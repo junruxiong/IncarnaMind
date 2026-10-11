@@ -10,9 +10,8 @@ function scriptLanguage(question: string): string | null {
   return null;
 }
 
-/** The system prompt for answering `question`, before anything about Documents. */
-export function answerInstructions(question: string): string {
-  const language = scriptLanguage(question);
+/** The system prompt for answering Questions, before anything about Documents. The same for every Question. */
+export function answerInstructions(): string {
   return [
     "You answer Questions in IncarnaMind, a notebook where the User writes Notes and asks Questions in place.",
     "The messages are the part of the User's notebook above the Question: the User's Notes and earlier Questions as user messages, your earlier Answers as assistant messages. The last user message ends with the Question to answer now; use the rest as context.",
@@ -20,8 +19,18 @@ export function answerInstructions(question: string): string {
     "- Answer in the language the Question is written in, even when the Notes or Documents are in another language.",
     "- If you don't know the answer, or it isn't in what you were given and you aren't sure of it, say so plainly instead of guessing.",
     "- Write Markdown: paragraphs, headings, lists, tables (one row per line, with a heading row), fenced code blocks with a language, and LaTeX math as $…$ inline or $$…$$ on lines of its own. Don't use HTML.",
-    ...(language ? [`- The Question is written in ${language}, so answer in ${language}.`] : []),
   ].join("\n");
+}
+
+/**
+ * The one line of the instructions that depends on the Question, for a
+ * Question clearly written in one script. It goes last, after everything that
+ * stays the same from one Question to the next, so a change of language
+ * doesn't change the start of the prompt (a provider caches that: #343).
+ */
+export function languageInstruction(question: string): string {
+  const language = scriptLanguage(question);
+  return language ? `- The Question is written in ${language}, so answer in ${language}.` : "";
 }
 
 /**
@@ -41,6 +50,18 @@ export function connectorInstructions(
     "- Call a Tool that changes something (creates, sends, books, deletes…) only when the Question asks for that change. The User approves such calls first and may deny one: then carry on without it, don't call it again, and say what wasn't done.",
     "- What they return isn't from the User's Documents: never put a citation marker on it. Say in words where it came from when that helps.",
     ...(alone ? ["- Write nothing before your Tool calls: only the Answer, after them."] : []),
+  ].join("\n");
+}
+
+/**
+ * Find sources' Tool, when offered (#296): when to call it, and that what it
+ * finds isn't the User's Documents, so it is never cited with a marker.
+ */
+export function sourcesInstructions(offered: boolean): string {
+  if (!offered) return "";
+  return [
+    "You can also call find_sources to search scholarly databases for published papers outside the User's Documents. Call it only when the Question asks you to find papers, articles, studies or other sources.",
+    "- Name what it found by title, first author and year, and say which are open access; never put a citation marker on them. The User adds the ones they want from the search's results, under your Answer.",
   ].join("\n");
 }
 

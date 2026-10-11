@@ -26,6 +26,7 @@ import {
   tool,
 } from "ai";
 import Ajv, { type ValidateFunction } from "ajv";
+import { cacheProviderOptions, tokenUsageOf } from "../providers/promptCache";
 import {
   classifyProviderError,
   contextOverflow,
@@ -318,6 +319,7 @@ async function* run(request: RunRequest): AsyncGenerator<RunEvent> {
     messages: initial,
     tools,
     temperature: request.temperature,
+    providerOptions: cacheProviderOptions(request.cacheKey),
     stopWhen: stepCountIs(maxSteps) as StopCondition<ToolSet>,
     prepareStep: ({ stepNumber, initialMessages, responseMessages }) => {
       if (stepNumber > 0) {
@@ -368,10 +370,7 @@ async function* run(request: RunRequest): AsyncGenerator<RunEvent> {
           yield { type: "tool-result", id: part.toolCallId, ok: false };
           break;
         case "finish-step": {
-          const usage = {
-            inputTokens: part.usage.inputTokens,
-            outputTokens: part.usage.outputTokens,
-          };
+          const usage = tokenUsageOf(part.usage);
           window?.stepFinished(usage);
           yield { type: "step-finished", usage };
           break;

@@ -1,5 +1,10 @@
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
-import type { Meeting, Settings, WindowLayout } from "../../src/core/api";
+import {
+  DEFAULT_ASSISTANT,
+  type Meeting,
+  type Settings,
+  type WindowLayout,
+} from "../../src/core/api";
 import { keysLabel, keysOn } from "../../src/renderer/src/commands/keys";
 import {
   type CommandContext,
@@ -77,6 +82,7 @@ const showing = (mindId: string) =>
       ],
       focusedGroupId: "group",
       reopenable: 0,
+      assistant: DEFAULT_ASSISTANT,
     } satisfies WindowLayout,
   });
 

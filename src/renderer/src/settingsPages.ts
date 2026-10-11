@@ -6,6 +6,7 @@ export const settingsPages = [
   "meetings",
   "connectors",
   "skills",
+  "agents",
   "privacy",
 ] as const;
 

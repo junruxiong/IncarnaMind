@@ -14,12 +14,16 @@ import {
   interceptShowItemInFolder,
   launchApp,
   newMind,
+  openDocumentMenu,
   openSettings,
   pathsOpened,
   pathsShown,
   removeDataFolder,
+  setWindowSize,
+  showSourceLocations,
   useLocalChatModel,
   useOutputLocation,
+  WINDOW_SIZE,
 } from "./app";
 
 /** Set INCARNAMIND_SCREENSHOTS to a folder to also save screenshots of the questions and Settings. */
@@ -284,6 +288,125 @@ test("saving inside a Linked folder asks once; Settings › General shows where 
   await ask.getByTestId("file-write-deny").click();
   await expect(problem).toHaveText("无法保存：你没有允许在同步文件夹“Notes”中添加文件 · 允许");
   await screenshot(dialog, "export-not-allowed-zh");
+  await app.close();
+});
+
+test("an export saved into a Linked folder is IncarnaMind's file: its viewer says checks don't count it, Count it counts it with Undo, its menu takes that back, and Settings or a folder can count such files", async () => {
+  const papers = join(sources, "Papers");
+  await mkdir(papers);
+  await writeFile(join(papers, "Moon.txt"), "Spring tides happen at new moon and at full moon.");
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  const linked = await bridge(window).link(papers);
+  await window.evaluate(
+    (id) =>
+      (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.setLinkedFolderWriting(
+        id,
+        true,
+      ),
+    linked.id,
+  );
+  await useOutputLocation(window, papers);
+  await newMind(window);
+  await window.getByTestId("mind-title").fill("Tides");
+  await window.getByTestId("mind-editor").click();
+  await window.keyboard.type("Spring tides come twice a month.");
+  await window.getByTestId("export-mind").click();
+  const dialog = window.getByTestId("export-dialog");
+  await dialog.getByTestId("export-save").click();
+  await expect(dialog.getByTestId("export-done")).toContainText("Saved Tides.docx");
+  await dialog.getByTestId("export-close").click();
+
+  // The Linked folder picks the export up, beside the User's own file.
+  await showSourceLocations(window);
+  const items = window.getByTestId("document-list-item");
+  const exported = items.filter({ hasText: "Tides" });
+  const moon = items.filter({ hasText: "Moon" });
+  await expect(exported).toHaveAttribute("data-status", "ready", { timeout: 30_000 });
+  await expect(moon).toHaveAttribute("data-status", "ready");
+
+  // The User's file says nothing; the export's viewer says checks don't count it.
+  const viewer = window.getByTestId("viewer");
+  const line = viewer.getByTestId("viewer-own-file");
+  await moon.getByTestId("open-document").click();
+  await expect(viewer.getByTestId("viewer-title")).toHaveText("Moon");
+  await expect(line).toHaveCount(0);
+  await exported.getByTestId("open-document").click();
+  await expect(viewer.getByTestId("viewer-title")).toHaveText("Tides");
+  await expect(line).toHaveText(
+    "IncarnaMind wrote this file, so checks don't count it as evidence · Count it",
+  );
+  await screenshot(viewer, "own-file-viewer-en");
+
+  // Count it: the line goes, the undo line says so, and Undo takes it back.
+  await line.getByTestId("count-it").click();
+  await expect(line).toHaveCount(0);
+  const undo = window.getByTestId("undo-line");
+  await expect(undo.getByTestId("undo-message")).toHaveText("“Tides” counts as evidence now");
+  await undo.getByTestId("undo-action").click();
+  await expect(line).toBeVisible();
+
+  // Its menu shows the choice both ways.
+  const choice = exported.getByTestId("document-evidence");
+  await openDocumentMenu(exported);
+  await expect(choice).toHaveText("Count as evidence");
+  await choice.click();
+  await expect(line).toHaveCount(0);
+  await openDocumentMenu(exported);
+  await expect(choice).toHaveText("Don't count as evidence");
+  await choice.click();
+  await expect(line).toBeVisible();
+  await expect(undo.getByTestId("undo-message")).toHaveText("“Tides” no longer counts as evidence");
+  // The User's own file has no such choice.
+  await openDocumentMenu(moon);
+  await expect(moon.getByTestId("document-evidence")).toHaveCount(0);
+  await window.keyboard.press("Escape");
+
+  // In Chinese, at the narrowest window, the line wraps by word inside the viewer.
+  await bridge(window).language("zh-CN");
+  await setWindowSize(app, window, 900, WINDOW_SIZE.height);
+  await expect(line).toHaveText("这个文件由 IncarnaMind 导出，核对时不计为依据 · 计为依据");
+  await expect(line).toBeVisible();
+  const [lineBox, viewerBox] = await Promise.all([line.boundingBox(), viewer.boundingBox()]);
+  if (!lineBox || !viewerBox) throw new Error("The line or the viewer isn't laid out.");
+  expect(lineBox.x + lineBox.width).toBeLessThanOrEqual(viewerBox.x + viewerBox.width);
+  await screenshot(viewer, "own-file-viewer-zh-narrow");
+  await bridge(window).language("en");
+  await setWindowSize(app, window, WINDOW_SIZE.width, WINDOW_SIZE.height);
+
+  // Settings › Search counts such files everywhere, and a folder's own switch has nothing to do.
+  const settings = await openSettings(window, "search");
+  const checks = settings.getByTestId("evidence-settings");
+  const leaveOut = checks.getByRole("switch", { name: "Leave out files IncarnaMind wrote" });
+  await expect(leaveOut).toBeChecked();
+  await checks.scrollIntoViewIfNeeded();
+  await screenshot(checks, "settings-search-checks-en");
+  await leaveOut.click();
+  await expect(leaveOut).not.toBeChecked();
+  await closeSettings(window);
+  await expect(line).toHaveCount(0);
+  await openDocumentMenu(exported);
+  await expect(choice).toHaveCount(0);
+  await window.keyboard.press("Escape");
+  await window.getByTestId("open-library").click();
+  const library = window.getByTestId("library");
+  await library.getByRole("button", { name: "New folder", exact: true }).click();
+  const counts = library.getByTestId("folder-counts-own-files");
+  await expect(counts).toBeChecked();
+  await expect(counts).toBeDisabled();
+  await expect(library).toContainText("Counted in every folder");
+
+  // On again: a new folder leaves them out unless it says otherwise; in Chinese too.
+  await window.evaluate(() =>
+    (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+      user: { leaveOutOwnFiles: true },
+    }),
+  );
+  await expect(counts).not.toBeChecked();
+  await expect(counts).toBeEnabled();
+  await bridge(window).language("zh-CN");
+  await expect(library.getByText("在此文件夹中，将 IncarnaMind 导出的文件计为依据")).toBeVisible();
+  await screenshot(library, "folder-counts-own-files-zh");
   await app.close();
 });
 

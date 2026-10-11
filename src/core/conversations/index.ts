@@ -36,6 +36,7 @@ import type {
   SearchScope,
 } from "../api";
 import { InvalidInputError, isRecord, NotFoundError } from "../errors";
+import { parseSearchScope } from "../scope";
 import { isChatModelChoice } from "../settings";
 import type { Database, SqlValue } from "../storage";
 import { excerptOf, findTerms, indexText, plainText, searchTerms, termQuery } from "./search";
@@ -130,6 +131,7 @@ const ERROR_KINDS: Record<ProviderErrorKind, true> = {
   network: true,
   provider: true,
   "consent-declined": true,
+  "local-mode": true,
   "not-signed-in": true,
   "plan-limit": true,
   blocked: true,
@@ -152,31 +154,10 @@ function storedList<T>(value: string): T[] {
   }
 }
 
-function parseIdList(value: unknown, what: string): string[] {
-  if (value === undefined || value === null) return [];
-  if (!Array.isArray(value) || !value.every((id) => typeof id === "string" && id !== "")) {
-    throw new InvalidInputError(`${what} must be a list of ids.`);
-  }
-  return [...new Set(value as string[])];
-}
-
-/** A Search scope from input; one that names nothing is none (null). */
-function parseScope(value: unknown): SearchScope | null {
-  if (value === undefined || value === null) return null;
-  if (!isRecord(value)) throw new InvalidInputError("A Search scope must be an object.");
-  const scope = {
-    folderIds: parseIdList(value.folderIds, "A Search scope's Folders"),
-    tagIds: parseIdList(value.tagIds, "A Search scope's Tags"),
-    documentIds: parseIdList(value.documentIds, "A Search scope's Documents"),
-  };
-  const empty = scope.folderIds.length + scope.tagIds.length + scope.documentIds.length === 0;
-  return empty ? null : scope;
-}
-
 function storedScope(value: string | null): SearchScope | null {
   if (value === null) return null;
   try {
-    return parseScope(JSON.parse(value));
+    return parseSearchScope(JSON.parse(value));
   } catch {
     return null;
   }
@@ -484,7 +465,7 @@ export function createConversations(db: Database, now: () => string) {
             : liveRow(conversationId).id,
         text: text.trim(),
         mind,
-        scope: parseScope(input.scope),
+        scope: parseSearchScope(input.scope),
         model: model ?? null,
         forcedSkill: typeof forcedSkill === "string" ? forcedSkill : null,
       };
