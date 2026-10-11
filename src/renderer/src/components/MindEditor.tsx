@@ -33,6 +33,7 @@ import { noteSlashItems, skillSlashItems } from "../editor/slashItems";
 import { Suggestions } from "../editor/suggestions";
 import { SmartTypography } from "../editor/typography";
 import { useT } from "../i18n";
+import { useMeetingOf } from "../meetings";
 import { isWritingIn } from "../mindStatus";
 import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
@@ -172,8 +173,13 @@ function MindEditorView({
   const cursorInMind = useRef(false);
   const placeholder = useRef("");
   placeholder.current = t("editor.placeholder");
+  // A Meeting's empty Mind waits for the agenda (as in Granola), with no Question to ask yet.
+  const isMeeting = useMeetingOf(mindId) !== undefined;
   // The example Mind invites a Question of one's own at its end.
   const hintText = (place: HintPlace): HintText => {
+    if (place === "empty" && isMeeting) {
+      return { before: t("meetings.hint.agenda"), ask: "", after: "" };
+    }
     const key =
       place === "empty"
         ? "editor.hint.empty"

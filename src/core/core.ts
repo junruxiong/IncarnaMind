@@ -60,6 +60,7 @@ import { automaticGroupClassifier } from "./library/automatic";
 import { createBatches } from "./library/batches";
 import { chatGroupClassifier, decisionGroupClassifier } from "./library/classifier";
 import { documentPageImages } from "./library/pageImages";
+import { createMeetings } from "./meetings";
 import { accessFor, isKnownKind } from "./mindAccess";
 import { createMindContent } from "./mindContent";
 import {
@@ -86,6 +87,7 @@ import {
 } from "./providers/ollama";
 import { createOllamaModels } from "./providers/ollamaModels";
 import { createAiSdkRerankingModel, createRerank } from "./providers/rerank";
+import { createRecentlyDeleted, purgeExpired } from "./recentlyDeleted";
 import { BUILT_IN_RERANKING_MODEL, createRerankingModel } from "./reranking";
 import { resolveSearchScope } from "./scope";
 import { createSecrets } from "./secrets";
@@ -143,6 +145,10 @@ export interface Core extends CoreApi, CoreEventSource {
    * resolves once that, and any change already reported, has been taken in.
    */
   reconcileDocuments(): Promise<void>;
+  /** The computer is about to sleep: a Meeting recording saves what it has and stops capturing. */
+  systemSleeping(): void;
+  /** The computer woke: a Meeting the sleep stopped records again, the sleep marked as a gap. */
+  systemAwake(): void;
   /** Every event the core emits, for the host to forward to the UI. */
   onAnyEvent(listener: AnyEventListener): Unsubscribe;
   /** Every external data flow. Core modules register theirs here; consent covers each one. */
@@ -178,6 +184,12 @@ export function createCore(adapters: CoreAdapters): Core {
   }
 
   const now = () => (adapters.now?.() ?? new Date()).toISOString();
+  try {
+    purgeExpired(db, now());
+  } catch (error) {
+    db.close();
+    throw error;
+  }
   const events = createEventHub();
   // Logs what happens from here on, from the events: never the User's content.
   const activity = logActivity(events, adapters.log ?? silentLogger);
@@ -207,7 +219,14 @@ export function createCore(adapters: CoreAdapters): Core {
   });
   // The level Skill scripts run at: the given Executor's, else the local one's below ("none").
   const scriptSandbox = adapters.executor?.level ?? "none";
-  const settings = createSettings(db, now, adapters.systemLanguages, scriptSandbox);
+  const capture = adapters.audioCapture;
+  const settings = createSettings(
+    db,
+    now,
+    adapters.systemLanguages,
+    scriptSandbox,
+    !capture ? "none" : capture.systemAudio ? "both" : "microphone",
+  );
   const folders = createFolders(db, now);
   const foldersChanged = () => events.emit("folders.changed", folders.list());
   const tags = createTags(db, now);
@@ -829,6 +848,20 @@ export function createCore(adapters: CoreAdapters): Core {
   libraryDocumentChanged = (id) => library.documentChanged(id);
   library.start();
 
+  const recentlyDeleted = createRecentlyDeleted({
+    db,
+    now,
+    say: (key, params) => translate(settings.get().language, key, params),
+    minds,
+    content,
+    documents,
+    tags,
+    library,
+    mindsChanged,
+    tagsChanged,
+    tagged: announceTagged,
+  });
+
   /** Jev was set up, changed or removed: say so, and Documents waiting may go on. */
   const jevChanged = async () => {
     const status = await jev.status();
@@ -996,6 +1029,37 @@ export function createCore(adapters: CoreAdapters): Core {
     return ollamaBaseUrl(input?.baseUrl);
   };
 
+  // Meetings (#135): while audio is being captured, background model work holds back.
+  const meetings = createMeetings({
+    db,
+    dataDir,
+    now,
+    capture: adapters.audioCapture,
+    enabled: () => settings.get().device.meetingsEnabled,
+    noticeAccepted: () => settings.get().device.meetingNoticeAccepted,
+    systemAudioByDefault: () => settings.get().device.meetingSystemAudio,
+    language: () => settings.get().language,
+    createMind: (title) => {
+      const mind = minds.create(parseCreateMindInput({ title }));
+      mindsChanged();
+      return mind;
+    },
+    mindExists: (mindId) => {
+      try {
+        minds.get(mindId);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    changed: (list) => events.emit("meetings.changed", list),
+    onCapturingChange: (capturing) => {
+      background.setRecording(capturing);
+      documents.hold(capturing);
+    },
+    log: adapters.log ?? silentLogger,
+  });
+
   // Async on purpose: the renderer reaches these over IPC, and a future hosted core may be remote.
   return {
     createMind: async (input) => {
@@ -1014,10 +1078,12 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     deleteMind: async (mindId) => {
       const at = now();
-      db.transaction(() => {
+      const deleted = db.transaction(() => {
         const mind = minds.delete(mindId, at);
         content.remove(mind.id, at);
+        return mind;
       });
+      meetings.mindDeleted(deleted.id);
       mindsChanged();
       layouts.forgetDeletedMinds();
     },
@@ -1283,12 +1349,17 @@ export function createCore(adapters: CoreAdapters): Core {
     createLibraryGroup: async (input) => library.create(input),
     updateLibraryGroup: async (id, input) => library.update(id, input),
     deleteLibraryGroup: async (id) => {
-      // Its Minds go to Not in a Folder with it, as its Documents do.
-      const moved = db.transaction(() => {
-        library.delete(id);
-        return minds.leaveFolder(id as string);
+      const deletion = db.transaction(() => {
+        const folder = library.folder(id);
+        const left = minds.leaveFolder(folder.id);
+        const { assignments } = library.delete(
+          folder.id,
+          left.map((mind) => mind.id),
+        );
+        return { assignments, mindIds: left.filter((mind) => mind.live).map((mind) => mind.id) };
       });
-      if (moved) mindsChanged();
+      if (deletion.mindIds.length > 0) mindsChanged();
+      return deletion;
     },
     addLibraryStarterGroups: async (keys) => library.addStarters(keys),
     saveLibrarySettings: async (input) => library.saveSettings(input),
@@ -1307,6 +1378,10 @@ export function createCore(adapters: CoreAdapters): Core {
       }
     },
     assignDocumentGroup: async (id, groupId) => library.assign(id, groupId),
+    restoreAssignment: async (id, previous) => library.restoreAssignment(id, previous),
+    restore: async (refs) => recentlyDeleted.restore(refs),
+    listDeleted: async () => recentlyDeleted.list(),
+    deletePermanently: async (refs) => recentlyDeleted.deletePermanently(refs),
     acceptAssignments: async (ids) => library.accept(ids),
     rejectAssignments: async (ids) => library.reject(ids),
     moveToFolder: async (input) => {
@@ -1369,12 +1444,17 @@ export function createCore(adapters: CoreAdapters): Core {
       tagMany(documentIds, (id) => tags.addToDocument(id, tagId)),
     removeTagFromDocuments: async (documentIds, tagId) =>
       tagMany(documentIds, (id) => tags.removeFromDocument(id, tagId)),
+    revertDocumentTags: async (links) => {
+      const changed = recentlyDeleted.revertTags(links);
+      if (changed.length > 0) announceTagged(changed);
+      return documents.getMany([...new Set(links.map((link) => link.documentId))]);
+    },
     mergeTags: async (tagId, intoTagId) => {
-      const documentIds = tags.merge(tagId, intoTagId, now());
+      const { documentIds, links } = tags.merge(tagId, intoTagId, now());
       // Tags first, so a listener filtering by the merged Tag hears it's gone before it refreshes.
       tagsChanged();
       announceTagged(documentIds);
-      return tags.get(intoTagId);
+      return { tag: tags.get(intoTagId), merged: { kind: "tag", id: tagId, links } };
     },
     retagDocuments: async (documentIds) => {
       if (organizationConfigured()) return library.classify(documentIds);
@@ -1478,6 +1558,16 @@ export function createCore(adapters: CoreAdapters): Core {
     listFileWriteRequests: async () => outputs.requests(),
     respondToFileWrite: (requestId, accept) => outputs.respond(requestId, accept),
 
+    listMeetings: async () => meetings.list(),
+    createMeeting: async (input) => meetings.create(input),
+    discardMeeting: async (meetingId) => meetings.discard(meetingId),
+    startMeeting: async (input) => meetings.start(input),
+    pauseMeeting: async (meetingId) => meetings.pause(meetingId),
+    resumeMeeting: async (meetingId) => meetings.resume(meetingId),
+    stopMeeting: async (meetingId) => meetings.stop(meetingId),
+    deleteMeetingAudio: async (meetingId) => meetings.deleteAudio(meetingId),
+    openAudioSettings: (source) => meetings.openSettings(source),
+
     openDocumentFile: (documentId) => documents.openFile(documentId),
     openDocumentImage: (documentId, path) => documents.openImage(documentId, path),
     openDocumentInApp: async (documentId) => {
@@ -1498,6 +1588,8 @@ export function createCore(adapters: CoreAdapters): Core {
       adapters.shell.showItemInFolder(path);
     },
     reconcileDocuments: () => documents.linkedFolders.sync(),
+    systemSleeping: () => meetings.sleeping(),
+    systemAwake: () => meetings.awake(),
     on: (event, listener) => events.on(event, listener),
     onAnyEvent: (listener) => events.onAny(listener),
     dataFlows: consent.registry,
@@ -1506,6 +1598,8 @@ export function createCore(adapters: CoreAdapters): Core {
     close: () => {
       if (lifetime.signal.aborted) return;
       lifetime.abort();
+      // What a Meeting has captured is saved before anything else stops.
+      meetings.close();
       // First, so stopping the Answers below starts no background work.
       background.close();
       void chatGpt.cancelSignIn();

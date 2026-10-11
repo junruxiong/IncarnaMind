@@ -49,7 +49,7 @@ describe("Tag colours", () => {
       InvalidInputError,
     );
     // The Tag merged into keeps its own colour.
-    expect((await core.mergeTags(notes.id, report.id)).colour).toBe("teal");
+    expect((await core.mergeTags(notes.id, report.id)).tag.colour).toBe("teal");
     core.close();
     const reopened = startCore(dataDir);
     expect((await tagNamed(reopened, "Report")).colour).toBe("teal");

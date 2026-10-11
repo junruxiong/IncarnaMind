@@ -142,16 +142,18 @@ export function EndHint({
           style={hint.style}
         >
           {words.before}
-          <button
-            type="button"
-            data-testid="end-hint-ask"
-            className={`end-hint-ask ${hint.armed ? "end-hint-ask--armed" : ""}`}
-            // The cursor stays on the line, so the Question asked goes there.
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => onAsk(hint.pos)}
-          >
-            {words.ask}
-          </button>
+          {words.ask && (
+            <button
+              type="button"
+              data-testid="end-hint-ask"
+              className={`end-hint-ask ${hint.armed ? "end-hint-ask--armed" : ""}`}
+              // The cursor stays on the line, so the Question asked goes there.
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => onAsk(hint.pos)}
+            >
+              {words.ask}
+            </button>
+          )}
           {words.after}
         </p>
       )}

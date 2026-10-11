@@ -262,6 +262,14 @@ export function createMindContent(
       );
     },
 
+    /** Brings back the content `remove` marked deleted at `deletedAt`. */
+    restore(mindId: string, deletedAt: string): void {
+      db.run(
+        "UPDATE mind_updates SET deleted_at = NULL, updated_at = ? WHERE mind_id = ? AND deleted_at = ?",
+        [now(), mindId, deletedAt],
+      );
+    },
+
     /** Drops every document from memory. Everything is stored already. */
     closeAll(): void {
       for (const mindId of [...loaded.keys()]) unload(mindId);
