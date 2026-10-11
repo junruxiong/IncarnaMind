@@ -56,6 +56,7 @@ Single-context: `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/
 Read [`docs/agents/testing.md`](docs/agents/testing.md). Work is done when the pull request's CI checks are green on GitHub, not when the tests pass on your computer.
 
 - Run what CI runs: `npm run typecheck`, `npm run lint`, `npm test`, and `npm run test:smoke` for the specs your change touches.
+- Try the edge cases in `docs/agents/testing.md` that apply (empty and huge input, Chinese, broken files, offline, failing models, quitting halfway, twice and Undo), and say which in the pull request.
 - Update or remove the tests for UI you changed.
 - Watch `gh pr checks <number> --watch` and fix any red check before reporting.
 - Tests must pass on any machine:
