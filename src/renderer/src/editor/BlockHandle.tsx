@@ -15,6 +15,7 @@ import { CheckIcon, GripIcon, TrashIcon } from "../components/icons";
 import { ConversationLineIcon } from "../components/lineIcons";
 import { useT } from "../i18n";
 import { findBlock, questionWithAnswer } from "./blockCommands";
+import { blockMenuOpeners } from "./blockMenuOpeners";
 import { originOf } from "./blockOrigins";
 import { openOrigin } from "./ConversationLinks";
 import { BLOCK_ID_ATTRIBUTE } from "./noteSchema";
@@ -37,9 +38,8 @@ function firstTextPos(node: ProseMirrorNode, pos: number): number | null {
 
 /**
  * Where the handle goes: in the left margin, a fixed gap left of the Mind's
- * text edge (the CSS sets `--handle-gap`, wider for a Question, whose band
- * and Ask button take the margin), level with the Block's first line of text.
- * An Answer's first line is its first paragraph, under the "Answer" label.
+ * text edge (the CSS sets `--handle-gap`), level with the Block's first line
+ * of text.
  */
 function handleAnchor(
   editor: Editor,
@@ -51,9 +51,7 @@ function handleAnchor(
     contextElement: view.dom,
     getBoundingClientRect: () => {
       const style = getComputedStyle(view.dom);
-      const gapName =
-        block.node.type.name === QUESTION_BLOCK ? "--handle-gap-question" : "--handle-gap";
-      const gap = Number.parseFloat(style.getPropertyValue(gapName)) || 0;
+      const gap = Number.parseFloat(style.getPropertyValue("--handle-gap")) || 0;
       // The text edge: the editor's box reaches over the margin (styles.css, `--editor-gutter`).
       const edge = view.dom.getBoundingClientRect().left + Number.parseFloat(style.paddingLeft);
       const x = edge - gap;
@@ -78,6 +76,7 @@ const isNote = (node: ProseMirrorNode) =>
 
 /** The Block whose menu is open: its ID, where it was when the menu opened, and what it is. */
 interface MenuTarget {
+  anchor: Element | VirtualElement;
   id: unknown;
   pos: number;
   /** Null for Blocks that aren't Notes (Questions, Answers), which have no context flag. */
@@ -141,11 +140,13 @@ export function BlockHandle({ editor }: { editor: Editor }) {
       editor.view.dispatch(editor.state.tr.setMeta("lockDragHandle", locked));
   };
 
-  const openMenu = () => {
-    const block = hovered.current;
-    if (!block) return;
+  const openMenuFor = (
+    block: { node: ProseMirrorNode; pos: number },
+    anchor: MenuTarget["anchor"],
+  ) => {
     lockHandle(true);
     setMenuFor({
+      anchor,
       id: block.node.attrs[BLOCK_ID_ATTRIBUTE],
       pos: block.pos,
       included: isNote(block.node)
@@ -153,6 +154,23 @@ export function BlockHandle({ editor }: { editor: Editor }) {
         : null,
     });
   };
+
+  const openMenu = () => {
+    const block = hovered.current;
+    if (block && grip.current) openMenuFor(block, grip.current);
+  };
+
+  const open = useRef(openMenuFor);
+  open.current = openMenuFor;
+  useEffect(() => {
+    blockMenuOpeners.set(editor, (id) => {
+      const found = findBlock(editor.state.doc, id);
+      if (found) open.current(found, handleAnchor(editor, found) ?? editor.view.dom);
+    });
+    return () => {
+      blockMenuOpeners.delete(editor);
+    };
+  }, [editor]);
 
   const closeMenu = (refocus: boolean) => {
     setMenuFor(null);
@@ -196,6 +214,11 @@ export function BlockHandle({ editor }: { editor: Editor }) {
         getReferencedVirtualElement={() => handleAnchor(editor, hovered.current)}
         onNodeChange={({ node, pos }) => {
           hovered.current = node ? { node, pos } : null;
+          for (const shown of editor.view.dom.querySelectorAll("[data-handle-on]"))
+            shown.removeAttribute("data-handle-on");
+          // Only a Question's node view ignores attribute changes; on a text Block ProseMirror would redraw it.
+          const dom = node?.type.name === QUESTION_BLOCK ? editor.view.nodeDOM(pos) : null;
+          if (dom instanceof Element) dom.setAttribute("data-handle-on", "");
         }}
       >
         <button
@@ -211,9 +234,9 @@ export function BlockHandle({ editor }: { editor: Editor }) {
           <GripIcon className="size-4" />
         </button>
       </DragHandle>
-      {menuFor && grip.current && (
+      {menuFor && (
         <BlockMenu
-          anchor={grip.current}
+          anchor={menuFor.anchor}
           included={menuFor.included}
           origin={originOf(editor.state, menuFor.id)}
           onOpenOrigin={(origin) => {
@@ -238,7 +261,7 @@ function BlockMenu({
   onToggleContext,
   onClose,
 }: {
-  anchor: Element;
+  anchor: Element | VirtualElement;
   /** The Note's context flag, or null when the Block isn't a Note. */
   included: boolean | null;
   /** Where the Block came from: an Answer in the assistant (#201), or null. */

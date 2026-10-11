@@ -1721,10 +1721,8 @@
 
   /* The Mind editor's content (Tiptap): your writing in Source Serif 4, 17/28. */
   .mind-editor {
-    /* How far left of the text edge the block handle sits (see BlockHandle). */
-    --handle-gap: 28px;
-    /* Clear of a Question's spark and fold chevron, which take 46px of the margin. */
-    --handle-gap-question: 48px;
+    /* The handle's 20px fill the outer half of the 40px margin; a Question's fold chevron has the inner half. */
+    --handle-gap: 20px;
     /*
      * The editor's box reaches over the left margin, past the block handle,
      * while its text keeps the edge: Tiptap hides the handle once the pointer
@@ -2098,12 +2096,13 @@
   .question-fold {
     position: absolute;
     top: 0;
-    left: -46px;
+    left: -20px;
     display: flex;
     align-items: center;
-    gap: 2px;
+    justify-content: center;
+    width: 20px;
     height: 20px;
-    padding: 0 4px;
+    padding: 0;
     border-radius: 6px;
     color: var(--color-ink-meta);
     user-select: none;
@@ -2123,8 +2122,17 @@
     }
   }
   .question-spark {
+    position: absolute;
+    top: 3px;
+    left: -37px;
     width: 14px;
     height: 14px;
+    color: var(--color-ink-meta);
+    pointer-events: none;
+
+    [data-handle-on] & {
+      opacity: 0;
+    }
   }
   .question-row {
     position: relative;
@@ -3296,9 +3304,9 @@
     pointer-events: none;
   }
   /*
-   * At the start of the 56px margin. The Block handle takes 48px to 28px left of the text
-   * (--handle-gap), so the two meet over 6px: there the mark is on top, and its click opens
-   * the conversation, never the Block menu; their icons stay apart.
+   * At the start of the 56px margin, 2px clear of the Block handle, which takes 40px to 20px
+   * left of the text (--handle-gap); drawn over the handle's layer all the same, so a click
+   * on the mark opens the conversation, never the Block menu.
    */
   .conversation-link {
     position: absolute;
@@ -4055,27 +4063,17 @@
   }
 
   /*
-   * A narrow Mind (under 900px): both margins fold away. A Question keeps only its fold chevron
-   * in what is left of the margin, and each Citation marker shows its check,
-   * since the margin column is gone.
+   * A narrow Mind (under 900px): the right margin folds away and the left keeps the 40px the
+   * block handle and a Question's fold chevron share. Each Citation marker shows
+   * its check, since the margin column is gone.
    */
   @container mind (width < 900px) {
     .mind-measure {
       width: auto;
-      margin-inline: 24px;
+      margin-inline: 40px 24px;
     }
     .mind-editor {
-      --handle-gap: 2px;
-      --handle-gap-question: 2px;
-      /* The whole margin left of the measure. */
-      --editor-gutter: 24px;
-    }
-    .question-fold {
-      left: -22px;
-      padding: 0 4px;
-    }
-    .question-spark {
-      display: none;
+      --editor-gutter: 40px;
     }
     .margin-checks {
       display: none;
