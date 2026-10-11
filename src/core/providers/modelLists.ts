@@ -19,7 +19,7 @@ import type { ModelFactsLayer } from "./capabilities";
 import { isNonChatModel, type ModelInput, modelsProviderOfKind } from "./catalog";
 import { CHATGPT_PLAN_MODELS } from "./chatgpt/codexEndpoint";
 import { endpointUrl } from "./kinds";
-import { isCloudModelName, isRemoteEntry } from "./ollamaModels";
+import { isCloudModelName, isRemoteEntry } from "./ollamaCloud";
 
 const LIST_TIMEOUT_MS = 5_000;
 /** The picker shows at most this many models per provider. */

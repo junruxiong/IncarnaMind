@@ -17,34 +17,9 @@
  * Ollama reloads a model whose `num_ctx` changes.
  */
 import { freemem, totalmem } from "node:os";
-import type { CitationSupport, ExternalService } from "../api";
+import type { CitationSupport } from "../api";
 import { isRecord } from "../errors";
-
-/**
- * Where an Ollama cloud model's requests end up. The request goes to the
- * Ollama on this computer, and that Ollama forwards it here, so the address
- * alone says nothing about it.
- */
-export const OLLAMA_CLOUD: Readonly<ExternalService> = {
-  id: "https://ollama.com",
-  name: "ollama.com",
-};
-
-/**
- * Whether the name is one Ollama gives its cloud models: "gpt-oss:120b-cloud",
- * "gpt-oss:cloud". Read before anything Ollama says, because a false "local"
- * would send data away unasked.
- */
-export const isCloudModelName = (model: string): boolean => /[:-]cloud$/i.test(model.trim());
-
-/**
- * Whether Ollama says a model runs remotely: `remote_host` or `remote_model`
- * in its `/api/tags` entry or its `/api/show` answer.
- */
-export function isRemoteEntry(entry: Record<string, unknown>): boolean {
-  const set = (value: unknown) => typeof value === "string" && value.trim() !== "";
-  return set(entry.remote_host) || set(entry.remote_model);
-}
+import { isRemoteEntry } from "./ollamaCloud";
 
 /** The settings every chat request to one model carries. */
 export interface OllamaModelSettings {
@@ -393,7 +368,9 @@ export function createOllamaModels(
           body: JSON.stringify({ model }),
         }).then(
           (show) => profileOf(found, isRecord(show) ? show : {}, memory()),
-          () => null,
+          // Without /api/show a model is unknown, except that /api/tags may already
+          // say it runs on ollama.com: that must still reach the consent check.
+          () => (isRemoteEntry(found) ? profileOf(found, {}, memory()) : null),
         );
         profiles.set(key, profile);
         // A failed lookup is tried again next time.

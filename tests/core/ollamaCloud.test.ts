@@ -18,6 +18,8 @@ const LOCAL_MODEL = "qwen3:4b";
 /** Listed with `remote_host`, and named like a local model: only Ollama's word marks it. */
 const REMOTE_BY_HOST = "glm-next:latest";
 const REMOTE_BY_NAME = "gpt-oss:120b-cloud";
+/** Listed as remote, but Ollama then fails to describe it. */
+const REMOTE_NO_SHOW = "kimi-next:latest";
 
 const servers: Server[] = [];
 afterEach(() => {
@@ -41,9 +43,27 @@ async function fakeOllama(): Promise<string> {
               remote_host: "https://ollama.com:443",
             },
             { name: REMOTE_BY_NAME, model: REMOTE_BY_NAME, digest: "d3", size: 400 },
+            {
+              name: REMOTE_NO_SHOW,
+              model: REMOTE_NO_SHOW,
+              digest: "d4",
+              size: 400,
+              remote_host: "https://ollama.com:443",
+            },
           ],
         }),
       );
+    } else if (request.url === "/api/show") {
+      let body = "";
+      request.on("data", (chunk) => {
+        body += String(chunk);
+      });
+      request.on("end", () => {
+        if (body.includes(REMOTE_NO_SHOW)) {
+          response.statusCode = 500;
+          response.end("{}");
+        } else response.end(JSON.stringify({ capabilities: ["completion", "tools"] }));
+      });
     } else {
       response.end(JSON.stringify({ capabilities: ["completion", "tools"] }));
     }
@@ -89,6 +109,7 @@ describe("Ollama cloud models", () => {
   test.each([
     ["remote_host in /api/tags", REMOTE_BY_HOST],
     ["a name ending in -cloud", REMOTE_BY_NAME],
+    ["remote_host in /api/tags when /api/show fails", REMOTE_NO_SHOW],
   ])("a model with %s asks for consent to send to ollama.com first", async (_how, modelId) => {
     const { core, models, requests, use } = await setUp();
     const choice = await use(modelId);
@@ -151,9 +172,11 @@ describe("Ollama cloud models", () => {
 
     const [group] = await core.listChatModels();
     expect(group?.models).toEqual(
-      expect.arrayContaining([LOCAL_MODEL, REMOTE_BY_HOST, REMOTE_BY_NAME]),
+      expect.arrayContaining([LOCAL_MODEL, REMOTE_BY_HOST, REMOTE_BY_NAME, REMOTE_NO_SHOW]),
     );
-    expect([...(group?.cloud ?? [])].sort()).toEqual([REMOTE_BY_HOST, REMOTE_BY_NAME].sort());
+    expect([...(group?.cloud ?? [])].sort()).toEqual(
+      [REMOTE_BY_HOST, REMOTE_BY_NAME, REMOTE_NO_SHOW].sort(),
+    );
   });
 
   test("the name decides when Ollama can't be asked", async () => {
@@ -179,7 +202,7 @@ describe("Ollama cloud models", () => {
 
     expect(status).toMatchObject({ running: true, models: [LOCAL_MODEL] });
     expect(status.running && [...status.cloudModels].sort()).toEqual(
-      [REMOTE_BY_HOST, REMOTE_BY_NAME].sort(),
+      [REMOTE_BY_HOST, REMOTE_BY_NAME, REMOTE_NO_SHOW].sort(),
     );
     await expect(core.selectOllama({ baseUrl, model: REMOTE_BY_NAME })).rejects.toThrow(
       /runs on ollama\.com/,
