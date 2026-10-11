@@ -1,0 +1,29 @@
+---
+status: proposed
+---
+
+# Citation styles are formatted by Hayagriva, built to wasm
+
+Citation styles and a styled Bibliography (#289) need a CSL processor: APA 7, IEEE and GB/T 7714 (2015 and 2025) for the alpha, and any CSL style a User brings. The JavaScript processors break our dependency rule (`AGENTS.md`: open source under a permissive licence, maintained, small). citeproc-js is CPAL-1.0 or AGPL-3.0, and citeproc-rs is MPL-2.0 and archived. The spike in #288 built Hayagriva, the CSL engine in Typst (MIT or Apache-2.0), to WebAssembly. It then compared Hayagriva with the citeproc-js that Zotero ships, on 30 English and Chinese references in 11 styles. The full report is [0016-citation-styles-spike-report.md](0016-citation-styles-spike-report.md).
+
+We format citations with **Hayagriva, compiled to wasm with a small binding of our own**:
+
+- **The engine.** Hayagriva with its default features off and `csl-json` on, pinned to a commit of its `main` branch (`546c7c7`) until a release carries the fixes we need. The latest release, 0.10.1, drops every author in the Vancouver style. Our Rust binding, about 240 lines, takes the style and locale XML and the references as CSL JSON, the shape #286's reference record converts to. It returns the citations and the Bibliography as **runs**: text with italic, bold, small caps, superscript, subscript and link flags. It never returns Hayagriva's HTML, because that HTML doesn't escape field text, and reference metadata comes from files and lookups we don't control.
+- **Behind an interface in the core.** A `CitationStyleEngine` in `src/core` hides the engine, as `RunEngine` hides the agent loop (ADR-0007). It holds one parsed engine per style, formats off the window's thread, and caches results. Formatting 30 references takes 3–70 ms warm and 300 references up to 0.75 s, so markers update when formatting finishes, not on every keystroke.
+- **What the binding has to add (#289).** Chinese runs never come out italic, which is what Zotero does too. For styles whose English entries should use English terms (GB/T 7714's "et al." and "4th ed."), the binding formats twice and keeps each entry in its reference's language. The spike tested this, and it gives what the styles' CSL-M layout gives in citeproc-js, which Hayagriva can't read. The binding also converts Zotero's rich-text markup in fields (`<i>`, `<sub>`, `<span class="nocase">`), which Hayagriva's CSL JSON reader leaves as text.
+- **The styles.** We ship unmodified `.csl` and locale files from the official CSL repositories as plain files in the app's resources. They are named in the licence notices with the CSL project, a link to citationstyles.org, each style's title and authors, and the CC BY-SA 3.0 licence. Shipped this way they are a "Collection" under CC BY-SA 3.0 (§1(b)), so share-alike covers the style files and IncarnaMind stays Apache-2.0. If we ever change a style, the changed file is shared under CC BY-SA.
+- **Upstream.** We fix the Hayagriva bugs the spike found in Hayagriva itself, not in our copy: title case of words like "ChatGPT", the delimiter in "2019a, 2019b", year-suffix order, Chinese names with Latin initials, APA proceedings with editors, and the others in the report. The pin moves to a release once one carries them.
+
+## Considered options
+
+- **(B) A written exception for citeproc-js (CPAL-1.0 or AGPL-3.0) or citeproc-rs (MPL-2.0).** citeproc-js is what Zotero runs, so its output would match Zotero by definition, and it supports CSL-M. Rejected. AGPL would put the app under copyleft. CPAL's §15 treats network use as distribution, which would bind the hosted version (ADR-0002) to publish its source, and §14 lets the author require an attribution display at every start. citeproc-rs is MPL-2.0, which we could live with, but it has been archived since 2024, so nobody would fix it.
+- **(C) A few hand-written styles** (APA, IEEE, GB/T 2015 and 2025). This has no licence question, but each style is hundreds of rules: disambiguation, et al., name forms, year suffixes, sorting and locale terms. We would own them all, and Users couldn't use the style their university hands out. Rejected as the main route. It stays the fallback, behind the same interface, if Hayagriva stops being maintained.
+- **A community wasm build of Hayagriva from npm** (`citeme-engine-wasm`, `refkit-js`). Both are months old with one maintainer each. Owning 240 lines of binding is less risk.
+
+## Consequences
+
+- **Output differs from Zotero in known ways until the upstream fixes land.** On the spike's fixtures, 90% of citations and 82% of Bibliography entries match Zotero exactly. The report lists every difference. #289's golden tests record our expected output per style, so a Hayagriva update shows exactly what changed.
+- **The build gains a Rust step.** Either CI installs a pinned Rust toolchain and builds the wasm, or we commit the built `.wasm` with a script that reproduces it and a check that it does. #289 decides. The module is 2.4 MB (0.8 MB gzipped), almost half of it ICU data for sorting Chinese by pinyin.
+- **Licence notices grow:** the 58 crates linked into the wasm (MIT, Apache-2.0, Unicode-3.0, BSL-1.0 and other permissive licences; none copyleft) and the CSL styles and locales with their attribution.
+- **Hayagriva's maintainers say it is under-maintained** (typst/hayagriva#460), and it has no CSL-M. Typst depends on it, and fixes do land, but we should expect to write some of them. The interface keeps option (C) open.
+- **A User's own CSL file** goes through the same engine, so a style that only citeproc-js handles well may come out differently. #289 shows the problem where it happens, with the style named.
