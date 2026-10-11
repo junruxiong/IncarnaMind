@@ -51,3 +51,7 @@ export function useMindStatus(mindId: string): MindStatus {
   const writing = useWritingAnswers((state) => Object.values(state.minds).includes(mindId));
   return approving || consenting ? "waiting-for-approval" : writing ? "writing" : null;
 }
+
+/** Whether an Answer is being written into the Mind now: for what runs outside React, such as the editor's plugins. */
+export const isWritingIn = (mindId: string): boolean =>
+  Object.values(useWritingAnswers.getState().minds).includes(mindId);

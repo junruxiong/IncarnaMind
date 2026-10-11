@@ -96,7 +96,7 @@ const QUOTE_PAIRS: readonly (readonly [string, string])[] = [
  * The quote as the model meant it: without location marks, without the
  * ellipses and quotation marks models put around a quote. Its words are left alone.
  */
-function cleanQuote(raw: string): string {
+export function cleanQuote(raw: string): string {
   let quote = raw.replace(LOCATION_MARK, " ").trim();
   for (;;) {
     const before = quote;
@@ -193,7 +193,7 @@ function citedUnits(
 }
 
 /** The first Unit, or two consecutive Units of one run, among `units` whose text holds the quote. */
-function locateQuote(
+export function locateQuote(
   units: readonly PageText[],
   quote: string,
   matching: Matching = {},
