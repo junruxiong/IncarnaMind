@@ -17,6 +17,7 @@ import {
 } from "./answers/citedVersions";
 import { createCiting } from "./answers/citing";
 import type {
+  AddDocumentsResult,
   ChatModelChoice,
   CoreApi,
   CoreEventSource,
@@ -40,6 +41,7 @@ import {
 } from "./documents";
 import { createVersionRetention, type VersionRetention } from "./documents/retention";
 import { fsWatchFolder } from "./documents/watcher";
+import { createWebPages } from "./documents/web";
 import { BUILT_IN_EMBEDDING_MODEL, createEmbeddingModel } from "./embedding";
 import { createActiveEmbedding } from "./embedding/active";
 import {
@@ -137,7 +139,8 @@ export interface Core extends CoreApi, CoreEventSource {
   openDocumentImage(documentId: string, path: string): Promise<DocumentImage>;
   /**
    * Opens a live Document's file, where it is, in the default app for its
-   * type, through the `shell` adapter. Throws NotFoundError as
+   * type, through the `shell` adapter; a web page opens live, at its
+   * address, through the `browser` adapter. Throws NotFoundError as
    * `openDocumentFile` does.
    */
   openDocumentInApp(documentId: string): Promise<void>;
@@ -415,6 +418,16 @@ export function createCore(adapters: CoreAdapters): Core {
     db.close();
     throw error;
   }
+  const webPages = createWebPages({
+    db,
+    dataDir,
+    now,
+    documents,
+    languages: () =>
+      settings.get().language === "zh-CN" ? ["zh-CN", "zh;q=0.9", "en;q=0.8"] : ["en", "*;q=0.5"],
+    ...adapters.webPages,
+  });
+  webPages.dropPurged().catch((error: unknown) => console.error(error));
   let skills: ReturnType<typeof createSkills>;
   try {
     skills = createSkills({
@@ -1287,6 +1300,30 @@ export function createCore(adapters: CoreAdapters): Core {
       return updated;
     },
     addDocuments,
+    saveWebPage: async (input) => {
+      const folderId = isRecord(input) ? input.folderId : undefined;
+      if (
+        folderId !== undefined &&
+        folderId !== null &&
+        !library.snapshot().groups.some((group) => group.id === folderId)
+      ) {
+        throw new NotFoundError("There is no such Folder.");
+      }
+      const since = now();
+      const result = await webPages.save(input);
+      if (result.outcome === "saved" && !result.existing && typeof folderId === "string") {
+        library.assign(result.document.id, folderId);
+      }
+      const added: Omit<AddDocumentsResult, "batchId"> =
+        result.outcome === "saved"
+          ? { documents: [result.document], skipped: [] }
+          : { documents: [], skipped: [{ path: result.address, reason: "unreadable" }] };
+      usageData.record({ event: "documents_added", fields: addedCounts(added, since) });
+      return result.outcome === "saved"
+        ? { ...result, document: documents.get(result.document.id) }
+        : result;
+    },
+    fetchWebPageAgain: async (documentId) => webPages.fetchAgain(documentId),
     saveTextAsDocument: async (input) => {
       if (!isRecord(input) || typeof input.text !== "string" || input.text.trim() === "") {
         throw new InvalidInputError("There is no text to save.");
@@ -1544,7 +1581,10 @@ export function createCore(adapters: CoreAdapters): Core {
     restoreAssignment: async (id, previous) => library.restoreAssignment(id, previous),
     restore: async (refs) => recentlyDeleted.restore(refs),
     listDeleted: async () => recentlyDeleted.list(),
-    deletePermanently: async (refs) => recentlyDeleted.deletePermanently(refs),
+    deletePermanently: async (refs) => {
+      recentlyDeleted.deletePermanently(refs);
+      await webPages.dropPurged();
+    },
     acceptAssignments: async (ids) => library.accept(ids),
     rejectAssignments: async (ids) => library.reject(ids),
     moveToFolder: async (input) => {
@@ -1738,6 +1778,8 @@ export function createCore(adapters: CoreAdapters): Core {
     openDocumentFile: (documentId) => documents.openFile(documentId),
     openDocumentImage: (documentId, path) => documents.openImage(documentId, path),
     openDocumentInApp: async (documentId) => {
+      const address = documents.get(documentId).web?.address;
+      if (address) return adapters.browser.open(address);
       const path = await documents.filePath(documentId);
       if (!adapters.shell)
         throw new Error("This copy of IncarnaMind can't open files in other apps.");
