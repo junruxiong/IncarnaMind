@@ -9,6 +9,7 @@ import { recordUsage, useAppStore } from "../store";
 import { ConnectorsSettings } from "./connectors/ConnectorsSettings";
 import { CloseLineIcon } from "./lineIcons";
 import { OrganizationSettings } from "./OrganizationSettings";
+import { OutputLocationSettings } from "./OutputLocationSettings";
 import { PrivacySettings } from "./PrivacySettings";
 import { ChatGptPlanSettings } from "./providers/ChatGptPlanSettings";
 import { ChatModelSettings } from "./providers/ChatModelSettings";
@@ -148,6 +149,7 @@ function PageContent({ page }: { page: SettingsPage }) {
       return (
         <Page>
           <LanguageSettings />
+          <OutputLocationSettings />
           <DataFolderSettings />
           <AboutSettings />
         </Page>
