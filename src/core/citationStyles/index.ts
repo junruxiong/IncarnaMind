@@ -35,6 +35,8 @@ const CACHE_SIZE = 24;
 interface Reference {
   item: CslItem;
   documentId: string | null;
+  /** The Document's name, as the app shows it, or as it was when cited. */
+  name: string;
   needsDetails: boolean;
 }
 
@@ -55,6 +57,7 @@ function referenceOf(work: CitedWork, document: Document | undefined): Reference
     return {
       item: nameOnlyItem(`name:${name}`, name),
       documentId: null,
+      name,
       needsDetails: true,
     };
   }
@@ -62,13 +65,14 @@ function referenceOf(work: CitedWork, document: Document | undefined): Reference
   const item = fields ? cslItemOf(document.id, fields) : nameOnlyItem(document.id, name);
   // A work with no title is cited by its Document's name rather than by nothing.
   if (!item.title) item.title = name;
-  return { item, documentId: document.id, needsDetails: thin(document) };
+  return { item, documentId: document.id, name, needsDetails: thin(document) };
 }
 
 /**
  * Numbered, IncarnaMind's own form: the editor numbers its Citations and the exports give
  * each a footnote naming its Document and Location, so only the Bibliography is made here:
- * each cited Document once, by name, in alphabetical order.
+ * each cited Document once, by the name its footnotes give it, in alphabetical order. Its
+ * reference record isn't used, so none needs details.
  */
 function numbered(request: CitationFormatRequest, references: Map<string, Reference>) {
   const collator = new Intl.Collator(["en", "zh-CN"], { sensitivity: "base", numeric: true });
@@ -76,8 +80,8 @@ function numbered(request: CitationFormatRequest, references: Map<string, Refere
     .map((reference) => ({
       documentId: reference.documentId,
       label: null,
-      runs: [{ text: reference.item.title ?? "" }],
-      needsDetails: reference.needsDetails,
+      runs: [{ text: reference.name }],
+      needsDetails: false,
     }))
     .sort((a, b) => collator.compare(a.runs[0]?.text ?? "", b.runs[0]?.text ?? ""));
   return {

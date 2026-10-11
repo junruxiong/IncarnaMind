@@ -1,4 +1,6 @@
+import { useCitationStylePicker } from "../citationStylePicker";
 import { noteHolding } from "../editor/noteKeymap";
+import { currentTabOf } from "../layoutSlice";
 import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
 import { citationHandle, composerHandle, sidebarHandle } from "./handles";
@@ -6,6 +8,12 @@ import { meetingCommands } from "./meetings";
 import { type Command, commands, fromMenu } from "./registry";
 import { tableCommands } from "./tables";
 import { tabCommands } from "./tabs";
+
+/** The Mind in the tab the User is in, if that tab holds one. */
+function mindInFront(): string | null {
+  const item = currentTabOf(useAppStore.getState().layout)?.item;
+  return item?.kind === "mind" ? item.mindId : null;
+}
 
 const appCommands: readonly Command[] = [
   {
@@ -48,6 +56,24 @@ const appCommands: readonly Command[] = [
     // While a Citation's card shows (hovered, focused or clicked).
     when: () => citationHandle.current !== null,
     run: () => citationHandle.current?.open(),
+  },
+  {
+    // The Mind in front's citation style (#289): the same picker as its References' button.
+    id: "mind.citationStyle",
+    label: "citationStyle.command",
+    keywords: ["citationStyle.keywords", "references.title"],
+    group: "main",
+    // The picker's choice is taken back with Undo.
+    reversible: true,
+    when: () => mindInFront() !== null,
+    run: () => {
+      const mindId = mindInFront();
+      if (!mindId) return;
+      const button = document.querySelector<HTMLElement>(
+        `article[data-mind-id="${mindId}"] [data-testid="references-style"]`,
+      );
+      useCitationStylePicker.getState().show(mindId, button);
+    },
   },
   {
     id: "references.import",

@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import * as Y from "yjs";
 import { ANSWER_BLOCK, MIND_CONTENT_FIELD, type MindAccess } from "../../../core/api";
 import { translate } from "../../../shared/i18n";
+import { useCitationFormattingFor } from "../citationFormatting";
 import { shortcutLabel } from "../commands/keymap";
 import { useComposer } from "../composer";
 import { core } from "../core";
@@ -16,6 +17,7 @@ import { BlockCommands } from "../editor/blockCommands";
 import { CitationView } from "../editor/CitationView";
 import { CodeBlockView } from "../editor/CodeBlockView";
 import { Composer, type ComposerHandle } from "../editor/Composer";
+import { CitationClusters } from "../editor/citationClusters";
 import { CitationNumbers } from "../editor/citationNumbers";
 import { EndHint, type HintPlace, type HintText, isEmptyMind } from "../editor/EndHint";
 import { MarginChecks } from "../editor/MarginChecks";
@@ -26,6 +28,7 @@ import { noteExtensions } from "../editor/noteSchema";
 import { QuestionView } from "../editor/QuestionView";
 import { askInEditor, QuestionCommands } from "../editor/questionCommands";
 import { QuestionFold } from "../editor/questionFold";
+import { ReferencesBlock } from "../editor/ReferencesBlock";
 import { ScopePicker } from "../editor/ScopePicker";
 import { SelectionMenu } from "../editor/SelectionMenu";
 import { SlashMenu } from "../editor/SlashMenu";
@@ -212,6 +215,7 @@ function MindEditorView({
           citationView,
         }),
         CitationNumbers,
+        CitationClusters,
         Collaboration.configure({ document: doc, field: MIND_CONTENT_FIELD }),
         Placeholder.configure({
           // An empty Mind's line and the line after an Answer have their hint drawn over them (EndHint).
@@ -264,6 +268,9 @@ function MindEditorView({
     },
     [doc, readOnly],
   );
+
+  // The Citations and References in the Mind's citation style (#289), formatted off the window's thread.
+  useCitationFormattingFor(editor, doc, mindId);
 
   // When the language changes: relabel. Setting the props also redraws the placeholder.
   useEffect(() => {
@@ -321,6 +328,7 @@ function MindEditorView({
       {readOnly && <MindNotice kind="read-only" />}
       <div className={`mind-editor-frame ${guide ? "mind-editor-frame--guide" : ""}`}>
         <EditorContent editor={editor} />
+        <ReferencesBlock mindId={mindId} editor={editor} readOnly={readOnly} />
         {!readOnly && <EndHint editor={editor} text={hintText} onAsk={askOnLine} />}
         <MarginChecks editor={editor} />
         {!readOnly && <TableMenu editor={editor} />}

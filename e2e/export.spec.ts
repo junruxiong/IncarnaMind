@@ -119,15 +119,15 @@ test("a Mind exports to .docx: the dialog counts the unverified Citation first; 
   const target = join(await realpath(suggested), "Tides.docx");
   expect(await pathsShown(app)).toEqual([target]);
 
-  // The file is there: the Note and the Answer, not the Question, and the Citation a footnote.
+  // The file is there: the Note and the Answer, not the Question, and the Citation in the
+  // Mind's citation style (APA 7, the default), marked unverified, with the References.
   const files = unzip(await readFile(target));
   const paragraphs = paragraphsOf(part(files, "word/document.xml")).map((each) => each.text);
   expect(paragraphs).toContain("Notes on tides.");
-  expect(paragraphs).toContain("Your Documents answer this[1].");
+  expect(paragraphs).toContain("Your Documents answer this (Tides, n.d., p. 2) [unverified].");
   expect(paragraphs.join("\n")).not.toContain("When do spring tides happen?");
-  expect(footnotesOf(part(files, "word/footnotes.xml"))).toEqual({
-    "1": "Tides, p. 2 [unverified]",
-  });
+  expect(paragraphs.slice(-2)).toEqual(["References", "Tides. (n.d.)."]);
+  expect(footnotesOf(part(files, "word/footnotes.xml"))).toEqual({});
 
   // The next export doesn't ask, and leaves the first file as it was.
   const first = await readFile(target);

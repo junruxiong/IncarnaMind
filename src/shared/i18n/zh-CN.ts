@@ -1842,6 +1842,8 @@ export const zhCN = {
   "citationStyle.keywords": "参考文献、引文、国标、GB/T 7714、APA、MLA",
   "citationStyle.button": "引用格式：{style}",
   "citationStyle.search": "搜索格式…",
+  "citationStyle.current": "此 Mind 当前的格式",
+  "citationStyle.credit": "格式来自 Citation Style Language 项目：",
   "citationStyle.noMatch": "没有与“{query}”相符的格式。",
   "citationStyle.changed": "引用格式已改为 {style}",
   "citationStyle.failed": "无法更改引用格式：{reason}",

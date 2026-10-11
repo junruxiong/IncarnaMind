@@ -243,7 +243,7 @@ describe("formatting a Mind's Citations", () => {
     expect(plain(after.bibliography[0]?.runs)).toContain("Prospect theory revisited");
   });
 
-  test("Numbered lists each cited Document once, by name, and numbers nothing itself", async () => {
+  test("Numbered lists each cited Document once, by the name its footnotes give it", async () => {
     const { core, prospect, lease } = await setUp();
     const formatted = await format(
       core,
@@ -254,9 +254,14 @@ describe("formatting a Mind's Citations", () => {
     );
     expect(formatted.form).toBe("numbered");
     expect(formatted.clusters).toEqual([{ runs: [] }, { runs: [] }, { runs: [] }]);
-    expect(formatted.bibliography.map((entry) => plain(entry.runs))).toEqual([
-      "Lease agreement",
-      "Prospect theory: An analysis of decision under risk",
+    expect(formatted.bibliography).toEqual([
+      {
+        documentId: lease.id,
+        label: null,
+        runs: [{ text: "Lease agreement" }],
+        needsDetails: false,
+      },
+      { documentId: prospect.id, label: null, runs: [{ text: "prospect" }], needsDetails: false },
     ]);
   });
 

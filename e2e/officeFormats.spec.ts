@@ -253,13 +253,21 @@ test("Word, PowerPoint, Excel and CSV files in a linked folder are cited by sect
   await expect(mark.getByTestId("viewer-quote-mark-label")).toHaveText("rows 4–5");
   await screenshot(window, "csv-grid");
 
-  // Exported to .docx, each Citation's footnote names its Location.
+  // Exported to .docx in Numbered, IncarnaMind's own citation style (chosen in the dialog),
+  // each Citation's footnote names its Location.
   const target = join(sources, "Formats.docx");
   await useOutputLocation(window, sources);
   await window.keyboard.press("Escape");
   await window.getByTestId("export-mind").click();
   const dialog = window.getByTestId("export-dialog");
   await expect(dialog.getByTestId("export-citations")).toHaveAttribute("data-unverified", "0");
+  await dialog.getByTestId("export-citation-style").click();
+  await expect(window.getByTestId("citation-style-search")).toBeFocused();
+  await window.keyboard.type("numbered");
+  await window.keyboard.press("Enter");
+  await expect(dialog.getByTestId("export-citation-style")).toHaveText(
+    "Numbered (Document and page)",
+  );
   await dialog.getByTestId("export-save").click();
   await expect(dialog.getByTestId("export-done")).toBeVisible();
   await dialog.getByTestId("export-close").click();

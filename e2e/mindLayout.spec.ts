@@ -199,9 +199,10 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
   await expect(handle).toBeVisible();
   await inLeftMargin(handle, "the block handle");
 
-  // The Citations are numbered within their Answer; the not-found one is amber in the text.
+  // The Citations read in the Mind's citation style (APA 7, the default), numbered within their
+  // Answer in their labels; the not-found one is amber in the text.
   const markers = editor.getByTestId("citation-chip");
-  await expect(markers).toHaveText(["1", "2", "3"]);
+  await expect(markers).toHaveText(Array(3).fill("(Tides, n.d., p. 2)"));
   await expect(markers.nth(0)).toHaveAttribute("aria-label", /Tides, p\. 2\. Quote found on p\. 2/);
   await expect(markers.nth(2)).toHaveAttribute("data-check", "not-found");
 
