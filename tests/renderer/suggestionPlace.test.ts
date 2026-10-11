@@ -1,7 +1,7 @@
 import { getSchema, type JSONContent } from "@tiptap/core";
 import { EditorState, TextSelection } from "@tiptap/pm/state";
 import { describe, expect, test } from "vitest";
-import { ANSWER_BLOCK, CITATION_NODE } from "../../src/core/api";
+import { ANSWER_BLOCK, CITATION_NODE, FOOTNOTE_NODE } from "../../src/core/api";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
 import {
   citationNumberAt,
@@ -74,6 +74,16 @@ describe("where a suggestion goes", () => {
   test("its Citation takes the next number in its Block", () => {
     const state = stateWith([paragraph(text("One "), citation, text(LONG))], endOfFirst);
     expect(citationNumberAt(state, endOfFirst(state.doc))).toBe(2);
+  });
+
+  test("its Citation takes the next number in the Mind, which footnotes share", () => {
+    // A footnote holding a Citation counts once: the Citation in it has no number.
+    const footnote = { type: FOOTNOTE_NODE, content: [text("See "), citation] };
+    const state = stateWith(
+      [paragraph(text("Neap"), footnote, text(" tides "), citation), paragraph(text(LONG))],
+      (doc) => doc.content.size - 1,
+    );
+    expect(citationNumberAt(state, state.doc.content.size - 1)).toBe(3);
   });
 });
 
