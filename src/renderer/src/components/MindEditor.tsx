@@ -18,7 +18,6 @@ import { CodeBlockView } from "../editor/CodeBlockView";
 import { Composer, type ComposerHandle } from "../editor/Composer";
 import { CitationNumbers } from "../editor/citationNumbers";
 import { EndHint, type HintPlace, type HintText, isEmptyMind } from "../editor/EndHint";
-import { FormatMenu } from "../editor/FormatMenu";
 import { MarginChecks } from "../editor/MarginChecks";
 import { MathEditing, MathEditor } from "../editor/MathEditor";
 import { ComposerDockContext, MindIdContext } from "../editor/mindContext";
@@ -28,6 +27,7 @@ import { QuestionView } from "../editor/QuestionView";
 import { askInEditor, QuestionCommands } from "../editor/questionCommands";
 import { QuestionFold } from "../editor/questionFold";
 import { ScopePicker } from "../editor/ScopePicker";
+import { SelectionMenu } from "../editor/SelectionMenu";
 import { SlashMenu } from "../editor/SlashMenu";
 import { noteSlashItems, skillSlashItems } from "../editor/slashItems";
 import { SmartTypography } from "../editor/typography";
@@ -316,7 +316,7 @@ function MindEditorView({
         )}
       {guide && <StartGuide />}
       {!readOnly && <BlockHandle editor={editor} />}
-      {!readOnly && <FormatMenu editor={editor} />}
+      {!readOnly && <SelectionMenu editor={editor} />}
       {editingMath !== null && (
         <MathEditor
           key={editingMath}
