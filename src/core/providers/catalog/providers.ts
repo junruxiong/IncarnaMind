@@ -32,8 +32,8 @@ const PROVIDERS = [
         zh: "点“获取密钥”，登录 Anthropic Console。",
       },
       {
-        en: "Add credit under Billing. A Claude plan doesn't pay for API use.",
-        zh: "在 Billing 中充值。Claude 订阅不支付 API 用量。",
+        en: "Add credit under Billing. A Claude Max or Team plan includes monthly API credits: link the plan to this Console organization in claude.ai's Billing first. Pro doesn't include any.",
+        zh: "在 Billing 中充值。Claude Max 或 Team 订阅每月附带 API 额度：先在 claude.ai 的账单设置里把订阅关联到这个 Console 组织。Pro 订阅不含 API 额度。",
       },
       {
         en: "Create a key, copy it (it's shown once) and paste it here.",
