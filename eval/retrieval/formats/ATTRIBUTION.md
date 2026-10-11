@@ -1,6 +1,6 @@
 # Every-format fixtures: source and licence
 
-The files in `files/` were written by `make-fixtures.py` for IncarnaMind's evaluation (#70). All their text is synthetic, written for this project: no third-party text is reproduced. People, places, companies, institutions, products and figures are fictional, and no contact details appear. They are released under the repository's Apache-2.0 licence.
+The files in `files/` were written for IncarnaMind's evaluation (#70): all by `make-fixtures.py` but the two WebVTT Transcripts, written by hand. All their text is synthetic, written for this project: no third-party text is reproduced. People, places, companies, institutions, products and figures are fictional, and no contact details appear. They are released under the repository's Apache-2.0 licence.
 
 | Format | Written with |
 |---|---|
@@ -8,6 +8,7 @@ The files in `files/` were written by `make-fixtures.py` for IncarnaMind's evalu
 | PowerPoint | python-pptx 1.0.2: charts with their cached values, and the workbook PowerPoint keeps beside each chart (XlsxWriter 3.2.9) |
 | Excel | openpyxl 3.1.5 |
 | CSV, Markdown, plain text | written as UTF-8 text |
+| WebVTT Transcripts (#136) | written by hand as UTF-8 WebVTT, one cue per line said, each with its speaker |
 | PDF | reportlab 5.0.1 in its invariant mode: Helvetica for Latin text, reportlab's built-in STSong-Light CID font for Chinese (not embedded; pdf.js maps it with its CMaps), figures drawn by reportlab |
 
 With the same library versions, `make-fixtures.py` writes the same bytes again: fixed document dates, fixed ZIP timestamps (also inside the workbooks charts embed) and reportlab's invariant mode.
