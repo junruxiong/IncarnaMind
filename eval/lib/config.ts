@@ -77,6 +77,12 @@ export interface EvalConfig {
   questionIds: string[] | null;
   /** Whether the every-format set runs too (INCARNAMIND_EVAL_FORMATS: on by default). */
   formats: boolean;
+  /**
+   * Whether keyword + rewrites and keyword + sub-questions also run with a
+   * local chat model (INCARNAMIND_EVAL_LOCAL_QUERY_MODES: off by default), which
+   * would make a call per Question per mode.
+   */
+  localQueryModes: boolean;
   /** The sets `npm run eval:dump` dumps (INCARNAMIND_EVAL_DUMP_SETS: all three by default). */
   dumpSets: DumpSet[];
 }
@@ -212,6 +218,14 @@ function formatsOn(env: Env): boolean {
   throw new Error(`${PREFIX}FORMATS must be "on" or "off", not "${raw}".`);
 }
 
+/** "off" (the default) or "on". */
+function localQueryModesOn(env: Env): boolean {
+  const raw = value(env, "LOCAL_QUERY_MODES");
+  if (raw === null || raw === "off") return false;
+  if (raw === "on") return true;
+  throw new Error(`${PREFIX}LOCAL_QUERY_MODES must be "on" or "off", not "${raw}".`);
+}
+
 /** "gating", "formats" and "hard", some or all, separated by commas; all by default. */
 function dumpSets(env: Env): DumpSet[] {
   const raw = value(env, "DUMP_SETS");
@@ -245,6 +259,7 @@ export function readConfig(root: string, env: Env = process.env): EvalConfig {
     answerTimeoutMs: positiveInteger(env, "ANSWER_TIMEOUT_S", 300) * 1000,
     questionIds: questionIds(env),
     formats: formatsOn(env),
+    localQueryModes: localQueryModesOn(env),
     dumpSets: dumpSets(env),
   };
 }

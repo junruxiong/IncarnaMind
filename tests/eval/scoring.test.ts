@@ -743,6 +743,19 @@ describe("The evaluation's settings for a short check", () => {
     expect(() => readConfig("/repo", { INCARNAMIND_EVAL_FORMATS: "no" })).toThrow(/"on" or "off"/);
   });
 
+  test("INCARNAMIND_EVAL_LOCAL_QUERY_MODES=on runs the chat-model modes with a local model, which is off by default", () => {
+    expect(readConfig("/repo", {}).localQueryModes).toBe(false);
+    expect(readConfig("/repo", { INCARNAMIND_EVAL_LOCAL_QUERY_MODES: "off" }).localQueryModes).toBe(
+      false,
+    );
+    expect(readConfig("/repo", { INCARNAMIND_EVAL_LOCAL_QUERY_MODES: "on" }).localQueryModes).toBe(
+      true,
+    );
+    expect(() => readConfig("/repo", { INCARNAMIND_EVAL_LOCAL_QUERY_MODES: "1" })).toThrow(
+      /"on" or "off"/,
+    );
+  });
+
   test("the Questions named are asked in the set's order; an id in no set asked from is refused", () => {
     const set = loadEvaluationSet(fileURLToPath(new URL("../..", import.meta.url)));
     expect(questionsToAsk(set.questions, null)).toHaveLength(set.questions.length);
