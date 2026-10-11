@@ -65,22 +65,7 @@ export function AnswerActions({
     return () => clearTimeout(timer);
   }, [copied]);
 
-  if (streaming) {
-    return (
-      <div data-testid="answer-meta" className="assistant-answer-actions">
-        <span className="assistant-answer-meta">{writing}</span>
-        <button
-          type="button"
-          data-testid="answer-stop"
-          onClick={() => stopAnswer(answer.id)}
-          className="assistant-answer-action"
-        >
-          <StopIcon className="size-3" />
-          {t("answer.stop")}
-        </button>
-      </div>
-    );
-  }
+  if (streaming) return <WritingLine writing={writing} onStop={() => stopAnswer(answer.id)} />;
 
   if (added) {
     return (
@@ -189,6 +174,27 @@ export function AnswerActions({
         <span className="assistant-answer-meta">
           <Dotted items={meta} />
         </span>
+      )}
+    </div>
+  );
+}
+
+/** Under an Answer being written, or on its way: what it is doing, and Stop unless it is stopping. */
+export function WritingLine({ writing, onStop }: { writing: ReactNode; onStop?: () => void }) {
+  const t = useT();
+  return (
+    <div data-testid="answer-meta" className="assistant-answer-actions">
+      <span className="assistant-answer-meta">{writing}</span>
+      {onStop && (
+        <button
+          type="button"
+          data-testid="answer-stop"
+          onClick={onStop}
+          className="assistant-answer-action"
+        >
+          <StopIcon className="size-3" />
+          {t("answer.stop")}
+        </button>
       )}
     </div>
   );

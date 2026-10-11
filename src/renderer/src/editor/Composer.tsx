@@ -17,7 +17,7 @@ import { mindModelOf } from "../../../shared/mindModel";
 import { hasSearchScope, type ScopeKind, scopeIds } from "../../../shared/searchScope";
 import { useAnswers } from "../answers";
 import { shortcutLabel } from "../commands/keymap";
-import { SearchIcon } from "../components/icons";
+import { SearchIcon, StopIcon } from "../components/icons";
 import { SparkLineIcon } from "../components/lineIcons";
 import { ProblemLine } from "../components/ProblemLine";
 import {
@@ -29,7 +29,13 @@ import {
   type Paste,
   useComposer,
 } from "../composer";
-import { askInAssistant, useConversations } from "../conversations";
+import {
+  answerBeingWritten,
+  askInAssistant,
+  stopWriting,
+  useAnswerBeingWritten,
+  useConversations,
+} from "../conversations";
 import { core } from "../core";
 import { editFromComposer, stopEditing, useEdits } from "../editWithAi";
 import { useT } from "../i18n";
@@ -97,7 +103,9 @@ export interface ComposerHandle {
  *
  * In its row: a Skill chosen with "/", the text, the quiet model chip, the
  * Search scope (a chip for each Folder, Tag or Document, or "All Documents";
- * "@" adds more), and the Ask button (an up arrow). A Mind in a Folder starts
+ * "@" adds more), and the Ask button (an up arrow; Stop while an Answer is
+ * written, which Enter waits for). Sending empties the text at once, and puts
+ * it back if the Question couldn't be asked. A Mind in a Folder starts
  * with the Folder's chip; taking it out searches everything (see
  * `composerScope`). Why a Question couldn't be asked shows on one line above
  * them, with the one thing that fixes it; so does the offer to suggest as the
@@ -366,6 +374,9 @@ export function Composer({
       }
       return;
     }
+    // An Answer is being written, or its Question is on its way: Enter waits for it, as in
+    // ChatGPT and Claude, so a second press never asks the Question twice. The button is Stop.
+    if (answerBeingWritten() !== null) return;
     const typed = current.text.trim();
     // What is pasted, in chips, goes with the words typed.
     const text = [typed, ...current.pastes.map((paste) => paste.text.trim())]
@@ -429,6 +440,8 @@ export function Composer({
   };
 
   const canAsk = draft.text.trim() !== "" || draft.pastes.length > 0;
+  /** An Answer is being written in the assistant, or on its way: the button is Stop meanwhile. */
+  const answering = useAnswerBeingWritten() !== null;
   const activeOption = picking && option >= 0 ? `${listId}-${option}` : undefined;
 
   return (
@@ -595,19 +608,37 @@ export function Composer({
               {t("composer.scope.all")}
             </button>
           )}
-          <button
-            type="button"
-            data-testid="composer-ask"
-            aria-label={editing ? t("composer.edit.send") : t("composer.ask")}
-            title={editing ? t("composer.edit.send") : t("composer.ask")}
-            disabled={!canAsk}
-            // The text keeps the focus.
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => void ask()}
-            className="composer-ask"
-          >
-            <AskArrowIcon className="size-3" />
-          </button>
+          {answering && !editing ? (
+            <button
+              type="button"
+              data-testid="composer-stop"
+              aria-label={t("command.answer.stop")}
+              title={t("command.answer.stop")}
+              // The text keeps the focus.
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={(event) => {
+                // A double click on Ask: its second click lands here, and leaves the Answer be.
+                if (event.detail < 2) stopWriting();
+              }}
+              className="composer-ask"
+            >
+              <StopIcon className="size-3.5" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              data-testid="composer-ask"
+              aria-label={editing ? t("composer.edit.send") : t("composer.ask")}
+              title={editing ? t("composer.edit.send") : t("composer.ask")}
+              disabled={!canAsk}
+              // The text keeps the focus.
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => void ask()}
+              className="composer-ask"
+            >
+              <AskArrowIcon className="size-3" />
+            </button>
+          )}
         </div>
         {showExpand && (
           <button
