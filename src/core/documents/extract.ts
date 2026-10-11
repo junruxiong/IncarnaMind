@@ -63,30 +63,59 @@ function pageText(items: readonly object[]): string {
 /** XMP's creation date, written as an element or as an attribute of its description. */
 const XMP_CREATE_DATE = /xmp:CreateDate\s*(?:=\s*(["'])([^"'<>]*)\1|>([^<]*)<)/i;
 
+/** What a PDF says of itself, as `pdfMetadata` reads it. */
+export interface PdfMetadata {
+  /** Its Info dictionary's CreationDate, a PDF date string. */
+  info: string | null;
+  /** Its XMP metadata's xmp:CreateDate, an ISO 8601 date. */
+  xmp: string | null;
+  /** Its Info dictionary's Title (#213). */
+  title: string | null;
+  /** Its Info dictionary's Author (#286). */
+  author: string | null;
+  /** Its XMP metadata packet, as written (#286). */
+  xmpPacket: string | null;
+  /** The text of its first `pages` pages, as extracted, running headers and all (#286). */
+  firstPages: string[];
+}
+
 /**
- * A PDF's creation dates as written (#53): its document information
- * dictionary's CreationDate, a PDF date string, and its XMP metadata's
- * xmp:CreateDate, an ISO 8601 date. Null where there is none. Never its
- * ModDate. Only the metadata is read, not the pages. Throws if the PDF
- * can't be opened.
+ * A PDF's metadata as written: its document information dictionary's
+ * CreationDate (#53), Title (#213) and Author, and its XMP metadata, whose
+ * xmp:CreateDate is read here; never its ModDate. With `pages`, the text of
+ * its first pages too (#286: a DOI or an arXiv id is printed there).
+ * Throws if the PDF can't be opened.
  */
-export async function pdfCreationDates(
-  bytes: Uint8Array,
-): Promise<{ info: string | null; xmp: string | null; title: string | null }> {
+export async function pdfMetadata(bytes: Uint8Array, pages = 0): Promise<PdfMetadata> {
   const { getDocument } = await loadPdfJs();
   // pdf.js may take ownership of the buffer, so give it a copy.
-  const task = getDocument({ data: new Uint8Array(bytes), verbosity: 0 });
+  const task = getDocument({
+    data: new Uint8Array(bytes),
+    ...(pages > 0 && { ...pdfjsDataUrls(), cMapPacked: true }),
+    verbosity: 0,
+  });
   try {
     const document = await task.promise;
     const { info, metadata } = await document.getMetadata();
-    const created = isRecord(info) ? info.CreationDate : undefined;
-    const xmp = metadata ? XMP_CREATE_DATE.exec(String(metadata.getRaw())) : null;
-    const title = isRecord(info) ? info.Title : undefined;
+    const raw = metadata ? String(metadata.getRaw()) : null;
+    const xmp = raw ? XMP_CREATE_DATE.exec(raw) : null;
+    const entry = (name: string) => {
+      const value = isRecord(info) ? info[name] : undefined;
+      return typeof value === "string" ? value : null;
+    };
+    const firstPages: string[] = [];
+    for (let number = 1; number <= Math.min(pages, document.numPages); number++) {
+      const page = await document.getPage(number);
+      firstPages.push(pageText((await page.getTextContent()).items));
+      page.cleanup();
+    }
     return {
-      info: typeof created === "string" ? created : null,
+      info: entry("CreationDate"),
       xmp: xmp ? (xmp[2] ?? xmp[3] ?? null) : null,
-      // Its title (#213), read with the dates: the dictionary's Title.
-      title: typeof title === "string" ? title : null,
+      title: entry("Title"),
+      author: entry("Author"),
+      xmpPacket: raw,
+      firstPages,
     };
   } finally {
     await task.destroy();
