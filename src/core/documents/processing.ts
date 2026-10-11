@@ -12,9 +12,15 @@ import { createReadStream } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import type { TextUnit } from "../../shared/units";
 import type { DocumentFailureReason, DocumentKind } from "../api";
+import {
+  type FileMetadata,
+  type FileReference,
+  readReference,
+  webPageReference,
+} from "../referenceRecords/read";
 import { stripBoilerplate } from "./boilerplate";
 import { creationDate, pdfDate, w3cDate } from "./creationDate";
-import { ExtractionError, extractText, pdfCreationDates } from "./extract";
+import { ExtractionError, extractText, pdfMetadata } from "./extract";
 import { officeProperties } from "./formats/coreProperties";
 import { readWebPage } from "./formats/web";
 import { packageSizeError } from "./formats/zip";
@@ -76,9 +82,12 @@ export const HAN_CURRENT_SINCE = 6;
  * Document from before migration 24 is), has it read again by a metadata
  * job, in the background, without being processed or embedded again. When
  * only the metadata read changes, bump this, not `PROCESSING_VERSION`.
- * 1: #53 (creation dates). 2: #213 (titles).
+ * 1: #53 (creation dates). 2: #213 (titles). 3: #286 (reference records).
  */
-export const METADATA_VERSION = 2;
+export const METADATA_VERSION = 3;
+
+/** How many of a PDF's first pages a DOI or an arXiv id is looked for in (#286). */
+const REFERENCE_PAGES = 2;
 
 /** Extracts a Document's text into Passages and Units, and reads its creation date. */
 export interface ProcessingJob {
@@ -142,24 +151,30 @@ interface Crashed {
   message: string;
 }
 
+/** What a version's metadata says of it. */
+export interface VersionMetadata {
+  /** The version's creation date (see ./creationDate), or null if nothing gives one. */
+  creationDate: string | null;
+  /** The version's title (see ./title), or null. */
+  title: string | null;
+  /** The version's reference record, as far as the file gives it (see ../referenceRecords/read). */
+  reference: FileReference;
+}
+
 export type ProcessingResult =
-  | (Processed & {
-      /** The version processed: the SHA-256 of the bytes read, hex. */
-      contentHash: string;
-      /** How many bytes were read. */
-      size: number;
-      /** The version's creation date (see ./creationDate), or null. */
-      creationDate: string | null;
-      /** The version's title (see ./title), or null. */
-      title: string | null;
-    })
+  | (Processed &
+      VersionMetadata & {
+        /** The version processed: the SHA-256 of the bytes read, hex. */
+        contentHash: string;
+        /** How many bytes were read. */
+        size: number;
+      })
   /** Nothing was processed. */
   | FileUnreadable
   | Crashed;
 
 export type MetadataResult =
-  /** The version's creation date (see ./creationDate), or null if nothing gives one. */
-  | { outcome: "read"; creationDate: string | null; title: string | null }
+  | ({ outcome: "read" } & VersionMetadata)
   /** The file is no longer the version indexed: nothing was read. */
   | { outcome: "changed" }
   | FileUnreadable
@@ -211,7 +226,7 @@ const isPackage = (kind: DocumentKind) => kind === "docx" || kind === "pptx" || 
  * `packageSizeError`), refused before it is read: its bytes are only hashed
  * as they stream past, for the version it is. Null for a file that isn't.
  */
-async function refuseTooLarge(file: string): Promise<ProcessingResult | null> {
+async function refuseTooLarge(file: string, kind: DocumentKind): Promise<ProcessingResult | null> {
   try {
     const { size } = await stat(file);
     const refused = packageSizeError(size);
@@ -226,6 +241,7 @@ async function refuseTooLarge(file: string): Promise<ProcessingResult | null> {
       size,
       creationDate: null,
       title: null,
+      reference: readReference({ kind, firstPages: [] }),
     };
   } catch (error) {
     return unreadable(error);
@@ -234,30 +250,39 @@ async function refuseTooLarge(file: string): Promise<ProcessingResult | null> {
 
 /** Never throws: every problem becomes a "failed" result. */
 export async function processFile(job: ProcessingJob): Promise<ProcessingResult> {
-  const refused = isPackage(job.kind) ? await refuseTooLarge(job.file) : null;
+  const refused = isPackage(job.kind) ? await refuseTooLarge(job.file, job.kind) : null;
   if (refused) return refused;
   const bytes = await readBytes(job.file);
   if (!(bytes instanceof Uint8Array)) return bytes;
   const version = { contentHash: sha256(bytes), size: bytes.byteLength };
-  const processed = await processBytes(job.kind, bytes);
+  const { processed, firstPages } = await processBytes(job.kind, bytes);
   const firstUnit = processed.outcome === "ready" ? (processed.pages[0]?.text ?? null) : null;
-  return { ...processed, ...version, ...(await readMetadataOf(job.kind, bytes, firstUnit)) };
+  return {
+    ...processed,
+    ...version,
+    ...(await readMetadataOf(job.kind, bytes, firstUnit, firstPages)),
+  };
 }
 
 /** A metadata job: the creation date of the version indexed, read from the file. Never throws. */
 export async function readMetadata(job: MetadataJob): Promise<MetadataResult> {
   // Text, Markdown and CSV files have no metadata: only the stored first Unit is read.
   if (!hasMetadata(job.kind)) {
+    const firstPages = job.firstUnit === null ? [] : [job.firstUnit];
     return {
       outcome: "read",
       creationDate: creationDate([], job.firstUnit, thisYear()),
       title: documentTitle(null, job.firstUnit),
+      reference: readReference({ kind: job.kind, firstPages }),
     };
   }
   const bytes = await readBytes(job.file);
   if (!(bytes instanceof Uint8Array)) return bytes;
   if (sha256(bytes) !== job.contentHash) return { outcome: "changed" };
-  return { outcome: "read", ...(await readMetadataOf(job.kind, bytes, job.firstUnit)) };
+  // A PDF's first pages are read again as extracted: the stored first Unit has lost its running
+  // headers and footers, where a DOI often is.
+  const firstPages = job.kind === "pdf" ? null : job.firstUnit === null ? [] : [job.firstUnit];
+  return { outcome: "read", ...(await readMetadataOf(job.kind, bytes, job.firstUnit, firstPages)) };
 }
 
 const hasMetadata = (kind: DocumentKind) =>
@@ -269,37 +294,59 @@ const thisYear = () => new Date().getFullYear();
 /**
  * A version's creation date (see ./creationDate): the metadata's (a PDF's
  * Info dictionary, then its XMP; an Office file's core properties), or else
- * the latest year written in its first Unit. Never throws: metadata that
- * can't be read is no metadata, and never fails the Document.
+ * the latest year written in its first Unit. Its title, and its reference
+ * record (see ../referenceRecords/read), from the same metadata and from
+ * `firstPages`, its first pages' text as extracted (null: a PDF's are read
+ * here). Never throws: metadata that can't be read is no metadata, and
+ * never fails the Document.
  */
 async function readMetadataOf(
   kind: DocumentKind,
   bytes: Uint8Array,
   firstUnit: string | null,
-): Promise<{ creationDate: string | null; title: string | null }> {
+  firstPages: string[] | null,
+): Promise<VersionMetadata> {
   let fromMetadata: (string | null)[] = [];
   let property: string | null = null;
+  const parts: FileMetadata = { kind, firstPages: firstPages ?? [] };
   try {
     if (kind === "web") {
       // When it was published, if it says; a year in its text is no date of the page's.
       const { meta } = readWebPage(new TextDecoder().decode(bytes));
+      const title = documentTitle(meta.title, firstUnit);
       return {
         creationDate: creationDate(
           [meta.published === null ? null : w3cDate(meta.published)],
           null,
           thisYear(),
         ),
-        title: documentTitle(meta.title, firstUnit),
+        title,
+        reference: webPageReference(
+          {
+            address: meta.address ?? "",
+            siteName: meta.siteName ?? "",
+            author: meta.author,
+            published: meta.published,
+          },
+          title,
+        ),
       };
     }
     if (kind === "pdf") {
-      const { info, xmp, title } = await pdfCreationDates(bytes);
-      fromMetadata = [info === null ? null : pdfDate(info), xmp === null ? null : w3cDate(xmp)];
-      property = title;
+      const pdf = await pdfMetadata(bytes, firstPages === null ? REFERENCE_PAGES : 0);
+      fromMetadata = [
+        pdf.info === null ? null : pdfDate(pdf.info),
+        pdf.xmp === null ? null : w3cDate(pdf.xmp),
+      ];
+      property = pdf.title;
+      parts.info = { title: pdf.title, author: pdf.author };
+      parts.xmp = pdf.xmpPacket;
+      if (firstPages === null) parts.firstPages = pdf.firstPages;
     } else if (hasMetadata(kind)) {
-      const { created, title } = await officeProperties(bytes);
-      fromMetadata = [created === null ? null : w3cDate(created)];
-      property = title;
+      const office = await officeProperties(bytes);
+      fromMetadata = [office.created === null ? null : w3cDate(office.created)];
+      property = office.title;
+      parts.office = office;
     }
   } catch {
     // Unusual or malformed: the year comes from the first Unit.
@@ -307,25 +354,32 @@ async function readMetadataOf(
   return {
     creationDate: creationDate(fromMetadata, firstUnit, thisYear()),
     title: documentTitle(property, firstUnit),
+    reference: readReference(parts),
   };
 }
 
-async function processBytes(kind: DocumentKind, bytes: Uint8Array): Promise<Processed> {
+/** The file's text, processed, and its first pages as extracted (see `readMetadataOf`). */
+async function processBytes(
+  kind: DocumentKind,
+  bytes: Uint8Array,
+): Promise<{ processed: Processed; firstPages: string[] }> {
   try {
     const extracted = await extractText(kind, bytes);
+    const firstPages = extracted.units.slice(0, REFERENCE_PAGES).map((unit) => unit.text);
     const pages = kind === "pdf" ? stripBoilerplate(extracted.units) : extracted.units;
     const { pageCount } = extracted;
     const passages = buildPassages(pages).map((passage) => ({
       ...passage,
       keywords: keywordText(passage.text),
     }));
-    if (passages.length === 0) return { outcome: "no-text", pageCount };
-    return { outcome: "ready", pageCount, passages, pages };
+    if (passages.length === 0) return { processed: { outcome: "no-text", pageCount }, firstPages };
+    return { processed: { outcome: "ready", pageCount, passages, pages }, firstPages };
   } catch (error) {
-    if (error instanceof ExtractionError) {
-      return { outcome: "failed", reason: error.reason, message: error.message };
-    }
-    return { outcome: "failed", reason: "processing-error", message: messageOf(error) };
+    const processed: Processed =
+      error instanceof ExtractionError
+        ? { outcome: "failed", reason: error.reason, message: error.message }
+        : { outcome: "failed", reason: "processing-error", message: messageOf(error) };
+    return { processed, firstPages: [] };
   }
 }
 

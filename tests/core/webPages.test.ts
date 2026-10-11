@@ -130,6 +130,15 @@ describe("Saving a web page", { timeout: 30_000 }, () => {
         published: "2024-05-01T09:30:00+01:00",
       },
     });
+    // Its reference record, for citing it, is read from the snapshot.
+    expect(document.reference?.fields).toMatchObject({
+      type: "webpage",
+      title: "Tea - The Open Encyclopedia",
+      authors: [{ family: "Lee", given: "Ann" }],
+      issued: "2024-05-01",
+      containerTitle: "The Open Encyclopedia",
+      url: site.url("/tea"),
+    });
     expect(document.path).toBe(join(dataDir, "Web pages", `${document.id}.html`));
     expect(readFileSync(document.path, "utf8")).not.toMatch(/<script|onclick|src=/);
     expect(await core.searchPassages("Portuguese merchants", { mode: "keyword" })).toHaveLength(1);
