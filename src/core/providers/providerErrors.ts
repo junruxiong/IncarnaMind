@@ -83,7 +83,10 @@ export function refusesFeature(
  * Answers (#29) reuse it for errors shown inside an Answer.
  */
 export function classifyProviderError(error: unknown): ProviderError {
-  const cause = RetryError.isInstance(error) ? error.lastError : error;
+  const retried = RetryError.isInstance(error) ? error.lastError : error;
+  // A ChatGPT plan refusal that ends a stream arrives wrapped in the AI SDK's own error.
+  const cause =
+    retried instanceof Error && retried.cause instanceof ChatGptPlanError ? retried.cause : retried;
   const message = messageOf(cause);
 
   if (cause instanceof ConsentDeclinedError) return { kind: "consent-declined", message };

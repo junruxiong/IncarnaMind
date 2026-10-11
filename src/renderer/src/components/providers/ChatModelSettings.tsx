@@ -1,5 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useId, useState } from "react";
-import type { ChatProvider } from "../../../../core/api";
+import type { ChatGptPlanModel, ChatProvider } from "../../../../core/api";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
@@ -16,7 +16,7 @@ import {
   ruledRow,
   ruledRowClass,
 } from "../ui";
-import { useChatGptPlan } from "./ChatGptPlanSettings";
+import { useChatGptPlan } from "./ChatGptSignIn";
 import { type ChatProviderChoice, ChatProviderChoices } from "./ChatProviderChoices";
 import { ReadinessExplanation } from "./ChatReadinessNotice";
 import { useOllama } from "./OllamaCard";
@@ -25,7 +25,8 @@ import { providerLabel } from "./shared";
 /**
  * Settings → Models → Chat model: the provider in use and the default model, as rows
  * split by rules, and changing the provider with the same choices as first
- * run (local models with Ollama, or an API key).
+ * run (local models with Ollama, or an API key). With the ChatGPT plan, the
+ * default model is a choice of the plan's models.
  */
 export function ChatModelSettings() {
   const t = useT();
@@ -110,14 +111,15 @@ export function ChatModelSettings() {
                 {t("providers.settings.defaultModel")}
               </label>
               {current.kind === "chatgpt" ? (
-                // The ChatGPT plan takes only the models its endpoint accepts.
+                // The ChatGPT plan takes only the models its endpoint accepts. This is the one place
+                // its model is chosen: the plan's own section has the account, usage and sign-out.
                 <select
                   id={modelFieldId}
                   value={model}
                   onChange={(event) => setModel(event.target.value)}
                   className={inputClass}
                 >
-                  {chatGptPlan?.models.map((each) => (
+                  {planModelOptions(chatGptPlan?.models ?? [], chatModel?.modelId).map((each) => (
                     <option key={each.id} value={each.id}>
                       {each.name}
                     </option>
@@ -174,4 +176,17 @@ export function ChatModelSettings() {
       )}
     </section>
   );
+}
+
+/**
+ * The ChatGPT plan's models to choose from, with the one in use kept even when
+ * the account no longer lists it, so the select never shows another model than
+ * the one Questions use.
+ */
+function planModelOptions(
+  models: readonly ChatGptPlanModel[],
+  inUse: string | undefined,
+): readonly ChatGptPlanModel[] {
+  if (!inUse || models.some((each) => each.id === inUse)) return models;
+  return [{ id: inUse, name: inUse }, ...models];
 }
