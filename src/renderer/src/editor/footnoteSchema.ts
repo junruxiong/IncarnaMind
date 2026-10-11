@@ -242,13 +242,13 @@ export const openFootnoteOf = (state: EditorState): string | null =>
 
 /** Opens a footnote's text in the popover at its marker. */
 export function openFootnote(editor: Editor, id: string): void {
-  if (editor.isDestroyed) return;
+  if (editor.view.isDestroyed) return;
   editor.view.dispatch(editor.state.tr.setMeta(openKey, id));
 }
 
 /** Closes the footnote popover. */
 export function closeFootnote(editor: Editor): void {
-  if (editor.isDestroyed || openFootnoteOf(editor.state) === null) return;
+  if (editor.view.isDestroyed || openFootnoteOf(editor.state) === null) return;
   editor.view.dispatch(editor.state.tr.setMeta(openKey, null));
 }
 
