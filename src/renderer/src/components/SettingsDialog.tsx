@@ -6,6 +6,7 @@ import { errorMessage } from "../errors";
 import { useT } from "../i18n";
 import { type SettingsPage, settingsPages } from "../settingsPages";
 import { recordUsage, useAppStore } from "../store";
+import { AgentsSettings } from "./agents/AgentsSettings";
 import { ConnectorsSettings } from "./connectors/ConnectorsSettings";
 import { EvidenceSettings } from "./EvidenceSettings";
 import { CloseLineIcon } from "./lineIcons";
@@ -46,6 +47,7 @@ const pageLabels: Record<SettingsPage, MessageKey> = {
   meetings: "settings.pages.meetings",
   connectors: "connectors.settings.title",
   skills: "skills.settings.title",
+  agents: "settings.pages.agents",
   privacy: "privacy.tabs.privacy",
 };
 
@@ -201,6 +203,12 @@ function PageContent({ page }: { page: SettingsPage }) {
         <Page>
           <SkillsSettings />
           <SkillScriptsSettings />
+        </Page>
+      );
+    case "agents":
+      return (
+        <Page>
+          <AgentsSettings />
         </Page>
       );
     case "privacy":
