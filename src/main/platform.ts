@@ -2,8 +2,9 @@
  * Electron implementations of the core's adapters. This is the only place that
  * turns Electron APIs into capabilities the core can use.
  */
+import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { app, safeStorage, shell } from "electron";
 import {
   type AudioCapture,
@@ -291,12 +292,31 @@ const referenceLookupUrl =
 
 /**
  * Test-only launch flag: where Find sources asks its providers (#296), a
- * local server standing in for OpenAlex, arXiv, PubMed and Crossref, each
+ * local server standing in for each provider (OpenAlex, arXiv, PubMed, Crossref, openFDA, DailyMed and ClinicalTrials.gov), each
  * under its own path, so the smoke tests reach none of them. Only a test
  * build honours it.
  */
 const sourceProvidersUrl =
   import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_SOURCES : undefined;
+
+/**
+ * Test-only launch flag: a local server standing in for OpenAI (#122), at
+ * this origin, where the ChatGPT plan signs in and asks, so the smoke tests
+ * can sign in and reach neither OpenAI's sign-in nor its API. Only a test
+ * build honours it.
+ */
+function chatGptStandIn(): CoreAdapters["chatGptPlan"] {
+  const origin = import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_CHATGPT : undefined;
+  if (!origin) return undefined;
+  return {
+    issuer: origin,
+    authorizeUrl: `${origin}/api/accounts/authorize`,
+    tokenUrl: `${origin}/api/accounts/oauth/token`,
+    revokeUrl: `${origin}/api/accounts/oauth/revoke`,
+    jwksUrl: `${origin}/.well-known/jwks.json`,
+    apiBaseUrl: `${origin}/v1`,
+  };
+}
 
 /**
  * What records Meetings: the hidden capture window (ADR-0015). Test-only
@@ -318,12 +338,37 @@ function audioCapture(log: Logger): AudioCapture {
   return createElectronAudioCapture({ log, rendererUrl: process.env.ELECTRON_RENDERER_URL });
 }
 
+/**
+ * A development or test build may keep the ChatGPT sign-in in a ChatGPT test
+ * profile, the folder in INCARNAMIND_CHATGPT_PROFILE, instead of the data
+ * folder: the owner signs in there once, and coding agents running with
+ * temporary data folders use the same sign-in for checks by hand
+ * (docs/agents/testing.md). Its tokens stay encrypted by safeStorage, in that
+ * folder only, and a lock file keeps the processes' refreshes apart. A
+ * release build never reads the variable.
+ */
+function chatGptTestProfile(log: Logger): CoreAdapters["chatGptStore"] {
+  const folder = process.env.INCARNAMIND_CHATGPT_PROFILE;
+  if (import.meta.env.MODE === "production" || !folder) return undefined;
+  const dir = resolve(folder);
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  log.info("chatgpt.testProfile", { folder: dir });
+  return {
+    keychain: createFileKeychain(join(dir, SECRETS_FILE), safeStorageCipher),
+    lockFile: join(dir, "refresh.lock"),
+  };
+}
+
 /** Builds the core's adapters, with the log the core writes to. Call after `app` is ready. */
 export function createElectronAdapters(log: Logger): CoreAdapters {
   const dataDir = app.getPath("userData");
   const crashReporter = createCrashReporter(dataDir);
   const usageData = createUsageDataSender();
+  const chatGptStore = chatGptTestProfile(log);
+  const chatGptPlan = chatGptStandIn();
   return {
+    ...(chatGptStore && { chatGptStore }),
+    ...(chatGptPlan && { chatGptPlan }),
     ...(crashReporter && { crashReporter }),
     ...(usageData && { usageData }),
     ...(referenceLookupUrl && {
@@ -335,6 +380,9 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
         arxiv: `${sourceProvidersUrl}/arxiv`,
         pubmed: `${sourceProvidersUrl}/pubmed`,
         crossref: `${sourceProvidersUrl}/crossref`,
+        openfda: `${sourceProvidersUrl}/openfda`,
+        dailymed: `${sourceProvidersUrl}/dailymed`,
+        clinicaltrials: `${sourceProvidersUrl}/clinicaltrials`,
       },
     }),
     log,

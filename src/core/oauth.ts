@@ -10,7 +10,8 @@
  *   Connectors use it on its own: the MCP SDK discovers their authorization
  *   server, registers IncarnaMind and builds the request with PKCE.
  * - `authorizeWithLoopback` runs the whole flow on top of it, for a server
- *   whose endpoints and client ID are known: the ChatGPT plan provider.
+ *   whose endpoints are known: the ChatGPT plan provider, whose client ID
+ *   OpenAI issues during the first sign-in.
  *
  * The browser is opened through the core's `Browser` adapter; this module
  * never imports Electron.
@@ -61,6 +62,17 @@ export interface LoopbackAuthorizationOptions extends LoopbackRedirectOptions {
   authorizeParams?: Readonly<Record<string, string>>;
   /** Extra form parameters for the code exchange. */
   tokenParams?: Readonly<Record<string, string>>;
+  /**
+   * Checks what the browser brought back before anything in it is used (see
+   * `LoopbackReceipt.verify`).
+   */
+  verify?(params: URLSearchParams): void;
+  /**
+   * The client ID to exchange the code for, from what the browser brought
+   * back. Defaults to `clientId`; a server that registers the app during this
+   * sign-in names the client it issued there.
+   */
+  exchangeClientId?(params: URLSearchParams): string;
   /** Opens the authorization URL in the User's browser. */
   openBrowser(url: string): Promise<void>;
   fetch?: typeof globalThis.fetch;
@@ -120,21 +132,6 @@ function createPkcePair(): { verifier: string; challenge: string } {
   const verifier = base64Url(randomBytes(32));
   const challenge = base64Url(createHash("sha256").update(verifier).digest());
   return { verifier, challenge };
-}
-
-/**
- * The claims in a JWT's payload, without verifying its signature: only for
- * reading what a token we just received from the server says about itself.
- */
-export function decodeJwtClaims(token: string): Record<string, unknown> | null {
-  const parts = token.split(".");
-  if (parts.length !== 3 || !parts[1]) return null;
-  try {
-    const claims: unknown = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
-    return isRecord(claims) ? claims : null;
-  } catch {
-    return null;
-  }
 }
 
 const escapeHtml = (text: string) =>
@@ -238,6 +235,49 @@ export async function refreshOAuthTokens(options: {
     options.signal,
   );
   return readTokenResponse(response, "token refresh");
+}
+
+/**
+ * Ends a sign-in's renewable session at the server (RFC 7009): the token
+ * stops working there. Resolves when the server confirms (HTTP 200, which it
+ * also answers for a token that was already invalid); rejects with
+ * `OAuthTokenError` when it refuses, and as fetch does when it can't be reached.
+ */
+export async function revokeOAuthToken(options: {
+  revokeUrl: string;
+  clientId: string;
+  token: string;
+  tokenTypeHint: "refresh_token" | "access_token";
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}): Promise<void> {
+  const response = await postForm(
+    options.fetch ?? globalThis.fetch,
+    options.revokeUrl,
+    {
+      token: options.token,
+      token_type_hint: options.tokenTypeHint,
+      client_id: options.clientId,
+    },
+    options.signal,
+  );
+  if (response.status === 200) {
+    await response.body?.cancel();
+    return;
+  }
+  const raw = await response.text();
+  let body: unknown;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    body = undefined;
+  }
+  const code = isRecord(body) ? text(body.error) : null;
+  throw new OAuthTokenError(
+    response.status,
+    code,
+    `The sign-out was refused (${response.status}): ${code ?? (raw.slice(0, 200) || response.statusText)}`,
+  );
 }
 
 /** What the browser brought back, for the caller to check and use. */
@@ -438,13 +478,14 @@ export async function authorizeWithLoopback(
       await options.openBrowser(authorize.href);
     }
     return await loopback.receive({
-      async exchange(code) {
+      ...(options.verify && { verify: options.verify }),
+      async exchange(code, params) {
         const response = await postForm(
           fetcher,
           options.tokenUrl,
           {
             grant_type: "authorization_code",
-            client_id: options.clientId,
+            client_id: options.exchangeClientId?.(params) ?? options.clientId,
             code,
             redirect_uri: loopback.redirectUri,
             code_verifier: pkce.verifier,

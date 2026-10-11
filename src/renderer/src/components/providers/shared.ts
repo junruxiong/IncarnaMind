@@ -6,13 +6,13 @@ import type { MessageKey, MessageParams } from "../../../../shared/i18n";
 
 type Translate = (key: MessageKey, params?: MessageParams) => string;
 
-/** What a failed connection test means, in words. The ChatGPT plan's own kinds live under `codex.`. */
+/** What a failed connection test means, in words. The ChatGPT plan's own kinds live under `chatgpt.`. */
 export function testErrorKey(kind: ProviderErrorKind): MessageKey {
   switch (kind) {
     case "not-signed-in":
     case "plan-limit":
     case "blocked":
-      return `codex.test.${kind}`;
+      return `chatgpt.test.${kind}`;
     default:
       return `providers.test.${kind}`;
   }
@@ -23,13 +23,13 @@ export function readinessKey(
   reason: Extract<ChatReadiness, { ready: false }>["reason"],
 ): MessageKey {
   return reason === "sign-in-required"
-    ? "codex.readiness.sign-in-required"
+    ? "chatgpt.readiness.sign-in-required"
     : `providers.readiness.${reason}`;
 }
 
 /** "OpenAI","OpenAI-compatible server · api.deepseek.com", "Ollama · on this computer". */
 export function providerLabel(provider: ChatProvider, t: Translate): string {
-  if (provider.kind === "chatgpt") return t("codex.provider.name");
+  if (provider.kind === "chatgpt") return t("chatgpt.title");
   const kind = t(`providers.kind.${provider.kind}`);
   const catalog = catalogProviderOfKind(provider.kind);
   if (catalog && catalog.endpoints.length > 0) {

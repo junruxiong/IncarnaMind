@@ -32,7 +32,7 @@ import {
   searchable,
   summariseHard,
 } from "../../eval/hard/lib/scoring";
-import type { AnswerRecord, CitationRecord } from "../../eval/lib/citations";
+import type { AnswerRecord, CitationRecord, CitationRun } from "../../eval/lib/citations";
 import type { OpenReranker } from "../../eval/lib/rerank";
 import { GATING_MODE, HYBRID_RERANK_MODE } from "../../eval/lib/retrieval";
 import { DATABASE_FILE, type PassageSearchResult } from "../../src/core";
@@ -550,6 +550,7 @@ describe("The hard tier's Citations per difficulty", () => {
     droppedMarkers: 0,
     droppedRecords: 0,
     rejectedRecords: [],
+    text: "A claim.",
     sentences: [{ text: "A claim.", cited: citations.length > 0 }],
     citations,
     seconds: 1,
@@ -610,6 +611,60 @@ describe("The hard tier's Citations per difficulty", () => {
       library,
     );
     expect(unanswerable).toMatchObject({ answers: 3, withoutCitation: 1, failedAnswers: 1 });
+  });
+
+  test("count the unanswerable Answers that decline per language, with or without Citations", () => {
+    const declining = (
+      language: "en" | "zh",
+      declines: boolean,
+      citations: CitationRecord[] = [],
+    ) => ({
+      ...answer("un", citations),
+      language,
+      declines,
+    });
+    const summary = summariseDifficulty(
+      [
+        declining("en", true, [cite("Report 2022")]),
+        declining("en", true),
+        declining("en", false, [cite("Report 2022")]),
+        declining("zh", true, [cite("Report 2022")]),
+        declining("zh", false),
+      ],
+      questions,
+      names,
+      library,
+    );
+    expect(summary.declines).toBe(3);
+    expect(summary.declinesByLanguage).toEqual({
+      en: { answers: 3, declines: 2 },
+      zh: { answers: 2, declines: 1 },
+    });
+  });
+
+  test("report.md shows the declines share per language beside the answered-without-a-Citation row", () => {
+    const unanswerable = summariseDifficulty(
+      [
+        { ...answer("un", [cite("Report 2022")]), declines: true },
+        { ...answer("un", []), declines: true },
+        { ...answer("un", []), declines: false },
+        { ...answer("un", []), language: "zh" as const, declines: true },
+      ],
+      questions,
+      names,
+      library,
+    );
+    const markdown = markdownReport({
+      ...REPORT,
+      citations: {
+        run: { model: "test/model", service: null } as CitationRun,
+        byDifficulty: { unanswerable },
+      },
+    }).split("\n");
+    expect(markdown).toContain("| **Answered without a Citation** | 3/4 (75%) |");
+    expect(markdown).toContain("| **Declines, with or without Citations** | 3/4 (75%) |");
+    expect(markdown).toContain("- English: 2/3 (67%)");
+    expect(markdown).toContain("- Chinese: 1/1 (100%)");
   });
 
   test("the gating set's Citation part gets the Questions as it takes them", () => {

@@ -42,6 +42,7 @@ export { MEETING_SAMPLE_RATE } from "./adapters";
 export * from "./api";
 export { type Core, createCore, DATABASE_FILE } from "./core";
 export type { DocumentFile, DocumentImage } from "./documents";
+export { ExtractionError } from "./documents/formats/errors";
 export {
   RETENTION_KINDS,
   type RetainedVersion,
