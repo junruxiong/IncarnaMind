@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import type { ExportFormat, Mind, MindExportPreview } from "../../../core/api";
+import type { ExportFormat, Mind, MindCitationStyle, MindExportPreview } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
+import { styleLabel, useCitationStylePicker } from "../citationStylePicker";
 import { core, files } from "../core";
 import { errorMessage } from "../errors";
 import { useT } from "../i18n";
 import { folderName } from "../linkedFolders";
 import { chooseOutputLocation } from "../outputFiles";
 import { saveFailureReason } from "../problems";
+import { useAppStore } from "../store";
 import { QuoteNotFoundIcon } from "./icons";
+import { ChevronDownLineIcon } from "./lineIcons";
 import { type ProblemAction, ProblemLine } from "./ProblemLine";
 import {
   buttonClass,
@@ -30,6 +33,48 @@ const FORMATS: readonly { value: ExportFormat; label: MessageKey; hint: MessageK
   { value: "docx", label: "export.format.docx", hint: "export.format.docx.hint" },
   { value: "markdown", label: "export.format.markdown", hint: "export.format.markdown.hint" },
 ];
+
+/**
+ * The Mind's citation style (#289), which its export is written in, with the button that
+ * changes it: the same picker as the References block's.
+ */
+function CitationStyleRow({ mindId }: { mindId: string }) {
+  const t = useT();
+  const [style, setStyle] = useState<MindCitationStyle | null>(null);
+  const picking = useCitationStylePicker((state) => state.open?.mindId === mindId);
+  useEffect(() => {
+    // Read again once the picker closes: the User may have chosen another.
+    if (picking) return;
+    let current = true;
+    core.getMindCitationStyle(mindId).then(
+      (found) => {
+        if (current) setStyle(found);
+      },
+      (error: unknown) => useAppStore.getState().reportError(error),
+    );
+    return () => {
+      current = false;
+    };
+  }, [mindId, picking]);
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <span id="export-citation-style" className={fieldLabelClass}>
+        {t("export.citationStyle")}
+      </span>
+      <button
+        type="button"
+        data-testid="export-citation-style"
+        aria-labelledby="export-citation-style export-citation-style-value"
+        aria-haspopup="dialog"
+        onClick={(event) => useCitationStylePicker.getState().show(mindId, event.currentTarget)}
+        className={`${buttonClass} gap-1`}
+      >
+        <span id="export-citation-style-value">{style ? styleLabel(style.style, t) : "…"}</span>
+        <ChevronDownLineIcon className="size-3.5 shrink-0 text-ink-meta" />
+      </button>
+    </div>
+  );
+}
 
 /**
  * Exports a Mind: the format, whether a .docx includes the Questions, and how
@@ -173,6 +218,8 @@ function ExportForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
           ))}
         </div>
       </fieldset>
+
+      <CitationStyleRow mindId={mind.id} />
 
       {format === "docx" && (
         <div>

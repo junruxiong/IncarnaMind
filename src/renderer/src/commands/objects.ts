@@ -1,6 +1,7 @@
 import type { LinkedFolder } from "../../../core/api";
 import { displayName } from "../../../shared/documentNames";
 import { core, files } from "../core";
+import { useExportDialog } from "../exportDialog";
 import { languageNow } from "../i18n";
 import { bridgeFrom, type LibraryBridge } from "../libraryBridges";
 import { fileStatusLabel, folderName, formatCount, revealLabelKey } from "../linkedFolders";
@@ -80,7 +81,7 @@ export const mindCommands: readonly Command[] = [
     reversible: true,
     run(ctx) {
       const mind = mindOf(ctx);
-      if (mind) useRequests.getState().ask({ exportMind: mind });
+      if (mind) useExportDialog.getState().open(mind.id);
     },
   },
   {

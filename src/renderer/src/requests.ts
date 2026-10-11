@@ -3,8 +3,7 @@ import type { Document, LibraryGroup, LinkedFolder, Mind } from "../../core/api"
 
 /**
  * The questions a command puts to the User before it acts: whether to delete a
- * Mind, a Document or a Folder, or unlink a Linked folder, and which Mind to
- * export. A menu on any surface asks for one, and `RequestedDialogs` (mounted
+ * Mind, a Document or a Folder, or unlink a Linked folder. A menu on any surface asks for one, and `RequestedDialogs` (mounted
  * once) shows it, so no row owns a dialog. When Undo replaces the
  * confirmations (#228), the commands act at once and this goes.
  */
@@ -13,7 +12,6 @@ interface Requests {
   deleteDocument: Document | null;
   deleteFolder: LibraryGroup | null;
   unlink: { linked: LinkedFolder; name: string } | null;
-  exportMind: Mind | null;
   /** The Folder whose name and description the Library opens to edit. */
   editFolder: string | null;
   /** The Tag Manage Tags opens on, to rename or to delete. */
@@ -27,7 +25,6 @@ export const useRequests = create<Requests>((set) => ({
   deleteDocument: null,
   deleteFolder: null,
   unlink: null,
-  exportMind: null,
   editFolder: null,
   manageTag: null,
   ask: (request) => set(request),

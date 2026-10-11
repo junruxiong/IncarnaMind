@@ -6,10 +6,13 @@ import {
   BLOCK_ID_ATTRIBUTE,
   type CitationAttributes,
   type CitationCheck,
+  type FormattedCluster,
+  type StyledRun,
 } from "../../../core/api";
 import { badgeMessage, type CitationState, citationState } from "../../../shared/citations";
 import { citationLocation, formatLocation, openKind } from "../../../shared/locations";
 import { useAnswers } from "../answers";
+import { type MindFormatting, useMindFormatting } from "../citationFormatting";
 import { citationHandle } from "../commands/handles";
 import { type CommandContext, commands } from "../commands/registry";
 import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
@@ -19,11 +22,18 @@ import { groupsMerged } from "../layoutSlice";
 import type { ObjectRef } from "../objects";
 import { recordUsage, useAppStore } from "../store";
 import { pageDate } from "../webPages";
+import {
+  type ClusterPlace,
+  citationClusters,
+  clusterPlaceOf,
+  memberMarker,
+} from "./citationClusters";
 import { citationNumberOf } from "./citationNumbers";
 import { CheckMarkIcon, CheckStateIcon } from "./icons";
 import { InFootnoteContext, useMindId } from "./mindContext";
 import { Popover } from "./Popover";
-import { onPeek } from "./peek";
+import { onPeek, peekCitation } from "./peek";
+import { StyledRuns, StyledRunView } from "./StyledRuns";
 
 /** How long a pointer rests on a Citation before its card shows, and how long it may leave before it goes. */
 const SHOW_MS = 120;
@@ -53,8 +63,11 @@ function answerAround(
 }
 
 /**
- * A Citation in the text: an 18px marker with its number, its place among the
- * Mind's footnotes (see `CitationNumbers`). It stays neutral unless the
+ * A Citation in the text: in the Mind's citation style (#289), a chip in the
+ * style's words, "(Bowler et al., 2010, p. 4)" or "[1]", which the first of
+ * Citations side by side draws for all of them (see `CitationClusters`); in a
+ * note style, or in Numbered, an 18px marker with its number, its place among
+ * the Mind's footnotes (see `CitationNumbers`). It stays neutral unless the
  * quote wasn't found; the check itself shows in the margin (`MarginChecks`),
  * or, in a narrow Mind, as an icon inside the marker. In a footnote's text
  * it is part of the footnote: the marker shows where it points and its
@@ -99,6 +112,9 @@ export function CitationView({
   const [peeking, setPeeking] = useState(false);
   const open = pinned || peeking;
   const marker = useRef<HTMLButtonElement>(null);
+  /** The marker whose card the pointer over this one asks for: its own, or a neighbour's. */
+  const pointed = useRef<HTMLElement | null>(null);
+  const formatting = useMindFormatting(mindId);
   const askers = useRef(new Set<string>());
   const timer = useRef<number | undefined>(undefined);
 
@@ -200,6 +216,28 @@ export function CitationView({
     ? t("citation.inFootnote.label", { document: pointsTo, badge: badgeText })
     : t("citation.label", { number, document: pointsTo, badge: badgeText });
 
+  // In the Mind's citation style (#289): the first Citation of a cluster draws it whole.
+  const inCluster = clusterPlaceOf(decorations);
+  const styled = styledMarker(formatting, inCluster);
+  const members = inCluster
+    ? (citationClusters(editor.state)[inCluster.cluster]?.members ?? [])
+    : [];
+  /** The marker of the cluster's Citation that wrote `work`: this one's, or a neighbour's. */
+  const markerOfWork = (work: number | null) =>
+    inCluster === null || work === null || work === inCluster.member
+      ? marker.current
+      : memberMarker(editor.view.dom, inCluster.cluster, work);
+  /** Shows the card of the Citation the pointer is over, and hides the one it left. */
+  const pointAt = (target: HTMLElement | null) => {
+    const before = pointed.current;
+    if (before === target) return;
+    pointed.current = target;
+    if (before === marker.current) hold("pointer", false);
+    else if (before) peekCitation(before, "cluster", false);
+    if (target === marker.current) hold("pointer", true);
+    else if (target) peekCitation(target, "cluster", true);
+  };
+
   return (
     <NodeViewWrapper
       as="span"
@@ -208,6 +246,7 @@ export function CitationView({
       data-check={state.check}
       data-reason={state.reason ?? undefined}
       data-number={number || undefined}
+      data-styled={styled.kind === "numbered" ? undefined : styled.kind}
       contentEditable={false}
       {...objectMenu.rowProps}
     >
@@ -217,21 +256,47 @@ export function CitationView({
         data-testid="citation-chip"
         data-check={state.check}
         data-number={number || undefined}
-        className={`citation-marker ${inFootnote ? "citation-marker--source" : ""}`}
+        className={`citation-marker ${
+          inFootnote
+            ? "citation-marker--source"
+            : styled.kind === "joined"
+              ? "citation-marker--joined"
+              : styled.kind === "runs"
+                ? `citation-marker--styled ${styled.raised ? "citation-marker--raised" : ""}`
+                : ""
+        }`}
         aria-label={label}
-        title={label}
+        title={styled.kind === "runs" ? undefined : label}
         aria-haspopup="dialog"
         aria-expanded={open}
         // Keep the editor's selection and focus where they are.
         onMouseDown={(event) => event.preventDefault()}
-        onPointerEnter={() => hold("pointer", true)}
-        onPointerLeave={() => hold("pointer", false)}
+        // In a cluster, the pointer shows the card of the Citation whose words it is over.
+        onPointerMove={(event) => pointAt(markerOfWork(workAt(event.target, inCluster)))}
+        onPointerLeave={() => pointAt(null)}
         onFocus={() => hold("focus", true)}
         onBlur={() => hold("focus", false)}
-        onClick={onClick}
+        onClick={(event) => {
+          const target = markerOfWork(workAt(event.target, inCluster));
+          if (target && target !== marker.current) target.click();
+          else onClick();
+        }}
       >
         <CheckMarkIcon check={state.check} className="citation-marker-icon" />
-        <span>{inFootnote ? pointsTo : number || "·"}</span>
+        {inFootnote ? (
+          <span>{pointsTo}</span>
+        ) : styled.kind === "runs" ? (
+          <ClusterRuns
+            runs={styled.runs}
+            checks={members.map((member) =>
+              member.attributes === attributes
+                ? state.check
+                : citationState(member.attributes, documents, kept).check,
+            )}
+          />
+        ) : styled.kind === "joined" ? null : (
+          <span>{number || "·"}</span>
+        )}
       </button>
       <ObjectMenu
         target={{ kind: "citation", id: menuId }}
@@ -278,12 +343,99 @@ export function CitationView({
               }}
               inAnswer={answerAround(editor, getPos()) !== null}
               menu={{ target: { kind: "citation", id: menuId }, here }}
+              note={noteOf(formatting, inCluster)}
             />
           </Popover>,
           document.body,
         )}
     </NodeViewWrapper>
   );
+}
+
+/** How a Citation's marker reads in the Mind's citation style. */
+type StyledMarker =
+  /** IncarnaMind's numbered chip: Numbered, or the style's form until it is formatted. */
+  | { kind: "numbered" }
+  /**
+   * The style's in-text form, drawn by the cluster's first Citation; `raised` when the style
+   * raises all of it (GB/T 7714's "[1]"), which the chip then does instead of its text.
+   */
+  | { kind: "runs"; runs: FormattedCluster["runs"]; raised: boolean }
+  /** A note style: the note's number among the Mind's footnotes (`CitationNumbers`). */
+  | { kind: "note" }
+  /** A later Citation of a cluster its first one draws: nothing of its own to show. */
+  | { kind: "joined" };
+
+/**
+ * What a Citation's marker shows: the style's form once its cluster is formatted as it is now
+ * (the answer may be for clusters that have changed since), IncarnaMind's number until then.
+ */
+function styledMarker(
+  formatting: MindFormatting | undefined,
+  place: ClusterPlace | null,
+): StyledMarker {
+  const formatted = formatting?.formatted;
+  if (!formatting || !formatted || !place || formatted.form === "numbered") {
+    return { kind: "numbered" };
+  }
+  if (formatted.style !== formatting.style) return { kind: "numbered" };
+  const cluster = formatted.clusters[place.cluster];
+  if (!cluster || formatting.signatures[place.cluster] !== place.signature) {
+    return { kind: "numbered" };
+  }
+  if (place.member > 0) return { kind: "joined" };
+  if (formatted.form === "note") return { kind: "note" };
+  const raised =
+    cluster.runs.length > 0 &&
+    cluster.runs.every((run) => run.script === "sup" || run.text.trim() === "");
+  return {
+    kind: "runs",
+    runs: raised ? cluster.runs.map(({ script: _, ...run }) => run) : cluster.runs,
+    raised,
+  };
+}
+
+/** In a note style, the note a Citation's cluster is written as, once it is formatted. */
+function noteOf(
+  formatting: MindFormatting | undefined,
+  place: ClusterPlace | null,
+): StyledRun[] | null {
+  const formatted = formatting?.formatted;
+  if (!formatted || !place || formatted.form !== "note") return null;
+  if (formatting.signatures[place.cluster] !== place.signature) return null;
+  return (formatted.clusters[place.cluster]?.runs ?? []).map(({ work: _, ...run }) => run);
+}
+
+/** Which of a cluster's works the element is part of; its own place for its affixes. */
+function workAt(target: EventTarget | null, place: ClusterPlace | null): number | null {
+  if (!place || !(target instanceof Element)) return null;
+  const work = target.closest<HTMLElement>("[data-work]")?.dataset.work;
+  return work === undefined ? place.member : Number(work);
+}
+
+/**
+ * A cluster in the style's words, each work's words in its own Citation's colours (a quote
+ * not found turns amber), and no links: a click here opens the Citation, not an address.
+ */
+function ClusterRuns({
+  runs,
+  checks,
+}: {
+  runs: FormattedCluster["runs"];
+  /** Each member's check, by its place in the cluster. */
+  checks: readonly CitationCheck[];
+}) {
+  return runs.map(({ work, link: _, ...run }, index) => (
+    <span
+      // biome-ignore lint/suspicious/noArrayIndexKey: runs have no identity but their place.
+      key={index}
+      data-work={work}
+      data-check={work === undefined ? undefined : checks[work]}
+      className="citation-run"
+    >
+      <StyledRunView run={run} />
+    </span>
+  ));
 }
 
 /**
@@ -297,6 +449,7 @@ function CitationCard({
   attributes,
   badgeText,
   inAnswer,
+  note,
   onOpen,
   onRemove,
   onRegenerate,
@@ -308,6 +461,8 @@ function CitationCard({
   attributes: CitationAttributes;
   badgeText: string;
   inAnswer: boolean;
+  /** In a note style, the note the Citation is written in, as an export will write it. */
+  note: readonly StyledRun[] | null;
   onOpen(withQuote: boolean): void;
   onRemove(): void;
   onRegenerate(): void;
@@ -366,6 +521,12 @@ function CitationCard({
       {attributes.verdict && (
         <p data-testid="citation-verdict" className="citation-card-verdict">
           {attributes.verdict}
+        </p>
+      )}
+      {note && (
+        <p data-testid="citation-styled-note" className="citation-card-styled">
+          <span className="citation-card-styled-label">{t("citation.note")}</span>{" "}
+          <StyledRuns runs={note} />
         </p>
       )}
       {reason && (

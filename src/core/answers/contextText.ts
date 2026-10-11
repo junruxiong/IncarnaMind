@@ -114,6 +114,8 @@ function blockMarkdown(block: Block): string {
     case "table":
       return tableMarkdown(block.rows);
     case "image":
+    // Only an export writes a Bibliography; a Mind's own Blocks never hold one.
+    case "bibliography":
       return "";
   }
 }
@@ -176,6 +178,8 @@ function inlineText(inline: Inline): string {
       return inline.footnote.source ? `[${inline.footnote.source}]` : "";
     case "footnote":
       return `^[${inlineMarkdown(inline.content)}]`;
+    case "cite":
+      return inline.runs.map((run) => run.text).join("");
     case "image":
       return "";
   }

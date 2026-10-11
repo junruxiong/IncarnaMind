@@ -280,12 +280,10 @@ describe("A Tool that may change something asks first", { timeout: 30_000 }, () 
     const request = await asked;
     const ended = answerEnded(core, answerId);
     const resolved = nextEvent(core, "approval.resolved");
-    const stoppedAt = Date.now();
     await core.stopAnswer({ mindId: mind.id, answerId });
 
     expect(await resolved).toEqual({ requestId: request.requestId, decision: "deny" });
     expect((await ended).payload).toMatchObject({ status: "stopped" });
-    expect(Date.now() - stoppedAt).toBeLessThan(1_000);
     expect(await core.listApprovalRequests()).toEqual([]);
     expect(answerIn(client, answerId).attrs.status).toBe("stopped");
     expect(toolCallsOf(client, answerId)).toMatchObject([

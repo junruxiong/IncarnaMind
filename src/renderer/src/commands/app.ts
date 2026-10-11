@@ -1,5 +1,7 @@
+import { useCitationStylePicker } from "../citationStylePicker";
 import { noteHolding } from "../editor/noteKeymap";
 import { useFindSources } from "../findSources";
+import { currentTabOf } from "../layoutSlice";
 import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
 import { assistantCommands } from "./assistant";
@@ -22,6 +24,12 @@ import { type Command, commands, fromMenu } from "./registry";
 import { tableCommands } from "./tables";
 import { tabCommands } from "./tabs";
 import { webPageCommands } from "./webPages";
+
+/** The Mind in the tab the User is in, if that tab holds one. */
+function mindInFront(): string | null {
+  const item = currentTabOf(useAppStore.getState().layout)?.item;
+  return item?.kind === "mind" ? item.mindId : null;
+}
 
 const appCommands: readonly Command[] = [
   {
@@ -73,6 +81,26 @@ const appCommands: readonly Command[] = [
     // While a Citation's card shows (hovered, focused or clicked), or from its menu.
     when: (ctx) => ctx.here?.["citation.open"] !== undefined || citationHandle.current !== null,
     run: (ctx) => (ctx.here?.["citation.open"] ?? citationHandle.current?.open)?.(),
+  },
+  {
+    // The Mind in front's citation style (#289): the same picker as its References' button.
+    id: "mind.citationStyle",
+    label: "citationStyle.command",
+    keywords: ["citationStyle.keywords", "references.title"],
+    group: "main",
+    // The picker's choice is taken back with Undo.
+    reversible: true,
+    // A Mind's row in the sidebar picks for that Mind.
+    when: (ctx) => ctx.here?.["mind.citationStyle"] !== undefined || mindInFront() !== null,
+    run: (ctx) => {
+      if (ctx.here?.["mind.citationStyle"]) return ctx.here["mind.citationStyle"]();
+      const mindId = mindInFront();
+      if (!mindId) return;
+      const button = document.querySelector<HTMLElement>(
+        `article[data-mind-id="${mindId}"] [data-testid="references-style"]`,
+      );
+      useCitationStylePicker.getState().show(mindId, button);
+    },
   },
   {
     id: "references.import",
