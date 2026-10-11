@@ -1,7 +1,8 @@
-import { type Editor, Extension, isMacOS, type JSONContent } from "@tiptap/core";
+import { type Editor, Extension, type JSONContent } from "@tiptap/core";
 import { type EditorState, Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
 import { CellSelection, cellAround, isInTable, rowIsHeader, selectedRect } from "@tiptap/pm/tables";
 import { yUndoPluginKey } from "@tiptap/y-tiptap";
+import type { CommandId, Keys } from "../../../shared/commands";
 import type { MessageKey } from "../../../shared/i18n";
 
 /** What the table menu can do to the table the cursor is in. */
@@ -17,9 +18,11 @@ export type TableActionId =
 
 export interface TableAction {
   id: TableActionId;
+  /** Its command in the command list (../commands/tables), which binds its keys and is in ⌘K. */
+  command: CommandId;
   label: MessageKey;
-  /** Its key, in ProseMirror's names ("Mod-Alt-ArrowUp"), when it has one. */
-  key?: string;
+  /** Its keys, as an accelerator, when it has some. */
+  keys?: Keys;
   run(editor: Editor): boolean;
 }
 
@@ -30,69 +33,60 @@ export interface TableAction {
 export const TABLE_ACTIONS: readonly TableAction[] = [
   {
     id: "rowAbove",
+    command: "table.rowAbove",
     label: "editor.table.rowAbove",
-    key: "Mod-Alt-ArrowUp",
+    keys: "CmdOrCtrl+Alt+Up",
     run: (editor) => editor.commands.addRowBefore(),
   },
   {
     id: "rowBelow",
+    command: "table.rowBelow",
     label: "editor.table.rowBelow",
-    key: "Mod-Alt-ArrowDown",
+    keys: "CmdOrCtrl+Alt+Down",
     run: (editor) => editor.commands.addRowAfter(),
   },
   {
     id: "columnLeft",
+    command: "table.columnLeft",
     label: "editor.table.columnLeft",
-    key: "Mod-Alt-ArrowLeft",
+    keys: "CmdOrCtrl+Alt+Left",
     run: (editor) => editor.commands.addColumnBefore(),
   },
   {
     id: "columnRight",
+    command: "table.columnRight",
     label: "editor.table.columnRight",
-    key: "Mod-Alt-ArrowRight",
+    keys: "CmdOrCtrl+Alt+Right",
     run: (editor) => editor.commands.addColumnAfter(),
   },
   {
     id: "headerRow",
+    command: "table.headerRow",
     label: "editor.table.headerRow",
     run: (editor) => editor.commands.toggleHeaderRow(),
   },
   {
     id: "deleteRow",
+    command: "table.deleteRow",
     label: "editor.table.deleteRow",
     run: (editor) => editor.commands.deleteRow(),
   },
   {
     id: "deleteColumn",
+    command: "table.deleteColumn",
     label: "editor.table.deleteColumn",
     run: (editor) => editor.commands.deleteColumn(),
   },
   {
     id: "deleteTable",
+    command: "table.delete",
     label: "editor.table.delete",
     run: (editor) => editor.commands.deleteTable(),
   },
 ];
 
-const KEY_SYMBOLS: Readonly<Record<string, string>> = {
-  ArrowUp: "↑",
-  ArrowDown: "↓",
-  ArrowLeft: "←",
-  ArrowRight: "→",
-};
-
-/** A key as a menu shows it: ⌘⌥↑ on macOS, Ctrl+Alt+↑ elsewhere. */
-export function keyLabel(key: string): string {
-  const parts = key.split("-");
-  const last = parts.pop() ?? "";
-  const symbol = KEY_SYMBOLS[last] ?? last;
-  if (isMacOS()) {
-    const mac: Readonly<Record<string, string>> = { Mod: "⌘", Alt: "⌥", Shift: "⇧" };
-    return `${parts.map((part) => mac[part] ?? part).join("")}${symbol}`;
-  }
-  const other: Readonly<Record<string, string>> = { Mod: "Ctrl", Alt: "Alt", Shift: "Shift" };
-  return [...parts.map((part) => other[part] ?? part), symbol].join("+");
-}
+/** The keys that open the table menu, as ⌘/ opens the menu over selected text. */
+export const TABLE_MENU_KEYS: Keys = "CmdOrCtrl+/";
 
 /** Runs a change as an Undo step of its own, rather than merged with the typing just before or after it. */
 export function asOwnUndoStep<T>(editor: Editor, run: () => T): T {
@@ -159,6 +153,19 @@ export const sameSpot = (a: TableSpot | null, b: TableSpot | null) =>
     a.canDeleteRows === b.canDeleteRows &&
     a.canDeleteColumns === b.canDeleteColumns);
 
+/** Why a table action can't be done here now, or null. */
+export function unavailable(id: TableActionId, spot: TableSpot): MessageKey | null {
+  if (id === "deleteRow" && !spot.canDeleteRows) return "editor.table.lastRow";
+  if (id === "deleteColumn" && !spot.canDeleteColumns) return "editor.table.lastColumn";
+  return null;
+}
+
+/** Whether the table menu opens on ⌘/: the cursor is in a table, with no text selected (that's the selection menu's). */
+export function menuKeyApplies(state: EditorState): boolean {
+  const { selection } = state;
+  return isInTable(state) && (selection.empty || selection instanceof CellSelection);
+}
+
 /** A new table: a heading row over empty rows, each cell an empty paragraph. */
 export function emptyTable(rows = 3, columns = 3): JSONContent {
   const row = (type: "tableHeader" | "tableCell"): JSONContent => ({
@@ -185,19 +192,17 @@ declare module "@tiptap/core" {
   }
 }
 
-/** The key that opens the table menu, as ⌘/ opens the menu over selected text. */
-export const TABLE_MENU_KEY = "Mod-/";
-
 /**
- * The table's keys and its right-click. In a table: the menu's keys add rows
- * and columns, ⌘/ opens the menu, and Tab and Shift-Tab never take the focus
- * out of the Mind (Tiptap's Table moves between cells with them, and adds a
- * row at the last cell). A right-click in a cell puts the cursor there,
- * unless it is on the selection, and opens the menu.
+ * The table's own keys in the editor, and its right-click. Tiptap's Table
+ * moves between cells with Tab and Shift-Tab, and adds a row at the last
+ * cell; here they also never take the focus out of the Mind (at the first
+ * cell, say). A right-click in a cell puts the cursor there, unless it is on
+ * the selection, and opens the table menu. The menu's own keys are commands
+ * (../commands/tables), in the one keymap.
  */
 export const TableKeys = Extension.create<Record<string, never>, TableKeysStorage>({
   name: "tableKeys",
-  // After Tiptap's Table (and lists in cells): its Tab and Shift-Tab go first; these only keep the focus.
+  // After Tiptap's Table (and lists in cells): their Tab and Shift-Tab go first.
   priority: 50,
 
   addStorage() {
@@ -206,24 +211,7 @@ export const TableKeys = Extension.create<Record<string, never>, TableKeysStorag
 
   addKeyboardShortcuts() {
     const inTable = () => isInTable(this.editor.state);
-    const shortcuts: Record<string, () => boolean> = {
-      [TABLE_MENU_KEY]: () => {
-        const { selection } = this.editor.state;
-        // Over selected text, ⌘/ is the selection menu's.
-        if (!inTable() || !(selection.empty || selection instanceof CellSelection)) return false;
-        const open = this.storage.openMenu;
-        if (!open) return false;
-        open(0);
-        return true;
-      },
-      Tab: inTable,
-      "Shift-Tab": inTable,
-    };
-    for (const action of TABLE_ACTIONS) {
-      if (action.key)
-        shortcuts[action.key] = () => inTable() && runTableAction(this.editor, action);
-    }
-    return shortcuts;
+    return { Tab: inTable, "Shift-Tab": inTable };
   },
 
   addProseMirrorPlugins() {

@@ -1,6 +1,7 @@
 import { autoUpdate } from "@floating-ui/dom";
 import { type Editor, useEditorState } from "@tiptap/react";
 import { Fragment, type KeyboardEvent, useEffect, useLayoutEffect, useState } from "react";
+import { shortcutLabel } from "../commands/keymap";
 import { CheckLineIcon, MoreLineIcon } from "../components/lineIcons";
 import {
   menuClass,
@@ -11,15 +12,14 @@ import {
 import { openMenuFromRightClick, usePopoverMenu } from "../components/usePopoverMenu";
 import { useT } from "../i18n";
 import {
-  keyLabel,
   runTableAction,
   sameSpot,
   TABLE_ACTIONS,
-  TABLE_MENU_KEY,
   type TableAction,
   type TableActionId,
   type TableSpot,
   tableSpot,
+  unavailable,
 } from "./tableCommands";
 
 const BUTTON_SIZE = 20;
@@ -59,7 +59,7 @@ function placeOnCell(cell: HTMLElement, button: HTMLElement, frame: HTMLElement)
 /**
  * The table menu: a ⋯ button at the top-right corner of the cell the cursor
  * is in, as Confluence has, and the same menu on a right-click in a cell or
- * with ⌘/ (see `TableKeys`). It adds rows and columns where the cursor is,
+ * with ⌘/ (its command, `table.menu`; the right-click is `TableKeys`'s). It adds rows and columns where the cursor is,
  * turns the heading row on and off, and deletes rows, columns or the table,
  * each an Undo step of its own. Drawn inside `.mind-editor-frame`.
  */
@@ -126,11 +126,9 @@ export function TableMenu({ editor }: { editor: Editor }) {
     return t(actionOf(id).label);
   };
   /** Why an action can't be done now, or null. */
-  const unavailable = (id: TableActionId): string | null => {
-    if (id === "deleteRow" && spot && !spot.canDeleteRows) return t("editor.table.lastRow");
-    if (id === "deleteColumn" && spot && !spot.canDeleteColumns)
-      return t("editor.table.lastColumn");
-    return null;
+  const whyNot = (id: TableActionId): string | null => {
+    const reason = spot && unavailable(id, spot);
+    return reason ? t(reason) : null;
   };
 
   return (
@@ -140,7 +138,7 @@ export function TableMenu({ editor }: { editor: Editor }) {
         type="button"
         data-testid="table-menu"
         aria-label={label}
-        title={`${label} (${keyLabel(TABLE_MENU_KEY)})`}
+        title={`${label} (${shortcutLabel("table.menu")})`}
         // Keep the cursor in the cell: the menu acts where it is.
         onMouseDown={(event) => event.preventDefault()}
         className="table-menu-button"
@@ -163,7 +161,7 @@ export function TableMenu({ editor }: { editor: Editor }) {
               {index > 0 && <div className={menuRuleClass} />}
               {group.map((id) => {
                 const action = actionOf(id);
-                const why = unavailable(id);
+                const why = whyNot(id);
                 if (id === "headerRow") {
                   return (
                     <button
@@ -196,8 +194,10 @@ export function TableMenu({ editor }: { editor: Editor }) {
                     className={`${menuItemClass} ${menuItemUnavailableClass} pl-2`}
                   >
                     <span className="flex-1">{labelOf(id)}</span>
-                    {action.key && (
-                      <span className="pl-4 text-[13px] text-ink-meta">{keyLabel(action.key)}</span>
+                    {action.keys && (
+                      <span className="pl-4 text-[13px] text-ink-meta">
+                        {shortcutLabel(action.command)}
+                      </span>
                     )}
                   </button>
                 );

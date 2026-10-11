@@ -66,12 +66,6 @@ export const OpenExternallyIcon = (props: IconProps) => (
   </Stroke>
 );
 
-export const CloseViewerIcon = (props: IconProps) => (
-  <Stroke strokeWidth={2} {...props}>
-    <path d="M6 6l12 12M18 6 6 18" />
-  </Stroke>
-);
-
 /** Points right; turned a quarter to point down when its entry is expanded. */
 export const ExpandIcon = (props: IconProps) => (
   <Stroke strokeWidth={2} {...props}>

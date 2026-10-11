@@ -160,6 +160,7 @@ for (const language of ["en", "zh-CN"] as const) {
     const menu = window.getByTestId("table-actions");
     await expect(menu).toBeVisible();
     await expect(menu.getByTestId("table-rowBelow")).toContainText(words.rowBelow);
+    await screenshot(window, `table-menu-${language}`);
     await pointAndClick(window, menu.getByTestId("table-rowBelow"));
     await expect(menu).toBeHidden();
     await expect(table.locator("tr")).toHaveCount(4);

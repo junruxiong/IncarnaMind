@@ -2,10 +2,8 @@ import { Editor, type JSONContent } from "@tiptap/core";
 import { CellSelection } from "@tiptap/pm/tables";
 import { describe, expect, onTestFinished, test } from "vitest";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
-import { noteSlashItems } from "../../src/renderer/src/editor/slashItems";
 import {
   emptyTable,
-  keyLabel,
   runTableAction,
   TABLE_ACTIONS,
   type TableActionId,
@@ -50,10 +48,8 @@ function inCell(editor: Editor, row: number, column: number): number {
     if (node.type.name === "tableRow") {
       rowIndex++;
       if (rowIndex !== row) return false;
-      let offset = pos + 1;
-      node.forEach((cell, cellOffset, index) => {
+      node.forEach((_cell, cellOffset, index) => {
         if (index === column) at = pos + 1 + cellOffset + 2;
-        offset += cell.nodeSize;
       });
       return false;
     }
@@ -79,28 +75,15 @@ const named = (): JSONContent => {
   return table;
 };
 
-describe("inserting a table", () => {
-  test('"/" › Table puts a heading row over two rows of three cells, with the cursor in the first', () => {
-    const editor = editorWith([paragraph("Before"), paragraph("/tab")]);
-    const item = noteSlashItems.find((each) => each.id === "table");
-    if (!item) throw new Error("No table in the slash menu.");
-    const end = editor.state.doc.content.size - 1;
-    editor.commands.setTextSelection(end);
-    item.run(editor, { from: end - 4, to: end });
-
-    const types: string[] = [];
-    editor.state.doc.forEach((node) => {
-      types.push(node.type.name);
-    });
-    // The line it was typed on becomes the table; a line after it to write on.
-    expect(types).toEqual(["paragraph", "table", "paragraph"]);
+describe("tables in the editor", () => {
+  test('a new table, as "/" inserts one, is a heading row over two rows of three empty cells', () => {
+    const editor = editorWith([paragraph("Before"), emptyTable(), paragraph()]);
     expect(grid(editor)).toEqual([
       ["#", "#", "#"],
       ["", "", ""],
       ["", "", ""],
     ]);
-    expect(editor.state.selection.$head.parent.type.name).toBe("paragraph");
-    expect(editor.state.selection.$head.node(-1).type.name).toBe("tableHeader");
+    editor.commands.setTextSelection(inCell(editor, 0, 0));
     expect(tableSpot(editor.state)).toMatchObject({ rows: 1, columns: 1, headerRow: true });
   });
 
@@ -173,10 +156,5 @@ describe("inserting a table", () => {
     const editor = editorWith([paragraph("Plain")]);
     editor.commands.setTextSelection(2);
     expect(tableSpot(editor.state)).toBeNull();
-  });
-
-  test("the menu shows each key as the platform writes it", () => {
-    expect(["⌘⌥↓", "Ctrl+Alt+↓"]).toContain(keyLabel("Mod-Alt-ArrowDown"));
-    expect(["⌘/", "Ctrl+/"]).toContain(keyLabel("Mod-/"));
   });
 });

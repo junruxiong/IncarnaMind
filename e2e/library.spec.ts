@@ -145,6 +145,12 @@ test("one Organize action assigns folder and tags, preserves corrections and sur
     if (!providerId) throw new Error("No provider");
     await settings.getByLabel("Connection", { exact: true }).selectOption(providerId);
     await settings.getByLabel("Model name", { exact: true }).fill("small-classifier");
+    // On by default; turned off here, so the Document waits for the Organize button.
+    const automatic = settings.getByRole("checkbox", {
+      name: /^Organize new and changed Documents automatically/,
+    });
+    await expect(automatic).toBeChecked();
+    await automatic.uncheck();
     await saveOrganization(window);
     const path = join(sources, "Research notes.txt");
     await writeFile(path, "Research report about membrane separation and water filtration.");

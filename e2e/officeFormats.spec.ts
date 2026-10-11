@@ -18,13 +18,13 @@ import {
   createDataFolder,
   dismissChatSetup,
   documentIdOf,
-  interceptSaveDialog,
   launchApp,
   linkFolderFromSidebar,
   newMind,
   openDocumentAt,
   removeDataFolder,
   useLocalChatModel,
+  useOutputLocation,
 } from "./app";
 
 const FIXTURES = join(__dirname, "..", "tests", "fixtures", "formats");
@@ -57,15 +57,15 @@ async function screenshot(window: Page, name: string) {
   await window.screenshot({ path: join(folder, `${name}.png`) });
 }
 
-/** A wide window with a wide viewer: room for each page's margin, where the mark and its label go. */
+/**
+ * A window wide enough that a Document's group beside the Mind is over 860px:
+ * room for each page's margin, where the mark and its label go.
+ */
 async function widen(app: ElectronApplication, window: Page) {
   await app.evaluate(({ BrowserWindow }) => {
-    BrowserWindow.getAllWindows()[0]?.setSize(1720, 1000);
+    BrowserWindow.getAllWindows()[0]?.setSize(2000, 1000);
   });
-  await window.evaluate(async () => {
-    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-    await bridge.updateSettings({ device: { viewerWidth: 860 } });
-  });
+  await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(2000);
 }
 
 /** An element's box; it must be shown. */
@@ -255,7 +255,7 @@ test("Word, PowerPoint, Excel and CSV files in a linked folder are cited by sect
 
   // Exported to .docx, each Citation's footnote names its Location.
   const target = join(sources, "Formats.docx");
-  await interceptSaveDialog(app, target);
+  await useOutputLocation(window, sources);
   await window.keyboard.press("Escape");
   await window.getByTestId("export-mind").click();
   const dialog = window.getByTestId("export-dialog");

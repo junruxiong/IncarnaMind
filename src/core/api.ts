@@ -1,4 +1,6 @@
 import type {
+  AssignmentChange,
+  DocumentBatch,
   DocumentGroupAssignment,
   LibraryGroup,
   LibraryGroupInput,
@@ -8,7 +10,9 @@ import type {
 import type { UiUsageEvent } from "./usageEvents";
 
 export type {
+  AssignmentChange,
   ClassificationStatus,
+  DocumentBatch,
   DocumentGroupAssignment,
   LibraryClassifier,
   LibraryGroup,
@@ -550,25 +554,8 @@ export interface GettingStarted {
 export interface DeviceSettings {
   /** Width of the left sidebar, in CSS pixels. */
   sidebarWidth: number;
-  /** The User hid the sidebar (⌘\, the button, View menu, or dragging it shut). Its width is kept. */
+  /** The User hid the sidebar (the shortcut, the button, View menu, or dragging it shut). Its width is kept. */
   sidebarHidden: boolean;
-  /**
-   * Width of the right Document viewer pane, in CSS pixels, once the User
-   * has resized it. Null until then: it opens at about half the room beside the sidebar.
-   */
-  viewerWidth: number | null;
-  /**
-   * The Minds open as tabs in the Mind pane, by ID, in their order, so they
-   * open again after a restart. IDs of Minds deleted since are ignored.
-   */
-  openMinds: string[];
-  /** The tab shown, one of `openMinds`, or null when none is open. */
-  activeMind: string | null;
-  /**
-   * The Library's tab (#119): "closed", "open" beside the Mind tabs, or
-   * "shown" (open, and the tab in front), so it comes back after a restart.
-   */
-  libraryTab: "closed" | "open" | "shown";
   /** The User chose "set up later" on the first-run chat setup screen. */
   chatSetupDismissed: boolean;
   /** The "Get started" checklist's progress on this device (see `GettingStarted`). */
@@ -616,6 +603,144 @@ export interface SettingsPatch {
   user?: Partial<UserSettings>;
   device?: Partial<DeviceSettings>;
 }
+
+// ---------------------------------------------------------------------------
+// Tabs and groups: everything that opens is a tab, in up to three groups side
+// by side, as VS Code's editor groups. Each window keeps its own layout.
+
+/** At most this many groups sit side by side. */
+export const MAX_TAB_GROUPS = 3;
+
+/** What a tab shows. The Library has one tab per window. */
+export type TabItem =
+  | { kind: "mind"; mindId: string }
+  | { kind: "library" }
+  | { kind: "document"; documentId: string };
+
+/** What the viewer knows of the Citation a Document was opened from. */
+export interface TabCitation {
+  check: CitationCheck;
+  /** The number the Citation shows in its Answer, from 1. */
+  number?: number;
+  /** Its Location's short label, e.g. "slide 4" or "Revenue, rows 12–14": the mark shows it. */
+  label?: string;
+  /**
+   * The version of the Document it quotes: with the Document gone, the viewer
+   * tells whether that text was kept because its Linked folder was unlinked.
+   */
+  contentHash?: string;
+}
+
+/** Where in its Document a Document tab was opened: a Citation's Units and quote. */
+export interface DocumentPlace {
+  /**
+   * The first Unit to show, from 1 (ADR-0011): a PDF's page, a deck's slide,
+   * otherwise the number of a section, block of rows or block of lines.
+   */
+  pageFrom?: number;
+  /** The last Unit the quote may be in. Defaults to `pageFrom`. */
+  pageTo?: number;
+  /**
+   * Text to highlight if it is found: in the Units from `pageFrom` to
+   * `pageTo` (the viewer scrolls to it), or without them, anywhere in a
+   * TXT or Markdown file.
+   */
+  quote?: string;
+  /** The Citation this was opened from, if a Citation opened it. */
+  citation?: TabCitation;
+}
+
+export interface LayoutTab {
+  id: string;
+  item: TabItem;
+  /**
+   * A preview (its title in italics): the next Document opened as a preview
+   * in its group replaces it, until the User keeps it. Only Documents open as previews.
+   */
+  preview: boolean;
+  /** Kept at the left of its group; ⌘W and a middle click leave it open. */
+  pinned: boolean;
+  /** A Document tab: where it was last opened with a place, if it was. */
+  place: DocumentPlace | null;
+  /** How many times it was opened with a place: each time, the viewer goes there again. */
+  opened: number;
+}
+
+export interface LayoutGroup {
+  id: string;
+  /** In order, the pinned ones first. */
+  tabs: LayoutTab[];
+  /** The tab it shows: null only in an empty window's one group. */
+  activeTabId: string | null;
+  /** Its share of the width, above 0; the groups' shares add up to 1. */
+  width: number;
+}
+
+export interface WindowLayout {
+  /** From left to right: one to `MAX_TAB_GROUPS`. Only a window's one group may be empty. */
+  groups: LayoutGroup[];
+  /** The group the User is in: shortcuts such as ⌘W act on it. */
+  focusedGroupId: string;
+  /** How many closed tabs ⇧⌘T can reopen, most recent first. */
+  reopenable: number;
+}
+
+/**
+ * Where `open` puts what it opens:
+ * - "place" (the default): revealed where it is open, else a new tab in the focused group;
+ * - "side": in the group right of `from` (the focused group by default), made if
+ *   there are fewer than three, else the one to its left; revealed instead if it
+ *   is open in another group than `from`;
+ * - "beside": revealed where it is open, else in the focused group if that shows a
+ *   Document, else to the side of it (Documents opened from a list);
+ * - "group": a new tab in that group (the focused one by default), before `before`
+ *   (at the end for null; after the active tab when left out).
+ */
+export type OpenWhere =
+  | { in: "place" }
+  | { in: "side"; from?: string }
+  | { in: "beside" }
+  | { in: "group"; groupId?: string; before?: string | null };
+
+/** A change to a window's layout (see `CoreApi.changeLayout`). */
+export type LayoutChange =
+  | {
+      type: "open";
+      item: TabItem;
+      where?: OpenWhere;
+      /** A Document as a preview, replacing the group's preview if it has one. */
+      preview?: boolean;
+      /** Its group becomes the focused one: true unless false. */
+      focus?: boolean;
+      /** A Document: where in it, e.g. a Citation's quote. */
+      place?: DocumentPlace;
+    }
+  /** Shows a tab in its group, which takes the focus. */
+  | { type: "show"; tabId: string }
+  | { type: "close"; tabId: string }
+  /** Closes the other tabs of its group, except pinned ones. */
+  | { type: "closeOthers"; tabId: string }
+  /** Closes the tabs after it in its group, except pinned ones. */
+  | { type: "closeToTheRight"; tabId: string }
+  | { type: "closeGroup"; groupId: string }
+  /** Reopens the tab closed last, where it was. */
+  | { type: "reopen" }
+  /** Moves a tab before another one (to the end for null), in its group or another; it stops being a preview. */
+  | { type: "move"; tabId: string; groupId: string; before: string | null }
+  /**
+   * Puts a tab in a new group to the `side` of `groupId` (its own group by
+   * default): a copy of it (⌥⌘\), or the tab itself (a drag). Nothing happens
+   * with `MAX_TAB_GROUPS` groups already.
+   */
+  | { type: "split"; tabId: string; side: "left" | "right"; copy: boolean; groupId?: string }
+  /** A preview becomes a normal tab. */
+  | { type: "keep"; tabId: string }
+  | { type: "pin"; tabId: string; pinned: boolean }
+  | { type: "focus"; groupId: string }
+  /** The groups' widths, left to right, in any unit: they are made shares of 1. */
+  | { type: "resize"; widths: number[] }
+  /** Every group as wide as the others. */
+  | { type: "equalize" };
 
 /**
  * The kinds of file that can be added as Documents (ADR-0011): PDF, plain
@@ -998,6 +1123,23 @@ export interface AddDocumentsResult {
   documents: Document[];
   /** Files that were not added. */
   skipped: SkippedFile[];
+  /** The batch of the new Documents: "documents.batch" events report its progress. */
+  batchId: string;
+}
+
+/** Where `addDocuments` and `addLinkedFolder` put the Documents they add. */
+export interface AddDocumentsOptions {
+  /**
+   * The Folder they were dropped on: each new Document is filed there as the
+   * User's choice, and Organize suggests only its Tags. Omitted: Organize
+   * suggests their Folders.
+   */
+  groupId?: string;
+}
+
+/** A Linked folder just linked, with the batch of the Documents its first scan adds. */
+export interface AddedLinkedFolder extends LinkedFolder {
+  batchId: string;
 }
 
 /**
@@ -2486,6 +2628,68 @@ export interface MindExport extends MindExportPreview {
   data: Uint8Array;
 }
 
+/** What `saveMindExport` did. */
+export type SavedMindExport =
+  | { status: "saved"; file: SavedFile }
+  /** The User didn't choose where new files go, so nothing was saved. */
+  | { status: "cancelled" }
+  /** The Output location is inside a Linked folder the User said IncarnaMind may not add files to. */
+  | { status: "not-allowed"; linkedFolderId: string; linkedFolderPath: string };
+
+// ---------------------------------------------------------------------------
+// Files IncarnaMind creates
+
+/**
+ * Where the files IncarnaMind creates go (exports, and later transcripts,
+ * saved web pages and what Tasks make): the Output location, and the Linked
+ * folders the User has said it may or may not add files to. It never changes,
+ * renames or deletes a file that is already there.
+ */
+export interface OutputSettings {
+  /** The folder the User chose, absolute, symbolic links resolved; null until they choose (the first save asks). */
+  location: string | null;
+  /** The folder the first save offers: "IncarnaMind" in the User's Documents folder. */
+  suggested: string;
+  /** The Linked folders the User has answered about, oldest answer first. */
+  linkedFolders: LinkedFolderWriting[];
+}
+
+/** Whether IncarnaMind may add new files inside a Linked folder, which it otherwise only reads. */
+export interface LinkedFolderWriting {
+  linkedFolderId: string;
+  /** The Linked folder's path. */
+  path: string;
+  allowed: boolean;
+  /** ISO 8601, UTC: when the User last answered. */
+  decidedAt: string;
+}
+
+/**
+ * A save waiting for the User's answer (`respondToFileWrite`), asked once:
+ * - "output-location": no Output location is chosen yet. Accepting saves in
+ *   the suggested folder; `setOutputLocation` answers with another one.
+ * - "linked-folder": the file would go inside a Linked folder. Accepting lets
+ *   IncarnaMind add files there from now on; declining stops it, until the
+ *   User changes it in Settings (`setLinkedFolderWriting`).
+ */
+export type FileWriteRequest =
+  | { requestId: string; kind: "output-location"; suggested: string; fileName: string }
+  | {
+      requestId: string;
+      kind: "linked-folder";
+      linkedFolderId: string;
+      linkedFolderPath: string;
+      fileName: string;
+    };
+
+/** A new file IncarnaMind saved. */
+export interface SavedFile {
+  /** Absolute. */
+  path: string;
+  /** Its name: the one asked for, or, when that was taken, the next free one ("Tides 2.docx"). */
+  name: string;
+}
+
 // ---------------------------------------------------------------------------
 
 export interface CoreApi {
@@ -2495,10 +2699,27 @@ export interface CoreApi {
   deleteLibraryGroup(groupId: string): Promise<void>;
   addLibraryStarterGroups(keys: string[]): Promise<void>;
   saveLibrarySettings(settings: LibrarySettings): Promise<void>;
-  /** Queues selected documents, or all; manual assignments are preserved. */
+  /**
+   * Queues selected documents, or all. Organize suggests a Folder for each
+   * (a Suggested Folder) and its Tags; manual assignments are preserved, and
+   * only their Tags suggested.
+   */
   classifyDocuments(documentIds?: string[]): Promise<void>;
   /** A manual choice, including Not in a Folder (null), wins over in-flight classification. */
   assignDocumentGroup(documentId: string, groupId: string | null): Promise<void>;
+  /**
+   * Makes these Documents' Suggested Folders the User's choices, which
+   * Organize never changes. Documents with none waiting are left alone; an
+   * unknown Document throws and changes nothing. Returns what changed.
+   */
+  acceptAssignments(documentIds: string[]): Promise<AssignmentChange[]>;
+  /**
+   * Turns down these Documents' Suggested Folders: each is left Not in a
+   * Folder, and Organize doesn't suggest that Folder for it again. Documents
+   * with none waiting are left alone; an unknown Document throws and changes
+   * nothing. Returns what changed.
+   */
+  rejectAssignments(documentIds: string[]): Promise<AssignmentChange[]>;
   /**
    * Moves Minds and Documents into a Folder, or out of every Folder (null),
    * all or none: an unknown Mind, Document or Folder changes nothing and
@@ -2533,14 +2754,27 @@ export interface CoreApi {
   /** Changes only the fields given and returns the settings now in effect. */
   updateSettings(patch: SettingsPatch): Promise<Settings>;
   /**
+   * A window's tabs and groups, as it left them last time (the app's window
+   * is "main"), without the Minds and Documents deleted since.
+   */
+  getLayout(windowId: string): Promise<WindowLayout>;
+  /**
+   * Changes a window's tabs and groups, keeps the layout for the next start,
+   * and returns it; "layout.changed" follows. Throws InvalidInputError for a
+   * change that names a tab or group the window doesn't have, and
+   * NotFoundError for a Mind that isn't there.
+   */
+  changeLayout(windowId: string, change: LayoutChange): Promise<WindowLayout>;
+  /**
    * Adds PDF, TXT and Markdown files on their own, given their absolute
    * paths. Each is indexed where it is, never copied, and queued for
    * processing; "document.status" events report its progress. A file already
    * indexed at that path gives its Document; a file inside a Linked folder
    * is that Linked folder's Document; a file with the content of a missing
-   * Document is that Document, moved.
+   * Document is that Document, moved. The new Documents are one batch; given
+   * a Folder (see `AddDocumentsOptions`), they are filed there.
    */
-  addDocuments(paths: string[]): Promise<AddDocumentsResult>;
+  addDocuments(paths: string[], options?: AddDocumentsOptions): Promise<AddDocumentsResult>;
   /**
    * Keeps text the User pasted as a Markdown Document, so Answers can cite it.
    * The file is written in the data folder ("Saved text"), never next to the
@@ -2591,9 +2825,10 @@ export interface CoreApi {
    * A folder inside a Linked folder is already linked: that Linked folder is
    * returned. Linked folders inside this one are merged into it, their
    * Documents keeping their ids. Files added on their own that are inside it
-   * become its Documents.
+   * become its Documents. The Documents its first scan adds are one batch;
+   * given a Folder (see `AddDocumentsOptions`), they are filed there.
    */
-  addLinkedFolder(path: string): Promise<LinkedFolder>;
+  addLinkedFolder(path: string, options?: AddDocumentsOptions): Promise<AddedLinkedFolder>;
   /** The Linked folders, in path order. */
   listLinkedFolders(): Promise<LinkedFolder[]>;
   /**
@@ -3037,6 +3272,28 @@ export interface CoreApi {
    * "[unverified]" unless its quote was found. Math stays LaTeX.
    */
   exportMind(mindId: string, options: ExportMindOptions): Promise<MindExport>;
+  /**
+   * Exports a Mind (as `exportMind`) into the Output location, under the
+   * next free name, asking where new files go the first time.
+   */
+  saveMindExport(mindId: string, options: ExportMindOptions): Promise<SavedMindExport>;
+
+  /** Where new files go, and the Linked folders IncarnaMind may or may not add files to. */
+  getOutputSettings(): Promise<OutputSettings>;
+  /**
+   * Sets the Output location: an absolute path to a folder, made if it is the
+   * suggested one and isn't there yet. A save waiting to know where goes on there.
+   */
+  setOutputLocation(path: string): Promise<OutputSettings>;
+  /**
+   * Allows or stops IncarnaMind adding new files inside a Linked folder (it
+   * never changes the files there). A save waiting for that answer goes on with it.
+   */
+  setLinkedFolderWriting(linkedFolderId: string, allowed: boolean): Promise<OutputSettings>;
+  /** Saves waiting for the User's answer, oldest first. */
+  listFileWriteRequests(): Promise<FileWriteRequest[]>;
+  /** Answers a save's question (see `FileWriteRequest`). One already answered does nothing. */
+  respondToFileWrite(requestId: string, accept: boolean): Promise<void>;
 }
 
 /**
@@ -3052,6 +3309,8 @@ export interface CoreEvents {
    * or their Folder was deleted: the list as `listMinds` now returns it.
    */
   "minds.changed": Mind[];
+  /** A window's tabs and groups changed: by `changeLayout`, or a deleted Mind's tab closed. */
+  "layout.changed": { windowId: string; layout: WindowLayout };
   "examples.changed": Examples;
   /** A Mind's content changed. Clients editing that Mind apply the update to their `Y.Doc`. */
   "mind.update": MindUpdate;
@@ -3074,6 +3333,12 @@ export interface CoreEvents {
   "rerank.changed": RerankSettings;
   /** Whether Questions can be asked may have changed. */
   "chatReadiness.changed": ChatReadiness;
+  /** The Output location, or what IncarnaMind may do in a Linked folder, changed. */
+  "outputSettings.changed": OutputSettings;
+  /** A save waits for the User's answer: where new files go, or whether it may add files to a Linked folder. */
+  "fileWrite.requested": FileWriteRequest;
+  /** A save's question was answered, here or in another window, or withdrawn. */
+  "fileWrite.resolved": { requestId: string };
   /** A data flow needs the User's consent before anything is sent. */
   "consent.requested": ConsentRequest;
   /** A consent request was answered, here or in another window. */
@@ -3113,11 +3378,17 @@ export interface CoreEvents {
   "library.changed": null;
   /**
    * Documents' Library assignments changed: Organize queued, started,
-   * finished or failed on them, or the User put one in a Folder. Carries each
+   * finished or failed on them, or the User put one in a Folder, or accepted
+   * or rejected its Suggested Folder. Carries each
    * one's assignment whole, as `getLibrary` lists it, so the snapshot needn't
    * be read again.
    */
   "library.assignments": DocumentGroupAssignment[];
+  /**
+   * A batch of Documents added together moved on: one joined it, was read
+   * or sorted, or its Suggested Folders changed. Carries the batch whole.
+   */
+  "documents.batch": DocumentBatch;
   /**
    * Documents' Tags changed, or where automatic tagging is for them: the User
    * added or removed a Tag, automatic tagging started, waited, finished or
@@ -3193,6 +3464,8 @@ const methods: Record<CoreApiMethod, true> = {
   closeMind: true,
   getSettings: true,
   updateSettings: true,
+  getLayout: true,
+  changeLayout: true,
   addDocuments: true,
   saveTextAsDocument: true,
   listDocuments: true,
@@ -3260,6 +3533,8 @@ const methods: Record<CoreApiMethod, true> = {
   saveLibrarySettings: true,
   classifyDocuments: true,
   assignDocumentGroup: true,
+  acceptAssignments: true,
+  rejectAssignments: true,
   moveToFolder: true,
   listTags: true,
   createTag: true,
@@ -3307,6 +3582,12 @@ const methods: Record<CoreApiMethod, true> = {
   restoreBuiltInSkills: true,
   previewMindExport: true,
   exportMind: true,
+  saveMindExport: true,
+  getOutputSettings: true,
+  setOutputLocation: true,
+  setLinkedFolderWriting: true,
+  listFileWriteRequests: true,
+  respondToFileWrite: true,
 };
 
 /** Every method of CoreApi, used to wire the IPC bridge. */
