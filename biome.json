@@ -42,6 +42,27 @@
   },
   "overrides": [
     {
+      "includes": ["src/**", "!src/renderer/src/motion.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "motion": "Animate through src/renderer/src/motion.ts: its tokens, helpers and reduced motion (DESIGN.md, Motion).",
+                  "motion/mini": "Animate through src/renderer/src/motion.ts: its tokens, helpers and reduced motion (DESIGN.md, Motion).",
+                  "motion/react": "Animate through src/renderer/src/motion.ts: its tokens, helpers and reduced motion (DESIGN.md, Motion).",
+                  "framer-motion": "Animate through src/renderer/src/motion.ts: its tokens, helpers and reduced motion (DESIGN.md, Motion).",
+                  "motion-dom": "Animate through src/renderer/src/motion.ts: its tokens, helpers and reduced motion (DESIGN.md, Motion)."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       "includes": ["src/core/**"],
       "linter": {
         "rules": {

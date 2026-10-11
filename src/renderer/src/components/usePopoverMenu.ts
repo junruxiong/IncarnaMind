@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { type Box, enterFrom, exitToward } from "../motion";
 
 const GAP_PX = 4;
 const EDGE_PX = 8;
@@ -19,15 +20,15 @@ const itemsOf = (menu: HTMLElement | null) =>
 /**
  * Below the button, or above it if the window is too short. A popover that
  * isn't showing yet isn't laid out (it has no size), so it is laid out for a
- * moment to measure it as it will show.
+ * moment to measure it as it will show. Returns where it put it.
  */
 function place(
   button: HTMLElement | null,
   menu: HTMLElement | null,
   around: HTMLElement | null = null,
-): void {
+): Box | null {
   const box = button?.getBoundingClientRect();
-  if (!box || !menu) return;
+  if (!box || !menu) return null;
   const hidden = !menu.matches(":popover-open");
   if (hidden) menu.style.display = "block";
   const width = menu.offsetWidth;
@@ -39,12 +40,15 @@ function place(
   const anchor = outer
     ? { left: box.right + GAP_PX - width, top: outer.top, bottom: outer.bottom }
     : box;
-  menu.style.left = `${Math.max(EDGE_PX, Math.min(anchor.left, window.innerWidth - width - EDGE_PX))}px`;
+  const left = Math.max(EDGE_PX, Math.min(anchor.left, window.innerWidth - width - EDGE_PX));
   const below = anchor.bottom + GAP_PX;
-  menu.style.top =
+  const top =
     below + height > window.innerHeight - EDGE_PX
-      ? `${Math.max(EDGE_PX, anchor.top - GAP_PX - height)}px`
-      : `${below}px`;
+      ? Math.max(EDGE_PX, anchor.top - GAP_PX - height)
+      : below;
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+  return { left, top, width, height };
 }
 
 /** The checked item, or the first. */
@@ -57,7 +61,8 @@ function focusFirst(menu: HTMLElement | null): void {
  * A menu that opens from a button as a popover, so it sits above everything
  * and a click outside or Esc closes it (Esc closes only the menu, not the
  * Document viewer too). It shows below the button, or above it if the window
- * is too short; opening focuses the checked item (or the first), and the
+ * is too short, growing from the button and, closed, shrinking back toward it
+ * (`../motion`); opening focuses the checked item (or the first), and the
  * arrow keys, Home and End move between items. The menu may render its items
  * only while `open`, and may get them a moment later (a list that loads): it
  * is then placed again, and the checked item takes the focus, unless the
@@ -87,10 +92,12 @@ export function usePopoverMenu({
   // its `toggle` event comes only after a frame is drawn, too late to place it.
   // It takes the focus once it shows: here if it already does, or else on that
   // `toggle` event (below), as a popover that hasn't shown can't be focused.
+  // It grows from the button from that first frame (DESIGN.md, Motion), and is usable at once.
   useLayoutEffect(() => {
     if (!open) return;
     const anchor = button.current;
-    place(anchor, menu.current, anchor && outer.current ? outer.current(anchor) : null);
+    const box = place(anchor, menu.current, anchor && outer.current ? outer.current(anchor) : null);
+    if (menu.current && box) enterFrom(menu.current, anchor, box);
     if (menu.current?.matches(":popover-open")) focusFirst(menu.current);
   }, [open]);
 
@@ -149,7 +156,9 @@ export function usePopoverMenu({
       id,
       popover: "auto" as const,
       // Before it shows, so a menu that renders its items only while open has them when it paints.
+      // Closing, it is copied as it shows, and the copy shrinks back toward the button.
       onBeforeToggle: (event: ToggleEvent<HTMLDivElement>) => {
+        if (event.newState === "closed" && menu.current) exitToward(menu.current, button.current);
         setOpen(event.newState === "open");
       },
       // Now it shows, where it was placed: it can take the focus.

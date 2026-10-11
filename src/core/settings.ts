@@ -3,6 +3,8 @@ import {
   type ChatModelChoice,
   type DeviceSettings,
   type GettingStarted,
+  MOTION_PREFERENCES,
+  type MotionPreference,
   type SandboxLevel,
   type Settings,
   SKILL_SCRIPT_LIMITS,
@@ -84,6 +86,7 @@ const deviceScope: Scope<DeviceSettings> = {
     meetingsEnabled: false,
     meetingSystemAudio: true,
     meetingNoticeAccepted: false,
+    motion: "system",
   },
   validators: {
     sidebarWidth: isPaneWidth,
@@ -97,6 +100,8 @@ const deviceScope: Scope<DeviceSettings> = {
     meetingsEnabled: isBoolean,
     meetingSystemAudio: isBoolean,
     meetingNoticeAccepted: isBoolean,
+    motion: (value): value is MotionPreference =>
+      MOTION_PREFERENCES.some((preference) => preference === value),
   },
 };
 
