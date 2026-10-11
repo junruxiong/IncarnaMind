@@ -111,7 +111,7 @@ ${sourceOf(document)}`
             {t("webPages.fetched", { date: pageDate(document.web.fetchedAt, language) })}
           </span>
         )}
-        {document && openable && (document.web || document.fileStatus === "available") && (
+        {document && (document.web || (openable && document.fileStatus === "available")) && (
           <button
             type="button"
             data-testid="viewer-open-externally"
