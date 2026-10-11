@@ -25,6 +25,7 @@ import type { ChatGptCredentials } from "./chatgpt/signIn";
 import { endpointUrl } from "./kinds";
 import { createOllamaChatModel } from "./ollamaChat";
 import { DEFAULT_OLLAMA_SETTINGS, type OllamaModelSettings } from "./ollamaModels";
+import { withCacheBreakpoints } from "./promptCache";
 import { withoutStorage, withProviderOptions } from "./responsesStore";
 
 /** A model object, never a model id string (which the AI SDK would send to its gateway). */
@@ -94,6 +95,7 @@ export const createAiSdkChatModel: ChatModelFactory = (spec) => {
   if (request?.store === false) {
     model = withoutStorage(model, spec.kind === "xai" ? "xai" : "openai");
   }
+  if (spec.kind === "anthropic") model = withCacheBreakpoints(model);
   if (spec.thinking === "off" && request?.thinkingOff && canSkipThinking(spec, request)) {
     model = withProviderOptions(model, request.thinkingOff.options);
   }
