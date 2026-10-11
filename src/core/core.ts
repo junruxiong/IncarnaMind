@@ -366,6 +366,7 @@ export function createCore(adapters: CoreAdapters): Core {
       settings.get().language === "zh-CN" ? ["zh-CN", "zh;q=0.9", "en;q=0.8"] : ["en", "*;q=0.5"],
     ...adapters.webPages,
   });
+  webPages.dropPurged().catch((error: unknown) => console.error(error));
   let skills: ReturnType<typeof createSkills>;
   try {
     skills = createSkills({
@@ -1367,7 +1368,10 @@ export function createCore(adapters: CoreAdapters): Core {
     restoreAssignment: async (id, previous) => library.restoreAssignment(id, previous),
     restore: async (refs) => recentlyDeleted.restore(refs),
     listDeleted: async () => recentlyDeleted.list(),
-    deletePermanently: async (refs) => recentlyDeleted.deletePermanently(refs),
+    deletePermanently: async (refs) => {
+      recentlyDeleted.deletePermanently(refs);
+      await webPages.dropPurged();
+    },
     acceptAssignments: async (ids) => library.accept(ids),
     rejectAssignments: async (ids) => library.reject(ids),
     moveToFolder: async (input) => {
