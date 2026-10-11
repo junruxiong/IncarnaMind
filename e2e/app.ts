@@ -85,6 +85,12 @@ export interface LaunchOptions {
 export const WINDOW_SIZE = { width: 1280, height: 660 };
 
 /**
+ * The key that, held with an arrow, moves the caret a word at a time, and with
+ * Shift too selects by word: Option on macOS, Ctrl on Windows and Linux.
+ */
+export const WORD_KEY = process.platform === "darwin" ? "Alt" : "Control";
+
+/**
  * Launches the built app (`out/`) on the given data folder, with test hooks on
  * and the fake embedding model, which needs no download, in a window of
  * `WINDOW_SIZE` whatever the screen's.
@@ -214,6 +220,31 @@ export async function turnOnEmbeddings(window: Page): Promise<void> {
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     await bridge.saveEmbeddingProvider({ kind: "built-in" });
   });
+}
+
+/**
+ * Keys are kept with the system's keyring. On Linux with none running, as on
+ * CI's Linux runner, the User first accepts storing them in plain text, once
+ * on this computer. With `form`, accepts it as the User does, in the notice a
+ * form that saves a key shows ("No keyring is running"); without, through the
+ * core's bridge, as that notice does. With a keyring there's nothing to accept.
+ */
+export async function acceptPlainTextKeys(window: Page, form?: Locator): Promise<void> {
+  const { protection, plainTextAccepted } = await window.evaluate(() =>
+    (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.getSecretStorage(),
+  );
+  if (protection !== "plain-text" || plainTextAccepted) return;
+  if (!form) {
+    await window.evaluate(async () => {
+      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      await bridge.acceptPlainTextSecretStorage();
+    });
+    return;
+  }
+  const notice = form.getByTestId("plain-text-secrets");
+  await notice.getByRole("checkbox").click();
+  // Accepted, the key can be saved, and the notice goes.
+  await expect(notice).toBeHidden();
 }
 
 /** The pages in Settings' list. */
@@ -566,6 +597,29 @@ export async function widthOf(locator: Locator): Promise<number> {
   const box = await locator.boundingBox();
   if (!box) throw new Error("The element isn't visible.");
   return box.width;
+}
+
+/**
+ * Checks that the window's first group's tabs start at the card's left edge:
+ * flush with it on macOS, where the sidebar's button sits in the sidebar's
+ * header beside the traffic lights; on Windows and Linux just after that
+ * button, which starts the strip there (SidebarToggle), 8px in and 6px before
+ * the first tab (styles.css).
+ */
+export async function expectFirstTabAtCardStart(window: Page, firstTab: Locator): Promise<void> {
+  const card = await window.getByTestId("card").boundingBox();
+  const tab = await firstTab.boundingBox();
+  if (!card || !tab) throw new Error("The card or its first tab isn't visible.");
+  const toggle = window.getByTestId("tab-strip").first().getByTestId("sidebar-toggle");
+  if (process.platform === "darwin") {
+    await expect(toggle).toHaveCount(0);
+    expect(tab.x).toBeCloseTo(card.x, 0);
+    return;
+  }
+  const button = await toggle.boundingBox();
+  if (!button) throw new Error("The sidebar's button isn't at the start of the strip.");
+  expect(button.x - card.x).toBeCloseTo(8, 0);
+  expect(tab.x - (button.x + button.width)).toBeCloseTo(6, 0);
 }
 
 /**
