@@ -2163,8 +2163,8 @@ export interface TestRerankConnectionInput {
 /**
  * Where Answers can come from. "ollama" is an OpenAI-compatible server run by
  * Ollama, normally on this computer; it also offers one-click model downloads.
- * "chatgpt" is the User's ChatGPT plan, used through a browser sign-in instead
- * of an API key; it is experimental (see `ChatGptPlanStatus`).
+ * "chatgpt" is the User's ChatGPT plan, used through Sign in with ChatGPT
+ * instead of an API key (see `ChatGptPlanStatus`).
  */
 export const chatProviderKinds = [
   "openai",
@@ -2250,9 +2250,12 @@ export type ProviderErrorKind =
   | "local-mode"
   /** ChatGPT plan: there is no sign-in on this device, or it expired: sign in again. */
   | "not-signed-in"
-  /** ChatGPT plan: the plan's usage limit is reached, or the plan doesn't include this use. */
+  /** ChatGPT plan: the plan's usage limit, or the one the User set for IncarnaMind, is reached. */
   | "plan-limit"
-  /** ChatGPT plan: OpenAI refused a valid sign-in (401 or 403), e.g. it blocked this integration. */
+  /**
+   * ChatGPT plan: OpenAI refused a valid sign-in, e.g. the plan isn't one that
+   * can be used in other apps, or the request came from a region it doesn't serve.
+   */
   | "blocked"
   /**
    * A local model: the request doesn't fit its context window, even with the
@@ -2934,49 +2937,44 @@ export const SKILL_LIMITS = {
 } as const;
 
 // ---------------------------------------------------------------------------
-// ChatGPT plan (experimental)
+// ChatGPT plan
 
-/**
- * A model the ChatGPT plan's endpoint accepts. The list is fixed in the app
- * and follows the Codex CLI's own model catalog.
- */
+/** A model the User's ChatGPT plan can be used with. */
 export interface ChatGptPlanModel {
   id: string;
-  /** What the User sees, e.g. "GPT-5.5". */
+  /** What the User sees, e.g. "GPT-6.1 Sol". */
   name: string;
 }
 
 /** The ChatGPT sign-in on this device. */
 export type ChatGptAccount =
   | { state: "signed-out" }
-  /** Refreshing the sign-in failed, so it was removed: the User has to sign in again. */
+  /** Refreshing the sign-in failed (or the User disconnected IncarnaMind in ChatGPT): sign in again. */
   | { state: "expired" }
   | {
       state: "signed-in";
       /** From the sign-in's ID token, when it carries one. */
       email: string | null;
-      /** The ChatGPT plan, e.g. "plus" or "pro", when the ID token says. */
-      plan: string | null;
     };
 
 /**
- * The experimental "ChatGPT plan (via Codex sign-in)" provider. It signs in
- * with the sign-in OpenAI's Codex CLI uses, which OpenAI hasn't approved for
- * other apps and may block. It is off until the User turns it on in Settings.
+ * The ChatGPT plan provider, "Continue with ChatGPT": Sign in with ChatGPT,
+ * OpenAI's way for an open-source app on the User's computer to use their
+ * Plus or Pro plan instead of an API key. What it sends goes to OpenAI under
+ * the User's ChatGPT account and counts against the plan's limits.
  */
 export interface ChatGptPlanStatus {
-  /** The User turned the experimental provider on, on this device. Off by default. */
-  enabled: boolean;
   account: ChatGptAccount;
   /** A browser sign-in is waiting for the User. */
   signingIn: boolean;
-  /** The models Questions can use with the plan, the default first. */
+  /**
+   * The models Questions can use with the plan, the default first: the
+   * account's own list once signed in, else the ones OpenAI usually offers.
+   */
   models: ChatGptPlanModel[];
 }
 
 export type ChatGptSignInErrorKind =
-  /** The sign-in's fixed local port is taken, e.g. the Codex CLI is signing in at the same time. */
-  | "port-in-use"
   /** The User didn't finish in the browser within a few minutes. */
   | "timed-out"
   /** The User cancelled in IncarnaMind. */
@@ -2985,11 +2983,30 @@ export type ChatGptSignInErrorKind =
   | "denied"
   /** This device can't store the sign-in securely (see `getSecretStorage`). */
   | "secret-storage"
+  /** The User signed in but didn't allow IncarnaMind to use their plan; signing in again asks again. */
+  | "plan-not-allowed"
+  /** The User signed in to another ChatGPT account than the one this device uses; `anotherAccount` switches. */
+  | "other-account"
   | "failed";
 
 export type ChatGptSignInResult =
-  | { ok: true; status: ChatGptPlanStatus }
+  | {
+      ok: true;
+      /** The first sign-in on this device: the UI says once that Questions now use the plan. */
+      firstTime: boolean;
+      status: ChatGptPlanStatus;
+    }
   | { ok: false; error: { kind: ChatGptSignInErrorKind; message: string } };
+
+export interface ChatGptSignOutResult {
+  /**
+   * Whether OpenAI confirmed the session ended. When it couldn't be reached,
+   * the tokens are gone from this device anyway, and the User can disconnect
+   * IncarnaMind in ChatGPT's settings.
+   */
+  revoked: boolean;
+  status: ChatGptPlanStatus;
+}
 
 // ---------------------------------------------------------------------------
 // Secrets
@@ -3176,7 +3193,8 @@ export interface RegisteredDataFlow {
  *   when the first Documents are ready to search, unless reranking is off or
  *   uses a service.
  * - "ollama-pull": Ollama downloads a model from its registry, when the User picks local models.
- * - "chatgpt-sign-in": the experimental ChatGPT plan's sign-in, and refreshing it.
+ * - "chatgpt-sign-in": Sign in with ChatGPT, refreshing it, signing out, and
+ *   reading OpenAI's signing keys; listed once the User has signed in.
  * - "remote-connectors": connecting to each remote Connector that is on, and
  *   signing in to it: its server, and the authorization server it names
  *   (discovery, registration, tokens). One entry per server. Tool calls, which
@@ -4917,23 +4935,23 @@ export interface CoreApi {
    */
   selectOllama(input?: SelectOllamaInput): Promise<ChatProvider>;
 
-  /** The experimental ChatGPT plan provider: whether it's on, the sign-in, and its models. */
+  /** The ChatGPT plan provider: the sign-in and the account's models. */
   getChatGptPlan(): Promise<ChatGptPlanStatus>;
   /**
-   * Turns the experimental ChatGPT plan provider on or off on this device.
-   * Turning it off signs out (deleting the tokens) and removes the provider.
+   * "Continue with ChatGPT": opens Sign in with ChatGPT in the User's
+   * browser and waits, for a few minutes at most, until they finish.
+   * Starting again cancels a sign-in still waiting. `anotherAccount` signs in
+   * to a different ChatGPT account than the one this device used before.
+   * Signing in doesn't choose a model: `saveChatProvider` does.
    */
-  setChatGptPlanEnabled(enabled: boolean): Promise<ChatGptPlanStatus>;
-  /**
-   * Opens the ChatGPT sign-in in the User's browser and waits, for a few
-   * minutes at most, until they finish. Starting again cancels a sign-in
-   * still waiting. The provider must be turned on.
-   */
-  signInToChatGpt(): Promise<ChatGptSignInResult>;
+  signInToChatGpt(input?: { anotherAccount?: boolean }): Promise<ChatGptSignInResult>;
   /** Stops waiting for a browser sign-in. */
   cancelChatGptSignIn(): Promise<void>;
-  /** Deletes the ChatGPT tokens from this device. A saved ChatGPT provider then needs a new sign-in. */
-  signOutOfChatGpt(): Promise<ChatGptPlanStatus>;
+  /**
+   * Ends the ChatGPT sign-in at OpenAI and deletes its tokens from this
+   * device. A saved ChatGPT provider then needs a new sign-in.
+   */
+  signOutOfChatGpt(): Promise<ChatGptSignOutResult>;
 
   /**
    * Every registered external data flow, to each service it currently goes to
@@ -5433,7 +5451,7 @@ export interface CoreEvents {
   "references.changed": Document[];
   /** `importReferences` has matched `done` of `total` references. */
   "references.importProgress": { done: number; total: number };
-  /** The ChatGPT plan provider was turned on or off, or its sign-in changed (including expiring). */
+  /** The ChatGPT sign-in changed: started, finished, signed out, or expired. */
   "chatGptPlan.changed": ChatGptPlanStatus;
   /** Jev was set up, changed or removed on this device. */
   "jev.changed": JevSettings;
@@ -5594,7 +5612,6 @@ const methods: Record<CoreApiMethod, true> = {
   detectOllama: true,
   selectOllama: true,
   getChatGptPlan: true,
-  setChatGptPlanEnabled: true,
   signInToChatGpt: true,
   cancelChatGptSignIn: true,
   signOutOfChatGpt: true,

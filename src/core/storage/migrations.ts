@@ -1192,6 +1192,36 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
+    version: 53,
+    description: "Sign in with ChatGPT replaces the experimental ChatGPT plan provider",
+    sql: `
+      -- Sign in with ChatGPT (#122) replaces the experimental "ChatGPT plan (via Codex
+      -- sign-in)" provider and its per-device switch. Its providers (kind 'chatgpt') stay
+      -- where the switch was on, and need a new sign-in; where it was off they were hidden,
+      -- and now go, with a default chat model on one of them. Nothing is sent to chatgpt.com
+      -- any more, so decisions about sending there go too. The core forgets the switch and
+      -- the old tokens in the secret store at start-up (forgetCodexSignIn), after this.
+      UPDATE chat_providers
+        SET deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        WHERE kind = 'chatgpt' AND deleted_at IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM device_settings
+            WHERE key = 'chatGptPlanEnabled' AND value = 'true' AND deleted_at IS NULL
+          );
+      UPDATE user_settings
+        SET value = 'null', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        WHERE key = 'chatModel' AND deleted_at IS NULL
+          AND json_extract(value, '$.providerId') IN (
+            SELECT id FROM chat_providers WHERE kind = 'chatgpt' AND deleted_at IS NOT NULL
+          );
+      UPDATE data_flow_consents
+        SET deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        WHERE service_id = 'https://chatgpt.com' AND deleted_at IS NULL;
+    `,
+  },
+  {
     version: 54,
     description:
       "Answers in conversations keep where the third-party text their Run read came from (#78)",
