@@ -11,6 +11,7 @@ import {
   launchApp,
   newMind,
   openFolderInLibrary,
+  placeAssistant,
   removeDataFolder,
   setWindowSize,
 } from "./app";
@@ -177,6 +178,8 @@ test("a Folder's header holds in the narrowest window that keeps groups side by 
     await addDocuments(window, await writeSources());
     await addFolder(window, "Reports & presentations");
     await setWindowSize(app, window, 1000, 700);
+    // At 1,000px the groups keep side by side only with the assistant at the bottom (#253).
+    await placeAssistant(window, { dock: "bottom" });
     await window.getByTestId("open-library").click();
     const library = window.getByTestId("library");
     await openFolderInLibrary(window, "Reports & presentations");
