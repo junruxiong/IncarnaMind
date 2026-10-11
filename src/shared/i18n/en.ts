@@ -1219,6 +1219,8 @@ export const en = {
   "citation.badge.notFound.in": "Quote not found in {location}",
   "citation.badge.notFound.document": "Quote not found in {document}",
   "citation.badge.cantCheck": "Can't check",
+  "citation.badge.unsupported": "Unsupported by your Documents",
+  "citation.badge.contradicted": "Contradicted",
   "citation.reason.quote-not-on-pages": "The quote isn't in the text of the place it cites.",
   "citation.reason.pages-outside-passage":
     "The place it cites isn't part of the Passage the quote came from.",
@@ -1244,6 +1246,7 @@ export const en = {
   "citation.openAnyway.lines": "Open the lines anyway",
   "citation.openAnyway.document": "Open the Document anyway",
   "citation.remove": "Remove the Citation",
+  "command.citation.open": "Open cited page",
   "citation.regenerate": "Regenerate the Answer",
   "citation.changedAfterCited": "The Document changed after this was cited.",
   "citation.recheck": "Check against the current version",
