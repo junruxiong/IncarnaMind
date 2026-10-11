@@ -72,6 +72,11 @@ interface Segment {
   to: number;
   /** The selection covers all of its text. */
   whole: boolean;
+  /**
+   * Its text is a paragraph of `Selection.text`. An empty one isn't: the
+   * model's paragraphs pair with only those it was shown.
+   */
+  shown: boolean;
   /** Its tokens in [from, to), leading and trailing spaces left out: they stay as they are. */
   tokens: OldToken[];
   /** Where those tokens start and end (`from`..`to` with the spaces left out). */
@@ -248,17 +253,18 @@ export function readSelection(blocks: Y.XmlFragment, from: TextPlace, to: TextPl
     while (lo < hi && /^\s+$/.test(tokens[lo]?.text ?? "x")) lo++;
     while (hi > lo && /^\s+$/.test(tokens[hi - 1]?.text ?? "x")) hi--;
     const kept = tokens.slice(lo, hi);
+    const shownText = words.join("").trim();
     segments.push({
       element,
       from: start,
       to: end,
       whole: start === 0 && end === size,
+      shown: shownText !== "",
       tokens: kept,
       start: kept[0]?.from ?? start,
       end: kept.at(-1)?.to ?? start,
     });
     plain.push(seen.join(""));
-    const shownText = words.join("").trim();
     text.push(shownText);
     context.push(blockText(element));
     characters += shownText.length;
@@ -599,10 +605,12 @@ export function proposeRewrite(
     const marker = markerOf(token);
     if (marker) into.add(marker);
   };
-  const pairs = Math.min(paragraphs.length, selection.segments.length);
+  // Only the paragraphs the model was shown: an empty one between two isn't in its text.
+  const segments = selection.segments.filter((segment) => segment.shown);
+  const pairs = Math.min(paragraphs.length, segments.length);
 
   for (let index = 0; index < pairs; index++) {
-    const segment = selection.segments[index] as Segment;
+    const segment = segments[index] as Segment;
     const tokens = paragraphs[index] as NewToken[];
     const steps = diffSteps(
       segment.tokens.map((token) => token.key),
@@ -629,7 +637,7 @@ export function proposeRewrite(
   }
 
   // Fewer paragraphs: the rest of the selection goes.
-  for (const segment of selection.segments.slice(pairs)) {
+  for (const segment of segments.slice(pairs)) {
     if (segment.tokens.length === 0) continue;
     const ref = next();
     if (segment.whole) {
@@ -641,7 +649,7 @@ export function proposeRewrite(
   }
 
   // More paragraphs: each a new Block after the last one paired.
-  const anchor = selection.segments[Math.max(0, pairs - 1)];
+  const anchor = segments[Math.max(0, pairs - 1)];
   if (anchor && paragraphs.length > pairs) {
     const added = paragraphs.slice(pairs).map((tokens) => {
       for (const token of tokens) note(addedCitations, token);

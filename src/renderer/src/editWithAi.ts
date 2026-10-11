@@ -175,7 +175,14 @@ export async function requestEdit(
       error: { kind: "unknown", message: error instanceof Error ? error.message : String(error) },
     };
   }
-  if (useEdits.getState().pending[mindId]?.requestId !== requestId) return;
+  const edits = useEdits.getState();
+  if (edits.pending[mindId]?.requestId !== requestId) {
+    // Stopped: nothing waits on the text any more, unless another request or the composer does.
+    if (!edits.pending[mindId] && !edits.editing[mindId] && !editor.isDestroyed) {
+      setEditTarget(editor, null);
+    }
+    return;
+  }
   set("pending", mindId, null);
   const target = editor.isDestroyed ? null : editTarget(editor.state);
   if (!editor.isDestroyed) setEditTarget(editor, null);
