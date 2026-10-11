@@ -116,6 +116,14 @@ interface Pose {
 
 const REST: Pose = { x: 0, y: 0, scale: 1, opacity: 1 };
 
+/** `base`, with what `change` gives instead (a value left undefined keeps the base's). */
+const posed = (base: Pose, change: Partial<Pose>): Pose => ({
+  x: change.x ?? base.x,
+  y: change.y ?? base.y,
+  scale: change.scale ?? base.scale,
+  opacity: change.opacity ?? base.opacity,
+});
+
 /** The transform keyframes between two poses, for what differs. */
 function between(from: Pose, to: Pose): Keyframes {
   const keyframes: Keyframes = {};
@@ -140,7 +148,7 @@ export function planEnter(
   const opacity = tween(fade, delay);
   if (mode === "reduced") return { keyframes: { opacity: [0, 1] }, transition: opacity };
   return {
-    keyframes: { opacity: [0, 1], ...between({ ...REST, ...from }, REST) },
+    keyframes: { opacity: [0, 1], ...between(posed(REST, from), REST) },
     // From rest: a velocity left over from an earlier animation would overshoot.
     transition: { ...physics(spring[name], 0), delay, opacity },
   };
@@ -153,11 +161,11 @@ export function planEnter(
  */
 export function planExit(mode: MotionMode, to: Offset, from: Partial<Pose> = {}): Plan | null {
   if (mode === "off") return null;
-  const start = { ...REST, ...from };
+  const start = posed(REST, from);
   const opacity: Keyframes = { opacity: [start.opacity, 0] };
   if (mode === "reduced") return { keyframes: opacity, transition: tween(fadeQuick) };
   return {
-    keyframes: { ...opacity, ...between(start, { ...start, ...to }) },
+    keyframes: { ...opacity, ...between(start, posed(start, to)) },
     transition: tween(fadeQuick),
   };
 }
@@ -563,7 +571,8 @@ function leaving(
     : at
       ? towardSource(box, at)
       : (sources.get(element) ?? towardSource(box, null));
-  const plan = planExit(current, how.to ?? { ...toward, scale: SOURCE_SCALE }, { opacity });
+  const to = how.to ?? (toward ? { x: toward.x, y: toward.y, scale: SOURCE_SCALE } : {});
+  const plan = planExit(current, to, { opacity });
   if (!plan) return null;
   const copy = copyOf(element, box);
   const scrollTop = element.scrollTop;
