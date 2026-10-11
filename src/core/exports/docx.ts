@@ -8,9 +8,10 @@
  * Node's zlib.
  *
  * Headings use Word's built-in heading styles, so they show in Word's
- * navigation pane; lists are Word lists; each Citation is a real Word
- * footnote; maths is Word's own equations (./math), or its LaTeX as text
- * where it can't be converted; code is monospaced paragraphs.
+ * navigation pane; lists are Word lists; each Citation, and each footnote
+ * the User wrote, is a real Word footnote, so Word numbers them together;
+ * maths is Word's own equations (./math), or its LaTeX as text where it
+ * can't be converted; code is monospaced paragraphs.
  */
 
 import { deflateRawSync } from "node:zlib";
@@ -133,6 +134,15 @@ export function renderDocx(blocks: readonly Block[], options: DocxOptions): Uint
       { name: "word/settings.xml", data: SETTINGS },
       { name: "word/numbering.xml", data: numbering(writer.lists) },
       { name: "word/footnotes.xml", data: footnotesPart(writer.footnotes) },
+      // Links in footnotes are the footnotes part's own relationships.
+      ...(writer.noteRelationships.length > 0
+        ? [
+            {
+              name: "word/_rels/footnotes.xml.rels",
+              data: relationshipsXml(writer.noteRelationships),
+            },
+          ]
+        : []),
       ...writer.media.map((file) => ({ name: `word/media/${file.name}`, data: file.data })),
     ],
     deflateRawSync,
@@ -160,6 +170,8 @@ interface Context {
   width: number;
   /** How their paragraphs are aligned, e.g. in a table's cell; null: as the text flows. */
   align: TableAlign;
+  /** In a footnote's text, whose links are the footnotes part's. */
+  note?: boolean;
 }
 
 interface List {
@@ -169,13 +181,16 @@ interface List {
 }
 
 class DocxWriter {
-  /** The `<w:footnote>` of each Citation, numbered from 1 in order. */
+  /** The `<w:footnote>` of each Citation and footnote, numbered from 1 in order. */
   readonly footnotes: string[] = [];
   readonly relationships: Relationship[] = [];
+  /** The footnotes part's relationships: its links. */
+  readonly noteRelationships: Relationship[] = [];
   readonly media: { name: string; data: Uint8Array }[] = [];
   /** Each list written: a Word numbering instance, numbered from 1. */
   readonly lists: List[] = [];
   private readonly links = new Map<string, string>();
+  private readonly noteLinks = new Map<string, string>();
   /** The footnotes' and drawings' ids, each from 1. */
   private readonly ids = new WordIds();
 
@@ -283,8 +298,11 @@ class DocxWriter {
     );
   }
 
-  /** Text a citation style formatted, run by run; its web addresses are links. */
-  private styled(runs: readonly StyledRun[]): string {
+  /**
+   * Text a citation style formatted, run by run; its web addresses are links, the footnotes
+   * part's own in a footnote (`inNote`).
+   */
+  private styled(runs: readonly StyledRun[], inNote = false): string {
     return runs
       .map((each) => {
         const format: RunFormat = {
@@ -296,19 +314,23 @@ class DocxWriter {
             each.script === "sup" ? "superscript" : each.script === "sub" ? "subscript" : undefined,
         };
         if (each.link && isWebLink(each.link)) {
-          return `<w:hyperlink r:id="${this.link(each.link)}" w:history="1">${run(each.text, { ...format, style: "Hyperlink" })}</w:hyperlink>`;
+          const id = inNote ? this.noteLink(each.link) : this.link(each.link);
+          return `<w:hyperlink r:id="${id}" w:history="1">${run(each.text, { ...format, style: "Hyperlink" })}</w:hyperlink>`;
         }
         return run(each.text, format);
       })
       .join("");
   }
 
-  /** Citations in a citation style: in the text, or as a footnote in the style's form. */
-  private cite(item: Extract<Inline, { kind: "cite" }>): string {
+  /**
+   * Citations in a citation style: in the text, or as a footnote in the style's form, which
+   * Word numbers with the User's own. In a footnote's text, a note can only be its words.
+   */
+  private cite(item: Extract<Inline, { kind: "cite" }>, context: Context): string {
     const marker = item.unverified ? run(` ${this.options.labels.unverified}`, { bold: true }) : "";
-    if (!item.note) return this.styled(item.runs) + marker;
+    if (!item.note || context.note) return this.styled(item.runs, context.note) + marker;
     const id = this.ids.take("footnote");
-    this.footnotes.push(footnote(id, run(" ") + this.styled(item.runs) + marker));
+    this.footnotes.push(footnote(id, run(" ") + this.styled(item.runs, true) + marker));
     return footnoteReference(id);
   }
 
@@ -405,7 +427,8 @@ class DocxWriter {
           runs += run(next.text, formatOf(next.marks, context, "Hyperlink"));
         }
         index--;
-        xml += `<w:hyperlink r:id="${this.link(href)}" w:history="1">${runs}</w:hyperlink>`;
+        const id = context.note ? this.noteLink(href) : this.link(href);
+        xml += `<w:hyperlink r:id="${id}" w:history="1">${runs}</w:hyperlink>`;
         continue;
       }
       switch (item.kind) {
@@ -419,13 +442,22 @@ class DocxWriter {
           xml += "<w:r><w:br/></w:r>";
           break;
         case "citation":
-          xml += this.footnote(item.footnote);
+          if (context.note) {
+            // A word of the footnote's text, apart from the one before it.
+            const before = content[index - 1];
+            const apart = before?.kind === "text" && /\S$/.test(before.text);
+            xml += this.source(item.footnote, apart ? " " : "");
+          } else xml += this.footnote(item.footnote);
+          break;
+        case "footnote":
+          if (!context.note) xml += this.userFootnote(item.content);
           break;
         case "image":
-          xml += this.image(item.image, context);
+          // A picture's relationship belongs to the document part, not to a footnote.
+          xml += context.note ? run(item.image.alt) : this.image(item.image, context);
           break;
         case "cite":
-          xml += this.cite(item);
+          xml += this.cite(item, context);
           break;
       }
     }
@@ -435,19 +467,58 @@ class DocxWriter {
   /** A Citation's footnote, and the reference to it in the text. */
   private footnote(citation: Footnote): string {
     const id = this.ids.take("footnote");
+    this.footnotes.push(footnote(id, this.source(citation, " ")));
+    return footnoteReference(id);
+  }
+
+  /** A Citation's source, after `before`, e.g. "Tides, p. 2", and "[unverified]" in bold. */
+  private source(citation: Footnote, before: string): string {
     const marker = citation.unverified
       ? run(` ${this.options.labels.unverified}`, { bold: true })
       : "";
-    this.footnotes.push(footnote(id, run(` ${citation.source}`) + marker));
+    return run(`${before}${citation.source}`) + marker;
+  }
+
+  /**
+   * A footnote the User wrote, and the reference to it in the text: its text
+   * with its marks and links, and any Citation in it as its source. It takes
+   * its number from the same ids as Citations', so Word numbers them together.
+   */
+  private userFootnote(content: readonly Inline[]): string {
+    const id = this.ids.take("footnote");
+    const text = this.inline(content, {
+      indent: 0,
+      style: null,
+      listDepth: 0,
+      bold: false,
+      width: this.textWidth,
+      align: null,
+      note: true,
+    });
+    this.footnotes.push(footnote(id, run(" ") + text));
     return footnoteReference(id);
   }
 
   private link(href: string): string {
-    let id = this.links.get(href);
+    return this.relationshipOf(href, this.links, this.relationships, "rIdLink");
+  }
+
+  /** A link in a footnote: the footnotes part's own relationship. */
+  private noteLink(href: string): string {
+    return this.relationshipOf(href, this.noteLinks, this.noteRelationships, "rIdNoteLink");
+  }
+
+  private relationshipOf(
+    href: string,
+    known: Map<string, string>,
+    relationships: Relationship[],
+    prefix: string,
+  ): string {
+    let id = known.get(href);
     if (!id) {
-      id = `rIdLink${this.links.size + 1}`;
-      this.links.set(href, id);
-      this.relationships.push({ id, type: RELATIONSHIP.hyperlink, target: href, external: true });
+      id = `${prefix}${known.size + 1}`;
+      known.set(href, id);
+      relationships.push({ id, type: RELATIONSHIP.hyperlink, target: href, external: true });
     }
     return id;
   }

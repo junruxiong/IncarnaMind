@@ -169,7 +169,8 @@ test("each Folder lists its Minds above its Documents and opens in place; a Mind
     await expect(answers.nth(1)).toHaveAttribute("data-status", "done", { timeout: 15_000 });
     await expect(answers.nth(1).getByTestId("citation-chip")).toHaveAttribute(
       "aria-label",
-      /^Citation 1: Spring menu/,
+      // Citations number through the Mind, with its footnotes: the first Answer's is 1.
+      /^Citation 2: Spring menu/,
     );
 
     // Its × takes the Folder out: every Document is searched.

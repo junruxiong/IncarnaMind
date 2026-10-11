@@ -2,6 +2,7 @@
  * Citation styles through the core (#289): a Mind's style, its Citations and Bibliography from
  * the Documents' reference records, formatted on the style thread, and the exports in the style.
  */
+import { randomUUID } from "node:crypto";
 import type { JSONContent } from "@tiptap/core";
 import { describe, expect, test } from "vitest";
 import type {
@@ -12,6 +13,7 @@ import type {
   FormattedCitations,
   ReferencePatch,
 } from "../../src/core";
+import { FOOTNOTE_NODE } from "../../src/core/api";
 import { type CslItem, locatorOf } from "../../src/core/citationStyles/csl";
 import { createWorkerEngine } from "../../src/core/citationStyles/engine";
 import { fixtureReferences, markup } from "../helpers/citationStyles";
@@ -458,5 +460,66 @@ describe("exporting a Mind in its citation style", () => {
       "Thesis",
       "Nothing cited here.",
     ]);
+  });
+});
+
+describe("the User's footnotes beside a citation style", () => {
+  const footnote = (...content: JSONContent[]): JSONContent => ({
+    type: FOOTNOTE_NODE,
+    attrs: { id: randomUUID() },
+    content,
+  });
+
+  /** A Note with a Citation, a footnote of the User's, and a Citation inside a footnote. */
+  async function written(style: FormattedCitations["style"]) {
+    const setup = await setUp();
+    const { core, mind, client, prospect, qian } = setup;
+    await core.setMindCitationStyle(mind.id, style);
+    writeMind(client, [
+      paragraph(
+        text("Losses loom larger "),
+        citation(prospect, page(265)),
+        text(" than gains "),
+        footnote(text("A note of my own.")),
+        text(". Systems are open "),
+        citation(qian, null),
+        footnote(text("Compare "), citation(prospect, page(270)), text(".")),
+        text("."),
+      ),
+    ]);
+    await client.settled();
+    return setup;
+  }
+
+  test("in a style that cites in the text, only the User's footnotes are footnotes, right after the word", async () => {
+    const { core, mind } = await written("apa");
+    const files = unzip((await core.exportMind(mind.id, { format: "docx" })).data);
+    expect(paragraphsOf(part(files, "word/document.xml"))[1]?.text).toBe(
+      "Losses loom larger (Kahneman & Tversky, 1979, p. 265) than gains[1]. Systems are open (钱学森 et al., 1990)[2].",
+    );
+    // A Citation inside a footnote is written into its text as its source, as in Numbered.
+    expect(Object.values(footnotesOf(part(files, "word/footnotes.xml")))).toEqual([
+      "A note of my own.",
+      "Compare prospect, p. 270.",
+    ]);
+  });
+
+  test("in a note style, the style's notes and the User's are numbered together, in order", async () => {
+    const { core, mind } = await written("chicago-notes");
+    const files = unzip((await core.exportMind(mind.id, { format: "docx" })).data);
+    expect(paragraphsOf(part(files, "word/document.xml"))[1]?.text).toBe(
+      "Losses loom larger[1] than gains[2]. Systems are open[3][4].",
+    );
+    const notes = Object.values(footnotesOf(part(files, "word/footnotes.xml")));
+    expect(notes[0]).toMatch(/^Daniel Kahneman and Amos Tversky, “Prospect Theory/);
+    expect(notes[1]).toBe("A note of my own.");
+    expect(notes[2]).toMatch(/^钱学森 et al\./);
+    expect(notes[3]).toBe("Compare prospect, p. 270.");
+
+    const markdown = new TextDecoder().decode(
+      (await core.exportMind(mind.id, { format: "markdown" })).data,
+    );
+    expect(markdown).toContain("Losses loom larger[^1] than gains[^2]. Systems are open[^3][^4].");
+    expect(markdown).toContain("[^2]: A note of my own.");
   });
 });

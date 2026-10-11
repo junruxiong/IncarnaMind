@@ -4,7 +4,12 @@ import { type EditorState, Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { CITATION_NODE, type CitationAttributes, type CitedWork } from "../../../core/api";
 import { citationLocation } from "../../../shared/locations";
-import { type NumberedCitation, numberCitations, textBlockEdited } from "./citationNumbers";
+import {
+  type NumberedCitation,
+  numberCitations,
+  sideBySide,
+  textBlockEdited,
+} from "./citationNumbers";
 
 /**
  * Citations side by side in the text, which a citation style (#289) writes as one:
@@ -38,27 +43,17 @@ export function citedWorkOf(attributes: CitationAttributes): CitedWork {
 const workSignature = (attributes: CitationAttributes) =>
   JSON.stringify([attributes.documentId, attributes.documentName, citationLocation(attributes)]);
 
-/** Whether nothing but spaces stands between two Citations of one text block. */
-function sideBySide(doc: ProseMirrorNode, before: NumberedCitation, after: NumberedCitation) {
-  const $before = doc.resolve(before.pos);
-  const $after = doc.resolve(after.pos);
-  if ($before.parent !== $after.parent) return false;
-  let only = true;
-  doc.nodesBetween(before.pos + 1, after.pos, (node) => {
-    if (node.isText ? (node.text ?? "").trim() !== "" : node.isInline) only = false;
-    return only;
-  });
-  return only;
-}
-
-/** The Mind's clusters, top to bottom. */
+/** The Mind's clusters, top to bottom. A footnote between two Citations parts them. */
 export function clusterCitations(doc: ProseMirrorNode): CitationCluster[] {
   const clusters: { members: NumberedCitation[] }[] = [];
   let previous: NumberedCitation | undefined;
   for (const citation of numberCitations(doc)) {
     const last = clusters.at(-1);
-    if (last && previous && sideBySide(doc, previous, citation)) last.members.push(citation);
-    else clusters.push({ members: [citation] });
+    if (last && previous && sideBySide(doc, previous.pos, citation.pos)) {
+      last.members.push(citation);
+    } else {
+      clusters.push({ members: [citation] });
+    }
     previous = citation;
   }
   return clusters.map(({ members }) => ({

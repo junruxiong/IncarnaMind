@@ -3,6 +3,7 @@ import { noteHolding } from "../editor/noteKeymap";
 import { currentTabOf } from "../layoutSlice";
 import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
+import { footnoteCommands } from "./footnotes";
 import { citationHandle, composerHandle, sidebarHandle } from "./handles";
 import { meetingCommands } from "./meetings";
 import { type Command, commands, fromMenu } from "./registry";
@@ -118,6 +119,7 @@ const appCommands: readonly Command[] = [
       if (ctx.focus) noteHolding(ctx.focus.id)?.commands.deleteBlock();
     },
   },
+  ...footnoteCommands,
   ...tableCommands,
 ];
 
