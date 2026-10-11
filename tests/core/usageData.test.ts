@@ -481,6 +481,7 @@ function counts(): UsageEventFields<"documents_added"> {
     markdown: 0,
     text: 0,
     web: 0,
+    transcript: 0,
   };
 }
 

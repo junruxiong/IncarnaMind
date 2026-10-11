@@ -93,7 +93,7 @@ export function LooseDocumentsLineIcon(props: IconProps) {
 }
 
 /** What each kind of Document has drawn on its page (#119): a mark of its own, 16px legible. Excel and CSV share one. */
-const KIND_MARK: Record<Exclude<DocumentKind, "web">, string> = {
+const KIND_MARK: Record<Exclude<DocumentKind, "web" | "transcript">, string> = {
   pdf: "M9 18v-6h2.2a1.9 1.9 0 0 1 0 3.8H9",
   docx: "M8 11.5l1.6 6 2.4-5 2.4 5 1.6-6",
   xlsx: "M8 11.5h8M8 14.5h8M8 17.5h8M12 11.5v6",
@@ -105,9 +105,17 @@ const KIND_MARK: Record<Exclude<DocumentKind, "web">, string> = {
 
 /**
  * A Document: a page with a folded corner, and on it the mark of its kind
- * (PDF, Word, sheet, slides, Markdown, text); a saved web page is a globe.
+ * (PDF, Word, sheet, slides, Markdown, text); a saved web page is a globe,
+ * and a meeting's Transcript a waveform.
  */
 export function DocumentLineIcon({ kind, ...props }: IconProps & { kind: DocumentKind }) {
+  if (kind === "transcript") {
+    return (
+      <LineIcon {...props} data-kind={kind}>
+        <path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 10.5v3" />
+      </LineIcon>
+    );
+  }
   if (kind === "web") {
     return (
       <LineIcon {...props} data-kind={kind}>

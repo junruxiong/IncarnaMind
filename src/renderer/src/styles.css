@@ -1542,6 +1542,22 @@
     width: 24px;
     padding: 0;
   }
+  /* Show transcript, at the bar's far end; its words give way first in a narrow Mind. */
+  .meeting-button--end {
+    flex-shrink: 1;
+    min-width: 0;
+    margin-left: auto;
+
+    &:disabled {
+      color: var(--color-ink-placeholder);
+      background: none;
+    }
+  }
+  .meeting-button-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   /* A quiet 22px chip: no fill until pointed at (the model, "All Documents"). */
   .composer-chip {
     display: inline-flex;
