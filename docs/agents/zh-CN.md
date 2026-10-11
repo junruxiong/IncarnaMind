@@ -62,6 +62,8 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Open access | 开放获取 | As CNKI and publishers say it. "仅开放获取", "无开放全文". |
 | Preprint / Accepted manuscript | 预印本 / 录用稿 | The version an open copy is. |
 | Cited by {count} | 被引 {count} 次 | As CNKI and Google Scholar show it. |
+| Import references | 导入引用信息… | From a CSL JSON, BibTeX or RIS file. Counted with 条: "导入了 3 条". |
+| Reference without a Document | 还没有文档 | Its list: "添加 PDF…" links it. |
 | Folder | 文件夹 | |
 | Source location | 文件位置 | The sidebar view of the files as they are on disk. |
 | Tag | 标签 | Tagging is 打标签; automatic tagging is 自动打标签. |
