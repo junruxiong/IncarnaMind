@@ -9,10 +9,10 @@ import { core } from "./core";
 import { errorMessage } from "./errors";
 import { useAppStore } from "./store";
 
-/** A work being added, or how adding it went. */
+/** A work being added, or how adding it went, with the Folder it went to (null: Not in a Folder). */
 export type AddState =
   | { status: "adding" }
-  | { status: "done"; result: AddFoundSourceResult }
+  | { status: "done"; result: AddFoundSourceResult; folderId: string | null }
   | { status: "failed"; message: string };
 
 /** What a search is for, as the panel's fields hold it. */
@@ -50,6 +50,9 @@ interface FindSourcesState extends SourceSearch {
   search(): Promise<void>;
   add(work: FoundSource): Promise<void>;
 }
+
+/** Counts searches, so only the latest one's answer is shown. */
+let searchTicket = 0;
 
 /** The Folder the Library shows, if it shows one: where Find sources adds by default. */
 function shownFolder(): string | null {
@@ -100,6 +103,7 @@ export const useFindSources = create<FindSourcesState>()((set, get) => ({
   async search() {
     const { query, fromYear, toYear, openAccessOnly, providers, off } = get();
     if (query.trim() === "") return;
+    const ticket = ++searchTicket;
     set({ searching: true, error: null });
     try {
       const searching = providers.filter((each) => each.searches).map((each) => each.id);
@@ -110,11 +114,12 @@ export const useFindSources = create<FindSourcesState>()((set, get) => ({
         openAccessOnly,
         ...(providers.length > 0 && { providers: searching.filter((id) => !off.includes(id)) }),
       });
-      set({ result, adds: {} });
+      // A search started since has the last word.
+      if (ticket === searchTicket) set({ result, adds: {} });
     } catch (error) {
-      set({ error: errorMessage(error) });
+      if (ticket === searchTicket) set({ error: errorMessage(error) });
     } finally {
-      set({ searching: false });
+      if (ticket === searchTicket) set({ searching: false });
       // A consent decision may have changed what each provider shows.
       core.listSourceProviders().then(
         (providers) => set({ providers }),
@@ -128,7 +133,8 @@ export const useFindSources = create<FindSourcesState>()((set, get) => ({
     set((state) => ({ adds: { ...state.adds, [work.key]: { status: "adding" } } }));
     let next: AddState;
     try {
-      next = { status: "done", result: await core.addFoundSource({ key: work.key, folderId }) };
+      const result = await core.addFoundSource({ key: work.key, folderId });
+      next = { status: "done", result, folderId };
     } catch (error) {
       next = { status: "failed", message: errorMessage(error) };
     }

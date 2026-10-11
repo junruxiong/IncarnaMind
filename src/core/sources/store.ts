@@ -122,12 +122,20 @@ export function inLibrary(
   return row ? { documentId: row.document_id, recordId: row.id } : null;
 }
 
-/** The Documents Find sources added that have since been deleted permanently: their files can go. */
-export function purgedFoundFiles(db: Database): string[] {
-  return db
-    .all<{ path: string }>(
-      `SELECT d.path FROM documents d JOIN found_sources f ON f.document_id = d.id
-       WHERE d.purged_at IS NOT NULL`,
-    )
-    .map((row) => row.path);
+/**
+ * The copies of Documents Find sources added that have since been deleted
+ * permanently, not yet removed: their files can go, unless a Document that
+ * isn't purged is at the same path (a later copy given the freed name).
+ */
+export function purgedFoundFiles(db: Database): { id: string; path: string }[] {
+  return db.all<{ id: string; path: string }>(
+    `SELECT f.id, d.path FROM documents d JOIN found_sources f ON f.document_id = d.id
+     WHERE d.purged_at IS NOT NULL AND f.deleted_at IS NULL
+       AND NOT EXISTS (SELECT 1 FROM documents o WHERE o.path = d.path AND o.purged_at IS NULL)`,
+  );
+}
+
+/** A copy removed: its row goes too, so it isn't removed again. */
+export function forgetFoundFile(db: Database, id: string, at: string): void {
+  db.run("UPDATE found_sources SET deleted_at = ?, updated_at = ? WHERE id = ?", [at, at, id]);
 }

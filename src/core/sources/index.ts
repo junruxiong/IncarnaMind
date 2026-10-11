@@ -10,7 +10,7 @@
  * where it came from recorded (./store); with no open copy, the reference
  * record alone is kept. The Answer's Tool (./tool) runs the same search.
  */
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, realpath, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { arxivIdOf, normalizeDoi } from "../../shared/references";
 import type {
@@ -36,7 +36,7 @@ import { downloadOpenPdf, fileOf } from "./fullText";
 import { SourceError, type SourceHttp } from "./http";
 import { licenceOf } from "./licences";
 import { type MergedWork, mergeWorks } from "./merge";
-import { inLibrary, purgedFoundFiles, recordFoundSource } from "./store";
+import { forgetFoundFile, inLibrary, purgedFoundFiles, recordFoundSource } from "./store";
 import { sourcesTool } from "./tool";
 import type {
   FullText,
@@ -526,11 +526,24 @@ export function createSources(options: SourcesOptions) {
 
     /** Removes the copies of Documents deleted permanently: their text goes with them. */
     async dropPurged(): Promise<void> {
+      const files = purgedFoundFiles(db);
+      if (files.length === 0) return;
+      // Documents keep the path with links resolved (on macOS, /private/var for /var).
+      const folders = [options.folder, await realpath(options.folder).catch(() => options.folder)];
       await Promise.all(
-        purgedFoundFiles(db)
-          .filter((path) => isInside(options.folder, path))
-          .map((path) => rm(path, { force: true })),
-      ).catch(options.reportError);
+        files
+          .filter((file) => folders.some((folder) => isInside(folder, file.path)))
+          .map(async (file) => {
+            try {
+              await rm(file.path, { force: true });
+              // The core may have closed meanwhile: the row is forgotten at the next start.
+              if (!options.signal.aborted) forgetFoundFile(db, file.id, now());
+            } catch (error) {
+              // Tried again at the next start.
+              options.reportError(error);
+            }
+          }),
+      );
     },
   };
 }

@@ -414,20 +414,29 @@ function AddLine({ work, add }: { work: FoundSource; add: AddState | undefined }
       </ProblemLine>
     );
   }
-  return <AddedLine result={add.result} groups={groups} openDocument={openDocument} />;
+  return (
+    <AddedLine
+      result={add.result}
+      folderId={add.folderId}
+      groups={groups}
+      openDocument={openDocument}
+    />
+  );
 }
 
 function AddedLine({
   result,
+  folderId,
   groups,
   openDocument,
 }: {
   result: AddFoundSourceResult;
+  /** The Folder it was added to, whatever "Add to" says now. */
+  folderId: string | null;
   groups: readonly { id: string; name: string }[] | undefined;
   openDocument(documentId: string): void;
 }) {
   const t = useT();
-  const folderId = useFindSources((state) => state.folderId);
   if (result.outcome === "document") {
     const folder = groups?.find((group) => group.id === folderId);
     return (

@@ -1008,9 +1008,10 @@ async function* toolLoop(
         ...context,
         counted: (count) => results.set(context.toolCallId, count),
       });
-      // A search that found no Passages read nothing of the Documents.
-      const read =
-        tool === search ? (results.get(context.toolCallId) ?? 0) > 0 : result.trim() !== "";
+      // A search that found nothing (no Passages, no works) read nothing untrusted.
+      const read = results.has(context.toolCallId)
+        ? (results.get(context.toolCallId) ?? 0) > 0
+        : result.trim() !== "";
       if (tool.untrustedResult && read) tainted = true;
       return result;
     },
