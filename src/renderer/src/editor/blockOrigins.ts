@@ -153,16 +153,23 @@ export function originRuns(state: EditorState): OriginRun[] {
   return runs;
 }
 
-/** Washes Blocks just added for a moment. */
+/**
+ * Washes Blocks just added for a moment. Blocks added meanwhile keep their own
+ * wash for its whole moment: each ending takes off only its own Blocks.
+ */
 export function flashBlocks(editor: Editor, blockIds: readonly string[]): void {
   if (editor.isDestroyed) return;
+  const flashingNow = () => originsKey.getState(editor.state)?.flashing ?? new Set<string>();
   editor.view.dispatch(
-    editor.state.tr.setMeta(originsKey, { flashing: new Set(blockIds) } satisfies Meta),
+    editor.state.tr.setMeta(originsKey, {
+      flashing: new Set([...flashingNow(), ...blockIds]),
+    } satisfies Meta),
   );
   setTimeout(() => {
     if (editor.isDestroyed) return;
+    const left = [...flashingNow()].filter((id) => !blockIds.includes(id));
     editor.view.dispatch(
-      editor.state.tr.setMeta(originsKey, { flashing: new Set() } satisfies Meta),
+      editor.state.tr.setMeta(originsKey, { flashing: new Set(left) } satisfies Meta),
     );
   }, FLASH_MS);
 }
