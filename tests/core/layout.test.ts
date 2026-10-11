@@ -474,7 +474,7 @@ describe("Tabs and groups", () => {
   test("the assistant starts docked on the right; its place, sizes and fold survive a restart, and bad input is refused", async () => {
     const { core, dataDir, change } = await setUp();
     expect((await core.getLayout(WINDOW)).assistant).toEqual(DEFAULT_ASSISTANT);
-    expect(DEFAULT_ASSISTANT).toMatchObject({ dock: "right", folded: false, width: 360 });
+    expect(DEFAULT_ASSISTANT).toMatchObject({ dock: "right", folded: false, width: 320 });
 
     // What is given changes; the rest stays.
     let layout = await change({ type: "assistant", place: { dock: "left", width: 412.4 } });
