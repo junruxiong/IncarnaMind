@@ -8,7 +8,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { CITATION_OUTCOMES, type CitationOutcome } from "../../lib/citations";
-import { reviewerSheet } from "../../lib/report";
+import { answersText, reviewerSheet } from "../../lib/report";
 import type { RerankerInfo } from "../../lib/rerank";
 import {
   GATING_MODE,
@@ -325,11 +325,12 @@ function citationsSection(report: HardReport): string[] {
   const of = (difficulty: Difficulty) => citations.byDifficulty[difficulty];
   const ofAnswers = (part: number, difficulty: Difficulty) =>
     `${part}/${of(difficulty)?.answers ?? 0} (${percent(part / Math.max(1, of(difficulty)?.answers ?? 0))})`;
+  const unanswerable = of("unanswerable");
   return [
     "## Citations",
     "",
     `- Model: \`${citations.run.model}\`, ${citations.run.service ? `sent to ${citations.run.service}` : "on this computer"}. Each Question asked once, in a Mind of its own, with embeddings off as Users have them by default (keyword search, reranked). Reported, never gating.`,
-    '- Figures as for the gating set (`eval/README.md`). "Cites a Document it needs": an Answer with a found Citation of an expected Document; for a near-duplicate Question, of the right version. For an unanswerable Question, the share answered without a Citation is the one that matters.',
+    "- Figures as for the gating set (`eval/README.md`). \"Cites a Document it needs\": an Answer with a found Citation of an expected Document; for a near-duplicate Question, of the right version. For an unanswerable Question, what matters is whether the Answer says the Documents don't answer it: the share that declines, by a phrase rule in English and Chinese (`eval/lib/declines.ts`), with or without Citations. The reviewer sheet lists the Answers the rule did not take as declines, with a column to mark the ones it missed. Each Answer's text is in `answers.md`.",
     "",
     `| | ${columns.join(" | ")} |`,
     `|---|${columns.map(() => "---|").join("")}`,
@@ -351,7 +352,25 @@ function citationsSection(report: HardReport): string[] {
       d === "near-duplicate" ? ofAnswers(of(d)?.citingOtherVersion ?? 0, d) : "–",
     ),
     row("**Answered without a Citation**", (d) => ofAnswers(of(d)?.withoutCitation ?? 0, d)),
+    row("**Declines, with or without Citations**", (d) =>
+      d === "unanswerable" ? ofAnswers(of(d)?.declines ?? 0, d) : "–",
+    ),
     "",
+    ...(unanswerable
+      ? [
+          "Unanswerable Questions whose Answer declines, by the rule:",
+          "",
+          ...(
+            [
+              ["English", unanswerable.declinesByLanguage.en],
+              ["Chinese", unanswerable.declinesByLanguage.zh],
+            ] as const
+          ).map(
+            ([label, each]) => `- ${label}: ${share({ hits: each.declines, total: each.answers })}`,
+          ),
+          "",
+        ]
+      : []),
   ];
 }
 
@@ -463,7 +482,7 @@ export function hardSummary(report: HardReport, reportDir: string, root: string)
         .map((d) => `${d} found ${percent(citations.byDifficulty[d]?.foundShare ?? null)}`)
         .join(
           ", ",
-        )}${unanswerable ? `; unanswerable answered without a Citation ${unanswerable.withoutCitation}/${unanswerable.answers}` : ""}`,
+        )}${unanswerable ? `; unanswerable: ${unanswerable.declines}/${unanswerable.answers} decline, ${unanswerable.withoutCitation}/${unanswerable.answers} answered without a Citation` : ""}`,
     );
   }
   lines.push(`Reports: ${relative(root, reportDir)}/`, "");
@@ -478,6 +497,7 @@ export async function writeHardReports(report: HardReport, resultsDir: string): 
   await writeFile(join(dir, "report.md"), markdownReport(report));
   if (!("skipped" in report.citations)) {
     await writeFile(join(dir, "reviewer-sheet.csv"), reviewerSheet(report.citations.run));
+    await writeFile(join(dir, "answers.md"), answersText(report.citations.run));
   }
   return dir;
 }
