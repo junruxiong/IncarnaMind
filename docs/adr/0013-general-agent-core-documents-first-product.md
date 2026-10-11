@@ -38,3 +38,40 @@ Waiting for approval happens above the engine, in a `gate` the engine awaits bef
 - Task tables (`runs`, `run_steps`, `schedules`) follow ADR-0003's rules and record the device a Run executes on. "Run" and "Task" enter CONTEXT.md when Tasks are built; "Effect" is in it now.
 - A Files provider never changes a file in a Linked folder, and adds a new one there only with that folder's permission (ADR-0010, amended 2026-10-10 by #124).
 - On macOS, the OS sandbox relies on `sandbox-exec` and Seatbelt profiles, which Apple deprecates and doesn't document for third parties; Claude Code and Codex rely on them too. Windows stays at sandbox level "none" and asks every time.
+
+## Addendum, 2026-10-11: the User's own agent
+
+The owner asked why we write our own harness rather than use Claude Code's, Codex's, pi's or OpenClaw's, and suggested Users connect their own. We keep our own loop. A User's agent can use IncarnaMind in two ways, both outside that loop. Research: `docs/research/bring-your-own-agent.md`.
+
+**We keep our loop.** The loop is already the AI SDK's. What we write is the Citation check, consent, Proposals, Effects and read-only Linked folders. An outside harness as our engine would drop them: Claude's ACP adapter uses its own file and shell Tools whatever the client allows. Most Users won't have a coding agent, and many use a local model.
+
+**IncarnaMind is an MCP server.** A User can connect their own agent, such as Claude Code, Codex, Cursor or Claude Desktop, to IncarnaMind.
+- It runs as a stdio command that talks to the running app over a local socket. There is no HTTP port until a client needs one, because stdio and a socket are what the MCP security guide recommends for local servers.
+- Each agent is a pairing the User makes in Settings, with its own Search scope, its own consent, a token only it holds, and a list of what it did.
+- Its Tools read the Documents and the Minds and mint Citations. Its only write is a Proposal, which waits for the User in IncarnaMind.
+- Only IncarnaMind mints a Citation. Every Citation an agent sends back is checked again, and a sentence without one is marked.
+- Off by default, and offered as an experimental setting first. A new pairing sees no Documents until the User picks its Folders. Local mode pauses every outside agent, because IncarnaMind can't tell which model the agent sends text to.
+
+**IncarnaMind can host an outside agent over ACP, later and experimentally.** A hosted agent is a new kind of Run whose loop runs in the agent's process. It isn't a Run engine, because the model isn't ours.
+- The agent gets IncarnaMind's MCP server at session start, and its text streams into an Answer Block with re-checked Citations.
+- Its permission requests use our approval cards. After our Tools return Passages to it, we stop offering "always allow".
+- We start it in its most restrictive mode, and never in one that skips permissions.
+- Its own Tools are outside our Effects, and we say so in its consent.
+
+**Vendor terms decide which agents.**
+- We never show a vendor's sign-in, read its tokens, or bundle its proprietary binary.
+- Codex, Goose, OpenCode, and Gemini CLI on a paid key are hosted first.
+- Claude is not hosted for now. Claude Code and Claude Desktop connect through the MCP server above, on the User's own sign-in. Hosting it can be reconsidered if Anthropic confirms subscription use in a third-party app.
+
+**Considered options.**
+- **Run the User's harness as our engine.** Rejected for the reasons above.
+- **A localhost HTTP server with a token.** Kept for later. It opens a port that web pages can try to reach, and no client we target needs it today.
+- **Let agents write to Minds directly.** Rejected. A change from outside waits as a Proposal, as an AI change from inside does.
+- **Trust ACP's `fs` and `terminal` capabilities to confine the agent.** Rejected. Agents use their own Tools when the client declines, and ACP v2 removes them.
+
+**Consequences.**
+- A new data flow, "agents", one consent per pairing, listed on the Privacy page.
+- A pairings table, following ADR-0003's rules, with each token kept by `secrets.ts`.
+- The socket listener lives in the main process, and the core never imports Electron.
+- "Outside agent" enters CONTEXT.md when Phase 1 ships.
+- `@agentclientprotocol/sdk` (Apache-2.0) is added only with the ACP host.
