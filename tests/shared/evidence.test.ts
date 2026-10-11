@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { DocumentGroupAssignment, LibraryGroup, OwnFile, Settings } from "../../src/core/api";
-import { leftOutOfEvidence } from "../../src/shared/evidence";
+import { countedByChoice, leftOutOfEvidence } from "../../src/shared/evidence";
 
 const settings = (leaveOutOwnFiles: boolean): Pick<Settings, "user"> => ({
   user: { language: "en", chatModel: null, suggestWhileWriting: false, leaveOutOwnFiles },
@@ -48,5 +48,15 @@ describe("whether checks leave a Document out of their evidence, as the window s
     expect(
       leftOutOfEvidence(exported(), settings(true), { groups: [folder(true)], assignments: [] }),
     ).toBe(true);
+  });
+
+  test("taking Count it back is offered only where it would leave the Document out again", () => {
+    expect(countedByChoice(exported(true), settings(true), null)).toBe(true);
+    expect(countedByChoice(exported(false), settings(true), null)).toBe(false);
+    // Settings, or its Folder, counts it anyway: taking the choice back would change nothing.
+    expect(countedByChoice(exported(true), settings(false), null)).toBe(false);
+    const library = { groups: [folder(true)], assignments: [filed] };
+    expect(countedByChoice(exported(true), settings(true), library)).toBe(false);
+    expect(countedByChoice({ id: "notes", ownFile: null }, settings(true), null)).toBe(false);
   });
 });

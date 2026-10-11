@@ -1,5 +1,5 @@
 import type { Document } from "../../../core/api";
-import { leftOutOfEvidence } from "../../../shared/evidence";
+import { countedByChoice, leftOutOfEvidence } from "../../../shared/evidence";
 import { countAsEvidence } from "../evidence";
 import { useAppStore } from "../store";
 import type { Command, CommandContext } from "./registry";
@@ -46,7 +46,11 @@ export const evidenceCommands: readonly Command[] = [
     },
     group: "main",
     appliesTo: ["document"],
-    when: (ctx) => everyOne(ctx, (document) => document.ownFile?.counted === true),
+    // Only where taking the choice back leaves it out: not while Settings or its Folder counts it.
+    when: (ctx) => {
+      const { settings, library } = useAppStore.getState();
+      return everyOne(ctx, (document) => countedByChoice(document, settings, library));
+    },
     reversible: true,
     run: (ctx) => countAsEvidence(documentsOf(ctx), false),
   },

@@ -55,7 +55,8 @@ export const en = {
   "library.description": "Description",
   "library.descriptionHint": "What belongs in this folder?",
   "library.countsOwnFiles": "Count files IncarnaMind wrote as evidence in this folder",
-  "library.countsOwnFiles.hint": "Checks leave them out of their evidence in other folders.",
+  "library.countsOwnFiles.hint":
+    "Files IncarnaMind wrote that are in other folders stay out of checks' evidence.",
   "library.countsOwnFiles.everywhere":
     "Counted in every folder: Settings → Search doesn't leave them out.",
   "library.save": "Save folder",
@@ -536,7 +537,7 @@ export const en = {
   "evidence.settings.title": "Checks",
   "evidence.settings.switch": "Leave out files IncarnaMind wrote",
   "evidence.settings.body":
-    "When IncarnaMind checks your writing or compares Documents, the exports and source packs it saved aren't used as evidence, so a note can't support itself. Copies of the document being checked are always left out. Transcripts and saved web pages count as usual.",
+    "While this is on, the exports and source packs IncarnaMind saved aren't used as evidence when it checks your writing or compares Documents, so a note can't support itself. A folder, or one Document, can still count them. Copies of the document being checked are always left out. Transcripts and saved web pages count as usual.",
   "documents.remove.title": "Remove this Document?",
   "documents.remove.body":
     "“{name}” is no longer in its folder. Removing it drops the text IncarnaMind kept of it, and Citations to it can't be checked any more.",
