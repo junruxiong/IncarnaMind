@@ -182,6 +182,16 @@ function examplesFolder(): string | undefined {
 }
 
 /**
+ * The citation-style engine, styles and locales (ADR-0016), found like the built-in Skills: in
+ * the packaged app's resources, otherwise in the repository.
+ */
+function citationStylesFolder(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, "citation-styles")
+    : join(app.getAppPath(), "resources", "citation-styles");
+}
+
+/**
  * The User's Documents folder, where the first save offers to put the Output
  * location. A test build uses one in its data folder, so the smoke tests never
  * write into the User's.
@@ -369,6 +379,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
       dataDir,
       builtInSkills: builtInSkillsFolder(),
       examples: examplesFolder(),
+      citationStyles: citationStylesFolder(),
       documents: documentsFolder(dataDir),
     },
     systemLanguages: () => app.getPreferredSystemLanguages(),

@@ -6,7 +6,9 @@ import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import * as Y from "yjs";
 import { ANSWER_BLOCK, MIND_CONTENT_FIELD, type MindAccess } from "../../../core/api";
+import { citationStyle } from "../../../shared/citationStyles";
 import { translate } from "../../../shared/i18n";
+import { useCitationFormattingFor, useMindStyleChoice } from "../citationFormatting";
 import { noteHandle } from "../commands/handles";
 import { shortcutLabel } from "../commands/keymap";
 import { useComposer } from "../composer";
@@ -14,10 +16,12 @@ import { core } from "../core";
 import { AnswerView } from "../editor/AnswerView";
 import { BlockHandle } from "../editor/BlockHandle";
 import { BlockCommands } from "../editor/blockCommands";
+import { CitationStylePrompt } from "../editor/CitationStylePrompt";
 import { CitationView } from "../editor/CitationView";
 import { CodeBlockView } from "../editor/CodeBlockView";
 import { Composer, type ComposerHandle } from "../editor/Composer";
-import { CitationNumbers, redrawFootnotes } from "../editor/citationNumbers";
+import { CitationClusters } from "../editor/citationClusters";
+import { CitationNumbers, redrawFootnotes, setCitationForm } from "../editor/citationNumbers";
 import { EndHint, type HintPlace, type HintText, isEmptyMind } from "../editor/EndHint";
 import { selectionForEdit } from "../editor/editSelection";
 import { FootnoteArea } from "../editor/FootnoteArea";
@@ -34,6 +38,7 @@ import { ProposalReview } from "../editor/proposalReview";
 import { QuestionView } from "../editor/QuestionView";
 import { askInEditor, QuestionCommands } from "../editor/questionCommands";
 import { QuestionFold } from "../editor/questionFold";
+import { ReferencesBlock } from "../editor/ReferencesBlock";
 import { ScopePicker } from "../editor/ScopePicker";
 import { type SelectionAction, SelectionMenu } from "../editor/SelectionMenu";
 import { SlashMenu } from "../editor/SlashMenu";
@@ -215,6 +220,11 @@ function MindEditorView({
       : t("editor.footnote.label", { number });
   /** The position of the formula whose LaTeX is being edited. */
   const [editingMath, setEditingMath] = useState<number | null>(null);
+  /** The Mind's citation style, followed as it changes (#289). */
+  const styleChoice = useMindStyleChoice(doc);
+  const { style } = styleChoice;
+  const styleRef = useRef(style);
+  styleRef.current = style;
 
   const editor = useEditor(
     {
@@ -230,7 +240,9 @@ function MindEditorView({
           citationView,
           footnoteView: footnoteView(() => footnoteLabel.current),
         }),
-        CitationNumbers,
+        // Footnotes are numbered as the Mind's citation style counts its Citations (#289).
+        CitationNumbers.configure({ form: () => citationStyle(styleRef.current).form }),
+        CitationClusters,
         FootnoteKeys,
         Collaboration.configure({ document: doc, field: MIND_CONTENT_FIELD }),
         Placeholder.configure({
@@ -285,6 +297,13 @@ function MindEditorView({
     },
     [doc, readOnly],
   );
+
+  // The Citations and References in the Mind's citation style (#289), formatted off the
+  // window's thread, and the footnotes numbered again when the style counts Citations otherwise.
+  useCitationFormattingFor(editor, style, mindId);
+  useEffect(() => {
+    if (!editor.isDestroyed) setCitationForm(editor.view, citationStyle(style).form);
+  }, [editor, style]);
 
   // The commands on the Mind's text (⌘K, ⌘↵ and ⌘⌫ on its changes) act on the Mind last written in.
   useEffect(() => {
@@ -399,6 +418,12 @@ function MindEditorView({
         <MarginChecks editor={editor} />
         {!readOnly && <TableMenu editor={editor} />}
         <FootnoteArea editor={editor} citationView={citationView} />
+        {style !== "numbered" && (
+          <ReferencesBlock mindId={mindId} editor={editor} readOnly={readOnly} />
+        )}
+        {!readOnly && !styleChoice.chosen && !styleChoice.promptDismissed && (
+          <CitationStylePrompt mindId={mindId} editor={editor} doc={doc} />
+        )}
       </div>
       {dock &&
         !readOnly &&

@@ -16,6 +16,7 @@
 
 import { deflateRawSync } from "node:zlib";
 import type { TableAlign } from "../../shared/markdownTables";
+import type { StyledRun } from "../api";
 import { writeZip } from "../documents/formats/zip";
 import {
   type Block,
@@ -270,7 +271,67 @@ class DocxWriter {
         return this.table(block.rows, context);
       case "image":
         return paragraph({ style: context.style, indent }, this.image(block.image, context));
+      case "bibliography":
+        return this.bibliography(block);
     }
+  }
+
+  /**
+   * The Bibliography a citation style made (#289): its heading, then one paragraph per entry,
+   * hanging if the style hangs them. A number the style sets apart ("[1]") sits in the hang,
+   * with a tab before the entry's text.
+   */
+  private bibliography(block: Extract<Block, { kind: "bibliography" }>): string {
+    const labelled = block.items.some((item) => item.label !== null);
+    const hang = labelled || block.hangingIndent ? INDENT : undefined;
+    return (
+      paragraph({ style: "Heading1" }, run(block.heading)) +
+      block.items
+        .map((item) =>
+          paragraph(
+            { indent: hang, hanging: hang },
+            (item.label ? `${this.styled(item.label)}<w:r><w:tab/></w:r>` : "") +
+              this.styled(item.runs),
+          ),
+        )
+        .join("")
+    );
+  }
+
+  /**
+   * Text a citation style formatted, run by run; its web addresses are links, the footnotes
+   * part's own in a footnote (`inNote`).
+   */
+  private styled(runs: readonly StyledRun[], inNote = false): string {
+    return runs
+      .map((each) => {
+        const format: RunFormat = {
+          bold: each.bold,
+          italic: each.italic,
+          smallCaps: each.smallCaps,
+          underline: each.underline,
+          script:
+            each.script === "sup" ? "superscript" : each.script === "sub" ? "subscript" : undefined,
+        };
+        if (each.link && isWebLink(each.link)) {
+          const id = inNote ? this.noteLink(each.link) : this.link(each.link);
+          return `<w:hyperlink r:id="${id}" w:history="1">${run(each.text, { ...format, style: "Hyperlink" })}</w:hyperlink>`;
+        }
+        return run(each.text, format);
+      })
+      .join("");
+  }
+
+  /**
+   * Citations in a citation style: in the text, or as a footnote in the style's form, which
+   * Word numbers with the User's own. In a footnote's text, a note can only be its words.
+   */
+  private cite(item: Extract<Inline, { kind: "cite" }>, context: Context): string {
+    const marker = item.unverified ? run(` ${this.options.labels.unverified}`, { bold: true }) : "";
+    if (!item.note || context.note) return this.styled(item.runs, context.note) + marker;
+    const id = this.ids.take("footnote");
+    this.footnotes.push(footnote(id, run(" ") + this.styled(item.runs, true) + marker));
+    return footnoteReference(id);
   }
 
   /** A Word list: the first paragraph of each item carries its number or bullet. */
@@ -394,6 +455,9 @@ class DocxWriter {
         case "image":
           // A picture's relationship belongs to the document part, not to a footnote.
           xml += context.note ? run(item.image.alt) : this.image(item.image, context);
+          break;
+        case "cite":
+          xml += this.cite(item, context);
           break;
       }
     }

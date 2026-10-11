@@ -5,6 +5,7 @@ import { useKeymap } from "./commands/keymap";
 import { AddWebPageDialog } from "./components/AddWebPageDialog";
 import { AppShell, useRememberSidebarWidth } from "./components/AppShell";
 import { Workbench } from "./components/assistant/Workbench";
+import { CitationStylePickerHost } from "./components/CitationStylePicker";
 import { ConsentDialog } from "./components/ConsentDialog";
 import { DropOverlay, useFileDrop } from "./components/FileDrop";
 import { FileWriteDialog } from "./components/FileWriteDialog";
@@ -256,6 +257,7 @@ function Workspace() {
         <ChatSetupDialog />
         <ChatGptWelcomeDialog />
         <UsageDataDialog />
+        <CitationStylePickerHost />
         {/* Open after the dialog that triggered the request, so they show on top of it. */}
         <ConsentDialog />
         <MeetingNoticeDialog />

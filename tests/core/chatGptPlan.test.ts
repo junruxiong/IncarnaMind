@@ -856,7 +856,7 @@ describe("The experimental provider it replaces", () => {
     const db = openDatabase(join(dataDir, DATABASE_FILE));
     migrate(
       db,
-      migrations.filter((migration) => migration.version < 52),
+      migrations.filter((migration) => migration.version < 53),
     );
     const at = "2026-10-01T00:00:00.000Z";
     db.run(
