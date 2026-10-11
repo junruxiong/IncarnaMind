@@ -4,7 +4,7 @@
  * `CoreApi.formatCitations`, and the exports format with the same function, so the two agree.
  */
 import { type CitationStyle, citationStyle } from "../../shared/citationStyles";
-import { displayName } from "../../shared/documentNames";
+import { displayName, titleWithoutSite } from "../../shared/documentNames";
 import { missingDetails } from "../../shared/references";
 import type {
   BibliographyEntry,
@@ -67,6 +67,9 @@ function referenceOf(work: CitedWork, document: Document | undefined): Reference
   const item = fields ? cslItemOf(id, fields) : nameOnlyItem(id, name);
   // A work with no title is cited by its Document's name rather than by nothing.
   if (!item.title) item.title = name;
+  // A web page's site is its own field, so its title doesn't name the site again.
+  const site = item["container-title"];
+  if (document.web && typeof site === "string") item.title = titleWithoutSite(item.title, site);
   // A web page is cited as it read on the day the quoted version was fetched (#100).
   if (fetched) item.accessed = { "date-parts": [localDay(fetched)] };
   return { item, documentId: document.id, name, needsDetails: thin(document) };

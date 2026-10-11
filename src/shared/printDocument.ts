@@ -6,7 +6,7 @@
 export interface PrintDocument {
   /** The `lang` of the page: line breaking, and which faces Chinese text takes. */
   language: "en" | "zh-CN";
-  /** Letter in English, A4 otherwise, as the .docx export chooses. */
+  /** By the system's region (`paperFor`). */
   paper: PrintPaper;
   /** The PDF's title. */
   title: string;
@@ -20,6 +20,28 @@ export interface PrintDocument {
 }
 
 export type PrintPaper = "a4" | "letter";
+
+/** The countries that print on Letter, as the Unicode CLDR lists them; the rest use A4. */
+const LETTER_COUNTRIES: ReadonlySet<string> = new Set([
+  "BZ",
+  "CA",
+  "CL",
+  "CO",
+  "CR",
+  "GT",
+  "MX",
+  "NI",
+  "PA",
+  "PH",
+  "PR",
+  "SV",
+  "US",
+  "VE",
+]);
+
+/** The paper a country prints on, from its ISO 3166 code: A4 where it isn't known. */
+export const paperFor = (region: string): PrintPaper =>
+  LETTER_COUNTRIES.has(region.trim().toUpperCase()) ? "letter" : "a4";
 
 /** A page's size and margins in CSS pixels (96 to the inch), the same in the core and the print page. */
 export const PAPER: Readonly<

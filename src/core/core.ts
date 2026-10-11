@@ -9,6 +9,7 @@ import {
   citationStyleIn,
   setCitationStyle,
 } from "../shared/mindCitationStyle";
+import { paperFor } from "../shared/printDocument";
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
 import { agentSocketPath, createAgents } from "./agents";
@@ -76,6 +77,7 @@ import { renderMarkdown } from "./exports/markdown";
 import { createFileLock } from "./fileLock";
 import { safeFileName, writeNewFile } from "./fileNames";
 import { createFolders } from "./folders";
+import { systemRegion } from "./language";
 import { createLayouts } from "./layout";
 import { CLASSIFICATION_FLOW_SENDS, createLibrary } from "./library";
 import { automaticGroupClassifier } from "./library/automatic";
@@ -917,6 +919,7 @@ export function createCore(adapters: CoreAdapters): Core {
     citationStyle: (mindId) => mindCitationStyle(mindId).style,
     formatCitations: (request) => citationStyles.format(request),
     printer: adapters.printer ?? null,
+    paper: () => paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages())),
     now,
   });
   /** Usage data: which format, and whether Questions went with it. */

@@ -256,7 +256,7 @@ test("a Mind with English and Chinese Citations, a table and maths prints as a P
     "2 潮汐, p. 1",
     "3 Tides, p. 1",
     "4 潮汐, p. 1 [unverified]",
-    `5 Tea - The Open Encyclopedia, The Open Encyclopedia, § History, ¶ 3, ${ADDRESS}, accessed ${accessed}`,
+    `5 Tea, The Open Encyclopedia, § History, ¶ 3, ${ADDRESS}, accessed ${accessed}`,
     "1",
   ].join("\n");
   expect((await pdfText(pdf)).map(unspaced)).toEqual([unspaced(golden)]);

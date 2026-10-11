@@ -387,6 +387,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
       documents: documentsFolder(dataDir),
     },
     systemLanguages: () => app.getPreferredSystemLanguages(),
+    systemRegion: () => app.getLocaleCountryCode(),
     keychain: createSafeStorageKeychain(dataDir),
     browser: systemBrowser,
     shell: fileShell,

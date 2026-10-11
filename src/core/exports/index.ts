@@ -11,9 +11,11 @@ import {
   citationStyle,
 } from "../../shared/citationStyles";
 import { citationState, citedLocation } from "../../shared/citations";
+import { titleWithoutSite } from "../../shared/documentNames";
 import { translate } from "../../shared/i18n";
 import type { Translate } from "../../shared/locations";
 import { mindName } from "../../shared/naming";
+import type { PrintPaper } from "../../shared/printDocument";
 import type { Printer } from "../adapters";
 import type {
   CitationAttributes,
@@ -57,6 +59,8 @@ export interface ExportsDependencies {
   formatCitations(request: CitationFormatRequest): Promise<FormattedCitations>;
   /** Prints a PDF; null where this copy can't. */
   printer: Printer | null;
+  /** The paper a PDF is printed on, which goes by the computer's region (`paperFor`). */
+  paper(): PrintPaper;
   now(): string;
 }
 
@@ -128,7 +132,6 @@ export function createExports(deps: ExportsDependencies) {
         question: translate(language, "export.question"),
         unverified: translate(language, "export.unverified"),
       };
-      const paper = language === "en" ? "letter" : "a4";
       let data: Uint8Array;
       if (format === "markdown") {
         data = new TextEncoder().encode(renderMarkdown(title, blocks, labels));
@@ -137,14 +140,14 @@ export function createExports(deps: ExportsDependencies) {
           title,
           labels,
           language: language === "zh-CN" ? "zh-CN" : "en-US",
-          paper,
+          paper: language === "en" ? "letter" : "a4",
           created: deps.now(),
         });
       } else {
         const { body, notes } = renderPrintHtml(title, blocks, labels);
         const printed = await (deps.printer as Printer).print({
           language,
-          paper,
+          paper: deps.paper(),
           title: preview.fileName.slice(0, -".pdf".length),
           body,
           notes,
@@ -207,7 +210,8 @@ function footnoteOf(
     };
   }
   const version = web.versions.find((each) => each.contentHash === attributes.contentHash);
-  const parts = [document];
+  // The site is named after the title, so a title that ends with it leaves it off.
+  const parts = [titleWithoutSite(document, web.siteName)];
   if (web.siteName && web.siteName !== document) parts.push(web.siteName);
   if (location) parts.push(location);
   parts.push(web.address);
