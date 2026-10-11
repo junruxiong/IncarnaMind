@@ -381,9 +381,10 @@ export interface AnswerToolCall {
   /**
    * Where the Tool comes from: "documents" is IncarnaMind's own document
    * search; "skill", the Skill Tools; "connector", one of the User's
-   * Connectors (see `connector`).
+   * Connectors (see `connector`); "sources", Find sources (`find_sources`,
+   * `{ query, from_year?, to_year?, open_access_only? }`).
    */
-  source: "documents" | "skill" | "connector";
+  source: "documents" | "skill" | "connector" | "sources";
   /** A Connector's Tool: which Connector, with its name when the call was made. */
   connector?: { id: string; name: string };
   /** What the model asked, e.g. `{ query }` for a search, or the arguments sent to a Connector. */
@@ -655,6 +656,12 @@ export interface UserSettings {
    * flow first, when the default chat model sends to a service.
    */
   suggestWhileWriting: boolean;
+  /**
+   * Checks and comparison tables leave the files IncarnaMind wrote out of
+   * their evidence (#80, see `OwnFile`): on by default. Off, they count
+   * everywhere. Copies of the document being checked are left out either way.
+   */
+  leaveOutOwnFiles: boolean;
 }
 
 /**
@@ -716,7 +723,17 @@ export interface DeviceSettings {
    * that the other people should be told. Recording waits for it.
    */
   meetingNoticeAccepted: boolean;
+  /** How the window moves here (Settings → General → Motion): see `MotionPreference`. */
+  motion: MotionPreference;
 }
+
+/**
+ * How the window moves on a device (DESIGN.md, Motion): as the system's own
+ * Reduce motion setting says ("system", until the User chooses), on,
+ * reduced (movement becomes short fades) or off (every change is instant).
+ */
+export const MOTION_PREFERENCES = ["system", "on", "reduced", "off"] as const;
+export type MotionPreference = (typeof MOTION_PREFERENCES)[number];
 
 /**
  * How the programs Tools start (Skill scripts) are confined:
@@ -832,7 +849,54 @@ export interface WindowLayout {
   focusedGroupId: string;
   /** How many closed tabs ⇧⌘T can reopen, most recent first. */
   reopenable: number;
+  /** Where the window's one assistant sits, outside the groups, and its sizes. */
+  assistant: AssistantPlace;
 }
+
+/**
+ * Where the assistant sits (#253): docked on the window's right, left or
+ * bottom edge, beside the card, or floating over it.
+ */
+export type AssistantDock = "right" | "left" | "bottom" | "float";
+
+/** A window's corner: a floating assistant keeps its distance to the one nearest it. */
+export type AssistantCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+
+/** A floating assistant's size and place, in CSS pixels. */
+export interface AssistantFloat {
+  width: number;
+  height: number;
+  /** The window's corner nearest to it. */
+  corner: AssistantCorner;
+  /** From the corner's side of the window (its left or right edge) to the box's. */
+  x: number;
+  /** From the corner's top or bottom edge of the window to the box's. */
+  y: number;
+}
+
+/**
+ * The User's choices for the assistant, kept with the window's layout. A side
+ * dock shows at the bottom while the window is narrow, without changing `dock`.
+ */
+export interface AssistantPlace {
+  dock: AssistantDock;
+  /** Folded: a 44px rail on a side, or only its header at the bottom or floating. */
+  folded: boolean;
+  /** A side dock's width, in CSS pixels. */
+  width: number;
+  /** A bottom dock's height, in CSS pixels. */
+  height: number;
+  float: AssistantFloat;
+}
+
+/** A new window's assistant: docked on the right, at its default sizes (#253). */
+export const DEFAULT_ASSISTANT: AssistantPlace = {
+  dock: "right",
+  folded: false,
+  width: 360,
+  height: 300,
+  float: { width: 380, height: 520, corner: "top-right", x: 24, y: 56 },
+};
 
 /**
  * Where `open` puts what it opens:
@@ -889,7 +953,9 @@ export type LayoutChange =
   /** The groups' widths, left to right, in any unit: they are made shares of 1. */
   | { type: "resize"; widths: number[] }
   /** Every group as wide as the others. */
-  | { type: "equalize" };
+  | { type: "equalize" }
+  /** Moves, resizes, folds or unfolds the assistant: what is given changes, the rest stays. */
+  | { type: "assistant"; place: Partial<AssistantPlace> };
 
 /**
  * The kinds of Document (ADR-0011): files of PDF, plain text, Markdown, Word
@@ -1080,10 +1146,77 @@ export interface Document {
    * from its file and edited by the User. Null until its file has been read.
    */
   reference: ReferenceRecord | null;
+  /**
+   * Set when IncarnaMind wrote the Document's file (#80): see `OwnFile`.
+   * Null for the User's own files, and for the sources IncarnaMind saves
+   * (web pages, Transcripts), which count as evidence as usual.
+   */
+  ownFile: OwnFile | null;
+  /** Where its text came from, when Find sources added it (#296); null for any other Document. */
+  found: DocumentFoundSource | null;
   /** When the Document was added to IncarnaMind. ISO 8601, UTC. */
   createdAt: string;
   /** ISO 8601, UTC. */
   updatedAt: string;
+}
+
+/** What IncarnaMind writes that checks leave out of their evidence (#80): a Mind's export, or a source pack. */
+export const ownFileKinds = ["export", "source-pack"] as const;
+export type OwnFileKind = (typeof ownFileKinds)[number];
+
+/**
+ * A Document whose file IncarnaMind wrote (#80): an export or a source pack
+ * it saved, found by the file's content fingerprint, e.g. once saved into a
+ * Linked folder. It stays one when the User edits the file, since what it
+ * says still came from the Mind. Checks and comparison tables leave it out of
+ * their evidence, so a note can't support itself, unless the User counts it
+ * ("Count it"), its Folder counts IncarnaMind's files (`LibraryGroup.countsOwnFiles`),
+ * or Settings does (`UserSettings.leaveOutOwnFiles` off). Ordinary Answers search it as usual.
+ */
+export interface OwnFile {
+  kind: OwnFileKind;
+  /** The User counts it as evidence all the same, until they take that back (`setCountedAsEvidence`). */
+  counted: boolean;
+}
+
+/**
+ * Why a check leaves a Document out of its evidence (#80):
+ * - "own-file": IncarnaMind wrote it (see `OwnFile`). Counting it lets it count.
+ * - "checked-document": it is the document being checked, an earlier version
+ *   of it, or a copy of either (the same content fingerprint, at any path).
+ *   Never evidence for that check.
+ */
+export type EvidenceExclusion = "own-file" | "checked-document";
+
+/** The document a check verifies (#97, #110): it, its earlier versions and their copies are never its evidence. */
+export interface CheckedDocument {
+  /** Its Documents. */
+  documentIds?: string[];
+  /** The content fingerprints (SHA-256, hex) of a checked file that isn't a Document, e.g. an imported .docx. */
+  contentHashes?: string[];
+}
+
+export interface SearchEvidenceOptions {
+  /** The check's Search scope. None: every Document. */
+  scope?: SearchScope;
+  checked?: CheckedDocument;
+}
+
+/** A Document a check left out of its evidence, where it matched: a result names it, never hides it. */
+export interface ExcludedEvidence {
+  documentId: string;
+  documentName: string;
+  reason: EvidenceExclusion;
+  /** Its Passages that matched, in reading order: where it would have been evidence. */
+  passages: PassageSearchResult[];
+}
+
+/** What a check's search found (`searchEvidence`). */
+export interface EvidenceSearchResult {
+  /** The evidence: what the search Tool gives an Answer, from the Documents a check may use. */
+  passages: PassageSearchResult[];
+  /** The Documents left out that matched too, the best first. */
+  excluded: ExcludedEvidence[];
 }
 
 /**
@@ -1277,6 +1410,165 @@ export type ReferenceLookupResult =
       message: string;
     };
 
+// ---------------------------------------------------------------------------
+// Find sources (#296, ADR-0018)
+
+/**
+ * A Source provider (CONTEXT.md): a public service Find sources searches for
+ * works to add, as Documents when their full text is open, else as reference
+ * records. OpenAlex, arXiv and PubMed search; Crossref looks a DOI up. Laws,
+ * filings and drug labels come later, each one more provider.
+ */
+export interface SourceProviderInfo {
+  /**
+   * "openalex", "arxiv", "pubmed", "crossref". The UI says what each covers
+   * and what its records are licensed under (`sources.provider.<id>.about`).
+   */
+  id: string;
+  /** As its operator names it. */
+  name: string;
+  /** Where searches go: consent is asked per service, once ("find-sources" flow). */
+  service: ExternalService;
+  /** It searches by words; false for one that only looks a work up by its identifier (Crossref, by DOI). */
+  searches: boolean;
+  /** The User's decision on sending it searches. */
+  consent: DataFlowStatus["consent"];
+  /** Where its operator states its terms and limits. */
+  termsUrl: string;
+}
+
+/** What Find sources looks for. */
+export interface FindSourcesInput {
+  /** Words, a title, or an identifier: a DOI, an arXiv ID or a PubMed ID. */
+  query: string;
+  /** Only works published in or after this year. */
+  fromYear?: number | null;
+  /** Only works published in or before this year. */
+  toYear?: number | null;
+  /** Only works whose full text is open. */
+  openAccessOnly?: boolean;
+  /** The providers to ask, by id; every one that searches, when left out. */
+  providers?: string[];
+}
+
+/**
+ * Why a provider gave no results:
+ * - "declined": the User didn't allow sending it searches;
+ * - "unreachable": it couldn't be reached, or took too long;
+ * - "rate-limited": it asked IncarnaMind to slow down (429), or its free daily allowance is used up;
+ * - "service-error": it answered with an error, or with something unreadable.
+ */
+export type SourceFailureReason = "declined" | "unreachable" | "rate-limited" | "service-error";
+
+/** How one provider's part of a search went. */
+export interface SourceProviderOutcome {
+  id: string;
+  name: string;
+  /** How many works it gave, before they were merged with the others'. */
+  count: number;
+  /** Null when it answered. */
+  failure: { reason: SourceFailureReason; message: string } | null;
+}
+
+/** The versions an open full text can be, as repositories label them. */
+export type SourceVersion = "published" | "accepted" | "submitted";
+
+/** The licence an open text is under, and whether it allows commercial use. */
+export interface SourceLicence {
+  /** As the provider writes it, in lower case: "cc-by", "cc-by-nc-nd", "public-domain". */
+  id: string;
+  /** "CC BY", "CC BY-NC-ND", "CC0"; the id for any other, which the UI names. */
+  label: string;
+  /** False for a licence that rules out commercial use (an NC licence); null when unknown. */
+  commercial: boolean | null;
+}
+
+/**
+ * How a found work's full text can be had: "open", downloaded and processed
+ * into a Document when added (a PDF, text the provider gives by section, or a
+ * "web-page" at its publisher's, saved as `saveWebPage` saves one); or
+ * "closed" when no open copy is known, so adding keeps its reference record
+ * only. Nothing is ever downloaded from behind a paywall.
+ */
+export type SourceAccess =
+  | {
+      kind: "open";
+      format: "pdf" | "text" | "web-page";
+      /** Which version the open copy is: a preprint can differ from what was published. */
+      version: SourceVersion | null;
+      licence: SourceLicence | null;
+    }
+  | { kind: "closed" };
+
+/** A work Find sources found: a paper now; later a law, a filing or a label. */
+export interface FoundSource {
+  /**
+   * Its identity across providers, for `addFoundSource`: "doi:10.1038/…", else
+   * "arxiv:1706.03762", "pmid:36970624" or "openalex:W4362665266".
+   */
+  key: string;
+  /** Its reference record, as the providers give it. */
+  fields: ReferenceFields;
+  /** The providers that found it, best first. */
+  foundBy: { id: string; name: string }[];
+  /** How many works cite it, when a provider counts them. */
+  citedBy: number | null;
+  /**
+   * The date of the version described, ISO 8601 at the precision known: what
+   * a Document added from it holds, as laws and preprints change.
+   */
+  versionDate: string | null;
+  access: SourceAccess;
+  /** Its page at its publisher or registry, for "Get the PDF…" in the User's browser. */
+  landingUrl: string | null;
+  /** Already in the Library: as a Document, or as a reference record without one. */
+  inLibrary: { documentId: string | null; recordId: string } | null;
+}
+
+export type FindSourcesResult =
+  | {
+      outcome: "found";
+      /** Best first: found by more providers, and higher in each, ranks higher. */
+      works: FoundSource[];
+      /** Each provider asked, in the order asked. */
+      providers: SourceProviderOutcome[];
+    }
+  /** "Keep everything on this computer" is on: nothing was sent. */
+  | { outcome: "local-mode" };
+
+export interface AddFoundSourceInput {
+  /** `FoundSource.key`, from a search this session. */
+  key: string;
+  /** The Folder to add it to; Not in a Folder when null or left out. */
+  folderId?: string | null;
+}
+
+/** What adding a found work came to. */
+export type AddFoundSourceResult =
+  | {
+      outcome: "document";
+      /** The Document, being processed; or the one added before (`existing`). */
+      document: Document;
+      existing: boolean;
+    }
+  | {
+      outcome: "reference";
+      /** The reference record kept, with no Document. */
+      recordId: string;
+      /** Why no Document: "closed", no open full text; "download-failed", no open copy could be had. */
+      reason: "closed" | "download-failed";
+      /** For the User's browser: the open copy that couldn't be had, else the work's page at its publisher. */
+      landingUrl: string | null;
+      existing: boolean;
+    }
+  | {
+      outcome: "failed";
+      /** "local-mode": nothing may be sent; "declined": the provider isn't allowed; "not-found": search again. */
+      reason: "local-mode" | "declined" | "not-found";
+      /** Technical detail in English, for logs and tooltips. */
+      message: string;
+    };
+
 /** An entry of a reference export that couldn't be imported. The rest of the file still is. */
 export interface ReferenceImportProblem {
   /** The entry's cite key or id, else its place in the file ("line 12", "item 3"). */
@@ -1330,6 +1622,20 @@ export type ReferenceImportResult =
       /** Technical detail in English, for logs and tooltips. */
       message: string;
     };
+
+/** Where a Document Find sources added came from: what its text is, and when it was fetched. */
+export interface DocumentFoundSource {
+  /** The provider whose open copy it is. */
+  provider: { id: string; name: string };
+  /** The address its text was fetched from. */
+  address: string;
+  licence: SourceLicence | null;
+  version: SourceVersion | null;
+  /** The date of the version its text is, ISO 8601 at the precision known. */
+  versionDate: string | null;
+  /** When it was fetched. ISO 8601, UTC. */
+  fetchedAt: string;
+}
 
 /** What `addImportedReferenceFiles` added. */
 export interface ReferenceFilesResult {
@@ -1904,6 +2210,8 @@ export type ProviderErrorKind =
   | "network"
   | "provider"
   | "consent-declined"
+  /** "Keep everything on this computer" is on and the model isn't on this computer: nothing was sent, or the Answer was stopped. */
+  | "local-mode"
   /** ChatGPT plan: there is no sign-in on this device, or it expired: sign in again. */
   | "not-signed-in"
   /** ChatGPT plan: the plan's usage limit is reached, or the plan doesn't include this use. */
@@ -1952,8 +2260,11 @@ export type ChatReadiness =
        * "consent-declined": the User declined sending data to its service.
        * "sign-in-required": the provider uses a sign-in (the ChatGPT plan) and
        * this device has none, e.g. the User signed out or it expired.
+       * "local-mode": "Keep everything on this computer" is on and the model isn't
+       * on this computer, so no Question is sent to it (each other flow checks
+       * local mode itself).
        */
-      reason: "missing-api-key" | "consent-declined" | "sign-in-required";
+      reason: "missing-api-key" | "consent-declined" | "sign-in-required" | "local-mode";
       provider: ChatProvider;
       modelId: string;
     };
@@ -1972,6 +2283,12 @@ export interface ChatModelGroup {
    * out as it goes.
    */
   unknown: string[];
+  /**
+   * The ids in `models` that run in the cloud although the provider is on this
+   * computer: an Ollama cloud model, which Ollama forwards to ollama.com. Asking
+   * with one needs consent to send to that service, and local mode refuses it.
+   */
+  cloud: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -2242,6 +2559,24 @@ export interface AnswerFinished extends AnswerPlace {
    * was made. The evaluation counts these.
    */
   quoteRetry: QuoteRetry | null;
+  /** The tokens its model calls counted (#343). */
+  usage: AnswerUsage;
+}
+
+/**
+ * The tokens an Answer's model calls used, added up. `inputTokens` counts all
+ * input, the cached tokens too, so the share served from the provider's prompt
+ * cache is `cachedInputTokens / inputTokens`; the estimate of cost (#83) prices
+ * the cached and the written tokens at their own rates. All 0 for a provider
+ * that reports no counts (a local model).
+ */
+export interface AnswerUsage {
+  inputTokens: number;
+  outputTokens: number;
+  /** Of the input, the tokens read from the provider's prompt cache. */
+  cachedInputTokens: number;
+  /** Of the input, the tokens written to it (Anthropic bills these above the base price). */
+  cacheWriteTokens: number;
 }
 
 /** What an Answer's one request for exact quotes did (see `AnswerFinished.quoteRetry`). */
@@ -2642,8 +2977,10 @@ export type OllamaStatus =
   | {
       running: true;
       baseUrl: string;
-      /** Models already pulled, e.g. "qwen3:4b". */
+      /** Models already pulled that run on this computer, e.g. "qwen3:4b". */
       models: string[];
+      /** Cloud models Ollama lists (e.g. "gpt-oss:120b-cloud"): they run on ollama.com, so they are never offered as local. */
+      cloudModels: string[];
       /** The model one click pulls and selects. */
       recommendedModel: string;
     };
@@ -2685,7 +3022,12 @@ export const dataKinds = [
   "writing",
   "writing-passages",
   "identifiers",
+  "search-terms",
+  "work-ids",
   "selection",
+  "scoped-passages",
+  "scoped-minds",
+  "answers",
 ] as const;
 
 export type DataKind = (typeof dataKinds)[number];
@@ -2710,8 +3052,18 @@ export type DataKind = (typeof dataKinds)[number];
  * - "reference-lookup": a Document's DOI to Crossref, or its arXiv id to
  *   arXiv, when the User asks Look up to fill its reference record (#286).
  *   Nothing else: no file, text or name. None in local mode.
+ * - "find-sources": what the User (or an Answer, for them) searches for, with
+ *   its filters, to each Source provider searched, and the identifier of a
+ *   work they add, to the provider that gives its full text or record (#296).
+ *   Nothing from their Documents or Minds. Asked once per provider; none in
+ *   local mode.
  * - "edits": when the User asks Edit with AI (#93), the text they selected
  *   and the paragraphs it is in, to the chat model's provider. None in local mode.
+ * - "agents": what an outside agent reads (#351), to that agent, which sends
+ *   it on to the AI model it uses, out of IncarnaMind's sight: one service
+ *   per pairing ("agent:<id>"), named as the User named the agent. Passages
+ *   of the Documents in its Folders, those Folders' Minds, and the Answers it
+ *   asks for. None in local mode.
  */
 export const dataFlowIds = [
   "chat",
@@ -2722,7 +3074,9 @@ export const dataFlowIds = [
   "rerank",
   "suggestions",
   "reference-lookup",
+  "find-sources",
   "edits",
+  "agents",
 ] as const;
 
 export type DataFlowId = (typeof dataFlowIds)[number];
@@ -3348,6 +3702,7 @@ export type EffectScope =
   | { kind: "folder"; path: string } // absolute; covers what is inside
   | { kind: "service"; serviceId: string; name: string } // an external service, as consent names it
   | { kind: "host"; host: string } // a web host
+  | { kind: "mind"; mindId: string } // one of the User's Minds
   | { kind: "anywhere" };
 
 /**
@@ -3651,6 +4006,209 @@ export interface StartMeetingInput {
   meetingId: string;
   /** Record the computer's sound too. Defaults to the Settings choice ("What is recorded"). */
   systemAudio?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Outside agents (#351, experimental)
+
+/**
+ * An outside agent the User connected: an AI agent they run themselves, such
+ * as Claude Code or Codex, that uses IncarnaMind as an MCP server. One pairing
+ * per agent, on this device only: the agent runs on this computer.
+ */
+export interface AgentPairing {
+  id: string;
+  /** What the User calls it, e.g. "Claude Code". Unique among pairings, ignoring case. */
+  name: string;
+  /** The Folders it may search and read, with their Minds. None until the User picks some. */
+  folderIds: string[];
+  /** The agent it was set up in, e.g. "codex"; null for one set up by hand. */
+  client: string | null;
+  /** When it last called IncarnaMind, ISO 8601, UTC; null if it never has. */
+  lastUsedAt: string | null;
+  createdAt: string;
+}
+
+export interface AgentSettings {
+  /** Connecting agents is on (Settings → Agents, experimental). Off by default; off, nothing listens. */
+  enabled: boolean;
+  /**
+   * "local-mode": Local mode pauses every pairing, because an agent sends what
+   * it reads to an AI model IncarnaMind can't see. Null when nothing pauses them.
+   */
+  paused: "local-mode" | null;
+  pairings: AgentPairing[];
+}
+
+export interface ConnectAgentInput {
+  /** Trimmed; must not be empty, nor another pairing's name (ignoring case). */
+  name: string;
+  /** Folders (by id) it may read; none by default. */
+  folderIds?: string[];
+  /** The agent it is set up in, e.g. "codex": lower-case letters, digits and hyphens. */
+  client?: string;
+}
+
+export interface UpdateAgentInput {
+  name?: string;
+  folderIds?: string[];
+}
+
+/** How an agent starts IncarnaMind's server: the command for its MCP settings. */
+export interface AgentLaunch {
+  command: string;
+  args: string[];
+  /** Holds the pairing's token: write it only into that agent's own settings, never show or log it. */
+  env: Record<string, string>;
+}
+
+/** A new pairing, and how its agent starts IncarnaMind's server. */
+export interface ConnectedAgent {
+  pairing: AgentPairing;
+  launch: AgentLaunch;
+}
+
+/** The Tools an outside agent can call (see src/core/agents/mcp.ts). */
+export const AGENT_TOOLS = [
+  "search",
+  "read_passages",
+  "cite",
+  "check_citations",
+  "show_citation",
+  "list_minds",
+  "read_mind",
+  "ask",
+] as const;
+
+/** The agents Settings → Agents can set IncarnaMind up in (see src/core/agents/clients.ts). */
+export const AGENT_CLIENT_IDS = [
+  "claude-desktop",
+  "claude-code",
+  "codex",
+  "cursor",
+  "vscode",
+  "gemini-cli",
+  "kimi-code",
+  "qwen-code",
+  "codebuddy",
+  "minimax-code",
+  "trae",
+  "qoder",
+  "comate",
+  "cherry-studio",
+  "chatbox",
+  "deepchat",
+  "goose",
+  "opencode",
+  "cline",
+  "kilo",
+  "openclaw",
+  "pi",
+  "other",
+] as const;
+
+export type AgentClientId = (typeof AGENT_CLIENT_IDS)[number];
+
+/**
+ * How an agent takes IncarnaMind: "bundle", a file its app installs when
+ * opened (Claude); "link", a link its app installs from (Cursor, VS Code);
+ * "file", IncarnaMind adds itself to the agent's settings file; "command", one
+ * line to paste into a terminal (Claude Code); "manual", settings to paste
+ * into the agent's own screen.
+ */
+export type AgentSetupKind = "bundle" | "link" | "file" | "command" | "manual";
+
+export interface AgentClient {
+  id: AgentClientId;
+  /** Its own name; empty for "other", which the interface names. */
+  name: string;
+  /** It looks installed on this computer: such agents are listed first. */
+  installed: boolean;
+  setup: AgentSetupKind;
+}
+
+/** What setting an agent up will change in its settings file, the pairing's key hidden. */
+export interface AgentSetupPreview {
+  path: string;
+  /** The lines IncarnaMind adds (or puts in place of its own earlier ones). */
+  change: string;
+}
+
+/**
+ * How setting an agent up went:
+ * - "opened": its app opened to finish (Install, in its own dialog);
+ * - "wrote": IncarnaMind added itself to its settings file at `path`;
+ * - "copy": something for the User to paste (`text`, which holds the key;
+ *   `shown` hides it): a command line, or settings for the agent's screen, or
+ *   for its settings file at `path` when IncarnaMind couldn't read that file.
+ */
+export type AgentSetupResult =
+  | { kind: "opened"; how: "bundle" | "link" }
+  | { kind: "wrote"; path: string }
+  | { kind: "copy"; how: "command" | "settings"; text: string; shown: string; path?: string };
+
+export interface SetUpAgentInput {
+  client: AgentClientId;
+  /** The Folders it may read; the User picks at least one. */
+  folderIds: string[];
+}
+
+export interface SetUpAgent {
+  pairing: AgentPairing;
+  result: AgentSetupResult;
+}
+
+/** An outside agent asked IncarnaMind to show one of its Citations (`show_citation`). */
+export interface AgentCitationShown extends DocumentPlace {
+  documentId: string;
+}
+
+export type AgentToolName = (typeof AGENT_TOOLS)[number];
+
+/**
+ * Why an outside agent's call was refused or failed:
+ * - "unpaired": its token belongs to no pairing (it was disconnected);
+ * - "off": connecting agents is turned off;
+ * - "local-mode": Local mode pauses outside agents;
+ * - "consent": the User's consent to its data flow was revoked;
+ * - "no-folders": it has no Folders to read yet;
+ * - "outside-scope": what it asked for is outside its Folders;
+ * - "not-found": no such Passage, Document, Mind or Citation;
+ * - "chat-not-ready": `ask` needs a chat model that is set up and allowed;
+ * - "invalid": its arguments make no sense;
+ * - "failed": something went wrong in IncarnaMind (the log says what).
+ */
+export type AgentProblem =
+  | "unpaired"
+  | "off"
+  | "local-mode"
+  | "consent"
+  | "no-folders"
+  | "outside-scope"
+  | "not-found"
+  | "chat-not-ready"
+  | "invalid"
+  | "failed";
+
+/** One call an outside agent made, as its activity list shows it. */
+export interface AgentActivity {
+  id: string;
+  pairingId: string;
+  tool: AgentToolName;
+  /** What it asked, to show: the search words, the Question, the quotes it cited; "" for none. */
+  summary: string;
+  outcome: "done" | "refused" | "failed";
+  /** Why it was refused or failed; null when it was done. */
+  problem: AgentProblem | null;
+  /** How many Passages, Citations or Minds it got; null when it got none. */
+  count: number | null;
+  /** The Documents it got text from, by id. */
+  documentIds: string[];
+  /** What the call did: reading the Documents or a Mind, sending a Question to the chat model. */
+  effects: Effect[];
+  durationMs: number;
+  /** ISO 8601, UTC. */
+  at: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -3971,6 +4529,30 @@ export interface CoreApi {
    */
   addReferenceFile(recordId: string, path: string): Promise<Document>;
 
+  /** The Source providers Find sources can ask, each with the User's consent decision (#296). */
+  listSourceProviders(): Promise<SourceProviderInfo[]>;
+  /**
+   * Find sources (#296): searches the providers asked (every one that
+   * searches, by default) for works, and merges what they find, best first.
+   * An identifier (a DOI, an arXiv ID, a PubMed ID) is looked up instead.
+   * Each provider is sent only the query and its filters, after the User has
+   * allowed the "find-sources" flow to it (asked once; a provider declined
+   * is skipped, and says so); nothing at all in local mode. The same search
+   * again soon after is answered from what was found, without asking again.
+   * Throws InvalidInputError for an empty query or a year that can't be one.
+   */
+  findSources(input: FindSourcesInput): Promise<FindSourcesResult>;
+  /**
+   * Adds a found work (by its key, from a search this session) to the
+   * Library, in the Folder given: its open full text, downloaded (only an
+   * open-access copy, never from behind a paywall) and processed into a
+   * Document with its reference record filled; or, with no open copy, its
+   * reference record alone. A work added before gives what it was added as.
+   * A download goes to the provider that gives the copy only once the User
+   * has allowed it; nothing in local mode.
+   */
+  addFoundSource(input: AddFoundSourceInput): Promise<AddFoundSourceResult>;
+
   /** An example Mind and its Documents, if made (see `Examples`); the tea example by default. */
   getExamples(group?: ExampleGroup): Promise<Examples>;
   /**
@@ -4013,6 +4595,21 @@ export interface CoreApi {
    * model isn't ready, and InvalidInputError while embeddings are off.
    */
   searchPassages(query: string, options?: SearchPassagesOptions): Promise<PassageSearchResult[]>;
+  /**
+   * Searches as a check or a comparison table does (#80): as the search Tool
+   * searches for an Answer, reranked as the User chose, but without the
+   * Documents a check leaves out of its evidence (see `EvidenceExclusion`).
+   * Those that match are named in `excluded`, with where, so the result can
+   * say so and offer Count it.
+   */
+  searchEvidence(query: string, options?: SearchEvidenceOptions): Promise<EvidenceSearchResult>;
+  /**
+   * Counts a Document IncarnaMind wrote as evidence from now on ("Count it"),
+   * or, with false, leaves it out again: its Undo, and its menu. Returns it,
+   * and "document.status" says so. InvalidInputError for a Document
+   * IncarnaMind didn't write.
+   */
+  setCountedAsEvidence(documentId: string, counted: boolean): Promise<Document>;
   /** The built-in embedding model and its download. */
   getEmbeddingModel(): Promise<EmbeddingModelStatus>;
   /**
@@ -4053,7 +4650,9 @@ export interface CoreApi {
    * device. Turning it on switches a cloud embedding provider back to the
    * built-in model, which embeds every Document again (an embedding provider
    * on this computer, e.g. Ollama, is kept), and pauses a reranking service
-   * (the built-in reranking model carries on).
+   * (the built-in reranking model carries on). Questions are then asked only of a
+   * model on this computer: a cloud model is refused before anything is sent, and
+   * an Answer streaming to one is stopped.
    */
   setLocalOnly(enabled: boolean): Promise<EmbeddingSettings>;
 
@@ -4507,6 +5106,39 @@ export interface CoreApi {
   deleteMeetingAudio(meetingId: string): Promise<Meeting>;
   /** Opens the system's settings where the User allows IncarnaMind to record this source. */
   openAudioSettings(source: AudioSource): Promise<void>;
+
+  /** Outside agents (#351, experimental): the setting, what pauses them, and every pairing. */
+  getAgents(): Promise<AgentSettings>;
+  /** Turns connecting agents on or off on this device. Off, nothing listens and every call is refused. */
+  setAgentsEnabled(enabled: boolean): Promise<AgentSettings>;
+  /**
+   * Pairs a new agent, and records the User's consent to its data flow: call
+   * it only once the User has confirmed what the agent will be able to read
+   * and where that goes. Returns how the agent starts IncarnaMind's server.
+   */
+  connectAgent(input: ConnectAgentInput): Promise<ConnectedAgent>;
+  /** Renames a pairing, or changes the Folders it may read; calls already made keep their activity. */
+  updateAgent(pairingId: string, input: UpdateAgentInput): Promise<AgentPairing>;
+  /** Unpairs an agent: its token stops working at once, its connections close and its consent goes. */
+  disconnectAgent(pairingId: string): Promise<void>;
+  /** How a paired agent starts IncarnaMind's server, again: e.g. to set it up in that agent once more. */
+  getAgentLaunch(pairingId: string): Promise<AgentLaunch>;
+  /** The calls a paired agent made, newest first: the most recent 500. */
+  listAgentActivity(pairingId: string): Promise<AgentActivity[]>;
+  /** The agents IncarnaMind can be set up in, those on this computer first. */
+  listAgentClients(): Promise<AgentClient[]>;
+  /** What setting up an agent will change in its settings file; null for one that has none. */
+  previewAgentSetup(client: AgentClientId): Promise<AgentSetupPreview | null>;
+  /**
+   * Pairs an agent and sets IncarnaMind up in it, as `connectAgent` does,
+   * once the User has confirmed: opens its app to finish, writes its settings
+   * file, or gives what to paste. A setup that fails leaves no pairing.
+   */
+  setUpAgent(input: SetUpAgentInput): Promise<SetUpAgent>;
+  /** Takes a setup just made back: its settings file as it was, and the pairing gone. */
+  undoAgentSetup(pairingId: string): Promise<void>;
+  /** A paired agent's settings to paste again, e.g. into a second copy of it. */
+  copyAgentSetup(pairingId: string): Promise<Extract<AgentSetupResult, { kind: "copy" }>>;
 }
 
 /**
@@ -4676,6 +5308,15 @@ export interface CoreEvents {
    * `listMeetings` now returns it.
    */
   "meetings.changed": Meeting[];
+  /**
+   * Connecting agents was turned on or off, Local mode paused or resumed them, or a pairing
+   * was made, changed, used or removed: as `getAgents` now returns it.
+   */
+  "agents.changed": AgentSettings;
+  /** An outside agent made a call (see `listAgentActivity`). */
+  "agents.activity": AgentActivity;
+  /** An outside agent asked to show one of its Citations: open it in the viewer, in front. */
+  "agents.citationShown": AgentCitationShown;
 }
 
 export type CoreEventName = keyof CoreEvents;
@@ -4734,6 +5375,9 @@ const methods: Record<CoreApiMethod, true> = {
   updateReference: true,
   restoreReference: true,
   lookUpReference: true,
+  listSourceProviders: true,
+  findSources: true,
+  addFoundSource: true,
   importReferences: true,
   undoReferenceImport: true,
   addImportedReferenceFiles: true,
@@ -4744,6 +5388,8 @@ const methods: Record<CoreApiMethod, true> = {
   downloadOnlineOnlyFiles: true,
   recheckCitation: true,
   searchPassages: true,
+  searchEvidence: true,
+  setCountedAsEvidence: true,
   getEmbeddingModel: true,
   downloadEmbeddingModel: true,
   getEmbeddingSettings: true,
@@ -4874,6 +5520,18 @@ const methods: Record<CoreApiMethod, true> = {
   stopMeeting: true,
   deleteMeetingAudio: true,
   openAudioSettings: true,
+  getAgents: true,
+  setAgentsEnabled: true,
+  connectAgent: true,
+  updateAgent: true,
+  disconnectAgent: true,
+  getAgentLaunch: true,
+  listAgentActivity: true,
+  listAgentClients: true,
+  previewAgentSetup: true,
+  setUpAgent: true,
+  undoAgentSetup: true,
+  copyAgentSetup: true,
 };
 
 /** Every method of CoreApi, used to wire the IPC bridge. */

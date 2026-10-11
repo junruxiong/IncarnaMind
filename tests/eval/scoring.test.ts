@@ -791,6 +791,7 @@ describe("The evaluation's settings for a model in Ollama", () => {
       parameters: 9_653_104_368,
       support: "tools",
       chat: true,
+      remote: false,
       settings: { numCtx: 16_384, outputTokens: 4_096, keepAlive: "30m", think: false },
     };
     const app: OllamaModels = { describe: async () => profile, loaded: async () => true };
@@ -935,6 +936,31 @@ describe("A language's Citation figures", () => {
     });
   });
 
+  test("the prompt cache: the share of the input it served, over the Answers that report usage", () => {
+    const usage = (input: number, cached: number) => ({
+      inputTokens: input,
+      outputTokens: 10,
+      cachedInputTokens: cached,
+      cacheWriteTokens: 0,
+    });
+    const answers = [
+      record({ usage: usage(1_000, 0) }),
+      record({ usage: usage(1_000, 900) }),
+      // A model on this computer reports none, and a report from before has none.
+      record({ usage: usage(0, 0) }),
+      record({}),
+    ];
+
+    expect(summariseGroup(answers).usage).toEqual({
+      inputTokens: 2_000,
+      outputTokens: 30,
+      cachedInputTokens: 900,
+      cacheWriteTokens: 0,
+      cacheHitRate: 0.45,
+    });
+    expect(summariseGroup([record({})]).usage.cacheHitRate).toBeNull();
+  });
+
   test("the requests for exact quotes: how many Answers made one, what they recovered, and the time they added", () => {
     const answers = [
       record({ quoteRetry: { records: 2, recovered: 1, durationMs: 3_000 } }),
@@ -999,6 +1025,12 @@ describe("Why Citations aren't found, in report.md", () => {
   test("lists each Citation not found and each Answer without one; a short run says it doesn't gate", async () => {
     const answers = [
       record({
+        usage: {
+          inputTokens: 2_000,
+          outputTokens: 50,
+          cachedInputTokens: 1_500,
+          cacheWriteTokens: 100,
+        },
         citations: [
           cited("found"),
           {
@@ -1086,6 +1118,13 @@ describe("Why Citations aren't found, in report.md", () => {
         "| zh-02 | 1 | done | structured-output | 2 | 0 |  | 交通事故 | 文档没有提到。 |",
       );
       expect(markdown).toContain("Skipped: INCARNAMIND_EVAL_FORMATS is off.");
+      // How much of the input the provider's prompt cache served (#343), per group.
+      expect(markdown).toContain(
+        "| Prompt cache hit rate (cached input tokens) | 75.0% (1500/2000) | – | – | – | reported |",
+      );
+      expect(markdown).toContain(
+        "| Tokens written to the prompt cache | 100 | 0 | 0 | 0 | reported |",
+      );
       // What the requests for exact quotes cost and gave, per group.
       expect(markdown).toContain(
         "| Answers that asked again for quotes | 0/1 | 1/1 | 0/0 | 0/0 | reported |",
@@ -1102,6 +1141,9 @@ describe("Why Citations aren't found, in report.md", () => {
       const summary = terminalSummary(report, "/repo/eval/results/x", "/repo");
       expect(summary).toContain(
         "Citation quality, ollama/qwen3.5:4b (2 Questions only, not gating)",
+      );
+      expect(summary).toContain(
+        "prompt cache: 75.0% of 2000 input tokens read from it, 100 written",
       );
       expect(summary).toContain(
         "quotes asked again: 1 Answer, 1 of 2 records recovered, 2.5 s median, 2.5 s most, 2.5 s per Answer",

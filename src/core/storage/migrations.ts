@@ -1018,6 +1018,169 @@ export const migrations: readonly Migration[] = [
         WHERE deleted_at IS NOT NULL;
     `,
   },
+  {
+    version: 49,
+    description: "Found sources: where a Document or reference Find sources added came from (#296)",
+    sql: `
+      -- One row per Document, or reference record with no Document, that Find
+      -- sources added (src/core/sources, ADR-0018): the Source provider whose
+      -- copy or record it is (its id, e.g. "openalex"), the work's key
+      -- ("doi:10.1038/…", "arxiv:1706.03762"), the provider's name as it was
+      -- then ("OpenAlex"), the address its text was
+      -- fetched from (its page at the publisher, for a reference alone), the
+      -- licence and version of that text ("cc-by"; "published", "accepted"
+      -- or "submitted") and the version's date (ISO 8601 at the precision
+      -- known), and when it was fetched (NULL for a reference alone). No
+      -- foreign keys: a later sync may deliver a row before its Document.
+      CREATE TABLE found_sources (
+        id TEXT PRIMARY KEY NOT NULL,
+        document_id TEXT,
+        reference_record_id TEXT,
+        provider TEXT NOT NULL,
+        provider_name TEXT NOT NULL,
+        work_key TEXT NOT NULL,
+        address TEXT,
+        licence TEXT,
+        version TEXT,
+        version_date TEXT,
+        fetched_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX found_sources_by_work ON found_sources (work_key) WHERE deleted_at IS NULL;
+      CREATE UNIQUE INDEX found_sources_by_document ON found_sources (document_id)
+        WHERE deleted_at IS NULL AND document_id IS NOT NULL;
+    `,
+  },
+  {
+    version: 50,
+    description:
+      "Files IncarnaMind wrote: their fingerprints, the Documents they became, and Count it (#80)",
+    sql: `
+      -- The content fingerprint of each file IncarnaMind wrote (src/core/documents/ownFiles.ts):
+      -- the SHA-256 of its bytes, hex, as documents.content_hash is. kind is 'export' or
+      -- 'source-pack', checked in code. Recorded before the file is written. No path: the
+      -- same bytes are the same file wherever they are copied, on any device.
+      CREATE TABLE own_files (
+        id TEXT PRIMARY KEY NOT NULL,
+        content_hash TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX own_files_by_content_hash ON own_files (content_hash) WHERE deleted_at IS NULL;
+
+      -- own_file: the kind IncarnaMind wrote a Document's file as, set once a version of it
+      -- has a recorded fingerprint, and kept when the User edits the file, since what it says
+      -- still came from a Mind. NULL: the User's own file, or a source IncarnaMind saved (a
+      -- web page, a Transcript). Checks leave such a Document out of their evidence unless
+      -- counted_as_evidence is 1 (the User's "Count it"), its Folder counts IncarnaMind's
+      -- files, or Settings does.
+      ALTER TABLE documents ADD COLUMN own_file TEXT;
+      ALTER TABLE documents ADD COLUMN counted_as_evidence INTEGER NOT NULL DEFAULT 0;
+      CREATE INDEX documents_by_own_file ON documents (own_file)
+        WHERE deleted_at IS NULL AND own_file IS NOT NULL;
+
+      -- Kept in step here, whichever comes first, so no way a Document gets a version (added,
+      -- moved, a new version indexed, a later sync) can miss it. Derived on each device, like
+      -- the keyword index, so updated_at is left alone.
+      CREATE TRIGGER documents_own_file_added AFTER INSERT ON documents
+      WHEN new.own_file IS NULL AND EXISTS (
+        SELECT 1 FROM own_files WHERE content_hash = new.content_hash AND deleted_at IS NULL
+      ) BEGIN
+        UPDATE documents SET own_file = (
+          SELECT kind FROM own_files WHERE content_hash = new.content_hash AND deleted_at IS NULL
+          ORDER BY created_at, rowid LIMIT 1
+        ) WHERE id = new.id;
+      END;
+      CREATE TRIGGER documents_own_file_versioned AFTER UPDATE OF content_hash ON documents
+      WHEN new.own_file IS NULL AND EXISTS (
+        SELECT 1 FROM own_files WHERE content_hash = new.content_hash AND deleted_at IS NULL
+      ) BEGIN
+        UPDATE documents SET own_file = (
+          SELECT kind FROM own_files WHERE content_hash = new.content_hash AND deleted_at IS NULL
+          ORDER BY created_at, rowid LIMIT 1
+        ) WHERE id = new.id;
+      END;
+      CREATE TRIGGER own_files_recorded AFTER INSERT ON own_files
+      WHEN new.deleted_at IS NULL BEGIN
+        UPDATE documents SET own_file = new.kind
+        WHERE content_hash = new.content_hash AND own_file IS NULL AND deleted_at IS NULL;
+      END;
+
+      -- A Folder where checks count IncarnaMind's files as evidence: the User switched their
+      -- exclusion off there. 0 or 1.
+      ALTER TABLE library_groups ADD COLUMN counts_own_files INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
+  {
+    version: 51,
+    description: "Outside agents: pairings, the Citations minted for them, and what they did",
+    sql: `
+      -- Each outside agent the User connected (#351), on this device only: the agent runs on
+      -- this computer, so these rows never sync. folder_ids is the Folders it may read (a JSON
+      -- list of ids), none by default. client is the agent it was set up in (e.g. "codex"), so
+      -- disconnecting can take IncarnaMind out of that agent's settings too; NULL for one set
+      -- up by hand. Its token is kept by secrets.ts, never here.
+      CREATE TABLE agent_pairings (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        folder_ids TEXT NOT NULL DEFAULT '[]',
+        client TEXT,
+        last_used_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+
+      -- A Citation minted for an outside agent: its token ("[cite:k3x9a2b7]") stands for one
+      -- quote, checked as found at one Location of one version of a Document, so a later check
+      -- and opening it read the same. location is a Citation's Location (JSON), or NULL.
+      -- The same quote of the same Passage for the same pairing keeps its token.
+      CREATE TABLE agent_citations (
+        id TEXT PRIMARY KEY NOT NULL,
+        token TEXT NOT NULL,
+        pairing_id TEXT NOT NULL,
+        passage_id TEXT NOT NULL,
+        document_id TEXT NOT NULL,
+        document_name TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        page_from INTEGER,
+        page_to INTEGER,
+        location TEXT,
+        quote TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX agent_citations_by_token ON agent_citations (token)
+        WHERE deleted_at IS NULL;
+      CREATE INDEX agent_citations_by_quote ON agent_citations (pairing_id, passage_id)
+        WHERE deleted_at IS NULL;
+
+      -- Every call an outside agent made, for its activity list: summary is what it asked, as
+      -- the list shows it; document_ids and effects are JSON. No Document text is kept here.
+      CREATE TABLE agent_activity (
+        id TEXT PRIMARY KEY NOT NULL,
+        pairing_id TEXT NOT NULL,
+        tool TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        outcome TEXT NOT NULL,
+        problem TEXT,
+        result_count INTEGER,
+        document_ids TEXT NOT NULL DEFAULT '[]',
+        effects TEXT NOT NULL DEFAULT '[]',
+        duration_ms INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX agent_activity_by_pairing ON agent_activity (pairing_id, created_at)
+        WHERE deleted_at IS NULL;
+    `,
+  },
 ];
 
 /**

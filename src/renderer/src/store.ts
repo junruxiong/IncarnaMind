@@ -499,7 +499,7 @@ export const useAppStore = create<AppState>()((set, get) => {
   };
 
   return {
-    ...createLayoutSlice(set, (error) => set({ actionError: messageOf(error) })),
+    ...createLayoutSlice(set, get, (error) => set({ actionError: messageOf(error) })),
     status: { kind: "loading" },
     minds: [],
     titleToFocus: null,
@@ -1173,6 +1173,13 @@ core.on("answer.started", ({ answerId }) => {
 });
 
 core.on("chatReadiness.changed", (chatReadiness) => useAppStore.setState({ chatReadiness }));
+
+// An outside agent asked to show one of its Citations (#351): it opens beside the Mind, at its quote.
+core.on("agents.citationShown", (place) => {
+  const state = useAppStore.getState();
+  if (state.settingsOpen) state.closeSettings();
+  state.openDocument(place, { as: "list" });
+});
 
 // The embedding model downloads in the background: follow its state and progress.
 core.on("embeddingModel.status", (embeddingModel) => useAppStore.setState({ embeddingModel }));

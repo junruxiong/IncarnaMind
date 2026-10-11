@@ -392,6 +392,19 @@ function citationTable(
       "reported",
     ),
     row(
+      "Prompt cache hit rate (cached input tokens)",
+      ({ usage }) =>
+        usage.inputTokens === 0
+          ? "–"
+          : `${percent(usage.cacheHitRate)} (${usage.cachedInputTokens}/${usage.inputTokens})`,
+      "reported",
+    ),
+    row(
+      "Tokens written to the prompt cache",
+      ({ usage }) => String(usage.cacheWriteTokens),
+      "reported",
+    ),
+    row(
       "Answers that asked again for quotes",
       ({ quoteRetries, answers }) => `${quoteRetries.answers}/${answers}`,
       "reported",
@@ -785,6 +798,11 @@ export function terminalSummary(report: EvalReport, reportDir: string, root: str
       lines.push(
         `  ${label.padEnd(14)} ${percent(summary.citedAnswerShare)} of ${summary.answers} Answers cited, ${String(summary.citations).padStart(3)} Citations, found ${percent(summary.foundShare)}, false "not found" ${percent(summary.falseNotFoundShare)}, coverage ${percent(summary.coverage)}, dropped ${summary.droppedMarkers} markers and ${summary.droppedRecords} records, median ${summary.medianSeconds === null ? "–" : `${summary.medianSeconds.toFixed(1)} s`} an Answer`,
       );
+      if (summary.usage.inputTokens > 0) {
+        lines.push(
+          `  ${"".padEnd(14)} prompt cache: ${percent(summary.usage.cacheHitRate)} of ${summary.usage.inputTokens} input tokens read from it, ${summary.usage.cacheWriteTokens} written`,
+        );
+      }
       if (summary.quoteRetries.answers > 0) {
         lines.push(
           `  ${"".padEnd(14)} quotes asked again: ${quoteRetryLine(summary.quoteRetries)}`,

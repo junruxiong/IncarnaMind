@@ -65,7 +65,16 @@ interface DocumentRow {
   content_hash: string | null;
   status: string;
 }
-const GROUP_COLUMNS = "id, name, description, created_at AS createdAt, updated_at AS updatedAt";
+const GROUP_COLUMNS =
+  "id, name, description, counts_own_files, created_at AS createdAt, updated_at AS updatedAt";
+
+/** A stored Folder: its switch is 0 or 1. */
+type GroupRow = Omit<LibraryGroup, "countsOwnFiles"> & { counts_own_files: number };
+
+const toGroup = ({ counts_own_files, ...row }: GroupRow): LibraryGroup => ({
+  ...row,
+  countsOwnFiles: counts_own_files === 1,
+});
 
 /** A stored assignment as the API gives it. */
 const assignmentOf = (row: AssignmentRow): DocumentGroupAssignment => ({
@@ -160,9 +169,11 @@ export function createLibrary(options: {
       automatic: true,
     };
   const groups = () =>
-    db.all<LibraryGroup>(
-      `SELECT ${GROUP_COLUMNS} FROM library_groups WHERE deleted_at IS NULL ORDER BY name COLLATE NOCASE, id`,
-    );
+    db
+      .all<GroupRow>(
+        `SELECT ${GROUP_COLUMNS} FROM library_groups WHERE deleted_at IS NULL ORDER BY name COLLATE NOCASE, id`,
+      )
+      .map(toGroup);
   const group = (id: unknown) => {
     if (typeof id !== "string") throw new InvalidInputError("A group id must be text.");
     const value = groups().find((item) => item.id === id);
@@ -457,8 +468,9 @@ export function createLibrary(options: {
     const at = now();
     const id = randomUUID();
     db.run(
-      "INSERT INTO library_groups (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-      [id, value.name, value.description, at, at],
+      `INSERT INTO library_groups (id, name, description, counts_own_files, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [id, value.name, value.description, value.countsOwnFiles ? 1 : 0, at, at],
     );
     revision++;
     changed();
@@ -479,7 +491,10 @@ export function createLibrary(options: {
       throw new InvalidInputError("A folder with this name already exists.");
     if (!exceptId && groups().length >= 100)
       throw new InvalidInputError("The Library supports up to 100 folders.");
-    return { name, description };
+    const { countsOwnFiles } = input;
+    if (countsOwnFiles !== undefined && typeof countsOwnFiles !== "boolean")
+      throw new InvalidInputError("countsOwnFiles must be true or false.");
+    return { name, description, countsOwnFiles };
   }
 
   return {
@@ -498,13 +513,17 @@ export function createLibrary(options: {
           "SELECT g.* FROM document_groups g JOIN documents d ON d.id = g.document_id WHERE g.deleted_at IS NULL AND d.deleted_at IS NULL",
         )
         .map(assignmentOf);
-      const deletedGroups = db.all<LibraryGroup>(
-        `SELECT ${GROUP_COLUMNS} FROM library_groups WHERE deleted_at IS NOT NULL ORDER BY name COLLATE NOCASE, id`,
-      );
+      const deletedGroups = db
+        .all<GroupRow>(
+          `SELECT ${GROUP_COLUMNS} FROM library_groups WHERE deleted_at IS NOT NULL ORDER BY name COLLATE NOCASE, id`,
+        )
+        .map(toGroup);
       return { groups: groups(), deletedGroups, assignments, settings: getSettings() };
     },
     /** A live Folder, or NotFoundError. */
     folder: group,
+    /** The live Folders, by name. */
+    folders: groups,
     /**
      * Puts these Documents in a Folder (or in none) as the User's choice, as
      * `assign` does for one, all or none, and returns where each was. It says
@@ -541,12 +560,12 @@ export function createLibrary(options: {
     update(id: unknown, input: unknown) {
       const existing = group(id);
       const value = parseGroup(input, existing.id);
-      db.run("UPDATE library_groups SET name = ?, description = ?, updated_at = ? WHERE id = ?", [
-        value.name,
-        value.description,
-        now(),
-        existing.id,
-      ]);
+      const counts = value.countsOwnFiles ?? existing.countsOwnFiles;
+      db.run(
+        `UPDATE library_groups SET name = ?, description = ?, counts_own_files = ?, updated_at = ?
+         WHERE id = ?`,
+        [value.name, value.description, counts ? 1 : 0, now(), existing.id],
+      );
       revision++;
       changed();
       return group(existing.id);

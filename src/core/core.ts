@@ -5,6 +5,8 @@ import * as Y from "yjs";
 import { translate } from "../shared/i18n";
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
+import { agentSocketPath, createAgents } from "./agents";
+import { createAgentSetup } from "./agents/setup";
 import { createAiUse } from "./aiUse";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
 import { recheckCitation, recheckKept } from "./answers/citations";
@@ -24,6 +26,7 @@ import type {
   EmbeddingSettings,
   ExportMindOptions,
   Mind,
+  OwnFileKind,
   ProviderError,
   SearchScope,
   Unsubscribe,
@@ -39,6 +42,8 @@ import {
   type DocumentImage,
   parseListOptions,
 } from "./documents";
+import { createEvidence, parseCheckedDocument, passageResult } from "./documents/evidence";
+import { createOwnFiles } from "./documents/ownFiles";
 import { createVersionRetention, type VersionRetention } from "./documents/retention";
 import { fsWatchFolder } from "./documents/watcher";
 import { createWebPages } from "./documents/web";
@@ -58,6 +63,7 @@ import { type AnyEventListener, createEventHub } from "./events";
 import { createExamples } from "./examples";
 import { createLocalExecutor } from "./execution";
 import { createExports } from "./exports";
+import { renderMarkdown } from "./exports/markdown";
 import { safeFileName, writeNewFile } from "./fileNames";
 import { createFolders } from "./folders";
 import { createLayouts } from "./layout";
@@ -77,7 +83,7 @@ import {
   parseIds,
   parseMindId,
 } from "./minds";
-import { firstLineOf } from "./mindText";
+import { firstLineOf, readBlocks } from "./mindText";
 import { createOutputFiles } from "./outputFiles";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
 import { readsImages } from "./providers/capabilities";
@@ -93,6 +99,7 @@ import {
   pullOllamaModel,
   RECOMMENDED_OLLAMA_MODEL,
 } from "./providers/ollama";
+import { isCloudModelName } from "./providers/ollamaCloud";
 import { createOllamaModels } from "./providers/ollamaModels";
 import { createAiSdkRerankingModel, createRerank } from "./providers/rerank";
 import { createRecentlyDeleted, purgeExpired } from "./recentlyDeleted";
@@ -104,11 +111,15 @@ import {
 } from "./referenceRecords";
 import { parseReference } from "./references";
 import { BUILT_IN_RERANKING_MODEL, createRerankingModel } from "./reranking";
-import { resolveSearchScope } from "./scope";
+import { parseSearchScope, resolveSearchScope } from "./scope";
 import { createSecrets } from "./secrets";
 import { createSettings, isChatModelChoice } from "./settings";
 import { createSkills } from "./skills";
 import { createScriptRunner } from "./skills/scripts";
+import { createSources, FIND_SOURCES_SENDS } from "./sources";
+import { createSourceHttp } from "./sources/http";
+import { createPace, realTimers } from "./sources/pace";
+import { createSourceProviders } from "./sources/providers";
 import { migrate, openDatabase } from "./storage";
 import { createSuggestions } from "./suggestions";
 import { createTags } from "./tags";
@@ -525,9 +536,11 @@ export function createCore(adapters: CoreAdapters): Core {
   // Documents to search from an earlier run: the built-in reranking model downloads now, or
   // carries on from where the app quit, if it reranks them.
   if (documents.searchableCount() > 0) rerank.prepare();
+  /** Set once outside agents exist: Local mode pauses them. */
+  let agentsLocalModeChanged = () => {};
   /**
    * Local mode on or off: embeddings may switch back to the built-in model,
-   * rerank pauses, and usage data stops.
+   * rerank pauses, usage data stops, and outside agents pause.
    */
   const setLocalOnly = async (enabled: unknown) => {
     const wasLocal = embedding.localOnly();
@@ -536,7 +549,12 @@ export function createCore(adapters: CoreAdapters): Core {
     if (wasLocal !== embedding.localOnly()) {
       usageData.localModeChanged();
       privacyChanged();
+      agentsLocalModeChanged();
       await rerankChanged();
+      // Questions to a cloud model are refused now (or allowed again): the chat model's readiness changed.
+      await readinessChanged();
+      // An Answer on its way to a cloud model stops at once, with the reason.
+      if (embedding.localOnly()) await answers.stopCloud();
     }
     return embeddingSettings();
   };
@@ -560,6 +578,7 @@ export function createCore(adapters: CoreAdapters): Core {
     createModel: adapters.createChatModel ?? createAiSdkChatModel,
     chatGpt,
     ollamaModels: adapters.ollamaModels ?? createOllamaModels(),
+    localOnly: () => embedding.localOnly(),
   });
 
   /** Set once readiness can be reported: Connectors turned on or off change what chat sends. */
@@ -647,6 +666,53 @@ export function createCore(adapters: CoreAdapters): Core {
   // time, giving way to Answers.
   const background = createBackgroundQueue({ reportError: (error) => console.error(error) });
 
+  // Requests to one service kept apart, as its operator asks: Look up and Find sources share them.
+  const paceTimers = adapters.paceTimers ?? realTimers;
+  const pace = createPace(paceTimers);
+  // Find sources (#296): searches Source providers with consent, never in local mode, and adds
+  // what the User chooses to the Library, as Documents (open copies) or reference records.
+  const sources = createSources({
+    db,
+    now,
+    clock: () => paceTimers.now(),
+    consent,
+    localOnly: () => embedding.localOnly(),
+    providers: createSourceProviders(adapters.sourceProviders),
+    http: createSourceHttp(pace, paceTimers),
+    folder: join(dataDir, "Sources"),
+    checkFolder: (folderId) => {
+      library.target({ groupId: folderId });
+    },
+    async addFile(path, folderId, added) {
+      const batchId = batches.begin(folderId);
+      try {
+        const result = await documents.add([path], (documentId) => {
+          batches.added(batchId, documentId);
+          added(documentId);
+        });
+        return result.documents[0] ?? null;
+      } finally {
+        batches.done(batchId);
+      }
+    },
+    async savePage(address, folderId, added) {
+      const result = await webPages.save({ address }, added);
+      if (result.outcome === "failed") return null;
+      if (!result.existing && folderId !== null) library.assign(result.document.id, folderId);
+      return { document: documents.get(result.document.id), existing: result.existing };
+    },
+    document: (id) => documents.get(id),
+    signal: lifetime.signal,
+    reportError: (error) => console.error(error),
+  });
+  // A provider is asked only once the User searches it, as Look up's services are: the Privacy
+  // page lists each one the User has decided on, to revoke.
+  consent.registry.register({
+    id: "find-sources",
+    sends: FIND_SOURCES_SENDS,
+    services: async () => [],
+  });
+  sources.dropPurged().catch((error: unknown) => console.error(error));
   /** The User's Documents searched as an Answer searches them: the search Tool, reranked as the User chose. */
   const searchDocuments = (
     query: string,
@@ -664,6 +730,14 @@ export function createCore(adapters: CoreAdapters): Core {
       organizedFolderDocuments: (folderId) => library.documentIds(folderId),
       documentIds: (filter) => documents.ids(filter),
     });
+  // What checks and comparison tables search (#80): as Answers do, without IncarnaMind's own
+  // files and the document being checked. Answers themselves search everything, as before.
+  const evidence = createEvidence({
+    db,
+    leaveOutOwnFiles: () => settings.get().user.leaveOutOwnFiles,
+    search: (query, options) =>
+      documents.searchTool(query, { ...options, rerank: adapters.reranker ?? rerank.active() }),
+  });
 
   const answers = createAnswers({
     content,
@@ -691,7 +765,10 @@ export function createCore(adapters: CoreAdapters): Core {
       pageTexts: (documentId, contentHash, from, to) =>
         documents.pageTexts(documentId, contentHash, from, to),
     },
-    toolProviders: [{ kind: "connector", tools: (signal) => connectors.tools(signal) }],
+    toolProviders: [
+      { kind: "connector", tools: (signal) => connectors.tools(signal) },
+      { kind: "sources", tools: async () => sources.tools() },
+    ],
     connectorsNeedingSignIn: () => connectors.needingSignIn(),
     approvals: {
       decide: (call) => approvals.decide(call),
@@ -775,6 +852,13 @@ export function createCore(adapters: CoreAdapters): Core {
     now: () => adapters.now?.() ?? new Date(),
   });
 
+  // The fingerprints of the files IncarnaMind writes (#80). A Document already indexed with
+  // the same bytes is marked at once, and every window hears of it.
+  const ownFiles = createOwnFiles(db, now);
+  const recordOwnFile = (data: Uint8Array, kind: OwnFileKind) => {
+    const marked = ownFiles.record(data, kind);
+    for (const document of documents.getMany(marked)) events.emit("document.status", document);
+  };
   const mindExports = createExports({
     mind: (mindId) => minds.get(mindId),
     read: (mindId, look) => content.read(mindId, look),
@@ -804,6 +888,7 @@ export function createCore(adapters: CoreAdapters): Core {
     settings,
     suggested: join(adapters.paths.documents ?? join(homedir(), "Documents"), "IncarnaMind"),
     linkedFolders: () => documents.linkedFolders.list(),
+    recordOwnFile,
   });
   const unlinkFolder = (linkedFolderId: string) => {
     documents.linkedFolders.remove(linkedFolderId);
@@ -966,6 +1051,7 @@ export function createCore(adapters: CoreAdapters): Core {
     document: (id) => documents.get(id),
     changed: (list) => events.emit("references.changed", list),
     signal: lifetime.signal,
+    pace,
   });
   // Importing references (#287) reads a file the User chose and sends nothing.
   const referenceImport = createReferenceImport({
@@ -1199,6 +1285,76 @@ export function createCore(adapters: CoreAdapters): Core {
     log: adapters.log ?? silentLogger,
   });
 
+  // Outside agents (#351): the User's own agent, paired in Settings, reads its Folders over the
+  // socket and gets Citations IncarnaMind minted and checked. Off until the User turns it on.
+  const agents = createAgents({
+    db,
+    now,
+    clock: () => performance.now(),
+    secrets,
+    consent,
+    readValue: (key) => settings.readDeviceValue(key),
+    writeValue: (key, value) => settings.writeDeviceValue(key, value),
+    localOnly: () => embedding.localOnly(),
+    socketPath: adapters.agents?.socketPath ?? agentSocketPath(dataDir),
+    // Without a host's launcher there is no shim to start; tests and the evaluation give theirs.
+    launcher: adapters.agents?.launcher ?? { command: process.execPath, args: [] },
+    version: adapters.agents?.version ?? "0.0.0",
+    access: {
+      say: (key, params) => translate(settings.get().language, key, params),
+      folders: () => library.folders().map((folder) => ({ id: folder.id, name: folder.name })),
+      documentsIn: (folderIds) =>
+        folderIds.length === 0
+          ? []
+          : (resolveScope({ folderIds: [...folderIds], tagIds: [], documentIds: [] }) ?? []),
+      // Without the reranker: it costs about a second a search (ADR-0009), and an agent's
+      // search must answer in well under 100 ms. `ask` reranks, as every Answer does.
+      search: (query, documentIds, parameters, signal) =>
+        documents.searchTool(query, { documentIds, parameters, signal }),
+      passage: (passageId) => documents.passage(passageId),
+      passagesBetween: (documentId, from, to) => documents.passagesBetween(documentId, from, to),
+      citing,
+      recheck: (input) => recheckCitation(documents, input),
+      minds: () => minds.list().filter((mind) => isKnownKind(mind.kind)),
+      mindMarkdown: (mindId, footnote) => {
+        const mind = minds.get(mindId);
+        const { language } = settings.get();
+        const blocks = content.peek(mind.id, (fragment) =>
+          readBlocks(fragment, { includeQuestions: true, footnote, trimBeforeCitation: true }),
+        );
+        return renderMarkdown(mind.title || mind.autoTitle, blocks, {
+          question: translate(language, "export.question"),
+          unverified: translate(language, "export.unverified"),
+        });
+      },
+      answer: (question, documentIds, signal) =>
+        answers.answerOutside(question, documentIds, signal),
+      show: (place) => events.emit("agents.citationShown", place),
+    },
+    changed: (value) => events.emit("agents.changed", value),
+    called: (activity) => events.emit("agents.activity", activity),
+    reportError: (error) => console.error(error),
+  });
+  agentsLocalModeChanged = () => agents.localModeChanged();
+  agents.start().catch((error: unknown) => console.error(error));
+  // Setting IncarnaMind up in the User's agent, from Settings → Agents.
+  const home = adapters.agents?.home ?? homedir();
+  const agentSetup = createAgentSetup({
+    agents,
+    home,
+    applications:
+      adapters.agents?.applications ??
+      (platform === "darwin" ? ["/Applications", join(home, "Applications")] : []),
+    platform,
+    tempDir: adapters.paths.tempDir ?? tmpdir(),
+    shimScript: adapters.agents?.shimScript ?? null,
+    version: adapters.agents?.version ?? "0.0.0",
+    openLink: adapters.agents?.openLink ?? null,
+    openPath: adapters.shell ? (path) => adapters.shell?.openPath(path) ?? Promise.resolve() : null,
+    say: (key, params) => translate(settings.get().language, key, params),
+    reportError: (error) => console.error(error),
+  });
+
   const addDocuments: CoreApi["addDocuments"] = async (paths, options) => {
     const batchId = batches.begin(library.target(options));
     const since = now();
@@ -1393,6 +1549,9 @@ export function createCore(adapters: CoreAdapters): Core {
     restoreReference: async (documentId, before, fields) =>
       references.restore(documentId, before, fields),
     lookUpReference: (documentId) => references.lookUp(documentId),
+    listSourceProviders: async () => sources.list(),
+    findSources: (input) => sources.search(input),
+    addFoundSource: (input) => sources.add(input),
     importReferences: (path) => referenceImport.run(path),
     undoReferenceImport: async (importId) => {
       referenceImport.undo(importId);
@@ -1424,6 +1583,20 @@ export function createCore(adapters: CoreAdapters): Core {
       });
     },
     searchPassages: (query, options) => documents.search(query, options),
+    searchEvidence: async (query, options) => {
+      if (typeof query !== "string") throw new InvalidInputError("A search query must be text.");
+      if (options !== undefined && !isRecord(options)) {
+        throw new InvalidInputError("searchEvidence's options must be an object.");
+      }
+      const scope = parseSearchScope(options?.scope);
+      const found = await evidence.search(
+        query,
+        evidence.scope(scope ? resolveScope(scope) : null, parseCheckedDocument(options?.checked)),
+      );
+      return { passages: found.passages.map(passageResult), excluded: found.excluded };
+    },
+    setCountedAsEvidence: async (documentId, counted) =>
+      documents.setCountedAsEvidence(documentId, counted),
     getEmbeddingModel: async () => embeddingModel.status(),
     downloadEmbeddingModel: async () => embeddingModel.retry(),
 
@@ -1492,6 +1665,12 @@ export function createCore(adapters: CoreAdapters): Core {
       }
       const status = await detectOllama(baseUrl);
       if (!status.running) throw new Error(`Ollama isn't running at ${baseUrl}.`);
+      // One click means a model on this computer; a cloud model is chosen from the model menu.
+      if (isCloudModelName(model) || hasOllamaModel(status.cloudModels, model)) {
+        throw new InvalidInputError(
+          `${model} runs on ollama.com, not on this computer. Choose a local model, or pick it in the model menu.`,
+        );
+      }
       if (!hasOllamaModel(status.models, model)) {
         await pullOllamaModel(
           baseUrl,
@@ -1600,7 +1779,7 @@ export function createCore(adapters: CoreAdapters): Core {
     listDeleted: async () => recentlyDeleted.list(),
     deletePermanently: async (refs) => {
       recentlyDeleted.deletePermanently(refs);
-      await webPages.dropPurged();
+      await Promise.all([webPages.dropPurged(), sources.dropPurged()]);
     },
     acceptAssignments: async (ids) => library.accept(ids),
     rejectAssignments: async (ids) => library.reject(ids),
@@ -1754,13 +1933,15 @@ export function createCore(adapters: CoreAdapters): Core {
     previewMindExport: async (mindId, options) => mindExports.preview(mindId, options),
     exportMind: async (mindId, options) => {
       const exported = mindExports.export(mindId, options);
+      // The host saves these bytes as a file: IncarnaMind's, wherever it goes.
+      recordOwnFile(exported.data, "export");
       recordExport(options);
       return exported;
     },
     saveMindExport: async (mindId, options) => {
       const { fileName, data } = mindExports.export(mindId, options);
       try {
-        const file = await outputs.save({ name: fileName, data });
+        const file = await outputs.save({ name: fileName, data, ownFile: "export" });
         recordExport(options);
         return { status: "saved", file };
       } catch (error) {
@@ -1813,6 +1994,21 @@ export function createCore(adapters: CoreAdapters): Core {
       if (!adapters.shell) throw new Error("This copy of IncarnaMind can't show files.");
       adapters.shell.showItemInFolder(path);
     },
+    getAgents: async () => agents.settings(),
+    setAgentsEnabled: (enabled) => agents.setEnabled(enabled),
+    connectAgent: (input) => agents.connect(input),
+    updateAgent: async (pairingId, input) => agents.update(pairingId, input),
+    disconnectAgent: async (pairingId) => {
+      await agentSetup.removeFromSettings(pairingId);
+      await agents.disconnect(pairingId);
+    },
+    listAgentClients: async () => agentSetup.clients(),
+    previewAgentSetup: async (client) => agentSetup.preview(client),
+    setUpAgent: (input) => agentSetup.setUp(input),
+    undoAgentSetup: (pairingId) => agentSetup.undo(pairingId),
+    copyAgentSetup: (pairingId) => agentSetup.settingsFor(pairingId),
+    getAgentLaunch: (pairingId) => agents.launch(pairingId),
+    listAgentActivity: async (pairingId) => agents.activity(pairingId),
     reconcileDocuments: () => documents.linkedFolders.sync(),
     systemSleeping: () => meetings.sleeping(),
     systemAwake: () => meetings.awake(),
@@ -1827,6 +2023,8 @@ export function createCore(adapters: CoreAdapters): Core {
       lifetime.abort();
       // What a Meeting has captured is saved before anything else stops.
       meetings.close();
+      // Outside agents can't reach the core while it closes.
+      void agents.close().catch((error: unknown) => console.error(error));
       // First, so stopping the Answers below starts no background work.
       background.close();
       void chatGpt.cancelSignIn();

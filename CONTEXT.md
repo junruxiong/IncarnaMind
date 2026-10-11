@@ -86,6 +86,10 @@ _Avoid_: endnote, annotation, comment
 What a citation style needs to cite a Document: its type, title, authors, date, where it was published, volume, issue, pages, publisher, DOI, URL and language. It is read from the Document's file, the User can edit every field (an edit is never replaced by a later read), and Look up can fill its empty fields from the Document's DOI or arXiv ID. A record of a known type that lacks its title, authors or date "needs details". A file exported from Zotero, EndNote or Mendeley (CSL JSON, BibTeX or RIS) can be imported: each reference is matched to a Document, or kept as a record with no Document until its PDF is added; the User's edits win over an import.
 _Avoid_: metadata, bibliographic entry, citation (a Citation is the reference in an Answer)
 
+**Source provider**:
+A public service that Find sources searches for works to add to the Library: OpenAlex, arXiv and PubMed (Crossref looks a DOI up); later, services for laws, regulations, filings and drug labels. A work with an open-access copy is added as a Document, which keeps the provider it came from and the date of the version it holds; any other work, as its Reference record alone. Each Source provider is asked once for consent before anything is sent to it.
+_Avoid_: source (a Document is not one), database, provider on its own (an AI model's provider)
+
 **Location**:
 Where in a Document a Citation points, in the unit the Document's own readers use: one or two pages of a PDF, one or two slides of a deck (speaker notes count as part of their slide), a sheet and a range of rows of a spreadsheet, the section a quote sits under in a Word file or Markdown (for a quote of a Word comment, the section the comment is anchored in, and that it is a comment by its author), the section and paragraphs of a Web page, or a range of lines in plain text.
 _Avoid_: page (for anything that isn't a PDF), position, anchor
@@ -138,6 +142,10 @@ _Avoid_: plugin, command
 **Skill script**:
 A script that comes with a Skill, which an Answer can run on the User's computer with the User's approval.
 _Avoid_: tool script, code execution
+
+**Outside agent**:
+An AI agent the User runs themselves, such as Claude Code or Codex, connected to IncarnaMind so it can search and read the Folders the User shares with it and cite them with Citations IncarnaMind checks. The User connects each one in Settings, with its own Folders (none until chosen), its own consent and a list of every call it made; disconnecting it stops it at once, and Local mode pauses it.
+_Avoid_: harness, plugin, client, bot
 
 **Built-in Skill**:
 A Skill that ships with IncarnaMind and is updated with it: summarise a Document, a literature review across Documents, and a Mind to report. The User can turn one off, remove it and restore it, or duplicate it as their own, but not change it.
