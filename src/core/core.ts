@@ -30,6 +30,7 @@ import type {
   CoreApi,
   CoreEventSource,
   Document,
+  EmbeddingModelStatus,
   EmbeddingSettings,
   ExportMindOptions,
   Mind,
@@ -54,6 +55,7 @@ import {
 import { createEvidence, parseCheckedDocument, passageResult } from "./documents/evidence";
 import { createOwnFiles } from "./documents/ownFiles";
 import { createVersionRetention, type VersionRetention } from "./documents/retention";
+import { BUILT_IN_TEXT_RECOGNITION_MODEL, createTextRecognitionModel } from "./documents/scan";
 import { fsWatchFolder } from "./documents/watcher";
 import { createWebPages } from "./documents/web";
 import { createEdits } from "./edits";
@@ -85,7 +87,6 @@ import { documentPageImages } from "./library/pageImages";
 import { createMeetings } from "./meetings";
 import { accessFor, isKnownKind } from "./mindAccess";
 import { createMindContent } from "./mindContent";
-
 import {
   createMinds,
   parseCreateMindInput,
@@ -329,6 +330,25 @@ export function createCore(adapters: CoreAdapters): Core {
     embedder: adapters.embedder,
     emitStatus: (status) => events.emit("embeddingModel.status", status),
   });
+  // Reads scanned pages (#397), when this copy has a recognizer to read them with.
+  const textRecognitionModel = adapters.textRecognizer
+    ? createTextRecognitionModel({
+        definition: BUILT_IN_TEXT_RECOGNITION_MODEL,
+        source: adapters.textRecognitionModelSource,
+        dataDir,
+        recognizer: adapters.textRecognizer,
+        emitStatus: (status) => events.emit("textRecognitionModel.status", status),
+      })
+    : undefined;
+  /** What `getTextRecognitionModel` says in a copy that has no recognizer: nothing to download. */
+  const textRecognitionUnavailable: EmbeddingModelStatus = {
+    name: BUILT_IN_TEXT_RECOGNITION_MODEL.name,
+    host: new URL(BUILT_IN_TEXT_RECOGNITION_MODEL.source.baseUrl).host,
+    state: "not-downloaded",
+    downloadedBytes: 0,
+    totalBytes: 0,
+    error: null,
+  };
   /** Reports the embedding settings again; set once Documents exist. */
   let embeddingChanged = () => {};
   /** A Document's status changed: during a rebuild, its progress may have too. */
@@ -362,6 +382,7 @@ export function createCore(adapters: CoreAdapters): Core {
       dataDir,
       now,
       model: embedding.model,
+      textRecognition: textRecognitionModel,
       folders,
       emitStatus: (document) => {
         events.emit("document.status", document);
@@ -1197,6 +1218,19 @@ export function createCore(adapters: CoreAdapters): Core {
     // While the built-in reranking model reranks: by default, unless the User chose otherwise.
     listed: () => rerankingSource.files.length > 0 && rerank.usesBuiltIn(),
   });
+  const textRecognitionSource =
+    adapters.textRecognitionModelSource ?? BUILT_IN_TEXT_RECOGNITION_MODEL.source;
+  const textRecognitionHost = new URL(textRecognitionSource.baseUrl);
+  privacy.traffic.register({
+    id: "text-recognition-model",
+    service: {
+      id: textRecognitionHost.origin,
+      name:
+        textRecognitionHost.host === "huggingface.co" ? "Hugging Face" : textRecognitionHost.host,
+    },
+    // Only a copy that reads scans downloads it.
+    listed: () => textRecognitionModel !== undefined && textRecognitionSource.files.length > 0,
+  });
   privacy.traffic.register({ id: "ollama-pull", service: OLLAMA_REGISTRY });
   const chatGptSignIn = new URL(
     adapters.chatGptPlan?.authorizeUrl ?? CHATGPT_PLAN_ENDPOINTS.authorizeUrl,
@@ -1580,6 +1614,23 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     retryDocument: async (id) => documents.retry(id),
     readDocumentText: async (id) => documents.readText(id),
+    readScannedText: async (id) => documents.readScannedText(id),
+    readScannedQuote: async (input) => {
+      if (!isRecord(input) || typeof input.quote !== "string") {
+        throw new InvalidInputError(
+          "readScannedQuote needs a Citation's Document, Units and quote.",
+        );
+      }
+      const unit = (value: unknown) =>
+        typeof value === "number" && Number.isInteger(value) && value >= 1 ? value : null;
+      return documents.readScannedQuote({
+        documentId: typeof input.documentId === "string" ? input.documentId : "",
+        contentHash: typeof input.contentHash === "string" ? input.contentHash : null,
+        pageFrom: unit(input.pageFrom),
+        pageTo: unit(input.pageTo),
+        quote: input.quote,
+      });
+    },
     previewLinkedFolder: (path) => documents.linkedFolders.preview(path),
     addLinkedFolder: async (path, options) => {
       const groupId = library.target(options);
@@ -1651,6 +1702,10 @@ export function createCore(adapters: CoreAdapters): Core {
       documents.setCountedAsEvidence(documentId, counted),
     getEmbeddingModel: async () => embeddingModel.status(),
     downloadEmbeddingModel: async () => embeddingModel.retry(),
+    getTextRecognitionModel: async () =>
+      textRecognitionModel?.status() ?? textRecognitionUnavailable,
+    downloadTextRecognitionModel: async () =>
+      textRecognitionModel?.retry() ?? textRecognitionUnavailable,
 
     getEmbeddingSettings: () => embeddingSettings(),
     saveEmbeddingProvider: async (input) => {
@@ -2113,6 +2168,7 @@ export function createCore(adapters: CoreAdapters): Core {
       documents.close();
       embeddingModel.close();
       rerankingModel.close();
+      textRecognitionModel?.close();
       activity.stop();
       aiUse.close();
       events.clear();

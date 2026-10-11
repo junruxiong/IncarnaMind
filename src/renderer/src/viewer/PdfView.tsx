@@ -28,6 +28,8 @@ import { loadOutline, type OutlineItem } from "./outline";
 import { isMissingDocumentError, loadPdfJs, openPdf, type PdfJs } from "./pdfjs";
 import { PlaceMemoryContext } from "./place";
 import { CitationMark, type QuoteMark, quoteMarkOf, quoteTone } from "./quoteMark";
+import { type ScannedPage, scannedTextLayer, useScannedPages } from "./scannedText";
+import { UnreadPagesLine } from "./UnreadPagesLine";
 import { HeaderDivider, ViewerHeader } from "./ViewerHeader";
 import { FileGone, ViewerMessage } from "./ViewerMessage";
 import { createWheelZoom, MAX_ZOOM, MIN_ZOOM, stepZoom } from "./zoom";
@@ -159,6 +161,7 @@ export function PdfView({ document, target }: { document: Document; target: View
     case "ready":
       return (
         <PdfPages
+          document={document}
           pdfjs={loaded.pdfjs}
           pdf={loaded.pdf}
           firstPage={loaded.firstPage}
@@ -169,6 +172,7 @@ export function PdfView({ document, target }: { document: Document; target: View
 }
 
 interface PdfPagesProps {
+  document: Document;
   pdfjs: PdfJs;
   pdf: PDFDocumentProxy;
   firstPage: PageSize;
@@ -195,8 +199,10 @@ function lostLigaturesOf(pdf: PDFDocumentProxy): Promise<boolean> {
   return known;
 }
 
-function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
+function PdfPages({ document, pdfjs, pdf, firstPage, target }: PdfPagesProps) {
   const pageCount = pdf.numPages;
+  // A scanned page's text was read from its picture (#397): it is laid over the picture.
+  const scanned = useScannedPages(document);
   const places = useContext(PlaceMemoryContext);
   // Where the view was, if its file was read again: it comes back at the same zoom and page.
   const [recalled] = useState(() => places.recall());
@@ -433,6 +439,11 @@ function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
       // Each page's text runs, counted as its text layer counts them.
       const pages: TextPiece[][] = [];
       for (let page = from; page <= to; page++) {
+        const read = scanned.get(page);
+        if (read) {
+          pages.push(read.pieces);
+          continue;
+        }
         const content = await (await pdf.getPage(page)).getTextContent();
         const pieces: TextPiece[] = [];
         for (const entry of content.items) {
@@ -467,7 +478,7 @@ function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
     return () => {
       cancelled = true;
     };
-  }, [pdf, pageCount, target.request, target.quote, target.pageFrom, target.pageTo]);
+  }, [pdf, pageCount, scanned, target.request, target.quote, target.pageFrom, target.pageTo]);
 
   // The outline, if the PDF has one: its button shows only then.
   useEffect(() => {
@@ -576,6 +587,7 @@ function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
           }}
         />
       </ViewerHeader>
+      <UnreadPagesLine document={document} />
       <div className="flex min-h-0 flex-1">
         {hasOutline && outlineOpen && (
           <OutlinePanel items={outline} currentPage={currentPage} onGoToPage={goToPage} />
@@ -605,6 +617,7 @@ function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
                   size={size}
                   scale={scale}
                   nearby={nearby.has(page)}
+                  scanned={scanned.get(page)}
                   highlights={highlights.get(page)}
                   mark={page === firstHighlightPage ? mark : null}
                   onSize={onPageSize}
@@ -937,6 +950,8 @@ interface PdfPageProps {
   scale: number;
   /** Near the visible area: drawn. Otherwise blank, with its resources released. */
   nearby: boolean;
+  /** A scanned page's text, read from its picture: its text layer instead of the PDF's. */
+  scanned: ScannedPage | undefined;
   highlights: readonly RunHighlight[] | undefined;
   /** The Citation's mark, for the page the quote starts on. */
   mark: QuoteMark | null;
@@ -983,6 +998,7 @@ const PdfPage = memo(function PdfPage(props: PdfPageProps) {
     size,
     scale,
     nearby,
+    scanned,
     highlights,
     mark,
     onSize,
@@ -993,7 +1009,10 @@ const PdfPage = memo(function PdfPage(props: PdfPageProps) {
   const section = useRef<HTMLElement | null>(null);
   const canvasHost = useRef<HTMLDivElement>(null);
   const textHost = useRef<HTMLDivElement>(null);
-  const textLayer = useRef<TextLayer | null>(null);
+  /** The page's text layer's runs, and each one's text: pdf.js's, or a scanned page's (#397). */
+  const textRuns = useRef<{ divs: readonly HTMLElement[]; strings: readonly string[] } | null>(
+    null,
+  );
   /** The quote's first highlighted part on this page, once marked. */
   const firstHighlight = useRef<HTMLElement | null>(null);
   const [drawn, setDrawn] = useState(false);
@@ -1016,7 +1035,7 @@ const PdfPage = memo(function PdfPage(props: PdfPageProps) {
       hasDrawn.current = false;
       canvasDiv.replaceChildren();
       textDiv.replaceChildren();
-      textLayer.current = null;
+      textRuns.current = null;
       setDrawn(false);
       setLayerScale(null);
       pdf.getPage(page).then(
@@ -1055,15 +1074,21 @@ const PdfPage = memo(function PdfPage(props: PdfPageProps) {
       hasDrawn.current = true;
       setDrawn(true);
 
-      const content = await proxy.getTextContent();
-      if (cancelled) return;
-      const container = document.createElement("div");
-      container.className = "textLayer";
-      layer = new pdfjs.TextLayer({ textContentSource: content, container, viewport });
-      await layer.render();
-      if (cancelled) return;
-      textDiv.replaceChildren(container);
-      textLayer.current = layer;
+      if (scanned) {
+        const read = scannedTextLayer(scanned, natural.width, natural.height);
+        textDiv.replaceChildren(read.container);
+        textRuns.current = read;
+      } else {
+        const content = await proxy.getTextContent();
+        if (cancelled) return;
+        const container = document.createElement("div");
+        container.className = "textLayer";
+        layer = new pdfjs.TextLayer({ textContentSource: content, container, viewport });
+        await layer.render();
+        if (cancelled) return;
+        textDiv.replaceChildren(container);
+        textRuns.current = { divs: layer.textDivs, strings: layer.textContentItemsStr };
+      }
       setLayerScale(scale);
       setTextLayerVersion((version) => version + 1);
     };
@@ -1084,15 +1109,14 @@ const PdfPage = memo(function PdfPage(props: PdfPageProps) {
       renderTask?.cancel();
       layer?.cancel();
     };
-  }, [pdfjs, pdf, page, scale, nearby, onSize]);
+  }, [pdfjs, pdf, page, scale, nearby, scanned, onSize]);
 
   // Marks the quote in the text layer, and lets the view move to it.
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-runs for each new text layer
   useEffect(() => {
-    const layer = textLayer.current;
-    if (!layer) return;
-    const divs = layer.textDivs;
-    const strings = layer.textContentItemsStr;
+    const runs = textRuns.current;
+    if (!runs) return;
+    const { divs, strings } = runs;
     let first: HTMLElement | null = null;
     const marked: number[] = [];
     // A run can hold two parts of a quote with an ellipsis: its ranges, in order.
@@ -1144,7 +1168,7 @@ const PdfPage = memo(function PdfPage(props: PdfPageProps) {
   useEffect(() => {
     const element = section.current;
     const first = firstHighlight.current;
-    const runs = textLayer.current?.textDivs;
+    const runs = textRuns.current?.divs;
     setPlace(mark && element && first && runs ? markPlace(first, element, runs) : null);
   }, [textLayerVersion, highlights, mark]);
 

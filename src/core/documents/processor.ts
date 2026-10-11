@@ -1,9 +1,13 @@
 /**
  * Runs jobs one at a time on a worker thread, so extracting a large PDF never
  * blocks the core's thread (the Electron main process): processing jobs, and
- * metadata jobs, which only read a Document's creation date.
+ * metadata jobs, which only read a Document's creation date. A job reading a
+ * PDF's scanned pages (#397) asks for each page's picture to be read, and
+ * says how far it is.
  */
 import type { Worker } from "node:worker_threads";
+import type { TextUnit } from "../../shared/units";
+import type { PagePicture, RecognizedLine } from "../adapters";
 import type {
   MetadataJob,
   MetadataResult,
@@ -21,13 +25,29 @@ export interface ProcessorHandlers {
   onStart(job: ProcessingJob): void;
   onResult(job: ProcessingJob, result: ProcessingResult): void;
   onMetadata(job: MetadataJob, result: MetadataResult): void;
+  /**
+   * How far a job is in reading the scanned pages of version `contentHash`:
+   * `read` of `of`, and the page just read.
+   */
+  onProgress(
+    job: ProcessingJob,
+    progress: { contentHash: string; read: number; of: number; unit: TextUnit | null },
+  ): void;
+  /**
+   * Reads a scanned page's picture for a job. Rejects with `unavailable` set
+   * when no page can be read now (the model can't be had).
+   */
+  read(job: ProcessingJob, page: number, picture: PagePicture): Promise<RecognizedLine[]>;
+  /** Whether an error from `read` means no page can be read now. */
+  isUnavailable(error: unknown): boolean;
 }
 
 export interface Processor {
   enqueue(job: WorkerJob): void;
   /**
-   * Drops a Document's processing job if it hasn't started. A started job
-   * still reports its result, and so does every metadata job.
+   * Drops a Document's processing job if it hasn't started. A started one
+   * that is reading scanned pages stops before its next page, reporting
+   * "stopped"; another still reports its result, as does every metadata job.
    */
   cancel(documentId: string): void;
   /** Holds jobs back, while a Meeting is recorded (#135): the one in the worker finishes, the rest wait. */
@@ -73,9 +93,38 @@ export function createProcessor(
     if (current) finish(current.id, { outcome: "crashed", message });
   }
 
+  /** A job's request to read a page's picture: answered once the model has read it. */
+  function read(from: Worker, id: number, request: number, page: number, picture: PagePicture) {
+    const asked = current;
+    if (asked?.id !== id || asked.job.task !== "process") return;
+    const answer = (message: WorkerRequest) => {
+      if (worker === from && current?.id === id) from.postMessage(message);
+    };
+    handlers.read(asked.job, page, picture).then(
+      (lines) => answer({ id, request, lines }),
+      (error: unknown) =>
+        answer({
+          id,
+          request,
+          error: {
+            message: error instanceof Error ? error.message : String(error),
+            unavailable: handlers.isUnavailable(error),
+          },
+        }),
+    );
+  }
+
   function startWorker(): Worker {
     const started = startDocumentWorker({ name: "incarnamind-documents" });
-    started.on("message", (response: WorkerResponse) => finish(response.id, response.result));
+    started.on("message", (response: WorkerResponse) => {
+      if ("result" in response) finish(response.id, response.result);
+      else if ("picture" in response) {
+        read(started, response.id, response.request, response.page, response.picture);
+      } else if (current?.id === response.id && current.job.task === "process") {
+        const { job } = current;
+        call(() => handlers.onProgress(job, response.progress));
+      }
+    });
     started.on("error", (error) => lose(started, `Processing stopped: ${error.message}`));
     started.on("exit", (code) => lose(started, `Processing stopped (exit code ${code}).`));
     return started;
@@ -110,6 +159,9 @@ export function createProcessor(
         (job) => job.task === "process" && job.documentId === documentId,
       );
       if (index !== -1) queue.splice(index, 1);
+      if (current?.job.task === "process" && current.job.documentId === documentId) {
+        worker?.postMessage({ id: current.id, stop: true } satisfies WorkerRequest);
+      }
     },
     hold(value) {
       held = value;

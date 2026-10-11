@@ -27,6 +27,7 @@ import {
   memberMarker,
 } from "./citationClusters";
 import { citationNumberOf } from "./citationNumbers";
+import { QuoteWithUnsureWords, ScanLine, useScannedQuote } from "./citationScan";
 import { CheckMarkIcon, CheckStateIcon } from "./icons";
 import { InFootnoteContext, useMindId } from "./mindContext";
 import { Popover } from "./Popover";
@@ -470,6 +471,7 @@ function CitationCard({
         ? t(`citation.reason.${state.reason}`)
         : null;
   const removed = state.reason === "document-removed";
+  const scanned = useScannedQuote(attributes);
   return (
     <div className={`citation-card citation-card--${state.check}`} contentEditable={false}>
       <div className="citation-card-head">
@@ -478,6 +480,7 @@ function CitationCard({
           <span>{badgeText}</span>
         </p>
         {source && <p className="citation-card-source">{source}</p>}
+        {scanned && <ScanLine scanned={scanned} />}
         {web && fetchedAt && (
           <p data-testid="citation-web-source" className="citation-card-source">
             {web.siteName} · {t("webPages.fetched", { date: pageDate(fetchedAt, language) })}
@@ -488,7 +491,9 @@ function CitationCard({
         <figure className="citation-card-quote">
           <figcaption className="sr-only">{t("citation.quote")}</figcaption>
           <blockquote>
-            <span className="citation-card-wash">{attributes.quote}</span>
+            <span className="citation-card-wash">
+              <QuoteWithUnsureWords quote={attributes.quote} unsure={scanned?.unsure ?? []} />
+            </span>
           </blockquote>
         </figure>
       )}

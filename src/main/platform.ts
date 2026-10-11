@@ -26,6 +26,7 @@ import { createElectronAudioCapture } from "./meetings/capture";
 import { createLoginShellProcesses } from "./processes";
 import { createUtilityProcessCrossEncoder } from "./reranker";
 import { loadOsSandbox } from "./sandbox";
+import { createUtilityProcessTextRecognizer } from "./scanReader";
 import { createFileKeychain, SECRETS_FILE, type SecretCipher } from "./secretsFile";
 import { createPostHogSender } from "./usageData";
 
@@ -155,6 +156,9 @@ export async function chooseExecutor(log: Logger): Promise<Executor | undefined>
  */
 const fakeEmbedder =
   import.meta.env.MODE === "test" && process.env.INCARNAMIND_TEST_EMBEDDER === "fake";
+
+/** With the fake models, what the fake text recognition model reads on each scanned page (#397). */
+const fakeScans = fakeEmbedder ? (process.env.INCARNAMIND_TEST_SCANS ?? null) : null;
 
 /**
  * The built-in Skills: in a packaged app, where electron-builder copied them
@@ -408,10 +412,14 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     },
     embedder: createUtilityProcessEmbedder({ fake: fakeEmbedder }),
     crossEncoder: createUtilityProcessCrossEncoder({ fake: fakeEmbedder }),
+    textRecognizer: createUtilityProcessTextRecognizer(
+      fakeEmbedder ? { fake: { script: fakeScans } } : {},
+    ),
     // The fake models have no files to download.
     ...(fakeEmbedder && {
       embeddingModelSource: { baseUrl: "http://localhost/", files: [] },
       rerankingModelSource: { baseUrl: "http://localhost/", files: [] },
+      textRecognitionModelSource: { baseUrl: "http://localhost/", files: [] },
     }),
   };
 }
