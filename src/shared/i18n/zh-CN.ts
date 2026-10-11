@@ -964,6 +964,8 @@ export const zhCN = {
   "providers.form.region": "地域",
   "providers.region.cn": "中国",
   "providers.region.intl": "国际",
+  "providers.form.more": "更多提供商",
+  "providers.form.keyGuide": "如何获取密钥？",
   "providers.form.getKey": "获取密钥",
   "providers.form.planCredits": "了解更多",
   "providers.form.dataUse": "数据使用：",
