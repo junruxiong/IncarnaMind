@@ -8,7 +8,7 @@
  * (`documentImageUrl`), only from its own folder, and only images.
  */
 import { protocol } from "electron";
-import { type Core, type DocumentKind, NotFoundError } from "../core";
+import { type Core, type DocumentKind, ExtractionError, NotFoundError } from "../core";
 import { DOCUMENT_SCHEME, documentIdFromUrl, documentImageFromUrl } from "../shared/documentViewer";
 
 const CONTENT_TYPES: Readonly<Record<DocumentKind, string>> = {
@@ -81,6 +81,9 @@ export function serveDocumentFiles(core: Core, devServerOrigin: string | null): 
       return new Response(stream, { status: 200, headers });
     } catch (error) {
       if (error instanceof NotFoundError) return new Response(null, { status: 404, headers });
+      if (error instanceof ExtractionError && error.reason === "too-large") {
+        return new Response(null, { status: 413, headers });
+      }
       console.error(error);
       return new Response(null, { status: 500, headers });
     }
