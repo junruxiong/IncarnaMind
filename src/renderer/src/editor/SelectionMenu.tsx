@@ -252,6 +252,9 @@ export function SelectionMenu({
   const options = useRef({
     placement: "bottom-start" as const,
     offset: 8,
+    // With the AI section the menu is tall: where it fits neither above nor below the
+    // selection, it slides into the Mind's view rather than lose its top row (the offset comes after).
+    shift: { crossAxis: true, padding: 8 },
     onShow: () => {
       shown.current = true;
     },
