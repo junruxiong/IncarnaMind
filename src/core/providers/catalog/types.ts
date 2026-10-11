@@ -44,9 +44,11 @@ export interface Endpoint {
  * - "answers": the default for Answers, the provider's cheaper capable model;
  * - "strongest": its strongest model for Answers, one click away from the default;
  * - "quickTasks": a small, cheap model for the calls that don't write the Answer;
- * - "images": the model that reads images and scanned pages.
+ * - "images": the model that reads images and scanned pages;
+ * - "tagging": the model that tags and organizes Documents, only where it isn't
+ *   the quick-tasks model, which tags otherwise.
  */
-export type Role = "answers" | "strongest" | "quickTasks" | "images";
+export type Role = "answers" | "strongest" | "quickTasks" | "images" | "tagging";
 
 /** What a provider does with the data it is sent through its API. */
 export interface DataUse {
@@ -77,9 +79,14 @@ export interface RequestQuirks {
   /**
    * Provider options (by the AI SDK provider's key) that turn thinking off, for
    * the small calls that don't write the Answer. A model whose id starts with
-   * one of `unless` can't turn it off.
+   * one of `unless`, or is one of `except` (with or without a date suffix),
+   * can't turn it off.
    */
-  thinkingOff?: { options: Record<string, Record<string, unknown>>; unless?: readonly string[] };
+  thinkingOff?: {
+    options: Record<string, Record<string, unknown>>;
+    unless?: readonly string[];
+    except?: readonly string[];
+  };
 }
 
 export interface CatalogProvider {

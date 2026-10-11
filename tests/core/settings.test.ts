@@ -10,6 +10,8 @@ describe("Settings", () => {
       user: {
         language: "system",
         chatModel: null,
+        quickTasksModel: null,
+        imageModel: null,
         suggestWhileWriting: false,
         leaveOutOwnFiles: true,
       },
@@ -99,6 +101,8 @@ describe("Settings", () => {
     expect(settings.user).toEqual({
       language: "zh-CN",
       chatModel: null,
+      quickTasksModel: null,
+      imageModel: null,
       suggestWhileWriting: false,
       leaveOutOwnFiles: true,
     });
@@ -165,6 +169,8 @@ describe("Settings", () => {
       user: {
         language: "zh-CN",
         chatModel: null,
+        quickTasksModel: null,
+        imageModel: null,
         suggestWhileWriting: true,
         leaveOutOwnFiles: false,
       },

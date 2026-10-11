@@ -17,6 +17,8 @@ import {
   type Settings,
 } from "../core";
 import type { Language } from "../core/language";
+import { defaultOllamaUrl } from "../core/providers/kinds";
+import { installedOllamaModels } from "../core/providers/ollama";
 import { channelFor, EVENT_CHANNEL } from "../shared/bridge";
 import { translate } from "../shared/i18n";
 import { registerDocumentScheme, serveDocumentFiles } from "./documentProtocol";
@@ -204,6 +206,12 @@ app.whenReady().then(async () => {
       ...createElectronAdapters(logger),
       ...(executor && { executor }),
       ...(createChatModel && { createChatModel }),
+      // A smoke test never reaches an Ollama that happens to run on the computer: only a
+      // stand-in it starts at another address.
+      ...(testHooks && {
+        localModels: (baseUrl: string) =>
+          baseUrl === defaultOllamaUrl() ? Promise.resolve([]) : installedOllamaModels(baseUrl),
+      }),
     });
   } catch (error) {
     showStartupError(error);

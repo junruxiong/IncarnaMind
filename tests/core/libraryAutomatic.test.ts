@@ -262,11 +262,11 @@ describe("automatic local classification", () => {
         ]),
       ),
     ];
-    const docs = await addAndProcess(core, files);
     await core.saveLibrarySettings({
       classifier: { kind: "auto", baseUrl: server.url },
       automatic: false,
     });
+    const docs = await addAndProcess(core, files);
     await core.classifyDocuments(docs.map((doc) => doc.id));
     await vi.waitFor(
       async () =>

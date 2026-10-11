@@ -459,13 +459,15 @@ describe("Organize suggests a Folder and waits for the User", () => {
     expect(await core.listLinkedFolders()).toEqual([]);
   });
 
-  test("automatic Organize is on once a model is set up, and a User who turned it off keeps it off", async () => {
+  test("automatic Organize is on with Automatic, and a User who turned it off keeps it off", async () => {
     const fake = sorter();
     const dataDir = await createTempDataFolder();
     const sources = await createSourceFolder();
     const core = startCore(dataDir, { createChatModel: () => fake.model });
-    expect((await core.getLibrary()).settings).toEqual({ classifier: null, automatic: true });
-    const provider = await core.saveChatProvider({ kind: "ollama", modelId: "main-model" });
+    expect((await core.getLibrary()).settings).toEqual({
+      classifier: { kind: "automatic" },
+      automatic: true,
+    });
     await core.createLibraryGroup({ name: "Thesis", description: "Research for my thesis" });
     const add = async (on: Core, name: string) => {
       const [document] = await addAndProcess(on, [
@@ -475,32 +477,32 @@ describe("Organize suggests a Folder and waits for the User", () => {
       return document;
     };
 
-    // No model for Organize yet: nothing waits for one.
+    // No model at all: Automatic has none to organize with, so the Document waits.
     const early = await add(core, "Chapter 1");
-    expect(await assignmentOf(core, early.id)).toBeUndefined();
+    await vi.waitFor(async () =>
+      expect(await assignmentOf(core, early.id)).toMatchObject({ status: "waiting" }),
+    );
+    // A chat model on this computer: Automatic organizes with it, the one waiting too.
+    const provider = await core.saveChatProvider({ kind: "ollama", modelId: "main-model" });
+    const later = await add(core, "Chapter 2");
+    for (const document of [early, later]) {
+      await vi.waitFor(async () =>
+        expect(await assignmentOf(core, document.id)).toMatchObject({
+          status: "classified",
+          suggested: true,
+        }),
+      );
+    }
 
     const classifier = {
       kind: "chat" as const,
       choice: { providerId: provider.id, modelId: "small-classifier" },
     };
-    await core.saveLibrarySettings({
-      classifier,
-      automatic: (await core.getLibrary()).settings.automatic,
-    });
-    const later = await add(core, "Chapter 2");
-    await vi.waitFor(async () =>
-      expect(await assignmentOf(core, later.id)).toMatchObject({
-        status: "classified",
-        suggested: true,
-      }),
-    );
-    expect(await assignmentOf(core, early.id)).toBeUndefined();
-
     await core.saveLibrarySettings({ classifier, automatic: false });
     core.close();
     const reopened = startCore(dataDir, { createChatModel: () => fake.model });
-    // Manual only, then the model again, each saved as the settings show it.
-    for (const next of [null, classifier]) {
+    // Automatic, then the model again, each saved as the settings show it.
+    for (const next of [{ kind: "automatic" as const }, classifier]) {
       const { automatic } = (await reopened.getLibrary()).settings;
       await reopened.saveLibrarySettings({ classifier: next, automatic });
     }

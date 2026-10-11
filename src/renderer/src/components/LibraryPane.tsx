@@ -176,10 +176,6 @@ export function LibraryPane() {
     return item?.status !== "classified" || doc.tagging !== "tagged";
   });
   const organize = () => {
-    if (!snapshot?.settings.classifier) {
-      useAppStore.getState().openSettings("models");
-      return;
-    }
     void act(() =>
       core.classifyDocuments(
         (needsOrganization.length ? needsOrganization : shown).map((doc) => doc.id),
@@ -288,8 +284,8 @@ export function LibraryPane() {
             <button
               type="button"
               className={`${buttonStyle("ghost", "sm")} ml-auto`}
-              aria-label={t("library.settingsTitle")}
-              title={t("library.settingsTitle")}
+              aria-label={t("tagging.title")}
+              title={t("tagging.title")}
               onClick={() => useAppStore.getState().openSettings("models")}
             >
               <SettingsLineIcon className="size-4" />

@@ -73,6 +73,12 @@ export async function detectOllama(baseUrl: string): Promise<OllamaStatus> {
   }
 }
 
+/** The models Ollama has on this computer at an address (cloud ones left out); none when it can't be reached. */
+export async function installedOllamaModels(baseUrl: string): Promise<readonly string[]> {
+  const status = await detectOllama(baseUrl);
+  return status.running ? status.models : [];
+}
+
 /** Ollama lists a model pulled without a tag as "name:latest". */
 export function hasOllamaModel(models: readonly string[], model: string): boolean {
   return models.includes(model) || (!model.includes(":") && models.includes(`${model}:latest`));

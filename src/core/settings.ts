@@ -40,19 +40,25 @@ export const isChatModelChoice = (value: unknown): value is ChatModelChoice =>
   isNonBlankText(value.providerId) &&
   isNonBlankText(value.modelId);
 
+const isModelSetting = (value: unknown): value is ChatModelChoice | null =>
+  value === null || isChatModelChoice(value);
+
 const userScope: Scope<UserSettings> = {
   name: "user",
   table: "user_settings",
   defaults: {
     language: "system",
     chatModel: null,
+    quickTasksModel: null,
+    imageModel: null,
     suggestWhileWriting: false,
     leaveOutOwnFiles: true,
   },
   validators: {
     language: isLanguagePreference,
-    chatModel: (value): value is ChatModelChoice | null =>
-      value === null || isChatModelChoice(value),
+    chatModel: isModelSetting,
+    quickTasksModel: isModelSetting,
+    imageModel: isModelSetting,
     suggestWhileWriting: isBoolean,
     leaveOutOwnFiles: isBoolean,
   },

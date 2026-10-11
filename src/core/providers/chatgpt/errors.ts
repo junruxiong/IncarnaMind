@@ -24,6 +24,8 @@ export class ChatGptPlanError extends Error {
     readonly kind: "plan-limit" | "blocked",
     message: string,
     readonly status: number,
+    /** When a reached limit resets (epoch milliseconds), when OpenAI says. */
+    readonly resetsAt: number | null = null,
   ) {
     super(message);
   }

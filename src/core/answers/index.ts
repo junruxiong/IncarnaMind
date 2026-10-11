@@ -207,6 +207,14 @@ export interface AnswersOptions {
   readiness(choice: ChatModelChoice | undefined): Promise<ChatReadiness>;
   /** The model, once the User has accepted its data flow (see `Core.prepareChatModel`). */
   prepareModel(choice: ChatModelChoice): Promise<PreparedChatModel>;
+  /**
+   * The quick-tasks model for an Answer asked with `answers`, prepared as
+   * `answers` was (#180): for the calls that don't write the Answer.
+   */
+  prepareQuickModel?(
+    answers: ChatModelChoice,
+    prepared: PreparedChatModel,
+  ): Promise<PreparedChatModel["model"]>;
   /** Searching the User's Documents, and what Citations point to. */
   documents: DocumentsForAnswers;
   /** The ids of the live Documents a Search scope covers; null with no Search scope (every Document). */
@@ -930,6 +938,7 @@ export function createAnswers(options: AnswersOptions) {
       if (prepared.loaded) void watchLoading(prepared.loaded);
 
       const learntKey = modelKey(model, prepared);
+      const prepareQuick = options.prepareQuickModel;
       let outcome: Outcome = { status: "stopped" };
       for await (const event of engine.generate({
         instructions: (
@@ -962,6 +971,7 @@ export function createAnswers(options: AnswersOptions) {
         messages: context.messages,
         question: context.question,
         model: prepared.model,
+        ...(prepareQuick && { quickModel: () => prepareQuick(model, prepared) }),
         documents,
         tools: [...provided, ...fromSkills],
         gate,
