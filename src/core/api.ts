@@ -292,6 +292,41 @@ export const ANSWER_BLOCK = "answer";
 export const INCLUDE_IN_CONTEXT_ATTRIBUTE = "includeInContext";
 
 /**
+ * Where text someone other than the User wrote came from (third-party text,
+ * CONTEXT.md; ADR-0013, #78):
+ * - "imported": imported from a file someone else wrote, such as a .docx
+ *   carrying their tracked changes (#104);
+ * - "web-page": a saved web page (#261): Passages a search found in one, or a
+ *   quote added from one (#101);
+ * - "checked-document": the document a check reads to check it (#97, #110).
+ */
+export type ThirdPartySource = "imported" | "web-page" | "checked-document";
+
+/** Third-party text a Run reads itself: a saved web page a search found, or the document a check checks. */
+export type ReadThirdPartySource = Exclude<ThirdPartySource, "imported">;
+
+/**
+ * Why a Run counts as having read third-party text: it read some itself, or
+ * its Question context holds some (a Block or an Answer with a third-party
+ * origin). Such a Run asks before a write or a send that a Tool-level
+ * "always" would otherwise let through (see `ApprovalRequest.thirdParty`).
+ */
+export type ThirdPartyReason =
+  | { via: "read"; source: ReadThirdPartySource }
+  | { via: "context"; source: ThirdPartySource };
+
+/**
+ * The name of the Y.Map, beside a Mind's Blocks, that says which Blocks hold
+ * third-party text: a `ThirdPartySource` by Block id (`BLOCK_ID_ATTRIBUTE`),
+ * for top-level Blocks and Blocks nested in them alike. An Answer written in
+ * a Run that had read third-party text is in it too. Kept beside the Blocks,
+ * not in their attributes, so an older version's editor, which strips
+ * attributes it doesn't know, leaves it as it is (see `src/shared/textOrigins.ts`).
+ * A Block deleted since leaves its entry unused.
+ */
+export const MIND_TEXT_ORIGINS_FIELD = "textOrigins";
+
+/**
  * A Question's Search scope (CONTEXT.md): the Folders, Tags and individual
  * Documents its Document search is limited to. It covers every Document in
  * one of the Folders or their sub-Folders (at any depth), every Document with
@@ -2636,6 +2671,12 @@ export interface ConversationAnswer {
   citationSupport: CitationSupport | null;
   /** The Tools it called, in order: its searches, Skills and Connectors' Tools. */
   toolCalls: AnswerToolCall[];
+  /**
+   * Written in a Run that had read third-party text (#78): where that text
+   * came from, so a later Question in the conversation counts as having read
+   * it too, and so does a Mind it is added to. Null: none.
+   */
+  textOrigin: ThirdPartySource | null;
   /** ISO 8601, UTC. */
   createdAt: string;
   /** ISO 8601, UTC. */
@@ -3580,8 +3621,9 @@ export interface SetApprovalPolicyInput {
   policy: ApprovalPolicyValue | null;
   /**
    * "Always run" a Skill's scripts only: the User has seen the warning that
-   * its scripts will then run on this computer without asking, with no
-   * sandbox, and confirmed it. Without it, that policy is refused.
+   * its scripts will then run on this computer without asking (in the OS
+   * sandbox where `Settings.scriptSandbox` is "os", with none otherwise), and
+   * confirmed it. Without it, that policy is refused.
    */
   riskAccepted?: boolean;
 }
@@ -3590,9 +3632,11 @@ export interface SetApprovalPolicyInput {
  * What the User decides about a Tool call that asks first:
  * - "allow-once": this call runs;
  * - "always-allow": this call runs, and so will every later call of the Tool
- *   without asking (the policy becomes "always"). For a Skill script this is
- *   "always run": every script of the Skill runs from now on without asking,
- *   which needs `ApprovalResponseOptions.riskAccepted`;
+ *   without asking (the policy becomes "always"), except a call that writes
+ *   or sends data in a Run that has read third-party text
+ *   (`ApprovalRequest.thirdParty`). For a Skill script this is "always run":
+ *   every script of the Skill runs from now on without asking, with the same
+ *   exception, which needs `ApprovalResponseOptions.riskAccepted`;
  * - "deny": the call doesn't run; the model is told the User denied it, and
  *   the Answer carries on without it.
  */
@@ -3602,8 +3646,9 @@ export interface ApprovalResponseOptions {
   /**
    * "always-allow" of a Skill script ("always run") only: the User has seen
    * the warning that the Skill's scripts will then run on this computer
-   * without asking, with no sandbox, and confirmed it. Without it, that
-   * decision is refused and the request keeps waiting.
+   * without asking (in the OS sandbox where `Settings.scriptSandbox` is "os",
+   * with none otherwise), and confirmed it. Without it, that decision is
+   * refused and the request keeps waiting.
    */
   riskAccepted?: boolean;
 }
@@ -3625,10 +3670,18 @@ interface ApprovalRequestBase extends AnswerPlace {
   /**
    * Its Answer had read content the User didn't write before this call, such
    * as Passages of their Documents or a Connector's reply
-   * (docs/designs/agent-extensibility.md §4.6). For now it doesn't change
-   * whether a call asks.
+   * (docs/designs/agent-extensibility.md §4.6). On its own it doesn't change
+   * whether a call asks: `thirdParty` does.
    */
   tainted: boolean;
+  /**
+   * Why its Answer counts as having read third-party text (#78, ADR-0013): it
+   * read a saved web page or the document being checked, or its Question
+   * context holds third-party text. Then a Tool-level "always" (always allow,
+   * always run) no longer covers a call that writes or sends data, so the
+   * call asks, and the card says why. Absent when there is none.
+   */
+  thirdParty?: ThirdPartyReason[];
 }
 
 /**
@@ -3656,8 +3709,9 @@ export type EffectScope =
 
 /**
  * A run of a Skill script waiting for the User's approval: which Skill, which
- * of its scripts, and its arguments. Scripts run on this computer with no
- * sandbox (v1): they can do whatever the User can.
+ * of its scripts, and its arguments. Scripts run on this computer: in the OS
+ * sandbox on macOS and Linux (#65, `Settings.scriptSandbox` "os"), and with
+ * none on Windows, where they can do whatever the User can (`effects` says which).
  */
 export interface SkillScriptApprovalRequest extends ApprovalRequestBase {
   subject: Extract<ApprovalSubject, { kind: "skill-script" }>;

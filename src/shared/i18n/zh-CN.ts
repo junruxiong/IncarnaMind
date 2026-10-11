@@ -1817,6 +1817,16 @@ export const zhCN = {
   "approvals.card.alwaysAllow": "始终允许",
   "approvals.card.alwaysAllowHint": "以后运行 {tool} 时不再询问。你可以在“设置”的“批准”中撤销。",
   "approvals.card.deny": "拒绝",
+  "approvals.thirdParty.read.webPage": "这条回答读过网页，所以会先问你。",
+  "approvals.thirdParty.read.checkedDocument": "这条回答读过正在核对的文档，所以会先问你。",
+  "approvals.thirdParty.mind.imported": "这个 Mind 里有导入的文字，所以会先问你。",
+  "approvals.thirdParty.mind.webPage": "这个 Mind 里有来自网页的文字，所以会先问你。",
+  "approvals.thirdParty.mind.checkedDocument":
+    "这个 Mind 里有正在核对的文档中的文字，所以会先问你。",
+  "approvals.thirdParty.conversation.imported": "这个对话里有导入的文字，所以会先问你。",
+  "approvals.thirdParty.conversation.webPage": "这个对话里有来自网页的文字，所以会先问你。",
+  "approvals.thirdParty.conversation.checkedDocument":
+    "这个对话里有正在核对的文档中的文字，所以会先问你。",
   "approvals.call.waiting": "等待你的批准：{connector}：{tool}",
   "approvals.call.denied": "未允许：{connector}：{tool}",
   "approvals.call.allowed": "经你批准，已调用 {connector}：{tool}",

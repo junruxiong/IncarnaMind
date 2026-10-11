@@ -3,14 +3,20 @@
  * every Block above the Question, in order, except Notes the User switched off:
  * Notes and earlier Questions as the User's words, earlier Answers as the
  * model's. In a conversation, its earlier Questions and Answers the same way.
- * When that is over the token budget, the oldest content goes first.
+ * When that is over the token budget, the oldest content goes first. Where
+ * the third-party text in it came from is read beside it (#78): an Answer to
+ * such a context is written by a Run that counts as having read that text.
  */
 import * as Y from "yjs";
+import { parseThirdPartySource } from "../../shared/textOrigins";
 import {
   ANSWER_BLOCK,
+  BLOCK_ID_ATTRIBUTE,
   type ConversationMessage,
   INCLUDE_IN_CONTEXT_ATTRIBUTE,
+  MIND_TEXT_ORIGINS_FIELD,
   QUESTION_BLOCK,
+  type ThirdPartySource,
 } from "../api";
 import { attribute, contentMarkdown, textAttribute, toMarkdown } from "./blocks";
 import { answerMarkdown } from "./contextText";
@@ -98,6 +104,25 @@ export interface QuestionContext {
 }
 
 /**
+ * The third-party sources recorded for a Block and the Blocks nested in it
+ * (a quote added inside a list, say), each once, in the order found.
+ */
+function originsIn(block: Y.XmlElement, origins: Y.Map<unknown>): ThirdPartySource[] {
+  const found = new Set<ThirdPartySource>();
+  const visit = (element: Y.XmlElement) => {
+    const id = textAttribute(element, BLOCK_ID_ATTRIBUTE);
+    const source = id === null ? null : parseThirdPartySource(origins.get(id));
+    if (source) found.add(source);
+    for (const child of element.toArray()) if (child instanceof Y.XmlElement) visit(child);
+  };
+  visit(block);
+  return [...found];
+}
+
+/** Each source once, in the order first given. */
+const distinct = (sources: Iterable<ThirdPartySource>): ThirdPartySource[] => [...new Set(sources)];
+
+/**
  * The Question context of the Question at `index` among the Mind's top-level
  * Blocks. The Question itself is always kept, even alone over the budget.
  */
@@ -125,6 +150,26 @@ export function buildQuestionContext(
 }
 
 /**
+ * Where the third-party text in the Question context of the Question at
+ * `index` came from (#78), each once, the newest first: the Blocks above it
+ * that Question context reads (not Notes switched off, nor failed Answers),
+ * and the Blocks nested in them, recorded in the Mind's `textOrigins`.
+ * Counted whether or not the budget keeps them, as the User sees them in the
+ * Mind. Empty: none.
+ */
+export function questionContextOrigins(blocks: Y.XmlFragment, index: number): ThirdPartySource[] {
+  const origins = blocks.doc?.getMap<unknown>(MIND_TEXT_ORIGINS_FIELD);
+  if (!origins || origins.size === 0) return [];
+  const children = blocks.toArray();
+  const found: ThirdPartySource[] = [];
+  for (let at = index - 1; at >= 0; at--) {
+    const block = children[at];
+    if (block instanceof Y.XmlElement && pieceOf(block)) found.push(...originsIn(block, origins));
+  }
+  return distinct(found);
+}
+
+/**
  * The Question context of a Question in one of the assistant's conversations
  * (ADR-0017): the messages before it, Questions as the User's words and Answers
  * (with their Citations as plain references) as the model's, the oldest left out
@@ -146,6 +191,22 @@ export function conversationContext(
     messages: withinBudget(pieces.reverse(), question, budget - estimateTokens(question)),
     question,
   };
+}
+
+/**
+ * Where the third-party text in a conversation's Question context came from
+ * (#78), each once, the newest first: the earlier Answers written in a Run
+ * that had read some. Empty: none.
+ */
+export function conversationContextOrigins(
+  earlier: readonly ConversationMessage[],
+): ThirdPartySource[] {
+  const found = earlier.flatMap((message) =>
+    message.kind === "answer" && message.status !== "failed" && message.textOrigin
+      ? [message.textOrigin]
+      : [],
+  );
+  return distinct(found.reverse());
 }
 
 /**
