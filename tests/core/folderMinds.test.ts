@@ -111,6 +111,9 @@ describe("A Mind in a Folder", () => {
     const finance = await core.createLibraryGroup({ name: "Finance", description: "" });
     const research = await core.createLibraryGroup({ name: "Research", description: "" });
     await core.assignDocumentGroup(id("Moon"), research.id);
+    const filed = (await core.getLibrary()).assignments.find(
+      (each) => each.documentId === id("Moon"),
+    );
     const changes = mindsEvents(core);
     const assignments: string[][] = [];
     core.on("library.assignments", (changed) =>
@@ -128,8 +131,8 @@ describe("A Mind in a Folder", () => {
       folderId: finance.id,
       minds: [{ id: mind.id, from: null }],
       documents: [
-        { id: id("Moon"), from: research.id },
-        { id: id("Harbour"), from: null },
+        { id: id("Moon"), from: research.id, previous: filed },
+        { id: id("Harbour"), from: null, previous: null },
       ],
     });
     expect((await core.listMinds())[0]?.folderId).toBe(finance.id);
@@ -144,18 +147,12 @@ describe("A Mind in a Folder", () => {
     expect(assigned(id("Moon"))).toMatchObject({ groupId: finance.id, source: "user" });
     expect(assigned(id("Harbour"))).toMatchObject({ groupId: finance.id, source: "user" });
 
-    // Undo: each back where it was.
+    // Undo: each back where it was, as it was.
     await core.moveToFolder({ mindIds: [mind.id], folderId: null });
-    await core.moveToFolder({ documentIds: [id("Moon")], folderId: research.id });
-    await core.moveToFolder({ documentIds: [id("Harbour")], folderId: null });
+    for (const document of move.documents)
+      await core.restoreAssignment(document.id, document.previous);
     expect((await core.listMinds())[0]?.folderId).toBeNull();
-    const after = await core.getLibrary();
-    expect(after.assignments.map((each) => [each.documentId, each.groupId]).sort()).toEqual(
-      [
-        [id("Harbour"), null],
-        [id("Moon"), research.id],
-      ].sort(),
-    );
+    expect((await core.getLibrary()).assignments).toEqual([filed]);
   });
 
   test("a move with anything unknown moves nothing", async () => {
@@ -232,6 +229,7 @@ describe("A Mind in a Folder", () => {
       {
         id: "e4d3c2b1-a0f9-4e8d-9c7b-6a5f4e3d2c10",
         title: "Tides",
+        autoTitle: "",
         kind: "mind",
         createdAt: at,
         updatedAt: at,

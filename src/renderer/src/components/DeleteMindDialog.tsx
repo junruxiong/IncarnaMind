@@ -1,4 +1,5 @@
 import type { Mind } from "../../../core/api";
+import { mindName } from "../../../shared/naming";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import {
@@ -30,7 +31,7 @@ export function DeleteMindDialog({ mind, onClose }: { mind: Mind | null; onClose
           {t("mind.delete")}
         </h2>
         <p className={dialogTextClass}>
-          {t("mind.delete.body", { title: mind?.title || t("mind.untitled") })}
+          {t("mind.delete.body", { title: (mind && mindName(mind)) || t("mind.untitled") })}
         </p>
         <div className={dialogActionsClass}>
           <button type="button" onClick={onClose} className={buttonClass}>
