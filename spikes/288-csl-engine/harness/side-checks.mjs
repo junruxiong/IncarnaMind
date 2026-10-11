@@ -9,7 +9,11 @@ import { loadCSL, render as citeprocRender } from "./citeproc-run.mjs";
 const [work, pkgDir] = process.argv.slice(2);
 const require = createRequire(import.meta.url);
 const { CslEngine } = require(path.join(pkgDir, "node", "csl_spike.js"));
-const fixtures = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "fixtures");
+// The fixtures moved to the unit tests, which run them through every shipped style (#289).
+const fixtures = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../../tests/fixtures/citation-styles",
+);
 const refs = JSON.parse(fs.readFileSync(path.join(fixtures, "references.json"), "utf8"));
 const CSL = loadCSL(path.join(work, "citeproc.js"));
 const localesDir = path.join(work, "locales");

@@ -8,7 +8,11 @@ import { fileURLToPath } from "node:url";
 import { loadCSL, render as citeprocRender } from "./citeproc-run.mjs";
 
 const [work, pkgDir, outDir] = process.argv.slice(2);
-const fixtures = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "fixtures");
+// The fixtures moved to the unit tests, which run them through every shipped style (#289).
+const fixtures = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../../tests/fixtures/citation-styles",
+);
 const require = createRequire(import.meta.url);
 const { CslEngine } = require(path.join(pkgDir, "node", "csl_spike.js"));
 

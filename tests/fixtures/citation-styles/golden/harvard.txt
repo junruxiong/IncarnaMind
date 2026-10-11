@@ -1,0 +1,71 @@
+# harvard (harvard-cite-them-right.csl)
+
+## Citations (34)
+
+1. (Shannon, 1940)
+2. (Kahneman and Tversky, 1979, p. 265)
+3. (Jumper <i>et al.</i>, 2021, p. 585)
+4. (Vaswani <i>et al.</i>, 2017)
+5. (van der Maaten and Hinton, 2008)
+6. (Zhou, 2018)
+7. (Kuhn, 2012, p. 52)
+8. (Tversky and Kahneman, 1982, pp. 11–12)
+9. (World Health Organization, 2023)
+10. (Citation Style Language, no date)
+11. (Intergovernmental Panel on Climate Change, 2023)
+12. (International Organization for Standardization, 2021)
+13. (<i>Regulation (EU) 2016/679 of the European Parliament and of the Council of 27 April 2016 on the protection of natural persons with regard to the processing of personal data and on the free movement of such data (General Data Protection Regulation)</i>, 2016)
+14. (<i>Nature</i>, 2023)
+15. (OECD, 2019a)
+16. (OECD, 2019b)
+17. (钱, 于 and 戴, 1990, p. 5)
+18. (刘 <i>et al.</i>, 2016)
+19. (费, 2012, p. 23)
+20. (周, 2016, pp. 12–15)
+21. (白, 1998)
+22. (吴, 2003)
+23. (贾 and 柯, 2011)
+24. (中国互联网络信息中心, 2012)
+25. (中华人民共和国国家质量监督检验检疫总局 and 中国国家标准化管理委员会, 2015)
+26. (全国人民代表大会常务委员会, 2021)
+27. (萧, 2001)
+28. (丁, 2000)
+29. (昂温 and 昂温, 1988)
+30. (中国力学学会, 1990)
+31. (Kahneman and Tversky, 1979; 刘 <i>et al.</i>, 2016; Vaswani <i>et al.</i>, 2017)
+32. (Kuhn, 2012, p. 60)
+33. (Kuhn, 2012, p. 61)
+34. (OECD, 2019a; 2019b)
+
+## Bibliography (30)
+
+- en-csl-nd: Citation Style Language (no date) <i>Citation Style Language 1.0.2 specification</i>, <i>CitationStyles.org</i>. Available at: https://docs.citationstyles.org/en/stable/specification.html (Accessed: October 1, 2026).
+- en-ipcc-2023: Intergovernmental Panel on Climate Change (2023) <i>Climate change 2023: Synthesis report</i>. Geneva: IPCC. Available at: https://doi.org/10.59327/IPCC/AR6-9789291691647.
+- en-iso-690: International Organization for Standardization (2021) “Information and documentation — Guidelines for bibliographic references and citations to information resources.” Geneva: ISO.
+- en-jumper-2021: Jumper, J. <i>et al.</i> (2021) “Highly accurate protein structure prediction with AlphaFold,” <i>Nature</i>, 596(7873), pp. 583–589. Available at: https://doi.org/10.1038/s41586-021-03819-2.
+- en-kahneman-1979: Kahneman, D. and Tversky, A. (1979) “Prospect theory: An analysis of decision under risk,” <i>Econometrica</i>, 47(2), pp. 263–291. Available at: https://doi.org/10.2307/1914185.
+- en-kuhn-2012: Kuhn, T.S. (2012) <i>The structure of scientific revolutions</i>. 4th ed. Chicago: University of Chicago Press.
+- en-vandermaaten-2008: van der Maaten, L. and Hinton, G. (2008) “Visualizing data using t-SNE,” <i>Journal of Machine Learning Research</i>, 9(86), pp. 2579–2605. Available at: http://jmlr.org/papers/v9/vandermaaten08a.html.
+- en-nature-2023: <i>Nature</i> (2023) “Tools such as ChatGPT threaten transparent science; here are our ground rules for their use”, 613(7945), p. 612. Available at: https://doi.org/10.1038/d41586-023-00191-1.
+- en-oecd-2019a: OECD (2019a) <i>OECD skills outlook 2019: Thriving in a digital world</i>. Paris: OECD Publishing. Available at: https://doi.org/10.1787/df80bc12-en.
+- en-oecd-2019b: OECD (2019b) <i>PISA 2018 results (Volume I): What students know and can do</i>. Paris: OECD Publishing. Available at: https://doi.org/10.1787/5f07c754-en.
+- en-gdpr-2016: <i>Regulation (EU) 2016/679 of the European Parliament and of the Council of 27 April 2016 on the protection of natural persons with regard to the processing of personal data and on the free movement of such data (General Data Protection Regulation)</i> (2016) <i>Official Journal of the European Union</i>. Available at: http://data.europa.eu/eli/reg/2016/679/oj.
+- en-shannon-1940: Shannon, C.E. (1940) <i>An algebra for theoretical genetics</i>. Doctoral dissertation. Massachusetts Institute of Technology. Available at: http://hdl.handle.net/1721.1/11174.
+- en-tversky-1982: Tversky, A. and Kahneman, D. (1982) “Judgment under uncertainty: Heuristics and biases,” in D. Kahneman, P. Slovic, and A. Tversky (eds.) <i>Judgment under uncertainty: Heuristics and biases</i>. Cambridge: Cambridge University Press, pp. 3–20. Available at: https://doi.org/10.1017/CBO9780511809477.002.
+- en-vaswani-2017: Vaswani, A. <i>et al.</i> (2017) “Attention is all you need,” in <i>Advances in Neural Information Processing Systems 30</i>. Red Hook, NY: Curran Associates, pp. 5998–6008. Available at: https://papers.nips.cc/paper/7181-attention-is-all-you-need.
+- en-who-2023: World Health Organization (2023) <i>Depression</i>, <i>WHO</i>. Available at: https://www.who.int/news-room/fact-sheets/detail/depression (Accessed: September 1, 2026).
+- en-zhou-2018: Zhou, Z.-H. (2018) “A brief introduction to weakly supervised learning,” <i>National Science Review</i>, 5(1), pp. 44–53. Available at: https://doi.org/10.1093/nsr/nwx106.
+- zh-ding-2000: 丁文祥 (2000) “数字革命与竞争国际化,” 中国青年报, 20 November, p. 15.
+- zh-gbt7714-2015: 中华人民共和国国家质量监督检验检疫总局 and 中国国家标准化管理委员会 (2015) “信息与文献 参考文献著录规则.” 北京: 中国标准出版社.
+- zh-cnnic-2012: 中国互联网络信息中心 (2012) 第29次中国互联网络发展状况统计报告. Available at: http://www.cnnic.net.cn/hlwfzyj/hlwxzbg/201201/P020120709345264469680.pdf (Accessed: March 26, 2013).
+- zh-mechanics-1990: 中国力学学会 (1990) 第3届全国实验流体力学学术会议论文集. 天津.
+- zh-pipl-2021: 全国人民代表大会常务委员会 (2021) 中华人民共和国个人信息保护法.
+- zh-liu-2016: 刘知远 <i>et al.</i> (2016) “知识表示学习研究进展,” 计算机研究与发展, 53(2), pp. 247–261. Available at: https://doi.org/10.7544/issn1000-1239.2016.20160020.
+- zh-wu-2003: 吴云芳 (2003) 面向中文信息处理的现代汉语并列结构研究. 博士学位论文. 北京大学. Available at: http://thesis.lib.pku.edu.cn/dlib/List.asp?lang=gb&amp;type=Reader&amp;DocGroupID=4&amp;DocID=6328 (Accessed: October 14, 2013).
+- zh-zhou-2016: 周志华 (2016) 机器学习. 北京: 清华大学出版社.
+- zh-unwin-1988: 昂温G and 昂温P S (1988) 外国出版史. Translated by 陈生铮. 北京: 中国书籍出版社.
+- zh-bai-1998: 白书农 (1998) “植物开花研究,” in 李承森 (ed.) 植物科学进展. 北京: 高等教育出版社, pp. 146–163.
+- zh-xiao-2001: 萧钰 (2001) 出版业信息化迈入快车道. Available at: http://www.creader.com/news/20011219/200112190019.html (Accessed: April 15, 2002).
+- zh-fei-2012: 费孝通 (2012) 乡土中国. 北京: 北京大学出版社.
+- zh-jia-2011: 贾东琴 and 柯平 (2011) “面向数字素养的高校图书馆数字服务体系研究,” in 中国图书馆学会 (ed.) 中国图书馆学会年会论文集：2011年卷. 北京: 国家图书馆出版社, pp. 45–52.
+- zh-qian-1990: 钱学森, 于景元 and 戴汝为 (1990) “一个科学新领域——开放的复杂巨系统及其方法论,” 自然杂志, 13(1), pp. 3–10.

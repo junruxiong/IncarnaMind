@@ -227,6 +227,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     await expect(actions.getByRole("menuitem")).toHaveText([
       /^Open$/,
       /^Open to the side$/,
+      /^Citation style…$/,
       /^Move to…(⇧⌘M|Ctrl\+Shift\+M)$/,
       /^Rename(↩|F2)$/,
       /^Delete…$/,
@@ -253,13 +254,14 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     await expect(notInAFolder(window).getByTestId("mind-list-item")).toHaveText("Shortlist");
     await expect(undoLine.getByTestId("undo-message")).toHaveCount(0);
 
-    // By the keyboard alone: Tab to the row's ⋯, Enter, down to Move to…, type, Enter.
+    // By the keyboard alone: Tab to the row's ⋯, Enter, down past Citation style… to Move to…,
+    // type, Enter.
     await shortlist.getByTestId("mind-list-item").focus();
     await window.keyboard.press("Tab");
     await expect(shortlist.getByTestId("mind-menu")).toBeFocused();
     await window.keyboard.press("Enter");
     await expect(actions.getByTestId("mind-open")).toBeFocused();
-    for (let step = 0; step < 2; step++) await window.keyboard.press("ArrowDown");
+    for (let step = 0; step < 3; step++) await window.keyboard.press("ArrowDown");
     await expect(actions.getByTestId("mind-move-to")).toBeFocused();
     await window.keyboard.press("Enter");
     await expect(picker.getByTestId("move-to-search")).toBeFocused();

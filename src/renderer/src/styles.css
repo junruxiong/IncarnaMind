@@ -2830,6 +2830,74 @@
     }
   }
   /*
+   * A Citation in the Mind's citation style (#289): the style's own words in the chip,
+   * "(Bowler et al., 2010, p. 4)" or "[1, 3]", drawn by the first Citation of a cluster. Each
+   * work's words take its own check's colour; the chip stays neutral. A long one wraps as a
+   * whole, by word.
+   */
+  .citation-marker--styled {
+    /* The style's runs flow as text, without the numbered chip's gaps between its parts. */
+    display: inline-block;
+    height: auto;
+    min-height: 18px;
+    max-width: 100%;
+    padding: 0 5px;
+    font-weight: 500;
+    white-space: normal;
+    text-align: left;
+    vertical-align: 1px;
+
+    &[data-check="not-found"],
+    &[data-check="unsupported"],
+    &[data-check="contradicted"] {
+      background: var(--color-chip);
+      box-shadow: none;
+      font-weight: 500;
+      color: var(--color-ink-secondary);
+    }
+  }
+  .citation-run {
+    /* Over a work's words, the pointer shows that Citation's card. */
+    pointer-events: auto;
+
+    &[data-check="not-found"],
+    &[data-check="unsupported"] {
+      font-weight: 700;
+      color: var(--color-warning);
+    }
+    &[data-check="contradicted"] {
+      font-weight: 700;
+      color: var(--color-danger);
+    }
+  }
+  /* A raised number ("[1]" in GB/T 7714): the chip sits up, smaller, as the number would. */
+  .citation-marker--raised {
+    height: 15px;
+    min-height: 15px;
+    min-width: 0;
+    margin-left: 1px;
+    padding: 0 3px;
+    font-size: 10px;
+    line-height: 15px;
+    vertical-align: 7px;
+  }
+  /* A Citation its cluster's first one draws: kept for the keyboard and its card, not seen. */
+  .citation-marker--joined {
+    width: 0;
+    min-width: 0;
+    /*
+     * A pixel high, on the baseline: measured, so it keeps its mark in the margin, which then
+     * comes after the cluster's first one, whose middle is higher.
+     */
+    height: 1px;
+    min-height: 1px;
+    vertical-align: baseline;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    opacity: 0;
+  }
+  /*
    * Proposals waiting for the User (#93; DESIGN.md, AI edits): removed words
    * struck in ink-meta, new words in the Answer's ink with a 1px accent
    * underline, whole new Blocks the same. Strike and underline say it, not
@@ -3508,6 +3576,220 @@
       background: #2e3238;
     }
   }
+  /* In a note style, the note the Citation is written as: what the export's footnote says. */
+  .citation-card-styled {
+    margin: 0;
+    padding-left: 22px;
+    font-family: var(--font-serif);
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink-secondary);
+    overflow-wrap: break-word;
+  }
+  .citation-card-styled-label {
+    font-family: var(--font-sans);
+    font-size: var(--text-label);
+    font-weight: 600;
+    color: var(--color-ink-meta);
+  }
+
+  /*
+   * The Mind's References (#289), after its last Block: a quiet label over a 1px rule, the
+   * style picker and Copy and Export beside it, then each cited Document once, in the
+   * style, in the serif a size below the writing's. A thin record shows its Document's name
+   * in meta grey with "Needs details", which opens its "Cite as" panel beside it.
+   */
+  .references {
+    margin-top: 48px;
+    padding-top: 12px;
+    border-top: 1px solid var(--color-rule);
+    font-family: var(--font-sans);
+  }
+  .references-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    min-height: 28px;
+  }
+  .references-title {
+    margin: 0;
+    font-size: var(--text-label);
+    line-height: var(--text-label--line-height);
+    font-weight: 600;
+    color: var(--color-ink-meta);
+  }
+  .references-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    height: 24px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-secondary);
+    cursor: pointer;
+
+    &:hover:not(:disabled) {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 1px;
+    }
+    &:disabled {
+      color: var(--color-ink-placeholder);
+      cursor: default;
+    }
+  }
+  .references-style {
+    max-width: 100%;
+    font-weight: 600;
+  }
+  .references-status {
+    margin: 8px 0 0;
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink-meta);
+  }
+  .references-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 12px 0 0;
+    padding: 0;
+    list-style: none;
+    font-family: var(--font-serif);
+    font-size: 15px;
+    line-height: 24px;
+    color: var(--color-ink);
+    overflow-wrap: break-word;
+    transition: opacity 120ms ease;
+
+    [data-pending] > & {
+      opacity: 0.6;
+    }
+  }
+  .references-list--hanging .references-entry {
+    padding-left: 24px;
+    text-indent: -24px;
+  }
+  .references-entry--labelled {
+    display: grid;
+    grid-template-columns: 2.75em minmax(0, 1fr);
+    column-gap: 4px;
+  }
+  .references-label {
+    color: var(--color-ink-secondary);
+  }
+  .references-thin {
+    color: var(--color-ink-meta);
+  }
+  .references-needs {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0;
+    border: 0;
+    border-radius: 2px;
+    background: transparent;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    line-height: 20px;
+    text-indent: 0;
+    white-space: nowrap;
+    color: var(--color-ink-meta);
+    vertical-align: 1px;
+    cursor: pointer;
+
+    &:hover:not(:disabled) {
+      color: var(--color-ink);
+      text-decoration: underline;
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 2px;
+    }
+    &:disabled {
+      cursor: default;
+    }
+  }
+  .references-link {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: var(--color-rule-strong);
+    text-underline-offset: 3px;
+
+    &:hover {
+      text-decoration-color: currentColor;
+    }
+  }
+  .references-cite-as {
+    box-sizing: border-box;
+    width: min(440px, calc(100vw - 32px));
+    max-height: min(560px, calc(100vh - 32px));
+    overflow-y: auto;
+    padding: 12px 16px;
+    border-radius: 10px;
+    background: var(--color-sheet);
+    box-shadow: var(--shadow-popover);
+  }
+  /*
+   * "Choose a citation style? APA · GB/T 7714 · More…": a quiet line where the References
+   * would be, in the meta ink of the Mind's other offers, with accent actions and a close
+   * button that shows on hover or focus.
+   */
+  .citation-style-prompt-action {
+    border-radius: 2px;
+    font-weight: 600;
+    color: var(--color-accent);
+    white-space: nowrap;
+    text-underline-offset: 2px;
+
+    &:hover {
+      text-decoration: underline;
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+    }
+  }
+  .citation-style-prompt-dismiss {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-left: 6px;
+    vertical-align: -5px;
+    border-radius: 4px;
+    color: var(--color-ink-meta);
+    opacity: 0;
+
+    &:hover {
+      background: var(--color-hover);
+    }
+    &:focus-visible {
+      opacity: 1;
+      outline: 2px solid var(--color-accent);
+    }
+  }
+  .citation-style-prompt {
+    margin-top: 48px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink-meta);
+    overflow-wrap: break-word;
+  }
+  .citation-style-prompt:hover .citation-style-prompt-dismiss,
+  .citation-style-prompt:focus-within .citation-style-prompt-dismiss {
+    opacity: 1;
+  }
 
   /* The menu under selected text: Turn into, the format buttons, and the AI section. */
   .selection-menu {
@@ -3812,6 +4094,12 @@
     }
     .citation-marker-icon {
       display: block;
+    }
+    /* In a style's words, the check goes in the line, before them. */
+    .citation-marker--styled .citation-marker-icon {
+      display: inline-block;
+      margin-right: 2px;
+      vertical-align: -1px;
     }
   }
 
