@@ -3981,6 +3981,8 @@ export interface AgentPairing {
   name: string;
   /** The Folders it may search and read, with their Minds. None until the User picks some. */
   folderIds: string[];
+  /** The agent it was set up in, e.g. "codex"; null for one set up by hand. */
+  client: string | null;
   /** When it last called IncarnaMind, ISO 8601, UTC; null if it never has. */
   lastUsedAt: string | null;
   createdAt: string;
@@ -4002,6 +4004,8 @@ export interface ConnectAgentInput {
   name: string;
   /** Folders (by id) it may read; none by default. */
   folderIds?: string[];
+  /** The agent it is set up in, e.g. "codex": lower-case letters, digits and hyphens. */
+  client?: string;
 }
 
 export interface UpdateAgentInput {

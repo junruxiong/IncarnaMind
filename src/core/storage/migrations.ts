@@ -1121,11 +1121,14 @@ export const migrations: readonly Migration[] = [
     sql: `
       -- Each outside agent the User connected (#351), on this device only: the agent runs on
       -- this computer, so these rows never sync. folder_ids is the Folders it may read (a JSON
-      -- list of ids), none by default. Its token is kept by secrets.ts, never here.
+      -- list of ids), none by default. client is the agent it was set up in (e.g. "codex"), so
+      -- disconnecting can take IncarnaMind out of that agent's settings too; NULL for one set
+      -- up by hand. Its token is kept by secrets.ts, never here.
       CREATE TABLE agent_pairings (
         id TEXT PRIMARY KEY NOT NULL,
         name TEXT NOT NULL,
         folder_ids TEXT NOT NULL DEFAULT '[]',
+        client TEXT,
         last_used_at TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
