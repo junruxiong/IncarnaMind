@@ -54,6 +54,11 @@ export interface LaunchOptions {
   /** A home folder for the app instead of the User's, so nothing it writes there is theirs. */
   home?: string;
   /**
+   * Where Look up asks Crossref and arXiv: a local server standing in for
+   * both (tests/helpers/referenceServices.ts). A test build honours it.
+   */
+  referenceLookup?: string;
+  /**
    * Leaves the window at the size and place it opened at, instead of making
    * it `WINDOW_SIZE`: for a test of how the window opens.
    */
@@ -90,6 +95,7 @@ export async function launchApp(
     usageData,
     examples = false,
     home,
+    referenceLookup,
     keepWindow = false,
     computerSound = "allowed",
   }: LaunchOptions = {},
@@ -105,6 +111,7 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_POSTHOG_HOST;
   delete env.INCARNAMIND_TEST_TESTER_BUILD;
   delete env.POSTHOG_CAPTURE_MODE;
+  delete env.INCARNAMIND_TEST_REFERENCE_LOOKUP;
   env.INCARNAMIND_TEST_AUDIO = "fake";
   env.INCARNAMIND_TEST_AUDIO_SYSTEM = computerSound;
   if (examples) env.INCARNAMIND_TEST_EXAMPLES = "1";
@@ -115,6 +122,7 @@ export async function launchApp(
     if (usageData.testerBuild) env.INCARNAMIND_TEST_TESTER_BUILD = "1";
   }
   if (home) env.HOME = home;
+  if (referenceLookup) env.INCARNAMIND_TEST_REFERENCE_LOOKUP = referenceLookup;
   env.INCARNAMIND_DATA_DIR = dataDir;
   env.INCARNAMIND_TEST_HOOKS = "1";
   if (fakeChat) env.INCARNAMIND_FAKE_CHAT = "1";
@@ -212,7 +220,6 @@ export type SettingsPage =
   | "models"
   | "search"
   | "meetings"
-  | "tools"
   | "connectors"
   | "skills"
   | "privacy";

@@ -966,11 +966,134 @@ export interface Document {
    * heading, else its first line. Null if it has none, or until it is read.
    */
   title: string | null;
+  /**
+   * What a Citation of it needs to say (#286): its reference record, read
+   * from its file and edited by the User. Null until its file has been read.
+   */
+  reference: ReferenceRecord | null;
   /** When the Document was added to IncarnaMind. ISO 8601, UTC. */
   createdAt: string;
   /** ISO 8601, UTC. */
   updatedAt: string;
 }
+
+/**
+ * The kinds of work a reference record describes (#286), by their Citation
+ * Style Language names, so citation styles (#289) and CSL JSON (#287, #302)
+ * read them as they are: a journal article, a conference paper, a book
+ * chapter, a book, a thesis, a report, a web page, a preprint ("article").
+ * "document" is Other: nothing more is known.
+ */
+export const referenceTypes = [
+  "article-journal",
+  "paper-conference",
+  "chapter",
+  "book",
+  "thesis",
+  "report",
+  "webpage",
+  "article",
+  "document",
+] as const;
+
+export type ReferenceType = (typeof referenceTypes)[number];
+
+/**
+ * A name in a reference record, as CSL JSON writes it: a person's family and
+ * given names, or a name kept whole, as written: a Chinese, Japanese or
+ * Korean name (family name first, never split as a Western name is) or an
+ * organisation.
+ */
+export type ReferenceName = { family: string; given: string } | { literal: string };
+
+/**
+ * A reference record's fields (#286): what a citation style needs to cite a
+ * Document. An empty string, or no names, is an empty field.
+ */
+export interface ReferenceFields {
+  type: ReferenceType;
+  title: string;
+  /** In the order the work gives them; never re-ordered. */
+  authors: ReferenceName[];
+  /** When it was published, ISO 8601 at the precision known: "2010", "2010-08" or "2010-08-04". */
+  issued: string;
+  /** Where it was published: the journal, the book a chapter is in, the conference, the website. */
+  containerTitle: string;
+  volume: string;
+  issue: string;
+  /** Its pages in that: "456" or "456–470". */
+  pages: string;
+  publisher: string;
+  /** Without "https://doi.org/": "10.1186/1471-2458-10-456". */
+  doi: string;
+  /** A web page's address, or a preprint's ("https://arxiv.org/abs/1706.03762"). */
+  url: string;
+  /** What it is written in, as a BCP 47 tag: "en", "zh". */
+  language: string;
+}
+
+export type ReferenceField = keyof ReferenceFields;
+
+/**
+ * Where a field's value came from:
+ * - "file": read from the file (its properties, or a DOI or arXiv id in its
+ *   first pages). Reading the file again, as a new version is processed,
+ *   replaces it.
+ * - "lookup": filled by Look up (Crossref or arXiv), into a field that was empty.
+ * - "user": the User typed it, or cleared it. Nothing replaces it.
+ */
+export type ReferenceSource = "file" | "lookup" | "user";
+
+/** A reference record: a Document's fields as a citation style needs them (#286). */
+export interface ReferenceRecord {
+  /** A random UUID generated on this device. */
+  id: string;
+  fields: ReferenceFields;
+  /** Where each field's value came from; a field with no value and no source is empty. */
+  sources: Partial<Record<ReferenceField, ReferenceSource>>;
+  /** When Look up last filled it. ISO 8601, UTC. Null if never. */
+  lookedUpAt: string | null;
+  /** ISO 8601, UTC. */
+  updatedAt: string;
+}
+
+/** Fields the User typed: each replaces its value, and is theirs ("user"). "" or no names clears one. */
+export type ReferencePatch = Partial<ReferenceFields>;
+
+/**
+ * Why Look up didn't fill a reference record:
+ * - "no-identifier": it has no DOI, and no arXiv address, to look up.
+ * - "local-mode": "Keep everything on this computer" is on.
+ * - "declined": the User didn't allow sending the identifier.
+ * - "not-found": the service has no record for it.
+ * - "unreachable": the service couldn't be reached, or took too long.
+ * - "service-error": the service answered with an error, or with something unreadable.
+ */
+export type ReferenceLookupFailureReason =
+  | "no-identifier"
+  | "local-mode"
+  | "declined"
+  | "not-found"
+  | "unreachable"
+  | "service-error";
+
+/** What Look up came to. */
+export type ReferenceLookupResult =
+  | {
+      outcome: "filled";
+      /** The Document, its record filled. */
+      document: Document;
+      /** The fields filled, which were empty: none if the service had nothing new. */
+      filled: ReferenceField[];
+      /** Where the record came from. */
+      service: ExternalService;
+    }
+  | {
+      outcome: "failed";
+      reason: ReferenceLookupFailureReason;
+      /** Technical detail in English, for logs and tooltips. */
+      message: string;
+    };
 
 export interface ListDocumentsOptions {
   /** Only Documents in this Folder. Omitted: every Document, in a Folder or not. */
@@ -2182,6 +2305,7 @@ export const dataKinds = [
   "tool-arguments",
   "document-text",
   "queries",
+  "identifiers",
 ] as const;
 
 export type DataKind = (typeof dataKinds)[number];
@@ -2200,6 +2324,9 @@ export type DataKind = (typeof dataKinds)[number];
  * - "rerank": each search query and its candidate Passages, to Cohere or
  *   Voyage, when a rerank key is set up. The built-in reranking model sends
  *   nothing: with it, the flow has no service.
+ * - "reference-lookup": a Document's DOI to Crossref, or its arXiv id to
+ *   arXiv, when the User asks Look up to fill its reference record (#286).
+ *   Nothing else: no file, text or name. None in local mode.
  */
 export const dataFlowIds = [
   "chat",
@@ -2208,6 +2335,7 @@ export const dataFlowIds = [
   "connectors",
   "embeddings",
   "rerank",
+  "reference-lookup",
 ] as const;
 
 export type DataFlowId = (typeof dataFlowIds)[number];
@@ -3298,6 +3426,38 @@ export interface CoreApi {
   removeLinkedFolder(linkedFolderId: string): Promise<void>;
   /** The text kept of Documents unlinked with their Linked folder, for the Citations that quote it. */
   listKeptCitationTexts(): Promise<KeptCitationText[]>;
+  /**
+   * Changes fields of a Document's reference record (#286) as the User typed
+   * them: each becomes theirs, so reading the file again never replaces it.
+   * A field given its value as it is changes nothing. A DOI is kept without
+   * "https://doi.org/", and a date as `ReferenceFields.issued` says. Returns
+   * the Document; "references.changed" carries it too. Throws
+   * InvalidInputError for a field that isn't one, or a value that can't be
+   * (a date or a DOI that isn't one), and NotFoundError for an unknown Document.
+   */
+  updateReference(documentId: string, patch: ReferencePatch): Promise<Document>;
+  /**
+   * Puts these fields of a Document's reference record back as they were in
+   * `before`, a copy of the record from earlier, each with where its value
+   * came from: Undo, after `updateReference` or `lookUpReference`. Returns
+   * the Document; "references.changed" carries it too.
+   */
+  restoreReference(
+    documentId: string,
+    before: ReferenceRecord,
+    fields: ReferenceField[],
+  ): Promise<Document>;
+  /**
+   * Look up (#286): fetches the record for the Document's DOI from Crossref,
+   * or for its arXiv id (from an arXiv address) from arXiv, and fills its
+   * empty fields with it, leaving every other field that has a value. The
+   * type is the one exception: one read from the file is only a guess from a
+   * DOI or an arXiv id, so the service's replaces it, unless the User chose
+   * it. Only the identifier is sent, after the User has allowed the "reference-lookup"
+   * flow to that service (asked once); never in local mode. Only when the
+   * User asks: nothing looks up by itself.
+   */
+  lookUpReference(documentId: string): Promise<ReferenceLookupResult>;
 
   /** An example Mind and its Documents, if made (see `Examples`); the tea example by default. */
   getExamples(group?: ExampleGroup): Promise<Examples>;
@@ -3815,8 +3975,9 @@ export interface CoreEvents {
   /** A Mind's content changed. Clients editing that Mind apply the update to their `Y.Doc`. */
   "mind.update": MindUpdate;
   /**
-   * A Document was added or restored, or its processing status (or embedding progress)
-   * changed, or its creation date was read in the background. Carries the whole Document.
+   * A Document was added or restored, or its processing status (or embedding
+   * progress) changed, or its creation date, title or reference record was read
+   * in the background. Carries the whole Document.
    */
   "document.status": Document;
   /** The built-in embedding model's state changed, or its download made progress. */
@@ -3895,6 +4056,12 @@ export interface CoreEvents {
    * failed, or a deleted Tag left them. Carries each Document whole.
    */
   "documents.tagged": Document[];
+  /**
+   * Documents' reference records changed (#286): the User edited one or put
+   * one back, or Look up filled one. Reading a record from a file comes with
+   * "document.status". Carries each Document whole.
+   */
+  "references.changed": Document[];
   /** The ChatGPT plan provider was turned on or off, or its sign-in changed (including expiring). */
   "chatGptPlan.changed": ChatGptPlanStatus;
   /** Jev was set up, changed or removed on this device. */
@@ -3993,6 +4160,9 @@ const methods: Record<CoreApiMethod, true> = {
   listLinkedFolders: true,
   removeLinkedFolder: true,
   listKeptCitationTexts: true,
+  updateReference: true,
+  restoreReference: true,
+  lookUpReference: true,
   setLinkedFolderLayout: true,
   setLinkedFolderPaused: true,
   downloadOnlineOnlyFiles: true,
