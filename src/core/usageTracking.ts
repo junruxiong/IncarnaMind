@@ -50,7 +50,7 @@ const isBuiltInSkillName = (name: string): name is (typeof BUILT_IN_SKILL_NAMES)
  * that were in already, and the files that couldn't be added.
  */
 export function addedCounts(
-  result: AddDocumentsResult,
+  result: Omit<AddDocumentsResult, "batchId">,
   since: string,
 ): UsageEventFields<"documents_added"> {
   const fields: UsageEventFields<"documents_added"> = {
