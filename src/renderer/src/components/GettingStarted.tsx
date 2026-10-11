@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { GettingStarted } from "../../../core/api";
+import { shortcutLabel } from "../commands/keymap";
 import { CheckMarkIcon } from "../editor/icons";
-import { QUESTION_SHORTCUT_LABEL } from "../editor/questionCommands";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { AskIcon, PlugIcon } from "./icons";
@@ -354,7 +354,7 @@ export function StartGuide() {
               message={t("startGuide.ask.body", { shortcut: SLOT })}
               slot={
                 <kbd className="rounded-sm bg-chip px-[5px] py-px font-sans text-[12px] text-ink-strong">
-                  {QUESTION_SHORTCUT_LABEL}
+                  {shortcutLabel("composer.focus")}
                 </kbd>
               }
             />
