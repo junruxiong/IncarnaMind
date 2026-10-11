@@ -2,7 +2,9 @@
  * A Mind as Markdown (CommonMark, with GitHub's tables and footnotes), for an
  * archive: Notes and Answers as Markdown, Questions marked as Questions, math
  * as `$…$` and `$$…$$`, highlights as `==…==` (as Obsidian, Typora and
- * markdown-it-mark read them), and each Citation as its own footnote.
+ * markdown-it-mark read them), and each Citation and each footnote the User
+ * wrote as a footnote, numbered together in the order they appear. A Citation
+ * inside the User's footnote is written into its text, as its source.
  */
 import type { TableAlign } from "../../shared/markdownTables";
 import { type Block, type Footnote, type Inline, type Marks, tableLayout } from "../mindText";
@@ -17,14 +19,19 @@ export interface MarkdownLabels {
 interface Context {
   /** Inside a table cell, where "|" must be escaped and lines can't break. */
   table: boolean;
+  /** Inside the text of a footnote the User wrote. */
+  note?: boolean;
 }
+
+/** A footnote as written at the end: a Citation's source, or the text of the User's own. */
+type Written = { kind: "citation"; footnote: Footnote } | { kind: "note"; text: string };
 
 export function renderMarkdown(
   title: string,
   blocks: readonly Block[],
   labels: MarkdownLabels,
 ): string {
-  const footnotes: Footnote[] = [];
+  const footnotes: Written[] = [];
   const writer = new MarkdownWriter(labels, (footnote) => {
     footnotes.push(footnote);
     return footnotes.length;
@@ -37,8 +44,12 @@ export function renderMarkdown(
     parts.push(
       footnotes
         .map((footnote, index) => {
-          const marker = footnote.unverified ? ` ${labels.unverified}` : "";
-          return `[^${index + 1}]: ${escapeText(footnote.source, false)}${marker}`;
+          // A line break in a footnote's text goes on, indented, under its first line.
+          const text =
+            footnote.kind === "note"
+              ? footnote.text.replace(/\n/g, "\n    ")
+              : citationSource(footnote.footnote, labels);
+          return `[^${index + 1}]: ${text}`;
         })
         .join("\n"),
     );
@@ -49,8 +60,8 @@ export function renderMarkdown(
 class MarkdownWriter {
   constructor(
     private readonly labels: MarkdownLabels,
-    /** Numbers a Citation's footnote: 1, 2, 3… in the order they are written. */
-    private readonly number: (footnote: Footnote) => number,
+    /** Numbers a footnote: 1, 2, 3… in the order they are written. */
+    private readonly number: (footnote: Written) => number,
   ) {}
 
   blocks(blocks: readonly Block[], context: Context): string {
@@ -177,6 +188,8 @@ class MarkdownWriter {
         continue;
       }
       if (item.kind !== "text") {
+        // A Citation in a footnote's text is a word of it, apart from the one before.
+        if (item.kind === "citation" && context.note && /\S$/.test(out)) out += " ";
         out += this.atom(item, context);
         continue;
       }
@@ -204,11 +217,20 @@ class MarkdownWriter {
       case "math":
         return `$${item.latex}$`;
       case "citation":
-        return `[^${this.number(item.footnote)}]`;
+        if (context.note) return citationSource(item.footnote, this.labels);
+        return `[^${this.number({ kind: "citation", footnote: item.footnote })}]`;
+      case "footnote":
+        return `[^${this.number({ kind: "note", text: this.inline(item.content, { table: false, note: true }) })}]`;
       case "image":
         return image(item.image.src, item.image.alt, context);
     }
   }
+}
+
+/** A Citation's source, as its footnote says it, e.g. "Tides, p. 2 [unverified]". */
+function citationSource(footnote: Footnote, labels: MarkdownLabels): string {
+  const marker = footnote.unverified ? ` ${labels.unverified}` : "";
+  return `${escapeText(footnote.source, false)}${marker}`;
 }
 
 /** A column's cell in a table's delimiter row, which says how the column is aligned. */
