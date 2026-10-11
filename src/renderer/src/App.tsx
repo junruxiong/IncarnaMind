@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { GAP, isSide, RAIL, SIDE_MIN, shownDock } from "./assistantPlace";
 import { sidebarHandle, useHandle } from "./commands/handles";
 import { useKeymap } from "./commands/keymap";
 import { AddWebPageDialog } from "./components/AddWebPageDialog";
 import { AppShell, useRememberSidebarWidth } from "./components/AppShell";
+import { Workbench } from "./components/assistant/Workbench";
 import { ConsentDialog } from "./components/ConsentDialog";
 import { DropOverlay, useFileDrop } from "./components/FileDrop";
 import { FileWriteDialog } from "./components/FileWriteDialog";
@@ -14,7 +16,6 @@ import { SettingsDialog } from "./components/SettingsDialog";
 import { Sidebar } from "./components/Sidebar";
 import { SidebarControlContext } from "./components/SidebarToggle";
 import { TagsDialog } from "./components/TagsDialog";
-import { TabGroups } from "./components/tabs/TabGroups";
 import { TabNoticeLine } from "./components/tabs/TabNoticeLine";
 import { UsageDataDialog } from "./components/UsageDataDialog";
 import { buttonStyle } from "./components/ui";
@@ -29,7 +30,7 @@ import { useWebPages } from "./webPages";
 /** The card's distance from the sidebar, and from the window's top, right and bottom edges. */
 const CARD_GAP = 8;
 const SIDEBAR = { min: 165, max: 480 };
-/** What the card keeps beside the sidebar, at least. */
+/** What the card keeps beside the sidebar (and an assistant docked beside it), at least. */
 const CARD_MIN = 300;
 
 export function App() {
@@ -163,6 +164,11 @@ function Workspace() {
     (addresses) => void useWebPages.getState().add(addresses),
   );
   const windowWidth = useWindowWidth();
+  const assistantBeside = useAppStore((state) => {
+    const place = state.layout?.assistant;
+    if (!place || !isSide(shownDock(place, windowWidth))) return 0;
+    return (place.folded ? RAIL : SIDE_MIN) + GAP;
+  });
   const openSettings = useAppStore((state) => state.openSettings);
   useKeymap();
   useRememberSidebarWidth(device?.sidebarWidth);
@@ -188,8 +194,9 @@ function Workspace() {
 
   if (!device) return null;
   const { sidebarWidth } = device;
-  // What the sidebar may take, with the card's gap and margin and its minimum kept.
-  const room = windowWidth - 2 * CARD_GAP - CARD_MIN;
+  // What the sidebar may take, with the card's gap and margin and its minimum kept, and the
+  // least an assistant docked on a side needs.
+  const room = windowWidth - 2 * CARD_GAP - CARD_MIN - assistantBeside;
 
   return (
     <SidebarControlContext.Provider value={control}>
@@ -232,14 +239,11 @@ function Workspace() {
             onCollapse={() => sidebar.setHidden(true)}
           />
         )}
-        <div
-          data-testid="card"
-          data-sidebar-hidden={sidebar.hidden || undefined}
-          className="app-card"
-        >
-          <TabGroups />
-          {fileDrop.active && fileDrop.links && <DropOverlay links />}
-        </div>
+        <Workbench
+          sidebarHidden={sidebar.hidden}
+          // Links dropped become web pages, so the card is where they go (#261).
+          cardOverlay={fileDrop.active && fileDrop.links ? <DropOverlay links /> : null}
+        />
         <TabNoticeLine />
         <SettingsDialog />
         <TagsDialog />

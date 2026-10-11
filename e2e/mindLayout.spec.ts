@@ -44,9 +44,12 @@ test.afterEach(async () => {
   await removeDataFolder(sources);
 });
 
-/** The size the approved mockups were drawn at. */
+/**
+ * The Mind as wide as the approved mockups drew it (a 1440px window's card),
+ * beside the assistant docked on the right (#253), which takes 368px of it.
+ */
 async function useMockupSize(app: ElectronApplication, window: Page) {
-  await setWindowSize(app, window, 1440, 900);
+  await setWindowSize(app, window, 1600, 900);
   await window.evaluate(() => document.fonts.ready.then(() => undefined));
 }
 
@@ -190,10 +193,11 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
   const foldMiddle = middle(await box(editor.getByTestId("question-fold")));
   expectNear(foldMiddle, (await box(texts.question)).y + 10, 1, "the fold chevron's middle");
   await expect(answer.locator(".answer-label")).toHaveCount(0);
-  // The composer, pinned under the Mind, is the measure wide at the text edge.
+  // The composer is the assistant's, beside the Mind (#253), not in its column.
   const composer = await box(window.getByTestId("composer"));
-  expectNear(composer.x, edge, 1, "the composer's edge");
-  expectNear(composer.width, MEASURE, 1, "the composer's width");
+  expect
+    .soft(composer.x, "the composer is right of the margin column")
+    .toBeGreaterThan(edge + MEASURE + RIGHT_MARGIN);
   await texts.note.hover();
   const handle = window.getByTestId("block-handle");
   await expect(handle).toBeVisible();
@@ -250,12 +254,6 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
   await expect(window.getByTestId("margin-checks")).toBeHidden();
   await expect(markers.nth(0).locator(".citation-marker-icon")).toBeVisible();
   expectNear((await box(texts.note)).x, (await textColumn(editor)).x, 1, "narrow: the Note's edge");
-  expectNear(
-    (await box(window.getByTestId("composer"))).x,
-    (await textColumn(editor)).x,
-    1,
-    "narrow: the composer's edge",
-  );
   expectNear(
     (await box(texts.answer)).x,
     (await textColumn(editor)).x,

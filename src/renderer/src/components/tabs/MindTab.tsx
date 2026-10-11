@@ -1,56 +1,51 @@
-import { type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type KeyboardEvent, useContext, useEffect, useRef, useState } from "react";
 import type { Mind } from "../../../../core/api";
 import { ComposerDockContext, CountSlotContext } from "../../editor/mindContext";
 import { useT } from "../../i18n";
+import { assistantTabOf } from "../../layoutSlice";
 import { useAppStore } from "../../store";
+import { useGroupsMerged } from "../../useWindowWidth";
 import { ExampleBanner, useIsExample } from "../GettingStarted";
 import { PlusLineIcon } from "../lineIcons";
 import { MeetingInMind } from "../MeetingInMind";
 import { MindEditor } from "../MindEditor";
 import { ChatReadinessNotice } from "../providers/ChatReadinessNotice";
 import { buttonStyle } from "../ui";
+import { useTabPlace } from "./tabItems";
 
 /**
- * A Mind's tab: its title and its Blocks, and the composer pinned at its foot.
+ * A Mind's tab: its title and its Blocks. When it is the Mind the assistant
+ * reads, its composer is drawn in the assistant (#253).
  */
 export function MindTab({ mindId }: { mindId: string }) {
   const mind = useAppStore((state) => state.minds.find((each) => each.id === mindId));
   const isExample = useIsExample(mindId);
   const [countSlot, setCountSlot] = useState<HTMLElement | null>(null);
-  const [dock, setDock] = useState<HTMLElement | null>(null);
-  const [scroller, setScroller] = useState<HTMLElement | null>(null);
-  const gutter = useScrollbarWidth(scroller);
+  const assistantSlot = useContext(ComposerDockContext);
+  const tabId = useTabPlace()?.tabId;
+  const merged = useGroupsMerged();
+  const read = useAppStore((state) => assistantTabOf(state.layout, merged)?.id === tabId);
   if (!mind) return null;
 
   return (
-    <>
-      <div ref={setScroller} className="mind-scroller min-h-0 flex-grow overflow-auto">
-        {/* Every text in it starts at one edge (styles.css, `.mind-column`). */}
-        <article data-testid="mind-pane" data-mind-id={mind.id} className="mind-column">
-          <div className="mind-measure">
-            {isExample && <ExampleBanner />}
-            <MindTitle mind={mind} />
-            <div ref={setCountSlot} data-testid="mind-count-slot" />
-            <MeetingInMind mindId={mind.id} />
-            {/* The example works without a chat model: it says so in its Answer instead. */}
-            {!isExample && <ChatReadinessNotice />}
-            <ComposerDockContext.Provider value={dock}>
-              <CountSlotContext.Provider value={countSlot}>
-                <MindEditor mindId={mind.id} />
-              </CountSlotContext.Provider>
-            </ComposerDockContext.Provider>
-          </div>
-        </article>
-      </div>
-      {/* The composer, pinned at the column's foot: the Mind's editor draws it here. It
-          keeps clear of the scrollbar's gutter above it, so it is centred as the column is. */}
-      <div
-        ref={setDock}
-        data-testid="composer-dock"
-        className="composer-dock"
-        style={{ paddingRight: gutter }}
-      />
-    </>
+    <div className="mind-scroller min-h-0 flex-grow overflow-auto">
+      {/* Every text in it starts at one edge (styles.css, `.mind-column`). */}
+      <article data-testid="mind-pane" data-mind-id={mind.id} className="mind-column">
+        <div className="mind-measure">
+          {isExample && <ExampleBanner />}
+          <MindTitle mind={mind} />
+          <div ref={setCountSlot} data-testid="mind-count-slot" />
+          <MeetingInMind mindId={mind.id} />
+          {/* The example works without a chat model: it says so in its Answer instead. */}
+          {!isExample && <ChatReadinessNotice />}
+          <ComposerDockContext.Provider value={read ? assistantSlot : null}>
+            <CountSlotContext.Provider value={countSlot}>
+              <MindEditor mindId={mind.id} />
+            </CountSlotContext.Provider>
+          </ComposerDockContext.Provider>
+        </div>
+      </article>
+    </div>
   );
 }
 
@@ -75,24 +70,6 @@ export function NoTabOpen() {
       </button>
     </div>
   );
-}
-
-/**
- * How wide the element's scrollbar is: 0 where scrollbars show only while
- * scrolling (macOS with a trackpad), about 15px where they always show
- * (Windows, Linux, macOS with a mouse). Measured again as the element resizes.
- */
-function useScrollbarWidth(element: HTMLElement | null): number {
-  const [width, setWidth] = useState(0);
-  useLayoutEffect(() => {
-    if (!element) return;
-    const measure = () => setWidth(element.offsetWidth - element.clientWidth);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [element]);
-  return width;
 }
 
 /**
