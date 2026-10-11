@@ -327,8 +327,9 @@ describe("a table in a Mind", { timeout: 30_000 }, () => {
     });
   });
 
-  test("a Mind written with a table records content schema version 2; one written before opens as it was", async () => {
-    expect(CONTENT_SCHEMA_VERSION).toBe(2);
+  test("a Mind written with a table records the content schema version (2 since tables); one written before opens as it was", async () => {
+    // Tables came in with version 2; footnotes (#284) raised it again.
+    expect(CONTENT_SCHEMA_VERSION).toBeGreaterThanOrEqual(2);
     const { core, client, mind } = await setUpWithDocuments(tableModel(""), []);
     const old = new Y.Doc();
     const paragraph = new Y.XmlElement("paragraph");
@@ -338,7 +339,7 @@ describe("a table in a Mind", { timeout: 30_000 }, () => {
     await core.applyMindUpdate(mind.id, Y.encodeStateAsUpdate(old));
     await client.settled();
 
-    // A version 1 Mind is version 2 content as it is: it opens to edit, and nothing in it changes.
+    // A version 1 Mind is newer content as it is: it opens to edit, and nothing in it changes.
     const opened = await core.openMind(mind.id);
     expect(opened.access).toBe("edit");
     const stored = new Y.Doc();
@@ -356,7 +357,9 @@ describe("a table in a Mind", { timeout: 30_000 }, () => {
     await client.settled();
     const after = new Y.Doc();
     Y.applyUpdate(after, (await core.openMind(mind.id)).state);
-    expect(after.getMap(MIND_SETTINGS_FIELD).get(CONTENT_SCHEMA_VERSION_KEY)).toBe(2);
+    expect(after.getMap(MIND_SETTINGS_FIELD).get(CONTENT_SCHEMA_VERSION_KEY)).toBe(
+      CONTENT_SCHEMA_VERSION,
+    );
     expect(rowsOf(tableIn(client))).toEqual([["#A table"]]);
   });
 });

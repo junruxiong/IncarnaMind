@@ -508,6 +508,46 @@ export async function setWindowSize(
   await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(width);
 }
 
+/** How many animations are running (src/renderer/src/motion.ts), leaving copies included. */
+export function motionRunning(window: Page): Promise<number> {
+  return window.evaluate(
+    () =>
+      (globalThis as { incarnamindTestHooks?: TestHooks }).incarnamindTestHooks?.motionRunning() ??
+      0,
+  );
+}
+
+/** The copies of closed menus and popovers still fading where they were, which nothing else can see. */
+export function leavingCopies(window: Page) {
+  return window.evaluate(
+    () =>
+      (globalThis as { incarnamindTestHooks?: TestHooks }).incarnamindTestHooks?.leavingCopies() ??
+      [],
+  );
+}
+
+/**
+ * How an element shows now: its opacity, its transform's scale and vertical
+ * shift, its transform origin, and where it is laid out without the transform.
+ */
+export function motionLook(target: Locator) {
+  return target.evaluate((element) => {
+    const style = getComputedStyle(element);
+    const matrix = new DOMMatrixReadOnly(style.transform === "none" ? undefined : style.transform);
+    const [originX = "0", originY = "0"] = style.transformOrigin.split(" ");
+    const box = element.getBoundingClientRect();
+    return {
+      opacity: Number(style.opacity),
+      scale: matrix.a,
+      y: matrix.f,
+      originX: Number.parseFloat(originX),
+      originY: Number.parseFloat(originY),
+      left: box.left - matrix.e - (1 - matrix.a) * Number.parseFloat(originX),
+      top: box.top - matrix.f - (1 - matrix.d) * Number.parseFloat(originY),
+    };
+  });
+}
+
 /**
  * Waits until nothing moves (src/renderer/src/motion.ts): no animation
  * running, and no closed menu still fading where it was. For a test that
