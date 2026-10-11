@@ -1,5 +1,5 @@
 /**
- * Found sources in the database (migration 46): where a Document, or a
+ * Found sources in the database (migration 47): where a Document, or a
  * reference record with no Document, that Find sources added came from;
  * and whether a found work is in the Library already, by what was added
  * from it or by its DOI on any reference record (a file the User added
