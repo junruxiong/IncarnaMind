@@ -23,7 +23,7 @@ Read this before adding or changing a string in `src/shared/i18n/zh-CN.ts`, whet
     - No long 的 chain before a noun: split the sentence ("添加一个问题，只搜索此文件夹", not "添加一个只搜索此文件夹的问题").
     - Drop 它/它的 and 你的 when they add nothing.
     - Put the condition first ("开启后，…").
-13. **One word for one thing.** Use the glossary everywhere and never a second word for the same concept: 未分类, not 未分组; 对话模型, not 聊天模型; 提供商, not 服务商.
+13. **One word for one thing.** Use the glossary everywhere and never a second word for the same concept: 不在文件夹中, not 未分类 or 未分组; 对话模型, not 聊天模型; 提供商, not 服务商.
 14. **Platform words go in their own keys.** Where macOS and Windows name a thing differently, add a key per platform and choose it in code, as `linkedFolders.reveal.mac` / `.windows` / `.other` and `menu.copy` / `menu.copy.other` do. Don't put one platform's word on the other.
 15. **Names stay as they are:** IncarnaMind, Mind, ChatGPT, Ollama, OpenAI, PDF, Word, Markdown. Write file types in capitals (ZIP, CSV), and keys as they are printed (Enter, Esc, Backspace, ⌘J).
 
@@ -59,7 +59,9 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Tag | 标签 | Tagging is 打标签; automatic tagging is 自动打标签. |
 | Library | 资料库 | Where the User's files live in ChatGPT (资料库), Yuanbao (资料库, 加入资料库) and LobeChat. Not 知识库, which in Feishu and Yuque is a wiki and in AI clients a collection built for one assistant. |
 | Organize | 整理 | "整理此文件夹". As Tencent Docs (批量整理文档) and Apple Notes (整理备忘录). |
-| Unsorted | 未分类 | As Zotero's 未分类条目. |
+| Not in a Folder | 不在文件夹中 | One place for Documents and Minds in no Folder. |
+| Tab | 标签页 | As Chrome, Edge and VS Code. A preview tab is kept with 保持打开. |
+| Group (of tabs) | 栏 | "第 1 栏", "向右拆分", "各栏等宽", "移动到右侧一栏". |
 | Tool | 工具 | Calling one: 调用. |
 | Connector | 连接器 | As Doubao, Feishu, LobeChat and Microsoft. |
 | Skill | 技能 | As Kimi, Doubao, Yuanbao, Feishu, Notion and Cherry Studio. |

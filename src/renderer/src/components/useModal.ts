@@ -15,7 +15,19 @@ export function useModal(open: boolean, { focusDialog = false } = {}) {
       element.showModal();
       if (focusDialog) element.focus();
     }
-    if (!open && element.open) element.close();
+    if (!open && element.open) {
+      element.close();
+      // Chromium gives the focus back to the text field the dialog took it from, but leaves the
+      // caret outside it, so what is typed next goes nowhere (e.g. a follow-up after "Allow").
+      const field = document.activeElement;
+      if (
+        (field instanceof HTMLTextAreaElement || field instanceof HTMLInputElement) &&
+        field.selectionStart !== null &&
+        field.selectionEnd !== null
+      ) {
+        field.setSelectionRange(field.selectionStart, field.selectionEnd);
+      }
+    }
   }, [open, focusDialog]);
   return dialog;
 }

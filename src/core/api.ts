@@ -46,6 +46,12 @@ export interface Mind {
   createdAt: string;
   /** ISO 8601, UTC. */
   updatedAt: string;
+  /**
+   * The Folder (an in-app one, a `LibraryGroup`) the Mind belongs to, or null:
+   * Not in a Folder. A Mind in a Folder starts each Question with the Folder
+   * as its Search scope; one in none searches every Document.
+   */
+  folderId: string | null;
 }
 
 /** The kinds of Mind this version opens. `chat` is a conversation with no note behind it. */
@@ -59,6 +65,8 @@ export interface CreateMindInput {
   title?: string;
   /** Defaults to `"mind"`. */
   kind?: MindKind;
+  /** The Folder to make it in; none, or null: Not in a Folder. */
+  folderId?: string | null;
 }
 
 /**
@@ -104,6 +112,33 @@ export type ReferenceAnchor = BlockAnchor;
 export interface ArtifactReference {
   artifactId: string;
   anchor: ReferenceAnchor;
+}
+
+/**
+ * What to move into a Folder, or out of every Folder (`folderId` null: Not
+ * in a Folder): Minds and Documents, any number of each, in one go.
+ */
+export interface FolderMoveInput {
+  mindIds?: string[];
+  documentIds?: string[];
+  folderId: string | null;
+}
+
+/** One thing a move moved, and the Folder it was in before (null: none), so the move can be undone. */
+export interface MovedItem {
+  id: string;
+  from: string | null;
+}
+
+/**
+ * What a move did: each Mind and Document it moved, with where it was. Those
+ * already in the Folder are listed too, with the Folder as `from`. Undoing
+ * moves each back to its `from`.
+ */
+export interface FolderMove {
+  folderId: string | null;
+  minds: MovedItem[];
+  documents: MovedItem[];
 }
 
 /**
@@ -510,25 +545,8 @@ export interface GettingStarted {
 export interface DeviceSettings {
   /** Width of the left sidebar, in CSS pixels. */
   sidebarWidth: number;
-  /** The User hid the sidebar (⌘\, the button, View menu, or dragging it shut). Its width is kept. */
+  /** The User hid the sidebar (the shortcut, the button, View menu, or dragging it shut). Its width is kept. */
   sidebarHidden: boolean;
-  /**
-   * Width of the right Document viewer pane, in CSS pixels, once the User
-   * has resized it. Null until then: it opens at about half the room beside the sidebar.
-   */
-  viewerWidth: number | null;
-  /**
-   * The Minds open as tabs in the Mind pane, by ID, in their order, so they
-   * open again after a restart. IDs of Minds deleted since are ignored.
-   */
-  openMinds: string[];
-  /** The tab shown, one of `openMinds`, or null when none is open. */
-  activeMind: string | null;
-  /**
-   * The Library's tab (#119): "closed", "open" beside the Mind tabs, or
-   * "shown" (open, and the tab in front), so it comes back after a restart.
-   */
-  libraryTab: "closed" | "open" | "shown";
   /** The User chose "set up later" on the first-run chat setup screen. */
   chatSetupDismissed: boolean;
   /** The "Get started" checklist's progress on this device (see `GettingStarted`). */
@@ -576,6 +594,144 @@ export interface SettingsPatch {
   user?: Partial<UserSettings>;
   device?: Partial<DeviceSettings>;
 }
+
+// ---------------------------------------------------------------------------
+// Tabs and groups: everything that opens is a tab, in up to three groups side
+// by side, as VS Code's editor groups. Each window keeps its own layout.
+
+/** At most this many groups sit side by side. */
+export const MAX_TAB_GROUPS = 3;
+
+/** What a tab shows. The Library has one tab per window. */
+export type TabItem =
+  | { kind: "mind"; mindId: string }
+  | { kind: "library" }
+  | { kind: "document"; documentId: string };
+
+/** What the viewer knows of the Citation a Document was opened from. */
+export interface TabCitation {
+  check: CitationCheck;
+  /** The number the Citation shows in its Answer, from 1. */
+  number?: number;
+  /** Its Location's short label, e.g. "slide 4" or "Revenue, rows 12–14": the mark shows it. */
+  label?: string;
+  /**
+   * The version of the Document it quotes: with the Document gone, the viewer
+   * tells whether that text was kept because its Linked folder was unlinked.
+   */
+  contentHash?: string;
+}
+
+/** Where in its Document a Document tab was opened: a Citation's Units and quote. */
+export interface DocumentPlace {
+  /**
+   * The first Unit to show, from 1 (ADR-0011): a PDF's page, a deck's slide,
+   * otherwise the number of a section, block of rows or block of lines.
+   */
+  pageFrom?: number;
+  /** The last Unit the quote may be in. Defaults to `pageFrom`. */
+  pageTo?: number;
+  /**
+   * Text to highlight if it is found: in the Units from `pageFrom` to
+   * `pageTo` (the viewer scrolls to it), or without them, anywhere in a
+   * TXT or Markdown file.
+   */
+  quote?: string;
+  /** The Citation this was opened from, if a Citation opened it. */
+  citation?: TabCitation;
+}
+
+export interface LayoutTab {
+  id: string;
+  item: TabItem;
+  /**
+   * A preview (its title in italics): the next Document opened as a preview
+   * in its group replaces it, until the User keeps it. Only Documents open as previews.
+   */
+  preview: boolean;
+  /** Kept at the left of its group; ⌘W and a middle click leave it open. */
+  pinned: boolean;
+  /** A Document tab: where it was last opened with a place, if it was. */
+  place: DocumentPlace | null;
+  /** How many times it was opened with a place: each time, the viewer goes there again. */
+  opened: number;
+}
+
+export interface LayoutGroup {
+  id: string;
+  /** In order, the pinned ones first. */
+  tabs: LayoutTab[];
+  /** The tab it shows: null only in an empty window's one group. */
+  activeTabId: string | null;
+  /** Its share of the width, above 0; the groups' shares add up to 1. */
+  width: number;
+}
+
+export interface WindowLayout {
+  /** From left to right: one to `MAX_TAB_GROUPS`. Only a window's one group may be empty. */
+  groups: LayoutGroup[];
+  /** The group the User is in: shortcuts such as ⌘W act on it. */
+  focusedGroupId: string;
+  /** How many closed tabs ⇧⌘T can reopen, most recent first. */
+  reopenable: number;
+}
+
+/**
+ * Where `open` puts what it opens:
+ * - "place" (the default): revealed where it is open, else a new tab in the focused group;
+ * - "side": in the group right of `from` (the focused group by default), made if
+ *   there are fewer than three, else the one to its left; revealed instead if it
+ *   is open in another group than `from`;
+ * - "beside": revealed where it is open, else in the focused group if that shows a
+ *   Document, else to the side of it (Documents opened from a list);
+ * - "group": a new tab in that group (the focused one by default), before `before`
+ *   (at the end for null; after the active tab when left out).
+ */
+export type OpenWhere =
+  | { in: "place" }
+  | { in: "side"; from?: string }
+  | { in: "beside" }
+  | { in: "group"; groupId?: string; before?: string | null };
+
+/** A change to a window's layout (see `CoreApi.changeLayout`). */
+export type LayoutChange =
+  | {
+      type: "open";
+      item: TabItem;
+      where?: OpenWhere;
+      /** A Document as a preview, replacing the group's preview if it has one. */
+      preview?: boolean;
+      /** Its group becomes the focused one: true unless false. */
+      focus?: boolean;
+      /** A Document: where in it, e.g. a Citation's quote. */
+      place?: DocumentPlace;
+    }
+  /** Shows a tab in its group, which takes the focus. */
+  | { type: "show"; tabId: string }
+  | { type: "close"; tabId: string }
+  /** Closes the other tabs of its group, except pinned ones. */
+  | { type: "closeOthers"; tabId: string }
+  /** Closes the tabs after it in its group, except pinned ones. */
+  | { type: "closeToTheRight"; tabId: string }
+  | { type: "closeGroup"; groupId: string }
+  /** Reopens the tab closed last, where it was. */
+  | { type: "reopen" }
+  /** Moves a tab before another one (to the end for null), in its group or another; it stops being a preview. */
+  | { type: "move"; tabId: string; groupId: string; before: string | null }
+  /**
+   * Puts a tab in a new group to the `side` of `groupId` (its own group by
+   * default): a copy of it (⌥⌘\), or the tab itself (a drag). Nothing happens
+   * with `MAX_TAB_GROUPS` groups already.
+   */
+  | { type: "split"; tabId: string; side: "left" | "right"; copy: boolean; groupId?: string }
+  /** A preview becomes a normal tab. */
+  | { type: "keep"; tabId: string }
+  | { type: "pin"; tabId: string; pinned: boolean }
+  | { type: "focus"; groupId: string }
+  /** The groups' widths, left to right, in any unit: they are made shares of 1. */
+  | { type: "resize"; widths: number[] }
+  /** Every group as wide as the others. */
+  | { type: "equalize" };
 
 /**
  * The kinds of file that can be added as Documents (ADR-0011): PDF, plain
@@ -867,11 +1023,21 @@ export type LinkedFolderLayout = "tree" | "flat";
 export type LinkedFolderStatus = "scanning" | "watching" | "paused" | "unavailable";
 
 /**
- * The example Mind (onboarding, see src/core/examples.ts): "Where tea comes
- * from", with two example Documents in their own Linked folder, written in
- * advance so it works before any chat model is set up.
+ * The groups that have an example Mind (onboarding, see src/core/examples.ts):
+ * "tea" is the first-run default; the others are one per pick of the first
+ * run's question (Papers and research, Reports and analysis, Contracts and
+ * legal work, Meetings and team notes).
+ */
+export type ExampleGroup = "tea" | "papers" | "reports" | "contracts" | "meetings";
+
+/**
+ * An example Mind (onboarding, see src/core/examples.ts): "Where tea comes
+ * from", or one of a group, with its example Documents in their own Linked
+ * folder, written in advance so it works before any chat model is set up.
  */
 export interface Examples {
+  /** Which example this is. */
+  group: ExampleGroup;
   /** Whether this copy of IncarnaMind ships the examples. */
   available: boolean;
   /** The example Mind, while it exists. */
@@ -1907,7 +2073,7 @@ export interface UsageDataSettings {
   /** Usage data is being sent now. */
   enabled: boolean;
   /**
-   * A test build (the alpha): usage data is on until the User turns it off,
+   * A test build (for invited testers): usage data is on until the User turns it off,
    * and the first run says so. Otherwise it is off until the User agrees.
    */
   testerBuild: boolean;
@@ -2447,9 +2613,18 @@ export interface CoreApi {
   saveLibrarySettings(settings: LibrarySettings): Promise<void>;
   /** Queues selected documents, or all; manual assignments are preserved. */
   classifyDocuments(documentIds?: string[]): Promise<void>;
-  /** A manual choice, including Unsorted (null), wins over in-flight classification. */
+  /** A manual choice, including Not in a Folder (null), wins over in-flight classification. */
   assignDocumentGroup(documentId: string, groupId: string | null): Promise<void>;
+  /**
+   * Moves Minds and Documents into a Folder, or out of every Folder (null),
+   * all or none: an unknown Mind, Document or Folder changes nothing and
+   * throws. A Document's move is a manual choice, which Organize keeps.
+   * Returns where each was, for Undo (a move back to each one's `from`).
+   * "minds.changed" and "library.assignments" follow, once each.
+   */
+  moveToFolder(move: FolderMoveInput): Promise<FolderMove>;
 
+  /** Makes a Mind, in a Folder if given (it must exist), and returns it. */
   createMind(input?: CreateMindInput): Promise<Mind>;
   /** Minds that are not deleted, most recently updated first. Editing a Mind's content updates it. */
   listMinds(): Promise<Mind[]>;
@@ -2473,6 +2648,18 @@ export interface CoreApi {
   getSettings(): Promise<Settings>;
   /** Changes only the fields given and returns the settings now in effect. */
   updateSettings(patch: SettingsPatch): Promise<Settings>;
+  /**
+   * A window's tabs and groups, as it left them last time (the app's window
+   * is "main"), without the Minds and Documents deleted since.
+   */
+  getLayout(windowId: string): Promise<WindowLayout>;
+  /**
+   * Changes a window's tabs and groups, keeps the layout for the next start,
+   * and returns it; "layout.changed" follows. Throws InvalidInputError for a
+   * change that names a tab or group the window doesn't have, and
+   * NotFoundError for a Mind that isn't there.
+   */
+  changeLayout(windowId: string, change: LayoutChange): Promise<WindowLayout>;
   /**
    * Adds PDF, TXT and Markdown files on their own, given their absolute
    * paths. Each is indexed where it is, never copied, and queued for
@@ -2547,8 +2734,8 @@ export interface CoreApi {
   /** The text kept of Documents unlinked with their Linked folder, for the Citations that quote it. */
   listKeptCitationTexts(): Promise<KeptCitationText[]>;
 
-  /** The example Mind and its Documents, if made (see `Examples`). */
-  getExamples(): Promise<Examples>;
+  /** An example Mind and its Documents, if made (see `Examples`); the tea example by default. */
+  getExamples(group?: ExampleGroup): Promise<Examples>;
   /**
    * On a first run (no Mind yet, examples never offered before), makes the
    * examples, once. Returns them, or null when nothing was made.
@@ -2558,10 +2745,11 @@ export interface CoreApi {
    * Makes the example Mind and its Documents (copies of the shipped files in
    * the data folder, linked), or returns them if they exist. Its Citations
    * are checked once the Documents have been read. "examples.changed" follows.
+   * The tea example by default.
    */
-  createExamples(): Promise<Examples>;
+  createExamples(group?: ExampleGroup): Promise<Examples>;
   /** Deletes the example Mind, and unlinks the example Documents and deletes their copies. */
-  removeExamples(): Promise<void>;
+  removeExamples(group?: ExampleGroup): Promise<void>;
   /** Shows a Linked folder as a tree of Folders or as a flat list. Returns it. */
   setLinkedFolderLayout(linkedFolderId: string, layout: LinkedFolderLayout): Promise<LinkedFolder>;
   /**
@@ -2987,8 +3175,13 @@ export interface CoreApi {
 export interface CoreEvents {
   /** The settings in effect changed, e.g. the interface language. */
   "settings.changed": Settings;
-  /** Minds were created, renamed, deleted or edited: the list as `listMinds` now returns it. */
+  /**
+   * Minds were created, renamed, moved to another Folder, deleted or edited,
+   * or their Folder was deleted: the list as `listMinds` now returns it.
+   */
   "minds.changed": Mind[];
+  /** A window's tabs and groups changed: by `changeLayout`, or a deleted Mind's tab closed. */
+  "layout.changed": { windowId: string; layout: WindowLayout };
   "examples.changed": Examples;
   /** A Mind's content changed. Clients editing that Mind apply the update to their `Y.Doc`. */
   "mind.update": MindUpdate;
@@ -3045,7 +3238,7 @@ export interface CoreEvents {
   "tags.changed": Tag[];
   /**
    * The Library's Folders or settings changed, or a deleted Folder left its
-   * Documents Unsorted: read the current snapshot.
+   * Documents Not in a Folder: read the current snapshot.
    */
   "library.changed": null;
   /**
@@ -3130,6 +3323,8 @@ const methods: Record<CoreApiMethod, true> = {
   closeMind: true,
   getSettings: true,
   updateSettings: true,
+  getLayout: true,
+  changeLayout: true,
   addDocuments: true,
   saveTextAsDocument: true,
   listDocuments: true,
@@ -3197,6 +3392,7 @@ const methods: Record<CoreApiMethod, true> = {
   saveLibrarySettings: true,
   classifyDocuments: true,
   assignDocumentGroup: true,
+  moveToFolder: true,
   listTags: true,
   createTag: true,
   updateTag: true,
