@@ -1,4 +1,5 @@
 import type { ChatReadiness } from "../../../../core/api";
+import { signInAgain } from "../../chatGptSignIn";
 import { useT } from "../../i18n";
 import { turnOffLocalMode } from "../../localMode";
 import type { SettingsPage } from "../../settingsPages";
@@ -10,6 +11,37 @@ import { readinessKey, serviceName } from "./shared";
 export const settingsPageFor = (
   readiness: Extract<ChatReadiness, { ready: false }>,
 ): SettingsPage => (readiness.reason === "consent-declined" ? "privacy" : "models");
+
+/**
+ * The one action that fixes `readiness`, labelled `label` (its Settings page
+ * by default): for an ended ChatGPT sign-in, "Sign in again", right there;
+ * else opening the Settings page that fixes it. `before` runs first, e.g. to
+ * dismiss the problem.
+ */
+export function readinessAction(
+  readiness: Extract<ChatReadiness, { ready: false }>,
+  t: ReturnType<typeof useT>,
+  openSettings: (page: SettingsPage) => void,
+  label: string,
+  before?: () => void,
+): { label: string; onClick(): void } {
+  if (readiness.reason === "sign-in-required") {
+    return {
+      label: t("chatgpt.signInAgain"),
+      onClick: () => {
+        before?.();
+        void signInAgain(openSettings);
+      },
+    };
+  }
+  return {
+    label,
+    onClick: () => {
+      before?.();
+      openSettings(settingsPageFor(readiness));
+    },
+  };
+}
 
 /**
  * What to configure before Questions can be asked. `inLine`: ahead of an
@@ -81,10 +113,7 @@ export function ReadinessLine({
       role="status"
       testId={testId}
       {...(className && { className })}
-      action={{
-        label: setUpLabel,
-        onClick: () => openSettings(settingsPageFor(readiness)),
-      }}
+      action={readinessAction(readiness, t, openSettings, setUpLabel)}
     >
       <ReadinessExplanation readiness={readiness} inLine />
     </ProblemLine>
