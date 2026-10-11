@@ -135,12 +135,17 @@ export interface MovedItem {
 /**
  * What a move did: each Mind and Document it moved, with where it was. Those
  * already in the Folder are listed too, with the Folder as `from`. Undoing
- * moves each back to its `from`.
+ * moves each Mind back to its `from`, and puts back each Document's `previous`.
  */
 export interface FolderMove {
   folderId: string | null;
   minds: MovedItem[];
-  documents: MovedItem[];
+  documents: MovedDocument[];
+}
+
+/** A Document a move moved, with its assignment before (null: none), for `restoreAssignment`. */
+export interface MovedDocument extends MovedItem {
+  previous: DocumentGroupAssignment | null;
 }
 
 /**
@@ -577,6 +582,19 @@ export interface DeviceSettings {
    * shown on this device: it shows at most twice (docs/agents/interaction.md, rule 14).
    */
   suggestionOffers: number;
+  /**
+   * Meetings can be recorded on this device (Settings → Meetings). Off by
+   * default while recording is new: transcription and telling speakers apart
+   * come after it.
+   */
+  meetingsEnabled: boolean;
+  /** What a Meeting records unless the start block says otherwise: the computer's sound too ("Me and them"), or only the microphone. */
+  meetingSystemAudio: boolean;
+  /**
+   * The User has read, once on this device, what a recording captures and
+   * that the other people should be told. Recording waits for it.
+   */
+  meetingNoticeAccepted: boolean;
 }
 
 /**
@@ -601,6 +619,12 @@ export interface Settings {
    * a setting. The approval card and Settings say what a script can reach by it.
    */
   scriptSandbox: SandboxLevel;
+  /**
+   * What this copy can record for a Meeting, found out when the app starts:
+   * not a setting. "both": the microphone and the computer's sound; "microphone":
+   * the microphone only (Linux, for now); "none": nothing (no capture).
+   */
+  meetingAudio: "both" | "microphone" | "none";
 }
 
 export interface SettingsPatch {
@@ -2664,6 +2688,66 @@ export interface ToolApprovalRequest extends ApprovalRequestBase {
 }
 
 // ---------------------------------------------------------------------------
+// Recently deleted (CONTEXT.md)
+
+/** How many days deleted things wait in Recently deleted before they are deleted permanently. */
+export const RECENTLY_DELETED_DAYS = 30;
+
+/** What deleting puts in Recently deleted. A Chat is a Mind of kind "chat"; a Folder is an in-app one. */
+export type DeletedKind = "mind" | "chat" | "document" | "folder" | "tag";
+
+export interface DeletedRef {
+  kind: DeletedKind;
+  id: string;
+}
+
+export interface RestoreRef extends DeletedRef {
+  /** Tag links to put back as they were with it: what `mergeTags` changed in the other Tag. */
+  links?: TagLinkState[];
+}
+
+export interface DeletedItem {
+  kind: DeletedKind;
+  id: string;
+  /** Its name when deleted. May be empty for a Mind: the UI shows "Untitled". */
+  name: string;
+  /** ISO 8601, UTC. */
+  deletedAt: string;
+  /** A Document's kind; null for the others. */
+  documentKind: DocumentKind | null;
+  /** The in-app Folder (`LibraryGroup`) a Mind or Document was in, or null: none, and for the others. */
+  groupId: string | null;
+  /** A Document's Linked folder, or null: a file added on its own, and for the others. */
+  linkedFolderId: string | null;
+}
+
+/** What a deleted Folder held: its Documents, as they were filed, and its Minds. Restoring it puts back each one still in no Folder. */
+export interface FolderDeletion {
+  assignments: DocumentGroupAssignment[];
+  mindIds: string[];
+}
+
+/** How a Document carried a Tag before a change, for `revertDocumentTags`. */
+export interface TagLinkState {
+  documentId: string;
+  tagId: string;
+  /** As `Document.tags` listed it, or null: the Document didn't carry the Tag. */
+  link: Pick<DocumentTag, "source" | "confidence" | "needsReview"> | null;
+  /**
+   * With `link` null: whether the User had taken the Tag off, so automatic tagging left it
+   * off. False forgets a removal recorded since; left out, every removal stays.
+   */
+  removedByUser?: boolean;
+}
+
+export interface TagMerge {
+  /** The Tag merged into, unchanged. */
+  tag: Tag;
+  /** Restoring it undoes the merge: the merged Tag comes back, and both Tags' links are as they were. */
+  merged: RestoreRef;
+}
+
+// ---------------------------------------------------------------------------
 // Export
 
 /** What a Mind exports to: Markdown, for an archive, or Word (.docx), for the deliverable. */
@@ -2768,12 +2852,114 @@ export interface SavedFile {
 }
 
 // ---------------------------------------------------------------------------
+// Meetings
+
+/** Where a Meeting's audio comes from: the microphone, or the computer's own sound (the other people in the Meeting). */
+export type AudioSource = "microphone" | "system";
+
+/**
+ * A Meeting's state:
+ * - "ready": its Mind shows the start block; nothing is recorded yet.
+ * - "recording": its audio goes to disk as it is captured, in 10-second parts.
+ * - "paused": by the User, or because IncarnaMind closed while it was recording.
+ * - "stopped": over. Its audio is kept until it expires.
+ */
+export type MeetingStatus = "ready" | "recording" | "paused" | "stopped";
+
+/**
+ * How one source is recorded right now:
+ * - "off": not asked for ("Only me"), or the Meeting isn't recording.
+ * - "starting": asked for, not heard from yet.
+ * - "recording": its audio is coming in.
+ * - "silent": the computer's sound has been nothing but silence for a minute,
+ *   which is what macOS gives when IncarnaMind isn't allowed to record it.
+ * - "denied": this computer doesn't allow IncarnaMind to record it.
+ * - "unavailable": there is none (no microphone), or this computer can't
+ *   record it (the computer's sound on Linux, for now).
+ * - "ended": it stopped part way, e.g. its device went, and couldn't start again.
+ */
+export type MeetingSourceState =
+  | "off"
+  | "starting"
+  | "recording"
+  | "silent"
+  | "denied"
+  | "unavailable"
+  | "ended";
+
+/**
+ * A stretch the User didn't choose not to record: IncarnaMind wasn't running
+ * (it closed or crashed while recording), or the computer slept.
+ */
+export interface MeetingGap {
+  /** Where it falls, in the Meeting's time: ms of recording before it (pauses and gaps take none). */
+  atMs: number;
+  /** How long nothing was recorded, in ms. */
+  missedMs: number;
+  reason: "interrupted" | "sleep";
+}
+
+export interface Meeting {
+  id: string;
+  /** The Mind it belongs to, where its notes are written. */
+  mindId: string;
+  status: MeetingStatus;
+  /** Why it is paused: the User did, or IncarnaMind closed while it was recording. Null unless paused. */
+  pausedBy: "user" | "interrupted" | null;
+  /** The computer's sound is recorded too ("Me and them"), not only the microphone ("Only me"). */
+  systemAudio: boolean;
+  sources: Record<AudioSource, MeetingSourceState>;
+  /**
+   * How much has been recorded, in ms: in all, or, while `recordingSince` is
+   * set, up to then. The Meeting's time now is `recordedMs` plus the time
+   * since `recordingSince`. Pauses and gaps don't count.
+   */
+  recordedMs: number;
+  /** While audio is being captured, when this stretch began (ISO 8601); otherwise null. */
+  recordingSince: string | null;
+  gaps: MeetingGap[];
+  /** When recording first started, and when it was stopped (ISO 8601). */
+  startedAt: string | null;
+  stoppedAt: string | null;
+  /** Its audio on this computer, which is deleted at most a day after the Meeting. */
+  audio: MeetingAudio;
+  /** Why the latest audio couldn't be saved (e.g. the disk is full), until a part is saved again. */
+  saveError: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MeetingAudio {
+  /** Some audio is on this computer. */
+  kept: boolean;
+  /** When it will be deleted, once the Meeting is paused or stopped; null while recording. */
+  expiresAt: string | null;
+  /** When the User, or the day's limit, last deleted it. */
+  deletedAt: string | null;
+}
+
+/** How long a Meeting's audio is kept after its last recording, at most. */
+export const MEETING_AUDIO_KEPT_MS = 24 * 60 * 60 * 1000;
+
+export interface CreateMeetingInput {
+  /** An empty Mind to hold it. Not given: a new Mind, named for the day. */
+  mindId?: string;
+}
+
+export interface StartMeetingInput {
+  meetingId: string;
+  /** Record the computer's sound too. Defaults to the Settings choice ("What is recorded"). */
+  systemAudio?: boolean;
+}
+
+// ---------------------------------------------------------------------------
 
 export interface CoreApi {
   getLibrary(): Promise<LibrarySnapshot>;
   createLibraryGroup(input: LibraryGroupInput): Promise<LibraryGroup>;
   updateLibraryGroup(groupId: string, input: LibraryGroupInput): Promise<LibraryGroup>;
-  deleteLibraryGroup(groupId: string): Promise<void>;
+  /** Its Minds and Documents go to Not in a Folder. Returns what it held, which restoring it puts back. */
+  deleteLibraryGroup(groupId: string): Promise<FolderDeletion>;
   addLibraryStarterGroups(keys: string[]): Promise<void>;
   saveLibrarySettings(settings: LibrarySettings): Promise<void>;
   /**
@@ -2782,8 +2968,23 @@ export interface CoreApi {
    * only their Tags suggested.
    */
   classifyDocuments(documentIds?: string[]): Promise<void>;
-  /** A manual choice, including Not in a Folder (null), wins over in-flight classification. */
-  assignDocumentGroup(documentId: string, groupId: string | null): Promise<void>;
+  /**
+   * A manual choice, including Not in a Folder (null), wins over in-flight classification.
+   * Returns the assignment before, for `restoreAssignment` (null: it had none).
+   */
+  assignDocumentGroup(
+    documentId: string,
+    groupId: string | null,
+  ): Promise<DocumentGroupAssignment | null>;
+  /**
+   * Puts a Document's assignment back as it was (null: none), with who chose it, so an
+   * automatic choice stays automatic and Organize may change it again, and a Suggested
+   * Folder is a suggestion again. Rejected suggestions stay rejected.
+   */
+  restoreAssignment(
+    documentId: string,
+    previous: Omit<DocumentGroupAssignment, "documentId"> | null,
+  ): Promise<void>;
   /**
    * Makes these Documents' Suggested Folders the User's choices, which
    * Organize never changes. Documents with none waiting are left alone; an
@@ -2801,10 +3002,31 @@ export interface CoreApi {
    * Moves Minds and Documents into a Folder, or out of every Folder (null),
    * all or none: an unknown Mind, Document or Folder changes nothing and
    * throws. A Document's move is a manual choice, which Organize keeps.
-   * Returns where each was, for Undo (a move back to each one's `from`).
+   * Returns where each was, for Undo: each Mind moved back to its `from`, and each
+   * Document's `previous` assignment put back with `restoreAssignment`.
    * "minds.changed" and "library.assignments" follow, once each.
    */
   moveToFolder(move: FolderMoveInput): Promise<FolderMove>;
+
+  /**
+   * Brings back deleted Minds and Chats with their content, Documents with their Passages,
+   * text and Tags, Folders with the Minds and Documents their deletion took out (those in no
+   * Folder since)
+   * and Tags with their links, all or none, and sends the events any change sends. One not
+   * deleted is left as it is. Throws, changing nothing, for one deleted permanently or more
+   * than `RECENTLY_DELETED_DAYS` ago, or that can't come back now (its name taken, its
+   * Linked folder unlinked). Never touches the User's files.
+   */
+  restore(refs: RestoreRef[]): Promise<void>;
+  /** What can be restored: the Minds, Chats, Documents, Folders and Tags deleted in the last `RECENTLY_DELETED_DAYS`, newest first. */
+  listDeleted(): Promise<DeletedItem[]>;
+  /**
+   * Drops deleted things' content (a Mind's notes, a Document's Passages and text, a Tag's
+   * links), keeping each one's id and when it was deleted, so a later sync can pass the
+   * deletion on. They can't be restored afterwards. Throws for one not deleted. Never
+   * touches the User's files. Done by itself at start-up `RECENTLY_DELETED_DAYS` after.
+   */
+  deletePermanently(refs: DeletedRef[]): Promise<void>;
 
   /** Makes a Mind, in a Folder if given (it must exist), and returns it. */
   createMind(input?: CreateMindInput): Promise<Mind>;
@@ -2877,7 +3099,8 @@ export interface CoreApi {
    * Removes a Document from the index: soft-deletes it, its Passages and its
    * Tags, so search ignores them. The file isn't touched. A Document in a
    * Linked folder whose file is still there stays out of the index after
-   * later scans, until the Linked folder is removed and linked again.
+   * later scans, until it is restored, or the Linked folder is removed and
+   * linked again.
    */
   deleteDocument(id: string): Promise<void>;
   /**
@@ -3207,13 +3430,19 @@ export interface CoreApi {
   /** The User takes a Tag off several Documents at once, as `removeDocumentTag` does on each. */
   removeTagFromDocuments(documentIds: string[], tagId: string): Promise<Document[]>;
   /**
+   * Puts Tags on Documents back as they were, with who chose them, all or none, without
+   * recording a removal: automatic tagging may add a Tag taken off this way. Returns the
+   * Documents, in the order given; one "documents.tagged" event carries those that changed.
+   */
+  revertDocumentTags(links: TagLinkState[]): Promise<Document[]>;
+  /**
    * Merges a Tag into another: every Document carrying `tagId` carries
    * `intoTagId` instead, and `tagId` is deleted. Who chose each Tag is kept
    * (the User's choice wins when a Document had both), and a removal the
-   * User made of the merged Tag carries over to the other. Returns the Tag
-   * merged into, unchanged.
+   * User made of the merged Tag carries over to the other. Returns what it
+   * changed, which `restore` undoes.
    */
-  mergeTags(tagId: string, intoTagId: string): Promise<Tag>;
+  mergeTags(tagId: string, intoTagId: string): Promise<TagMerge>;
   /**
    * Recomputes the automatic Tags of these Documents, or of every Document,
    * e.g. after Tag definitions changed. Tags the User added or removed are
@@ -3398,6 +3627,32 @@ export interface CoreApi {
   listFileWriteRequests(): Promise<FileWriteRequest[]>;
   /** Answers a save's question (see `FileWriteRequest`). One already answered does nothing. */
   respondToFileWrite(requestId: string, accept: boolean): Promise<void>;
+
+  /** Every Meeting, newest first. */
+  listMeetings(): Promise<Meeting[]>;
+  /**
+   * A Meeting ready to record, in a new Mind named for the day or in an empty
+   * Mind given: its Mind shows the start block. Needs meetings turned on in
+   * Settings, and a Mind with no Meeting.
+   */
+  createMeeting(input?: CreateMeetingInput): Promise<Meeting>;
+  /** Takes back a Meeting that hasn't started ("Don't record; keep this as a note"): its Mind stays. */
+  discardMeeting(meetingId: string): Promise<void>;
+  /**
+   * Starts recording a ready Meeting: the microphone, and the computer's sound
+   * if asked. Needs the one-time recording notice accepted on this device, and
+   * no other Meeting recording.
+   */
+  startMeeting(input: StartMeetingInput): Promise<Meeting>;
+  pauseMeeting(meetingId: string): Promise<Meeting>;
+  /** Records again after a pause, the User's or one IncarnaMind closing made. */
+  resumeMeeting(meetingId: string): Promise<Meeting>;
+  /** Ends the recording. Its audio is kept for at most a day. */
+  stopMeeting(meetingId: string): Promise<Meeting>;
+  /** Deletes the Meeting's audio on this computer now; a recording goes on keeping what comes next. */
+  deleteMeetingAudio(meetingId: string): Promise<Meeting>;
+  /** Opens the system's settings where the User allows IncarnaMind to record this source. */
+  openAudioSettings(source: AudioSource): Promise<void>;
 }
 
 /**
@@ -3409,8 +3664,8 @@ export interface CoreEvents {
   /** The settings in effect changed, e.g. the interface language. */
   "settings.changed": Settings;
   /**
-   * Minds were created, renamed, moved to another Folder, deleted or edited,
-   * or their Folder was deleted: the list as `listMinds` now returns it.
+   * Minds were created, renamed, moved to another Folder, deleted, restored or edited, or
+   * their Folder was deleted or restored: the list as `listMinds` now returns it.
    */
   "minds.changed": Mind[];
   /** A window's tabs and groups changed: by `changeLayout`, or a deleted Mind's tab closed. */
@@ -3419,7 +3674,7 @@ export interface CoreEvents {
   /** A Mind's content changed. Clients editing that Mind apply the update to their `Y.Doc`. */
   "mind.update": MindUpdate;
   /**
-   * A Document was added, or its processing status (or embedding progress)
+   * A Document was added or restored, or its processing status (or embedding progress)
    * changed, or its creation date was read in the background. Carries the whole Document.
    */
   "document.status": Document;
@@ -3473,11 +3728,11 @@ export interface CoreEvents {
    * list as `listKeptCitationTexts` now returns it.
    */
   "keptCitationTexts.changed": KeptCitationText[];
-  /** Tags were created (including the presets), edited or deleted: the list as `listTags` now returns it. */
+  /** Tags were created (including the presets), edited, deleted or restored: the list as `listTags` now returns it. */
   "tags.changed": Tag[];
   /**
    * The Library's Folders or settings changed, or a deleted Folder left its
-   * Documents Not in a Folder: read the current snapshot.
+   * Documents Not in a Folder, or a restored one took them back: read the current snapshot.
    */
   "library.changed": null;
   /**
@@ -3540,6 +3795,12 @@ export interface CoreEvents {
   "answer.failed": AnswerFailed;
   /** The User accepted a suggestion into a Mind (see `acceptSuggestion`). */
   "suggestion.accepted": SuggestionAccepted;
+  /**
+   * A Meeting was created, started, paused, resumed, stopped or discarded, a
+   * source's state changed, or its audio was saved or deleted: the list as
+   * `listMeetings` now returns it.
+   */
+  "meetings.changed": Meeting[];
 }
 
 export type CoreEventName = keyof CoreEvents;
@@ -3646,6 +3907,10 @@ const methods: Record<CoreApiMethod, true> = {
   acceptAssignments: true,
   rejectAssignments: true,
   moveToFolder: true,
+  restoreAssignment: true,
+  restore: true,
+  listDeleted: true,
+  deletePermanently: true,
   listTags: true,
   createTag: true,
   updateTag: true,
@@ -3654,6 +3919,7 @@ const methods: Record<CoreApiMethod, true> = {
   removeDocumentTag: true,
   addTagToDocuments: true,
   removeTagFromDocuments: true,
+  revertDocumentTags: true,
   mergeTags: true,
   retagDocuments: true,
   getJevSettings: true,
@@ -3698,6 +3964,15 @@ const methods: Record<CoreApiMethod, true> = {
   setLinkedFolderWriting: true,
   listFileWriteRequests: true,
   respondToFileWrite: true,
+  listMeetings: true,
+  createMeeting: true,
+  discardMeeting: true,
+  startMeeting: true,
+  pauseMeeting: true,
+  resumeMeeting: true,
+  stopMeeting: true,
+  deleteMeetingAudio: true,
+  openAudioSettings: true,
 };
 
 /** Every method of CoreApi, used to wire the IPC bridge. */

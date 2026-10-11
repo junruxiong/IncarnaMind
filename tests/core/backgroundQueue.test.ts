@@ -7,6 +7,7 @@ import {
   type BackgroundJob,
   createBackgroundQueue,
 } from "../../src/core/backgroundQueue";
+import { createFakeCapture } from "../../src/core/meetings/fakeCapture";
 import { migrate, openDatabase } from "../../src/core/storage";
 import { createTags } from "../../src/core/tags";
 import type { TagClassifier } from "../../src/core/tags/classify";
@@ -210,6 +211,31 @@ describe("The background model queue", () => {
     expect(tagA.calls).toHaveLength(2);
   });
 
+  test("while a Meeting records, no job starts and a local one in flight gives way; they go on once it pauses or stops", async () => {
+    const log: string[] = [];
+    const queue = queueFor();
+    const tagA = testJob(log, "tagging", "tag A", { local: true });
+    const classify1 = testJob(log, "classification", "classify 1");
+    queue.add(tagA);
+    queue.add(classify1);
+
+    queue.setRecording(true);
+    await settle();
+    expect(log).toEqual(["tag A started", "tag A aborted"]);
+    // An Answer ending while the Meeting still records starts nothing.
+    queue.setAnswering(true);
+    queue.setAnswering(false);
+    await settle();
+    expect(log).toHaveLength(2);
+
+    queue.setRecording(false);
+    await settle();
+    expect(log).toEqual(["tag A started", "tag A aborted", "tag A started"]);
+    tagA.finish();
+    await settle();
+    expect(log.slice(3)).toEqual(["tag A done", "classify 1 started"]);
+  });
+
   test("closing aborts the job in flight and drops the rest", async () => {
     const log: string[] = [];
     const queue = queueFor();
@@ -374,6 +400,7 @@ async function setUp(provider: SaveChatProviderInput) {
   const fake = answeringAndTagging();
   const core = startCore(await createTempDataFolder(), {
     createChatModel: scriptedModels(fake.model).createChatModel,
+    audioCapture: createFakeCapture(),
   });
   core.on("consent.requested", ({ requestId }) => void core.respondToConsent(requestId, true));
   await core.saveChatProvider(provider);
@@ -457,6 +484,29 @@ describe("Background work gives way to Answers", { timeout: 30_000 }, () => {
       expect(fake.aborted).toBe(1);
     },
   );
+
+  test("a Meeting starting stops a tagging call to a local model, which runs again once it stops", async () => {
+    const { core, fake } = await setUp(LOCAL);
+    await core.updateSettings({ device: { meetingsEnabled: true, meetingNoticeAccepted: true } });
+    fake.tagging.hold();
+    const document = await addDocument(core);
+    await fake.tagging.requested();
+
+    const waiting = waitForTagging(core, [document.id], (each) => each.tagging === "pending");
+    const meeting = await core.createMeeting();
+    await core.startMeeting({ meetingId: meeting.id });
+    await waiting;
+    expect(fake.aborted).toBe(1);
+    // Not tried again while the Meeting records.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(fake.tagging.requests).toHaveLength(1);
+
+    await core.stopMeeting(meeting.id);
+    await fake.tagging.requested(2);
+    fake.tagging.release();
+    await waitForTagging(core, [document.id]);
+    expect(await tagNamesOf(core, document.id)).toEqual(["Paper"]);
+  });
 
   test("on a cloud provider, the tagging call in flight finishes while the Answer is written", async () => {
     const { core, fake, ask, finishAnswer } = await setUp(OPENAI);
