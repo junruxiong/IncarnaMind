@@ -35,6 +35,8 @@ interface ChatProviderChoicesProps {
   ollamaActionInRow?: boolean;
   /** First run offers the ChatGPT plan here; Settings has a section of its own for it. */
   includeChatGpt?: boolean;
+  /** Settings also lists the best-effort providers, under "More providers"; first run lists only first-class ones. */
+  withMoreProviders?: boolean;
 }
 
 /**
@@ -44,7 +46,7 @@ interface ChatProviderChoicesProps {
  */
 export function ChatProviderChoices(props: ChatProviderChoicesProps) {
   const { choice, onChoose, ollama, providers, onSaved } = props;
-  const { ollamaActionInRow = false, includeChatGpt = false } = props;
+  const { ollamaActionInRow = false, includeChatGpt = false, withMoreProviders = false } = props;
   const t = useT();
   const name = useId();
 
@@ -97,7 +99,13 @@ export function ChatProviderChoices(props: ChatProviderChoicesProps) {
       <Choice
         inputId={`${name}-api-key`}
         chosen={choice === "api-key"}
-        details={<ProviderForm providers={providers} onSaved={onSaved} />}
+        details={
+          <ProviderForm
+            providers={providers}
+            onSaved={onSaved}
+            withMoreProviders={withMoreProviders}
+          />
+        }
       >
         {radio("api-key")}
         <span className="flex min-w-0 flex-col gap-1">
