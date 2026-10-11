@@ -706,6 +706,43 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
+    version: 35,
+    description: "Whether IncarnaMind may add new files inside a Linked folder (#124)",
+    // Asked at the first save there, and changed in Settings; allowed is 1 or 0. It ends with
+    // its Linked folder: linked again, the folder is asked about again (src/core/outputFiles.ts).
+    sql: `
+      CREATE TABLE linked_folder_writes (
+        id TEXT PRIMARY KEY NOT NULL,
+        linked_folder_id TEXT NOT NULL,
+        allowed INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX linked_folder_writes_by_folder ON linked_folder_writes (linked_folder_id)
+        WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    version: 36,
+    description: "Suggested Folders wait for the User, and a rejected one isn't suggested again",
+    // Every assignment so far keeps what it was: none of them is a suggestion. No foreign
+    // keys: a later sync may deliver a rejection before its Document or Folder.
+    sql: `
+      ALTER TABLE document_groups ADD COLUMN suggested INTEGER NOT NULL DEFAULT 0;
+      CREATE TABLE document_group_rejections (
+        id TEXT PRIMARY KEY NOT NULL,
+        document_id TEXT NOT NULL,
+        group_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX document_group_rejections_live
+        ON document_group_rejections (document_id, group_id) WHERE deleted_at IS NULL;
+    `,
+  },
+  {
     version: 40,
     description: "A Mind without a title is named by its first line of text",
     // Kept up to date by the core as the Mind is edited; the title the User typed stays in `title`.

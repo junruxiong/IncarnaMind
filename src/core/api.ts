@@ -1,4 +1,6 @@
 import type {
+  AssignmentChange,
+  DocumentBatch,
   DocumentGroupAssignment,
   LibraryGroup,
   LibraryGroupInput,
@@ -8,7 +10,9 @@ import type {
 import type { UiUsageEvent } from "./usageEvents";
 
 export type {
+  AssignmentChange,
   ClassificationStatus,
+  DocumentBatch,
   DocumentGroupAssignment,
   LibraryClassifier,
   LibraryGroup,
@@ -1114,6 +1118,23 @@ export interface AddDocumentsResult {
   documents: Document[];
   /** Files that were not added. */
   skipped: SkippedFile[];
+  /** The batch of the new Documents: "documents.batch" events report its progress. */
+  batchId: string;
+}
+
+/** Where `addDocuments` and `addLinkedFolder` put the Documents they add. */
+export interface AddDocumentsOptions {
+  /**
+   * The Folder they were dropped on: each new Document is filed there as the
+   * User's choice, and Organize suggests only its Tags. Omitted: Organize
+   * suggests their Folders.
+   */
+  groupId?: string;
+}
+
+/** A Linked folder just linked, with the batch of the Documents its first scan adds. */
+export interface AddedLinkedFolder extends LinkedFolder {
+  batchId: string;
 }
 
 /**
@@ -2602,6 +2623,68 @@ export interface MindExport extends MindExportPreview {
   data: Uint8Array;
 }
 
+/** What `saveMindExport` did. */
+export type SavedMindExport =
+  | { status: "saved"; file: SavedFile }
+  /** The User didn't choose where new files go, so nothing was saved. */
+  | { status: "cancelled" }
+  /** The Output location is inside a Linked folder the User said IncarnaMind may not add files to. */
+  | { status: "not-allowed"; linkedFolderId: string; linkedFolderPath: string };
+
+// ---------------------------------------------------------------------------
+// Files IncarnaMind creates
+
+/**
+ * Where the files IncarnaMind creates go (exports, and later transcripts,
+ * saved web pages and what Tasks make): the Output location, and the Linked
+ * folders the User has said it may or may not add files to. It never changes,
+ * renames or deletes a file that is already there.
+ */
+export interface OutputSettings {
+  /** The folder the User chose, absolute, symbolic links resolved; null until they choose (the first save asks). */
+  location: string | null;
+  /** The folder the first save offers: "IncarnaMind" in the User's Documents folder. */
+  suggested: string;
+  /** The Linked folders the User has answered about, oldest answer first. */
+  linkedFolders: LinkedFolderWriting[];
+}
+
+/** Whether IncarnaMind may add new files inside a Linked folder, which it otherwise only reads. */
+export interface LinkedFolderWriting {
+  linkedFolderId: string;
+  /** The Linked folder's path. */
+  path: string;
+  allowed: boolean;
+  /** ISO 8601, UTC: when the User last answered. */
+  decidedAt: string;
+}
+
+/**
+ * A save waiting for the User's answer (`respondToFileWrite`), asked once:
+ * - "output-location": no Output location is chosen yet. Accepting saves in
+ *   the suggested folder; `setOutputLocation` answers with another one.
+ * - "linked-folder": the file would go inside a Linked folder. Accepting lets
+ *   IncarnaMind add files there from now on; declining stops it, until the
+ *   User changes it in Settings (`setLinkedFolderWriting`).
+ */
+export type FileWriteRequest =
+  | { requestId: string; kind: "output-location"; suggested: string; fileName: string }
+  | {
+      requestId: string;
+      kind: "linked-folder";
+      linkedFolderId: string;
+      linkedFolderPath: string;
+      fileName: string;
+    };
+
+/** A new file IncarnaMind saved. */
+export interface SavedFile {
+  /** Absolute. */
+  path: string;
+  /** Its name: the one asked for, or, when that was taken, the next free one ("Tides 2.docx"). */
+  name: string;
+}
+
 // ---------------------------------------------------------------------------
 
 export interface CoreApi {
@@ -2611,10 +2694,27 @@ export interface CoreApi {
   deleteLibraryGroup(groupId: string): Promise<void>;
   addLibraryStarterGroups(keys: string[]): Promise<void>;
   saveLibrarySettings(settings: LibrarySettings): Promise<void>;
-  /** Queues selected documents, or all; manual assignments are preserved. */
+  /**
+   * Queues selected documents, or all. Organize suggests a Folder for each
+   * (a Suggested Folder) and its Tags; manual assignments are preserved, and
+   * only their Tags suggested.
+   */
   classifyDocuments(documentIds?: string[]): Promise<void>;
   /** A manual choice, including Not in a Folder (null), wins over in-flight classification. */
   assignDocumentGroup(documentId: string, groupId: string | null): Promise<void>;
+  /**
+   * Makes these Documents' Suggested Folders the User's choices, which
+   * Organize never changes. Documents with none waiting are left alone; an
+   * unknown Document throws and changes nothing. Returns what changed.
+   */
+  acceptAssignments(documentIds: string[]): Promise<AssignmentChange[]>;
+  /**
+   * Turns down these Documents' Suggested Folders: each is left Not in a
+   * Folder, and Organize doesn't suggest that Folder for it again. Documents
+   * with none waiting are left alone; an unknown Document throws and changes
+   * nothing. Returns what changed.
+   */
+  rejectAssignments(documentIds: string[]): Promise<AssignmentChange[]>;
   /**
    * Moves Minds and Documents into a Folder, or out of every Folder (null),
    * all or none: an unknown Mind, Document or Folder changes nothing and
@@ -2666,9 +2766,10 @@ export interface CoreApi {
    * processing; "document.status" events report its progress. A file already
    * indexed at that path gives its Document; a file inside a Linked folder
    * is that Linked folder's Document; a file with the content of a missing
-   * Document is that Document, moved.
+   * Document is that Document, moved. The new Documents are one batch; given
+   * a Folder (see `AddDocumentsOptions`), they are filed there.
    */
-  addDocuments(paths: string[]): Promise<AddDocumentsResult>;
+  addDocuments(paths: string[], options?: AddDocumentsOptions): Promise<AddDocumentsResult>;
   /**
    * Keeps text the User pasted as a Markdown Document, so Answers can cite it.
    * The file is written in the data folder ("Saved text"), never next to the
@@ -2719,9 +2820,10 @@ export interface CoreApi {
    * A folder inside a Linked folder is already linked: that Linked folder is
    * returned. Linked folders inside this one are merged into it, their
    * Documents keeping their ids. Files added on their own that are inside it
-   * become its Documents.
+   * become its Documents. The Documents its first scan adds are one batch;
+   * given a Folder (see `AddDocumentsOptions`), they are filed there.
    */
-  addLinkedFolder(path: string): Promise<LinkedFolder>;
+  addLinkedFolder(path: string, options?: AddDocumentsOptions): Promise<AddedLinkedFolder>;
   /** The Linked folders, in path order. */
   listLinkedFolders(): Promise<LinkedFolder[]>;
   /**
@@ -3165,6 +3267,28 @@ export interface CoreApi {
    * "[unverified]" unless its quote was found. Math stays LaTeX.
    */
   exportMind(mindId: string, options: ExportMindOptions): Promise<MindExport>;
+  /**
+   * Exports a Mind (as `exportMind`) into the Output location, under the
+   * next free name, asking where new files go the first time.
+   */
+  saveMindExport(mindId: string, options: ExportMindOptions): Promise<SavedMindExport>;
+
+  /** Where new files go, and the Linked folders IncarnaMind may or may not add files to. */
+  getOutputSettings(): Promise<OutputSettings>;
+  /**
+   * Sets the Output location: an absolute path to a folder, made if it is the
+   * suggested one and isn't there yet. A save waiting to know where goes on there.
+   */
+  setOutputLocation(path: string): Promise<OutputSettings>;
+  /**
+   * Allows or stops IncarnaMind adding new files inside a Linked folder (it
+   * never changes the files there). A save waiting for that answer goes on with it.
+   */
+  setLinkedFolderWriting(linkedFolderId: string, allowed: boolean): Promise<OutputSettings>;
+  /** Saves waiting for the User's answer, oldest first. */
+  listFileWriteRequests(): Promise<FileWriteRequest[]>;
+  /** Answers a save's question (see `FileWriteRequest`). One already answered does nothing. */
+  respondToFileWrite(requestId: string, accept: boolean): Promise<void>;
 }
 
 /**
@@ -3204,6 +3328,12 @@ export interface CoreEvents {
   "rerank.changed": RerankSettings;
   /** Whether Questions can be asked may have changed. */
   "chatReadiness.changed": ChatReadiness;
+  /** The Output location, or what IncarnaMind may do in a Linked folder, changed. */
+  "outputSettings.changed": OutputSettings;
+  /** A save waits for the User's answer: where new files go, or whether it may add files to a Linked folder. */
+  "fileWrite.requested": FileWriteRequest;
+  /** A save's question was answered, here or in another window, or withdrawn. */
+  "fileWrite.resolved": { requestId: string };
   /** A data flow needs the User's consent before anything is sent. */
   "consent.requested": ConsentRequest;
   /** A consent request was answered, here or in another window. */
@@ -3243,11 +3373,17 @@ export interface CoreEvents {
   "library.changed": null;
   /**
    * Documents' Library assignments changed: Organize queued, started,
-   * finished or failed on them, or the User put one in a Folder. Carries each
+   * finished or failed on them, or the User put one in a Folder, or accepted
+   * or rejected its Suggested Folder. Carries each
    * one's assignment whole, as `getLibrary` lists it, so the snapshot needn't
    * be read again.
    */
   "library.assignments": DocumentGroupAssignment[];
+  /**
+   * A batch of Documents added together moved on: one joined it, was read
+   * or sorted, or its Suggested Folders changed. Carries the batch whole.
+   */
+  "documents.batch": DocumentBatch;
   /**
    * Documents' Tags changed, or where automatic tagging is for them: the User
    * added or removed a Tag, automatic tagging started, waited, finished or
@@ -3392,6 +3528,8 @@ const methods: Record<CoreApiMethod, true> = {
   saveLibrarySettings: true,
   classifyDocuments: true,
   assignDocumentGroup: true,
+  acceptAssignments: true,
+  rejectAssignments: true,
   moveToFolder: true,
   listTags: true,
   createTag: true,
@@ -3439,6 +3577,12 @@ const methods: Record<CoreApiMethod, true> = {
   restoreBuiltInSkills: true,
   previewMindExport: true,
   exportMind: true,
+  saveMindExport: true,
+  getOutputSettings: true,
+  setOutputLocation: true,
+  setLinkedFolderWriting: true,
+  listFileWriteRequests: true,
+  respondToFileWrite: true,
 };
 
 /** Every method of CoreApi, used to wire the IPC bridge. */
