@@ -4,6 +4,7 @@ import { useKeymap } from "./commands/keymap";
 import { AppShell, useRememberSidebarWidth } from "./components/AppShell";
 import { ConsentDialog } from "./components/ConsentDialog";
 import { DropOverlay, useFileDrop } from "./components/FileDrop";
+import { FileWriteDialog } from "./components/FileWriteDialog";
 import { ChatSetupDialog } from "./components/providers/ChatSetupDialog";
 import { ResizeRod } from "./components/ResizeRod";
 import { SettingsDialog } from "./components/SettingsDialog";
@@ -226,8 +227,9 @@ function Workspace() {
         <TagsDialog />
         <ChatSetupDialog />
         <UsageDataDialog />
-        {/* Opens after the dialog that triggered the request, so it shows on top of it. */}
+        {/* Open after the dialog that triggered the request, so they show on top of it. */}
         <ConsentDialog />
+        <FileWriteDialog />
         <ActionError />
         {fileDrop.active && <DropOverlay />}
         <p role="status" data-testid="sidebar-announcement" className="sr-only">
