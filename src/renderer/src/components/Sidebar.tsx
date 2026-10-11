@@ -2,7 +2,7 @@ import type { ClipboardEvent, ReactNode } from "react";
 import { shortcutLabel } from "../commands/keymap";
 import { commands } from "../commands/registry";
 import { useT } from "../i18n";
-import { useMeetings } from "../meetings";
+import { canRecordMeetings } from "../meetings";
 import { useAppStore } from "../store";
 import { linksIn, useWebPages } from "../webPages";
 import { DocumentsSection } from "./DocumentsSection";
@@ -123,8 +123,6 @@ function pasteLinks(event: ClipboardEvent<HTMLElement>) {
   void useWebPages.getState().add(addresses, folder ?? null);
 }
 
-const reportError = (error: unknown) => useAppStore.getState().reportError(error);
-
 /**
  * The one "+" menu, the one place to add: New Mind, Record a meeting (once
  * Meetings are turned on), New Folder…, Add Documents…, Add a web page… and
@@ -138,10 +136,8 @@ function PlusMenu() {
   const pickDocuments = useAppStore((state) => state.pickDocuments);
   const picking = useAppStore((state) => state.pickingDocuments);
   const addLinkedFolder = useAppStore((state) => state.addLinkedFolder);
-  const meetingsOn = useAppStore(
-    (state) => state.settings?.device.meetingsEnabled && state.settings.meetingAudio !== "none",
-  );
-  const recordMeeting = useMeetings((state) => state.record);
+  const meetingsOn = useAppStore((state) => canRecordMeetings(state.settings));
+  const reportError = useAppStore((state) => state.reportError);
 
   /** Closes the menu, then does it. */
   const choose = (action: () => void) => () => {
@@ -184,7 +180,7 @@ function PlusMenu() {
             type="button"
             role="menuitem"
             data-testid="plus-record-meeting"
-            onClick={choose(() => void recordMeeting())}
+            onClick={choose(() => void commands.run("meeting.record").catch(reportError))}
             className={`${menuItemClass} pl-2`}
           >
             <RecordingLineIcon className="size-4 shrink-0 text-ink-meta" />
