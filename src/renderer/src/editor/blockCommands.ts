@@ -1,8 +1,13 @@
 import { Extension } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { Selection } from "@tiptap/pm/state";
+import { type EditorState, Plugin, PluginKey, Selection } from "@tiptap/pm/state";
+import { yUndoPluginKey } from "@tiptap/y-tiptap";
 import { ANSWER_BLOCK, QUESTION_BLOCK } from "../../../core/api";
 import { BLOCK_ID_ATTRIBUTE } from "./noteSchema";
+
+/** Ends the Undo step being gathered, so the next change starts one of its own. */
+const stopUndoCapturing = (state: EditorState) =>
+  yUndoPluginKey.getState(state)?.undoManager.stopCapturing();
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -95,6 +100,24 @@ function selectedBlocks({ $from, $to }: Selection): Range | null {
 /** Deleting Blocks as a whole: `deleteBlock`, which the "block.delete" command runs (⇧⌘⌫). */
 export const BlockCommands = Extension.create({
   name: "blockCommands",
+
+  // A Block dropped where it was dragged is an Undo step of its own, as Turn into
+  // is: ⌘Z takes back the move (and the footnote numbers it changed), not the typing before it.
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey("dropUndoStep"),
+        filterTransaction: (transaction, state) => {
+          if (transaction.getMeta("uiEvent") === "drop") stopUndoCapturing(state);
+          return true;
+        },
+      }),
+    ];
+  },
+
+  onTransaction({ transaction }) {
+    if (transaction.getMeta("uiEvent") === "drop") stopUndoCapturing(this.editor.state);
+  },
 
   addCommands() {
     return {
