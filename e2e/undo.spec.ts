@@ -148,9 +148,7 @@ test("Minds and Folders: renamed, moved and deleted, each back with ⌘Z and aga
   await money.getByTestId("folder-menu").click();
   await money.getByTestId("folder.delete").click();
   await window.getByTestId("confirm-delete-folder").click();
-  await expect(undoLine(window).getByTestId("undo-message")).toHaveText(
-    "Moved “Money” to Recently deleted",
-  );
+  await expect(undoLine(window).getByTestId("undo-message")).toHaveText("Deleted “Money”");
   await expect.poll(folderNames).toEqual([]);
   expect(await mindFolder(window, "Vendors")).toBeNull();
   await leaveText(window);
@@ -168,9 +166,7 @@ test("Minds and Folders: renamed, moved and deleted, each back with ⌘Z and aga
   await row.getByTestId("mind-menu").click();
   await row.getByTestId("mind-actions").getByTestId("mind.delete").click();
   await window.getByTestId("confirm-delete-mind").click();
-  await expect(undoLine(window).getByTestId("undo-message")).toHaveText(
-    "Moved “Vendors” to Recently deleted",
-  );
+  await expect(undoLine(window).getByTestId("undo-message")).toHaveText("Deleted “Vendors”");
   await expect.poll(() => mindTitles(window)).toEqual([]);
   await leaveText(window);
   // The line's Undo does what ⌘Z does.
@@ -285,9 +281,7 @@ test("Documents: renamed, moved, tagged and deleted, each back with ⌘Z and aga
   await openDocumentMenu(ferries);
   await ferries.getByTestId("document-file-actions").getByTestId("document.delete").click();
   await window.getByTestId("confirm-delete-document").click();
-  await expect(undoLine(window).getByTestId("undo-message")).toHaveText(
-    "Moved “Ferries” to Recently deleted",
-  );
+  await expect(undoLine(window).getByTestId("undo-message")).toHaveText("Deleted “Ferries”");
   await expect.poll(names).toEqual(["Tide tables"]);
   expect(
     await read(window, async (core) => (await core.listDeleted()).map((each) => each.name)),
@@ -378,9 +372,7 @@ test("Tags: renamed, recoloured, merged and deleted in Manage Tags, each back wi
   await pointAndClick(window, row(ids.report).getByTestId("confirm-delete-tag"));
   await expect(row(ids.report)).toHaveCount(0);
   await done();
-  await expect(undoLine(window).getByTestId("undo-message")).toHaveText(
-    "Moved “Reports” to Recently deleted",
-  );
+  await expect(undoLine(window).getByTestId("undo-message")).toHaveText("Deleted “Reports”");
   await expect.poll(labTags).toEqual([]);
   await undo(window);
   await expect.poll(labTags).toEqual([ids.report]);
