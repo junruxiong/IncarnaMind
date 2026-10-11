@@ -3237,11 +3237,10 @@
     color: var(--color-ink-placeholder);
     cursor: pointer;
     pointer-events: auto;
-
-    &:hover {
-      background: var(--color-hover);
-      color: var(--color-ink-secondary);
-    }
+  }
+  .conversation-links > .conversation-link:hover {
+    background: var(--color-hover);
+    color: var(--color-ink-secondary);
   }
   .editor-popover.origin-card {
     /* Drawn from the margin's layer, which lets the pointer through to the note. */
@@ -3276,10 +3275,9 @@
     border-radius: 4px;
     font-weight: 600;
     color: var(--color-accent);
-
-    &:hover {
-      text-decoration: underline;
-    }
+  }
+  .origin-card > .origin-card-link:hover {
+    text-decoration: underline;
   }
   .origin-card-gone {
     color: var(--color-ink-secondary);
