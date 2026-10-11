@@ -1778,6 +1778,15 @@ export function createDocuments(options: DocumentsOptions) {
       );
     },
 
+    /**
+     * While a Meeting is recorded (#135), Documents wait to be read and
+     * embedded: the one being read finishes, the rest go on afterwards.
+     */
+    hold(held: boolean): void {
+      processor.hold(held);
+      embedding.hold(held);
+    },
+
     close(): void {
       closed = true;
       library.close();
