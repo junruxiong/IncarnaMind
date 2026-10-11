@@ -209,7 +209,15 @@ describe("undoing a move", () => {
     const filed = assignment("a", "classified", "g");
     useAppStore.setState({
       minds: [
-        { id: "m", title: "Plan", kind: "mind", folderId: null, createdAt: "", updatedAt: "" },
+        {
+          id: "m",
+          title: "Plan",
+          autoTitle: "",
+          kind: "mind",
+          folderId: null,
+          createdAt: "",
+          updatedAt: "",
+        },
       ],
       library: snapshot([filed]),
     });

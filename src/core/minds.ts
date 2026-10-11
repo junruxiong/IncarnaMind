@@ -14,17 +14,19 @@ export const EDIT_TOUCH_INTERVAL_MS = 10_000;
 interface MindRow {
   id: string;
   title: string;
+  auto_title: string;
   kind: string;
   created_at: string;
   updated_at: string;
   folder_id: string | null;
 }
 
-const COLUMNS = "id, title, kind, created_at, updated_at, folder_id";
+const COLUMNS = "id, title, auto_title, kind, created_at, updated_at, folder_id";
 
 const toMind = (row: MindRow): Mind => ({
   id: row.id,
   title: row.title,
+  autoTitle: row.auto_title,
   kind: row.kind,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
@@ -99,7 +101,7 @@ export function createMinds(db: Database, now: () => string) {
         [id, title, kind, at, at, folderId],
       );
       touched(id, at);
-      return { id, title, kind, createdAt: at, updatedAt: at, folderId };
+      return { id, title, autoTitle: "", kind, createdAt: at, updatedAt: at, folderId };
     },
 
     list(): Mind[] {
@@ -119,6 +121,17 @@ export function createMinds(db: Database, now: () => string) {
       db.run("UPDATE minds SET title = ?, updated_at = ? WHERE id = ?", [newTitle, at, mind.id]);
       touched(mind.id, at);
       return { ...mind, title: newTitle, updatedAt: at };
+    },
+
+    /** Sets the name taken from the Mind's text. Returns whether it changed; `updatedAt` stays. */
+    setAutoTitle(mindId: string, autoTitle: string): boolean {
+      const row = db.get<{ auto_title: string }>(
+        "SELECT auto_title FROM minds WHERE id = ? AND deleted_at IS NULL",
+        [mindId],
+      );
+      if (!row || row.auto_title === autoTitle) return false;
+      db.run("UPDATE minds SET auto_title = ? WHERE id = ?", [autoTitle, mindId]);
+      return true;
     },
 
     /**

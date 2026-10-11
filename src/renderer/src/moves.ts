@@ -5,6 +5,7 @@
  * that says what happened, and the moves that take it back. Pure: no store,
  * no bridge, so the tests import it.
  */
+
 import type {
   Document,
   DocumentGroupAssignment,
@@ -13,6 +14,7 @@ import type {
   Mind,
 } from "../../core/api";
 import type { MessageKey, MessageParams } from "../../shared/i18n";
+import { mindName } from "../../shared/naming";
 import { applyAssignments } from "./documentUpdates";
 
 /** What a move takes: Minds and Documents, by id, any number of each. */
@@ -87,7 +89,7 @@ export function moveMessage(
   if (count === 1) {
     const mind = names.minds.find((each) => each.id === mindIds[0]);
     const document = names.documents.find((each) => each.id === documentIds[0]);
-    const name = mind ? mind.title || t("mind.untitled") : (document?.name ?? "");
+    const name = mind ? mindName(mind) || t("mind.untitled") : (document?.name ?? "");
     return t("move.done", { name, folder: folderName });
   }
   const key: MessageKey =
