@@ -141,7 +141,7 @@ const citationView = ReactNodeViewRenderer(CitationView, {
 /**
  * Notes (see `noteExtensions`), Questions and Answers in the Mind's Yjs
  * document, with the slash menu, the "@" picker of a Question's Search scope,
- * the drag handle, the formatting menu, smart typography, the LaTeX field,
+ * the drag handle, the formatting menu, the table menu, smart typography, the LaTeX field,
  * the margin column of Citation checks, and the composer at the column's
  * foot, where Questions are asked (drawn in the dock, `ComposerDockContext`).
  *
