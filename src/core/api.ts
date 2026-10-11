@@ -3066,6 +3066,9 @@ export const dataKinds = [
   "search-terms",
   "work-ids",
   "selection",
+  "scoped-passages",
+  "scoped-minds",
+  "answers",
 ] as const;
 
 export type DataKind = (typeof dataKinds)[number];
@@ -3097,6 +3100,11 @@ export type DataKind = (typeof dataKinds)[number];
  *   local mode.
  * - "edits": when the User asks Edit with AI (#93), the text they selected
  *   and the paragraphs it is in, to the chat model's provider. None in local mode.
+ * - "agents": what an outside agent reads (#351), to that agent, which sends
+ *   it on to the AI model it uses, out of IncarnaMind's sight: one service
+ *   per pairing ("agent:<id>"), named as the User named the agent. Passages
+ *   of the Documents in its Folders, those Folders' Minds, and the Answers it
+ *   asks for. None in local mode.
  */
 export const dataFlowIds = [
   "chat",
@@ -3109,6 +3117,7 @@ export const dataFlowIds = [
   "reference-lookup",
   "find-sources",
   "edits",
+  "agents",
 ] as const;
 
 export type DataFlowId = (typeof dataFlowIds)[number];
@@ -3746,6 +3755,7 @@ export type EffectScope =
   | { kind: "folder"; path: string } // absolute; covers what is inside
   | { kind: "service"; serviceId: string; name: string } // an external service, as consent names it
   | { kind: "host"; host: string } // a web host
+  | { kind: "mind"; mindId: string } // one of the User's Minds
   | { kind: "anywhere" };
 
 /**
@@ -4050,6 +4060,209 @@ export interface StartMeetingInput {
   meetingId: string;
   /** Record the computer's sound too. Defaults to the Settings choice ("What is recorded"). */
   systemAudio?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Outside agents (#351, experimental)
+
+/**
+ * An outside agent the User connected: an AI agent they run themselves, such
+ * as Claude Code or Codex, that uses IncarnaMind as an MCP server. One pairing
+ * per agent, on this device only: the agent runs on this computer.
+ */
+export interface AgentPairing {
+  id: string;
+  /** What the User calls it, e.g. "Claude Code". Unique among pairings, ignoring case. */
+  name: string;
+  /** The Folders it may search and read, with their Minds. None until the User picks some. */
+  folderIds: string[];
+  /** The agent it was set up in, e.g. "codex"; null for one set up by hand. */
+  client: string | null;
+  /** When it last called IncarnaMind, ISO 8601, UTC; null if it never has. */
+  lastUsedAt: string | null;
+  createdAt: string;
+}
+
+export interface AgentSettings {
+  /** Connecting agents is on (Settings → Agents, experimental). Off by default; off, nothing listens. */
+  enabled: boolean;
+  /**
+   * "local-mode": Local mode pauses every pairing, because an agent sends what
+   * it reads to an AI model IncarnaMind can't see. Null when nothing pauses them.
+   */
+  paused: "local-mode" | null;
+  pairings: AgentPairing[];
+}
+
+export interface ConnectAgentInput {
+  /** Trimmed; must not be empty, nor another pairing's name (ignoring case). */
+  name: string;
+  /** Folders (by id) it may read; none by default. */
+  folderIds?: string[];
+  /** The agent it is set up in, e.g. "codex": lower-case letters, digits and hyphens. */
+  client?: string;
+}
+
+export interface UpdateAgentInput {
+  name?: string;
+  folderIds?: string[];
+}
+
+/** How an agent starts IncarnaMind's server: the command for its MCP settings. */
+export interface AgentLaunch {
+  command: string;
+  args: string[];
+  /** Holds the pairing's token: write it only into that agent's own settings, never show or log it. */
+  env: Record<string, string>;
+}
+
+/** A new pairing, and how its agent starts IncarnaMind's server. */
+export interface ConnectedAgent {
+  pairing: AgentPairing;
+  launch: AgentLaunch;
+}
+
+/** The Tools an outside agent can call (see src/core/agents/mcp.ts). */
+export const AGENT_TOOLS = [
+  "search",
+  "read_passages",
+  "cite",
+  "check_citations",
+  "show_citation",
+  "list_minds",
+  "read_mind",
+  "ask",
+] as const;
+
+/** The agents Settings → Agents can set IncarnaMind up in (see src/core/agents/clients.ts). */
+export const AGENT_CLIENT_IDS = [
+  "claude-desktop",
+  "claude-code",
+  "codex",
+  "cursor",
+  "vscode",
+  "gemini-cli",
+  "kimi-code",
+  "qwen-code",
+  "codebuddy",
+  "minimax-code",
+  "trae",
+  "qoder",
+  "comate",
+  "cherry-studio",
+  "chatbox",
+  "deepchat",
+  "goose",
+  "opencode",
+  "cline",
+  "kilo",
+  "openclaw",
+  "pi",
+  "other",
+] as const;
+
+export type AgentClientId = (typeof AGENT_CLIENT_IDS)[number];
+
+/**
+ * How an agent takes IncarnaMind: "bundle", a file its app installs when
+ * opened (Claude); "link", a link its app installs from (Cursor, VS Code);
+ * "file", IncarnaMind adds itself to the agent's settings file; "command", one
+ * line to paste into a terminal (Claude Code); "manual", settings to paste
+ * into the agent's own screen.
+ */
+export type AgentSetupKind = "bundle" | "link" | "file" | "command" | "manual";
+
+export interface AgentClient {
+  id: AgentClientId;
+  /** Its own name; empty for "other", which the interface names. */
+  name: string;
+  /** It looks installed on this computer: such agents are listed first. */
+  installed: boolean;
+  setup: AgentSetupKind;
+}
+
+/** What setting an agent up will change in its settings file, the pairing's key hidden. */
+export interface AgentSetupPreview {
+  path: string;
+  /** The lines IncarnaMind adds (or puts in place of its own earlier ones). */
+  change: string;
+}
+
+/**
+ * How setting an agent up went:
+ * - "opened": its app opened to finish (Install, in its own dialog);
+ * - "wrote": IncarnaMind added itself to its settings file at `path`;
+ * - "copy": something for the User to paste (`text`, which holds the key;
+ *   `shown` hides it): a command line, or settings for the agent's screen, or
+ *   for its settings file at `path` when IncarnaMind couldn't read that file.
+ */
+export type AgentSetupResult =
+  | { kind: "opened"; how: "bundle" | "link" }
+  | { kind: "wrote"; path: string }
+  | { kind: "copy"; how: "command" | "settings"; text: string; shown: string; path?: string };
+
+export interface SetUpAgentInput {
+  client: AgentClientId;
+  /** The Folders it may read; the User picks at least one. */
+  folderIds: string[];
+}
+
+export interface SetUpAgent {
+  pairing: AgentPairing;
+  result: AgentSetupResult;
+}
+
+/** An outside agent asked IncarnaMind to show one of its Citations (`show_citation`). */
+export interface AgentCitationShown extends DocumentPlace {
+  documentId: string;
+}
+
+export type AgentToolName = (typeof AGENT_TOOLS)[number];
+
+/**
+ * Why an outside agent's call was refused or failed:
+ * - "unpaired": its token belongs to no pairing (it was disconnected);
+ * - "off": connecting agents is turned off;
+ * - "local-mode": Local mode pauses outside agents;
+ * - "consent": the User's consent to its data flow was revoked;
+ * - "no-folders": it has no Folders to read yet;
+ * - "outside-scope": what it asked for is outside its Folders;
+ * - "not-found": no such Passage, Document, Mind or Citation;
+ * - "chat-not-ready": `ask` needs a chat model that is set up and allowed;
+ * - "invalid": its arguments make no sense;
+ * - "failed": something went wrong in IncarnaMind (the log says what).
+ */
+export type AgentProblem =
+  | "unpaired"
+  | "off"
+  | "local-mode"
+  | "consent"
+  | "no-folders"
+  | "outside-scope"
+  | "not-found"
+  | "chat-not-ready"
+  | "invalid"
+  | "failed";
+
+/** One call an outside agent made, as its activity list shows it. */
+export interface AgentActivity {
+  id: string;
+  pairingId: string;
+  tool: AgentToolName;
+  /** What it asked, to show: the search words, the Question, the quotes it cited; "" for none. */
+  summary: string;
+  outcome: "done" | "refused" | "failed";
+  /** Why it was refused or failed; null when it was done. */
+  problem: AgentProblem | null;
+  /** How many Passages, Citations or Minds it got; null when it got none. */
+  count: number | null;
+  /** The Documents it got text from, by id. */
+  documentIds: string[];
+  /** What the call did: reading the Documents or a Mind, sending a Question to the chat model. */
+  effects: Effect[];
+  durationMs: number;
+  /** ISO 8601, UTC. */
+  at: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -4947,6 +5160,39 @@ export interface CoreApi {
   deleteMeetingAudio(meetingId: string): Promise<Meeting>;
   /** Opens the system's settings where the User allows IncarnaMind to record this source. */
   openAudioSettings(source: AudioSource): Promise<void>;
+
+  /** Outside agents (#351, experimental): the setting, what pauses them, and every pairing. */
+  getAgents(): Promise<AgentSettings>;
+  /** Turns connecting agents on or off on this device. Off, nothing listens and every call is refused. */
+  setAgentsEnabled(enabled: boolean): Promise<AgentSettings>;
+  /**
+   * Pairs a new agent, and records the User's consent to its data flow: call
+   * it only once the User has confirmed what the agent will be able to read
+   * and where that goes. Returns how the agent starts IncarnaMind's server.
+   */
+  connectAgent(input: ConnectAgentInput): Promise<ConnectedAgent>;
+  /** Renames a pairing, or changes the Folders it may read; calls already made keep their activity. */
+  updateAgent(pairingId: string, input: UpdateAgentInput): Promise<AgentPairing>;
+  /** Unpairs an agent: its token stops working at once, its connections close and its consent goes. */
+  disconnectAgent(pairingId: string): Promise<void>;
+  /** How a paired agent starts IncarnaMind's server, again: e.g. to set it up in that agent once more. */
+  getAgentLaunch(pairingId: string): Promise<AgentLaunch>;
+  /** The calls a paired agent made, newest first: the most recent 500. */
+  listAgentActivity(pairingId: string): Promise<AgentActivity[]>;
+  /** The agents IncarnaMind can be set up in, those on this computer first. */
+  listAgentClients(): Promise<AgentClient[]>;
+  /** What setting up an agent will change in its settings file; null for one that has none. */
+  previewAgentSetup(client: AgentClientId): Promise<AgentSetupPreview | null>;
+  /**
+   * Pairs an agent and sets IncarnaMind up in it, as `connectAgent` does,
+   * once the User has confirmed: opens its app to finish, writes its settings
+   * file, or gives what to paste. A setup that fails leaves no pairing.
+   */
+  setUpAgent(input: SetUpAgentInput): Promise<SetUpAgent>;
+  /** Takes a setup just made back: its settings file as it was, and the pairing gone. */
+  undoAgentSetup(pairingId: string): Promise<void>;
+  /** A paired agent's settings to paste again, e.g. into a second copy of it. */
+  copyAgentSetup(pairingId: string): Promise<Extract<AgentSetupResult, { kind: "copy" }>>;
 }
 
 /**
@@ -5116,6 +5362,15 @@ export interface CoreEvents {
    * `listMeetings` now returns it.
    */
   "meetings.changed": Meeting[];
+  /**
+   * Connecting agents was turned on or off, Local mode paused or resumed them, or a pairing
+   * was made, changed, used or removed: as `getAgents` now returns it.
+   */
+  "agents.changed": AgentSettings;
+  /** An outside agent made a call (see `listAgentActivity`). */
+  "agents.activity": AgentActivity;
+  /** An outside agent asked to show one of its Citations: open it in the viewer, in front. */
+  "agents.citationShown": AgentCitationShown;
 }
 
 export type CoreEventName = keyof CoreEvents;
@@ -5319,6 +5574,18 @@ const methods: Record<CoreApiMethod, true> = {
   stopMeeting: true,
   deleteMeetingAudio: true,
   openAudioSettings: true,
+  getAgents: true,
+  setAgentsEnabled: true,
+  connectAgent: true,
+  updateAgent: true,
+  disconnectAgent: true,
+  getAgentLaunch: true,
+  listAgentActivity: true,
+  listAgentClients: true,
+  previewAgentSetup: true,
+  setUpAgent: true,
+  undoAgentSetup: true,
+  copyAgentSetup: true,
 };
 
 /** Every method of CoreApi, used to wire the IPC bridge. */
