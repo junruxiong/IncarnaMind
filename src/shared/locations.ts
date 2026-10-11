@@ -53,12 +53,22 @@ export function parseLocation(value: unknown): CitationLocation | null {
         typeof comment === "object" && comment !== null
           ? (comment as Record<string, unknown>).author
           : undefined;
+      const paragraphs =
+        typeof location.paragraphs === "object" && location.paragraphs !== null
+          ? (location.paragraphs as Record<string, unknown>)
+          : null;
       return {
         kind,
         heading: typeof location.heading === "string" ? location.heading : null,
         ...(location.notes === true ? { notes: true } : {}),
         ...(author !== undefined
           ? { comment: { author: typeof author === "string" && author ? author : null } }
+          : {}),
+        ...(paragraphs &&
+        isCount(paragraphs.from) &&
+        isCount(paragraphs.to) &&
+        paragraphs.to >= paragraphs.from
+          ? { paragraphs: { from: paragraphs.from, to: paragraphs.to } }
           : {}),
       };
     }
@@ -117,6 +127,15 @@ export function formatLocation(location: CitationLocation, t: Translate): string
         : location.heading
           ? t("location.section", { heading: location.heading })
           : t("location.section.start");
+      const { paragraphs } = location;
+      if (paragraphs) {
+        return t(
+          paragraphs.to !== paragraphs.from
+            ? "location.section.paragraph.other"
+            : "location.section.paragraph.one",
+          { section, range: span(paragraphs.from, paragraphs.to) },
+        );
+      }
       if (!location.comment) return section;
       return location.comment.author
         ? t("location.section.comment", { section, author: location.comment.author })
@@ -259,6 +278,31 @@ function commentAt(unit: UnitText, offset: number): { author: string | null } | 
   return null;
 }
 
+/**
+ * The paragraphs of a web page's section a quote covers, numbered from its
+ * heading (see `UnitLabel.paragraphs`): in the parts of the section the
+ * quote starts in. Null where paragraphs aren't numbered, or none is covered.
+ */
+function paragraphsCovered(
+  units: readonly UnitText[],
+  parts: readonly { unit: number; start: number; end: number }[],
+  where: UnitText,
+): { from: number; to: number } | null {
+  if (!where.label?.paragraphs) return null;
+  const path = JSON.stringify(where.label.path ?? []);
+  const numbers: number[] = [];
+  for (const part of parts) {
+    const unit = units[part.unit] as UnitText;
+    if (!unit.label?.paragraphs || JSON.stringify(unit.label.path ?? []) !== path) continue;
+    for (const anchor of anchorsOf(unit)) {
+      const number = /^p(\d+)$/.exec(anchor.target)?.[1];
+      if (number && anchor.start < part.end && anchor.end > part.start)
+        numbers.push(Number(number));
+    }
+  }
+  return numbers.length > 0 ? { from: Math.min(...numbers), to: Math.max(...numbers) } : null;
+}
+
 /** A request for a narrower range than the Units cited: rows or lines the model named. */
 export interface RowsOrLines {
   from: number;
@@ -299,8 +343,11 @@ export function locationOf(
     case "section": {
       const where = units[parts[0]?.unit ?? 0] ?? first;
       const section = unitLocation(where);
+      if (section?.kind !== "section") return section;
       const comment = parts[0] ? commentAt(where, parts[0].start) : null;
-      return section?.kind === "section" && comment ? { ...section, comment } : section;
+      if (comment) return { ...section, comment };
+      const paragraphs = paragraphsCovered(units, parts, where);
+      return paragraphs ? { ...section, paragraphs } : section;
     }
     case "rows": {
       const whole = { from: first.label?.from ?? 1, to: last.label?.to ?? first.label?.to ?? 1 };
@@ -350,6 +397,10 @@ export type RequestedLocation =
  */
 const A_COMMENT = /\s*(?:[,，;(]\s*(?:a\s+)?comment(?:\s+by\b.*)?|[,，]\s*[^,，]*批注)\)?$/iu;
 
+/** What a web page's Location adds after its section: ", ¶ 3", "，第 3 段" (#261). */
+const A_PARAGRAPH =
+  /\s*[,，;]?\s*(?:¶{1,2}\s*\d+(?:\s*[-–—]\s*\d+)?|第\s*\d+(?:\s*[-–—]\s*\d+)?\s*段)$/u;
+
 const RANGE = String.raw`(\d{1,7})(?:\s*(?:-|–|—|to|and)\s*(\d{1,7}))?`;
 const range = (from: string | undefined, to: string | undefined) => {
   const a = Number(from);
@@ -382,7 +433,7 @@ export function parseRequestedLocation(input: string): RequestedLocation | null 
   match = /^(?:'?(.+?)'?!)?\$?[A-Z]{1,3}\$?(\d{1,7})(?::\$?[A-Z]{1,3}\$?(\d{1,7}))?$/i.exec(text);
   if (match) return { kind: "rows", sheet: match[1]?.trim() || null, ...range(match[2], match[3]) };
   match = /^(?:§+|sections?\b|heading\b)\s*(.+)$/i.exec(text);
-  const heading = match?.[1]?.replace(A_COMMENT, "").trim();
+  const heading = match?.[1]?.replace(A_PARAGRAPH, "").replace(A_COMMENT, "").trim();
   if (heading) return { kind: "section", heading };
   return null;
 }
