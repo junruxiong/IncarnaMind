@@ -73,6 +73,10 @@ export interface LibraryOptions {
    * embeddings on afterwards. True by default.
    */
   embeddings?: boolean;
+  /** More adapters for the core, e.g. a chat model factory that counts usage (eval/agents). */
+  adapters?: Partial<CoreAdapters>;
+  /** Keeps the data folder in this folder instead of the system's temporary one. */
+  parentDir?: string;
 }
 
 export interface Library {
@@ -208,7 +212,9 @@ function processed(core: Core, ids: readonly string[], log: Log): Promise<Docume
 
 export async function openLibrary(options: LibraryOptions): Promise<Library> {
   const { log } = options;
-  const dataDir = await mkdtemp(join(tmpdir(), `incarnamind-eval-${options.name}-`));
+  const parent = options.parentDir ?? tmpdir();
+  await mkdir(parent, { recursive: true });
+  const dataDir = await mkdtemp(join(parent, `incarnamind-eval-${options.name}-`));
   const modelsLink = join(dataDir, "models");
   if (options.modelCache) {
     await mkdir(options.modelCache, { recursive: true });
@@ -239,6 +245,7 @@ export async function openLibrary(options: LibraryOptions): Promise<Library> {
           crossEncoder: createFakeCrossEncoder(),
           rerankingModelSource: { baseUrl: "http://127.0.0.1/", files: [] },
         }),
+    ...options.adapters,
   };
   const core = createCore(adapters);
   const close = async () => {
