@@ -1388,6 +1388,9 @@ test("B6 outside agents (#351): an agent's search over 2,000 Documents, through 
     await documentsReady(window, paths.length, 25 * 60_000);
     const connected = await window.evaluate(async (id) => {
       const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      // Linux with no keyring running: the pairing's key is kept as other keys are, once allowed.
+      const storage = await bridge.getSecretStorage();
+      if (!storage.canSave) await bridge.acceptPlainTextSecretStorage();
       await bridge.setAgentsEnabled(true);
       return bridge.connectAgent({ name: "Audit agent", folderIds: [id] });
     }, folderId);
