@@ -72,7 +72,11 @@ export function AssistantAnswer({
 
   const meta: ReactNode[] = [];
   if (status === "stopped") {
-    meta.push(<span data-testid="answer-stopped">{t("answer.status.stopped")}</span>);
+    meta.push(
+      <span data-testid="answer-stopped" className="assistant-answer-status">
+        {t("answer.status.stopped")}
+      </span>,
+    );
   }
   if (answer.model) {
     meta.push(
