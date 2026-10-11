@@ -67,19 +67,21 @@ interface ComposerState {
   /** By Mind id: switching tabs keeps what was typed in each Mind's composer. */
   drafts: Readonly<Record<string, Draft>>;
   /**
-   * Bumped to ask the open Mind's composer to take the focus, e.g. by a Skill
-   * chosen in the note's slash menu.
+   * The composer is to take the focus, e.g. for ⌘J or a Skill chosen in the
+   * note's slash menu: it does once it is on screen (the assistant unfolds for
+   * it), and says so with `focusTaken`.
    */
-  focusRequests: number;
+  focusWanted: boolean;
   draft(mindId: string): Draft;
   update(mindId: string, change: Partial<Draft>): void;
   requestFocus(): void;
+  focusTaken(): void;
 }
 
 /** The composer's drafts, in this window (DESIGN.md, Composer). */
 export const useComposer = create<ComposerState>()((set, get) => ({
   drafts: {},
-  focusRequests: 0,
+  focusWanted: false,
   draft: (mindId) => get().drafts[mindId] ?? EMPTY_DRAFT,
   update(mindId, change) {
     set((state) => ({
@@ -89,7 +91,8 @@ export const useComposer = create<ComposerState>()((set, get) => ({
       },
     }));
   },
-  requestFocus: () => set((state) => ({ focusRequests: state.focusRequests + 1 })),
+  requestFocus: () => set({ focusWanted: true }),
+  focusTaken: () => set({ focusWanted: false }),
 }));
 
 /** The key under which a problem asking from a Mind's composer is kept (`useAnswers.blocked`). */

@@ -110,6 +110,10 @@ import { createSecrets } from "./secrets";
 import { createSettings, isChatModelChoice } from "./settings";
 import { createSkills } from "./skills";
 import { createScriptRunner } from "./skills/scripts";
+import { createSources, FIND_SOURCES_SENDS } from "./sources";
+import { createSourceHttp } from "./sources/http";
+import { createPace, realTimers } from "./sources/pace";
+import { createSourceProviders } from "./sources/providers";
 import { migrate, openDatabase } from "./storage";
 import { createSuggestions } from "./suggestions";
 import { createTags } from "./tags";
@@ -659,6 +663,53 @@ export function createCore(adapters: CoreAdapters): Core {
   // time, giving way to Answers.
   const background = createBackgroundQueue({ reportError: (error) => console.error(error) });
 
+  // Requests to one service kept apart, as its operator asks: Look up and Find sources share them.
+  const paceTimers = adapters.paceTimers ?? realTimers;
+  const pace = createPace(paceTimers);
+  // Find sources (#296): searches Source providers with consent, never in local mode, and adds
+  // what the User chooses to the Library, as Documents (open copies) or reference records.
+  const sources = createSources({
+    db,
+    now,
+    clock: () => paceTimers.now(),
+    consent,
+    localOnly: () => embedding.localOnly(),
+    providers: createSourceProviders(adapters.sourceProviders),
+    http: createSourceHttp(pace, paceTimers),
+    folder: join(dataDir, "Sources"),
+    checkFolder: (folderId) => {
+      library.target({ groupId: folderId });
+    },
+    async addFile(path, folderId, added) {
+      const batchId = batches.begin(folderId);
+      try {
+        const result = await documents.add([path], (documentId) => {
+          batches.added(batchId, documentId);
+          added(documentId);
+        });
+        return result.documents[0] ?? null;
+      } finally {
+        batches.done(batchId);
+      }
+    },
+    async savePage(address, folderId, added) {
+      const result = await webPages.save({ address }, added);
+      if (result.outcome === "failed") return null;
+      if (!result.existing && folderId !== null) library.assign(result.document.id, folderId);
+      return { document: documents.get(result.document.id), existing: result.existing };
+    },
+    document: (id) => documents.get(id),
+    signal: lifetime.signal,
+    reportError: (error) => console.error(error),
+  });
+  // A provider is asked only once the User searches it, as Look up's services are: the Privacy
+  // page lists each one the User has decided on, to revoke.
+  consent.registry.register({
+    id: "find-sources",
+    sends: FIND_SOURCES_SENDS,
+    services: async () => [],
+  });
+  sources.dropPurged().catch((error: unknown) => console.error(error));
   /** The User's Documents searched as an Answer searches them: the search Tool, reranked as the User chose. */
   const searchDocuments = (
     query: string,
@@ -703,7 +754,10 @@ export function createCore(adapters: CoreAdapters): Core {
       pageTexts: (documentId, contentHash, from, to) =>
         documents.pageTexts(documentId, contentHash, from, to),
     },
-    toolProviders: [{ kind: "connector", tools: (signal) => connectors.tools(signal) }],
+    toolProviders: [
+      { kind: "connector", tools: (signal) => connectors.tools(signal) },
+      { kind: "sources", tools: async () => sources.tools() },
+    ],
     connectorsNeedingSignIn: () => connectors.needingSignIn(),
     approvals: {
       decide: (call) => approvals.decide(call),
@@ -978,6 +1032,7 @@ export function createCore(adapters: CoreAdapters): Core {
     document: (id) => documents.get(id),
     changed: (list) => events.emit("references.changed", list),
     signal: lifetime.signal,
+    pace,
   });
   // Importing references (#287) reads a file the User chose and sends nothing.
   const referenceImport = createReferenceImport({
@@ -1405,6 +1460,9 @@ export function createCore(adapters: CoreAdapters): Core {
     restoreReference: async (documentId, before, fields) =>
       references.restore(documentId, before, fields),
     lookUpReference: (documentId) => references.lookUp(documentId),
+    listSourceProviders: async () => sources.list(),
+    findSources: (input) => sources.search(input),
+    addFoundSource: (input) => sources.add(input),
     importReferences: (path) => referenceImport.run(path),
     undoReferenceImport: async (importId) => {
       referenceImport.undo(importId);
@@ -1603,7 +1661,7 @@ export function createCore(adapters: CoreAdapters): Core {
     listDeleted: async () => recentlyDeleted.list(),
     deletePermanently: async (refs) => {
       recentlyDeleted.deletePermanently(refs);
-      await webPages.dropPurged();
+      await Promise.all([webPages.dropPurged(), sources.dropPurged()]);
     },
     acceptAssignments: async (ids) => library.accept(ids),
     rejectAssignments: async (ids) => library.reject(ids),

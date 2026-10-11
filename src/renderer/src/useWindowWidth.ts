@@ -1,5 +1,6 @@
-import { useSyncExternalStore } from "react";
-import { MERGE_BELOW } from "./layoutSlice";
+import { useMemo, useSyncExternalStore } from "react";
+import { groupsMergedAt } from "./assistantPlace";
+import { useCardWidth } from "./layoutSlice";
 
 const subscribeToResize = (onChange: () => void) => {
   window.addEventListener("resize", onChange);
@@ -10,6 +11,22 @@ const subscribeToResize = (onChange: () => void) => {
 export const useWindowWidth = () =>
   useSyncExternalStore(subscribeToResize, () => window.innerWidth);
 
-/** Whether the window is too narrow for groups side by side: they merge into one strip. */
-export const useGroupsMerged = () =>
-  useSyncExternalStore(subscribeToResize, () => window.innerWidth < MERGE_BELOW);
+/** The window's height, followed as it is resized. */
+const useWindowHeight = () => useSyncExternalStore(subscribeToResize, () => window.innerHeight);
+
+/** The window's size, followed as it is resized. */
+export function useWindowSize(): { width: number; height: number } {
+  const width = useWindowWidth();
+  const height = useWindowHeight();
+  return useMemo(() => ({ width, height }), [width, height]);
+}
+
+/**
+ * Whether there is no room for groups side by side: they merge into one
+ * strip, in a narrow window or a narrow card (`groupsMergedAt`).
+ */
+export function useGroupsMerged(): boolean {
+  const windowWidth = useWindowWidth();
+  // Only a change of the answer draws again, not every pixel the card is resized by.
+  return useCardWidth((state) => groupsMergedAt(windowWidth, state.width));
+}
