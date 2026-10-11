@@ -4,11 +4,15 @@
  * Documents, opening big files in the viewer, and whether indexing or Organize
  * stall the UI. Results go to AUDIT_OUT/results.json under "speed.*".
  */
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { createConnection } from "node:net";
 import { join } from "node:path";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { type ElectronApplication, expect, type Page, test } from "@playwright/test";
 import type { Editor } from "@tiptap/core";
-import type { CoreBridge } from "../../src/core/api";
+import type { AgentLaunch, CoreBridge } from "../../src/core/api";
+import { AGENT_SOCKET_ENV, AGENT_TOKEN_ENV, handshakeLine } from "../../src/shared/agentSocket";
 import { writeFixtures } from "./fixtures";
 import {
   SHOTS as AUDIT_SHOTS,
@@ -1296,5 +1300,163 @@ test("B5 motion: frames while a menu opens and closes (on, reduced, off), and ty
   } finally {
     await close(app);
     removeDir(dataDir);
+  }
+});
+
+/** Every file under `dir`, at any depth, by its absolute path. */
+function filesUnder(dir: string): string[] {
+  return readdirSync(dir, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => join(entry.parentPath, entry.name));
+}
+
+/** The 50th and 95th percentiles and the slowest of some times, in ms. */
+function spread(times: number[]) {
+  const sorted = [...times].sort((a, b) => a - b);
+  const at = (q: number) => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] ?? 0;
+  const round = (ms: number) => Math.round(ms * 100) / 100;
+  return { runs: sorted.length, p50: round(at(0.5)), p95: round(at(0.95)), max: round(at(1)) };
+}
+
+/**
+ * MCP pings straight to the app's socket, with no shim: the opening line, the
+ * 2025 handshake, then `count` pings, each timed from send to answer.
+ */
+async function directPings(launch: AgentLaunch, count: number): Promise<number[]> {
+  const socket = createConnection(launch.env[AGENT_SOCKET_ENV] ?? "");
+  await new Promise<void>((resolve, reject) => {
+    socket.once("connect", () => resolve());
+    socket.once("error", reject);
+  });
+  const waiting = new Map<number, () => void>();
+  let pending = "";
+  socket.setEncoding("utf8");
+  socket.on("data", (chunk: string) => {
+    pending += chunk;
+    for (let end = pending.indexOf("\n"); end !== -1; end = pending.indexOf("\n")) {
+      const message = JSON.parse(pending.slice(0, end)) as { id?: number };
+      pending = pending.slice(end + 1);
+      if (typeof message.id === "number") waiting.get(message.id)?.();
+    }
+  });
+  const request = (id: number, method: string, params: object = {}) =>
+    new Promise<void>((resolve) => {
+      waiting.set(id, resolve);
+      socket.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`);
+    });
+  socket.write(handshakeLine(launch.env[AGENT_TOKEN_ENV] ?? ""));
+  await request(0, "initialize", {
+    protocolVersion: "2025-11-25",
+    capabilities: {},
+    clientInfo: { name: "audit", version: "1" },
+  });
+  socket.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`);
+  const times: number[] = [];
+  for (let id = 1; id <= count; id++) {
+    const started = performance.now();
+    await request(id, "ping");
+    times.push(performance.now() - started);
+  }
+  socket.destroy();
+  return times;
+}
+
+test("B6 outside agents (#351): an agent's search over 2,000 Documents, through the shim", async () => {
+  test.setTimeout(40 * 60_000);
+  const dataDir = tempDir("data");
+  const root = tempDir("fixtures");
+  const fixtures = writeFixtures(root, 2000);
+  const paths = filesUnder(fixtures.scale);
+  const app = await launch(dataDir, { fakeChat: true, readyTestId: "chat-setup" });
+  try {
+    const { window } = app;
+    const folderId = await window.evaluate(async (all) => {
+      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      const folder = await bridge.createLibraryGroup({ name: "Research", description: "All" });
+      await bridge.addDocuments(all, { groupId: folder.id });
+      return folder.id;
+    }, paths);
+    await documentsReady(window, paths.length, 25 * 60_000);
+    const connected = await window.evaluate(async (id) => {
+      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      // Linux with no keyring running: the pairing's key is kept as other keys are, once allowed.
+      const storage = await bridge.getSecretStorage();
+      if (!storage.canSave) await bridge.acceptPlainTextSecretStorage();
+      await bridge.setAgentsEnabled(true);
+      return bridge.connectAgent({ name: "Audit agent", folderIds: [id] });
+    }, folderId);
+
+    // As an agent starts it: the app's own binary runs the shim as Node.
+    const client = new Client({ name: "audit-agent", version: "1.0.0" });
+    const spawned = performance.now();
+    await client.connect(
+      new StdioClientTransport({
+        command: connected.launch.command,
+        args: connected.launch.args,
+        env: connected.launch.env,
+        stderr: "pipe",
+      }),
+    );
+    const connectMs = performance.now() - spawned;
+    try {
+      const { tools } = await client.listTools();
+      const definitions = JSON.stringify(
+        tools.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })),
+      );
+      const queries = [
+        "tide estuary",
+        "salt marsh erosion",
+        "seagrass sediment",
+        "carbon price",
+        "emissions target",
+        "tea auction",
+        "machine learning model",
+        "contract clause",
+        "public health survey",
+        "harbour shoreline",
+        "研究笔记",
+        "review of shoreline",
+      ];
+      // One of each first: the first search of a word list warms SQLite's pages.
+      for (const query of queries) await client.callTool({ name: "search", arguments: { query } });
+      const searches: number[] = [];
+      let passages = 0;
+      for (let round = 0; round < 10; round++) {
+        for (const query of queries) {
+          const started = performance.now();
+          const result = await client.callTool({ name: "search", arguments: { query } });
+          searches.push(performance.now() - started);
+          passages += (result.structuredContent as { passages: unknown[] }).passages.length;
+        }
+      }
+      const shimPings: number[] = [];
+      for (let i = 0; i < 200; i++) {
+        const started = performance.now();
+        await client.ping();
+        shimPings.push(performance.now() - started);
+      }
+      const direct = spread(await directPings(connected.launch, 200));
+      const throughShim = spread(shimPings);
+      record("speed.agents", {
+        documents: paths.length,
+        connectMs: Math.round(connectMs),
+        search: { ...spread(searches), passagesPerSearch: passages / searches.length },
+        pingThroughShim: throughShim,
+        pingDirectToSocket: direct,
+        shimOverheadP50Ms: Math.round((throughShim.p50 - direct.p50) * 100) / 100,
+        toolDefinitions: {
+          tools: tools.length,
+          characters: definitions.length,
+          // English text: about 4 characters a token.
+          approximateTokens: Math.ceil(definitions.length / 4),
+        },
+      });
+    } finally {
+      await client.close();
+    }
+  } finally {
+    await close(app);
+    removeDir(dataDir);
+    removeDir(root);
   }
 });

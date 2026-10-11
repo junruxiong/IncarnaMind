@@ -6,6 +6,7 @@
  * imports Electron (ADR-0004, ADR-0006).
  */
 import type { ChildProcess } from "node:child_process";
+import type { AgentLauncher } from "./agents";
 import type { AnswerEngine } from "./answers/engine";
 import type { AudioSource, ExternalService, SandboxLevel, SecretProtection } from "./api";
 import type { Reranker } from "./documents/searchTool";
@@ -451,6 +452,28 @@ export interface CoreAdapters {
   executor?: Executor;
   /** What Skill scripts run with (see `ScriptRuntimes`); the defaults suit the desktop app. */
   scriptRuntimes?: ScriptRuntimes;
+  /**
+   * Outside agents (#351): how an agent starts the shim that reaches this app
+   * (the desktop app's own binary, run as Node, with its shim script), where
+   * the shim's socket is (by default in the data folder, see
+   * src/core/agents/socket.ts), and the version the server names itself with.
+   */
+  agents?: {
+    launcher?: AgentLauncher;
+    socketPath?: string;
+    version?: string;
+    /** The shim's script, built (`out/main/agentShim.js`): Claude's install file carries a copy. */
+    shimScript?: string;
+    /**
+     * Where agents keep their settings (the User's home folder) and where apps
+     * are installed, to tell which agents are on this computer. Default to the
+     * home folder and, on macOS, the Applications folders.
+     */
+    home?: string;
+    applications?: readonly string[];
+    /** Opens an agent's install link (Cursor's, VS Code's) in its app. */
+    openLink?(url: string): Promise<void>;
+  };
   /** Runs the built-in embedding model (see `Embedder`). */
   embedder: Embedder;
   /**

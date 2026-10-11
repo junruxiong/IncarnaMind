@@ -265,6 +265,36 @@ export function windowedPassagesBySeq(db: Database, seqs: readonly number[]): Wi
   });
 }
 
+/** A live Passage of a live Document, with its window; null for any other. */
+export function livePassage(db: Database, passageId: string): WindowedPassage | null {
+  const row = db.get<WindowedRow>(
+    `SELECT ${WINDOWED_COLUMNS}
+     FROM passages p JOIN documents d ON d.id = p.document_id
+     WHERE p.id = ? AND p.deleted_at IS NULL AND d.deleted_at IS NULL`,
+    [passageId],
+  );
+  return row ? toWindowed(row) : null;
+}
+
+/** The live Passages of a live Document at positions `from` to `to`, in reading order. */
+export function passagesBetween(
+  db: Database,
+  documentId: string,
+  from: number,
+  to: number,
+): WindowedPassage[] {
+  return db
+    .all<WindowedRow>(
+      `SELECT ${WINDOWED_COLUMNS}
+       FROM passages p JOIN documents d ON d.id = p.document_id
+       WHERE p.document_id = ? AND p.deleted_at IS NULL AND d.deleted_at IS NULL
+         AND p.position BETWEEN ? AND ?
+       ORDER BY p.position`,
+      [documentId, BigInt(from), BigInt(to)],
+    )
+    .map(toWindowed);
+}
+
 /**
  * The live Passages of one sliding window of a Document, in reading order:
  * those whose own window range takes in `window`. With windows of 3 and step 1,
