@@ -36,5 +36,5 @@ Waiting for approval happens above the engine, in a `gate` the engine awaits bef
 - A later Task's output goes to a Tasks view with its log, and its deliverable to where the User chose (a Mind, a folder or the Library), not all into a Mind.
 - Effect policies on folders belong to one device: they get a `device_id`, unlike today's per-User rows (ADR-0003).
 - Task tables (`runs`, `run_steps`, `schedules`) follow ADR-0003's rules and record the device a Run executes on. "Run" and "Task" enter CONTEXT.md when Tasks are built; "Effect" is in it now.
-- A Files provider never writes into a Linked folder (ADR-0010).
+- A Files provider never changes a file in a Linked folder, and adds a new one there only with that folder's permission (ADR-0010, amended 2026-10-10 by #124).
 - On macOS, the OS sandbox relies on `sandbox-exec` and Seatbelt profiles, which Apple deprecates and doesn't document for third parties; Claude Code and Codex rely on them too. Windows stays at sandbox level "none" and asks every time.

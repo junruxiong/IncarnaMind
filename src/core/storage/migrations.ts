@@ -705,6 +705,24 @@ export const migrations: readonly Migration[] = [
       CREATE INDEX minds_by_folder ON minds (folder_id) WHERE deleted_at IS NULL;
     `,
   },
+  {
+    version: 35,
+    description: "Whether IncarnaMind may add new files inside a Linked folder (#124)",
+    // Asked at the first save there, and changed in Settings; allowed is 1 or 0. It ends with
+    // its Linked folder: linked again, the folder is asked about again (src/core/outputFiles.ts).
+    sql: `
+      CREATE TABLE linked_folder_writes (
+        id TEXT PRIMARY KEY NOT NULL,
+        linked_folder_id TEXT NOT NULL,
+        allowed INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX linked_folder_writes_by_folder ON linked_folder_writes (linked_folder_id)
+        WHERE deleted_at IS NULL;
+    `,
+  },
 ];
 
 /**

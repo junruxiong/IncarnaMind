@@ -28,17 +28,6 @@ const isPaneWidth = (value: unknown): value is number =>
 
 const isBoolean = (value: unknown): value is boolean => typeof value === "boolean";
 
-/** A Mind's ID, as a tab names it: any short non-blank text (the Mind may be gone since). */
-const isMindId = (value: unknown): value is string =>
-  typeof value === "string" && value.trim() !== "" && value.length <= 200;
-
-/** Open Mind tabs: a list of distinct IDs, at most 100. */
-const isMindIdList = (value: unknown): value is string[] =>
-  Array.isArray(value) &&
-  value.length <= 100 &&
-  value.every(isMindId) &&
-  new Set(value).size === value.length;
-
 const isNonBlankText = (value: unknown): value is string =>
   typeof value === "string" && value.trim() !== "" && value.length <= 500;
 
@@ -78,13 +67,9 @@ const deviceScope: Scope<DeviceSettings> = {
   name: "device",
   table: "device_settings",
   defaults: {
-    // DESIGN.md: the sidebar is 248px by default; the viewer opens at about half the room beside the sidebar.
+    // DESIGN.md: the sidebar is 248px by default.
     sidebarWidth: 248,
     sidebarHidden: false,
-    viewerWidth: null,
-    openMinds: [],
-    activeMind: null,
-    libraryTab: "closed",
     chatSetupDismissed: false,
     gettingStarted: {
       started: false,
@@ -100,11 +85,6 @@ const deviceScope: Scope<DeviceSettings> = {
   validators: {
     sidebarWidth: isPaneWidth,
     sidebarHidden: isBoolean,
-    viewerWidth: (value): value is number | null => value === null || isPaneWidth(value),
-    openMinds: isMindIdList,
-    activeMind: (value): value is string | null => value === null || isMindId(value),
-    libraryTab: (value): value is "closed" | "open" | "shown" =>
-      value === "closed" || value === "open" || value === "shown",
     chatSetupDismissed: isBoolean,
     gettingStarted: isGettingStarted,
     skillScriptsEnabled: isBoolean,
