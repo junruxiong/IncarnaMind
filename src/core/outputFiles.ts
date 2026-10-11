@@ -5,7 +5,9 @@
  * e.g. next to the original it was made from, once the User has allowed that
  * folder (ADR-0010). A new file never replaces anything: it takes the next
  * free name. Folders are checked with symbolic links resolved, so nothing
- * lands outside the place the User chose.
+ * lands outside the place the User chose. A file that is IncarnaMind's own
+ * writing (an export, a source pack) has its fingerprint recorded first, so
+ * checks leave it out of their evidence wherever it ends up (#80).
  *
  * Questions work as consent's do: a save that needs an answer raises
  * "fileWrite.requested" and waits; saves waiting for the same answer share it.
@@ -18,6 +20,7 @@ import type {
   LinkedFolder,
   LinkedFolderWriting,
   OutputSettings,
+  OwnFileKind,
   SavedFile,
 } from "./api";
 import { isInside } from "./documents/files";
@@ -44,6 +47,12 @@ export interface NewFile {
   name: string;
   data: Uint8Array;
   /**
+   * What IncarnaMind wrote it as, so checks leave it out of their evidence
+   * wherever it ends up (#80): an export or a source pack. Null for a source
+   * IncarnaMind saves, such as a Transcript or a web page, which counts.
+   */
+  ownFile: OwnFileKind | null;
+  /**
    * The folder to save it in, if not the Output location: one inside a Linked
    * folder, e.g. next to the original it was made from. Anywhere else is refused.
    */
@@ -59,6 +68,8 @@ export interface OutputFilesOptions {
   suggested: string;
   /** The live Linked folders. */
   linkedFolders(): readonly Pick<LinkedFolder, "id" | "path">[];
+  /** Records the fingerprint of a file IncarnaMind wrote, before it is written (see ./documents/ownFiles). */
+  recordOwnFile(data: Uint8Array, kind: OwnFileKind): void;
 }
 
 /** A question as a save raises it, before it has an id. */
@@ -316,6 +327,8 @@ export function createOutputFiles(options: OutputFilesOptions) {
           file.folder === undefined ? await outputFolder(name) : await givenFolder(file.folder);
         const linked = ownerOf(folder);
         if (linked && !(await allowedIn(linked, name))) continue;
+        // Before the file exists, so a Linked folder can't index it as the User's.
+        if (file.ownFile) options.recordOwnFile(file.data, file.ownFile);
         const used = await writeNewFile(folder, name, file.data);
         const path = join(folder, used);
         saved.add(path);

@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { enterFrom, exitToward } from "../motion";
 import { CheckLineIcon } from "./lineIcons";
 import { menuClass, menuTitleClass } from "./ui";
 
@@ -79,7 +80,8 @@ export function SearchPicker<Id>({
   );
   const shown = Math.min(active, Math.max(0, shownOptions.length - 1));
 
-  // Opens beside its anchor, below it or above if there is no room, and takes the focus.
+  // Opens beside its anchor, below it or above if there is no room, growing from it, and takes
+  // the focus.
   useLayoutEffect(() => {
     const element = panel.current;
     if (!open || !element || !anchor) return;
@@ -95,6 +97,7 @@ export function SearchPicker<Id>({
       below + height > window.innerHeight - EDGE_PX
         ? `${Math.max(EDGE_PX, box.top - GAP_PX - height)}px`
         : `${below}px`;
+    enterFrom(element, anchor);
     field.current?.focus();
   }, [open, anchor]);
 
@@ -142,6 +145,10 @@ export function SearchPicker<Id>({
       data-testid={`${testId}-picker`}
       role="dialog"
       aria-label={title}
+      // Closing, it shrinks back toward what it opened beside.
+      onBeforeToggle={(event) => {
+        if (event.newState === "closed") exitToward(event.currentTarget, anchor);
+      }}
       onToggle={(event) => {
         if (event.newState === "closed") {
           onClose();

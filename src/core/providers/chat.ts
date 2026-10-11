@@ -43,6 +43,7 @@ import {
 } from "./kinds";
 import { type ListedModel, listProviderModels } from "./modelLists";
 import type { ChatLanguageModel, ChatModelFactory, ChatModelSpec, ContextWindow } from "./models";
+import { isCloudModelName, OLLAMA_CLOUD } from "./ollamaCloud";
 import {
   DEFAULT_OLLAMA_SETTINGS,
   type OllamaModelProfile,
@@ -204,6 +205,45 @@ export function createChat(options: {
   const profileFor = (kind: ChatProviderKind, baseUrl: string | null, modelId: string) =>
     kind === "ollama" && baseUrl ? ollamaModels.describe(baseUrl, modelId) : Promise.resolve(null);
 
+  /**
+   * Which models in Ollama run on ollama.com, as last asked, by server and
+   * model. Sync code (`defaultService`, `mightBeReady`) reads it; anything that
+   * sends data asks first (`remoteService`), so it never relies on a stale answer.
+   */
+  const remoteModels = new Map<string, boolean>();
+  const remoteKey = (baseUrl: string | null, modelId: string) => `${baseUrl ?? ""}\n${modelId}`;
+
+  /** Asks Ollama whether the model runs on ollama.com, and remembers what it said. */
+  const refreshRemote = async (
+    kind: ChatProviderKind,
+    baseUrl: string | null,
+    modelId: string,
+  ): Promise<boolean> => {
+    if (kind !== "ollama" || !baseUrl) return false;
+    // The name decides first, whatever Ollama says: a false "local" would send data away unasked.
+    const remote =
+      isCloudModelName(modelId) ||
+      ((await ollamaModels.describe(baseUrl, modelId))?.remote ?? false);
+    remoteModels.set(remoteKey(baseUrl, modelId), remote);
+    return remote;
+  };
+
+  /** Where a request to the model goes: the server's service, else ollama.com for a cloud model in Ollama. Asks Ollama. */
+  const remoteService = async (
+    server: { kind: ChatProviderKind; baseUrl: string | null; endpoint?: string | null },
+    modelId: string,
+  ): Promise<ExternalService | null> =>
+    serviceFor(server.kind, server.baseUrl, server.endpoint) ??
+    ((await refreshRemote(server.kind, server.baseUrl, modelId)) ? OLLAMA_CLOUD : null);
+
+  /** `remoteService` without asking: what was last learnt, else what the name says. */
+  const knownService = (row: ProviderRow, modelId: string): ExternalService | null =>
+    rowService(row) ??
+    (row.kind === "ollama" &&
+    (remoteModels.get(remoteKey(row.base_url, modelId)) ?? isCloudModelName(modelId))
+      ? OLLAMA_CLOUD
+      : null);
+
   /** A ChatGPT plan provider counts only while the experimental switch is on. */
   const usable = (row: ProviderRow | undefined) =>
     row && (row.kind !== "chatgpt" || chatGpt.enabled()) ? row : undefined;
@@ -318,7 +358,7 @@ export function createChat(options: {
     }
   };
 
-  const toProvider = async (row: ProviderRow): Promise<ChatProvider> => {
+  const toProvider = async (row: ProviderRow, modelId?: string): Promise<ChatProvider> => {
     const kind = row.kind as ChatProviderKind;
     const hasApiKey = acceptsApiKey(kind) && (await secrets.tryGet(keyName(row.id))) !== null;
     return {
@@ -328,8 +368,16 @@ export function createChat(options: {
       endpoint: row.endpoint,
       baseUrl: row.base_url,
       hasApiKey,
-      service: rowService(row),
+      service: modelId === undefined ? rowService(row) : knownService(row, modelId),
     };
+  };
+
+  /** A saved provider with where its default model's requests go: a cloud model in Ollama isn't on this computer. */
+  const withDefaultModel = async (row: ProviderRow): Promise<ChatProvider> => {
+    const choice = settings.get().user.chatModel;
+    if (choice?.providerId !== row.id) return toProvider(row);
+    await refreshRemote(row.kind as ChatProviderKind, row.base_url, choice.modelId);
+    return toProvider(row, choice.modelId);
   };
 
   consent.registry.register({
@@ -338,7 +386,7 @@ export function createChat(options: {
     async services() {
       const services: ExternalService[] = [];
       for (const row of knownRows()) {
-        const service = rowService(row);
+        const service = (await withDefaultModel(row)).service;
         if (service) services.push(service);
       }
       return services;
@@ -364,8 +412,9 @@ export function createChat(options: {
     if (!choice || !row || !isChatProviderKind(row.kind)) {
       return { ready: false, reason: "no-provider" };
     }
-    const provider = await toProvider(row);
     const { modelId } = choice;
+    await refreshRemote(row.kind as ChatProviderKind, row.base_url, modelId);
+    const provider = await toProvider(row, modelId);
     if (requiresApiKey(provider.kind) && !provider.hasApiKey) {
       return { ready: false, reason: "missing-api-key", provider, modelId };
     }
@@ -387,7 +436,7 @@ export function createChat(options: {
 
   return {
     async list(): Promise<ChatProvider[]> {
-      return Promise.all(knownRows().map(toProvider));
+      return Promise.all(knownRows().map(withDefaultModel));
     },
 
     /** Saves the provider and makes the model on it the default. The key is stored first: if the keychain refuses it, nothing changes. */
@@ -477,7 +526,10 @@ export function createChat(options: {
     describe(id: string): { kind: ChatProviderKind; local: boolean } | null {
       const row = rowById(id);
       if (!row || !isChatProviderKind(row.kind)) return null;
-      return { kind: row.kind, local: rowService(row) === null };
+      const choice = settings.get().user.chatModel;
+      const service =
+        choice?.providerId === row.id ? knownService(row, choice.modelId) : rowService(row);
+      return { kind: row.kind, local: service === null };
     },
 
     /**
@@ -501,7 +553,8 @@ export function createChat(options: {
     /** The service the default chat model sends to, or null when there is none or it runs on this computer. */
     defaultService(): ExternalService | null {
       const row = defaultRow();
-      return row ? rowService(row) : null;
+      const choice = settings.get().user.chatModel;
+      return row && choice ? knownService(row, choice.modelId) : null;
     },
 
     /**
@@ -512,7 +565,8 @@ export function createChat(options: {
     mightBeReady(flow: DataFlowId): boolean {
       const row = defaultRow();
       if (!row) return false;
-      const service = rowService(row);
+      const choice = settings.get().user.chatModel;
+      const service = choice ? knownService(row, choice.modelId) : rowService(row);
       return !service || consent.status(flow, service) !== "declined";
     },
 
@@ -546,7 +600,21 @@ export function createChat(options: {
           const defaultModel = chatModel?.providerId === row.id ? [chatModel.modelId] : [];
           const models = [...new Set([...defaultModel, ...listed.map((each) => each.id)])];
           const unknown = models.filter((id) => !capabilitiesOf(row, id).known);
-          return { provider, models, unknown };
+          // Ollama says which of its models run on ollama.com; the default one may not be in the list.
+          const cloud = models.filter(
+            (id) =>
+              row.kind === "ollama" &&
+              (listed.some((each) => each.id === id && each.cloud) || isCloudModelName(id)),
+          );
+          const [chosen] = defaultModel;
+          if (
+            chosen !== undefined &&
+            !cloud.includes(chosen) &&
+            (await refreshRemote(provider.kind, row.base_url, chosen))
+          ) {
+            cloud.push(chosen);
+          }
+          return { provider, models, unknown, cloud };
         }),
       );
     },
@@ -579,7 +647,7 @@ export function createChat(options: {
       }
 
       try {
-        const service = serviceFor(server.kind, server.baseUrl, server.endpoint);
+        const service = await remoteService(server, modelId);
         if (service) await consent.ensure("chat", service);
         // A model in Ollama is tested with the settings Answers use, so it stays loaded for them.
         const profile = await profileFor(server.kind, server.baseUrl, modelId);

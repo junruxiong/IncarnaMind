@@ -32,6 +32,7 @@ const group = (id: string, name: string): LibraryGroup => ({
   id,
   name,
   description: "",
+  countsOwnFiles: false,
   createdAt: "",
   updatedAt: "",
 });
