@@ -9,9 +9,10 @@
  *   INCARNAMIND_LIVE_ANTHROPIC_KEY   Claude (INCARNAMIND_LIVE_ANTHROPIC_MODEL, Haiku by default)
  *   INCARNAMIND_LIVE_OPENAI_KEY      OpenAI (INCARNAMIND_LIVE_OPENAI_MODEL, its quick-tasks model by default)
  *   INCARNAMIND_LIVE_OLLAMA_MODEL    a model in Ollama on this computer, e.g. qwen3.5:4b, in local mode
+ *   INCARNAMIND_LIVE_OLLAMA_CLOUD_MODEL   an Ollama cloud model, e.g. gpt-oss:20b-cloud (sent to ollama.com)
  *
- * Ollama's model is looked at as the app does (a small one cites through
- * structured output), with its context kept to 8,192 tokens.
+ * Ollama's models are looked at as the app does (a small one cites through
+ * structured output), a local one with its context kept to 8,192 tokens.
  *
  * Names of their own, so a key a shell has for other tools never starts paid requests here.
  *
@@ -89,6 +90,13 @@ const LIVE: Live[] = [
     model: process.env.INCARNAMIND_LIVE_OLLAMA_MODEL ?? "",
     local: true,
   },
+  {
+    name: "Ollama cloud",
+    kind: "ollama",
+    apiKey: process.env.INCARNAMIND_LIVE_OLLAMA_CLOUD_MODEL ? "" : undefined,
+    model: process.env.INCARNAMIND_LIVE_OLLAMA_CLOUD_MODEL ?? "",
+    local: false,
+  },
 ];
 
 /** The app's own look at a model in Ollama, with its context kept to 8,192 tokens at most. */
@@ -147,7 +155,9 @@ describe.each(LIVE)("Answers in the assistant, live: $name", (live) => {
       const sources = await createTempDataFolder();
       const core = startCore(dataDir, {
         createChatModel: createAiSdkChatModel,
-        ...(live.local && { ollamaModels: ollamaAsTheAppSees() }),
+        ...(live.kind === "ollama" && {
+          ollamaModels: live.local ? ollamaAsTheAppSees() : createOllamaModels(),
+        }),
       });
       core.on("consent.requested", (asked) => void core.respondToConsent(asked.requestId, true));
       await core.saveChatProvider({
