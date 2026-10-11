@@ -444,6 +444,12 @@ export interface CoreAdapters {
   paths: Paths;
   /** The OS's preferred languages, most preferred first, as BCP 47 tags such as "zh-Hans-CN". */
   systemLanguages(): readonly string[];
+  /**
+   * The OS's region, as an ISO 3166 country code such as "GB" ("" when it doesn't say), for what
+   * goes by country rather than by language, such as the paper a PDF is printed on. Absent, or
+   * "": the region of the most preferred system language.
+   */
+  systemRegion?(): string;
   keychain: Keychain;
   browser: Browser;
   /**

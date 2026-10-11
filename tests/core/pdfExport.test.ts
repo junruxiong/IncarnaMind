@@ -68,10 +68,14 @@ function fakePrinter() {
 }
 
 /** A core with an English and a Chinese Document, and a Mind that cites both. */
-async function setUp({ printer }: { printer?: Printer } = {}) {
+async function setUp({ printer, region }: { printer?: Printer; region?: string } = {}) {
   const dataDir = await createTempDataFolder();
   const sources = await createTempDataFolder();
-  const core = startCore(dataDir, { now: manualClock().now, ...(printer && { printer }) });
+  const core = startCore(dataDir, {
+    now: manualClock().now,
+    ...(printer && { printer }),
+    ...(region !== undefined && { systemRegion: () => region }),
+  });
   const [tides, chinese] = (await addAndProcess(core, [
     await writeSourceFile(sources, "Tides.txt", "Spring tides happen at new moon."),
     await writeSourceFile(sources, "潮汐.txt", "大潮出现在新月和满月前后。"),
@@ -191,9 +195,9 @@ describe("exporting a Mind to PDF", () => {
     expect(body.endsWith(`<p>Neap tides come at the quarter moons${marker(5)}</p>`)).toBe(true);
   });
 
-  test("the deliverable leaves Questions out unless asked; in Chinese, the paper is A4 and the footnotes speak Chinese", async () => {
+  test("the deliverable leaves Questions out unless asked; in Chinese, on a computer in China, the paper is A4 and the footnotes speak Chinese", async () => {
     const { printed, printer } = fakePrinter();
-    const { core, mind, client, tides } = await setUp({ printer });
+    const { core, mind, client, tides } = await setUp({ printer, region: "CN" });
     await core.updateSettings({ user: { language: "zh-CN" } });
     writeMind(client, [
       question("大潮什么时候出现？"),
@@ -212,6 +216,19 @@ describe("exporting a Mind to PDF", () => {
     expect(withQuestions?.body).toContain(
       '<p class="question"><span class="question-label">问题：</span> 大潮什么时候出现？</p>',
     );
+  });
+
+  test("the paper goes by the computer's region, not the interface language: A4 in Britain in English, Letter in the US in Chinese", async () => {
+    const british = fakePrinter();
+    const inBritain = await setUp({ printer: british.printer, region: "GB" });
+    await inBritain.core.exportMind(inBritain.mind.id, { format: "pdf" });
+    expect(british.printed[0]).toMatchObject({ language: "en", paper: "a4" });
+
+    const american = fakePrinter();
+    const inTheUs = await setUp({ printer: american.printer, region: "US" });
+    await inTheUs.core.updateSettings({ user: { language: "zh-CN" } });
+    await inTheUs.core.exportMind(inTheUs.mind.id, { format: "pdf" });
+    expect(american.printed[0]).toMatchObject({ language: "zh-CN", paper: "letter" });
   });
 
   test("an empty Mind prints its title alone; a Mind with no title takes its first line", async () => {
@@ -328,7 +345,7 @@ async function webMind(core: Core, before: Document, after: Document) {
 }
 
 describe("a web page Citation's footnote", () => {
-  test("names the page, its site, its address and the day the version it quotes was fetched, in every format", async () => {
+  test("names the page, its site (once), its address and the day the version it quotes was fetched, in every format", async () => {
     const { printed, printer } = fakePrinter();
     const { core, before, after } = await savedTwice(printer);
     expect(after.contentHash).not.toBe(before.contentHash);
@@ -338,7 +355,8 @@ describe("a web page Citation's footnote", () => {
     const markdown = new TextDecoder().decode(
       (await core.exportMind(mind.id, { format: "markdown" })).data,
     );
-    const site = "Tea - The Open Encyclopedia, The Open Encyclopedia";
+    // The title, "Tea - The Open Encyclopedia", doesn't name the site twice.
+    const site = "Tea, The Open Encyclopedia";
     const older = `${site}, § History, ¶\u00a03, ${ADDRESS}, accessed 6 October 2026`;
     const newer = `${site}, § Start, ${ADDRESS}, accessed 8 October 2026`;
     expect(markdown).toContain(`[^1]: ${older}\n[^2]: ${newer}\n`);
@@ -358,7 +376,7 @@ describe("a web page Citation's footnote", () => {
       (await core.exportMind(mind.id, { format: "markdown" })).data,
     );
     expect(chinese).toContain(
-      `[^1]: Tea - The Open Encyclopedia，The Open Encyclopedia，§ History，第 3 段，${ADDRESS}，访问于 2026年10月6日`,
+      `[^1]: Tea，The Open Encyclopedia，§ History，第 3 段，${ADDRESS}，访问于 2026年10月6日`,
     );
   });
 
@@ -378,9 +396,7 @@ describe("a web page Citation's footnote", () => {
     const kept = new TextDecoder().decode(
       (await core.exportMind(mind.id, { format: "markdown" })).data,
     );
-    expect(kept).toContain(
-      `[^1]: Tea - The Open Encyclopedia, The Open Encyclopedia, § History, ¶\u00a03, ${ADDRESS}\n`,
-    );
+    expect(kept).toContain(`[^1]: Tea, The Open Encyclopedia, § History, ¶\u00a03, ${ADDRESS}\n`);
 
     await core.deleteDocument(before.id);
     const gone = new TextDecoder().decode(
@@ -401,6 +417,8 @@ describe("a web page Citation's footnote", () => {
 
     const [document] = printed;
     expect(document?.notes[0]).toContain("accessed October 6, 2026");
+    expect(document?.notes[0]).toContain("“Tea,” The Open Encyclopedia");
+    expect(document?.body).not.toContain("Tea - ");
     expect(document?.notes[1]).toContain("accessed October 8, 2026");
     expect(document?.body).toContain('<section class="bibliography');
     expect(document?.body).toContain("Accessed October 6, 2026");
