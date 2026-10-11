@@ -656,6 +656,32 @@ export async function clickEmptyLine(line: Locator): Promise<void> {
 }
 
 /**
+ * Selects `words` in a line of text as a person does with the mouse: slides to
+ * the first letter, presses, slides along to the end of them and lets go.
+ */
+export async function slideSelect(window: Page, line: Locator, words: string): Promise<void> {
+  const box = await line.evaluate((element, wanted) => {
+    const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const at = node.textContent?.indexOf(wanted) ?? -1;
+      if (at < 0) continue;
+      const range = element.ownerDocument.createRange();
+      range.setStart(node, at);
+      range.setEnd(node, at + wanted.length);
+      const rect = range.getBoundingClientRect();
+      return { left: rect.left, right: rect.right, y: rect.top + rect.height / 2 };
+    }
+    return null;
+  }, words);
+  if (!box) throw new Error(`"${words}" isn't in the line.`);
+  await window.mouse.move(box.left - 6, box.y, { steps: 4 });
+  await window.mouse.move(box.left + 1, box.y, { steps: 2 });
+  await window.mouse.down();
+  await window.mouse.move(box.right - 1, box.y, { steps: 12 });
+  await window.mouse.up();
+}
+
+/**
  * Enter in a Mind's title, which takes the cursor into the Mind's text, and
  * waits until it is there: a new Mind's text comes a moment after its title,
  * and until then what is typed still goes into the title.
