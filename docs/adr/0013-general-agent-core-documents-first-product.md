@@ -88,4 +88,4 @@ Web pages and documents other people wrote are now main inputs, so the consequen
 
 ## Amendment, 2026-10-12: where an Answer is written (ADR-0017)
 
-The opening says an Answer is written into a Mind. Since #201 and ADR-0017, an Answer is written in the assistant's conversation instead. A Mind gets it only when the User picks Add to note, or as Proposals the User accepts (#202). The product stays documents-first: wherever an Answer is shown, its Citations are checked against the Documents.
+The opening says an Answer is written into a Mind. With ADR-0017 and #201, an Answer is written in the assistant's conversation instead. A Mind gets it only when the User picks Add to note, or as Proposals the User accepts (#202). The product stays documents-first: wherever an Answer is shown, its Citations are checked against the Documents.
