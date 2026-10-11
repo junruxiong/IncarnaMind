@@ -1,4 +1,4 @@
-import type { Transcriber } from "../../src/core";
+import type { Transcriber, TranscriptionModelFiles } from "../../src/core";
 import {
   createChannelTranscriber,
   serveTranscriber,
@@ -6,6 +6,7 @@ import {
   type TranscriberResponse,
 } from "../../src/core/transcription/channel";
 import { createFakeSpeechEngine, type FakeSpeechOptions } from "../../src/core/transcription/fake";
+import type { SpeechEngine } from "../../src/core/transcription/speech";
 
 /** No files to download: the fake engine needs none. */
 export const NO_TRANSCRIPTION_FILES = {
@@ -17,9 +18,14 @@ export const NO_TRANSCRIPTION_FILES = {
  * A `Transcriber` whose engine (the fake one) runs in this process behind
  * the same channel as the desktop app's utility process, messages crossing a
  * turn of the event loop as they would between processes. `crash` kills the
- * running one, as an out-of-memory would.
+ * running one, as an out-of-memory would. `engine` runs another engine, the
+ * real one in the live tests.
  */
-export function inProcessTranscriber(options: FakeSpeechOptions = {}) {
+export function inProcessTranscriber(
+  options: FakeSpeechOptions = {},
+  engine: (model: TranscriptionModelFiles) => Promise<SpeechEngine> = async () =>
+    createFakeSpeechEngine(options),
+) {
   let kill: (() => void) | null = null;
   let started = 0;
   const transcriber: Transcriber = createChannelTranscriber(() => {
@@ -28,7 +34,7 @@ export function inProcessTranscriber(options: FakeSpeechOptions = {}) {
     let deliver: (request: TranscriberRequest) => void = () => {};
     const responses: ((response: TranscriberResponse) => void)[] = [];
     const exits: ((code: number | null) => void)[] = [];
-    serveTranscriber(async () => createFakeSpeechEngine(options), {
+    serveTranscriber(engine, {
       onRequest: (listener) => {
         deliver = listener;
       },
