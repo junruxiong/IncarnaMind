@@ -76,6 +76,10 @@ _Avoid_: project (in the interface), group (a Folder's former name; a Group is n
 The one place for every Document and Mind in no Folder. A Mind there searches all Documents.
 _Avoid_: Unsorted, Uncategorised, Inbox
 
+**Suggested Folder**:
+A Folder that Organize proposes for a Document, which waits for the User to accept it (it becomes the User's choice) or reject it (the Document stays Not in a Folder and that Folder isn't suggested for it again). While it waits, the Document counts as in that Folder, for listings and for the Folder's Search scope, marked as a suggestion.
+_Avoid_: automatic Folder, proposed Folder
+
 **Source location**:
 The original file or Linked folder from which IncarnaMind reads Documents. Its folders mirror the disk and are independent of the Folders used to organise Documents inside IncarnaMind.
 
