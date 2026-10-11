@@ -20,6 +20,7 @@ import { hasSearchScope } from "../../src/shared/searchScope";
 const mind = (id: string, folderId: string | null, title = id): Mind => ({
   id,
   title,
+  autoTitle: "",
   kind: "mind",
   createdAt: "",
   updatedAt: "",
@@ -131,22 +132,21 @@ describe("moving Minds and Documents", () => {
     ]);
   });
 
-  test("undoing moves each back to where it was, in one move per Folder it came from", () => {
+  test("undoing moves each Mind back to where it was, in one move per Folder it came from", () => {
     expect(
       undoMoves({
         folderId: "finance",
         minds: [
           { id: "shortlist", from: null },
+          { id: "notes", from: "research" },
           { id: "already", from: "finance" },
         ],
-        documents: [
-          { id: "moon", from: "research" },
-          { id: "harbour", from: null },
-        ],
+        // Documents go back with `restoreAssignment`, each with who chose its Folder.
+        documents: [{ id: "moon", from: "research", previous: null }],
       }),
     ).toEqual([
-      { folderId: null, items: { mindIds: ["shortlist"], documentIds: ["harbour"] } },
-      { folderId: "research", items: { mindIds: [], documentIds: ["moon"] } },
+      { folderId: null, items: { mindIds: ["shortlist"] } },
+      { folderId: "research", items: { mindIds: ["notes"] } },
     ]);
   });
 

@@ -494,12 +494,14 @@ test("a Document row shows up to three Tag colours and +N after its name, names 
       [long]: ["Paper", "Notes"],
     });
     await expect(row("Attention").getByTestId("tag-dot")).toHaveCount(3);
-    expect(await marksOf(row("Attention"))).toEqual({
-      colours: ["orange", "red", "purple"],
-      more: "+1",
-    });
-    expect(await marksOf(row("Q1 report"))).toEqual({ colours: ["blue"], more: null });
-    expect(await marksOf(row(long))).toEqual({ colours: ["gray", "purple"], more: null });
+    // The Tags arrive one by one: wait for the fourth's "+1", not just three dots.
+    await expect
+      .poll(() => marksOf(row("Attention")))
+      .toEqual({ colours: ["orange", "red", "purple"], more: "+1" });
+    await expect.poll(() => marksOf(row("Q1 report"))).toEqual({ colours: ["blue"], more: null });
+    await expect
+      .poll(() => marksOf(row(long)))
+      .toEqual({ colours: ["gray", "purple"], more: null });
     await expect(row("Field notes").getByTestId("tag-marks")).toHaveCount(0);
     // Nothing moved: every row where it was, 28px, its name on one line.
     expect(await boxes()).toEqual(before);

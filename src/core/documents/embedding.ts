@@ -55,6 +55,11 @@ export interface EmbeddingQueue {
    * "embedding" are waiting their turn: they are shown as queued.
    */
   isEmbedding(documentId: string): boolean;
+  /**
+   * Holds embedding back, while a Meeting is recorded (#135): the Document
+   * being embedded stops after the batch in flight and waits first in line.
+   */
+  hold(held: boolean): void;
   /** Moves every Document waiting for the model on to "embedding", and queues it. */
   resumeWaiting(): void;
   /**
@@ -81,6 +86,7 @@ export function createEmbeddingQueue(options: EmbeddingQueueOptions): EmbeddingQ
   const queue: string[] = [];
   let running = false;
   let closed = false;
+  let held = false;
   /** The Document whose turn it is, from its model loading to its last vector. */
   let current: string | undefined;
   /** Counts model switches: work started under an earlier count stops. */
@@ -229,6 +235,10 @@ export function createEmbeddingQueue(options: EmbeddingQueueOptions): EmbeddingQ
       });
       dimensions = size;
       for (const { seq, vector } of stored) vectors.add(id, seq, vector);
+      if (held) {
+        if (!queue.includes(id)) queue.unshift(id);
+        return "skipped";
+      }
       if (Date.now() - announced >= PROGRESS_INTERVAL_MS) {
         announced = Date.now();
         announce(id);
@@ -252,11 +262,14 @@ export function createEmbeddingQueue(options: EmbeddingQueueOptions): EmbeddingQ
     return "done";
   }
 
+  /** The next Document in line, unless the queue is closed or held. */
+  const next = () => (closed || held ? undefined : queue.shift());
+
   async function pump(): Promise<void> {
     if (running) return;
     running = true;
     try {
-      for (let id = queue.shift(); id !== undefined && !closed; id = queue.shift()) {
+      for (let id = next(); id !== undefined; id = next()) {
         if ((await embedDocument(id)) === "model-unavailable") {
           if (!closed) park();
           break;
@@ -268,7 +281,7 @@ export function createEmbeddingQueue(options: EmbeddingQueueOptions): EmbeddingQ
       running = false;
     }
     // Something may have been queued while the last Document was finishing.
-    if (!closed && queue.length > 0) void pump();
+    if (!closed && !held && queue.length > 0) void pump();
   }
 
   function enqueue(documentId: string): boolean {
@@ -295,6 +308,11 @@ export function createEmbeddingQueue(options: EmbeddingQueueOptions): EmbeddingQ
         setStatus(id, "embedding", "waiting-for-model");
         if (!enqueue(id)) announce(id);
       }
+    },
+
+    hold(value) {
+      held = value;
+      if (!held && !closed) void pump();
     },
 
     restart() {

@@ -1276,10 +1276,10 @@ export function createLibrary(options: LibraryOptions) {
       if (linkedFolderId) announceProgress();
     },
 
-    /** The User removed a Document from the index: its Folder may hold nothing now. */
-    documentRemoved(linkedFolderId: string | null): void {
+    /** The User removed a Document from the index, or restored one: its Folder may hold nothing now, or something again. */
+    documentsChanged(linkedFolderId: string | null): void {
       if (!linkedFolderId) {
-        watchSingles(); // its folder may hold no file added on its own now
+        watchSingles(); // its folder may hold no file added on its own now, or one again
         return;
       }
       if (syncFolders(linkedFolderId)) hooks.foldersChanged();
