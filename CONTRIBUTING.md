@@ -6,7 +6,7 @@ Thank you for helping. Code, testing with your own documents, translations and i
 
 - Found a bug, or want a feature? [Open an issue](https://github.com/junruxiong/IncarnaMind/issues/new/choose). For a bug, say what you did, what you expected and what happened, and your operating system.
 - Questions and ideas: [Discussions](https://github.com/junruxiong/IncarnaMind/discussions).
-- Looking for something to work on? Issues labelled [good first issue](https://github.com/junruxiong/IncarnaMind/labels/good%20first%20issue) or [help wanted](https://github.com/junruxiong/IncarnaMind/labels/help%20wanted) are a good start. Say in the issue that you're taking it.
+- Looking for something to work on? Issues labelled [good first issue](https://github.com/junruxiong/IncarnaMind/labels/good%20first%20issue) are a good start. Say in the issue that you're taking it.
 
 ## Labels
 
