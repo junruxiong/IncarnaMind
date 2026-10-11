@@ -4,7 +4,7 @@ import { useT } from "../../i18n";
 import { activeTabOf, focusedGroupOf } from "../../layoutSlice";
 import { useAppStore } from "../../store";
 import { useGroupsMerged } from "../../useWindowWidth";
-import { ExportDialog } from "../ExportDialog";
+import { ExportDialog, useExportDialog } from "../ExportDialog";
 import { LibraryPane } from "../LibraryPane";
 import { ResizeRod } from "../ResizeRod";
 import { DocumentTab } from "./DocumentTab";
@@ -30,8 +30,9 @@ export function TabGroups() {
   const width = useWidth(container);
   /** Widths while a divider is dragged, before the core has them. */
   const [dragging, setDragging] = useState<number[] | null>(null);
-  /** The Mind whose export dialog is open. */
-  const [exporting, setExporting] = useState<string | null>(null);
+  /** The Mind whose export dialog is open (the tab strip's Export, or the References block's). */
+  const exporting = useExportDialog((state) => state.mindId);
+  const setExporting = useExportDialog((state) => state.open);
   const exportMind = useAppStore((state) => state.minds.find((mind) => mind.id === exporting));
 
   // A double-click on a divider makes the groups equal, as in VS Code.
@@ -88,7 +89,7 @@ export function TabGroups() {
         ))}
       </div>
       <DragFeedback dragged={drag.dragged} target={drag.target} />
-      <ExportDialog mind={exportMind ?? null} onClose={() => setExporting(null)} />
+      <ExportDialog mind={exportMind ?? null} onClose={() => useExportDialog.getState().close()} />
     </>
   );
 }
