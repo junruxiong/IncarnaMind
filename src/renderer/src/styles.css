@@ -2288,22 +2288,6 @@
       color: var(--color-ink);
     }
   }
-  .answer-notice-action {
-    flex-shrink: 0;
-    height: 28px;
-    padding: 0 10px;
-    border-radius: 6px;
-    background: var(--color-sheet);
-    box-shadow: inset 0 0 0 1px var(--color-rule-strong);
-    font-family: var(--font-sans);
-    font-size: 13px;
-    font-weight: 600;
-    color: #2e3238;
-
-    &:hover {
-      background: var(--color-frame);
-    }
-  }
 
   /*
    * An Answer: no box, no label. Its text keeps the Mind's edge in ink-answer,
@@ -2552,29 +2536,12 @@
     padding: 0;
     list-style: none;
   }
-  /* A model that can't cite, and an edited Answer about to be replaced. */
+  /* A model that can't cite. */
   .answer-info {
     font-family: var(--font-sans);
     font-size: 13px;
     line-height: 20px;
     color: var(--color-ink-meta);
-  }
-  .answer-notice {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px 12px;
-    padding-block: 8px;
-    border-block: 1px solid var(--color-rule);
-    font-family: var(--font-sans);
-    font-size: 13px;
-    line-height: 20px;
-    color: var(--color-ink-secondary);
-    user-select: none;
-  }
-  .answer-notice-text {
-    flex: 1 1 16rem;
-    min-width: 0;
   }
 
   /*
@@ -2953,6 +2920,31 @@
 
     &:hover {
       text-decoration: underline;
+    }
+  }
+  /*
+   * A change out of date (#94; DESIGN.md, AI edits): its new words grey, on a
+   * dashed ink-placeholder underline, and a grey line under its Block, "Out of
+   * date · Regenerate · Reject", in place of its bar. It can't be accepted.
+   */
+  .mind-editor ins.proposal-insert:has(> .proposal-stale),
+  .mind-editor .proposal-node--insert.proposal-stale:not(.citation-marker) {
+    color: var(--color-ink-meta);
+    text-decoration: underline dashed 1px var(--color-ink-placeholder);
+  }
+  .mind-editor .proposal-stale-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    line-height: 20px;
+    color: var(--color-ink-meta);
+    user-select: none;
+
+    & .proposal-action {
+      color: var(--color-ink-secondary);
     }
   }
   /* One change's own bar, over its first line: "Change 1 of 3 · Accept · Reject". */
