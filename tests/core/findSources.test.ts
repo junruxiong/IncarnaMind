@@ -645,6 +645,12 @@ describe("Find sources: the Answer's Tool", { timeout: 30_000 }, () => {
     expect(asksForSources("租户需要提前多久通知？")).toBe(false);
     expect(asksForSources("When are the tide tables published?")).toBe(false);
     expect(asksForSources("What does Article 5 of the lease say?")).toBe(false);
+    expect(asksForSources("What are the sources of revenue in the report?")).toBe(false);
+    expect(asksForSources("Find sources on urban heat islands")).toBe(true);
+    expect(asksForSources("Can you search for some recent articles about base editing?")).toBe(
+      true,
+    );
+    expect(asksForSources("帮我查找一些关于城市热岛的资料")).toBe(true);
   });
 
   test("in local mode, an Answer isn't offered find_sources", async () => {
