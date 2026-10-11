@@ -10,7 +10,7 @@
  *   wait meanwhile, and one tries first when the wait is over: it never
  *   retries in a loop.
  */
-import { ChatGptPlanError } from "../providers/chatgpt/errors";
+import { ChatGptPlanError, isPlanLimit } from "../providers/chatgpt/errors";
 import type { Pace, PaceTimers } from "../sources/pace";
 
 export const PLAN_PACE = {
@@ -21,10 +21,6 @@ export const PLAN_PACE = {
 
 /** The Pace's lane: every plan request tagging makes, Organize's and automatic tagging's. */
 const LANE = "chatgpt-plan-tagging";
-
-/** The plan's usage limit is reached (`ChatGptPlanError`), as a request or a paused tagger says. */
-export const isPlanLimit = (error: unknown): error is ChatGptPlanError =>
-  error instanceof ChatGptPlanError && error.kind === "plan-limit";
 
 export type PlanPace = ReturnType<typeof createPlanPace>;
 
