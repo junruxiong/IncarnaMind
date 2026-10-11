@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   AgentActivity,
   AgentClientId,
@@ -13,6 +13,7 @@ import {
   buttonStyle,
   ghostButtonClass,
   hintClass,
+  inputClass,
   rowButtonsClass,
   rowTextClass,
   rowTitleClass,
@@ -49,6 +50,7 @@ export function AgentPairingRow({
   const [open, setOpen] = useState<"folders" | "activity" | null>(null);
   const [activity, setActivity] = useState<AgentActivity[] | null>(null);
   const [copied, setCopied] = useState(false);
+  const [renaming, setRenaming] = useState(false);
 
   // The activity list follows each call while it is open.
   useEffect(() => {
@@ -88,9 +90,25 @@ export function AgentPairingRow({
   return (
     <li data-testid="agent-pairing" data-name={pairing.name} className={ruledRowClass}>
       <div className="flex min-w-0 flex-col gap-0.5">
-        <span className={`${rowTitleClass} truncate`} title={pairing.name}>
-          {pairing.name}
-        </span>
+        {renaming ? (
+          <RenameAgent pairing={pairing} onDone={() => setRenaming(false)} />
+        ) : (
+          <button
+            type="button"
+            data-testid="agent-pairing-name"
+            title={pairing.name}
+            onDoubleClick={() => setRenaming(true)}
+            onKeyDown={(event) => {
+              if (event.key === "F2") {
+                event.preventDefault();
+                setRenaming(true);
+              }
+            }}
+            className={`${rowTitleClass} cursor-default truncate text-left`}
+          >
+            {pairing.name}
+          </button>
+        )}
         <span data-testid="agent-pairing-reads" className={rowTextClass}>
           {names.length > 0
             ? t("agents.pairing.reads", { folders: names.join(", ") })
@@ -217,5 +235,54 @@ export function AgentPairingRow({
         </button>
       </div>
     </li>
+  );
+}
+
+/**
+ * An agent's name, renamed in place as everywhere (a double-click or F2):
+ * Enter or leaving the field saves, Esc cancels, and an empty name changes
+ * nothing. Enter while a Chinese input method is composing only composes.
+ */
+function RenameAgent({ pairing, onDone }: { pairing: AgentPairing; onDone(): void }) {
+  const t = useT();
+  const reportError = useAppStore((state) => state.reportError);
+  const [value, setValue] = useState(pairing.name);
+  const field = useRef<HTMLInputElement>(null);
+  const finished = useRef(false);
+
+  useEffect(() => {
+    field.current?.focus();
+    field.current?.select();
+  }, []);
+
+  const finish = (save: boolean) => {
+    if (finished.current) return;
+    finished.current = true;
+    const name = value.trim();
+    if (save && name && name !== pairing.name) {
+      core.updateAgent(pairing.id, { name }).catch(reportError);
+    }
+    onDone();
+  };
+
+  return (
+    <input
+      ref={field}
+      value={value}
+      data-testid="agent-pairing-rename"
+      aria-label={t("agents.pairing.renameLabel", { agent: pairing.name })}
+      onChange={(event) => setValue(event.target.value)}
+      onKeyDown={(event) => {
+        if (event.nativeEvent.isComposing) return;
+        if (event.key === "Enter" || event.key === "Escape") {
+          // Esc ends the renaming, not Settings.
+          event.preventDefault();
+          event.stopPropagation();
+          finish(event.key === "Enter");
+        }
+      }}
+      onBlur={() => finish(true)}
+      className={inputClass}
+    />
   );
 }
