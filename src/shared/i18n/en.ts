@@ -1618,6 +1618,24 @@ export const en = {
     "Every claim gets a mark in the margin: {mark} when the quote is found in your Document. Click it to open the page.",
   "startGuide.example.lead": "Want to see it first?",
   "startGuide.example.open": "Open the example Mind",
+  "restore.error.unknown": "That isn't in Recently deleted.",
+  "restore.error.deletedPermanently": "“{name}” was deleted permanently, so it can't be restored.",
+  "restore.error.expired":
+    "“{name}” was deleted more than {days} days ago, so it can't be restored.",
+  "restore.error.unlinked":
+    "“{name}” can't be restored: the Linked folder it was in has been unlinked.",
+  "restore.error.documentBack": "“{name}” is in the Library again, so it can't be restored.",
+  "restore.error.documentGone": "That Document was deleted. Restore it first.",
+  "restore.error.tagGone": "The Tag “{name}” was deleted. Restore it first.",
+  "restore.error.folderGone": "The Folder “{name}” was deleted. Restore it first.",
+  "restore.error.tagNameTaken":
+    "There is another Tag named “{name}” now. Rename it, then restore this one.",
+  "restore.error.folderNameTaken":
+    "There is another Folder named “{name}” now. Rename it, then restore this one.",
+  "restore.error.folderLimit":
+    "The Library holds up to 100 Folders. Delete one, then restore this one.",
+  "deletePermanently.error.notDeleted":
+    "“{name}” isn't deleted, so it can't be deleted permanently.",
   "meetings.mindTitle": "Meeting, {date}",
   "settings.pages.meetings": "Meetings",
   "status.readingPaused": "Reading paused while recording",
