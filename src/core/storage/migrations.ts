@@ -842,7 +842,7 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
-    version: 46,
+    version: 47,
     description: "Found sources: where a Document or reference Find sources added came from (#296)",
     sql: `
       -- One row per Document, or reference record with no Document, that Find
