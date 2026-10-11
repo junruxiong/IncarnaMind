@@ -8,6 +8,7 @@ import { renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../../src/core/api";
+import { settingsPages } from "../../src/renderer/src/settingsPages";
 import type { TestHooks } from "../../src/shared/testHooks";
 import { writeFixtures } from "./fixtures";
 import {
@@ -266,17 +267,7 @@ test("A2 first run without examples: chat setup, the empty Mind, Settings", asyn
       await click(window, window.getByRole("button", { name: "Settings", exact: true }));
       const settings = window.getByTestId("settings");
       await expect(settings).toBeVisible();
-      const pages = [
-        "general",
-        "chat-model",
-        "search",
-        "organization",
-        "connectors",
-        "skills",
-        "approvals",
-        "privacy",
-      ];
-      for (const page of pages) {
+      for (const page of settingsPages) {
         const nav = settings.getByTestId(`settings-nav-${page}`);
         if (!(await nav.count())) continue;
         await click(window, nav);
@@ -435,7 +426,7 @@ test("A3 a working session: a Linked folder, Answers with Citations, the viewer,
     });
 
     const formats: [string, string, string][] = [
-      ["pdf", fixtures.names.pdf, "viewer-scroller,[data-testid=pdf-scroller]"],
+      ["pdf", fixtures.names.pdf, "[data-testid=pdf-scroller]"],
       ["pdf-300-pages", fixtures.names.bigPdf, "[data-testid=pdf-scroller]"],
       ["docx", fixtures.names.docx, "[data-testid=viewer-docx]"],
       ["docx-images", fixtures.names.imageDocx, "[data-testid=viewer-docx]"],
@@ -564,7 +555,7 @@ test("A3 a working session: a Linked folder, Answers with Citations, the viewer,
         ctrlTab: cycled,
         cmdW: await tabs.count(),
       });
-      await shot(window.getByTestId("mind-tabs"), "A38-tabs");
+      await shot(window.getByTestId("tab-strip").first(), "A38-tabs");
     });
 
     // Window sizes: see A6.
@@ -900,7 +891,12 @@ test("A6 window sizes, the three steps, the @ and / menus, hover states", async 
           ),
         });
       }
-      await click(window, window.getByTestId("viewer-close"));
+      // Earlier steps can leave more than one Document open: close them all.
+      const documentTabs = window.getByTestId("document-tab");
+      while (await documentTabs.count()) {
+        await click(window, documentTabs.first().getByTestId("tab-close"));
+      }
+      await expect(window.getByTestId("viewer")).toBeHidden();
       for (const [w, h] of sizes) {
         await resize(w, h);
         await shot(window, `A83-size-${w}x${h}`);

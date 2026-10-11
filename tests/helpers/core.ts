@@ -108,6 +108,9 @@ export function startCore(dataDir: string, overrides: Partial<CoreAdapters> = {}
       arxiv: NOWHERE,
       pubmed: NOWHERE,
       crossref: NOWHERE,
+      openfda: NOWHERE,
+      dailymed: NOWHERE,
+      clinicaltrials: NOWHERE,
     },
     ...overrides,
     // Linked folders settle and retry quickly in tests.
