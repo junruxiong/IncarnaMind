@@ -5282,9 +5282,9 @@ export interface CoreApi {
   createSkill(draft: SkillDraft): Promise<SkillSaveResult>;
   /**
    * Saves what the User changed in a Skill that isn't built-in, keeping its
-   * other files and whether it's on. Its SKILL.md is written again from the
-   * draft, with the licence, compatibility and metadata it had; any other
-   * frontmatter field is dropped. Throws for a built-in Skill: duplicate it.
+   * other files and whether it's on. Only the name, the description and the
+   * instructions of its SKILL.md change; every other frontmatter field stays as
+   * written. Throws for a built-in Skill: duplicate it.
    */
   updateSkill(skillId: string, draft: SkillDraft): Promise<SkillSaveResult>;
   /**
