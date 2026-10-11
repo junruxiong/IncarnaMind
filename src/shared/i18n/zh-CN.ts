@@ -2175,8 +2175,9 @@ export const zhCN = {
   "agents.mind.outsideCitation": "未共享给此智能体的文件夹中的文档",
   "settings.pages.agents": "智能体",
   "agents.settings.experimental": "实验",
+  "agents.settings.lead": "在 Claude、Codex 或 Cursor 里问你的文档。",
   "agents.settings.intro":
-    "让你已在用的 AI 智能体（例如 Claude、Codex 或 Cursor）搜索你选择的文件夹并引用其中内容。它给出的每条引文都由 IncarnaMind 核对。",
+    "连接你已在用的 AI 工具，选好它能读的文件夹，它的回答就会引用这些文档，每条引文都由 IncarnaMind 核对。",
   "agents.settings.switch": "连接 AI 智能体",
   "agents.settings.switch.off": "已关闭：任何智能体都无法读取你的文档。",
   "agents.settings.switch.on":
