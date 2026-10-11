@@ -273,6 +273,7 @@ export type SettingsPage =
   | "meetings"
   | "connectors"
   | "skills"
+  | "agents"
   | "privacy";
 
 /** Opens Settings from the sidebar, then one of the pages in its list. Returns the dialog. */

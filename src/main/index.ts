@@ -83,8 +83,24 @@ function exposeCore(core: Core): void {
     });
   }
   core.onAnyEvent((name, payload) => {
+    // An outside agent asked to show a Citation (#351): the app comes in front to show it, in
+    // a new window once loaded if none is open.
+    if (name === "agents.citationShown" && appWindows().length === 0) {
+      const window = createWindow();
+      window.webContents.once("did-finish-load", () =>
+        window.webContents.send(EVENT_CHANNEL, name, payload),
+      );
+      return;
+    }
     for (const window of appWindows()) {
       if (!window.isDestroyed()) window.webContents.send(EVENT_CHANNEL, name, payload);
+    }
+    if (name === "agents.citationShown") {
+      const [front] = appWindows();
+      if (front?.isMinimized()) front.restore();
+      front?.show();
+      front?.focus();
+      app.focus({ steal: true });
     }
   });
 }
