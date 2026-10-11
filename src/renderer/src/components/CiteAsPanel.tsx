@@ -42,12 +42,15 @@ export function CiteAsPanel({
   record,
   focusField,
   onClose,
+  inPopover = false,
 }: {
   document: Document;
   record: ReferenceRecord;
   /** The field to put the focus on when it opens: the first one missing, from "Needs details". */
   focusField: ReferenceField | null;
   onClose(): void;
+  /** Opened beside a References entry (#289), not under a Library row: no row indent or rule. */
+  inPopover?: boolean;
 }) {
   const t = useT();
   const language = useLanguage();
@@ -178,7 +181,9 @@ export function CiteAsPanel({
         event.stopPropagation();
         onClose();
       }}
-      className="mt-3 ml-6 max-w-[720px] border-t border-rule pt-3 text-[13px] leading-5"
+      className={`${
+        inPopover ? "" : "mt-3 ml-6 max-w-[720px] border-t border-rule pt-3"
+      } text-[13px] leading-5`}
     >
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-label font-semibold text-ink-meta">{t("reference.citeAs")}</h3>
