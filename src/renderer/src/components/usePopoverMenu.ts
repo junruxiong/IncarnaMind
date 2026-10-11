@@ -27,7 +27,11 @@ function place(
   menu: HTMLElement | null,
   around: HTMLElement | null = null,
 ): Box | null {
-  const box = button?.getBoundingClientRect();
+  const at = button?.dataset.menuAt?.split(",").map(Number);
+  const box =
+    at?.length === 2 && at.every(Number.isFinite)
+      ? new DOMRect(at[0], at[1], 0, 0)
+      : button?.getBoundingClientRect();
   if (!box || !menu) return null;
   const hidden = !menu.matches(":popover-open");
   if (hidden) menu.style.display = "block";
@@ -66,8 +70,14 @@ function focusFirst(menu: HTMLElement | null, first = false): void {
  * (`buttons`, from the event), once it is let go, as letting go outside the
  * menu would close it. An open menu stays open.
  */
-export function openMenuFromRightClick(button: HTMLButtonElement, buttons: number): void {
+export function openMenuFromRightClick(
+  button: HTMLButtonElement,
+  buttons: number,
+  at?: { x: number; y: number },
+): void {
   if (button.getAttribute("aria-expanded") === "true") return;
+  // Where the menu opens instead of under the button; cleared when it closes.
+  if (at) button.dataset.menuAt = `${at.x},${at.y}`;
   if (buttons === 0) button.click();
   else {
     const open = () => {
@@ -123,6 +133,7 @@ export function usePopoverMenu({
   useLayoutEffect(() => {
     if (!open) {
       entered.current = false;
+      delete button.current?.dataset.menuAt;
       return;
     }
     const anchor = button.current;

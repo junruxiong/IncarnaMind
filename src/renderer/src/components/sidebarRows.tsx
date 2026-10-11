@@ -1,6 +1,5 @@
-import type { MouseEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { ChevronDownLineIcon, ChevronRightLineIcon } from "./lineIcons";
-import { openMenuFromRightClick } from "./usePopoverMenu";
 
 /*
  * The sidebar's rows (DESIGN.md, Sidebar): 28px, inset 8px by the sidebar's
@@ -28,7 +27,7 @@ const rowTones: Record<RowTone, string> = {
  * an inset rule and weight 600. Its actions (`rowActionsClass`) sit on its
  * right end and take its background. Names of Documents and Folders are a
  * shade darker than the app's own rows. A row's words can't be selected, so
- * a right-click (see `openRowMenu`) never selects them. `--row-bg` follows
+ * a right-click never selects them. `--row-bg` follows
  * its background, for a mark that rings itself in it (a Document's Tag dots).
  */
 export const rowClass = (selected: boolean, tone: RowTone = "app") =>
@@ -37,20 +36,6 @@ export const rowClass = (selected: boolean, tone: RowTone = "app") =>
       ? "bg-sheet font-semibold text-ink shadow-[inset_0_0_0_1px_var(--color-rule)] [--row-bg:var(--color-sheet)]"
       : `${rowTones[tone]} hover:bg-hover has-[:focus-visible]:bg-hover hover:[--row-bg:var(--color-hover)] has-[:focus-visible]:[--row-bg:var(--color-hover)]`
   }`;
-
-/**
- * A right-click on a row opens its "More" menu, as its ⋯ button (found by
- * `menuTestId`) does. A right-click inside the open menu leaves it be.
- */
-export function openRowMenu(event: MouseEvent<HTMLElement>, menuTestId: string): void {
-  if ((event.target as Element).closest('[role="menu"]')) return;
-  const button = event.currentTarget.querySelector<HTMLButtonElement>(
-    `[data-testid="${menuTestId}"]`,
-  );
-  if (!button) return;
-  event.preventDefault();
-  openMenuFromRightClick(button, event.buttons);
-}
 
 /** A name being typed in a row. */
 export const rowInputClass =

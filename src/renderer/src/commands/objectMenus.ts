@@ -17,6 +17,7 @@ registerMenu("document", [
   "document.openTab",
   "document.ask",
   "document.startMind",
+  "document.tags",
   "document.retry",
   "document.fetchAgain",
   "document.countAsEvidence",
@@ -29,9 +30,17 @@ registerMenu("document", [
   "document.delete",
 ]);
 
-registerMenu("folder", ["folder.open", "folder.newMind", "folder.rename", "folder.delete"]);
+registerMenu("folder", [
+  "folder.open",
+  "folder.newMind",
+  "folder.ask",
+  "folder.organize",
+  "folder.editDescription",
+  "folder.rename",
+  "folder.delete",
+]);
 
-registerMenu("tag", ["tag.open", "tag.manage"]);
+registerMenu("tag", ["tag.open", "tag.manage", "tag.rename", "tag.delete"]);
 
 registerMenu("linkedFolder", [
   "linkedFolder.pause",
@@ -41,17 +50,23 @@ registerMenu("linkedFolder", [
   "linkedFolder.unlink",
 ]);
 
-registerMenu("tab", [
-  "tab.split",
-  "tab.keep",
-  "tab.pin",
-  "tab.moveLeft",
-  "tab.moveRight",
-  "tab.rename",
-  "tab.close",
-  "tab.closeOthers",
-  "tab.closeToTheRight",
-]);
+// A tab's menu is its Mind's, then the tab's own.
+registerMenu("tab", ["mind.export", "mind.moveTo", "mind.delete"], 0);
+registerMenu(
+  "tab",
+  [
+    "tab.split",
+    "tab.keep",
+    "tab.pin",
+    "tab.moveLeft",
+    "tab.moveRight",
+    "tab.rename",
+    "tab.close",
+    "tab.closeOthers",
+    "tab.closeToTheRight",
+  ],
+  1,
+);
 
 registerMenu("answer", ["answer.copy", "answer.regenerate", "block.delete"]);
 

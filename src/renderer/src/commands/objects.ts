@@ -1,11 +1,12 @@
 import type { LinkedFolder } from "../../../core/api";
 import { displayName } from "../../../shared/documentNames";
-import { files } from "../core";
+import { core, files } from "../core";
 import { languageNow } from "../i18n";
-import type { LibraryBridge } from "../libraryBridges";
+import { bridgeFrom, type LibraryBridge } from "../libraryBridges";
 import { fileStatusLabel, folderName, formatCount, revealLabelKey } from "../linkedFolders";
 import { useRequests } from "../requests";
 import { useAppStore } from "../store";
+import { findTab } from "../tabs";
 import { type Command, type CommandContext, needsHere } from "./registry";
 import { documentsOf, everyDocument, idsOf } from "./targets";
 
@@ -13,10 +14,15 @@ const store = () => useAppStore.getState();
 const reportError = (error: unknown) => store().reportError(error);
 const RENAME_KEYS = { mac: "Enter", other: "F2" } as const;
 
+/** The Mind a Mind's row, or the tab showing it, stands for. */
 const mindOf = (ctx: CommandContext) => {
-  const id = idsOf(ctx, "mind")[0];
+  const target = ctx.selection[0] ?? ctx.focus;
+  const shown = target?.kind === "tab" ? findTab(store().layout, target.id)?.item : undefined;
+  const id =
+    shown?.kind === "mind" ? shown.mindId : target?.kind === "mind" ? target.id : undefined;
   return store().minds.find((each) => each.id === id);
 };
+const ofMind = (ctx: CommandContext) => mindOf(ctx) !== undefined;
 const folderOf = (ctx: CommandContext) => {
   const id = idsOf(ctx, "folder")[0];
   return store().library?.groups.find((each) => each.id === id);
@@ -69,7 +75,8 @@ export const mindCommands: readonly Command[] = [
     id: "mind.export",
     label: "mind.export",
     group: "main",
-    appliesTo: ["mind"],
+    appliesTo: ["mind", "tab"],
+    when: ofMind,
     reversible: true,
     run(ctx) {
       const mind = mindOf(ctx);
@@ -81,9 +88,10 @@ export const mindCommands: readonly Command[] = [
     label: "mind.moveTo",
     rowKeys: "CmdOrCtrl+Shift+M",
     group: "move",
-    appliesTo: ["mind"],
+    appliesTo: ["mind", "tab"],
+    when: (ctx) => ofMind(ctx) && ctx.here?.["mind.moveTo"] !== undefined,
     reversible: true,
-    ...needsHere("mind.moveTo"),
+    run: (ctx) => ctx.here?.["mind.moveTo"]?.(),
   },
   {
     id: "mind.rename",
@@ -99,7 +107,8 @@ export const mindCommands: readonly Command[] = [
     label: "mind.deleteAction",
     group: "danger",
     destructive: true,
-    appliesTo: ["mind"],
+    appliesTo: ["mind", "tab"],
+    when: ofMind,
     reversible: { confirm: "mind.delete.body" },
     run(ctx) {
       const mind = mindOf(ctx);
@@ -166,6 +175,14 @@ export const documentCommands: readonly Command[] = [
     run: async (ctx) => {
       await Promise.all(idsOf(ctx, "document").map((id) => store().retryDocument(id)));
     },
+  },
+  {
+    id: "document.tags",
+    label: "document.tags",
+    group: "tags",
+    appliesTo: ["document"],
+    reversible: true,
+    ...needsHere("document.tags"),
   },
   {
     id: "document.rename",
@@ -242,6 +259,45 @@ export const folderCommands: readonly Command[] = [
     },
   },
   {
+    id: "folder.ask",
+    label: "library.ask.folder",
+    group: "main",
+    appliesTo: ["folder"],
+    when: (ctx) => folderBridge(ctx) !== null,
+    reversible: true,
+    run(ctx) {
+      const bridge = folderBridge(ctx);
+      if (bridge) return store().askAbout(bridge);
+    },
+  },
+  {
+    id: "folder.organize",
+    label: "folder.organize",
+    group: "main",
+    appliesTo: ["folder"],
+    enabled: (ctx) =>
+      folderDocumentIds(ctx).length > 0 ? true : { reason: "folder.organize.empty" },
+    // Suggestions are reviewed and taken back from the Library.
+    reversible: true,
+    async run(ctx) {
+      if (!store().library?.settings.classifier) return store().openSettings("models");
+      await core.classifyDocuments(folderDocumentIds(ctx));
+    },
+  },
+  {
+    id: "folder.editDescription",
+    label: "folder.editDescription",
+    group: "main",
+    appliesTo: ["folder"],
+    reversible: true,
+    run(ctx) {
+      const id = idsOf(ctx, "folder")[0];
+      if (!id) return;
+      store().openLibrary(id);
+      useRequests.getState().ask({ editFolder: id });
+    },
+  },
+  {
     id: "folder.rename",
     label: "folder.rename",
     rowKeys: RENAME_KEYS,
@@ -278,7 +334,29 @@ export const tagCommands: readonly Command[] = [
     },
   },
   {
-    // Renaming and deleting a Tag are in Manage Tags until Tags are edited in place (#205).
+    id: "tag.rename",
+    label: "tag.rename",
+    group: "edit",
+    appliesTo: ["tag"],
+    reversible: true,
+    run(ctx) {
+      useRequests.getState().ask({ manageTag: { id: idsOf(ctx, "tag")[0] ?? "", mode: "edit" } });
+      store().openTagsDialog();
+    },
+  },
+  {
+    id: "tag.delete",
+    label: "tag.delete",
+    group: "danger",
+    destructive: true,
+    appliesTo: ["tag"],
+    reversible: { confirm: "tags.dialog.delete.body" },
+    run(ctx) {
+      useRequests.getState().ask({ manageTag: { id: idsOf(ctx, "tag")[0] ?? "", mode: "delete" } });
+      store().openTagsDialog();
+    },
+  },
+  {
     id: "tag.manage",
     label: "tags.menu.manage",
     group: "edit",
@@ -287,6 +365,24 @@ export const tagCommands: readonly Command[] = [
     run: () => store().openTagsDialog(),
   },
 ];
+
+const folderDocumentIds = (ctx: CommandContext): string[] => {
+  const id = idsOf(ctx, "folder")[0];
+  return (store().library?.assignments ?? []).flatMap((item) =>
+    item.groupId === id ? [item.documentId] : [],
+  );
+};
+
+const folderBridge = (ctx: CommandContext): LibraryBridge | null => {
+  const folder = folderOf(ctx);
+  return folder
+    ? bridgeFrom(
+        { kind: "folder", id: folder.id, name: folder.name },
+        folderDocumentIds(ctx),
+        false,
+      )
+    : null;
+};
 
 const REVEAL = revealLabelKey(navigator.platform);
 
