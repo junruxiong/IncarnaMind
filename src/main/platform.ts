@@ -64,6 +64,16 @@ export const systemBrowser: Browser = {
   },
 };
 
+/** The apps whose install links Settings → Agents opens (#351), and no others. */
+const AGENT_LINK_SCHEMES = new Set(["cursor:", "vscode:"]);
+
+/** Opens an agent's install link in its app: its app shows what it installs, and asks. */
+async function openAgentLink(url: string): Promise<void> {
+  const { protocol } = new URL(url);
+  if (!AGENT_LINK_SCHEMES.has(protocol)) throw new Error(`Refusing to open a ${protocol} link.`);
+  await shell.openExternal(url);
+}
+
 /**
  * Documents' files, opened in their default app or shown in the file
  * manager, where the User keeps them. `shell` is looked up at each call, so
@@ -335,6 +345,18 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     // JavaScript Skill scripts run on Electron's own Node, as plain Node: nothing to install.
     scriptRuntimes: {
       node: { command: process.execPath, env: { ELECTRON_RUN_AS_NODE: "1" } },
+    },
+    // An outside agent starts the shim (#351) the same way: this app's binary, as plain Node,
+    // running the shim built beside this file (inside app.asar, which Node mode reads).
+    agents: {
+      launcher: {
+        command: process.execPath,
+        args: [join(__dirname, "agentShim.js")],
+        env: { ELECTRON_RUN_AS_NODE: "1" },
+      },
+      shimScript: join(__dirname, "agentShim.js"),
+      version: app.getVersion(),
+      openLink: openAgentLink,
     },
     embedder: createUtilityProcessEmbedder({ fake: fakeEmbedder }),
     crossEncoder: createUtilityProcessCrossEncoder({ fake: fakeEmbedder }),

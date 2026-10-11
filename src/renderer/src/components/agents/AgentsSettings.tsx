@@ -1,0 +1,198 @@
+import { useEffect, useId, useState } from "react";
+import type { AgentClient, AgentSettings } from "../../../../core/api";
+import { core } from "../../core";
+import { errorMessage } from "../../errors";
+import { useT } from "../../i18n";
+import { useAppStore } from "../../store";
+import {
+  buttonStyle,
+  hintClass,
+  noticeClass,
+  pageIntroClass,
+  rowButtonsClass,
+  rowTextClass,
+  rowTitleClass,
+  ruledListClass,
+  ruledRowClass,
+  sectionNoteClass,
+  sectionTitleClass,
+} from "../ui";
+import { AgentPairingRow, type JustSetUp } from "./AgentPairingRow";
+import { clientName, setupWords } from "./agentWords";
+import { ConnectAgentDialog } from "./ConnectAgentDialog";
+
+/**
+ * Settings → Agents (#351, experimental): the User's own AI agent (Claude,
+ * Codex, Cursor…) searching the Folders they choose, with checked Citations.
+ * Off by default. On, it lists the agents connected, each with its Folders,
+ * activity and Disconnect, then every agent IncarnaMind can be set up in,
+ * those on this computer first: Connect asks once, in plain words, what the
+ * agent may read and where that goes, then sets it up in one click where the
+ * agent allows it (see src/core/agents/setup.ts). What's technical (settings
+ * to copy) stays behind "Details".
+ */
+export function AgentsSettings() {
+  const t = useT();
+  const reportError = useAppStore((state) => state.reportError);
+  const showPage = useAppStore((state) => state.showSettingsPage);
+  const folders = useAppStore((state) => state.library?.groups ?? []);
+  const [settings, setSettings] = useState<AgentSettings | null>(null);
+  const [clients, setClients] = useState<AgentClient[] | null>(null);
+  const [connecting, setConnecting] = useState<AgentClient | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [justSetUp, setJustSetUp] = useState<JustSetUp | null>(null);
+  const switchId = useId();
+
+  useEffect(() => {
+    core.getAgents().then(setSettings, reportError);
+    core.listAgentClients().then(setClients, reportError);
+    return core.on("agents.changed", setSettings);
+  }, [reportError]);
+
+  if (!settings) return null;
+
+  const turn = (enabled: boolean) => core.setAgentsEnabled(enabled).then(setSettings, reportError);
+
+  const allow = async (client: AgentClient, folderIds: string[]) => {
+    setBusy(true);
+    setProblem(null);
+    try {
+      const { pairing, result } = await core.setUpAgent({ client: client.id, folderIds });
+      setJustSetUp({ pairingId: pairing.id, result });
+      setConnecting(null);
+      // The agent is connected either way: "Copy settings" in its details copies it again.
+      if (result.kind === "copy")
+        await navigator.clipboard.writeText(result.text).catch(reportError);
+    } catch (error) {
+      setProblem(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const installed = clients?.filter((client) => client.installed) ?? [];
+  const others = clients?.filter((client) => !client.installed) ?? [];
+  const clientRow = (client: AgentClient) => (
+    <li
+      key={client.id}
+      data-testid="agent-client"
+      data-client={client.id}
+      className={ruledRowClass}
+    >
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className={rowTitleClass}>{clientName(client, t)}</span>
+        <span className={rowTextClass}>{setupWords(client, t)}</span>
+      </div>
+      <div className={rowButtonsClass}>
+        <button
+          type="button"
+          data-testid="agent-connect"
+          onClick={() => setConnecting(client)}
+          className={buttonStyle("secondary", "sm")}
+        >
+          {t("agents.settings.connectButton")}
+        </button>
+      </div>
+    </li>
+  );
+
+  return (
+    <section data-testid="agents-settings" className="flex flex-col gap-6">
+      <div className="flex flex-col gap-2">
+        <span className="self-start rounded-full bg-chip px-2 text-label leading-5 font-semibold text-ink-secondary">
+          {t("agents.settings.experimental")}
+        </span>
+        <p className={pageIntroClass}>{t("agents.settings.intro")}</p>
+      </div>
+
+      <div className={ruledListClass}>
+        <div className={ruledRowClass}>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <label htmlFor={switchId} className={rowTitleClass}>
+              {t("agents.settings.switch")}
+            </label>
+            <p id={`${switchId}-description`} className={rowTextClass}>
+              {t(settings.enabled ? "agents.settings.switch.on" : "agents.settings.switch.off")}
+            </p>
+          </div>
+          <input
+            id={switchId}
+            type="checkbox"
+            role="switch"
+            aria-checked={settings.enabled}
+            aria-describedby={`${switchId}-description`}
+            data-testid="agents-enabled"
+            checked={settings.enabled}
+            onChange={(event) => void turn(event.target.checked)}
+            className="switch"
+          />
+        </div>
+      </div>
+
+      {settings.enabled && settings.paused === "local-mode" && (
+        <p data-testid="agents-paused" role="status" className={noticeClass}>
+          {t("agents.settings.paused")}
+          <span aria-hidden="true"> · </span>
+          <button
+            type="button"
+            onClick={() => showPage("search")}
+            className="rounded-sm font-semibold text-accent underline-offset-2 hover:underline"
+          >
+            {t("agents.settings.paused.open")}
+          </button>
+        </p>
+      )}
+
+      {settings.enabled && settings.pairings.length > 0 && (
+        <section data-testid="agents-connected">
+          <h4 className={`mb-2 ${sectionTitleClass}`}>{t("agents.settings.connected")}</h4>
+          <ul className={ruledListClass}>
+            {settings.pairings.map((pairing) => (
+              <AgentPairingRow
+                key={pairing.id}
+                pairing={pairing}
+                folders={folders}
+                justSetUp={justSetUp}
+                onUndone={() => setJustSetUp(null)}
+              />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {settings.enabled && clients && (
+        <section data-testid="agents-clients">
+          <h4 className={sectionTitleClass}>{t("agents.settings.connect")}</h4>
+          <p className={sectionNoteClass}>{t("agents.settings.connect.note")}</p>
+          {installed.length > 0 && (
+            <>
+              <p className={`${hintClass} mb-1`}>{t("agents.setup.installed")}</p>
+              <ul data-testid="agents-installed" className={`${ruledListClass} mb-3`}>
+                {installed.map(clientRow)}
+              </ul>
+            </>
+          )}
+          <details data-testid="agents-more" open={installed.length === 0}>
+            <summary className="cursor-pointer py-1 text-[13px] leading-5 text-ink-secondary">
+              {t("agents.settings.more")}
+            </summary>
+            <ul className={ruledListClass}>{others.map(clientRow)}</ul>
+          </details>
+        </section>
+      )}
+
+      <ConnectAgentDialog
+        client={connecting}
+        folders={folders}
+        busy={busy}
+        problem={problem}
+        onAllow={(folderIds) => connecting && void allow(connecting, folderIds)}
+        onClose={() => {
+          setConnecting(null);
+          setProblem(null);
+        }}
+      />
+    </section>
+  );
+}

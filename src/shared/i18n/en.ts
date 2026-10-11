@@ -2246,4 +2246,121 @@ export const en = {
   "command.assistant.fold": "Assistant: Fold",
   "command.assistant.unfold": "Assistant: Show",
   "command.assistant.history": "Conversation history",
+  // Outside agents (#351): the consent for each agent the User connects, and what IncarnaMind
+  // tells an agent when a call can't be done, which the agent passes on to the User.
+  "consent.flow.agents": "Your AI agents",
+  "consent.flow.agents.purpose":
+    "let an AI agent you use, such as Claude or Codex, read your Documents and cite them",
+  "consent.data.scoped-passages":
+    "Passages from the Documents in the folders you choose, as the agent searches and reads them",
+  "consent.data.scoped-minds": "Your Minds in those folders, when the agent reads them",
+  "consent.data.answers": "IncarnaMind’s Answers to the agent’s Questions, with their quotes",
+  "agents.problem.unpaired":
+    "This agent isn’t connected to IncarnaMind any more. Connect it again in IncarnaMind, in Settings → Agents.",
+  "agents.problem.off":
+    "Connecting agents is turned off in IncarnaMind. Turn it on in Settings → Agents.",
+  "agents.problem.local-mode":
+    "Connected agents are paused while IncarnaMind keeps everything on this computer, because an agent sends what it reads to its own AI model. To go on, turn off “Keep everything on this computer” in IncarnaMind, in Settings → Search.",
+  "agents.problem.consent":
+    "This agent isn’t allowed to read your Documents any more. Allow it again in IncarnaMind, in Settings → Privacy.",
+  "agents.problem.no-folders":
+    "This agent can’t read any Documents yet. Choose its folders in IncarnaMind, in Settings → Agents.",
+  "agents.problem.outside-scope":
+    "That folder isn’t shared with this agent. Share more folders with it in IncarnaMind, in Settings → Agents.",
+  "agents.problem.not-found":
+    "There’s no such Passage, Document, Mind or Citation in the folders shared with this agent.",
+  "agents.problem.chat-not-ready":
+    "IncarnaMind has no chat model ready to answer. Set one up in IncarnaMind, in Settings → Models, or search and cite instead.",
+  "agents.problem.chat-consent":
+    "IncarnaMind’s chat model isn’t allowed yet. Ask one Question in IncarnaMind to allow it, or search and cite instead.",
+  "agents.problem.answer-failed": "IncarnaMind couldn’t answer: {message}",
+  "agents.problem.invalid": "IncarnaMind couldn’t read that request.",
+  "agents.problem.failed": "Something went wrong in IncarnaMind. Try again.",
+  "agents.answer.notFound": "[quote not found]",
+  "agents.answer.cantCheck": "[can’t be checked]",
+  "agents.mind.outsideCitation": "a Document in a folder not shared with this agent",
+  // Settings → Agents (#351): plain words for people who never edit a settings file.
+  "settings.pages.agents": "Agents",
+  "agents.settings.experimental": "Experimental",
+  "agents.settings.intro":
+    "Let an AI agent you already use, such as Claude, Codex or Cursor, search the folders you choose and cite them. IncarnaMind checks every quote it gives.",
+  "agents.settings.switch": "Connect AI agents",
+  "agents.settings.switch.off": "Off: no agent can reach your Documents.",
+  "agents.settings.switch.on":
+    "On: while IncarnaMind is open, each agent below can read the folders you gave it.",
+  "agents.settings.paused":
+    "Paused while “Keep everything on this computer” is on, because an agent sends what it reads to its own AI model.",
+  "agents.settings.paused.open": "Search settings",
+  "agents.settings.connected": "Connected agents",
+  "agents.settings.connect": "Connect an agent",
+  "agents.settings.connect.note": "Agents found on this computer come first.",
+  "agents.settings.more": "More agents",
+  "agents.settings.connectButton": "Connect",
+  "agents.settings.help": "Step-by-step help",
+  "agents.setup.bundle": "One click: Claude opens to install it",
+  "agents.setup.link": "One click: {agent} opens to install it",
+  "agents.setup.file": "IncarnaMind adds itself to {agent}’s settings",
+  "agents.setup.command": "Copy one line to run in a terminal",
+  "agents.setup.manual": "Copy the settings to paste into {agent}",
+  "agents.setup.installed": "On this computer",
+  "agents.setup.undoChanged": "{path} has changed since, so IncarnaMind left it as it is.",
+  "agents.client.other": "Another agent",
+  "agents.pairing.reads": "Reads {folders}",
+  "agents.pairing.readsNothing": "Reads no folders yet",
+  "agents.pairing.lastUsed": "Last used {when}",
+  "agents.pairing.notUsed": "Not used yet",
+  "agents.pairing.renameLabel": "Name of {agent}",
+  "agents.pairing.folders": "Folders…",
+  "agents.pairing.foldersTitle": "Folders {agent} may read",
+  "agents.pairing.activity": "Activity",
+  "agents.pairing.disconnect": "Disconnect",
+  "agents.pairing.details": "Details for technical users",
+  "agents.pairing.copySettings": "Copy settings",
+  "agents.pairing.copied": "Copied",
+  "agents.activity.empty": "No calls yet.",
+  "agents.activity.search": "Searched “{text}”",
+  "agents.activity.read_passages": "Read Passages",
+  "agents.activity.cite": "Cited “{text}”",
+  "agents.activity.check_citations": "Checked its Citations",
+  "agents.activity.show_citation": "Showed you a Citation",
+  "agents.activity.list_minds": "Listed your Minds",
+  "agents.activity.read_mind": "Read the Mind “{text}”",
+  "agents.activity.ask": "Asked “{text}”",
+  "agents.activity.count.one": "1 result",
+  "agents.activity.count.other": "{count} results",
+  "agents.activity.refused": "Refused: {reason}",
+  "agents.activity.failed": "Didn’t work: {reason}",
+  "agents.reason.unpaired": "it wasn’t connected",
+  "agents.reason.off": "connecting agents was off",
+  "agents.reason.local-mode": "everything was kept on this computer",
+  "agents.reason.consent": "it wasn’t allowed",
+  "agents.reason.no-folders": "it had no folders to read",
+  "agents.reason.outside-scope": "a folder not shared with it",
+  "agents.reason.not-found": "nothing like that in its folders",
+  "agents.reason.chat-not-ready": "no chat model was ready",
+  "agents.reason.invalid": "a request IncarnaMind couldn’t read",
+  "agents.reason.failed": "something went wrong",
+  "agents.connect.title": "Let {agent} read your Documents?",
+  "agents.connect.body":
+    "{agent} will be able to search and read the Documents in the folders you choose, and your Minds in them. What it reads goes to the AI model {agent} uses, under that service’s terms, not IncarnaMind’s. Some plans may use it to train their models.",
+  "agents.connect.folders": "Folders it may read",
+  "agents.connect.noFolders":
+    "You don’t have any folders yet. Make one in the Library, then come back.",
+  "agents.connect.pickOne": "Choose at least one folder.",
+  "agents.connect.fileChange": "IncarnaMind adds these lines to {path}:",
+  "agents.connect.showChange": "Show the lines",
+  "agents.connect.allow": "Allow and connect",
+  "agents.connect.cancel": "Cancel",
+  "agents.done.bundle": "Claude opened: click Install there to finish.",
+  "agents.done.link": "{agent} opened: click Install there to finish.",
+  "agents.done.wrote": "Added to {agent}’s settings. Start a new {agent} session to use it.",
+  "agents.done.command": "Copied. Paste it into a terminal and run it.",
+  "agents.done.settings": "Copied. In {agent}, add it as a new server, then restart {agent}.",
+  "agents.done.settings.other":
+    "Copied. Paste it where your agent adds a new server, then restart the agent.",
+  "agents.done.unreadable":
+    "{agent}’s settings file couldn’t be read, so IncarnaMind left it alone. The settings are copied: paste them into {path}.",
+  "agents.done.undo": "Undo",
+  "agents.bundle.description":
+    "Search your IncarnaMind Documents and cite them, with every quote checked.",
 } as const satisfies Record<string, string>;
