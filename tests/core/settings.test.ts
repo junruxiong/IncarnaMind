@@ -30,6 +30,7 @@ describe("Settings", () => {
         meetingsEnabled: false,
         meetingSystemAudio: true,
         meetingNoticeAccepted: false,
+        motion: "system",
       },
       language: "en",
       scriptSandbox: "none",
@@ -118,6 +119,7 @@ describe("Settings", () => {
       meetingsEnabled: false,
       meetingSystemAudio: true,
       meetingNoticeAccepted: false,
+      motion: "system",
     });
   });
 
@@ -149,6 +151,7 @@ describe("Settings", () => {
       meetingsEnabled: true,
       meetingSystemAudio: false,
       meetingNoticeAccepted: true,
+      motion: "reduced" as const,
     };
     await before.updateSettings({
       user: { language: "zh-CN", suggestWhileWriting: true, leaveOutOwnFiles: false },
@@ -197,6 +200,7 @@ describe("Settings", () => {
       name: "a script timeout in part seconds",
       patch: { device: { skillScriptTimeoutSeconds: 1.5 } },
     },
+    { name: "an unknown motion choice", patch: { device: { motion: "slow" } } },
     {
       name: "a default model without a model",
       patch: { user: { chatModel: { providerId: "x" } } },
