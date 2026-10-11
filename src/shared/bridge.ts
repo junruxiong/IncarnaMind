@@ -1,5 +1,6 @@
 /** Names shared by the main process and the preload script for the typed core bridge. */
 import type { CoreApiMethod } from "../core/api";
+import type { MenuCommandId } from "./commands";
 import type { TitleBar } from "./titleBar";
 
 /** The renderer reaches the core as `window.incarnamind`. */
@@ -81,8 +82,8 @@ export interface FilesBridge {
   onFullScreenChange(listener: (fullScreen: boolean) => void): () => void;
 }
 
-/** What the application menu asks the window to do (see src/main/menu.ts). */
-export type MenuCommand = "new-mind" | "close-tab" | "open-settings" | "toggle-sidebar";
+/** The command the application menu asks the window to run (see src/main/menu.ts). */
+export type MenuCommand = MenuCommandId;
 
 export type SkillPickKind = "folder" | "zip";
 

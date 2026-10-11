@@ -7,7 +7,7 @@
  * one, usage data is sent only while the User agrees:
  * - a release build sends nothing until the User says yes, asked once on
  *   the first run; the default is no;
- * - a test build (the alpha) sends until the User says no, as testers agree
+ * - a test build (for invited testers) sends until the User says no, as testers agree
  *   to when they join; the first run says so, with the switch;
  * - local mode ("Keep everything on this computer") turns it off, and keeps
  *   it off while it is on;

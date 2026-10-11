@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { sidebarHandle, useHandle } from "./commands/handles";
+import { useKeymap } from "./commands/keymap";
 import { AppShell, useRememberSidebarWidth } from "./components/AppShell";
 import { ConsentDialog } from "./components/ConsentDialog";
 import { DropOverlay, useFileDrop } from "./components/FileDrop";
@@ -17,7 +19,6 @@ import { files } from "./core";
 import { useLanguage, useT } from "./i18n";
 import { isNarrow, sidebarIsHidden } from "./sidebarLayout";
 import { useAppStore } from "./store";
-import { useDevViewerShortcut } from "./viewerControls";
 
 // Pane limits, from the old frontend's layout store. The divider inside the card is a 1px rule.
 const ROD_WIDTH = 1;
@@ -60,34 +61,10 @@ export function App() {
 }
 
 /**
- * What the application menu's items do (src/main/menu.ts): New Mind, Close
- * Tab and Settings…. Nothing while a dialog is open, as for the tab shortcuts.
- */
-function useMenuCommands(): void {
-  useEffect(
-    () =>
-      files.onMenuCommand((command) => {
-        if (document.querySelector("dialog[open]")) return;
-        const { createMind, closeTab, openMindId, openSettings, libraryOpen, closeLibrary } =
-          useAppStore.getState();
-        if (command === "toggle-sidebar") return; // The sidebar's own hook handles it.
-        if (command === "new-mind") void createMind();
-        else if (command === "close-tab") {
-          if (libraryOpen) closeLibrary();
-          else if (openMindId) closeTab(openMindId);
-        } else openSettings();
-      }),
-    [],
-  );
-}
-
-const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
-
-/**
  * Hiding and showing the sidebar (#219): Cmd+\ / Ctrl+\ and View > Hide Sidebar
- * (the menu, whose label follows), the title bar's button, dragging the
- * divider shut, and a window too narrow for the viewer. The User's choice
- * is remembered; the narrow window's is not.
+ * (the "sidebar.toggle" command; the menu's label follows), the title bar's
+ * button, dragging the divider shut, and a window too narrow for the viewer.
+ * The User's choice is remembered; the narrow window's is not.
  */
 function useSidebarControl(
   userHidden: boolean,
@@ -134,26 +111,6 @@ function useSidebarControl(
     refocus.current = false;
     return wanted;
   }, []);
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.altKey || event.shiftKey || event.code !== "Backslash") {
-        return;
-      }
-      const command = isMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
-      if (!command || document.querySelector("dialog[open]")) return;
-      event.preventDefault();
-      toggle();
-    };
-    window.addEventListener("keydown", onKey);
-    const stopMenu = files.onMenuCommand((command) => {
-      if (command === "toggle-sidebar" && !document.querySelector("dialog[open]")) toggle();
-    });
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      stopMenu();
-    };
-  }, [toggle]);
 
   // The View menu says Hide or Show to match.
   useEffect(() => files.setSidebarHidden(hidden), [hidden]);
@@ -215,8 +172,7 @@ function Workspace() {
   const fileDrop = useFileDrop((files, folders) => void addDropped(files, folders));
   const windowWidth = useWindowWidth();
   const openSettings = useAppStore((state) => state.openSettings);
-  useDevViewerShortcut();
-  useMenuCommands();
+  useKeymap();
   useRememberSidebarWidth(device?.sidebarWidth);
   const sidebar = useSidebarControl(
     device?.sidebarHidden ?? false,
@@ -241,6 +197,7 @@ function Workspace() {
     }),
     [sidebar.hidden, peek.peeking, sidebar.toggle, sidebar.takeRefocus],
   );
+  useHandle(sidebarHandle, control);
 
   if (!device) return null;
   const { sidebarWidth } = device;
