@@ -3,6 +3,7 @@
 // usage: node citeproc-run.mjs <citeproc.js> <style.csl> <references.json> <citations.json> <html|text> <localesDir>
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 export function loadCSL(citeprocPath) {
   const src = fs.readFileSync(citeprocPath, "utf8");
@@ -51,7 +52,8 @@ export function render(CSL, styleXml, items, citations, format, localesDir) {
   return out;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Run as a script (paths compared as paths, so a folder name with a space still matches).
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   const [citeproc, style, refs, cites, format, localesDir] = process.argv.slice(2);
   const CSL = loadCSL(citeproc);
   const out = render(
