@@ -54,7 +54,7 @@ Citations and the Bibliography are formatted by Hayagriva, the CSL engine of the
 sh wasm/citation-styles/build.sh
 ```
 
-with rustup on the `PATH` (it installs the pinned toolchain), and commit `engine.wasm` and `engine.wasm.sha256`. `--check` builds and compares instead; CI's "Citation-style engine" workflow runs that on every change to either. A change to the engine's output shows in the golden files, `tests/fixtures/citation-styles/golden/`: review the diff, then update them with `npx vitest run tests/core/citationStyleGoldens.test.ts -u`. A new style goes in `resources/citation-styles/styles` exactly as the CSL repository has it, in `src/shared/citationStyles.ts`, and in `resources/notices/citation-styles.txt` with its authors and contributors.
+with rustup on the `PATH` (it installs the pinned toolchain) to try the change. The committed `engine.wasm` is the build on x86_64 Linux: cargo mixes the build machine's platform into its crate hashes, so another machine builds a module that works the same but differs in bytes. CI's "Citation-style engine" workflow runs `build.sh --check` on Linux for every change to the binding or the file, and uploads what it built as the `citation-engine-built` artifact: commit that `engine.wasm`, with its SHA-256 in `engine.wasm.sha256`. A change to the engine's output shows in the golden files, `tests/fixtures/citation-styles/golden/`: review the diff, then update them with `npx vitest run tests/core/citationStyleGoldens.test.ts -u`. A new style goes in `resources/citation-styles/styles` exactly as the CSL repository has it, in `src/shared/citationStyles.ts`, and in `resources/notices/citation-styles.txt` with its authors and contributors.
 
 ## Architecture
 

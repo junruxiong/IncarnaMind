@@ -3,9 +3,13 @@
 # resources/citation-styles/engine.wasm, with its SHA-256 beside it.
 #
 # The built file is committed, so `npm ci` and the app's build need no Rust. Run this only when
-# wasm/citation-styles changes (its source, Cargo.toml or Cargo.lock), and commit both files.
-# CI's "Citation-style engine" workflow runs it with --check whenever they change, to show the
-# committed file is what this source builds to.
+# wasm/citation-styles changes (its source, Cargo.toml or Cargo.lock).
+#
+# The committed file is the build on x86_64 Linux. Cargo mixes the build machine's platform into
+# the hashes of crates that use procedural macros, so another machine builds a module that works
+# the same but differs in bytes. CI's "Citation-style engine" workflow runs this with --check
+# whenever the binding or the file changes, and uploads what it built (the citation-engine-built
+# artifact): after a change to the binding, commit that engine.wasm and its SHA-256.
 #
 # Needs rustup and Node. The pinned Rust toolchain is installed through rustup if it is missing;
 # binaryen's wasm-opt comes from npm (set WASM_OPT to use another copy of the same version).
@@ -55,17 +59,22 @@ RAW="$WORK/target/wasm32-unknown-unknown/release/citation_styles.wasm"
 echo "cargo built a module with SHA-256 $(sha256 "$RAW")"
 SUM=$(sha256 "$WORK/engine.wasm")
 
+# CHECK_OUT keeps what was built: the file to commit, and cargo's module, for comparing.
+keep() {
+  [ -n "${CHECK_OUT:-}" ] || return 0
+  mkdir -p "$CHECK_OUT"
+  cp "$RAW" "$CHECK_OUT/citation_styles.wasm"
+  cp "$WORK/engine.wasm" "$CHECK_OUT/engine.wasm"
+  echo "$SUM  engine.wasm" >"$CHECK_OUT/engine.wasm.sha256"
+}
+
 if [ "$MODE" = check ]; then
+  keep
   EXPECTED=$(cut -d' ' -f1 "$OUT.sha256")
   if [ "$SUM" != "$EXPECTED" ]; then
     echo "This source builds an engine with SHA-256 $SUM, but the committed one is $EXPECTED." >&2
-    echo "Run sh wasm/citation-styles/build.sh, and commit resources/citation-styles/engine.wasm and its .sha256." >&2
-    # CHECK_OUT keeps what was built, for comparing it with the committed file.
-    if [ -n "${CHECK_OUT:-}" ]; then
-      mkdir -p "$CHECK_OUT"
-      cp "$RAW" "$CHECK_OUT/citation_styles.wasm"
-      cp "$WORK/engine.wasm" "$CHECK_OUT/engine.wasm"
-    fi
+    echo "The committed file is the build on x86_64 Linux: after a change to the binding, commit the" >&2
+    echo "engine.wasm and engine.wasm.sha256 that CI's Citation-style engine workflow uploads." >&2
     exit 1
   fi
   echo "The committed engine is what this source builds to: $SUM"
