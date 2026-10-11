@@ -742,17 +742,20 @@ describe("Consent and Local mode", () => {
     expect(fake.responses()).toEqual([]);
   });
 
-  test("in Local mode the plan counts as leaving the computer", async () => {
-    const { core } = await signedIn();
+  test("Local mode blocks the plan: nothing goes to OpenAI", async () => {
+    const { core, fake } = await signedIn();
     await core.updateSettings({ user: { suggestWhileWriting: true } });
 
     await core.setLocalOnly(true);
 
-    expect((await core.getSuggestionStatus()).paused).toEqual({ reason: "local-mode" });
-    // Settings names where Questions still go: ChatGPT.
     expect(await core.getChatReadiness()).toMatchObject({
+      ready: false,
+      reason: "local-mode",
       provider: { service: CHATGPT_SERVICE },
     });
+    await expect(core.prepareChatModel()).rejects.toThrow(ChatNotReadyError);
+    expect((await core.getSuggestionStatus()).paused).toEqual({ reason: "local-mode" });
+    expect(fake.responses()).toEqual([]);
   });
 });
 

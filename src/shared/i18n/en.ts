@@ -763,9 +763,9 @@ export const en = {
   "embeddingProviders.confirm.turnOff": "Turn off",
   "embeddingProviders.localOnly.label": "Keep everything on this computer",
   "embeddingProviders.localOnly.body":
-    "Embeddings, when on, use the built-in model or Ollama, search results aren't sent for reranking, and no usage data is sent. Turning it on switches a cloud embedding model back to the built-in one, and processes your Documents again.",
+    "Embeddings, when on, use the built-in model or Ollama, search results aren't sent for reranking, Questions are asked only of a model on this computer, and no usage data is sent. Turning it on switches a cloud embedding model back to the built-in one, and processes your Documents again.",
   "embeddingProviders.localOnly.cloudChat":
-    "Your chat model still sends Questions to {service}: choose a local model under Chat model to keep them here too.",
+    "Your chat model is on {service}, so Questions aren't sent while this is on: choose a local model under Chat model to ask them.",
   "embeddingProviders.rebuild.title": "Embedding Documents for search: {done} of {total}",
   "embeddingProviders.rebuild.localMode":
     "To keep everything on this computer, search now uses the built-in model.",
@@ -1025,6 +1025,8 @@ export const en = {
   "providers.test.rate-limit": "The provider is limiting requests for this key. Try again shortly.",
   "providers.test.network": "Couldn't reach the server. Check its URL and your connection.",
   "providers.test.provider": "The provider returned an error.",
+  "providers.test.local-mode":
+    "Nothing was sent: “Keep everything on this computer” is on, and this model isn't on this computer.",
   "providers.test.consent-declined":
     "Nothing was sent, because you chose not to send data to this service.",
   "providers.test.too-long": "The model's context window is too small for even a short request.",
@@ -1054,7 +1056,14 @@ export const en = {
     "The API key for {service} isn't saved on this device. Add it in Settings to ask Questions.",
   "providers.readiness.consent-declined":
     "You chose not to send data to {service}, so Questions are off. Choose another provider or a local model, or allow it in Settings.",
+  "providers.readiness.local-mode":
+    "“Keep everything on this computer” is on, so Questions aren't sent to {service}.",
   "providers.readiness.setUp": "Set up",
+  "localMode.refused":
+    "“Keep everything on this computer” is on, so this Question wasn't sent to {service}",
+  "localMode.useLocal": "Use a local model",
+  "localMode.turnOff": "Turn off local mode",
+  "localMode.turnedOff": "Turned off “Keep everything on this computer”",
 
   "providers.settings.title": "Chat model",
   "providers.settings.none": "No chat model is set up yet.",
@@ -1286,7 +1295,7 @@ export const en = {
   "privacy.intro":
     "IncarnaMind collects no usage data. This page lists everything it sends from this computer, and lets you change it.",
   "privacy.flows.intro":
-    "These send your content to a service outside this computer. Nothing is sent on one until you allow it. Where a provider offers the choice, IncarnaMind asks it not to store your requests.",
+    "These send your content to a service outside this computer. Nothing is sent on one until you allow it, and nothing at all while “Keep everything on this computer” is on. Where a provider offers the choice, IncarnaMind asks it not to store your requests.",
   "privacy.flows.service": "to {service}",
   "privacy.flows.local": "Stays on this computer",
   "privacy.flows.sends": "Sends:",
@@ -1404,6 +1413,7 @@ export const en = {
   "composer.model.hint.local": "Stays on this computer",
   "composer.model.hint.localMac": "Stays on this Mac",
   "composer.model.hint.cloud": "Cloud: sent to ollama.com",
+  "composer.model.localModeOff": "Unavailable: “Keep everything on this computer” is on",
   "composer.model.via.keys": "your key",
   "composer.model.via.plan": "your ChatGPT plan",
   "composer.model.via.local": "on this computer",
@@ -1461,6 +1471,9 @@ export const en = {
   "answer.error.network": "Couldn't reach the provider",
   "answer.error.provider": "The provider ran into a problem",
   "answer.error.consent-declined": "Nothing was sent: you chose not to send data to this service",
+  "answer.error.local-mode":
+    "Stopped: “Keep everything on this computer” was turned on, and {model} isn't on this computer",
+  "answer.error.useLocal": "Use a local model",
   "answer.error.too-long":
     "This Question is too long for the local model, even without the Notes above it. Shorten it, or pick another model on the Question",
   "answer.error.unknown": "This Answer couldn't be written",

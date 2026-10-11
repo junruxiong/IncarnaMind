@@ -89,6 +89,7 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc; onChosen(): void }) {
   const chosen = useMindModel(doc);
   const defaultModel = useAppStore((state) => state.settings?.user.chatModel ?? null);
   const readiness = useAppStore((state) => state.chatReadiness);
+  const localMode = useAppStore((state) => state.embedding?.localOnly === true);
   const openSettings = useAppStore((state) => state.openSettings);
   const groups = useAnswers((state) => state.models);
   const loadModels = useAnswers((state) => state.loadModels);
@@ -207,6 +208,7 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc; onChosen(): void }) {
                             modelId={modelId}
                             hint={t(HINTS[group])}
                             checked={same({ providerId: each.id, modelId }, current)}
+                            unavailable={localMode}
                             onChoose={choose}
                           />
                         )),
@@ -229,6 +231,8 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc; onChosen(): void }) {
                           modelId={modelId}
                           hint={t(HINTS[group])}
                           checked={same({ providerId: each.id, modelId }, current)}
+                          // Local mode: only a model on this computer can be asked.
+                          unavailable={localMode && group !== "local"}
                           onChoose={choose}
                         />
                       )),
@@ -267,18 +271,23 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc; onChosen(): void }) {
   );
 }
 
-/** One model in the menu: its id, a hint, and who runs it. */
+/**
+ * One model in the menu: its id, a hint, and who runs it. `unavailable`: listed
+ * but not chosen, with the reason as its hint (a cloud model in local mode).
+ */
 function ModelItem({
   provider,
   modelId,
   hint,
   checked,
+  unavailable,
   onChoose,
 }: {
   provider: ChatProvider;
   modelId: string;
   hint: string;
   checked: boolean;
+  unavailable: boolean;
   onChoose(choice: ChatModelChoice): void;
 }) {
   const t = useT();
@@ -287,10 +296,14 @@ function ModelItem({
       type="button"
       role="menuitemradio"
       aria-checked={checked}
+      aria-disabled={unavailable || undefined}
       data-testid="composer-model-option"
       data-model={modelId}
       data-provider={provider.id}
-      onClick={() => onChoose({ providerId: provider.id, modelId })}
+      data-unavailable={unavailable || undefined}
+      onClick={() => {
+        if (!unavailable) onChoose({ providerId: provider.id, modelId });
+      }}
       className="model-menu-item"
     >
       <CheckLineIcon
@@ -299,7 +312,9 @@ function ModelItem({
       />
       <span className="model-menu-name">
         <span className="truncate">{modelId}</span>
-        <span className="model-menu-hint">{hint}</span>
+        <span className="model-menu-hint">
+          {unavailable ? t("composer.model.localModeOff") : hint}
+        </span>
       </span>
       <span className="model-menu-provider">{providerName(provider, t)}</span>
     </button>
