@@ -1033,7 +1033,7 @@ describe("Citations in the Mind", { timeout: 30_000 }, () => {
     const pasted = readMind(reader).lastChild;
     expect(pasted?.type.name).toBe("paragraph");
     expect(pasted?.textContent).toBe("Spring tides come at new and full moon .");
-    expect(pasted?.child(1).attrs).toEqual(cited);
+    expect(pasted?.child(1).attrs).toEqual({ ...cited, proposal: null });
     // The Answer keeps its own.
     expect(onlyCitation(reader, answerId)).toEqual(cited);
 
