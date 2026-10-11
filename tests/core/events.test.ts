@@ -34,7 +34,7 @@ describe("Core events", () => {
     });
     core.onAnyEvent((event) => seen.push(event));
 
-    await core.updateSettings({ device: { viewerWidth: 500 } });
+    await core.updateSettings({ device: { sidebarWidth: 500 } });
 
     expect(seen).toEqual(["settings.changed"]);
     expect(errors).toHaveBeenCalledOnce();

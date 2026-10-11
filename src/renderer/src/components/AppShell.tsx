@@ -52,7 +52,7 @@ export function AppShell() {
       </div>
       <div className="w-2 shrink-0" />
       <div className="app-card flex-col">
-        <div className="mind-tabs title-bar" />
+        <div className="tab-strip title-bar" />
       </div>
     </div>
   );
