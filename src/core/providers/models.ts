@@ -20,7 +20,8 @@ import type { LanguageModel } from "ai";
 import type { ChatProviderKind } from "../api";
 import { catalogFacts, modelsProviderOfKind } from "./catalog";
 import { catalogProviderOfKind } from "./catalog/providers";
-import { type ChatGptCredentials, createCodexChatModel } from "./chatgpt/codexEndpoint";
+import { createPlanChatModel } from "./chatgpt/planEndpoint";
+import type { ChatGptCredentials } from "./chatgpt/signIn";
 import { endpointUrl } from "./kinds";
 import { createOllamaChatModel } from "./ollamaChat";
 import { DEFAULT_OLLAMA_SETTINGS, type OllamaModelSettings } from "./ollamaModels";
@@ -171,7 +172,7 @@ function providerModel(spec: ChatModelSpec): ChatLanguageModel {
       });
     case "chatgpt":
       if (!spec.credentials) throw new Error("A ChatGPT sign-in is required.");
-      return createCodexChatModel({
+      return createPlanChatModel({
         baseUrl: requireBaseUrl(spec),
         modelId: spec.modelId,
         credentials: spec.credentials,
