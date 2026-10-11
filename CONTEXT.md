@@ -78,6 +78,10 @@ _Avoid_: chunk, snippet
 A reference, anchored in the text of an Answer, to the Passage a claim was drawn from: the Location it cites, and a quote from the Passage that is checked against the text at that Location. Copied into a Note, it stays a Citation; Question context shows it as a plain reference to its Document.
 _Avoid_: source, reference
 
+**Footnote**:
+A note the User writes at a point in the text, shown there by its number; its text can hold Citations. Footnotes and Citations share one numbering, in the order they appear, in the Mind and in every export, where a Citation's footnote is its reference.
+_Avoid_: endnote, annotation, comment
+
 **Reference record**:
 What a citation style needs to cite a Document: its type, title, authors, date, where it was published, volume, issue, pages, publisher, DOI, URL and language. It is read from the Document's file, the User can edit every field (an edit is never replaced by a later read), and Look up can fill its empty fields from the Document's DOI or arXiv ID. A record of a known type that lacks its title, authors or date "needs details". A file exported from Zotero, EndNote or Mendeley (CSL JSON, BibTeX or RIS) can be imported: each reference is matched to a Document, or kept as a record with no Document until its PDF is added; the User's edits win over an import.
 _Avoid_: metadata, bibliographic entry, citation (a Citation is the reference in an Answer)

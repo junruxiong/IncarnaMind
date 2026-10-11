@@ -1,5 +1,5 @@
 import type { EditorState } from "@tiptap/pm/state";
-import { ANSWER_BLOCK, CITATION_NODE, QUESTION_BLOCK } from "../../../core/api";
+import { ANSWER_BLOCK, CITATION_NODE, FOOTNOTE_NODE, QUESTION_BLOCK } from "../../../core/api";
 
 /** A paragraph shorter than this gets no suggestion (the core's limit too). */
 export const MIN_PARAGRAPH_CHARACTERS = 40;
@@ -75,14 +75,21 @@ export function nextWord(text: string): string {
   return text.slice(0, end);
 }
 
-/** The number a Citation inserted at `pos` gets: one more than those before it in its Block. */
+/**
+ * The number a Citation inserted at `pos` gets: one more than the Citations
+ * and footnotes before it in the Mind, which share one numbering (see
+ * `numberFootnotes`). A Citation inside a footnote has no number of its own.
+ */
 export function citationNumberAt(state: EditorState, pos: number): number {
-  const $at = state.doc.resolve(pos);
-  if ($at.depth === 0) return 1;
-  const start = $at.before(1);
   let before = 0;
-  state.doc.nodesBetween(start, pos, (node) => {
-    if (node.type.name === CITATION_NODE) before++;
+  state.doc.nodesBetween(0, pos, (node, at) => {
+    const name = node.type.name;
+    if (name === FOOTNOTE_NODE) {
+      if (at + node.nodeSize <= pos) before++;
+      return false;
+    }
+    if (name === CITATION_NODE && at < pos) before++;
+    return true;
   });
   return before + 1;
 }

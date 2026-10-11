@@ -2806,6 +2806,213 @@
     height: 11px;
     flex-shrink: 0;
   }
+  /*
+   * A Citation in a footnote's text: no number and no mark in the margin, so
+   * the marker says where it points, with its check's icon and colour.
+   */
+  .citation-marker--source {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 500;
+
+    .citation-marker-icon {
+      display: block;
+    }
+    &[data-check="found"] {
+      background: var(--color-success-wash);
+      color: var(--color-success);
+    }
+  }
+
+  /*
+   * A footnote the User wrote: its marker is a raised number, as in print, in
+   * the same numbering as the Citations' markers. Quieter than they are: no
+   * chip, only the number, which takes the pointer.
+   */
+  .footnote {
+    line-height: 0;
+  }
+  .footnote-marker {
+    min-width: 12px;
+    padding: 0 2px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 600;
+    color: var(--color-ink-secondary);
+    cursor: pointer;
+    user-select: none;
+
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+    /* Selected: its text is open, or it is the node selected. */
+    &:focus-visible,
+    .ProseMirror-selectednode & {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 1px;
+    }
+  }
+
+  /* A footnote's text, edited in place: in the popover at its marker, or in the footnote area. */
+  .footnote-text-frame {
+    position: relative;
+  }
+  .footnote-text {
+    outline: none;
+    font-family: var(--font-serif);
+    font-size: 15px;
+    line-height: 24px;
+    color: var(--color-ink);
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+  }
+  /* What to write, while there is nothing yet. */
+  .footnote-text-frame--empty .footnote-text::before {
+    content: attr(data-placeholder);
+    position: absolute;
+    pointer-events: none;
+    color: var(--color-ink-placeholder);
+  }
+  .footnote-popover {
+    width: 360px;
+    max-width: 90vw;
+    padding: 8px;
+  }
+  /* In the popover, a field like the LaTeX field. */
+  .footnote-text--popover {
+    min-height: 24px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    background: var(--color-frame);
+    box-shadow: inset 0 0 0 1px var(--color-accent);
+
+    &::before {
+      left: 8px;
+    }
+  }
+  .footnote-popover-foot {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    padding: 0 2px;
+  }
+  .footnote-popover-hint {
+    flex: 1;
+    min-width: 0;
+    font-size: var(--text-meta);
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  .footnote-popover-remove {
+    flex-shrink: 0;
+    height: 24px;
+    padding: 0 8px;
+    border-radius: 6px;
+    font-size: var(--text-meta);
+    color: var(--color-ink-secondary);
+
+    &:hover,
+    &:focus-visible {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+  }
+
+  /*
+   * The footnote area at the end of the Mind, once the User has written a
+   * footnote: every footnote in the one numbering, as in print, under a rule.
+   * The User's own are edited in place; a Citation's is its reference, quieter.
+   */
+  .footnote-area {
+    margin-top: 48px;
+    padding-top: 12px;
+    border-top: 1px solid var(--color-rule);
+  }
+  .footnote-area-title {
+    margin: 0 0 8px;
+    font-family: var(--font-sans);
+    font-size: var(--text-label);
+    line-height: var(--text-label--line-height);
+    font-weight: 600;
+    color: var(--color-ink-meta);
+  }
+  .footnote-area-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  /* The numbers hang in the left margin, so the texts keep the Mind's one left edge. */
+  .footnote-area-row {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr);
+    align-items: start;
+    gap: 0;
+    margin-left: -32px;
+    padding: 2px 0;
+  }
+  /* In the area, text that shows it can be edited where it is: pointed at, and while being written. */
+  .footnote-text--area {
+    padding: 0 4px;
+    border-radius: 4px;
+
+    &::before {
+      left: 4px;
+    }
+    &:hover {
+      background: var(--color-hover);
+    }
+    &:focus {
+      background: var(--color-frame);
+      box-shadow: inset 0 0 0 1px var(--color-accent);
+    }
+  }
+  .footnote-area-number {
+    justify-self: end;
+    height: 24px;
+    padding: 0 4px;
+    border-radius: 4px;
+    font-family: var(--font-sans);
+    font-size: var(--text-meta);
+    line-height: 24px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-ink-secondary);
+
+    &:hover,
+    &:focus-visible {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+  }
+  .footnote-area-source {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 0 4px;
+    font-family: var(--font-serif);
+    font-size: 15px;
+    line-height: 24px;
+    color: var(--color-ink-meta);
+  }
+  .footnote-area-check {
+    width: 11px;
+    height: 11px;
+    flex-shrink: 0;
+  }
+  .footnote-area-row--citation[data-check="found"] .footnote-area-check {
+    color: var(--color-success);
+  }
+  .footnote-area-row--citation[data-check="not-found"] .footnote-area-check {
+    color: var(--color-warning);
+  }
 
   /*
    * The margin column of checks (`MarginChecks`): for each Citation an 18px
@@ -3076,6 +3283,12 @@
       background: #fef08a;
       color: var(--color-ink);
     }
+    /* The footnote button's label is a word with a raised number, as Word's is. */
+    .format-footnote > sup {
+      font-size: 10px;
+      font-weight: 600;
+      line-height: 0;
+    }
   }
   .selection-section {
     padding: 4px 8px 2px;
@@ -3302,6 +3515,10 @@
     }
     .margin-checks {
       display: none;
+    }
+    /* No margin to hang the footnotes' numbers in. */
+    .footnote-area-row {
+      margin-left: 0;
     }
     .citation-marker {
       padding: 0 5px 0 3px;
