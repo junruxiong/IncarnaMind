@@ -2,7 +2,7 @@
 
 What IncarnaMind sends from your computer, and how to change it. **Settings → Privacy** in the app lists the same, live.
 
-- **Your content** (a Question and the Passages found for it, Document text for cloud embeddings, Tool calls to a Connector) goes only to the service you picked, and only after you allow it. Settings → Privacy lists every flow and lets you revoke it.
+- **Your content** (a Question and the Passages found for it, Document text for cloud embeddings, Tool calls to a Connector, and, once you turn on suggestions as you write, the paragraph you pause in with the Passages that match it) goes only to the service you picked, and only after you allow it. Settings → Privacy lists every flow and lets you revoke it.
 - **Traffic without your content**: update checks, model downloads, and remote Connectors' sign-in.
 - **Crash reports**: off unless you turn them on, and stripped of your content first.
 - **Usage data**: only if you agree, described below.
