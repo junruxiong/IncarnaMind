@@ -1,0 +1,152 @@
+/**
+ * A Meeting's audio on disk: the data folder's meetings/<id>/, one WAV file
+ * per source for every 10 seconds, written as each fills. The files are the
+ * record of what was captured: each is written whole under a temporary name,
+ * flushed and renamed into place, so a crash leaves only whole files and at
+ * most the part still filling is lost. A file's name says its source and where
+ * it starts in the Meeting's time, so nothing else is needed to find it again.
+ */
+import {
+  closeSync,
+  fsyncSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeSync,
+} from "node:fs";
+import { join } from "node:path";
+import { MEETING_SAMPLE_RATE } from "../adapters";
+import type { AudioSource } from "../api";
+
+/** Samples in a whole part: 10 seconds. */
+export const PART_SAMPLES = MEETING_SAMPLE_RATE * 10;
+
+const WAV_HEADER_BYTES = 44;
+const BYTES_PER_SAMPLE = 2;
+const PART_NAME = /^(microphone|system)-(\d{10})\.wav$/;
+const WRITING_SUFFIX = ".writing";
+
+/** One saved part of a Meeting's audio. */
+export interface AudioPart {
+  source: AudioSource;
+  /** Where it starts, in the Meeting's time (ms of recording before it). */
+  offsetMs: number;
+  durationMs: number;
+  /** The WAV file: 16-bit PCM, mono, `MEETING_SAMPLE_RATE`. */
+  path: string;
+}
+
+export const meetingFolder = (dataDir: string, meetingId: string) =>
+  join(dataDir, "meetings", meetingId);
+
+const partName = (source: AudioSource, offsetMs: number) =>
+  `${source}-${String(Math.max(0, Math.round(offsetMs))).padStart(10, "0")}.wav`;
+
+/** A canonical WAV header for 16-bit mono PCM at `MEETING_SAMPLE_RATE`. */
+export function wavHeader(samples: number): Uint8Array {
+  const data = samples * BYTES_PER_SAMPLE;
+  const header = new DataView(new ArrayBuffer(WAV_HEADER_BYTES));
+  const text = (at: number, value: string) => {
+    for (let i = 0; i < value.length; i++) header.setUint8(at + i, value.charCodeAt(i));
+  };
+  text(0, "RIFF");
+  header.setUint32(4, 36 + data, true);
+  text(8, "WAVE");
+  text(12, "fmt ");
+  header.setUint32(16, 16, true);
+  header.setUint16(20, 1, true); // PCM
+  header.setUint16(22, 1, true); // mono
+  header.setUint32(24, MEETING_SAMPLE_RATE, true);
+  header.setUint32(28, MEETING_SAMPLE_RATE * BYTES_PER_SAMPLE, true);
+  header.setUint16(32, BYTES_PER_SAMPLE, true);
+  header.setUint16(34, 16, true);
+  text(36, "data");
+  header.setUint32(40, data, true);
+  return new Uint8Array(header.buffer);
+}
+
+/**
+ * Writes one part, whole, and flushed to the disk before it takes its name,
+ * so a crash or a power cut never leaves half a part. Synchronous: a part is
+ * 320 KB every 10 seconds, and nothing can come between it and a crash.
+ */
+export function writePart(
+  folder: string,
+  source: AudioSource,
+  offsetMs: number,
+  samples: Int16Array,
+): AudioPart {
+  mkdirSync(folder, { recursive: true });
+  const path = join(folder, partName(source, offsetMs));
+  const writing = path + WRITING_SUFFIX;
+  const fd = openSync(writing, "w");
+  try {
+    writeSync(fd, wavHeader(samples.length));
+    writeSync(fd, new Uint8Array(samples.buffer, samples.byteOffset, samples.byteLength));
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+  renameSync(writing, path);
+  // The rename must reach the disk too, or a power cut can undo it. Windows can't flush a folder.
+  if (process.platform !== "win32") {
+    const dir = openSync(folder, "r");
+    try {
+      fsyncSync(dir);
+    } finally {
+      closeSync(dir);
+    }
+  }
+  return { source, offsetMs, durationMs: msOf(samples.length), path };
+}
+
+export const msOf = (samples: number) => (samples * 1000) / MEETING_SAMPLE_RATE;
+
+/**
+ * The parts saved in a Meeting's folder, in time order, microphone before
+ * system at the same time. Files being written when IncarnaMind stopped are
+ * left out (`removeUnfinished` deletes them).
+ */
+export function listParts(folder: string): AudioPart[] {
+  let names: string[];
+  try {
+    names = readdirSync(folder);
+  } catch {
+    return [];
+  }
+  const parts: AudioPart[] = [];
+  for (const name of names) {
+    const match = PART_NAME.exec(name);
+    if (!match) continue;
+    const path = join(folder, name);
+    const samples = Math.max(0, (statSync(path).size - WAV_HEADER_BYTES) / BYTES_PER_SAMPLE);
+    parts.push({
+      source: match[1] as AudioSource,
+      offsetMs: Number(match[2]),
+      durationMs: msOf(samples),
+      path,
+    });
+  }
+  return parts.sort((a, b) => a.offsetMs - b.offsetMs || a.source.localeCompare(b.source));
+}
+
+/** Deletes what a crash left half written. Returns how many there were. */
+export function removeUnfinished(folder: string): number {
+  let names: string[];
+  try {
+    names = readdirSync(folder);
+  } catch {
+    return 0;
+  }
+  const unfinished = names.filter((name) => name.endsWith(WRITING_SUFFIX));
+  for (const name of unfinished) rmSync(join(folder, name), { force: true });
+  return unfinished.length;
+}
+
+/** Deletes a Meeting's audio, and its folder. */
+export function removeAudio(folder: string): void {
+  rmSync(folder, { recursive: true, force: true });
+}

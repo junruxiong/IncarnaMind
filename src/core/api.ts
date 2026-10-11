@@ -568,6 +568,19 @@ export interface DeviceSettings {
    * `maxTimeoutSeconds`, `defaultTimeoutSeconds` by default.
    */
   skillScriptTimeoutSeconds: number;
+  /**
+   * Meetings can be recorded on this device (Settings → Meetings). Off by
+   * default while recording is new: transcription and telling speakers apart
+   * come after it.
+   */
+  meetingsEnabled: boolean;
+  /** What a Meeting records unless the start block says otherwise: the computer's sound too ("Me and them"), or only the microphone. */
+  meetingSystemAudio: boolean;
+  /**
+   * The User has read, once on this device, what a recording captures and
+   * that the other people should be told. Recording waits for it.
+   */
+  meetingNoticeAccepted: boolean;
 }
 
 /**
@@ -592,6 +605,12 @@ export interface Settings {
    * a setting. The approval card and Settings say what a script can reach by it.
    */
   scriptSandbox: SandboxLevel;
+  /**
+   * What this copy can record for a Meeting, found out when the app starts:
+   * not a setting. "both": the microphone and the computer's sound; "microphone":
+   * the microphone only (Linux, for now); "none": nothing (no capture).
+   */
+  meetingAudio: "both" | "microphone" | "none";
 }
 
 export interface SettingsPatch {
@@ -2762,6 +2781,107 @@ export interface SavedFile {
 }
 
 // ---------------------------------------------------------------------------
+// Meetings
+
+/** Where a Meeting's audio comes from: the microphone, or the computer's own sound (the other people in the Meeting). */
+export type AudioSource = "microphone" | "system";
+
+/**
+ * A Meeting's state:
+ * - "ready": its Mind shows the start block; nothing is recorded yet.
+ * - "recording": its audio goes to disk as it is captured, in 10-second parts.
+ * - "paused": by the User, or because IncarnaMind closed while it was recording.
+ * - "stopped": over. Its audio is kept until it expires.
+ */
+export type MeetingStatus = "ready" | "recording" | "paused" | "stopped";
+
+/**
+ * How one source is recorded right now:
+ * - "off": not asked for ("Only me"), or the Meeting isn't recording.
+ * - "starting": asked for, not heard from yet.
+ * - "recording": its audio is coming in.
+ * - "silent": the computer's sound has been nothing but silence for a minute,
+ *   which is what macOS gives when IncarnaMind isn't allowed to record it.
+ * - "denied": this computer doesn't allow IncarnaMind to record it.
+ * - "unavailable": there is none (no microphone), or this computer can't
+ *   record it (the computer's sound on Linux, for now).
+ * - "ended": it stopped part way, e.g. its device went, and couldn't start again.
+ */
+export type MeetingSourceState =
+  | "off"
+  | "starting"
+  | "recording"
+  | "silent"
+  | "denied"
+  | "unavailable"
+  | "ended";
+
+/**
+ * A stretch the User didn't choose not to record: IncarnaMind wasn't running
+ * (it closed or crashed while recording), or the computer slept.
+ */
+export interface MeetingGap {
+  /** Where it falls, in the Meeting's time: ms of recording before it (pauses and gaps take none). */
+  atMs: number;
+  /** How long nothing was recorded, in ms. */
+  missedMs: number;
+  reason: "interrupted" | "sleep";
+}
+
+export interface Meeting {
+  id: string;
+  /** The Mind it belongs to, where its notes are written. */
+  mindId: string;
+  status: MeetingStatus;
+  /** Why it is paused: the User did, or IncarnaMind closed while it was recording. Null unless paused. */
+  pausedBy: "user" | "interrupted" | null;
+  /** The computer's sound is recorded too ("Me and them"), not only the microphone ("Only me"). */
+  systemAudio: boolean;
+  sources: Record<AudioSource, MeetingSourceState>;
+  /**
+   * How much has been recorded, in ms: in all, or, while `recordingSince` is
+   * set, up to then. The Meeting's time now is `recordedMs` plus the time
+   * since `recordingSince`. Pauses and gaps don't count.
+   */
+  recordedMs: number;
+  /** While audio is being captured, when this stretch began (ISO 8601); otherwise null. */
+  recordingSince: string | null;
+  gaps: MeetingGap[];
+  /** When recording first started, and when it was stopped (ISO 8601). */
+  startedAt: string | null;
+  stoppedAt: string | null;
+  /** Its audio on this computer, which is deleted at most a day after the Meeting. */
+  audio: MeetingAudio;
+  /** Why the latest audio couldn't be saved (e.g. the disk is full), until a part is saved again. */
+  saveError: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MeetingAudio {
+  /** Some audio is on this computer. */
+  kept: boolean;
+  /** When it will be deleted, once the Meeting is paused or stopped; null while recording. */
+  expiresAt: string | null;
+  /** When the User, or the day's limit, last deleted it. */
+  deletedAt: string | null;
+}
+
+/** How long a Meeting's audio is kept after its last recording, at most. */
+export const MEETING_AUDIO_KEPT_MS = 24 * 60 * 60 * 1000;
+
+export interface CreateMeetingInput {
+  /** An empty Mind to hold it. Not given: a new Mind, named for the day. */
+  mindId?: string;
+}
+
+export interface StartMeetingInput {
+  meetingId: string;
+  /** Record the computer's sound too. Defaults to the Settings choice ("What is recorded"). */
+  systemAudio?: boolean;
+}
+
+// ---------------------------------------------------------------------------
 
 export interface CoreApi {
   getLibrary(): Promise<LibrarySnapshot>;
@@ -3384,6 +3504,32 @@ export interface CoreApi {
   listFileWriteRequests(): Promise<FileWriteRequest[]>;
   /** Answers a save's question (see `FileWriteRequest`). One already answered does nothing. */
   respondToFileWrite(requestId: string, accept: boolean): Promise<void>;
+
+  /** Every Meeting, newest first. */
+  listMeetings(): Promise<Meeting[]>;
+  /**
+   * A Meeting ready to record, in a new Mind named for the day or in an empty
+   * Mind given: its Mind shows the start block. Needs meetings turned on in
+   * Settings, and a Mind with no Meeting.
+   */
+  createMeeting(input?: CreateMeetingInput): Promise<Meeting>;
+  /** Takes back a Meeting that hasn't started ("Don't record; keep this as a note"): its Mind stays. */
+  discardMeeting(meetingId: string): Promise<void>;
+  /**
+   * Starts recording a ready Meeting: the microphone, and the computer's sound
+   * if asked. Needs the one-time recording notice accepted on this device, and
+   * no other Meeting recording.
+   */
+  startMeeting(input: StartMeetingInput): Promise<Meeting>;
+  pauseMeeting(meetingId: string): Promise<Meeting>;
+  /** Records again after a pause, the User's or one IncarnaMind closing made. */
+  resumeMeeting(meetingId: string): Promise<Meeting>;
+  /** Ends the recording. Its audio is kept for at most a day. */
+  stopMeeting(meetingId: string): Promise<Meeting>;
+  /** Deletes the Meeting's audio on this computer now; a recording goes on keeping what comes next. */
+  deleteMeetingAudio(meetingId: string): Promise<Meeting>;
+  /** Opens the system's settings where the User allows IncarnaMind to record this source. */
+  openAudioSettings(source: AudioSource): Promise<void>;
 }
 
 /**
@@ -3524,6 +3670,12 @@ export interface CoreEvents {
   "answer.citationAdded": AnswerCitationAdded;
   "answer.finished": AnswerFinished;
   "answer.failed": AnswerFailed;
+  /**
+   * A Meeting was created, started, paused, resumed, stopped or discarded, a
+   * source's state changed, or its audio was saved or deleted: the list as
+   * `listMeetings` now returns it.
+   */
+  "meetings.changed": Meeting[];
 }
 
 export type CoreEventName = keyof CoreEvents;
@@ -3680,6 +3832,15 @@ const methods: Record<CoreApiMethod, true> = {
   setLinkedFolderWriting: true,
   listFileWriteRequests: true,
   respondToFileWrite: true,
+  listMeetings: true,
+  createMeeting: true,
+  discardMeeting: true,
+  startMeeting: true,
+  pauseMeeting: true,
+  resumeMeeting: true,
+  stopMeeting: true,
+  deleteMeetingAudio: true,
+  openAudioSettings: true,
 };
 
 /** Every method of CoreApi, used to wire the IPC bridge. */

@@ -3,6 +3,7 @@ import { useShallow } from "zustand/react/shallow";
 import type { DocumentStatus, EmbeddingModelError } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
 import { useT } from "../i18n";
+import { useCapturing } from "../meetings";
 import { rerankingModelStatus } from "../rerankStatus";
 import { isOwnDocument, useAppStore } from "../store";
 import { canTryAgain, outsideDialog, reasonKey, useWebPages } from "../webPages";
@@ -189,6 +190,7 @@ function useStatuses(): Status[] {
   const embedding = useAppStore((state) => state.embedding);
   const library = useAppStore((state) => state.library);
   const organizing = !!library?.groups.length || !!library?.settings.classifier;
+  const capturing = useCapturing();
   const counts = useAppStore(
     useShallow((state) => {
       let processing = 0;
@@ -379,7 +381,15 @@ function useStatuses(): Status[] {
     statuses.push({ testId: "web-pages-fetching", tone: "progress", short: text, full: text });
   }
 
-  if (counts.processing > 0) {
+  // While a Meeting records, Documents wait to be read, and tagging waits too (#135).
+  if (capturing && (counts.processing > 0 || counts.tagging > 0)) {
+    statuses.push({
+      testId: "reading-paused",
+      tone: "info",
+      short: t("status.readingPaused"),
+      full: t("status.readingPaused.full"),
+    });
+  } else if (counts.processing > 0) {
     const text =
       counts.processing === 1
         ? t("status.processing.one")
@@ -387,7 +397,7 @@ function useStatuses(): Status[] {
     statuses.push({ testId: "processing-status", tone: "progress", short: text, full: text });
   }
 
-  if (!organizing && counts.tagging > 0) {
+  if (!capturing && !organizing && counts.tagging > 0) {
     const text =
       counts.tagging === 1
         ? t("status.tagging.one")

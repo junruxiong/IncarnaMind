@@ -6,6 +6,7 @@ import { AppShell, useRememberSidebarWidth } from "./components/AppShell";
 import { ConsentDialog } from "./components/ConsentDialog";
 import { DropOverlay, useFileDrop } from "./components/FileDrop";
 import { FileWriteDialog } from "./components/FileWriteDialog";
+import { MeetingNoticeDialog } from "./components/MeetingNoticeDialog";
 import { ChatSetupDialog } from "./components/providers/ChatSetupDialog";
 import { ResizeRod } from "./components/ResizeRod";
 import { SettingsDialog } from "./components/SettingsDialog";
@@ -236,6 +237,7 @@ function Workspace() {
         <UsageDataDialog />
         {/* Open after the dialog that triggered the request, so they show on top of it. */}
         <ConsentDialog />
+        <MeetingNoticeDialog />
         <FileWriteDialog />
         <ActionError />
         {fileDrop.active && !fileDrop.links && <DropOverlay />}

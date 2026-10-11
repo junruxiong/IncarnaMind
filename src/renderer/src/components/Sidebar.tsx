@@ -2,6 +2,7 @@ import type { ClipboardEvent, ReactNode } from "react";
 import { shortcutLabel } from "../commands/keymap";
 import { commands } from "../commands/registry";
 import { useT } from "../i18n";
+import { useMeetings } from "../meetings";
 import { useAppStore } from "../store";
 import { linksIn, useWebPages } from "../webPages";
 import { DocumentsSection } from "./DocumentsSection";
@@ -13,6 +14,7 @@ import {
   FolderPlusLineIcon,
   MindLineIcon,
   PlusLineIcon,
+  RecordingLineIcon,
   SettingsLineIcon,
 } from "./lineIcons";
 import { SidebarStatus } from "./SidebarStatus";
@@ -124,9 +126,10 @@ function pasteLinks(event: ClipboardEvent<HTMLElement>) {
 const reportError = (error: unknown) => useAppStore.getState().reportError(error);
 
 /**
- * The one "+" menu, the one place to add: New Mind, New Folder…, Add
- * Documents…, Add a web page… and Link a folder…. Opened by keyboard or
- * mouse, its items are menu items reached with the arrow keys.
+ * The one "+" menu, the one place to add: New Mind, Record a meeting (once
+ * Meetings are turned on), New Folder…, Add Documents…, Add a web page… and
+ * Link a folder…. Opened by keyboard or mouse, its items are menu items
+ * reached with the arrow keys.
  */
 function PlusMenu() {
   const t = useT();
@@ -135,6 +138,10 @@ function PlusMenu() {
   const pickDocuments = useAppStore((state) => state.pickDocuments);
   const picking = useAppStore((state) => state.pickingDocuments);
   const addLinkedFolder = useAppStore((state) => state.addLinkedFolder);
+  const meetingsOn = useAppStore(
+    (state) => state.settings?.device.meetingsEnabled && state.settings.meetingAudio !== "none",
+  );
+  const recordMeeting = useMeetings((state) => state.record);
 
   /** Closes the menu, then does it. */
   const choose = (action: () => void) => () => {
@@ -172,6 +179,18 @@ function PlusMenu() {
           <span className="flex-1">{t("sidebar.newMind")}</span>
           <span className="pl-4 text-[13px] text-ink-meta">{shortcutLabel("tab.new")}</span>
         </button>
+        {meetingsOn && (
+          <button
+            type="button"
+            role="menuitem"
+            data-testid="plus-record-meeting"
+            onClick={choose(() => void recordMeeting())}
+            className={`${menuItemClass} pl-2`}
+          >
+            <RecordingLineIcon className="size-4 shrink-0 text-ink-meta" />
+            <span className="flex-1">{t("meetings.record")}</span>
+          </button>
+        )}
         <button
           type="button"
           role="menuitem"
