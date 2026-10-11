@@ -17,6 +17,8 @@ import type { ChatModelFactory } from "./providers/models";
 import type { OllamaModels } from "./providers/ollamaModels";
 import type { RerankingModelFactory } from "./providers/rerank";
 import type { RunEngine } from "./runs/engine";
+import type { PaceTimers } from "./sources/pace";
+import type { SourceProviderUrls } from "./sources/providers";
 import type { UsageEventName, UsageValue } from "./usageEvents";
 
 export interface Paths {
@@ -500,6 +502,19 @@ export interface CoreAdapters {
    * the requests as going to Crossref and arXiv.
    */
   referenceLookup?: { crossref?: string; arxiv?: string };
+  /**
+   * Where Find sources (#296) asks each Source provider, by its id
+   * ("openalex", "arxiv", "pubmed", "crossref"). Defaults to the real
+   * services; tests point them at a local stand-in. Consent still treats the
+   * requests as going to each provider.
+   */
+  sourceProviders?: SourceProviderUrls;
+  /**
+   * How the core keeps requests to one service apart in time (arXiv's three
+   * seconds, NCBI's three a second): the real clock, unless a test passes
+   * one it moves itself.
+   */
+  paceTimers?: PaceTimers;
   /**
    * Turns Question context into a streamed Answer. Defaults to the AI SDK
    * engine; an alternative agent layer plugs in here.
