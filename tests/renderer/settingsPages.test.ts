@@ -4,11 +4,12 @@ import { en } from "../../src/shared/i18n/en";
 import { zhCN } from "../../src/shared/i18n/zh-CN";
 
 describe("Settings pages", () => {
-  test("are General, Models, Search, Tools, Connectors, Skills and Privacy, in that order", () => {
+  test("are General, Models, Search, Meetings, Tools, Connectors, Skills and Privacy, in that order", () => {
     expect(settingsPages).toEqual([
       "general",
       "models",
       "search",
+      "meetings",
       "tools",
       "connectors",
       "skills",
@@ -30,6 +31,8 @@ describe("Settings pages", () => {
     expect(zhCN["settings.pages.models"]).toBe("模型");
     expect(en["settings.pages.search"]).toBe("Search");
     expect(zhCN["settings.pages.search"]).toBe("搜索");
+    expect(en["settings.pages.meetings"]).toBe("Meetings");
+    expect(zhCN["settings.pages.meetings"]).toBe("会议");
     expect(en["settings.pages.tools"]).toBe("Tools");
     expect(zhCN["settings.pages.tools"]).toBe("工具");
   });
