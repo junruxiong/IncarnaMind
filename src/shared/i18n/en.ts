@@ -33,17 +33,14 @@ export const en = {
   "library.deleteNotice":
     "Its Documents and Minds move to Not in a Folder. Their original files and Tags are kept.",
   "library.cancel": "Cancel",
-  "library.modelSettings": "Organization settings",
   "library.search": "Find by name or tag",
   "library.classify": "Organize",
-  "library.reclassify": "Organize this folder",
   "library.progress": "Organizing {count} Documents…",
   "library.waiting":
     "{count} Documents need text, a model or permission. Open their details to check.",
   "library.failed": "{count} Documents need attention. Open their details, then retry Organize.",
   "library.count": "{count} Documents",
   "library.count.one": "1 Document",
-  "library.manualHint": "Choose a folder and tags, or use Organize to suggest them.",
   "library.empty": "Add Documents from the sidebar to start organising them.",
   "library.noMatches": "No Documents here yet.",
   "library.manual": "Your choice",
@@ -206,9 +203,6 @@ export const en = {
 
   "mind.untitled": "Untitled",
   "conversation.untitled": "New chat",
-  "object.renamed": "Renamed to “{name}”",
-  "object.deleted": "Deleted “{name}”",
-  "object.deleted.conversations": "Deleted {count} conversations",
   "mind.noneOpen.title": "Start a Mind",
   "mind.noneOpen.body": "A Mind is a notebook for a topic or project.",
   "mind.title.label": "Mind title",
@@ -335,7 +329,6 @@ export const en = {
   "editor.ai.improve": "Improve writing",
   "editor.ai.shorten": "Shorten",
   "editor.ai.translate": "Translate…",
-  "editor.ai.translateTo": "Translate into",
   "editor.ai.explain": "Explain",
   "editor.ai.edit": "Edit with AI…",
   "edit.pending.improve": "Improving the writing…",
@@ -355,6 +348,8 @@ export const en = {
   "edit.problem.chooseModel": "Choose a model",
   "edit.problem.failed": "Edit with AI didn't work: {message}",
   "edit.problem.retry": "Try again",
+  "edit.problem.cant-regenerate":
+    "This change can't be made again. Reject it, then select the text and edit it with AI.",
   "composer.edit.placeholder": "Say what to change…",
   "composer.edit.label": "Say what to change in the selected text",
   "composer.edit.quote": "Editing “{text}”",
@@ -385,6 +380,23 @@ export const en = {
   "proposal.rejected.one": "Rejected 1 change",
   "proposal.arrived": "{count} changes from the assistant, in the note.",
   "proposal.arrived.one": "1 change from the assistant, in the note.",
+  "proposal.arrived.outOfDate": "{count} are out of date: you edited their text meanwhile.",
+  "proposal.arrived.outOfDate.one": "1 is out of date: you edited its text meanwhile.",
+  "proposal.outOfDate": "Out of date",
+  "proposal.outOfDate.why":
+    "You changed this text after the change was suggested, so it can't be accepted",
+  "proposal.outOfDate.label":
+    "Change {index} of {count}, out of date: you changed this text after it was suggested",
+  "proposal.announce.outOfDate":
+    "Change out of date: {what}. You changed its text after it was suggested. Reject it with {reject}, or regenerate it.",
+  "proposal.cantAccept": "This change is out of date: regenerate it or reject it.",
+  "proposal.regenerate": "Regenerate",
+  "proposal.regenerate.label": "Regenerate change {index} from the text as it is now",
+  "proposal.reject.label": "Reject change {index}",
+  "proposal.acceptAll.outOfDate": "Changes out of date are left as they are",
+  "proposal.sourceRemoved": "Source removed",
+  "proposal.sourceRemoved.why":
+    "A Document this change cites has been deleted. Its Citation keeps the quote.",
   "editor.turnInto.label": "Turn into",
   "editor.turnInto.bulletList": "Bulleted list",
   "editor.turnInto.orderedList": "Numbered list",
@@ -465,7 +477,6 @@ export const en = {
   "viewer.markdown.imageWeb": "Images from the web aren't loaded",
   "viewer.markdown.imageMissing": "Image not found",
   "viewer.docx.comment": "Comment by {author}",
-  "viewer.section.start": "Start",
 
   "location.page": "p. {range}",
   "location.slide.one": "slide {range}",
@@ -880,9 +891,7 @@ export const en = {
   "tags.chip.automatic": "{tag}: added automatically",
   "tags.chip.user": "{tag}: added by you",
   "tags.menu.open": "Tags of {name}",
-  "tags.menu.title": "Tags",
   "tags.menu.none": "No Tags yet.",
-  "tags.menu.confirm": "Confirm {tag}",
   "tags.menu.retag": "Re-tag automatically",
   "tags.menu.manage": "Manage Tags…",
   "tags.state.pending": "Waiting to be tagged",
@@ -1017,6 +1026,8 @@ export const en = {
   "providers.form.region": "Region",
   "providers.region.cn": "China",
   "providers.region.intl": "International",
+  "providers.form.more": "More providers",
+  "providers.form.keyGuide": "How do I get one?",
   "providers.form.getKey": "Get a key",
   "providers.form.planCredits": "Learn more",
   "providers.form.dataUse": "What it does with your data.",
@@ -1299,7 +1310,6 @@ export const en = {
   "consent.settings.revoke": "Revoke",
   "consent.settings.askAgain": "Ask again",
 
-  "privacy.tabs.label": "Settings pages",
   "privacy.tabs.general": "General",
   "privacy.tabs.privacy": "Privacy",
   "privacy.intro":
@@ -1443,7 +1453,6 @@ export const en = {
   "scope.picker.documents": "Documents",
   "scope.picker.empty": "No Folders, Tags or Documents match",
   "scope.picker.none": "Add Documents, Folders or Tags to choose what a Question searches.",
-  "scope.label": "Search only",
   "scope.chip.folder": "Folder “{name}”, with its sub-Folders",
   "scope.chip.tag": "Documents tagged “{name}”",
   "scope.chip.document": "Document “{name}”",
@@ -1472,9 +1481,6 @@ export const en = {
   "answer.stop": "Stop",
   "answer.regenerate": "Regenerate",
   "answer.more": "More for this Answer",
-  "answer.edited.body": "You've edited this Answer. Regenerating replaces it, edits and all.",
-  "answer.edited.replace": "Replace it",
-  "answer.edited.keep": "Keep my edits",
   "answer.error.thisModel": "this model",
   "answer.error.auth": "The key for {model} was refused",
   "answer.error.model": "The provider doesn't know {model}",
@@ -1790,6 +1796,7 @@ export const en = {
   "command.proposal.reject": "Reject change",
   "command.proposal.acceptAll": "Accept all changes",
   "command.proposal.rejectAll": "Reject all changes",
+  "command.proposal.regenerate": "Regenerate change",
   "command.tab.new": "New Tab",
   "command.tab.next": "Next Tab",
   "command.tab.previous": "Previous Tab",
@@ -1950,6 +1957,20 @@ export const en = {
   "approvals.card.alwaysAllowHint":
     "Run {tool} from now on without asking. You can revoke this in Settings, under Approvals.",
   "approvals.card.deny": "Deny",
+  "approvals.thirdParty.read.webPage": "This Answer read a web page, so it asks you first.",
+  "approvals.thirdParty.read.checkedDocument":
+    "This Answer read the document being checked, so it asks you first.",
+  "approvals.thirdParty.mind.imported": "This Mind contains imported text, so it asks you first.",
+  "approvals.thirdParty.mind.webPage":
+    "This Mind contains text from a web page, so it asks you first.",
+  "approvals.thirdParty.mind.checkedDocument":
+    "This Mind contains text from the document being checked, so it asks you first.",
+  "approvals.thirdParty.conversation.imported":
+    "This conversation contains imported text, so it asks you first.",
+  "approvals.thirdParty.conversation.webPage":
+    "This conversation contains text from a web page, so it asks you first.",
+  "approvals.thirdParty.conversation.checkedDocument":
+    "This conversation contains text from the document being checked, so it asks you first.",
   "approvals.call.waiting": "Waiting for your approval: {connector}: {tool}",
   "approvals.call.denied": "Not allowed: {connector}: {tool}",
   "approvals.call.allowed": "Asked {connector} with your approval: {tool}",

@@ -5,7 +5,13 @@ import { useComposer } from "../composer";
 import { selectionForEdit } from "../editor/editSelection";
 import { noteHolding } from "../editor/noteKeymap";
 import { pendingAtSelection, pendingIn } from "../editor/proposalReview";
-import { requestEdit, resolveProposalsIn, startEditing, useEdits } from "../editWithAi";
+import {
+  regenerateChange,
+  requestEdit,
+  resolveProposalsIn,
+  startEditing,
+  useEdits,
+} from "../editWithAi";
 import { useAppStore } from "../store";
 import { noteHandle } from "./handles";
 import type { Command, CommandContext } from "./registry";
@@ -30,6 +36,15 @@ function resolveAt(ctx: CommandContext, outcome: "accept" | "reject"): void {
   if (!editor || note?.editor !== editor) return;
   const ids = pendingAtSelection(editor.state).map((each) => each.id);
   resolveProposalsIn(editor, note.mindId, ids, outcome);
+}
+
+/** The change out of date the cursor is on, in the Mind last written in, while no request runs there. */
+function outOfDateAt(ctx: CommandContext) {
+  const editor = noteOnProposal(ctx);
+  const note = noteHandle.current;
+  if (!editor || note?.editor !== editor || useEdits.getState().pending[note.mindId]) return null;
+  const proposal = pendingAtSelection(editor.state).find((each) => each.outOfDate);
+  return proposal ? { note, proposal } : null;
 }
 
 /** The Mind last written in, while it has Proposals waiting. */
@@ -90,6 +105,23 @@ export const proposalCommands: readonly Command[] = [
     reversible: true,
     when: (ctx) => noteOnProposal(ctx) !== null,
     run: (ctx) => resolveAt(ctx, "reject"),
+  },
+  {
+    // "Regenerate" under a change out of date, from the keyboard and ⌘K.
+    id: "proposal.regenerate",
+    label: "command.proposal.regenerate",
+    group: "main",
+    appliesTo: ["block"],
+    // Its new changes wait as Proposals, and rejecting them leaves the text as it was.
+    reversible: true,
+    when: (ctx) => outOfDateAt(ctx) !== null,
+    run(ctx) {
+      const found = outOfDateAt(ctx);
+      if (found) {
+        const { editor, mindId, doc } = found.note;
+        void regenerateChange(editor, mindId, doc, found.proposal);
+      }
+    },
   },
   {
     id: "proposal.acceptAll",
