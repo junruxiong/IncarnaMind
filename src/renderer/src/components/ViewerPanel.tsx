@@ -119,6 +119,7 @@ export function ViewerPanel({ width, onClose }: { width: number; onClose(): void
   return (
     <section
       data-testid="viewer"
+      data-surface="viewer"
       data-document-id={document?.id}
       aria-label={t("viewer.label")}
       className="viewer-pane flex min-w-[220px] shrink flex-col overflow-hidden bg-sheet"
