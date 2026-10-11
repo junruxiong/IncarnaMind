@@ -1,11 +1,11 @@
 /**
  * Edit with AI (#93) against real models: Improve writing and Translate on a
- * cited paragraph, in English and in Chinese, through the core as the app
- * uses it. Each model runs only when its key (or, for Ollama, its name) is in
+ * cited paragraph, in English and in Chinese, and on one with a footnote the
+ * User wrote, through the core as the app uses it. Each model runs only when its key (or, for Ollama, its name) is in
  * the environment, and is skipped otherwise, so `npx vitest run` makes no
  * request without one. It checks that each reply comes back as Proposals,
  * never as an edit, and that the paragraph's Citation is still there, and
- * still found, once they are accepted.
+ * still found, once they are accepted, and its footnote with its text.
  *
  *   INCARNAMIND_LIVE_ANTHROPIC_KEY   Claude (INCARNAMIND_LIVE_ANTHROPIC_MODEL, Haiku by default)
  *   INCARNAMIND_LIVE_OPENAI_KEY      OpenAI (INCARNAMIND_LIVE_OPENAI_MODEL, its quick-tasks model by default)
@@ -24,6 +24,7 @@ import {
   type Core,
   type Document,
   type EditAction,
+  FOOTNOTE_NODE,
   PROPOSAL_ATTRIBUTE,
   PROPOSAL_DELETE_MARK,
   PROPOSAL_INSERT_MARK,
@@ -85,14 +86,21 @@ const LIVE: Live[] = [
   },
 ];
 
-/** The paragraph's text, Proposals shown as [-removed-] and {+added+}, a Citation as ⟨its check⟩. */
+/**
+ * The paragraph's text, Proposals shown as [-removed-] and {+added+}, a
+ * Citation as ⟨its check⟩, a footnote as ^[its text].
+ */
 function shown(client: MindClient, blockId: string): string {
   let line = "";
   readMind(client).descendants((node) => {
     if (node.attrs.id !== blockId) return true;
     node.forEach((child) => {
       const kind = (child.attrs[PROPOSAL_ATTRIBUTE] as { kind?: string } | null)?.kind;
-      const inline = child.isText ? (child.text ?? "") : `⟨${String(child.attrs.check)}⟩`;
+      const inline = child.isText
+        ? (child.text ?? "")
+        : child.type.name === FOOTNOTE_NODE
+          ? `^[${child.textContent}]`
+          : `⟨${String(child.attrs.check)}⟩`;
       const marks = child.marks.map((mark) => mark.type.name);
       if (marks.includes(PROPOSAL_DELETE_MARK) || kind === "delete") line += `[-${inline}-]`;
       else if (marks.includes(PROPOSAL_INSERT_MARK) || kind === "insert") line += `{+${inline}+}`;
@@ -101,6 +109,18 @@ function shown(client: MindClient, blockId: string): string {
     return false;
   });
   return line.replace(/-\]\[-|\+\}\{\+/g, "");
+}
+
+function footnotesOf(client: MindClient, blockId: string): string[] {
+  const found: string[] = [];
+  readMind(client).descendants((node) => {
+    if (node.attrs.id !== blockId) return true;
+    node.forEach((child) => {
+      if (child.type.name === FOOTNOTE_NODE) found.push(child.textContent);
+    });
+    return false;
+  });
+  return found;
 }
 
 function citationsOf(client: MindClient, blockId: string): Record<string, unknown>[] {
@@ -138,7 +158,10 @@ async function edit(
   let plain = "";
   readMind(client).descendants((node) => {
     if (node.attrs.id !== blockId) return true;
-    plain = node.textBetween(0, node.content.size, "", "￼");
+    // As the editor reads it: an inline node as one character, a footnote's text not at all.
+    node.forEach((child) => {
+      plain += child.isText ? (child.text ?? "") : "￼";
+    });
     return false;
   });
   const started = Date.now();
@@ -178,11 +201,14 @@ describe.each(LIVE)("Edit with AI, live: $name", (live) => {
       const client = await connectToMind(core, mind.id);
       const english = "english";
       const chinese = "chinese";
+      const footnoted = "footnoted";
       const cases: { blockId: string; action: EditAction; instruction?: string }[] = [
         { blockId: english, action: "improve" },
         { blockId: english, action: "translate", instruction: "Simplified Chinese (简体中文)" },
         { blockId: chinese, action: "improve" },
         { blockId: chinese, action: "translate", instruction: "English" },
+        { blockId: footnoted, action: "improve" },
+        { blockId: footnoted, action: "translate", instruction: "Simplified Chinese (简体中文)" },
       ];
       const report: string[] = [`## ${live.name} · ${live.model}`];
       for (const each of cases) {
@@ -206,6 +232,22 @@ describe.each(LIVE)("Edit with AI, live: $name", (live) => {
               { type: "text", text: "大潮一般是在新月和满月的前后出现的的，" },
               citationOf(chaoxi as Document, "大潮出现在新月和满月前后"),
               { type: "text", text: "因为太阳和月亮的引力它们叠加在一起。" },
+            ],
+          },
+          {
+            type: "paragraph",
+            attrs: { id: footnoted },
+            content: [
+              {
+                type: "text",
+                text: "neap tides is weak because sun and moon pulls at right angle",
+              },
+              {
+                type: FOOTNOTE_NODE,
+                attrs: { id: "footnote" },
+                content: [{ type: "text", text: "At the first and last quarter moons." }],
+              },
+              { type: "text", text: ", so the high water dont rise much." },
             ],
           },
         ]);
@@ -239,7 +281,9 @@ describe.each(LIVE)("Edit with AI, live: $name", (live) => {
         await client.settled();
         const kept = citationsOf(client, each.blockId);
         report.push(`  accepted: ${shown(client, each.blockId)}`);
-        if (result.kind === "proposed" && result.droppedCitations === 0) {
+        if (each.blockId === footnoted) {
+          expect(footnotesOf(client, footnoted)).toEqual(["At the first and last quarter moons."]);
+        } else if (result.kind === "proposed" && result.droppedCitations === 0) {
           expect(kept).toHaveLength(1);
           expect(kept[0]?.check).toBe("found");
         }
