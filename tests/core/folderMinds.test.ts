@@ -229,6 +229,7 @@ describe("A Mind in a Folder", () => {
       {
         id: "e4d3c2b1-a0f9-4e8d-9c7b-6a5f4e3d2c10",
         title: "Tides",
+        autoTitle: "",
         kind: "mind",
         createdAt: at,
         updatedAt: at,

@@ -115,9 +115,12 @@ export function createRecentlyDeleted(options: {
 }) {
   const { db, now, say, minds, content, documents, tags, library } = options;
 
+  /** A Mind's name as `mindName` gives it: its title, else its first line. */
+  const MIND_NAME = "CASE WHEN title <> '' THEN title ELSE auto_title END";
+
   const rowOf = (kind: Stored, id: string) =>
     db.get<DeletedRow>(
-      `SELECT ${kind === "mind" ? "title" : "name"} AS name, deleted_at, purged_at
+      `SELECT ${kind === "mind" ? MIND_NAME : "name"} AS name, deleted_at, purged_at
        FROM ${TABLES[kind]} WHERE id = ?`,
       [id],
     );
@@ -177,7 +180,7 @@ export function createRecentlyDeleted(options: {
             deleted_at: string;
             group_id: string | null;
           }>(
-            `SELECT id, title AS name, kind, deleted_at, folder_id AS group_id FROM minds
+            `SELECT id, ${MIND_NAME} AS name, kind, deleted_at, folder_id AS group_id FROM minds
              WHERE deleted_at >= ? AND purged_at IS NULL`,
             [since],
           )
