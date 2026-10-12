@@ -7,6 +7,7 @@ import { currentTabOf } from "../layoutSlice";
 import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
 import { assistantCommands } from "./assistant";
+import { editCommands } from "./edit";
 import { evidenceCommands } from "./evidence";
 import { exportCommands } from "./exports";
 import { footnoteCommands } from "./footnotes";
@@ -47,6 +48,7 @@ const appCommands: readonly Command[] = [
     reversible: true,
     run: () => useAppStore.getState().createMind(),
   },
+  ...editCommands,
   ...mindCommands,
   ...documentCommands,
   ...folderCommands,

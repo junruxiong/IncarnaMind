@@ -23,7 +23,7 @@ import type { Core } from "../core";
 import { FILES_CHANNELS } from "../shared/bridge";
 import { translate } from "../shared/i18n";
 import { type FileLogger, logsFolder, logWindowError } from "./log";
-import { setMenuSidebarHidden } from "./menu";
+import { isEditMenuState, setEditMenu, setMenuSidebarHidden } from "./menu";
 import { rememberPick, startFolder } from "./pickerFolders";
 
 /** What "Add Documents" offers; the core decides what it takes (and says what it skipped). */
@@ -206,6 +206,10 @@ export function serveFileActions(
 
   ipcMain.on(FILES_CHANNELS.sidebarHidden, (event, hidden: unknown) => {
     if (trusted(event) && typeof hidden === "boolean") setMenuSidebarHidden(hidden);
+  });
+
+  ipcMain.on(FILES_CHANNELS.editMenu, (event, state: unknown) => {
+    if (trusted(event) && isEditMenuState(state)) setEditMenu(state);
   });
 
   ipcMain.on(FILES_CHANNELS.logError, (event, report: unknown) => {

@@ -1,12 +1,14 @@
 import type { ComponentType } from "react";
 import {
   type CommandId,
+  type Keys,
   MENU_COMMANDS,
   type MenuCommandId,
   type ShortcutKeys,
 } from "../../../shared/commands";
 import type { MessageKey } from "../../../shared/i18n";
 import type { ObjectKind, ObjectRef, Translate, Undoable } from "../objects";
+import { useUndo } from "../undo";
 import { checkKeys } from "./keys";
 
 /** Where the User is acting, as `data-surface` marks it on the page. */
@@ -32,6 +34,13 @@ export interface Shortcut {
    * command acts on a Block (`appliesTo`) and says where it applies (`when`).
    */
   inText?: true;
+  /**
+   * Keys the User also types with (⌘Z), which the command takes only while the
+   * focus isn't in text: there they keep their meaning, the text's own undo.
+   */
+  outsideText?: true;
+  /** The same command's second keys on Windows and Linux: Ctrl+Y redoes there, as Ctrl+Shift+Z does. */
+  alsoOther?: Keys;
 }
 
 export interface CommandContext {
@@ -117,6 +126,7 @@ export const commands = {
   register(command: Command): () => void {
     if (registered.has(command.id)) throw new Error(`Two commands are called ${command.id}.`);
     if (command.shortcut) checkKeys(command.shortcut.keys);
+    if (command.shortcut?.alsoOther) checkKeys(command.shortcut.alsoOther);
     registered.set(command.id, command);
     return () => {
       if (registered.get(command.id) === command) registered.delete(command.id);
@@ -132,14 +142,16 @@ export const commands = {
     [...registered.values()].filter((command) => offered(command, ctx)),
 
   /**
-   * Runs a command, if it is offered and enabled here. Resolves to its undo
-   * when it changed something.
+   * Runs a command, if it is offered and enabled here. What it changed goes on
+   * the undo stack, and is what it resolves to.
    */
   async run(id: CommandId, given: Partial<CommandContext> = {}): Promise<Undoable | undefined> {
     const command = registered.get(id);
     if (!command) throw new Error(`There is no command ${id}.`);
     const ctx = { ...NO_CONTEXT, ...given };
     if (!offered(command, ctx) || !isEnabled(command, ctx)) return undefined;
-    return (await command.run(ctx)) ?? undefined;
+    const change = (await command.run(ctx)) ?? undefined;
+    if (change) useUndo.getState().push(change);
+    return change;
   },
 };
