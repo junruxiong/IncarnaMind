@@ -7,6 +7,7 @@ import { useLanguage, useT } from "../i18n";
 import { formatCount } from "../linkedFolders";
 import { useRequests } from "../requests";
 import { useAppStore } from "../store";
+import { deleteTag, editTag, mergeTags } from "../tagChanges";
 import { MergeLineIcon, PencilLineIcon, TrashLineIcon } from "./lineIcons";
 import { TagColourPicker, tagChipColour } from "./TagColour";
 import {
@@ -200,8 +201,7 @@ function TagRow({
           submitLabel={t("tags.dialog.save")}
           note={t("tags.dialog.descriptionNote")}
           onSubmit={async (name, description, colour) => {
-            if (await run(() => core.updateTag(tag.id, { name, description, colour })))
-              setMode("view");
+            if (await run(() => editTag(tag.id, { name, description, colour }))) setMode("view");
           }}
           onCancel={() => setMode("view")}
         />
@@ -226,7 +226,7 @@ function TagRow({
         <button
           type="button"
           data-testid="confirm-delete-tag"
-          onClick={() => void run(() => core.deleteTag(tag.id))}
+          onClick={() => void run(() => deleteTag(tag.id))}
           className={dangerButtonClass}
         >
           {t("tags.dialog.delete.confirm")}
@@ -270,7 +270,7 @@ function TagRow({
             type="button"
             data-testid="confirm-merge-tag"
             disabled={!target}
-            onClick={() => void run(() => core.mergeTags(tag.id, into))}
+            onClick={() => void run(() => mergeTags(tag.id, into))}
             className={buttonClass}
           >
             {t("tags.dialog.merge.confirm")}
