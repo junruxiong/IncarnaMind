@@ -11,6 +11,8 @@ import {
   createCore,
   DATABASE_FILE,
   type Keychain,
+  type LogFields,
+  type Logger,
   type SecretProtection,
 } from "../../src/core";
 import { createFakeEmbedder } from "../../src/core/embedding/fake";
@@ -24,6 +26,21 @@ export const CITATION_STYLES = fileURLToPath(
 
 /** A model source with nothing to download: the fake embedding model needs no files. */
 export const NO_MODEL_FILES = { baseUrl: "http://127.0.0.1/", files: [] } as const;
+
+export interface LogEntry {
+  level: "info" | "warn" | "error";
+  event: string;
+  fields: LogFields | undefined;
+}
+
+/** A log that keeps what it is told. */
+export function recordingLog(): { log: Logger; entries: LogEntry[] } {
+  const entries: LogEntry[] = [];
+  const record = (level: LogEntry["level"]) => (event: string, fields?: LogFields) => {
+    entries.push({ level, event, fields });
+  };
+  return { log: { info: record("info"), warn: record("warn"), error: record("error") }, entries };
+}
 
 /** An address nothing answers at (the discard port), for services a test doesn't stand in for. */
 const NOWHERE = "http://127.0.0.1:9";

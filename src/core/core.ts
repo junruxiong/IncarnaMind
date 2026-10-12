@@ -540,6 +540,7 @@ export function createCore(adapters: CoreAdapters): Core {
     dataDir,
     crossEncoder: adapters.crossEncoder,
     emitStatus: () => reportRerank(),
+    log: adapters.log ?? silentLogger,
   });
   // Rerank: the built-in model by default, a Cohere or Voyage key (paused in local mode), or off.
   const rerank = createRerank({

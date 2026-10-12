@@ -1,27 +1,11 @@
 import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test, vi } from "vitest";
-import type { LogFields, Logger } from "../../src/core";
-import { createTempDataFolder, startCore } from "../helpers/core";
+import { createTempDataFolder, recordingLog, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
 import { connectToMind } from "../helpers/mindClient";
 import { note, question, writeMind } from "../helpers/minds";
 import { scriptedModels } from "../helpers/models";
-
-interface Entry {
-  level: "info" | "warn" | "error";
-  event: string;
-  fields: LogFields | undefined;
-}
-
-/** A log that keeps what it is told. */
-function recordingLog(): { log: Logger; entries: Entry[] } {
-  const entries: Entry[] = [];
-  const record = (level: Entry["level"]) => (event: string, fields?: LogFields) => {
-    entries.push({ level, event, fields });
-  };
-  return { log: { info: record("info"), warn: record("warn"), error: record("error") }, entries };
-}
 
 // The User's content and secrets: none of it may reach the log.
 const DOCUMENT_NAME = "Merger plan for Northwind";
