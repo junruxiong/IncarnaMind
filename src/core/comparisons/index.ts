@@ -98,7 +98,6 @@ export interface ComparisonsOptions {
 /** One cell to fill, with what its Answer is asked from. */
 interface Cell {
   documentId: string;
-  documentName: string;
   questionId: string;
   question: string;
 }
@@ -166,14 +165,13 @@ function cellsToFill(table: Y.XmlElement): Cell[] {
   for (const row of elements(table)) {
     if (row.nodeName !== COMPARISON_ROW_NODE) continue;
     const documentId = String(row.getAttribute("documentId") ?? "");
-    const documentName = String(row.getAttribute("documentName") ?? "");
     const byQuestion = new Map(
       elements(row).map((cell) => [String(cell.getAttribute("questionId") ?? ""), cell]),
     );
     for (const question of questions) {
       const cell = byQuestion.get(question.id);
       if (!cell || !cellToFill(comparisonCellOf(cell.getAttributes()))) continue;
-      cells.push({ documentId, documentName, questionId: question.id, question: question.text });
+      cells.push({ documentId, questionId: question.id, question: question.text });
     }
   }
   return cells;
