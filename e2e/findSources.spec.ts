@@ -371,7 +371,7 @@ test("choosing the eCFR finds a regulation marked as an unofficial compilation; 
     await add.click();
     await window.getByTestId("library-find-sources").click();
     const panel = window.getByTestId("find-sources");
-    const ecfr =panel.getByTestId("find-sources-provider").filter({ hasText: "eCFR" });
+    const ecfr = panel.getByTestId("find-sources-provider").filter({ hasText: "eCFR" });
     const govinfoKey = panel.locator('[data-provider="govinfo"]');
 
     // GovInfo's key line shows once the eCFR, the provider it is listed with, is chosen.
