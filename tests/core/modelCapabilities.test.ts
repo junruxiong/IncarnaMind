@@ -334,6 +334,7 @@ describe("Providers saved before the catalog", () => {
       baseUrl: "https://api.openai.com/v1",
       apiKey: "sk-openai",
       modelId: "gpt-6.1-sol",
+      thinking: "summary",
     });
     expect(prepared.capabilities.known).toBe(true);
     const deepseek = { providerId: ids.compatible, modelId: "deepseek-chat" };
