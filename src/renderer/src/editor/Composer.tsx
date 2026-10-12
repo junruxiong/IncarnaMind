@@ -20,6 +20,7 @@ import { shortcutLabel } from "../commands/keymap";
 import { SearchIcon, StopIcon } from "../components/icons";
 import { SparkLineIcon } from "../components/lineIcons";
 import { ProblemLine } from "../components/ProblemLine";
+import { TypingTextarea } from "../components/TypingTextarea";
 import {
   chosenScope,
   composerKey,
@@ -560,7 +561,7 @@ export function Composer({
             testId="composer-skill"
           />
         )}
-        <textarea
+        <TypingTextarea
           ref={field}
           rows={1}
           data-testid="composer-input"

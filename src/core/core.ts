@@ -61,6 +61,7 @@ import { statIdentity } from "./documents/files";
 import { createOwnFiles } from "./documents/ownFiles";
 import { createVersionRetention, type VersionRetention } from "./documents/retention";
 import { BUILT_IN_TEXT_RECOGNITION_MODEL, createTextRecognitionModel } from "./documents/scan";
+import { tunedSearch } from "./documents/searchTuning";
 import { fsWatchFolder } from "./documents/watcher";
 import { createWebPages } from "./documents/web";
 import { createEdits } from "./edits";
@@ -798,12 +799,17 @@ export function createCore(adapters: CoreAdapters): Core {
     query: string,
     documentIds: readonly string[] | null,
     signal?: AbortSignal,
-  ) =>
-    documents.searchTool(query, {
+  ) => {
+    const options = {
       signal,
       rerank: adapters.reranker ?? rerank.active(),
       documentIds: documentIds ?? undefined,
-    });
+    };
+    const tuning = adapters.answerSearch;
+    return tuning
+      ? tunedSearch(tuning, query, options, (tuned) => documents.searchTool(query, tuned))
+      : documents.searchTool(query, options);
+  };
   const resolveScope = (scope: SearchScope) =>
     resolveSearchScope(scope, {
       folderTree: (folderId) => folders.subtree(folderId),

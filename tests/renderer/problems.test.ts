@@ -17,6 +17,7 @@ const KINDS: ProviderErrorKind[] = [
   "blocked",
   "too-long",
   "cost-cap",
+  "no-answer",
   "unknown",
 ];
 
@@ -56,6 +57,15 @@ describe("a failed Answer's problem line", () => {
     });
     expect(translate("en", "answer.error.cost-cap")).toBe("Monthly cap reached");
     expect(translate("en", "answer.error.changeCap")).toBe("Change cap");
+  });
+
+  test("a reply with no text says so, and offers Try again, in both languages", () => {
+    expect(ANSWER_PROBLEMS["no-answer"]).toEqual({
+      line: "answer.error.no-answer",
+      fix: { kind: "retry", label: "answer.error.retry" },
+    });
+    expect(translate("en", "answer.error.no-answer")).toBe("The model sent no Answer");
+    expect(translate("zh-CN", "answer.error.no-answer")).toBe("模型没有给出回答");
   });
 
   test("an Ollama Cloud allowance used up is managed on Ollama's own page", () => {
