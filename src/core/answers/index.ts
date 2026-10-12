@@ -42,6 +42,7 @@
  */
 import { randomUUID } from "node:crypto";
 import type * as Y from "yjs";
+import { asGenerated } from "../../shared/aiText";
 import { runsByDefault } from "../../shared/approvalRules";
 import { citationNode, withCitations } from "../../shared/blockJson";
 import { withFigures, withFigureText } from "../../shared/figureMarkers";
@@ -192,7 +193,7 @@ interface AnswerHome {
 interface WrittenAnswer {
   /** What the model wrote: Markdown, with Citation markers, its footnote definitions left out. */
   markdown: string;
-  /** Its Blocks, each marker a Citation node: the final ones once it has ended. */
+  /** Its Blocks, each marker a Citation node, its words AI text: the final ones once it has ended. */
   blocks(): NodeJSON[];
   /** Its Citations, in the order of their markers in the text: the final ones once it has ended. */
   citations(): MarkedCitation[];
@@ -711,13 +712,15 @@ export function createAnswers(options: AnswersOptions) {
                   ? (marker) => session.finalNode(marker)
                   : (marker) => session.streamingNode(marker),
               );
-              return calculating
-                ? withFigures(
-                    blocks,
-                    (marker) => figures.figure(marker),
-                    (figure) => figure.shown,
-                  )
-                : blocks;
+              return asGenerated(
+                calculating
+                  ? withFigures(
+                      blocks,
+                      (marker) => figures.figure(marker),
+                      (figure) => figure.shown,
+                    )
+                  : blocks,
+              );
             },
             citations: () => {
               const found: MarkedCitation[] = [];
@@ -1658,6 +1661,7 @@ export function createAnswers(options: AnswersOptions) {
           errorMessage: null,
           errorResetsAt: null,
           generatedHash: null,
+          generatedMarks: true,
           citationSupport: null,
           toolCalls: null,
         };
