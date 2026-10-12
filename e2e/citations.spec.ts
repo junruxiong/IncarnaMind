@@ -2,6 +2,8 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { Editor } from "@tiptap/core";
+import type { CoreBridge } from "../src/core/api";
+import { xlsxOf } from "../tests/helpers/office";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
@@ -23,6 +25,12 @@ import {
 const TIDES = buildPdf([
   { lines: ["Tides and the Moon", "The Moon raises two bulges of water on the Earth."] },
   { lines: ["Spring and neap tides", "Spring tides happen at new moon and at full moon."] },
+  { lines: ["Tide tables", "Harbours publish the times of high water every year."] },
+]);
+
+/** Two short pages, so one Passage covers both: the line about spring tides is on page 1. */
+const TWO_PAGES = buildPdf([
+  { lines: ["Spring tides", "Spring tides happen at new moon and at full moon."] },
   { lines: ["Tide tables", "Harbours publish the times of high water every year."] },
 ]);
 
@@ -109,6 +117,23 @@ test("an Answer cites a PDF: its badge says the quote was found, and clicking it
   await expect(groups.first().getByTestId("mind-tab")).toHaveAttribute("aria-selected", "true");
   await expect(groups.first()).toHaveAttribute("data-focused", "true");
   await expect(groups.nth(1).getByTestId("document-tab")).toHaveAttribute("data-preview", "true");
+  await app.close();
+});
+
+test("a quote on page 1 of a Passage that runs onto page 2 is labelled p. 1, as the page it opens at", async () => {
+  await writeFile(join(sources, "Tides.pdf"), TWO_PAGES);
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await addDocuments(window, [join(sources, "Tides.pdf")]);
+
+  const answer = await ask(window, "When do spring tides happen? Name no page.");
+
+  const chip = answer.getByTestId("citation").getByTestId("citation-chip");
+  await expect(chip).toHaveAttribute("aria-label", "Citation 1: Tides, p. 1. Quote found on p. 1");
+  await pointAndClick(window, chip);
+  await expect(window.getByTestId("citation-badge")).toHaveText("Quote found on p. 1");
+  await expect(window.getByTestId("pdf-page-number")).toHaveValue("1");
   await app.close();
 });
 
@@ -299,5 +324,48 @@ test("a contradicted Citation's words are outlined in red on the page, never was
   const mark = window.getByTestId("viewer-quote-mark");
   await expect(mark).toHaveAttribute("data-check", "contradicted");
   await expect(mark).toHaveAttribute("aria-label", /contradicted/);
+  await app.close();
+});
+
+test("in Chinese, a Citation of a Chinese sheet's row has no space between Chinese characters", async () => {
+  await writeFile(
+    join(sources, "年报.xlsx"),
+    xlsxOf([
+      {
+        name: "利润表",
+        rows: [
+          ["Item", "Amount"],
+          ["Revenue", 1200],
+          ["Cost of sales", 800],
+          ["Net profit", 400],
+        ],
+      },
+    ]),
+  );
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await addDocuments(window, [join(sources, "年报.xlsx")]);
+  await expect(window.getByTestId("document-list-item")).toHaveAttribute("data-status", "ready", {
+    timeout: 30_000,
+  });
+
+  const answer = await ask(window, "What is the net profit, in rows?");
+  const chip = answer.getByTestId("citation-chip");
+  await expect(chip).toHaveCount(1);
+  await window.evaluate(() =>
+    (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+      user: { language: "zh-CN" },
+    }),
+  );
+
+  await expect(chip).toHaveAttribute(
+    "aria-label",
+    /^引用 1：年报，利润表，第 \d+–?\d* 行。已在“利润表，第 \d+–?\d* 行”中找到引文$/,
+  );
+  await chip.click();
+  const badge = window.getByTestId("citation-badge");
+  await expect(badge).toHaveText(/^已在“利润表，第 \d+–?\d* 行”中找到引文$/);
+  expect(await badge.innerText()).not.toMatch(/[一-鿿] [一-鿿]/);
   await app.close();
 });
