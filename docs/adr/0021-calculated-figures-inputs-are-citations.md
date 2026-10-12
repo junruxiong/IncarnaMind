@@ -33,5 +33,5 @@ So a number an Answer works out from numbers in Passages is a **calculated figur
 
 ## Consequences
 
-- For the models offered it, the steer adds about 150 tokens to every Answer's instructions in the Tool loop, and a paragraph to structured output's. The Tool's description carries an example, since some models (gpt-oss on Ollama) are shown a Tool's top-level parameters only. One Answer may call it three times, as it may search five times, so a model that can't get a figure right still answers.
+- For the models offered it, the steer adds about 130 tokens to every Answer's instructions in the Tool loop, and a paragraph to structured output's. The Tool's description carries an example, since some models (gpt-oss on Ollama) are shown a Tool's top-level parameters only. One Answer may call it three times, as it may search five times, so a model that can't get a figure right still answers.
 - The figure's card, its margin marks, Recalculate and the marks for figures worked out without the Tool build on this model (#439, #440, #442). The evaluation measures how many worked-out figures go through the Tool, per model and language (#441).
