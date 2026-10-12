@@ -20,6 +20,8 @@ import type { MessageKey } from "../../shared/i18n";
 import { resolveProposals } from "../../shared/proposals";
 import { addCitedUnits, addCitedVersions, type CitedUnits } from "../answers/citedVersions";
 import {
+  ANSWER_BLOCK,
+  BLOCK_ID_ATTRIBUTE,
   CHECKPOINT_IDLE_MS,
   CHECKPOINT_REASONS,
   type Checkpoint,
@@ -48,6 +50,10 @@ export interface CheckpointsOptions {
   requireMind(mindId: unknown): string;
   /** A Mind's Checkpoints changed. */
   changed(mindId: string): void;
+  /** Stops an Answer being written in the Mind, keeping what it has. */
+  stopAnswer(mindId: string, answerId: string): void;
+  /** Marks the Mind's Answers left "streaming" with nothing writing them as stopped. */
+  settleAnswers(mindId: string): void;
   say(key: MessageKey): string;
   reportError(error: unknown): void;
 }
@@ -83,6 +89,14 @@ const toCheckpoint = (row: Row): Checkpoint => ({
   reason: isReason(row.reason) ? row.reason : "others",
   createdAt: row.created_at,
 });
+
+/** The Answers being written into a Mind's Blocks, by id. */
+const streamingAnswers = (blocks: Y.XmlFragment): string[] =>
+  blocks.toArray().flatMap((block) => {
+    if (!(block instanceof Y.XmlElement) || block.nodeName !== ANSWER_BLOCK) return [];
+    const id = block.getAttribute(BLOCK_ID_ATTRIBUTE);
+    return block.getAttribute("status") === "streaming" && typeof id === "string" ? [id] : [];
+  });
 
 /** The versions of Documents the Citations in a Mind's document quote, and their Units. */
 function citedIn(doc: Y.Doc): RetainVersion[] {
@@ -144,16 +158,18 @@ export function createCheckpoints(options: CheckpointsOptions) {
       [mindId],
     );
 
-  const sameState = (saved: Uint8Array, doc: Y.Doc) =>
-    saved.byteLength > 0 && Y.equalSnapshots(Y.decodeSnapshot(saved), Y.snapshot(doc));
+  const sameState = (saved: Uint8Array, snapshot: Y.Snapshot) =>
+    saved.byteLength > 0 && Y.equalSnapshots(Y.decodeSnapshot(saved), snapshot);
 
   const save = (mindInput: unknown, reasonInput: unknown): Checkpoint => {
     const reason = parseReason(reasonInput);
     const mindId = options.requireMind(mindInput);
-    const doc = docOf(content.storedState(mindId));
+    const state = content.storedState(mindId);
+    const doc = docOf(state);
     try {
+      const snapshot = Y.snapshot(doc);
       const last = newest(mindId);
-      if (last && sameState(last.snapshot, doc)) {
+      if (last && sameState(last.snapshot, snapshot)) {
         if (last.reason !== "idle" || reason === "idle") return toCheckpoint(last);
         // Now the state before an AI change: kept for good.
         db.run("UPDATE mind_checkpoints SET reason = ?, updated_at = ? WHERE id = ?", [
@@ -170,15 +186,7 @@ export function createCheckpoints(options: CheckpointsOptions) {
         db.run(
           `INSERT INTO mind_checkpoints (id, mind_id, reason, data, snapshot, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [
-            id,
-            mindId,
-            reason,
-            Y.encodeStateAsUpdate(doc),
-            Y.encodeSnapshot(Y.snapshot(doc)),
-            at,
-            at,
-          ],
+          [id, mindId, reason, state, Y.encodeSnapshot(snapshot), at, at],
         );
         retention.retain("checkpoint", id, citedIn(doc));
         if (reason === "idle") thin(mindId);
@@ -214,7 +222,7 @@ export function createCheckpoints(options: CheckpointsOptions) {
       if (last) {
         const doc = docOf(content.storedState(mindId));
         try {
-          if (sameState(last.snapshot, doc)) current = last.id;
+          if (sameState(last.snapshot, Y.snapshot(doc))) current = last.id;
         } finally {
           doc.destroy();
         }
@@ -251,6 +259,10 @@ export function createCheckpoints(options: CheckpointsOptions) {
       }
       const old = docOfCheckpoint(mindId, checkpointId);
       try {
+        // An Answer being written would go on into Blocks the restore replaces.
+        for (const answerId of content.peek(mindId, streamingAnswers)) {
+          options.stopAnswer(mindId, answerId);
+        }
         const before = save(mindId, "restore");
         const restored = old
           .getXmlFragment(MIND_CONTENT_FIELD)
@@ -262,6 +274,8 @@ export function createCheckpoints(options: CheckpointsOptions) {
           // As History showed it: without the changes still waiting in it then.
           resolveProposals(blocks, () => true, "reject");
         });
+        // One that was being written when the Checkpoint was saved comes back stopped.
+        options.settleAnswers(mindId);
         return { before };
       } finally {
         old.destroy();

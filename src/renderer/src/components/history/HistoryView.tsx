@@ -79,14 +79,20 @@ function History({ mindId, onClose }: { mindId: string; onClose(): void }) {
     });
   }, [mindId, loadList]);
 
+  /** The latest comparison asked for: an earlier one that answers later is left unused. */
+  const asked = useRef(0);
   const compare = useCallback(() => {
     if (!left) return;
+    const request = ++asked.current;
     core.compareCheckpoints({ mindId, from: left, to: right }).then(
       (compared) => {
+        if (request !== asked.current) return;
         setComparison(compared);
         setProblem(null);
       },
-      (error: unknown) => setProblem(errorMessage(error)),
+      (error: unknown) => {
+        if (request === asked.current) setProblem(errorMessage(error));
+      },
     );
   }, [mindId, left, right]);
 

@@ -446,6 +446,30 @@ describe("Comparing and restoring", () => {
     expect(marks).toEqual([]);
   });
 
+  test("an Answer that was being written when it was saved comes back stopped", async () => {
+    const core = startCore(await createTempDataFolder());
+    const mind = await core.createMind({ title: "Tides" });
+    const client = await connectToMind(core, mind.id);
+    const asked = { type: "question", attrs: { id: "question-1" }, content: [] };
+    writeMind(client, [
+      { ...asked, content: [{ type: "text", text: "When are spring tides?" }] },
+      {
+        type: "answer",
+        attrs: { id: "answer-1", questionId: "question-1", status: "streaming" },
+        content: [{ type: "paragraph", content: [{ type: "text", text: "At new and" }] }],
+      },
+    ]);
+    await client.settled();
+    const midway = await core.saveCheckpoint(mind.id, "regenerate");
+    writeMind(client, [note("Spring tides, to look up.")]);
+    await client.settled();
+
+    await core.restoreCheckpoint(mind.id, midway.id);
+    await client.settled();
+    expect(answerIn(client, "answer-1").attrs.status).toBe("stopped");
+    expect(lines(client)).toEqual(["When are spring tides?", "At new and"]);
+  });
+
   test("a Mind a newer version wrote can be compared but not restored", async () => {
     const core = startCore(await createTempDataFolder());
     const { mind, client } = await mindWith(core, ["Tides"]);
