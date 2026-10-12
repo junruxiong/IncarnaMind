@@ -359,6 +359,14 @@ export type ThirdPartyReason =
 export const MIND_TEXT_ORIGINS_FIELD = "textOrigins";
 
 /**
+ * The name of the Y.Map, beside a Mind's Blocks, that says when in its Meeting
+ * each line was written (#139): the Meeting's time in ms, by Block id. A map
+ * rather than a Block attribute, for the reason `MIND_TEXT_ORIGINS_FIELD` is
+ * (see `src/shared/blockTimes.ts`), so the content schema version stays as it is.
+ */
+export const MIND_BLOCK_TIMES_FIELD = "blockTimes";
+
+/**
  * A Question's Search scope (CONTEXT.md): the Folders, Tags and individual
  * Documents its Document search is limited to. It covers every Document in
  * one of the Folders or their sub-Folders (at any depth), every Document with

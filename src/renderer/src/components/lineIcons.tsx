@@ -321,6 +321,15 @@ export function StopLineIcon(props: IconProps) {
   );
 }
 
+/** A Mark in a meeting: a bookmark. */
+export function BookmarkLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M7.5 4.5h9v15l-4.5-3.5-4.5 3.5z" />
+    </LineIcon>
+  );
+}
+
 /** A pinned tab, and Keep open: a pushpin. */
 export function PinLineIcon(props: IconProps) {
   return (

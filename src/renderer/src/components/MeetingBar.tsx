@@ -3,11 +3,18 @@ import type { ReactNode } from "react";
 import type { AudioSource, Meeting, MeetingSourceState } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
 import { shortcutLabel } from "../commands/keymap";
+import { commands } from "../commands/registry";
 import { useT } from "../i18n";
 import { useMeetings, useMeetingTime } from "../meetings";
 import { clockTime, durationLabel } from "../meetingTime";
 import { hideTranscript, showTranscript, useDocumentTab } from "../transcripts";
-import { DocumentLineIcon, PauseLineIcon, ResumeLineIcon, StopLineIcon } from "./lineIcons";
+import {
+  BookmarkLineIcon,
+  DocumentLineIcon,
+  PauseLineIcon,
+  ResumeLineIcon,
+  StopLineIcon,
+} from "./lineIcons";
 import { type ProblemAction, ProblemLine } from "./ProblemLine";
 import { TranscriptLines } from "./TranscriptLines";
 import { useTabPlace } from "./tabs/tabItems";
@@ -48,6 +55,7 @@ function MeetingControls({ meeting }: { meeting: Meeting }) {
   const recording = meeting.status === "recording";
   const toggle = () => void (recording ? pause(meeting.id) : resume(meeting.id));
   const shortcut = shortcutLabel("meeting.pauseResume");
+  const markShortcut = shortcutLabel("meeting.mark");
 
   return (
     <div data-testid="meeting-controls" className="meeting-controls">
@@ -89,6 +97,20 @@ function MeetingControls({ meeting }: { meeting: Meeting }) {
       >
         <StopLineIcon className="size-3.5" />
         {t("meetings.bar.stop")}
+      </button>
+      <button
+        type="button"
+        data-testid="meeting-mark"
+        disabled={!recording}
+        aria-label={t("meetings.mark.title", { shortcut: markShortcut })}
+        title={t(recording ? "meetings.mark.title" : "meetings.command.markPaused", {
+          shortcut: markShortcut,
+        })}
+        onClick={() => void commands.run("meeting.mark")}
+        className="meeting-button"
+      >
+        <BookmarkLineIcon className="size-3.5" />
+        {t("meetings.mark")}
       </button>
       <TranscriptToggle meeting={meeting} />
     </div>

@@ -6,6 +6,7 @@ import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import * as Y from "yjs";
 import { ANSWER_BLOCK, MIND_CONTENT_FIELD, type MindAccess } from "../../../core/api";
+import { writingTime } from "../../../shared/blockTimes";
 import { citationStyle } from "../../../shared/citationStyles";
 import { translate } from "../../../shared/i18n";
 import { useCitationFormattingFor, useMindStyleChoice } from "../citationFormatting";
@@ -30,6 +31,7 @@ import { type FootnoteLabel, footnoteView } from "../editor/FootnoteView";
 import { FootnoteKeys } from "../editor/footnoteSchema";
 import { MarginChecks } from "../editor/MarginChecks";
 import { MathEditing, MathEditor } from "../editor/MathEditor";
+import { MeetingNotes } from "../editor/meetingNotes";
 import { ComposerDockContext, CountSlotContext, MindIdContext } from "../editor/mindContext";
 import { NoteKeymap } from "../editor/noteKeymap";
 import { noteExtensions } from "../editor/noteSchema";
@@ -50,7 +52,7 @@ import { SmartTypography } from "../editor/typography";
 import { WordCount } from "../editor/WordCount";
 import { requestEdit, startEditing, TRANSLATE_LANGUAGES } from "../editWithAi";
 import { translateNow, useT } from "../i18n";
-import { useMeetingOf } from "../meetings";
+import { useMeetingOf, useMeetings } from "../meetings";
 import { isWritingIn } from "../mindStatus";
 import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
@@ -244,6 +246,15 @@ function MindEditorView({
         CitationNumbers.configure({ form: () => citationStyle(styleRef.current).form }),
         CitationClusters,
         FootnoteKeys,
+        MeetingNotes.configure({
+          mindId,
+          doc,
+          time: () =>
+            writingTime(
+              useMeetings.getState().meetings.find((each) => each.mindId === mindId),
+              Date.now(),
+            ),
+        }),
         Collaboration.configure({ document: doc, field: MIND_CONTENT_FIELD }),
         Placeholder.configure({
           // An empty Mind's line and the line after an Answer have their hint drawn over them (EndHint).
