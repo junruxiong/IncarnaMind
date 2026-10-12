@@ -2572,6 +2572,8 @@ export const zhCN = {
   "references.export": "导出…",
   "references.needsDetails.open": "在“引用信息”中补充“{name}”的信息",
   "references.needsDetails.removed": "它的文档已删除，无法补充信息。",
+  "references.fallback": "{name}。{kind}，添加于 {date}。",
+  "references.fallback.removed": "{name}。",
   "references.formatting": "正在生成参考文献…",
   "references.failed": "无法按 {style} 生成参考文献：{reason}",
   "references.retry": "重试",
