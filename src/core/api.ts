@@ -778,9 +778,11 @@ export interface CalculatedFigure {
   /** The rules it was worked out and shown by (`FORMULA_VERSION`): a check runs the same ones. */
   engine: number;
   /**
-   * What the Answer wrote right before its marker when that isn't this figure:
-   * "26%" where IncarnaMind calculated 25.0%. Null when it wrote nothing
-   * there, or the same figure, which the text then shows once.
+   * What the Answer wrote beside its marker when that isn't this figure: a
+   * number right before it ("26%" where IncarnaMind calculated 25.0%), or a
+   * scale or currency right after it ("亿元" after a figure in 万元), which
+   * the text leaves out. Null when it wrote nothing there, or the same
+   * figure, which the text then shows once.
    */
   written: string | null;
 }

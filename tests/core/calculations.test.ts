@@ -54,6 +54,15 @@ const REPORT = {
   contents: buildPdf([{ chineseLines: ["合并利润表", "单位：万元", INCOME] }]),
 };
 
+/** The report of #577: its amounts in 万元, stated only in its heading. */
+const CHENGHU_INCOME = "营业收入 120,345.67 98,765.43";
+const CHENGHU = {
+  name: "澄湖科技2025年年度报告.pdf",
+  contents: buildPdf([
+    { chineseLines: ["合并利润表", "单位：万元　币种：人民币", CHENGHU_INCOME] },
+  ]),
+};
+
 /** A Tool call as a scripted model makes it. */
 type Call = { tool: string; input: unknown };
 
@@ -385,6 +394,222 @@ describe("The calculate Tool", { timeout: 60_000 }, () => {
         ],
       },
     ]);
+  });
+
+  // protects=#577: a formula that divides an amount by 10000 to show 亿 is refused with a line that names scale, and scale shows it right; fails_when=the figure comes out 10,000 times too small, or the line doesn't say how to ask for the scale; no_claim=every way a power of ten can be written (tests/shared/formula.test.ts).
+  test("a formula that turns 万元 into 亿元 itself is refused, and scale: 亿 shows the amount in 亿元 (#577)", async () => {
+    const total = (formula: string, show: object = {}) => ({
+      marker: 1,
+      label: "2025年营业收入合计",
+      formula,
+      ...show,
+      inputs: [
+        {
+          name: "rev25",
+          label: "2025年营业收入",
+          citation: 1,
+          number: "120,345.67",
+          unitQuote: "单位：万元　币种：人民币",
+        },
+      ],
+    });
+    const model = calculatingModel({
+      queries: ["营业收入"],
+      steps: [
+        (passages) => [
+          {
+            tool: "cite",
+            input: {
+              citations: [
+                {
+                  marker: 1,
+                  passage: passageOf(passages, "澄湖科技"),
+                  location: "p. 1",
+                  quote: CHENGHU_INCOME,
+                },
+              ],
+            },
+          },
+          { tool: "calculate", input: { figures: [total("rev25 / 10000")] } },
+        ],
+        () => [
+          {
+            tool: "calculate",
+            input: { figures: [total("rev25", { scale: "亿", decimals: 2 })] },
+          },
+        ],
+      ],
+      answer: "2025年营业收入合计为 [=1] 亿元[^1]。",
+    });
+    const { core } = await setUpCalculating(model, [CHENGHU]);
+
+    const { answer } = await askAndRead(core, "2025年营业收入合计多少亿元？");
+
+    expect(told(model, "calculate")).toEqual([
+      [
+        "Nothing was recorded.",
+        "Fix these with another calculate call:",
+        '- [=1]: rev25 / 10000 changes the scale itself, but inputs are already in base units (万 applied); to show it in 亿, give scale: "亿" and write rev25 in place of rev25 / 10000.',
+      ].join("\n"),
+      expect.stringMatching(/^Recorded \[=1\] = 12\.03亿元 \(2025年营业收入合计: 120,345\.67\)\./),
+    ]);
+    expect(shown(answerBlocks(answer))).toBe("2025年营业收入合计为 12.03亿元。");
+    expect(answer.figures).toMatchObject([
+      { marker: 1, value: 1_203_456_700, shown: "12.03亿元", written: null },
+    ]);
+  });
+
+  // protects=the English analogues of #577 are refused both ways, naming the scale meant, while a power of ten that makes a rate per so many stands; fails_when="/ 1000" for billions or "* 1000" for millions is recorded, or "per 10,000 users" is refused; no_claim=Chinese, tested above.
+  test("in English, millions made billions and billions made millions are refused; a rate per 10,000 users isn't", async () => {
+    const ASSETS = "Total assets were $12.4 billion at the end of 2025.";
+    const USERS = "Users at the end of 2025: 3,120,000";
+    const facts = {
+      name: "Acme Facts 2025.pdf",
+      contents: buildPdf([{ lines: ["Acme Facts 2025", REVENUE, ASSETS, USERS] }]),
+    };
+    const figures = (first: object, second: object) => [
+      {
+        marker: 1,
+        label: "Revenue 2025",
+        inputs: [{ name: "rev", label: "Revenue 2025", citation: 1, number: "$1,482.6 million" }],
+        ...first,
+      },
+      {
+        marker: 2,
+        label: "Total assets 2025",
+        inputs: [
+          { name: "assets", label: "Total assets 2025", citation: 2, number: "$12.4 billion" },
+        ],
+        ...second,
+      },
+    ];
+    const perUsers = {
+      marker: 3,
+      label: "Revenue per 10,000 users 2025",
+      formula: "rev / (users / 10000)",
+      inputs: [
+        { name: "rev", label: "Revenue 2025", citation: 1, number: "$1,482.6 million" },
+        { name: "users", label: "Users 2025", citation: 3, number: "3,120,000" },
+      ],
+    };
+    const model = calculatingModel({
+      queries: ["revenue assets users"],
+      steps: [
+        (passages) => {
+          const passage = passageOf(passages, "Acme Facts");
+          return [
+            {
+              tool: "cite",
+              input: {
+                citations: [
+                  { marker: 1, passage, location: "p. 1", quote: REVENUE },
+                  { marker: 2, passage, location: "p. 1", quote: ASSETS },
+                  { marker: 3, passage, location: "p. 1", quote: USERS },
+                ],
+              },
+            },
+            {
+              tool: "calculate",
+              input: {
+                figures: [
+                  ...figures({ formula: "rev / 1000" }, { formula: "assets * 1000" }),
+                  perUsers,
+                ],
+              },
+            },
+          ];
+        },
+        () => [
+          {
+            tool: "calculate",
+            input: {
+              figures: figures(
+                { formula: "rev", scale: "billion", decimals: 2 },
+                { formula: "assets", scale: "million" },
+              ),
+            },
+          },
+        ],
+      ],
+      answer:
+        "Revenue was [=1] in 2025[^1], total assets [=2][^2], and revenue per 10,000 users [=3][^3].",
+    });
+    const { core } = await setUpCalculating(model, [facts]);
+
+    const { answer } = await askAndRead(
+      core,
+      "What were Acme's revenue in billions and assets in millions?",
+    );
+
+    const [first, second] = told(model, "calculate");
+    expect(first).toBe(
+      [
+        "Recorded [=3] = $4.8 million (Revenue per 10,000 users 2025: $1,482.6 million ÷ (3,120,000 ÷ 10000)).",
+        "Fix these with another calculate call:",
+        '- [=1]: rev / 1000 changes the scale itself, but inputs are already in base units (million applied); to show it in billion, give scale: "billion" and write rev in place of rev / 1000.',
+        '- [=2]: assets * 1000 changes the scale itself, but inputs are already in base units (billion applied); to show it in million, give scale: "million" and write assets in place of assets * 1000.',
+      ].join("\n"),
+    );
+    expect(second).toMatch(
+      /^Recorded \[=1\] = \$1\.48 billion .*\nRecorded \[=2\] = \$12,400 million /,
+    );
+    expect(shown(answerBlocks(answer))).toBe(
+      "Revenue was $1.48 billion in 2025, total assets $12,400 million, and revenue per 10,000 users $4.8 million.",
+    );
+  });
+
+  // protects=#577's doubled word: a scale the model writes after its marker never shows beside the figure's own, and one that isn't the figure's is stored as what the Answer wrote; fails_when="万元 亿元" reads in the Answer, or the differing scale is lost; no_claim=how #439 shows it.
+  test("a scale written after a marker isn't shown twice; one that isn't the figure's is kept as what the Answer wrote (#577)", async () => {
+    const model = calculatingModel({
+      queries: ["营业收入"],
+      steps: [
+        (passages) => [
+          {
+            tool: "cite",
+            input: {
+              citations: [
+                {
+                  marker: 1,
+                  passage: passageOf(passages, "澄湖科技"),
+                  location: "p. 1",
+                  quote: CHENGHU_INCOME,
+                },
+              ],
+            },
+          },
+          {
+            tool: "calculate",
+            input: {
+              figures: [
+                {
+                  marker: 1,
+                  label: "2025年营业收入",
+                  formula: "rev25",
+                  inputs: [
+                    {
+                      name: "rev25",
+                      label: "2025年营业收入",
+                      citation: 1,
+                      number: "120,345.67",
+                      unitQuote: "单位：万元　币种：人民币",
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+      ],
+      answer: "2025年营业收入合计为 [=1] 亿元[^1]，报告列示为 [=1]万元。",
+    });
+    const { core } = await setUpCalculating(model, [CHENGHU]);
+
+    const { answer } = await askAndRead(core, "2025年营业收入合计多少亿元？");
+
+    expect(shown(answerBlocks(answer))).toBe(
+      "2025年营业收入合计为 120,345.67万元，报告列示为 120,345.67万元。",
+    );
+    expect(answer.figures).toMatchObject([{ marker: 1, shown: "120,345.67万元", written: "亿元" }]);
   });
 
   test("every input and formula it can't work out is told to the model in one line, and nothing is recorded for it", async () => {
