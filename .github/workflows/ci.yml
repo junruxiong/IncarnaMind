@@ -58,6 +58,15 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      # Downloads from GitHub's releases fail now and then (a 500), and each shard downloads
+      # Electron, so a failed download is tried again here rather than failing every spec.
+      - name: Make sure Electron is installed
+        run: |
+          for attempt in 1 2 3; do
+            node node_modules/electron/install.js && exit 0
+            sleep 20
+          done
+          exit 1
       # The app needs a display: a virtual one, bigger than the window the specs set
       # (e2e/app.ts), at full colour depth. xvfb-run's own default is 640 × 480 at 8 bits.
       - run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" npm run test:smoke -- --shard=${{ matrix.shard }}/4

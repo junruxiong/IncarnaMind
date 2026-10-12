@@ -6,7 +6,7 @@ Thank you for helping. Code, testing with your own documents, translations and i
 
 - Found a bug, or want a feature? [Open an issue](https://github.com/junruxiong/IncarnaMind/issues/new/choose). For a bug, say what you did, what you expected and what happened, and your operating system.
 - Questions and ideas: [Discussions](https://github.com/junruxiong/IncarnaMind/discussions).
-- Looking for something to work on? Issues labelled [good first issue](https://github.com/junruxiong/IncarnaMind/labels/good%20first%20issue) or [help wanted](https://github.com/junruxiong/IncarnaMind/labels/help%20wanted) are a good start. Say in the issue that you're taking it.
+- Looking for something to work on? Issues labelled [good first issue](https://github.com/junruxiong/IncarnaMind/labels/good%20first%20issue) are a good start. Say in the issue that you're taking it.
 
 ## Labels
 
@@ -16,11 +16,11 @@ New issues are triaged with five labels:
 | --- | --- |
 | `needs-triage` | The maintainer needs to evaluate it |
 | `needs-info` | Waiting on the reporter for more information |
-| `ready-for-agent` | Fully specified, so a coding agent can pick it up without further questions |
-| `ready-for-human` | Needs a person to implement it |
+| `ready-to-build` | Fully specified, so anyone can pick it up without further questions |
+| `needs-owner` | Needs the owner or another person: an account, signing, a decision or hand-checked data |
 | `wontfix` | Won't be actioned |
 
-A person is welcome to take any issue that is fully specified, whichever of the two `ready-for-` labels it carries. [`AGENTS.md`](AGENTS.md) holds the rules for working on the code, for people and coding agents alike, and `docs/agents/` holds the detail: the issue tracker and its `gh` commands ([`issue-tracker.md`](docs/agents/issue-tracker.md)), the labels ([`triage-labels.md`](docs/agents/triage-labels.md)), how to use the domain docs ([`domain.md`](docs/agents/domain.md)), the rules every UI change follows ([`interaction.md`](docs/agents/interaction.md)), and how to test so CI passes ([`testing.md`](docs/agents/testing.md)).
+Anyone is welcome to take an issue labelled `ready-to-build`. A `needs-owner` issue needs an account, a decision or hand-checked data, so ask on it first. [`AGENTS.md`](AGENTS.md) holds the rules for working on the code, for people and coding agents alike, and `docs/agents/` holds the detail: the issue tracker and its `gh` commands ([`issue-tracker.md`](docs/agents/issue-tracker.md)), the labels ([`triage-labels.md`](docs/agents/triage-labels.md)), how to use the domain docs ([`domain.md`](docs/agents/domain.md)), the rules every UI change follows ([`interaction.md`](docs/agents/interaction.md)), and how to test so CI passes ([`testing.md`](docs/agents/testing.md)).
 
 ## Setting up
 

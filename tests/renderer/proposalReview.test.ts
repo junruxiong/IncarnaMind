@@ -1,17 +1,22 @@
 import { Editor, type JSONContent } from "@tiptap/core";
 import { EditorState, TextSelection } from "@tiptap/pm/state";
+import { prosemirrorToYXmlFragment } from "@tiptap/y-tiptap";
 import { describe, expect, onTestFinished, test } from "vitest";
-import { PROPOSAL_ATTRIBUTE } from "../../src/core";
+import * as Y from "yjs";
+import { MIND_CONTENT_FIELD, PROPOSAL_ATTRIBUTE } from "../../src/core";
 import { selectionForEdit } from "../../src/renderer/src/editor/editSelection";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
 import {
+  acceptedSlice,
   editTarget,
   ProposalReview,
   pendingAtSelection,
   pendingIn,
   proposalReviewKey,
   proposalsAt,
+  sourcesRemoved,
 } from "../../src/renderer/src/editor/proposalReview";
+import { outOfDateProposals, targetHash } from "../../src/shared/proposals";
 
 const inserted = (id: string) => ({ type: "proposalInsert", attrs: { id, request: "r1" } });
 const removed = (id: string) => ({ type: "proposalDelete", attrs: { id, request: "r1" } });
@@ -74,7 +79,23 @@ function noteWith(content: JSONContent[]) {
 
 /** The class a decoration gives, for what the review draws. */
 const classOf = (decoration: unknown) =>
-  (decoration as { type: { attrs: { class?: string } } }).type.attrs.class;
+  (decoration as { type: { attrs?: { class?: string } } }).type.attrs?.class;
+
+/** Marks of a change that records the text it removes, as the core writes them. */
+const change = (id: string, removes: string) => {
+  const ref = { id, request: "r1", target: targetHash(removes) };
+  return {
+    removed: { type: "proposalDelete", attrs: ref },
+    inserted: { type: "proposalInsert", attrs: ref },
+  };
+};
+
+/** The changes out of date as the core reads them, from the editor's document written to Yjs. */
+function outOfDateInCore(note: { state: EditorState }): string[] {
+  const doc = new Y.Doc();
+  const blocks = prosemirrorToYXmlFragment(note.state.doc, doc.getXmlFragment(MIND_CONTENT_FIELD));
+  return [...outOfDateProposals(blocks)].sort();
+}
 
 describe("Proposals in the editor", () => {
   test("are found from their marks and attributes, in order, with what they remove and add", () => {
@@ -199,6 +220,134 @@ describe("Proposals in the editor", () => {
     const [wash] = proposalReviewKey.getState(note.state)?.decorations.find() ?? [];
     expect(wash).toMatchObject({ from: target?.from, to: target?.to });
     expect(classOf(wash)).toBe("proposal-target");
+  });
+});
+
+describe("Changes out of date", () => {
+  /** "The tides are [-very -]strong and [-really-]{+truly+} regular.", each change recording what it removes. */
+  function tides() {
+    const a = change("a", "very ");
+    const b = change("b", "really");
+    return noteWith([
+      {
+        type: "paragraph",
+        attrs: { id: "p1" },
+        content: [
+          text("The tides are "),
+          text("very ", [a.removed]),
+          text("strong and "),
+          text("really", [b.removed]),
+          text("truly", [b.inserted]),
+          text(" regular."),
+        ],
+      },
+    ]);
+  }
+
+  test("a change is out of date once the User edits the words it removes, in the editor as in the core", () => {
+    const note = tides();
+    expect(pendingIn(note.state).map((each) => each.outOfDate)).toEqual([false, false]);
+    expect(outOfDateInCore(note)).toEqual([]);
+
+    // Writing in what a change adds, or elsewhere, leaves it as it is.
+    note.apply((tr) => tr.insertText("u", note.after("tru")));
+    note.apply((tr) => tr.insertText(" Indeed.", note.after("regular.")));
+    expect(pendingIn(note.state).map((each) => each.outOfDate)).toEqual([false, false]);
+    expect(outOfDateInCore(note)).toEqual([]);
+
+    // A word typed among the words a change removes is the User's: the change is out of date.
+    note.apply((tr) => tr.insertText("l", note.after("rea")));
+    expect(pendingIn(note.state).map((each) => each.outOfDate)).toEqual([false, true]);
+    expect(outOfDateInCore(note)).toEqual(["b"]);
+
+    // It is drawn so, with "Out of date · Regenerate" after its paragraph.
+    const drawn = proposalReviewKey.getState(note.state)?.decorations.find() ?? [];
+    const stale = drawn.filter((each) => classOf(each)?.includes("proposal-stale"));
+    // Its words, not those the User typed among them.
+    expect(stale.map((each) => note.state.doc.textBetween(each.from, each.to)).join("")).toBe(
+      "reallytruly",
+    );
+    const line = drawn.find((each) => (each.spec as { key?: string }).key?.startsWith("stale-b"));
+    expect(line?.from).toBe(note.state.doc.child(0).nodeSize);
+  });
+
+  test("deleting part of the words a change removes, or a paragraph it removes, puts it out of date", () => {
+    const note = tides();
+    const very = note.after("The tides are ");
+    note.apply((tr) => tr.delete(very, very + "ve".length));
+    expect(pendingIn(note.state).map((each) => each.outOfDate)).toEqual([true, false]);
+    expect(outOfDateInCore(note)).toEqual(["a"]);
+
+    const removedParagraph = noteWith([
+      {
+        type: "paragraph",
+        attrs: {
+          id: "p1",
+          [PROPOSAL_ATTRIBUTE]: {
+            id: "c",
+            request: "r1",
+            target: targetHash("A paragraph to go."),
+            kind: "delete",
+          },
+        },
+        content: [text("A paragraph to go.")],
+      },
+    ]);
+    expect(pendingIn(removedParagraph.state)[0]?.outOfDate).toBe(false);
+    removedParagraph.apply((tr) => tr.insertText(" Still mine.", removedParagraph.after("go.")));
+    expect(pendingIn(removedParagraph.state)[0]?.outOfDate).toBe(true);
+    expect(outOfDateInCore(removedParagraph)).toEqual(["c"]);
+  });
+
+  test("a change made before changes recorded their text is never out of date", () => {
+    const note = noteWith([
+      {
+        type: "paragraph",
+        attrs: { id: "p1" },
+        content: [text("The "), text("old", [removed("a")]), text(" tides.")],
+      },
+    ]);
+    note.apply((tr) => tr.insertText("X", note.after("ol")));
+    expect(pendingIn(note.state)[0]?.outOfDate).toBe(false);
+    expect(outOfDateInCore(note)).toEqual([]);
+  });
+
+  test("copying a change still waiting copies the text it would replace", () => {
+    const note = tides();
+    const { doc } = note.state;
+    const copied = acceptedSlice(doc.slice(0, doc.content.size));
+    expect(copied.content.textBetween(0, copied.content.size)).toBe(
+      "The tides are very strong and really regular.",
+    );
+    // Nothing in the copy is a change any more.
+    const marks: string[] = [];
+    copied.content.descendants((node) => {
+      marks.push(...node.marks.map((mark) => mark.type.name));
+    });
+    expect(marks).toEqual([]);
+  });
+
+  test("a change citing a Document deleted since says its source is removed", () => {
+    const note = noteWith([
+      {
+        type: "paragraph",
+        attrs: { id: "p1" },
+        content: [
+          text("Spring tides are high"),
+          citation("Spring tides", { id: "c", request: "r1", kind: "insert" }),
+          text("."),
+        ],
+      },
+    ]);
+    const [adds] = pendingIn(note.state);
+    if (!adds) throw new Error("No change.");
+    expect(adds.citations).toMatchObject([{ documentId: "d1" }]);
+    expect(sourcesRemoved(adds, [{ id: "d1", contentHash: "h1" }])).toBe(0);
+    // Deleted: the change says so, and it stays.
+    expect(sourcesRemoved(adds, [])).toBe(1);
+    expect(pendingIn(note.state)).toHaveLength(1);
+    // While the Documents load, nothing is said.
+    expect(sourcesRemoved(adds, null)).toBe(0);
   });
 });
 

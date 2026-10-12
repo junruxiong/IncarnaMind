@@ -5,6 +5,7 @@ import type { CoreBridge } from "../src/core/api";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
+  coreOf,
   createDataFolder,
   darkPixels,
   dismissChatSetup,
@@ -634,7 +635,7 @@ test("a Document deleted while it is open, or already deleted, shows Document re
   await expect(viewer.locator('[data-page-number="1"]')).toHaveAttribute("data-drawn", "true");
 
   await openDocumentMenu(item);
-  await item.getByTestId("delete-document").click();
+  await item.getByTestId("document.delete").click();
   await window.getByTestId("confirm-delete-document").click();
   await expect(item).toHaveCount(0);
   await expect(window.getByTestId("viewer-removed")).toContainText(
@@ -791,7 +792,7 @@ test("a Document's tab has one 36px toolbar under its group's strip, holding eve
   expect(headerBox.y).toBe(strip.y + strip.height);
 
   // In order: the outline toggle, the name, its Tags, page navigation, zoom, Keep open (it is
-  // a preview), and its own app.
+  // a preview), its own app, and its ⋯ menu.
   const controls = header.locator("button, input, [data-testid='viewer-title']");
   expect(
     await controls.evaluateAll((elements) =>
@@ -809,6 +810,7 @@ test("a Document's tab has one 36px toolbar under its group's strip, holding eve
     "pdf-fit-width",
     "viewer-keep",
     "viewer-open-externally",
+    "document-file-menu",
   ]);
   await expect(window.getByTestId("viewer-title")).toHaveText("Guide");
   for (const control of await header.locator("button:not([data-testid='viewer-keep'])").all()) {
@@ -847,9 +849,6 @@ test("a Document's tab has one 36px toolbar under its group's strip, holding eve
   // The app would remove the copy a day later; the test doesn't leave it behind.
   if (opened) await rm(dirname(opened), { recursive: true, force: true });
 });
-
-const coreOf = (window: Page) =>
-  window.evaluateHandle(() => (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind);
 
 test("below 560 px a Document tab's toolbar hides its Tag chips and keeps the Tags button, in English and Chinese", async () => {
   const notes = join(sources, "Notes.txt");

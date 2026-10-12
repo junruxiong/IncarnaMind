@@ -36,6 +36,7 @@ import {
 } from "../libraryFilters";
 import { formatCount } from "../linkedFolders";
 import { missingList } from "../referenceEditing";
+import { useRequests } from "../requests";
 import { useAppStore } from "../store";
 import { AddDocumentsMenu } from "./AddDocumentsMenu";
 import { CiteAsPanel } from "./CiteAsPanel";
@@ -44,7 +45,9 @@ import { LibraryFilterBar } from "./LibraryFilterBar";
 import { LibraryMoreMenu } from "./LibraryMoreMenu";
 import { LibrarySelectBox, LibrarySelectionBar } from "./LibrarySelection";
 import { DocumentLineIcon, SettingsLineIcon } from "./lineIcons";
+import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
 import { ReferenceImportPanel } from "./ReferenceImportPanel";
+import { rowActionButtonClass } from "./sidebarRows";
 import { DocumentTagChips } from "./TagChips";
 import { useTabPlace } from "./tabs/tabItems";
 import { buttonStyle, errorTextClass, fieldLabelClass, inputClass } from "./ui";
@@ -175,6 +178,13 @@ export function LibraryPane() {
     const item = assignments.get(doc.id);
     return item?.status !== "classified" || doc.tagging !== "tagged";
   });
+  const editFolder = useRequests((state) => state.editFolder);
+  useEffect(() => {
+    if (editFolder && selected?.id === editFolder) {
+      setEditing(selected);
+      useRequests.getState().clear("editFolder");
+    }
+  }, [editFolder, selected]);
   const organize = () => {
     void act(() =>
       core.classifyDocuments(
@@ -456,6 +466,7 @@ const LibraryRow = memo(function LibraryRow({
   const [citing, setCiting] = useState<{ focus: ReferenceField | null } | null>(null);
   const citeToggle = useRef<HTMLButtonElement>(null);
   const citePanelId = useId();
+  const objectMenu = useObjectMenu({ kind: "document", id: doc.id });
   const status =
     item?.status === "classifying" || item?.status === "pending"
       ? "library.working"
@@ -470,6 +481,7 @@ const LibraryRow = memo(function LibraryRow({
     <li
       data-testid="library-document"
       data-document-id={doc.id}
+      {...objectMenu.rowProps}
       className="group/row library-columns relative border-b border-rule py-3"
     >
       <LibrarySelectBox document={doc} shownIds={shownIds} />
@@ -477,6 +489,7 @@ const LibraryRow = memo(function LibraryRow({
         <div className="flex min-w-0 items-center gap-2">
           <button
             type="button"
+            data-row-main=""
             title={name === source ? name : `${name}\n${source}`}
             className="flex min-w-0 items-center gap-2 text-left hover:underline focus-visible:outline-2 focus-visible:outline-accent"
             // A preview to the Library's right; ⌘-click (Ctrl-click) opens it here, kept.
@@ -497,6 +510,11 @@ const LibraryRow = memo(function LibraryRow({
               {name}
             </span>
           </button>
+          <ObjectMenu
+            target={{ kind: "document", id: doc.id }}
+            label={t("documents.more", { name: doc.name })}
+            className={`${rowActionButtonClass} opacity-0 group-hover/row:opacity-100 group-has-[:focus-visible]/row:opacity-100 aria-expanded:opacity-100`}
+          />
           {doc.reference && (
             <CiteAsToggle
               ref={citeToggle}

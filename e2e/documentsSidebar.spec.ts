@@ -127,11 +127,11 @@ test("a Document that failed offers Retry, which processes it again", async () =
   await openDocumentMenu(item);
   await screenshot(window, "document-failed-menu");
   // At once, while the menu still grows in, before the file's change is noticed on its own.
-  await clickNow(window, item.getByTestId("retry-document"));
+  await clickNow(window, item.getByTestId("document.retry"));
   await expect(item).toHaveAttribute("data-status", "ready");
   // A ready Document has nothing to retry.
   await openDocumentMenu(item);
-  await expect(item.getByTestId("retry-document")).toHaveCount(0);
+  await expect(item.getByTestId("document.retry")).toHaveCount(0);
   await app.close();
 });
 
