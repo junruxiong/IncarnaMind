@@ -39,8 +39,36 @@ const multiply = (m: Matrix, n: readonly number[]): Matrix => {
   ];
 };
 
+/** The area a picture covers, drawn through this matrix: it fills the unit square. */
+const area = (m: Matrix) => Math.abs(m[0] * m[3] - m[1] * m[2]);
+
+/** The transforms of a grouped picture's entries, each drawn as its own picture. */
+const entryTransforms = (entries: unknown): number[][] =>
+  Array.isArray(entries)
+    ? entries.flatMap((entry: unknown) =>
+        typeof entry === "object" &&
+        entry !== null &&
+        "transform" in entry &&
+        Array.isArray(entry.transform)
+          ? [entry.transform as number[]]
+          : [],
+      )
+    : [];
+
+/** The placements of a repeated picture: its matrix at each position (x, y pairs). */
+const placements = (scale: number[], positions: unknown): number[][] => {
+  if (!positions || typeof positions !== "object" || !("length" in positions)) return [];
+  const xy = Array.from(positions as ArrayLike<number>);
+  const out: number[][] = [];
+  for (let i = 0; i + 1 < xy.length; i += 2) out.push([...scale, xy[i] ?? 0, xy[i + 1] ?? 0]);
+  return out;
+};
+
 /** How much of the page its pictures cover, from 0 to 1, as they are drawn (overlaps counted twice). */
-export async function pictureShare(page: PDFPageProxy, ops: PdfJs["OPS"]): Promise<number> {
+export async function pictureShare(
+  page: Pick<PDFPageProxy, "view" | "getOperatorList">,
+  ops: PdfJs["OPS"],
+): Promise<number> {
   const [x0 = 0, y0 = 0, x1 = 0, y1 = 0] = page.view;
   const pageArea = Math.abs((x1 - x0) * (y1 - y0));
   if (pageArea === 0) return 0;
@@ -52,10 +80,12 @@ export async function pictureShare(page: PDFPageProxy, ops: PdfJs["OPS"]): Promi
     ops.paintImageXObject,
     ops.paintInlineImageXObject,
     ops.paintImageMaskXObject,
-    ops.paintImageXObjectRepeat,
   ]);
   fnArray.forEach((op, index) => {
     const args = argsArray[index] as unknown[] | null;
+    // pdf.js draws runs of small pictures as one group, and one picture drawn again and
+    // again as a repeat: a scan in strips comes this way, so each is counted where it's drawn.
+    let drawn: number[][] = [];
     if (op === ops.save) stack.push(matrix);
     else if (op === ops.restore) matrix = stack.pop() ?? matrix;
     else if (op === ops.transform && Array.isArray(args))
@@ -65,10 +95,26 @@ export async function pictureShare(page: PDFPageProxy, ops: PdfJs["OPS"]): Promi
       const formMatrix = Array.isArray(args) ? args[0] : null;
       if (Array.isArray(formMatrix)) matrix = multiply(matrix, formMatrix as number[]);
     } else if (op === ops.paintFormXObjectEnd) matrix = stack.pop() ?? matrix;
-    else if (pictures.has(op)) {
-      // A picture fills the unit square, drawn through the current matrix.
-      covered += Math.abs(matrix[0] * matrix[3] - matrix[1] * matrix[2]);
+    else if (pictures.has(op)) covered += area(matrix);
+    else if (op === ops.paintInlineImageXObjectGroup && Array.isArray(args))
+      drawn = entryTransforms(args[1]);
+    else if (op === ops.paintImageMaskXObjectGroup && Array.isArray(args))
+      drawn = entryTransforms(args[0]);
+    else if (op === ops.paintImageXObjectRepeat && Array.isArray(args)) {
+      const [, scaleX = 1, scaleY = 1, positions] = args as [unknown, number, number, unknown];
+      drawn = placements([scaleX, 0, 0, scaleY], positions);
+    } else if (op === ops.paintImageMaskXObjectRepeat && Array.isArray(args)) {
+      const [, a = 1, b = 0, c = 0, d = 1, positions] = args as [
+        unknown,
+        number,
+        number,
+        number,
+        number,
+        unknown,
+      ];
+      drawn = placements([a, b, c, d], positions);
     }
+    for (const transform of drawn) covered += area(multiply(matrix, transform));
   });
   return Math.min(1, covered / pageArea);
 }
@@ -83,8 +129,8 @@ export async function isScanned(
   ops: PdfJs["OPS"],
 ): Promise<boolean> {
   const [x0 = 0, y0 = 0, x1 = 0, y1 = 0] = page.view;
-  const area = Math.abs((x1 - x0) * (y1 - y0));
-  if (characters(text) >= MIN_PAGE_TEXT * Math.max(area / A4_AREA, 0.25)) return false;
+  const size = Math.abs((x1 - x0) * (y1 - y0));
+  if (characters(text) >= MIN_PAGE_TEXT * Math.max(size / A4_AREA, 0.25)) return false;
   return (await pictureShare(page, ops)) >= MIN_PICTURE_SHARE;
 }
 

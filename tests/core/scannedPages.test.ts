@@ -146,6 +146,19 @@ describe("Scanned pages are read on this computer (#397)", { timeout: 60_000 }, 
     });
     expect(units[1]?.text).toContain("Mean water temperature rose to 9.4 degrees Celsius");
     expect(JSON.parse(units[1]?.label ?? "null")).toEqual({ scan: { reader: READER } });
+    // A Citation of both pages says it was read from a scan only when it quotes the scanned one.
+    const quoted = (quote: string) =>
+      core.readScannedQuote({
+        documentId: document.id,
+        contentHash: null,
+        pageFrom: 1,
+        pageTo: 2,
+        quote,
+      });
+    expect(await quoted("The harbour floor is mostly sand.")).toBeNull();
+    expect(await quoted("Mean water temperature rose to 9.4 degrees Celsius")).toEqual({
+      unsure: [],
+    });
 
     // Without a model to read them, a scanned page is left as it was before.
     const plainDir = await createTempDataFolder();
@@ -252,6 +265,16 @@ describe("Scanned pages are read on this computer (#397)", { timeout: 60_000 }, 
         quote: "Business Days and certify the deletion",
       }),
     ).toEqual({ unsure: [] });
+    // A quote that isn't on the page says nothing of the scan: the check says it wasn't found.
+    expect(
+      await core.readScannedQuote({
+        documentId: citation.documentId as string,
+        contentHash: citation.contentHash ?? null,
+        pageFrom: 1,
+        pageTo: 1,
+        quote: "The tenant may keep a dog",
+      }),
+    ).toBeNull();
   });
 
   test("pages that couldn't be read are named, and Retry reads only them", async () => {
