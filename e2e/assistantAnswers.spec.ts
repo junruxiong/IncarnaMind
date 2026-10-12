@@ -391,6 +391,42 @@ test("the keyboard reaches it all: ⌘J, Tab through an Answer's actions, ⌘⇧
   await app.close();
 });
 
+test("a number the Answer works out is calculated: its text shows the figure, and its steps say so; in Chinese too", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true, home });
+  await setWindowSize(app, window, 1440, 900);
+  await dismissChatSetup(window);
+  await connectLocalChatModel(window);
+  await writeFile(
+    join(sources, "Revenue.pdf"),
+    buildPdf([{ lines: ["Revenue was 1,482.6 in 2025, compared with 1,231.0 in 2024."] }]),
+  );
+  await addDocuments(window, [join(sources, "Revenue.pdf")]);
+  await mindWithNotes(window, "Reading notes: revenue");
+
+  const answer = await askInAssistant(window, "How much did revenue grow?");
+  await expect(answer.getByTestId("assistant-answer-text")).toContainText("It grew 20.4%");
+  await expect(answer.getByTestId("assistant-answer-text")).not.toContainText("[=1]");
+  await expect(answer.getByTestId("citation-chip")).toHaveAttribute("data-check", "found");
+  // Its steps, opened from the meta line, say so, with no Tool-call card.
+  await pointAt(window, answer.getByTestId("assistant-answer-text"));
+  await pointAndClick(window, answer.getByTestId("answer-tools-toggle"));
+  await expect(answer.getByTestId("answer-figures")).toHaveText("Calculated 1 figure");
+  await expect(answer.getByTestId("answer-tool-call")).toHaveCount(1);
+  await expect(answer.getByTestId("answer-uncalculated")).toHaveCount(0);
+  await screenshot(window, "assistant-answer-calculated");
+
+  await window.evaluate(async () => {
+    const bridge = (
+      globalThis as unknown as { incarnamind: { updateSettings(patch: unknown): Promise<unknown> } }
+    ).incarnamind;
+    await bridge.updateSettings({ user: { language: "zh-CN" } });
+  });
+  await pointAt(window, answer.getByTestId("assistant-answer-text"));
+  await expect(answer.getByTestId("answer-figures")).toHaveText("计算了 1 个数字");
+  await screenshot(window, "assistant-answer-calculated-zh");
+  await app.close();
+});
+
 test("the ⋯ menu adds the last Answer to a new Mind and clears the conversation, with Undo; in Chinese too", async () => {
   const { app, window } = await start();
   await mindWithNotes(window, "Reading notes: tides");

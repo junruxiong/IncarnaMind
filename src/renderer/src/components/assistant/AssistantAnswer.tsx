@@ -11,7 +11,6 @@ import {
   AnswerError,
   ApprovalCard,
   CallRows,
-  FiguresSummary,
   figuresOf,
   SEARCH,
   SearchesSummary,
@@ -99,7 +98,6 @@ export function AssistantAnswer({
       />,
     );
   }
-  if (calculated > 0) meta.push(<FiguresSummary count={calculated} />);
 
   return (
     <article
@@ -127,7 +125,7 @@ export function AssistantAnswer({
       {!streaming && uncalculated > 0 && <UncalculatedLine count={uncalculated} />}
       {searchesOpen && (
         <div className="answer-searches-open">
-          <SearchList searches={searches} />
+          <SearchList searches={searches} calculated={calculated} />
         </div>
       )}
       {!streaming && status === "failed" && (
