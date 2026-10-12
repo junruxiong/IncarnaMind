@@ -175,7 +175,7 @@ export function ComparisonTableView({ node, editor }: ReactNodeViewProps) {
     >
       <div contentEditable={false} data-comparison-ui className="comparison-head">
         {expanded && <TableIcon className="size-4 shrink-0 text-ink-meta" />}
-        <span data-testid="comparison-title" className="comparison-title">
+        <span data-testid="comparison-title" className="comparison-title" title={title}>
           {expanded ? (
             <>
               <strong>{t("comparison.title")}</strong>
