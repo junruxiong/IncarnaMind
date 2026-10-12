@@ -1891,18 +1891,30 @@ export function createDocuments(options: DocumentsOptions) {
         input.pageTo ?? input.pageFrom,
       );
       if (!units.some((unit) => unit.label?.scan && !unit.label.scan.unread)) return null;
-      const ranges = quoteInUnits(units, cleanQuote(input.quote)) ?? [];
+      const ranges = quoteInUnits(units, cleanQuote(input.quote));
+      if (!ranges || ranges.length === 0) return null;
       const unsure: string[] = [];
+      // A quote of a page of text beside a scanned one wasn't read from a scan.
+      let scanned = false;
       let start = 0;
       for (const unit of units) {
+        const end = start + unit.text.length;
+        if (
+          unit.label?.scan &&
+          !unit.label.scan.unread &&
+          ranges.some((range) => range.start < end && range.end > start)
+        ) {
+          scanned = true;
+        }
         for (const [from, to] of unit.label?.scan?.unsure ?? []) {
           if (ranges.some((range) => range.start < start + to && range.end > start + from)) {
             unsure.push(unit.text.slice(from, to));
           }
         }
-        start += unit.text.length + 1;
+        // `joinUnits` puts one line break between Units.
+        start = end + 1;
       }
-      return { unsure };
+      return scanned ? { unsure } : null;
     },
 
     /** `added` hears of each new Document as it is stored, before it is processed. */

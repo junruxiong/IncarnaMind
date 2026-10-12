@@ -1,9 +1,11 @@
+import { OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { describe, expect, test } from "vitest";
 import type { RecognizedLine } from "../../src/core";
 import { stripBoilerplate } from "../../src/core/documents/boilerplate";
 import { convexHull, minAreaRect, textBoxes } from "../../src/core/documents/scan/detect";
 import { readingOrder, scannedUnit, unsureWords } from "../../src/core/documents/scan/layout";
 import { onnxMetadata } from "../../src/core/documents/scan/onnxMetadata";
+import { pictureShare } from "../../src/core/documents/scan/pages";
 import { decodeLine, lineFrame } from "../../src/core/documents/scan/recognize";
 import type { TextUnit } from "../../src/shared/units";
 
@@ -268,5 +270,58 @@ describe("The models' input and output (#397)", () => {
       ...field(14, [...field(1, text("character")), ...field(2, text("甲\n乙\nA"))]),
     ]);
     expect(onnxMetadata(model)).toEqual({ character: "甲\n乙\nA" });
+  });
+});
+
+describe("Which pages are scans (#397)", () => {
+  /** An A4 page drawing these operations, as pdf.js lists them. */
+  const page = (operations: [number, unknown[] | null][]) => ({
+    view: [0, 0, 595, 842],
+    getOperatorList: async () => ({
+      fnArray: operations.map(([op]) => op),
+      argsArray: operations.map(([, args]) => args),
+    }),
+  });
+  const strip = (row: number) => [595, 0, 0, 84.2, 0, 84.2 * row];
+
+  test("a picture drawn over the whole page covers it; drawn at half the width, half of it", async () => {
+    const whole = page([
+      [OPS.save, null],
+      [OPS.transform, [595, 0, 0, 842, 0, 0]],
+      [OPS.paintImageXObject, ["img_p0_1", 2480, 3508]],
+      [OPS.restore, null],
+    ]);
+    expect(await pictureShare(whole, OPS)).toBeCloseTo(1);
+    const half = page([
+      [OPS.transform, [0.5, 0, 0, 1, 0, 0]],
+      [OPS.transform, [595, 0, 0, 842, 0, 0]],
+      [OPS.paintImageXObject, ["img_p0_1", 2480, 3508]],
+    ]);
+    expect(await pictureShare(half, OPS)).toBeCloseTo(0.5);
+  });
+
+  test("a scan in strips covers its page, though pdf.js groups or repeats the strips", async () => {
+    const rows = Array.from({ length: 10 }, (_, row) => row);
+    const inline = page([
+      [OPS.paintInlineImageXObjectGroup, [{}, rows.map((row) => ({ transform: strip(row) }))]],
+    ]);
+    expect(await pictureShare(inline, OPS)).toBeCloseTo(1);
+    const masks = page([
+      [OPS.paintImageMaskXObjectGroup, [rows.map((row) => ({ transform: strip(row) }))]],
+    ]);
+    expect(await pictureShare(masks, OPS)).toBeCloseTo(1);
+    const positions = new Float32Array(rows.flatMap((row) => [0, 84.2 * row]));
+    const repeated = page([[OPS.paintImageXObjectRepeat, ["img_p0_1", 595, 84.2, positions]]]);
+    expect(await pictureShare(repeated, OPS)).toBeCloseTo(1);
+    const maskRepeated = page([
+      [OPS.paintImageMaskXObjectRepeat, [{}, 595, 0, 0, 84.2, positions]],
+    ]);
+    expect(await pictureShare(maskRepeated, OPS)).toBeCloseTo(1);
+    // Drawn through a matrix of their own, as any picture is.
+    const shrunk = page([
+      [OPS.transform, [0.5, 0, 0, 0.5, 0, 0]],
+      [OPS.paintImageXObjectRepeat, ["img_p0_1", 595, 84.2, positions]],
+    ]);
+    expect(await pictureShare(shrunk, OPS)).toBeCloseTo(0.25);
   });
 });
