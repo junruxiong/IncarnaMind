@@ -842,6 +842,53 @@ export function evaluateFormula(
   }
 }
 
+const READ_AS: ReadonlyMap<string, string> = new Map([
+  ["*", "×"],
+  ["/", "÷"],
+  ["-", "−"],
+]);
+
+/**
+ * A formula as a person reads it: each name `say` knows replaced by what it
+ * gives (an input's label, or its number as written), and "*", "/" and "-"
+ * written "×", "÷" and "−". A formula that can't be read comes back as it is.
+ */
+export function formulaText(formula: string, say: (name: string) => string | null): string {
+  let tokens: Token[];
+  try {
+    tokens = lex(formula);
+  } catch (error) {
+    if (error instanceof Refusal) return formula;
+    throw error;
+  }
+  if (tokens[0]?.kind === "operator" && tokens[0].text === "=") tokens = tokens.slice(1);
+  let text = "";
+  let previous: Token | null = null;
+  let afterSign = false;
+  for (const token of tokens) {
+    const operator = token.kind === "operator" ? token.text : null;
+    const sign =
+      (operator === "-" || operator === "+") &&
+      (previous === null || (previous.kind === "operator" && !/^[)%]$/.test(previous.text)));
+    const tight =
+      previous === null ||
+      afterSign ||
+      (previous.kind === "operator" && previous.text === "(") ||
+      operator === ")" ||
+      operator === "," ||
+      operator === "%" ||
+      (operator === "(" && previous.kind === "name");
+    if (!tight) text += " ";
+    text +=
+      token.kind === "name"
+        ? (say(token.text) ?? token.text)
+        : (READ_AS.get(token.text) ?? token.text);
+    afterSign = sign;
+    previous = token;
+  }
+  return text;
+}
+
 function increment(digits: string): string {
   let at = digits.length - 1;
   while (at >= 0 && digits[at] === "9") at--;
