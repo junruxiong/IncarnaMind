@@ -15,7 +15,7 @@ import {
  * Questions and Answers are top-level Blocks only: they belong to this group,
  * which only the Mind itself takes, never a list, a quote or an Answer.
  */
-const MIND_BLOCK_GROUP = "mindBlock";
+export const MIND_BLOCK_GROUP = "mindBlock";
 
 /** A Mind: Notes, Questions and Answers, in the order the User placed them. Replaces StarterKit's document. */
 export const MindDocument = Node.create({
