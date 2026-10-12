@@ -4,6 +4,7 @@ import { type ElectronApplication, expect, type Page, test } from "@playwright/t
 import type { CoreBridge } from "../src/core/api";
 import {
   addDocuments,
+  clickEditItem,
   coreOf,
   createDataFolder,
   dismissChatSetup,
@@ -412,12 +413,6 @@ const editItem = (app: ElectronApplication, id: "edit.undo" | "edit.redo") =>
   app.evaluate(({ Menu }, itemId) => {
     const item = Menu.getApplicationMenu()?.getMenuItemById(itemId);
     return item ? { label: item.label, enabled: item.enabled } : null;
-  }, id);
-
-/** Chooses the Edit menu's Undo or Redo. */
-const clickEditItem = (app: ElectronApplication, id: "edit.undo" | "edit.redo") =>
-  app.evaluate(({ Menu }, itemId) => {
-    Menu.getApplicationMenu()?.getMenuItemById(itemId)?.click();
   }, id);
 
 test("⌘Z goes to the note's own undo in the note, to a field's in a field, and to the last change elsewhere; the Edit menu too, naming it", async () => {

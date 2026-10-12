@@ -14,6 +14,7 @@ export type ObjectKind =
   | "linkedFolder"
   | "deleted"
   | "citation"
+  | "chart"
   | "answer"
   | "block"
   | "tab";
