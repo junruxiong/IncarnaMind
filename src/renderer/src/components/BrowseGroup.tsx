@@ -61,7 +61,8 @@ export function BrowseGroup({
   const count = documents.length;
   const Chevron = expanded ? ChevronDownLineIcon : ChevronRightLineIcon;
   const objectMenu = useObjectMenu(object ?? { kind: "tag", id: "" });
-  const naming = useRename<HTMLButtonElement>(`${testId}:${object?.id ?? name}`);
+  // The first click of a double-click chose or cleared it: back as it was before renaming.
+  const naming = useRename<HTMLButtonElement>(`${testId}:${object?.id ?? name}`, onOpen);
   const renaming = naming.renaming && rename !== undefined;
   return (
     <li data-testid={testId} data-count={count} {...data}>
