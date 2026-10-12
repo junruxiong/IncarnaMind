@@ -87,39 +87,39 @@ Each cell is the number of files, and in brackets how many of them are committed
 | Domain | en | zh | zh-TW | ja | ko | de | fr | es | ar | he | mixed | n/a | All |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | legal | 7 | 6 (5) | · | · | · | 2 (1) | 1 | · | 1 | · | · | · | 17 (15) |
-| finance | 4 (3) | 1 | · | 1 (0) | · | 1 (0) | · | 1 (0) | · | · | · | · | 8 (4) |
+| finance | 5 (4) | 1 | · | 1 (0) | · | 1 (0) | · | 1 (0) | · | · | · | · | 9 (5) |
 | medical | 2 (1) | 2 | 1 (0) | · | 1 | · | · | · | · | · | · | · | 6 (4) |
 | academic | 1 | 1 (0) | · | · | · | · | · | · | · | 1 (0) | · | · | 3 (1) |
 | government | 1 (0) | 2 | 2 | 1 (0) | · | · | 1 (0) | · | · | · | · | · | 7 (4) |
 | engineering | 3 (2) | · | · | · | · | 1 (0) | · | · | · | · | · | · | 4 (2) |
-| hr | 2 (1) | 1 | · | 1 | · | · | · | · | · | 1 | · | · | 5 (4) |
+| hr | 3 (2) | 1 | · | 1 | · | · | · | · | · | 1 | · | · | 6 (5) |
 | education | 1 (0) | · | · | · | · | · | · | 1 (0) | 1 (0) | · | · | · | 3 (0) |
 | business | 2 | 2 | · | · | · | · | · | · | · | · | 3 (1) | · | 7 (5) |
 | test | 74 (20) | 8 (1) | · | 7 (1) | 2 (0) | 11 (0) | 7 (2) | 4 (1) | 8 (1) | · | 2 | 53 (21) | 176 (49) |
-| All | 97 (37) | 23 (14) | 3 (2) | 10 (2) | 3 (1) | 15 (1) | 9 (3) | 6 (1) | 10 (2) | 2 (1) | 5 (3) | 53 (21) | 236 (88) |
+| All | 99 (39) | 23 (14) | 3 (2) | 10 (2) | 3 (1) | 15 (1) | 9 (3) | 6 (1) | 10 (2) | 2 (1) | 5 (3) | 53 (21) | 238 (90) |
 
 **Feature by language** (files with at least one)
 
 | Feature | en | zh | zh-TW | ja | ko | de | fr | es | ar | he | mixed | n/a | All |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Tracked changes | 16 (12) | 4 (3) | · | · | · | 1 (0) | 2 (1) | · | · | 1 | 1 | 15 (12) | 40 (30) |
-| Comments | 11 (6) | 6 (5) | · | · | · | 1 (0) | · | · | 1 (0) | · | 1 (0) | 2 (1) | 22 (12) |
+| Tracked changes | 17 (13) | 4 (3) | · | · | · | 1 (0) | 2 (1) | · | · | 1 | 1 | 15 (12) | 41 (31) |
+| Comments | 12 (7) | 6 (5) | · | · | · | 1 (0) | · | · | 1 (0) | · | 1 (0) | 2 (1) | 23 (13) |
 | Comment replies | 3 (1) | 2 (1) | · | · | · | 1 (0) | · | · | · | · | 1 (0) | 1 (0) | 8 (2) |
-| Footnotes | 26 (12) | 6 (5) | 1 | · | 1 | 3 (0) | 6 (2) | 1 (0) | 1 | 1 (0) | · | 5 (3) | 51 (25) |
+| Footnotes | 28 (14) | 6 (5) | 1 | · | 1 | 3 (0) | 6 (2) | 1 (0) | 1 | 1 (0) | · | 5 (3) | 53 (27) |
 | Endnotes | 14 (8) | 4 (3) | · | · | 1 | 2 (0) | 2 (1) | 1 (0) | 1 | 1 (0) | · | 3 (1) | 29 (15) |
-| Fields | 46 (24) | 14 (12) | 3 (2) | 3 (1) | 1 | 5 (0) | 4 (2) | 2 (0) | 2 (1) | 2 (1) | 3 (1) | 12 (9) | 97 (54) |
-| TOC | 14 (7) | 2 (1) | · | · | · | · | · | · | · | · | · | 4 (3) | 20 (11) |
+| Fields | 48 (26) | 14 (12) | 3 (2) | 3 (1) | 1 | 5 (0) | 4 (2) | 2 (0) | 2 (1) | 2 (1) | 3 (1) | 12 (9) | 99 (56) |
+| TOC | 15 (8) | 2 (1) | · | · | · | · | · | · | · | · | · | 4 (3) | 21 (12) |
 | Cross-references | 13 (4) | · | · | · | · | · | 1 | · | · | · | · | 3 | 17 (8) |
 | SEQ captions | 20 (9) | 2 (0) | 2 (1) | 3 (1) | 1 | 2 (0) | 2 (1) | 2 (0) | 2 (1) | 2 (1) | 3 (1) | · | 41 (16) |
-| Bookmarks | 45 (23) | 5 (3) | 3 (2) | 3 (1) | 1 | 9 (1) | 6 (2) | 3 (0) | 5 (2) | 2 (1) | 3 (1) | 22 (15) | 107 (52) |
-| Headers and footers | 41 (26) | 15 (13) | 3 (2) | 3 (1) | 1 | 7 (1) | 3 (1) | 2 (0) | 3 (1) | 2 (1) | 3 (1) | 15 (10) | 98 (58) |
+| Bookmarks | 46 (24) | 5 (3) | 3 (2) | 3 (1) | 1 | 9 (1) | 6 (2) | 3 (0) | 5 (2) | 2 (1) | 3 (1) | 22 (15) | 108 (53) |
+| Headers and footers | 43 (28) | 15 (13) | 3 (2) | 3 (1) | 1 | 7 (1) | 3 (1) | 2 (0) | 3 (1) | 2 (1) | 3 (1) | 15 (10) | 100 (60) |
 | Several sections | 18 (7) | 3 (0) | · | · | 1 (0) | 1 (0) | 1 (0) | · | 1 (0) | · | · | 6 (5) | 31 (12) |
 | Columns | 9 (3) | 1 (0) | · | · | · | · | · | · | · | · | · | 2 (1) | 12 (4) |
-| Tables | 37 (16) | 9 (7) | 3 (2) | 5 (1) | 1 | 8 (0) | 5 (1) | 3 (1) | 2 (1) | 1 | 3 (1) | 9 (5) | 86 (37) |
+| Tables | 38 (17) | 9 (7) | 3 (2) | 5 (1) | 1 | 8 (0) | 5 (1) | 3 (1) | 2 (1) | 1 | 3 (1) | 9 (5) | 87 (38) |
 | Nested tables | 6 (2) | · | · | 1 (0) | · | · | · | · | · | · | · | 3 (2) | 10 (4) |
 | Merged cells | 17 (9) | · | · | · | 1 | 2 (0) | · | · | 1 (0) | · | · | 3 (2) | 24 (12) |
 | Lists | 40 (19) | 9 (7) | 1 (0) | 3 (1) | 1 | 5 (1) | 3 (1) | 2 (0) | 3 (1) | 2 (1) | 3 (1) | 4 | 76 (37) |
-| Content controls | 15 (6) | 4 | 1 (0) | 2 (1) | · | 1 (0) | · | · | · | · | · | 8 (5) | 31 (16) |
+| Content controls | 16 (7) | 4 | 1 (0) | 2 (1) | · | 1 (0) | · | · | · | · | · | 8 (5) | 32 (17) |
 | Form fields | 6 (2) | 1 (0) | 1 (0) | 1 (0) | 1 | · | 1 | · | · | · | · | 1 (0) | 12 (4) |
 | Images | 19 (5) | 1 (0) | · | 2 (0) | 1 (0) | · | · | 1 (0) | · | · | · | 6 (2) | 30 (7) |
 | Images with wrap | 8 (3) | · | · | 2 (0) | · | 1 (0) | · | · | · | · | · | 6 (1) | 17 (4) |
@@ -129,32 +129,32 @@ Each cell is the number of files, and in brackets how many of them are committed
 | Text boxes | 10 (5) | · | · | 2 (0) | · | 2 (0) | · | 1 (0) | · | · | 1 (0) | 4 (2) | 20 (7) |
 | Shapes | 13 (5) | · | · | 2 (0) | · | 3 (0) | · | 3 (0) | · | · | 1 (0) | 8 (3) | 30 (8) |
 | Embedded objects | 3 (0) | · | · | · | · | · | · | · | · | · | · | 6 (1) | 9 (1) |
-| Right-to-left | 13 (3) | 1 | · | · | 1 (0) | 4 (0) | · | 1 | 10 (2) | 2 (1) | 1 (0) | 10 (2) | 43 (10) |
-| Older compatibility mode | 65 (15) | 10 (3) | 1 | 7 (1) | 2 (0) | 3 (1) | 4 (1) | 3 (0) | 5 (0) | · | 2 | 41 (18) | 143 (42) |
+| Right-to-left | 15 (5) | 1 | · | · | 1 (0) | 4 (0) | · | 1 | 10 (2) | 2 (1) | 1 (0) | 10 (2) | 45 (12) |
+| Older compatibility mode | 67 (17) | 10 (3) | 1 | 7 (1) | 2 (0) | 3 (1) | 4 (1) | 3 (0) | 5 (0) | · | 2 | 41 (18) | 145 (44) |
 | 100+ pages | 4 (2) | 1 (0) | · | · | · | · | · | · | · | · | · | · | 5 (2) |
 
 **Feature by domain**
 
 | Feature | legal | finance | medical | academic | government | engineering | hr | education | business | test | All |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| Tracked changes | 3 (2) | 1 (0) | 1 (0) | · | 1 | · | 2 | · | 3 | 29 (22) | 40 (30) |
-| Comments | 6 (5) | 1 (0) | 1 (0) | · | 1 | · | 3 (2) | · | 1 (0) | 9 (4) | 22 (12) |
+| Tracked changes | 3 (2) | 1 (0) | 1 (0) | · | 1 | · | 3 | · | 3 | 29 (22) | 41 (31) |
+| Comments | 6 (5) | 1 (0) | 1 (0) | · | 1 | · | 4 (3) | · | 1 (0) | 9 (4) | 23 (13) |
 | Comment replies | 1 (0) | 1 (0) | 1 (0) | · | 1 | · | 1 (0) | · | 1 (0) | 2 (1) | 8 (2) |
-| Footnotes | 12 (11) | 6 (3) | 1 | 3 (1) | 2 (1) | 1 (0) | 1 | · | · | 25 (7) | 51 (25) |
+| Footnotes | 12 (11) | 7 (4) | 1 | 3 (1) | 2 (1) | 1 (0) | 2 | · | · | 25 (7) | 53 (27) |
 | Endnotes | 10 (9) | 5 (2) | 1 | 3 (1) | 1 (0) | 1 (0) | · | · | · | 8 (2) | 29 (15) |
-| Fields | 16 (14) | 8 (4) | 6 (4) | 3 (1) | 7 (4) | 4 (2) | 5 (4) | 3 (0) | 5 (3) | 40 (18) | 97 (54) |
-| TOC | 3 | 4 (3) | 1 | 1 (0) | · | 1 (0) | 1 (0) | · | · | 9 (4) | 20 (11) |
+| Fields | 16 (14) | 9 (5) | 6 (4) | 3 (1) | 7 (4) | 4 (2) | 6 (5) | 3 (0) | 5 (3) | 40 (18) | 99 (56) |
+| TOC | 3 | 5 (4) | 1 | 1 (0) | · | 1 (0) | 1 (0) | · | · | 9 (4) | 21 (12) |
 | Cross-references | 2 | 2 | · | · | · | · | · | · | · | 13 (4) | 17 (8) |
 | SEQ captions | 7 (5) | 4 (1) | 3 (2) | 3 (1) | 4 (1) | 3 (1) | 3 (2) | 3 (0) | 3 (1) | 8 (2) | 41 (16) |
-| Bookmarks | 10 (8) | 6 (2) | 6 (4) | 3 (1) | 6 (3) | 3 (1) | 3 (2) | 3 (0) | 3 (1) | 64 (30) | 107 (52) |
-| Headers and footers | 17 (15) | 8 (4) | 6 (4) | 3 (1) | 7 (4) | 4 (2) | 5 (4) | 3 (0) | 7 (5) | 38 (19) | 98 (58) |
+| Bookmarks | 10 (8) | 7 (3) | 6 (4) | 3 (1) | 6 (3) | 3 (1) | 3 (2) | 3 (0) | 3 (1) | 64 (30) | 108 (53) |
+| Headers and footers | 17 (15) | 9 (5) | 6 (4) | 3 (1) | 7 (4) | 4 (2) | 6 (5) | 3 (0) | 7 (5) | 38 (19) | 100 (60) |
 | Several sections | · | 1 | · | 1 | · | 1 | · | · | · | 28 (9) | 31 (12) |
 | Columns | · | 1 | · | 1 | · | · | · | · | · | 10 (2) | 12 (4) |
-| Tables | 12 (10) | 6 (3) | 3 (2) | 1 (0) | 6 (3) | 3 (1) | 2 | 3 (0) | 7 (5) | 43 (11) | 86 (37) |
+| Tables | 12 (10) | 7 (4) | 3 (2) | 1 (0) | 6 (3) | 3 (1) | 2 | 3 (0) | 7 (5) | 43 (11) | 87 (38) |
 | Nested tables | · | · | 1 | · | · | · | · | · | · | 9 (3) | 10 (4) |
 | Merged cells | 4 (3) | 1 | 2 | · | · | 1 | · | 2 (0) | · | 14 (5) | 24 (12) |
 | Lists | 16 (14) | 5 (1) | 4 (2) | 3 (1) | 3 (0) | 4 (2) | 4 (3) | 3 (0) | 6 (4) | 28 (10) | 76 (37) |
-| Content controls | 5 | 1 | 3 (1) | · | 2 (0) | · | 2 (1) | · | · | 18 (8) | 31 (16) |
+| Content controls | 5 | 2 | 3 (1) | · | 2 (0) | · | 2 (1) | · | · | 18 (8) | 32 (17) |
 | Form fields | 1 (0) | · | 4 (2) | · | 2 (0) | · | · | · | · | 5 (2) | 12 (4) |
 | Images | · | · | · | 1 | · | · | 1 (0) | 1 (0) | · | 27 (6) | 30 (7) |
 | Images with wrap | · | · | · | 1 | · | · | 1 (0) | 1 (0) | · | 14 (3) | 17 (4) |
@@ -164,11 +164,11 @@ Each cell is the number of files, and in brackets how many of them are committed
 | Text boxes | 1 | · | · | · | · | 1 | · | 2 (0) | 1 (0) | 15 (5) | 20 (7) |
 | Shapes | 1 | · | · | · | · | 1 | · | 2 (0) | 1 (0) | 25 (6) | 30 (8) |
 | Embedded objects | · | · | · | · | · | · | · | · | · | 9 (1) | 9 (1) |
-| Right-to-left | 1 | · | · | 1 (0) | 1 | · | 1 | 1 (0) | 1 (0) | 37 (7) | 43 (10) |
-| Older compatibility mode | 2 | · | 1 | · | 2 | 1 | · | · | · | 137 (36) | 143 (42) |
+| Right-to-left | 1 | 1 | · | 1 (0) | 1 | · | 2 | 1 (0) | 1 (0) | 37 (7) | 45 (12) |
+| Older compatibility mode | 2 | 1 | 1 | · | 2 | 1 | 1 | · | · | 137 (36) | 145 (44) |
 | 100+ pages | 1 | 1 (0) | · | 1 (0) | · | 1 (0) | · | · | · | 1 | 5 (2) |
 
-88 committed files (1.7 MB) and 148 in the extended set (2.6 MB when fetched): 236 in all.
+90 committed files (1.7 MB) and 148 in the extended set (2.6 MB when fetched): 238 in all.
 
 <!-- coverage:end -->
 
@@ -283,7 +283,9 @@ Lang: `en`, `zh` (Simplified), `zh-TW`, `ja`, `ko`, `de`, `fr`, `es`, `ar`, `he`
 
 | File | Lang | Domain | Licence | Source | Kinds | Features (count) |
 |---|---|---|---|---|---|---|
-| `word-mac/en-contract-services.docx` | en | legal | Apache-2.0 | documents/synthetic/en-contract-services.docx, saved in Word for Mac | 10 | Footnotes 1, Endnotes 1, Fields 3, TOC 1, Bookmarks 1, Headers and footers 2, Tables 2, Merged cells 1, Lists 18, Content controls 2 |
-| `word-mac/zh-contract-service.docx` | zh | legal | Apache-2.0 | documents/synthetic/zh-contract-service.docx, saved in Word for Mac | 7 | Footnotes 1, Endnotes 1, Fields 2, Headers and footers 2, Tables 2, Lists 9, Content controls 2 |
+| `word-mac/en-contract-services.docx` | en | legal | Apache-2.0 | documents/synthetic/en-contract-services.docx, saved in Word for Mac, 2026-10-12 | 10 | Footnotes 1, Endnotes 1, Fields 3, TOC 1, Bookmarks 1, Headers and footers 2, Tables 2, Merged cells 1, Lists 18, Content controls 2 |
+| `word-mac/zh-contract-service.docx` | zh | legal | Apache-2.0 | documents/synthetic/zh-contract-service.docx, saved in Word for Mac, 2026-10-12 | 7 | Footnotes 1, Endnotes 1, Fields 2, Headers and footers 2, Tables 2, Lists 9, Content controls 2 |
+| `google-docs/en-memo-policy.docx` | en | hr | Apache-2.0 | documents/synthetic/en-memo-policy.docx, Google Docs (web), saved as Google Doc then exported .docx, 2026-10-12 | 7 | Tracked changes 4, Comments 1, Footnotes 1, Fields 2, Headers and footers 2, Right-to-left 21, Older compatibility mode 1 (change authors: HR, Legal) |
+| `google-docs/en-report-quarterly.docx` | en | finance | Apache-2.0 | documents/synthetic/en-report-quarterly.docx, Google Docs (web), saved as Google Doc then exported .docx, 2026-10-12 | 9 | Footnotes 2, Fields 3, TOC 1, Bookmarks 1, Headers and footers 2, Tables 1, Content controls 1, Right-to-left 39, Older compatibility mode 1 |
 
 <!-- files:end -->
