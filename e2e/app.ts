@@ -156,6 +156,7 @@ export async function launchApp(
   env.INCARNAMIND_TEST_HOOKS = "1";
   if (fakeChat) env.INCARNAMIND_FAKE_CHAT = "1";
   env.INCARNAMIND_TEST_EMBEDDER = "fake";
+  env.INCARNAMIND_TEST_TRANSCRIBER = "fake";
 
   const app = await electron.launch({ args: [appDir], env });
   openApps.set(app, dataDir);
