@@ -62,6 +62,7 @@ export { BUILT_IN_EMBEDDING_MODEL } from "./embedding";
 export {
   ChatNotReadyError,
   ConsentDeclinedError,
+  DataFromNewerVersionError,
   EmbeddingModelNotReadyError,
   FileWriteCancelledError,
   InvalidInputError,

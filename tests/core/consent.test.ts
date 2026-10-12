@@ -352,6 +352,7 @@ describe("Data-flow consent", () => {
         baseUrl: "https://api.openai.com/v1",
         apiKey: "sk-test-openai",
         modelId: "gpt-5.4-mini",
+        thinking: "summary",
       },
     ]);
   });

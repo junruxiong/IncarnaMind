@@ -11,17 +11,14 @@ import {
   useState,
 } from "react";
 import type { AssistantDock } from "../../../../core/api";
-import { mindName } from "../../../../shared/naming";
-import { readsLine } from "../../assistantContext";
 import { isSide } from "../../assistantPlace";
 import { newChat } from "../../commands/assistant";
 import { assistantHandle, readMindHandle, useHandle } from "../../commands/handles";
 import { shortcutLabel } from "../../commands/keymap";
-import { composerScope, useComposer } from "../../composer";
+import { useComposer } from "../../composer";
 import { conversationLabel, useOpenConversation } from "../../conversations";
 import { useT } from "../../i18n";
 import { useAssistantWaiting } from "../../mindStatus";
-import { scopeChips } from "../../scope";
 import { useAppStore } from "../../store";
 import { GripIcon } from "../icons";
 import {
@@ -42,7 +39,7 @@ import { useReadMindId } from "./readMind";
 /**
  * The window's one assistant (#253), outside the tab groups, as in Cursor:
  * its header (the conversation's title with ▾ and the clock for History,
- * + New chat, ⋯ and fold), the line saying what it reads, the conversation
+ * + New chat, ⋯ and fold), with no line under it (#391), the conversation
  * (#201), and the composer at its foot. Folded on a side, it is a 44px rail
  * (show, New chat, History); at the bottom or floating, only its header.
  *
@@ -262,8 +259,8 @@ export function Assistant({
 }
 
 /**
- * Under the header: the line saying what it reads, the conversation, and the
- * composer. Kept while folded, only hidden, so nothing in it starts over.
+ * Under the header: the conversation and the composer. Kept while folded,
+ * only hidden, so nothing in it starts over.
  */
 function AssistantMain({
   folded,
@@ -281,12 +278,8 @@ function AssistantMain({
   useLayoutEffect(() => {
     if (!folded && thread.current) thread.current.scrollTop = scrolled.current;
   }, [folded]);
-  const line = useReadsLine();
   return (
     <div className="assistant-main" hidden={folded}>
-      <p data-testid="assistant-reads" title={line} className="assistant-reads">
-        {line}
-      </p>
       <div
         ref={thread}
         data-testid="assistant-thread"
@@ -301,26 +294,6 @@ function AssistantMain({
       {readMindId === null && <AskInNewMind />}
     </div>
   );
-}
-
-/** What the next Question reads and searches, from the Mind it reads and its composer's scope. */
-function useReadsLine(): string {
-  const t = useT();
-  const mindId = useReadMindId();
-  const mind = useAppStore((state) => state.minds.find((each) => each.id === mindId));
-  const draft = useComposer((state) => (mindId ? state.drafts[mindId] : undefined));
-  const folders = useAppStore((state) => state.folders);
-  const groups = useAppStore((state) => state.library?.groups);
-  const deletedGroups = useAppStore((state) => state.library?.deletedGroups);
-  const tags = useAppStore((state) => state.tags);
-  const documents = useAppStore((state) => state.documents);
-  if (!mind) return readsLine(t, null, []);
-  const scope = composerScope(
-    draft ?? { text: "", scope: null, skill: null, pastes: [] },
-    mind.folderId,
-  );
-  const chips = scopeChips({ folders, groups, deletedGroups, tags, documents }, scope);
-  return readsLine(t, mindName(mind) || t("mind.untitled"), chips);
 }
 
 /**
