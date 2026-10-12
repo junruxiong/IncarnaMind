@@ -519,7 +519,7 @@ function MindEditorView({
       </div>
       {dock &&
         !readOnly &&
-        createPortal(<Composer ref={composer} editor={editor} doc={doc} mindId={mindId} />, dock)}
+        createPortal(<Composer ref={composer} mind={{ editor, doc, mindId }} />, dock)}
       {guide && <StartGuide />}
       {!readOnly && <BlockHandle editor={editor} />}
       {!readOnly && <SelectionMenu editor={editor} ai={aiActions} />}

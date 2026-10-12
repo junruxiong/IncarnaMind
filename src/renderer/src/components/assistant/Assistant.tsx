@@ -17,6 +17,7 @@ import { assistantHandle, readMindHandle, useHandle } from "../../commands/handl
 import { shortcutLabel } from "../../commands/keymap";
 import { useComposer } from "../../composer";
 import { conversationLabel, useOpenConversation } from "../../conversations";
+import { Composer } from "../../editor/Composer";
 import { useT } from "../../i18n";
 import { useAssistantWaiting } from "../../mindStatus";
 import { useAppStore } from "../../store";
@@ -30,7 +31,6 @@ import {
   HistoryLineIcon,
   PlusLineIcon,
 } from "../lineIcons";
-import { buttonStyle } from "../ui";
 import { AssistantMenu } from "./AssistantMenu";
 import { ConversationThread } from "./ConversationThread";
 import { HistoryPopover } from "./HistoryPopover";
@@ -259,8 +259,10 @@ export function Assistant({
 }
 
 /**
- * Under the header: the conversation and the composer. Kept while folded,
- * only hidden, so nothing in it starts over.
+ * Under the header: the conversation and the composer, which stays whatever
+ * is in focus (#621): a Mind's own is drawn in its slot, and with none in
+ * focus this one asks of every Document. Kept while folded, only hidden, so
+ * nothing in it starts over.
  */
 function AssistantMain({
   folded,
@@ -290,49 +292,9 @@ function AssistantMain({
       >
         <ConversationThread focusedMindId={readMindId} />
       </div>
-      <div ref={onComposerSlot} data-testid="assistant-composer" className="assistant-composer" />
-      {readMindId === null && <AskInNewMind />}
-    </div>
-  );
-}
-
-/**
- * With no Mind on screen to ask in (only the Library, say), a Question is
- * asked in a new Mind, as "Ask your own Question" does; ⌘J comes here.
- */
-function AskInNewMind() {
-  const t = useT();
-  const button = useRef<HTMLButtonElement>(null);
-  const focusWanted = useComposer((state) => state.focusWanted);
-  useEffect(() => {
-    const element = button.current;
-    if (!focusWanted || !element) return;
-    const take = () => {
-      if (element.getClientRects().length === 0) return false;
-      element.focus();
-      useComposer.getState().focusTaken();
-      return true;
-    };
-    if (take()) return;
-    const observer = new ResizeObserver(() => {
-      if (take()) observer.disconnect();
-    });
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [focusWanted]);
-  return (
-    <div data-testid="assistant-no-mind" className="assistant-no-mind">
-      <p>{t("assistant.noMind")}</p>
-      <button
-        ref={button}
-        type="button"
-        data-testid="assistant-ask-new-mind"
-        onClick={() => void useAppStore.getState().createMind({ startQuestion: true })}
-        className={buttonStyle("secondary", "sm")}
-      >
-        <PlusLineIcon className="size-4" />
-        {t("assistant.noMind.ask")}
-      </button>
+      <div ref={onComposerSlot} data-testid="assistant-composer" className="assistant-composer">
+        {readMindId === null && <Composer mind={null} />}
+      </div>
     </div>
   );
 }
