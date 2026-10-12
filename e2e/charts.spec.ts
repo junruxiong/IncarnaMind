@@ -54,6 +54,7 @@ const WORDS = {
       "Rename",
       "Delete",
     ],
+    share: "of 2025",
     source: "values, each quoted from Acme",
     uncited: "1 with no Citation",
     noCitation: "No Citation",
@@ -68,6 +69,7 @@ const WORDS = {
     showAsChart: "以图表显示",
     title: "分季度营业收入（百万美元）",
     menu: ["以表格显示", "显示为折线图", "显示为饼图", "显示为散点图", "重命名", "删除"],
+    share: "占 2025 的",
     source: "个数值，均引自“Acme”",
     uncited: "1 个数值没有引用",
     noCitation: "没有引用",
@@ -129,6 +131,32 @@ async function askForFigures(window: Page, language: Language) {
 /** The value of the chart at this row and column of its data. */
 const point = (chart: Locator, row: number, series: number) =>
   chart.locator(`[data-testid="chart-point"][data-point="${row}:${series}"]`);
+
+/**
+ * Points at another value as a person does: off the card first, so it goes,
+ * as it may lie over the value next to the one it is for.
+ */
+async function pointAt(window: Page, value: Locator): Promise<void> {
+  await window.mouse.move(0, 0);
+  await expect(window.getByTestId("chart-card")).toHaveCount(0);
+  await value.hover();
+}
+
+/** Waits until the two boxes don't overlap: a card that grows in place settles first. */
+async function expectApart(a: Locator, b: Locator): Promise<void> {
+  await expect
+    .poll(async () => {
+      const [one, two] = [await a.boundingBox(), await b.boundingBox()];
+      if (!one || !two) return "not on screen";
+      const apart =
+        one.x + one.width <= two.x ||
+        two.x + two.width <= one.x ||
+        one.y + one.height <= two.y ||
+        two.y + two.height <= one.y;
+      return apart ? "apart" : "overlapping";
+    })
+    .toBe("apart");
+}
 
 /** The bottom of a box, and its right edge. */
 async function boxOf(locator: Locator) {
@@ -205,21 +233,26 @@ for (const [language, width] of [
     await expect(card.getByTestId("chart-card-source")).toContainText("Acme");
     await expect(card.getByTestId("chart-check")).toHaveAttribute("data-check", "found");
     await expect(q3).toHaveAttribute("data-active", "true");
-    // The card sits by the value, above or below it.
-    const bar = await boxOf(q3);
-    const shown = await boxOf(card);
-    expect(shown.x).toBeLessThan(bar.x + bar.width);
-    expect(shown.x + shown.width).toBeGreaterThan(bar.x);
+    // The card stays in the plot's frame: off the chart's head and its "Bar ⌄", and off its foot.
+    await expectApart(card, chart.getByTestId("chart-kind"));
+    await expectApart(card, chart.getByTestId("chart-foot"));
     await screenshot(window, `chart-point-${language}-${width}`);
 
+    // So does the tallest value's, beside it under the head: its "1 with no Citation" foot shows.
+    await pointAt(window, point(chart, 3, 1));
+    await expect(card.getByTestId("chart-card-value")).toHaveText("401.2");
+    await expectApart(card, chart.getByTestId("chart-kind"));
+    await expectApart(card, chart.getByTestId("chart-show-table"));
+    await expectApart(card, chart.getByTestId("chart-foot"));
+
     // A value with no Citation says so quietly, with nothing to open.
-    await point(chart, 3, 1).hover();
+    await pointAt(window, point(chart, 3, 1));
     await expect(card.getByTestId("chart-card-value")).toHaveText("401.2");
     await expect(card.getByTestId("chart-card-source")).toHaveText(words.noCitation);
     await expect(card.getByTestId("chart-card-open")).toHaveCount(0);
 
     // Open shows the cited page, the quote washed, as a Citation's Open does.
-    await q3.hover();
+    await pointAt(window, q3);
     await expect(card.getByTestId("chart-card-value")).toHaveText("377.9");
     await card.getByTestId("chart-card-open").click();
     await expect(card).toHaveCount(0);
@@ -249,6 +282,31 @@ for (const [language, width] of [
     await window.keyboard.press("ControlOrMeta+z");
     await expect(plot).toHaveAttribute("data-kind", "bar");
 
+    // A pie and a scatter chart: the foot counts the same cells as the bars did. A pie's card
+    // says which column its slices are, and of what its share is.
+    const foot = (await chart.getByTestId("chart-source").textContent()) ?? "";
+    await pointAndClick(window, chart.getByTestId("chart-kind"));
+    await pointAndClick(window, menu.getByTestId("chart-kind-pie"));
+    await expect(plot).toHaveAttribute("data-kind", "pie");
+    await expect(chart.getByTestId("chart-source")).toHaveText(foot);
+    await pointAt(window, point(chart, 2, 1));
+    await expect(card.getByTestId("chart-card-body")).toContainText("Q3 · 2025");
+    await expect(card.getByTestId("chart-card-body")).toContainText(words.share);
+    await expectApart(card, chart.getByTestId("chart-kind"));
+    await expectApart(card, chart.getByTestId("chart-foot"));
+    await pointAndClick(window, chart.getByTestId("chart-kind"));
+    await pointAndClick(window, menu.getByTestId("chart-kind-scatter"));
+    await expect(plot).toHaveAttribute("data-kind", "scatter");
+    await expect(chart.getByTestId("chart-source")).toHaveText(foot);
+    await pointAt(window, point(chart, 3, 1));
+    await expect(card.getByTestId("chart-card-value")).toContainText("401.2");
+    await expectApart(card, chart.getByTestId("chart-kind"));
+    await expectApart(card, chart.getByTestId("chart-foot"));
+    await window.mouse.move(0, 0);
+    await window.keyboard.press("ControlOrMeta+z");
+    await window.keyboard.press("ControlOrMeta+z");
+    await expect(plot).toHaveAttribute("data-kind", "bar");
+
     // Show as table: every value as written, with its check; the one with none marked so.
     const toggle = chart.getByTestId("chart-show-table");
     await expect(toggle).toHaveText(words.showAsTable);
@@ -259,7 +317,7 @@ for (const [language, width] of [
     await expect(values.getByTestId("chart-value")).toHaveCount(8);
     await expect(values.locator('[data-check="found"]')).toHaveCount(7);
     await expect(values.locator('[data-check="none"]')).toHaveCount(1);
-    await values.getByTestId("chart-value").nth(5).hover();
+    await pointAt(window, values.getByTestId("chart-value").nth(5));
     await expect(card.getByTestId("chart-card-value")).toHaveText("377.9");
     await screenshot(window, `chart-table-${language}-${width}`);
     await app.close();
@@ -289,10 +347,11 @@ for (const [language, width] of [
     await window.keyboard.press("ControlOrMeta+j");
     await window.keyboard.press("Escape");
     await editor.focus();
+    await expect(editor).toBeFocused();
     await window.keyboard.press("ControlOrMeta+End");
     for (let press = 0; press < 12; press++) {
-      const inCell = await window.evaluate(
-        () => document.getSelection()?.anchorNode?.parentElement?.closest("td, th") !== null,
+      const inCell = await window.evaluate(() =>
+        Boolean(document.getSelection()?.anchorNode?.parentElement?.closest("td, th")),
       );
       if (inCell) break;
       await window.keyboard.press("ArrowUp");

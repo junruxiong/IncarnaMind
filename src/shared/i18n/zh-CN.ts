@@ -361,7 +361,7 @@ export const zhCN = {
   "chart.point": "{label}：{value} · {source}",
   "chart.point.title": "{row} · {series}",
   "chart.point.named": "{name}：{value}",
-  "chart.point.share": "占总数的 {share}",
+  "chart.point.share": "占{series}的 {share}",
   "chart.point.where": "{document} · {location}",
   "chart.point.open": "打开",
   "chart.point.noCitation": "没有引用",
