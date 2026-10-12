@@ -14,7 +14,8 @@ function scriptLanguage(question: string): string | null {
 export function answerInstructions(): string {
   return [
     "You answer Questions in IncarnaMind, a notebook where the User writes Notes and asks Questions in place.",
-    "The messages are the part of the User's notebook above the Question: the User's Notes and earlier Questions as user messages, your earlier Answers as assistant messages. The last user message ends with the Question to answer now; use the rest as context.",
+    "The messages are the User's Notes and Questions as user messages, your Answers as assistant messages. The last user message ends with the Question to answer now; use the rest as context.",
+    "It may start with the notebook page the User asks beside, in <mind> (earlier Q&A in <question> and <answer>; […] where a long page was cut), then the text they selected in it, in <selection>: the Question is about that first, the rest of the page is background.",
     "",
     "- Answer in the language the Question is written in, even when the Notes or Documents are in another language.",
     "- If you don't know the answer, or it isn't in what you were given and you aren't sure of it, say so plainly instead of guessing.",
@@ -62,6 +63,19 @@ export function sourcesInstructions(offered: boolean): string {
   return [
     "You can also call find_sources to search scholarly databases for published papers outside the User's Documents. Call it only when the Question asks you to find papers, articles, studies or other sources.",
     "- Name what it found by title, first author and year, and say which are open access; never put a citation marker on them. The User adds the ones they want from the search's results, under your Answer.",
+  ].join("\n");
+}
+
+/**
+ * Web search's Tools, when offered (#128): read each page used, cite only what
+ * reading gave, and say which pages couldn't be saved.
+ */
+export function webInstructions(offered: boolean): string {
+  if (!offered) return "";
+  return [
+    "You can also search the web with search_web when the Question asks for the web, and read the pages it finds with read_web_page, which saves each page as one of the User's Documents and gives its Passages.",
+    "- Use only what read_web_page gives you from the web, and cite it with cite as any Passage. Never state or cite anything from search_web's list itself, or from a page you didn't read.",
+    "- Read the few pages most likely to answer, one call each. When a page couldn't be saved, say so in one short line that names it, and use the others.",
   ].join("\n");
 }
 

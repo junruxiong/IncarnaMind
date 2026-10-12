@@ -17,7 +17,14 @@ import { addAndProcess, createSourceFolder, writeSourceFile } from "../helpers/d
 import { footnotesOf, part, textOf, unzip } from "../helpers/docx";
 import { exportMind, linkWithExports } from "../helpers/evidence";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
-import { note, outline, readMind, resolveChanges, writeMind } from "../helpers/minds";
+import {
+  note,
+  outline,
+  readMind,
+  resolveChanges,
+  shownWithAiText,
+  writeMind,
+} from "../helpers/minds";
 import {
   type ModelCall,
   type ScriptedReply,
@@ -279,6 +286,30 @@ describe("Compare Documents", () => {
     expect(tables()).toHaveLength(2);
     await resolveChanges(client, "reject");
     expect(tables()).toHaveLength(1);
+  });
+
+  test("the cells' words are AI text, and stay AI text once the table is accepted", async () => {
+    const { core, client, mind, documents } = await setUpWithDocuments(cellModel(), SUPPLIERS);
+    await compare(core, client, {
+      mindId: mind.id,
+      documentIds: documents.slice(0, 2).map((document) => document.id),
+      questions: QUESTIONS,
+    });
+    const shownCells = () => {
+      const shown: string[] = [];
+      readMind(client).descendants((node) => {
+        if (node.type.name !== "comparisonCell") return true;
+        shown.push(shownWithAiText(node));
+        return false;
+      });
+      return shown;
+    };
+    const marked = ["«90 days »￼", "«12 months of fees »￼"];
+    expect(shownCells().slice(0, 2)).toEqual(marked);
+
+    await resolveChanges(client, "accept");
+    expect(tableIn(client).proposal).toBeNull();
+    expect(shownCells().slice(0, 2)).toEqual(marked);
   });
 
   test("rejecting the table while it fills stops the fill: nothing more is asked", async () => {

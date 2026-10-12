@@ -231,7 +231,11 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     await expect(actions.getByRole("menuitem")).toHaveText([
       /^Open$/,
       /^Open to the side$/,
-      /^Export…$/,
+      /^Outline(⌥⌘L|Ctrl\+Alt\+L)$/,
+      /^Export as Word \(\.docx\)(⇧⌘E|Ctrl\+Shift\+E)$/,
+      /^Export as PDF$/,
+      /^Export as Markdown \(\.md\)$/,
+      /^Export options…$/,
       /^Citation style…$/,
       /^Make this a Skill$/,
       /^Move to…(⇧⌘M|Ctrl\+Shift\+M)$/,
@@ -260,14 +264,14 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     await expect(notInAFolder(window).getByTestId("mind-list-item")).toHaveText("Shortlist");
     await expect(undoLine.getByTestId("undo-message")).toHaveCount(0);
 
-    // By the keyboard alone: Tab to the row's ⋯, Enter, down past Citation style… and Make this a Skill to Move to…,
-    // type, Enter.
+    // By the keyboard alone: Tab to the row's ⋯, Enter, down past Outline, the exports, Citation style… and
+    // Make this a Skill to Move to…, type, Enter.
     await shortlist.getByTestId("mind-list-item").focus();
     await window.keyboard.press("Tab");
     await expect(shortlist.getByTestId("mind-menu")).toBeFocused();
     await window.keyboard.press("Enter");
     await expect(actions.getByTestId("mind.open")).toBeFocused();
-    for (let step = 0; step < 5; step++) await window.keyboard.press("ArrowDown");
+    for (let step = 0; step < 9; step++) await window.keyboard.press("ArrowDown");
     await expect(actions.getByTestId("mind.moveTo")).toBeFocused();
     await window.keyboard.press("Enter");
     await expect(picker.getByTestId("move-to-search")).toBeFocused();
@@ -344,6 +348,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
       /^New Mind here$/,
       /^Organize this Folder$/,
       /^Edit description…$/,
+      /^Sort by…$/,
       /^RenameF2$/,
       /^Delete$/,
     ]);
@@ -357,7 +362,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     await expect(renamed).toHaveCount(0);
     await expect(notInAFolder(window).getByTestId("mind-list-item")).toHaveText("Shortlist");
     await expect(composer.getByTestId("composer-scope-all")).toBeVisible();
-    await expect(answer.getByTestId("answer-steps")).toHaveText("Asked from Shortlist");
+    await expect(answer.getByTestId("answer-steps-line")).toHaveText("Asked from Shortlist");
 
     // In Chinese, the same tree.
     await window.evaluate(() =>

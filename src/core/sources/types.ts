@@ -38,20 +38,32 @@ export interface WorkIds {
   setid?: string;
   /** A trial's registry number: "NCT04368728". */
   nct?: string;
+  /**
+   * The eCFR's text of a CFR section or part, as `cfrId` writes it: "17 CFR
+   * 240.10b-5", with "@2019-06-30" for the version in force on a date.
+   */
+  cfr?: string;
+  /** A GovInfo granule: one section of an official edition, "USCODE-2024-title42-chap21-subchapI-sec1983". */
+  govinfo?: string;
 }
 
-/** An identifier the User typed, which providers look up instead of searching. */
+/**
+ * An identifier the User typed, which providers look up instead of searching.
+ * A citation's id is as `./citations` writes it: "17 CFR 240.10b-5", "42 U.S.C. 1983".
+ */
 export type WorkIdentifier =
   | { kind: "doi"; id: string }
   | { kind: "arxiv"; id: string }
   | { kind: "pmid"; id: string }
   | { kind: "setid"; id: string }
-  | { kind: "nct"; id: string };
+  | { kind: "nct"; id: string }
+  | { kind: "cfr"; id: string }
+  | { kind: "usc"; id: string };
 
 /**
  * Where a work's full text can be had openly. "pdf": a PDF file at `url`.
  * "sections": text the provider gives by section, through its
- * `fetchFullText` (PMC's articles now; provisions of a law later). "html":
+ * `fetchFullText` (PMC's articles, drug labels, a regulation's provisions). "html":
  * the text is a web page at `url`, a publisher's or a repository's, saved as
  * `saveWebPage` saves one (#261), whatever its `provider`.
  */
@@ -84,6 +96,8 @@ export interface ProviderWork {
   landingUrl: string | null;
   /** What the source itself says about relying on it (openFDA's disclaimer), shown with the result. */
   notice?: string;
+  /** Its text is an unofficial compilation (the eCFR), not the official edition: the result says so. */
+  unofficial?: boolean;
 }
 
 /** One section of a text a provider gives by section: a heading, as the work cites it, and its paragraphs. */
@@ -136,6 +150,8 @@ export interface SourceProvider {
   readonly searchedByDefault?: boolean;
   /** It takes an optional key of the User's, kept through `secrets.ts` and sent in a header. */
   readonly takesKey?: boolean;
+  /** It works only with that key (GovInfo's): without one it is off, nothing is sent, and the User is told where to get one. */
+  readonly needsKey?: { signUp: string };
   /** Searches by words; absent for one that only looks works up (Crossref). */
   search?(query: SourceQuery, context: ProviderContext): Promise<ProviderWork[]>;
   /** Looks a work up by an identifier it knows; null for one it doesn't hold. */

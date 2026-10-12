@@ -94,7 +94,7 @@ import type {
 import { DOCUMENT_TOOLS, offeredTools, type Tool, type ToolProviderInfo } from "../tools";
 import { asksForFigureFixes, type FigureProblem, givenList } from "./calculations";
 import { asksForFixes } from "./citations";
-import { earlierContext } from "./context";
+import { earlierContext, type RequestMind } from "./context";
 import { retryFigures } from "./figureRetry";
 import { missingMarkerEvents, textEdits } from "./markerPlacement";
 import {
@@ -146,6 +146,12 @@ export interface CiteOptions {
   structured?: boolean;
 }
 
+/** How one search of the Documents is made. */
+export interface AnswerSearchOptions {
+  /** False leaves the reranker out (ADR-0009, 2026-10-12). Omitted: as the User set it. */
+  rerank?: boolean;
+}
+
 /** What a search gives the model. */
 export interface SearchResultForModel {
   /** The Passages, formatted for the model, or a sentence saying there are none. */
@@ -187,7 +193,11 @@ export interface AnswerTools {
    */
   readonly documentLanguages?: readonly DocumentLanguage[];
   /** The document-search Tool. */
-  searchDocuments(query: string, signal?: AbortSignal): Promise<SearchResultForModel>;
+  searchDocuments(
+    query: string,
+    signal?: AbortSignal,
+    options?: AnswerSearchOptions,
+  ): Promise<SearchResultForModel>;
   /** Takes Citation records; returns what to tell the model about them. */
   cite(records: readonly CitationRecordInput[], options?: CiteOptions): string;
   /** Whether a valid record was taken for this marker: the engine places its marker if the model left it out. */
@@ -237,6 +247,8 @@ export interface InstructionOptions {
   connectorTools?: boolean;
   /** The model is offered Find sources' Tool. */
   sourceTools?: boolean;
+  /** The model is offered web search's Tools. */
+  webTools?: boolean;
 }
 
 /** A Tool call at the Answer's gate. */
@@ -274,6 +286,11 @@ export interface AnswerRequest {
   instructions(mode: CitationSupport | "no-documents", options?: InstructionOptions): string;
   /** The Question context, oldest first; the last message is the User's and ends with the Question. */
   messages: AnswerMessage[];
+  /**
+   * The Mind read with a Question in the assistant (#544), right before the
+   * Question in its message: within a window, it is cut by its own rules.
+   */
+  mind?: RequestMind;
   /**
    * The Question's own text: what a model that can't call Tools searches for,
    * once it has rewritten it into a query that stands on its own.
@@ -346,6 +363,8 @@ export type AnswerEngineEvent =
     }
   /** The engine put in `count` Citation markers the model left out of its text (see ./markerPlacement). */
   | { type: "markers-placed"; count: number }
+  /** The model's window holds only part of the Mind read with the Question, or none of it. */
+  | { type: "mind-cut"; kept: "part" | "none" }
   /** The model was asked once more for exact quotes (see ./quoteRetry), and what that gave. */
   | { type: "quotes-retried"; retry: QuoteRetry }
   /** The model was asked once more for the figures it gave that couldn't be worked out (see ./figureRetry). */
@@ -914,11 +933,13 @@ function createWritingEngine(options: AiSdkAnswerEngineOptions): AnswerEngine {
             instructions,
             messages: request.messages,
             question: request.question,
+            mind: request.mind,
           });
           if (!fit.ok) {
             yield { type: "failed", error: fit.error };
             return;
           }
+          if (fit.mindCut) yield { type: "mind-cut", kept: fit.mindCut };
           const sized = { ...request, messages: fit.messages };
           const window: Sized = {
             estimated: fit.estimated,
@@ -934,8 +955,10 @@ function createWritingEngine(options: AiSdkAnswerEngineOptions): AnswerEngine {
         });
 
       // With no Documents there is nothing to search or cite: Skills and
-      // Connector Tools alone, or a plain Answer.
-      if (request.documents.documentCount === 0) {
+      // Connector Tools alone, or a plain Answer. Web search saves what it reads as
+      // Documents, which are cited, so with it the Documents' Tools are offered too.
+      const savesDocuments = request.tools.some((each) => each.provider.kind === "web");
+      if (request.documents.documentCount === 0 && !savesDocuments) {
         if (request.tools.length > 0 && (request.support ?? "tools") === "tools") {
           let unsupported = false;
           for await (const event of fitted(() =>
@@ -1141,7 +1164,7 @@ export function documentTools(
       async call({ query }, { toolCallId, signal, readThirdParty }) {
         let found: SearchResultForModel;
         try {
-          found = await documents.searchDocuments(String(query ?? ""), signal);
+          found = await documents.searchDocuments(String(query ?? ""), signal, { rerank: false });
         } catch (error) {
           // A failed search is the app's problem, so it is logged; the model is told it failed.
           if (!signal.aborted) {
@@ -1320,6 +1343,7 @@ async function* toolLoop(
     skillTools: request.tools.some((each) => each.provider.kind === "skills"),
     connectorTools: tools.some((each) => each.provider.kind === "connector"),
     sourceTools: tools.some((each) => each.provider.kind === "sources"),
+    webTools: tools.some((each) => each.provider.kind === "web"),
   });
 
   // Within a window: the Question context that fits beside the instructions, the Tools and a search.
@@ -1333,11 +1357,13 @@ async function* toolLoop(
       question: request.question,
       tools: definitions(tools),
       reserve: SEARCH_RESERVE_TOKENS,
+      mind: request.mind,
     });
     if (!fit.ok) {
       yield { type: "failed", error: fit.error };
       return;
     }
+    if (fit.mindCut) yield { type: "mind-cut", kept: fit.mindCut };
     ({ messages, estimated } = fit);
     const account = budget.loop(fit.estimated);
     loop = account;

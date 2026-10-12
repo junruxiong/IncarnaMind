@@ -108,6 +108,7 @@ export const Answer = Node.create<AnswerOptions>({
       errorMessage: stored(),
       errorResetsAt: stored(),
       generatedHash: stored(),
+      generatedMarks: stored(),
       citationSupport: stored(),
       toolCalls: stored(),
     };
