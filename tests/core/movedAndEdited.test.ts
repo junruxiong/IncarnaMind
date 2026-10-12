@@ -231,7 +231,7 @@ describe("A file moved and edited where IncarnaMind didn't see it", { timeout: 6
         ALTER TABLE documents DROP COLUMN file_device;
         ALTER TABLE documents DROP COLUMN file_number;
         ALTER TABLE documents DROP COLUMN file_created_ns;
-        DELETE FROM schema_migrations WHERE version = 61;
+        DELETE FROM schema_migrations WHERE version = 68;
       `);
     } finally {
       db.close();
