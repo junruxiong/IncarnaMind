@@ -380,11 +380,11 @@ export function editFromComposer(
 export function resolveProposalsIn(
   editor: Editor,
   mindId: string,
-  ids: readonly string[],
+  ids: readonly string[] | "all",
   outcome: "accept" | "reject",
 ): void {
   if (editor.isDestroyed || ids.length === 0) return;
-  const resolved = resolveInEditor(editor, new Set(ids), outcome);
+  const resolved = resolveInEditor(editor, ids === "all" ? ids : new Set(ids), outcome);
   if (resolved.length === 0) {
     // Only changes out of date were picked: they can't be accepted, and the User hears why.
     if (outcome === "accept") speak(mindId, t("proposal.cantAccept"));

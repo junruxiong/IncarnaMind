@@ -30,6 +30,10 @@ The assistant's conversations are kept by the core in SQLite, not as Minds (ADR-
 
 A Mind's Yjs document keeps, beside its Blocks, a `textOrigins` map: for each Block, top-level or nested, that holds third-party text (ADR-0013, amended), where it came from ("imported", "web-page" or "checked-document"), by Block id. It is a map rather than a Block attribute: an attribute would have to be declared on every node type a Block can be, nested ones too, and an older version's editor would strip it unless the content schema version rose, which would make every Mind written since open read-only there. An older version keeps the map as it is, so the content schema version stays 4. A Block deleted since leaves its entry unused. A copy pasted elsewhere gets a new id and counts as the User's, as text pasted from another app does.
 
+## Amendment: when each line of a Meeting's notes was written (2026-10-12, #139)
+
+A Mind's Yjs document keeps a `blockTimes` map beside its Blocks: for each line the User writes while the Meeting records, the Meeting's time in ms, by Block id. It is a map for the same reason as `textOrigins`: an attribute would make an older version's editor strip it, or need the content schema version to rise, so the version stays as it is. A line takes its time when it first has text, a Mark when it is made, and nothing is taken while the Meeting is paused or stopped. A Block deleted since leaves its entry unused; a copy pasted elsewhere has no time.
+
 ## Amendment: a Mind imported from a Word file (2026-10-12, #104)
 
 A Mind can be imported from a .docx (ADR-0011, amended), and export writes the User's edits back into the original package (#105), so the Mind keeps what that needs.
@@ -37,4 +41,3 @@ A Mind can be imported from a .docx (ADR-0011, amended), and export writes the U
 - **Content schema version 10** adds three node types: `wordAtom`, inline, and `wordBlock`, a Block, for what the editor can't represent and keeps as it is (a field, a text box, a bookmark, a header…), each naming where its XML is in the package; and `image`, an inline picture. Older content is version 10 content as it is. A version before 10 opens a Mind with any of them read-only.
 - **Beside the Blocks,** two maps, as `textOrigins` is, so an older version keeps them as they are: `word` (the file: its name, the package's SHA-256, size and main part; whose document it is; what the import made editable and kept as is; how far the import has got) and `wordSources` (for each node mapped from a paragraph or a table, by node id: its `w14:paraId` or its place in the part, and its fingerprint as imported, which tells export whether it was edited).
 - **The package** isn't in the Yjs document: it is kept in the data folder by its SHA-256 (ADR-0011), with a row per Mind (migration 69), and would sync as a file of its own.
-

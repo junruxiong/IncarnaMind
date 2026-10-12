@@ -97,14 +97,13 @@ test("the sidebar lists the most recently edited Mind first, and a deleted Mind 
   await window.keyboard.type("An edit");
   await expect(items).toHaveText(["Older", "Newer"]);
 
-  // Deleting it asks first, then removes it from the sidebar and closes its tab: the
+  // Deleting it asks nothing and removes it from the sidebar and closes its tab: the
   // other open Mind shows instead.
   const olderId = await items.filter({ hasText: "Older" }).getAttribute("data-mind-id");
   const older = window.getByTestId("mind-row").filter({ hasText: "Older" });
   await older.hover();
   await older.getByTestId("mind-menu").click();
   await older.getByTestId("mind.delete").click();
-  await window.getByTestId("confirm-delete-mind").click();
   await expect(items).toHaveText(["Newer"]);
   await expect(window.getByTestId("mind-tab").getByTestId("tab-title")).toHaveText(["Newer"]);
   await expect(window.getByTestId("mind-pane")).not.toHaveAttribute("data-mind-id", `${olderId}`);
@@ -142,14 +141,13 @@ test("added files are processed, show as ready in the sidebar, and can be delete
     await expect(notesItem.getByTestId("document-status")).toHaveText("Ready");
     await first.app.close();
 
-    // After a restart both are still there. Deleting one (from its menu) asks first, then removes it.
+    // After a restart both are still there. Deleting one (from its menu) asks nothing and removes it.
     const second = await launchApp(dataDir);
     const restored = second.window.getByTestId("document-list-item");
     await expect(restored).toHaveCount(2);
     const doomed = restored.filter({ hasText: "Reading notes" });
     await openDocumentMenu(doomed);
     await doomed.getByTestId("document.delete").click();
-    await second.window.getByTestId("confirm-delete-document").click();
     await expect(restored).toHaveCount(1);
     await expect(restored).toHaveAttribute("data-status", "ready");
     await second.app.close();

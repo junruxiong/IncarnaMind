@@ -34,6 +34,7 @@ import { type MessageKey, type MessageParams, translate } from "../../shared/i18
 import { mindName } from "../../shared/naming";
 import { deleted, renamed, retagged, tagLinks } from "./changes";
 import { core, files } from "./core";
+import { LIBRARY_DELETED } from "./deletedItems";
 import { applyAssignments, applyDocumentChanges, createDocumentUpdates } from "./documentUpdates";
 import { errorMessage } from "./errors";
 import {
@@ -145,6 +146,7 @@ interface AppState extends LayoutSlice {
   selectedDocuments: ReadonlySet<string>;
   tagsDialogOpen: boolean;
   library: LibrarySnapshot | null;
+  /** What the Library shows: "all", "unsorted", "new" (the new-Folder form), a Folder's id, or `LIBRARY_DELETED`. */
   libraryFilter: string;
   refreshLibrary(): Promise<void>;
   /**
@@ -280,7 +282,8 @@ interface AppState extends LayoutSlice {
    */
   locateDocumentFile(id: string): Promise<"cancelled" | "located" | "other">;
   renameDocument(id: string, name: string): Promise<void>;
-  deleteDocument(id: string): Promise<void>;
+  /** To Recently deleted, at once, with one undo line for all of them. */
+  deleteDocuments(ids: readonly string[]): Promise<void>;
   /** Processes a Document that failed again, from its file. */
   retryDocument(id: string): Promise<void>;
   dismissSkippedFiles(): void;
@@ -651,6 +654,7 @@ export const useAppStore = create<AppState>()((set, get) => {
         ...(get().libraryFilter !== "all" &&
         get().libraryFilter !== "unsorted" &&
         get().libraryFilter !== "new" &&
+        get().libraryFilter !== LIBRARY_DELETED &&
         !library.groups.some((g) => g.id === get().libraryFilter)
           ? { libraryFilter: "all" }
           : {}),
@@ -1075,17 +1079,25 @@ export const useAppStore = create<AppState>()((set, get) => {
         push(renamed(t, displayName(document), rename, { before, after: document.name }));
       }),
 
-    deleteDocument: (id) =>
+    deleteDocuments: (ids) =>
       attempt(async () => {
-        const document = get().documents.find((each) => each.id === id);
+        const first = get().documents.find((each) => each.id === ids[0]);
         const remove = async () => {
-          await core.deleteDocument(id);
+          for (const id of ids) await core.deleteDocument(id);
           documentUpdates.flush();
-          set((state) => ({ documents: state.documents.filter((each) => each.id !== id) }));
+          set((state) => ({ documents: state.documents.filter((each) => !ids.includes(each.id)) }));
         };
         await remove();
-        const shown = document ? displayName(document) : "";
-        push(deleted(t, shown, [{ kind: "document", id }], remove));
+        if (ids.length === 0) return;
+        const shown = first ? displayName(first) : "";
+        push(
+          deleted(
+            t,
+            shown,
+            ids.map((id) => ({ kind: "document", id })),
+            remove,
+          ),
+        );
       }),
 
     // Its status follows the core's "document.status" event too.
