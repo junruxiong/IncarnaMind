@@ -3,14 +3,15 @@
  * SQLite beside the Minds, never as Minds. A conversation is made with its first
  * Question and belongs to the Folder of the Mind that Question was asked from;
  * its messages, Questions and Answers, are rows in order. An Answer is the
- * Markdown the model wrote, with a marker where each Citation goes, and its
- * Citations (with their markers), written as it streams by the Answer code
- * (../answers). A Question keeps where the User was in the Mind it was asked
- * from, and its Answer the Mind it read and its version (#544). Deleting marks
- * the conversation deleted (ADR-0003); deleting it permanently is Recently
- * deleted's (../recentlyDeleted).
+ * Markdown the model wrote, with a marker where each Citation and each
+ * calculated figure goes, and its Citations and figures (with their markers),
+ * written as it streams by the Answer code (../answers). A Question keeps where
+ * the User was in the Mind it was asked from, and its Answer the Mind it read
+ * and its version (#544). Deleting marks the conversation deleted (ADR-0003);
+ * deleting it permanently is Recently deleted's (../recentlyDeleted).
  */
 import { randomUUID } from "node:crypto";
+import { withFigureText } from "../../shared/figureMarkers";
 import { conversationName, cutTitle } from "../../shared/naming";
 import { parseThirdPartySource } from "../../shared/textOrigins";
 import {
@@ -35,6 +36,7 @@ import type {
   ConversationMessage,
   ConversationQuestion,
   MarkedCitation,
+  MarkedFigure,
   MindFocus,
   MindRead,
   MovedItem,
@@ -70,6 +72,7 @@ export type AnswerRead = Pick<MindRead, "mindId" | "version" | "partial">;
 export interface AnswerWrite {
   text: string;
   citations: MarkedCitation[];
+  figures: MarkedFigure[];
   toolCalls: AnswerToolCall[];
   support: CitationSupport | null;
   /** Where the third-party text its Run had read came from (#78); null: none. */
@@ -115,6 +118,7 @@ interface MessageRow {
   error_message: string | null;
   citation_support: string | null;
   citations: string;
+  figures: string;
   tool_calls: string;
   text_origin: string | null;
   steps: string | null;
@@ -180,6 +184,7 @@ const PHASES: Record<AnswerPhase, true> = {
   searching: true,
   writing: true,
   "checking-quotes": true,
+  "checking-figures": true,
 };
 
 const timeOrNull = (value: unknown): string | null =>
@@ -230,6 +235,13 @@ function storedList<T>(value: string): T[] {
   } catch {
     return [];
   }
+}
+
+/** An Answer's text as words are read from it: each figure marker its figure's shown text. */
+function shownText(text: string, figures: readonly MarkedFigure[]): string {
+  if (figures.length === 0) return withFigureText(text, () => null);
+  const byMarker = new Map(figures.map((figure) => [figure.marker, figure]));
+  return withFigureText(text, (marker) => byMarker.get(marker) ?? null);
 }
 
 function storedScope(value: string | null): SearchScope | null {
@@ -303,6 +315,7 @@ function toAnswer(row: MessageRow): ConversationAnswer {
     questionId: row.question_id ?? "",
     text: row.text,
     citations: storedList<MarkedCitation>(row.citations),
+    figures: storedList<MarkedFigure>(row.figures),
     model: modelOf(row),
     status,
     errorKind:
@@ -424,12 +437,12 @@ export function createConversations(db: Database, now: () => string) {
     ]);
   };
 
-  /** Indexes a message's text (again): its plain text's words. */
-  const indexMessage = (seq: number, text: string) => {
+  /** Indexes a message's text (again): its plain text's words, its figures as they are shown. */
+  const indexMessage = (seq: number, text: string, figures: readonly MarkedFigure[] = []) => {
     db.run("DELETE FROM conversation_messages_fts WHERE rowid = ?", [BigInt(seq)]);
     db.run("INSERT INTO conversation_messages_fts (rowid, text) VALUES (?, ?)", [
       BigInt(seq),
-      indexText(plainText(text)),
+      indexText(plainText(shownText(text, figures))),
     ]);
   };
 
@@ -491,25 +504,36 @@ export function createConversations(db: Database, now: () => string) {
 
   /** Answers left being written by an earlier run of the app: nothing writes them any more. */
   db.transaction(() => {
-    for (const row of db.all<{ seq: number; text: string }>(
+    for (const row of db.all<{ seq: number; text: string; figures: string }>(
       `UPDATE conversation_messages SET status = 'stopped', updated_at = ?
-       WHERE kind = 'answer' AND status = 'streaming' RETURNING seq, text`,
+       WHERE kind = 'answer' AND status = 'streaming' RETURNING seq, text, figures`,
       [now()],
     )) {
-      indexMessage(row.seq, row.text);
+      indexMessage(row.seq, row.text, storedList<MarkedFigure>(row.figures));
     }
   });
 
-  /** Calls `add` with every Citation kept by an Answer of a conversation not deleted permanently. */
+  /**
+   * Calls `add` with every Citation kept by an Answer of a conversation not
+   * deleted permanently: its own, and those its calculated figures' inputs read.
+   */
   function eachCitation(add: (citation: CitationFields) => void): void {
-    const rows = db.all<{ citations: string }>(
-      `SELECT msg.citations FROM conversation_messages msg
+    const rows = db.all<{ citations: string; figures: string }>(
+      `SELECT msg.citations, msg.figures FROM conversation_messages msg
        JOIN conversations c ON c.id = msg.conversation_id
        WHERE msg.kind = 'answer' AND msg.deleted_at IS NULL AND c.purged_at IS NULL
-         AND msg.citations <> '[]'`,
+         AND (msg.citations <> '[]' OR msg.figures <> '[]')`,
     );
-    for (const row of rows)
+    for (const row of rows) {
       for (const citation of storedList<CitationFields>(row.citations)) add(citation);
+      for (const figure of storedList<MarkedFigure>(row.figures)) {
+        for (const input of Array.isArray(figure.inputs) ? figure.inputs : []) {
+          const unit = input.unitStatement?.citation;
+          if (isRecord(input.citation)) add(input.citation);
+          if (isRecord(unit)) add(unit);
+        }
+      }
+    }
   }
 
   return {
@@ -704,7 +728,7 @@ export function createConversations(db: Database, now: () => string) {
         if (!answer || !question)
           throw new NotFoundError("That Answer isn't in this conversation.");
         db.run(
-          `UPDATE conversation_messages SET text = '', citations = '[]', tool_calls = '[]',
+          `UPDATE conversation_messages SET text = '', citations = '[]', figures = '[]', tool_calls = '[]',
              status = 'streaming', error_kind = NULL, error_message = NULL,
              citation_support = NULL, text_origin = NULL, steps = NULL, provider_id = ?,
              model_id = ?, read_mind_id = ?, read_mind_version = ?, read_partial = ?,
@@ -733,7 +757,7 @@ export function createConversations(db: Database, now: () => string) {
       const { outcome } = write;
       db.transaction(() => {
         db.run(
-          `UPDATE conversation_messages SET text = ?, citations = ?, tool_calls = ?,
+          `UPDATE conversation_messages SET text = ?, citations = ?, figures = ?, tool_calls = ?,
              citation_support = ?, text_origin = ?, read_mind_id = ?, read_mind_version = ?,
              read_partial = ?, steps = ?, status = ?, error_kind = ?, error_message = ?,
              updated_at = ?
@@ -741,6 +765,7 @@ export function createConversations(db: Database, now: () => string) {
           [
             write.text,
             JSON.stringify(write.citations),
+            JSON.stringify(write.figures),
             JSON.stringify(write.toolCalls),
             write.support,
             write.textOrigin,
@@ -753,7 +778,7 @@ export function createConversations(db: Database, now: () => string) {
             answerId,
           ],
         );
-        if (outcome) indexMessage(row.seq, write.text);
+        if (outcome) indexMessage(row.seq, write.text, write.figures);
       });
       return toAnswer(storedMessage(answerId));
     },
@@ -884,7 +909,10 @@ export function createConversations(db: Database, now: () => string) {
               {
                 messageId: message.id,
                 kind: message.kind,
-                ...excerptOf(plainText(row.text), terms),
+                ...excerptOf(
+                  plainText(shownText(row.text, storedList<MarkedFigure>(row.figures))),
+                  terms,
+                ),
               },
             ];
           }),

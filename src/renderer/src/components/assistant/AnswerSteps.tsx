@@ -29,6 +29,7 @@ import { scopeChips } from "../../scope";
 import { useAppStore } from "../../store";
 import { SearchIcon } from "../icons";
 import {
+  CalculatorLineIcon,
   ChevronRightLineIcon,
   CloseLineIcon,
   DocumentLineIcon,
@@ -182,6 +183,8 @@ function liveText(t: Translate, step: LiveStep, scope: string): string {
       return step.count === 1
         ? t("steps.live.checking.one")
         : t("steps.live.checking", { count: step.count });
+    case "checking-figures":
+      return t("answer.phase.checking-figures");
   }
 }
 
@@ -433,6 +436,16 @@ function StepItem({
         >
           <SkillRow name={row.name} use={row.use} reads={row.reads} />
         </li>
+      );
+    case "calculated":
+      return (
+        <Step kind={row.kind} icon={<CalculatorLineIcon />}>
+          <p data-testid="answer-figures" className="answer-step-title">
+            {row.count === 1
+              ? t("answer.figures.calculated.one")
+              : t("answer.figures.calculated", { count: row.count })}
+          </p>
+        </Step>
       );
     case "check":
       return <CheckStep count={row.count} notFound={row.notFound} />;

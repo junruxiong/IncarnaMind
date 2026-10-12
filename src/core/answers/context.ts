@@ -442,7 +442,7 @@ export function conversationContextOf(
     if (message.kind === "question")
       return message.text ? [{ role: "user", text: message.text }] : [];
     if (message.status === "failed") return [];
-    const text = answerMarkdown(message.text, message.citations);
+    const text = answerMarkdown(message.text, message.citations, message.figures);
     if (!text) return [];
     return [
       { role: "assistant", text, ...(message.textOrigin && { origins: [message.textOrigin] }) },
