@@ -141,6 +141,7 @@ test("a link: added with the button or ⌘K on a selection, edited, opened and r
   await expect(line.locator("a")).toHaveText("Tides paper");
   await expect(line.locator("a")).toHaveAttribute("href", "https://example.com/tides");
   // Undo takes the link back as one step.
+  await expect(editor).toBeFocused();
   await window.keyboard.press("ControlOrMeta+Z");
   await expect(line.locator("a")).toHaveCount(0);
   await expect(line).toHaveText("Read the Tides paper today and the Moon one tomorrow");
@@ -161,6 +162,14 @@ test("a link: added with the button or ⌘K on a selection, edited, opened and r
   await link.click();
   const bubble = window.getByTestId("link-bubble-address");
   await expect(bubble).toHaveText("https://example.com/moon");
+  // The address and the three buttons sit in one row.
+  const rows = await Promise.all(
+    ["link-bubble-address", "link-open", "link-edit", "link-remove"].map(async (id) => {
+      const box = await window.getByTestId(id).boundingBox();
+      return Math.round(((box?.y ?? -100) + (box?.height ?? 0) / 2) / 8);
+    }),
+  );
+  expect(new Set(rows).size).toBe(1);
   await window.getByTestId("link-open").hover();
   await window.getByTestId("link-open").click();
   await expect.poll(() => urlsOpened(app)).toEqual(["https://example.com/moon"]);
@@ -179,6 +188,7 @@ test("a link: added with the button or ⌘K on a selection, edited, opened and r
   await window.getByTestId("link-remove").hover();
   await window.getByTestId("link-remove").click();
   await expect(line.locator("a")).toHaveCount(0);
+  await expect(editor).toBeFocused();
   await window.keyboard.press("ControlOrMeta+Z");
   await expect(link).toHaveAttribute("href", "https://example.com/moons");
 
@@ -254,6 +264,7 @@ for (const [language, titles] of [
     await expect(window.getByTestId("mind-outline")).toHaveCount(0);
     await expect.poll(() => inView(last)).toBe(true);
     // The cursor is at the start of the heading: typing goes there.
+    await expect(editor).toBeFocused();
     await window.keyboard.type("!");
     await expect(last).toHaveText(`!${titles[2]}`);
 
@@ -268,6 +279,7 @@ for (const [language, titles] of [
     await expect(items.nth(1)).toBeFocused();
     await window.keyboard.press("Enter");
     await expect.poll(() => inView(editor.locator("h2"))).toBe(true);
+    await expect(editor).toBeFocused();
     await window.keyboard.type("?");
     await expect(editor.locator("h2")).toHaveText(`?${titles[1]}`);
   });
@@ -421,10 +433,16 @@ test('"@" in a Note puts in a Document chip that opens the viewer, by mouse or k
     await pointAndClick(window, editor.locator("p").first());
     await expect(editor).toBeFocused();
     await window.keyboard.press("End");
-    for (let step = 0; step < 7; step++) {
+    // One key at a time, each read by the editor before the next, until the chip is selected.
+    const selected = editor.locator(".ProseMirror-selectednode");
+    for (let step = 0; step < 10 && (await selected.count()) === 0; step++) {
       await window.keyboard.press("ArrowLeft");
-      // The editor reads where the caret went on the frame after, before the next key.
-      await window.evaluate(() => new Promise((done) => requestAnimationFrame(() => done(null))));
+      await window.evaluate(
+        () =>
+          new Promise((done) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => done(null))),
+          ),
+      );
     }
     await expect(editor.locator(".ProseMirror-selectednode")).toHaveText("Moons");
     await window.keyboard.press("Enter");

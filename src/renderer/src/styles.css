@@ -3909,7 +3909,7 @@
     overflow-y: auto;
   }
   /* Where a link goes, with Open, Edit and Remove: the address gives way to the buttons. */
-  .link-bubble {
+  .editor-menu.link-bubble {
     flex-direction: row;
     align-items: center;
     gap: 2px;
