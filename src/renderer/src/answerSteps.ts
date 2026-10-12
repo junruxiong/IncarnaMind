@@ -62,6 +62,7 @@ export type StepRow =
 
 export type FoldedLine =
   | { kind: "searched"; sources: number; extraScopes: number }
+  | { kind: "searched-web"; sources: number }
   | { kind: "listened"; sources: number }
   | { kind: "asked"; mind: AskedFrom }
   | { kind: "answered"; model: string };
@@ -208,7 +209,7 @@ const sourceCount = (citations: readonly MarkedCitation[]) =>
 
 /**
  * Further scopes the Answer searched beside its Question's: each Connector
- * whose Tools it called, and Find sources.
+ * whose Tools it called, Find sources, and the web.
  */
 function extraScopes(calls: readonly AnswerToolCall[]): number {
   const ran = calls.filter((call) => call.status === "done" && !call.signInRequired);
@@ -217,12 +218,14 @@ function extraScopes(calls: readonly AnswerToolCall[]): number {
       call.source === "connector" && call.connector ? [call.connector.id] : [],
     ),
   );
-  return connectors.size + (ran.some((call) => call.source === "sources") ? 1 : 0);
+  const also = (source: AnswerToolCall["source"]) =>
+    ran.some((call) => call.source === source) ? 1 : 0;
+  return connectors.size + also("sources") + also("web");
 }
 
 /**
- * The folded line: what was searched and how many Documents the Answer
- * cites; with no search, the Mind it was asked from, or the model that
+ * The folded line: what was searched (the Documents, or else the web) and
+ * how many Documents the Answer cites; with no search, the Mind it was asked from, or the model that
  * answered. Null for an Answer no model wrote, asked from no Mind.
  */
 export function foldedLine({ answer, askedFrom, meeting }: StepsInput): FoldedLine | null {
@@ -230,6 +233,9 @@ export function foldedLine({ answer, askedFrom, meeting }: StepsInput): FoldedLi
   if (meeting) return { kind: "listened", sources };
   if (answer.toolCalls.some((call) => isSearch(call) && call.status === "done")) {
     return { kind: "searched", sources, extraScopes: extraScopes(answer.toolCalls) };
+  }
+  if (answer.toolCalls.some((call) => call.source === "web" && call.status === "done")) {
+    return { kind: "searched-web", sources };
   }
   if (askedFrom) return { kind: "asked", mind: askedFrom };
   return answer.model ? { kind: "answered", model: answer.model.modelId } : null;
