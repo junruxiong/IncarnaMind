@@ -151,6 +151,7 @@ test("Find support on two sentences: one is supported and its Citation is added,
   await window.keyboard.type("Gulls");
   await expect(marks(window)).toHaveAttribute("data-check", "needs-recheck");
   await expect(health.getByTestId("health-recheck")).toHaveText("1 needs re-check");
+  await screenshot(window, "check-recheck-en");
   await pointAndClick(window, marks(window));
   await expect(card.getByTestId("claim-reason")).toHaveText(
     "The sentence has changed since it was checked.",
