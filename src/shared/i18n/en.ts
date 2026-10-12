@@ -2561,6 +2561,7 @@ export const en = {
     "Used in the ChatGPT app’s Work and Codex modes; ordinary Chat mode doesn’t use it.",
   "agents.setup.undoChanged": "{path} has changed since, so IncarnaMind left it as it is.",
   "agents.client.other": "Other agent",
+  "agents.client.codex": "ChatGPT app and Codex",
   "agents.pairing.reads": "Reads {folders}",
   "agents.pairing.readsNothing": "Reads no folders yet",
   "agents.pairing.lastUsed": "Last used {when}",
