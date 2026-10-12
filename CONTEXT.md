@@ -18,6 +18,10 @@ _Avoid_: message
 A Block the User writes.
 _Avoid_: text block
 
+**Chart**:
+A Block in a Mind that draws values from a table or from cited figures (a bar, line, pie or scatter chart), each value kept with where it came from and its Citation, so each point can be traced to its source.
+_Avoid_: graph, plot, figure (a figure is a number)
+
 **Question**:
 What the User asks for an Answer: a Block in a Mind, or a message in a Conversation.
 _Avoid_: query, prompt
@@ -82,6 +86,14 @@ _Avoid_: chunk, snippet
 A reference, anchored in the text of an Answer, to the Passage a claim was drawn from: the Location it cites, and a quote from the Passage that is checked against the text at that Location. Copied into a Note, it stays a Citation; Question context shows it as a plain reference to its Document.
 _Avoid_: source, reference
 
+**Calculated figure**:
+A number in an Answer or Note that IncarnaMind worked out from numbers quoted from Documents, by a formula (or, later, an Analysis), rather than the AI working it out itself. It keeps its Inputs, each with its Citation, its formula and its result as shown. The AI writes a marker where it goes and never the number; the interface says "Calculated".
+_Avoid_: computed figure, calculated citation, derived number, formula
+
+**Input**:
+A number a Calculated figure or an Analysis is worked out from: a number in a Citation's quote (with the line that states its scale or currency, when only a heading does), a cell of a sheet (the number it stores, not the one it shows rounded), or a range of a sheet or CSV, in the version of its Document it was read from.
+_Avoid_: argument, variable, source
+
 **Footnote**:
 A note the User writes at a point in the text, shown there by its number; its text can hold Citations. Footnotes and Citations share one numbering, in the order they appear, in the Mind and in every export, where a Citation's footnote is its reference.
 _Avoid_: endnote, annotation, comment
@@ -143,6 +155,10 @@ _Avoid_: function, action
 What a Tool call can do beyond the conversation it is part of: read data, write (change something), run code on a computer, or send data over the network, and where (some of the User's folders, a web host, a Connector's service, the Documents, a Mind). Whether a call asks the User first depends on its Effects.
 _Avoid_: permission, capability, side effect
 
+**Analysis**:
+Python an Answer wrote and IncarnaMind ran in its sandbox, with no network or files, over Inputs cited from Documents, kept in a Mind with its steps, Inputs, code and results.
+_Avoid_: notebook, script, code interpreter (in the interface), Skill script
+
 **Third-party text**:
 Text someone other than the User wrote that a Run reads: a saved Web page, the document being checked, or text in a Mind or Conversation that came from them (imported from someone else's file, a quote added from a Web page, or an Answer written from such text). Once a Run has read some, a call that writes or sends data asks even where the User chose "always". The User's other Documents don't count, though their text is untrusted too, and neither does text pasted from other apps, which can't be traced.
 _Avoid_: external content, untrusted content (which also covers the User's own Documents)
@@ -190,6 +206,14 @@ _Avoid_: toast, snackbar, notification
 **Citation check**:
 The test of whether a Citation's quote is found in the text at its Location. Its only failing result is quote not found.
 _Avoid_: validation, verification
+
+**Calculation check**:
+The test of whether a Calculated figure still holds: each Input's quote is found at its Location and reads as the same number, and the formula gives the same result. Its failing results are an Input not found and needs re-check. It says nothing about whether the right numbers were used, and never that a figure is correct.
+_Avoid_: verification, validation
+
+**Unchecked figure**:
+A number in an Answer that is neither in a quote of its sentence's Citations nor a Calculated figure: the AI worked it out or wrote it without a source. It is marked as quietly as a sentence without a Citation.
+_Avoid_: hallucinated number, unsupported (a claim check's result)
 
 **Quote not found**:
 The result of a Citation check when the Citation's quote is not in the text at its Location. It says nothing about whether the claim is true. "Not found" is used only for this.

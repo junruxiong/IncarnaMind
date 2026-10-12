@@ -246,6 +246,15 @@ export function SparkLineIcon(props: IconProps) {
   );
 }
 
+export function CalculatorLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <rect x="5" y="3" width="14" height="18" rx="2" />
+      <path d="M8.5 7h7M8.5 11h.01M12 11h.01M15.5 11h.01M8.5 14.5h.01M12 14.5h.01M15.5 14.5h.01M8.5 18h3.5M15.5 18h.01" />
+    </LineIcon>
+  );
+}
+
 export function CheckLineIcon(props: IconProps) {
   return (
     <LineIcon strokeWidth={2.25} {...props}>
@@ -287,6 +296,15 @@ export function RecordingLineIcon(props: IconProps) {
   );
 }
 
+/** How a recording went, its recording details: a pulse, as a call's health is in Teams. */
+export function PulseLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M3 12h4l2.5-6 5 12 2.5-6h4" />
+    </LineIcon>
+  );
+}
+
 /** Split to the right: a window cut in two halves, as in VS Code. */
 export function SplitLineIcon(props: IconProps) {
   return (
@@ -317,6 +335,15 @@ export function StopLineIcon(props: IconProps) {
   return (
     <LineIcon {...props}>
       <rect x="6.5" y="6.5" width="11" height="11" rx="1.5" fill="currentColor" />
+    </LineIcon>
+  );
+}
+
+/** A Mark in a meeting: a bookmark. */
+export function BookmarkLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M7.5 4.5h9v15l-4.5-3.5-4.5 3.5z" />
     </LineIcon>
   );
 }

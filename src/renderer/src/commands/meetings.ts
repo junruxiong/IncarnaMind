@@ -1,8 +1,12 @@
 import type { LayoutTab, Meeting } from "../../../core/api";
+import { writingTime } from "../../../shared/blockTimes";
+import { markNow, noteOf } from "../editor/meetingNotes";
+import { translateNow } from "../i18n";
 import { currentMindIdOf } from "../layoutSlice";
 import { canRecordMeetings, isLive, useMeetings } from "../meetings";
 import { useAppStore } from "../store";
 import { hideTranscript, showTranscript } from "../transcripts";
+import { transcriptHandle } from "./handles";
 import type { Command } from "./registry";
 
 /*
@@ -25,6 +29,28 @@ const meetingsOn = () => canRecordMeetings(useAppStore.getState().settings);
 
 const whileLive = () => (liveMeeting() ? true : { reason: "meetings.command.noneLive" as const });
 
+const whileRecording = () => {
+  const meeting = liveMeeting();
+  if (!meeting) return { reason: "meetings.command.noneLive" as const };
+  return meeting.status === "recording" ? true : { reason: "meetings.command.markPaused" as const };
+};
+
+/**
+ * Mark (⌘D): an empty bullet at the Meeting's time now, the cursor in it, in the
+ * Meeting's notes, wherever the User is. ⌘Z in the notes takes it back, as it
+ * does any line.
+ */
+async function leaveMark(): Promise<void> {
+  const meeting = liveMeeting();
+  if (!meeting) return;
+  const note = await noteOf(meeting.mindId);
+  const current = useMeetings.getState().meetings.find((each) => each.id === meeting.id);
+  const ms = writingTime(current, Date.now());
+  if (!note || ms === null || !markNow(note, ms)) {
+    throw new Error(translateNow("meetings.mark.noNote"));
+  }
+}
+
 /** The tab a Document shows in, and the group its meeting's Mind is in. */
 function placesOf(meeting: Meeting, documentId: string | null) {
   let tab: LayoutTab | undefined;
@@ -36,6 +62,13 @@ function placesOf(meeting: Meeting, documentId: string | null) {
     }
   }
   return { tab, mindGroup };
+}
+
+/** The Mind in view's Meeting, once it has started: the one whose recording details there are. */
+function startedMeetingInView(): Meeting | undefined {
+  const mindId = currentMindIdOf(useAppStore.getState().layout);
+  const meeting = useMeetings.getState().meetings.find((each) => each.mindId === mindId);
+  return meeting && meeting.status !== "ready" ? meeting : undefined;
 }
 
 export const meetingCommands: readonly Command[] = [
@@ -64,6 +97,28 @@ export const meetingCommands: readonly Command[] = [
       const { pause, resume } = useMeetings.getState();
       return meeting.status === "recording" ? pause(meeting.id) : resume(meeting.id);
     },
+  },
+  {
+    id: "meeting.mark",
+    label: "meetings.command.mark",
+    shortcut: { keys: "CmdOrCtrl+D" },
+    group: "main",
+    // A line in the notes: ⌘Z there takes it back.
+    reversible: true,
+    when: meetingsOn,
+    enabled: whileRecording,
+    run: leaveMark,
+  },
+  {
+    id: "meeting.addLine",
+    label: "meetings.command.addLine",
+    group: "main",
+    // Its Undo line, and ⌘Z outside a text field, take it back.
+    reversible: true,
+    when: () => transcriptHandle.current !== null,
+    enabled: () =>
+      transcriptHandle.current?.hasLine() ? true : { reason: "meetings.command.noLine" },
+    run: () => transcriptHandle.current?.addLine(),
   },
   {
     id: "meeting.transcript",
@@ -102,6 +157,23 @@ export const meetingCommands: readonly Command[] = [
     run() {
       const meeting = liveMeeting();
       if (meeting) return useMeetings.getState().stop(meeting.id);
+    },
+  },
+  {
+    id: "meeting.details",
+    label: (_ctx, t) => {
+      const meeting = startedMeetingInView();
+      const shown = meeting && useMeetings.getState().detailsShown[meeting.id];
+      return t(shown ? "meetings.health.hide" : "meetings.health.show");
+    },
+    group: "main",
+    // Pressed again, it undoes itself.
+    reversible: true,
+    when: () => meetingsOn() || startedMeetingInView() !== undefined,
+    enabled: () => (startedMeetingInView() ? true : { reason: "meetings.health.none" }),
+    run() {
+      const meeting = startedMeetingInView();
+      if (meeting) useMeetings.getState().showDetails(meeting.id);
     },
   },
 ];

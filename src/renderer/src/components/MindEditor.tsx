@@ -7,6 +7,7 @@ import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import * as Y from "yjs";
 import { ANSWER_BLOCK, MIND_CONTENT_FIELD, type MindAccess } from "../../../core/api";
+import { writingTime } from "../../../shared/blockTimes";
 import { citationStyle } from "../../../shared/citationStyles";
 import { translate } from "../../../shared/i18n";
 import { useCitationFormattingFor, useMindStyleChoice } from "../citationFormatting";
@@ -18,6 +19,7 @@ import { AnswerView } from "../editor/AnswerView";
 import { BlockHandle } from "../editor/BlockHandle";
 import { BlockCommands } from "../editor/blockCommands";
 import { BlockOrigins } from "../editor/blockOrigins";
+import { ChartView } from "../editor/ChartView";
 import { CitationStylePrompt } from "../editor/CitationStylePrompt";
 import { CitationView } from "../editor/CitationView";
 import { CodeBlockView } from "../editor/CodeBlockView";
@@ -25,6 +27,7 @@ import { Composer, type ComposerHandle } from "../editor/Composer";
 import { ConversationLinks } from "../editor/ConversationLinks";
 import { CitationClusters } from "../editor/citationClusters";
 import { CitationNumbers, redrawFootnotes, setCitationForm } from "../editor/citationNumbers";
+import { CopyCitations } from "../editor/copyCitations";
 import { EndHint, type HintPlace, type HintText, isEmptyMind } from "../editor/EndHint";
 import { selectionForEdit } from "../editor/editSelection";
 import { FootnoteArea } from "../editor/FootnoteArea";
@@ -33,6 +36,7 @@ import { type FootnoteLabel, footnoteView } from "../editor/FootnoteView";
 import { FootnoteKeys } from "../editor/footnoteSchema";
 import { MarginChecks } from "../editor/MarginChecks";
 import { MathEditing, MathEditor } from "../editor/MathEditor";
+import { MeetingNotes } from "../editor/meetingNotes";
 import { ComposerDockContext, CountSlotContext, MindIdContext } from "../editor/mindContext";
 import { NoteKeymap } from "../editor/noteKeymap";
 import { noteExtensions } from "../editor/noteSchema";
@@ -53,7 +57,7 @@ import { SmartTypography } from "../editor/typography";
 import { WordCount } from "../editor/WordCount";
 import { requestEdit, startEditing, TRANSLATE_LANGUAGES } from "../editWithAi";
 import { translateNow, useT } from "../i18n";
-import { useMeetingOf } from "../meetings";
+import { useMeetingOf, useMeetings } from "../meetings";
 import { isWritingIn } from "../mindStatus";
 import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
@@ -163,6 +167,26 @@ const citationView = ReactNodeViewRenderer(CitationView, {
 });
 
 /**
+ * A chart takes its own pointer and keys (its menus, its values' focus and
+ * cards), so the editor doesn't select or type over it; a press on its edge
+ * still selects it as a Block, and ⌘Z / ⌘⇧Z reach the editor's undo from it.
+ */
+const chartView = ReactNodeViewRenderer(ChartView, {
+  stopEvent: ({ event }) => {
+    const target = event.target;
+    if (!(target instanceof Element) || !target.closest("[data-chart-ui]")) return false;
+    if (event.type.startsWith("drag") || event.type === "drop") return false;
+    if (event.type === "copy" || event.type === "cut" || event.type === "paste") return false;
+    const undo =
+      event instanceof KeyboardEvent &&
+      (event.metaKey || event.ctrlKey) &&
+      /^[zy]$/i.test(event.key) &&
+      !(target instanceof HTMLInputElement);
+    return !undo;
+  },
+});
+
+/**
  * Notes (see `noteExtensions`), Questions and Answers in the Mind's Yjs
  * document, with the slash menu, the "@" picker of a Question's Search scope,
  * the drag handle, the formatting menu, the table menu, smart typography, the LaTeX field,
@@ -242,11 +266,22 @@ function MindEditorView({
           answerView: ReactNodeViewRenderer(AnswerView),
           citationView,
           footnoteView: footnoteView(() => footnoteLabel.current),
+          chartView,
         }),
         // Footnotes are numbered as the Mind's citation style counts its Citations (#289).
         CitationNumbers.configure({ form: () => citationStyle(styleRef.current).form }),
         CitationClusters,
+        CopyCitations,
         FootnoteKeys,
+        MeetingNotes.configure({
+          mindId,
+          doc,
+          time: () =>
+            writingTime(
+              useMeetings.getState().meetings.find((each) => each.mindId === mindId),
+              Date.now(),
+            ),
+        }),
         Collaboration.configure({ document: doc, field: MIND_CONTENT_FIELD }),
         // Notes added from an Answer, with their links back to it (#201).
         BlockOrigins.configure({ doc }),
@@ -454,7 +489,7 @@ function MindEditorView({
         <ConversationLinks editor={editor} />
         {!readOnly && <TableMenu editor={editor} />}
         <FootnoteArea editor={editor} citationView={citationView} />
-        {style !== "numbered" && (
+        {(style !== "numbered" || styleChoice.bibliography) && (
           <ReferencesBlock mindId={mindId} editor={editor} readOnly={readOnly} />
         )}
         {!readOnly && !styleChoice.chosen && !styleChoice.promptDismissed && (

@@ -95,6 +95,9 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Task | 任务 | |
 | Routine | 定时任务 | As Kimi, Doubao, Yuanbao, Cherry Studio and LobeChat. |
 | Comparison table | 对比表 | |
+| Chart | 图表 | Its kinds: 柱状图、折线图、饼图、散点图. "以表格显示" / "以图表显示"; "用表格生成图表". |
+| Columns (a chart's series) | 数据列 | The columns of a table a chart draws. A scatter chart's two: 横轴 and 纵轴. |
+| Source (of a chart's values) | 数据来源 | Under a chart in an export, as Chinese reports caption theirs: "数据来源：". |
 | Memory | 记忆 | |
 | Meeting | 会议 | |
 | Transcript | 转写稿 | |
@@ -112,6 +115,14 @@ A figure in an Answer is written as reports write it, with no space between the 
 
 | English | Chinese | Notes |
 |---|---|---|
+| figure (a number in an Answer) | 数字 | Counted with 个: "计算了 2 个数字", "1 个数字未能计算". |
+| Calculated figure | 计算结果 | Its label word is 计算得出 ("计算得出 · 20.4%"), as "Calculated" is in English. |
+| Input (of a calculation) | 所用数据 | "所用数据均已找到". |
+| Calculation check | 核对计算 | The verb is 核对, as for a Citation: "正在核对数字…". |
+| Unchecked figure | 未核对的数字 | |
+| Analysis | 数据分析 | |
+| Recalculate | 重新计算 | |
+| Run again | 重新运行 | |
 | percentage points | 个百分点 | A difference of two percents: "2.3个百分点", never "2.3%". |
 | about (an approximate figure) | 约 | "约1.2亿元". |
 | times (a multiple) | 倍 | "4.00倍". |

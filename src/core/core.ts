@@ -5,6 +5,7 @@ import * as Y from "yjs";
 import { isCitationStyleId } from "../shared/citationStyles";
 import type { DrawnPage } from "../shared/citedPage";
 import { translate } from "../shared/i18n";
+import { bibliographyShown } from "../shared/mindBibliography";
 import {
   chosenCitationStyle,
   citationStyleIn,
@@ -82,6 +83,7 @@ import { type AnyEventListener, createEventHub } from "./events";
 import { createExamples } from "./examples";
 import { createLocalExecutor } from "./execution";
 import { createExports } from "./exports";
+import { exportLabels } from "./exports/labels";
 import { renderMarkdown } from "./exports/markdown";
 import { createFileLock } from "./fileLock";
 import { safeFileName, writeNewFile } from "./fileNames";
@@ -94,6 +96,7 @@ import { chatGroupClassifier, decisionGroupClassifier } from "./library/classifi
 import { documentCitedPages, documentPageImages } from "./library/pageImages";
 import { createMeetings } from "./meetings";
 import { listParts, meetingFolder } from "./meetings/audioFiles";
+import { createCaptureHealth } from "./meetings/health";
 import { createTranscripts } from "./meetings/transcript";
 import { accessFor, isKnownKind } from "./mindAccess";
 import { createMindContent } from "./mindContent";
@@ -124,7 +127,7 @@ import {
 import { isCloudModelName } from "./providers/ollamaCloud";
 import { createOllamaModels } from "./providers/ollamaModels";
 import { createAiSdkRerankingModel, createRerank } from "./providers/rerank";
-import { createRecentlyDeleted, purgeExpired } from "./recentlyDeleted";
+import { createRecentlyDeleted } from "./recentlyDeleted";
 import {
   createReferenceImport,
   createReferences,
@@ -267,7 +270,6 @@ export function createCore(adapters: CoreAdapters): Core {
 
   const now = () => (adapters.now?.() ?? new Date()).toISOString();
   try {
-    purgeExpired(db, now());
     ensureWorkspace(db, now);
   } catch (error) {
     db.close();
@@ -612,6 +614,7 @@ export function createCore(adapters: CoreAdapters): Core {
     dataDir,
     crossEncoder: adapters.crossEncoder,
     emitStatus: () => reportRerank(),
+    log: adapters.log ?? silentLogger,
   });
   // Rerank: the built-in model by default, a Cohere or Voyage key (paused in local mode), or off.
   const rerank = createRerank({
@@ -1021,7 +1024,10 @@ export function createCore(adapters: CoreAdapters): Core {
     keptCitationTexts: () => documents.keptCitationTexts(),
     language: () => settings.get().language,
     citationStyle: (mindId) => mindCitationStyle(mindId).style,
+    bibliography: (mindId) => content.readSettings(mindId, bibliographyShown),
     formatCitations: (request) => citationStyles.format(request),
+    ...(adapters.pictures && { pictures: adapters.pictures }),
+    log: adapters.log ?? silentLogger,
     now,
   });
   /** Usage data: which format, and whether Questions went with it. */
@@ -1271,6 +1277,17 @@ export function createCore(adapters: CoreAdapters): Core {
   const recentlyDeleted = createRecentlyDeleted({
     db,
     now,
+    // A Mind still waiting in Recently deleted comes back with its Citations, so they count too.
+    documentText: (documentIds) => {
+      const wanted = new Set(documentIds);
+      const cited: CitedUnits[] = [];
+      for (const { id } of db.all<{ id: string }>("SELECT id FROM minds WHERE purged_at IS NULL")) {
+        content.peek(id, (fragment) => addCitedUnits(fragment, wanted, cited));
+      }
+      conversations.addCitedUnits(wanted, cited);
+      retention.addRetainedUnits(wanted, cited);
+      documents.purgeText(documentIds, cited);
+    },
     say: (key, params) => translate(settings.get().language, key, params),
     minds,
     content,
@@ -1283,6 +1300,12 @@ export function createCore(adapters: CoreAdapters): Core {
     tagsChanged,
     tagged: announceTagged,
   });
+  try {
+    recentlyDeleted.expire();
+  } catch (error) {
+    // The app still opens; what is due goes at the next start.
+    console.error("Deleting what waited 30 days in Recently deleted failed.", error);
+  }
 
   /** Jev was set up, changed or removed: say so, and Documents waiting may go on. */
   const jevChanged = async () => {
@@ -1483,6 +1506,12 @@ export function createCore(adapters: CoreAdapters): Core {
   const meetingsChanged = () => {
     if (listMeetings) events.emit("meetings.changed", listMeetings());
   };
+  const captureHealth = createCaptureHealth({
+    dataDir,
+    now,
+    log: adapters.log ?? silentLogger,
+    changed: meetingsChanged,
+  });
   const transcriber = adapters.transcriber;
   const transcripts =
     transcriber &&
@@ -1534,6 +1563,7 @@ export function createCore(adapters: CoreAdapters): Core {
           [modelId]: ratio,
         });
       },
+      health: captureHealth,
       changed: meetingsChanged,
       log: adapters.log ?? silentLogger,
     });
@@ -1567,6 +1597,7 @@ export function createCore(adapters: CoreAdapters): Core {
       documents.hold(capturing);
     },
     ...(transcripts && { transcripts }),
+    health: captureHealth,
     log: adapters.log ?? silentLogger,
   });
   listMeetings = () => meetings.list();
@@ -1610,10 +1641,7 @@ export function createCore(adapters: CoreAdapters): Core {
         const blocks = content.peek(mind.id, (fragment) =>
           readBlocks(fragment, { includeQuestions: true, footnote, trimBeforeCitation: true }),
         );
-        return renderMarkdown(mind.title || mind.autoTitle, blocks, {
-          question: translate(language, "export.question"),
-          unverified: translate(language, "export.unverified"),
-        });
+        return renderMarkdown(mind.title || mind.autoTitle, blocks, exportLabels(language));
       },
       answer: (question, documentIds, signal) =>
         answers.answerOutside(question, documentIds, signal),

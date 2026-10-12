@@ -105,8 +105,8 @@ test("folders, tags, search, edits and removal update the index while originals 
     await expect(row).toHaveCount(0);
     await library.getByLabel("Find by name or tag").fill("Report");
     await expect(row).toHaveCount(1);
+    // Deleting asks nothing: the Folder goes to Recently deleted.
     await library.getByRole("button", { name: "Delete folder", exact: true }).click();
-    await library.getByRole("button", { name: "Delete folder", exact: true }).last().click();
     await expect(assignment).toHaveValue("");
     await expect(row.getByTestId("document-tags")).toContainText("Report");
     expect(await readFile(path, "utf8")).toBe(text);
