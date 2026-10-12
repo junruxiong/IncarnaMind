@@ -1617,21 +1617,29 @@ export function createDocuments(options: DocumentsOptions) {
     },
 
     /**
-     * Adds a web page's snapshot, in the data folder, as a new Document
-     * named `name`, and queues it; `record` runs in the same transaction.
+     * Adds a file IncarnaMind saved in the data folder, a web page's snapshot
+     * or a Meeting's Transcript while it records, as a new Document named
+     * `name`, and queues it; `record` runs in the same transaction.
      */
-    addSnapshot(id: string, name: string, file: SnapshotFile, record: () => void): Document {
+    addSnapshot(
+      id: string,
+      name: string,
+      file: SnapshotFile,
+      record: () => void,
+      kind: "web" | "transcript" = "web",
+    ): Document {
       const at = now();
       db.transaction(() => {
         db.run(
           `INSERT INTO documents (id, content_hash, name, kind, size, status, path,
              linked_folder_id, folder_id, source_kind, relative_path, file_status, file_mtime_ms,
              created_at, updated_at)
-           VALUES (?, ?, ?, 'web', ?, 'queued', ?, NULL, NULL, 'data-folder', ?, 'available', ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, 'queued', ?, NULL, NULL, 'data-folder', ?, 'available', ?, ?, ?)`,
           [
             id,
             file.contentHash,
             parseName(name.slice(0, MAX_NAME_LENGTH)),
+            kind,
             file.size,
             file.path,
             relativePath(dataDir, file.path),
@@ -1651,6 +1659,25 @@ export function createDocuments(options: DocumentsOptions) {
 
     /** Looks at a file again now, as when it is opened: a new version is processed. */
     check: (path: string) => library.check([path]),
+
+    /**
+     * Points a Document added on its own at a copy IncarnaMind just saved of
+     * its file, elsewhere: a Transcript saved at Stop to the Output location
+     * (#136). It keeps its id, Folder, Tags and Citations; a copy that differs
+     * is a new version.
+     */
+    async moveFile(id: string, path: string): Promise<void> {
+      const row = find(id);
+      if (!row) return;
+      db.run(
+        `UPDATE documents SET path = ?, file_status = 'available', file_mtime_ms = NULL, updated_at = ?
+         WHERE id = ? AND deleted_at IS NULL`,
+        [path, now(), id],
+      );
+      library.documentsChanged(null);
+      announce(id);
+      await library.check([path]);
+    },
 
     list,
     ids,

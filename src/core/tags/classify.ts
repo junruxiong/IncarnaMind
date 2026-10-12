@@ -134,6 +134,7 @@ const KIND_NAMES: Record<DocumentKind, string> = {
   xlsx: "Excel workbook",
   csv: "CSV table",
   web: "web page",
+  transcript: "meeting transcript",
 };
 
 export const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();

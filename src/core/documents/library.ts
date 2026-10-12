@@ -142,6 +142,7 @@ const SECONDS_PER_MEGABYTE: Readonly<Record<DocumentKind, number>> = {
   xlsx: 20,
   csv: 30,
   web: 30,
+  transcript: 30,
 };
 
 /** A folder is laid out flat when this share of its folders with files hold exactly one. */

@@ -6,8 +6,11 @@ import { shortcutLabel } from "../commands/keymap";
 import { useT } from "../i18n";
 import { useMeetings, useMeetingTime } from "../meetings";
 import { clockTime, durationLabel } from "../meetingTime";
-import { PauseLineIcon, ResumeLineIcon, StopLineIcon } from "./lineIcons";
+import { hideTranscript, showTranscript, useDocumentTab } from "../transcripts";
+import { DocumentLineIcon, PauseLineIcon, ResumeLineIcon, StopLineIcon } from "./lineIcons";
 import { type ProblemAction, ProblemLine } from "./ProblemLine";
+import { TranscriptLines } from "./TranscriptLines";
+import { useTabPlace } from "./tabs/tabItems";
 
 /**
  * The meeting bar, while the Mind's Meeting records or is paused: at the top
@@ -27,6 +30,7 @@ export function MeetingBar({ meeting, children }: { meeting: Meeting; children?:
     >
       <MeetingControls meeting={meeting} />
       <MeetingLines meeting={meeting} />
+      <TranscriptLines meeting={meeting} />
       {children}
     </section>
   );
@@ -86,7 +90,40 @@ function MeetingControls({ meeting }: { meeting: Meeting }) {
         <StopLineIcon className="size-3.5" />
         {t("meetings.bar.stop")}
       </button>
+      <TranscriptToggle meeting={meeting} />
     </div>
+  );
+}
+
+/**
+ * Show transcript (显示转写稿): opens the Meeting's Transcript as a tab in
+ * the group beside its Mind; then Hide transcript closes it (#136). Before
+ * the first line there is no Transcript to show yet.
+ */
+function TranscriptToggle({ meeting }: { meeting: Meeting }) {
+  const t = useT();
+  const place = useTabPlace();
+  const documentId = meeting.transcript?.documentId ?? null;
+  const tab = useDocumentTab(documentId);
+  if (!meeting.transcript) return null;
+  const label = t(tab ? "meetings.bar.hideTranscript" : "meetings.bar.showTranscript");
+  return (
+    <button
+      type="button"
+      data-testid="meeting-transcript-toggle"
+      aria-pressed={tab !== null}
+      disabled={!documentId}
+      title={documentId ? label : t("meetings.bar.transcriptSoon")}
+      onClick={() => {
+        if (!documentId) return;
+        if (tab) hideTranscript(tab.id);
+        else showTranscript(documentId, place?.groupId);
+      }}
+      className="meeting-button meeting-button--end"
+    >
+      <DocumentLineIcon kind="transcript" className="size-3.5" />
+      <span className="meeting-button-label">{label}</span>
+    </button>
   );
 }
 

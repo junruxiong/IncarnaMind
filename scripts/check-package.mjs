@@ -3,10 +3,12 @@
 //      top level. Anything else (sources, tests, data, untracked files in the checkout)
 //      means the `files` patterns in electron-builder.yml let the whole folder in.
 //   2. Each app.asar and each installer is within its size budget.
+//   3. Each app has the speech-to-text addon (#136) of its own platform and architecture, and no
+//      other, unpacked beside app.asar.
 // Usage: node scripts/check-package.mjs [dist-folder]   (default: dist)
 // Exit code 1 when a check fails.
-import { readdirSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { existsSync, readdirSync, statSync } from "node:fs";
+import { join, resolve, sep } from "node:path";
 import { listPackage } from "@electron/asar";
 
 const ALLOWED_TOP_LEVEL = new Set(["out", "node_modules", "package.json"]);
@@ -70,6 +72,34 @@ for (const asar of asars) {
 	}
 	if (size > MAX_ASAR_BYTES) {
 		failures.push(`${asar} is ${mb(size)}, over the ${mb(MAX_ASAR_BYTES)} budget`);
+	}
+}
+
+/** The speech package each app should have, from the folder electron-builder put it in. */
+function speechPackageFor(asar) {
+	if (asar.includes(`${sep}mac-arm64${sep}`)) return "sherpa-onnx-darwin-arm64";
+	if (asar.includes(`${sep}mac${sep}`) || asar.includes(`${sep}mac-x64${sep}`)) return "sherpa-onnx-darwin-x64";
+	if (asar.includes(`${sep}win-unpacked${sep}`)) return "sherpa-onnx-win-x64";
+	if (asar.includes(`${sep}linux-unpacked${sep}`)) return "sherpa-onnx-linux-x64";
+	if (asar.includes(`${sep}linux-arm64-unpacked${sep}`)) return "sherpa-onnx-linux-arm64";
+	return null;
+}
+
+for (const asar of asars) {
+	const expected = speechPackageFor(asar);
+	const modules = join(`${asar}.unpacked`, "node_modules");
+	let found = [];
+	try {
+		found = readdirSync(modules).filter((name) => /^sherpa-onnx-(darwin|linux|win)-/.test(name));
+	} catch {
+		// No unpacked node_modules at all: reported below.
+	}
+	if (expected && !existsSync(join(modules, expected, "sherpa-onnx.node"))) {
+		failures.push(`${asar} has no ${expected}/sherpa-onnx.node unpacked beside it`);
+	}
+	const others = found.filter((name) => name !== expected);
+	if (others.length > 0) {
+		failures.push(`${asar} carries another platform's speech package: ${others.join(", ")}`);
 	}
 }
 

@@ -59,6 +59,10 @@ extraResources:
 asarUnpack:
   - "**/node_modules/onnxruntime-node/bin/**"
   - "**/node_modules/@napi-rs/canvas*/**"
+  # sherpa-onnx-node, which transcribes Meetings in a utility process (#136): its addon and the
+  # ONNX Runtime it bundles, one prebuilt package per platform and architecture, loaded beside
+  # each other (@loader_path, $ORIGIN).
+  - "**/node_modules/sherpa-onnx-*/**"
   # The OS sandbox's seccomp helper, which bubblewrap runs on Linux: it can't run one inside
   # app.asar (src/main/platform.ts points sandbox-runtime at this copy).
   - "**/node_modules/@anthropic-ai/sandbox-runtime/vendor/seccomp/**"
@@ -86,6 +90,8 @@ mac:
     # The arm64 and x64 apps are built separately: each keeps its own architecture.
     - "!**/node_modules/onnxruntime-node/bin/napi-v*/{linux,win32}{,/**}"
     - "!**/node_modules/onnxruntime-node/bin/napi-v*/darwin/!(${arch}){,/**}"
+    # The release workflow puts the other macOS architecture's speech package beside this one.
+    - "!**/node_modules/sherpa-onnx-darwin-!(${arch}){,/**}"
   # The zip is what auto-update downloads; the dmg is what people install from.
   target:
     - dmg
