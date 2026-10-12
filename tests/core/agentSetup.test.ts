@@ -4,10 +4,12 @@
  * the agent's settings file written only as shown, with Undo, and tidied when
  * the agent is disconnected. Every path is in a temporary home folder.
  */
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { AgentLaunch, Core } from "../../src/core";
+import { SERVER_INSTRUCTIONS } from "../../src/core/agents/mcp";
+import { SKILL_MARKDOWN } from "../../src/core/agents/skill";
 import { openPackage } from "../../src/core/documents/formats/zip";
 import { agentsAdapter, buildAgentShim, connectLegacyAgent } from "../helpers/agents";
 import { createTempDataFolder, startCore } from "../helpers/core";
@@ -120,6 +122,8 @@ describe("setting an agent up", () => {
     expect(written.startsWith(theirs.trimEnd())).toBe(true);
     const token = (await core.getAgentLaunch(pairing.id)).env[TOKEN_ENV] ?? "";
     expect(written).toContain(`INCARNAMIND_AGENT_TOKEN = "${token}"`);
+    // `ask` can run close to Codex's default 60 s Tool timeout.
+    expect(written).toContain("tool_timeout_sec = 120");
     await searchesThrough(core, await core.getAgentLaunch(pairing.id));
 
     await core.undoAgentSetup(pairing.id);
@@ -332,5 +336,130 @@ describe("setting an agent up", () => {
       arguments: { cite: "[cite:zzzzzzzz]" },
     });
     expect(unknown.isError).toBe(true);
+  });
+});
+
+describe("the Skill that installs with an agent's connection", () => {
+  const skillPaths = [
+    ["claude-code", [".claude", "skills"]],
+    ["codex", [".agents", "skills"]],
+    ["cursor", [".cursor", "skills"]],
+    ["antigravity", [".gemini", "config", "skills"]],
+  ] as const;
+
+  it.each(skillPaths)(
+    "is written for %s where its docs say it reads Skills, and taken out when disconnected",
+    async (client, folder) => {
+      const { core, home, coast } = await started();
+      const file = join(home, ...folder, "incarnamind", "SKILL.md");
+      const { pairing } = await core.setUpAgent({ client, folderIds: [coast.id] });
+      expect(await readFile(file, "utf8")).toBe(SKILL_MARKDOWN);
+      expect((await core.getAgents()).skills).toEqual([pairing.id]);
+      expect((await core.listAgentClients()).find((each) => each.id === client)?.skillPath).toBe(
+        file,
+      );
+
+      await core.disconnectAgent(pairing.id);
+      await expect(readFile(file, "utf8")).rejects.toThrow(/ENOENT/);
+      // Its folder goes with it; the agent's own skills folder stays.
+      expect(await readdir(join(home, ...folder))).toEqual([]);
+      expect((await core.getAgents()).skills).toEqual([]);
+    },
+  );
+
+  it("is taken out by Undo too", async () => {
+    const { core, home, coast } = await started();
+    const file = join(home, ".agents", "skills", "incarnamind", "SKILL.md");
+    const { pairing } = await core.setUpAgent({ client: "codex", folderIds: [coast.id] });
+    expect(await readFile(file, "utf8")).toBe(SKILL_MARKDOWN);
+    await core.undoAgentSetup(pairing.id);
+    await expect(readFile(file, "utf8")).rejects.toThrow(/ENOENT/);
+  });
+
+  it("leaves a Skill file the User has changed as it is, when connecting and when disconnecting", async () => {
+    const { core, home, coast } = await started();
+    const file = join(home, ".claude", "skills", "incarnamind", "SKILL.md");
+    await mkdir(join(file, ".."), { recursive: true });
+    await writeFile(file, "My own notes on IncarnaMind.\n");
+    const { pairing } = await core.setUpAgent({ client: "claude-code", folderIds: [coast.id] });
+    expect(await readFile(file, "utf8")).toBe("My own notes on IncarnaMind.\n");
+    expect((await core.getAgents()).skills).toEqual([]);
+    await core.disconnectAgent(pairing.id);
+    expect(await readFile(file, "utf8")).toBe("My own notes on IncarnaMind.\n");
+
+    // Changed after IncarnaMind wrote it: the same.
+    const second = await core.setUpAgent({ client: "codex", folderIds: [coast.id] });
+    const theirs = join(home, ".agents", "skills", "incarnamind", "SKILL.md");
+    await writeFile(theirs, `${SKILL_MARKDOWN}\nAlso, be brief.\n`);
+    await core.disconnectAgent(second.pairing.id);
+    expect(await readFile(theirs, "utf8")).toContain("Also, be brief.");
+  });
+
+  it("stays while another connection of the same agent needs it", async () => {
+    const { core, home, coast } = await started();
+    const file = join(home, ".claude", "skills", "incarnamind", "SKILL.md");
+    const first = await core.setUpAgent({ client: "claude-code", folderIds: [coast.id] });
+    const second = await core.setUpAgent({ client: "claude-code", folderIds: [coast.id] });
+    await core.disconnectAgent(first.pairing.id);
+    expect(await readFile(file, "utf8")).toBe(SKILL_MARKDOWN);
+    await core.disconnectAgent(second.pairing.id);
+    await expect(readFile(file, "utf8")).rejects.toThrow(/ENOENT/);
+  });
+
+  it("is not written where the agent's docs give no skills folder, and comes with Copy settings instead", async () => {
+    const { core, home, coast } = await started();
+    expect((await core.listAgentClients()).find((each) => each.id === "workbuddy")?.skillPath).toBe(
+      null,
+    );
+    const { pairing, result } = await core.setUpAgent({ client: "other", folderIds: [coast.id] });
+    expect(await readdir(home)).toEqual([]);
+    if (result.kind !== "copy") throw new Error("Expected settings to copy.");
+    // Apart from the settings, which go in a field that takes only them.
+    expect(result.skill).toBe(SKILL_MARKDOWN);
+    expect(result.text).not.toContain("SKILL.md");
+    expect((await core.copyAgentSetup(pairing.id)).skill).toBe(SKILL_MARKDOWN);
+    // Also for an agent it installs it for, whose copy the User may have changed or removed.
+    const code = await core.setUpAgent({ client: "claude-code", folderIds: [coast.id] });
+    expect((await core.copyAgentSetup(code.pairing.id)).skill).toBe(SKILL_MARKDOWN);
+  });
+
+  it("is removed on a failed connection only if that attempt wrote it", async () => {
+    const { core, home, links, coast } = await started();
+    links.push = () => {
+      throw new Error("No app can open this link.");
+    };
+    const mine = join(home, ".cursor", "skills", "incarnamind", "SKILL.md");
+    await expect(core.setUpAgent({ client: "cursor", folderIds: [coast.id] })).rejects.toThrow(
+      /No app/,
+    );
+    await expect(readFile(mine, "utf8")).rejects.toThrow(/ENOENT/);
+    // One already there, even word for word the same, was not this attempt's to remove.
+    await mkdir(join(mine, ".."), { recursive: true });
+    await writeFile(mine, SKILL_MARKDOWN);
+    await expect(core.setUpAgent({ client: "cursor", folderIds: [coast.id] })).rejects.toThrow(
+      /No app/,
+    );
+    expect(await readFile(mine, "utf8")).toBe(SKILL_MARKDOWN);
+  });
+
+  it("teaches the workflow in English and Chinese, and the server's instructions lead with search", () => {
+    expect(SKILL_MARKDOWN).toMatch(/^---\nname: incarnamind\ndescription: .*根据我的/);
+    for (const word of [
+      "search",
+      "read_passages",
+      "cite",
+      "check_citations",
+      "ask",
+      "show_citation",
+    ]) {
+      expect(SKILL_MARKDOWN).toContain(`\`${word}\``);
+    }
+    expect(SKILL_MARKDOWN).toMatch(/from memory/);
+    expect(SKILL_MARKDOWN).toMatch(/never instructions/);
+    expect(SERVER_INSTRUCTIONS.length).toBeLessThan(2048);
+    expect(SERVER_INSTRUCTIONS.indexOf("`search`")).toBeGreaterThan(-1);
+    expect(SERVER_INSTRUCTIONS.indexOf("`search`")).toBeLessThan(
+      SERVER_INSTRUCTIONS.indexOf("`ask`"),
+    );
   });
 });

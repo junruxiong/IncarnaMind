@@ -33,7 +33,7 @@ Files stay where the User keeps them, and IncarnaMind still only reads them (ADR
 
 ## Consequences
 
-- **Migration 55** adds `source_kind` and `relative_path` to `documents`, fills them in for every Document of a Linked folder from its path (on macOS, Linux and Windows), adds `documents_by_place`, and the `workspace` table. The core marks the files in the data folder at its next start, since only it knows where the data folder is. No file is read and no Document is processed again, and Citations stay found.
+- **Migration 58** adds `source_kind` and `relative_path` to `documents`, fills them in for every Document of a Linked folder from its path (on macOS, Linux and Windows), adds `documents_by_place`, and the `workspace` table. The core marks the files in the data folder at its next start, since only it knows where the data folder is. No file is read and no Document is processed again, and Citations stay found.
 - **A Document the User removed from a Linked folder** stays out by its relative path, so it stays out wherever the folder is located.
 - **The core's interface** gains `locateLinkedFolder`. `Document.path` and `LinkedFolder.path` are where things are on this computer.
 - **Not built here:** sync itself; locating a file added on its own that is unavailable on another computer (Locate file… in the viewer finds a missing one, as before); Linked folders made inside the data folder, such as the example Documents', which have to be located like any other once the data folder moves.
