@@ -126,10 +126,10 @@ const mindRow = ({ answer, askedFrom }: StepsInput) =>
 
 /**
  * The rows of the unfolded timeline, in order: the model's reasoning (or
- * who answered), the Mind read, the searches and other calls in the order
- * they started (searches in a row as one, a failed one where it happened),
- * and the check of the Citations last. A call still waiting for the User has
- * no row: its approval card shows instead.
+ * who answered), the Mind read, unless the folded line already says so, the
+ * searches and other calls in the order they started (searches in a row as
+ * one, a failed one where it happened), and the check of the Citations last.
+ * A call still waiting for the User has no row: its approval card shows instead.
  */
 export function stepRows(input: StepsInput): StepRow[] {
   const { answer } = input;
@@ -137,7 +137,7 @@ export function stepRows(input: StepsInput): StepRow[] {
   const first = modelRow(answer);
   if (first) rows.push(first);
   const mind = mindRow(input);
-  if (mind) rows.push(mind);
+  if (mind && foldedLine(input)?.kind !== mind.kind) rows.push(mind);
 
   const searches: Extract<StepRow, { kind: "search" }>[] = [];
   const skills = new Map<string, Extract<StepRow, { kind: "skill" }>>();
