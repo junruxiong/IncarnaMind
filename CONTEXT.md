@@ -156,7 +156,7 @@ A script that comes with a Skill, which an Answer can run on the User's computer
 _Avoid_: tool script, code execution
 
 **Outside agent**:
-An AI agent the User runs themselves, such as Claude Code or Codex, connected to IncarnaMind so it can search and read the Folders the User shares with it and cite them with Citations IncarnaMind checks. The User connects each one in Settings, with its own Folders (none until chosen), its own consent and a list of every call it made; disconnecting it stops it at once, and Local mode pauses it.
+An AI agent the User runs themselves, such as Claude Code or Codex, connected to IncarnaMind so it can search and read the Folders the User shares with it and cite them with Citations IncarnaMind checks. The User connects each one in Settings, with its own Folders (none until chosen), its own consent and a list of every call it made; disconnecting it stops it at once, and Local mode pauses it. Where the agent reads Skills, connecting it also installs a Skill in the agent's own skills folder that tells it when to use IncarnaMind, and disconnecting removes it if the User hasn't changed it.
 _Avoid_: harness, plugin, client, bot
 
 **Built-in Skill**:
