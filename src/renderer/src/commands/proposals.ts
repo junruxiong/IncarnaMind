@@ -2,6 +2,7 @@ import type { Editor } from "@tiptap/core";
 import type { EditAction } from "../../../core/api";
 import { translate } from "../../../shared/i18n";
 import { useComposer } from "../composer";
+import { holdsAiText } from "../editor/aiText";
 import { selectionForEdit } from "../editor/editSelection";
 import { noteHolding } from "../editor/noteKeymap";
 import { pendingAtSelection, pendingIn } from "../editor/proposalReview";
@@ -12,14 +13,16 @@ import {
   startEditing,
   useEdits,
 } from "../editWithAi";
+import { markSelectionAsMine } from "../markAsMine";
 import { useAppStore } from "../store";
 import { noteHandle } from "./handles";
 import type { Command, CommandContext } from "./registry";
 
 /*
- * Proposals (#93) and Edit with AI, from the keyboard and ⌘K. ⌘↵ and ⌘⌫ act
- * in the note, on the change the cursor is in or the changes a selection
- * touches (a section, as in Word); anywhere else they do what they always do.
+ * Proposals (#93), Edit with AI and Mark as mine (#95), from the keyboard
+ * and ⌘K. ⌘↵ and ⌘⌫ act in the note, on the change the cursor is in or the
+ * changes a selection touches (a section, as in Word); anywhere else they do
+ * what they always do.
  */
 
 /** The note the cursor's Block is in, while the cursor or the selection is on a Proposal. */
@@ -64,6 +67,12 @@ function withSelection() {
   const note = noteHandle.current;
   if (!note || note.editor.isDestroyed || useEdits.getState().pending[note.mindId]) return null;
   return selectionForEdit(note.editor.state) ? note : null;
+}
+
+/** The Mind last written in, while it has AI text selected. */
+function withAiText() {
+  const note = noteHandle.current;
+  return note && !note.editor.isDestroyed && holdsAiText(note.editor.state) ? note : null;
 }
 
 /** An AI action of the selection menu, on the selected text. */
@@ -171,4 +180,16 @@ export const proposalCommands: readonly Command[] = [
     },
   },
   editAction("explain", "editor.ai.explain"),
+  {
+    id: "edit.markAsMine",
+    label: "editor.ai.markAsMine",
+    group: "main",
+    // ⌘Z, or Undo on its line, takes it back.
+    reversible: true,
+    when: () => withAiText() !== null,
+    run() {
+      const note = withAiText();
+      if (note) markSelectionAsMine(note.editor);
+    },
+  },
 ];
