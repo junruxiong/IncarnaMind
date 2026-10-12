@@ -46,10 +46,16 @@ function savedFiles(sources: Source[]): Source[] {
         language: name.startsWith("zh-") ? ("zh" as const) : ("en" as const),
         domain: original(name)?.domain ?? "legal",
         licence: "Apache-2.0",
-        source: `documents/synthetic/${name}, saved in ${SAVED_BY[app]}`,
+        source: `documents/synthetic/${name}, ${PROVENANCE[app]}`,
       }));
   });
 }
+
+const PROVENANCE = {
+  "word-mac": "saved in Word for Mac, 2026-10-12",
+  wps: "saved in WPS Office, 2026-10-12",
+  "google-docs": "Google Docs (web), saved as Google Doc then exported .docx, 2026-10-12",
+} as const;
 
 const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 const link = (label: string, url: string) => (url.startsWith("http") ? `[${label}](${url})` : url);
