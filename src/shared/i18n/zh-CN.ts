@@ -2260,15 +2260,16 @@ export const zhCN = {
   "agents.settings.connected": "已连接的智能体",
   "agents.settings.connect": "连接智能体",
   "agents.settings.connect.note": "在这台电脑上找到的智能体排在前面。",
-  "agents.settings.more": "更多智能体",
+  "agents.settings.web":
+    "只能在互联网上使用的聊天应用（例如网页版 ChatGPT 和 Claude、Gemini、Le Chat、Grok）无法连接 IncarnaMind，因为它只服务这台电脑。",
   "agents.settings.connectButton": "连接",
   "agents.settings.help": "分步说明",
   "agents.setup.bundle": "一键连接：打开 Claude 进行安装",
   "agents.setup.link": "一键连接：打开 {agent} 进行安装",
   "agents.setup.file": "IncarnaMind 会把自己添加到 {agent} 的设置中",
   "agents.setup.command": "复制一行命令，在终端中运行",
-  "agents.setup.manual": "复制设置，粘贴到 {agent} 中",
-  "agents.setup.installed": "在这台电脑上",
+  "agents.setup.other": "复制设置，粘贴到你的智能体中",
+  "agents.note.codex": "在 ChatGPT 应用的“工作”和 Codex 模式中使用；普通对话模式不会用到。",
   "agents.setup.undoChanged": "{path} 之后已有改动，IncarnaMind 未作更改。",
   "agents.client.other": "其他智能体",
   "agents.pairing.reads": "可读取：{folders}",
@@ -2309,6 +2310,7 @@ export const zhCN = {
   "agents.connect.title": "允许 {agent} 读取你的文档？",
   "agents.connect.body":
     "{agent} 将可以搜索和读取你所选文件夹中的文档，以及其中的 Mind。它读到的内容会发送给 {agent} 使用的 AI 模型，适用该服务的条款，而非 IncarnaMind 的条款。某些套餐可能会用这些内容训练模型。",
+  "agents.connect.name": "名称",
   "agents.connect.folders": "它可以读取的文件夹",
   "agents.connect.noFolders": "你还没有文件夹。先在资料库中新建一个，再回到这里。",
   "agents.connect.pickOne": "至少选择一个文件夹。",
@@ -2321,7 +2323,8 @@ export const zhCN = {
   "agents.done.wrote": "已添加到 {agent} 的设置中。开始一个新的 {agent} 会话即可使用。",
   "agents.done.command": "已复制。粘贴到终端中运行。",
   "agents.done.settings": "已复制。在 {agent} 中把它添加为新的服务器，然后重新启动 {agent}。",
-  "agents.done.settings.other": "已复制。在智能体添加服务器的地方粘贴，然后重新启动智能体。",
+  "agents.done.settings.other":
+    "已复制。在智能体添加服务器的地方粘贴，然后重新启动智能体。如果它要求分别填写命令、参数和环境变量，它们就在你复制的设置里（技术细节）。",
   "agents.done.unreadable":
     "无法读取 {agent} 的设置文件，IncarnaMind 未作改动。设置已复制：粘贴到 {path} 中。",
   "agents.done.undo": "撤销",
