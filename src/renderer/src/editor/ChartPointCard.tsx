@@ -4,12 +4,6 @@ import { citationLocation, formatLocation } from "../../../shared/locations";
 import { useT } from "../i18n";
 import { ChartCheck } from "./ChartCheck";
 
-/**
- * A chart value's card (#436): what the value is, as written, and its
- * source with its check and Open, which opens the cited page with the
- * quote washed, as a Citation's Open does. A value with no Citation says so
- * quietly; one whose cell holds no number says it isn't drawn.
- */
 export function ChartPointCard({
   title,
   value,
@@ -21,12 +15,9 @@ export function ChartPointCard({
   onOpen,
 }: {
   title: string;
-  /** As written: "$377.9 million", "1.5亿". */
   value: string;
-  /** A pie slice's share, or a scatter point's value across. */
   detail: string | null;
   notDrawn: boolean;
-  /** Said when the table was cut to fit the chart. */
   cut: string | null;
   citation: CitationAttributes | null;
   state: CitationState | null;

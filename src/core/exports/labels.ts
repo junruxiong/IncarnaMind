@@ -1,22 +1,13 @@
-/**
- * An export's own words, in the interface's language: what the Markdown and
- * Word writers add around the Mind's text.
- */
 import { translate } from "../../shared/i18n";
 import type { Language } from "../language";
 
 export interface ExportLabels {
-  /** Marks a Question, e.g. "Question:". */
   question: string;
-  /** Follows an unverified Citation's source in its footnote, e.g. "[unverified]". */
   unverified: string;
-  /** A chart's caption: "Chart: Revenue by quarter", or "Chart" when it has no title. */
   chart(title: string): string;
-  /** Before a chart's sources, with the space that follows it, if any: "Source: ", "数据来源：". */
+  /** With the space that follows it, if any: "Source: ", "数据来源：". */
   chartSources: string;
-  /** After them, the values drawn with no Citation: "2 values have no Citation." */
   chartUncited(count: number): string;
-  /** A chart of a table cut to fit: "Only the first 250 of 300 rows are charted." */
   chartCut(rows: number, total: number): string;
 }
 

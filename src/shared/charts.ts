@@ -11,6 +11,7 @@
  */
 import type { CitationAttributes, CitationCheck } from "../core/api";
 import { type Figure, type FigureUnit, figureContextOf, readFigures } from "./figures";
+import type { MessageKey, MessageParams } from "./i18n";
 
 export const CHART_KINDS = ["bar", "line", "pie", "scatter"] as const;
 export type ChartKind = (typeof CHART_KINDS)[number];
@@ -18,7 +19,6 @@ export type ChartKind = (typeof CHART_KINDS)[number];
 /** At most this many values in a chart: a longer table is cut, and the chart says so. */
 export const MAX_CHART_VALUES = 500;
 
-/** Where a value came from. */
 export type ChartValueOrigin =
   /** A cell of a table in the Mind: its row and column on the table's grid, from 0, the heading row included. */
   | { kind: "cell"; row: number; column: number }
@@ -30,7 +30,6 @@ export interface ChartValue {
   shown: string;
   /** The number read from `shown` (./figures); null when it holds none, or none that reads one way: not drawn. */
   value: number | null;
-  /** What the number measures, when one was read. */
   unit: FigureUnit | null;
   /** The Citation that was with it, as its node held it; null: it had none. */
   citation: CitationAttributes | null;
@@ -54,21 +53,16 @@ export interface ChartData {
   cutFrom: number | null;
 }
 
-/** What a chart was made from: a table Block of the Mind (its id), or figures in its text. */
 export type ChartSource = { kind: "table"; blockId: string | null } | { kind: "figures" };
 
-/** Everything a chart Block holds (see the editor's `chartSchema`). */
 export interface ChartAttributes {
   kind: ChartKind;
-  /** Its title, "" for none. */
   title: string;
   /** The series drawn, by their place in `data.series`; null: all of them. */
   drawn: number[] | null;
   data: ChartData;
   source: ChartSource;
 }
-
-// Reading what a Mind stores ----------------------------------------------------
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -111,7 +105,7 @@ function readValue(value: unknown): ChartValue | null {
   };
 }
 
-/** A chart's data as stored, with anything malformed left out rather than guessed. */
+/** Anything malformed (from another version, or a sync) is left out rather than guessed. */
 export function readChartData(value: unknown): ChartData {
   if (!isRecord(value)) return { labelHeading: "", series: [], rows: [], cutFrom: null };
   const series = Array.isArray(value.series) ? value.series.map(text) : [];
@@ -135,7 +129,6 @@ function readSource(value: unknown): ChartSource {
   return { kind: "table", blockId };
 }
 
-/** A chart Block's attributes as stored, each read as its default when missing or malformed. */
 export function readChart(attributes: Readonly<Record<string, unknown>>): ChartAttributes {
   const data = readChartData(attributes.data);
   const drawn = Array.isArray(attributes.drawn)
@@ -160,8 +153,6 @@ export function readChart(attributes: Readonly<Record<string, unknown>>): ChartA
   };
 }
 
-// What is drawn -------------------------------------------------------------------
-
 /**
  * The series drawn, by their place in the data: those chosen (all, by default),
  * in order. A pie draws one, the last chosen ("this year"); a scatter chart
@@ -174,11 +165,30 @@ export function drawnSeries(chart: Pick<ChartAttributes, "kind" | "drawn" | "dat
   return chosen;
 }
 
+/**
+ * A series' name: its heading, or, with none, "Column 3" (the column of the
+ * table it came from) or "Value" for figures from text, in the words of `say`.
+ */
+export function seriesName(
+  chart: Pick<ChartAttributes, "data" | "source">,
+  index: number,
+  say: (key: MessageKey, params?: MessageParams) => string,
+): string {
+  const name = chart.data.series[index];
+  if (name) return name;
+  if (chart.source.kind === "figures") return say("chart.series.value");
+  const from = chart.data.rows
+    .map((row) => row.values[index]?.from)
+    .find((each) => each?.kind === "cell");
+  return say("chart.series.unnamed", {
+    number: from?.kind === "cell" ? from.column + 1 : index + 2,
+  });
+}
+
 /** Whether a kind can be drawn from this data: a scatter chart needs two series. */
 export const kindFits = (kind: ChartKind, data: ChartData) =>
   kind !== "scatter" || data.series.length >= 2;
 
-/** A value drawn: its row, its series (by its place in the data) and the value. */
 export interface ChartPoint {
   row: number;
   series: number;
@@ -216,33 +226,24 @@ export function chartPoints(chart: Pick<ChartAttributes, "kind" | "drawn" | "dat
   return points;
 }
 
-// Sources ----------------------------------------------------------------------------
-
-/** One place the values were quoted from: a Document, and where in it. */
 export interface ChartSourcePlace {
   /**
    * The first of its Citations whose quote wasn't found, if any, else the
    * first: what an export's footnote for the place says.
    */
   citation: CitationAttributes;
-  /** How many values drawn were quoted from it. */
   count: number;
 }
 
 export interface ChartSources {
-  /** The values drawn. */
   values: number;
-  /** Of those, the ones with no Citation. */
   uncited: number;
   /** Cells of the series drawn that hold words but no number, so aren't drawn. */
   notDrawn: number;
-  /** The places the values were quoted from, in the order the values are. */
   places: ChartSourcePlace[];
-  /** How many Documents those places are in. */
   documents: number;
 }
 
-/** The place a Citation points to, as a key: its Document, and its Location or its pages. */
 function placeKey(citation: CitationAttributes): string {
   const document = citation.documentId ?? citation.documentName ?? "";
   const where = citation.location
@@ -253,7 +254,6 @@ function placeKey(citation: CitationAttributes): string {
 
 const isFound = (check: CitationCheck | undefined) => check === "found";
 
-/** Where a chart's drawn values were quoted from, and how many have no Citation. */
 export function chartSources(
   chart: Pick<ChartAttributes, "kind" | "drawn" | "data">,
 ): ChartSources {
@@ -293,8 +293,6 @@ export function chartSources(
   };
 }
 
-// Reading numbers ------------------------------------------------------------------
-
 /** What a figure doesn't settle that changes its value: drawn, it would be a guess. */
 const UNSETTLED = new Set(["separator", "sign"]);
 
@@ -309,15 +307,10 @@ function figureIn(
   return { figure, value: unsettled || !Number.isFinite(figure.value) ? null : figure.value };
 }
 
-// From a table ---------------------------------------------------------------------
-
-/** A cell of a table, as a chart reads it. */
 export interface SourceCell {
   /** Its text, without its Citations' markers or its footnotes' text. */
   text: string;
-  /** The first Citation in it, as its node holds it. */
   citation: CitationAttributes | null;
-  /** A heading cell. */
   header: boolean;
   /** It spans down or across from another slot: its value is that slot's, its words read again. */
   continued?: boolean;
@@ -359,7 +352,6 @@ export function chartFromTable(
   const dataRows = headingRow ? grid.slice(1) : grid;
   const firstRow = headingRow ? 1 : 0;
 
-  /** A cell's value, or null for an empty slot or one a cell spans into. */
   const valueAt = (cell: SourceCell | null, row: number, column: number): ChartValue | null => {
     if (!cell || cell.continued || cell.text.trim() === "") return null;
     const read = figureIn(cell.text, context);
@@ -402,12 +394,9 @@ export function chartFromTable(
   };
 }
 
-// From cited figures ---------------------------------------------------------------
-
 /** A line of text (a paragraph, a list item, a table row's text), as a chart reads it. */
 export interface SourceLine {
   text: string;
-  /** The first Citation in it. */
   citation: CitationAttributes | null;
 }
 
@@ -462,11 +451,7 @@ export function chartFromFigures(
   };
 }
 
-/**
- * Whether the chart's data differs from what its table would give now, so it
- * can offer to update. Compares what is drawn and where it came from, not
- * how it was stored.
- */
+/** Compares what is drawn and where it came from, not how it was stored. */
 export function sameChartData(a: ChartData, b: ChartData): boolean {
   return JSON.stringify(readChartData(a)) === JSON.stringify(readChartData(b));
 }

@@ -1,16 +1,8 @@
 /**
- * Where everything in a chart goes, at the width it is drawn at (#436): the
- * editor draws it at the width its column has, so its labels stay 12 px, and
- * an export draws it at a page's width. One layout, drawn twice: as React
- * elements in the editor (with focus and hover), and as an SVG string for an
- * export's picture (./chartSvg).
- *
- * Colours are named by their role (`ChartInk`), never by value: the editor
- * maps them to DESIGN.md's tokens, so the chart follows the theme, and an
- * export to the light theme's values.
- *
- * Pure, with no DOM: text is measured by `measure` when the caller can, and
- * estimated otherwise.
+ * A chart's layout at the width it is drawn at, so its labels stay 12 px
+ * (#436). The editor draws it as React elements and an export as an SVG
+ * string (./chartSvg), so colours are roles (`ChartInk`), never values: the
+ * editor maps them to the theme's tokens, an export to the light theme's.
  */
 import {
   type ChartAttributes,
@@ -20,7 +12,6 @@ import {
   drawnSeries,
 } from "./charts";
 
-/** The size of every word in a chart, in px (DESIGN.md: charts keep their labels at 12 px). */
 export const CHART_FONT_SIZE = 12;
 
 /**
@@ -32,19 +23,12 @@ export const CHART_FONT_SIZE = 12;
  */
 export type ChartInk = "prior" | "now" | `category${number}`;
 
-/** How many categorical colours there are before they repeat. */
 export const CATEGORY_COUNT = 9;
 
-/** One drawn value, where it is. */
 export type ChartMark =
   | { shape: "bar"; x: number; y: number; width: number; height: number }
   | { shape: "dot"; cx: number; cy: number; r: number }
-  | {
-      shape: "slice";
-      path: string /** Where its focus ring's middle is, for a card to point at. */;
-      cx: number;
-      cy: number;
-    };
+  | { shape: "slice"; path: string; cx: number; cy: number };
 
 export interface LaidOutPoint {
   row: number;
@@ -52,7 +36,6 @@ export interface LaidOutPoint {
   value: ChartValue & { value: number };
   ink: ChartInk;
   mark: ChartMark;
-  /** A pie slice's share of the whole, from 0 to 1. */
   share: number | null;
 }
 
@@ -61,20 +44,18 @@ export interface ChartText {
   y: number;
   text: string;
   anchor: "start" | "middle" | "end";
-  /** "axis": ticks and axis names, in the meta ink; "label": point and legend labels, in the secondary ink. */
   role: "axis" | "label";
 }
 
 export interface ChartLine {
-  /** A line's series, in the order drawn. */
   series: number;
   ink: ChartInk;
-  /** Its runs of points with values in a row: a missing value breaks the line. */
+  /** A missing value breaks the line into runs. */
   runs: [number, number][][];
 }
 
 export interface ChartLegendItem {
-  /** Its series (bar and line) or its row (pie). */
+  /** A series (bar and line) or a row (pie). */
   index: number;
   ink: ChartInk;
   name: string;
@@ -84,40 +65,33 @@ export interface ChartLayout {
   kind: ChartKind;
   width: number;
   height: number;
-  /** Horizontal lines across the plot, the one at zero `base`. */
   grid: { y: number; base: boolean; x1: number; x2: number }[];
   texts: ChartText[];
   lines: ChartLine[];
   points: LaidOutPoint[];
-  /** The key to the colours: series of a bar or line chart, slices of a pie. */
   legend: ChartLegendItem[];
-  /** Where the legend's swatches and names are drawn inside the picture; empty in the editor, which lists it under the chart. */
+  /** Drawn inside the picture: a pie's key always, others' only for an export (the editor lists it under the chart). */
   legendMarks: { x: number; y: number; ink: ChartInk; text: ChartText }[];
 }
 
 export interface LayoutOptions {
   width: number;
-  /** For the numbers on the axes: a BCP 47 tag. */
   language: string;
-  /** A series' name (an unnamed one's in the interface's words). */
   seriesName(index: number): string;
-  /** The width of a text at 12 px; estimated when not given. */
   measure?: (text: string) => number;
-  /** Draw the legend inside the picture, under the plot (for an export). */
   legendInside?: boolean;
 }
 
 /** Wide characters (Chinese, Japanese, Korean, full-width forms) take a whole em; others about 0.6. */
 const WIDE = /[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]/u;
 
-/** A text's width at 12 px, estimated without a font. */
+/** For the core, which has no font to measure with. */
 export function estimateWidth(text: string): number {
   let width = 0;
   for (const char of text) width += WIDE.test(char) ? CHART_FONT_SIZE : CHART_FONT_SIZE * 0.6;
   return width;
 }
 
-/** The text, cut with "…" to fit `width`. */
 export function fitText(text: string, width: number, measure: (text: string) => number): string {
   if (measure(text) <= width) return text;
   const chars = [...text];
@@ -125,7 +99,6 @@ export function fitText(text: string, width: number, measure: (text: string) => 
   return chars.length > 0 ? `${chars.join("")}…` : "";
 }
 
-/** A round step near `x`: 1, 2, 2.5 or 5 times a power of ten. */
 export function niceStep(x: number): number {
   if (!(x > 0) || !Number.isFinite(x)) return 1;
   const power = 10 ** Math.floor(Math.log10(x));
@@ -133,7 +106,6 @@ export function niceStep(x: number): number {
   return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 5 ? 5 : 10) * power;
 }
 
-/** Round bounds around the values, in about `ticks` steps; `zero` keeps 0 in. */
 function niceDomain(
   values: readonly number[],
   ticks: number,
@@ -151,7 +123,6 @@ function niceDomain(
   return [Math.floor(low / step + 1e-9) * step, Math.ceil(high / step - 1e-9) * step, step];
 }
 
-/** The ticks from `low` to `high` by `step`. */
 function ticksOf(low: number, high: number, step: number): number[] {
   const ticks: number[] = [];
   for (let at = 0; low + at * step <= high + step * 1e-6; at++) {
@@ -194,18 +165,13 @@ export function tickFormat(
 
 const isPercent = (value: ChartValue) => value.unit?.kind === "percent";
 
-/** The ink of each series drawn, by its place among them. */
 function seriesInks(count: number): ChartInk[] {
   if (count === 1) return ["now"];
   if (count === 2) return ["prior", "now"];
   return Array.from({ length: count }, (_, index) => `category${index % CATEGORY_COUNT}` as const);
 }
 
-/**
- * The key to a bar or line chart's colours: its series drawn, each with its
- * ink. A pie's key is drawn beside it, and a scatter chart's one series
- * needs none.
- */
+/** A pie's key is drawn beside it, and a scatter chart's one series needs none. */
 export function chartLegend(
   chart: Pick<ChartAttributes, "kind" | "drawn" | "data">,
   seriesName: (index: number) => string,
@@ -222,13 +188,10 @@ export function chartLegend(
 
 const PLOT_TOP = 10;
 const PLOT_RIGHT = 10;
-/** Room under the plot for the labels along it. */
 const AXIS_BOTTOM = 28;
 const CHART_HEIGHT = 240;
-/** The legend's rows, inside an export's picture. */
 const LEGEND_ROW = 22;
 
-/** Lays a chart out at `options.width`. */
 export function layoutChart(
   chart: Pick<ChartAttributes, "kind" | "drawn" | "data">,
   options: LayoutOptions,
@@ -260,7 +223,6 @@ function emptyLayout(kind: ChartKind, width: number, height = CHART_HEIGHT): Cha
   };
 }
 
-/** Bars side by side per row, or a line per series, over a value axis that keeps 0 in. */
 function layoutBarsOrLines(
   chart: Pick<ChartAttributes, "kind" | "drawn" | "data">,
   options: Measured,
@@ -299,7 +261,7 @@ function layoutBarsOrLines(
     });
   });
 
-  // Each row's slot along the axis, and its label under it: every k-th when they would touch.
+  // Labels that would touch are thinned to every k-th.
   const slot = (right - left) / rows.length;
   const centre = (row: number) => left + slot * (row + 0.5);
   const widest = Math.max(...rows.map((row) => measure(row.label)));
@@ -342,7 +304,6 @@ function layoutBarsOrLines(
     return layout;
   }
 
-  // Bars: the group of a row's bars fills at most 70% of its slot, each at most 30 px.
   const count = Math.max(1, drawn.length);
   const gap = count > 1 ? Math.min(4, slot * 0.04) : 0;
   const bar = Math.max(1, Math.min(30, (slot * 0.7 - gap * (count - 1)) / count));
@@ -368,7 +329,6 @@ function layoutBarsOrLines(
   return layout;
 }
 
-/** One series across, one up, a dot per row with both, labelled by its row when there is room. */
 function layoutScatter(
   chart: Pick<ChartAttributes, "kind" | "drawn" | "data">,
   options: Measured,
@@ -459,7 +419,6 @@ function layoutScatter(
   return layout;
 }
 
-/** A pie of one series, its slices in the category colours, with a key beside it giving each share. */
 function layoutPie(
   chart: Pick<ChartAttributes, "kind" | "drawn" | "data">,
   options: Measured,
@@ -536,7 +495,6 @@ function safeLanguage(language: string): string {
   }
 }
 
-/** The series' key in rows under the plot, for a picture with no page around it. */
 function addLegendRow(layout: ChartLayout, measure: (text: string) => number): void {
   const start = layout.grid[0]?.x1 ?? 16;
   let x = start;

@@ -1,24 +1,17 @@
 /**
- * Draws SVG pictures as PNG for exports (#436): the core's `Pictures`, for a
- * chart in a Word file. Each picture is drawn in a hidden window of its own,
- * whose session refuses every request that isn't the picture itself, so
- * nothing in it reaches the network, and it asks for nothing. The page draws
- * the SVG on a canvas at its own size, with the system's fonts, and hands
- * back the PNG.
+ * The core's `Pictures` (#436): each SVG is drawn on a canvas in a hidden
+ * window whose session refuses every request but the picture itself, so
+ * nothing reaches the network.
  */
 import { BrowserWindow, type Session, session } from "electron";
 import type { Logger, Pictures } from "../core";
 
-/** An in-memory session of its own: nothing it loads is kept, or shared with the app's window. */
 const PICTURES_PARTITION = "pictures";
 
 /** Far longer than a chart takes, so a page that hangs fails the export's picture instead. */
 const PICTURE_TIMEOUT_MS = 30_000;
 
-/**
- * What the hidden page runs: the SVG loaded as an image, drawn on a canvas
- * its size, read back as a PNG data: URL. Kept as text, as it runs in the page.
- */
+/** Kept as text: it runs in the page. */
 const DRAW = `(svg) => new Promise((resolve, reject) => {
   const image = new Image();
   image.onload = () => {

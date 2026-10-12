@@ -1,16 +1,7 @@
-/**
- * A chart as an SVG document, for an export's picture (#436): the layout the
- * editor draws (./chartLayout), in the light theme's colours, since a page is
- * white. Pure: the core turns it into a PNG through the host (`Pictures`).
- */
+/** A chart as a standalone SVG document, on white, for an export's picture (#436). */
 import { CHART_FONT_SIZE, type ChartInk, type ChartLayout } from "./chartLayout";
 
-/**
- * The light theme's values of the colours a chart uses (DESIGN.md: `sheet`,
- * `rule`, `rule-strong`, `ink-meta`, `ink-secondary`, the chart's prior-year
- * grey, and the Tag hues' dots and inks). The editor uses the tokens
- * themselves (styles.css, `.chart-*`).
- */
+/** The light theme's values of the tokens the editor draws charts with (styles.css, `.chart-*`): a page is white. */
 export const LIGHT_CHART_COLOURS = {
   sheet: "#FFFFFF",
   rule: "#E3E5E9",
@@ -32,7 +23,7 @@ export const LIGHT_CHART_COLOURS = {
   ],
 } as const;
 
-/** The system's font, as the app's (DESIGN.md, Typography): the picture is drawn on this computer. */
+/** The app's font (DESIGN.md, Typography): the picture is drawn on this computer, with its fonts. */
 const FONT_FAMILY =
   '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif';
 
@@ -51,7 +42,6 @@ export function inkColour(ink: ChartInk): string {
   return categories[index % categories.length] ?? LIGHT_CHART_COLOURS.now;
 }
 
-/** The chart as a standalone SVG document, `scale` times its size in pixels, on white. */
 export function chartSvg(layout: ChartLayout, scale = 1): string {
   const colours = LIGHT_CHART_COLOURS;
   const parts: string[] = [

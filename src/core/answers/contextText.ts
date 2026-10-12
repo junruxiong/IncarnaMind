@@ -151,10 +151,6 @@ function tableMarkdown(rows: readonly TableCell[][]): string {
   return lines.join("\n");
 }
 
-/**
- * A chart (#436) as its kind and title, then the table of the values it
- * draws, each with its source, so the model reads what the User sees.
- */
 function chartMarkdown(block: Extract<Block, { kind: "chart" }>): string {
   const { chart } = block;
   const drawn = drawnSeries(chart);
@@ -206,7 +202,7 @@ function chartMarkdown(block: Extract<Block, { kind: "chart" }>): string {
   return `Chart, ${chart.kind}${chart.title ? `: ${chart.title}` : ""}${cut}\n\n${tableMarkdown(rows)}`;
 }
 
-/** A Citation's work, which Question context doesn't use: it writes the source. */
+/** Question context writes a Citation's source, never its work. */
 const blankWork = { documentId: null, documentName: null, location: null };
 
 function listMarkdown(list: Extract<Block, { kind: "list" }>): string {

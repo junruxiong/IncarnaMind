@@ -8,13 +8,11 @@ import { noteHolding } from "../editor/noteKeymap";
 import { languageNow } from "../i18n";
 import type { Command, CommandContext } from "./registry";
 
-/** The note the command acts in: the keymap gives it the Block at the cursor as its focus. */
 function noteOf(ctx: CommandContext): Editor | null {
   const editor = ctx.focus?.kind === "block" ? noteHolding(ctx.focus.id) : null;
   return editor && !editor.isDestroyed && editor.isEditable ? editor : null;
 }
 
-/** The chart the command acts on: the one whose menu it is, or the Block selected in the note. */
 const chartOf = (ctx: CommandContext) =>
   ctx.focus && (ctx.focus.kind === "chart" || ctx.focus.kind === "block")
     ? (chartHandles.get(ctx.focus.id) ?? null)
@@ -27,12 +25,6 @@ const KIND_COMMANDS: Record<ChartKind, MessageKey> = {
   scatter: "chart.command.scatter",
 };
 
-/**
- * Charts (#436): one from the table the cursor is in (also in the table's
- * menu), or from the cited figures in the selected lines; and, for a chart,
- * its kind, its values as a table, an update from its table, Rename and
- * Delete, in its right-click menu and in ⌘K. Each is undone with ⌘Z.
- */
 export const chartCommands: readonly Command[] = [
   {
     id: "chart.fromTable",

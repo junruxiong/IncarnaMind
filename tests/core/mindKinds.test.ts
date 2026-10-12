@@ -199,7 +199,10 @@ describe("the content schema version of a Mind", () => {
     const core = startCore(await createTempDataFolder());
     const mind = await core.createMind();
 
-    await core.applyMindUpdate(mind.id, Y.encodeStateAsUpdate(newerDocument(CONTENT_SCHEMA_VERSION + 1)));
+    await core.applyMindUpdate(
+      mind.id,
+      Y.encodeStateAsUpdate(newerDocument(CONTENT_SCHEMA_VERSION + 1)),
+    );
 
     const opened = await core.openMind(mind.id);
     expect(opened.access).toBe("read-only");
@@ -209,7 +212,10 @@ describe("the content schema version of a Mind", () => {
       CONTENT_SCHEMA_VERSION + 1,
     );
     await expect(
-      core.applyMindUpdate(mind.id, Y.encodeStateAsUpdate(newerDocument(CONTENT_SCHEMA_VERSION + 1))),
+      core.applyMindUpdate(
+        mind.id,
+        Y.encodeStateAsUpdate(newerDocument(CONTENT_SCHEMA_VERSION + 1)),
+      ),
     ).rejects.toThrow(MindReadOnlyError);
   });
 
