@@ -349,14 +349,20 @@ export function createAgentSetup(options: AgentSetupOptions) {
       if (!Array.isArray(input.folderIds) || input.folderIds.length === 0) {
         throw new InvalidInputError("Choose at least one Folder for the agent to read.");
       }
-      const { pairing, launch } = await options.agents.connect({
-        name: nameFor(client, input.name),
-        folderIds: input.folderIds,
-        client: client.id,
-      });
+      // Before pairing, so the settings the pairing announces already show it.
+      // The agent still works without it, from the server's instructions.
+      await addSkill(client).catch(options.reportError);
+      const { pairing, launch } = await options.agents
+        .connect({
+          name: nameFor(client, input.name),
+          folderIds: input.folderIds,
+          client: client.id,
+        })
+        .catch(async (error: unknown) => {
+          await removeSkill(client.id, "").catch(options.reportError);
+          throw error;
+        });
       try {
-        // The agent still works without it, from the server's instructions.
-        await addSkill(client).catch(options.reportError);
         return { pairing, result: await install(client, pairing.id, launch) };
       } catch (error) {
         // Nothing half made: the pairing goes with the setup that failed.
