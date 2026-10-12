@@ -45,3 +45,10 @@ macOS has no public way to ask whether the computer's sound may be recorded. A d
 - Apple TN3127, code signing requirements and privacy permissions: https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements
 - Windows loopback recording: https://learn.microsoft.com/en-us/windows/win32/coreaudio/loopback-recording
 - MediaStream Recording, slices need not be playable: https://w3c.github.io/mediacapture-record/
+
+## Amendment: transcribing on this computer (2026-10-11, #136)
+
+- **One track for transcription.** The core mixes the microphone and the computer's sound into one track, in the Meeting's time (`src/core/meetings/mixer.ts`), and streams it to the `Transcriber` adapter. What the User says and what the others say are transcribed once, and the microphone picking up the speakers doesn't give each line twice. The two sources stay apart on disk, for telling speakers apart later (#138, #140).
+- **A utility process of its own.** The desktop app runs the engine, Qwen3-ASR-0.6B int8 with Silero VAD through sherpa-onnx-node (Apache-2.0), in an Electron utility process (`src/main/transcriber.ts`), as it runs the embedding and reranking models. sherpa-onnx-node bundles its own ONNX Runtime; the process keeps it apart from onnxruntime-node's, and `tests/core/onnxRuntimes.test.ts` shows both run even in one process, in either order. A process that crashes is started again, and the stretch it lost is marked as a gap in the Transcript.
+- **The files are the record, here too.** What is needed to pick a Transcript up after a crash is in files in the data folder's `Transcripts/`, beside nothing else: its lines and gaps in `<meeting>.vtt`, and in `<meeting>.json` its Document, how far live text got and the stretches still to transcribe. No database column: a Meeting's audio and its Transcript's working state belong to this computer, as the audio's parts do.
+- **The audio stays the source.** Live text that falls behind, audio that came while the model downloaded or started, and a stretch a crash lost are transcribed from the parts on disk once the Meeting stops, as long as its audio is kept (at most a day).
