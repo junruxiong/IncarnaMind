@@ -1539,12 +1539,12 @@
           "reasoning": true,
           "temperature": true,
           "context": 1048576,
-          "maxOutput": 943718,
+          "maxOutput": 393216,
           "price": {
             "currency": "USD",
-            "input": 0.0001,
-            "output": 0.6,
-            "cacheRead": 0.005
+            "input": 0.0333,
+            "output": 0.1332,
+            "cacheRead": 0.000666
           }
         },
         {
@@ -1556,12 +1556,12 @@
           "reasoning": true,
           "temperature": true,
           "context": 1048576,
-          "maxOutput": 943718,
+          "maxOutput": 393216,
           "price": {
             "currency": "USD",
-            "input": 0.3,
-            "output": 5,
-            "cacheRead": 0.219
+            "input": 0.24948,
+            "output": 0.74844,
+            "cacheRead": 0.007938
           }
         },
         {
@@ -1576,9 +1576,9 @@
           "maxOutput": 943718,
           "price": {
             "currency": "USD",
-            "input": 0.0099,
-            "output": 1.28,
-            "cacheRead": 0.0099
+            "input": 0.0128,
+            "output": 0.768,
+            "cacheRead": 0.0128
           }
         },
         {
@@ -1627,9 +1627,9 @@
           "maxOutput": 943718,
           "price": {
             "currency": "USD",
-            "input": 0.33,
-            "output": 14.89,
-            "cacheRead": 0.3
+            "input": 0.73,
+            "output": 10,
+            "cacheRead": 0.55
           }
         },
         {
@@ -1743,12 +1743,12 @@
           "reasoning": true,
           "temperature": true,
           "context": 1048576,
-          "maxOutput": 131072,
+          "maxOutput": 943718,
           "price": {
             "currency": "USD",
-            "input": 0.04,
-            "output": 0.5,
-            "cacheRead": 0.0125
+            "input": 0.0232,
+            "output": 1.2,
+            "cacheRead": 0.0232
           }
         },
         {
@@ -1763,9 +1763,9 @@
           "maxOutput": 943718,
           "price": {
             "currency": "USD",
-            "input": 0.039,
-            "output": 4.8,
-            "cacheRead": 0.038
+            "input": 0.055,
+            "output": 5,
+            "cacheRead": 0.06
           }
         },
         {
@@ -2641,9 +2641,9 @@
           "maxOutput": 943718,
           "price": {
             "currency": "USD",
-            "input": 0.0182,
+            "input": 0.03,
             "output": 1.28,
-            "cacheRead": 0.0182
+            "cacheRead": 0.03
           }
         },
         {
@@ -2658,9 +2658,9 @@
           "maxOutput": 943718,
           "price": {
             "currency": "USD",
-            "input": 0.0099,
-            "output": 1.28,
-            "cacheRead": 0.0099
+            "input": 0.016,
+            "output": 0.64,
+            "cacheRead": 0.016
           }
         },
         {
@@ -2692,9 +2692,9 @@
           "maxOutput": 384000,
           "price": {
             "currency": "USD",
-            "input": 0.9483,
-            "output": 1.8966,
-            "cacheRead": 0.079025
+            "input": 0.436044,
+            "output": 0.872088,
+            "cacheRead": 0.036337
           }
         },
         {
@@ -2723,12 +2723,12 @@
           "reasoning": true,
           "temperature": true,
           "context": 1048576,
-          "maxOutput": 943718,
+          "maxOutput": 393216,
           "price": {
             "currency": "USD",
-            "input": 0.3,
-            "output": 1.2,
-            "cacheRead": 0.006
+            "input": 0.15,
+            "output": 0.6,
+            "cacheRead": 0.003
           }
         },
         {
@@ -3079,9 +3079,9 @@
           "maxOutput": 235929,
           "price": {
             "currency": "USD",
-            "input": 0.0675,
-            "output": 0.225,
-            "cacheRead": 0.0375
+            "input": 0.09,
+            "output": 0.3,
+            "cacheRead": 0.05
           }
         },
         {
@@ -3293,7 +3293,7 @@
           "reasoning": true,
           "temperature": true,
           "context": 262144,
-          "maxOutput": 32768,
+          "maxOutput": 235929,
           "price": {
             "currency": "USD",
             "input": 0,
@@ -3491,11 +3491,11 @@
           "reasoning": false,
           "temperature": true,
           "context": 1310720,
-          "maxOutput": 16384,
+          "maxOutput": 117964,
           "price": {
             "currency": "USD",
-            "input": 0.1,
-            "output": 0.3
+            "input": 0.18,
+            "output": 0.59
           }
         },
         {
@@ -4194,9 +4194,9 @@
           "maxOutput": 235929,
           "price": {
             "currency": "USD",
-            "input": 0.465,
-            "output": 2.45,
-            "cacheRead": 0.0875
+            "input": 0.65,
+            "output": 3.41,
+            "cacheRead": 0.15
           }
         },
         {
@@ -4228,9 +4228,9 @@
           "maxOutput": 943718,
           "price": {
             "currency": "USD",
-            "input": 0.64,
-            "output": 13.5,
-            "cacheRead": 0.28
+            "input": 0.73,
+            "output": 10,
+            "cacheRead": 0.55
           }
         },
         {
@@ -4420,12 +4420,12 @@
           "reasoning": true,
           "temperature": true,
           "context": 262144,
-          "maxOutput": 16384,
+          "maxOutput": 182520,
           "price": {
             "currency": "USD",
-            "input": 0.5,
-            "output": 2.2,
-            "cacheRead": 0.1
+            "input": 0.6,
+            "output": 2.4,
+            "cacheRead": 0.12
           }
         },
         {
@@ -6286,12 +6286,12 @@
           "reasoning": true,
           "temperature": true,
           "context": 262144,
-          "maxOutput": 235929,
+          "maxOutput": 65536,
           "price": {
             "currency": "USD",
-            "input": 0.15,
-            "output": 1,
-            "cacheRead": 0.05
+            "input": 0.1,
+            "output": 0.95,
+            "cacheRead": 0.1
           }
         },
         {
@@ -6404,12 +6404,12 @@
           "reasoning": true,
           "temperature": true,
           "context": 1000000,
-          "maxOutput": 131072,
+          "maxOutput": 235929,
           "price": {
             "currency": "USD",
-            "input": 0.425,
-            "output": 2.55,
-            "cacheRead": 0.085
+            "input": 0.04,
+            "output": 2.3,
+            "cacheRead": 0.0198
           }
         },
         {
@@ -7346,7 +7346,7 @@
             "currency": "USD",
             "input": 0.3,
             "output": 0.9,
-            "cacheRead": 0.055
+            "cacheRead": 0.05
           }
         },
         {
@@ -7462,9 +7462,9 @@
           "maxOutput": 943718,
           "price": {
             "currency": "USD",
-            "input": 0.039,
+            "input": 0.079,
             "output": 4.8,
-            "cacheRead": 0.038
+            "cacheRead": 0.059
           }
         },
         {
@@ -7476,12 +7476,12 @@
           "reasoning": true,
           "temperature": true,
           "context": 1048576,
-          "maxOutput": 943717,
+          "maxOutput": 943718,
           "price": {
             "currency": "USD",
-            "input": 0.15,
-            "output": 0.5,
-            "cacheRead": 0.03
+            "input": 0.0232,
+            "output": 1.2,
+            "cacheRead": 0.0232
           }
         },
         {
