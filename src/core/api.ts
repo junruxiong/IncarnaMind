@@ -209,6 +209,23 @@ export const MIND_CONTENT_FIELD = "blocks";
  */
 export const MIND_SETTINGS_FIELD = "settings";
 
+/**
+ * The name of the Y.Map, beside a Mind's Blocks, that says where Blocks came
+ * from: by Block id, a `BlockOrigin`. A Note added from an Answer in the
+ * assistant (#201) keeps its link back to that Answer here, not in the Block's
+ * attributes, which an older version's editor would strip. A Block deleted
+ * since leaves its entry unused. See src/shared/blockOrigins.ts.
+ */
+export const MIND_ORIGINS_FIELD = "origins";
+
+/** Where a Block came from: a Note added from an Answer links back to it. */
+export interface BlockOrigin {
+  /** The Answer, in its conversation (`messageReference`). */
+  from: ArtifactReference;
+  /** The Question it answered, as asked: shown with the link, even once the conversation is gone. */
+  question: string;
+}
+
 /** The attribute every Block keeps its UUID in, in the Mind's Yjs document. */
 export const BLOCK_ID_ATTRIBUTE = "id";
 
@@ -273,9 +290,10 @@ export const MIND_PROPOSAL_REQUESTS_FIELD = "proposalRequests";
 
 /**
  * What made a request's Proposals: Edit with AI (#93), with what it was asked
- * so a change can be made again (regenerated) once it is out of date; or
- * Regenerate of an Answer the User had edited (#94). The assistant (#202) and
- * Enhance (#114) add theirs.
+ * so a change can be made again (regenerated) once it is out of date;
+ * Regenerate of an Answer the User had edited (#94); or an Answer from the
+ * assistant added to a new Mind, as changes to accept (#201). The assistant
+ * (#202) and Enhance (#114) add theirs.
  */
 export type ProposalRequest =
   | (ProposalMaker & {
@@ -285,7 +303,8 @@ export type ProposalRequest =
       /** What the User asked for ("translate", "instruction"); "" for none. */
       instruction?: string;
     })
-  | (ProposalMaker & { source: "answer"; answerId: string });
+  | (ProposalMaker & { source: "answer"; answerId: string })
+  | (ProposalMaker & { source: "answer-added" });
 
 /** The model that made a request's Proposals, and when. */
 export interface ProposalMaker {
@@ -1175,8 +1194,12 @@ export interface Document {
    */
   contentHash: string;
   /**
-   * The file, where the User keeps it: an absolute path. IncarnaMind never
-   * changes it. A web page's is its snapshot, in the data folder.
+   * The file, where the User keeps it on this computer: an absolute path.
+   * IncarnaMind never changes the file. A web page's is its snapshot, in the
+   * data folder. Not what the Document is known by (ADR-0020): that is its
+   * Linked folder and its path inside it, its place in the data folder, or,
+   * for a file added on its own, its id; so it can be elsewhere on another
+   * computer, or after its Linked folder is located somewhere else.
    */
   path: string;
   /** Where the file is: see `DocumentFileStatus`. */
@@ -1882,9 +1905,9 @@ export interface Examples {
  * placeholders (online-only files) aren't read unless the User asks.
  */
 export interface LinkedFolder {
-  /** A random UUID generated on this device. */
+  /** A random UUID generated on this device: the same wherever the folder is (ADR-0020). */
   id: string;
-  /** Absolute, symbolic links resolved. */
+  /** Where it is on this computer: absolute, symbolic links resolved. `locateLinkedFolder` changes it. */
   path: string;
   /** Its own Folder, the root of its Folders. */
   folderId: string;
@@ -2941,6 +2964,35 @@ export type ConversationAskResult =
   | { asked: false; reason: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
   /** Nothing was kept or sent: the Question forces a Skill (`skill`) that is off or gone. */
   | { asked: false; reason: "skill-unavailable"; skill: string; state: SkillAvailability };
+
+/** Blocks from an Answer to put into a Mind's note ("Add to note", #201). */
+export interface AddToNoteInput {
+  mindId: string;
+  /**
+   * The Blocks, as the editor writes them in JSON: Notes only (`NOTE_BLOCK_TYPES`)
+   * at the top level, with whatever they hold, Citations included. Their ids are
+   * given anew.
+   */
+  blocks: unknown[];
+  /** Their link back to the Answer they came from; null for none. */
+  origin: BlockOrigin | null;
+  /** The model that wrote the Answer, for the record of AI use; null when unknown. */
+  model: ChatModelChoice | null;
+  /** They wait as changes to accept or reject, each Block one (a new Mind made from an Answer). */
+  proposed?: boolean;
+}
+
+/** What "Add to note" put into a Mind: the ids of its new top-level Blocks, in order. */
+export interface AddedToNote {
+  mindId: string;
+  blockIds: string[];
+}
+
+/** Takes an "Add to note" back: its Blocks leave the Mind, with their links back. */
+export interface UndoAddToNoteInput {
+  mindId: string;
+  blockIds: string[];
+}
 
 /** Where words of a search are in a piece of text: `start` to `end`, in UTF-16 code units. */
 export interface TextRange {
@@ -4802,6 +4854,17 @@ export interface CoreApi {
    * Block's origin. Restoring what it points into makes it lead there again.
    */
   resolveReference(reference: ArtifactReference): Promise<ReferenceTarget>;
+  /**
+   * "Add to note" (#201) into a Mind that isn't open in the editor: Blocks at the
+   * end of its note (in place of its empty last line), each Citation in them
+   * checked again against its Document, with a link back to the Answer. As
+   * `proposed`, they wait as changes to accept or reject. What is added at once
+   * goes into the record of AI use; a proposal does once it is accepted. The
+   * Mind open in the editor adds at its cursor itself, by the same rules.
+   */
+  addToNote(input: AddToNoteInput): Promise<AddedToNote>;
+  /** Takes the Blocks an "Add to note" put into a Mind back out, with their links back. */
+  undoAddToNote(input: UndoAddToNoteInput): Promise<void>;
 
   getSettings(): Promise<Settings>;
   /**
@@ -4909,6 +4972,18 @@ export interface CoreApi {
   addLinkedFolder(path: string, options?: AddDocumentsOptions): Promise<AddedLinkedFolder>;
   /** The Linked folders, in path order. */
   listLinkedFolders(): Promise<LinkedFolder[]>;
+  /**
+   * Points a Linked folder at where it is on this computer now, after it was
+   * moved or renamed, or when the data folder is opened on another computer
+   * (ADR-0020). Its Documents are looked for at their paths inside it and
+   * keep their ids, versions, Tags and Citations: a file with the same size
+   * and modified time isn't read, and one with the same content isn't
+   * processed again. Returns at once, "scanning". Throws InvalidInputError,
+   * changing nothing, for a folder inside or around another Linked folder,
+   * one that holds none of its files, or one with a file of it already added
+   * on its own.
+   */
+  locateLinkedFolder(linkedFolderId: string, path: string): Promise<LinkedFolder>;
   /**
    * Stops syncing a Linked folder and removes its Documents and Folders from
    * the index. Nothing on disk is touched. Of their stored text, only the
@@ -5887,6 +5962,8 @@ const methods: Record<CoreApiMethod, true> = {
   renameConversation: true,
   deleteConversation: true,
   resolveReference: true,
+  addToNote: true,
+  undoAddToNote: true,
   getSettings: true,
   updateSettings: true,
   getLayout: true,
@@ -5903,6 +5980,7 @@ const methods: Record<CoreApiMethod, true> = {
   previewLinkedFolder: true,
   addLinkedFolder: true,
   listLinkedFolders: true,
+  locateLinkedFolder: true,
   removeLinkedFolder: true,
   listKeptCitationTexts: true,
   updateReference: true,
