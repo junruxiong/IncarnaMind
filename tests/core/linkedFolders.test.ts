@@ -236,6 +236,30 @@ describe("Linking a folder", { timeout: 30_000 }, () => {
     ]);
   });
 
+  test("a Document holds its file's own modified time, and a rescan keeps it current", async () => {
+    const library = await createSourceFolder();
+    const early = new Date(Date.UTC(2024, 1, 3, 8, 0));
+    const late = new Date(Date.UTC(2026, 5, 7, 18, 30));
+    const old = await writeSourceFile(library, "Old.txt", "The tide turned.\n");
+    const recent = await writeSourceFile(library, "Recent.txt", "The tide rose.\n");
+    await utimes(old, early, early);
+    await utimes(recent, late, late);
+    const core = startCore(await createTempDataFolder());
+
+    const documents = await linkAndProcess(core, library);
+
+    expect(documentAt(documents, old).modifiedAt).toBe(early.toISOString());
+    expect(documentAt(documents, recent).modifiedAt).toBe(late.toISOString());
+    // Touched without a change to what it says: the time follows the file.
+    const touched = new Date(Date.UTC(2026, 8, 1, 12, 0));
+    await utimes(old, touched, touched);
+    await core.reconcileDocuments();
+    await waitForDocuments(core, (current) => {
+      expect(documentAt(current, old).modifiedAt).toBe(touched.toISOString());
+    });
+    core.close();
+  });
+
   test("a folder inside a Linked folder is linked already; one around Linked folders takes them in, their Documents keeping their ids", async () => {
     const outer = await createSourceFolder();
     const inner = join(outer, "Inner");

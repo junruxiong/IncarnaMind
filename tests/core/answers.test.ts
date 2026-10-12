@@ -4,6 +4,7 @@ import { describe, expect, onTestFinished, test, vi } from "vitest";
 import type * as Y from "yjs";
 import type { Core, CoreEvents } from "../../src/core";
 import { ANSWER_TEMPERATURE, answerTemperature } from "../../src/core/answers/engine";
+import { asGenerated } from "../../src/shared/aiText";
 import { pendingProposals, proposalRequestOf } from "../../src/shared/proposals";
 import { askAndFinish, setUpWithDocuments } from "../helpers/citations";
 import { createTempDataFolder, nextEvent, startCore } from "../helpers/core";
@@ -342,100 +343,103 @@ describe("Streaming Answers into the Mind", () => {
     const answerId = await ask(core, mind.id, asked.attrs.id);
     await answerEnded(core, answerId);
 
-    expect(answerIn(reader, answerId).toJSON().content).toEqual([
-      {
-        type: "heading",
-        attrs: { id: expect.any(String), level: 2, includeInContext: null, proposal: null },
-        content: [{ type: "text", text: "Tidal forces" }],
-      },
-      {
-        type: "paragraph",
-        attrs: { id: expect.any(String), includeInContext: null, proposal: null },
-        content: [
-          { type: "text", text: "The " },
-          { type: "text", text: "Moon", marks: [{ type: "bold" }] },
-          { type: "text", text: " pulls hardest on the near side, where " },
-          { type: "inlineMath", attrs: { latex: "F = G\\frac{m_1 m_2}{r^2}", proposal: null } },
-          { type: "text", text: " is largest." },
-        ],
-      },
-      {
-        type: "bulletList",
-        attrs: { id: expect.any(String), includeInContext: null, proposal: null },
-        content: [
-          {
-            type: "listItem",
-            attrs: { proposal: null },
-            content: [
-              {
-                type: "paragraph",
-                attrs: { id: expect.any(String), includeInContext: null, proposal: null },
-                content: [{ type: "text", text: "High tide faces the Moon" }],
-              },
-            ],
-          },
-          {
-            type: "listItem",
-            attrs: { proposal: null },
-            content: [
-              {
-                type: "paragraph",
-                attrs: { id: expect.any(String), includeInContext: null, proposal: null },
-                content: [
-                  { type: "text", text: "Another", marks: [{ type: "italic" }] },
-                  { type: "text", text: " one is opposite" },
-                ],
-              },
-            ],
-          },
-        ],
-      },
-      {
-        type: "codeBlock",
-        attrs: {
-          id: expect.any(String),
-          language: "python",
-          includeInContext: null,
-          proposal: null,
+    // Every word of it is AI text.
+    expect(answerIn(reader, answerId).toJSON().content).toEqual(
+      asGenerated([
+        {
+          type: "heading",
+          attrs: { id: expect.any(String), level: 2, includeInContext: null, proposal: null },
+          content: [{ type: "text", text: "Tidal forces" }],
         },
-        content: [{ type: "text", text: "print('tide')" }],
-      },
-      {
-        type: "blockMath",
-        attrs: {
-          id: expect.any(String),
-          latex: "h(t) = A \\cos(\\omega t)",
-          includeInContext: null,
-          proposal: null,
+        {
+          type: "paragraph",
+          attrs: { id: expect.any(String), includeInContext: null, proposal: null },
+          content: [
+            { type: "text", text: "The " },
+            { type: "text", text: "Moon", marks: [{ type: "bold" }] },
+            { type: "text", text: " pulls hardest on the near side, where " },
+            { type: "inlineMath", attrs: { latex: "F = G\\frac{m_1 m_2}{r^2}", proposal: null } },
+            { type: "text", text: " is largest." },
+          ],
         },
-      },
-      {
-        type: "paragraph",
-        attrs: { id: expect.any(String), includeInContext: null, proposal: null },
-        content: [
-          { type: "text", text: "See " },
-          {
-            type: "text",
-            text: "NOAA",
-            marks: [
-              {
-                type: "link",
-                attrs: {
-                  href: "https://oceanservice.noaa.gov",
-                  target: "_blank",
-                  rel: "noopener noreferrer nofollow",
-                  class: null,
-                  title: null,
+        {
+          type: "bulletList",
+          attrs: { id: expect.any(String), includeInContext: null, proposal: null },
+          content: [
+            {
+              type: "listItem",
+              attrs: { proposal: null },
+              content: [
+                {
+                  type: "paragraph",
+                  attrs: { id: expect.any(String), includeInContext: null, proposal: null },
+                  content: [{ type: "text", text: "High tide faces the Moon" }],
                 },
-              },
-            ],
+              ],
+            },
+            {
+              type: "listItem",
+              attrs: { proposal: null },
+              content: [
+                {
+                  type: "paragraph",
+                  attrs: { id: expect.any(String), includeInContext: null, proposal: null },
+                  content: [
+                    { type: "text", text: "Another", marks: [{ type: "italic" }] },
+                    { type: "text", text: " one is opposite" },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          type: "codeBlock",
+          attrs: {
+            id: expect.any(String),
+            language: "python",
+            includeInContext: null,
+            proposal: null,
           },
-          { type: "text", text: " and " },
-          { type: "text", text: "tide tables", marks: [{ type: "code" }] },
-          { type: "text", text: "." },
-        ],
-      },
-    ]);
+          content: [{ type: "text", text: "print('tide')" }],
+        },
+        {
+          type: "blockMath",
+          attrs: {
+            id: expect.any(String),
+            latex: "h(t) = A \\cos(\\omega t)",
+            includeInContext: null,
+            proposal: null,
+          },
+        },
+        {
+          type: "paragraph",
+          attrs: { id: expect.any(String), includeInContext: null, proposal: null },
+          content: [
+            { type: "text", text: "See " },
+            {
+              type: "text",
+              text: "NOAA",
+              marks: [
+                {
+                  type: "link",
+                  attrs: {
+                    href: "https://oceanservice.noaa.gov",
+                    target: "_blank",
+                    rel: "noopener noreferrer nofollow",
+                    class: null,
+                    title: null,
+                  },
+                },
+              ],
+            },
+            { type: "text", text: " and " },
+            { type: "text", text: "tide tables", marks: [{ type: "code" }] },
+            { type: "text", text: "." },
+          ],
+        },
+      ]),
+    );
 
     // While streaming, no Markdown syntax ever showed, and Blocks only grew at the end.
     const final = seen.at(-1)?.types ?? [];
@@ -470,15 +474,18 @@ describe("Streaming Answers into the Mind", () => {
       "codeBlock",
       "paragraph",
     ]);
-    expect(answer.child(5).toJSON().content).toEqual([
-      { type: "text", text: "Line " },
-      { type: "text", text: "one", marks: [{ type: "italic" }] },
-      { type: "hardBreak", attrs: { proposal: null } },
-      { type: "text", text: "Line " },
-      { type: "text", text: "two", marks: [{ type: "strike" }] },
-      { type: "text", text: " " },
-      { type: "text", text: "code", marks: [{ type: "code" }] },
-    ]);
+    expect(answer.attrs.generatedMarks).toBe(true);
+    expect(answer.child(5).toJSON().content).toEqual(
+      asGenerated([
+        { type: "text", text: "Line " },
+        { type: "text", text: "one", marks: [{ type: "italic" }] },
+        { type: "hardBreak", attrs: { proposal: null } },
+        { type: "text", text: "Line " },
+        { type: "text", text: "two", marks: [{ type: "strike" }] },
+        { type: "text", text: " " },
+        { type: "text", text: "code", marks: [{ type: "code" }] },
+      ]),
+    );
 
     // Tiptap's Yjs binding would write the Mind exactly as the core did: nothing changes.
     let rewritten = false;

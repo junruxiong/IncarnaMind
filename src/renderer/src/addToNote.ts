@@ -1,8 +1,8 @@
 /**
  * Add to note (#201): an Answer in the assistant, or the part of it selected,
- * goes into a Mind's note as Notes, Citations and all, each Citation checked
- * again where it lands, with a link back to the Answer and its conversation
- * (src/shared/blockOrigins.ts).
+ * goes into a Mind's note as Notes, Citations and all, its words AI text, each
+ * Citation checked again where it lands, with a link back to the Answer and
+ * its conversation (src/shared/blockOrigins.ts).
  *
  * - Into the Mind the assistant reads, open in its editor: at its cursor, or
  *   at its end, through the editor, as one step of its Undo, so ⌘Z in the
@@ -24,6 +24,7 @@ import {
   type ConversationAnswer,
 } from "../../core/api";
 import { messageReference } from "../../core/references";
+import { asGenerated } from "../../shared/aiText";
 import type { NodeJSON } from "../../shared/blockJson";
 import { setOrigins } from "../../shared/blockOrigins";
 import { mindName } from "../../shared/naming";
@@ -96,8 +97,8 @@ function addInEditor(editor: Editor, blocks: readonly NodeJSON[], atCursor: bool
 async function addToReadMind(added: AddedAnswer, mindId: string): Promise<boolean> {
   const read = readMindHandle.current;
   if (!read || read.mindId !== mindId || read.editor.isDestroyed) return false;
-  const checked = await recheckCitations(withoutIds(added.blocks), (input) =>
-    core.recheckCitation(input),
+  const checked = asGenerated(
+    await recheckCitations(withoutIds(added.blocks), (input) => core.recheckCitation(input)),
   );
   const { editor, doc } = read;
   if (editor.isDestroyed) return false;
