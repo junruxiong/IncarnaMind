@@ -1921,6 +1921,11 @@ export const en = {
   "error.dismiss": "Dismiss",
   "error.startup.title": "IncarnaMind couldn't start",
   "error.startup.body": "Your data folder couldn't be opened.\n\n{message}",
+  "error.startup.newer.title": "Update IncarnaMind to open your data",
+  "error.startup.newer.body":
+    "A newer version of IncarnaMind saved this data folder, so this version can't open it. Your data is safe and unchanged.",
+  "error.startup.newer.download": "Download the latest version",
+  "error.startup.newer.quit": "Quit",
 
   // The application menu (src/main/menu.ts).
   "menu.about": "About IncarnaMind",

@@ -24,6 +24,16 @@ export class MindReadOnlyError extends Error {
   override name = "MindReadOnlyError";
 }
 
+/** Thrown at start-up when the data folder was written by a newer version than this one. */
+export class DataFromNewerVersionError extends Error {
+  override name = "DataFromNewerVersionError";
+  constructor(readonly newestVersion: number) {
+    super(
+      `The database was written by a newer version of IncarnaMind (it has schema migration ${newestVersion}, which this version doesn't know).`,
+    );
+  }
+}
+
 /** Thrown when a secret can't be stored safely on this device (see `getSecretStorage`). */
 export class SecretStorageError extends Error {
   override name = "SecretStorageError";
