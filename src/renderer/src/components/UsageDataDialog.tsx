@@ -2,7 +2,7 @@ import { useId, useState } from "react";
 import type { MessageKey } from "../../../shared/i18n";
 import { core } from "../core";
 import { errorMessage } from "../errors";
-import { useT } from "../i18n";
+import { useGap, useT } from "../i18n";
 import { usageDataQuestionWaiting, useAppStore } from "../store";
 import {
   buttonClass,
@@ -39,6 +39,7 @@ const EXAMPLES: readonly MessageKey[] = [
  */
 export function UsageDataDialog() {
   const t = useT();
+  const gap = useGap();
   const id = useId();
   const privacy = useAppStore((state) => state.privacy);
   const waiting = usageDataQuestionWaiting(privacy);
@@ -116,7 +117,8 @@ export function UsageDataDialog() {
             </div>
           )}
           <p className={hintClass}>
-            {t("usageData.dialog.change")}{" "}
+            {t("usageData.dialog.change")}
+            {gap(t("usageData.dialog.change"), t("usageData.dialog.details"))}
             <a
               href={USAGE_DATA_DETAILS_URL}
               target="_blank"
