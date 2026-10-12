@@ -9,7 +9,7 @@ What the index keeps is enough for Citations without the file:
 - Each version of a file is identified by the SHA-256 of its content.
 - When a file changes, the new version is indexed and becomes what search and new Answers use. The old version's pages are kept for as long as a Citation points at them, so the Citation is still checked against the text it quoted, and it says the Document changed after it was cited.
 - A new version that can't be read (a sync client wrote it half-way, or it is corrupt) replaces nothing: the last good version stays indexed and searched, and the Document shows the failure and offers Retry until a retry or a later change is read.
-- A file that moves or is renamed is found again by its content fingerprint, so its Citations and Search scopes follow it.
+- A file that moves or is renamed is found again by its content fingerprint, so its Citations and Search scopes follow it. One also edited where IncarnaMind didn't see it is found by its identity on its disk, or as the one clear candidate (ADR-0020's amendment, #389).
 - A file that disappears leaves a missing Document whose text and Citations remain. Only the rendered page, which needs the file, is lost.
 - Unlinking a Linked folder removes its Documents from the index but keeps the Units (ADR-0011) its Citations point to, so they are still checked; like an old version's pages, that text goes once no Citation quotes it (settled with the User on 2026-10-07).
 
