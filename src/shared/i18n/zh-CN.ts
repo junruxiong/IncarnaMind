@@ -2446,7 +2446,11 @@ export const zhCN = {
   "agents.pairing.activity": "活动",
   "agents.pairing.disconnect": "断开连接",
   "agents.pairing.details": "技术细节",
+  "agents.pairing.skill": "已安装技能：{agent} 知道何时使用 IncarnaMind",
   "agents.pairing.copySettings": "复制设置",
+  "agents.pairing.copySkill": "复制技能",
+  "agents.pairing.copySkill.hint":
+    "将它保存为 SKILL.md，放进智能体技能文件夹中名为 incarnamind 的文件夹，智能体就知道何时使用 IncarnaMind。",
   "agents.pairing.copied": "已复制",
   "agents.activity.empty": "还没有调用记录。",
   "agents.activity.search": "搜索了“{text}”",
@@ -2479,6 +2483,8 @@ export const zhCN = {
   "agents.connect.noFolders": "你还没有文件夹。先在资料库中新建一个，再回到这里。",
   "agents.connect.pickOne": "至少选择一个文件夹。",
   "agents.connect.fileChange": "IncarnaMind 会在 {path} 中添加以下内容：",
+  "agents.connect.skill":
+    "IncarnaMind 还会在 {path} 添加一个简短的技能，告诉 {agent} 何时使用 IncarnaMind。",
   "agents.connect.showChange": "显示添加的内容",
   "agents.connect.allow": "允许并连接",
   "agents.connect.cancel": "取消",
