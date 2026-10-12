@@ -2512,9 +2512,17 @@
   .answer-searches-found {
     color: var(--color-ink-placeholder);
   }
-  /* Its Blocks are inside the node view's content element, one level down. */
+  /*
+   * Its Blocks are inside the node view's content element, one level down. An
+   * Answer written before AI text was marked word by word is all in the
+   * Answer's ink; a newer one is in the User's, its AI text marked.
+   */
   .answer-content {
     color: var(--color-ink-answer);
+
+    &[data-generated-marks] {
+      color: var(--color-ink);
+    }
 
     :where([data-node-view-content-react] > * + *) {
       margin-top: 12px;
@@ -2964,6 +2972,16 @@
     padding: 0;
     overflow: hidden;
     opacity: 0;
+  }
+  /*
+   * AI text (#95; DESIGN.md, Writing and text): the Answer's ink, a step
+   * softer than the User's writing. A quote keeps its own, softer still.
+   */
+  .mind-editor .generated-text {
+    color: var(--color-ink-answer);
+  }
+  .mind-editor blockquote .generated-text {
+    color: inherit;
   }
   /*
    * Proposals waiting for the User (#93; DESIGN.md, AI edits): removed words
