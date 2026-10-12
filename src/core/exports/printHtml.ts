@@ -5,7 +5,7 @@
  * citation style's notes take their numbers too, and its in-text Citations and Bibliography
  * are in the body. Maths is typeset (MathML); what KaTeX can't read stays LaTeX. Everything
  * from the Mind is escaped: the page shows text, never markup it was given. The HTML export
- * (./html) is the same document, its markers links to the notes (`linkNotes`).
+ * (./html) is the same document, its markers are links to the notes (`linkNotes`).
  */
 import type { StyledRun } from "../api";
 import { type Block, type Footnote, type Inline, type Marks, tableLayout } from "../mindText";
