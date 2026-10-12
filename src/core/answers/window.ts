@@ -43,8 +43,8 @@ const MESSAGE_TOKENS = 8;
 const MARGIN_TOKENS = 128;
 /** What a model writes in a step of the Tool loop besides its Answer: a Tool call, a preamble. */
 const STEP_OUTPUT_TOKENS = 128;
-/** Kept free for the first search in the Tool loop: about 12 Passages of 500 tokens. */
-export const SEARCH_RESERVE_TOKENS = 6_500;
+/** Kept free for the first search in the Tool loop: about 8 Passages of 500 tokens. */
+export const SEARCH_RESERVE_TOKENS = 4_500;
 /** A Tool result cut to less than this isn't worth sending: the model is told to answer instead. */
 const MIN_RESULT_TOKENS = 256;
 

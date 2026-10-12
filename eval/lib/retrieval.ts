@@ -623,7 +623,7 @@ export function compareAggregations(
 }
 
 /** Scores the Passages the search Tool handed the model, in the order it handed them: a hit if one holds the expected Passage. */
-function scoreHanded(
+export function scoreHanded(
   handed: readonly PassageSearchResult[],
   expected: ExpectedPassage,
   expectedDocumentId: string,
@@ -631,32 +631,6 @@ function scoreHanded(
   const checked = handed.map((passage) => checkPassage(passage, expected, expectedDocumentId));
   const index = checked.findIndex(isHit);
   return { hit: index >= 0, rank: index >= 0 ? index + 1 : null, top: checked };
-}
-
-/**
- * Adds the search Tool's score to `results`: each Question searched, and its
- * translated query too, through the core's `searchEvidence`, which runs the
- * Tool as an Answer does over every Document, reranked as the app is set up.
- * Embeddings must be off, as by default. The rank is the place of the first
- * Passage handed that holds the expected one.
- */
-export async function runSearchTool(
-  core: Core,
-  questions: readonly EvalQuestion[],
-  documentIds: ReadonlyMap<string, string>,
-  results: readonly QuestionResult[],
-): Promise<void> {
-  for (const question of questions) {
-    const result = results.find((each) => each.id === question.id);
-    if (!result) throw new Error(`${question.id}: no results to add the search Tool to.`);
-    const expectedId = expectedIdOf(question, documentIds);
-    const handed = async (query: string) =>
-      scoreHanded((await core.searchEvidence(query)).passages, question.expected, expectedId);
-    result.modes[TOOL_MODE] = await handed(question.question);
-    if (question.translatedQuery && result.translated) {
-      result.translated[TOOL_MODE] = await handed(question.translatedQuery);
-    }
-  }
 }
 
 const tally = (results: readonly QuestionResult[], mode: RetrievalMode): Tally => ({

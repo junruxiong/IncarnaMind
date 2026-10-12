@@ -16,7 +16,11 @@ import {
   type WindowedPassage,
   windowedPassagesBySeq,
 } from "../../src/core/documents/search";
-import { type SearchCandidate, searchDocumentsTool } from "../../src/core/documents/searchTool";
+import {
+  ONE_SEARCH_PARAMETERS,
+  type SearchCandidate,
+  searchDocumentsTool,
+} from "../../src/core/documents/searchTool";
 import { rerankText } from "../../src/core/reranking";
 import type { Database } from "../../src/core/storage";
 import {
@@ -62,7 +66,7 @@ export interface DumpOptions {
 }
 
 /** Keyword search's best `limit` for a query, as the Passages the search Tool sees, with their BM25 scores. */
-async function keywordCandidates(
+export async function keywordCandidates(
   { core, db }: Pick<DumpOptions, "core" | "db">,
   query: string,
   limit: number,
@@ -94,8 +98,8 @@ async function keywordCandidates(
   return { passages, scores };
 }
 
-/** The search Tool for a query, as it runs with embeddings off, over the reranked candidates. */
-async function toolPassages(
+/** The search Tool for a query as a one-search Answer runs it, with embeddings off, over the reranked candidates. */
+export async function toolPassages(
   db: Database,
   query: string,
   candidates: readonly WindowedPassage[],
@@ -111,6 +115,7 @@ async function toolPassages(
     },
     query,
     {
+      parameters: ONE_SEARCH_PARAMETERS,
       rerank: async (_query, hits: readonly SearchCandidate[]) =>
         hits
           .map((hit, index) => ({

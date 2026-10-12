@@ -4,7 +4,9 @@ import {
   centroidWindows,
   clusterByOverlap,
   documentWindows,
+  ONE_SEARCH_PARAMETERS,
   SEARCH_TOOL_PARAMETERS,
+  type SearchToolParameters,
   type SearchToolSources,
   searchDocumentsTool,
   topsOfEach,
@@ -261,7 +263,7 @@ describe("The document-search Tool", { timeout: 30_000 }, () => {
     expect(reranked).toEqual([["p3", "p7", "p40"]]);
   });
 
-  test("hands the model at most 12 Passages, in windows of 3, up to 3 windows from a Document and 4 Documents", async () => {
+  test("hands the model at most 8 Passages, and a one-search Answer 12, from up to 4 Documents, in windows of 3", async () => {
     const passage = (documentId: string, position: number, score = 0) => ({
       seq: position,
       passageId: `${documentId}-${position}`,
@@ -289,23 +291,32 @@ describe("The document-search Tool", { timeout: 30_000 }, () => {
       window: (documentId, window) =>
         [window, window + 1, window + 2].map((position) => passage(documentId, position)),
     });
-    const handed = async (hitsPerDocument: number[]) =>
+    const handed = async (hitsPerDocument: number[], parameters?: Partial<SearchToolParameters>) =>
       searchDocumentsTool(sources(hitsPerDocument), "lighthouse", {
         rerank: async (_query, candidates) => [...candidates],
+        parameters,
       });
+    const perDocument = (found: Awaited<ReturnType<typeof handed>>) =>
+      Object.entries(Object.groupBy(found, (each) => each.documentId)).map(
+        ([documentId, passages]) => [documentId, passages?.length],
+      );
 
     expect(SEARCH_TOOL_PARAMETERS).toMatchObject({
-      maxPassages: 12,
-      maxWindowsPerDocument: 3,
+      keywordRerankCandidates: 20,
+      maxPassages: 8,
+      maxWindowsPerDocument: 2,
       maxDocuments: 4,
     });
-    const many = await handed([0, 10, 20, 30]);
-    expect(many).toHaveLength(12);
-    const perDocument = Object.groupBy(many, (each) => each.documentId);
-    expect(Object.keys(perDocument)).toEqual(["d1", "d2"]);
-    expect(perDocument.d1).toHaveLength(9);
-    expect(perDocument.d2).toHaveLength(3);
-    const one = await handed([0]);
+    expect(ONE_SEARCH_PARAMETERS).toEqual({ maxPassages: 12, maxWindowsPerDocument: 3 });
+    expect(perDocument(await handed([0, 10, 20, 30]))).toEqual([
+      ["d1", 6],
+      ["d2", 2],
+    ]);
+    expect(perDocument(await handed([0, 10, 20, 30], ONE_SEARCH_PARAMETERS))).toEqual([
+      ["d1", 9],
+      ["d2", 3],
+    ]);
+    const one = await handed([0], ONE_SEARCH_PARAMETERS);
     expect(new Set(one.map((each) => each.documentId))).toEqual(new Set(["d1", "d2", "d3", "d4"]));
     expect(one).toHaveLength(12);
   });

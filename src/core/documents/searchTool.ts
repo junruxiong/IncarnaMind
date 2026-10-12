@@ -61,19 +61,29 @@ export interface SearchToolParameters {
 }
 
 /**
- * 12 Passages of about 500 tokens is about 6,000 tokens a search, so a few
+ * 8 Passages of about 500 tokens is about 4,000 tokens a search, so a few
  * searches fit an Answer's context. The reranker sees keyword search's top
  * 20 with embeddings off: against its top 60 it hands the model nearly as
  * many Questions' Passages for half the built-in reranking model's time,
- * about 0.8 s a search against 1.6 s, and 12 Passages find many more than 8,
- * mostly for Questions whose answer is in two places (ADR-0009, 2026-10-12).
- * The other counts are untuned starting values.
+ * about 0.8 s a search against 1.6 s (ADR-0009, 2026-10-12). The other counts
+ * are untuned starting values.
  */
 export const SEARCH_TOOL_PARAMETERS: SearchToolParameters = {
   candidates: 30,
   rerankPerList: 10,
   keywordRerankCandidates: 20,
   maxDocuments: 4,
+  maxWindowsPerDocument: 2,
+  maxPassages: 8,
+};
+
+/**
+ * What an Answer from a model that searches once is handed: 12 Passages find
+ * many more than 8, mostly for Questions whose answer is in two places. A
+ * model in the Tool loop keeps 8: it can search again, and with 12 Claude
+ * Haiku 5.5 stopped citing on a Question it cited with 8 (ADR-0009, 2026-10-12).
+ */
+export const ONE_SEARCH_PARAMETERS: Partial<SearchToolParameters> = {
   maxWindowsPerDocument: 3,
   maxPassages: 12,
 };
