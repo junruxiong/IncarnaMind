@@ -12,7 +12,6 @@ import { MergeLineIcon, PencilLineIcon, TrashLineIcon } from "./lineIcons";
 import { TagColourPicker, tagChipColour } from "./TagColour";
 import {
   buttonClass,
-  dangerButtonClass,
   dialogActionsClass,
   dialogClass,
   dialogTextClass,
@@ -188,8 +187,8 @@ function TagRow({
   const t = useT();
   const language = useLanguage();
   const asked = useRequests((state) => state.manageTag);
-  const [mode, setMode] = useState<"view" | "edit" | "delete" | "merge">(
-    asked?.id === tag.id ? asked.mode : "view",
+  const [mode, setMode] = useState<"view" | "edit" | "merge">(
+    asked?.id === tag.id ? "edit" : "view",
   );
   const [into, setInto] = useState("");
 
@@ -205,32 +204,6 @@ function TagRow({
           }}
           onCancel={() => setMode("view")}
         />
-      </li>
-    );
-  }
-
-  if (mode === "delete") {
-    return (
-      <li data-testid="tag-row" data-tag-id={tag.id} className="flex items-center gap-2 py-2.5">
-        <p className="min-w-0 flex-1 text-ui break-words text-ink">
-          {usage.count > 0
-            ? t("tags.dialog.delete.bodyCount", {
-                name: tag.name,
-                count: formatCount(usage.count, language),
-              })
-            : t("tags.dialog.delete.body", { name: tag.name })}
-        </p>
-        <button type="button" onClick={() => setMode("view")} className={buttonClass}>
-          {t("tags.dialog.cancel")}
-        </button>
-        <button
-          type="button"
-          data-testid="confirm-delete-tag"
-          onClick={() => void run(() => deleteTag(tag.id))}
-          className={dangerButtonClass}
-        >
-          {t("tags.dialog.delete.confirm")}
-        </button>
       </li>
     );
   }
@@ -350,7 +323,7 @@ function TagRow({
         data-testid="delete-tag"
         aria-label={t("tags.dialog.delete", { name: tag.name })}
         title={t("tags.dialog.delete", { name: tag.name })}
-        onClick={() => setMode("delete")}
+        onClick={() => void run(() => deleteTag(tag.id))}
         className={iconButtonClass}
       >
         <TrashLineIcon className="size-4" />

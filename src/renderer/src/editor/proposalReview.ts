@@ -607,14 +607,16 @@ export const editorDoc = (editor: Editor): Y.Doc | null => bindingOf(editor)?.do
  * Accepts or rejects Proposals in the editor's copy of the Mind, as one step
  * of its Undo (⌘Z takes it back), the same way the core does anywhere
  * (`resolveProposals`). The change reaches the core as the User's edits do.
+ * `"all"` takes every Proposal the Mind holds when it runs, ones an Undo has
+ * just brought back included, rather than a list read earlier.
  */
 export function resolveInEditor(
   editor: Editor,
-  ids: ReadonlySet<string>,
+  ids: ReadonlySet<string> | "all",
   outcome: "accept" | "reject",
 ): ResolvedProposal[] {
   const binding = bindingOf(editor);
-  if (!binding || ids.size === 0) return [];
+  if (!binding || (ids !== "all" && ids.size === 0)) return [];
   const undo: { stopCapturing(): void } | undefined = yUndoPluginKey.getState(
     editor.state,
   )?.undoManager;
@@ -622,7 +624,11 @@ export function resolveInEditor(
   let resolved: ResolvedProposal[] = [];
   // As the editor's own change, so its Undo takes it back.
   binding.doc.transact(() => {
-    resolved = resolveProposals(binding.type, (proposal) => ids.has(proposal.id), outcome);
+    resolved = resolveProposals(
+      binding.type,
+      (proposal) => ids === "all" || ids.has(proposal.id),
+      outcome,
+    );
   }, ySyncPluginKey);
   undo?.stopCapturing();
   return resolved;
