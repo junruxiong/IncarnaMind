@@ -48,7 +48,6 @@ export interface CheckpointsOptions {
   retention: Pick<VersionRetention, "retain" | "release">;
   /** The Mind's id, once it is known to exist, not deleted, and of a kind this version writes. */
   requireMind(mindId: unknown): string;
-  /** A Mind's Checkpoints changed. */
   changed(mindId: string): void;
   /** Stops an Answer being written in the Mind, keeping what it has. */
   stopAnswer(mindId: string, answerId: string): void;
@@ -90,7 +89,6 @@ const toCheckpoint = (row: Row): Checkpoint => ({
   createdAt: row.created_at,
 });
 
-/** The Answers being written into a Mind's Blocks, by id. */
 const streamingAnswers = (blocks: Y.XmlFragment): string[] =>
   blocks.toArray().flatMap((block) => {
     if (!(block instanceof Y.XmlElement) || block.nodeName !== ANSWER_BLOCK) return [];
@@ -112,8 +110,7 @@ function citedIn(doc: Y.Doc): RetainVersion[] {
 
 export function createCheckpoints(options: CheckpointsOptions) {
   const { db, content, retention } = options;
-  /** Minds edited since, each with its timer for an idle Checkpoint. */
-  const waiting = new Map<string, ReturnType<typeof setTimeout>>();
+  const idleTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   const docOfCheckpoint = (mindId: string, checkpointId: unknown): Y.Doc => {
     const row = db.get<{ data: Uint8Array }>(
@@ -284,20 +281,19 @@ export function createCheckpoints(options: CheckpointsOptions) {
 
     /** A Mind's content was stored: its idle Checkpoint waits for it to stay unchanged. */
     edited(mindId: string): void {
-      clearTimeout(waiting.get(mindId));
+      clearTimeout(idleTimers.get(mindId));
       const timer = setTimeout(() => {
-        waiting.delete(mindId);
+        idleTimers.delete(mindId);
         saveIdle(mindId);
       }, CHECKPOINT_IDLE_MS);
       // A Checkpoint still to come must not keep the app from quitting.
       timer.unref?.();
-      waiting.set(mindId, timer);
+      idleTimers.set(mindId, timer);
     },
 
-    /** Stops: nothing runs after the core closes. */
     close(): void {
-      for (const timer of waiting.values()) clearTimeout(timer);
-      waiting.clear();
+      for (const timer of idleTimers.values()) clearTimeout(timer);
+      idleTimers.clear();
     },
   };
 }
