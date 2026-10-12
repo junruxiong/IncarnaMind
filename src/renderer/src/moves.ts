@@ -87,20 +87,30 @@ export function undoMoves(move: FolderMove): { items: MoveItems; folderId: strin
   return [...back].map(([folderId, items]) => ({ folderId, items }));
 }
 
-/**
- * What the line says once something moved: "Moved “Shortlist” to Finance",
- * or for several, how many of what ("Moved 3 Documents to Finance").
- */
-export function moveMessage(
-  t: (key: MessageKey, params?: MessageParams) => string,
+/** The Folders a move's undo puts things back in, each once. */
+export function foldersMovedFrom(move: FolderMove): string[] {
+  const from = [
+    ...move.minds.map((item) => item.from),
+    ...move.conversations.map((item) => item.from),
+    ...move.documents.map((item) => item.previous?.groupId ?? null),
+  ];
+  return [...new Set(from.filter((id): id is string => id !== null && id !== move.folderId))];
+}
+
+type Translate = (key: MessageKey, params?: MessageParams) => string;
+
+interface Names {
+  minds: readonly Mind[];
+  documents: readonly Document[];
+  conversations?: readonly Conversation[];
+}
+
+/** What moves, as the line and the Edit menu say it: one by its name, several by how many of what. */
+function whatMoves(
+  t: Translate,
   items: MoveItems,
-  folderName: string,
-  names: {
-    minds: readonly Mind[];
-    documents: readonly Document[];
-    conversations?: readonly Conversation[];
-  },
-): string {
+  names: Names,
+): { name: string } | { count: number; kind: "minds" | "documents" | "conversations" | "items" } {
   const { mindIds, documentIds, conversationIds } = itemsOf(items);
   const count = mindIds.length + documentIds.length + conversationIds.length;
   if (count === 1) {
@@ -112,15 +122,37 @@ export function moveMessage(
       : conversation
         ? conversationName(conversation) || t("conversation.untitled")
         : (document?.name ?? "");
-    return t("move.done", { name, folder: folderName });
+    return { name };
   }
   const only = (ids: readonly string[]) => ids.length === count;
-  const key: MessageKey = only(mindIds)
-    ? "move.done.minds"
+  const kind = only(mindIds)
+    ? "minds"
     : only(documentIds)
-      ? "move.done.documents"
+      ? "documents"
       : only(conversationIds)
-        ? "move.done.conversations"
-        : "move.done.items";
-  return t(key, { count, folder: folderName });
+        ? "conversations"
+        : "items";
+  return { count, kind };
+}
+
+/**
+ * What the line says once something moved: "Moved “Shortlist” to Finance",
+ * or for several, how many of what ("Moved 3 Documents to Finance").
+ */
+export function moveMessage(
+  t: Translate,
+  items: MoveItems,
+  folderName: string,
+  names: Names,
+): string {
+  const what = whatMoves(t, items, names);
+  if ("name" in what) return t("move.done", { name: what.name, folder: folderName });
+  return t(`move.done.${what.kind}`, { count: what.count, folder: folderName });
+}
+
+/** The move as the Edit menu names it: "Move “Shortlist”", "Move 3 Documents". */
+export function moveName(t: Translate, items: MoveItems, names: Names): string {
+  const what = whatMoves(t, items, names);
+  if ("name" in what) return t("undo.name.move", { name: what.name });
+  return t(`undo.name.move.${what.kind}`, { count: what.count });
 }

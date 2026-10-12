@@ -177,6 +177,10 @@ _Avoid_: snapshot, version, backup, undo
 Where a deleted Mind, Conversation, Document, Folder or Tag waits for 30 days, from where it can be restored or deleted permanently. Deleting never touches the User's files.
 _Avoid_: trash, bin, archive
 
+**Undo line**:
+The one short line that says what the User just changed, with Undo, shown after any change that can be taken back: "Moved 3 Documents to Finance · Undo". Its Undo does what ⌘Z does.
+_Avoid_: toast, snackbar, notification
+
 ### Checks
 
 **Citation check**:
@@ -220,6 +224,16 @@ _Avoid_: grid, spreadsheet
 **Memory**:
 What IncarnaMind has been asked to remember about the User, kept only when the User says so and open to read, change and delete.
 _Avoid_: history, profile, learned preferences
+
+### Cost
+
+**Monthly cap**:
+The most IncarnaMind may spend in a calendar month on the models the User pays for by the token, on their own keys; off until the User sets it. A request that could pass it isn't sent, and a run it stops says so.
+_Avoid_: budget, quota, spending limit
+
+**Plan**:
+A subscription the User signs in with, such as ChatGPT Plus, whose own limits apply instead of a price. A plan's limit stops a run as the monthly cap does.
+_Avoid_: subscription key, membership
 
 ### Meetings
 
