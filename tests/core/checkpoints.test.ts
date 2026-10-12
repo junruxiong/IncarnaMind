@@ -411,6 +411,44 @@ describe("Comparing and restoring", () => {
     await expect(core.restoreCheckpoint(mind.id, "nothing")).rejects.toThrow(NotFoundError);
   });
 
+  test("a Mind of 300 Blocks: three changes among them are the only rows changed, and restore brings back every Block", async () => {
+    const core = startCore(await createTempDataFolder());
+    const original = Array.from({ length: 300 }, (_, index) =>
+      index % 20 === 0 ? `Section ${index / 20 + 1}` : `Tide reading ${index}: 潮位 ${index} cm.`,
+    );
+    const { mind, client } = await mindWith(core, original);
+    const old = await core.saveCheckpoint(mind.id, "accept");
+    const edited = original.flatMap((text, index) =>
+      index === 10
+        ? []
+        : index === 150
+          ? ["Tide reading 150: 潮位 151 cm."]
+          : index === 200
+            ? ["Neap tide here.", text]
+            : [text],
+    );
+    writeMind(
+      client,
+      edited.map((text) => note(text)),
+    );
+    await client.settled();
+
+    const compared = await core.compareCheckpoints({ mindId: mind.id, from: old.id, to: null });
+    expect(compared.changes).toBe(3);
+    expect(compared.rows).toHaveLength(301);
+    expect(
+      compared.rows.filter((row) => row.changed).map((row) => [shown(row.left), shown(row.right)]),
+    ).toEqual([
+      ["[-Tide reading 10: 潮位 10 cm.-]", null],
+      ["Tide reading 150: 潮位 [-150-] cm.", "Tide reading 150: 潮位 {+151+} cm."],
+      [null, "{+Neap tide here.+}"],
+    ]);
+
+    await core.restoreCheckpoint(mind.id, old.id);
+    await client.settled();
+    expect(lines(client)).toEqual(original);
+  });
+
   test("a version saved with changes still waiting comes back as History showed it, without them", async () => {
     const core = startCore(await createTempDataFolder());
     const mind = await core.createMind({ title: "Tides" });
