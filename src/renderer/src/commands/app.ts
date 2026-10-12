@@ -11,6 +11,7 @@ import { assistantCommands } from "./assistant";
 import { chartCommands } from "./charts";
 import { editCommands } from "./edit";
 import { evidenceCommands } from "./evidence";
+import { fileCommands } from "./fileInfo";
 import { footnoteCommands } from "./footnotes";
 import { citationHandle, sidebarHandle } from "./handles";
 import { meetingCommands } from "./meetings";
@@ -66,6 +67,7 @@ const appCommands: readonly Command[] = [
   ...tabCommands,
   ...meetingCommands,
   ...webPageCommands,
+  ...fileCommands,
   ...evidenceCommands,
   {
     ...fromMenu("settings.open"),
