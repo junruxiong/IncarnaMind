@@ -15,13 +15,15 @@ import { shortcutLabel } from "../commands/keymap";
 import { ChevronIcon } from "../components/icons";
 import { useT } from "../i18n";
 import { footnotePlace, insertFootnote } from "./footnoteSchema";
+import { caretAnchor, LinkField } from "./LinkField";
 import { Popover } from "./Popover";
 import {
+  applyLink,
   asOwnUndoStep,
   canTurnInto,
   currentTurnInto,
   inOneTextblock,
-  linkTarget,
+  LINK_EDIT,
   selectionToMath,
   TURN_INTO,
 } from "./selectionCommands";
@@ -237,11 +239,17 @@ export function SelectionMenu({
       setTimeout(() => {
         if (!editor.isDestroyed && shown.current && !showsOver(editor, false)) hideMenu(editor);
       }, 50);
+    // ⌘K on a selection: its link's address.
+    const editLink = () => {
+      if (!editor.state.selection.empty) setLinking(true);
+    };
+    dom.addEventListener(LINK_EDIT, editLink);
     dom.addEventListener("compositionend", afterComposition);
     dom.addEventListener("mousedown", press);
     document.addEventListener("mouseup", release);
     dom.addEventListener("keydown", onKey, true);
     return () => {
+      dom.removeEventListener(LINK_EDIT, editLink);
       dom.removeEventListener("compositionend", afterComposition);
       dom.removeEventListener("mousedown", press);
       document.removeEventListener("mouseup", release);
@@ -334,17 +342,6 @@ export function SelectionMenu({
     });
   };
 
-  const applyLink = (typed: string) => {
-    setLinking(false);
-    asOwnUndoStep(editor, () => {
-      const chain = editor.chain().focus();
-      if (typed.trim() === "") return chain.extendMarkRange("link").unsetLink().run();
-      // Editing a link changes all of it, not just the part selected.
-      if (editor.isActive("link")) chain.extendMarkRange("link");
-      return chain.setLink({ href: linkTarget(typed) }).run();
-    });
-  };
-
   const keepSelection = (event: { preventDefault(): void }) => event.preventDefault();
 
   return (
@@ -405,7 +402,7 @@ export function SelectionMenu({
             aria-checked={state.link}
             aria-haspopup="dialog"
             data-testid="format-link"
-            title={t("editor.format.link")}
+            title={`${t("editor.format.link")} ${shortcutLabel("link.edit")}`}
             aria-label={t("editor.format.link")}
             onMouseDown={keepSelection}
             onClick={() => act(() => setLinking(true))}
@@ -550,11 +547,14 @@ export function SelectionMenu({
           }}
         />
       )}
-      {linking && linkButton.current && (
+      {linking && (
         <LinkField
-          anchor={linkButton.current}
+          anchor={shown.current && linkButton.current ? linkButton.current : caretAnchor(editor)}
           current={editor.getAttributes("link").href as string | undefined}
-          onApply={applyLink}
+          onApply={(typed) => {
+            setLinking(false);
+            applyLink(editor, typed);
+          }}
           onClose={() => {
             setLinking(false);
             editor.commands.focus();
@@ -757,53 +757,6 @@ function ChoiceMenu({
           <span className="truncate">{choice.label}</span>
         </button>
       ))}
-    </Popover>
-  );
-}
-
-function LinkField({
-  anchor,
-  current,
-  onApply,
-  onClose,
-}: {
-  anchor: HTMLElement;
-  current: string | undefined;
-  onApply(typed: string): void;
-  onClose(): void;
-}) {
-  const t = useT();
-  const field = useRef<HTMLInputElement>(null);
-  const [typed, setTyped] = useState(current ?? "");
-
-  return (
-    <Popover
-      anchor={anchor}
-      initialFocus={field}
-      aria-label={t("editor.link.label")}
-      onDismiss={onClose}
-      className="editor-menu link-editor"
-    >
-      <input
-        ref={field}
-        type="text"
-        inputMode="url"
-        data-testid="link-field"
-        aria-label={t("editor.link.label")}
-        placeholder={t("editor.link.placeholder")}
-        value={typed}
-        spellCheck={false}
-        onChange={(event) => setTyped(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.nativeEvent.isComposing || event.key === "Process") return;
-          if (event.key === "Enter") {
-            event.preventDefault();
-            onApply(typed);
-          }
-        }}
-        className="math-input"
-      />
-      <p className="math-hint">{t(current ? "editor.link.hintEdit" : "editor.link.hint")}</p>
     </Popover>
   );
 }

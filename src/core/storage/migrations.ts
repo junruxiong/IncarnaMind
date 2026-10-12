@@ -1364,6 +1364,22 @@ export const migrations: readonly Migration[] = [
         WHERE deleted_at IS NULL AND file_number IS NOT NULL;
     `,
   },
+  {
+    // 69 to 71 are reserved by work in progress.
+    version: 72,
+    description: "A Question in the assistant reads the Mind it was asked from (#544)",
+    sql: `
+      -- A Question keeps where the User was in the Mind it was asked from, as JSON
+      -- { selection, blockIds }: the text they selected ('' for none) and the ids of the
+      -- top-level Blocks it is in, or the one the cursor is in. NULL: none.
+      ALTER TABLE conversation_messages ADD COLUMN focus TEXT;
+      -- An Answer keeps the Mind it read (NULL: none), its version as read (a fingerprint of
+      -- its text), and 1 if only part of it fitted the model's window.
+      ALTER TABLE conversation_messages ADD COLUMN read_mind_id TEXT;
+      ALTER TABLE conversation_messages ADD COLUMN read_mind_version TEXT;
+      ALTER TABLE conversation_messages ADD COLUMN read_partial INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
 ];
 
 /**
