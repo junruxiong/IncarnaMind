@@ -99,7 +99,7 @@ export function createNoteAdding(options: NoteAddingOptions) {
         if (doc && origin) setOrigins(doc, ids, origin);
         if (doc && proposed && model && !proposalRequestOf(doc, request)) {
           recordProposalRequest(doc, request, {
-            source: "answer",
+            source: "answer-added",
             providerId: model.providerId,
             modelId: model.modelId,
             createdAt: options.now().toISOString(),

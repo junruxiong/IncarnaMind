@@ -151,3 +151,45 @@ test("in a Mind written before the assistant, a Question and its Answer are drag
   await expect.poll(order).toEqual(["Intro", "Next thought", "Later"]);
   await app.close();
 });
+
+test("in a Mind written before the assistant, an Answer the User edited is written again as changes over their version, which stays until they accept them", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await mindWrittenBefore(window, "Written before", [
+    { question: "What is IncarnaMind?", answer: "A notebook." },
+  ]);
+  await window.getByTestId("mind-list-item").filter({ hasText: "Written before" }).click();
+  const editor = window.getByTestId("mind-editor");
+  const answer = editor.getByTestId("answer");
+  await expect(answer).toContainText("A notebook.");
+  const regenerate = async () => {
+    await pointAt(window, answer);
+    await pointAndClick(window, answer.getByTestId("answer-regenerate"));
+  };
+
+  // Written again, unedited, it is replaced where it is.
+  await regenerate();
+  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  await expect(answer).toContainText("That is all.");
+  await expect(answer).not.toContainText("A notebook.");
+
+  // The User writes in the Answer: it is theirs now.
+  await pointAndClick(window, answer.locator("p").last());
+  await window.keyboard.press("End");
+  await window.keyboard.type(" Mine.");
+  await expect(answer).toContainText("That is all. Mine.");
+
+  // Written again, it comes back as changes over their version, which stays until accepted.
+  await regenerate();
+  const changes = window.getByTestId("proposals-bar");
+  await expect(changes).toBeVisible({ timeout: 15_000 });
+  // The model wrote the same again: the change takes the User's words out.
+  await expect(answer.locator("del.proposal-delete")).toContainText("Mine.");
+  await expect(answer).toContainText("Mine.");
+  await expect(answer).toHaveAttribute("data-status", "done");
+  await pointAndClick(window, changes.getByTestId("proposals-accept-all"));
+  await expect(changes).toHaveCount(0);
+  await expect(answer).not.toContainText("Mine.");
+  await app.close();
+});

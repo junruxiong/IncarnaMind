@@ -9,6 +9,8 @@
   Write and ask in one place, with answers from your own files and the AI model you choose. Free and open source, on your computer.
 </p>
 
+<p align="center"><a href="https://tally.so/r/rjN2jL?ref=readme"><img src="docs/images/notify-en.svg" width="278" height="40" alt="Get notified when the alpha opens"></a></p>
+
 <p align="center">
   <a href="#download"><b>Download</b></a> ·
   <a href="#what-you-can-do">What you can do</a> ·
@@ -26,7 +28,7 @@
 
 ## Download
 
-**IncarnaMind isn't released yet.** Once it is, the [Releases page](https://github.com/junruxiong/IncarnaMind/releases) will have installers for macOS (Apple silicon and Intel), Windows and Linux. To hear when, click **Watch → Custom → Releases** at the top of this page. To try it now, run it from source with Node.js 24 or newer:
+**IncarnaMind isn't released yet.** Once it is, the [Releases page](https://github.com/junruxiong/IncarnaMind/releases) will have installers for macOS (Apple silicon and Intel), Windows and Linux. To hear when, [leave your e-mail](https://tally.so/r/rjN2jL?ref=readme) or click **Watch → Custom → Releases** at the top of this page. To try it now, run it from source with Node.js 24 or newer:
 
 ```shell
 git clone https://github.com/junruxiong/IncarnaMind.git && cd IncarnaMind

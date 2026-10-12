@@ -257,7 +257,7 @@ export function createExamples(options: ExamplesOptions) {
         answer,
         createElement({ type: "paragraph" }),
       ]);
-      // Unedited: regenerating it with a model of one's own replaces it without asking.
+      // Unedited: regenerating it with a model of one's own replaces it in place.
       answer.setAttribute("generatedHash", contentHash(answer));
     });
     options.writeValue(valueKey(group), {

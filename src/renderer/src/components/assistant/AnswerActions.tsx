@@ -116,9 +116,9 @@ export function AnswerActions({
             aria-label={
               copied
                 ? t("answer.copied")
-                : t("answer.copy.label", { shortcut: shortcutLabel("answer.copy") })
+                : t("answer.copy.label", { shortcut: shortcutLabel("assistant.copyAnswer") })
             }
-            title={t("answer.copy.label", { shortcut: shortcutLabel("answer.copy") })}
+            title={t("answer.copy.label", { shortcut: shortcutLabel("assistant.copyAnswer") })}
             // A selection in the Answer stays as it is: Copy copies just that.
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => {

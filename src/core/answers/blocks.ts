@@ -92,7 +92,10 @@ function childrenOf(content: readonly NodeJSON[]): Child[] {
   return children;
 }
 
-function formattingOf(marks: readonly MarkJSON[] | undefined): FormattingAttributes | undefined {
+/** A text node's marks as Yjs formatting attributes, each named after its mark. */
+export function formattingOf(
+  marks: readonly MarkJSON[] | undefined,
+): FormattingAttributes | undefined {
   if (!marks || marks.length === 0) return undefined;
   return Object.fromEntries(marks.map((mark) => [mark.type, mark.attrs ?? {}]));
 }

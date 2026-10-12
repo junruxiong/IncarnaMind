@@ -95,8 +95,12 @@ export interface CreateMindInput {
  *   `proposalDelete` marks on text, and the `proposal` attribute on Blocks and
  *   on inline nodes (see `PROPOSAL_ATTRIBUTE`). Older content is version 4
  *   content as it is: nothing is rewritten.
+ * - 5: a Proposal records the text it changes (#94): `target` on its marks
+ *   and its `proposal` attributes (see `ProposalRef`), so it goes out of date
+ *   once that text changes. Version 4 Proposals have none and never go out
+ *   of date: nothing is rewritten.
  */
-export const CONTENT_SCHEMA_VERSION = 4;
+export const CONTENT_SCHEMA_VERSION = 5;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -239,8 +243,12 @@ export const BLOCK_ID_ATTRIBUTE = "id";
  *   a `ProposalAttribute` (the editor's binding keeps no marks on nodes).
  *
  * Until it is accepted a Proposal isn't part of the Mind: what reads the
- * Mind's text (Question context, exports) leaves its new words out and keeps
- * the words it would remove.
+ * Mind's text (Question context, exports, copying, the word count) leaves its
+ * new words out and keeps the words it would remove. It is out of date once
+ * the text it changes has changed (`target`): the words it removes were
+ * edited, partly deleted, or had words typed between them, or the Block it
+ * removes was edited. One out of date can't be accepted, only rejected or
+ * made again (regenerated) from the text as it is now.
  */
 export const PROPOSAL_INSERT_MARK = "proposalInsert";
 export const PROPOSAL_DELETE_MARK = "proposalDelete";
@@ -251,11 +259,20 @@ export interface ProposalRef {
   /** The Proposal's random UUID: what is accepted or rejected on its own. */
   id: string;
   /**
-   * What asked for it: one Edit with AI, or (later) one reply of the
-   * assistant. Its Proposals are accepted or rejected together from there,
-   * and `MIND_PROPOSAL_REQUESTS_FIELD` says which model made them.
+   * What asked for it: one Edit with AI, one Regenerate of an Answer the User
+   * edited, or (later) one reply of the assistant. Its Proposals are accepted
+   * or rejected together from there, and `MIND_PROPOSAL_REQUESTS_FIELD` says
+   * which model made them.
    */
   request: string;
+  /**
+   * A hash of the text it changes as it was when it was made (`targetHash` in
+   * src/shared/proposals.ts): its removed words, an inline node as U+FFFC, or
+   * the whole Block it removes; the hash of "" for one that only adds. Every
+   * part of the Proposal carries it. Absent on Proposals made before version 5,
+   * which are never out of date.
+   */
+  target?: string;
 }
 
 /** The `proposal` attribute of a Block or an inline node: it adds it, or removes it. */
@@ -271,13 +288,26 @@ export interface ProposalAttribute extends ProposalRef {
  */
 export const MIND_PROPOSAL_REQUESTS_FIELD = "proposalRequests";
 
-/** What made a request's Proposals. */
-export interface ProposalRequest {
-  /**
-   * Edit with AI (#93), or an Answer added to a new Mind ("answer", #201); the
-   * assistant (#202) and Enhance (#114) add theirs.
-   */
-  source: "edit-with-ai" | "answer";
+/**
+ * What made a request's Proposals: Edit with AI (#93), with what it was asked
+ * so a change can be made again (regenerated) once it is out of date;
+ * Regenerate of an Answer the User had edited (#94); or an Answer from the
+ * assistant added to a new Mind, as changes to accept (#201). The assistant
+ * (#202) and Enhance (#114) add theirs.
+ */
+export type ProposalRequest =
+  | (ProposalMaker & {
+      source: "edit-with-ai";
+      /** Absent on requests made before #94: their changes can't be regenerated. */
+      action?: EditAction;
+      /** What the User asked for ("translate", "instruction"); "" for none. */
+      instruction?: string;
+    })
+  | (ProposalMaker & { source: "answer"; answerId: string })
+  | (ProposalMaker & { source: "answer-added" });
+
+/** The model that made a request's Proposals, and when. */
+export interface ProposalMaker {
   providerId: string;
   modelId: string;
   /** ISO 8601, UTC. */
@@ -311,6 +341,41 @@ export const ANSWER_BLOCK = "answer";
  * default; `false` means the User switched the Note off, so Questions don't see it.
  */
 export const INCLUDE_IN_CONTEXT_ATTRIBUTE = "includeInContext";
+
+/**
+ * Where text someone other than the User wrote came from (third-party text,
+ * CONTEXT.md; ADR-0013, #78):
+ * - "imported": imported from a file someone else wrote, such as a .docx
+ *   carrying their tracked changes (#104);
+ * - "web-page": a saved web page (#261): Passages a search found in one, or a
+ *   quote added from one (#101);
+ * - "checked-document": the document a check reads to check it (#97, #110).
+ */
+export type ThirdPartySource = "imported" | "web-page" | "checked-document";
+
+/** Third-party text a Run reads itself: a saved web page a search found, or the document a check checks. */
+export type ReadThirdPartySource = Exclude<ThirdPartySource, "imported">;
+
+/**
+ * Why a Run counts as having read third-party text: it read some itself, or
+ * its Question context holds some (a Block or an Answer with a third-party
+ * origin). Such a Run asks before a write or a send that a Tool-level
+ * "always" would otherwise let through (see `ApprovalRequest.thirdParty`).
+ */
+export type ThirdPartyReason =
+  | { via: "read"; source: ReadThirdPartySource }
+  | { via: "context"; source: ThirdPartySource };
+
+/**
+ * The name of the Y.Map, beside a Mind's Blocks, that says which Blocks hold
+ * third-party text: a `ThirdPartySource` by Block id (`BLOCK_ID_ATTRIBUTE`),
+ * for top-level Blocks and Blocks nested in them alike. An Answer written in
+ * a Run that had read third-party text is in it too. Kept beside the Blocks,
+ * not in their attributes, so an older version's editor, which strips
+ * attributes it doesn't know, leaves it as it is (see `src/shared/textOrigins.ts`).
+ * A Block deleted since leaves its entry unused.
+ */
+export const MIND_TEXT_ORIGINS_FIELD = "textOrigins";
 
 /**
  * A Question's Search scope (CONTEXT.md): the Folders, Tags and individual
@@ -582,11 +647,14 @@ export const MAX_CITED_PAGES = 2;
  *   its author (null when the file names none) (#76). `paragraphs`: in a
  *   web page, the paragraphs of the section the quote covers, from 1 (#261).
  * - "lines": the lines the quote covers, or the cited block's.
+ * - "time": in a Transcript, from the start of the cue the quote starts in to
+ *   the end of the one it ends in, in ms from the Transcript's start (#136).
  */
 export type CitationLocation =
   | { kind: "page" | "slide"; from: number; to: number }
   | { kind: "rows"; sheet: string | null; from: number; to: number }
   | { kind: "lines"; from: number; to: number }
+  | { kind: "time"; from: number; to: number }
   | {
       kind: "section";
       heading: string | null;
@@ -914,7 +982,7 @@ export interface AssistantPlace {
 export const DEFAULT_ASSISTANT: AssistantPlace = {
   dock: "right",
   folded: false,
-  width: 360,
+  width: 320,
   height: 300,
   float: { width: 380, height: 520, corner: "top-right", x: 24, y: 56 },
 };
@@ -980,10 +1048,19 @@ export type LayoutChange =
 
 /**
  * The kinds of Document (ADR-0011): files of PDF, plain text, Markdown, Word
- * (.docx), PowerPoint (.pptx), Excel (.xlsx) and CSV, and web pages saved by
- * their address (#261).
+ * (.docx), PowerPoint (.pptx), Excel (.xlsx) and CSV, web pages saved by
+ * their address (#261), and Transcripts, WebVTT files (#136).
  */
-export type DocumentKind = "pdf" | "text" | "markdown" | "docx" | "pptx" | "xlsx" | "csv" | "web";
+export type DocumentKind =
+  | "pdf"
+  | "text"
+  | "markdown"
+  | "docx"
+  | "pptx"
+  | "xlsx"
+  | "csv"
+  | "web"
+  | "transcript";
 
 /**
  * Where a Document is in processing: "queued", then "extracting" its text,
@@ -2338,15 +2415,11 @@ export interface AskQuestionInput {
   mindId: string;
   /** The Question Block's id. */
   questionId: string;
-  /** Replace the Question's Answer even if the User has edited it. Defaults to false. */
-  discardEdits?: boolean;
 }
 
 export interface RegenerateAnswerInput {
   mindId: string;
   answerId: string;
-  /** Replace the Answer even if the User has edited it. Defaults to false. */
-  discardEdits?: boolean;
 }
 
 export interface StopAnswerInput {
@@ -2463,20 +2536,46 @@ export interface EditWithAiInput {
   model?: ChatModelChoice | null;
 }
 
+/**
+ * Regenerate of a change from Edit with AI (#94), usually one out of date:
+ * the same request is made again from the text the change covers as it is
+ * now, and its new changes replace it.
+ */
+export interface RegenerateProposalInput {
+  /** Chosen by the caller, so it can stop the request (`cancelEdit`). */
+  requestId: string;
+  mindId: string;
+  /** The Proposal to make again (`ProposalRef.id`). */
+  proposalId: string;
+  /** The model to use: the Mind's own; none, or null, the default chat model. */
+  model?: ChatModelChoice | null;
+}
+
 /** What Edit with AI did. */
 export type EditWithAiResult =
   /**
    * The changes are in the Mind as Proposals: `proposals` of them, all from
    * `request`. `droppedCitations`: how many Citations they would remove.
+   * `outOfDate`: how many were out of date as they arrived, because the User
+   * edited their text while the model worked.
    */
-  | { kind: "proposed"; request: string; proposals: number; droppedCitations: number }
+  | {
+      kind: "proposed";
+      request: string;
+      proposals: number;
+      droppedCitations: number;
+      outOfDate: number;
+    }
   /** The model gave the text back as it was: there is nothing to propose. */
   | { kind: "unchanged" }
   /** Nothing was sent: the model can't be used now, and `readiness` says why. */
   | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
   /** Nothing was sent: local mode is on, and the model isn't on this computer. */
   | { kind: "local-mode" }
-  /** The selected text isn't in the Mind as it was any more: it was edited meanwhile. */
+  /**
+   * The selected text isn't in the Mind any more (its paragraphs were deleted
+   * meanwhile), or the change to regenerate has gone: nothing was written.
+   */
   | { kind: "changed" }
   /** Nothing was sent: the selection holds Proposals that are still waiting. */
   | { kind: "has-proposals" }
@@ -2493,8 +2592,6 @@ export type AskResult =
   | { asked: true; answerId: string }
   /** Nothing was sent: Questions can't be asked yet, and `readiness` says why. */
   | { asked: false; reason: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
-  /** Nothing was sent: the User has edited the Answer. Ask again with `discardEdits` to replace it. */
-  | { asked: false; reason: "edited"; answerId: string }
   /**
    * Nothing was sent: the Question forces a Skill (`skill`, its name) that is
    * turned off or no longer there. Turn it on, or take it off the Question.
@@ -2715,6 +2812,12 @@ export interface ConversationAnswer {
   citationSupport: CitationSupport | null;
   /** The Tools it called, in order: its searches, Skills and Connectors' Tools. */
   toolCalls: AnswerToolCall[];
+  /**
+   * Written in a Run that had read third-party text (#78): where that text
+   * came from, so a later Question in the conversation counts as having read
+   * it too, and so does a Mind it is added to. Null: none.
+   */
+  textOrigin: ThirdPartySource | null;
   /** ISO 8601, UTC. */
   createdAt: string;
   /** ISO 8601, UTC. */
@@ -3216,6 +3319,8 @@ export interface RegisteredDataFlow {
  * - "reranking-model": downloads the built-in reranking model's files, once,
  *   when the first Documents are ready to search, unless reranking is off or
  *   uses a service.
+ * - "transcription-model": downloads the speech-to-text model and Silero VAD,
+ *   once, when a Meeting is first transcribed on this computer (#136).
  * - "ollama-pull": Ollama downloads a model from its registry, when the User picks local models.
  * - "chatgpt-sign-in": Sign in with ChatGPT, refreshing it, signing out, and
  *   reading OpenAI's signing keys; listed once the User has signed in.
@@ -3231,6 +3336,7 @@ export const networkTrafficIds = [
   "update-check",
   "embedding-model",
   "reranking-model",
+  "transcription-model",
   "ollama-pull",
   "chatgpt-sign-in",
   "remote-connectors",
@@ -3714,8 +3820,9 @@ export interface SetApprovalPolicyInput {
   policy: ApprovalPolicyValue | null;
   /**
    * "Always run" a Skill's scripts only: the User has seen the warning that
-   * its scripts will then run on this computer without asking, with no
-   * sandbox, and confirmed it. Without it, that policy is refused.
+   * its scripts will then run on this computer without asking (in the OS
+   * sandbox where `Settings.scriptSandbox` is "os", with none otherwise), and
+   * confirmed it. Without it, that policy is refused.
    */
   riskAccepted?: boolean;
 }
@@ -3724,9 +3831,11 @@ export interface SetApprovalPolicyInput {
  * What the User decides about a Tool call that asks first:
  * - "allow-once": this call runs;
  * - "always-allow": this call runs, and so will every later call of the Tool
- *   without asking (the policy becomes "always"). For a Skill script this is
- *   "always run": every script of the Skill runs from now on without asking,
- *   which needs `ApprovalResponseOptions.riskAccepted`;
+ *   without asking (the policy becomes "always"), except a call that writes
+ *   or sends data in a Run that has read third-party text
+ *   (`ApprovalRequest.thirdParty`). For a Skill script this is "always run":
+ *   every script of the Skill runs from now on without asking, with the same
+ *   exception, which needs `ApprovalResponseOptions.riskAccepted`;
  * - "deny": the call doesn't run; the model is told the User denied it, and
  *   the Answer carries on without it.
  */
@@ -3736,8 +3845,9 @@ export interface ApprovalResponseOptions {
   /**
    * "always-allow" of a Skill script ("always run") only: the User has seen
    * the warning that the Skill's scripts will then run on this computer
-   * without asking, with no sandbox, and confirmed it. Without it, that
-   * decision is refused and the request keeps waiting.
+   * without asking (in the OS sandbox where `Settings.scriptSandbox` is "os",
+   * with none otherwise), and confirmed it. Without it, that decision is
+   * refused and the request keeps waiting.
    */
   riskAccepted?: boolean;
 }
@@ -3759,10 +3869,18 @@ interface ApprovalRequestBase extends AnswerPlace {
   /**
    * Its Answer had read content the User didn't write before this call, such
    * as Passages of their Documents or a Connector's reply
-   * (docs/designs/agent-extensibility.md §4.6). For now it doesn't change
-   * whether a call asks.
+   * (docs/designs/agent-extensibility.md §4.6). On its own it doesn't change
+   * whether a call asks: `thirdParty` does.
    */
   tainted: boolean;
+  /**
+   * Why its Answer counts as having read third-party text (#78, ADR-0013): it
+   * read a saved web page or the document being checked, or its Question
+   * context holds third-party text. Then a Tool-level "always" (always allow,
+   * always run) no longer covers a call that writes or sends data, so the
+   * call asks, and the card says why. Absent when there is none.
+   */
+  thirdParty?: ThirdPartyReason[];
 }
 
 /**
@@ -3791,8 +3909,9 @@ export type EffectScope =
 
 /**
  * A run of a Skill script waiting for the User's approval: which Skill, which
- * of its scripts, and its arguments. Scripts run on this computer with no
- * sandbox (v1): they can do whatever the User can.
+ * of its scripts, and its arguments. Scripts run on this computer: in the OS
+ * sandbox on macOS and Linux (#65, `Settings.scriptSandbox` "os"), and with
+ * none on Windows, where they can do whatever the User can (`effects` says which).
  */
 export interface SkillScriptApprovalRequest extends ApprovalRequestBase {
   subject: Extract<ApprovalSubject, { kind: "skill-script" }>;
@@ -4161,9 +4280,63 @@ export interface Meeting {
   audio: MeetingAudio;
   /** Why the latest audio couldn't be saved (e.g. the disk is full), until a part is saved again. */
   saveError: string | null;
+  /** Its Transcript, made on this computer (#136); null before it starts, or where this copy can't transcribe. */
+  transcript: MeetingTranscript | null;
   createdAt: string;
   updatedAt: string;
 }
+
+/**
+ * Where a Meeting's Transcript is (#136):
+ * - "waiting": nothing has been transcribed or is waiting to be: no audio has come yet.
+ * - "preparing": the speech-to-text model is downloading or starting. The
+ *   audio is kept meanwhile, and transcribed once it can be.
+ * - "live": lines arrive a few seconds behind the Meeting.
+ * - "behind": live text fell behind, or couldn't go on: the meeting bar says
+ *   "Recording…", and the rest is transcribed once the Meeting stops.
+ * - "finishing": stopped; what is left is being transcribed and saved.
+ * - "saved": saved as a WebVTT file in the Output location (`savedPath`).
+ * - "empty": stopped with nothing said that could be transcribed: no file is saved.
+ * - "failed": it couldn't be finished; `problem` says why.
+ */
+export type TranscriptState =
+  | "waiting"
+  | "preparing"
+  | "live"
+  | "behind"
+  | "finishing"
+  | "saved"
+  | "empty"
+  | "failed";
+
+/**
+ * What stops a Transcript, each with one thing to do (`retryTranscript`):
+ * - "download": the speech-to-text model couldn't be downloaded.
+ * - "engine": it couldn't start, or stopped again and again.
+ * - "save": the WebVTT file couldn't be saved, or no Output location was chosen.
+ */
+export interface TranscriptProblem {
+  kind: "download" | "engine" | "save";
+  message: string;
+}
+
+export interface MeetingTranscript {
+  /** The Transcript's Document, from its first line: searchable and citable while the Meeting records. */
+  documentId: string | null;
+  state: TranscriptState;
+  /** How many lines it has. */
+  lines: number;
+  /** The speech being transcribed now, while live: where it starts, in the Meeting's time, and its words so far. */
+  partial: { startMs: number; text: string } | null;
+  /** The speech-to-text model, while it is downloading or failed to. */
+  model: TranscriptionModelStatus | null;
+  /** The WebVTT file in the Output location, once saved. */
+  savedPath: string | null;
+  problem: TranscriptProblem | null;
+}
+
+/** The speech-to-text model on this computer and its download, as the built-in embedding model's. */
+export type TranscriptionModelStatus = EmbeddingModelStatus;
 
 export interface MeetingAudio {
   /** Some audio is on this computer. */
@@ -4260,30 +4433,18 @@ export const AGENT_TOOLS = [
   "ask",
 ] as const;
 
-/** The agents Settings → Agents can set IncarnaMind up in (see src/core/agents/clients.ts). */
+/**
+ * The agents Settings → Agents sets IncarnaMind up in, and "other" for the
+ * rest (see src/core/agents/clients.ts). A pairing made before an agent
+ * stopped being listed keeps its own id, so a pairing's `client` is any text.
+ */
 export const AGENT_CLIENT_IDS = [
   "claude-desktop",
   "claude-code",
   "codex",
   "cursor",
-  "vscode",
-  "gemini-cli",
-  "kimi-code",
-  "qwen-code",
-  "codebuddy",
-  "minimax-code",
-  "trae",
-  "qoder",
-  "comate",
-  "cherry-studio",
-  "chatbox",
-  "deepchat",
-  "goose",
-  "opencode",
-  "cline",
-  "kilo",
-  "openclaw",
-  "pi",
+  "antigravity",
+  "workbuddy",
   "other",
 ] as const;
 
@@ -4291,7 +4452,7 @@ export type AgentClientId = (typeof AGENT_CLIENT_IDS)[number];
 
 /**
  * How an agent takes IncarnaMind: "bundle", a file its app installs when
- * opened (Claude); "link", a link its app installs from (Cursor, VS Code);
+ * opened (Claude); "link", a link its app installs from (Cursor);
  * "file", IncarnaMind adds itself to the agent's settings file; "command", one
  * line to paste into a terminal (Claude Code); "manual", settings to paste
  * into the agent's own screen.
@@ -4331,6 +4492,8 @@ export interface SetUpAgentInput {
   client: AgentClientId;
   /** The Folders it may read; the User picks at least one. */
   folderIds: string[];
+  /** The name the User gave it ("Other agent" only); otherwise its own name. */
+  name?: string;
 }
 
 export interface SetUpAgent {
@@ -4904,9 +5067,10 @@ export interface CoreApi {
   /**
    * Asks a Question: its Answer is written into the Mind right after it, as the
    * model streams it ("answer.*" events follow its progress). Asking a Question
-   * that already has an Answer replaces that Answer in place. Nothing is sent
-   * when Questions can't be asked yet, or when the Answer has edits the User
-   * hasn't agreed to lose.
+   * that already has an Answer writes it again in place. An Answer the User
+   * has edited isn't replaced: the new one is written, once it is finished,
+   * as Proposals over the User's version (#94), which stays until they accept
+   * a change to it. Nothing is sent when Questions can't be asked yet.
    */
   askQuestion(input: AskQuestionInput): Promise<AskResult>;
   /** Writes an Answer again, in place, from its Question. Same rules as `askQuestion`. */
@@ -4949,6 +5113,16 @@ export interface CoreApi {
    * used. Pushes the Proposals as a "mind.update", like any edit.
    */
   editWithAi(input: EditWithAiInput): Promise<EditWithAiResult>;
+  /**
+   * Makes a change from Edit with AI again (#94), usually one out of date:
+   * rejects it and asks the model again, as that request asked, for the text
+   * it covered as it is now, the User's edits included. What comes back are
+   * new Proposals, written as `editWithAi` writes them; when the model gives
+   * the text back as it is, the change just goes ("unchanged"). If the model
+   * fails or is stopped, the change stays. Not for changes from other
+   * requests (an Answer's Regenerate is `regenerateAnswer`).
+   */
+  regenerateProposal(input: RegenerateProposalInput): Promise<EditWithAiResult>;
   /** Stops an Edit with AI request: it gives "cancelled". Stopping one that ended does nothing. */
   cancelEdit(requestId: string): Promise<void>;
 
@@ -5323,6 +5497,11 @@ export interface CoreApi {
   stopMeeting(meetingId: string): Promise<Meeting>;
   /** Deletes the Meeting's audio on this computer now; a recording goes on keeping what comes next. */
   deleteMeetingAudio(meetingId: string): Promise<Meeting>;
+  /**
+   * Tries the Meeting's Transcript again after a problem (`MeetingTranscript.problem`):
+   * downloads or starts the speech-to-text model, or saves the WebVTT file again.
+   */
+  retryTranscript(meetingId: string): Promise<Meeting>;
   /** Opens the system's settings where the User allows IncarnaMind to record this source. */
   openAudioSettings(source: AudioSource): Promise<void>;
 
@@ -5638,6 +5817,7 @@ const methods: Record<CoreApiMethod, true> = {
   acceptSuggestion: true,
   getSuggestionStatus: true,
   editWithAi: true,
+  regenerateProposal: true,
   cancelEdit: true,
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,
@@ -5743,6 +5923,7 @@ const methods: Record<CoreApiMethod, true> = {
   resumeMeeting: true,
   stopMeeting: true,
   deleteMeetingAudio: true,
+  retryTranscript: true,
   openAudioSettings: true,
   getAgents: true,
   setAgentsEnabled: true,

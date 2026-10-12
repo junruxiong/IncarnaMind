@@ -12,12 +12,28 @@
  *   adds go after them, under `proposalInsert`. Paragraphs the new text adds
  *   or drops are Proposals on whole Blocks.
  * - `proposeAfter` adds new paragraphs under the stretch, each a Proposal.
+ * - `proposeBlocks` writes new content for a whole element (an Answer
+ *   written again) over what it holds: Blocks kept as they are, paragraphs
+ *   compared word by word, and other Blocks added or removed whole.
+ * - `takeBackForRegenerate` rejects a Proposal and says where the text it
+ *   covered is now, to make it again from that text.
  *
  * Nothing in the Mind is changed but by marks, attributes and the new words:
- * the User's text stays where and what it was until they accept.
+ * the User's text stays where and what it was until they accept. Each
+ * Proposal records the text it changes (`ProposalRef.target`), so that it
+ * goes out of date once that text changes.
  */
 import * as Y from "yjs";
-import { createElement } from "../answers/blocks";
+import {
+  INLINE_NODES,
+  NODE_CHARACTER,
+  readProposalAttribute,
+  readProposalRef,
+  resolveProposals,
+  targetHash,
+  targetText,
+} from "../../shared/proposals";
+import { createElement, formattingOf, type NodeJSON } from "../answers/blocks";
 import {
   BLOCK_ID_ATTRIBUTE,
   CITATION_NODE,
@@ -29,7 +45,7 @@ import {
   type ProposalRef,
   type TextPlace,
 } from "../api";
-import { diffSteps, hunksOf, splitWords } from "./diff";
+import { diffSteps, hunksOf, type Step, splitWords } from "./diff";
 
 /** The Blocks whose text can be edited: Notes' and Answers' paragraphs and headings. */
 const TEXT_BLOCKS: ReadonlySet<string> = new Set(["paragraph", "heading"]);
@@ -45,8 +61,6 @@ const WRAPPERS: ReadonlySet<string> = new Set([
 
 const MATH = "inlineMath";
 const BREAK = "hardBreak";
-/** How the editor reads an inline node in a text (see `TextPlace`). */
-const NODE_CHARACTER = "\uFFFC";
 
 type Attributes = Record<string, unknown>;
 
@@ -61,8 +75,12 @@ interface OldToken {
   key: string;
   from: number;
   to: number;
+  /** How a Proposal that removes it records it (`targetText`). */
+  target: string;
   /** Its text, or for an inline node its name and attributes. */
   text?: string;
+  /** An inline node as the model reads it: "[1]", "$x^2$". */
+  shown?: string;
   attributes?: Attributes;
   node?: InlineNode;
 }
@@ -107,6 +125,13 @@ export interface Selection {
   text: string;
   /** The whole paragraphs it is in, the same way. */
   context: string;
+  /**
+   * The words just before and just after it in its paragraphs, when it is
+   * part of one: its new text must fit between them, and not repeat them.
+   * "" at a paragraph's edge.
+   */
+  before: string;
+  after: string;
   /** How many characters it holds, for the model's window. */
   characters: number;
 }
@@ -202,83 +227,46 @@ export function readSelection(blocks: Y.XmlFragment, from: TextPlace, to: TextPl
   const text: string[] = [];
   const context: string[] = [];
   let characters = 0;
+  /** An inline node of the selection, as the model reads it: a numbered marker, a formula. */
+  const nodeToken = (node: Y.XmlElement, attributes: Attributes, index: number): NodeKey => {
+    const name = node.nodeName;
+    if (name === CITATION_NODE) {
+      citations.push(attributes);
+      return { key: keyOf.citation(citations.length), shown: `[${citations.length}]` };
+    }
+    if (name === FOOTNOTE_NODE) {
+      footnotes.push(node);
+      return {
+        key: keyOf.footnote(footnotes.length),
+        shown: `[^${footnotes.length}]`,
+        source: node,
+      };
+    }
+    if (name === MATH) {
+      const latex = stringOf(attributes.latex);
+      return { key: keyOf.math(latex), shown: `$${latex}$` };
+    }
+    if (name === BREAK) return { key: keyOf.break(), shown: "\n" };
+    // Nothing the model can keep: it comes back without it, for the User to review.
+    return { key: keyOf.node(name, index), shown: "" };
+  };
   for (const [index, { element }] of chosen.entries()) {
     const size = sizeOf(element);
     const start = index === 0 ? from.offset : 0;
     const end = index === chosen.length - 1 ? to.offset : size;
     if (start < 0 || end > size || start > end) return { ok: false, reason: "changed" };
-    const tokens: OldToken[] = [];
-    const words: string[] = [];
-    const seen: string[] = [];
-    for (const child of layout(element)) {
-      if (child.node instanceof Y.XmlText) {
-        let at = child.start;
-        for (const run of child.node.toDelta() as Run[]) {
-          if (typeof run.insert !== "string") continue;
-          const runFrom = at;
-          at += run.insert.length;
-          const cut = run.insert.slice(Math.max(0, start - runFrom), Math.max(0, end - runFrom));
-          if (at <= start || runFrom >= end || cut === "") continue;
-          if (hasProposal(run.attributes)) return { ok: false, reason: "has-proposals" };
-          let tokenFrom = Math.max(start, runFrom);
-          for (const word of splitWords(cut)) {
-            tokens.push({
-              key: keyOf.text(word),
-              from: tokenFrom,
-              to: tokenFrom + word.length,
-              text: word,
-              attributes: run.attributes ?? {},
-            });
-            tokenFrom += word.length;
-          }
-          seen.push(cut);
-          words.push(cut);
-        }
-        continue;
-      }
-      if (child.start < start || child.start >= end) continue;
-      const attributes = child.node.getAttributes() as Attributes;
-      if (PROPOSAL_ATTRIBUTE in attributes) return { ok: false, reason: "has-proposals" };
-      const name = child.node.nodeName;
-      let key: string;
-      let shown: string;
-      let source: Y.XmlElement | undefined;
-      if (name === CITATION_NODE) {
-        citations.push(attributes);
-        key = keyOf.citation(citations.length);
-        shown = `[${citations.length}]`;
-      } else if (name === FOOTNOTE_NODE) {
-        footnotes.push(child.node);
-        key = keyOf.footnote(footnotes.length);
-        shown = `[^${footnotes.length}]`;
-        source = child.node;
-      } else if (name === MATH) {
-        key = keyOf.math(stringOf(attributes.latex));
-        shown = `$${stringOf(attributes.latex)}$`;
-      } else if (name === BREAK) {
-        key = keyOf.break();
-        shown = "\n";
-      } else {
-        // Nothing the model can keep: it comes back without it, for the User to review.
-        key = keyOf.node(name, tokens.length);
-        shown = "";
-      }
-      tokens.push({
-        key,
-        from: child.start,
-        to: child.start + 1,
-        node: { name, attributes, ...(source && { source }) },
-      });
-      seen.push(NODE_CHARACTER);
-      words.push(shown);
-    }
+    const tokens = tokensIn(element, start, end, nodeToken);
+    if (!tokens) return { ok: false, reason: "has-proposals" };
     // The spaces at either end stay as they are.
     let lo = 0;
     let hi = tokens.length;
     while (lo < hi && /^\s+$/.test(tokens[lo]?.text ?? "x")) lo++;
     while (hi > lo && /^\s+$/.test(tokens[hi - 1]?.text ?? "x")) hi--;
     const kept = tokens.slice(lo, hi);
-    const shownText = words.join("").trim();
+    const shownText = tokens
+      .map((token) => token.text ?? token.shown ?? "")
+      .join("")
+      .trim();
     segments.push({
       element,
       from: start,
@@ -289,11 +277,13 @@ export function readSelection(blocks: Y.XmlFragment, from: TextPlace, to: TextPl
       start: kept[0]?.from ?? start,
       end: kept.at(-1)?.to ?? start,
     });
-    plain.push(seen.join(""));
+    plain.push(tokens.map((token) => token.text ?? NODE_CHARACTER).join(""));
     text.push(shownText);
     context.push(blockText(element));
     characters += shownText.length;
   }
+  const firstBlock = chosen[0]?.element;
+  const lastBlock = chosen.at(-1)?.element;
   return {
     ok: true,
     selection: {
@@ -303,24 +293,113 @@ export function readSelection(blocks: Y.XmlFragment, from: TextPlace, to: TextPl
       plain: plain.join("\n"),
       text: text.filter((each) => each !== "").join("\n\n"),
       context: context.join("\n\n"),
+      before: firstBlock ? nearWords(blockText(firstBlock, 0, from.offset), "before") : "",
+      after: lastBlock ? nearWords(blockText(lastBlock, to.offset), "after") : "",
       characters,
     },
   };
 }
 
-/** A paragraph's whole text as context for the model: inline nodes as they read, Citations as "[·]". */
-function blockText(element: Y.XmlElement): string {
-  return layout(element)
-    .map(({ node }) => {
-      if (node instanceof Y.XmlText) {
-        return (node.toDelta() as Run[]).map((run) => stringOf(run.insert)).join("");
+/** About this many characters of the words around a selection are shown to the model. */
+const NEAR_CHARACTERS = 80;
+
+/**
+ * The end of `text` nearest the selection, `NEAR_CHARACTERS` of it at most,
+ * without a word cut in two at the far end.
+ */
+function nearWords(text: string, side: "before" | "after"): string {
+  if (text.length <= NEAR_CHARACTERS) return text.trim();
+  const cut = side === "before" ? text.slice(-NEAR_CHARACTERS) : text.slice(0, NEAR_CHARACTERS);
+  const whole = side === "before" ? cut.replace(/^\S*\s+/u, "") : cut.replace(/\s+\S*$/u, "");
+  return (whole === "" ? cut : whole).trim();
+}
+
+/** How an inline node is compared, and read by the model; a footnote moved takes its text along (`source`). */
+interface NodeKey {
+  key: string;
+  shown?: string;
+  source?: Y.XmlElement;
+}
+
+/**
+ * The tokens of a paragraph's or heading's text from `start` to `end`
+ * (`TextPlace` offsets): its words with their marks, and its inline nodes,
+ * compared as `keyNode` says. Null when a Proposal waits there.
+ */
+function tokensIn(
+  element: Y.XmlElement,
+  start: number,
+  end: number,
+  keyNode: (node: Y.XmlElement, attributes: Attributes, index: number) => NodeKey,
+): OldToken[] | null {
+  const tokens: OldToken[] = [];
+  for (const child of layout(element)) {
+    if (child.node instanceof Y.XmlText) {
+      let at = child.start;
+      for (const run of child.node.toDelta() as Run[]) {
+        if (typeof run.insert !== "string") continue;
+        const runFrom = at;
+        at += run.insert.length;
+        const cut = run.insert.slice(Math.max(0, start - runFrom), Math.max(0, end - runFrom));
+        if (at <= start || runFrom >= end || cut === "") continue;
+        if (hasProposal(run.attributes)) return null;
+        let tokenFrom = Math.max(start, runFrom);
+        for (const word of splitWords(cut)) {
+          tokens.push({
+            key: keyOf.text(word),
+            from: tokenFrom,
+            to: tokenFrom + word.length,
+            target: word,
+            text: word,
+            attributes: run.attributes ?? {},
+          });
+          tokenFrom += word.length;
+        }
       }
-      if (node.nodeName === MATH) return `$${stringOf(node.getAttribute("latex"))}$`;
-      if (node.nodeName === BREAK) return "\n";
-      return node.nodeName === CITATION_NODE ? "[·]" : "";
-    })
-    .join("")
-    .trim();
+      continue;
+    }
+    if (child.start < start || child.start >= end) continue;
+    const attributes = child.node.getAttributes() as Attributes;
+    if (PROPOSAL_ATTRIBUTE in attributes) return null;
+    const { key, shown, source } = keyNode(child.node, attributes, tokens.length);
+    tokens.push({
+      key,
+      from: child.start,
+      to: child.start + 1,
+      target: targetText(child.node),
+      ...(shown !== undefined && { shown }),
+      node: { name: child.node.nodeName, attributes, ...(source && { source }) },
+    });
+  }
+  return tokens;
+}
+
+/**
+ * A paragraph's text as context for the model, all of it or from `start` to
+ * `end` (`TextPlace` offsets), as the Mind reads it: what Proposals still
+ * waiting add left out, inline nodes as they read, Citations as "[·]".
+ */
+function blockText(element: Y.XmlElement, start = 0, end = Number.POSITIVE_INFINITY): string {
+  let text = "";
+  for (const { node, start: at, size } of layout(element)) {
+    if (at + size <= start || at >= end) continue;
+    if (node instanceof Y.XmlText) {
+      let offset = at;
+      for (const run of node.toDelta() as Run[]) {
+        const words = stringOf(run.insert);
+        const from = offset;
+        offset += typeof run.insert === "string" ? words.length : 1;
+        if (run.attributes && PROPOSAL_INSERT_MARK in run.attributes) continue;
+        text += words.slice(Math.max(0, start - from), Math.max(0, end - from));
+      }
+      continue;
+    }
+    if (readProposalAttribute(node.getAttribute(PROPOSAL_ATTRIBUTE))?.kind === "insert") continue;
+    if (node.nodeName === MATH) text += `$${stringOf(node.getAttribute("latex"))}$`;
+    else if (node.nodeName === BREAK) text += "\n";
+    else if (node.nodeName === CITATION_NODE) text += "[·]";
+  }
+  return text.trim();
 }
 
 // ---------------------------------------------------------------------------
@@ -330,6 +409,8 @@ function blockText(element: Y.XmlElement): string {
 interface NewToken {
   key: string;
   text?: string;
+  /** The words' own marks (an Answer's), instead of those of the words they replace. */
+  marks?: Attributes;
   node?: InlineNode;
 }
 
@@ -416,6 +497,10 @@ export interface Written {
   droppedCitations: number;
 }
 
+/** What a Proposal's marks and attributes hold: which it is, and the text it changes. */
+const refOf = ({ id, request, target }: ProposalRef): ProposalRef =>
+  target === undefined ? { id, request } : { id, request, target };
+
 /** Text a Proposal adds, and its marks, with no other Proposal's. */
 function withoutProposals(attributes: Attributes | undefined): Attributes {
   const kept: Attributes = {};
@@ -441,11 +526,9 @@ function markRemoved(element: Y.XmlElement, from: number, to: number, ref: Propo
     const end = Math.min(to, child.start + child.size);
     if (start >= end) continue;
     if (child.node instanceof Y.XmlText) {
-      child.node.format(start - child.start, end - start, {
-        [PROPOSAL_DELETE_MARK]: { id: ref.id, request: ref.request },
-      });
+      child.node.format(start - child.start, end - start, { [PROPOSAL_DELETE_MARK]: refOf(ref) });
     } else {
-      setProposal(child.node, { ...ref, kind: "delete" });
+      setProposal(child.node, { ...refOf(ref), kind: "delete" });
     }
   }
 }
@@ -524,7 +607,7 @@ function elementOf(node: InlineNode, newId: () => string): Y.XmlElement {
 /** An inline node the Proposal adds. */
 function nodeElement(node: InlineNode, ref: ProposalRef, newId: () => string): Y.XmlElement {
   const element = elementOf(node, newId);
-  setProposal(element, { ...ref, kind: "insert" });
+  setProposal(element, { ...refOf(ref), kind: "insert" });
   return element;
 }
 
@@ -533,32 +616,41 @@ function withoutProposalAttribute(attributes: Attributes): Attributes {
   return rest;
 }
 
-/** Adds the new tokens at `at` in a Block's text, as the Proposal's words. */
+const sameMarks = (a: Attributes, b: Attributes) => JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * Adds the new tokens at `at` in a Block's text, as the Proposal's words:
+ * with their own marks (an Answer's), or else with `marks`.
+ */
 function insertTokens(
-  segment: Segment,
+  element: Y.XmlElement,
   at: number,
   tokens: readonly NewToken[],
   marks: Attributes,
   ref: ProposalRef,
   newId: () => string,
 ): void {
-  const inserted = { ...marks, [PROPOSAL_INSERT_MARK]: { id: ref.id, request: ref.request } };
+  const inserted = refOf(ref);
   let position = at;
   let words = "";
+  let wordMarks = marks;
   const flush = () => {
     if (words === "") return;
-    insertText(segment.element, position, words, inserted);
+    insertText(element, position, words, { ...wordMarks, [PROPOSAL_INSERT_MARK]: inserted });
     position += words.length;
     words = "";
   };
   for (const token of tokens) {
     if (token.node) {
       flush();
-      insertNode(segment.element, position, nodeElement(token.node, ref, newId));
+      insertNode(element, position, nodeElement(token.node, ref, newId));
       position += 1;
-    } else {
-      words += token.text ?? "";
+      continue;
     }
+    const own = token.marks ?? marks;
+    if (!sameMarks(own, wordMarks)) flush();
+    wordMarks = own;
+    words += token.text ?? "";
   }
   flush();
 }
@@ -571,24 +663,27 @@ function paragraphOf(
 ): Y.XmlElement {
   const paragraph = createElement({
     type: "paragraph",
-    attrs: { [PROPOSAL_ATTRIBUTE]: { ...ref, kind: "insert" } satisfies ProposalAttribute },
+    attrs: { [PROPOSAL_ATTRIBUTE]: { ...refOf(ref), kind: "insert" } satisfies ProposalAttribute },
   });
   const children: (Y.XmlElement | Y.XmlText)[] = [];
-  let words = "";
+  let runs: Run[] = [];
   const flush = () => {
-    if (words === "") return;
+    if (runs.length === 0) return;
     const text = new Y.XmlText();
-    text.insert(0, words);
+    text.applyDelta(runs.map((run) => ({ insert: run.insert, attributes: run.attributes ?? {} })));
     children.push(text);
-    words = "";
+    runs = [];
   };
   for (const token of tokens) {
     if (token.node) {
       flush();
       children.push(elementOf(token.node, newId));
-    } else {
-      words += token.text ?? "";
+      continue;
     }
+    const marks = token.marks ?? {};
+    const last = runs.at(-1);
+    if (last && sameMarks(last.attributes ?? {}, marks)) last.insert += token.text ?? "";
+    else runs.push({ insert: token.text ?? "", attributes: marks });
   }
   flush();
   paragraph.insert(0, children);
@@ -614,7 +709,7 @@ function addAfter(anchor: Y.XmlElement, elements: Y.XmlElement[]): void {
   parent.insert(index + 1, elements);
 }
 
-/** The selection's Citation a token is, by its marker; null for any other token. */
+/** The Citation a token is, by its marker (or by what it cites, in an Answer); null for any other token. */
 function markerOf(token: { key: string }): string | null {
   const prefix = keyOf.citation(0).slice(0, -1);
   if (!token.key.startsWith(prefix)) return null;
@@ -635,6 +730,92 @@ function joinsAcross(tokens: readonly OldToken[]) {
   };
 }
 
+/** What a Proposal that removes these tokens records as the text it changes. */
+const targetOf = (tokens: readonly OldToken[]) => tokens.map((token) => token.target).join("");
+
+/** The Citations Proposals remove and add, by marker, to count those removed and added back nowhere. */
+interface CitationNotes {
+  removed: Set<string>;
+  added: Set<string>;
+}
+
+const noteCitation = (into: Set<string>, token: { key: string }) => {
+  const marker = markerOf(token);
+  if (marker) into.add(marker);
+};
+
+const droppedOf = (notes: CitationNotes) =>
+  [...notes.removed].filter((marker) => !notes.added.has(marker)).length;
+
+/**
+ * Less than half the words kept: a paragraph written anew, better read as one
+ * change than as a change at every other word.
+ */
+function mostlyNew(steps: readonly Step[], old: readonly OldToken[], next: readonly NewToken[]) {
+  const isWord = (text: string | undefined) => text === undefined || !/^\s+$/.test(text);
+  let kept = 0;
+  let at = 0;
+  for (const step of steps) {
+    if (step === "insert") continue;
+    if (step === "equal" && isWord(old[at]?.text)) kept++;
+    at++;
+  }
+  const words = Math.max(
+    old.filter((token) => isWord(token.text)).length,
+    next.filter((token) => isWord(token.text)).length,
+  );
+  return kept * 2 < words;
+}
+
+/**
+ * Writes the changes from a segment's tokens to `tokens`, each place that
+ * changed a Proposal of its own (`next`, given the text it changes), from the
+ * end, so the places read before each are still right. With `whole`, a
+ * paragraph mostly written anew is one change.
+ */
+function writeHunks(
+  segment: Segment,
+  tokens: readonly NewToken[],
+  next: (target: string) => ProposalRef,
+  newId: () => string,
+  notes: CitationNotes,
+  whole = false,
+): void {
+  const steps = diffSteps(
+    segment.tokens.map((token) => token.key),
+    tokens.map((token) => token.key),
+  );
+  let hunks = hunksOf(steps, joinsAcross(segment.tokens));
+  if (whole && hunks.length > 1 && mostlyNew(steps, segment.tokens, tokens)) {
+    hunks = [{ oldFrom: 0, oldTo: segment.tokens.length, newFrom: 0, newTo: tokens.length }];
+  }
+  const refs = hunks.map((hunk) => next(targetOf(segment.tokens.slice(hunk.oldFrom, hunk.oldTo))));
+  for (let at = hunks.length - 1; at >= 0; at--) {
+    const hunk = hunks[at] as (typeof hunks)[number];
+    const ref = refs[at] as ProposalRef;
+    const removed = segment.tokens.slice(hunk.oldFrom, hunk.oldTo);
+    const added = tokens.slice(hunk.newFrom, hunk.newTo);
+    const end = removed.at(-1)?.to ?? segment.tokens[hunk.oldFrom]?.from ?? segment.end;
+    const firstWords = removed.find((token) => token.text !== undefined);
+    const marks = firstWords ? withoutProposals(firstWords.attributes) : besideMarks(segment, end);
+    insertTokens(segment.element, end, added, marks, ref, newId);
+    if (removed.length > 0) markRemoved(segment.element, removed[0]?.from ?? end, end, ref);
+    for (const token of removed) noteCitation(notes.removed, token);
+    for (const token of added) noteCitation(notes.added, token);
+  }
+}
+
+/** A Proposal maker: each new Proposal of `request`, recording the text it changes, in order. */
+function proposalsOf(request: string, newId: () => string) {
+  const proposals: ProposalRef[] = [];
+  const next = (target: string): ProposalRef => {
+    const ref = { id: newId(), request, target: targetHash(target) };
+    proposals.push(ref);
+    return ref;
+  };
+  return { proposals, next };
+}
+
 /**
  * Writes the model's `text` for the selection as Proposals of `request`:
  * each paragraph against the selection's in order, word by word; a
@@ -652,76 +833,39 @@ export function proposeRewrite(
   fresh: ReadonlyMap<number, Attributes> = new Map(),
 ): Written {
   const paragraphs = newParagraphs(text, selection, fresh);
-  const proposals: ProposalRef[] = [];
-  const next = () => {
-    const ref = { id: newId(), request };
-    proposals.push(ref);
-    return ref;
-  };
-  /** The Citations (by marker) the Proposals remove, and those they add back. */
-  const removedCitations = new Set<string>();
-  const addedCitations = new Set<string>();
-  const note = (into: Set<string>, token: { key: string }) => {
-    const marker = markerOf(token);
-    if (marker) into.add(marker);
-  };
+  const { proposals, next } = proposalsOf(request, newId);
+  const notes: CitationNotes = { removed: new Set(), added: new Set() };
   // Only the paragraphs the model was shown: an empty one between two isn't in its text.
   const segments = selection.segments.filter((segment) => segment.shown);
   const pairs = Math.min(paragraphs.length, segments.length);
 
   for (let index = 0; index < pairs; index++) {
-    const segment = segments[index] as Segment;
-    const tokens = paragraphs[index] as NewToken[];
-    const steps = diffSteps(
-      segment.tokens.map((token) => token.key),
-      tokens.map((token) => token.key),
-    );
-    const hunks = hunksOf(steps, joinsAcross(segment.tokens));
-    const refs = hunks.map(() => next());
-    // From the end, so the places read before each are still right.
-    for (let at = hunks.length - 1; at >= 0; at--) {
-      const hunk = hunks[at] as (typeof hunks)[number];
-      const ref = refs[at] as ProposalRef;
-      const removed = segment.tokens.slice(hunk.oldFrom, hunk.oldTo);
-      const added = tokens.slice(hunk.newFrom, hunk.newTo);
-      const end = removed.at(-1)?.to ?? segment.tokens[hunk.oldFrom]?.from ?? segment.end;
-      const firstWords = removed.find((token) => token.text !== undefined);
-      const marks = firstWords
-        ? withoutProposals(firstWords.attributes)
-        : besideMarks(segment, end);
-      insertTokens(segment, end, added, marks, ref, newId);
-      if (removed.length > 0) markRemoved(segment.element, removed[0]?.from ?? end, end, ref);
-      for (const token of removed) note(removedCitations, token);
-      for (const token of added) note(addedCitations, token);
-    }
+    writeHunks(segments[index] as Segment, paragraphs[index] as NewToken[], next, newId, notes);
   }
 
   // Fewer paragraphs: the rest of the selection goes.
   for (const segment of segments.slice(pairs)) {
     if (segment.tokens.length === 0) continue;
-    const ref = next();
     if (segment.whole) {
-      setProposal(removedWith(segment.element), { ...ref, kind: "delete" });
+      const removed = removedWith(segment.element);
+      setProposal(removed, { ...refOf(next(targetText(removed))), kind: "delete" });
     } else {
-      markRemoved(segment.element, segment.start, segment.end, ref);
+      markRemoved(segment.element, segment.start, segment.end, next(targetOf(segment.tokens)));
     }
-    for (const token of segment.tokens) note(removedCitations, token);
+    for (const token of segment.tokens) noteCitation(notes.removed, token);
   }
 
   // More paragraphs: each a new Block after the last one paired.
   const anchor = segments[Math.max(0, pairs - 1)];
   if (anchor && paragraphs.length > pairs) {
     const added = paragraphs.slice(pairs).map((tokens) => {
-      for (const token of tokens) note(addedCitations, token);
-      return paragraphOf(tokens, next(), newId);
+      for (const token of tokens) noteCitation(notes.added, token);
+      return paragraphOf(tokens, next(""), newId);
     });
     addAfter(anchor.element, added);
   }
 
-  return {
-    proposals,
-    droppedCitations: [...removedCitations].filter((marker) => !addedCitations.has(marker)).length,
-  };
+  return { proposals, droppedCitations: droppedOf(notes) };
 }
 
 /**
@@ -740,21 +884,268 @@ export function proposeAfter(
   let top: Y.XmlElement | null = last ?? null;
   while (top && top.parent instanceof Y.XmlElement) top = top.parent;
   if (!top || top.parent !== blocks) return { proposals: [], droppedCitations: 0 };
-  const proposals: ProposalRef[] = [];
+  const { proposals, next } = proposalsOf(request, newId);
   const paragraphs = text
     .replace(/\s*\[\^?\d+\]/g, "")
     .split(/\n[ \t]*\n+/)
     .map((paragraph) => paragraph.trim())
     .filter((paragraph) => paragraph !== "");
-  const added = paragraphs.map((paragraph) => {
-    const ref = { id: newId(), request };
-    proposals.push(ref);
-    return paragraphOf(
+  const added = paragraphs.map((paragraph) =>
+    paragraphOf(
       splitWords(paragraph).map((word) => ({ key: keyOf.text(word), text: word })),
-      ref,
+      next(""),
       newId,
-    );
-  });
+    ),
+  );
   addAfter(top, added);
   return { proposals, droppedCitations: 0 };
+}
+
+// ---------------------------------------------------------------------------
+// An Answer written again, over the User's version
+
+/** What tells one Citation from another in an Answer: what it cites, not its number. */
+function citedKey(attributes: Attributes): string {
+  const location = attributes.location;
+  return [
+    attributes.documentId,
+    attributes.contentHash,
+    attributes.quote,
+    attributes.pageFrom,
+    attributes.pageTo,
+    location === undefined || location === null ? "" : JSON.stringify(location),
+  ]
+    .map((value) => (value === undefined || value === null ? "" : String(value)))
+    .join("\u0001");
+}
+
+/** How an inline node of an Answer is compared: a Citation by what it cites, a formula by its LaTeX. */
+function answerNodeKey(name: string, attributes: Attributes): string {
+  if (name === CITATION_NODE) return `${keyOf.citation(0).slice(0, -1)}${citedKey(attributes)}`;
+  if (name === MATH) return keyOf.math(stringOf(attributes.latex));
+  if (name === BREAK) return keyOf.break();
+  return `\u0000n${name}${JSON.stringify(withoutProposalAttribute(attributes))}`;
+}
+
+/** The attributes that make two Blocks of a type differ, beyond their text. */
+const shapeOf = (name: string, attributes: Attributes) =>
+  `${name}:${[attributes.level, attributes.start, attributes.language]
+    .map((value) => (value === undefined || value === null ? "" : String(value)))
+    .join(",")}`;
+
+/** How a Block of the Mind is compared with one of the new Answer: its type, shape and text. */
+function elementKey(element: Y.XmlElement): string {
+  const attributes = element.getAttributes() as Attributes;
+  if (INLINE_NODES.has(element.nodeName)) return answerNodeKey(element.nodeName, attributes);
+  const inside = element
+    .toArray()
+    .map((child) => {
+      if (child instanceof Y.XmlText) {
+        return (child.toDelta() as Run[]).map((run) => stringOf(run.insert)).join("");
+      }
+      return child instanceof Y.XmlElement ? elementKey(child) : "";
+    })
+    .join("");
+  return `\u0003${shapeOf(element.nodeName, attributes)}{${inside}}`;
+}
+
+/** The same, for a Block of the new Answer. */
+function jsonKey(node: NodeJSON): string {
+  if (node.type === "text") return node.text ?? "";
+  const attributes = node.attrs ?? {};
+  if (INLINE_NODES.has(node.type)) return answerNodeKey(node.type, attributes);
+  const inside = (node.content ?? []).map(jsonKey).join("");
+  return `\u0003${shapeOf(node.type, attributes)}{${inside}}`;
+}
+
+/** The new Answer's inline content as tokens, its words with their own marks. */
+function jsonTokens(content: readonly NodeJSON[]): NewToken[] {
+  const tokens: NewToken[] = [];
+  for (const node of content) {
+    if (node.type === "text") {
+      const marks = formattingOf(node.marks) ?? {};
+      for (const word of splitWords(node.text ?? "")) {
+        tokens.push({ key: keyOf.text(word), text: word, marks });
+      }
+      continue;
+    }
+    const attributes = node.attrs ?? {};
+    tokens.push({
+      key: answerNodeKey(node.type, attributes),
+      node: { name: node.type, attributes },
+    });
+  }
+  return tokens;
+}
+
+/** Every Citation in an element, or in the new Answer's Block, by what it cites. */
+function citationsIn(node: Y.XmlElement | NodeJSON): string[] {
+  if (node instanceof Y.XmlElement) {
+    if (node.nodeName === CITATION_NODE) return [citedKey(node.getAttributes() as Attributes)];
+    return node
+      .toArray()
+      .flatMap((child) => (child instanceof Y.XmlElement ? citationsIn(child) : []));
+  }
+  if (node.type === CITATION_NODE) return [citedKey(node.attrs ?? {})];
+  return (node.content ?? []).flatMap(citationsIn);
+}
+
+/** Two Blocks whose words are compared one by one: paragraphs, or headings of a level. */
+const comparable = (element: Y.XmlElement, node: NodeJSON) =>
+  TEXT_BLOCKS.has(element.nodeName) &&
+  element.nodeName === node.type &&
+  shapeOf(element.nodeName, element.getAttributes() as Attributes) ===
+    shapeOf(node.type, node.attrs ?? {});
+
+/**
+ * Writes `content` (an Answer written again) over what `container` holds
+ * now, as Proposals of `request`: Blocks that are the same stay as they are;
+ * where they differ, a paragraph or heading paired with one of the same kind
+ * is compared word by word (one change if it is mostly new), and other Blocks
+ * are removed and added whole, the new after the old. What the User wrote
+ * stays until they accept a change to it. `container` must hold no Proposals.
+ * Call it in a Yjs transaction.
+ */
+export function proposeBlocks(
+  container: Y.XmlElement,
+  content: readonly NodeJSON[],
+  request: string,
+  newId: () => string,
+): Written {
+  const { proposals, next } = proposalsOf(request, newId);
+  const notes: CitationNotes = { removed: new Set(), added: new Set() };
+  const old = container.toArray().filter((child) => child instanceof Y.XmlElement);
+  const hunks = hunksOf(diffSteps(old.map(elementKey), content.map(jsonKey)), () => false);
+
+  /** A Block of the new Answer, added whole. */
+  const addedBlock = (node: NodeJSON, ref: ProposalRef) => {
+    for (const key of citationsIn(node)) notes.added.add(key);
+    const element = createElement(node);
+    setProposal(element, { ...refOf(ref), kind: "insert" });
+    return element;
+  };
+  /** A Block of the Mind, removed whole. */
+  const removeBlock = (element: Y.XmlElement, ref: ProposalRef) => {
+    for (const key of citationsIn(element)) notes.removed.add(key);
+    setProposal(element, { ...refOf(ref), kind: "delete" });
+  };
+
+  // Planned in order, so the Proposals are numbered as they read; written from the end.
+  const plans = hunks.map((hunk) => {
+    const removed = old.slice(hunk.oldFrom, hunk.oldTo);
+    const added = content.slice(hunk.newFrom, hunk.newTo);
+    const pairs = removed.slice(0, added.length).map((element, index) => {
+      const node = added[index] as NodeJSON;
+      const tokens = comparable(element, node)
+        ? tokensIn(element, 0, sizeOf(element), (child, attributes) => ({
+            key: answerNodeKey(child.nodeName, attributes),
+          }))
+        : null;
+      if (tokens) {
+        const segment: Segment = {
+          element,
+          from: 0,
+          to: sizeOf(element),
+          whole: true,
+          shown: true,
+          tokens,
+          start: 0,
+          end: sizeOf(element),
+        };
+        return { kind: "words" as const, segment, tokens: jsonTokens(node.content ?? []) };
+      }
+      return { kind: "whole" as const, element, node, ref: next(targetText(element)) };
+    });
+    // Words are compared when written, each change made then: their numbers come after.
+    const gone = removed.slice(added.length).map((element) => ({
+      element,
+      ref: next(targetText(element)),
+    }));
+    const extra = added.slice(removed.length).map((node) => ({ node, ref: next("") }));
+    return { hunk, pairs, gone, extra };
+  });
+
+  for (const { hunk, pairs, gone, extra } of plans.reverse()) {
+    // New Blocks go after the last Block this place removes, else after the one before it.
+    const anchor = old[hunk.oldTo - 1] ?? null;
+    if (extra.length > 0) {
+      const elements = extra.map(({ node, ref }) => addedBlock(node, ref));
+      if (anchor) addAfter(anchor, elements);
+      else container.insert(0, elements);
+    }
+    for (const { element, ref } of gone) removeBlock(element, ref);
+    for (const pair of [...pairs].reverse()) {
+      if (pair.kind === "words") {
+        writeHunks(pair.segment, pair.tokens, next, newId, notes, true);
+      } else {
+        addAfter(pair.element, [addedBlock(pair.node, pair.ref)]);
+        removeBlock(pair.element, pair.ref);
+      }
+    }
+  }
+  return { proposals, droppedCitations: droppedOf(notes) };
+}
+
+// ---------------------------------------------------------------------------
+// Making a change again
+
+/** The Block-wide Proposal an element is in: its own `proposal` attribute, or one of a Block around it. */
+function wholeProposal(element: Y.XmlElement): ProposalAttribute | null {
+  for (let at: unknown = element; at instanceof Y.XmlElement; at = at.parent) {
+    const attribute = readProposalAttribute(at.getAttribute(PROPOSAL_ATTRIBUTE));
+    if (attribute) return attribute;
+  }
+  return null;
+}
+
+/**
+ * Rejects the Proposal `id`, in the caller's Yjs transaction, and says where
+ * the text it covered is now: from where it starts to the end of the last
+ * word it removes, the User's words among them included, for the request to
+ * be made again from that text. Null when no paragraph or heading holds
+ * text of it (it only added a Block), and nothing is changed then.
+ */
+export function takeBackForRegenerate(
+  blocks: Y.XmlFragment,
+  id: string,
+): { from: TextPlace; to: TextPlace } | null {
+  let from: TextPlace | null = null;
+  let to: TextPlace | null = null;
+  const isIt = (value: unknown) => readProposalRef(value)?.id === id;
+  for (const { element } of textBlocks(blocks)) {
+    const blockId = stringOf(element.getAttribute(BLOCK_ID_ATTRIBUTE));
+    const whole = wholeProposal(element);
+    if (whole?.id === id) {
+      if (whole.kind === "delete") {
+        from ??= { blockId, offset: 0 };
+        to = { blockId, offset: sizeOf(element) };
+      }
+      continue;
+    }
+    /** Where each part will be once the Proposal is rejected: what it adds won't be there. */
+    let offset = 0;
+    for (const child of layout(element)) {
+      if (child.node instanceof Y.XmlText) {
+        for (const run of child.node.toDelta() as Run[]) {
+          const length = typeof run.insert === "string" ? run.insert.length : 1;
+          const adds = isIt(run.attributes?.[PROPOSAL_INSERT_MARK]);
+          const removes = isIt(run.attributes?.[PROPOSAL_DELETE_MARK]);
+          if (adds || removes) from ??= { blockId, offset };
+          if (adds) continue;
+          offset += length;
+          if (removes) to = { blockId, offset };
+        }
+        continue;
+      }
+      const attribute = readProposalAttribute(child.node.getAttribute(PROPOSAL_ATTRIBUTE));
+      const mine = attribute?.id === id;
+      if (mine) from ??= { blockId, offset };
+      if (mine && attribute?.kind === "insert") continue;
+      offset += 1;
+      if (mine) to = { blockId, offset };
+    }
+  }
+  if (!from) return null;
+  resolveProposals(blocks, (ref) => ref.id === id, "reject");
+  return { from, to: to ?? from };
 }
