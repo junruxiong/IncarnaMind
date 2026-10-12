@@ -28,6 +28,7 @@ import { connectToMind, type MindClient } from "../helpers/mindClient";
 import { editMind, question, readMind, writeMind } from "../helpers/minds";
 import { promptOf } from "../helpers/models";
 import { buildPdf } from "../helpers/pdf";
+import { fakePrinter } from "../helpers/printer";
 
 /** Acme's quarterly revenue, a year a page. */
 const REPORT = buildPdf([
@@ -295,6 +296,58 @@ describe("a chart from a cited table", { timeout: 30_000 }, () => {
     const tableOnly = unzip((await plain.core.exportMind(plain.mind.id, { format: "docx" })).data);
     expect([...tableOnly.keys()].some((name) => name.startsWith("word/media/"))).toBe(false);
     expect(textOf(part(tableOnly, "word/document.xml"))).toContain("Q3309.8377.9");
+  });
+
+  test("a PDF has the same picture and caption, and its sources as numbered footnotes; with no picture, its table", async () => {
+    const pictures = fakePictures();
+    const { printed, printer } = fakePrinter();
+    const { core, client, mind } = await setUpWithDocuments(
+      figuresModel(),
+      [{ name: "Acme.pdf", contents: REPORT }],
+      { pictures, printer },
+    );
+    await askAndFinish(core, client, mind.id, "Revenue by quarter? Answer as a table.");
+    writeMind(client, [chartBlock(chartOfFirstTable(client))]);
+    await client.settled();
+
+    await core.exportMind(mind.id, { format: "pdf" });
+    expect(pictures.drawn).toHaveLength(1);
+    expect(pictures.drawn[0]).toMatch(/^<svg [^>]*width="1200"/);
+    const body = printed[0]?.body ?? "";
+    const png = `data:image/png;base64,${Buffer.from(PNG).toString("base64")}`;
+    expect(body).toContain(`<img src="${png}" alt="Bar chart: Revenue by quarter">`);
+    expect(body).not.toContain("<table>");
+    expect(body).toContain(
+      '<p class="caption keep-next">Chart: Revenue by quarter</p>' +
+        '<p class="caption chart-sources">Source: <sup class="note-ref" data-note="1">1</sup>' +
+        '<sup class="note-ref" data-note="2">2</sup> 1 value has no Citation.</p>',
+    );
+    expect(printed[0]?.notes).toEqual(["Acme, p. 1", "Acme, p. 2"]);
+
+    // In the Mind's citation style, the sources side by side are one note, as a style cites them.
+    await core.setMindCitationStyle(mind.id, "chicago-notes");
+    await core.exportMind(mind.id, { format: "pdf" });
+    expect(printed[1]?.body).toContain(
+      '<p class="caption chart-sources">Source: <sup class="note-ref" data-note="1">1</sup> 1 value',
+    );
+    expect(printed[1]?.notes).toEqual(["“Acme,” n.d., 1; “Acme,” 2."]);
+
+    // A host that can't draw pictures: the table of its values instead.
+    const plain = fakePrinter();
+    const tableOnly = await setUpWithDocuments(
+      figuresModel(),
+      [{ name: "Acme.pdf", contents: REPORT }],
+      { printer: plain.printer },
+    );
+    await askAndFinish(tableOnly.core, tableOnly.client, tableOnly.mind.id, "Revenue? As a table.");
+    writeMind(tableOnly.client, [chartBlock(chartOfFirstTable(tableOnly.client))]);
+    await tableOnly.client.settled();
+    await tableOnly.core.exportMind(tableOnly.mind.id, { format: "pdf" });
+    expect(plain.printed[0]?.body).toContain("<table>");
+    expect(plain.printed[0]?.body).not.toContain("<img");
+    expect(plain.printed[0]?.body).toContain(
+      '<p class="caption keep-next">Chart: Revenue by quarter</p>',
+    );
   });
 
   test("a picture the host fails to draw leaves the table, and the export still succeeds", async () => {

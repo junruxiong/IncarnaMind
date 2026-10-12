@@ -524,7 +524,9 @@ test("A3 a working session: a Linked folder, Answers with Citations, the viewer,
     });
 
     await step(T, "export dialog", async () => {
-      await click(window, window.getByTestId("export-mind"));
+      const tab = window.getByRole("tab", { selected: true }).first();
+      await tab.click({ button: "right" });
+      await click(window, tab.getByTestId("tab-actions").getByTestId("mind.exportOptions"));
       const dialog = window.getByTestId("export-dialog");
       await expect(dialog).toBeVisible();
       await window.waitForTimeout(500);

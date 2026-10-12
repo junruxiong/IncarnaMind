@@ -196,6 +196,12 @@ export interface ModelFacts {
   price: Price;
   /** How it cites, when that was measured or the server decides it (a small local model). */
   citing: Citing;
+  /**
+   * It is offered the `calculate` Tool and told to work no number out itself
+   * (ADR-0021), because it was measured to use them well (#438, then the
+   * evaluation, #441). Unset: neither, and its Answers are as before.
+   */
+  calculates: boolean;
 }
 
 /** A model in the catalog: its facts, any of which its sources may not give. */

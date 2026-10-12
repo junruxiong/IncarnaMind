@@ -11,6 +11,7 @@ import { displayName, fileNameOf, sourceOf } from "../../../shared/documentNames
 import { libraryPresetKeys } from "../../../shared/libraryPresets";
 import { missingDetails } from "../../../shared/references";
 import { core } from "../core";
+import { LIBRARY_DELETED } from "../deletedItems";
 import { errorMessage as messageOf } from "../errors";
 import { useFindSources } from "../findSources";
 import { useLanguage, useT } from "../i18n";
@@ -38,6 +39,7 @@ import { LibraryMoreMenu } from "./LibraryMoreMenu";
 import { LibrarySelectBox, LibrarySelectionBar } from "./LibrarySelection";
 import { DocumentLineIcon, SettingsLineIcon } from "./lineIcons";
 import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
+import { RecentlyDeleted } from "./RecentlyDeleted";
 import { ReferenceImportPanel } from "./ReferenceImportPanel";
 import { rowActionButtonClass } from "./sidebarRows";
 import { DocumentTagChips } from "./TagChips";
@@ -59,8 +61,14 @@ function keepPreviewOf(documentId: string): void {
   if (preview) void changeLayout({ type: "keep", tabId: preview.id });
 }
 
-/** The sidebar chooses a folder; this sheet shows its documents and editable tags. */
+/** The Library tab: the sheet of a Folder's Documents, or Recently deleted. */
 export function LibraryPane() {
+  const deleted = useAppStore((state) => state.libraryFilter === LIBRARY_DELETED);
+  return deleted ? <RecentlyDeleted /> : <LibrarySheet />;
+}
+
+/** The sidebar chooses a folder; this sheet shows its documents and editable tags. */
+function LibrarySheet() {
   const t = useT();
   const language = useLanguage();
   // Every Document: the Tags filter below is the sidebar's, and counts its options from all.
@@ -86,14 +94,12 @@ export function LibraryPane() {
   const [limit, setLimit] = useState(100);
   const [editing, setEditing] = useState<LibraryGroup | "new" | null>(null);
   const [starters, setStarters] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     setLimit(100);
     setSearch("");
     setFacetFilter({});
-    setDeleting(false);
     setEditing(filter === "new" ? "new" : null);
     // Another Folder: what was selected in this one isn't in view any more.
     useSelection.getState().clear("library");
@@ -285,8 +291,14 @@ export function LibraryPane() {
                 </button>
                 <button
                   type="button"
+                  disabled={busy}
                   className={buttonStyle("ghost", "sm")}
-                  onClick={() => setDeleting(!deleting)}
+                  onClick={() =>
+                    void act(async () => {
+                      await useAppStore.getState().deleteFolder(selected.id);
+                      useAppStore.getState().openLibrary();
+                    })
+                  }
                 >
                   {t("library.delete")}
                 </button>
@@ -307,33 +319,6 @@ export function LibraryPane() {
             <p role="alert" className={`${errorTextClass} mb-4`}>
               {error}
             </p>
-          )}
-          {deleting && selected && (
-            <div className="mb-5 border-y border-rule py-4">
-              <p className="mb-3 text-ink-secondary">{t("library.deleteNotice")}</p>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  disabled={busy}
-                  className={buttonStyle("danger")}
-                  onClick={() =>
-                    void act(async () => {
-                      await useAppStore.getState().deleteFolder(selected.id);
-                      useAppStore.getState().openLibrary();
-                    })
-                  }
-                >
-                  {t("library.delete")}
-                </button>
-                <button
-                  type="button"
-                  className={buttonStyle("ghost")}
-                  onClick={() => setDeleting(false)}
-                >
-                  {t("library.cancel")}
-                </button>
-              </div>
-            </div>
           )}
           {editing && (
             <GroupForm
@@ -383,13 +368,23 @@ export function LibraryPane() {
                             count: shown.length,
                           })}
             </p>
-            <button
-              type="button"
-              className="hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-accent"
-              onClick={() => useAppStore.getState().openTagsDialog()}
-            >
-              {t("library.manageTags")}
-            </button>
+            <span className="flex flex-wrap items-center gap-x-4">
+              <button
+                type="button"
+                data-testid="library-recently-deleted"
+                className="hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-accent"
+                onClick={() => useAppStore.getState().openLibrary(LIBRARY_DELETED)}
+              >
+                {t("deleted.link")}
+              </button>
+              <button
+                type="button"
+                className="hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-accent"
+                onClick={() => useAppStore.getState().openTagsDialog()}
+              >
+                {t("library.manageTags")}
+              </button>
+            </span>
           </div>
           {shown.length === 0 ? (
             <p className="border-t border-rule py-10 text-ink-meta">
