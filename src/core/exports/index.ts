@@ -1,8 +1,9 @@
 /**
- * Exporting a Mind to Markdown, .docx or PDF (see `CoreApi.exportMind`). The core
+ * Exporting a Mind to Markdown, .docx, PDF or HTML (see `CoreApi.exportMind`). The core
  * makes the file's bytes; the host decides where they go (the desktop app asks
  * with the system save dialog), so nothing here touches the file system. A PDF
- * is printed by the host's `Printer`, from the HTML made here.
+ * is printed by the host's `Printer`, from the HTML made here; an HTML file is that same
+ * HTML, whole.
  */
 import type * as Y from "yjs";
 import { layoutChart } from "../../shared/chartLayout";
@@ -21,16 +22,17 @@ import { mindName } from "../../shared/naming";
 import type { PrintPaper } from "../../shared/printDocument";
 import type { SourceDocument } from "../../shared/sources";
 import type { Logger, Pictures, Printer } from "../adapters";
-import type {
-  CitationAttributes,
-  CitationFormatRequest,
-  ExportFormat,
-  ExportMindOptions,
-  FormattedCitations,
-  KeptCitationText,
-  Mind,
-  MindExport,
-  MindExportPreview,
+import {
+  type CitationAttributes,
+  type CitationFormatRequest,
+  EXPORT_FORMATS,
+  type ExportFormat,
+  type ExportMindOptions,
+  type FormattedCitations,
+  type KeptCitationText,
+  type Mind,
+  type MindExport,
+  type MindExportPreview,
 } from "../api";
 import { InvalidInputError, isRecord } from "../errors";
 import { safeFileName } from "../fileNames";
@@ -38,6 +40,7 @@ import type { Language } from "../language";
 import { type Block, countQuestions, type Footnote, footnotesIn, readBlocks } from "../mindText";
 import { addSources, styleCitations } from "./citations";
 import { renderDocx } from "./docx";
+import { renderHtml } from "./html";
 import { exportLabels } from "./labels";
 import { renderMarkdown } from "./markdown";
 import { unifyIdeographs } from "./pdfUnicode";
@@ -82,6 +85,7 @@ const EXTENSIONS: Readonly<Record<ExportFormat, string>> = {
   markdown: "md",
   docx: "docx",
   pdf: "pdf",
+  html: "html",
 };
 
 /** What an export holds, read once for both its preview and its file. */
@@ -171,6 +175,14 @@ export function createExports(deps: ExportsDependencies) {
           paper: language === "en" ? "letter" : "a4",
           created: deps.now(),
         });
+      } else if (format === "html") {
+        const drawn = await withPictures(blocks, language, deps);
+        data = new TextEncoder().encode(
+          renderHtml(title, drawn, labels, {
+            language,
+            name: preview.fileName.slice(0, -".html".length),
+          }),
+        );
       } else {
         // Charts as Word has them: the picture, drawn at twice its size, else the table of values.
         const drawn = await withPictures(blocks, language, deps);
@@ -252,14 +264,17 @@ async function withPictures(
 function parseExportOptions(input: unknown): Required<ExportMindOptions> {
   if (!isRecord(input)) throw new InvalidInputError("Export options must be an object.");
   const { format, includeQuestions } = input;
-  if (format !== "markdown" && format !== "docx" && format !== "pdf") {
-    throw new InvalidInputError('The export format must be "markdown", "docx" or "pdf".');
+  if (!EXPORT_FORMATS.some((each) => each === format)) {
+    throw new InvalidInputError('The export format must be "markdown", "docx", "pdf" or "html".');
   }
   if (includeQuestions !== undefined && typeof includeQuestions !== "boolean") {
     throw new InvalidInputError("includeQuestions must be true or false.");
   }
-  // Markdown is an archive, so it keeps Questions; a .docx or PDF is the deliverable, so it doesn't.
-  return { format, includeQuestions: includeQuestions ?? format === "markdown" };
+  // Markdown is an archive, so it keeps Questions; the others are deliverables, so they don't.
+  return {
+    format: format as ExportFormat,
+    includeQuestions: includeQuestions ?? format === "markdown",
+  };
 }
 
 /** The day a web page's version was fetched, as the interface language writes a date. */

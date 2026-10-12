@@ -4,7 +4,8 @@
  * footnotes are numbered together in the order they appear, as in the other exports; a
  * citation style's notes take their numbers too, and its in-text Citations and Bibliography
  * are in the body. Maths is typeset (MathML); what KaTeX can't read stays LaTeX. Everything
- * from the Mind is escaped: the page shows text, never markup it was given.
+ * from the Mind is escaped: the page shows text, never markup it was given. The HTML export
+ * (./html) is the same document, its markers links to the notes (`linkNotes`).
  */
 import type { StyledRun } from "../api";
 import { type Block, type Footnote, type Inline, type Marks, tableLayout } from "../mindText";
@@ -36,12 +37,17 @@ export function renderPrintHtml(
   title: string,
   blocks: readonly Block[],
   labels: PrintLabels,
+  { linkNotes = false }: { linkNotes?: boolean } = {},
 ): PrintHtml {
   const notes: string[] = [];
-  const writer = new PrintWriter(labels, (note) => {
-    notes.push(note);
-    return notes.length;
-  });
+  const writer = new PrintWriter(
+    labels,
+    (note) => {
+      notes.push(note);
+      return notes.length;
+    },
+    linkNotes,
+  );
   const parts: string[] = [];
   if (title) parts.push(`<h1 class="mind-title">${escapeHtml(title)}</h1>`);
   parts.push(writer.blocks(blocks));
@@ -117,6 +123,8 @@ class PrintWriter {
     private readonly labels: PrintLabels,
     /** Numbers a footnote, given as HTML: 1, 2, 3… in the order they are written. */
     private readonly number: (note: string) => number,
+    /** Markers link to their notes, and carry the id the note links back to. */
+    private readonly linkNotes: boolean,
   ) {}
 
   blocks(blocks: readonly Block[]): string {
@@ -125,6 +133,9 @@ class PrintWriter {
 
   private marker(note: string): string {
     const number = this.number(note);
+    if (this.linkNotes) {
+      return `<sup class="note-ref" id="ref-${number}"><a href="#note-${number}">${number}</a></sup>`;
+    }
     return `<sup class="note-ref" data-note="${number}">${number}</sup>`;
   }
 
