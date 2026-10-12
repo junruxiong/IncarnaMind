@@ -17,6 +17,7 @@ import type {
   ExternalService,
   WebPageResult,
 } from "../../api";
+import { WebPageError } from "../../documents/web/errors";
 import type { PageFetch } from "../../documents/web/fetch";
 import { NotFoundError } from "../../errors";
 import type { PreparedChatModel } from "../../providers/chat";
@@ -101,6 +102,13 @@ export function createWebSearch(options: WebSearchOptions): AnswerWeb & { close(
     },
 
     async save(address: string, place: AnswerPlace, signal: AbortSignal): Promise<SavedPage> {
+      // Before a page saved already is used as it is: web search reads only the public internet.
+      try {
+        await fetcher.check(address);
+      } catch (error) {
+        if (error instanceof WebPageError) return { outcome: "failed", reason: error.reason };
+        throw error;
+      }
       const result = await options.savePage(address, fetcher.fetch);
       if (result.outcome === "failed") return { outcome: "failed", reason: result.failure.reason };
       const { document } = result;

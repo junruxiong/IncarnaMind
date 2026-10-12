@@ -235,6 +235,37 @@ describe("Web search in an Answer", { timeout: 30_000 }, () => {
     expect(shownPassages(text).length).toBeGreaterThan(0);
   });
 
+  test("a page saved already from this computer's network isn't reused when a search returns its address", async () => {
+    let local = "";
+    const answering = scriptedModel((call: ModelCall): ScriptedReply => {
+      if (!call.results.some((result) => result.tool === "search_web")) {
+        return { calls: [{ tool: "search_web", input: { query: "tea" } }] };
+      }
+      if (!call.results.some((result) => result.tool === "read_web_page")) {
+        return { calls: [{ tool: "read_web_page", input: { url: local } }] };
+      }
+      return { text: "Nothing to read." };
+    });
+    const found: { url: string; title: string }[] = [];
+    const { model } = webSearchingModel(answering, found);
+    const { core, client, mind, web } = await setUp(model);
+    // Added by the User through #261's path, which reaches this computer.
+    local = `http://127.0.0.1:${web.port}/tea`;
+    found.push({ url: local, title: "Tea on the intranet" });
+    const added = await core.saveWebPage({ address: local });
+    expect(added.outcome).toBe("saved");
+    const heardBefore = web.heard.length;
+
+    const { answerId } = await askAndFinish(core, client, mind.id, "Search the web for tea");
+
+    expect(toolCalls(client, answerId)[1]).toMatchObject({
+      tool: "read_web_page",
+      status: "failed",
+      webPage: { address: local, failure: "not-public" },
+    });
+    expect(web.heard).toHaveLength(heardBefore);
+  });
+
   test("isn't offered while the switch is off, in Local mode, for a Question that doesn't ask for the web, or with a provider that has no web search", async () => {
     const off = webSearchingModel(researcher(), FOUND);
     const first = await setUp(off.model, { webSearch: false });
