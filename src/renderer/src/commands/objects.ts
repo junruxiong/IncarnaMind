@@ -1,9 +1,10 @@
 import type { LinkedFolder } from "../../../core/api";
 import { displayName } from "../../../shared/documentNames";
 import { core, files } from "../core";
+import { showFileLabelKey } from "../fileInfo";
 import { languageNow } from "../i18n";
 import { bridgeFrom, type LibraryBridge } from "../libraryBridges";
-import { fileStatusLabel, folderName, formatCount, revealLabelKey } from "../linkedFolders";
+import { fileStatusLabel, folderName, formatCount } from "../linkedFolders";
 import { useRequests } from "../requests";
 import { useAppStore } from "../store";
 import { findTab } from "../tabs";
@@ -198,7 +199,7 @@ export const documentCommands: readonly Command[] = [
   },
   {
     id: "document.showInFolder",
-    label: "documents.copy.showInFolder",
+    label: (_ctx, t) => t(showFileLabelKey(navigator.platform)),
     group: "file",
     appliesTo: ["document"],
     when: onFiles,
@@ -371,7 +372,7 @@ const folderBridge = (ctx: CommandContext): LibraryBridge | null => {
     : null;
 };
 
-const REVEAL = revealLabelKey(navigator.platform);
+const REVEAL = showFileLabelKey(navigator.platform);
 
 export const linkedFolderCommands: readonly Command[] = [
   {
