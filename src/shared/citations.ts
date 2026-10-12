@@ -152,6 +152,28 @@ export function citedLocation(
   return location ? formatLocation(location, t) : null;
 }
 
+/**
+ * Where a Citation points, as "Document, Location". A sheet that shares its
+ * Document's name is left out of the Location, so the name isn't said twice.
+ */
+export function citationSource(
+  attributes: Partial<CitationAttributes>,
+  t: Translate,
+): { name: string; where: string | null; text: string } {
+  const name = attributes.documentName ?? "";
+  const location = citationLocation(attributes);
+  if (!location) return { name, where: null, text: name };
+  const sameName = (sheet: string) =>
+    sheet.toLowerCase() === name.toLowerCase().replace(/\.[^.]+$/, "") ||
+    sheet.toLowerCase() === name.toLowerCase();
+  const shown =
+    location.kind === "rows" && location.sheet !== null && sameName(location.sheet)
+      ? { ...location, sheet: null }
+      : location;
+  const where = formatLocation(shown, t);
+  return { name, where, text: t("citation.where", { document: name, location: where }) };
+}
+
 /** A Citation as plain text, e.g. "[Attention Is All You Need, p. 3]", for copying as text. */
 export function citationReference(attributes: Partial<CitationAttributes>): string {
   const name = attributes.documentName;

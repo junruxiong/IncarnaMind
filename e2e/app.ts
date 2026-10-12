@@ -81,6 +81,11 @@ export interface LaunchOptions {
    * always a fake that makes a tone: no test opens a device.
    */
   computerSound?: "allowed" | "denied" | "silent";
+  /**
+   * What the fake text recognition model reads on each scanned page (#397):
+   * a JSON file of a `FakeScanScript`. Without, it reads nothing on them.
+   */
+  scans?: string;
 }
 
 /**
@@ -123,6 +128,7 @@ export async function launchApp(
     chatGpt,
     keepWindow = false,
     computerSound = "allowed",
+    scans,
   }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
@@ -139,6 +145,7 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_REFERENCE_LOOKUP;
   delete env.INCARNAMIND_TEST_SOURCES;
   delete env.INCARNAMIND_TEST_CHATGPT;
+  delete env.INCARNAMIND_TEST_SCANS;
   // A test never uses the ChatGPT sign-in an agent's shell may point at for checks by hand.
   delete env.INCARNAMIND_CHATGPT_PROFILE;
   env.INCARNAMIND_TEST_AUDIO = "fake";
@@ -154,6 +161,7 @@ export async function launchApp(
   if (referenceLookup) env.INCARNAMIND_TEST_REFERENCE_LOOKUP = referenceLookup;
   if (sources) env.INCARNAMIND_TEST_SOURCES = sources;
   if (chatGpt) env.INCARNAMIND_TEST_CHATGPT = chatGpt;
+  if (scans) env.INCARNAMIND_TEST_SCANS = scans;
   env.INCARNAMIND_DATA_DIR = dataDir;
   env.INCARNAMIND_TEST_HOOKS = "1";
   if (fakeChat) env.INCARNAMIND_FAKE_CHAT = "1";
@@ -1100,6 +1108,17 @@ export async function stubClipboard(window: Page) {
 /** A fresh, empty data folder. Remove it with `removeDataFolder`. */
 export const createDataFolder = () => mkdtemp(join(tmpdir(), "incarnamind-smoke-"));
 
+/** Closes an app, and kills it if it hasn't quit in 10 s, so one stuck app can't hold up the worker. */
+async function closeOrKill(app: ElectronApplication): Promise<void> {
+  const quit = app.close().catch(() => undefined);
+  let timer: NodeJS.Timeout | undefined;
+  const stuck = new Promise<"stuck">((resolve) => {
+    timer = setTimeout(() => resolve("stuck"), 10_000);
+  });
+  if ((await Promise.race([quit, stuck])) === "stuck") app.process().kill("SIGKILL");
+  clearTimeout(timer);
+}
+
 /**
  * Removes a data folder, after closing an app the test left open on it. If
  * the test failed, a screenshot of that app's window as the test left it is
@@ -1117,7 +1136,7 @@ export async function removeDataFolder(dataDir: string): Promise<void> {
       const shot = await window.screenshot({ path }).catch(() => undefined);
       if (shot) await info.attach("app-window", { path, contentType: "image/png" });
     }
-    await app.close().catch(() => undefined);
+    await closeOrKill(app);
   }
   await rm(dataDir, { recursive: true, force: true, maxRetries: 3 });
 }
