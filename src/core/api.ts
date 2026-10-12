@@ -421,6 +421,8 @@ export interface AnswerAttributes {
   errorKind: ProviderErrorKind | null;
   /** The provider's own message about the failure, for details. */
   errorMessage: string | null;
+  /** When the plan's limit that stopped it resets (ISO 8601), when the provider said. */
+  errorResetsAt: string | null;
   /** A fingerprint of the content as it was generated: it differs once the User edits the Answer. */
   generatedHash: string | null;
   /**
@@ -732,6 +734,8 @@ export interface UserSettings {
    * everywhere. Copies of the document being checked are left out either way.
    */
   leaveOutOwnFiles: boolean;
+  /** The monthly cap on models billed per token: off (null) by default. */
+  monthlyCap: MonthlyCap | null;
 }
 
 /**
@@ -2321,13 +2325,98 @@ export type ProviderErrorKind =
    * oldest Question context left out. Nothing is cut silently.
    */
   | "too-long"
+  /** The request could pass the User's monthly cap (`UserSettings.monthlyCap`): nothing was sent. */
+  | "cost-cap"
   | "unknown";
 
 export interface ProviderError {
   kind: ProviderErrorKind;
   /** The provider's own message, for details. */
   message: string;
+  /** "plan-limit": when the plan's limit resets (ISO 8601), when the provider says. */
+  resetsAt?: string;
 }
+
+/**
+ * How a model's requests are paid for (src/core/providers/catalog/billing.ts):
+ * per token on an API key, from a plan's own limits (the ChatGPT plan), or
+ * not at all (a model on this computer).
+ */
+export type Billing = "per-token" | "plan" | "free";
+
+export type Currency = "USD" | "CNY";
+
+export interface Money {
+  currency: Currency;
+  amount: number;
+}
+
+/**
+ * The most IncarnaMind may spend in a calendar month on models billed per
+ * token. Before each such request its most (its prompt and its output limit)
+ * is reserved, and a request whose reservation would pass the cap isn't sent.
+ * Spending in the other currency counts at a fixed rate.
+ */
+export interface MonthlyCap {
+  amount: number;
+  currency: Currency;
+}
+
+/** One saved provider's use this month. */
+export interface ProviderCost {
+  providerId: string;
+  billing: Billing;
+  requests: number;
+  /** What its requests cost, in each currency they were priced in. */
+  spent: Money[];
+  /** Tokens of requests to models with no known price: counted here, not toward the cap. */
+  unpricedTokens: number;
+}
+
+/** Settings' month-to-date cost: recorded on this computer, never sent. */
+export interface CostSummary {
+  /** When the counted month began (ISO 8601), in the computer's time zone. */
+  monthStart: string;
+  /** What per-token requests cost this month, settled and still reserved, per currency. */
+  spent: Money[];
+  /** All of it in the cap's currency (the other at a fixed rate), when a cap is set. */
+  spentTowardCap: Money | null;
+  cap: MonthlyCap | null;
+  /** The providers used this month. */
+  providers: ProviderCost[];
+}
+
+/**
+ * Why a Run stopped before its work was done, so that a Task can resume from
+ * it later: the monthly cap, or a plan's limit (with when it resets, when the
+ * provider says). Its unfinished items say "not checked" with the reason.
+ */
+export type RunStop = { reason: "cost-cap" } | { reason: "plan-limit"; resetsAt: string | null };
+
+/** A large run to estimate: so many items (a comparison table's cells, verify's sentences…), each about an Answer. */
+export interface RunEstimateInput {
+  items: number;
+  /** The model it would use; the default model when left out. */
+  model?: ChatModelChoice;
+}
+
+/**
+ * The one estimate shown before a large run on a model billed per token,
+ * never asked: its calls, tokens and price, with the month so far. A plan or
+ * a model on this computer gets none: a plan's price is fixed, and none of
+ * the plans IncarnaMind uses says how much of its window is left.
+ */
+export type RunEstimate =
+  | {
+      billing: "per-token";
+      calls: number;
+      tokens: number;
+      /** Null for a model with no known price. */
+      cost: Money | null;
+      spentTowardCap: Money | null;
+      cap: MonthlyCap | null;
+    }
+  | { billing: "plan" | "free" };
 
 export type ConnectionTestResult = { ok: true } | { ok: false; error: ProviderError };
 
@@ -5004,6 +5093,18 @@ export interface CoreApi {
    * flow to it. A provider that isn't asked, or can't be reached, offers its default.
    */
   listChatModels(): Promise<ChatModelGroup[]>;
+  /**
+   * This month's cost so far, for Settings: what requests billed per token
+   * cost, settled and still reserved, and each provider's use. Recorded on
+   * this computer only.
+   */
+  getCostSummary(): Promise<CostSummary>;
+  /**
+   * The estimate shown before a large run (comparison tables, verify,
+   * contradiction watch, Enhance): for a model billed per token, its calls,
+   * tokens and price; for a plan or a model on this computer, nothing.
+   */
+  estimateRun(input: RunEstimateInput): Promise<RunEstimate>;
 
   /**
    * Asks a Question: its Answer is written into the Mind right after it, as the
@@ -5748,6 +5849,8 @@ const methods: Record<CoreApiMethod, true> = {
   testChatConnection: true,
   getChatReadiness: true,
   listChatModels: true,
+  getCostSummary: true,
+  estimateRun: true,
   askQuestion: true,
   regenerateAnswer: true,
   stopAnswer: true,
