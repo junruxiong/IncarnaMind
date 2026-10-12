@@ -63,10 +63,22 @@ import type { Database, SqlValue } from "../storage";
 import { tagsOfDocument } from "../tags";
 import type { StoredTaggingState } from "../tags/tagger";
 import { createEmbeddingQueue } from "./embedding";
-import { DOCUMENT_EXTENSIONS, isInside, openFile, openImageBeside, relativePath } from "./files";
+import {
+  DOCUMENT_EXTENSIONS,
+  isInside,
+  openFile,
+  openImageBeside,
+  relativePath,
+  type StatIdentity,
+} from "./files";
 import { isPackageKind, packageSizeError } from "./formats/zip";
 import { keywordText } from "./keywords";
-import { createLibrary, type LibraryHooks, type LibraryOptions } from "./library";
+import {
+  createLibrary,
+  FORGET_FILE_IDENTITY,
+  type LibraryHooks,
+  type LibraryOptions,
+} from "./library";
 import type { PageText } from "./passages";
 import {
   CURRENT_SINCE,
@@ -385,6 +397,7 @@ export interface DocumentsOptions {
   textRecognition?: TextRecognitionModel;
   linkedFolders: {
     watch: WatchFolder;
+    stat: StatIdentity;
     retryMs: number;
     detectDataless: boolean;
   };
@@ -1197,6 +1210,7 @@ export function createDocuments(options: DocumentsOptions) {
     say: options.say,
     folders: options.folders,
     watch: options.linkedFolders.watch,
+    stat: options.linkedFolders.stat,
     retryMs: options.linkedFolders.retryMs,
     detectDataless: options.linkedFolders.detectDataless,
     hooks: {
@@ -2000,7 +2014,7 @@ export function createDocuments(options: DocumentsOptions) {
       // Linked folder it is in, if the Output location is inside one.
       db.run(
         `UPDATE documents SET path = ?, source_kind = 'file', relative_path = NULL,
-           file_status = 'available', file_mtime_ms = NULL, updated_at = ?
+           file_status = 'available', file_mtime_ms = NULL, ${FORGET_FILE_IDENTITY}, updated_at = ?
          WHERE id = ? AND deleted_at IS NULL`,
         [path, now(), id],
       );
