@@ -74,3 +74,14 @@ registerMenu(
 registerMenu("answer", ["answer.copy", "answer.regenerate", "block.delete"]);
 
 registerMenu("citation", ["citation.open", "citation.remove"]);
+
+registerMenu("chart", [
+  "chart.table",
+  "chart.kind.bar",
+  "chart.kind.line",
+  "chart.kind.pie",
+  "chart.kind.scatter",
+  "chart.update",
+  "chart.rename",
+  "block.delete",
+]);

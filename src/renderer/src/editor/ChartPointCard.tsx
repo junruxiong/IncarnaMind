@@ -1,0 +1,67 @@
+import type { CitationAttributes } from "../../../core/api";
+import { badgeMessage, type CitationState, citationSource } from "../../../shared/citations";
+import { useT } from "../i18n";
+import { ChartCheck } from "./ChartCheck";
+
+export function ChartPointCard({
+  title,
+  value,
+  detail,
+  notDrawn,
+  cut,
+  citation,
+  state,
+  onOpen,
+}: {
+  title: string;
+  value: string;
+  detail: string | null;
+  notDrawn: boolean;
+  cut: string | null;
+  citation: CitationAttributes | null;
+  state: CitationState | null;
+  onOpen(): void;
+}) {
+  const t = useT();
+  const source = citation ? citationSource(citation, t) : null;
+  const badge = citation && state ? badgeMessage(state, citation, t) : null;
+  const canOpen = state !== null && state.documentId !== null;
+  return (
+    <div className="chart-card" data-testid="chart-card-body">
+      <p className="chart-card-title">{title}</p>
+      <p className="chart-card-value" data-testid="chart-card-value">
+        {value}
+      </p>
+      {detail && <p className="chart-card-detail">{detail}</p>}
+      {notDrawn && <p className="chart-card-detail">{t("chart.point.notDrawn")}</p>}
+      <div className="chart-card-source" data-testid="chart-card-source">
+        {citation && state && badge ? (
+          <>
+            <ChartCheck check={state.check} label={t(badge.key, badge.params)} />
+            <span className="chart-card-where" title={source?.text}>
+              {source?.where
+                ? t("chart.point.where", { document: source.name, location: source.where })
+                : source?.name}
+            </span>
+            {canOpen && (
+              <button
+                type="button"
+                data-testid="chart-card-open"
+                className="chart-card-open"
+                onClick={onOpen}
+              >
+                {t("chart.point.open")}
+              </button>
+            )}
+          </>
+        ) : (
+          <>
+            <ChartCheck check={null} label={t("chart.point.noCitation")} />
+            <span className="chart-card-where">{t("chart.point.noCitation")}</span>
+          </>
+        )}
+      </div>
+      {cut && <p className="chart-card-cut">{cut}</p>}
+    </div>
+  );
+}

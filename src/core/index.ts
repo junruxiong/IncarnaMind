@@ -29,6 +29,7 @@ export type {
   ModelFile,
   PagePicture,
   Paths,
+  Pictures,
   ProcessLauncher,
   RecognizedLine,
   RerankingModelFiles,
