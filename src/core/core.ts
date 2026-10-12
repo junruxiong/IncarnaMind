@@ -418,6 +418,8 @@ export function createCore(adapters: CoreAdapters): Core {
     retention,
     requireMind: (mindId) => writableMind(mindId).id,
     changed: (mindId) => events.emit("checkpoints.changed", { mindId }),
+    stopAnswer: (mindId, answerId) => answers.stop({ mindId, answerId }),
+    settleAnswers: (mindId) => answers.settleOrphans(mindId),
     say: (key) => translate(settings.get().language, key),
     reportError: (error) => console.error(error),
   });
