@@ -9,7 +9,7 @@
   写作和提问在同一个地方，回答来自你自己的文件和你选的 AI 模型。免费开源，在你自己的电脑上运行。
 </p>
 
-<p align="center"><a href="https://tally.so/r/rjN2jL?ref=readme-zh"><img src="docs/images/notify-zh.svg" width="187" height="40" alt="alpha 上线时通知我"></a></p>
+<p align="center"><a href="https://tally.so/r/LZA5aG?ref=readme-zh"><img src="docs/images/notify-zh.svg" width="187" height="40" alt="alpha 上线时通知我"></a></p>
 
 <p align="center">
   <a href="#下载"><b>下载</b></a> ·
@@ -22,13 +22,13 @@
   <!-- 第一个版本发布后，加上：<a href="https://github.com/junruxiong/IncarnaMind/releases/latest"><img alt="最新版本" src="https://img.shields.io/github/v/release/junruxiong/IncarnaMind?color=17191C"></a> -->
 </p>
 
-<p align="center"><img src="docs/images/demo.gif" width="880" alt="依次展示九个界面：指向一条引用，显示它的引文；打开它，PDF 页面上高亮着这段引文；各种格式的全部文档，带文件夹和标签；在 Excel 表里选中单元格提问；跨十份合同的对比表；带修订和批注的 Word 合同；会议实时转写旁的笔记；正在运行和定时运行的后台任务；以及设置里的 Claude、GPT、DeepSeek 和通过 Ollama 运行的本地模型。"></p>
+<p align="center"><img src="docs/images/demo.gif" width="880" alt="依次展示十个界面：旁边带着助手的 Mind，助手里回答的引用都已核对，这个回答也已添加到笔记；指向一条引用，显示它的引文；打开它，PDF 页面上高亮着这段引文；各种格式的全部文档，带文件夹和标签；在 Excel 表里选中单元格提问；跨十份合同的对比表；带修订和批注的 Word 合同；会议实时转写旁的笔记；正在运行和定时运行的后台任务；以及设置里的 Claude、GPT、DeepSeek 和通过 Ollama 运行的本地模型。"></p>
 
 <p align="center"><sub>选中内容提问、对比表、Word 修订与批注、会议和后台任务<a href="#即将推出">即将推出</a>，其余功能现在就能用。</sub></p>
 
 ## 下载
 
-**IncarnaMind 还没有正式发布。** 发布后，[发布页](https://github.com/junruxiong/IncarnaMind/releases)会提供 macOS（Apple 芯片和 Intel）、Windows 和 Linux 的安装包。想在发布时收到通知，可以[留下邮箱](https://tally.so/r/rjN2jL?ref=readme-zh)，或点本页右上角的 **Watch → Custom → Releases**。想现在试用，可以用 Node.js 24 或更高版本从源码运行：
+**IncarnaMind 还没有正式发布。** 发布后，[发布页](https://github.com/junruxiong/IncarnaMind/releases)会提供 macOS（Apple 芯片和 Intel）、Windows 和 Linux 的安装包。想在发布时收到通知，可以[留下邮箱](https://tally.so/r/LZA5aG?ref=readme-zh)，或点本页右上角的 **Watch → Custom → Releases**。想现在试用，可以用 Node.js 24 或更高版本从源码运行：
 
 ```shell
 git clone https://github.com/junruxiong/IncarnaMind.git && cd IncarnaMind
@@ -46,7 +46,7 @@ npm install && npm run dev
 
 ## 你能用它做什么
 
-**边写边问。** 一个 Mind 就是为一个主题准备的笔记本：在 Mind 底部的输入框里提问，回答直接写进你的草稿、光标所在的位置，可以像普通文字一样修改。
+**边写边问。** 一个 Mind 就是为一个主题准备的笔记本，旁边就是助手：就当前的 Mind 或你的文件向它提问，回答以对话的形式留在助手里，每个引用都已核对。你的草稿保持原样，直到你点 **添加到笔记**：回答连同引用放到光标处，可以像普通文字一样修改，还带着回到原对话的链接。
 
 **每个回答都能核对。** 回答会标出每个说法的出处，并附上原文引文，再逐条到那个位置核对：找到了打绿勾，没找到就标成橙色；点一下，原文就打开到那一页，引文高亮显示。
 
