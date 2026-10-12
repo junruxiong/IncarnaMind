@@ -797,7 +797,7 @@ describe("Calculated figures with conversations (ADR-0017)", { timeout: 60_000 }
     const db = openDatabase(join(dataDir, DATABASE_FILE));
     migrate(
       db,
-      migrations.filter((migration) => migration.version < 60),
+      migrations.filter((migration) => migration.version < 67),
     );
     const at = "2026-10-01T00:00:00.000Z";
     db.run(

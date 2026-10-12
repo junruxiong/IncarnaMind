@@ -18,7 +18,7 @@ So a number an Answer works out from numbers in Passages is a **calculated figur
 ## How it is written and kept
 
 - **Markers.** A marker with no figure is left out, and the Answer's end says how many figures couldn't be calculated. A number the model wrote right before its own marker is left out when it reads as that figure, so the text shows it once. One that differs ("26%" where IncarnaMind calculated 25.0%) stays, and the figure keeps what the Answer wrote there, for its card to show (#439). Markers in code stay as they are.
-- **Conversations (ADR-0017)** keep a `figures` list on each Answer beside its Citations (migration 60). Reopening a conversation, Add to note, search and Question context all read the same figures, and the last two read each as its shown text. The old versions of Documents that a figure's inputs quote are kept as a Citation's are.
+- **Conversations (ADR-0017)** keep a `figures` list on each Answer beside its Citations (migration 67). Reopening a conversation, Add to note, search and Question context all read the same figures, and the last two read each as its shown text. The old versions of Documents that a figure's inputs quote are kept as a Citation's are.
 - **In a Mind**, a figure reads as its shown text, until a Mind has a node of its own for it (#439, with the next content schema version).
 - **Small local models in structured output** can't call Tools. They give their figures in their JSON, which is read in the same way. One request to fix the figures in error follows, as the second chance at quotes does (ADR-0007). A figure still in error is dropped, and its marker left out.
 - **The Answer's steps** say "Calculated 2 figures" (计算了 2 个数字), with no Tool-call card, as for `cite`.
