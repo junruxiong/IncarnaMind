@@ -1,16 +1,21 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { Editor } from "@tiptap/core";
+import type { CoreBridge } from "../src/core/api";
+import { xlsxOf } from "../tests/helpers/office";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
+  askInAssistant,
+  assistantAnswers,
   createDataFolder,
   dismissChatSetup,
   launchApp,
   newMind,
   placeAssistant,
   pointAndClick,
+  pointAt,
   removeDataFolder,
   setWindowSize,
   useLocalChatModel,
@@ -34,18 +39,23 @@ test.afterEach(async () => {
   await removeDataFolder(sources);
 });
 
-/** Asks a Question in a new Mind and waits for its Answer to finish. */
+/** Asks a Question in the assistant, beside a new Mind, and waits for its Answer to finish. */
 async function ask(window: Page, text: string) {
   await newMind(window);
-  const editor = window.getByTestId("mind-editor");
-  await editor.click();
-  await window.keyboard.press("ControlOrMeta+j");
-  await window.keyboard.type(text);
-  await window.keyboard.press("Enter");
-  const answer = editor.getByTestId("answer");
-  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-  return answer;
+  await window.getByTestId("mind-editor").click();
+  return askInAssistant(window, text);
 }
+
+/** Gives the Citations of an Answer in the assistant a check (#96 will produce them for real). */
+const setCheck = (answer: Locator, patch: { check: string; verdict?: string | null }) =>
+  answer.getByTestId("assistant-answer-text").evaluate((dom, attributes) => {
+    const { view } = (dom as unknown as { editor: Editor }).editor;
+    view.state.doc.descendants((node, pos) => {
+      if (node.type.name !== "citation") return true;
+      view.dispatch(view.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...attributes }));
+      return false;
+    });
+  }, patch);
 
 test("an Answer cites a PDF: its badge says the quote was found, and clicking it opens the page with the quote highlighted", async () => {
   await writeFile(join(sources, "Tides.pdf"), TIDES);
@@ -56,32 +66,22 @@ test("an Answer cites a PDF: its badge says the quote was found, and clicking it
 
   const answer = await ask(window, "When do spring tides happen?");
 
-  // Copying the sentence into a Note keeps its Citation, check result and all. This goes
-  // through the editor's own clipboard HTML (the system clipboard is shared with the machine).
-  const editor = window.getByTestId("mind-editor");
-  await editor.evaluate((dom) => {
-    const { view, commands } = (dom as unknown as { editor: Editor }).editor;
-    let at = -1;
-    view.state.doc.descendants((node, pos) => {
-      if (at < 0 && node.type.name === "citation") at = pos;
-    });
-    const sentence = view.state.doc.resolve(at);
-    commands.setTextSelection({ from: sentence.start(), to: sentence.end() });
-    const { dom: copied } = view.serializeForClipboard(view.state.selection.content());
-    commands.setTextSelection(view.state.doc.content.size - 1);
-    view.pasteHTML(copied.innerHTML);
-  });
-  const note = editor.locator(":scope > p").last();
-  await expect(note).toContainText("Your Documents answer this");
-  await expect(note.getByTestId("citation")).toHaveAttribute("data-check", "found");
-  await expect(editor.getByTestId("answer")).toHaveCount(1);
-
   // It shows that it searched the Documents, and what for.
+  await pointAt(window, answer.getByTestId("assistant-answer-text"));
   await expect(answer.getByTestId("answer-tools")).toContainText("Searched your Documents");
   await answer.getByTestId("answer-tools-toggle").click();
   await expect(answer.getByTestId("answer-tool-call")).toContainText(
     "When do spring tides happen?",
   );
+
+  // Added to a Note, the sentence keeps its Citation, check result and all.
+  const editor = window.getByTestId("mind-editor");
+  await pointAt(window, answer.getByTestId("assistant-answer-text"));
+  await pointAndClick(window, answer.getByTestId("answer-add"));
+  const note = editor.locator(":scope > p").first();
+  await expect(note).toContainText("Your Documents answer this");
+  await expect(note.getByTestId("citation")).toHaveAttribute("data-check", "found");
+  await expect(editor.getByTestId("answer")).toHaveCount(0);
 
   // The marker became a Citation whose quote was found on page 2: numbered 1 in the text,
   // its label naming the Document, the page and the check.
@@ -136,28 +136,29 @@ test("a quote that isn't on its page says so, and the page can still be opened, 
   await expect(window.getByTestId("pdf-page-number")).toHaveValue("2");
   await expect(window.getByTestId("viewer").locator("[data-quote-highlight]")).toHaveCount(0);
 
-  // Regenerating from the card writes the Answer again, in place: it wasn't edited.
+  // An Answer in the assistant can't be edited: its card offers no removing.
   await citation.getByTestId("citation-chip").click();
+  await expect(
+    window.getByTestId("citation-card").getByTestId("citation-open-anyway"),
+  ).toBeVisible();
+  await expect(window.getByTestId("citation-card").getByTestId("citation-remove")).toHaveCount(0);
+
+  // Regenerating from the card writes the Answer again, where it is.
   await window.getByTestId("citation-card").getByTestId("citation-regenerate").click();
   await expect(answer).toHaveAttribute("data-status", "streaming");
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-  const changes = window.getByTestId("proposals-bar");
-  await expect(changes).toHaveCount(0);
+  await expect(assistantAnswers(window)).toHaveCount(1);
 
-  // Removing the Citation edits the Answer; regenerating it now comes back as changes over
-  // the User's version, which stays until they accept them.
-  await citation.getByTestId("citation-chip").click();
+  // Added to the note, the Citation is checked again there, and can be removed from the note.
+  const editor = window.getByTestId("mind-editor");
+  await pointAt(window, answer.getByTestId("assistant-answer-text"));
+  await pointAndClick(window, answer.getByTestId("answer-add"));
+  const added = editor.getByTestId("citation");
+  await expect(added).toHaveAttribute("data-check", "not-found");
+  await added.getByTestId("citation-chip").click();
   await window.getByTestId("citation-card").getByTestId("citation-remove").click();
-  await expect(answer.getByTestId("citation")).toHaveCount(0);
-  await expect(answer).toContainText("Your Documents answer this");
-  await answer.hover();
-  await answer.getByTestId("answer-regenerate").click();
-  await expect(changes).toBeVisible({ timeout: 15_000 });
-  await expect(answer.locator(".proposal-node--insert, ins.proposal-insert")).not.toHaveCount(0);
-  await expect(answer).toHaveAttribute("data-status", "done");
-  await pointAndClick(window, changes.getByTestId("proposals-accept-all"));
-  await expect(changes).toHaveCount(0);
-  await expect(answer.getByTestId("citation")).toHaveCount(1);
+  await expect(editor.getByTestId("citation")).toHaveCount(0);
+  await expect(editor).toContainText("Your Documents answer this");
   await app.close();
 });
 
@@ -229,7 +230,7 @@ test("a Citation's mark in the margin opens the same card, and every state has i
   await dismissChatSetup(window);
   await useLocalChatModel(window);
   await addDocuments(window, [join(sources, "Tides.pdf")]);
-  // The Mind as wide as a 1440px window gave it, beside the assistant (#253): its margin shows.
+  // The marks sit in the margin beside the Answer in the assistant.
   await setWindowSize(app, window, 1600, 800);
 
   const answer = await ask(window, "When do spring tides happen?");
@@ -252,17 +253,7 @@ test("a Citation's mark in the margin opens the same card, and every state has i
     ],
   ] as const;
   for (const [check, word, verdict] of states) {
-    await window.getByTestId("mind-editor").evaluate(
-      (dom, patch) => {
-        const { view } = (dom as unknown as { editor: Editor }).editor;
-        view.state.doc.descendants((node, pos) => {
-          if (node.type.name !== "citation") return true;
-          view.dispatch(view.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...patch }));
-          return false;
-        });
-      },
-      { check, verdict: verdict || null },
-    );
+    await setCheck(answer, { check, verdict: verdict || null });
     await expect(answer.getByTestId("citation")).toHaveAttribute("data-check", check);
     await expect(mark).toHaveAttribute("data-check", check);
     await expect(mark).toHaveAttribute("aria-label", new RegExp(word));
@@ -291,16 +282,7 @@ test("a contradicted Citation's words are outlined in red on the page, never was
   const answer = await ask(window, "When do spring tides happen?");
 
   // #96 will produce this for real; here the Citation is given the state.
-  await window.getByTestId("mind-editor").evaluate((dom) => {
-    const { view } = (dom as unknown as { editor: Editor }).editor;
-    view.state.doc.descendants((node, pos) => {
-      if (node.type.name !== "citation") return true;
-      view.dispatch(
-        view.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, check: "contradicted" }),
-      );
-      return false;
-    });
-  });
+  await setCheck(answer, { check: "contradicted" });
   await answer.getByTestId("citation-chip").click();
   await window.getByTestId("citation-card").getByTestId("citation-open").click();
 
@@ -319,5 +301,48 @@ test("a contradicted Citation's words are outlined in red on the page, never was
   const mark = window.getByTestId("viewer-quote-mark");
   await expect(mark).toHaveAttribute("data-check", "contradicted");
   await expect(mark).toHaveAttribute("aria-label", /contradicted/);
+  await app.close();
+});
+
+test("in Chinese, a Citation of a Chinese sheet's row has no space between Chinese characters", async () => {
+  await writeFile(
+    join(sources, "年报.xlsx"),
+    xlsxOf([
+      {
+        name: "利润表",
+        rows: [
+          ["Item", "Amount"],
+          ["Revenue", 1200],
+          ["Cost of sales", 800],
+          ["Net profit", 400],
+        ],
+      },
+    ]),
+  );
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await addDocuments(window, [join(sources, "年报.xlsx")]);
+  await expect(window.getByTestId("document-list-item")).toHaveAttribute("data-status", "ready", {
+    timeout: 30_000,
+  });
+
+  const answer = await ask(window, "What is the net profit, in rows?");
+  const chip = answer.getByTestId("citation-chip");
+  await expect(chip).toHaveCount(1);
+  await window.evaluate(() =>
+    (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+      user: { language: "zh-CN" },
+    }),
+  );
+
+  await expect(chip).toHaveAttribute(
+    "aria-label",
+    /^引用 1：年报，利润表，第 \d+–?\d* 行。已在“利润表，第 \d+–?\d* 行”中找到引文$/,
+  );
+  await chip.click();
+  const badge = window.getByTestId("citation-badge");
+  await expect(badge).toHaveText(/^已在“利润表，第 \d+–?\d* 行”中找到引文$/);
+  expect(await badge.innerText()).not.toMatch(/[一-鿿] [一-鿿]/);
   await app.close();
 });

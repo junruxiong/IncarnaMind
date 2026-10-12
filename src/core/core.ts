@@ -31,6 +31,7 @@ import type {
   CoreApi,
   CoreEventSource,
   Document,
+  EmbeddingModelStatus,
   EmbeddingSettings,
   ExportMindOptions,
   Meeting,
@@ -58,6 +59,7 @@ import {
 import { createEvidence, parseCheckedDocument, passageResult } from "./documents/evidence";
 import { createOwnFiles } from "./documents/ownFiles";
 import { createVersionRetention, type VersionRetention } from "./documents/retention";
+import { BUILT_IN_TEXT_RECOGNITION_MODEL, createTextRecognitionModel } from "./documents/scan";
 import { tunedSearch } from "./documents/searchTuning";
 import { fsWatchFolder } from "./documents/watcher";
 import { createWebPages } from "./documents/web";
@@ -100,6 +102,7 @@ import {
   parseMindId,
 } from "./minds";
 import { firstLineOf, readBlocks } from "./mindText";
+import { createNoteAdding } from "./noteAdding";
 import { createOutputFiles } from "./outputFiles";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
 import { readsImages } from "./providers/capabilities";
@@ -150,6 +153,7 @@ import {
 } from "./transcription/model";
 import { createUsageData } from "./usageData";
 import { addedCounts, trackUsage } from "./usageTracking";
+import { ensureWorkspace } from "./workspace";
 
 export const DATABASE_FILE = "incarnamind.db";
 
@@ -253,6 +257,7 @@ export function createCore(adapters: CoreAdapters): Core {
   const now = () => (adapters.now?.() ?? new Date()).toISOString();
   try {
     purgeExpired(db, now());
+    ensureWorkspace(db, now);
   } catch (error) {
     db.close();
     throw error;
@@ -350,6 +355,25 @@ export function createCore(adapters: CoreAdapters): Core {
     embedder: adapters.embedder,
     emitStatus: (status) => events.emit("embeddingModel.status", status),
   });
+  // Reads scanned pages (#397), when this copy has a recognizer to read them with.
+  const textRecognitionModel = adapters.textRecognizer
+    ? createTextRecognitionModel({
+        definition: BUILT_IN_TEXT_RECOGNITION_MODEL,
+        source: adapters.textRecognitionModelSource,
+        dataDir,
+        recognizer: adapters.textRecognizer,
+        emitStatus: (status) => events.emit("textRecognitionModel.status", status),
+      })
+    : undefined;
+  /** What `getTextRecognitionModel` says in a copy that has no recognizer: nothing to download. */
+  const textRecognitionUnavailable: EmbeddingModelStatus = {
+    name: BUILT_IN_TEXT_RECOGNITION_MODEL.name,
+    host: new URL(BUILT_IN_TEXT_RECOGNITION_MODEL.source.baseUrl).host,
+    state: "not-downloaded",
+    downloadedBytes: 0,
+    totalBytes: 0,
+    error: null,
+  };
   /** Reports the embedding settings again; set once Documents exist. */
   let embeddingChanged = () => {};
   /** A Document's status changed: during a rebuild, its progress may have too. */
@@ -383,6 +407,7 @@ export function createCore(adapters: CoreAdapters): Core {
       dataDir,
       now,
       model: embedding.model,
+      textRecognition: textRecognitionModel,
       folders,
       emitStatus: (document) => {
         events.emit("document.status", document);
@@ -435,6 +460,7 @@ export function createCore(adapters: CoreAdapters): Core {
         retryMs: adapters.linkedFolders?.retryMs ?? 30_000,
         detectDataless: adapters.linkedFolders?.detectDatalessFiles ?? platform === "darwin",
       },
+      say: (key, params) => translate(settings.get().language, key, params),
     });
     // Old versions' text, and the text kept of unlinked Documents, that no
     // Citation quotes and no feature retains any more goes, at startup only:
@@ -930,6 +956,15 @@ export function createCore(adapters: CoreAdapters): Core {
     now: () => adapters.now?.() ?? new Date(),
   });
 
+  // "Add to note" into a Mind that isn't open (#201), with its Citations checked where they land.
+  const noteAdding = createNoteAdding({
+    content,
+    requireMind: (mindId) => writableMind(mindId).id,
+    recheck: (input) => recheckCitation(documents, input),
+    recordAiUse: (inputs) => void aiUse.record(inputs),
+    now: () => adapters.now?.() ?? new Date(),
+  });
+
   // The fingerprints of the files IncarnaMind writes (#80). A Document already indexed with
   // the same bytes is marked at once, and every window hears of it.
   const ownFiles = createOwnFiles(db, now);
@@ -962,10 +997,17 @@ export function createCore(adapters: CoreAdapters): Core {
     });
   // Make this a Skill: the chat model drafts it from the Mind, on the chat flow's consent.
   const skillDrafts = createSkillDrafts({
-    mindMarkdown: async (mindId) =>
-      new TextDecoder().decode(
+    mindMarkdown: async (mindId) => {
+      const mind = new TextDecoder().decode(
         (await mindExports.export(mindId, { format: "markdown", includeQuestions: true })).data,
-      ),
+      );
+      // Questions are asked in the assistant (#201): those asked from this Mind are its work too.
+      const label = translate(settings.get().language, "export.question");
+      const asked = conversations
+        .askedFromMind(mindId)
+        .map(({ question, answer }) => [`**${label}** ${question}`, answer].filter(Boolean));
+      return [mind, ...asked.flat()].join("\n\n");
+    },
     modelFor: (mindId) =>
       content.read(mindId, (blocks) => (blocks.doc ? mindModelOf(blocks.doc) : null)) ??
       settings.get().user.chatModel,
@@ -1263,6 +1305,19 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     // While the built-in reranking model reranks: by default, unless the User chose otherwise.
     listed: () => rerankingSource.files.length > 0 && rerank.usesBuiltIn(),
+  });
+  const textRecognitionSource =
+    adapters.textRecognitionModelSource ?? BUILT_IN_TEXT_RECOGNITION_MODEL.source;
+  const textRecognitionHost = new URL(textRecognitionSource.baseUrl);
+  privacy.traffic.register({
+    id: "text-recognition-model",
+    service: {
+      id: textRecognitionHost.origin,
+      name:
+        textRecognitionHost.host === "huggingface.co" ? "Hugging Face" : textRecognitionHost.host,
+    },
+    // Only a copy that reads scans downloads it.
+    listed: () => textRecognitionModel !== undefined && textRecognitionSource.files.length > 0,
   });
   const transcriptionSource = adapters.transcriptionModelSource?.model ?? QWEN3_ASR_0_6B.source;
   const transcriptionHost = new URL(transcriptionSource.baseUrl);
@@ -1636,6 +1691,8 @@ export function createCore(adapters: CoreAdapters): Core {
         ? { status: "available", reference, name: found.name }
         : { status: "deleted", reference, name: found.name, deletedAt: found.deletedAt };
     },
+    addToNote: (input) => noteAdding.add(input),
+    undoAddToNote: async (input) => noteAdding.undo(input),
     getSettings: async () => settings.get(),
     getLayout: async (windowId) => layouts.get(windowId),
     changeLayout: async (windowId, change) => layouts.change(windowId, change),
@@ -1725,6 +1782,23 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     retryDocument: async (id) => documents.retry(id),
     readDocumentText: async (id) => documents.readText(id),
+    readScannedText: async (id) => documents.readScannedText(id),
+    readScannedQuote: async (input) => {
+      if (!isRecord(input) || typeof input.quote !== "string") {
+        throw new InvalidInputError(
+          "readScannedQuote needs a Citation's Document, Units and quote.",
+        );
+      }
+      const unit = (value: unknown) =>
+        typeof value === "number" && Number.isInteger(value) && value >= 1 ? value : null;
+      return documents.readScannedQuote({
+        documentId: typeof input.documentId === "string" ? input.documentId : "",
+        contentHash: typeof input.contentHash === "string" ? input.contentHash : null,
+        pageFrom: unit(input.pageFrom),
+        pageTo: unit(input.pageTo),
+        quote: input.quote,
+      });
+    },
     previewLinkedFolder: (path) => documents.linkedFolders.preview(path),
     addLinkedFolder: async (path, options) => {
       const groupId = library.target(options);
@@ -1739,6 +1813,8 @@ export function createCore(adapters: CoreAdapters): Core {
       return { ...linked, batchId };
     },
     listLinkedFolders: async () => documents.linkedFolders.list(),
+    locateLinkedFolder: (linkedFolderId, path) =>
+      documents.linkedFolders.locate(linkedFolderId, path),
     removeLinkedFolder: async (linkedFolderId) => unlinkFolder(linkedFolderId),
     listKeptCitationTexts: async () => documents.keptCitationTexts(),
     updateReference: async (documentId, patch) => references.update(documentId, patch),
@@ -1796,6 +1872,10 @@ export function createCore(adapters: CoreAdapters): Core {
       documents.setCountedAsEvidence(documentId, counted),
     getEmbeddingModel: async () => embeddingModel.status(),
     downloadEmbeddingModel: async () => embeddingModel.retry(),
+    getTextRecognitionModel: async () =>
+      textRecognitionModel?.status() ?? textRecognitionUnavailable,
+    downloadTextRecognitionModel: async () =>
+      textRecognitionModel?.retry() ?? textRecognitionUnavailable,
 
     getEmbeddingSettings: () => embeddingSettings(),
     saveEmbeddingProvider: async (input) => {
@@ -2280,6 +2360,7 @@ export function createCore(adapters: CoreAdapters): Core {
       documents.close();
       embeddingModel.close();
       rerankingModel.close();
+      textRecognitionModel?.close();
       activity.stop();
       aiUse.close();
       events.clear();
