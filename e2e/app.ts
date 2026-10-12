@@ -188,6 +188,12 @@ export async function launchApp(
   return { app, window };
 }
 
+/** Chooses the Edit menu's Undo or Redo, as the application menu has it now. */
+export const clickEditItem = (app: ElectronApplication, id: "edit.undo" | "edit.redo") =>
+  app.evaluate(({ Menu }, itemId) => {
+    Menu.getApplicationMenu()?.getMenuItemById(itemId)?.click();
+  }, id);
+
 /**
  * "New Mind" from the sidebar header's "+" menu, the one place to add: a Mind
  * in no Folder. Returns once the menu has gone: keys a test presses a
