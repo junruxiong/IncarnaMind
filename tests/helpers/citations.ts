@@ -87,6 +87,9 @@ export function citingModel(plan: CitingPlan): MockLanguageModelV4 {
   });
 }
 
+/** A model for a core under test that is never asked an Answer. */
+export const unaskedModel = () => scriptedModel(() => ({ text: "No Answer was asked." }));
+
 /** What the model was told about its records: the result of its last `cite` call. */
 export function citeFeedback(model: MockLanguageModelV4): string {
   const last = model.doStreamCalls.at(-1);

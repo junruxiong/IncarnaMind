@@ -10,12 +10,7 @@ import {
   InvalidInputError,
   type RerankSettings,
 } from "../../src/core";
-import {
-  askAndFinish,
-  citingModel,
-  type ShownPassage,
-  setUpWithDocuments,
-} from "../helpers/citations";
+import { setUpWithDocuments, unaskedModel } from "../helpers/citations";
 import { createMemoryKeychain, createTempDataFolder, nextEvent, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
 import { startModelServer } from "../helpers/embedding";
@@ -62,24 +57,15 @@ function weatherCrossEncoder() {
 }
 
 /**
- * Two Documents, a local chat model that searches for "lighthouse" and shows
- * what it was given, and mock reranking models. Embeddings are on, so vector
- * search hands the reranker the Weather Document, which has no "lighthouse".
+ * Two Documents and mock reranking models. Embeddings are on, so vector search
+ * hands the reranker the Weather Document, which has no "lighthouse". `ask`
+ * searches for "lighthouse" as a check does, and returns the Passages found.
  */
 async function setUp(overrides: Partial<CoreAdapters> = {}) {
-  let shown: ShownPassage[] = [];
   const rerankers = mockRerankingModels(prefersWeather);
   const keychain = createMemoryKeychain();
-  const model = citingModel({
-    query: "lighthouse",
-    records: (passages) => {
-      shown = passages;
-      return [];
-    },
-    answer: "There is a lighthouse.",
-  });
   const setup = await setUpWithDocuments(
-    model,
+    unaskedModel(),
     [
       { name: "Coast.md", contents: sections(24, 12, "red") },
       { name: "Weather.md", contents: sections(6, 0, "") },
@@ -87,9 +73,9 @@ async function setUp(overrides: Partial<CoreAdapters> = {}) {
     { createRerankingModel: rerankers.createRerankingModel, keychain, ...overrides },
     { embeddings: true },
   );
-  const ask = async (text = "Where is the lighthouse?") => {
-    await askAndFinish(setup.core, setup.client, setup.mind.id, text);
-    return shown;
+  const ask = async () => {
+    const found = await setup.core.searchEvidence("lighthouse");
+    return found.passages.map((passage) => ({ document: passage.documentName }));
   };
   return { ...setup, rerankers, keychain, ask };
 }
