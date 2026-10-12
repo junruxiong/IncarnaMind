@@ -5829,6 +5829,11 @@
       border-bottom: 0;
     }
   }
+  .chart-value-note {
+    font-size: 12px;
+    white-space: nowrap;
+    color: var(--color-ink-meta);
+  }
   .chart-value {
     display: inline-flex;
     align-items: center;

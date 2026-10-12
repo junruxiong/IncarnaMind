@@ -10,6 +10,7 @@ import {
 import type { SkillPickKind } from "../../../shared/bridge";
 import { core, files } from "../core";
 import { errorMessage } from "../errors";
+import { showFileLabelKey } from "../fileInfo";
 import { useT } from "../i18n";
 import { formatSize, pickSkill, skillDescription } from "../skills";
 import { useAppStore } from "../store";
@@ -308,9 +309,7 @@ function ExportStatus({
         testId="skill-export-done"
         title={exported.path}
         action={{
-          label: navigator.userAgent.includes("Mac")
-            ? t("export.showInFinder")
-            : t("export.showInFolder"),
+          label: t(showFileLabelKey(navigator.platform)),
           testId: "skill-export-show",
           onClick: () =>
             void files.showSavedFile(exported.path).catch(useAppStore.getState().reportError),
