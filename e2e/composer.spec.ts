@@ -326,8 +326,8 @@ test("sending empties the composer and shows the Question with its Answer on its
     await pointAndClick(window, input);
 
     // Ollama is slow to say where the model runs, so the Question waits on it. Meanwhile, at
-    // once: the composer is empty, the Question is in the assistant with its first step, reading
-    // the Mind in focus, and Stop under it, and the send button is Stop. A second Enter, in the empty composer, does nothing.
+    // once: the composer is empty, the Question is in the assistant with its first step,
+    // searching, and Stop under it, and the send button is Stop. A second Enter, in the empty composer, does nothing.
     ollama.hold();
     await window.keyboard.type(LONG_QUESTION);
     await window.keyboard.press("Enter");
@@ -336,7 +336,7 @@ test("sending empties the composer and shows the Question with its Answer on its
     await expect(input).toBeFocused();
     await expect(questions).toHaveCount(1);
     await expect(questions).toContainText(LONG_QUESTION);
-    await expect(onItsWay.getByTestId("answer-writing")).toHaveText("Reading Untitled…");
+    await expect(onItsWay.getByTestId("answer-writing")).toHaveText("Searching All Documents…");
     await expect(onItsWay.getByTestId("answer-stop")).toBeVisible();
     await expect(stop).toHaveAccessibleName("Stop the Answer");
     await expect(ask).toHaveCount(0);
@@ -458,7 +458,7 @@ test("Stop works before the Answer has started; a Question that can't be asked p
     await window.keyboard.press("Enter");
     await expect(input).toHaveValue("");
     await expect(refusal).toHaveCount(0);
-    await expect(onItsWay.getByTestId("answer-writing")).toHaveText("正在读“未命名”…");
+    await expect(onItsWay.getByTestId("answer-writing")).toHaveText("正在搜索全部文档…");
     await expect(onItsWay.getByTestId("answer-stop")).toHaveText("停止");
     await expect(stop).toHaveAccessibleName("停止生成回答");
     await screenshot(window, "composer-stop-on-its-way-zh");

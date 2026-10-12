@@ -4416,7 +4416,7 @@
     }
   }
   /* What the next Question reads and searches: one line, once, in an empty conversation (#391). */
-  .assistant-reads {
+  .assistant-asked-from {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -4426,12 +4426,12 @@
     line-height: var(--text-ui--line-height);
     color: var(--color-ink-meta);
   }
-  .assistant-reads-icon {
+  .assistant-asked-from-icon {
     width: 14px;
     height: 14px;
     flex-shrink: 0;
   }
-  .assistant-reads-text {
+  .assistant-asked-from-text {
     min-width: 0;
     overflow: hidden;
     white-space: nowrap;

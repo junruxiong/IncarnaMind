@@ -63,34 +63,30 @@ export function AnswerSteps({
 }) {
   const t = useT();
   const phase = useAnswers((state) => state.phases[answer.id]);
-  const readFrom = question?.askedFrom ?? null;
+  const askedFrom = question?.askedFrom ?? null;
   const meeting = useAskedInMeeting(question);
+  const scopeOf = useStepsScopeOf(question);
   const [open, setOpen] = useState(false);
   // Written again, it starts folded.
   if (streaming && open) setOpen(false);
   if (streaming) {
-    return (
-      <LiveLine
-        step={liveStep({ answer, readFrom, phase, waitingForApproval })}
-        question={question}
-      />
-    );
+    return <LiveLine step={liveStep({ answer, phase, waitingForApproval })} scope={scopeOf(0)} />;
   }
-  const line = foldedLine({ answer, readFrom, meeting });
+  const line = foldedLine({ answer, askedFrom, meeting });
   if (!line) return null;
   return (
     <div className="answer-steps">
       <FoldedToggle
         line={line}
-        question={question}
+        scopeOf={scopeOf}
         open={open}
         onToggle={() => setOpen((was) => !was)}
       />
       {open && (
         <>
           <Timeline
-            rows={stepRows({ answer, readFrom, meeting })}
-            question={question}
+            rows={stepRows({ answer, askedFrom, meeting })}
+            scope={scopeOf(0)}
             onRegenerate={onRegenerate}
           />
           <button
@@ -110,18 +106,12 @@ export function AnswerSteps({
 
 /**
  * The line of an Answer on its way or being written: its step, with the
- * pulsing accent dot, or what it waits for, with the attention dot.
+ * pulsing accent dot, or what it waits for, with the attention dot. `scope`
+ * is what its Question searches (`stepsScope`).
  */
-export function LiveLine({
-  step,
-  question,
-}: {
-  step: LiveStep;
-  question: ConversationQuestion | undefined;
-}) {
+export function LiveLine({ step, scope }: { step: LiveStep; scope: string }) {
   const t = useT();
   const shown = useHeldStep(step);
-  const scope = useStepsScope(question);
   const label = liveText(t, shown, scope);
   const waiting = shown.kind === "waiting" || shown.kind === "consent";
   return (
@@ -180,8 +170,6 @@ function liveText(t: Translate, step: LiveStep, scope: string): string {
       return t("answer.phase.waiting-for-consent");
     case "loading":
       return t("answer.phase.loading");
-    case "reading":
-      return t("steps.live.reading", { mind: mindLabel(t, step.mind) });
     case "searching":
       return t("steps.live.searching", { scope });
     case "call":
@@ -233,10 +221,10 @@ function foldedText(t: Translate, line: FoldedLine, scope: (extra: number) => st
       });
     case "listened":
       return t("steps.listened", { sources: sourcesText(t, line.sources) });
-    case "read":
+    case "asked":
       return line.mind.deleted
-        ? t("steps.read.deleted")
-        : t("steps.read", { mind: mindLabel(t, line.mind) });
+        ? t("steps.asked.deleted")
+        : t("steps.asked", { mind: mindLabel(t, line.mind) });
     case "answered":
       return t("steps.answered", { model: line.model });
   }
@@ -245,20 +233,19 @@ function foldedText(t: Translate, line: FoldedLine, scope: (extra: number) => st
 /** The folded line: a click, Enter or Space opens and folds it. Its tooltip is the whole line. */
 function FoldedToggle({
   line,
-  question,
+  scopeOf,
   open,
   onToggle,
 }: {
   line: FoldedLine;
-  question: ConversationQuestion | undefined;
+  scopeOf(extra: number): string;
   open: boolean;
   onToggle(): void;
 }) {
   const t = useT();
-  const scope = useStepsScopeOf(question);
-  const label = foldedText(t, line, scope);
+  const label = foldedText(t, line, scopeOf);
   const Icon =
-    line.kind === "read" ? MindLineIcon : line.kind === "answered" ? SparkLineIcon : SearchIcon;
+    line.kind === "asked" ? MindLineIcon : line.kind === "answered" ? SparkLineIcon : SearchIcon;
   return (
     <button
       type="button"
@@ -279,15 +266,14 @@ function FoldedToggle({
 /** The unfolded steps, one row each, their icons joined by a rule. */
 function Timeline({
   rows,
-  question,
+  scope,
   onRegenerate,
 }: {
   rows: StepRow[];
-  question: ConversationQuestion | undefined;
+  scope: string;
   onRegenerate(): void;
 }) {
   const t = useT();
-  const scope = useStepsScope(question);
   return (
     <ol aria-label={t("steps.label")} data-testid="answer-timeline" className="answer-timeline">
       {rows.map((row, index) => (
@@ -333,19 +319,19 @@ function StepItem({
           </p>
         </Step>
       );
-    case "read":
+    case "asked":
       return (
         <Step kind={row.kind} icon={<MindLineIcon />}>
           {row.mind.deleted ? (
-            <p className="answer-step-title">{t("steps.read.deleted")}</p>
+            <p className="answer-step-title">{t("steps.asked.deleted")}</p>
           ) : (
             <button
               type="button"
-              data-testid="answer-step-read"
+              data-testid="answer-step-asked"
               onClick={() => useAppStore.getState().openMind(row.mind.mindId)}
               className="answer-step-title answer-step-link"
             >
-              {t("steps.read", { mind: mindLabel(t, row.mind) })}
+              {t("steps.asked", { mind: mindLabel(t, row.mind) })}
             </button>
           )}
         </Step>
@@ -620,5 +606,3 @@ function useStepsScopeOf(question: ConversationQuestion | undefined): (extra: nu
   );
   return (extra) => stepsScope(t, chips, extra);
 }
-
-const useStepsScope = (question: ConversationQuestion | undefined) => useStepsScopeOf(question)(0);
