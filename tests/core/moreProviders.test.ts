@@ -362,7 +362,7 @@ describe("Regions", () => {
 });
 
 describe("Small calls skip thinking", () => {
-  test("automatic tagging builds its model with thinking off; an Answer's model does not", async () => {
+  test("automatic tagging builds its model with thinking off; an Answer's model asks for a reasoning summary instead", async () => {
     const tagging = taggingModel(["Paper"]);
     const models = scriptedModels(tagging.model);
     const core = startCore(await createTempDataFolder(), {
@@ -380,8 +380,7 @@ describe("Small calls skip thinking", () => {
     expect(models.specs.at(-1)).toMatchObject({ kind: "deepseek", thinking: "off" });
 
     await core.prepareChatModel();
-    expect(models.specs.at(-1)).toMatchObject({ kind: "deepseek" });
-    expect(models.specs.at(-1)?.thinking).toBeUndefined();
+    expect(models.specs.at(-1)).toMatchObject({ kind: "deepseek", thinking: "summary" });
   });
 
   const spec = (kind: ChatProviderKind, modelId: string, thinking?: "off") => ({
