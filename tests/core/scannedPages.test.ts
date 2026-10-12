@@ -277,6 +277,34 @@ describe("Scanned pages are read on this computer (#397)", { timeout: 60_000 }, 
     expect(found).toMatchObject({ documentId: document.id, pageFrom: 2 });
   });
 
+  test("offline, the model can't be downloaded: its pages are named as unread, and none is tried after the first", async () => {
+    const dataDir = await createTempDataFolder();
+    const { recognizer, read } = countingRecognizer({ pages: { 1: { lines: ["Never read."] } } });
+    const statuses: string[] = [];
+    const core = startCore(dataDir, {
+      textRecognizer: recognizer,
+      // Nothing answers there, as when the computer is offline.
+      textRecognitionModelSource: {
+        baseUrl: "http://127.0.0.1:9/",
+        files: [{ path: "model.onnx", size: 10, sha256: "0".repeat(64) }],
+      },
+    });
+    core.on("textRecognitionModel.status", (status) => statuses.push(status.state));
+    const document = await addPdf(
+      core,
+      "Offline scan.pdf",
+      buildPdf([{ scan: picture("en-clean") }, { scan: picture("en-noisy") }]),
+    );
+    expect(document.status).toBe("failed");
+    expect(document.failure).toMatchObject({ reason: "pages-unread", pages: [] });
+    expect(document.failure?.message).toMatch(
+      /Scanned pages 1, 2 couldn't be read: Couldn't reach/,
+    );
+    expect(read).toEqual([]);
+    expect(statuses).toEqual(["downloading", "failed"]);
+    expect((await core.getTextRecognitionModel()).error?.kind).toBe("network");
+  });
+
   test("re-reading after a reader's upgrade keeps the pages a Citation quotes as they were read", async () => {
     const quote = "Either party may terminate this Agreement for convenience";
     const model = citingModel({

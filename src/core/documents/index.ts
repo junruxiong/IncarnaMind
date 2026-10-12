@@ -512,16 +512,16 @@ export function createDocuments(options: DocumentsOptions) {
   };
 
   /**
-   * The scanned pages a job keeps as they were read (see `ScanJob.keep`):
-   * those of the version indexed read by today's reader, those a Citation
-   * quotes or a feature retains, and those a job read before it was stopped.
-   */
-  /**
    * At startup, what Citations point to in the PDFs whose pages an older
    * reader read, found in one walk over the Minds for all of them (see `keptScans`).
    */
   let citedAtStart: ReadonlyMap<string, CitedUnits[]> | null = null;
 
+  /**
+   * The scanned pages a job keeps as they were read (see `ScanJob.keep`):
+   * those of the version indexed read by today's reader, those a Citation
+   * quotes or a feature retains, and those a job read before it was stopped.
+   */
   function keptScans(row: Pick<DocumentRow, "id" | "content_hash">): ScanJob["keep"] {
     const reader = textRecognition?.reader;
     const stored = db
