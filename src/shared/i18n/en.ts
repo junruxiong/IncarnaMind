@@ -1033,6 +1033,12 @@ export const en = {
   "providers.choice.apiKey": "An API key",
   "providers.choice.apiKey.body":
     "OpenAI, Anthropic, Google, DeepSeek, Qwen, Kimi, GLM, Mistral, xAI, OpenRouter, SiliconFlow, or an OpenAI-compatible server. Your Question and the Passages found for it are sent to that service.",
+  "providers.choice.apiKey.firstRun.body":
+    "{providers}. More providers are in Settings. Your Question and the Passages found for it are sent to that service.",
+  "providers.list.separator": ", ",
+  "providers.list.last": "{rest} or {last}",
+  "providers.kind.short.qwen": "Qwen",
+  "providers.kind.short.deepseek": "DeepSeek",
   "providers.choice.chatgpt.body": "Sign in with your ChatGPT Plus or Pro account. No key needed.",
 
   "providers.kind.openai": "OpenAI",
