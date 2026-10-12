@@ -218,6 +218,48 @@ test("an agent set up by pasting its settings searches, its activity shows each 
   }
 });
 
+test("in Chinese the Codex agent is named in Chinese in the list, the dialog and the connected row", async () => {
+  await mkdir(join(home, ".codex"));
+  const { app, window } = await launchApp(dataDir, { home });
+  try {
+    await dismissChatSetup(window);
+    await withCoast(window);
+    await acceptPlainTextKeys(window);
+    await setWindowSize(app, window, 900, 660);
+    await window.evaluate(async () => {
+      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      await bridge.setAgentsEnabled(true);
+      await bridge.updateSettings({ user: { language: "zh-CN" } });
+    });
+    await window.getByRole("button", { name: "设置" }).click();
+    const page = await showSettingsPage(window, "agents");
+    const codex = page.getByTestId("agents-list").locator('[data-client="codex"]');
+    await shot(window, "agents-codex-name-zh-list");
+    await expect(codex).toContainText("IncarnaMind 会把自己添加到 ChatGPT 应用和 Codex 的设置中");
+    await codex.getByTestId("agent-connect").click();
+
+    const dialog = window.getByTestId("connect-agent-dialog");
+    await shot(window, "agents-codex-name-zh-dialog");
+    await expect(dialog).toContainText("允许 ChatGPT 应用和 Codex 读取你的文档？");
+    await acceptPlainTextKeys(window, dialog);
+    await dialog.getByTestId("connect-agent-folder").check();
+    await dialog.getByTestId("connect-agent-allow").click();
+    await expect(dialog).toBeHidden();
+
+    const connected = page.getByTestId("agent-pairing").filter({ hasText: "ChatGPT 应用和 Codex" });
+    await shot(window, "agents-codex-name-zh-connected-900");
+    await expect(connected.getByTestId("agent-setup-done")).toContainText(
+      "已添加到 ChatGPT 应用和 Codex 的设置中。开始一个新的 ChatGPT 应用和 Codex 会话即可使用。",
+    );
+    await setWindowSize(app, window, 1440, 900);
+    await shot(window, "agents-codex-name-zh-connected-wide");
+    await expect(connected.getByTestId("agent-setup-done")).toBeVisible();
+    await expect(page).not.toContainText("app and");
+  } finally {
+    await app.close();
+  }
+});
+
 test("Disconnect takes away the settings file Connect made, and the agent stays among those not on this computer", async () => {
   const { app, window } = await launchApp(dataDir, { home });
   try {

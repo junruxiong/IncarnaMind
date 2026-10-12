@@ -21,6 +21,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readdir, readFile, rm, rmdir, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { deflateRawSync } from "node:zlib";
+import { clientTitle } from "../../shared/agentNames";
 import { AGENT_TOKEN_ENV } from "../../shared/agentSocket";
 import { translate } from "../../shared/i18n";
 import type { MessageKey, MessageParams } from "../../shared/i18n/types";
@@ -174,7 +175,7 @@ export function createAgentSetup(options: AgentSetupOptions) {
     if (client.id === "other" && typeof given === "string" && given.trim() !== "") {
       return given.trim();
     }
-    const base = client.name || t("agents.client.other");
+    const base = clientTitle(client, t);
     const taken = new Set(
       options.agents.settings().pairings.map((pairing) => pairing.name.toLocaleLowerCase()),
     );
