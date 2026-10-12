@@ -92,35 +92,36 @@ export function ViewerHeader({
             className={`viewer-kind ${leading ? "ml-1" : "ml-1.5"}`}
           />
         )}
-        {document && rename.renaming ? (
-          <span className="ml-1 min-w-12 max-w-md flex-1">
-            <InlineName
-              value={document.name}
-              label={t("documents.renameLabel", { name: document.name })}
-              testId="viewer-title-rename"
-              {...rename.field((name) => renameDocument(document.id, name))}
-            />
-          </span>
-        ) : document ? (
-          <button
-            {...rename.nameProps}
-            type="button"
-            // Out of the toolbar's tab order: a click focuses it for F2, and its menu has Rename.
-            tabIndex={-1}
-            data-testid="viewer-title"
-            title={
-              displayName(document) === sourceOf(document)
-                ? displayName(document)
-                : `${displayName(document)}
+        <div className="viewer-name-area">
+          {document && rename.renaming ? (
+            <span className="ml-1 min-w-16 max-w-md flex-1">
+              <InlineName
+                value={document.name}
+                label={t("documents.renameLabel", { name: document.name })}
+                testId="viewer-title-rename"
+                {...rename.field((name) => renameDocument(document.id, name))}
+              />
+            </span>
+          ) : document ? (
+            <button
+              {...rename.nameProps}
+              type="button"
+              // Out of the toolbar's tab order: a click focuses it for F2, and its menu has Rename.
+              tabIndex={-1}
+              data-testid="viewer-title"
+              title={
+                displayName(document) === sourceOf(document)
+                  ? displayName(document)
+                  : `${displayName(document)}
 ${sourceOf(document)}`
-            }
-            className="viewer-title cursor-default text-left"
-          >
-            {displayName(document)}
-          </button>
-        ) : null}
-        {document && <DocumentTagChips document={document} variant="header" />}
-        <span className="flex-1" />
+              }
+              className="viewer-title cursor-default text-left"
+            >
+              {displayName(document)}
+            </button>
+          ) : null}
+          {document && <DocumentTagChips document={document} variant="header" />}
+        </div>
         {children}
         {preview && (
           <button
