@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { descendants, parseXml } from "../../src/core/documents/formats/xml";
@@ -7,16 +8,69 @@ import { countFeatures, type Features } from "./features";
 
 export const WORD_DIR = dirname(fileURLToPath(import.meta.url));
 
+export const DOMAINS = [
+  "legal",
+  "finance",
+  "medical",
+  "academic",
+  "government",
+  "engineering",
+  "hr",
+  "education",
+  "business",
+  "test",
+] as const;
+
+export const LANGUAGES = [
+  "en",
+  "zh",
+  "zh-TW",
+  "ja",
+  "ko",
+  "de",
+  "fr",
+  "es",
+  "ar",
+  "he",
+  "mixed",
+  "n/a",
+] as const;
+
 export interface CorpusEntry {
   /** Relative to eval/word/. */
   file: string;
-  set: "documents" | "tracked-changes" | "saved";
-  origin: "synthetic" | "libreoffice" | "apache-poi" | "word-mac" | "wps" | "google-docs";
-  language: "en" | "zh" | "n/a";
+  set: "documents" | "tracked-changes" | "breadth" | "saved";
+  origin: string;
+  language: (typeof LANGUAGES)[number];
+  domain: (typeof DOMAINS)[number];
   licence: string;
   /** Where the file came from, pinned to a commit; empty for a synthetic file. */
   source: string;
+  /** Why the file may be reused, for an official document that has no licence. */
+  basis?: string;
+  /** What was changed from the published file, when something was. */
+  modification?: string;
+  originalSha256?: string;
   sha256: string;
+  features: Features;
+  /** Why the file is known not to pass a check, when it is. */
+  known?: string;
+}
+
+/** A file of the extended set: fetched into a cache, or generated into it, never committed. */
+export interface ExtendedEntry {
+  /** Relative to the cache folder. */
+  name: string;
+  kind: "real" | "generated";
+  origin: string;
+  licence: string;
+  source: string;
+  /** Where to fetch a real file from, pinned to a commit. */
+  url?: string;
+  /** Of a real file; a generated one varies with the compressor. */
+  sha256?: string;
+  language: CorpusEntry["language"];
+  domain: CorpusEntry["domain"];
   features: Features;
   /** Why the file is known not to pass a check, when it is. */
   known?: string;
@@ -24,6 +78,18 @@ export interface CorpusEntry {
 
 export function readManifest(): CorpusEntry[] {
   return JSON.parse(readFileSync(join(WORD_DIR, "manifest.json"), "utf8")) as CorpusEntry[];
+}
+
+export function readExtended(): ExtendedEntry[] {
+  return JSON.parse(readFileSync(join(WORD_DIR, "extended.json"), "utf8")) as ExtendedEntry[];
+}
+
+/** Where `npm run eval:word:fetch` puts the extended set. */
+export function extendedCache(): string {
+  return (
+    process.env.INCARNAMIND_WORD_CACHE ??
+    join(homedir(), ".cache", "incarnamind-eval", "word-extended")
+  );
 }
 
 export interface PackageReport {
@@ -50,7 +116,9 @@ export async function inspectPackage(bytes: Uint8Array): Promise<PackageReport> 
     if (text === undefined) continue;
     try {
       const root = parseXml(text);
-      if (name.startsWith("word/") && name.endsWith(".xml")) parts.set(name, text);
+      if ((name.startsWith("word/") && name.endsWith(".xml")) || name === "docProps/app.xml") {
+        parts.set(name, text);
+      }
       if (name.endsWith(".rels")) {
         const ownerDir = name.slice(0, name.lastIndexOf("_rels/"));
         for (const each of descendants(root, "Relationship")) {

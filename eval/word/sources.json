@@ -3,6 +3,7 @@
     "file": "documents/libreoffice/FDO76312.docx",
     "origin": "libreoffice",
     "language": "en",
+    "domain": "test",
     "licence": "MPL-2.0",
     "source": "https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/FDO76312.docx"
   },
@@ -10,6 +11,7 @@
     "file": "documents/libreoffice/tdf124637_sectionMargin.docx",
     "origin": "libreoffice",
     "language": "en",
+    "domain": "test",
     "licence": "MPL-2.0",
     "source": "https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/tdf124637_sectionMargin.docx"
   },
@@ -17,6 +19,7 @@
     "file": "documents/libreoffice/tdf103976.docx",
     "origin": "libreoffice",
     "language": "n/a",
+    "domain": "test",
     "licence": "MPL-2.0",
     "source": "https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/tdf103976.docx"
   },
@@ -24,6 +27,7 @@
     "file": "documents/libreoffice/fdo69649.docx",
     "origin": "libreoffice",
     "language": "n/a",
+    "domain": "test",
     "licence": "MPL-2.0",
     "source": "https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/fdo69649.docx"
   },
@@ -31,6 +35,7 @@
     "file": "documents/libreoffice/NumberedList.docx",
     "origin": "libreoffice",
     "language": "n/a",
+    "domain": "test",
     "licence": "MPL-2.0",
     "source": "https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/NumberedList.docx"
   },
@@ -38,6 +43,7 @@
     "file": "documents/libreoffice/multi-page-toc.docx",
     "origin": "libreoffice",
     "language": "n/a",
+    "domain": "test",
     "licence": "MPL-2.0",
     "source": "https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/multi-page-toc.docx"
   },
@@ -45,6 +51,7 @@
     "file": "documents/libreoffice/tdf126994_lostPageBreak.docx",
     "origin": "libreoffice",
     "language": "n/a",
+    "domain": "test",
     "licence": "MPL-2.0",
     "source": "https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/tdf126994_lostPageBreak.docx"
   },
@@ -52,6 +59,7 @@
     "file": "documents/libreoffice/fdo79008.docx",
     "origin": "libreoffice",
     "language": "en",
+    "domain": "test",
     "licence": "MPL-2.0",
     "source": "https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/fdo79008.docx"
   },
@@ -59,6 +67,7 @@
     "file": "documents/libreoffice/tdf170236.docx",
     "origin": "libreoffice",
     "language": "n/a",
+    "domain": "test",
     "licence": "MPL-2.0",
     "source": "https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlimport/data/tdf170236.docx"
   },
@@ -66,6 +75,7 @@
     "file": "documents/apache-poi/form_footnotes.docx",
     "origin": "apache-poi",
     "language": "en",
+    "domain": "test",
     "licence": "Apache-2.0",
     "source": "https://github.com/apache/poi/blob/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/document/form_footnotes.docx"
   },
@@ -73,6 +83,7 @@
     "file": "documents/apache-poi/Bug54849.docx",
     "origin": "apache-poi",
     "language": "en",
+    "domain": "test",
     "licence": "Apache-2.0",
     "source": "https://github.com/apache/poi/blob/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/document/Bug54849.docx"
   },
@@ -80,6 +91,7 @@
     "file": "documents/apache-poi/testComment.docx",
     "origin": "apache-poi",
     "language": "en",
+    "domain": "test",
     "licence": "Apache-2.0",
     "source": "https://github.com/apache/poi/blob/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/document/testComment.docx"
   },
@@ -87,6 +99,7 @@
     "file": "tracked-changes/libreoffice/tdf123054.docx",
     "origin": "libreoffice",
     "language": "n/a",
+    "domain": "test",
     "licence": "MPL-2.0",
     "source": "https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/tdf123054.docx"
   },
@@ -94,6 +107,7 @@
     "file": "tracked-changes/libreoffice/bnc821804.docx",
     "origin": "libreoffice",
     "language": "en",
+    "domain": "test",
     "licence": "MPL-2.0",
     "source": "https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlimport/data/bnc821804.docx"
   },
@@ -101,6 +115,7 @@
     "file": "tracked-changes/libreoffice/tdf104797.docx",
     "origin": "libreoffice",
     "language": "en",
+    "domain": "test",
     "licence": "MPL-2.0",
     "source": "https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/tdf104797.docx"
   },
@@ -108,6 +123,7 @@
     "file": "tracked-changes/libreoffice/tdf121784.docx",
     "origin": "libreoffice",
     "language": "n/a",
+    "domain": "test",
     "licence": "MPL-2.0",
     "source": "https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/tdf121784.docx"
   },
@@ -115,6 +131,7 @@
     "file": "tracked-changes/libreoffice/tdf125894.docx",
     "origin": "libreoffice",
     "language": "en",
+    "domain": "test",
     "licence": "MPL-2.0",
     "source": "https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/tdf125894.docx"
   },
@@ -122,6 +139,7 @@
     "file": "tracked-changes/libreoffice/tdf116084.docx",
     "origin": "libreoffice",
     "language": "en",
+    "domain": "test",
     "licence": "MPL-2.0",
     "source": "https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/tdf116084.docx"
   },
@@ -129,6 +147,7 @@
     "file": "tracked-changes/libreoffice/tdf121176.docx",
     "origin": "libreoffice",
     "language": "en",
+    "domain": "test",
     "licence": "MPL-2.0",
     "source": "https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/tdf121176.docx",
     "known": "a stray entry, tdf116084.docx, sits at the package root with no content type (Word writes no such entry)"
@@ -137,6 +156,7 @@
     "file": "tracked-changes/libreoffice/tdf127814.docx",
     "origin": "libreoffice",
     "language": "n/a",
+    "domain": "test",
     "licence": "MPL-2.0",
     "source": "https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/tdf127814.docx"
   },
@@ -144,6 +164,7 @@
     "file": "tracked-changes/libreoffice/tdf128156.docx",
     "origin": "libreoffice",
     "language": "n/a",
+    "domain": "test",
     "licence": "MPL-2.0",
     "source": "https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/tdf128156.docx"
   },
@@ -151,6 +172,7 @@
     "file": "tracked-changes/libreoffice/groupshape-trackedchanges.docx",
     "origin": "libreoffice",
     "language": "n/a",
+    "domain": "test",
     "licence": "MPL-2.0",
     "source": "https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/groupshape-trackedchanges.docx"
   },
@@ -158,6 +180,7 @@
     "file": "tracked-changes/libreoffice/fdo65265.docx",
     "origin": "libreoffice",
     "language": "en",
+    "domain": "test",
     "licence": "MPL-2.0",
     "source": "https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/fdo65265.docx"
   },
@@ -165,6 +188,7 @@
     "file": "tracked-changes/libreoffice/fdo65632.docx",
     "origin": "libreoffice",
     "language": "n/a",
+    "domain": "test",
     "licence": "MPL-2.0",
     "source": "https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/fdo65632.docx"
   },
@@ -172,6 +196,7 @@
     "file": "tracked-changes/libreoffice/n789482.docx",
     "origin": "libreoffice",
     "language": "n/a",
+    "domain": "test",
     "licence": "MPL-2.0",
     "source": "https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/n789482.docx"
   },
@@ -179,6 +204,7 @@
     "file": "tracked-changes/libreoffice/fdo79668.docx",
     "origin": "libreoffice",
     "language": "en",
+    "domain": "test",
     "licence": "MPL-2.0",
     "source": "https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/fdo79668.docx"
   },
@@ -186,6 +212,7 @@
     "file": "tracked-changes/libreoffice/fdo79535.docx",
     "origin": "libreoffice",
     "language": "n/a",
+    "domain": "test",
     "licence": "MPL-2.0",
     "source": "https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/fdo79535.docx"
   },
@@ -193,6 +220,7 @@
     "file": "tracked-changes/libreoffice/tdf107969.docx",
     "origin": "libreoffice",
     "language": "n/a",
+    "domain": "test",
     "licence": "MPL-2.0",
     "source": "https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/tdf107969.docx"
   },
@@ -200,6 +228,7 @@
     "file": "tracked-changes/libreoffice/n830205.docx",
     "origin": "libreoffice",
     "language": "n/a",
+    "domain": "test",
     "licence": "MPL-2.0",
     "source": "https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/n830205.docx"
   },
@@ -207,6 +236,7 @@
     "file": "tracked-changes/libreoffice/bnc837302.docx",
     "origin": "libreoffice",
     "language": "n/a",
+    "domain": "test",
     "licence": "MPL-2.0",
     "source": "https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/bnc837302.docx"
   },
@@ -214,6 +244,7 @@
     "file": "tracked-changes/apache-poi/delins.docx",
     "origin": "apache-poi",
     "language": "en",
+    "domain": "test",
     "licence": "Apache-2.0",
     "source": "https://github.com/apache/poi/blob/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/document/delins.docx"
   },
@@ -221,6 +252,7 @@
     "file": "tracked-changes/apache-poi/Tika-792.docx",
     "origin": "apache-poi",
     "language": "n/a",
+    "domain": "test",
     "licence": "Apache-2.0",
     "source": "https://github.com/apache/poi/blob/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/document/Tika-792.docx"
   },
@@ -228,6 +260,7 @@
     "file": "documents/synthetic/en-contract-lease.docx",
     "origin": "synthetic",
     "language": "en",
+    "domain": "legal",
     "licence": "Apache-2.0",
     "source": ""
   },
@@ -235,6 +268,7 @@
     "file": "documents/synthetic/en-contract-nda.docx",
     "origin": "synthetic",
     "language": "en",
+    "domain": "legal",
     "licence": "Apache-2.0",
     "source": ""
   },
@@ -242,6 +276,7 @@
     "file": "documents/synthetic/en-contract-redline.docx",
     "origin": "synthetic",
     "language": "en",
+    "domain": "legal",
     "licence": "Apache-2.0",
     "source": ""
   },
@@ -249,6 +284,7 @@
     "file": "documents/synthetic/en-contract-services.docx",
     "origin": "synthetic",
     "language": "en",
+    "domain": "legal",
     "licence": "Apache-2.0",
     "source": ""
   },
@@ -256,6 +292,7 @@
     "file": "documents/synthetic/en-memo-board.docx",
     "origin": "synthetic",
     "language": "en",
+    "domain": "business",
     "licence": "Apache-2.0",
     "source": ""
   },
@@ -263,6 +300,7 @@
     "file": "documents/synthetic/en-memo-plain.docx",
     "origin": "synthetic",
     "language": "en",
+    "domain": "business",
     "licence": "Apache-2.0",
     "source": ""
   },
@@ -270,6 +308,7 @@
     "file": "documents/synthetic/en-memo-policy.docx",
     "origin": "synthetic",
     "language": "en",
+    "domain": "hr",
     "licence": "Apache-2.0",
     "source": ""
   },
@@ -277,6 +316,7 @@
     "file": "documents/synthetic/en-policy-numbered.docx",
     "origin": "synthetic",
     "language": "en",
+    "domain": "engineering",
     "licence": "Apache-2.0",
     "source": ""
   },
@@ -284,6 +324,7 @@
     "file": "documents/synthetic/en-report-quarterly.docx",
     "origin": "synthetic",
     "language": "en",
+    "domain": "finance",
     "licence": "Apache-2.0",
     "source": ""
   },
@@ -291,6 +332,7 @@
     "file": "documents/synthetic/en-report-sections.docx",
     "origin": "synthetic",
     "language": "en",
+    "domain": "finance",
     "licence": "Apache-2.0",
     "source": ""
   },
@@ -298,6 +340,7 @@
     "file": "documents/synthetic/zh-bilingual-contract.docx",
     "origin": "synthetic",
     "language": "zh",
+    "domain": "legal",
     "licence": "Apache-2.0",
     "source": ""
   },
@@ -305,6 +348,7 @@
     "file": "documents/synthetic/zh-contract-redline.docx",
     "origin": "synthetic",
     "language": "zh",
+    "domain": "legal",
     "licence": "Apache-2.0",
     "source": ""
   },
@@ -312,6 +356,7 @@
     "file": "documents/synthetic/zh-contract-sale.docx",
     "origin": "synthetic",
     "language": "zh",
+    "domain": "legal",
     "licence": "Apache-2.0",
     "source": ""
   },
@@ -319,6 +364,7 @@
     "file": "documents/synthetic/zh-contract-service.docx",
     "origin": "synthetic",
     "language": "zh",
+    "domain": "legal",
     "licence": "Apache-2.0",
     "source": ""
   },
@@ -326,6 +372,7 @@
     "file": "documents/synthetic/zh-memo-meeting.docx",
     "origin": "synthetic",
     "language": "zh",
+    "domain": "business",
     "licence": "Apache-2.0",
     "source": ""
   },
@@ -333,6 +380,7 @@
     "file": "documents/synthetic/zh-memo-notice.docx",
     "origin": "synthetic",
     "language": "zh",
+    "domain": "business",
     "licence": "Apache-2.0",
     "source": ""
   },
@@ -340,6 +388,7 @@
     "file": "documents/synthetic/zh-policy-rules.docx",
     "origin": "synthetic",
     "language": "zh",
+    "domain": "hr",
     "licence": "Apache-2.0",
     "source": ""
   },
@@ -347,6 +396,307 @@
     "file": "documents/synthetic/zh-report-annual.docx",
     "origin": "synthetic",
     "language": "zh",
+    "domain": "finance",
+    "licence": "Apache-2.0",
+    "source": ""
+  },
+  {
+    "file": "breadth/apache-poi/rtl.docx",
+    "origin": "apache-poi",
+    "language": "ar",
+    "domain": "test",
+    "licence": "Apache-2.0",
+    "source": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/document/rtl.docx"
+  },
+  {
+    "file": "breadth/docx-js/word-stops-grid-indents.docx",
+    "origin": "docx-js",
+    "language": "ja",
+    "domain": "test",
+    "licence": "MIT",
+    "source": "https://raw.githubusercontent.com/dolanmiu/docx/c9be7acae6146b3176443522fd5b87bcf6b48c53/scripts/layout-probes/stops2/word-stops-grid-indents.docx"
+  },
+  {
+    "file": "breadth/docx-js/word-stops-compress-kana2.docx",
+    "origin": "docx-js",
+    "language": "mixed",
+    "domain": "test",
+    "licence": "MIT",
+    "source": "https://raw.githubusercontent.com/dolanmiu/docx/c9be7acae6146b3176443522fd5b87bcf6b48c53/scripts/layout-probes/stops2/word-stops-compress-kana2.docx"
+  },
+  {
+    "file": "breadth/open-xml-sdk/A5.docx",
+    "origin": "open-xml-sdk",
+    "language": "zh",
+    "domain": "test",
+    "licence": "MIT",
+    "source": "https://raw.githubusercontent.com/dotnet/Open-XML-SDK/431ab05cf160248cc3885a4a766026d4f8243792/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/page layout/page layout(big file)/A5.docx"
+  },
+  {
+    "file": "breadth/open-xml-powertools/Contract.docx",
+    "origin": "open-xml-powertools",
+    "language": "de",
+    "domain": "legal",
+    "licence": "MIT",
+    "source": "https://raw.githubusercontent.com/OpenXmlDev/Open-XML-PowerTools/536ca1fb4bcdce1f4c920658bd66807b970393d7/OpenXmlPowerToolsExamples/HtmlConverter01/Contract.docx"
+  },
+  {
+    "file": "breadth/open-xml-powertools/RP038-Inserted-Paras-at-End.docx",
+    "origin": "open-xml-powertools",
+    "language": "fr",
+    "domain": "test",
+    "licence": "MIT",
+    "source": "https://raw.githubusercontent.com/OpenXmlDev/Open-XML-PowerTools/536ca1fb4bcdce1f4c920658bd66807b970393d7/TestFiles/RP/RP038-Inserted-Paras-at-End.docx"
+  },
+  {
+    "file": "breadth/apache-poi/table-indent.docx",
+    "origin": "apache-poi",
+    "language": "es",
+    "domain": "test",
+    "licence": "Apache-2.0",
+    "source": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/document/table-indent.docx"
+  },
+  {
+    "file": "breadth/docx-js/word-stops-strict2.docx",
+    "origin": "docx-js",
+    "language": "mixed",
+    "domain": "test",
+    "licence": "MIT",
+    "source": "https://raw.githubusercontent.com/dolanmiu/docx/c9be7acae6146b3176443522fd5b87bcf6b48c53/scripts/layout-probes/stops2/word-stops-strict2.docx"
+  },
+  {
+    "file": "breadth/docx-js/word-stops-equations3.docx",
+    "origin": "docx-js",
+    "language": "en",
+    "domain": "test",
+    "licence": "MIT",
+    "source": "https://raw.githubusercontent.com/dolanmiu/docx/c9be7acae6146b3176443522fd5b87bcf6b48c53/scripts/layout-probes/stops2/word-stops-equations3.docx"
+  },
+  {
+    "file": "breadth/libreoffice/smartart.docx",
+    "origin": "libreoffice",
+    "language": "n/a",
+    "domain": "test",
+    "licence": "MPL-2.0",
+    "source": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/smartart.docx"
+  },
+  {
+    "file": "breadth/libreoffice/chart-size.docx",
+    "origin": "libreoffice",
+    "language": "n/a",
+    "domain": "test",
+    "licence": "MPL-2.0",
+    "source": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/chart-size.docx"
+  },
+  {
+    "file": "breadth/libreoffice/tdf106132.docx",
+    "origin": "libreoffice",
+    "language": "en",
+    "domain": "test",
+    "licence": "MPL-2.0",
+    "source": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/tdf106132.docx"
+  },
+  {
+    "file": "breadth/open-xml-sdk/Comment003.docx",
+    "origin": "open-xml-sdk",
+    "language": "en",
+    "domain": "test",
+    "licence": "MIT",
+    "source": "https://raw.githubusercontent.com/dotnet/Open-XML-SDK/431ab05cf160248cc3885a4a766026d4f8243792/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment003.docx"
+  },
+  {
+    "file": "breadth/docx-js/word-nested-tables.docx",
+    "origin": "docx-js",
+    "language": "en",
+    "domain": "test",
+    "licence": "MIT",
+    "source": "https://raw.githubusercontent.com/dolanmiu/docx/c9be7acae6146b3176443522fd5b87bcf6b48c53/scripts/layout-probes/word-nested-tables.docx"
+  },
+  {
+    "file": "breadth/apache-tika/EmbeddedDocument.docx",
+    "origin": "apache-tika",
+    "language": "n/a",
+    "domain": "test",
+    "licence": "Apache-2.0",
+    "source": "https://raw.githubusercontent.com/apache/tika/49e40e6ddaf44910111f6b8c44db1f768d39098b/tika-parsers/tika-parsers-standard/tika-parsers-standard-modules/tika-parser-microsoft-module/src/test/resources/test-documents/EmbeddedDocument.docx"
+  },
+  {
+    "file": "breadth/open-xml-powertools/RA001-Tracked-Revisions-02.docx",
+    "origin": "open-xml-powertools",
+    "language": "en",
+    "domain": "test",
+    "licence": "MIT",
+    "source": "https://raw.githubusercontent.com/OpenXmlDev/Open-XML-PowerTools/536ca1fb4bcdce1f4c920658bd66807b970393d7/TestFiles/RA001-Tracked-Revisions-02.docx"
+  },
+  {
+    "file": "breadth/docx-js/word-character-widths.docx",
+    "origin": "docx-js",
+    "language": "en",
+    "domain": "test",
+    "licence": "MIT",
+    "source": "https://raw.githubusercontent.com/dolanmiu/docx/c9be7acae6146b3176443522fd5b87bcf6b48c53/scripts/layout-probes/word-character-widths.docx"
+  },
+  {
+    "file": "breadth/libreoffice/tdf108505.docx",
+    "origin": "libreoffice",
+    "language": "fr",
+    "domain": "test",
+    "licence": "MPL-2.0",
+    "source": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/tdf108505.docx"
+  },
+  {
+    "file": "breadth/government/pbc-fujian-normative-documents.docx",
+    "origin": "government",
+    "language": "zh",
+    "domain": "government",
+    "licence": "Not copyrightable (official document)",
+    "source": "https://fuzhou.pbc.gov.cn/fuzhou/126805/126820/126789/5850754/2025092316012977612.docx",
+    "basis": "PRC Copyright Law Art. 5(1): laws and regulations, resolutions, decisions and orders of state organs, and other documents of a legislative, administrative or judicial nature, are not protected by copyright. This is an official document of a state organ, published on its own website.",
+    "modification": "docProps/core.xml creator and lastModifiedBy, and docProps/app.xml company and e-mail address, replaced; the rest is unchanged",
+    "originalSha256": "5996710a94cecb009dbd801fb411e9dc70a48378c0f073d078dbb544fa8f296b"
+  },
+  {
+    "file": "breadth/government/nmpa-tcm-drafting-note.docx",
+    "origin": "government",
+    "language": "zh",
+    "domain": "medical",
+    "licence": "Not copyrightable (official document)",
+    "source": "https://www.nmpa.gov.cn/directory/web/nmpa/images/1674013535292043222.docx",
+    "basis": "PRC Copyright Law Art. 5(1): laws and regulations, resolutions, decisions and orders of state organs, and other documents of a legislative, administrative or judicial nature, are not protected by copyright. This is an official document of a state organ, published on its own website.",
+    "modification": "docProps/core.xml creator and lastModifiedBy, and docProps/app.xml company and e-mail address, replaced; the rest is unchanged",
+    "originalSha256": "0aabbf5b5e7a31dc747aedb23919cbae380c21cb6f4e0143c966c5fd9988b7f3"
+  },
+  {
+    "file": "breadth/government/nmpa-device-gcp-drafting-note.docx",
+    "origin": "government",
+    "language": "zh",
+    "domain": "medical",
+    "licence": "Not copyrightable (official document)",
+    "source": "https://www.nmpa.gov.cn/directory/web/nmpa/images/1620611781701002332.docx",
+    "basis": "PRC Copyright Law Art. 5(1): laws and regulations, resolutions, decisions and orders of state organs, and other documents of a legislative, administrative or judicial nature, are not protected by copyright. This is an official document of a state organ, published on its own website.",
+    "modification": "docProps/core.xml creator and lastModifiedBy, and docProps/app.xml company and e-mail address, replaced; the rest is unchanged",
+    "originalSha256": "38ae92692f82bb1463958fe75ef263830d7005c35e6ce188ba0a6037051e928f"
+  },
+  {
+    "file": "breadth/government/moa-taiwan-draft-notice-sample.docx",
+    "origin": "government",
+    "language": "zh-TW",
+    "domain": "government",
+    "licence": "Not copyrightable (official document)",
+    "source": "https://www.moa.gov.tw/upload/files/web_structure/11414/3-1-5-2-4.docx",
+    "basis": "Taiwan Copyright Act Art. 9(1): the constitution, laws, regulations and official documents are not the subject of copyright. This is an official document of the Ministry of Agriculture, published on its own website.",
+    "modification": "docProps/core.xml creator and lastModifiedBy, and docProps/app.xml company and e-mail address, replaced; the rest is unchanged",
+    "originalSha256": "2e2c39cec75c487f6eabcbb023e3dbd00ad07780a2836a51e78a21f985d7ee7b"
+  },
+  {
+    "file": "breadth/domains/academic-en-paper.docx",
+    "origin": "synthetic",
+    "language": "en",
+    "domain": "academic",
+    "licence": "Apache-2.0",
+    "source": ""
+  },
+  {
+    "file": "breadth/domains/engineering-en-spec.docx",
+    "origin": "synthetic",
+    "language": "en",
+    "domain": "engineering",
+    "licence": "Apache-2.0",
+    "source": ""
+  },
+  {
+    "file": "breadth/domains/finance-en-prospectus.docx",
+    "origin": "synthetic",
+    "language": "en",
+    "domain": "finance",
+    "licence": "Apache-2.0",
+    "source": ""
+  },
+  {
+    "file": "breadth/domains/gov-zh-TW-announcement.docx",
+    "origin": "synthetic",
+    "language": "zh-TW",
+    "domain": "government",
+    "licence": "Apache-2.0",
+    "source": ""
+  },
+  {
+    "file": "breadth/domains/gov-zh-notice.docx",
+    "origin": "synthetic",
+    "language": "zh",
+    "domain": "government",
+    "licence": "Apache-2.0",
+    "source": ""
+  },
+  {
+    "file": "breadth/domains/hr-he-contract.docx",
+    "origin": "synthetic",
+    "language": "he",
+    "domain": "hr",
+    "licence": "Apache-2.0",
+    "source": ""
+  },
+  {
+    "file": "breadth/domains/hr-ja-contract.docx",
+    "origin": "synthetic",
+    "language": "ja",
+    "domain": "hr",
+    "licence": "Apache-2.0",
+    "source": ""
+  },
+  {
+    "file": "breadth/domains/legal-ar-contract.docx",
+    "origin": "synthetic",
+    "language": "ar",
+    "domain": "legal",
+    "licence": "Apache-2.0",
+    "source": ""
+  },
+  {
+    "file": "breadth/domains/legal-en-court-complaint.docx",
+    "origin": "synthetic",
+    "language": "en",
+    "domain": "legal",
+    "licence": "Apache-2.0",
+    "source": ""
+  },
+  {
+    "file": "breadth/domains/legal-en-msa-long.docx",
+    "origin": "synthetic",
+    "language": "en",
+    "domain": "legal",
+    "licence": "Apache-2.0",
+    "source": ""
+  },
+  {
+    "file": "breadth/domains/legal-fr-contrat.docx",
+    "origin": "synthetic",
+    "language": "fr",
+    "domain": "legal",
+    "licence": "Apache-2.0",
+    "source": ""
+  },
+  {
+    "file": "breadth/domains/medical-en-clinical-protocol.docx",
+    "origin": "synthetic",
+    "language": "en",
+    "domain": "medical",
+    "licence": "Apache-2.0",
+    "source": ""
+  },
+  {
+    "file": "breadth/domains/medical-ko-protocol.docx",
+    "origin": "synthetic",
+    "language": "ko",
+    "domain": "medical",
+    "licence": "Apache-2.0",
+    "source": ""
+  },
+  {
+    "file": "breadth/domains/mixed-en-zh-report.docx",
+    "origin": "synthetic",
+    "language": "mixed",
+    "domain": "business",
     "licence": "Apache-2.0",
     "source": ""
   }
