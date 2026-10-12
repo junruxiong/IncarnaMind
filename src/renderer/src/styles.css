@@ -1518,6 +1518,10 @@
       color: var(--color-ink);
     }
   }
+  .meeting-button:disabled {
+    color: var(--color-ink-placeholder);
+    background: none;
+  }
   .meeting-button--icon {
     justify-content: center;
     width: 24px;
@@ -1711,6 +1715,38 @@
       text-decoration: underline;
       text-underline-offset: 2px;
     }
+  }
+
+  /*
+   * A line written while a meeting records shows its time after its words when
+   * pointed at (#139); an empty one, a Mark, shows it before the cursor.
+   */
+  .mind-editor [data-meeting-time]::after {
+    content: attr(data-meeting-time);
+    margin-left: 12px;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-ink-meta);
+    opacity: 0;
+    user-select: none;
+    pointer-events: none;
+  }
+  .mind-editor [data-meeting-time]:hover::after {
+    opacity: 1;
+  }
+  .mind-editor [data-meeting-time]:has(> br:only-child)::after {
+    content: none;
+  }
+  .mind-editor [data-meeting-time]:has(> br:only-child)::before {
+    content: attr(data-meeting-time) " ·";
+    margin-right: 8px;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-ink-meta);
+    user-select: none;
+    pointer-events: none;
   }
 
   /* The Mind editor's content (Tiptap): your writing in Source Serif 4, 17/28. */

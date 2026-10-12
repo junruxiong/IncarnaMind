@@ -242,6 +242,13 @@
   .transcript-text {
     @apply m-0 text-[15px] leading-6 break-words text-ink;
   }
+  /* Add to note: on the line's right while it is pointed at or has the focus; Enter does it too. */
+  .transcript-line {
+    @apply relative -mx-2 rounded-sm px-2 outline-offset-[-2px] focus-visible:outline-2 focus-visible:outline-accent;
+  }
+  .transcript-add {
+    @apply absolute top-2 right-0 inline-flex h-7 items-center gap-1.5 rounded-md border border-rule bg-sheet px-2 font-sans text-[12px] leading-5 font-semibold text-ink-secondary opacity-0 shadow-sm hover:bg-hover hover:text-ink focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100;
+  }
   .transcript-line--partial .transcript-text {
     @apply text-ink-placeholder;
   }
