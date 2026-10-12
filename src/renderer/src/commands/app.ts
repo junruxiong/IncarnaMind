@@ -156,7 +156,6 @@ const appCommands: readonly Command[] = [
     },
   },
   {
-    // History (#113): the Mind's versions, compared, over the whole window.
     id: "mind.history",
     label: "history.command",
     menuLabel: "history.menu",
