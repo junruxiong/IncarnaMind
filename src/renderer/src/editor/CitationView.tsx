@@ -27,7 +27,7 @@ import { citationHandle } from "../commands/handles";
 import { type CommandContext, commands } from "../commands/registry";
 import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
 import { useTabPlace } from "../components/tabs/tabItems";
-import { useLanguage, useT } from "../i18n";
+import { useGap, useLanguage, useT } from "../i18n";
 import { groupsMerged } from "../layoutSlice";
 import type { ObjectRef } from "../objects";
 import { openCited as openCitedPlace, quoteSaysSo } from "../openCited";
@@ -46,6 +46,7 @@ import { InFootnoteContext, MindIdContext, RegenerateAnswerContext } from "./min
 import { Popover } from "./Popover";
 import { onPeek, peekCitation } from "./peek";
 import { StyledRuns, StyledRunView } from "./StyledRuns";
+import { runsText } from "./styledText";
 
 /** How long a pointer rests on a Citation before its card shows, and how long it may leave before it goes. */
 const SHOW_MS = 120;
@@ -477,6 +478,7 @@ function CitationCard({
 }) {
   const t = useT();
   const language = useLanguage();
+  const gap = useGap();
   const web = useAppStore(
     (store) => store.documents.find((each) => each.id === state.documentId)?.web ?? null,
   );
@@ -537,7 +539,8 @@ function CitationCard({
       )}
       {note && (
         <p data-testid="citation-styled-note" className="citation-card-styled">
-          <span className="citation-card-styled-label">{t("citation.note")}</span>{" "}
+          <span className="citation-card-styled-label">{t("citation.note")}</span>
+          {gap(t("citation.note"), runsText(note))}
           <StyledRuns runs={note} />
         </p>
       )}
