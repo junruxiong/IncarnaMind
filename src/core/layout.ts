@@ -222,12 +222,14 @@ export function parseLayoutChange(value: unknown): LayoutChange {
     case "open": {
       const preview = optionalBoolean(value.preview, "preview");
       const focus = optionalBoolean(value.focus, "focus");
+      const keep = optionalBoolean(value.keep, "keep");
       return {
         type: "open",
         item: parseItem(value.item),
         where: parseWhere(value.where),
         ...(preview !== undefined && { preview }),
         ...(focus !== undefined && { focus }),
+        ...(keep !== undefined && { keep }),
         ...(value.place !== undefined && { place: parsePlace(value.place) }),
       };
     }
@@ -371,14 +373,9 @@ function requireTab(layout: Layout, tabId: string): { group: LayoutGroup; tab: L
 }
 
 /** Where it is open, the focused group first. */
-function findOpen(
-  layout: Layout,
-  item: TabItem,
-  except?: LayoutGroup,
-): { group: LayoutGroup; tab: LayoutTab } | null {
+function findOpen(layout: Layout, item: TabItem): { group: LayoutGroup; tab: LayoutTab } | null {
   const focused = focusedGroup(layout);
   for (const group of [focused, ...layout.groups.filter((each) => each !== focused)]) {
-    if (group === except) continue;
     const tab = group.tabs.find((each) => sameItem(each.item, item));
     if (tab) return { group, tab };
   }
@@ -476,7 +473,7 @@ function open(
   const focus = change.focus !== false;
   const preview = change.preview === true && item.kind === "document";
   const reveal = (group: LayoutGroup, tab: LayoutTab) => {
-    if (change.preview === false) tab.preview = false;
+    if (change.preview === false || change.keep === true) tab.preview = false;
     if (place) {
       tab.place = place;
       tab.opened += 1;
@@ -488,14 +485,10 @@ function open(
     where.in === "side" && where.from !== undefined
       ? requireGroup(layout, where.from)
       : focusedGroup(layout);
-  // The Library has one tab per window; anything else is revealed where it is open,
-  // except in the group it is opened from to the side, which keeps what it shows.
+  // The Library has one tab per window; anything else is revealed wherever it is open,
+  // and only a tab asked for in a group (Open in a new tab) can be a second one.
   if (where.in !== "group" || item.kind === "library") {
-    const open = findOpen(
-      layout,
-      item,
-      where.in === "side" && item.kind !== "library" ? from : undefined,
-    );
+    const open = findOpen(layout, item);
     if (open) {
       reveal(open.group, open.tab);
       return;
