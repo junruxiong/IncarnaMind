@@ -433,14 +433,13 @@ for (const [language, width] of [
     }
     await expect(chart.getByTestId("chart-kind")).toBeFocused();
 
-    // The kind's menu, by keyboard: a column off, then back on.
+    // The kind's menu, by keyboard: a column off, then back on. Keys pressed as soon as it opens
+    // go to it (#584): down past the four kinds to the first column.
     await window.keyboard.press("Enter");
+    for (let press = 0; press < 4; press++) await window.keyboard.press("ArrowDown");
     const series = window.getByTestId("chart-kind-menu").getByTestId("chart-series");
     await expect(series).toHaveCount(2);
-    for (let press = 0; press < 12; press++) {
-      if (await series.first().evaluate((element) => element === document.activeElement)) break;
-      await window.keyboard.press("ArrowDown");
-    }
+    await expect(series.first()).toBeFocused();
     await window.keyboard.press("Enter");
     await expect(chart.getByTestId("chart-point")).toHaveCount(4);
     await window.keyboard.press("ControlOrMeta+z");
