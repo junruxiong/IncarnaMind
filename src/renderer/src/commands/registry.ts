@@ -38,19 +38,31 @@ export interface CommandContext {
   selection: readonly ObjectRef[];
   focus: ObjectRef | null;
   surface: Surface;
+  /**
+   * What only the place that shows the object can do, by command: renaming
+   * in the row's own field, or opening a Citation's card. A command that needs
+   * one is offered only where the menu was given it (`needsHere`).
+   */
+  here?: Partial<Record<CommandId, () => void>>;
 }
 
 export interface Command {
   id: CommandId;
   label: MessageKey | ((ctx: CommandContext, t: Translate) => string);
+  /** Shorter than `label`, in the menu of the object it acts on, which says what it acts on. */
+  menuLabel?: Command["label"];
   keywords?: readonly MessageKey[];
   icon?: ComponentType<{ className?: string }>;
   shortcut?: Shortcut;
+  /** Keys the row binds itself (Enter or F2 renames, ⇧⌘M moves), shown in menus; #224 and #225 make them shortcuts. */
+  rowKeys?: ShortcutKeys;
   /** False keeps it out of ⌘K; it then needs a shortcut. */
   palette?: false;
   group: CommandGroup;
   /** The kinds it acts on, as the selection or the focus. Without them, it acts on the window. */
   appliesTo?: readonly ObjectKind[];
+  /** Menus show it in the danger ink: it deletes, or takes something away. */
+  destructive?: true;
   /** Whether it is offered at all. */
   when?(ctx: CommandContext): boolean;
   /** Offered, but not now, and why. */
@@ -65,6 +77,12 @@ export const fromMenu = (id: MenuCommandId) => ({
   id,
   label: MENU_COMMANDS[id].label,
   shortcut: { keys: MENU_COMMANDS[id].keys },
+});
+
+/** For a command that only the place showing the object can do: offered where it was given. */
+export const needsHere = (id: CommandId) => ({
+  when: (ctx: CommandContext) => ctx.here?.[id] !== undefined,
+  run: (ctx: CommandContext) => ctx.here?.[id]?.(),
 });
 
 const NO_CONTEXT: CommandContext = { selection: [], focus: null, surface: "mind" };
@@ -86,6 +104,9 @@ export function offered(command: Command, ctx: CommandContext): boolean {
 
 export const isEnabled = (command: Command, ctx: CommandContext): boolean =>
   (command.enabled?.(ctx) ?? true) === true;
+
+export const menuLabelOf = (command: Command, ctx: CommandContext, t: Translate): string =>
+  labelOf({ ...command, label: command.menuLabel ?? command.label }, ctx, t);
 
 export const labelOf = (command: Command, ctx: CommandContext, t: Translate): string =>
   typeof command.label === "string" ? t(command.label) : command.label(ctx, t);

@@ -241,7 +241,7 @@ test("a Mind in a Folder asks within it by default: its chip can be taken out to
     // "New Mind here", from the Folder's menu.
     const folder = sidebarFolder(window, "Ocean research");
     await folder.getByTestId("folder-row").click({ button: "right" });
-    await folder.getByTestId("folder-new-mind-here").click();
+    await folder.getByTestId("folder.newMind").click();
     await expect(folder.getByTestId("mind-row")).toHaveCount(1);
     const editor = window.getByTestId("mind-editor");
     await editor.click();
