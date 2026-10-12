@@ -30,6 +30,8 @@ export interface DataFlowDefinition {
   id: DataFlowId;
   /** Every kind of data the flow sends. When this grows, the User is asked again. */
   sends: readonly DataKind[];
+  /** What it sends to one service besides (GovInfo is sent the User's key), asked about for that service alone. */
+  sendsTo?(serviceId: string): readonly DataKind[];
   /** The external services the flow currently goes to; empty when everything stays on this computer. */
   services(): Promise<ExternalService[]>;
 }
@@ -84,7 +86,8 @@ export function createConsent(
   const flowFor = (id: DataFlowId, service: ExternalService): DataFlow => {
     const definition = definitions.get(id);
     if (!definition) throw new Error(`No data flow "${id}" is registered.`);
-    return { id, service: { id: service.id, name: service.name }, sends: [...definition.sends] };
+    const sends = [...new Set([...definition.sends, ...(definition.sendsTo?.(service.id) ?? [])])];
+    return { id, service: { id: service.id, name: service.name }, sends };
   };
 
   const find = (flow: DataFlowId, serviceId: string) =>

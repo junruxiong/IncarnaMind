@@ -121,12 +121,16 @@ async function openApp(language: Language, width: number) {
 }
 
 /** A Mind holding an Answer's table of quarterly figures, each cited but the last, added from the assistant. */
-async function askForFigures(window: Page, language: Language) {
+async function askForFigures(
+  window: Page,
+  language: Language,
+  question: string = WORDS[language].question,
+) {
   await addDocuments(window, [join(sources, "Acme.pdf")]);
   await newMind(window);
   const editor = window.getByTestId("mind-editor");
   await pointAndClick(window, editor);
-  await addToNote(window, await askInAssistant(window, WORDS[language].question));
+  await addToNote(window, await askInAssistant(window, question));
   const table = editor.locator("table");
   await expect(table.locator("tr")).toHaveCount(5);
   await expect(table.getByTestId("citation")).toHaveCount(7);
@@ -182,6 +186,22 @@ async function expectApart(a: Locator, b: Locator): Promise<void> {
       return apart ? "apart" : "overlapping";
     })
     .toBe("apart");
+}
+
+/** Waits until the first box lies inside the second: a card that grows in place settles first. */
+async function expectInside(inner: Locator, outer: Locator): Promise<void> {
+  await expect
+    .poll(async () => {
+      const [one, two] = [await inner.boundingBox(), await outer.boundingBox()];
+      if (!one || !two) return "not on screen";
+      const inside =
+        one.x >= two.x - 1 &&
+        one.x + one.width <= two.x + two.width + 1 &&
+        one.y >= two.y - 1 &&
+        one.y + one.height <= two.y + two.height + 1;
+      return inside ? "inside" : "outside";
+    })
+    .toBe("inside");
 }
 
 /** The bottom of a box, and its right edge. */
@@ -354,6 +374,59 @@ for (const [language, width] of [
     await pointAt(window, values.getByTestId("chart-value").nth(5));
     await expect(card.getByTestId("chart-card-value")).toHaveText("377.9");
     await screenshot(window, `chart-table-${language}-${width}`);
+    await app.close();
+  });
+}
+
+// A pie's card (#578): beside the pie, past its key where the Mind has room, never over the key,
+// the slice in focus, the head or the foot, and never out of the Mind. In Chinese, with Chinese
+// labels (一季度…), whose key is wider.
+for (const [language, width] of [
+  ["en", 1100],
+  ["zh-CN", 1100],
+  ["en", 1600],
+  ["zh-CN", 1600],
+] as const) {
+  test(`a pie's value card stays in the Mind, off its key and the slice in focus (${language}, ${width}px)`, async () => {
+    const { app, window } = await openApp(language, width);
+    await useLocalChatModel(window);
+    const question = language === "zh-CN" ? "分季度营业收入 revenue quarter" : WORDS.en.question;
+    const { editor, table } = await askForFigures(window, language, question);
+    await pointAndClick(window, table.locator("td").nth(3));
+    await pointAndClick(window, window.getByTestId("table-menu"));
+    await pointAndClick(window, window.getByTestId("table-chart"));
+    const chart = editor.getByTestId("chart");
+    await pointAndClick(window, chart.getByTestId("chart-kind"));
+    await pointAndClick(window, window.getByTestId("chart-kind-pie"));
+    await expect(chart.getByTestId("chart-plot")).toHaveAttribute("data-kind", "pie");
+    await chart.evaluate((element) => element.scrollIntoView({ block: "center" }));
+
+    const pane = window.getByTestId("mind-pane");
+    const key = chart.getByTestId("chart-key");
+    const card = window.getByTestId("chart-card");
+    const slices = chart.getByTestId("chart-point");
+    await expect(slices).toHaveCount(4);
+    const keep = async (slice: Locator) => {
+      await expect(card).toBeVisible();
+      await expectInside(card, pane);
+      await expectApart(card, key);
+      await expectApart(card, slice);
+      await expectApart(card, chart.getByTestId("chart-kind"));
+      await expectApart(card, chart.getByTestId("chart-show-table"));
+      await expectApart(card, chart.getByTestId("chart-foot"));
+    };
+    for (let index = 0; index < 4; index++) {
+      await pointAtSlice(window, slices.nth(index));
+      await keep(slices.nth(index));
+      if (index === 2) await screenshot(window, `chart-pie-card-${language}-${width}`);
+    }
+    // Reached with the arrow keys, the same.
+    await window.mouse.move(0, 0);
+    await slices.first().focus();
+    await keep(slices.first());
+    await window.keyboard.press("ArrowRight");
+    await expect(slices.nth(1)).toBeFocused();
+    await keep(slices.nth(1));
     await app.close();
   });
 }
@@ -596,14 +669,13 @@ for (const [language, width] of [
     }
     await expect(chart.getByTestId("chart-kind")).toBeFocused();
 
-    // The kind's menu, by keyboard: a column off, then back on.
+    // The kind's menu, by keyboard: a column off, then back on. Keys pressed as soon as it opens
+    // go to it (#584): down past the four kinds to the first column.
     await window.keyboard.press("Enter");
+    for (let press = 0; press < 4; press++) await window.keyboard.press("ArrowDown");
     const series = window.getByTestId("chart-kind-menu").getByTestId("chart-series");
     await expect(series).toHaveCount(2);
-    for (let press = 0; press < 12; press++) {
-      if (await series.first().evaluate((element) => element === document.activeElement)) break;
-      await window.keyboard.press("ArrowDown");
-    }
+    await expect(series.first()).toBeFocused();
     await window.keyboard.press("Enter");
     await expect(chart.getByTestId("chart-point")).toHaveCount(4);
     await window.keyboard.press("ControlOrMeta+z");
