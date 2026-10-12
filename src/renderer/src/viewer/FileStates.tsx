@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useT } from "../i18n";
+import { useCitedAreaFailure } from "./citedArea";
 import type { LoadedFile } from "./useDocumentFile";
 import { ViewerHeader } from "./ViewerHeader";
 import { FileGone, ViewerMessage } from "./ViewerMessage";
@@ -18,6 +19,13 @@ export function FileStates<T>({
   ready(value: T): ReactNode;
 }) {
   const t = useT();
+  useCitedAreaFailure(
+    loaded.kind === "failed"
+      ? loaded.message || loaded.kind
+      : loaded.kind === "missing" || loaded.kind === "too-large"
+        ? loaded.kind
+        : null,
+  );
   switch (loaded.kind) {
     case "loading":
       return (
