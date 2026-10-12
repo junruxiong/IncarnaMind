@@ -52,17 +52,6 @@ export type ExportResult =
       folder: string;
     };
 
-/** The Mind whose Export options sheet is open, wherever it was opened: ⋯, ⌘K, its References. */
-export const useExportOptions = create<{
-  mindId: string | null;
-  open(mindId: string): void;
-  close(): void;
-}>()((set) => ({
-  mindId: null,
-  open: (mindId) => set({ mindId }),
-  close: () => set({ mindId: null }),
-}));
-
 export const useExports = create<{
   result: ExportResult | null;
   dismiss(): void;

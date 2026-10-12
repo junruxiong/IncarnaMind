@@ -156,6 +156,7 @@ export async function launchApp(
   env.INCARNAMIND_TEST_HOOKS = "1";
   if (fakeChat) env.INCARNAMIND_FAKE_CHAT = "1";
   env.INCARNAMIND_TEST_EMBEDDER = "fake";
+  env.INCARNAMIND_TEST_TRANSCRIBER = "fake";
 
   const app = await electron.launch({ args: [appDir], env });
   openApps.set(app, dataDir);
@@ -163,14 +164,10 @@ export async function launchApp(
   const window = await app.firstWindow();
   await window.getByTestId("plus-menu").waitFor();
   if (!keepWindow) {
-    await app.evaluate(({ BrowserWindow }, size) => {
-      BrowserWindow.getAllWindows()[0]?.setContentSize(size.width, size.height);
-    }, WINDOW_SIZE);
-    await expect
-      .poll(() => window.evaluate(() => [globalThis.innerWidth, globalThis.innerHeight]), {
-        message: `the window is ${WINDOW_SIZE.width} × ${WINDOW_SIZE.height}: is the screen too short for it?`,
-      })
-      .toEqual([WINDOW_SIZE.width, WINDOW_SIZE.height]);
+    await resizeContent(app, window, WINDOW_SIZE.width, WINDOW_SIZE.height, {
+      waitForHeight: true,
+      message: `the window is ${WINDOW_SIZE.width} × ${WINDOW_SIZE.height}: is the screen too short for it?`,
+    });
   }
   return { app, window };
 }
@@ -200,7 +197,7 @@ export async function openFolderInLibrary(window: Page, name: string): Promise<v
   const folder = sidebarFolder(window, name);
   await folder.getByTestId("folder-row").hover();
   await folder.getByTestId("folder-menu").click();
-  await folder.getByTestId("folder-open").click();
+  await folder.getByTestId("folder.open").click();
   await expect(window.getByTestId("library")).toBeVisible();
 }
 
@@ -579,12 +576,44 @@ export async function setWindowSize(
   width: number,
   height: number,
 ): Promise<void> {
-  await app.evaluate(
-    ({ BrowserWindow }, size) =>
-      BrowserWindow.getAllWindows()[0]?.setContentSize(size.width, size.height),
-    { width, height },
-  );
-  await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(width);
+  await resizeContent(app, window, width, height);
+}
+
+/**
+ * Asks for the content size and waits until the page has it, asking again
+ * while it hasn't. On Linux (Xvfb) a size asked for while the window is still
+ * taking the one before it (a launch sets one, then a test its own) is
+ * sometimes dropped, and the page stays as it was (#459), so one ask is not
+ * enough. The launch also waits for the height; `setWindowSize` only the width.
+ */
+async function resizeContent(
+  app: ElectronApplication,
+  window: Page,
+  width: number,
+  height: number,
+  { message, waitForHeight = false }: { message?: string; waitForHeight?: boolean } = {},
+): Promise<void> {
+  const ask = () =>
+    app.evaluate(
+      ({ BrowserWindow }, size) =>
+        BrowserWindow.getAllWindows()[0]?.setContentSize(size.width, size.height),
+      { width, height },
+    );
+  await ask();
+  await expect
+    .poll(
+      async () => {
+        const [innerWidth, innerHeight] = await window.evaluate(() => [
+          globalThis.innerWidth,
+          globalThis.innerHeight,
+        ]);
+        const arrived = innerWidth === width && (!waitForHeight || innerHeight === height);
+        if (!arrived) await ask();
+        return [innerWidth, waitForHeight ? innerHeight : height];
+      },
+      { message },
+    )
+    .toEqual([width, height]);
 }
 
 /** How many animations are running (src/renderer/src/motion.ts), leaving copies included. */
@@ -937,3 +966,7 @@ export async function removeDataFolder(dataDir: string): Promise<void> {
   }
   await rm(dataDir, { recursive: true, force: true, maxRetries: 3 });
 }
+
+/** The core's bridge in the page, for a test to set things up or read them: `(await coreOf(window)).evaluate(...)`. */
+export const coreOf = (window: Page) =>
+  window.evaluateHandle(() => (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind);

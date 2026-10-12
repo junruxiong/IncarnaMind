@@ -16,7 +16,7 @@ import { CiteAsPanel } from "../components/CiteAsPanel";
 import { ChevronDownLineIcon } from "../components/lineIcons";
 import { ProblemLine } from "../components/ProblemLine";
 import { errorMessage } from "../errors";
-import { useExportOptions } from "../exports";
+import { useExportDialog } from "../exportDialog";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { citationClusters } from "./citationClusters";
@@ -120,7 +120,7 @@ export function ReferencesBlock({
         <button
           type="button"
           data-testid="references-export"
-          onClick={() => useExportOptions.getState().open(mindId)}
+          onClick={() => useExportDialog.getState().open(mindId)}
           className="references-button"
         >
           {t("references.export")}
