@@ -59,6 +59,7 @@ import {
   parseListOptions,
 } from "./documents";
 import { createEvidence, parseCheckedDocument, passageResult } from "./documents/evidence";
+import { statIdentity } from "./documents/files";
 import { createOwnFiles } from "./documents/ownFiles";
 import { createVersionRetention, type VersionRetention } from "./documents/retention";
 import { BUILT_IN_TEXT_RECOGNITION_MODEL, createTextRecognitionModel } from "./documents/scan";
@@ -467,6 +468,7 @@ export function createCore(adapters: CoreAdapters): Core {
       linkedFolders: {
         watch:
           adapters.linkedFolders?.watch ?? fsWatchFolder(adapters.linkedFolders?.settleMs ?? 300),
+        stat: adapters.linkedFolders?.stat ?? statIdentity,
         retryMs: adapters.linkedFolders?.retryMs ?? 30_000,
         detectDataless: adapters.linkedFolders?.detectDatalessFiles ?? platform === "darwin",
       },
