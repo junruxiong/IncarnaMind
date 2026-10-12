@@ -484,6 +484,47 @@ describe("Two different files are never one Document", { timeout: 60_000 }, () =
       fileStatus: "available",
     });
   });
+
+  test("a Document in Recently deleted isn't the file it had, moved, edited or not, on this disk or another", async () => {
+    const dataDir = await createTempDataFolder();
+    const library = await createSourceFolder();
+    const drive = await createSourceFolder();
+    const linkedFolders = { stat: onAnotherDisk(drive) };
+    const paths = {
+      edited: await writeSourceFile(library, "notes.md", NOTES),
+      unedited: await writeSourceFile(library, "paper.md", PAPER),
+      toDrive: await writeSourceFile(library, "report.md", OTHER),
+    };
+    const first = startCore(dataDir, { linkedFolders });
+    const before = await linkAndProcess(first, library);
+    await first.addLinkedFolder(drive);
+    const deleted = Object.values(paths).map((path) => documentAt(before, path).id);
+    for (const id of deleted) await first.deleteDocument(id);
+    await first.close();
+    const moved = {
+      edited: join(library, "Sub", "notes.md"),
+      unedited: join(library, "Sub", "paper.md"),
+      toDrive: join(drive, "report.md"),
+    };
+    await mkdir(join(library, "Sub"));
+    for (const key of ["edited", "unedited", "toDrive"] as const) {
+      await rename(paths[key], moved[key]);
+    }
+    await writeFile(moved.edited, `${NOTES}${EDIT}`);
+    await writeSourceFile(drive, "report.md", `${OTHER}${EDIT}`);
+
+    const second = startCore(dataDir, { linkedFolders });
+    await second.reconcileDocuments();
+    const documents = await waitForDocuments(second, (current) => {
+      for (const path of Object.values(moved)) {
+        expect(documentAt(current, path).status).toBe("ready");
+      }
+    });
+
+    expect(documents).toHaveLength(3);
+    for (const document of documents) expect(deleted).not.toContain(document.id);
+    expect((await second.listDeleted()).map((item) => item.id).sort()).toEqual([...deleted].sort());
+  });
 });
 
 describe("Files on any system", { timeout: 60_000 }, () => {
