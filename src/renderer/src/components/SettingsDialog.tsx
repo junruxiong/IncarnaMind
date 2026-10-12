@@ -19,6 +19,7 @@ import { ChatModelSettings } from "./providers/ChatModelSettings";
 import { EmbeddingSettingsSection } from "./providers/EmbeddingSettings";
 import { RerankSettingsSection } from "./providers/RerankSettings";
 import { SkillScriptsSettings, SkillsSettings } from "./SkillsSettings";
+import { SpendingCapSettings } from "./SpendingCapSettings";
 import { SuggestionSettings } from "./SuggestionSettings";
 import { TaggingSettings } from "./TaggingSettings";
 import {
@@ -155,6 +156,7 @@ function PageContent({ page }: { page: SettingsPage }) {
       return (
         <Page>
           <LanguageSettings />
+          <SpendingCapSettings />
           <MotionSettings />
           <SuggestionSettings />
           <OutputLocationSettings />

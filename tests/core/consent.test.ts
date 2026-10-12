@@ -363,7 +363,11 @@ describe("Data-flow consent", () => {
     expect(models.specs).toEqual([]);
     await core.respondToConsent(request.requestId, true);
 
-    expect(await prepared).toMatchObject({ model: models.model, modelId: "gpt-5.4-mini" });
+    // The provider's model, counted by the meter on its way out.
+    expect(await prepared).toMatchObject({
+      model: { provider: models.model.provider, modelId: models.model.modelId },
+      modelId: "gpt-5.4-mini",
+    });
     expect(models.specs).toEqual([
       {
         kind: "openai",

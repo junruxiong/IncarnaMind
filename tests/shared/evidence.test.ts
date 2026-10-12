@@ -10,6 +10,7 @@ const settings = (leaveOutOwnFiles: boolean): Pick<Settings, "user"> => ({
     imageModel: null,
     suggestWhileWriting: false,
     leaveOutOwnFiles,
+    monthlyCap: null,
   },
 });
 

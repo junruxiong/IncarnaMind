@@ -251,6 +251,123 @@ describe("undoing a move", () => {
   });
 });
 
+describe("changes the User can take back", () => {
+  const mind = {
+    id: "m",
+    title: "Plan",
+    autoTitle: "",
+    kind: "mind" as const,
+    folderId: null,
+    createdAt: "",
+    updatedAt: "",
+  };
+  let useUndo: typeof import("../../src/renderer/src/undo").useUndo;
+
+  beforeAll(async () => {
+    ({ useUndo } = await import("../../src/renderer/src/undo"));
+  });
+
+  beforeEach(() => {
+    useUndo.setState({ done: [], undone: [], line: null });
+    useAppStore.setState({ minds: [mind], settings: null });
+  });
+
+  const top = () => useUndo.getState().done.at(-1);
+
+  test("a rename says so, is undone by the old name and done again by the new", async () => {
+    method("renameMind").mockResolvedValue({ ...mind, title: "Budget" });
+    await useAppStore.getState().renameMind("m", "Budget");
+    expect(top()?.message).toBe("Renamed to “Budget”");
+    expect(top()?.name).toBe("Rename");
+    await useUndo.getState().undo();
+    expect(method("renameMind")).toHaveBeenLastCalledWith("m", "Plan");
+    await useUndo.getState().redo();
+    expect(method("renameMind")).toHaveBeenLastCalledWith("m", "Budget");
+  });
+
+  test("a delete says so, is undone by restoring it and done again", async () => {
+    await useAppStore.getState().deleteDocument("a");
+    expect(top()?.message).toBe("Deleted “a v0”");
+    expect(useAppStore.getState().documents.map((each) => each.id)).toEqual(["b", "c"]);
+    await useUndo.getState().undo();
+    expect(method("restore")).toHaveBeenCalledWith([{ kind: "document", id: "a" }]);
+    await useUndo.getState().redo();
+    expect(method("deleteDocument")).toHaveBeenCalledTimes(2);
+  });
+
+  test("a Tag added is undone by putting each link back as it was, with who chose it", async () => {
+    useAppStore.setState({
+      tags: [{ id: "t", name: "Contract" } as never],
+      documents: [
+        {
+          ...doc("a"),
+          tags: [{ tagId: "t", source: "automatic", confidence: 0.4, needsReview: true }],
+        } as unknown as Document,
+        doc("b"),
+      ],
+    });
+    await useAppStore.getState().addTagToDocuments(["a", "b"], "t");
+    expect(top()?.message).toBe("Tagged 2 Documents Contract");
+    await useUndo.getState().undo();
+    expect(method("revertDocumentTags")).toHaveBeenCalledWith([
+      {
+        documentId: "a",
+        tagId: "t",
+        link: { source: "automatic", confidence: 0.4, needsReview: true },
+      },
+      { documentId: "b", tagId: "t", link: null },
+    ]);
+    await useUndo.getState().redo();
+    expect(method("addTagToDocuments")).toHaveBeenCalledTimes(2);
+  });
+
+  test("a move is done again where it went, and refused, with Restore, once the Folder it came from is gone", async () => {
+    const filed = assignment("a", "classified", "g");
+    useAppStore.setState({ library: snapshot([filed]) });
+    method("moveToFolder").mockResolvedValue({
+      folderId: null,
+      minds: [],
+      documents: [{ id: "a", from: "g", previous: filed }],
+      conversations: [],
+    });
+    await useAppStore.getState().moveToFolder({ documentIds: ["a"] }, null);
+    expect(top()?.name).toBe("Move “a v0”");
+    // Research is deleted meanwhile.
+    useAppStore.setState({ library: { ...snapshot([]), groups: [] } });
+    await useUndo.getState().undo();
+    const problem = useUndo.getState().line?.problem;
+    expect(problem?.reason).toBe("“Research” is deleted");
+    expect(problem?.fix?.label).toBe("Restore Research");
+    expect(method("restoreAssignment")).not.toHaveBeenCalled();
+    method("getLibrary").mockResolvedValue(snapshot([]));
+    await problem?.fix?.run();
+    expect(method("restore")).toHaveBeenCalledWith([{ kind: "folder", id: "g" }]);
+    expect(method("restoreAssignment")).toHaveBeenCalledWith("a", filed);
+    await useUndo.getState().redo();
+    expect(method("moveToFolder")).toHaveBeenCalledTimes(2);
+  });
+
+  test("the line and the Edit menu's name in Chinese, one and several", async () => {
+    useAppStore.setState({ settings: { language: "zh-CN" } as never });
+    method("moveToFolder").mockResolvedValue({
+      folderId: "g",
+      minds: [],
+      documents: [
+        { id: "a", from: null, previous: null },
+        { id: "b", from: null, previous: null },
+      ],
+      conversations: [],
+    });
+    useAppStore.setState({ library: snapshot([]) });
+    await useAppStore.getState().moveToFolder({ documentIds: ["a", "b"] }, "g");
+    expect(top()?.message).toBe("已将 2 个文档移动到“Research”");
+    expect(top()?.name).toBe("移动 2 个文档");
+    await useAppStore.getState().deleteMind("m");
+    expect(top()?.message).toBe("已删除“Plan”");
+    expect(top()?.name).toBe("删除“Plan”");
+  });
+});
+
 describe("loading keeps a list the core pushed after reading it", () => {
   const folder = (id: string) => ({ id, name: id }) as unknown as Folder;
   const folderIds = () => useAppStore.getState().folders.map((each) => each.id);
