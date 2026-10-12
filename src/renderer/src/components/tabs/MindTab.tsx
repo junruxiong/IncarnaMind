@@ -1,10 +1,12 @@
 import { type KeyboardEvent, useContext, useEffect, useRef, useState } from "react";
 import type { Mind } from "../../../../core/api";
+import { files } from "../../core";
 import { ComposerDockContext, CountSlotContext } from "../../editor/mindContext";
 import { useT } from "../../i18n";
 import { assistantTabOf } from "../../layoutSlice";
 import { useAppStore } from "../../store";
 import { useGroupsMerged } from "../../useWindowWidth";
+import { isWordFile, useWordImport } from "../../wordImport";
 import { ExportResultLine } from "../ExportResultLine";
 import { ExampleBanner, useIsExample } from "../GettingStarted";
 import { PlusLineIcon } from "../lineIcons";
@@ -28,11 +30,12 @@ export function MindTab({ mindId }: { mindId: string }) {
   const tabId = useTabPlace()?.tabId;
   const merged = useGroupsMerged();
   const read = useAppStore((state) => assistantTabOf(state.layout, merged)?.id === tabId);
+  const dropTarget = useWordFileDrop();
   if (!mind) return null;
 
   return (
     <div className="relative flex min-h-0 flex-grow flex-col">
-      <div className="mind-scroller min-h-0 flex-grow overflow-auto">
+      <div ref={dropTarget} className="mind-scroller min-h-0 flex-grow overflow-auto">
         {/* Every text in it starts at one edge (styles.css, `.mind-column`). */}
         <article data-testid="mind-pane" data-mind-id={mind.id} className="mind-column">
           <div className="mind-measure">
@@ -54,6 +57,30 @@ export function MindTab({ mindId }: { mindId: string }) {
       <ExportResultLine mindId={mind.id} />
     </div>
   );
+}
+
+/**
+ * A Word file dropped on a Mind, alone, opens the import screen (#104), which
+ * also offers to add it as a Document, as a drop anywhere else does. It is
+ * taken before the window's own drop handling (`useFileDrop`) sees it.
+ */
+function useWordFileDrop() {
+  const [element, setElement] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!element) return;
+    const drop = (event: DragEvent) => {
+      if (event.defaultPrevented || !event.dataTransfer) return;
+      const dropped = Array.from(event.dataTransfer.files);
+      const file = dropped.length === 1 ? dropped[0] : undefined;
+      const path = file && isWordFile(file.name) ? files.pathForFile(file) : "";
+      if (!path) return;
+      event.preventDefault();
+      void useWordImport.getState().open(path, true);
+    };
+    element.addEventListener("drop", drop);
+    return () => element.removeEventListener("drop", drop);
+  }, [element]);
+  return setElement;
 }
 
 /** A window with no tab open: a way to start a Mind. */

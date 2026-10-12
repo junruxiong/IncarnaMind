@@ -1,7 +1,7 @@
 /**
  * `npm run eval:word` (eval/word/README.md): for each file of the Word corpus, the checks that
- * can run today. Each is a step in `STEPS`; when the Word export (#105) exists, its round-trip
- * becomes more steps after "opens".
+ * can run today, the import as a Mind (#104) among them. Each is a step in `STEPS`; when the Word
+ * export (#105) exists, its round-trip becomes more steps after "opens".
  *
  * INCARNAMIND_WORD_SET picks the files: "core" (the committed files, the default), "extended"
  * (the cache that `npm run eval:word:fetch` fills) or "all".
@@ -20,6 +20,7 @@ import {
   WORD_DIR,
 } from "./corpus";
 import { type Features, featureKinds } from "./features";
+import { checkImport } from "./imports";
 import { convertToPdf, findLibreOffice } from "./libreoffice";
 
 interface Outcome {
@@ -37,6 +38,8 @@ interface Subject {
 
 interface Step {
   name: string;
+  /** Its detail is printed when it passes too: the counts a step reports. */
+  reports?: true;
   run(subject: Subject, bytes: Uint8Array): Promise<Outcome>;
 }
 
@@ -55,6 +58,11 @@ const STEPS: Step[] = [
         ? { ok: false, detail: `its listed features are out of date: ${drift}` }
         : { ok: true, detail: "" };
     },
+  },
+  {
+    name: "imports as a Mind",
+    reports: true,
+    run: async (_subject, bytes) => checkImport(bytes),
   },
   {
     name: "opens in LibreOffice",
@@ -137,7 +145,8 @@ describe("the Word corpus", () => {
       const cells: string[] = [];
       for (const step of STEPS) {
         const outcome = await step.run(subject, bytes);
-        cells.push(`${outcome.ok ? "ok" : "FAIL"} ${step.name}`);
+        const reported = outcome.ok && step.reports && outcome.detail ? ` (${outcome.detail})` : "";
+        cells.push(`${outcome.ok ? "ok" : "FAIL"} ${step.name}${reported}`);
         if (!outcome.ok) {
           const line = `${subject.name}: ${step.name}: ${outcome.detail}`;
           if (subject.known) lines.push(`  (known: ${subject.known}) ${line}`);
