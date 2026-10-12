@@ -9,7 +9,7 @@ CI (`.github/workflows/ci.yml`) runs three checks on every pull request (a push 
 | Check | Where | What it runs |
 |---|---|---|
 | Typecheck, lint and unit tests | Ubuntu | `npm ci`, `npm run typecheck`, `npm run lint`, `npm test` |
-| Electron smoke test (Linux) | Ubuntu | `npm ci`, then `npm run test:smoke` on a virtual display (`xvfb-run`): builds the app and runs every spec in `e2e/`, split into four shards that run at once (`Smoke shard N/4`); this check passes when all four do |
+| Electron smoke test (Linux) | Ubuntu | `npm ci`, the Noto CJK fonts (the runner has no Chinese face), then `npm run test:smoke` on a virtual display (`xvfb-run`): builds the app and runs every spec in `e2e/`, split into four shards that run at once (`Smoke shard N/4`); this check passes when all four do |
 | Every commit is signed off (DCO) | Ubuntu | a `Signed-off-by:` line on each commit (`git commit -s`) |
 
 `main` must stay green. A pull request is merged only when all three pass and it is up to date with `main`. If `main` goes red, fixing it comes before new work.
