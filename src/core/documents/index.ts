@@ -23,7 +23,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, renameSync } from "node:fs";
 import { rm, stat } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
-import type { Anchor, UnitKind, UnitLabel } from "../../shared/units";
+import { type Anchor, cellNumber, type UnitKind, type UnitLabel } from "../../shared/units";
 import type { CitedUnits } from "../answers/citedVersions";
 import type {
   AddDocumentsResult,
@@ -1566,6 +1566,30 @@ export function createDocuments(options: DocumentsOptions) {
          ORDER BY p.position`,
         [documentId, ...params],
       );
+    },
+
+    /**
+     * The number a workbook's cell stores (0.04213 for a cell showing "4.2%"),
+     * for the Tools that calculate over cells. Null when the cell shows its
+     * number plainly, isn't a number, or isn't there; always null for a CSV.
+     * `sheet` is the sheet's name, null for a CSV. From the Document's current
+     * version. Throws NotFoundError for an unknown or deleted Document.
+     */
+    cellNumber(idInput: unknown, sheet: string | null, ref: string): number | null {
+      const row = find(parseId(idInput));
+      if (!row) throw new NotFoundError("There is no such Document.");
+      const units = db.all<UnitRow>(
+        `SELECT page, text, kind, label, anchors FROM document_pages
+         WHERE document_id = ? AND content_hash = ? AND deleted_at IS NULL AND kind = 'rows'
+         ORDER BY page`,
+        [row.id, row.content_hash],
+      );
+      for (const unit of units.map(toUnitText)) {
+        if ((unit.label?.sheet ?? null) !== sheet) continue;
+        const number = cellNumber(unit.label, ref);
+        if (number !== null) return number;
+      }
+      return null;
     },
 
     /** The text kept of a live Document's current version (see `CoreApi.readDocumentText`). */
