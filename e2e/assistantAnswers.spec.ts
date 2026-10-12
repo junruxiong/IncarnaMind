@@ -12,6 +12,7 @@ import {
   dismissChatSetup,
   enterContent,
   launchApp,
+  openSteps,
   pointAndClick,
   pointAt,
   removeDataFolder,
@@ -125,7 +126,7 @@ test("an Answer streams into the assistant and leaves the Mind as it was; Add to
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(answer.getByTestId("citation-chip")).toHaveAttribute("data-check", "found");
   await expect(answer.getByTestId("margin-check")).toHaveAttribute("data-check", "found");
-  await expect(answer.getByTestId("answer-model")).toHaveText("fake-model");
+  await expect(answer.getByTestId("answer-steps")).toHaveText("Searched All Documents · 1 source");
   // The conversation is named by its first Question.
   await expect(assistant.getByTestId("assistant-title")).toContainText(
     "When do spring tides happen",
@@ -318,7 +319,6 @@ test("with no Mind in focus, Add to note opens the ▾, and adds through it", as
   const answer = await askInAssistant(window, "When do spring tides happen?");
   // The Library in front: no Mind in focus.
   await pointAndClick(window, window.getByTestId("open-library"));
-  await expect(window.getByTestId("assistant-reads")).toContainText("Searches All Documents");
   await pointAt(window, answer.getByTestId("assistant-answer-text"));
   const add = answer.getByTestId("answer-add");
   await expect(add).toHaveAttribute("title", "Choose a Mind to add it to");
@@ -350,12 +350,14 @@ test("the keyboard reaches it all: ⌘J, Tab through an Answer's actions, ⌘⇧
   }
   expect(seen).toEqual(
     expect.arrayContaining([
-      "Regenerate",
       "Add to another Mind or a new Mind",
       expect.stringMatching(/^Add to “Reading notes: tides”/),
     ]),
   );
-  await expect(answer.getByTestId("answer-meta")).toHaveAttribute("aria-label", "Answer actions");
+  await expect(answer.getByTestId("answer-actions")).toHaveAttribute(
+    "aria-label",
+    "Answer actions",
+  );
 
   // ⌘⇧C copies the newest Answer; ⌘⇧A adds it to the Mind in focus, at its cursor. The keys
   // as a keyboard reports them with Shift held: "C" and "A" (Linux's editor reads a lowercase
@@ -430,6 +432,7 @@ test("the ⋯ menu adds the last Answer to a new Mind and clears the conversatio
   await pointAt(window, answer.getByTestId("assistant-answer-text"));
   await expect(answer.getByTestId("answer-add")).toHaveText("添加到笔记");
   await expect(answer.getByTestId("answer-copy")).toHaveText("复制");
+  await openSteps(window, answer);
   await expect(answer.getByTestId("answer-regenerate")).toHaveText("重新生成");
   await screenshot(window, "assistant-answer-zh");
   await app.close();
