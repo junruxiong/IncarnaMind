@@ -1,0 +1,31 @@
+{
+  "dateIssued": "2024-12-31",
+  "graphicsInPDF": "false",
+  "heading": "Sec. 78j",
+  "packageId": "USCODE-2024-title15",
+  "packageLink": "https://api.govinfo.gov/packages/USCODE-2024-title15/summary",
+  "collectionCode": "USCODE",
+  "detailsLink": "https://www.govinfo.gov/app/details/USCODE-2024-title15/USCODE-2024-title15-chap2B-sec78j",
+  "title": "Manipulative and deceptive devices",
+  "leafRange": {
+    "from": "78j",
+    "to": "78j",
+    "type": "section"
+  },
+  "collectionName": "United States Code",
+  "granuleClass": "LEAF",
+  "granuleId": "USCODE-2024-title15-chap2B-sec78j",
+  "download": {
+    "premisLink": "https://api.govinfo.gov/packages/USCODE-2024-title15/premis",
+    "txtLink": "https://api.govinfo.gov/packages/USCODE-2024-title15/granules/USCODE-2024-title15-chap2B-sec78j/htm",
+    "zipLink": "https://api.govinfo.gov/packages/USCODE-2024-title15/zip",
+    "modsLink": "https://api.govinfo.gov/packages/USCODE-2024-title15/granules/USCODE-2024-title15-chap2B-sec78j/mods",
+    "pdfLink": "https://api.govinfo.gov/packages/USCODE-2024-title15/granules/USCODE-2024-title15-chap2B-sec78j/pdf"
+  },
+  "relatedLink": "https://api.govinfo.gov/related/USCODE-2024-title15-chap2B-sec78j",
+  "docClass": "USCODE",
+  "lastModified": "2025-08-18T23:53:18Z",
+  "category": "Bills and Statutes",
+  "granuleNumber": " ",
+  "granulesLink": "https://api.govinfo.gov/packages/USCODE-2024-title15/granules?offsetMark=*&pageSize=100"
+}

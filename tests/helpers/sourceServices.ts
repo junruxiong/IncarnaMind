@@ -3,8 +3,9 @@
  * answers recorded from the real services on 2026-10-11
  * (tests/fixtures/sources/), trimmed: OpenAlex at /openalex, arXiv (its API
  * and its PDFs) at /arxiv, NCBI's E-utilities at /pubmed, Crossref at
- * /crossref, openFDA's drug labels at /openfda, DailyMed at /dailymed and
- * ClinicalTrials.gov at /clinicaltrials. Open copies a recorded answer points to (a publisher's PDF or
+ * /crossref, openFDA's drug labels at /openfda, DailyMed at /dailymed,
+ * ClinicalTrials.gov at /clinicaltrials, and (recorded on 2026-10-12) the
+ * eCFR at /ecfr and GovInfo's API and link service at /govinfo. Open copies a recorded answer points to (a publisher's PDF or
  * web page) are served at /files; "paywall.pdf" answers with a sign-in page,
  * as a paywall does. It records every request, so a test can check what was sent, and to
  * whom. No test reaches the real services. Free of the test runner, so the
@@ -14,6 +15,7 @@ import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
+import { gzipSync } from "node:zlib";
 import { buildPdf } from "./pdf";
 
 export interface SourceRequest {
@@ -38,6 +40,8 @@ export interface SourceServices {
     openfda: string;
     dailymed: string;
     clinicaltrials: string;
+    ecfr: string;
+    govinfo: string;
   };
   /** Every request, in order. */
   readonly requests: SourceRequest[];
@@ -115,6 +119,49 @@ const CLINICAL_TRIALS: Readonly<Record<string, string>> = {
   NCT04368728: "clinicaltrials-study-results.json",
   NCT04625985: "clinicaltrials-study-no-results.json",
 };
+
+/** The eCFR's versioner, by what is asked of title 17: where each section or part is, its texts by date ("*": any). */
+const ECFR_ANCESTRY: Readonly<Record<string, string>> = {
+  "240.10b-5": "ecfr-ancestry-240.10b-5.json",
+  "part 243": "ecfr-ancestry-part-243.json",
+};
+const ECFR_TEXTS: Readonly<Record<string, string>> = {
+  "240.10b-5@*": "ecfr-240.10b-5.xml",
+  "part 243@*": "ecfr-part-243.xml",
+  "240.15Aj-1@2025-03-23": "ecfr-240.15Aj-1-2025-03-23.xml",
+};
+const ECFR_VERSIONS: Readonly<Record<string, string>> = {
+  "240.15Aj-1": "ecfr-versions-240.15Aj-1.json",
+};
+
+/** GovInfo's link service: where each citation it knows redirects (the CFR's by part and section). */
+const GOVINFO_LINKS: Readonly<Record<string, string>> = {
+  "uscode/42/1983":
+    "https://www.govinfo.gov/content/pkg/USCODE-2024-title42/html/USCODE-2024-title42-chap21-subchapI-sec1983.htm",
+  "uscode/15/78j":
+    "https://www.govinfo.gov/content/pkg/USCODE-2024-title15/html/USCODE-2024-title15-chap2B-sec78j.htm",
+  "cfr/17/240/10b-5":
+    "https://www.govinfo.gov/content/pkg/CFR-2025-title17-vol4/xml/CFR-2025-title17-vol4-sec240-10b-5.xml",
+};
+
+/** GovInfo's granules: their summary and their text. */
+const GOVINFO_GRANULES: Readonly<Record<string, { summary: string; text: string }>> = {
+  "USCODE-2024-title42-chap21-subchapI-sec1983": {
+    summary: "govinfo-usc-1983-summary.json",
+    text: "govinfo-usc-1983.htm",
+  },
+  "USCODE-2024-title15-chap2B-sec78j": {
+    summary: "govinfo-usc-78j-summary.json",
+    text: "govinfo-usc-78j.htm",
+  },
+  "CFR-2025-title17-vol4-sec240-10b-5": {
+    summary: "govinfo-cfr-240.10b-5-summary.json",
+    text: "govinfo-cfr-240.10b-5.xml",
+  },
+};
+
+/** A GovInfo key the stand-in turns away, as GovInfo turns away one it doesn't know. */
+export const REJECTED_GOVINFO_KEY = "rejected-govinfo-key";
 
 const EMPTY_FEED =
   '<?xml version="1.0" encoding="UTF-8"?><feed xmlns="http://www.w3.org/2005/Atom"></feed>';
@@ -267,6 +314,77 @@ export async function startSourceServices(): Promise<SourceServices> {
           const file = CLINICAL_TRIALS[tail.replace(/^studies\//, "")];
           return file ? send(response, 200, "application/json", fixture(file)) : notFound();
         }
+        case "ecfr": {
+          // As the real versioner does: it answers only a request that accepts a compressed answer.
+          if (!/gzip|deflate|br/.test(String(request.headers["accept-encoding"] ?? ""))) {
+            return send(
+              response,
+              406,
+              "text/plain",
+              "<error><message>This endpoint requires response compression. Send an Accept-Encoding header that permits compression.</message></error>",
+            );
+          }
+          const gzipped = (type: string, body: string) =>
+            response
+              .writeHead(200, { "content-type": type, "content-encoding": "gzip" })
+              .end(gzipSync(body));
+          const section = url.searchParams.get("section");
+          const asked = section ?? `part ${url.searchParams.get("part") ?? ""}`;
+          if (tail === "api/versioner/v1/titles.json") {
+            return gzipped("application/json", fixture("ecfr-titles.json"));
+          }
+          if (tail === "api/search/v1/results") {
+            const words = url.searchParams.get("query") ?? "";
+            return gzipped(
+              "application/json",
+              /manipulative|deceptive/i.test(words)
+                ? fixture("ecfr-search.json")
+                : '{"results":[],"meta":{"current_page":1,"total_pages":0,"total_count":0}}',
+            );
+          }
+          const ancestry = /^api\/versioner\/v1\/ancestry\/[\d-]+\/title-17\.json$/.test(tail)
+            ? ECFR_ANCESTRY[asked]
+            : undefined;
+          if (ancestry) return gzipped("application/json", fixture(ancestry));
+          if (tail === "api/versioner/v1/versions/title-17.json") {
+            const versions = ECFR_VERSIONS[asked];
+            return gzipped(
+              "application/json",
+              versions ? fixture(versions) : '{"content_versions":[],"meta":{}}',
+            );
+          }
+          const date = /^api\/versioner\/v1\/full\/([\d-]+)\/title-17\.xml$/.exec(tail)?.[1];
+          const text = date ? (ECFR_TEXTS[`${asked}@${date}`] ?? ECFR_TEXTS[`${asked}@*`]) : null;
+          if (text) return gzipped("application/xml", fixture(text));
+          return send(response, 404, "application/json", '{"error":"No matching content found."}');
+        }
+        case "govinfo": {
+          if (tail.startsWith("link/")) {
+            const sectionNumber = url.searchParams.get("sectionnum");
+            const cited = `${tail.slice("link/".length)}${sectionNumber ? `/${sectionNumber}` : ""}`;
+            const target = GOVINFO_LINKS[cited];
+            if (!target) return send(response, 400, "text/html", "<html>Bad request</html>");
+            return response.writeHead(302, { location: target }).end();
+          }
+          // As the real API does: no key, or one it doesn't know, is 401.
+          const key = request.headers["x-api-key"];
+          if (typeof key !== "string" || key === REJECTED_GOVINFO_KEY) {
+            const code = typeof key === "string" ? "API_KEY_INVALID" : "API_KEY_MISSING";
+            return send(response, 401, "application/json", `{"error":{"code":"${code}"}}`);
+          }
+          const granule = /^packages\/[^/]+\/granules\/([^/]+)\/(summary|htm|xml)$/.exec(tail);
+          const files = granule?.[1] ? GOVINFO_GRANULES[granule[1]] : undefined;
+          if (!files || !granule) return notFound();
+          if (granule[2] === "summary") {
+            return send(response, 200, "application/json", fixture(files.summary));
+          }
+          return send(
+            response,
+            200,
+            granule[2] === "htm" ? "text/html" : "application/xml",
+            fixture(files.text),
+          );
+        }
         case "files": {
           if (tail === "paywall.pdf") {
             return send(
@@ -299,6 +417,8 @@ export async function startSourceServices(): Promise<SourceServices> {
       openfda: `${base}/openfda`,
       dailymed: `${base}/dailymed`,
       clinicaltrials: `${base}/clinicaltrials`,
+      ecfr: `${base}/ecfr`,
+      govinfo: `${base}/govinfo`,
     },
     requests,
     fail(provider, status) {

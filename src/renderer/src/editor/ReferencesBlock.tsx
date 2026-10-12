@@ -24,7 +24,7 @@ import { hideBibliography } from "./bibliographyCommands";
 import { countedCitations } from "./countedCitations";
 import { Popover } from "./Popover";
 import { StyledRuns } from "./StyledRuns";
-import { bibliographyClipboard, runsText } from "./styledText";
+import { bibliographyClipboard } from "./styledText";
 
 /** How long "Copied" shows before the button says "Copy" again. */
 const COPIED_MS = 1500;
@@ -34,8 +34,8 @@ const COPIED_MS = 1500;
  * Document it cites, once, in its citation style; in Numbered, the default, by its name with the
  * Locations cited and, for a web page, its site, address and the day the quoted version was
  * fetched. A Citation a pending change would add isn't counted. Its header holds the style
- * picker, Copy and Export. A Document whose reference record is too thin to cite is listed by
- * its name, marked "Needs details", which opens its "Cite as" panel (#286) right there. Shown
+ * picker, Copy and Export. A Document whose reference record is too thin to cite is listed as
+ * the style can, marked "Needs details", which opens its "Cite as" panel (#286) right there. Shown
  * once the Mind has a Citation; a Numbered Mind shows it once "/" Bibliography has asked.
  */
 export function ReferencesBlock({
@@ -218,10 +218,10 @@ function ReferenceEntry({
       )}
       <span className="references-text">
         {entry.needsDetails ? (
-          // Too thin to print as a reference: its Document's name, and the way to fill it in.
+          // Too thin to print as a reference: what is known of it, and the way to fill it in.
           <>
             <span className="references-thin">
-              {document ? displayName(document) : runsText(entry.runs)}
+              <StyledRuns runs={entry.runs} />
             </span>{" "}
             <NeedsDetails document={document} readOnly={readOnly} />
           </>
