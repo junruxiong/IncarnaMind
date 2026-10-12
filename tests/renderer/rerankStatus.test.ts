@@ -27,6 +27,7 @@ const settings = (
   service: null,
   paused: false,
   model: { ...MODEL, ...model },
+  runsOn: null,
   ...overrides,
 });
 
