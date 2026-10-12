@@ -3,6 +3,7 @@
  * state, loading it into the `Embedder`, and turning Passages and queries into
  * vectors with the model's prefixes and the shared text normalisation.
  */
+import { join } from "node:path";
 import { normaliseText } from "../../shared/text";
 import type { Embedder, EmbeddingModelSource } from "../adapters";
 import type { EmbeddingModelStatus } from "../api";
@@ -68,8 +69,12 @@ export function createEmbeddingModel(options: EmbeddingModelOptions): EmbeddingM
   const files = createDownloadableModel({
     name: definition.name,
     folder: definition.folder,
-    files: definition.files,
-    maxTokens: definition.maxTokens,
+    runnerFiles: (directory) => ({
+      model: join(directory, definition.files.model),
+      tokenizer: join(directory, definition.files.tokenizer),
+      tokenizerConfig: join(directory, definition.files.tokenizerConfig),
+      maxTokens: definition.maxTokens,
+    }),
     source: options.source ?? definition.source,
     dataDir: options.dataDir,
     loadRunner: (paths) => embedder.load(paths),
