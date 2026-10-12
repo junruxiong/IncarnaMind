@@ -17,6 +17,18 @@ const ITEMS = '[role^="menuitem"]';
 const itemsOf = (menu: HTMLElement | null) =>
   Array.from(menu?.querySelectorAll<HTMLElement>(ITEMS) ?? []);
 
+/** Where a menu opened with a right-click was asked for, if it was. */
+function pointOf(button: HTMLElement | null): { x: number; y: number } | null {
+  const at = button?.dataset.menuAt?.split(",").map(Number);
+  return at?.length === 2 && at.every(Number.isFinite) ? { x: at[0] ?? 0, y: at[1] ?? 0 } : null;
+}
+
+/** What a menu grows from and shrinks to: the pointer if it opened there, else its button. */
+function sourceOf(button: HTMLElement | null): Element | Box | null {
+  const point = pointOf(button);
+  return point ? { left: point.x, top: point.y, width: 0, height: 0 } : button;
+}
+
 /**
  * Below the button, or above it if the window is too short. A popover that
  * isn't showing yet isn't laid out (it has no size), so it is laid out for a
@@ -27,7 +39,9 @@ function place(
   menu: HTMLElement | null,
   around: HTMLElement | null = null,
 ): Box | null {
-  const box = button?.getBoundingClientRect();
+  const point = pointOf(button);
+  const atPoint = point !== null;
+  const box = point ? new DOMRect(point.x, point.y, 0, 0) : button?.getBoundingClientRect();
   if (!box || !menu) return null;
   const hidden = !menu.matches(":popover-open");
   if (hidden) menu.style.display = "block";
@@ -40,11 +54,17 @@ function place(
   const anchor = outer
     ? { left: box.right + GAP_PX - width, top: outer.top, bottom: outer.bottom }
     : box;
-  const left = Math.max(EDGE_PX, Math.min(anchor.left, window.innerWidth - width - EDGE_PX));
-  const below = anchor.bottom + GAP_PX;
+  // At the pointer the menu overlaps it by 1px, so letting go of the button lands inside the menu
+  // and doesn't dismiss it.
+  const gap = atPoint ? -1 : GAP_PX;
+  const left = Math.max(
+    EDGE_PX,
+    Math.min(anchor.left - (atPoint ? 1 : 0), window.innerWidth - width - EDGE_PX),
+  );
+  const below = anchor.bottom + gap;
   const top =
     below + height > window.innerHeight - EDGE_PX
-      ? Math.max(EDGE_PX, anchor.top - GAP_PX - height)
+      ? Math.max(EDGE_PX, anchor.top - gap - height)
       : below;
   menu.style.left = `${left}px`;
   menu.style.top = `${top}px`;
@@ -62,12 +82,25 @@ function focusFirst(menu: HTMLElement | null, first = false): void {
 
 /**
  * Opens a menu from its ⋯ button for a right-click, so the right-click menu
- * and the ⋯ menu are one: at once, or, with a mouse button still held
- * (`buttons`, from the event), once it is let go, as letting go outside the
- * menu would close it. An open menu stays open.
+ * and the ⋯ menu are one. With `at` it opens at once at that point. Without, it opens under the button: at once, or, with
+ * a mouse button still held (`buttons`), once it is let go, as letting go
+ * outside the menu would close it.
  */
-export function openMenuFromRightClick(button: HTMLButtonElement, buttons: number): void {
-  if (button.getAttribute("aria-expanded") === "true") return;
+export function openMenuFromRightClick(
+  button: HTMLButtonElement,
+  buttons: number,
+  at?: { x: number; y: number },
+): void {
+  // The popover itself, not aria-expanded, which lags a render behind a menu that was just dismissed.
+  const expanded = button.popoverTargetElement?.matches(":popover-open") ?? false;
+  if (at) {
+    if (expanded) return;
+    // Where the menu opens instead of under the button; cleared when it closes.
+    button.dataset.menuAt = `${at.x},${at.y}`;
+    button.click();
+    return;
+  }
+  if (expanded) return;
   if (buttons === 0) button.click();
   else {
     const open = () => {
@@ -123,12 +156,13 @@ export function usePopoverMenu({
   useLayoutEffect(() => {
     if (!open) {
       entered.current = false;
+      delete button.current?.dataset.menuAt;
       return;
     }
     const anchor = button.current;
     const box = place(anchor, menu.current, anchor && outer.current ? outer.current(anchor) : null);
     // Once each time it opens: a menu that stays open is never animated again.
-    if (menu.current && box && !entered.current) enterFrom(menu.current, anchor, box);
+    if (menu.current && box && !entered.current) enterFrom(menu.current, sourceOf(anchor), box);
     entered.current = true;
     if (menu.current?.matches(":popover-open")) focusFirst(menu.current, first);
   }, [open, first]);
@@ -189,7 +223,8 @@ export function usePopoverMenu({
       // Before it shows, so a menu that renders its items only while open has them when it paints.
       // Closing, it is copied as it shows, and the copy shrinks back toward the button.
       onBeforeToggle: (event: ToggleEvent<HTMLDivElement>) => {
-        if (event.newState === "closed" && menu.current) exitToward(menu.current, button.current);
+        if (event.newState === "closed" && menu.current)
+          exitToward(menu.current, sourceOf(button.current));
         // Untouched from the moment it opens, not from a render after: keys can come first.
         if (event.newState === "open") touched.current = false;
         setOpen(event.newState === "open");

@@ -5,6 +5,7 @@ import { core } from "../core";
 import { errorMessage } from "../errors";
 import { useLanguage, useT } from "../i18n";
 import { formatCount } from "../linkedFolders";
+import { useRequests } from "../requests";
 import { useAppStore } from "../store";
 import { MergeLineIcon, PencilLineIcon, TrashLineIcon } from "./lineIcons";
 import { TagColourPicker, tagChipColour } from "./TagColour";
@@ -46,7 +47,11 @@ interface Usage {
 export function TagsDialog() {
   const t = useT();
   const open = useAppStore((state) => state.tagsDialogOpen);
-  const close = useAppStore((state) => state.closeTagsDialog);
+  const closeDialog = useAppStore((state) => state.closeTagsDialog);
+  const close = () => {
+    useRequests.getState().clear("manageTag");
+    closeDialog();
+  };
   const tags = useAppStore((state) => state.tags);
   const documents = useAppStore((state) => state.documents);
   const dialog = useModal(open);
@@ -181,7 +186,10 @@ function TagRow({
 }) {
   const t = useT();
   const language = useLanguage();
-  const [mode, setMode] = useState<"view" | "edit" | "delete" | "merge">("view");
+  const asked = useRequests((state) => state.manageTag);
+  const [mode, setMode] = useState<"view" | "edit" | "delete" | "merge">(
+    asked?.id === tag.id ? asked.mode : "view",
+  );
   const [into, setInto] = useState("");
 
   if (mode === "edit") {
