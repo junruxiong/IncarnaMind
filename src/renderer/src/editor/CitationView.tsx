@@ -21,7 +21,6 @@ import { type MindFormatting, useMindFormatting } from "../citationFormatting";
 import { citationHandle } from "../commands/handles";
 import { type CommandContext, commands } from "../commands/registry";
 import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
-import { useTabPlace } from "../components/tabs/tabItems";
 import { useLanguage, useT } from "../i18n";
 import { groupsMerged } from "../layoutSlice";
 import type { ObjectRef } from "../objects";
@@ -36,6 +35,7 @@ import {
 import { citationNumberOf } from "./citationNumbers";
 import { CheckMarkIcon, CheckStateIcon } from "./icons";
 import { InFootnoteContext, useMindId } from "./mindContext";
+import { quoteSaysSo, useOpenCited } from "./openCited";
 import { Popover } from "./Popover";
 import { onPeek, peekCitation } from "./peek";
 import { StyledRuns, StyledRunView } from "./StyledRuns";
@@ -43,10 +43,6 @@ import { StyledRuns, StyledRunView } from "./StyledRuns";
 /** How long a pointer rests on a Citation before its card shows, and how long it may leave before it goes. */
 const SHOW_MS = 120;
 const HIDE_MS = 200;
-
-/** Whether opening the cited place washes the quote: it is there, unless the check could not find it. */
-const quoteSaysSo = (check: CitationCheck) =>
-  check === "found" || check === "unsupported" || check === "contradicted";
 
 /** The Answer a Citation sits in, if it does (it may have been copied into a Note). */
 function answerAround(
@@ -96,9 +92,7 @@ export function CitationView({
     state.status.kind === "ready" ? state.documents : null,
   );
   const kept = useAppStore((state) => state.keptCitationTexts);
-  const openDocument = useAppStore((state) => state.openDocument);
-  /** The Mind's group: the Document opens in the group to its right. */
-  const place = useTabPlace();
+  const openPlace = useOpenCited();
   const state = citationState(attributes, documents, kept);
   const location = citationLocation(attributes);
   const where = location ? formatLocation(location, t) : null;
@@ -115,7 +109,7 @@ export function CitationView({
   const [pinned, setPinned] = useState(false);
   /** Hovered or focused, with the card, the marker or its mark. */
   const [peeking, setPeeking] = useState(false);
-  const open = pinned || peeking;
+  const shown = pinned || peeking;
   const marker = useRef<HTMLButtonElement>(null);
   /** The marker whose card the pointer over this one asks for: its own, or a neighbour's. */
   const pointed = useRef<HTMLElement | null>(null);
@@ -146,33 +140,8 @@ export function CitationView({
     };
   }, [hold]);
 
-  /**
-   * Opens the cited place (a page, slide, section, rows or lines), or the
-   * Document, with the quote to highlight if asked, and the Citation's
-   * check, number and label: the viewer colours the quote by the check
-   * (amber when opened anyway after "not found") and shows the check mark,
-   * with where it points, beside it.
-   */
-  const openCited = (withQuote: boolean) => {
-    const documentId = state.documentId ?? attributes.documentId;
-    if (!documentId) return;
-    openDocument(
-      {
-        documentId,
-        // A whole TXT or Markdown file cited before Locations, whose quote wasn't found, opens at the top.
-        pageFrom: attributes.pageFrom ?? undefined,
-        pageTo: attributes.pageTo ?? undefined,
-        quote: withQuote && attributes.quote ? attributes.quote : undefined,
-        citation: {
-          check: state.check,
-          ...(number > 0 ? { number } : {}),
-          ...(where ? { label: where } : {}),
-          ...(attributes.contentHash ? { contentHash: attributes.contentHash } : {}),
-        },
-      },
-      { as: "citation", ...(place && { from: place.groupId }) },
-    );
-  };
+  /** Opens the cited place, with the quote to highlight if asked (see `useOpenCited`). */
+  const openCited = (withQuote: boolean) => openPlace(attributes, state, { withQuote, number });
 
   const onClick = () => {
     setPinned(true);
@@ -196,13 +165,13 @@ export function CitationView({
   openFromCardRef.current = openFromCard;
   // "Open cited page" (a command) opens the Citation whose card shows.
   useEffect(() => {
-    if (!open) return;
+    if (!shown) return;
     const handle = { open: () => openFromCardRef.current() };
     citationHandle.current = handle;
     return () => {
       if (citationHandle.current === handle) citationHandle.current = null;
     };
-  }, [open]);
+  }, [shown]);
 
   const menuId = useId();
   const objectMenu = useObjectMenu({ kind: "citation", id: menuId });
@@ -273,7 +242,7 @@ export function CitationView({
         aria-label={label}
         title={styled.kind === "runs" ? undefined : label}
         aria-haspopup="dialog"
-        aria-expanded={open}
+        aria-expanded={shown}
         // Keep the editor's selection and focus where they are.
         onMouseDown={(event) => event.preventDefault()}
         // In a cluster, the pointer shows the card of the Citation whose words it is over.
@@ -315,7 +284,7 @@ export function CitationView({
         className="citation-menu-anchor"
         tabIndex={-1}
       />
-      {open &&
+      {shown &&
         marker.current &&
         // In the body, not the editor: ProseMirror must not see the card's events.
         createPortal(

@@ -12,6 +12,7 @@ export type ObjectKind =
   | "tag"
   | "linkedFolder"
   | "citation"
+  | "chart"
   | "answer"
   | "block"
   | "tab";

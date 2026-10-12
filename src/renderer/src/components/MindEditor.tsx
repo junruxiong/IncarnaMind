@@ -16,6 +16,7 @@ import { core } from "../core";
 import { AnswerView } from "../editor/AnswerView";
 import { BlockHandle } from "../editor/BlockHandle";
 import { BlockCommands } from "../editor/blockCommands";
+import { ChartView } from "../editor/ChartView";
 import { CitationStylePrompt } from "../editor/CitationStylePrompt";
 import { CitationView } from "../editor/CitationView";
 import { CodeBlockView } from "../editor/CodeBlockView";
@@ -160,6 +161,26 @@ const citationView = ReactNodeViewRenderer(CitationView, {
 });
 
 /**
+ * A chart takes its own pointer and keys (its menus, its values' focus and
+ * cards), so the editor doesn't select or type over it; a press on its edge
+ * still selects it as a Block, and ⌘Z / ⌘⇧Z reach the editor's undo from it.
+ */
+const chartView = ReactNodeViewRenderer(ChartView, {
+  stopEvent: ({ event }) => {
+    const target = event.target;
+    if (!(target instanceof Element) || !target.closest("[data-chart-ui]")) return false;
+    if (event.type.startsWith("drag") || event.type === "drop") return false;
+    if (event.type === "copy" || event.type === "cut" || event.type === "paste") return false;
+    const undo =
+      event instanceof KeyboardEvent &&
+      (event.metaKey || event.ctrlKey) &&
+      /^[zy]$/i.test(event.key) &&
+      !(target instanceof HTMLInputElement);
+    return !undo;
+  },
+});
+
+/**
  * Notes (see `noteExtensions`), Questions and Answers in the Mind's Yjs
  * document, with the slash menu, the "@" picker of a Question's Search scope,
  * the drag handle, the formatting menu, the table menu, smart typography, the LaTeX field,
@@ -239,6 +260,7 @@ function MindEditorView({
           answerView: ReactNodeViewRenderer(AnswerView),
           citationView,
           footnoteView: footnoteView(() => footnoteLabel.current),
+          chartView,
         }),
         // Footnotes are numbered as the Mind's citation style counts its Citations (#289).
         CitationNumbers.configure({ form: () => citationStyle(styleRef.current).form }),
