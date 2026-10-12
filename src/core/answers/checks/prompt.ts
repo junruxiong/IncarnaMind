@@ -25,8 +25,10 @@ const REPLY = [
   "Write nothing else.",
 ].join("\n");
 
-const RECORD =
-  "the Passage's id, where the quote is as the Passage names it (its pages or location, and marks like [p. 4], [slide 4], [§ 2.1 Sensitivity], [Revenue, rows 2–41] or [lines 51–100]), and a short quote copied exactly from the Passage, the words that decide it, as one unbroken stretch without an ellipsis";
+const QUOTE =
+  "a short quote copied exactly from the Passage, the words that decide it, as one unbroken stretch without an ellipsis";
+
+const RECORD = `the Passage's id, where the quote is as the Passage names it (its pages or location, and marks like [p. 4], [slide 4], [§ 2.1 Sensitivity], [Revenue, rows 2–41] or [lines 51–100]), and ${QUOTE}`;
 
 /** The instructions of a check Run, for a way of citing; `passages`: what the one search found, for a model without Tools. */
 export function checkInstructions(mode: CitationSupport | "no-documents", passages = ""): string {
@@ -94,6 +96,51 @@ export function claimPrompt(input: {
   ].join("\n");
 }
 
+/**
+ * What a model is asked once more when it gave a verdict but no record of
+ * the Passage that decides it: the Passage and an exact quote from it.
+ */
+export const EVIDENCE_INSTRUCTIONS = [
+  "You checked a sentence the User wrote against Passages from the User's Documents, and gave a verdict without recording the Passage that decides it.",
+  `Give it now: the Passage's id, where the quote is as the Passage names it, and ${QUOTE}.`,
+  'Reply with one JSON object and nothing else: {"passage": "P1", "location": "…", "quote": "…"}. If no Passage decides it, reply {"passage": null}.',
+].join("\n");
+
+/** The request for that record: the sentence, the verdict, and the Passages the check read. */
+export function evidencePrompt(input: {
+  claim: string;
+  verdict: ClaimVerdict;
+  says: string | null;
+  passages: readonly { id: string; text: string }[];
+}): string {
+  return [
+    `<sentence>\n${input.claim.trim()}\n</sentence>`,
+    `Your verdict: ${input.verdict}${input.says ? `. ${input.says}` : ""}`,
+    "",
+    "The Passages:",
+    ...input.passages.map((each) => `<passage id="${each.id}">\n${each.text}\n</passage>`),
+  ].join("\n");
+}
+
+/** A record from the model's reply to that request, or null when it gives none. */
+export function readEvidence(
+  reply: string,
+): { passage: string; location: string | null; quote: string } | null {
+  const start = reply.indexOf("{");
+  const end = reply.lastIndexOf("}");
+  if (start < 0 || end <= start) return null;
+  try {
+    const value: unknown = JSON.parse(reply.slice(start, end + 1));
+    if (typeof value !== "object" || value === null) return null;
+    const { passage, location, quote } = value as Record<string, unknown>;
+    if (typeof passage !== "string" || typeof quote !== "string" || quote.trim() === "")
+      return null;
+    return { passage, location: typeof location === "string" ? location : null, quote };
+  } catch {
+    return null;
+  }
+}
+
 /** What a reply says: its verdict and what the Document says; null when there is no verdict to read. */
 export interface ReadVerdict {
   verdict: ClaimVerdict;
@@ -102,8 +149,11 @@ export interface ReadVerdict {
 
 const MARKERS = /\s*\[\^?\d{1,4}\]/g;
 const THINKING = /<think>[\s\S]*?(?:<\/think>|$)/gi;
-const VERDICT_LINE =
-  /^[\s>*_#`"'“”-]*(?:verdict|结论|判断)?[\s*_]*[:：]?[\s*_"'“”`]*(supported|unsupported|contradicted)\b[\s*_"'“”`.]*/i;
+/** "Verdict: supported", in bold or quoted too, on a line of its own. */
+const LABELLED =
+  /^[\s>*_#`"'“”-]*(?:verdict|结论|判断)[\s*_]*[:：][\s*_"'“”`]*(supported|unsupported|contradicted)\b[\s*_"'“”`.]*/i;
+/** A first line that starts with the verdict alone: "Supported." */
+const BARE = /^[\s>*_#`"'“”-]*(supported|unsupported|contradicted)\b[\s*_"'“”`.:：]*/i;
 
 /** The JSON object a reply holds, fenced or not, when it has one with a verdict. */
 function jsonVerdict(reply: string): ReadVerdict | null {
@@ -128,19 +178,27 @@ const cleanSays = (text: string): string | null => {
 };
 
 /**
- * Reads a check's reply: "Verdict: …" on its first line (in bold, quoted or
- * after a label too), then what the Document says; or a JSON object with
- * `verdict` and `says`, as some models give. Null when no verdict can be read.
+ * Reads a check's reply: its "Verdict: …" line, wherever it is (some models
+ * think aloud first), or a first line that starts with the verdict, then
+ * what the Document says; or a JSON object with `verdict` and `says`, as
+ * some models give. Null when no verdict can be read.
  */
 export function readVerdict(reply: string): ReadVerdict | null {
   const text = reply.replace(THINKING, "").trim();
-  const lines = text.split("\n").map((line) => line.trim());
-  const first = lines.findIndex((line) => line !== "");
-  const match = first < 0 ? null : VERDICT_LINE.exec(lines[first] as string);
-  if (match?.[1]) {
+  const lines = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+  const labelled = lines.findIndex((line) => LABELLED.test(line));
+  const at = labelled >= 0 ? labelled : BARE.test(lines[0] ?? "") ? 0 : -1;
+  const line = lines[at];
+  const match = line === undefined ? null : (labelled >= 0 ? LABELLED : BARE).exec(line);
+  if (line !== undefined && match?.[1]) {
     const verdict = match[1].toLowerCase() as ClaimVerdict;
-    const rest = [(lines[first] as string).slice(match[0].length), ...lines.slice(first + 1)];
-    return { verdict, says: cleanSays(rest.join(" ")) };
+    return {
+      verdict,
+      says: cleanSays([line.slice(match[0].length), ...lines.slice(at + 1)].join(" ")),
+    };
   }
   return jsonVerdict(text);
 }
