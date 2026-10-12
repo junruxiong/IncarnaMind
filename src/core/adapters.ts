@@ -6,6 +6,7 @@
  * imports Electron (ADR-0004, ADR-0006).
  */
 import type { ChildProcess } from "node:child_process";
+import type { PrintDocument } from "../shared/printDocument";
 import type { AgentLauncher } from "./agents";
 import type { AnswerEngine } from "./answers/engine";
 import type {
@@ -128,6 +129,15 @@ export interface FileShell {
   openPath(path: string): Promise<void>;
   /** Shows a file selected in the system's file manager (Finder, Explorer). */
   showItemInFolder(path: string): void;
+}
+
+/**
+ * Prints a document as a PDF, laid out in pages with each footnote at the foot of the page its
+ * marker is on. The desktop app prints with Chromium in a hidden window that reaches nothing
+ * outside the app (src/main/printPdf.ts).
+ */
+export interface Printer {
+  print(document: PrintDocument): Promise<Uint8Array>;
 }
 
 /** How Linked folders are watched and checked (see ./documents/library). The defaults suit the app. */
@@ -618,6 +628,12 @@ export interface CoreAdapters {
   paths: Paths;
   /** The OS's preferred languages, most preferred first, as BCP 47 tags such as "zh-Hans-CN". */
   systemLanguages(): readonly string[];
+  /**
+   * The OS's region, as an ISO 3166 country code such as "GB" ("" when it doesn't say), for what
+   * goes by country rather than by language, such as the paper a PDF is printed on. Absent, or
+   * "": the region of the most preferred system language.
+   */
+  systemRegion?(): string;
   keychain: Keychain;
   browser: Browser;
   /**
@@ -625,6 +641,8 @@ export interface CoreAdapters {
    * Absent (tests that don't need it): both are refused.
    */
   shell?: FileShell;
+  /** Prints PDF exports. Absent (tests that don't export PDFs): a PDF export is refused. */
+  printer?: Printer;
   /**
    * Draws a chart's picture for a Word export. Absent (tests that don't need
    * it): a chart goes into Word as the table of its values instead.

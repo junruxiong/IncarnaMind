@@ -5,6 +5,7 @@ import type { NodeJSON } from "../../../../shared/blockJson";
 import { lendAnswerEditor } from "../../answerEditors";
 import { CitationView } from "../../editor/CitationView";
 import { CitationNumbers } from "../../editor/citationNumbers";
+import { CopyCitations } from "../../editor/copyCitations";
 import { MarginChecks } from "../../editor/MarginChecks";
 import { RegenerateAnswerContext } from "../../editor/mindContext";
 import { noteExtensions } from "../../editor/noteSchema";
@@ -55,7 +56,7 @@ export function AnswerText({
       shouldRerenderOnTransaction: false,
       content: docOf(blocks),
       editorProps: editorPropsFor(label),
-      extensions: [...noteExtensions({ citationView }), CitationNumbers],
+      extensions: [...noteExtensions({ citationView }), CitationNumbers, CopyCitations],
     },
     [],
   );

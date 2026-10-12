@@ -1,0 +1,76 @@
+import { EXPORT_FORMATS } from "../../../core/api";
+import { useExportDialog } from "../exportDialog";
+import { exportMind, exportPreferences, FORMAT_LABELS } from "../exports";
+import { currentTabOf } from "../layoutSlice";
+import { useAppStore } from "../store";
+import { findTab } from "../tabs";
+import type { Command, CommandContext } from "./registry";
+
+/**
+ * The Mind a command exports: the Mind's row or the tab its menu was opened on, else the Mind in
+ * the tab the User is in (⇧⌘E, ⌘K). One Mind at a time: none for several selected.
+ */
+function mindOf(ctx: CommandContext): string | null {
+  const targets = ctx.selection.length > 0 ? ctx.selection : ctx.focus ? [ctx.focus] : [];
+  if (targets.length > 1) return null;
+  const [target] = targets;
+  if (target?.kind === "mind") return target.id;
+  const { layout } = useAppStore.getState();
+  const tab =
+    target === undefined
+      ? currentTabOf(layout)
+      : target.kind === "tab"
+        ? findTab(layout, target.id)
+        : undefined;
+  return tab?.item.kind === "mind" ? tab.item.mindId : null;
+}
+
+/**
+ * Exporting a Mind (#100): ⇧⌘E exports in the last format, as the tab strip's Export does; each
+ * other format has its own item, which becomes the last; and Export options… opens the sheet.
+ * In ⌘K, and in the Mind's and its tab's menus (./objectMenus).
+ */
+export const exportCommands: readonly Command[] = [
+  {
+    id: "mind.export",
+    label: (_ctx, t) => t("export.as", { format: t(FORMAT_LABELS[exportPreferences().format]) }),
+    keywords: ["export.keywords"],
+    shortcut: { keys: "CmdOrCtrl+Shift+E" },
+    group: "main",
+    // A new file under a free name: nothing is replaced, and the file stays the User's to delete.
+    reversible: true,
+    when: (ctx) => mindOf(ctx) !== null,
+    run: (ctx) => {
+      const mindId = mindOf(ctx);
+      if (mindId) return exportMind(mindId);
+    },
+  },
+  ...EXPORT_FORMATS.map(
+    (format): Command => ({
+      id: `mind.exportAs.${format}`,
+      label: (_ctx, t) => t("export.as", { format: t(FORMAT_LABELS[format]) }),
+      keywords: ["export.keywords"],
+      group: "main",
+      reversible: true,
+      // The last format is "mind.export", with its keys.
+      when: (ctx) => mindOf(ctx) !== null && exportPreferences().format !== format,
+      run: (ctx) => {
+        const mindId = mindOf(ctx);
+        if (mindId) return exportMind(mindId, format);
+      },
+    }),
+  ),
+  {
+    id: "mind.exportOptions",
+    label: "export.options",
+    keywords: ["export.keywords"],
+    group: "main",
+    // Only opens the sheet; what it saves is the User's choice of options.
+    reversible: true,
+    when: (ctx) => mindOf(ctx) !== null,
+    run: (ctx) => {
+      const mindId = mindOf(ctx);
+      if (mindId) useExportDialog.getState().open(mindId);
+    },
+  },
+];
