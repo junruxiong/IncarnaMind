@@ -109,7 +109,7 @@ test('"/" finds the new items by their Chinese names', async () => {
   const names = [
     ["列表", ["bulleted-list", "numbered-list"]],
     ["待办", ["checklist"]],
-    ["引用", ["quote"]],
+    ["引述", ["quote"]],
     ["分割", ["divider"]],
   ] as const;
   for (const [typed, ids] of names) {
