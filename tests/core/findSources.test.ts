@@ -278,6 +278,8 @@ describe("Find sources: consent and local mode", () => {
         key: "none",
       },
       { id: "clinicaltrials", searches: true, consent: "not-asked", searchedByDefault: false },
+      { id: "ecfr", searches: true, consent: "not-asked", searchedByDefault: false, key: "none" },
+      { id: "govinfo", searches: false, consent: "not-asked", key: "unset", keyNeeded: true },
     ]);
   });
 
