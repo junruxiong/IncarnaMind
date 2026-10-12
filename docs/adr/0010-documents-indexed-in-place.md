@@ -69,3 +69,11 @@ An old version's text was kept only while a Citation quoted it. Check results (t
 ## Amendment: a Document is known by where it belongs, not by its path (2026-10-11, #171)
 
 "A Document is a file at a path" becomes "a file at a place": its Linked folder and its path inside it, the data folder, or a file of its own (ADR-0020). Its absolute path is where that place is on this computer, and differs on another. A Linked folder that moved, or that is somewhere else on another computer, is pointed at where it is now with Locate folder… in its menu: its Documents keep their ids, versions, Tags and Citations, and a file whose content didn't change isn't processed again (migration 58). The same content in two places is still two Documents, and a file that moves within what IncarnaMind watches is still found by its content.
+
+## Amendment: the cited page is saved when a Citation is made (2026-10-12, #133)
+
+A file that disappears no longer takes the cited page with it:
+
+- **What is saved.** When a Citation is made (in an Answer, or with a suggestion the User accepts), how its Location looked in the version it quotes becomes a picture in the data folder's "Cited pages": a PDF's pages, drawn by the page-image worker; a slide, the rows a sheet's Citation covers, a section or lines of text, drawn by their viewer off screen. The text drawn on it, each run with its box, is kept beside it (migration 73), so a quote can be found and highlighted on it. One picture per Location and version.
+- **When.** In the background queue, never while an Answer is being written. A picture a quit cut short is drawn at the next start, if the file still has that version; none is drawn of a version the file no longer has.
+- **How long.** While a Citation or a Checkpoint points at it, and it retains its version meanwhile (as a saved page, above). At the first start after the last one goes, it goes. The pictures are never searched, and are this computer's.
