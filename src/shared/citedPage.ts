@@ -37,7 +37,7 @@ export interface DrawnPage {
  */
 export type PageArea =
   | { kind: "rows"; sheet: string | null; from: number; to: number }
-  | { kind: "page" | "slide" | "section" | "lines" };
+  | { kind: "page" | "slide" | "section" | "lines" | "time" };
 
 /** A cited page to draw: the cited Units of a Document, as its file is now. */
 export interface PageCaptureRequest {

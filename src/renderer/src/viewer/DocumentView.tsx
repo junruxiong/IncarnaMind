@@ -10,6 +10,9 @@ const DocxView = lazy(() => import("./DocxView").then((m) => ({ default: m.DocxV
 const SlidesView = lazy(() => import("./SlidesView").then((m) => ({ default: m.SlidesView })));
 const SheetView = lazy(() => import("./SheetView").then((m) => ({ default: m.SheetView })));
 const WebView = lazy(() => import("./WebView").then((m) => ({ default: m.WebView })));
+const TranscriptView = lazy(() =>
+  import("./TranscriptView").then((m) => ({ default: m.TranscriptView })),
+);
 
 /** The view for a kind of Document (ADR-0011). */
 export function DocumentView({ document, target }: { document: Document; target: ViewerTarget }) {
@@ -28,5 +31,7 @@ export function DocumentView({ document, target }: { document: Document; target:
       return <SheetView document={document} target={target} />;
     case "web":
       return <WebView document={document} target={target} />;
+    case "transcript":
+      return <TranscriptView document={document} target={target} />;
   }
 }

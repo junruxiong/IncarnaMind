@@ -18,6 +18,7 @@ import {
   citationLocation,
   englishLocation,
   formatLocation,
+  isTranscriptLocation,
   readsIn,
   type Translate,
 } from "./locations";
@@ -170,7 +171,15 @@ export function badgeMessage(
   const params: Record<string, string> = location
     ? { location: formatLocation(location, t) }
     : { document };
-  const where = location === null ? "document" : readsIn(location) ? "in" : "on";
+  // A Transcript's is labelled so, so its check isn't taken for a page's.
+  const where =
+    location === null
+      ? "document"
+      : isTranscriptLocation(location)
+        ? "transcript"
+        : readsIn(location)
+          ? "in"
+          : "on";
   switch (state.check) {
     case "checking":
       return { key: "citation.badge.checking" };

@@ -8,12 +8,6 @@ import type { KeyboardEvent } from "react";
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 
-/** "Move to…", as this system writes it, for menus. */
-export const MOVE_TO_SHORTCUT = isMac ? "⇧⌘M" : "Ctrl+Shift+M";
-
-/** Rename, as this system writes it, for menus: Return in Finder, F2 in Explorer. */
-export const RENAME_SHORTCUT = isMac ? "↩" : "F2";
-
 /** Whether a key is "Move to…". */
 export const isMoveToKey = (event: KeyboardEvent) =>
   event.code === "KeyM" &&
