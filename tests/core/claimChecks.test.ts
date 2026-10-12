@@ -112,7 +112,28 @@ const paragraph = (...content: JSONContent[]): JSONContent & { attrs: { id: stri
   attrs: { id: `block-${++blocks}` },
   content,
 });
-const text = (value: string): JSONContent => ({ type: "text", text: value });
+const text = (value: string, check?: ClaimCheckAttributes): JSONContent => ({
+  type: "text",
+  text: value,
+  ...(check && { marks: [{ type: "claimCheck", attrs: check }] }),
+});
+
+/** A check as a crash leaves it: "checking", with no request running. */
+const LEFT_CHECKING: ClaimCheckAttributes = {
+  id: "left-checking",
+  request: "",
+  action: "find-support",
+  state: "checking",
+  reason: null,
+  detail: null,
+  text: SUPPORTED,
+  evidence: null,
+  says: null,
+  scope: { folderId: null, widened: false },
+  versions: [],
+  excluded: [],
+  checkedAt: "2026-10-12T09:00:00.000Z",
+};
 
 /** Selects the whole of a paragraph's text. */
 const whole = (block: { attrs: { id: string } }, length: number) => ({
@@ -457,6 +478,19 @@ describe("Needs re-check", () => {
 });
 
 describe("Stopping", () => {
+  test("a check left “checking” by a crash says “stopped” once its Mind opens", async () => {
+    const { core, client, mind } = await mindWith([SUPPORTED]);
+    const left = { ...LEFT_CHECKING, request: "a run that no longer exists" };
+    writeMind(client, [paragraph(text(SUPPORTED, left))]);
+    await client.settled();
+
+    await core.openMind(mind.id);
+
+    expect((await shownChecks(core, client)).map((each) => each.shown)).toEqual([
+      { state: "not-checked", reason: "stopped" },
+    ]);
+  });
+
   test("a check stopped halfway leaves the sentences not checked yet “stopped”", async () => {
     let release = () => {};
     const held = new Promise<void>((resolve) => {
