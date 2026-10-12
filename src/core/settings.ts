@@ -6,6 +6,7 @@ import {
   type ExportPreferences,
   type GettingStarted,
   MOTION_PREFERENCES,
+  type MonthlyCap,
   type MotionPreference,
   type SandboxLevel,
   type Settings,
@@ -55,6 +56,15 @@ const isExportPreferences = (value: unknown): value is ExportPreferences =>
   EXPORT_FORMATS.some((format) => format === value.format) &&
   isQuestionsOption(value.docx) &&
   isQuestionsOption(value.pdf);
+/** A cap of up to a million a month, in dollars or yuan. */
+const isMonthlyCap = (value: unknown): value is MonthlyCap =>
+  isRecord(value) &&
+  Object.keys(value).length === 2 &&
+  typeof value.amount === "number" &&
+  Number.isFinite(value.amount) &&
+  value.amount >= 0 &&
+  value.amount <= 1_000_000 &&
+  (value.currency === "USD" || value.currency === "CNY");
 
 const userScope: Scope<UserSettings> = {
   name: "user",
@@ -70,6 +80,7 @@ const userScope: Scope<UserSettings> = {
       docx: { includeQuestions: false },
       pdf: { includeQuestions: false },
     },
+    monthlyCap: null,
   },
   validators: {
     language: isLanguagePreference,
@@ -78,6 +89,7 @@ const userScope: Scope<UserSettings> = {
     suggestWhileWriting: isBoolean,
     leaveOutOwnFiles: isBoolean,
     exportOptions: isExportPreferences,
+    monthlyCap: (value): value is MonthlyCap | null => value === null || isMonthlyCap(value),
   },
 };
 

@@ -26,6 +26,7 @@ describe("Settings", () => {
         suggestWhileWriting: false,
         leaveOutOwnFiles: true,
         exportOptions: DEFAULT_EXPORT,
+        monthlyCap: null,
       },
       device: {
         sidebarWidth: 248,
@@ -116,6 +117,7 @@ describe("Settings", () => {
       suggestWhileWriting: false,
       leaveOutOwnFiles: true,
       exportOptions: DEFAULT_EXPORT,
+      monthlyCap: null,
     });
     expect(settings.device).toEqual({
       sidebarWidth: 320,
@@ -174,6 +176,7 @@ describe("Settings", () => {
         suggestWhileWriting: true,
         leaveOutOwnFiles: false,
         exportOptions: PDF_EXPORT,
+        monthlyCap: { amount: 20, currency: "USD" },
       },
       device,
     });
@@ -188,6 +191,7 @@ describe("Settings", () => {
         suggestWhileWriting: true,
         leaveOutOwnFiles: false,
         exportOptions: PDF_EXPORT,
+        monthlyCap: { amount: 20, currency: "USD" },
       },
       device,
       language: "zh-CN",

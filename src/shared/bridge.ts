@@ -82,6 +82,8 @@ export interface FilesBridge {
   onMenuCommand(listener: (command: MenuCommand) => void): () => void;
   /** Tells the application menu whether the sidebar is hidden, so View says "Hide Sidebar" or "Show Sidebar". */
   setSidebarHidden(hidden: boolean): void;
+  /** Tells the Edit menu where Undo and Redo go now, and what they would take back or do again. */
+  setEditMenu(state: EditMenuState): void;
   /** The window's title bar (./titleBar.ts), for the page to keep room for the window's buttons. */
   readonly titleBar: TitleBar;
   /**
@@ -93,6 +95,19 @@ export interface FilesBridge {
 
 /** The command the application menu asks the window to run (see src/main/menu.ts). */
 export type MenuCommand = MenuCommandId;
+
+/**
+ * Where the Edit menu's Undo and Redo go in the window in front: to the field
+ * with the focus (the menu does a field's own undo itself), to the note's own
+ * undo, or to the app's changes (`text` null). `undo` and `redo` name the change
+ * each would reach ("Move 3 Documents"; "" for one without a name), or are null
+ * when there is none.
+ */
+export interface EditMenuState {
+  text: "field" | "note" | null;
+  undo: string | null;
+  redo: string | null;
+}
 
 export type SkillPickKind = "folder" | "zip";
 
@@ -121,6 +136,8 @@ export const FILES_CHANNELS = {
   logError: "files:logError",
   /** From the page: the sidebar is hidden (true) or shown (false), for the View menu's label. */
   sidebarHidden: "app:sidebarHidden",
+  /** From the page: where the Edit menu's Undo and Redo go now (`EditMenuState`). */
+  editMenu: "app:editMenu",
   /** From the main process: a command chosen in the application menu. */
   menuCommand: "app:menuCommand",
   /** From the main process: the window entered (true) or left (false) full screen. */
