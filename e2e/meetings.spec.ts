@@ -1,5 +1,5 @@
 import { existsSync, readdirSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type ElectronApplication, expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
@@ -454,6 +454,8 @@ test("killed mid-recording, IncarnaMind recovers the audio up to the last part a
   await expect.poll(() => partsOf(meetingId, "microphone").length, { timeout: 30_000 }).toBe(1);
   first.app.process().kill("SIGKILL");
   await first.app.waitForEvent("close");
+  // The next part was being written when it died.
+  await writeFile(join(dataDir, "meetings", meetingId, "microphone-0000010000.wav.writing"), "");
 
   const { window } = await launchApp(dataDir);
   const bar = window.getByTestId("meeting-bar");
@@ -463,6 +465,22 @@ test("killed mid-recording, IncarnaMind recovers the audio up to the last part a
     "IncarnaMind closed while recording. Everything up to 0:10 is saved.",
   );
   await shot(window, "meeting-interrupted-en");
+
+  // The recording details say what was recovered, and what was lost.
+  const toggle = bar.getByTestId("meeting-details-toggle");
+  await toggle.hover();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  const details = bar.getByTestId("meeting-details");
+  const line = (text: string) =>
+    details.getByTestId("meeting-details-line").filter({ hasText: text });
+  await expect(line("the 10 s saved before then was recovered")).toContainText("0:10");
+  await expect(
+    line("10 s of microphone audio lost: IncarnaMind closed while saving it"),
+  ).toContainText("0:10");
+  await shot(window, "meeting-details-recovered-en");
+  await toggle.click();
+  await expect(details).toBeHidden();
 
   await interrupted.getByTestId("meeting-line-resume").click();
   await expect(bar).toHaveAttribute("data-status", "recording");
@@ -476,4 +494,115 @@ test("killed mid-recording, IncarnaMind recovers the audio up to the last part a
   ]);
   // The gap starts where the saved part ends, about 10 seconds in.
   expect(Math.floor((resumed?.gaps[0]?.atMs ?? 0) / 1000)).toBe(10);
+});
+
+test("recording details: a slow engine, a fallback and a part that can't be saved, the last with a problem line, in English and Chinese", async () => {
+  test.setTimeout(150_000);
+  // Decoding takes one and a half times as long as the speech; after two lines it fails over.
+  const { app, window } = await launchApp(dataDir, {
+    transcriber: { realTimeFactor: 1.5, failover: { toCloudAfter: 2 } },
+  });
+  await setWindowSize(app, window, 1440, 900);
+  await dismissChatSetup(window);
+  await useOutputLocation(window, sources);
+  await turnOnMeetings(window);
+  const bar = await startRecording(window, await recordMeeting(window), { notice: true });
+  const [meeting] = await bridge(window);
+  const meetingId = meeting?.id ?? "";
+
+  // Quiet until asked for: the bar's pulse button shows them.
+  const toggle = bar.getByTestId("meeting-details-toggle");
+  await expect(toggle).toHaveAttribute("aria-label", "Show recording details");
+  await expect(bar.getByTestId("meeting-details")).toHaveCount(0);
+  await toggle.hover();
+  await toggle.click();
+  const details = bar.getByTestId("meeting-details");
+  await expect(details).toBeVisible();
+  await expect(details).toContainText(
+    /Transcribed on this computer at 0\.\d× real time, too slow to keep up live/,
+    { timeout: 30_000 },
+  );
+  await expect(details).toContainText(
+    "Switched to cloud transcription: this computer fell behind",
+    {
+      timeout: 30_000,
+    },
+  );
+  await expect(details).toContainText("No audio was lost");
+  await shot(window, "meeting-details-slow-fallback-en");
+
+  // Once the first part is saved, a file stands where the meeting's folder was: the next can't be.
+  await expect.poll(() => partsOf(meetingId, "microphone").length, { timeout: 30_000 }).toBe(1);
+  const folder = join(dataDir, "meetings", meetingId);
+  await rename(folder, `${folder}-aside`);
+  await writeFile(folder, "");
+  await expect(window.getByTestId("meeting-line-save")).toBeVisible({ timeout: 30_000 });
+  await rm(folder);
+  await rename(`${folder}-aside`, folder);
+  // Once parts are saved again, a line says what is missing, with the details one click away.
+  await toggle.click();
+  await expect(details).toBeHidden();
+  const unsaved = bar.getByTestId("meeting-line-unsaved");
+  await expect(unsaved).toHaveText(
+    /^\d+ s of audio couldn’t be saved, so it isn’t in the transcript\. · Details$/,
+    { timeout: 30_000 },
+  );
+  await expect(window.getByTestId("meeting-line-save")).toHaveCount(0);
+  await shot(window, "meeting-line-unsaved-wide-en");
+  await unsaved.getByTestId("meeting-line-details").click();
+  await expect(details).toBeVisible();
+  await expect(details).toContainText(
+    /\d+ s of (microphone audio|the computer’s sound) lost: it couldn’t be saved/,
+  );
+  await expect(unsaved).toHaveText(/couldn’t be saved, so it isn’t in the transcript\.$/);
+  await shot(window, "meeting-details-unsaved-wide-en");
+
+  await setWindowSize(app, window, 900, 700);
+  await expect(details).toBeVisible();
+  const controls = await bar.getByTestId("meeting-controls").boundingBox();
+  expect(controls?.height).toBeLessThanOrEqual(28);
+  const barBox = await bar.boundingBox();
+  const detailsBox = await details.boundingBox();
+  if (!barBox || !detailsBox) throw new Error("The bar isn't drawn.");
+  expect(detailsBox.x + detailsBox.width).toBeLessThanOrEqual(barBox.x + barBox.width);
+  await shot(window, "meeting-details-narrow-en");
+
+  // In Chinese, the same details in Chinese words.
+  await window.evaluate(async () =>
+    (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+      user: { language: "zh-CN" },
+    }),
+  );
+  await expect(details).toContainText("已改用云端转写：这台电脑跟不上");
+  await expect(details).toContainText(/在这台电脑上转写，速度是实时的 0\.\d 倍，跟不上实时转写/);
+  await expect(unsaved).toHaveText(/^有 \d+ 秒的音频无法保存，转写稿中缺少这部分。$/);
+  await expect(toggle).toHaveAttribute("aria-label", "隐藏录制详情");
+  await shot(window, "meeting-details-narrow-zh");
+  await toggle.click();
+  await expect(unsaved).toHaveText(/ · 详情$/);
+  await shot(window, "meeting-line-unsaved-narrow-zh");
+  await setWindowSize(app, window, 1440, 900);
+  await shot(window, "meeting-line-unsaved-wide-zh");
+  await unsaved.getByTestId("meeting-line-details").click();
+  await shot(window, "meeting-details-wide-zh");
+
+  // Stopped, the details open from the line under the meeting, and ⌘K reaches them too.
+  await window.evaluate(async () =>
+    (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+      user: { language: "en" },
+    }),
+  );
+  await bar.getByTestId("meeting-stop").click();
+  await expect(bar).toBeHidden();
+  const after = window.getByTestId("meeting-details-toggle");
+  await expect(after).toHaveText("Recording details");
+  await expect(after).toHaveAttribute("aria-expanded", "true");
+  await expect(window.getByTestId("meeting-details")).toContainText(
+    "Switched to cloud transcription: this computer fell behind",
+  );
+  await shot(window, "meeting-details-stopped-en");
+  await after.click();
+  await expect(window.getByTestId("meeting-details")).toHaveCount(0);
+  await expect(window.getByTestId("meeting-line-unsaved")).toBeVisible();
+  await shot(window, "meeting-line-unsaved-stopped-en");
 });

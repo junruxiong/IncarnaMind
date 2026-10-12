@@ -80,6 +80,15 @@ export interface RequestQuirks {
    * one of `unless` can't turn it off.
    */
   thinkingOff?: { options: Record<string, Record<string, unknown>>; unless?: readonly string[] };
+  /**
+   * Provider options that ask for the provider's summary of a model's
+   * reasoning, for the calls that write the Answer (#391). Only providers
+   * whose reasoning comes back summarized have them: other providers' is raw
+   * chain of thought, which is never kept. They never turn thinking on: with
+   * `only`, they go to the models whose id starts with one of its prefixes,
+   * the ones that think by default.
+   */
+  reasoningSummary?: { options: Record<string, Record<string, unknown>>; only?: readonly string[] };
 }
 
 /**

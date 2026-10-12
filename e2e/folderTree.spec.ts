@@ -9,6 +9,7 @@ import {
   dismissChatSetup,
   launchApp,
   newMind,
+  openSteps,
   removeDataFolder,
   sidebarFolder,
 } from "./app";
@@ -150,7 +151,9 @@ test("each Folder lists its Minds above its Documents and opens in place; a Mind
     await window.keyboard.press("Enter");
     const answers = assistantAnswers(window);
     await expect(answers.first()).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-    await expect(answers.first().getByTestId("answer-scope")).toHaveText("“Ocean research”");
+    await expect(answers.first().getByTestId("answer-steps")).toContainText(
+      "Searched Ocean research ·",
+    );
     await expect(answers.first().getByTestId("citation-chip")).toHaveAttribute(
       "aria-label",
       /^Citation 1: Tide tables/,
@@ -180,9 +183,10 @@ test("each Folder lists its Minds above its Documents and opens in place; a Mind
     await window.keyboard.press("Enter");
     const third = answers.nth(2);
     await expect(third).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-    await expect(third.getByTestId("answer-scope")).toHaveText("All Documents");
-    await third.getByTestId("answer-tools-toggle").click();
-    await expect(third.getByTestId("answer-tool-call")).toContainText("2 Passages");
+    await expect(third.getByTestId("answer-steps")).toContainText("Searched All Documents ·");
+    await expect((await openSteps(window, third)).getByTestId("answer-step-found")).toContainText(
+      "2 passages found",
+    );
 
     // Clicked again, the Folder closes in place.
     await folder.getByTestId("folder-row").click();
@@ -231,7 +235,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
       /^Citation style…$/,
       /^Make this a Skill$/,
       /^Move to…(⇧⌘M|Ctrl\+Shift\+M)$/,
-      /^Rename(↩|F2)$/,
+      /^RenameF2$/,
       /^Delete…$/,
     ]);
     await actions.getByTestId("mind.moveTo").click();
@@ -305,7 +309,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     const answer = assistantAnswers(window).first();
     await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
 
-    // A Folder renames in place, as in Finder: a double-click, Enter saves; Enter or F2 on its
+    // A Folder renames in place, as in Finder: a double-click, Enter saves; F2 on its
     // row, Esc changes nothing.
     await research.getByTestId("folder-row").dblclick();
     // (While it is typed, the row has no name to find it by.)
@@ -320,7 +324,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     // Open as before the double-click.
     await expect(renamed).toHaveAttribute("data-expanded", "true");
     await expect(composer.getByTestId("scope-chip")).toHaveText("Research notes");
-    for (const key of ["Enter", "F2"]) {
+    for (const key of ["F2"]) {
       await renamed.getByTestId("folder-row").focus();
       await window.keyboard.press(key);
       await expect(window.getByTestId("folder-rename-field")).toBeFocused();
@@ -340,7 +344,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
       /^New Mind here$/,
       /^Organize this Folder$/,
       /^Edit description…$/,
-      /^Rename(↩|F2)$/,
+      /^RenameF2$/,
       /^Delete…$/,
     ]);
     await folderActions.getByTestId("folder.delete").click();
@@ -349,12 +353,12 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     await expect(dialog).toContainText("move to Not in a Folder");
     await dialog.getByTestId("confirm-delete-folder").click();
 
-    // Its Mind is Not in a Folder now: it searches everything; the Answer asked keeps the
-    // deleted Folder's name as what it searched.
+    // Its Mind is Not in a Folder now: it searches everything; the Answer asked, which had no
+    // Documents to search in the Folder, still says only the Mind it was asked from.
     await expect(renamed).toHaveCount(0);
     await expect(notInAFolder(window).getByTestId("mind-list-item")).toHaveText("Shortlist");
     await expect(composer.getByTestId("composer-scope-all")).toBeVisible();
-    await expect(answer.getByTestId("answer-scope")).toHaveText("“Research notes”");
+    await expect(answer.getByTestId("answer-steps")).toHaveText("Asked from Shortlist");
 
     // In Chinese, the same tree.
     await window.evaluate(() =>
