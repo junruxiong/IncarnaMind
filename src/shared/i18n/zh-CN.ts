@@ -981,6 +981,12 @@ export const zhCN = {
   "providers.choice.apiKey": "使用 API 密钥",
   "providers.choice.apiKey.body":
     "OpenAI、Anthropic、Google、DeepSeek、通义千问、Kimi、智谱 GLM、Mistral、xAI、OpenRouter、硅基流动，或兼容 OpenAI 的服务器。你的问题和为它找到的段落会发送给所选服务。",
+  "providers.choice.apiKey.firstRun.body":
+    "{providers}。更多提供商在“设置”中。你的问题和为它找到的段落会发送给所选服务。",
+  "providers.list.separator": "、",
+  "providers.list.last": "{rest}、{last}",
+  "providers.kind.short.qwen": "通义千问",
+  "providers.kind.short.deepseek": "DeepSeek",
   "providers.choice.chatgpt.body": "用你的 ChatGPT Plus 或 Pro 账号登录，无需密钥。",
 
   "providers.kind.openai": "OpenAI",
