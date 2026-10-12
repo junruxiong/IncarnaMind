@@ -52,6 +52,7 @@ import type { CitationSource } from "../documents";
 import type { PageText } from "../documents/passages";
 import type { WindowedPassage } from "../documents/search";
 import type { NodeJSON } from "./blocks";
+import { withCueMarks } from "./cueMarks";
 import type {
   AnswerTools,
   CitationRecordInput,
@@ -73,7 +74,7 @@ const CITATION_MARKER = /\[\^(\d{1,4})\]/g;
  * comment starts ("[comment by Reviewer]").
  */
 const LOCATION_MARK =
-  /\[(?:p\.\s*\d+(?:[–-]\d+)?|slides?\s+\d+(?:[–-]\d+)?|(?:[^\]\n]{1,100},\s*)?rows?\s+\d+(?:[–-]\d+)?|lines?\s+\d+(?:[–-]\d+)?|§[^\]\n]{0,200}|speaker notes|comment(?: by [^\]\n]{1,100})?)\]/gi;
+  /\[(?:p\.\s*\d+(?:[–-]\d+)?|slides?\s+\d+(?:[–-]\d+)?|(?:[^\]\n]{1,100},\s*)?rows?\s+\d+(?:[–-]\d+)?|lines?\s+\d+(?:[–-]\d+)?|§[^\]\n]{0,200}|speaker notes|comment(?: by [^\]\n]{1,100})?|\d{1,2}:\d{2}(?::\d{2})?(?: [^\]\n]{1,60})?)\]/gi;
 
 /** Marks where a slide's speaker notes start, inside a Passage given to the model. */
 const NOTES_MARK = "[speaker notes]";
@@ -427,6 +428,7 @@ const pagesLabel = ({ pageFrom, pageTo }: PageRange) =>
 
 /** The English label of a Unit, as its mark in a Passage shows it. */
 function unitMark(unit: PageText): string | null {
+  if (unit.kind === "cues") return null; // each cue is marked with its time instead (./cueMarks)
   const location = unitLocation(unit);
   return location ? `[${englishLocation(location)}]` : null;
 }
@@ -867,7 +869,7 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
             : passage.text;
         const id = handleFor(passage.passageId);
         // A browser-made PDF's "⼤" for "大": every other reader of the text folds it (ADR-0009).
-        const text = foldRadicals(marked);
+        const text = foldRadicals(withCueMarks(marked, units));
         shownTexts.set(id, text);
         return {
           id,
@@ -881,6 +883,10 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
         text: formatPassages(formatted),
         passageCount: found.length,
         ranks: found.map((passage, index) => passage.rank ?? index),
+        // Someone else wrote a saved web page: reading it makes the Run third-party (#78).
+        ...(found.some((passage) => passage.documentKind === "web") && {
+          thirdParty: ["web-page"] as const,
+        }),
       };
     },
 

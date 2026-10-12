@@ -92,7 +92,7 @@ export interface LaunchOptions {
  * content: on Linux the window also holds the menu bar, above the page.
  *
  * It is wider than the app's default (1280): the assistant docked on the right
- * takes 368px (#253), and this leaves the card about the room a 1280px window
+ * takes 328px (#253), and this leaves the card about the room a 1280px window
  * gave it before, so groups sit side by side and the Mind keeps its margins.
  */
 export const WINDOW_SIZE = { width: 1600, height: 660 };
@@ -156,6 +156,7 @@ export async function launchApp(
   env.INCARNAMIND_TEST_HOOKS = "1";
   if (fakeChat) env.INCARNAMIND_FAKE_CHAT = "1";
   env.INCARNAMIND_TEST_EMBEDDER = "fake";
+  env.INCARNAMIND_TEST_TRANSCRIBER = "fake";
 
   const app = await electron.launch({ args: [appDir], env });
   openApps.set(app, dataDir);

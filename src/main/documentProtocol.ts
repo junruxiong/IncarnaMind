@@ -23,6 +23,7 @@ const CONTENT_TYPES: Readonly<Record<DocumentKind, string>> = {
   csv: "text/csv",
   // Our own snapshot of a page; the viewer reads it with the code that indexed it.
   web: "application/xhtml+xml",
+  transcript: "text/vtt",
 };
 
 /** Must run before the app is ready. */

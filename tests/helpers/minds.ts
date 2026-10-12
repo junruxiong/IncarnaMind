@@ -2,8 +2,9 @@ import { randomUUID } from "node:crypto";
 import { getSchema, type JSONContent } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { updateYFragment, yXmlFragmentToProseMirrorRootNode } from "@tiptap/y-tiptap";
-import type { SearchScope } from "../../src/core";
+import { PROPOSAL_ATTRIBUTE, type SearchScope } from "../../src/core";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
+import { pendingProposals, resolveProposals } from "../../src/shared/proposals";
 import { SCOPE_ATTRIBUTES } from "../../src/shared/searchScope";
 import type { MindClient } from "./mindClient";
 
@@ -98,4 +99,55 @@ export function answerIn(client: MindClient, answerId: string): ProseMirrorNode 
 export function answerText(client: MindClient, answerId: string): string {
   const answer = answerIn(client, answerId);
   return answer.textBetween(0, answer.content.size, "\n\n");
+}
+
+/**
+ * The Mind's text, Proposals shown: removed words as [-…-], added words as
+ * {+…+}, a Citation as ⟨its check⟩, Blocks a Proposal adds or removes after
+ * "+ " or "- ", one line per paragraph or heading.
+ */
+export function shownWithChanges(client: MindClient): string[] {
+  const lines: string[] = [];
+  readMind(client).descendants((node: ProseMirrorNode) => {
+    if (!node.isTextblock) return true;
+    let line = "";
+    node.forEach((child) => {
+      const kind = (child.attrs[PROPOSAL_ATTRIBUTE] as { kind?: string } | null)?.kind;
+      const inline = child.isText
+        ? (child.text ?? "")
+        : child.type.name === "citation"
+          ? `⟨${child.attrs.check}⟩`
+          : "\uFFFC";
+      const marks = child.marks.map((mark) => mark.type.name);
+      if (marks.includes("proposalDelete") || kind === "delete") line += `[-${inline}-]`;
+      else if (marks.includes("proposalInsert") || kind === "insert") line += `{+${inline}+}`;
+      else line += inline;
+    });
+    const block = (node.attrs[PROPOSAL_ATTRIBUTE] as { kind?: string } | null)?.kind;
+    lines.push(`${block === "insert" ? "+ " : block === "delete" ? "- " : ""}${line}`);
+    return false;
+  });
+  return lines.map((line) => line.replace(/-\]\[-|\+\}\{\+/g, ""));
+}
+
+/**
+ * Accepts or rejects Proposals in the client's copy, as the editor does, and
+ * sends it to the core. `which` picks them by id and by their order in the Mind.
+ */
+export async function resolveChanges(
+  client: MindClient,
+  outcome: "accept" | "reject",
+  which: (id: string, index: number) => boolean = () => true,
+) {
+  const order = pendingProposals(client.blocks).map((proposal) => proposal.id);
+  let resolved: ReturnType<typeof resolveProposals> = [];
+  client.doc.transact(() => {
+    resolved = resolveProposals(
+      client.blocks,
+      (proposal) => which(proposal.id, order.indexOf(proposal.id)),
+      outcome,
+    );
+  }, "editor");
+  await client.settled();
+  return resolved;
 }
