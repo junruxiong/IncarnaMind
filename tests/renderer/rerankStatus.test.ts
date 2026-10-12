@@ -38,13 +38,16 @@ describe("The reranking model's download in the sidebar's status row", () => {
     ).toEqual({
       testId: "reranking-model-download",
       tone: "progress",
-      short: "Reranking model: 45 of 136 MB",
+      short: "Reranking",
+      figure: "45/136 MB",
       full: "Downloading the reranking model: 45 of 136 MB. Until it's ready, search keeps its own order.",
       retry: false,
     });
-    expect(
-      rerankingModelStatus(settings({}, { state: "downloading", downloadedBytes: 0 }), zh)?.short,
-    ).toBe("重排序模型：0 / 136 MB");
+    const started = rerankingModelStatus(
+      settings({}, { state: "downloading", downloadedBytes: 0 }),
+      zh,
+    );
+    expect([started?.short, started?.figure]).toEqual(["重排序", "0/136 MB"]);
   });
 
   test("says why it failed, with a retry", () => {

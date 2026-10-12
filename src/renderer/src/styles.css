@@ -151,6 +151,15 @@
 @custom-variant motion-safe (&:where(:root[data-motion="on"] *));
 @custom-variant motion-reduce (&:where(:root:not([data-motion="on"]) *));
 
+/*
+ * While a sidebar row shows its actions: pointed at, reached by keyboard, or
+ * with a menu of theirs open (`rowActionsClass`). What makes room for them or
+ * steps aside says `actions-shown:`.
+ */
+@custom-variant actions-shown (
+  &:where(.group:is(:hover, :has(:focus-visible), :has(.row-actions [aria-expanded="true"])) *)
+);
+
 @utility hide-scrollbar {
   scrollbar-width: none;
   overscroll-behavior: none;
