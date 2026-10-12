@@ -4,15 +4,15 @@ import type {
   AskResult,
   ChatModelGroup,
   ChatReadiness,
+  ConversationAskResult,
   SkillAvailability,
 } from "../../core/api";
-import { composerKey } from "./composer";
 import { core } from "./core";
 import { errorMessage } from "./errors";
 import { useAppStore } from "./store";
 
 /** Why asking a Question didn't go ahead, shown with it until the next try. */
-type AskBlock =
+export type AskBlock =
   /** Questions can't be asked yet: the Question explains why. */
   | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
   /** The Question forces a Skill that is off or gone: the Question says which. */
@@ -20,7 +20,10 @@ type AskBlock =
   | { kind: "error"; message: string };
 
 interface AnswersState {
-  /** By Question Block ID, or by `composerKey` for a Question asked from a Mind's composer. */
+  /**
+   * By Question Block ID, by `composerKey` for a Question asked from a Mind's
+   * composer, or by the id of an Answer in the assistant that couldn't be written again.
+   */
   blocked: Readonly<Record<string, AskBlock>>;
   /** Answers being written, by Block ID, from the core's Answer events. */
   writing: ReadonlySet<string>;
@@ -31,11 +34,6 @@ interface AnswersState {
 
   /** Asks a Question; an Answer the User edited comes back as changes over their version. */
   ask(mindId: string, questionId: string): Promise<AskResult | null>;
-  /**
-   * Asks a Question just put into the Mind from its composer: why it couldn't
-   * be asked is kept for the composer (`composerKey`), not for the Question.
-   */
-  askFromComposer(mindId: string, questionId: string): Promise<AskResult | null>;
   /** Writes an Answer again; one the User edited comes back as changes over their version. */
   regenerate(mindId: string, answerId: string, questionId: string): Promise<void>;
   stop(mindId: string, answerId: string): void;
@@ -44,8 +42,15 @@ interface AnswersState {
   loadModels(): void;
 }
 
-/** Keeps why asking didn't go ahead, under `key` (a Question's Block ID, or `composerKey`), or clears it. */
-function settle(key: string, result: AskResult | null, error?: unknown): void {
+/**
+ * Keeps why asking didn't go ahead, under `key` (a Question's Block ID,
+ * `composerKey`, or an Answer's id in the assistant), or clears it.
+ */
+export function settleAsk(
+  key: string,
+  result: AskResult | ConversationAskResult | null,
+  error?: unknown,
+): void {
   useAnswers.setState((state) => {
     const blocked = { ...state.blocked };
     delete blocked[key];
@@ -74,32 +79,20 @@ export const useAnswers = create<AnswersState>()((set, get) => ({
   async ask(mindId, questionId) {
     try {
       const result = await core.askQuestion({ mindId, questionId });
-      settle(questionId, result);
+      settleAsk(questionId, result);
       return result;
     } catch (error) {
-      settle(questionId, null, error);
-      return null;
-    }
-  },
-
-  async askFromComposer(mindId, questionId) {
-    const key = composerKey(mindId);
-    try {
-      const result = await core.askQuestion({ mindId, questionId });
-      settle(key, result);
-      return result;
-    } catch (error) {
-      settle(key, null, error);
+      settleAsk(questionId, null, error);
       return null;
     }
   },
 
   async regenerate(mindId, answerId, questionId) {
     try {
-      settle(questionId, await core.regenerateAnswer({ mindId, answerId }));
+      settleAsk(questionId, await core.regenerateAnswer({ mindId, answerId }));
     } catch (error) {
       // E.g. its Question was deleted: there may be no Question to show this, so the app does.
-      settle(questionId, null);
+      settleAsk(questionId, null);
       useAppStore.getState().reportError(error);
     }
   },
@@ -111,7 +104,7 @@ export const useAnswers = create<AnswersState>()((set, get) => ({
   },
 
   dismiss(questionId) {
-    settle(questionId, null);
+    settleAsk(questionId, null);
   },
 
   loadModels() {

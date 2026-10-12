@@ -1,5 +1,5 @@
 import { NodeViewContent, NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react";
-import { Fragment, type ReactNode, useId, useMemo, useState } from "react";
+import { Fragment, type ReactNode, useEffect, useId, useMemo, useState } from "react";
 import {
   type AnswerToolCall,
   type ApprovalRequest,
@@ -20,9 +20,10 @@ import { PlugIcon, ScriptIcon, SkillIcon, StopIcon } from "../components/icons";
 import { FindSourcesLineIcon } from "../components/lineIcons";
 import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
 import { ProblemLine } from "../components/ProblemLine";
+import { formatResetTime } from "../cost";
 import { useFindSources } from "../findSources";
-import { useT } from "../i18n";
-import { ANSWER_PROBLEMS } from "../problems";
+import { useLanguage, useT } from "../i18n";
+import { ANSWER_PROBLEMS, answerProblem } from "../problems";
 import type { SettingsPage } from "../settingsPages";
 import { useAppStore } from "../store";
 import { ChevronRightSmallIcon, RegenerateSmallIcon } from "./icons";
@@ -51,10 +52,11 @@ function toolCallsOf(value: unknown): AnswerToolCall[] {
 }
 
 const RUN_SCRIPT = "run_skill_script";
-const SEARCH = "search_documents";
+/** The Tool an Answer searches the Documents with: its calls are summed up on the meta line. */
+export const SEARCH = "search_documents";
 
 /** Items of the meta line, with a dot between each two. */
-function Dotted({ items }: { items: ReactNode[] }) {
+export function Dotted({ items }: { items: ReactNode[] }) {
   return items.map((item, index) => (
     // biome-ignore lint/suspicious/noArrayIndexKey: the items are fixed slots of the meta line.
     <Fragment key={index}>
@@ -169,6 +171,8 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
         <AnswerError
           kind={isErrorKind(node.attrs.errorKind) ? node.attrs.errorKind : "unknown"}
           modelId={modelId}
+          providerId={text(node.attrs.providerId)}
+          resetsAt={text(node.attrs.errorResetsAt)}
           details={text(node.attrs.errorMessage)}
           onRetry={questionId ? () => writeAgain() : undefined}
           onOpenSettings={openSettings}
@@ -223,21 +227,34 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
 }
 
 /** A failed Answer, under what was written of it: one line, and the one thing that can fix it. */
-function AnswerError({
+export function AnswerError({
   kind,
   modelId,
+  providerId,
+  resetsAt,
   details,
   onRetry,
   onOpenSettings,
 }: {
   kind: ProviderErrorKind;
   modelId: string | null;
+  providerId: string | null;
+  /** When the plan's limit resets, when its provider said. */
+  resetsAt: string | null;
   details: string | null;
   onRetry?: (() => void) | undefined;
   onOpenSettings(page: SettingsPage): void;
 }) {
   const t = useT();
-  const { line, fix } = ANSWER_PROBLEMS[kind];
+  const language = useLanguage();
+  const provider = useAnswers(
+    (state) => state.models?.find((group) => group.provider.id === providerId)?.provider.kind,
+  );
+  // Whose plan it was decides where its usage is managed.
+  useEffect(() => {
+    if (kind === "plan-limit") useAnswers.getState().loadModels();
+  }, [kind]);
+  const { line, fix } = answerProblem(kind, provider);
   const action =
     fix.kind === "settings"
       ? { label: t(fix.label), onClick: () => onOpenSettings(fix.page) }
@@ -267,6 +284,12 @@ function AnswerError({
         className="mt-1 select-none"
       >
         {t(line, { model: modelId ?? t("answer.error.thisModel") })}
+        {kind === "plan-limit" && resetsAt && (
+          <>
+            <span aria-hidden="true"> · </span>
+            {t("run.stopped.tryAfter", { time: formatResetTime(resetsAt, language) })}
+          </>
+        )}
       </ProblemLine>
     </div>
   );
@@ -277,7 +300,13 @@ function AnswerError({
  * rows, Skills first. A call waiting for the User's approval has no row: its
  * approval card shows instead, after the Answer's text.
  */
-function CallRows({ calls, approvals }: { calls: AnswerToolCall[]; approvals: ApprovalRequest[] }) {
+export function CallRows({
+  calls,
+  approvals,
+}: {
+  calls: AnswerToolCall[];
+  approvals: ApprovalRequest[];
+}) {
   const waitingIds = new Set(approvals.map((request) => request.toolCallId));
   const rows = calls
     .filter(
@@ -309,7 +338,7 @@ function CallRows({ calls, approvals }: { calls: AnswerToolCall[]; approvals: Ap
 }
 
 /** The approval card for a request: a Connector's Tool, or a Skill script. */
-function ApprovalCard({ request }: { request: ApprovalRequest }) {
+export function ApprovalCard({ request }: { request: ApprovalRequest }) {
   return request.subject.kind === "skill-script" ? (
     <ScriptApprovalCard request={request as SkillScriptApprovalRequest} />
   ) : (
@@ -859,7 +888,7 @@ function SkillRow({ name, use, reads }: SkillUse) {
 }
 
 /** The searches an Answer ran, summed up on its meta line; it opens the list. */
-function SearchesSummary({
+export function SearchesSummary({
   searches,
   open,
   onToggle,
@@ -891,7 +920,7 @@ function SearchesSummary({
 }
 
 /** What each search was for, and what it found. */
-function SearchList({ searches }: { searches: AnswerToolCall[] }) {
+export function SearchList({ searches }: { searches: AnswerToolCall[] }) {
   const t = useT();
   const results = (call: AnswerToolCall) =>
     call.status === "failed"

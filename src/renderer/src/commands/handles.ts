@@ -23,6 +23,21 @@ export const noteHandle: Handle<{ editor: Editor; mindId: string; doc: Y.Doc }> 
   current: null,
 };
 
+/**
+ * The Mind the assistant reads (#253), open in its editor: where Add to note
+ * puts an Answer, at its cursor (`cursorInMind`) or at its end (#201), and
+ * where a second Esc in the assistant goes back to (`returnToNote`).
+ */
+export const readMindHandle: Handle<{
+  editor: Editor;
+  mindId: string;
+  doc: Y.Doc;
+  /** Whether the Mind's cursor is where an Answer goes: else, at the Mind's end. */
+  cursorInMind(): boolean;
+  /** Puts the focus back in the note, where its cursor was, or at its end. */
+  returnToNote(): void;
+}> = { current: null };
+
 /** Lends `value` to commands through `handle` while the calling component is mounted. */
 export function useHandle<T>(handle: Handle<T>, value: T): void {
   useEffect(() => {

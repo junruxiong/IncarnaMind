@@ -6,8 +6,16 @@ import type {
   SearchScope,
   Tag,
 } from "../../core/api";
+import type { MessageKey } from "../../shared/i18n";
 import { SCOPE_KINDS, type ScopeKind, scopeIds } from "../../shared/searchScope";
 import { buildFolderTree, flattenFolderTree } from "./folders";
+
+/** What a scope item gone without its name is called: "Deleted Folder". */
+export const DELETED_NAMES: Record<ScopeKind, MessageKey> = {
+  folder: "scope.chip.deleted.folder",
+  tag: "scope.chip.deleted.tag",
+  document: "scope.chip.deleted.document",
+};
 
 /** The Folders, Tags and Documents a Search scope can name, as the app store holds them. */
 export interface ScopeLibrary {

@@ -1,5 +1,6 @@
 import { type ReactNode, useId } from "react";
-import type { ChatProvider } from "../../../../core/api";
+import type { ChatProvider, ChatProviderKind } from "../../../../core/api";
+import { keyProviderGroups } from "../../../../core/providers/catalog/providers";
 import { useT } from "../../i18n";
 import {
   buttonStyle,
@@ -18,6 +19,13 @@ import {
 } from "./ChatGptSignIn";
 import { type Ollama, OllamaProgress, ollamaDescription } from "./OllamaCard";
 import { ProviderForm } from "./ProviderForm";
+
+const SHORT_NAMES: Partial<
+  Record<ChatProviderKind, "providers.kind.short.qwen" | "providers.kind.short.deepseek">
+> = {
+  qwen: "providers.kind.short.qwen",
+  deepseek: "providers.kind.short.deepseek",
+};
 
 /** Where Answers come from: local models, an API key, or the User's ChatGPT plan. */
 export type ChatProviderChoice = "ollama" | "api-key" | "chatgpt";
@@ -49,6 +57,12 @@ export function ChatProviderChoices(props: ChatProviderChoicesProps) {
   const { ollamaActionInRow = false, includeChatGpt = false, withMoreProviders = false } = props;
   const t = useT();
   const name = useId();
+
+  const apiKeyBody = withMoreProviders
+    ? t("providers.choice.apiKey.body")
+    : t("providers.choice.apiKey.firstRun.body", {
+        providers: providerList(keyProviderGroups().main, t),
+      });
 
   const radio = (value: ChatProviderChoice) => (
     <input
@@ -110,7 +124,7 @@ export function ChatProviderChoices(props: ChatProviderChoicesProps) {
         {radio("api-key")}
         <span className="flex min-w-0 flex-col gap-1">
           <span className={choiceTitleClass}>{t("providers.choice.apiKey")}</span>
-          <span className={choiceTextClass}>{t("providers.choice.apiKey.body")}</span>
+          <span className={choiceTextClass}>{apiKeyBody}</span>
         </span>
       </Choice>
 
@@ -197,4 +211,16 @@ export function OllamaAction({ ollama, large = false }: { ollama: Ollama; large?
       {t("providers.ollama.checkAgain")}
     </button>
   );
+}
+
+/** The providers by their short names, in the language's list: "Anthropic, OpenAI or Google". */
+function providerList(kinds: readonly ChatProviderKind[], t: ReturnType<typeof useT>): string {
+  const names = kinds.map((kind) => {
+    const short = SHORT_NAMES[kind];
+    return t(short ?? `providers.kind.${kind}`);
+  });
+  const last = names.pop();
+  if (last === undefined) return "";
+  if (names.length === 0) return last;
+  return t("providers.list.last", { rest: names.join(t("providers.list.separator")), last });
 }

@@ -39,6 +39,7 @@
 import { randomUUID } from "node:crypto";
 import type * as Y from "yjs";
 import { runsByDefault } from "../../shared/approvalRules";
+import { withCitations } from "../../shared/blockJson";
 import { recordProposalRequest, resolveProposals } from "../../shared/proposals";
 import { searchScopeOf } from "../../shared/searchScope";
 import { setTextOrigin } from "../../shared/textOrigins";
@@ -114,7 +115,6 @@ import {
 import {
   type AnswerDocuments,
   createCitationSession,
-  withCitations,
   withoutFootnoteDefinitions,
 } from "./citations";
 import {
@@ -1144,6 +1144,7 @@ export function createAnswers(options: AnswersOptions) {
             status: outcome.status,
             errorKind: outcome.status === "failed" ? outcome.error.kind : null,
             errorMessage: outcome.status === "failed" ? outcome.error.message : null,
+            errorResetsAt: (outcome.status === "failed" && outcome.error.resetsAt) || null,
             generatedHash: contentHash(element),
           });
         }
@@ -1357,6 +1358,7 @@ export function createAnswers(options: AnswersOptions) {
           status: "streaming",
           errorKind: null,
           errorMessage: null,
+          errorResetsAt: null,
           generatedHash: null,
           citationSupport: null,
           toolCalls: null,

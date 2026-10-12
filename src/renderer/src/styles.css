@@ -2745,6 +2745,17 @@
       background: #912018;
     }
   }
+  /* In the assistant's narrower column the choices take less room, so Deny keeps its place at their row's end. */
+  .assistant-answer .approval-actions {
+    gap: 6px;
+    padding-right: 12px;
+  }
+  .assistant-answer .approval-button {
+    padding: 0 10px;
+  }
+  .assistant-answer .approval-button--primary {
+    padding: 0 12px;
+  }
   /* "Always run": the risk, in the choices' section, before it can be confirmed. */
   .approval-warning {
     flex-direction: column;
@@ -3306,6 +3317,97 @@
   }
 
   /*
+   * Notes added from an Answer (#201): just added, washed for a moment
+   * (DESIGN.md: "a brief wash on text just added"); beside each run of them,
+   * in the left margin beside the Block handle, a quiet conversation mark
+   * whose card names the conversation and the Question (`ConversationLinks`).
+   */
+  .mind-editor > .block-just-added {
+    border-radius: 2px;
+    animation: block-just-added 1600ms ease-in both;
+  }
+  .conversation-links {
+    position: absolute;
+    /* Over the Block handle's layer (10, set by Tiptap), where the two meet. */
+    z-index: 11;
+    top: 0;
+    left: 0;
+    width: 0;
+    height: 100%;
+    pointer-events: none;
+  }
+  /*
+   * At the start of the 56px margin, 2px clear of the Block handle, which takes 40px to 20px
+   * left of the text (--handle-gap); drawn over the handle's layer all the same, so a click
+   * on the mark opens the conversation, never the Block menu.
+   */
+  .conversation-link {
+    position: absolute;
+    left: -56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 28px;
+    border-radius: 4px;
+    color: var(--color-ink-placeholder);
+    cursor: pointer;
+    pointer-events: auto;
+  }
+  .conversation-links > .conversation-link:hover {
+    background: var(--color-hover);
+    color: var(--color-ink-secondary);
+  }
+  .editor-popover.origin-card {
+    /* Drawn from the margin's layer, which lets the pointer through to the note. */
+    pointer-events: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-width: 320px;
+    padding: 6px 8px;
+    border-radius: 10px;
+    background: var(--color-sheet);
+    box-shadow: var(--shadow-popover);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink);
+  }
+  .origin-card-link,
+  .origin-card-gone {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin: 0;
+    text-align: left;
+
+    > svg {
+      margin-top: 3px;
+      color: var(--color-ink-meta);
+    }
+  }
+  .origin-card-link {
+    border-radius: 4px;
+    font-weight: 600;
+    color: var(--color-accent);
+  }
+  .origin-card > .origin-card-link:hover {
+    text-decoration: underline;
+  }
+  .origin-card-gone {
+    color: var(--color-ink-secondary);
+  }
+  .origin-card-question {
+    margin: 0;
+    padding-left: 20px;
+    font-size: var(--text-label);
+    line-height: var(--text-label--line-height);
+    color: var(--color-ink-meta);
+    overflow-wrap: break-word;
+  }
+
+  /*
    * The margin column of checks (`MarginChecks`): for each Citation an 18px
    * mark with its state's icon and number, level with its marker's line.
    */
@@ -3475,6 +3577,12 @@
     background: var(--check-wash);
     box-decoration-break: clone;
     -webkit-box-decoration-break: clone;
+  }
+  /* A word read from a scan that may be misread (#397): a spellchecker's wavy line, in amber. */
+  .citation-card-unsure {
+    text-decoration: underline wavy var(--color-attention);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
   }
   /* A Citation's verdict, the one line a claim check adds. */
   .citation-card-verdict {
@@ -4048,6 +4156,35 @@
     font-size: var(--text-meta);
     color: var(--color-ink-meta);
   }
+  /* The composer's "/" picker: each Skill's name over what it is for, the User's and the built-in ones apart. */
+  .skill-choices {
+    width: min(340px, calc(100vw - 32px));
+    max-height: min(340px, 40vh);
+    overflow-y: auto;
+  }
+  .skill-choice {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    gap: 0;
+    height: auto;
+    min-height: 44px;
+    padding-block: 4px;
+  }
+  .skill-choice-description {
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--color-ink-secondary);
+  }
+  .skill-choice-manage {
+    margin-top: 4px;
+    border-top: 1px solid var(--color-rule);
+    border-radius: 0 0 6px 6px;
+    color: var(--color-ink-secondary);
+    &:hover {
+      background: var(--color-hover);
+    }
+  }
   .editor-menu-empty {
     padding: 4px 8px;
     font-size: 13px;
@@ -4146,6 +4283,10 @@
       --editor-gutter: 40px;
     }
     .margin-checks {
+      display: none;
+    }
+    /* No margin for a link back's mark: hovering the text still shows its card. */
+    .conversation-link {
       display: none;
     }
     /* No margin to hang the footnotes' numbers in. */
@@ -4459,6 +4600,344 @@
     line-height: 20px;
     color: var(--color-ink-meta);
   }
+
+  /*
+   * The conversation (#201; DESIGN.md, Answer): Questions as
+   * bubbles at the right, Answers with no box in the compact reading sizes
+   * (Source Sans 14/22, meta 12/16, Citation markers 10px), 8–12px between
+   * turns, so the note beside it stays the largest text on screen. Each
+   * Answer's checks sit in a margin at its right, as in a Mind.
+   */
+  /* Short, it sits at the foot, by the composer, as in Claude and ChatGPT. */
+  .assistant-log {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 10px;
+    min-height: 100%;
+
+    &:has(> .assistant-empty) {
+      justify-content: flex-start;
+    }
+  }
+  .assistant-question {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 2px;
+  }
+  .assistant-question-bubble {
+    max-width: 88%;
+    margin: 0;
+    padding: 4px 10px;
+    border-radius: 10px;
+    background: var(--color-chip);
+    font-size: 13px;
+    line-height: 20px;
+    font-weight: 500;
+    color: var(--color-ink);
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+  }
+  .assistant-question[data-pending] .assistant-question-bubble {
+    color: var(--color-ink-secondary);
+  }
+  .assistant-question-skill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-right: 6px;
+    font-weight: 600;
+    color: var(--color-ink-secondary);
+  }
+  .assistant-answer {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    border-radius: 6px;
+
+    .answer-info,
+    .answer-calls,
+    [data-testid="answer-error"],
+    [role="alert"],
+    [role="status"]:not(.assistant-answer-added) {
+      font-size: var(--text-label);
+      line-height: var(--text-label--line-height);
+    }
+  }
+  /* A link back from a Note led here: washed for a moment, as text just added is. */
+  .assistant-answer[data-sought] {
+    animation: block-just-added 1600ms ease-in both;
+  }
+  .assistant-answer-frame {
+    position: relative;
+    /* Room at the right for the Citations' checks. */
+    margin-right: 36px;
+
+    .margin-check {
+      left: 6px;
+      height: 16px;
+      font-size: 10px;
+      line-height: 16px;
+    }
+  }
+  .mind-editor.assistant-answer-text {
+    --editor-gutter: 0px;
+
+    min-height: 0;
+    margin-left: 0;
+    padding-left: 0;
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 22px;
+    color: var(--color-ink-answer);
+    cursor: text;
+
+    > * + * {
+      margin-top: 8px;
+    }
+    > * + :is(h1, h2, h3, h4, h5, h6) {
+      margin-top: 12px;
+    }
+    :is(h1, h2, h3, h4, h5, h6) {
+      font-size: 15px;
+      line-height: 22px;
+    }
+    /* A code block on its band, as in a Mind, in the compact sizes. */
+    > pre {
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: var(--color-frame);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 18px;
+      color: var(--color-ink);
+      overflow-x: auto;
+    }
+    .citation-marker {
+      min-width: 16px;
+      height: 16px;
+      font-size: 10px;
+      line-height: 16px;
+      vertical-align: 1px;
+    }
+  }
+  /*
+   * Under an Answer: Copy · Add to note ▾ · Regenerate, then its model, scope
+   * and searches; on hover or focus, and always on the newest, while it is
+   * written and once it is added. Hidden ones keep their room and their place
+   * in the Tab order.
+   */
+  .assistant-answer-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0 2px;
+    min-height: 24px;
+    margin-left: -6px;
+    font-size: var(--text-label);
+    line-height: var(--text-label--line-height);
+    white-space: nowrap;
+    color: var(--color-ink-meta);
+    user-select: none;
+    opacity: 0;
+    transition: opacity 80ms ease-out;
+  }
+  .assistant-answer:hover > .assistant-answer-actions,
+  .assistant-answer:focus-within > .assistant-answer-actions,
+  .assistant-answer[data-status="streaming"] > .assistant-answer-actions,
+  .assistant-answer:last-of-type > .assistant-answer-actions,
+  .assistant-answer-actions--added {
+    opacity: 1;
+  }
+  .assistant-answer .assistant-answer-action {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 5px;
+    height: 24px;
+    padding: 0 7px 0 6px;
+    border-radius: 6px;
+    font-weight: 600;
+    color: var(--color-ink-secondary);
+
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+  }
+  .assistant-answer-add {
+    display: inline-flex;
+    flex-shrink: 0;
+  }
+  .assistant-answer .assistant-answer-add-main {
+    padding-right: 4px;
+    border-radius: 6px 0 0 6px;
+  }
+  .assistant-answer .assistant-answer-add-more {
+    justify-content: center;
+    width: 20px;
+    padding: 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .assistant-answer-add:hover > .assistant-answer-action {
+    background: var(--color-hover);
+  }
+  /* What doesn't fit beside the actions goes onto a line of its own, cut with "…" past its end. */
+  .assistant-answer-actions > .assistant-answer-meta {
+    display: flex;
+    flex: 0 1 auto;
+    align-items: center;
+    gap: 0 6px;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 24px;
+    padding-left: 6px;
+    overflow: hidden;
+    color: var(--color-ink-meta);
+
+    > * {
+      flex-shrink: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    /* "Stopped" and the dots between are never cut: the model and the scope give way first. */
+    > [aria-hidden],
+    > .assistant-answer-status {
+      flex-shrink: 0;
+    }
+  }
+  .assistant-answer-actions--added {
+    gap: 4px;
+    margin-left: 0;
+  }
+  .assistant-answer-added {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 600;
+    color: var(--color-ink);
+  }
+
+  /* The ▾ beside Add to note, as Notion's "Add to page". */
+  .editor-popover.add-to-picker {
+    display: flex;
+    flex-direction: column;
+    width: 320px;
+    max-width: calc(100vw - 16px);
+    overflow: hidden;
+    border-radius: 10px;
+    background: var(--color-sheet);
+    box-shadow: var(--shadow-popover);
+    font-family: var(--font-sans);
+    text-align: left;
+    color: var(--color-ink);
+  }
+  .add-to-search {
+    padding: 8px 8px 4px;
+  }
+  .add-to-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 32px;
+    padding: 0 8px;
+    border-radius: 4px;
+    box-shadow: inset 0 0 0 1px var(--color-rule);
+    color: var(--color-ink-meta);
+
+    &:focus-within {
+      box-shadow: inset 0 0 0 1px var(--color-accent);
+    }
+    > input {
+      flex: 1 1 auto;
+      min-width: 0;
+      height: 28px;
+      border: 0;
+      outline: none;
+      background: transparent;
+      font: inherit;
+      font-size: 14px;
+      line-height: 20px;
+      color: var(--color-ink);
+
+      &::placeholder {
+        color: var(--color-ink-placeholder);
+      }
+    }
+  }
+  .add-to-list {
+    display: flex;
+    flex-direction: column;
+    max-height: 360px;
+    padding: 0 4px 4px;
+    overflow-y: auto;
+  }
+  .add-to-option {
+    display: grid;
+    /* Its icon, its name and where it goes, and on the chosen one the key that adds. */
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+    column-gap: 8px;
+    align-items: start;
+    padding: 5px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+
+    &[aria-selected="true"] {
+      background: var(--color-chip);
+    }
+  }
+  .add-to-option-icon {
+    padding-top: 2px;
+    color: var(--color-ink-meta);
+  }
+  .add-to-option-text {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+  }
+  .add-to-option-title,
+  .add-to-option-detail {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .add-to-option-title {
+    font-size: 14px;
+    line-height: 20px;
+  }
+  .add-to-option-detail {
+    font-size: var(--text-label);
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  .add-to-option-key {
+    align-self: center;
+    font-size: var(--text-label);
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  .add-to-heading {
+    margin: 0;
+    padding: 8px 8px 2px;
+    font-size: var(--text-label);
+    line-height: 16px;
+    font-weight: 600;
+    color: var(--color-ink-meta);
+  }
+  .add-to-separator {
+    flex-shrink: 0;
+    height: 1px;
+    margin: 4px;
+    background: var(--color-rule);
+  }
+  .add-to-empty {
+    margin: 0;
+    padding: 4px 8px;
+    font-size: 13px;
+    color: var(--color-ink-meta);
+  }
   /* The composer of the Mind it reads is drawn here, the panel's width. */
   .assistant-composer {
     flex: none;
@@ -4639,11 +5118,31 @@
   }
 }
 
+/* Text just added from an Answer, or the Answer a link back led to: washed, then not. */
+@keyframes block-just-added {
+  from,
+  60% {
+    background: var(--color-frame);
+    box-shadow: 0 0 0 6px var(--color-frame);
+  }
+  to {
+    background: transparent;
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+
 /* Reduced motion: checks appear at once, and nothing pulses. */
 :root:not([data-motion="on"]) :is(.margin-check-icon, .margin-check--reveal),
 :root:not([data-motion="on"]) :is(.citation-marker-icon, .edit-pending-dot),
 :root:not([data-motion="on"]) .answer-writing::before {
   animation: none;
+}
+/* Washed while it lasts, with no fade. */
+:root:not([data-motion="on"]) .mind-editor > .block-just-added,
+:root:not([data-motion="on"]) .assistant-answer[data-sought] {
+  animation: none;
+  background: var(--color-frame);
+  box-shadow: 0 0 0 6px var(--color-frame);
 }
 
 /* Folder contents stay readable beside an open document viewer. */
