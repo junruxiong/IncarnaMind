@@ -8,10 +8,13 @@
  * what a Tool-calling model does: it searches for the Question, cites the line
  * of the first Passage that shares a word with the Question (on the page, or
  * at the Location, that line is on), then answers with a marker. A Question
- * with "misquote" in it gets a quote that isn't on the page; one with "each"
+ * with "misquote" in it gets a quote that isn't on the page; one with "no page"
+ * names no page, as a small model often doesn't; one with "each"
  * cites the first Passage of each Document found, with a marker for each; one
  * with "rows" quotes two lines, so a sheet's Citation covers a range of rows; one that
  * asks for it "as a table" gets a Markdown table with its markers in a cell.
+ *
+ * A Question with "blank reply" in it gets a reply with no text at all.
  *
  * With Skills: a Question that names a listed Skill gets it loaded with
  * use_skill first. An Answer that follows a Skill (forced, or loaded) starts
@@ -213,7 +216,7 @@ function recordFor(
   const record = {
     marker,
     passage: passage.id,
-    ...(picked.page !== null
+    ...(picked.page !== null && !/\bno page\b/i.test(question)
       ? { pageFrom: picked.page, pageTo: picked.page }
       : picked.location
         ? { location: picked.location }
@@ -369,6 +372,7 @@ function scriptNamed(
 function nextReply(prompt: Prompt, tools: readonly OfferedTool[]): Reply {
   const names = tools.map((tool) => tool.name);
   const question = lastQuestion(prompt);
+  if (/blank reply/i.test(question)) return { text: "" };
   /** What the calls made first said, in order. */
   const said: string[] = [];
   const run = scriptNamed(prompt, question, names);
