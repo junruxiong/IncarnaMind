@@ -10,7 +10,8 @@ import {
   menuRuleClass,
 } from "../components/ui";
 import { openMenuFromRightClick, usePopoverMenu } from "../components/usePopoverMenu";
-import { useT } from "../i18n";
+import { languageNow, useT } from "../i18n";
+import { chartOfTable, insertChart } from "./chartCommands";
 import {
   runTableAction,
   sameSpot,
@@ -29,9 +30,10 @@ const INSET = 4;
 const actionOf = (id: TableActionId) =>
   TABLE_ACTIONS.find((action) => action.id === id) as TableAction;
 
-const GROUPS: readonly (readonly TableActionId[])[] = [
+const GROUPS: readonly (readonly (TableActionId | "chart")[])[] = [
   ["rowAbove", "rowBelow", "columnLeft", "columnRight"],
   ["headerRow"],
+  ["chart"],
   ["deleteRow", "deleteColumn", "deleteTable"],
 ];
 
@@ -152,6 +154,28 @@ export function TableMenu({ editor }: { editor: Editor }) {
             <Fragment key={group.join()}>
               {index > 0 && <div className={menuRuleClass} />}
               {group.map((id) => {
+                if (id === "chart") {
+                  // Chart from table (#436): a chart of it, inserted after it.
+                  const chart = chartOfTable(editor.state, languageNow());
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      role="menuitem"
+                      data-testid="table-chart"
+                      aria-disabled={chart === null || undefined}
+                      title={chart === null ? t("chart.fromTable.none") : undefined}
+                      onClick={() => {
+                        if (!chart) return;
+                        menu.close();
+                        insertChart(editor, chart);
+                      }}
+                      className={`${menuItemClass} ${menuItemUnavailableClass} pl-2`}
+                    >
+                      <span className="flex-1">{t("chart.fromTable")}</span>
+                    </button>
+                  );
+                }
                 const action = actionOf(id);
                 const why = whyNot(id);
                 if (id === "headerRow") {

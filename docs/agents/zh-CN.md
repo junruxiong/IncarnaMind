@@ -95,6 +95,9 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Task | 任务 | |
 | Routine | 定时任务 | As Kimi, Doubao, Yuanbao, Cherry Studio and LobeChat. |
 | Comparison table | 对比表 | |
+| Chart | 图表 | Its kinds: 柱状图、折线图、饼图、散点图. "以表格显示" / "以图表显示"; "用表格生成图表". |
+| Columns (a chart's series) | 数据列 | The columns of a table a chart draws. A scatter chart's two: 横轴 and 纵轴. |
+| Source (of a chart's values) | 数据来源 | Under a chart in an export, as Chinese reports caption theirs: "数据来源：". |
 | Memory | 记忆 | |
 | Meeting | 会议 | |
 | Transcript | 转写稿 | |
