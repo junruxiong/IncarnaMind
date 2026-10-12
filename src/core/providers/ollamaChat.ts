@@ -95,10 +95,63 @@ async function withErrorShape(response: Response): Promise<Response> {
   });
 }
 
+/**
+ * What a streamed reply's line is, if the provider can't read it as a chunk:
+ * Ollama's `{"error": …}` line, or text that isn't JSON. Never the line itself,
+ * which holds the User's Documents.
+ */
+export function unreadableLineKind(line: string): "error-line" | "not-json" | null {
+  const parsed = parseJson(line);
+  if (!isRecord(parsed)) return "not-json";
+  return "error" in parsed ? "error-line" : null;
+}
+
+/**
+ * Passes a streamed reply on line by line, but not the lines the provider
+ * can't read: it only warns of them, with the line's text in its warning, and
+ * the reply can then end with nothing in it. They are logged here instead.
+ */
+function droppingUnreadableLines(response: Response, modelId: string): Response {
+  if (!response.body) return response;
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  let pending = "";
+  const readable = (line: string) => {
+    if (!line.trim()) return false;
+    const kind = unreadableLineKind(line);
+    if (kind) {
+      console.warn(
+        `A line of the reply couldn't be read: provider=ollama model=${modelId} kind=${kind}`,
+      );
+    }
+    return kind === null;
+  };
+  const body = response.body.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        const lines = (pending + decoder.decode(chunk, { stream: true })).split("\n");
+        pending = lines.pop() ?? "";
+        for (const line of lines) {
+          if (readable(line)) controller.enqueue(encoder.encode(`${line}\n`));
+        }
+      },
+      flush(controller) {
+        if (readable(pending)) controller.enqueue(encoder.encode(`${pending}\n`));
+      },
+    }),
+  );
+  return new Response(body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+}
+
 /** The `fetch` the provider uses: shapes chat requests, and failed responses. */
 export function createOllamaFetch(
   settings: OllamaModelSettings,
   fetcher: typeof globalThis.fetch = globalThis.fetch,
+  modelId = "",
 ): typeof globalThis.fetch {
   const ollamaFetch = async (input: Parameters<typeof globalThis.fetch>[0], init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
@@ -111,7 +164,8 @@ export function createOllamaFetch(
       next = { ...init, headers, body: JSON.stringify(shapeChatRequest(body, settings)) };
     }
     const response = await fetcher(url, next);
-    return response.ok ? response : withErrorShape(response);
+    if (!response.ok) return withErrorShape(response);
+    return next !== init ? droppingUnreadableLines(response, modelId) : response;
   };
   return ollamaFetch as typeof globalThis.fetch;
 }
@@ -127,7 +181,7 @@ export function createOllamaChatModel(options: {
   const { settings } = options;
   const provider = createOllama({
     baseURL: `${options.baseUrl}/api`,
-    fetch: createOllamaFetch(settings, options.fetch),
+    fetch: createOllamaFetch(settings, options.fetch, options.modelId),
   });
   return wrapLanguageModel({
     model: provider(options.modelId),
@@ -135,6 +189,12 @@ export function createOllamaChatModel(options: {
       specificationVersion: "v4",
       transformParams: async ({ params }) => ({
         ...params,
+        // The provider warns of, and drops, the reasoning an earlier step sent back.
+        prompt: params.prompt.map((message) =>
+          message.role === "assistant"
+            ? { ...message, content: message.content.filter((part) => part.type !== "reasoning") }
+            : message,
+        ),
         providerOptions: {
           ...params.providerOptions,
           ollama: {

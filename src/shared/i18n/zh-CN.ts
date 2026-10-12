@@ -1029,6 +1029,7 @@ export const zhCN = {
   "providers.test.consent-declined": "没有发送任何内容，因为你选择不向此服务发送数据。",
   "providers.test.too-long": "这个模型的上下文窗口太小，连很短的请求都放不下。",
   "providers.test.cost-cap": "未发送任何内容：已达到本月花费上限。可在“设置 → 通用”中更改。",
+  "providers.test.no-answer": "模型没有回复。",
   "providers.test.unknown": "测试未通过。",
 
   "providers.secrets.plainText.title": "没有正在运行的密钥环",
@@ -1454,6 +1455,7 @@ export const zhCN = {
   "answer.error.useLocal": "改用本地模型",
   "answer.error.too-long":
     "这个问题太长，即使不带前面的内容，也超出了模型的上下文窗口。请缩短问题，或换一个模型",
+  "answer.error.no-answer": "模型没有给出回答",
   "answer.error.unknown": "无法生成这个回答",
   "answer.error.not-signed-in": "你还没有登录 ChatGPT",
   "answer.error.plan-limit": "ChatGPT 订阅的用量已达上限",
