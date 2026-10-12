@@ -533,8 +533,13 @@ function MindEditorView({
 
   return (
     <MindIdContext.Provider value={mindId}>
-      {countSlot && createPortal(<WordCount editor={editor} doc={doc} />, countSlot)}
-      {countSlot && createPortal(<NoteHealth editor={editor} mindId={mindId} />, countSlot)}
+      {countSlot &&
+        createPortal(
+          <WordCount editor={editor} doc={doc}>
+            <NoteHealth editor={editor} mindId={mindId} />
+          </WordCount>,
+          countSlot,
+        )}
       {readOnly && <MindNotice kind="read-only" />}
       <div className={`mind-editor-frame ${guide ? "mind-editor-frame--guide" : ""}`}>
         {!readOnly && <ProposalBars editor={editor} mindId={mindId} />}
