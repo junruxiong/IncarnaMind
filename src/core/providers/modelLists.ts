@@ -10,9 +10,9 @@
  * Ollama its capabilities, and the catalog the ids its sources know as
  * embedding, speech, image or video models (see ./catalog). Of what is left, a
  * hosted provider's list gives the menu only the catalog's current chat
- * models (OpenAI's list says nothing of what a model is); the other ids are
- * `other`: ones the catalog doesn't know, deprecated ones, and ones that
- * need another API than chat. Where a list says what a model can do (Anthropic's capabilities and limits, Ollama's capabilities),
+ * models (OpenAI's list says nothing of what a model is, only when one shuts
+ * down); the other ids are `other`: ones the catalog doesn't know, deprecated
+ * ones, and ones that need another API than chat. Where a list says what a model can do (Anthropic's capabilities and limits, Ollama's capabilities),
  * that is kept as the server's word on it (see ./capabilities).
  */
 import type { ChatProviderKind } from "../api";
@@ -42,6 +42,8 @@ export interface ListedModel {
   facts?: ModelFactsLayer;
   /** An Ollama model that runs on ollama.com, not on this computer. */
   cloud?: boolean;
+  /** The provider has announced this model's shutdown (OpenAI's `shutdown_date`). */
+  shuttingDown?: true;
   /** Not in the model menu until the User adds it. */
   other?: true;
 }
@@ -211,7 +213,16 @@ async function fetchModels({ kind, baseUrl, apiKey, endpoint }: ModelListSpec) {
       return listed(await getJson(`${hosted}/models`, bearer), openRouterModelFacts);
     case "openai":
       if (!apiKey) return [];
-      return idsOf(await getJson(`${hosted}/models`, bearer));
+      return dataOf(await getJson(`${hosted}/models`, bearer)).flatMap((model): ListedModel[] =>
+        typeof model.id === "string"
+          ? [
+              {
+                id: model.id,
+                ...(typeof model.shutdown_date === "string" && { shuttingDown: true }),
+              },
+            ]
+          : [],
+      );
     case "anthropic": {
       if (!apiKey) return [];
       const body = await getJson(`${hosted}/models?limit=100`, {
@@ -251,7 +262,7 @@ export async function listProviderModels(spec: ModelListSpec): Promise<ListedMod
     const ids = new Set(byId.keys());
     const sorted = [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));
     const inMenu = (model: ListedModel) =>
-      spec.kind === "chatgpt" || inDefaultMenu(catalogId, model.id, ids);
+      spec.kind === "chatgpt" || (!model.shuttingDown && inDefaultMenu(catalogId, model.id, ids));
     return [
       ...sorted.filter(inMenu).slice(0, MAX_MODELS),
       ...sorted
