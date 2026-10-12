@@ -769,6 +769,9 @@ export function createConversations(db: Database, now: () => string) {
     addCitedUnits(documentIds: ReadonlySet<string>, cited: CitedUnits[]): void {
       eachCitation((citation) => addCitedUnit(citation, documentIds, cited));
     },
+
+    /** Calls `visit` with the attributes of each Citation in the Answers of conversations. */
+    eachCitation,
   };
 }
 

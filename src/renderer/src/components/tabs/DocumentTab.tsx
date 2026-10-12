@@ -1,24 +1,12 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import type { Document, DocumentPlace, LayoutTab } from "../../../../core/api";
 import { citedTextKept } from "../../../../shared/citations";
 import { useT } from "../../i18n";
 import { useAppStore, type ViewerTarget } from "../../store";
+import { DocumentView } from "../../viewer/DocumentView";
 import { type PlaceMemory, PlaceMemoryContext, type ViewPlace } from "../../viewer/place";
 import { type ViewerFrame, ViewerFrameContext, ViewerHeader } from "../../viewer/ViewerHeader";
 import { DocumentRemoved } from "../../viewer/ViewerMessage";
-
-// Each kind's view loads the first time a Document of that kind opens, with its libraries
-// (pdf.js, docx-preview, JSZip, the Office formats), rather than with the app.
-const PdfView = lazy(() => import("../../viewer/PdfView").then((m) => ({ default: m.PdfView })));
-const TextView = lazy(() => import("../../viewer/TextView").then((m) => ({ default: m.TextView })));
-const DocxView = lazy(() => import("../../viewer/DocxView").then((m) => ({ default: m.DocxView })));
-const SlidesView = lazy(() =>
-  import("../../viewer/SlidesView").then((m) => ({ default: m.SlidesView })),
-);
-const SheetView = lazy(() =>
-  import("../../viewer/SheetView").then((m) => ({ default: m.SheetView })),
-);
-const WebView = lazy(() => import("../../viewer/WebView").then((m) => ({ default: m.WebView })));
 
 /** How far the User scrolls a preview, at least, to keep it: the jump to the quote doesn't count. */
 const KEEP_AFTER_SCROLL_PX = 120;
@@ -56,26 +44,6 @@ function usePlaceMemory(target: ViewerTarget): PlaceMemory {
     }),
     [key],
   );
-}
-
-/** The view for a kind of Document (ADR-0011). */
-function DocumentView({ document, target }: { document: Document; target: ViewerTarget }) {
-  switch (document.kind) {
-    case "pdf":
-      return <PdfView document={document} target={target} />;
-    case "text":
-    case "markdown":
-      return <TextView document={document} target={target} />;
-    case "docx":
-      return <DocxView document={document} target={target} />;
-    case "pptx":
-      return <SlidesView document={document} target={target} />;
-    case "xlsx":
-    case "csv":
-      return <SheetView document={document} target={target} />;
-    case "web":
-      return <WebView document={document} target={target} />;
-  }
 }
 
 /** Keys that scroll a page, not type in it. */

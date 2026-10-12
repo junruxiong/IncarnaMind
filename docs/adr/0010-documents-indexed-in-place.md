@@ -65,3 +65,11 @@ An old version's text was kept only while a Citation quoted it. Check results (t
 - The start-up clean-up keeps a version that a Citation quotes or something retains. It reads every retained version with one query, beside its walk over Minds, which isn't extended.
 - Unlinking a Linked folder keeps the Units retained, as it keeps those Citations point to.
 - Once its last owner releases a version, and no Citation quotes it, its text goes at the next start. A release stays as a deleted row for 30 days, for a later sync to pass on, and is then forgotten.
+
+## Amendment: the cited page is saved when a Citation is made (2026-10-12, #133)
+
+A file that disappears no longer takes the cited page with it:
+
+- **What is saved.** When a Citation is made (in an Answer, or with a suggestion the User accepts), how its Location looked in the version it quotes becomes a picture in the data folder's "Cited pages": a PDF's pages, drawn by the page-image worker; a slide, the rows a sheet's Citation covers, a section or lines of text, drawn by their viewer off screen. The text drawn on it, each run with its box, is kept beside it (migration 57), so a quote can be found and highlighted on it. One picture per Location and version.
+- **When.** In the background queue, never while an Answer is being written. A picture a quit cut short is drawn at the next start, if the file still has that version; none is drawn of a version the file no longer has.
+- **How long.** While a Citation or a Checkpoint points at it, and it retains its version meanwhile (as a saved page, above). At the first start after the last one goes, it goes. The pictures are never searched, and are this computer's.

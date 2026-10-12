@@ -20,6 +20,7 @@ import {
   type UsageDataSender,
 } from "../core";
 import { createFakeCapture, type FakeCapture } from "../core/meetings/fakeCapture";
+import { createCitedPageCapture } from "./citedPageCapture";
 import { createSentryCrashReporter } from "./crashReports";
 import { createUtilityProcessEmbedder } from "./embedder";
 import { createElectronAudioCapture } from "./meetings/capture";
@@ -378,6 +379,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     }),
     log,
     audioCapture: audioCapture(log),
+    capturePage: createCitedPageCapture({ rendererUrl: process.env.ELECTRON_RENDERER_URL }),
     paths: {
       dataDir,
       builtInSkills: builtInSkillsFolder(),
