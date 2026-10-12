@@ -85,6 +85,12 @@ export interface LaunchOptions {
   /** What a Meeting's fake speech-to-text engine does: slow, failing to read stretches, failing over. */
   transcriber?: FakeTranscriberOptions;
   /**
+   * The port of a local server standing in for the web (#128): web search's
+   * fetcher connects there for every host, its guard still deciding. A test
+   * build honours it.
+   */
+  web?: number;
+  /**
    * What the fake text recognition model reads on each scanned page (#397):
    * a JSON file of a `FakeScanScript`. Without, it reads nothing on them.
    */
@@ -133,6 +139,7 @@ export async function launchApp(
     computerSound = "allowed",
     transcriber,
     scans,
+    web,
   }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
@@ -151,6 +158,7 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_CHATGPT;
   delete env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS;
   delete env.INCARNAMIND_TEST_SCANS;
+  delete env.INCARNAMIND_TEST_WEB;
   // A test never uses the ChatGPT sign-in an agent's shell may point at for checks by hand.
   delete env.INCARNAMIND_CHATGPT_PROFILE;
   env.INCARNAMIND_TEST_AUDIO = "fake";
@@ -167,6 +175,7 @@ export async function launchApp(
   if (sources) env.INCARNAMIND_TEST_SOURCES = sources;
   if (chatGpt) env.INCARNAMIND_TEST_CHATGPT = chatGpt;
   if (scans) env.INCARNAMIND_TEST_SCANS = scans;
+  if (web) env.INCARNAMIND_TEST_WEB = String(web);
   env.INCARNAMIND_DATA_DIR = dataDir;
   env.INCARNAMIND_TEST_HOOKS = "1";
   if (fakeChat) env.INCARNAMIND_FAKE_CHAT = "1";
