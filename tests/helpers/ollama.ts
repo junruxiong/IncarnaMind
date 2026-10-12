@@ -113,6 +113,8 @@ export interface OllamaModelStub {
 export interface OllamaChatReply {
   content?: string;
   toolCalls?: { name: string; arguments: Record<string, unknown> }[];
+  /** Lines streamed before the content that the provider can't read as a chunk. */
+  unreadable?: string[];
 }
 
 /** One chat request the stub got, and what became of it. */
@@ -259,6 +261,7 @@ export async function startOllamaServer(options: {
         return;
       }
       response.writeHead(200, { "content-type": "application/x-ndjson" });
+      for (const line of reply.unreadable ?? []) response.write(`${line}\n`);
       const content = message.content;
       for (let start = 0; start < content.length; start += 16) {
         const delta = { role: "assistant", content: content.slice(start, start + 16) };

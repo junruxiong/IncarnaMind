@@ -8,6 +8,7 @@
  * processing worker and in tests.
  */
 import { normaliseText } from "../../shared/text";
+import { cutUnit } from "../../shared/units";
 import type { PageText } from "./passages";
 
 export interface BoilerplateParameters {
@@ -115,8 +116,12 @@ export function stripBoilerplate<Page extends PageText>(
         peeled++;
       } else break;
     }
-    const text = lines.slice(start, end).join("\n").trim();
+    const kept = lines.slice(start, end).join("\n");
     // A page with nothing but such lines keeps them: they may be all it says ("Page 3 of 40").
-    return { ...page, text: text || page.text };
+    if (kept.trim() === "") return { ...page };
+    // Where what is kept starts in the page's text, so a scanned page's anchors move with it.
+    const from = lines.slice(0, start).reduce((sum, line) => sum + line.length + 1, 0);
+    const leading = kept.length - kept.trimStart().length;
+    return cutUnit(page, from + leading, from + kept.trimEnd().length);
   });
 }
