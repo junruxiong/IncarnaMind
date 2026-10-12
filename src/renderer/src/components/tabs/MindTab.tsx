@@ -83,6 +83,8 @@ function MindTitle({ mind }: { mind: Mind }) {
   const renameMind = useAppStore((state) => state.renameMind);
   const [draft, setDraft] = useState<string | null>(null);
   const field = useRef<HTMLTextAreaElement>(null);
+  /** The title as it was when the User started typing it, for Undo. */
+  const titleBefore = useRef(mind.title);
   const focusNow = useAppStore((state) => state.titleToFocus === mind.id);
 
   // A Mind just created: its title takes the focus from the button that made it.
@@ -125,13 +127,19 @@ function MindTitle({ mind }: { mind: Mind }) {
         aria-label={t("mind.title.label")}
         placeholder={mind.autoTitle || t("mind.untitled")}
         value={draft ?? mind.title}
-        onFocus={() => setDraft(mind.title)}
-        onBlur={() => setDraft(null)}
+        onFocus={() => {
+          setDraft(mind.title);
+          titleBefore.current = mind.title;
+        }}
+        onBlur={() => {
+          setDraft(null);
+          useAppStore.getState().titleLeft(mind.id, titleBefore.current, draft ?? mind.title);
+        }}
         onChange={(event) => {
           // A title has no line breaks, even pasted ones.
           const title = event.target.value.replace(/\s*[\r\n]+\s*/g, " ");
           setDraft(title);
-          void renameMind(mind.id, title);
+          void renameMind(mind.id, title, { typing: true });
         }}
         onKeyDown={moveIntoContent}
       />
