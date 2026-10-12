@@ -421,6 +421,8 @@ export interface AnswerAttributes {
   errorKind: ProviderErrorKind | null;
   /** The provider's own message about the failure, for details. */
   errorMessage: string | null;
+  /** When the plan's limit that stopped it resets (ISO 8601), when the provider said. */
+  errorResetsAt: string | null;
   /** A fingerprint of the content as it was generated: it differs once the User edits the Answer. */
   generatedHash: string | null;
   /**
@@ -732,6 +734,8 @@ export interface UserSettings {
    * everywhere. Copies of the document being checked are left out either way.
    */
   leaveOutOwnFiles: boolean;
+  /** The monthly cap on models billed per token: off (null) by default. */
+  monthlyCap: MonthlyCap | null;
 }
 
 /**
@@ -2321,13 +2325,98 @@ export type ProviderErrorKind =
    * oldest Question context left out. Nothing is cut silently.
    */
   | "too-long"
+  /** The request could pass the User's monthly cap (`UserSettings.monthlyCap`): nothing was sent. */
+  | "cost-cap"
   | "unknown";
 
 export interface ProviderError {
   kind: ProviderErrorKind;
   /** The provider's own message, for details. */
   message: string;
+  /** "plan-limit": when the plan's limit resets (ISO 8601), when the provider says. */
+  resetsAt?: string;
 }
+
+/**
+ * How a model's requests are paid for (src/core/providers/catalog/billing.ts):
+ * per token on an API key, from a plan's own limits (the ChatGPT plan), or
+ * not at all (a model on this computer).
+ */
+export type Billing = "per-token" | "plan" | "free";
+
+export type Currency = "USD" | "CNY";
+
+export interface Money {
+  currency: Currency;
+  amount: number;
+}
+
+/**
+ * The most IncarnaMind may spend in a calendar month on models billed per
+ * token. Before each such request its most (its prompt and its output limit)
+ * is reserved, and a request whose reservation would pass the cap isn't sent.
+ * Spending in the other currency counts at a fixed rate.
+ */
+export interface MonthlyCap {
+  amount: number;
+  currency: Currency;
+}
+
+/** One saved provider's use this month. */
+export interface ProviderCost {
+  providerId: string;
+  billing: Billing;
+  requests: number;
+  /** What its requests cost, in each currency they were priced in. */
+  spent: Money[];
+  /** Tokens of requests to models with no known price: counted here, not toward the cap. */
+  unpricedTokens: number;
+}
+
+/** Settings' month-to-date cost: recorded on this computer, never sent. */
+export interface CostSummary {
+  /** When the counted month began (ISO 8601), in the computer's time zone. */
+  monthStart: string;
+  /** What per-token requests cost this month, settled and still reserved, per currency. */
+  spent: Money[];
+  /** All of it in the cap's currency (the other at a fixed rate), when a cap is set. */
+  spentTowardCap: Money | null;
+  cap: MonthlyCap | null;
+  /** The providers used this month. */
+  providers: ProviderCost[];
+}
+
+/**
+ * Why a Run stopped before its work was done, so that a Task can resume from
+ * it later: the monthly cap, or a plan's limit (with when it resets, when the
+ * provider says). Its unfinished items say "not checked" with the reason.
+ */
+export type RunStop = { reason: "cost-cap" } | { reason: "plan-limit"; resetsAt: string | null };
+
+/** A large run to estimate: so many items (a comparison table's cells, verify's sentences…), each about an Answer. */
+export interface RunEstimateInput {
+  items: number;
+  /** The model it would use; the default model when left out. */
+  model?: ChatModelChoice;
+}
+
+/**
+ * The one estimate shown before a large run on a model billed per token,
+ * never asked: its calls, tokens and price, with the month so far. A plan or
+ * a model on this computer gets none: a plan's price is fixed, and none of
+ * the plans IncarnaMind uses says how much of its window is left.
+ */
+export type RunEstimate =
+  | {
+      billing: "per-token";
+      calls: number;
+      tokens: number;
+      /** Null for a model with no known price. */
+      cost: Money | null;
+      spentTowardCap: Money | null;
+      cap: MonthlyCap | null;
+    }
+  | { billing: "plan" | "free" };
 
 export type ConnectionTestResult = { ok: true } | { ok: false; error: ProviderError };
 
@@ -2992,6 +3081,54 @@ export interface SkillImportError {
 export type SkillImportCheck =
   | { ok: true; preview: SkillImportPreview }
   | { ok: false; error: SkillImportError };
+
+/** What a Skill says in words: its name, when to use it, and its steps (SKILL.md's instructions). */
+export interface SkillDraft {
+  /** As typed: it is written in the format's characters (lowercase letters, digits, hyphens) when saved. */
+  name: string;
+  /** When to use the Skill: what Answers read to choose it. At most 1,024 characters. */
+  description: string;
+  /** What to do, in Markdown, as typed. */
+  steps: string;
+}
+
+/**
+ * Why a Skill wasn't saved, for the field to say.
+ * - "invalid-name": nothing of the name is left in the format's characters.
+ * - "name-taken": another Skill, built-in or the User's, has that name.
+ * - "no-description" and "description-too-long": when to use it is empty, or over 1,024 characters.
+ * - "no-steps": there are no steps.
+ * - "too-large": the steps are over `SKILL_LIMITS.maxInstructionsBytes`.
+ */
+export type SkillSaveProblem =
+  | "invalid-name"
+  | "name-taken"
+  | "no-description"
+  | "description-too-long"
+  | "no-steps"
+  | "too-large";
+
+export type SkillSaveResult = { ok: true; skill: Skill } | { ok: false; problem: SkillSaveProblem };
+
+export interface DraftSkillInput {
+  /** Chosen by the caller, so it can stop the request (`cancelSkillDraft`). */
+  requestId: string;
+  /** The Mind the User just worked in. Its own chat model drafts the Skill, else the default. */
+  mindId: string;
+}
+
+/** What drafting a Skill from a Mind did. */
+export type DraftSkillResult =
+  /** The model's draft, for the User to edit before it is saved. */
+  | { kind: "drafted"; draft: SkillDraft }
+  /** Nothing was sent: the Mind has no Notes, Questions or Answers to learn from. */
+  | { kind: "empty" }
+  /** Nothing was sent: the model can't be used now (local mode included), and `readiness` says why. */
+  | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
+  /** The User stopped it (`cancelSkillDraft`), or declined to send the Mind's text. */
+  | { kind: "cancelled" }
+  /** The model failed, or gave a draft that couldn't be read. */
+  | { kind: "failed"; error: ProviderError };
 
 /** How Skill scripts run. */
 export const SKILL_SCRIPT_LIMITS = {
@@ -4343,6 +4480,8 @@ export interface AgentSettings {
    */
   paused: "local-mode" | null;
   pairings: AgentPairing[];
+  /** The pairings whose agent has IncarnaMind's Skill installed, as IncarnaMind wrote it. */
+  skills: string[];
 }
 
 export interface ConnectAgentInput {
@@ -4418,6 +4557,8 @@ export interface AgentClient {
   /** It looks installed on this computer: such agents are listed first. */
   installed: boolean;
   setup: AgentSetupKind;
+  /** Where setting it up puts the Skill that tells it when to use IncarnaMind; null if it reads none. */
+  skillPath: string | null;
 }
 
 /** What setting an agent up will change in its settings file, the pairing's key hidden. */
@@ -4438,7 +4579,19 @@ export interface AgentSetupPreview {
 export type AgentSetupResult =
   | { kind: "opened"; how: "bundle" | "link" }
   | { kind: "wrote"; path: string }
-  | { kind: "copy"; how: "command" | "settings"; text: string; shown: string; path?: string };
+  | {
+      kind: "copy";
+      how: "command" | "settings";
+      text: string;
+      shown: string;
+      path?: string;
+      /**
+       * The Skill (SKILL.md) for the User to add to the agent's own skills
+       * folder, by hand, where IncarnaMind couldn't install it. Apart from
+       * `text`, which is pasted into a settings field that takes only the settings.
+       */
+      skill: string;
+    };
 
 export interface SetUpAgentInput {
   client: AgentClientId;
@@ -5004,6 +5157,18 @@ export interface CoreApi {
    * flow to it. A provider that isn't asked, or can't be reached, offers its default.
    */
   listChatModels(): Promise<ChatModelGroup[]>;
+  /**
+   * This month's cost so far, for Settings: what requests billed per token
+   * cost, settled and still reserved, and each provider's use. Recorded on
+   * this computer only.
+   */
+  getCostSummary(): Promise<CostSummary>;
+  /**
+   * The estimate shown before a large run (comparison tables, verify,
+   * contradiction watch, Enhance): for a model billed per token, its calls,
+   * tokens and price; for a plan or a model on this computer, nothing.
+   */
+  estimateRun(input: RunEstimateInput): Promise<RunEstimate>;
 
   /**
    * Asks a Question: its Answer is written into the Mind right after it, as the
@@ -5346,6 +5511,35 @@ export interface CoreApi {
    * on), turned on, not built-in. Returns the copy.
    */
   duplicateSkill(skillId: string): Promise<Skill>;
+  /** A Skill as its editor shows it: its name, its "when to use" and its steps (SKILL.md's instructions). */
+  getSkillDraft(skillId: string): Promise<SkillDraft>;
+  /**
+   * Saves a new Skill the User wrote or edited from a draft, turned on. A name
+   * another Skill has is refused (`name-taken`), never replaced.
+   */
+  createSkill(draft: SkillDraft): Promise<SkillSaveResult>;
+  /**
+   * Saves what the User changed in a Skill that isn't built-in, keeping its
+   * other files and whether it's on. Only the name, the description and the
+   * instructions of its SKILL.md change; every other frontmatter field stays as
+   * written. Throws for a built-in Skill: duplicate it.
+   */
+  updateSkill(skillId: string, draft: SkillDraft): Promise<SkillSaveResult>;
+  /**
+   * Saves a Skill as a zip in the Output location, under the next free name
+   * (as `saveMindExport` does, asking where the first time). The zip imports
+   * again with the same preview.
+   */
+  saveSkillExport(skillId: string): Promise<SavedMindExport>;
+  /**
+   * The chat model drafts a Skill from what the User just did in a Mind: its
+   * Notes, Questions and Answers, the latest weighing most. Sends on the
+   * "chat" flow once the User allows it to the model's service, and in local
+   * mode only a model on this computer is used. Nothing is saved.
+   */
+  draftSkillFromMind(input: DraftSkillInput): Promise<DraftSkillResult>;
+  /** Stops a `draftSkillFromMind` request. Stopping one that is gone does nothing. */
+  cancelSkillDraft(requestId: string): Promise<void>;
   /**
    * The names of the built-in Skills the User removed, which
    * `restoreBuiltInSkills` would install again. Empty when they are all there.
@@ -5748,6 +5942,8 @@ const methods: Record<CoreApiMethod, true> = {
   testChatConnection: true,
   getChatReadiness: true,
   listChatModels: true,
+  getCostSummary: true,
+  estimateRun: true,
   askQuestion: true,
   regenerateAnswer: true,
   stopAnswer: true,
@@ -5841,6 +6037,12 @@ const methods: Record<CoreApiMethod, true> = {
   setSkillEnabled: true,
   removeSkill: true,
   duplicateSkill: true,
+  getSkillDraft: true,
+  createSkill: true,
+  updateSkill: true,
+  saveSkillExport: true,
+  draftSkillFromMind: true,
+  cancelSkillDraft: true,
   listRemovedBuiltInSkills: true,
   restoreBuiltInSkills: true,
   previewMindExport: true,
