@@ -1,6 +1,11 @@
 import { type KeyboardEvent, useRef, useState } from "react";
 import type { CitationCheck } from "../../../core/api";
-import { type ChartAttributes, type ChartValue, chosenSeries } from "../../../shared/charts";
+import {
+  type ChartAttributes,
+  type ChartValue,
+  chosenSeries,
+  listedRows,
+} from "../../../shared/charts";
 import { ChartCheck } from "./ChartCheck";
 import { type PointEvents, type PointRef, samePoint } from "./ChartPlot";
 
@@ -22,7 +27,8 @@ export function ChartValues({
   checkOf(value: ChartValue): { check: CitationCheck | null; label: string };
 }) {
   const drawn = chosenSeries(chart);
-  const rows = chart.data.rows;
+  // A cut chart lists every row, those it doesn't draw too (#503).
+  const rows = listedRows(chart.data);
   const cells: PointRef[] = [];
   rows.forEach((row, index) => {
     for (const series of drawn) if (row.values[series]) cells.push({ row: index, series });

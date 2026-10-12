@@ -436,6 +436,7 @@ export const en = {
   "chart.point.where": "{document} · {location}",
   "chart.point.open": "Open",
   "chart.point.noCitation": "No Citation",
+  "chart.point.position": "{index} of {count}",
   "chart.point.notDrawn": "Not a number, so not drawn",
   "chart.source.place.one": "1 value, quoted from {document}, {location}",
   "chart.source.place.other": "{count} values, each quoted from {document}, {location}",

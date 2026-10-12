@@ -5,6 +5,7 @@ import { ChartCheck } from "./ChartCheck";
 
 export function ChartPointCard({
   title,
+  position,
   value,
   detail,
   notDrawn,
@@ -14,6 +15,8 @@ export function ChartPointCard({
   onOpen,
 }: {
   title: string;
+  /** Which of the values with no Citation the foot found this is: "1 of 3"; null for one, or a value found otherwise. */
+  position: string | null;
   value: string;
   detail: string | null;
   notDrawn: boolean;
@@ -28,7 +31,14 @@ export function ChartPointCard({
   const canOpen = state !== null && state.documentId !== null;
   return (
     <div className="chart-card" data-testid="chart-card-body">
-      <p className="chart-card-title">{title}</p>
+      <p className="chart-card-title">
+        <span>{title}</span>
+        {position && (
+          <span className="chart-card-position" data-testid="chart-card-position">
+            {position}
+          </span>
+        )}
+      </p>
       <p className="chart-card-value" data-testid="chart-card-value">
         {value}
       </p>
