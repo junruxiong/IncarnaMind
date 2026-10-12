@@ -7,6 +7,7 @@ import { currentTabOf } from "../layoutSlice";
 import { useMindTools } from "../mindTools";
 import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
+import { findTab } from "../tabs";
 import { assistantCommands } from "./assistant";
 import { evidenceCommands } from "./evidence";
 import { footnoteCommands } from "./footnotes";
@@ -24,7 +25,7 @@ import {
 } from "./objects";
 import { proposalCommands } from "./proposals";
 import "./objectMenus";
-import { type Command, commands, fromMenu } from "./registry";
+import { type Command, type CommandContext, commands, fromMenu } from "./registry";
 import { tableCommands } from "./tables";
 import { tabCommands } from "./tabs";
 import { webPageCommands } from "./webPages";
@@ -39,6 +40,17 @@ function blockMenuFor(blockId: string) {
 function mindInFront(): string | null {
   const item = currentTabOf(useAppStore.getState().layout)?.item;
   return item?.kind === "mind" ? item.mindId : null;
+}
+
+/** The Mind whose outline a menu or the keyboard asks for: the Mind's row, the Mind a tab shows, else the one in front. */
+function outlineMind(ctx: CommandContext): string | null {
+  const target = ctx.selection[0] ?? ctx.focus;
+  if (target?.kind === "mind") return target.id;
+  if (target?.kind === "tab") {
+    const item = findTab(useAppStore.getState().layout, target.id)?.item;
+    return item?.kind === "mind" ? item.mindId : null;
+  }
+  return mindInFront();
 }
 
 const appCommands: readonly Command[] = [
@@ -189,10 +201,13 @@ const appCommands: readonly Command[] = [
     group: "main",
     // Opening it changes nothing.
     reversible: true,
-    when: () => mindInFront() !== null,
-    run: () => {
-      const mindId = mindInFront();
-      if (mindId) useMindTools.getState().showOutline(mindId);
+    when: (ctx) => outlineMind(ctx) !== null,
+    run: (ctx) => {
+      const mindId = outlineMind(ctx);
+      if (!mindId) return;
+      // A Mind's row in the sidebar opens the Mind, which then shows its outline.
+      if (mindId !== mindInFront()) useAppStore.getState().openMind(mindId);
+      useMindTools.getState().showOutline(mindId);
     },
   },
   {

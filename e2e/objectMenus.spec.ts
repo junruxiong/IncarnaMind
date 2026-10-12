@@ -131,7 +131,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await newMind(window);
 
-  // A Mind: Open, Open to the side; Export; Move to…; Rename; then Delete after a rule.
+  // A Mind: Open, Open to the side; Outline, Export; Move to…; Rename; then Delete after a rule.
   const mind = window.getByTestId("mind-row").first();
   const mindMenu = await sameFromBothWays(
     window,
@@ -144,6 +144,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "mind.open",
     "mind.openSide",
     "—",
+    "mind.outline",
     "mind.export",
     "mind.citationStyle",
     "—",
@@ -250,7 +251,13 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
   const tabMenu = tab.getByTestId("tab-actions");
   const byRightClick = await commandsIn(tabMenu);
   // Its Mind's items first, then the tab's own.
-  expect(byRightClick.slice(0, 4)).toEqual(["mind.export", "—", "mind.delete", "—"]);
+  expect(byRightClick.slice(0, 5)).toEqual([
+    "mind.outline",
+    "mind.export",
+    "—",
+    "mind.delete",
+    "—",
+  ]);
   expect(byRightClick.indexOf("tab.rename")).toBeLessThan(byRightClick.indexOf("tab.close"));
   expect(byRightClick.indexOf("tab.close")).toBeLessThan(byRightClick.indexOf("tab.closeOthers"));
   // Close and its kin end the menu, after a rule.
@@ -328,6 +335,7 @@ test("the context-menu key and Shift+F10 open the focused row's menu; arrows mov
   await window.keyboard.press("Shift+F10");
   await window.keyboard.press("ArrowDown");
   await window.keyboard.press("ArrowDown");
+  await window.keyboard.press("ArrowDown");
   await expect(menu.getByTestId("mind.export")).toBeFocused();
   await window.keyboard.press("Enter");
   await expect(window.getByTestId("export-dialog")).toBeVisible();
@@ -360,6 +368,7 @@ test("each item shows its shortcut as the system writes it, and the labels are i
   await expect(menu.getByRole("menuitem")).toHaveText([
     "打开",
     "在侧边打开",
+    /^大纲(⌥⌘L|Ctrl\+Alt\+L)$/,
     "导出…",
     "引用格式…",
     /^移动到…(⇧⌘M|Ctrl\+Shift\+M)$/,

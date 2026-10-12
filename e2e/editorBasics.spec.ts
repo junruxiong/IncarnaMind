@@ -246,10 +246,11 @@ for (const [language, titles] of [
     expect(await inView(last)).toBe(false);
 
     // From the ⋯ menu, by mouse: a heading per line, indented by level.
-    await window.getByTestId("group-menu").hover();
-    await window.getByTestId("group-menu").click();
-    await window.getByTestId("tab-menu-outline").hover();
-    await window.getByTestId("tab-menu-outline").click();
+    await pointAndClick(window, window.getByRole("tab", { selected: true }).first(), {
+      button: "right",
+    });
+    await window.getByTestId("mind.outline").hover();
+    await window.getByTestId("mind.outline").click();
     await expect(items).toHaveText([...titles]);
     const levels = await items.evaluateAll((all) =>
       all.map((each) => Number(each.getAttribute("data-level"))),

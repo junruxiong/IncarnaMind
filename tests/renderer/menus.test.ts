@@ -108,7 +108,7 @@ describe("the menus", () => {
     }
   });
 
-  test("a Mind's is Open, Open to the side, Export, Move to, Rename, then Delete after a rule", () => {
+  test("a Mind's is Open, Open to the side, Outline, Export, Move to, Rename, then Delete after a rule", () => {
     const here = {
       "mind.citationStyle": () => undefined,
       "mind.moveTo": () => undefined,
@@ -118,6 +118,7 @@ describe("the menus", () => {
       "mind.open",
       "mind.openSide",
       "—",
+      "mind.outline",
       "mind.export",
       "mind.citationStyle",
       "—",
@@ -132,6 +133,7 @@ describe("the menus", () => {
       "mind.open",
       "mind.openSide",
       "—",
+      "mind.outline",
       "mind.export",
       "—",
       "mind.delete",
