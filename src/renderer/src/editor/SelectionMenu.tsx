@@ -19,6 +19,7 @@ import { Popover } from "./Popover";
 import {
   asOwnUndoStep,
   canTurnInto,
+  clearFormatting,
   currentTurnInto,
   inOneTextblock,
   linkTarget,
@@ -474,7 +475,7 @@ export function SelectionMenu({
             title={t("editor.format.clear")}
             aria-label={t("editor.format.clear")}
             onMouseDown={keepSelection}
-            onClick={() => act(() => editor.chain().focus().unsetAllMarks().run())}
+            onClick={() => act(() => clearFormatting(editor))}
             className="selection-format"
           >
             <span aria-hidden="true">T×</span>

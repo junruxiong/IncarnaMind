@@ -157,7 +157,10 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
         </p>
       )}
 
-      <NodeViewContent className="answer-content" />
+      <NodeViewContent
+        className="answer-content"
+        data-generated-marks={node.attrs.generatedMarks === true ? "" : undefined}
+      />
 
       {!streaming && uncalculated > 0 && <UncalculatedLine count={uncalculated} />}
 

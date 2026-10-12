@@ -450,6 +450,8 @@ export const zhCN = {
   "editor.ai.translate": "翻译…",
   "editor.ai.explain": "解释",
   "editor.ai.edit": "用 AI 编辑…",
+  "editor.ai.markAsMine": "标为我写的",
+  "aiText.markedAsMine": "已标为你写的",
   "edit.pending.improve": "正在润色…",
   "edit.pending.shorten": "正在缩写…",
   "edit.pending.translate": "正在翻译为{language}…",
