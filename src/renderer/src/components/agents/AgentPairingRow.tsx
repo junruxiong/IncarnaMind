@@ -20,6 +20,7 @@ import {
   ruledRowClass,
 } from "../ui";
 import { activityWords, doneWords, helpUrl, pairingInSentence, timeWords } from "./agentWords";
+import { LaunchDetails } from "./LaunchDetails";
 
 /** What setting this agent up just did, shown under it until the page goes. */
 export interface JustSetUp {
@@ -212,6 +213,7 @@ export function AgentPairingRow({
           >
             {copied === "settings" ? t("agents.pairing.copied") : t("agents.pairing.copySettings")}
           </button>
+          {pairing.client === "other" && <LaunchDetails pairingId={pairing.id} />}
           {!skillInstalled && (
             <>
               <button
