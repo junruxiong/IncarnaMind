@@ -20,6 +20,7 @@ import {
   type UsageDataSender,
 } from "../core";
 import { createFakeCapture, type FakeCapture } from "../core/meetings/fakeCapture";
+import type { FakeTranscriberOptions } from "../core/transcription/fake";
 import { createSentryCrashReporter } from "./crashReports";
 import { createUtilityProcessEmbedder } from "./embedder";
 import { createElectronAudioCapture } from "./meetings/capture";
@@ -158,12 +159,16 @@ const fakeEmbedder =
   import.meta.env.MODE === "test" && process.env.INCARNAMIND_TEST_EMBEDDER === "fake";
 
 /**
- * Test-only launch flag: the smoke tests transcribe Meetings with a fake
+ * Test-only launch flags: the smoke tests transcribe Meetings with a fake
  * speech-to-text engine in the utility process, so no model is downloaded
- * (#136). Only a test build honours it.
+ * (#136), slow, failing to read stretches or failing over as
+ * INCARNAMIND_TEST_TRANSCRIBER_OPTIONS (JSON) asks (#161). Only a test build
+ * honours them.
  */
-const fakeTranscriber =
-  import.meta.env.MODE === "test" && process.env.INCARNAMIND_TEST_TRANSCRIBER === "fake";
+const fakeTranscriber: FakeTranscriberOptions | undefined =
+  import.meta.env.MODE === "test" && process.env.INCARNAMIND_TEST_TRANSCRIBER === "fake"
+    ? JSON.parse(process.env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS ?? "{}")
+    : undefined;
 
 /**
  * The built-in Skills: in a packaged app, where electron-builder copied them
@@ -416,7 +421,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
       openLink: openAgentLink,
     },
     embedder: createUtilityProcessEmbedder({ fake: fakeEmbedder }),
-    transcriber: createUtilityProcessTranscriber({ fake: fakeTranscriber }),
+    transcriber: createUtilityProcessTranscriber(fakeTranscriber ? { fake: fakeTranscriber } : {}),
     ...(fakeTranscriber && {
       transcriptionModelSource: {
         model: { baseUrl: "http://localhost/", files: [] },

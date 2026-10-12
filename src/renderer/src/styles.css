@@ -1477,6 +1477,45 @@
   .meeting-line {
     padding: 0 4px 2px;
   }
+  /* A Meeting's recording details (#161): meta lines, each after its time in the Meeting. */
+  .capture-details {
+    display: flex;
+    flex-direction: column;
+    margin: 2px 0;
+    padding-top: 6px;
+    border-top: 1px solid var(--color-rule);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    line-height: 20px;
+    color: var(--color-ink-meta);
+    overflow-wrap: break-word;
+
+    & li {
+      display: flex;
+      gap: 8px;
+    }
+  }
+  .meeting-bar .capture-details {
+    margin-inline: 4px;
+  }
+  .capture-details-time {
+    flex-shrink: 0;
+    min-width: 2.5rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .capture-details-line {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink-meta);
+
+    &:hover {
+      color: var(--color-ink);
+    }
+  }
   .meeting-controls {
     display: flex;
     flex-shrink: 0;
