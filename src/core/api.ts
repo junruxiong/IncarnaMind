@@ -112,8 +112,14 @@ export interface CreateMindInput {
  *   (see `GENERATED_MARK`). Older content is version 11 content as it is:
  *   nothing is rewritten, and an Answer without `generatedMarks` is the AI's
  *   as a whole, as it always was.
+ * - 14: a chart value's scale (#579): `scale` beside `unit` on each value in
+ *   a chart's `data`, so a number with no unit or scale isn't drawn among
+ *   "$… million". An older version keeps it while it changes a chart's kind,
+ *   columns or title, but its Update writes the values again without it.
+ *   Older charts are version 14 content as they are: a value with no `scale`
+ *   is one whose scale isn't known, and nothing is rewritten.
  */
-export const CONTENT_SCHEMA_VERSION = 11;
+export const CONTENT_SCHEMA_VERSION = 14;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -2872,6 +2878,8 @@ export interface SuggestionAccepted {
   characters: number;
   /** When, ISO 8601, UTC. */
   acceptedAt: string;
+  /** The suggestion's Citation, now in the Mind. */
+  citation: Citation;
 }
 
 /**
