@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { type ChartLayout, type LaidOutPoint, layoutChart } from "../../../shared/chartLayout";
 import type { ChartAttributes } from "../../../shared/charts";
 
@@ -108,13 +108,6 @@ export function ChartPlot({
   const [current, setCurrent] = useState(0);
   const at = Math.min(current, Math.max(0, points.length - 1));
   const marks = useRef(new Map<string, SVGElement>());
-  const moved = useRef(false);
-  useEffect(() => {
-    if (!moved.current) return;
-    moved.current = false;
-    const point = points[at];
-    if (point) marks.current.get(`${point.row}:${point.series}`)?.focus();
-  }, [at, points]);
 
   const onKeyDown = (event: KeyboardEvent<SVGElement>, index: number) => {
     const point = points[index];
@@ -128,7 +121,9 @@ export function ChartPlot({
     const next = nextPoint(points, index, event.key, byRow);
     if (next === null) return;
     event.preventDefault();
-    moved.current = true;
+    // At once, not after the next render: a second key pressed before it goes from here.
+    const target = points[next];
+    if (target) marks.current.get(`${target.row}:${target.series}`)?.focus();
     setCurrent(next);
   };
 
