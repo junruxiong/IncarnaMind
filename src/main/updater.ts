@@ -20,8 +20,7 @@ import { app, BrowserWindow, dialog } from "electron";
 import type { Core, CoreApi, ExternalService, Language } from "../core";
 import { translate } from "../shared/i18n";
 import { systemBrowser } from "./platform";
-
-const RELEASES_PAGE = "https://github.com/junruxiong/IncarnaMind/releases";
+import { RELEASES_PAGE } from "./startupError";
 
 /** Where update checks go. */
 const GITHUB_RELEASES: Readonly<ExternalService> = {
