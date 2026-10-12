@@ -2,8 +2,8 @@ import type { KeyboardEvent } from "react";
 
 /*
  * The keys of the sidebar's tree (docs/agents/interaction.md, rules 1, 2 and
- * 7), as Finder has them: Enter or F2 renames, ⇧⌘M (Ctrl+Shift+M) is
- * "Move to…", and the arrow keys move through the rows.
+ * 7): Enter opens a row, F2 renames it, ⇧⌘M (Ctrl+Shift+M) is "Move to…",
+ * and the arrow keys move through the rows.
  */
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
