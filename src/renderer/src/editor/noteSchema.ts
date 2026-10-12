@@ -13,6 +13,7 @@ import {
   NOTE_BLOCK_TYPES,
   QUESTION_BLOCK,
 } from "../../../core/api";
+import { Chart } from "./chartSchema";
 import { Citation } from "./citationSchema";
 import { lowlight } from "./codeLanguages";
 import { DocumentChip } from "./documentChipSchema";
@@ -51,6 +52,8 @@ export interface NoteSchemaOptions {
   footnoteView?: NodeViewRenderer;
   /** Draws Document chips, e.g. as names that open the Document. */
   documentChipView?: NodeViewRenderer;
+  /** Draws charts, with their menus and their points' cards. */
+  chartView?: NodeViewRenderer;
 }
 
 /**
@@ -60,7 +63,8 @@ export interface NoteSchemaOptions {
  * an "include in Question context" flag. Questions and Answers, top-level
  * only. Document chips the User writes with "@". Citations, inline in Answers and in whatever they are copied into,
  * table cells included. Footnotes the User writes, inline, each holding its
- * text. Proposals the AI made, waiting for the User (see `proposalSchema`).
+ * text. Charts, drawn from a table or from cited figures, each value with its
+ * Citation (#436). Proposals the AI made, waiting for the User (see `proposalSchema`).
  * Every Block and every footnote has a UUID. The editor adds its interface on
  * top (collaboration, menus, the drag handle, smart typography); tests use
  * this alone.
@@ -73,6 +77,7 @@ export function noteExtensions({
   citationView,
   footnoteView,
   documentChipView,
+  chartView,
 }: NoteSchemaOptions = {}): Extensions {
   const onClick = onEditMath && ((_node: unknown, pos: number) => onEditMath(pos));
   const CodeBlock = codeBlockView
@@ -113,6 +118,7 @@ export function noteExtensions({
     Citation.configure({ view: citationView ?? null }),
     Footnote.configure({ view: footnoteView ?? null }),
     DocumentChip.configure({ view: documentChipView ?? null }),
+    Chart.configure({ view: chartView ?? null }),
     QuestionContextFlag,
     // Proposals waiting for the User: words struck and added, and whole Blocks (#93).
     ProposalInsert,

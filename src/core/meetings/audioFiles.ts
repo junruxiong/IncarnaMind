@@ -12,6 +12,7 @@ import {
   mkdirSync,
   openSync,
   readdirSync,
+  readSync,
   renameSync,
   rmSync,
   statSync,
@@ -133,17 +134,49 @@ export function listParts(folder: string): AudioPart[] {
   return parts.sort((a, b) => a.offsetMs - b.offsetMs || a.source.localeCompare(b.source));
 }
 
-/** Deletes what a crash left half written. Returns how many there were. */
-export function removeUnfinished(folder: string): number {
+/**
+ * Deletes what a crash left half written, and returns the parts lost: each
+ * as long as its header says it was to be, or a whole part if the header
+ * wasn't written.
+ */
+export function removeUnfinished(folder: string): Omit<AudioPart, "path">[] {
   let names: string[];
   try {
     names = readdirSync(folder);
   } catch {
-    return 0;
+    return [];
   }
-  const unfinished = names.filter((name) => name.endsWith(WRITING_SUFFIX));
-  for (const name of unfinished) rmSync(join(folder, name), { force: true });
-  return unfinished.length;
+  const lost: Omit<AudioPart, "path">[] = [];
+  for (const name of names.filter((each) => each.endsWith(WRITING_SUFFIX))) {
+    const path = join(folder, name);
+    const match = PART_NAME.exec(name.slice(0, -WRITING_SUFFIX.length));
+    if (match) {
+      lost.push({
+        source: match[1] as AudioSource,
+        offsetMs: Number(match[2]),
+        durationMs: msOf(intendedSamples(path) ?? PART_SAMPLES),
+      });
+    }
+    rmSync(path, { force: true });
+  }
+  return lost;
+}
+
+/** The samples a part's WAV header says it holds, if its header was written. */
+function intendedSamples(path: string): number | null {
+  try {
+    const fd = openSync(path, "r");
+    try {
+      const header = Buffer.alloc(WAV_HEADER_BYTES);
+      if (readSync(fd, header, 0, WAV_HEADER_BYTES, 0) < WAV_HEADER_BYTES) return null;
+      if (header.toString("latin1", 36, 40) !== "data") return null;
+      return header.readUInt32LE(40) / BYTES_PER_SAMPLE;
+    } finally {
+      closeSync(fd);
+    }
+  } catch {
+    return null;
+  }
 }
 
 /** Deletes a Meeting's audio, and its folder. */

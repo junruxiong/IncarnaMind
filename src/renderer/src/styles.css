@@ -93,6 +93,12 @@
   --color-tag-gray-ink: #4a4f57;
   --color-tag-gray-dot: #9aa0a8;
   --color-tag-gray-edge: #818993;
+  /*
+   * Charts (DESIGN.md, Colors): an earlier series in this light grey, the later
+   * in `ink-secondary`, the value in focus in `accent`, a pie's slices (and
+   * three series or more) in the Tag hues teal, purple, orange and yellow.
+   */
+  --color-chart-prior: #b9bec6;
 
   /* The type scale (DESIGN.md, Typography). */
   --text-display: 34px;
@@ -1481,6 +1487,45 @@
   }
   .meeting-line {
     padding: 0 4px 2px;
+  }
+  /* A Meeting's recording details (#161): meta lines, each after its time in the Meeting. */
+  .capture-details {
+    display: flex;
+    flex-direction: column;
+    margin: 2px 0;
+    padding-top: 6px;
+    border-top: 1px solid var(--color-rule);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    line-height: 20px;
+    color: var(--color-ink-meta);
+    overflow-wrap: break-word;
+
+    & li {
+      display: flex;
+      gap: 8px;
+    }
+  }
+  .meeting-bar .capture-details {
+    margin-inline: 4px;
+  }
+  .capture-details-time {
+    flex-shrink: 0;
+    min-width: 2.5rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .capture-details-line {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink-meta);
+
+    &:hover {
+      color: var(--color-ink);
+    }
   }
   .meeting-controls {
     display: flex;
@@ -4579,16 +4624,25 @@
       display: none;
     }
   }
-  /* What it reads: one 12px line under the header. */
-  .assistant-reads {
-    flex: none;
+  /* What the next Question reads and searches: one line, once, in an empty conversation (#391). */
+  .assistant-asked-from {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
     margin: 0;
-    padding: 4px 12px;
-    border-bottom: 1px solid var(--color-rule);
-    overflow: hidden;
-    font-size: 12px;
-    line-height: 16px;
+    font-size: var(--text-ui);
+    line-height: var(--text-ui--line-height);
     color: var(--color-ink-meta);
+  }
+  .assistant-asked-from-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+  }
+  .assistant-asked-from-text {
+    min-width: 0;
+    overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
   }
@@ -4601,17 +4655,17 @@
   }
   .assistant-empty {
     margin: 0;
-    font-size: 13px;
-    line-height: 20px;
+    font-size: var(--text-ui);
+    line-height: var(--text-ui--line-height);
     color: var(--color-ink-meta);
   }
 
   /*
    * The conversation (#201; DESIGN.md, Answer): Questions as
-   * bubbles at the right, Answers with no box in the compact reading sizes
-   * (Source Sans 14/22, meta 12/16, Citation markers 10px), 8–12px between
-   * turns, so the note beside it stays the largest text on screen. Each
-   * Answer's checks sit in a margin at its right, as in a Mind.
+   * bubbles at the right, Answers with no box, in one reading size (#391):
+   * 14px, Answers 14/22, the actions 13/18, Citation markers 10px; 8–12px
+   * between turns, so the note beside it stays the largest text on screen.
+   * Each Answer's checks sit in a margin at its right, as in a Mind.
    */
   /* Short, it sits at the foot, by the composer, as in Claude and ChatGPT. */
   .assistant-log {
@@ -4636,8 +4690,8 @@
     padding: 4px 10px;
     border-radius: 10px;
     background: var(--color-chip);
-    font-size: 13px;
-    line-height: 20px;
+    font-size: var(--text-ui);
+    line-height: var(--text-ui--line-height);
     font-weight: 500;
     color: var(--color-ink);
     white-space: pre-wrap;
@@ -4662,12 +4716,11 @@
     border-radius: 6px;
 
     .answer-info,
-    .answer-calls,
     [data-testid="answer-error"],
     [role="alert"],
     [role="status"]:not(.assistant-answer-added) {
-      font-size: var(--text-label);
-      line-height: var(--text-label--line-height);
+      font-size: var(--text-ui);
+      line-height: var(--text-ui--line-height);
     }
   }
   /* A link back from a Note led here: washed for a moment, as text just added is. */
@@ -4728,10 +4781,9 @@
     }
   }
   /*
-   * Under an Answer: Copy · Add to note ▾ · Regenerate, then its model, scope
-   * and searches; on hover or focus, and always on the newest, while it is
-   * written and once it is added. Hidden ones keep their room and their place
-   * in the Tab order.
+   * Under an Answer: Copy · Add to note ▾ (Stop while it is written); on
+   * hover or focus, and always on the newest, while it is written and once
+   * it is added. Hidden ones keep their room and their place in the Tab order.
    */
   .assistant-answer-actions {
     display: flex;
@@ -4740,8 +4792,8 @@
     gap: 0 2px;
     min-height: 24px;
     margin-left: -6px;
-    font-size: var(--text-label);
-    line-height: var(--text-label--line-height);
+    font-size: 13px;
+    line-height: 18px;
     white-space: nowrap;
     color: var(--color-ink-meta);
     user-select: none;
@@ -4788,30 +4840,254 @@
   .assistant-answer-add:hover > .assistant-answer-action {
     background: var(--color-hover);
   }
-  /* What doesn't fit beside the actions goes onto a line of its own, cut with "…" past its end. */
-  .assistant-answer-actions > .assistant-answer-meta {
+  .assistant-answer-actions > .assistant-answer-status {
+    padding: 0 6px;
+    color: var(--color-ink-meta);
+  }
+
+  /*
+   * An Answer's steps (#391; DESIGN.md, Answer › In the assistant): one
+   * 14/20 line, folded; the live step with its dot while it is written; and,
+   * unfolded, a timeline whose 16px icons a 1px rule joins. Folding and the
+   * chevron turning are instant.
+   */
+  .answer-steps {
     display: flex;
-    flex: 0 1 auto;
-    align-items: center;
-    gap: 0 6px;
+    flex-direction: column;
+    align-items: flex-start;
     min-width: 0;
-    max-width: 100%;
-    min-height: 24px;
-    padding-left: 6px;
+  }
+  .answer-steps-line {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    max-width: calc(100% + 6px);
+    min-height: 26px;
+    margin: 0 0 0 -6px;
+    padding: 3px 6px;
+    border-radius: 6px;
+    font-size: var(--text-ui);
+    line-height: var(--text-ui--line-height);
+    text-align: left;
+    color: var(--color-ink-meta);
+    user-select: none;
+  }
+  .assistant-answer .answer-steps-toggle:hover {
+    background: var(--color-hover);
+  }
+  .assistant-answer .answer-steps-toggle[aria-expanded="true"] {
+    color: var(--color-ink-secondary);
+  }
+  .answer-steps-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+  }
+  .answer-steps-text {
+    min-width: 0;
     overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .answer-steps-chevron {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+
+    [aria-expanded="true"] > & {
+      transform: rotate(90deg);
+    }
+  }
+  .answer-steps-dot {
+    width: 6px;
+    height: 6px;
+    margin: 0 4px;
+    flex-shrink: 0;
+    border-radius: 9999px;
+    background: var(--color-accent);
+    animation: mind-pulse 1.6s ease-in-out infinite;
+  }
+  .answer-steps-dot--waiting {
+    background: var(--color-attention);
+    animation: none;
+  }
+  .answer-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    margin: 6px 0 2px;
+    padding: 0;
+    list-style: none;
+    font-size: var(--text-ui);
+    line-height: var(--text-ui--line-height);
+    color: var(--color-ink-secondary);
+  }
+  .answer-step {
+    position: relative;
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr);
+    column-gap: 10px;
+
+    /* The rule from this step's icon to the next one's. */
+    &:not(:last-child)::before {
+      content: "";
+      position: absolute;
+      top: 22px;
+      bottom: -10px;
+      left: 7.5px;
+      width: 1px;
+      background: var(--color-rule);
+    }
+  }
+  .answer-step-icon {
+    display: flex;
+    width: 16px;
+    height: 20px;
+    align-items: center;
     color: var(--color-ink-meta);
 
-    > * {
-      flex-shrink: 1;
-      min-width: 0;
+    > svg {
+      width: 16px;
+      height: 16px;
+    }
+  }
+  .answer-step-body {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 0;
+  }
+  .answer-step-title {
+    margin: 0;
+    overflow-wrap: break-word;
+  }
+  .answer-step-link {
+    text-align: left;
+    border-radius: 4px;
+  }
+  .assistant-answer .answer-step-link:hover {
+    color: var(--color-ink);
+    text-decoration: underline;
+    text-decoration-color: var(--color-rule-strong);
+    text-underline-offset: 3px;
+  }
+  .answer-step-detail {
+    margin: 0;
+    color: var(--color-ink-meta);
+  }
+  .answer-step-reasoning {
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+
+    &:not([data-whole]) {
+      display: -webkit-box;
       overflow: hidden;
-      text-overflow: ellipsis;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 3;
     }
-    /* "Stopped" and the dots between are never cut: the model and the scope give way first. */
-    > [aria-hidden],
-    > .assistant-answer-status {
-      flex-shrink: 0;
+  }
+  .answer-step-more {
+    margin-top: 4px;
+    border-radius: 4px;
+    color: var(--color-ink-secondary);
+    text-decoration: underline;
+    text-decoration-color: var(--color-rule-strong);
+    text-underline-offset: 3px;
+  }
+  .assistant-answer .answer-step-more:hover {
+    color: var(--color-ink);
+  }
+  .answer-step-queries {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .answer-step-sources {
+    width: 100%;
+    margin: 4px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .answer-step-source {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    height: 28px;
+    margin-left: -6px;
+    padding: 0 6px;
+    border-radius: 6px;
+    text-align: left;
+    color: var(--color-ink-secondary);
+  }
+  .assistant-answer .answer-step-source:hover {
+    background: var(--color-hover);
+    color: var(--color-ink);
+  }
+  .answer-step-source-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    color: var(--color-ink-meta);
+  }
+  .answer-step-source-name {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .answer-step-source-where {
+    flex-shrink: 0;
+  }
+  .answer-step-check[data-check="found"] {
+    color: var(--color-success);
+  }
+  .answer-step-check[data-check="not-found"] {
+    color: var(--color-warning);
+  }
+  .assistant-answer .answer-step-problem {
+    font-size: var(--text-ui);
+    line-height: var(--text-ui--line-height);
+  }
+  /* A Connector's, a Skill's or a script's own row, its icon in the timeline's column. */
+  .answer-step--call {
+    > .answer-call {
+      grid-column: 1 / -1;
+      padding: 0;
+      border-top: 0;
     }
+    .answer-call-summary {
+      gap: 10px;
+      margin-left: 0;
+      padding: 0;
+    }
+    .answer-call-icon {
+      width: 16px;
+      height: 16px;
+    }
+    .answer-call-details,
+    .answer-call-files {
+      margin-left: 26px;
+    }
+  }
+  .answer-steps-regenerate {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 24px;
+    margin: 4px 0 0 20px;
+    padding: 0 7px 0 6px;
+    border-radius: 6px;
+    font-size: 13px;
+    line-height: 18px;
+    font-weight: 600;
+    color: var(--color-ink-secondary);
+  }
+  .assistant-answer .answer-steps-regenerate:hover {
+    background: var(--color-hover);
+    color: var(--color-ink);
   }
   .assistant-answer-actions--added {
     gap: 4px;
@@ -5108,6 +5384,485 @@
     line-height: 20px;
     color: var(--color-ink-meta);
   }
+
+  /* A chart (#436): its colours are tokens only, so it follows the theme. */
+  .chart-block {
+    position: relative;
+    margin: 4px 0 24px;
+    font-family: var(--font-sans);
+    font-size: var(--text-ui);
+    line-height: var(--text-ui--line-height);
+    color: var(--color-ink);
+    cursor: default;
+    user-select: none;
+  }
+  .chart-block.ProseMirror-selectednode .chart-body {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -1px;
+  }
+  .chart-head {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-height: 28px;
+    margin-bottom: 6px;
+  }
+  .chart-title {
+    min-width: 0;
+    overflow: hidden;
+    padding: 0;
+    text-align: start;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    line-height: 18px;
+    font-weight: 600;
+    color: var(--color-ink-meta);
+    cursor: default;
+  }
+  .chart-title-field {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 26px;
+    padding: 0 6px;
+    border: 1px solid var(--color-accent);
+    border-radius: 4px;
+    background: var(--color-sheet);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-ink);
+    outline: none;
+  }
+  .chart-head-space {
+    flex: 1 1 auto;
+  }
+  .chart-head-button {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 4px;
+    height: 26px;
+    padding: 0 6px;
+    border-radius: 6px;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-ink-secondary);
+
+    &:is(:hover, [aria-expanded="true"]) {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: -2px;
+    }
+  }
+  /* The right-click menu's ⋯ button: there for the menu to open from, never seen. */
+  .chart-menu-anchor {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .chart-body {
+    padding: 12px 12px 6px;
+    border: 1px solid var(--color-rule);
+    border-radius: 8px;
+    background: var(--color-sheet);
+  }
+  .chart-plot {
+    position: relative;
+    margin: 0;
+
+    svg {
+      display: block;
+      overflow: visible;
+    }
+  }
+  /* The values lie over the drawing; only they take the pointer. */
+  .chart-marks {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .chart-axis {
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    fill: var(--color-ink-meta);
+  }
+  .chart-label {
+    font-size: 12px;
+    fill: var(--color-ink-secondary);
+  }
+  .chart-grid {
+    stroke: var(--color-rule);
+    stroke-width: 1;
+  }
+  .chart-base {
+    stroke: var(--color-rule-strong);
+    stroke-width: 1;
+  }
+  .chart-line {
+    fill: none;
+    stroke-width: 2;
+    stroke-linejoin: round;
+  }
+  .chart-point {
+    outline: none;
+    cursor: pointer;
+    pointer-events: auto;
+
+    &:hover {
+      opacity: 0.85;
+    }
+  }
+  /* The value in focus, or with its card, in the accent; a pie's slice keeps its colour and is ringed. */
+  :is(rect, circle).chart-point:is([data-active], :focus-visible) {
+    opacity: 1;
+    fill: var(--color-accent);
+  }
+  path.chart-point {
+    stroke: var(--color-sheet);
+    stroke-width: 2;
+  }
+  .chart-ring {
+    fill: none;
+    stroke: var(--color-accent);
+    stroke-width: 3;
+    pointer-events: none;
+  }
+  .chart-fill-prior {
+    fill: var(--color-chart-prior);
+    background: var(--color-chart-prior);
+  }
+  .chart-fill-now {
+    fill: var(--color-ink-secondary);
+    background: var(--color-ink-secondary);
+  }
+  .chart-stroke-prior {
+    stroke: var(--color-chart-prior);
+  }
+  .chart-stroke-now {
+    stroke: var(--color-ink-secondary);
+  }
+  /* Categories in the Tag hues (never green, red or blue), then their darker inks, then grey. */
+  .chart-fill-category0 {
+    fill: var(--color-tag-teal-dot);
+    background: var(--color-tag-teal-dot);
+  }
+  .chart-stroke-category0 {
+    stroke: var(--color-tag-teal-dot);
+  }
+  .chart-fill-category1 {
+    fill: var(--color-tag-purple-dot);
+    background: var(--color-tag-purple-dot);
+  }
+  .chart-stroke-category1 {
+    stroke: var(--color-tag-purple-dot);
+  }
+  .chart-fill-category2 {
+    fill: var(--color-tag-orange-dot);
+    background: var(--color-tag-orange-dot);
+  }
+  .chart-stroke-category2 {
+    stroke: var(--color-tag-orange-dot);
+  }
+  .chart-fill-category3 {
+    fill: var(--color-tag-yellow-dot);
+    background: var(--color-tag-yellow-dot);
+  }
+  .chart-stroke-category3 {
+    stroke: var(--color-tag-yellow-dot);
+  }
+  .chart-fill-category4 {
+    fill: var(--color-tag-teal-ink);
+    background: var(--color-tag-teal-ink);
+  }
+  .chart-stroke-category4 {
+    stroke: var(--color-tag-teal-ink);
+  }
+  .chart-fill-category5 {
+    fill: var(--color-tag-purple-ink);
+    background: var(--color-tag-purple-ink);
+  }
+  .chart-stroke-category5 {
+    stroke: var(--color-tag-purple-ink);
+  }
+  .chart-fill-category6 {
+    fill: var(--color-tag-orange-ink);
+    background: var(--color-tag-orange-ink);
+  }
+  .chart-stroke-category6 {
+    stroke: var(--color-tag-orange-ink);
+  }
+  .chart-fill-category7 {
+    fill: var(--color-tag-yellow-ink);
+    background: var(--color-tag-yellow-ink);
+  }
+  .chart-stroke-category7 {
+    stroke: var(--color-tag-yellow-ink);
+  }
+  .chart-fill-category8 {
+    fill: var(--color-tag-gray-dot);
+    background: var(--color-tag-gray-dot);
+  }
+  .chart-stroke-category8 {
+    stroke: var(--color-tag-gray-dot);
+  }
+  .chart-empty {
+    margin: 0;
+    padding: 24px 0 30px;
+    text-align: center;
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--color-ink-meta);
+  }
+
+  .chart-values {
+    overflow-x: auto;
+
+    table {
+      width: 100%;
+      border: 0;
+      border-radius: 0;
+      border-collapse: collapse;
+      font-variant-numeric: tabular-nums;
+    }
+    :is(th, td) {
+      min-width: 0;
+      padding: 6px 10px;
+      border: 0;
+      border-bottom: 1px solid var(--color-rule);
+      border-radius: 0;
+      background: none;
+      text-align: end;
+      white-space: nowrap;
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 20px;
+      font-weight: 400;
+      color: var(--color-ink);
+    }
+    :is(th, td):first-child {
+      text-align: start;
+    }
+    thead th {
+      font-size: 12px;
+      line-height: 16px;
+      font-weight: 600;
+      color: var(--color-ink-meta);
+    }
+    tbody tr:last-child > * {
+      border-bottom: 0;
+    }
+  }
+  .chart-value {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 2px;
+    border-radius: 4px;
+    cursor: pointer;
+
+    &:is(:hover, [data-active]) {
+      background: var(--color-hover);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 1px;
+    }
+  }
+
+  .chart-check {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    background: var(--color-chip);
+    color: var(--color-ink-secondary);
+  }
+  .chart-check--md {
+    width: 14px;
+    height: 14px;
+  }
+  .chart-check-icon {
+    width: 10px;
+    height: 10px;
+  }
+  .chart-check--found {
+    background: var(--color-success);
+    color: var(--color-sheet);
+  }
+  :is(.chart-check--not-found, .chart-check--unsupported) {
+    background: var(--color-warning-wash);
+    color: var(--color-warning);
+  }
+  .chart-check--contradicted {
+    background: var(--color-sheet);
+    box-shadow: inset 0 0 0 1.5px var(--color-danger);
+    color: var(--color-danger);
+  }
+  .chart-check--checking {
+    color: var(--color-ink-meta);
+  }
+  .chart-check--none {
+    width: 10px;
+    height: 10px;
+    margin: 0 2px;
+    border-radius: 50%;
+    background: none;
+    box-shadow: inset 0 0 0 1.5px var(--color-ink-placeholder);
+  }
+  /* In a table cell, a found check is just its tick, as the margin's is. */
+  .chart-check--sm {
+    width: 12px;
+    height: 12px;
+
+    &.chart-check--found {
+      background: none;
+      color: var(--color-success);
+    }
+    &.chart-check--none {
+      width: 8px;
+      height: 8px;
+    }
+    .chart-check-icon {
+      width: 11px;
+      height: 11px;
+    }
+  }
+
+  .chart-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 14px;
+    margin-top: 8px;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  .chart-legend {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+  }
+  .chart-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .chart-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+  }
+  .chart-source {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  .chart-link {
+    padding: 0 2px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-accent);
+
+    &:hover {
+      text-decoration: underline;
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+    }
+  }
+
+  .chart-card {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    box-sizing: border-box;
+    width: 300px;
+    max-width: calc(100vw - 16px);
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: var(--color-sheet);
+    box-shadow: var(--shadow-popover);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--color-ink);
+
+    p {
+      margin: 0;
+    }
+  }
+  .chart-card-title {
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 600;
+    color: var(--color-ink-meta);
+  }
+  .chart-card-value {
+    font-size: 15px;
+    line-height: 22px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+  }
+  .chart-card-detail {
+    font-size: 12px;
+    line-height: 16px;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-ink-secondary);
+  }
+  .chart-card-source {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    margin-top: 6px;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  .chart-card-where {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .chart-card-open {
+    flex: none;
+    padding: 0 2px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-accent);
+
+    &:hover {
+      text-decoration: underline;
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+    }
+  }
+  .chart-card-cut {
+    margin-top: 6px;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
 }
 
 @keyframes mind-pulse {
@@ -5139,7 +5894,8 @@
 /* Reduced motion: checks appear at once, and nothing pulses. */
 :root:not([data-motion="on"]) :is(.margin-check-icon, .margin-check--reveal),
 :root:not([data-motion="on"]) :is(.citation-marker-icon, .edit-pending-dot),
-:root:not([data-motion="on"]) .answer-writing::before {
+:root:not([data-motion="on"]) .answer-writing::before,
+:root:not([data-motion="on"]) .answer-steps-dot {
   animation: none;
 }
 /* Washed while it lasts, with no fade. */

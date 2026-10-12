@@ -118,11 +118,11 @@ export const TURN_INTO: readonly TurnInto[] = [TEXT, ...BLOCK_KINDS];
 export const currentTurnInto = (editor: Editor): TurnInto =>
   BLOCK_KINDS.find((kind) => kind.active(editor)) ?? TEXT;
 
-const NOT_TURNED: readonly string[] = ["codeBlock", "blockMath", "table"];
+const NOT_TURNED: readonly string[] = ["codeBlock", "blockMath", "table", "chart"];
 
 /**
  * Whether the selection lies in Notes of text: Questions and Answers are not
- * turned into anything else, and neither are code blocks, formulas and tables.
+ * turned into anything else, and neither are code blocks, formulas, tables and charts.
  */
 export function canTurnInto(editor: Editor): boolean {
   const { doc, selection } = editor.state;

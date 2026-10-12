@@ -11,6 +11,7 @@ import {
   launchApp,
   newMind,
   openSettings,
+  openSteps,
   pathsShown,
   removeDataFolder,
   setWindowSize,
@@ -115,7 +116,7 @@ test("Make this a Skill: the model drafts it from the Mind, the User edits it in
   await window.keyboard.press("Enter");
   const answer = assistantAnswers(window).nth(1);
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-  await expect(answer.getByTestId("answer-skill")).toHaveAttribute(
+  await expect((await openSteps(window, answer)).getByTestId("answer-skill")).toHaveAttribute(
     "data-skill-name",
     "liability-cap-review",
   );

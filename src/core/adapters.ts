@@ -8,7 +8,14 @@
 import type { ChildProcess } from "node:child_process";
 import type { AgentLauncher } from "./agents";
 import type { AnswerEngine } from "./answers/engine";
-import type { AudioSource, ExternalService, SandboxLevel, SecretProtection } from "./api";
+import type {
+  AudioSource,
+  EngineSwitchReason,
+  ExternalService,
+  SandboxLevel,
+  SecretProtection,
+  TranscriptionEngine,
+} from "./api";
 import type { Reranker } from "./documents/searchTool";
 import type { AnswerSearchTuning } from "./documents/searchTuning";
 import type { WatchFolder } from "./documents/watcher";
@@ -515,6 +522,8 @@ export interface SpeechSegment {
   final: boolean;
   /** How long decoding it took, in ms: what tells whether this computer keeps up. */
   decodeMs: number;
+  /** The engine couldn't decode it: a final with no text. */
+  failed?: true;
 }
 
 /**
@@ -550,6 +559,25 @@ export interface TranscriberListener {
   failed(stream: string, message: string): void;
   /** The engine stopped by itself (it crashed, or ran out of memory): its streams are gone. */
   stopped(reason: string): void;
+  /** The transcriber moved a stream to another engine, for the stream's audio from now on. */
+  switched(change: EngineSwitch): void;
+}
+
+export interface EngineSwitch {
+  stream: string;
+  from: TranscriptionEngine;
+  to: TranscriptionEngine;
+  reason: EngineSwitchReason;
+}
+
+/**
+ * Draws an SVG document as a PNG, for a picture in an export (a chart in a
+ * Word file, #436). The desktop app draws it in a hidden window that loads
+ * nothing from the network (src/main/pictures.ts); tests pass a fake.
+ */
+export interface Pictures {
+  /** The SVG drawn at its own size in pixels (its `width` and `height`), as PNG bytes. */
+  png(svg: string): Promise<Uint8Array>;
 }
 
 export interface CoreAdapters {
@@ -563,6 +591,11 @@ export interface CoreAdapters {
    * Absent (tests that don't need it): both are refused.
    */
   shell?: FileShell;
+  /**
+   * Draws a chart's picture for a Word export. Absent (tests that don't need
+   * it): a chart goes into Word as the table of its values instead.
+   */
+  pictures?: Pictures;
   /** How Linked folders are watched (see `LinkedFolderOptions`). */
   linkedFolders?: LinkedFolderOptions;
   /**

@@ -283,6 +283,7 @@ const DocumentRow = memo(function DocumentRow({
 }) {
   const t = useT();
   const [renaming, setRenaming] = useState(false);
+  const button = useRef<HTMLButtonElement>(null);
   const shownName = displayName(item);
   const source = sourceOf(item);
   const chips = chipsOf(item.tags, tagsById);
@@ -316,11 +317,19 @@ const DocumentRow = memo(function DocumentRow({
           style={rowPadding(depth)}
         >
           <DocumentLineIcon kind={item.kind} className={rowIconClass(false)} />
-          <RenameInput item={item} onDone={() => setRenaming(false)} />
+          <RenameInput
+            item={item}
+            onDone={() => {
+              setRenaming(false);
+              // Back on its row, so the keyboard carries on from there.
+              requestAnimationFrame(() => button.current?.focus());
+            }}
+          />
         </div>
       ) : (
         // Opens the Document in the viewer, replacing whatever it showed.
         <button
+          ref={button}
           type="button"
           {...TREE_ROW}
           data-testid="open-document"
@@ -333,6 +342,13 @@ const DocumentRow = memo(function DocumentRow({
           onClick={() => openDocument({ documentId: item.id })}
           draggable
           onDragStart={(event) => startDocumentDrag(event, item.id)}
+          onDoubleClick={() => setRenaming(true)}
+          onKeyDown={(event) => {
+            if (event.key === "F2") {
+              event.preventDefault();
+              setRenaming(true);
+            }
+          }}
           className={rowButtonClass}
           style={rowPadding(depth)}
         >
@@ -450,6 +466,7 @@ function RenameInput({ item, onDone }: { item: Document; onDone(): void }) {
       aria-label={t("documents.renameLabel", { name: item.name })}
       onChange={(event) => setValue(event.target.value)}
       onKeyDown={(event) => {
+        if (event.nativeEvent.isComposing) return;
         if (event.key === "Enter" || event.key === "Escape") {
           event.preventDefault();
           finish(event.key === "Enter");
