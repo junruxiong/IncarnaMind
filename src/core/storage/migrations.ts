@@ -1312,6 +1312,17 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
+    version: 59,
+    description:
+      "Outside agents remember the settings files and folders IncarnaMind created (#495)",
+    sql: `
+      -- The settings files, and the folders for them, that setting an agent up created because
+      -- they did not exist (a JSON list of absolute paths, shallowest first), so Disconnect can
+      -- take back what IncarnaMind made and nothing the User had. On this device only.
+      ALTER TABLE agent_pairings ADD COLUMN created_paths TEXT NOT NULL DEFAULT '[]';
+    `,
+  },
+  {
     version: 60,
     description: "Answers in conversations keep their calculated figures (#438)",
     sql: `
