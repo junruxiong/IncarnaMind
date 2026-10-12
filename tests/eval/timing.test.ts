@@ -203,7 +203,7 @@ describe("Recording an Answer", () => {
     );
     expect(timing?.searches).toHaveLength(1);
     expect(timing?.searches[0]?.passages).toBeGreaterThan(0);
-    expect(timing?.searches[0]?.rerankMs).not.toBeNull();
+    expect(timing?.searches[0]?.rerankMs).toBeNull();
     expect(timing?.firstTextMs).not.toBeNull();
     expect(timing?.firstTextMs ?? 0).toBeGreaterThanOrEqual(calls[1]?.endMs ?? 0);
     expect(timing?.totalMs ?? 0).toBeGreaterThanOrEqual(timing?.firstTextMs ?? Infinity);
@@ -305,11 +305,20 @@ describe("Tuning the search Tool for Answers", () => {
   });
 
   test("leaves reranking out, or changes how many Passages a search hands over", async () => {
+    const searchesOnce = scriptedModel((call) =>
+      call.tools.length > 0
+        ? { error: { status: 400, message: "this model does not support tools" } }
+        : { text: JSON.stringify({ answer: "Spring tides come at new moon.", citations: [] }) },
+    );
     const searched = async (settings: { rerankDepth?: number | "off"; maxPassages?: number }) => {
       const recorder = createTimingRecorder();
-      const setup = await setUpWithDocuments(citing(), [{ name: "Tides.pdf", contents: TIDES }], {
-        answerSearch: answerSearchOf(settings, recorder),
-      });
+      const setup = await setUpWithDocuments(
+        searchesOnce,
+        [{ name: "Tides.pdf", contents: TIDES }],
+        {
+          answerSearch: answerSearchOf(settings, recorder),
+        },
+      );
       const run = await runCitations(
         libraryOf(setup, recorder),
         [QUESTION],

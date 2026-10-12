@@ -981,7 +981,7 @@ export const zhCN = {
 
   "rerank.settings.title": "重新排序",
   "rerank.settings.body":
-    "文档搜索会用重排序模型调整最佳结果的顺序，让最相关的段落排在前面。默认开启，使用在这台电脑上运行的内置模型；Cohere 和 Voyage AI 需要密钥。你也可以关闭它。",
+    "文档搜索会用重排序模型调整最佳结果的顺序，让最相关的段落排在前面。默认开启，使用在这台电脑上运行的内置模型；Cohere 和 Voyage AI 需要密钥。你也可以关闭它。重排序用于只搜索一次的模型生成的回答、写作建议，以及检查和对比表；能调用工具的模型搜索时不使用，段落没能回答问题时它会再搜一次。",
   "rerank.settings.inUse": "{service} 正在为搜索结果重新排序（{model}）。",
   "rerank.settings.sends": "每次搜索和找到的段落都会发送到 {service}。",
   "rerank.settings.builtInUse": "内置模型正在为搜索结果重新排序（{model}）。",
