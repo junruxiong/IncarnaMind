@@ -1,4 +1,12 @@
-import { type KeyboardEvent, useCallback, useEffect, useId, useRef, useState } from "react";
+import {
+  type KeyboardEvent,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 /** Two clicks this close in time and place are a double-click, whichever row is under the second. */
 const DOUBLE_CLICK_MS = 500;
@@ -104,7 +112,9 @@ export function useRename<E extends HTMLElement>(what: string, settleClick?: () 
   // One per row on screen: the same Document can be in the sidebar and the Library at once.
   const key = useId();
   const settle = useRef(settleClick);
-  settle.current = settleClick;
+  useLayoutEffect(() => {
+    settle.current = settleClick;
+  });
 
   const start = useCallback(() => setRenaming(true), []);
   const stop = useCallback(() => {
