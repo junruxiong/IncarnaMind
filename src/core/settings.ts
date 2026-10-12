@@ -81,6 +81,7 @@ const userScope: Scope<UserSettings> = {
       pdf: { includeQuestions: false },
     },
     monthlyCap: null,
+    webSearch: false,
   },
   validators: {
     language: isLanguagePreference,
@@ -90,6 +91,7 @@ const userScope: Scope<UserSettings> = {
     leaveOutOwnFiles: isBoolean,
     exportOptions: isExportPreferences,
     monthlyCap: (value): value is MonthlyCap | null => value === null || isMonthlyCap(value),
+    webSearch: isBoolean,
   },
 };
 

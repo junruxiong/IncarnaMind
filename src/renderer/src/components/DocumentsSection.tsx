@@ -2,6 +2,7 @@ import { type ChangeEvent, memo, type ReactNode, useMemo, useRef, useState } fro
 import type { Document, DocumentStatus, Tag } from "../../../core/api";
 import { displayName, sourceOf } from "../../../shared/documentNames";
 import type { MessageKey } from "../../../shared/i18n";
+import { startDocumentDrag } from "../documentDrag";
 import { documentStatusText } from "../documentStatus";
 import { useLanguage, useT } from "../i18n";
 import { currentTabOf } from "../layoutSlice";
@@ -300,6 +301,8 @@ const DocumentRow = memo(function DocumentRow({
             .join("\n")}
           // A preview beside the Mind, or in the group already showing a Document.
           onClick={() => openDocument({ documentId: item.id })}
+          draggable
+          onDragStart={(event) => startDocumentDrag(event, item.id)}
           className={rowButtonClass}
           style={rowPadding(depth)}
         >
