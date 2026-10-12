@@ -36,6 +36,7 @@ import { ChartKindMenu } from "./ChartKindMenu";
 import { ChartPlot, type PointEvents, type PointRef, samePoint } from "./ChartPlot";
 import { ChartPointCard } from "./ChartPointCard";
 import { ChartValues } from "./ChartValues";
+import { chartCardPlace } from "./chartCardPlace";
 import { changeChart, chartTable, tableUpdate, toggledSeries, withKind } from "./chartCommands";
 import { type ChartHandle, chartHandles } from "./chartHandles";
 import { Popover } from "./Popover";
@@ -488,8 +489,14 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
           <Popover
             anchor={card.anchor}
             placement="top"
-            // Between the plot's top and bottom: never over the chart's head (its "Bar ⌄") or its foot.
-            {...(frame && { within: frame })}
+            {...(frame && {
+              middleware: () =>
+                chartCardPlace(
+                  frame,
+                  frame.closest(".mind-column"),
+                  chart.kind === "pie" && !asTable,
+                ),
+            })}
             onDismiss={(how) => {
               // Esc on a value the foot found goes back to the foot, for the next.
               const back = how === "escape" && foundShown ? findButton.current : null;
