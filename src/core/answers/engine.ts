@@ -89,6 +89,7 @@ import type {
   TokenUsage,
 } from "../runs/engine";
 import { DOCUMENT_TOOLS, offeredTools, type Tool, type ToolProviderInfo } from "../tools";
+import { asksForFixes } from "./citations";
 import { earlierContext } from "./context";
 import { missingMarkerEvents, textEdits } from "./markerPlacement";
 import {
@@ -1133,6 +1134,8 @@ async function* toolLoop(
     thirdParty.push({ via: "read", source });
     unannounced.push(source);
   };
+  /** Whether `cite`'s reply to each call asked the model to fix records, by the call's id. */
+  const citeAskedForFixes = new Map<string, boolean>();
   /**
    * A Tool as the engine calls it: one with untrusted results taints the Run
    * once it returns some; one that counts what it found (Find sources) says
@@ -1151,6 +1154,7 @@ async function* toolLoop(
         ? (results.get(context.toolCallId) ?? 0) > 0
         : result.trim() !== "";
       if (tool.untrustedResult && read) tainted = true;
+      if (tool === cite) citeAskedForFixes.set(context.toolCallId, asksForFixes(result));
       return result;
     },
   });
@@ -1201,6 +1205,8 @@ async function* toolLoop(
   let keptText = "";
   /** The Tools the current step called. */
   let stepTools: Tool[] = [];
+  /** An earlier step wrote the Answer and recorded its Citations: text with markers after that is a second copy. */
+  let answered = false;
   /** The Tool of each call, by its id. */
   const calls = new Map<string, Tool>();
   /** Searches running now: the Answer is "searching" while there are any. */
@@ -1219,6 +1225,14 @@ async function* toolLoop(
         : RUN;
     },
     window,
+    // The Answer written beside `cite` and every record taken is complete: another call would only write it again.
+    endsAfter: (step) =>
+      cite !== null &&
+      MARKER.test(step.text) &&
+      step.calls.length > 0 &&
+      step.calls.every(
+        (call) => offered.get(call.tool) === cite && citeAskedForFixes.get(call.id) === false,
+      ),
     temperature,
     signal,
   })) {
@@ -1277,8 +1291,14 @@ async function* toolLoop(
         const preamble =
           stepTools.some((each) => each !== cite) ||
           (cite !== null && stepTools.includes(cite) && !MARKER.test(stepText));
-        if (preamble && stepText) yield { type: "text-retracted", length: stepText.length };
-        else keptText += stepText;
+        // After `cite` asked for fixes to an Answer written beside it, the model writes the Answer again.
+        const again = answered && MARKER.test(stepText);
+        if ((preamble || again) && stepText) {
+          yield { type: "text-retracted", length: stepText.length };
+        } else {
+          keptText += stepText;
+          if (cite !== null && stepTools.includes(cite) && MARKER.test(stepText)) answered = true;
+        }
         stepText = "";
         stepTools = [];
         break;
