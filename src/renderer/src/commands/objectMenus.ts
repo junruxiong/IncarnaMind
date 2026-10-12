@@ -1,7 +1,6 @@
 import { registerMenu } from "./menus";
 
-// Later features add their items with registerMenu: Move to… (#229, #212), Copy path and Get info (#249),
-// Add to note (#201), History (#300), Tag colour and merge (#205).
+// Later features add their items with registerMenu: Move to… (#229, #212), Add to note (#201), History (#300), Tag colour and merge (#205).
 
 /** Export as… the last format (⇧⌘E), each other format, then the options sheet (#100). */
 const EXPORTS = [
@@ -36,8 +35,10 @@ registerMenu("document", [
   "document.rename",
   "document.openExternally",
   "document.showInFolder",
+  "file.copyPath",
   "document.openLivePage",
   "document.copyAddress",
+  "file.info",
   "document.delete",
 ]);
 
@@ -58,9 +59,13 @@ registerMenu("linkedFolder", [
   "linkedFolder.layout",
   "linkedFolder.download",
   "linkedFolder.reveal",
+  "file.copyPath",
+  "file.info",
   "linkedFolder.locate",
   "linkedFolder.unlink",
 ]);
+
+registerMenu("deleted", ["deleted.restore", "deleted.deletePermanently"]);
 
 // A tab's menu is its Mind's, then the tab's own.
 registerMenu("tab", [...EXPORTS, "mind.moveTo", "mind.delete"], 0);
