@@ -89,10 +89,20 @@ export interface RequestQuirks {
   };
 }
 
+/**
+ * How far IncarnaMind stands behind a provider (ADR-0019). A first-class one is
+ * in the first-run setup, has a key guide where it needs a key, and is tried by
+ * hand before each release. A best-effort one stays in the catalog and keeps
+ * working for Users who have a key, listed under "More providers", with a link
+ * to the provider's key page and no more.
+ */
+export type Support = "first-class" | "best-effort";
+
 export interface CatalogProvider {
   /** Stable, stored on the provider row (`chat_providers.catalog_id`). */
   id: string;
   name: Localized;
+  support: Support;
   group: "international" | "china" | "local" | "other";
   adapter: Adapter;
   /**
@@ -105,6 +115,11 @@ export interface CatalogProvider {
   apiKey: "required" | "optional" | "none";
   /** Where the User gets a key ("Get a key ↗"). */
   keyUrl?: string;
+  /**
+   * "How do I get one?": the steps to a key, in plain words, for a first-class
+   * provider that needs one. The provider's own page (`keyUrl`) has the screens.
+   */
+  keyGuide?: readonly Localized[];
   docsUrl?: string;
   request?: RequestQuirks;
   /** Model ids for the roles it offers. A provider whose models the User names has none. */

@@ -1,9 +1,11 @@
 import type { ReactNode } from "react";
 import type { Document } from "../../../core/api";
 import { useT } from "../i18n";
+import type { ObjectRef } from "../objects";
 import { TREE_ROW } from "../treeKeys";
 import { ChevronDownLineIcon, ChevronRightLineIcon } from "./lineIcons";
-import { rowButtonClass, rowClass } from "./sidebarRows";
+import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
+import { rowActionsClass, rowButtonClass, rowClass } from "./sidebarRows";
 
 /** How many Documents a Tag lists under it in the sidebar; the Library shows them all. */
 const LISTED = 50;
@@ -20,6 +22,7 @@ export function BrowseGroup({
   icon,
   name,
   title = name,
+  object,
   documents,
   selected,
   selectedAs = "current",
@@ -35,6 +38,8 @@ export function BrowseGroup({
   name: string;
   /** Its name's tooltip, if not its name: a Tag's description. */
   title?: string;
+  /** What its menu is of (a Tag), if it has one: a right-click on the row, or its ⋯, opens it. */
+  object?: ObjectRef;
   documents: readonly Document[];
   /**
    * Chosen: a Folder the Library shows (`aria-current`), or a Tag the Tag
@@ -50,9 +55,10 @@ export function BrowseGroup({
   const t = useT();
   const count = documents.length;
   const Chevron = expanded ? ChevronDownLineIcon : ChevronRightLineIcon;
+  const objectMenu = useObjectMenu(object ?? { kind: "tag", id: "" });
   return (
     <li data-testid={testId} data-count={count} {...data}>
-      <div className={rowClass(selected)}>
+      <div className={rowClass(selected)} {...(object ? objectMenu.rowProps : {})}>
         <button
           type="button"
           {...TREE_ROW}
@@ -82,6 +88,11 @@ export function BrowseGroup({
         ) : (
           // Where the chevron would be, so every count lines up.
           <span aria-hidden="true" className="size-6 shrink-0" />
+        )}
+        {object && (
+          <div className={rowActionsClass} style={{ right: 29 }}>
+            <ObjectMenu target={object} label={t("tags.menu.of", { name })} />
+          </div>
         )}
       </div>
       {expanded && count > 0 && (

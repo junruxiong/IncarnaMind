@@ -19,6 +19,7 @@ import {
   errorTextClass,
   fieldLabelClass,
   hintClass,
+  inputClass,
   primaryButtonClass,
 } from "../ui";
 import { useModal } from "../useModal";
@@ -45,12 +46,14 @@ export function ConnectAgentDialog({
   busy: boolean;
   /** Why the last try to connect failed, shown here, where it happened. */
   problem: string | null;
-  onAllow(folderIds: string[]): void;
+  onAllow(folderIds: string[], name: string): void;
   onClose(): void;
 }) {
   const t = useT();
   const dialog = useModal(client !== null, { focusDialog: true });
   const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set());
+  /** The name the User gives "Other agent". */
+  const [name, setName] = useState("");
   const [preview, setPreview] = useState<AgentSetupPreview | null>(null);
   /** Where the agent's key can be kept: with no keyring (Linux), only once the User allows plain text. */
   const [storage, setStorage] = useState<SecretStorageStatus | null>(null);
@@ -61,6 +64,7 @@ export function ConnectAgentDialog({
   // A new agent starts with no Folder chosen, and its own preview.
   useEffect(() => {
     setChosen(new Set());
+    setName("");
     setPreview(null);
     if (!clientId) return;
     let current = true;
@@ -76,7 +80,7 @@ export function ConnectAgentDialog({
   }, [clientId, reportError]);
   const canKeepKey = storage?.canSave !== false;
 
-  const agent = client ? clientName(client, t) : "";
+  const agent = client ? name.trim() || clientName(client, t) : "";
   const toggle = (folderId: string, on: boolean) => {
     const next = new Set(chosen);
     if (on) next.add(folderId);
@@ -102,6 +106,19 @@ export function ConnectAgentDialog({
           {t("agents.connect.title", { agent })}
         </h2>
         <p className={dialogTextClass}>{t("agents.connect.body", { agent })}</p>
+        {client?.id === "other" && (
+          <label className="flex flex-col gap-1">
+            <span className={fieldLabelClass}>{t("agents.connect.name")}</span>
+            <input
+              type="text"
+              data-testid="connect-agent-name"
+              value={name}
+              placeholder={t("agents.client.other")}
+              onChange={(event) => setName(event.target.value)}
+              className={inputClass}
+            />
+          </label>
+        )}
         <fieldset className="flex flex-col gap-1">
           <legend className={fieldLabelClass}>{t("agents.connect.folders")}</legend>
           {folders.length === 0 ? (
@@ -167,7 +184,7 @@ export function ConnectAgentDialog({
             type="button"
             data-testid="connect-agent-allow"
             disabled={chosen.size === 0 || busy || !canKeepKey}
-            onClick={() => onAllow([...chosen])}
+            onClick={() => onAllow([...chosen], name)}
             className={primaryButtonClass}
           >
             {t("agents.connect.allow")}

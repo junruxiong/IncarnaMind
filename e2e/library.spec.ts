@@ -114,13 +114,11 @@ test("folders, tags, search, edits and removal update the index while originals 
     await window.setViewportSize({ width: 1000, height: 760 });
     // The viewer opens beside the Library: at 1,000px, with the assistant at the bottom (#253).
     await placeAssistant(window, { dock: "bottom" });
-    await window.screenshot({ path: "/tmp/incarnamind-organize-manual.png" });
     await library.getByRole("button", { name: "Quarterly report", exact: true }).click();
     await expect(window.getByTestId("viewer")).toBeVisible();
     await expect
       .poll(() => library.evaluate((element) => element.scrollWidth <= element.clientWidth))
       .toBe(true);
-    await window.screenshot({ path: "/tmp/incarnamind-organize-viewer.png" });
   } finally {
     await app.close();
   }
@@ -189,7 +187,6 @@ test("one Organize action assigns folder and tags, preserves corrections and sur
     await expect(row.getByTestId("document-tags")).toContainText("Membrane");
     await library.getByLabel("Find by name or tag").fill("Membrane");
     await expect(row).toHaveCount(1);
-    await window.screenshot({ path: "/tmp/incarnamind-organize-tags.png" });
   } finally {
     await app.close();
   }
@@ -227,7 +224,6 @@ test("onboarding offers starter folders and Chinese tagging settings", async () 
     await expect(window.getByTestId("settings-page-title")).toHaveText("模型");
     await expect(window.getByTestId("tagging-settings")).toContainText("自动打标签");
     await window.getByTestId("settings-close").click();
-    await window.screenshot({ path: "/tmp/incarnamind-organize-chinese.png" });
   } finally {
     await app.close();
   }
@@ -357,7 +353,6 @@ test("Auto routes text and scans with tags, reports failures, retries and preser
     section = await taggingSettings(window);
     await expect(images).not.toBeChecked();
     await closeSettings(window);
-    await window.screenshot({ path: "/tmp/incarnamind-organize-auto.png" });
   } finally {
     await app.close();
     server.closeAllConnections();
@@ -410,7 +405,6 @@ test("organized folders remain separate from source locations and follow changes
     await expect(library.locator("summary").filter({ hasText: /^Organized$/ })).toHaveCount(6);
     await expectReadyDocuments(window, 6);
     await window.setViewportSize({ width: 1280, height: 860 });
-    await window.screenshot({ path: "/tmp/incarnamind-organize-overview.png" });
     const row = library
       .getByTestId("library-document")
       .filter({ has: window.getByRole("button", { name: "Membrane separation", exact: true }) });
@@ -439,7 +433,6 @@ test("organized folders remain separate from source locations and follow changes
     await expect(row.getByTestId("document-tags-popover")).toBeVisible();
     await window.keyboard.press("Escape");
     await expect(row.getByTestId("document-tags-popover")).toBeHidden();
-    await window.screenshot({ path: "/tmp/incarnamind-organize-compact.png" });
   } finally {
     await app.close();
   }
