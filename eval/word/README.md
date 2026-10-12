@@ -2,13 +2,13 @@
 
 Issue #84, for the Word work in #74: the files that #104 (import) and #105 (export back into the original) are checked against, from simple memos to 125-page agreements, in ten languages, with the Word features a round-trip has to keep.
 
-- **Core set, committed (88 files, 1.7 MB):**
+- **Core set, committed (90 files, 1.7 MB):**
   - `documents/`: 30 realistic documents, in English and Chinese.
   - `tracked-changes/`: 20 files with someone else's tracked changes.
   - `breadth/`: 36 files for more domains, languages and complexity: 14 synthetic domain documents, 4 Chinese and Taiwanese official documents, 18 real test documents.
-  - `saved/`: files re-saved by hand in Word for Mac (2 so far) and Google Docs; see [`TO-SAVE.md`](TO-SAVE.md).
+  - `saved/`: files re-saved by hand in Word for Mac and Google Docs (2 each); the 2 WPS ones are the step left, see [`TO-SAVE.md`](TO-SAVE.md).
 - **Extended set, not committed (148 files, 2.8 MB when fetched):** listed in [`extended.json`](extended.json) and [`EXTENDED.md`](EXTENDED.md) with a commit-pinned URL, SHA-256, licence and features each; `npm run eval:word:fetch` puts them in a cache. 127 are real test documents; 21 are synthetic documents generated on the same run.
-- **Together:** 236 files. The coverage table below says what is where.
+- **Together:** 238 files. The coverage table below says what is where.
 
 Domains: legal (contracts, a court filing, policies), finance (annual reports, a prospectus, an audit letter), medical and pharma (protocols, SOPs), academic (papers with equations, a thesis), government (notices, regulations, forms), engineering (specifications and standards with numbered requirements), HR, education, and general business memos. Languages: English, Simplified and Traditional Chinese, Japanese, Korean, German, French, Spanish, Arabic (right-to-left), Hebrew (right-to-left) and files that mix languages.
 
@@ -25,7 +25,7 @@ Domains: legal (contracts, a court filing, policies), finance (annual reports, a
 | `docx-js` | MIT | Layout-probe documents from [docx](https://github.com/dolanmiu/docx) (`scripts/layout-probes`), including a 150-page one and files saved from Word. |
 | `docx-preview`, `mammoth`, `python-docx` | Apache-2.0, BSD-2-Clause, MIT | A few test files from [docxjs](https://github.com/VolodymyrBaydalka/docxjs), [mammoth.js](https://github.com/mwilliamson/mammoth.js) and [python-docx](https://github.com/python-openxml/python-docx), in the extended set. |
 | `government` | Not copyrightable | Four official documents of Chinese and Taiwanese state organs. The basis for each is below. |
-| `word-mac`, `google-docs` | Apache-2.0 | Re-saves of synthetic files by the application named (`saved/`). |
+| `word-mac`, `google-docs` | Apache-2.0 | Re-saves of synthetic files by the application named (`saved/`): Word for Mac, and Google Docs (web) saved as a Google Doc then exported as .docx, both on 2026-10-12. |
 
 Real files are byte for byte as published (`sha256` in [`manifest.json`](manifest.json) and `extended.json`), except the four official documents, which have their file properties cleaned (below).
 
@@ -129,7 +129,7 @@ Each cell is the number of files, and in brackets how many of them are committed
 | Text boxes | 10 (5) | · | · | 2 (0) | · | 2 (0) | · | 1 (0) | · | · | 1 (0) | 4 (2) | 20 (7) |
 | Shapes | 13 (5) | · | · | 2 (0) | · | 3 (0) | · | 3 (0) | · | · | 1 (0) | 8 (3) | 30 (8) |
 | Embedded objects | 3 (0) | · | · | · | · | · | · | · | · | · | · | 6 (1) | 9 (1) |
-| Right-to-left | 15 (5) | 1 | · | · | 1 (0) | 4 (0) | · | 1 | 10 (2) | 2 (1) | 1 (0) | 10 (2) | 45 (12) |
+| Right-to-left | 3 (2) | · | · | · | 1 (0) | · | · | · | 10 (2) | 2 (1) | 1 (0) | 1 | 18 (6) |
 | Older compatibility mode | 67 (17) | 10 (3) | 1 | 7 (1) | 2 (0) | 3 (1) | 4 (1) | 3 (0) | 5 (0) | · | 2 | 41 (18) | 145 (44) |
 | 100+ pages | 4 (2) | 1 (0) | · | · | · | · | · | · | · | · | · | · | 5 (2) |
 
@@ -164,7 +164,7 @@ Each cell is the number of files, and in brackets how many of them are committed
 | Text boxes | 1 | · | · | · | · | 1 | · | 2 (0) | 1 (0) | 15 (5) | 20 (7) |
 | Shapes | 1 | · | · | · | · | 1 | · | 2 (0) | 1 (0) | 25 (6) | 30 (8) |
 | Embedded objects | · | · | · | · | · | · | · | · | · | 9 (1) | 9 (1) |
-| Right-to-left | 1 | 1 | · | 1 (0) | 1 | · | 2 | 1 (0) | 1 (0) | 37 (7) | 45 (12) |
+| Right-to-left | 1 | · | · | 1 (0) | · | · | 1 | 1 (0) | 1 (0) | 13 (4) | 18 (6) |
 | Older compatibility mode | 2 | 1 | 1 | · | 2 | 1 | 1 | · | · | 137 (36) | 145 (44) |
 | 100+ pages | 1 | 1 (0) | · | 1 (0) | · | 1 (0) | · | · | · | 1 | 5 (2) |
 
@@ -182,7 +182,7 @@ Lang: `en`, `zh` (Simplified), `zh-TW`, `ja`, `ko`, `de`, `fr`, `es`, `ar`, `he`
 
 | File | Lang | Domain | Licence | Source | Kinds | Features (count) |
 |---|---|---|---|---|---|---|
-| `libreoffice/FDO76312.docx` | en | test | MPL-2.0 | [libreoffice](https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/FDO76312.docx) | 13 | Fields 2, Bookmarks 1, Headers and footers 2, Tables 1, Merged cells 4, Lists 5, Content controls 7, Images 1, Images with wrap 1, Text boxes 2, Shapes 2, Right-to-left 50, Older compatibility mode 1 |
+| `libreoffice/FDO76312.docx` | en | test | MPL-2.0 | [libreoffice](https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/FDO76312.docx) | 13 | Fields 2, Bookmarks 1, Headers and footers 2, Tables 1, Merged cells 4, Lists 5, Content controls 7, Images 1, Images with wrap 1, Text boxes 2, Shapes 2, Right-to-left 18, Older compatibility mode 1 |
 | `libreoffice/tdf124637_sectionMargin.docx` | en | test | MPL-2.0 | [libreoffice](https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/tdf124637_sectionMargin.docx) | 10 | Footnotes 1, Fields 6, TOC 1, Cross-references 4, Bookmarks 5, Headers and footers 6, Several sections 6, Columns 1, Lists 7, Content controls 2 |
 | `libreoffice/tdf103976.docx` | n/a | test | MPL-2.0 | [libreoffice](https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/tdf103976.docx) | 7 | Fields 1, Bookmarks 1, Headers and footers 1, Tables 2, Nested tables 1, Lists 2, Older compatibility mode 1 |
 | `libreoffice/fdo69649.docx` | n/a | test | MPL-2.0 | [libreoffice](https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/fdo69649.docx) | 8 | Fields 24, TOC 1, Cross-references 21, Bookmarks 27, Headers and footers 6, Content controls 1, Right-to-left 4, Older compatibility mode 1 |
@@ -220,7 +220,7 @@ Lang: `en`, `zh` (Simplified), `zh-TW`, `ja`, `ko`, `de`, `fr`, `es`, `ar`, `he`
 | `libreoffice/tdf123054.docx` | n/a | test | MPL-2.0 | [libreoffice](https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/tdf123054.docx) | 6 | Tracked changes 138, Bookmarks 1, Tables 1, Merged cells 1, Lists 15, Older compatibility mode 1 (change authors: Szerző) |
 | `libreoffice/bnc821804.docx` | en | test | MPL-2.0 | [libreoffice](https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlimport/data/bnc821804.docx) | 2 | Tracked changes 12, Older compatibility mode 1 (change authors: unknown1, unknown10, unknown11, unknown12, unknown2, unknown3, unknown4, unknown5, unknown6, unknown7, unknown8, unknown9) |
 | `libreoffice/tdf104797.docx` | en | test | MPL-2.0 | [libreoffice](https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/tdf104797.docx) | 2 | Tracked changes 7, Bookmarks 1 (change authors: Tekijä) |
-| `libreoffice/tdf121784.docx` | n/a | test | MPL-2.0 | [libreoffice](https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/tdf121784.docx) | 5 | Tracked changes 6, Footnotes 1, Endnotes 1, Right-to-left 5, Older compatibility mode 1 (change authors: User2 ) |
+| `libreoffice/tdf121784.docx` | n/a | test | MPL-2.0 | [libreoffice](https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/tdf121784.docx) | 4 | Tracked changes 6, Footnotes 1, Endnotes 1, Older compatibility mode 1 (change authors: User2 ) |
 | `libreoffice/tdf125894.docx` | en | test | MPL-2.0 | [libreoffice](https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/tdf125894.docx) | 4 | Tracked changes 4, Fields 1, Bookmarks 1, Headers and footers 6 (change authors: Szerző) |
 | `libreoffice/tdf116084.docx` | en | test | MPL-2.0 | [libreoffice](https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/tdf116084.docx) | 3 | Tracked changes 2, Bookmarks 1, Headers and footers 6 (change authors: Szerző) |
 | `libreoffice/tdf121176.docx` | en | test | MPL-2.0 | [libreoffice](https://github.com/LibreOffice/core/blob/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/tdf121176.docx) | 3 | Tracked changes 2, Bookmarks 1, Headers and footers 6 (change authors: Szerző) |
@@ -242,25 +242,25 @@ Lang: `en`, `zh` (Simplified), `zh-TW`, `ja`, `ko`, `de`, `fr`, `es`, `ar`, `he`
 
 | File | Lang | Domain | Licence | Source | Kinds | Features (count) |
 |---|---|---|---|---|---|---|
-| `apache-poi/rtl.docx` | ar | test | Apache-2.0 | [apache-poi](https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/document/rtl.docx) | 2 | Bookmarks 28, Right-to-left 76 |
+| `apache-poi/rtl.docx` | ar | test | Apache-2.0 | [apache-poi](https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/document/rtl.docx) | 2 | Bookmarks 28, Right-to-left 75 |
 | `docx-js/word-stops-grid-indents.docx` | ja | test | MIT | [docx-js](https://raw.githubusercontent.com/dolanmiu/docx/c9be7acae6146b3176443522fd5b87bcf6b48c53/scripts/layout-probes/stops2/word-stops-grid-indents.docx) | 1 | Older compatibility mode 1 |
 | `docx-js/word-stops-compress-kana2.docx` | mixed | test | MIT | [docx-js](https://raw.githubusercontent.com/dolanmiu/docx/c9be7acae6146b3176443522fd5b87bcf6b48c53/scripts/layout-probes/stops2/word-stops-compress-kana2.docx) | 1 | Older compatibility mode 1 |
 | `open-xml-sdk/A5.docx` | zh | test | MIT | [open-xml-sdk](https://raw.githubusercontent.com/dotnet/Open-XML-SDK/431ab05cf160248cc3885a4a766026d4f8243792/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/page layout/page layout(big file)/A5.docx) | 1 | Older compatibility mode 1 |
 | `open-xml-powertools/Contract.docx` | de | legal | MIT | [open-xml-powertools](https://raw.githubusercontent.com/OpenXmlDev/Open-XML-PowerTools/536ca1fb4bcdce1f4c920658bd66807b970393d7/OpenXmlPowerToolsExamples/HtmlConverter01/Contract.docx) | 4 | Bookmarks 18, Headers and footers 6, Lists 5, Older compatibility mode 1 |
 | `open-xml-powertools/RP038-Inserted-Paras-at-End.docx` | fr | test | MIT | [open-xml-powertools](https://raw.githubusercontent.com/OpenXmlDev/Open-XML-PowerTools/536ca1fb4bcdce1f4c920658bd66807b970393d7/TestFiles/RP/RP038-Inserted-Paras-at-End.docx) | 2 | Tracked changes 22, Footnotes 1 (change authors: Acien, Clara, Jones, Jacqueline, Zzzzzzzz, Eee, wwwwwwwwwwwwwwwww) |
-| `apache-poi/table-indent.docx` | es | test | Apache-2.0 | [apache-poi](https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/document/table-indent.docx) | 2 | Tables 7, Right-to-left 92 |
+| `apache-poi/table-indent.docx` | es | test | Apache-2.0 | [apache-poi](https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/document/table-indent.docx) | 1 | Tables 7 |
 | `docx-js/word-stops-strict2.docx` | mixed | test | MIT | [docx-js](https://raw.githubusercontent.com/dolanmiu/docx/c9be7acae6146b3176443522fd5b87bcf6b48c53/scripts/layout-probes/stops2/word-stops-strict2.docx) | 1 | Older compatibility mode 1 |
 | `docx-js/word-stops-equations3.docx` | en | test | MIT | [docx-js](https://raw.githubusercontent.com/dolanmiu/docx/c9be7acae6146b3176443522fd5b87bcf6b48c53/scripts/layout-probes/stops2/word-stops-equations3.docx) | 2 | Equations 138, Older compatibility mode 1 |
 | `libreoffice/smartart.docx` | n/a | test | MPL-2.0 | [libreoffice](https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/smartart.docx) | 3 | Bookmarks 1, SmartArt 1, Older compatibility mode 1 |
 | `libreoffice/chart-size.docx` | n/a | test | MPL-2.0 | [libreoffice](https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/chart-size.docx) | 5 | Bookmarks 1, Images with wrap 1, Charts 1, Text boxes 2, Shapes 2 |
-| `libreoffice/tdf106132.docx` | en | test | MPL-2.0 | [libreoffice](https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/tdf106132.docx) | 8 | Fields 2, SEQ captions 2, Images 1, Images with wrap 1, Text boxes 2, Shapes 2, Right-to-left 1, Older compatibility mode 1 |
-| `open-xml-sdk/Comment003.docx` | en | test | MIT | [open-xml-sdk](https://raw.githubusercontent.com/dotnet/Open-XML-SDK/431ab05cf160248cc3885a4a766026d4f8243792/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment003.docx) | 4 | Comments 6, Comment replies 4, Bookmarks 1, Right-to-left 15 |
+| `libreoffice/tdf106132.docx` | en | test | MPL-2.0 | [libreoffice](https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/tdf106132.docx) | 7 | Fields 2, SEQ captions 2, Images 1, Images with wrap 1, Text boxes 2, Shapes 2, Older compatibility mode 1 |
+| `open-xml-sdk/Comment003.docx` | en | test | MIT | [open-xml-sdk](https://raw.githubusercontent.com/dotnet/Open-XML-SDK/431ab05cf160248cc3885a4a766026d4f8243792/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment003.docx) | 4 | Comments 6, Comment replies 4, Bookmarks 1, Right-to-left 10 |
 | `docx-js/word-nested-tables.docx` | en | test | MIT | [docx-js](https://raw.githubusercontent.com/dolanmiu/docx/c9be7acae6146b3176443522fd5b87bcf6b48c53/scripts/layout-probes/word-nested-tables.docx) | 4 | Several sections 11, Tables 25, Nested tables 13, Older compatibility mode 1 |
 | `apache-tika/EmbeddedDocument.docx` | n/a | test | Apache-2.0 | [apache-tika](https://raw.githubusercontent.com/apache/tika/49e40e6ddaf44910111f6b8c44db1f768d39098b/tika-parsers/tika-parsers-standard/tika-parsers-standard-modules/tika-parser-microsoft-module/src/test/resources/test-documents/EmbeddedDocument.docx) | 4 | Images 1, Shapes 1, Embedded objects 1, Older compatibility mode 1 |
 | `open-xml-powertools/RA001-Tracked-Revisions-02.docx` | en | test | MIT | [open-xml-powertools](https://raw.githubusercontent.com/OpenXmlDev/Open-XML-PowerTools/536ca1fb4bcdce1f4c920658bd66807b970393d7/TestFiles/RA001-Tracked-Revisions-02.docx) | 9 | Tracked changes 280, Fields 1, Bookmarks 1, Headers and footers 4, Several sections 1, Tables 4, Merged cells 7, Lists 1, Older compatibility mode 1 (change authors: Author) |
 | `docx-js/word-character-widths.docx` | en | test | MIT | [docx-js](https://raw.githubusercontent.com/dolanmiu/docx/c9be7acae6146b3176443522fd5b87bcf6b48c53/scripts/layout-probes/word-character-widths.docx) | 3 | Several sections 2, Older compatibility mode 1, 100+ pages 1 |
 | `libreoffice/tdf108505.docx` | fr | test | MPL-2.0 | [libreoffice](https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sw/qa/extras/ooxmlexport/data/tdf108505.docx) | 4 | Fields 3, Bookmarks 3, Form fields 3, Older compatibility mode 1 |
-| `government/pbc-fujian-normative-documents.docx` | zh | government | Not copyrightable (official document) | [government](https://fuzhou.pbc.gov.cn/fuzhou/126805/126820/126789/5850754/2025092316012977612.docx) | 5 | Fields 2, Headers and footers 2, Tables 1, Right-to-left 2, Older compatibility mode 1 |
+| `government/pbc-fujian-normative-documents.docx` | zh | government | Not copyrightable (official document) | [government](https://fuzhou.pbc.gov.cn/fuzhou/126805/126820/126789/5850754/2025092316012977612.docx) | 4 | Fields 2, Headers and footers 2, Tables 1, Older compatibility mode 1 |
 | `government/nmpa-tcm-drafting-note.docx` | zh | medical | Not copyrightable (official document) | [government](https://www.nmpa.gov.cn/directory/web/nmpa/images/1674013535292043222.docx) | 3 | Fields 4, Bookmarks 1, Headers and footers 2 |
 | `government/nmpa-device-gcp-drafting-note.docx` | zh | medical | Not copyrightable (official document) | [government](https://www.nmpa.gov.cn/directory/web/nmpa/images/1620611781701002332.docx) | 5 | Fields 1, Bookmarks 1, Headers and footers 1, Content controls 1, Older compatibility mode 1 |
 | `government/moa-taiwan-draft-notice-sample.docx` | zh-TW | government | Not copyrightable (official document) | [government](https://www.moa.gov.tw/upload/files/web_structure/11414/3-1-5-2-4.docx) | 6 | Footnotes 2, Fields 2, Bookmarks 1, Headers and footers 1, Tables 3, Older compatibility mode 1 |
@@ -285,7 +285,7 @@ Lang: `en`, `zh` (Simplified), `zh-TW`, `ja`, `ko`, `de`, `fr`, `es`, `ar`, `he`
 |---|---|---|---|---|---|---|
 | `word-mac/en-contract-services.docx` | en | legal | Apache-2.0 | documents/synthetic/en-contract-services.docx, saved in Word for Mac, 2026-10-12 | 10 | Footnotes 1, Endnotes 1, Fields 3, TOC 1, Bookmarks 1, Headers and footers 2, Tables 2, Merged cells 1, Lists 18, Content controls 2 |
 | `word-mac/zh-contract-service.docx` | zh | legal | Apache-2.0 | documents/synthetic/zh-contract-service.docx, saved in Word for Mac, 2026-10-12 | 7 | Footnotes 1, Endnotes 1, Fields 2, Headers and footers 2, Tables 2, Lists 9, Content controls 2 |
-| `google-docs/en-memo-policy.docx` | en | hr | Apache-2.0 | documents/synthetic/en-memo-policy.docx, Google Docs (web), saved as Google Doc then exported .docx, 2026-10-12 | 7 | Tracked changes 4, Comments 1, Footnotes 1, Fields 2, Headers and footers 2, Right-to-left 21, Older compatibility mode 1 (change authors: HR, Legal) |
-| `google-docs/en-report-quarterly.docx` | en | finance | Apache-2.0 | documents/synthetic/en-report-quarterly.docx, Google Docs (web), saved as Google Doc then exported .docx, 2026-10-12 | 9 | Footnotes 2, Fields 3, TOC 1, Bookmarks 1, Headers and footers 2, Tables 1, Content controls 1, Right-to-left 39, Older compatibility mode 1 |
+| `google-docs/en-memo-policy.docx` | en | hr | Apache-2.0 | documents/synthetic/en-memo-policy.docx, Google Docs (web), saved as Google Doc then exported .docx, 2026-10-12 | 6 | Tracked changes 4, Comments 1, Footnotes 1, Fields 2, Headers and footers 2, Older compatibility mode 1 (change authors: HR, Legal) |
+| `google-docs/en-report-quarterly.docx` | en | finance | Apache-2.0 | documents/synthetic/en-report-quarterly.docx, Google Docs (web), saved as Google Doc then exported .docx, 2026-10-12 | 8 | Footnotes 2, Fields 3, TOC 1, Bookmarks 1, Headers and footers 2, Tables 1, Content controls 1, Older compatibility mode 1 |
 
 <!-- files:end -->

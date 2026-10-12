@@ -274,7 +274,7 @@
       "textBoxes": 0,
       "shapes": 0,
       "embeddedObjects": 0,
-      "rightToLeft": 8,
+      "rightToLeft": 0,
       "olderCompatibility": 0,
       "longDocument": 0
     }
@@ -412,7 +412,7 @@
       "textBoxes": 0,
       "shapes": 0,
       "embeddedObjects": 0,
-      "rightToLeft": 1,
+      "rightToLeft": 0,
       "olderCompatibility": 1,
       "longDocument": 0
     }
@@ -504,7 +504,7 @@
       "textBoxes": 0,
       "shapes": 0,
       "embeddedObjects": 0,
-      "rightToLeft": 2,
+      "rightToLeft": 0,
       "olderCompatibility": 1,
       "longDocument": 0
     }
@@ -918,7 +918,7 @@
       "textBoxes": 0,
       "shapes": 0,
       "embeddedObjects": 0,
-      "rightToLeft": 1,
+      "rightToLeft": 0,
       "olderCompatibility": 1,
       "longDocument": 0
     }
@@ -1056,7 +1056,7 @@
       "textBoxes": 0,
       "shapes": 0,
       "embeddedObjects": 0,
-      "rightToLeft": 1,
+      "rightToLeft": 0,
       "olderCompatibility": 1,
       "longDocument": 0
     }
@@ -1102,7 +1102,7 @@
       "textBoxes": 0,
       "shapes": 0,
       "embeddedObjects": 0,
-      "rightToLeft": 2,
+      "rightToLeft": 0,
       "olderCompatibility": 0,
       "longDocument": 0
     },
@@ -1241,7 +1241,7 @@
       "textBoxes": 0,
       "shapes": 0,
       "embeddedObjects": 0,
-      "rightToLeft": 10,
+      "rightToLeft": 0,
       "olderCompatibility": 0,
       "longDocument": 0
     }
@@ -1333,7 +1333,7 @@
       "textBoxes": 0,
       "shapes": 0,
       "embeddedObjects": 0,
-      "rightToLeft": 4,
+      "rightToLeft": 0,
       "olderCompatibility": 1,
       "longDocument": 0
     }
@@ -1379,7 +1379,7 @@
       "textBoxes": 0,
       "shapes": 0,
       "embeddedObjects": 0,
-      "rightToLeft": 1,
+      "rightToLeft": 0,
       "olderCompatibility": 1,
       "longDocument": 0
     }
@@ -1471,7 +1471,7 @@
       "textBoxes": 0,
       "shapes": 0,
       "embeddedObjects": 0,
-      "rightToLeft": 4,
+      "rightToLeft": 0,
       "olderCompatibility": 1,
       "longDocument": 0
     }
@@ -1517,7 +1517,7 @@
       "textBoxes": 2,
       "shapes": 2,
       "embeddedObjects": 0,
-      "rightToLeft": 42,
+      "rightToLeft": 0,
       "olderCompatibility": 0,
       "longDocument": 0
     }
@@ -1563,7 +1563,7 @@
       "textBoxes": 0,
       "shapes": 0,
       "embeddedObjects": 0,
-      "rightToLeft": 2,
+      "rightToLeft": 0,
       "olderCompatibility": 0,
       "longDocument": 0
     }
@@ -1609,7 +1609,7 @@
       "textBoxes": 0,
       "shapes": 0,
       "embeddedObjects": 0,
-      "rightToLeft": 3,
+      "rightToLeft": 0,
       "olderCompatibility": 1,
       "longDocument": 0
     }
@@ -1839,7 +1839,7 @@
       "textBoxes": 0,
       "shapes": 1,
       "embeddedObjects": 0,
-      "rightToLeft": 2,
+      "rightToLeft": 0,
       "olderCompatibility": 0,
       "longDocument": 0
     }
@@ -1931,7 +1931,7 @@
       "textBoxes": 0,
       "shapes": 0,
       "embeddedObjects": 0,
-      "rightToLeft": 8,
+      "rightToLeft": 0,
       "olderCompatibility": 0,
       "longDocument": 0
     }
@@ -2023,7 +2023,7 @@
       "textBoxes": 0,
       "shapes": 0,
       "embeddedObjects": 0,
-      "rightToLeft": 66,
+      "rightToLeft": 65,
       "olderCompatibility": 1,
       "longDocument": 0
     }
@@ -2069,7 +2069,7 @@
       "textBoxes": 0,
       "shapes": 0,
       "embeddedObjects": 0,
-      "rightToLeft": 50,
+      "rightToLeft": 0,
       "olderCompatibility": 1,
       "longDocument": 0
     }
@@ -2207,7 +2207,7 @@
       "textBoxes": 0,
       "shapes": 0,
       "embeddedObjects": 0,
-      "rightToLeft": 3,
+      "rightToLeft": 0,
       "olderCompatibility": 0,
       "longDocument": 0
     }
@@ -2299,7 +2299,7 @@
       "textBoxes": 0,
       "shapes": 0,
       "embeddedObjects": 0,
-      "rightToLeft": 4,
+      "rightToLeft": 0,
       "olderCompatibility": 0,
       "longDocument": 0
     }
@@ -2345,7 +2345,7 @@
       "textBoxes": 0,
       "shapes": 0,
       "embeddedObjects": 0,
-      "rightToLeft": 2,
+      "rightToLeft": 0,
       "olderCompatibility": 1,
       "longDocument": 0
     }
@@ -3085,7 +3085,7 @@
       "textBoxes": 0,
       "shapes": 0,
       "embeddedObjects": 0,
-      "rightToLeft": 1,
+      "rightToLeft": 0,
       "olderCompatibility": 1,
       "longDocument": 0
     }
@@ -3131,7 +3131,7 @@
       "textBoxes": 0,
       "shapes": 0,
       "embeddedObjects": 0,
-      "rightToLeft": 1,
+      "rightToLeft": 0,
       "olderCompatibility": 1,
       "longDocument": 0
     }

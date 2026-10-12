@@ -157,7 +157,7 @@ export function countFeatures(
     textBoxes: count(body, /<w:txbxContent/g),
     shapes: count(body, /<wps:wsp>|<v:(?:shape|rect|roundrect|oval)\b/g),
     embeddedObjects: names.filter((name) => name.startsWith("word/embeddings/")).length,
-    rightToLeft: count(all, /<w:bidi\b|<w:rtl\b/g),
+    rightToLeft: count(all, /<w:(?:bidi|rtl)(?:\s*\/>|\s+w:val="(?!0"|false")[^"]*"\s*\/>)/g),
     olderCompatibility: compat && Number(compat[1]) >= 15 ? 0 : 1,
     longDocument: estimatedPages >= 100 ? 1 : 0,
   };

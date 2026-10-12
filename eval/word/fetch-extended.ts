@@ -41,7 +41,13 @@ async function fetchOne(entry: Entry): Promise<void> {
     kept++;
     return;
   }
-  const response = await fetch(entry.url as string);
+  let response: Response;
+  try {
+    response = await fetch(entry.url as string, { signal: AbortSignal.timeout(60_000) });
+  } catch (error) {
+    problems.push(`${entry.name}: ${error instanceof Error ? error.message : String(error)}`);
+    return;
+  }
   if (!response.ok) {
     problems.push(`${entry.name}: ${response.status} from ${entry.url}`);
     return;
