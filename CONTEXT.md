@@ -62,6 +62,10 @@ _Avoid_: deleted, broken
 A Document whose Linked folder can't be reached for now, such as on an unplugged drive. It is still searched, from its stored text; only its file can't be opened.
 _Avoid_: offline, missing
 
+**Scanned page**:
+A page of a PDF that is a picture of text, such as a scan, with little or no text of its own. IncarnaMind reads its text from the picture on the User's computer (text recognition, also called OCR) and keeps it as the page's text, so it is searched and cited like any other page; a Citation of it says its text was read from a scan.
+_Avoid_: image page, OCR page
+
 **Linked folder**:
 A folder on the User's computer that IncarnaMind keeps in sync: every supported file in it, at any depth, is a Document, and new, changed and removed files are picked up. IncarnaMind never changes or deletes a file in it, and adds a new file there only once the User allows it for that folder. Files a cloud drive keeps online only are indexed when the User asks. Moved, renamed or on another computer, it is located again from its menu and keeps its Documents.
 _Avoid_: workspace, vault, source
