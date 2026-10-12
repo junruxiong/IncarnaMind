@@ -1232,6 +1232,11 @@
     color: var(--color-ink);
     transition: border-color 80ms ease-out;
 
+    /* A Document dragged over it, to join the Search scope. */
+    &[data-dropping] {
+      border-color: var(--color-accent);
+      background: var(--color-hover);
+    }
     &:has(> .composer-row > .composer-input:focus) {
       border-color: var(--color-accent);
     }
@@ -1896,6 +1901,35 @@
       padding-left: 24px;
     }
 
+    /* A checklist: the box hangs in the margin like a bullet; a done item is struck through. */
+    ul:has(> li[data-checked]) {
+      list-style: none;
+    }
+    li[data-checked] {
+      display: flex;
+      gap: 8px;
+      margin-left: -24px;
+    }
+    li[data-checked] > label {
+      flex: none;
+      width: 16px;
+      padding-top: 5px;
+      user-select: none;
+    }
+    li[data-checked] > label > input {
+      margin: 0;
+      accent-color: var(--color-accent);
+      cursor: pointer;
+    }
+    li[data-checked] > div {
+      flex: 1;
+      min-width: 0;
+    }
+    li[data-checked="true"] > div {
+      color: var(--color-ink-secondary);
+      text-decoration: line-through;
+    }
+
     /* A quote: its rule hangs in the margin, so its text keeps the edge. */
     blockquote {
       margin-left: -14px;
@@ -2512,9 +2546,17 @@
   .answer-searches-found {
     color: var(--color-ink-placeholder);
   }
-  /* Its Blocks are inside the node view's content element, one level down. */
+  /*
+   * Its Blocks are inside the node view's content element, one level down. An
+   * Answer written before AI text was marked word by word is all in the
+   * Answer's ink; a newer one is in the User's, its AI text marked.
+   */
   .answer-content {
     color: var(--color-ink-answer);
+
+    &[data-generated-marks] {
+      color: var(--color-ink);
+    }
 
     :where([data-node-view-content-react] > * + *) {
       margin-top: 12px;
@@ -2964,6 +3006,16 @@
     padding: 0;
     overflow: hidden;
     opacity: 0;
+  }
+  /*
+   * AI text (#95; DESIGN.md, Writing and text): the Answer's ink, a step
+   * softer than the User's writing. A quote keeps its own, softer still.
+   */
+  .mind-editor .generated-text {
+    color: var(--color-ink-answer);
+  }
+  .mind-editor blockquote .generated-text {
+    color: inherit;
   }
   /*
    * Proposals waiting for the User (#93; DESIGN.md, AI edits): removed words
@@ -3966,6 +4018,136 @@
     max-width: 90vw;
     padding: 8px;
   }
+  /* The find bar over the Mind's top right corner; its matches are marked in the text. */
+  .find-bar {
+    position: fixed;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    max-width: calc(100vw - 32px);
+    padding: 4px;
+    border-radius: 8px;
+    background: var(--color-sheet);
+    box-shadow: var(--shadow-popover);
+    font-family: var(--font-sans);
+    font-size: var(--text-ui);
+    line-height: var(--text-ui--line-height);
+    color: var(--color-ink);
+
+    input {
+      width: 160px;
+      min-width: 0;
+      flex: 1 1 auto;
+      height: 28px;
+      padding: 0 8px;
+      border-radius: 6px;
+      background: var(--color-chip);
+      outline: none;
+    }
+    .find-count {
+      flex: none;
+      min-width: 3.5em;
+      padding: 0 6px;
+      text-align: center;
+      font-size: var(--text-meta);
+      color: var(--color-ink-meta);
+      white-space: nowrap;
+    }
+    .find-count--none {
+      color: var(--color-danger);
+    }
+    button {
+      display: flex;
+      flex: none;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      color: var(--color-ink-secondary);
+      outline: none;
+
+      &:hover:not(:disabled),
+      &:focus-visible {
+        background: var(--color-hover);
+        color: var(--color-ink);
+      }
+      &:disabled {
+        opacity: 0.4;
+      }
+    }
+  }
+  /* A Document chip: a name in the text that opens the Document. */
+  .document-chip-wrap {
+    display: inline;
+  }
+  .document-chip {
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    gap: 4px;
+    padding: 0 6px;
+    border-radius: 6px;
+    background: var(--color-chip);
+    font-size: 0.9em;
+    line-height: 1.5;
+    color: var(--color-ink);
+    vertical-align: baseline;
+    cursor: pointer;
+
+    &:hover {
+      background: var(--color-hover);
+    }
+    .document-chip-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    &[data-missing="true"] {
+      color: var(--color-ink-meta);
+      cursor: default;
+      .document-chip-name {
+        text-decoration: line-through;
+      }
+    }
+  }
+  .ProseMirror-selectednode .document-chip {
+    outline: 2px solid var(--color-accent);
+  }
+  .find-match {
+    border-radius: 2px;
+    background: rgb(250 204 21 / 0.35);
+    color: inherit;
+  }
+  .find-match--current {
+    background: rgb(250 204 21 / 0.85);
+  }
+  .mind-outline {
+    width: min(320px, 92vw);
+    max-height: min(60vh, 420px);
+    overflow-y: auto;
+  }
+  /* Where a link goes, with Open, Edit and Remove: the address gives way to the buttons. */
+  .editor-menu.link-bubble {
+    flex-direction: row;
+    align-items: center;
+    gap: 2px;
+    max-width: min(460px, 92vw);
+    .link-bubble-address {
+      min-width: 0;
+      flex: 1 1 auto;
+      overflow: hidden;
+      padding: 0 8px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--color-ink-secondary);
+    }
+    .selection-format {
+      flex: none;
+      padding: 0 8px;
+    }
+  }
 
   /* The handle left of the Block under the mouse: drag it to move the Block, click it for its menu. */
   .block-handle > button {
@@ -4497,7 +4679,7 @@
     }
   }
   /* What the next Question reads and searches: one line, once, in an empty conversation (#391). */
-  .assistant-asked-from {
+  .assistant-reads {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -4507,12 +4689,12 @@
     line-height: var(--text-ui--line-height);
     color: var(--color-ink-meta);
   }
-  .assistant-asked-from-icon {
+  .assistant-reads-icon {
     width: 14px;
     height: 14px;
     flex-shrink: 0;
   }
-  .assistant-asked-from-text {
+  .assistant-reads-text {
     min-width: 0;
     overflow: hidden;
     white-space: nowrap;
@@ -4755,6 +4937,33 @@
     width: 14px;
     height: 14px;
     flex-shrink: 0;
+  }
+  /* A line that names the Mind: its words open and fold the steps, the name goes to the Mind. */
+  .assistant-answer .answer-steps-split {
+    gap: 0;
+
+    &:has(.answer-steps-part:hover) {
+      background: var(--color-hover);
+    }
+    &:has([aria-expanded="true"]) {
+      color: var(--color-ink-secondary);
+    }
+  }
+  .answer-steps-part {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 6px;
+    white-space: pre;
+  }
+  .answer-steps-part--end {
+    padding-left: 6px;
+  }
+  .answer-steps-mind {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
   .answer-steps-text {
     min-width: 0;
@@ -5663,7 +5872,7 @@
     flex-direction: column;
     gap: 2px;
     box-sizing: border-box;
-    width: 300px;
+    width: var(--chart-card-width, 300px);
     max-width: calc(100vw - 16px);
     padding: 12px 14px;
     border-radius: 10px;
@@ -5707,12 +5916,14 @@
     line-height: 16px;
     color: var(--color-ink-meta);
   }
+  /* Two lines at most, for a card narrowed beside a pie (#578). */
   .chart-card-where {
     flex: 1 1 auto;
     min-width: 0;
+    display: -webkit-box;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
   }
   .chart-card-open {
     flex: none;

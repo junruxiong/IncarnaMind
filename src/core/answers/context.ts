@@ -2,11 +2,15 @@
  * Question context (ADR-0007): what an Answer is generated from. In a Mind,
  * every Block above the Question, in order, except Notes the User switched off:
  * Notes and earlier Questions as the User's words, earlier Answers as the
- * model's. In a conversation, its earlier Questions and Answers the same way.
- * When that is over the token budget, the oldest content goes first. Where
- * the third-party text in it came from is read beside it (#78): an Answer to
- * such a context is written by a Run that counts as having read that text.
+ * model's. In a conversation, its earlier Questions and Answers the same way,
+ * and the Mind in focus when the Question was asked, read the same way (#544),
+ * with what the User selected in it first. When that is over the token
+ * budget, the oldest content goes first; a long Mind keeps its headings, the
+ * selection, the part around the cursor and its newest Blocks. Where the
+ * third-party text in it came from is read beside it (#78): an Answer to such
+ * a context is written by a Run that counts as having read that text.
  */
+import { createHash } from "node:crypto";
 import * as Y from "yjs";
 import { parseThirdPartySource } from "../../shared/textOrigins";
 import {
@@ -15,6 +19,7 @@ import {
   type ConversationMessage,
   INCLUDE_IN_CONTEXT_ATTRIBUTE,
   MIND_TEXT_ORIGINS_FIELD,
+  type MindFocus,
   QUESTION_BLOCK,
   type ThirdPartySource,
 } from "../api";
@@ -64,6 +69,19 @@ export function estimateTokens(text: string): number {
     else other++;
   }
   return wide + Math.ceil(other / 4);
+}
+
+/** The start of `text` that is about `tokens` estimated tokens long. */
+export function head(text: string, tokens: number): string {
+  let used = 0;
+  let end = 0;
+  for (const char of text) {
+    const cost = estimateTokens(char);
+    if (used + cost > tokens) break;
+    used += cost;
+    end += char.length;
+  }
+  return text.slice(0, end);
 }
 
 /** The end of `text` that fits in about `tokens` tokens, marked as cut. */
@@ -183,18 +201,232 @@ export function questionContextOf(
   };
 }
 
+/** A Block of a Mind as a Question in the assistant reads it. */
+interface ReadBlock {
+  text: string;
+  /** A heading: a long Mind keeps its headings first. */
+  heading: boolean;
+  origins: readonly ThirdPartySource[];
+}
+
+/** What of a Mind a request holds (see `MindReading`). */
+export interface MindSection {
+  /** The Mind, then what the User selected in it, as their message starts; "" when none of it fits. */
+  text: string;
+  /** Some of the Mind was left out to fit. */
+  partial: boolean;
+  /** Where the third-party text in what it keeps came from, each once. */
+  origins: ThirdPartySource[];
+}
+
+/**
+ * The Mind in focus, read for a Question in the assistant (#544), as plain
+ * text that no longer needs its document.
+ */
+export interface MindReading {
+  /** Its version as read: a fingerprint of its text. */
+  version: string;
+  /**
+   * What of it fits in about `tokens` tokens (`estimateTokens`); by default, as
+   * much as a Question context in a Mind holds.
+   */
+  section(tokens?: number): MindSection;
+}
+
+/** Where a Block was left out of a cut Mind, as the model reads it. */
+const LEFT_OUT = "[…]";
+/** What a kept Block adds besides its text, at most: the blank line before it, and a `LEFT_OUT` before that. */
+const BLOCK_EXTRA_TOKENS = estimateTokens(`${LEFT_OUT}\n\n\n\n`);
+
+const xmlAttribute = (text: string) =>
+  text.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+
+/** A Block as the Mind's text reads it: a Note as it is, and an earlier Question or Answer marked as one. */
+function readText(block: Y.XmlElement, piece: Piece): string {
+  if (block.nodeName === QUESTION_BLOCK) return `<question>${piece.text}</question>`;
+  if (block.nodeName === ANSWER_BLOCK) return `<answer>\n${piece.text}\n</answer>`;
+  return piece.text;
+}
+
+/**
+ * Reads a Mind for a Question asked beside it in the assistant (#544), as a
+ * Question in the Mind reads the Blocks above it (`pieceOf`): Notes the User
+ * excluded stay out, earlier Answers keep their Citations as plain references,
+ * and Proposals still waiting aren't read. `focus` is where the User is in it:
+ * the text they selected is read first, unless it is in a Note they excluded.
+ */
+export function readMind(
+  blocks: Y.XmlFragment,
+  name: string,
+  focus: MindFocus | null,
+): MindReading {
+  const recordedOrigins = blocks.doc?.getMap<unknown>(MIND_TEXT_ORIGINS_FIELD);
+  const recorded = recordedOrigins && recordedOrigins.size > 0 ? recordedOrigins : null;
+  const read: ReadBlock[] = [];
+  /**
+   * Each top-level Block by id: where it is in `read` (a Block that adds nothing, such as
+   * an empty line, is where the one before it is), and whether the User excluded it.
+   */
+  const byId = new Map<string, { index: number; excluded: boolean }>();
+  for (const block of blocks.toArray()) {
+    if (!(block instanceof Y.XmlElement)) continue;
+    const piece = pieceOf(block);
+    const id = textAttribute(block, BLOCK_ID_ATTRIBUTE);
+    if (id) {
+      byId.set(id, {
+        index: piece ? read.length : read.length - 1,
+        excluded: attribute(block, INCLUDE_IN_CONTEXT_ATTRIBUTE) === false,
+      });
+    }
+    if (!piece) continue;
+    read.push({
+      text: readText(block, piece),
+      heading: block.nodeName === "heading",
+      origins: recorded ? originsIn(block, recorded) : [],
+    });
+  }
+  const placed = (focus?.blockIds ?? []).map((id) => byId.get(id));
+  const focused = [
+    ...new Set(placed.flatMap((each) => (each && each.index >= 0 ? [each.index] : []))),
+  ];
+  const selection =
+    focus && placed.length > 0 && placed.every((each) => each !== undefined && !each.excluded)
+      ? focus.selection.trim()
+      : "";
+  const version = createHash("sha256")
+    .update(read.map((block) => block.text).join("\n\n"))
+    .digest("base64url")
+    .slice(0, 22);
+  return {
+    version,
+    section: (tokens = QUESTION_CONTEXT_TOKEN_BUDGET) =>
+      cutMind({ name, read, focused, selection }, tokens),
+  };
+}
+
+/**
+ * Indices around the cursor: the focused Blocks first, then their neighbours,
+ * one before and one after in turn, outwards.
+ */
+function* aroundCursor(focused: readonly number[], count: number): Generator<number> {
+  if (focused.length === 0) return;
+  yield* focused;
+  let before = Math.min(...focused) - 1;
+  let after = Math.max(...focused) + 1;
+  while (before >= 0 || after < count) {
+    if (after < count) yield after++;
+    if (before >= 0) yield before--;
+  }
+}
+
+/**
+ * What of a Mind fits in about `tokens` tokens: all of it when it fits. Else
+ * the selection first, then its headings, then the Blocks around the cursor
+ * (up to half of what is left), then its newest Blocks, the last one's end if
+ * it doesn't fit whole, then more around the cursor. Kept Blocks stay in
+ * order, with `LEFT_OUT` where Blocks were left out.
+ */
+function cutMind(
+  mind: { name: string; read: readonly ReadBlock[]; focused: readonly number[]; selection: string },
+  tokens: number,
+): MindSection {
+  const { read, focused, selection } = mind;
+  const wrap = (body: string) =>
+    `<mind name="${xmlAttribute(mind.name)}">\n${body}${body ? "\n" : ""}</mind>`;
+  const selected = (text: string) => (text ? `\n\n<selection>\n${text}\n</selection>` : "");
+  const focusOrigins = (kept: boolean) =>
+    kept ? focused.flatMap((index) => read[index]?.origins ?? []) : [];
+  const originsOf = (indices: Iterable<number>, withSelection: boolean) => [
+    ...new Set([
+      ...[...indices].flatMap((index) => read[index]?.origins ?? []),
+      ...focusOrigins(withSelection),
+    ]),
+  ];
+
+  const whole = wrap(read.map((block) => block.text).join("\n\n")) + selected(selection);
+  if (estimateTokens(whole) <= tokens) {
+    return { text: whole, partial: false, origins: originsOf(read.keys(), selection !== "") };
+  }
+
+  let left = tokens - estimateTokens(wrap(LEFT_OUT)) - BLOCK_EXTRA_TOKENS;
+  if (left <= 0) return { text: "", partial: true, origins: [] };
+  let selectionText = "";
+  if (selection) {
+    const room = left - estimateTokens(selected("…"));
+    selectionText =
+      estimateTokens(selected(selection)) <= left
+        ? selection
+        : room > 0
+          ? `${head(selection, room).trimEnd()}…`
+          : "";
+    left -= estimateTokens(selected(selectionText));
+  }
+
+  const kept = new Map<number, string>();
+  const cost = (index: number) => estimateTokens(read[index]?.text ?? "") + BLOCK_EXTRA_TOKENS;
+  const take = (index: number, room = left): boolean => {
+    if (kept.has(index)) return true;
+    const needed = cost(index);
+    if (needed > room) return false;
+    kept.set(index, read[index]?.text ?? "");
+    left -= needed;
+    return true;
+  };
+  const takeAround = (share: number) => {
+    let room = share;
+    for (const index of aroundCursor(focused, read.length)) {
+      if (kept.has(index)) continue;
+      const needed = cost(index);
+      if (!take(index, Math.min(room, left))) return;
+      room -= needed;
+    }
+  };
+
+  read.forEach((block, index) => {
+    if (block.heading) take(index);
+  });
+  takeAround(Math.ceil(left / 2));
+  for (let index = read.length - 1; index >= 0; index--) {
+    if (take(index)) continue;
+    // Less one for the "…" `tail` marks the cut with.
+    const room = left - BLOCK_EXTRA_TOKENS - 1;
+    if (room >= MIN_TAIL_TOKENS) {
+      kept.set(index, tail(read[index]?.text ?? "", room));
+      left = 0;
+    }
+    break;
+  }
+  takeAround(left);
+
+  const order = [...kept.keys()].sort((a, b) => a - b);
+  const parts: string[] = [];
+  let next = 0;
+  for (const index of order) {
+    if (index > next) parts.push(LEFT_OUT);
+    parts.push(kept.get(index) ?? "");
+    next = index + 1;
+  }
+  if (next < read.length) parts.push(LEFT_OUT);
+  return {
+    text: wrap(parts.join("\n\n")) + selected(selectionText),
+    partial: true,
+    origins: originsOf(order, selectionText !== ""),
+  };
+}
+
 /**
  * The Question context of a Question in one of the assistant's conversations
  * (ADR-0017): the messages before it, Questions as the User's words and Answers
  * (with their Citations as plain references) as the model's, the oldest left out
- * first, as in a Mind. A failed Answer adds nothing.
+ * first, as in a Mind. A failed Answer adds nothing. `mind`, what of the Mind in
+ * focus it reads (`MindSection`), comes right before the Question, in its message.
  */
 export function conversationContext(
   earlier: readonly ConversationMessage[],
   question: string,
-  budget = QUESTION_CONTEXT_TOKEN_BUDGET,
+  options: { mind?: string; budget?: number } = {},
 ): QuestionContext {
-  return conversationContextOf(earlier, question, budget).context;
+  return conversationContextOf(earlier, question, options).context;
 }
 
 /**
@@ -204,7 +436,7 @@ export function conversationContext(
 export function conversationContextOf(
   earlier: readonly ConversationMessage[],
   question: string,
-  budget = QUESTION_CONTEXT_TOKEN_BUDGET,
+  { mind = "", budget = QUESTION_CONTEXT_TOKEN_BUDGET }: { mind?: string; budget?: number } = {},
 ): QuestionContextWithOrigins {
   const pieces: Piece[] = earlier.flatMap((message): Piece[] => {
     if (message.kind === "question")
@@ -217,7 +449,8 @@ export function conversationContextOf(
     ];
   });
   const kept = keptWithinBudget(pieces.reverse(), budget - estimateTokens(question));
-  return { context: { messages: asMessages(kept, question), question }, origins: originsOf(kept) };
+  const asked = mind ? `${mind}\n\n${question}` : question;
+  return { context: { messages: asMessages(kept, asked), question }, origins: originsOf(kept) };
 }
 
 /**
@@ -269,32 +502,59 @@ function withinBudget(
 }
 
 /**
+ * The Mind read with a Question in the assistant, as its request holds it:
+ * `text`, right before the Question in its message, and how to cut it to
+ * about `tokens` tokens by the Mind's own rules ("" when none of it fits; see
+ * `MindReading`).
+ */
+export interface RequestMind {
+  text: string;
+  cut(tokens: number): string;
+}
+
+/**
  * The Question context cut down to about `budget` tokens (by `estimateTokens`)
  * by the same rules as `buildQuestionContext`: the Question is always kept,
  * the oldest content goes first, and the newest part that doesn't fit whole
- * keeps its end. For a local model, whose context window is known only once
- * the model is ready (see ./window). Null when the Question alone is over the budget.
+ * keeps its end. The Mind read with the Question (`mind`) comes before the
+ * rest, cut by its own rules if it doesn't fit whole. For a model whose
+ * context window is known only once the model is ready (see ./window). Null
+ * when the Question alone is over the budget.
  */
 export function fitQuestionContext(
   messages: readonly AnswerMessage[],
   question: string,
   budget: number,
+  mind?: RequestMind,
 ): AnswerMessage[] | null {
   const above: Piece[] = messages.map((message) => ({ role: message.role, text: message.content }));
-  // The last message ends with the Question, after whatever Notes come right before it;
-  // if it doesn't, it is kept whole as the Question.
+  // The last message ends with the Question, after whatever Notes (or the Mind) come right
+  // before it; if it doesn't, it is kept whole as the Question.
   let asked = question;
+  let section: string | null = null;
   const last = above.pop();
   if (last?.role === "user" && last.text.endsWith(question)) {
-    const before = last.text.slice(0, last.text.length - question.length).trim();
+    let before = last.text.slice(0, last.text.length - question.length).trim();
+    if (mind?.text && before.endsWith(mind.text)) {
+      section = mind.text;
+      before = before.slice(0, before.length - mind.text.length).trim();
+    }
     if (before) above.push({ role: "user", text: before });
   } else if (last?.role === "user") {
     asked = last.text;
   } else if (last) {
     above.push(last);
   }
-  const remaining = budget - estimateTokens(asked);
+  let remaining = budget - estimateTokens(asked);
   if (remaining < 0) return null;
+  if (section !== null && mind) {
+    // Less one for the blank line before the Question.
+    const fitted = estimateTokens(section) < remaining ? section : mind.cut(remaining - 1);
+    if (fitted) {
+      asked = `${fitted}\n\n${asked}`;
+      remaining -= estimateTokens(fitted) + 1;
+    }
+  }
   return withinBudget(above.reverse(), asked, remaining);
 }
 

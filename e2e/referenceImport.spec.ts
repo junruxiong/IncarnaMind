@@ -8,7 +8,6 @@
 import { copyFile, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
-import type { CoreBridge } from "../src/core/api";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
@@ -17,6 +16,7 @@ import {
   interceptOpenDialog,
   launchApp,
   removeDataFolder,
+  setLanguage,
   setWindowSize,
 } from "./app";
 
@@ -56,13 +56,6 @@ async function writeSources() {
     }),
   );
   return { bowler, halpern, rust };
-}
-
-async function setLanguage(window: Page, language: "en" | "zh-CN") {
-  await window.evaluate(async (value) => {
-    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-    await bridge.updateSettings({ user: { language: value } });
-  }, language);
 }
 
 async function shot(window: Page, name: string) {

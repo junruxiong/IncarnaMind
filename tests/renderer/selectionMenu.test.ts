@@ -4,6 +4,7 @@ import { ANSWER_BLOCK, BLOCK_ID_ATTRIBUTE, CITATION_NODE, QUESTION_BLOCK } from 
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
 import {
   canTurnInto,
+  clearFormatting,
   currentTurnInto,
   linkTarget,
   selectionToMath,
@@ -140,7 +141,7 @@ describe("formatting", () => {
       expect.arrayContaining(["underline", "bold", "link"]),
     );
 
-    editor.chain().unsetAllMarks().run();
+    clearFormatting(editor);
     expect(editor.getJSON().content?.[0]?.content).toEqual([text("See the tides")]);
   });
 

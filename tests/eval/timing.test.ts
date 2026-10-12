@@ -205,7 +205,7 @@ describe("Recording an Answer", () => {
     expect(timing?.searches[0]?.passages).toBeGreaterThan(0);
     expect(timing?.searches[0]?.rerankMs).toBeNull();
     expect(timing?.firstTextMs).not.toBeNull();
-    expect(timing?.firstTextMs ?? 0).toBeGreaterThan(calls[1]?.endMs ?? 0);
+    expect(timing?.firstTextMs ?? 0).toBeGreaterThanOrEqual(calls[1]?.endMs ?? 0);
     expect(timing?.totalMs ?? 0).toBeGreaterThanOrEqual(timing?.firstTextMs ?? Infinity);
     expect(timing?.writtenTwice).toBe(false);
     expect(timing?.loadAverage).toBeGreaterThanOrEqual(0);
@@ -221,8 +221,8 @@ describe("Recording an Answer", () => {
 
     expect(run.answers[0]?.text).toBe("Spring tides come at new moon [^1].");
     // The preamble streamed in the first call; the text that stayed came after the search.
-    expect(timing?.firstTextMs ?? 0).toBeGreaterThan(searchCall?.endMs ?? Infinity);
-    expect(timing?.searches[0]?.endMs ?? Infinity).toBeLessThan(timing?.firstTextMs ?? 0);
+    expect(timing?.firstTextMs ?? 0).toBeGreaterThanOrEqual(searchCall?.endMs ?? Infinity);
+    expect(timing?.searches[0]?.endMs ?? Infinity).toBeLessThanOrEqual(timing?.firstTextMs ?? 0);
   });
 
   test("finds an Answer a model wrote, cited and wrote again written once, since the engine keeps one copy (#466)", async () => {

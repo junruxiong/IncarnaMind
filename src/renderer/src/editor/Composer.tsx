@@ -38,6 +38,7 @@ import {
   useConversations,
 } from "../conversations";
 import { core } from "../core";
+import { carriesDocuments, droppedDocumentIds } from "../documentDrag";
 import { editFromComposer, stopEditing, useEdits } from "../editWithAi";
 import { useT } from "../i18n";
 import type { ScopeChoice } from "../scope";
@@ -48,6 +49,7 @@ import { AskProblem } from "./AskProblem";
 import { EditStatus } from "./EditStatus";
 import { AskArrowIcon, CollapseIcon, ExpandIcon, RemoveIcon } from "./icons";
 import { ModelChip } from "./ModelChip";
+import { mindFocusOf } from "./mindFocus";
 import { PasteChip, usePasteLabel } from "./PasteChip";
 import { SkillChip } from "./QuestionView";
 import { ScopeChips } from "./ScopeChips";
@@ -160,6 +162,7 @@ export function Composer({
 
   const update = (change: Partial<Draft>) => useComposer.getState().update(mindId, change);
   /** Keeps the scope the User chose; the Mind's own follows it to another Folder. */
+  const [dropping, setDropping] = useState(false);
   const updateScope = (next: SearchScope) => update({ scope: chosenScope(next, folderId) });
 
   // Single-line text sits beside the controls; once it would run past one line, it takes the
@@ -293,6 +296,15 @@ export function Composer({
     field.current?.focus();
   };
 
+  /** Documents dragged from the sidebar join the Search scope, as "@" would add them. */
+  const addDocuments = (ids: readonly string[]) => {
+    const have = scopeIds(scope, "document");
+    const fresh = ids.filter((id) => !have.includes(id));
+    if (fresh.length === 0) return;
+    updateScope({ ...scope, documentIds: [...have, ...fresh] });
+    field.current?.focus();
+  };
+
   const chooseSkill = (name: string) => {
     update({ skill: name, ...(picking && { text: withoutTyped(picking) }) });
     useAnswers.getState().dismiss(composerKey(mindId));
@@ -389,10 +401,11 @@ export function Composer({
     setExpanded(false);
     setViewing(null);
     setPicking(null);
-    // In the assistant's conversation: the Mind is read, never written to.
+    // In the assistant's conversation: the Mind is read, what is selected in it first, never written to.
     const asked = await askInAssistant({
       mindId,
       text,
+      focus: editor.isDestroyed ? null : mindFocusOf(editor.state),
       scope: composerScope(current, folderId),
       model: mindModelOf(doc),
       forcedSkill: current.skill,
@@ -446,11 +459,28 @@ export function Composer({
   const activeOption = picking && option >= 0 ? `${listId}-${option}` : undefined;
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: a drop target; "@" adds a Document without dragging.
     <div
       ref={root}
       data-testid="composer"
       data-expanded={expanded || undefined}
+      data-dropping={dropping || undefined}
       className={expanded ? "composer composer--expanded" : "composer"}
+      onDragOver={(event) => {
+        if (!carriesDocuments(event)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "link";
+        setDropping(true);
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropping(false);
+      }}
+      onDrop={(event) => {
+        if (!carriesDocuments(event)) return;
+        event.preventDefault();
+        setDropping(false);
+        addDocuments(droppedDocumentIds(event));
+      }}
     >
       <SuggestionOffer mindId={mindId} doc={doc} editor={editor} />
       <EditStatus mindId={mindId} />
