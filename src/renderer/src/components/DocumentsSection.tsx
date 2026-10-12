@@ -10,11 +10,13 @@ import {
 import type { Document, DocumentStatus, Tag } from "../../../core/api";
 import { displayName, sourceOf } from "../../../shared/documentNames";
 import type { MessageKey } from "../../../shared/i18n";
+import { startDocumentDrag } from "../documentDrag";
 import { documentStatusText } from "../documentStatus";
 import { useLanguage, useT } from "../i18n";
 import { currentTabOf } from "../layoutSlice";
 import { fileStatusLabel } from "../linkedFolders";
 import { scanningStatus } from "../scanStatus";
+import { useSortMenu } from "../sortMenu";
 import { selectVisibleDocuments, useAppStore } from "../store";
 import { chipsOf, tagIndex } from "../tagEditing";
 import { moveThroughRows, TREE_ROW } from "../treeKeys";
@@ -22,7 +24,7 @@ import { ActiveTagFilter, DocumentTagMenu, TagFilterMenu } from "./DocumentTags"
 import { FolderTree } from "./FolderTree";
 import { LibraryFolders } from "./LibraryFolders";
 import { LinkFolderDialog } from "./LinkFolderDialog";
-import { DocumentLineIcon } from "./lineIcons";
+import { DocumentLineIcon, MoreLineIcon } from "./lineIcons";
 import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
 import { SidebarTags } from "./SidebarTags";
 import {
@@ -177,6 +179,22 @@ export function DocumentsSection() {
           <DocumentLineIcon kind="text" className="size-4 shrink-0" />
           <span className="truncate">{t("library.all")}</span>
         </button>
+        <div className={rowActionsClass}>
+          <button
+            type="button"
+            data-testid="sidebar-sort"
+            aria-label={t("sort.sidebar")}
+            title={t("sort.sidebar")}
+            onClick={(event) =>
+              useSortMenu
+                .getState()
+                .show({ scope: "sidebar", withFolders: true, anchor: event.currentTarget })
+            }
+            className={rowActionButtonClass}
+          >
+            <MoreLineIcon className="size-4" />
+          </button>
+        </div>
       </div>
       {views.length > 1 && (
         <div className="mx-2 my-2 flex items-center gap-2 border-b border-rule pb-1">
@@ -310,6 +328,8 @@ const DocumentRow = memo(function DocumentRow({
             .join("\n")}
           // A preview beside the Mind, or in the group already showing a Document.
           onClick={() => openDocument({ documentId: item.id })}
+          draggable
+          onDragStart={(event) => startDocumentDrag(event, item.id)}
           onDoubleClick={() => setRenaming(true)}
           onKeyDown={(event) => {
             if (event.key === "F2") {

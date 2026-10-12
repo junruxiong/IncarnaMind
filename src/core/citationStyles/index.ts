@@ -5,6 +5,7 @@
  */
 import { type CitationStyle, citationStyle } from "../../shared/citationStyles";
 import { displayName, titleWithoutSite } from "../../shared/documentNames";
+import { translate } from "../../shared/i18n";
 import { missingDetails } from "../../shared/references";
 import type {
   BibliographyEntry,
@@ -14,6 +15,7 @@ import type {
   FormattedCitations,
   StyledRun,
 } from "../api";
+import type { Language } from "../language";
 import { type CslItem, cslItemOf, locatorOf, nameOnlyItem } from "./csl";
 import { CitationFormatError, type CitationStyleEngine, createWorkerEngine } from "./engine";
 import type { FormatJob } from "./format";
@@ -38,6 +40,23 @@ interface Reference {
   /** The Document's name, as the app shows it, or as it was when cited. */
   name: string;
   needsDetails: boolean;
+  /** What the app knows of it, for an entry when its record has no details; null if it has some. */
+  bare: { kind: Document["kind"]; addedAt: string } | "removed" | null;
+}
+
+/** Whether a record gives nothing to cite by, so the style has only the name to print. */
+function hasNoDetails(document: Document): boolean {
+  const fields = document.reference?.fields;
+  if (!fields) return true;
+  return (
+    fields.title === "" &&
+    fields.authors.length === 0 &&
+    fields.issued === "" &&
+    fields.containerTitle === "" &&
+    fields.publisher === "" &&
+    fields.doi === "" &&
+    fields.url === ""
+  );
 }
 
 /**
@@ -59,6 +78,7 @@ function referenceOf(work: CitedWork, document: Document | undefined): Reference
       documentId: null,
       name,
       needsDetails: true,
+      bare: "removed",
     };
   }
   const fields = document.reference?.fields;
@@ -72,7 +92,33 @@ function referenceOf(work: CitedWork, document: Document | undefined): Reference
   if (document.web && typeof site === "string") item.title = titleWithoutSite(item.title, site);
   // A web page is cited as it read on the day the quoted version was fetched (#100).
   if (fetched) item.accessed = { "date-parts": [localDay(fetched)] };
-  return { item, documentId: document.id, name, needsDetails: thin(document) };
+  return {
+    item,
+    documentId: document.id,
+    name,
+    needsDetails: thin(document),
+    bare: hasNoDetails(document) ? { kind: document.kind, addedAt: document.createdAt } : null,
+  };
+}
+
+/**
+ * The entry for a work with no details, which some styles leave blank (Chicago notes) and the
+ * rest print as little more than a title: its name, its kind and the day it was added, in the
+ * style's language. The style's own number, if it has one, stays.
+ */
+function fallbackRuns(reference: Reference, language: Language): StyledRun[] {
+  const { bare } = reference;
+  if (bare === null) return [];
+  const name = reference.name.replace(/[.。]+$/, "");
+  if (bare === "removed") {
+    return [{ text: translate(language, "references.fallback.removed", { name }) }];
+  }
+  const date = new Intl.DateTimeFormat(language === "zh-CN" ? "zh-CN" : "en-GB", {
+    dateStyle: "long",
+    timeZone: "UTC",
+  }).format(new Date(bare.addedAt));
+  const kind = translate(language, `library.format.${bare.kind}`);
+  return [{ text: translate(language, "references.fallback", { name, kind, date }) }];
 }
 
 /** The version of a web page a Citation quotes, as the page's fetches recorded it. */
@@ -146,7 +192,13 @@ export function createCitationStyles(options: CitationStylesOptions) {
       })),
       englishTermsForOthers: style.language === "zh-CN",
     };
-    const key = JSON.stringify([style.id, job]);
+    const fallbacks = new Map(
+      [...references.values()].map((reference) => [
+        reference.item.id,
+        fallbackRuns(reference, style.language),
+      ]),
+    );
+    const key = JSON.stringify([style.id, job, [...fallbacks.values()]]);
     const known = cache.get(key);
     if (known) {
       remember(key, known);
@@ -168,10 +220,11 @@ export function createCitationStyles(options: CitationStylesOptions) {
       })),
       bibliography: output.bibliography.map((entry): BibliographyEntry => {
         const reference = byId.get(entry.id);
+        const fallback = fallbacks.get(entry.id) ?? [];
         return {
           documentId: reference?.documentId ?? null,
           label: entry.firstField as StyledRun[] | null,
-          runs: entry.runs,
+          runs: fallback.length > 0 ? fallback : entry.runs,
           needsDetails: reference?.needsDetails ?? true,
         };
       }),

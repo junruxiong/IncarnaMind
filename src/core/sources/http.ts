@@ -12,20 +12,26 @@ import { type Pace, type PaceTimers, realTimers } from "./pace";
  * - "rate-limited": the service asked to slow down (429, 503), or its free allowance is used up;
  * - "service-error": an error status, or an answer that can't be read;
  * - "not-found": 404 or 410;
- * - "not-open": what came back isn't the open file asked for (a sign-in page, a paywall, too large).
+ * - "not-open": what came back isn't the open file asked for (a sign-in page, a paywall, too large);
+ * - "needs-key": the provider works only with the User's own key, and none is set;
+ * - "key-rejected": the provider turned the User's key away.
  */
 export type SourceErrorReason =
   | "unreachable"
   | "rate-limited"
   | "service-error"
   | "not-found"
-  | "not-open";
+  | "not-open"
+  | "needs-key"
+  | "key-rejected";
 
 export class SourceError extends Error {
   override name = "SourceError";
   constructor(
     readonly reason: SourceErrorReason,
     message: string,
+    /** The status the service answered, when it answered one. */
+    readonly status: number | null = null,
   ) {
     super(message);
   }
@@ -59,6 +65,8 @@ export interface SourceRequest {
   maxBytes?: number;
   /** Extra headers, for a key: never written to an error. */
   headers?: Record<string, string>;
+  /** "manual": a redirect isn't followed; its target is the response's `url`, with no body. */
+  redirect?: "manual";
 }
 
 export interface SourceResponse {
@@ -122,7 +130,7 @@ export function createSourceHttp(pace: Pace, timers: PaceTimers = realTimers): S
     const timeout = AbortSignal.timeout(request.timeoutMs ?? 20_000);
     try {
       return await fetch(url, {
-        redirect: "follow",
+        redirect: request.redirect ?? "follow",
         credentials: "omit",
         signal: AbortSignal.any([request.signal, timeout]),
         headers: {
@@ -156,27 +164,44 @@ export function createSourceHttp(pace: Pace, timers: PaceTimers = realTimers): S
           const wait = retryAfterMs(response.headers.get("retry-after"), timers.now());
           await response.body?.cancel().catch(() => undefined);
           if (wait === null || wait > MAX_RETRY_AFTER_MS) {
-            throw new SourceError("rate-limited", `${url} answered ${response.status}.`);
+            throw new SourceError(
+              "rate-limited",
+              `${url} answered ${response.status}.`,
+              response.status,
+            );
           }
           await timers.sleep(wait, request.signal);
           response = await once(url, request);
           if (response.status === 429 || response.status === 503) {
             await response.body?.cancel().catch(() => undefined);
-            throw new SourceError("rate-limited", `${url} answered ${response.status} again.`);
+            throw new SourceError(
+              "rate-limited",
+              `${url} answered ${response.status} again.`,
+              response.status,
+            );
           }
         }
         const fail = async (error: SourceError): Promise<never> => {
           await response.body?.cancel().catch(() => undefined);
           throw error;
         };
-        if (response.status === 404 || response.status === 410) {
-          return fail(new SourceError("not-found", `${url} answered ${response.status}.`));
+        const { status } = response;
+        if (request.redirect === "manual" && status >= 300 && status < 400) {
+          const target = URL.parse(response.headers.get("location") ?? "", url)?.href;
+          await response.body?.cancel().catch(() => undefined);
+          if (!target || !isWebAddress(target)) {
+            throw new SourceError("service-error", `${url} redirected nowhere.`, status);
+          }
+          return { bytes: new Uint8Array(), contentType: null, url: target };
         }
-        if (response.status === 401 || response.status === 402 || response.status === 403) {
-          return fail(new SourceError("not-open", `${url} answered ${response.status}.`));
+        if (status === 404 || status === 410) {
+          return fail(new SourceError("not-found", `${url} answered ${status}.`, status));
+        }
+        if (status === 401 || status === 402 || status === 403) {
+          return fail(new SourceError("not-open", `${url} answered ${status}.`, status));
         }
         if (!response.ok) {
-          return fail(new SourceError("service-error", `${url} answered ${response.status}.`));
+          return fail(new SourceError("service-error", `${url} answered ${status}.`, status));
         }
         const finalUrl = response.url || url;
         if (!isWebAddress(finalUrl)) {

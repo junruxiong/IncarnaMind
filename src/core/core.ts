@@ -802,6 +802,7 @@ export function createCore(adapters: CoreAdapters): Core {
   consent.registry.register({
     id: "find-sources",
     sends: FIND_SOURCES_SENDS,
+    sendsTo: (serviceId) => sources.sendsTo(serviceId),
     services: async () => [],
   });
   sources.dropPurged().catch((error: unknown) => console.error(error));
