@@ -71,7 +71,7 @@ const files: FilesBridge = {
     ipcRenderer.invoke(FILES_CHANNELS.openDocumentExternally, documentId),
   showDocumentInFolder: (documentId) =>
     ipcRenderer.invoke(FILES_CHANNELS.showDocumentInFolder, documentId),
-  pickLinkedFolder: () => ipcRenderer.invoke(FILES_CHANNELS.pickLinkedFolder),
+  pickLinkedFolder: (locating) => ipcRenderer.invoke(FILES_CHANNELS.pickLinkedFolder, locating),
   pickDocuments: () => ipcRenderer.invoke(FILES_CHANNELS.pickDocuments),
   pickReferenceFile: () => ipcRenderer.invoke(FILES_CHANNELS.pickReferenceFile),
   showLinkedFolder: (linkedFolderId) =>
@@ -85,6 +85,7 @@ const files: FilesBridge = {
     };
   },
   setSidebarHidden: (hidden) => ipcRenderer.send(FILES_CHANNELS.sidebarHidden, hidden),
+  setEditMenu: (state) => ipcRenderer.send(FILES_CHANNELS.editMenu, state),
   titleBar: titleBarOf(process.platform),
   onFullScreenChange: (listener) => {
     const receive = (_event: unknown, fullScreen: boolean) => listener(fullScreen);

@@ -1,13 +1,18 @@
 import { BrowserWindow, Menu, type MenuItemConstructorOptions } from "electron";
 import type { Language } from "../core/language";
-import { FILES_CHANNELS, type MenuCommand } from "../shared/bridge";
+import { type EditMenuState, FILES_CHANNELS, type MenuCommand } from "../shared/bridge";
 import { MENU_COMMANDS } from "../shared/commands";
 import { type MessageKey, translate } from "../shared/i18n";
 
+/** The window the menu acts on: the one in front, or else the only one. */
+function front(): BrowserWindow | null {
+  const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+  return window && !window.isDestroyed() ? window : null;
+}
+
 /** Asks the window in front to run a menu item's command (see `files.onMenuCommand`). */
 function send(command: MenuCommand): void {
-  const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
-  if (window && !window.isDestroyed()) window.webContents.send(FILES_CHANNELS.menuCommand, command);
+  front()?.webContents.send(FILES_CHANNELS.menuCommand, command);
 }
 
 /**
@@ -25,6 +30,26 @@ export function installAppMenu(language: Language, { developer }: { developer: b
 /** What the menu was last built from, to build it again when the sidebar is hidden or shown. */
 let installed: { language: Language; developer: boolean } | null = null;
 let sidebarHidden = false;
+
+/** Until the window says where its focus is, Undo and Redo show as a field's: enabled, naming nothing. */
+let editMenu: EditMenuState = { text: "field", undo: null, redo: null };
+
+/** Where the focus is in the window in front, and the change Undo and Redo name (see `EditMenuState`). */
+export function setEditMenu(state: EditMenuState): void {
+  if (state.text === editMenu.text && state.undo === editMenu.undo && state.redo === editMenu.redo)
+    return;
+  editMenu = state;
+  if (installed) buildMenu();
+}
+
+const isTextPlace = (value: unknown) => value === "field" || value === "note" || value === null;
+const isNamed = (value: unknown) => typeof value === "string" || value === null;
+
+export function isEditMenuState(value: unknown): value is EditMenuState {
+  if (typeof value !== "object" || value === null) return false;
+  const { text, undo, redo } = value as Record<string, unknown>;
+  return isTextPlace(text) && isNamed(undo) && isNamed(redo);
+}
 
 /** Makes View say "Show Sidebar" while the sidebar is hidden, "Hide Sidebar" otherwise. */
 export function setMenuSidebarHidden(hidden: boolean): void {
@@ -49,6 +74,29 @@ function buildMenu(): void {
     click: () => send(id),
   });
   const settings = command("settings.open");
+  /**
+   * Undo and Redo: the window decides where they go from its focus when they are
+   * chosen, as a reported focus may be behind (#516): a field's own undo, the
+   * note's own, or the app's changes, which the menu then names ("Undo Move 3 Documents").
+   */
+  const edit = (step: "undo" | "redo"): MenuItemConstructorOptions => {
+    const id = step === "undo" ? "edit.undo" : "edit.redo";
+    const action = editMenu[step];
+    const label =
+      editMenu.text === null && action
+        ? translate(language, step === "undo" ? "menu.undo.named" : "menu.redo.named", { action })
+        : t(MENU_COMMANDS[id].label);
+    return {
+      id,
+      label,
+      // Windows writes Redo as Ctrl+Y, which the window binds with Ctrl+Shift+Z.
+      accelerator:
+        step === "redo" && process.platform === "win32" ? "Ctrl+Y" : MENU_COMMANDS[id].keys,
+      registerAccelerator: false,
+      enabled: editMenu.text !== null || action !== null,
+      click: () => send(id),
+    };
+  };
 
   const template: MenuItemConstructorOptions[] = [
     ...(isMac
@@ -92,8 +140,8 @@ function buildMenu(): void {
     {
       label: t("menu.edit"),
       submenu: [
-        { role: "undo", label: t("menu.undo") },
-        { role: "redo", label: t("menu.redo") },
+        edit("undo"),
+        edit("redo"),
         { type: "separator" },
         { role: "cut", label: t("menu.cut") },
         { role: "copy", label: t(isMac ? "menu.copy" : "menu.copy.other") },

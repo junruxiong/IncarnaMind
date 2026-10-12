@@ -42,9 +42,12 @@ export const dangerButtonClass = buttonStyle("danger");
 export const iconButtonClass =
   "inline-flex size-7 shrink-0 items-center justify-center rounded-md text-ink-meta hover:bg-chip hover:text-ink focus-visible:outline-offset-0 disabled:opacity-50";
 
-/** A text field, under its label. Radius 4, a 1px edge, blue when focused. */
-export const inputClass =
-  "mt-1 block w-full rounded-sm border border-rule-strong bg-sheet px-2.5 py-1.5 text-ui text-ink placeholder:text-ink-placeholder focus:border-accent focus:outline-1 focus:outline-offset-0 focus:outline-accent disabled:opacity-60";
+/** A field's box: radius 4, a 1px edge, blue when focused. Sized by where it sits. */
+export const fieldClass =
+  "rounded-sm border border-rule-strong bg-sheet px-2.5 py-1.5 text-ui text-ink placeholder:text-ink-placeholder focus:border-accent focus:outline-1 focus:outline-offset-0 focus:outline-accent disabled:opacity-60";
+
+/** A text field, under its label, as wide as its column. */
+export const inputClass = `mt-1 block w-full ${fieldClass}`;
 
 /** A field's label, above it. */
 export const fieldLabelClass = "block text-[13px] leading-5 text-ink-secondary";

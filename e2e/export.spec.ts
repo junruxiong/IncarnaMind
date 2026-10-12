@@ -6,6 +6,8 @@ import { footnotesOf, paragraphsOf, part, unzip } from "../tests/helpers/docx";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
+  addToNote,
+  askInAssistant,
   closeSettings,
   createDataFolder,
   dismissChatSetup,
@@ -74,19 +76,17 @@ test("a Mind exports to .docx: the dialog counts the unverified Citation first; 
   await useLocalChatModel(window);
   await addDocuments(window, [join(sources, "Tides.pdf")]);
 
-  // A Note, then a Question whose Answer misquotes its Document.
+  // A Note, then an Answer that misquotes its Document, added from the assistant.
   await newMind(window);
   await window.getByTestId("mind-title").fill("Tides");
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await window.keyboard.type("Notes on tides.");
   await window.keyboard.press("Enter");
-  await window.keyboard.press("ControlOrMeta+j");
-  await window.keyboard.type("When do spring tides happen? Misquote it.");
-  await window.keyboard.press("Enter");
-  const answer = editor.getByTestId("answer");
-  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  const answer = await askInAssistant(window, "When do spring tides happen? Misquote it.");
   await expect(answer.getByTestId("citation")).toHaveAttribute("data-check", "not-found");
+  await addToNote(window, answer);
+  await expect(editor.getByTestId("citation")).toHaveAttribute("data-check", "not-found");
 
   // Before anything is written, the dialog says how many Citations are unverified.
   await window.getByTestId("export-mind").click();
@@ -123,7 +123,7 @@ test("a Mind exports to .docx: the dialog counts the unverified Citation first; 
   const target = join(await realpath(suggested), "Tides.docx");
   expect(await pathsShown(app)).toEqual([target]);
 
-  // The file is there: the Note and the Answer, not the Question, and the Citation a footnote.
+  // The file is there: the Notes, the one added from the Answer too, its Citation a footnote.
   const files = unzip(await readFile(target));
   const paragraphs = paragraphsOf(part(files, "word/document.xml")).map((each) => each.text);
   expect(paragraphs).toContain("Notes on tides.");

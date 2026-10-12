@@ -14,8 +14,9 @@ async function setLocalMode(enabled: boolean): Promise<void> {
  */
 export async function turnOffLocalMode(): Promise<void> {
   await setLocalMode(false);
-  useUndo.getState().offer({
+  useUndo.getState().push({
     message: translateNow("localMode.turnedOff"),
     undo: () => setLocalMode(true),
+    redo: () => setLocalMode(false),
   });
 }

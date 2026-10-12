@@ -1,10 +1,15 @@
 import { expect, test } from "@playwright/test";
 import {
+  assistantAnswers,
   createDataFolder,
   dismissChatSetup,
   dragBlock,
   launchApp,
+  mindWrittenBefore,
   newMind,
+  openSteps,
+  pointAndClick,
+  pointAt,
   removeDataFolder,
   slideToHandle,
   useLocalChatModel,
@@ -18,7 +23,7 @@ test.afterEach(async () => {
   await removeDataFolder(dataDir);
 });
 
-test("a Question asked in a new Mind gets an Answer that streams in, and it is still there after reopening the app", async () => {
+test("a Question asked in the assistant gets an Answer that streams in there, and the conversation is still there after reopening the app", async () => {
   const first = await launchApp(dataDir, { fakeChat: true });
   const { window } = first;
   await dismissChatSetup(window);
@@ -28,16 +33,16 @@ test("a Question asked in a new Mind gets an Answer that streams in, and it is s
   const editor = window.getByTestId("mind-editor");
   await editor.click();
 
-  // Cmd/Ctrl+J focuses the composer; Enter asks, and the Question goes on the empty line.
+  // Cmd/Ctrl+J focuses the composer; Enter asks, and the Question shows in the assistant.
   await window.keyboard.press("ControlOrMeta+j");
   await expect(window.getByTestId("composer-input")).toBeFocused();
   await window.keyboard.type("What is IncarnaMind?");
   await window.keyboard.press("Enter");
-  const question = editor.getByTestId("question");
-  await expect(question).toBeVisible();
+  const assistant = window.getByTestId("assistant");
+  await expect(assistant.getByTestId("assistant-question")).toContainText("What is IncarnaMind?");
 
   // The Answer streams in below the Question: part of it shows while the rest is still coming.
-  const answer = editor.getByTestId("answer");
+  const answer = assistantAnswers(window).first();
   await expect(answer).toHaveAttribute("data-status", "streaming");
   await expect(answer.getByTestId("answer-stop")).toBeVisible();
   await expect(answer).toContainText("scripted");
@@ -47,22 +52,35 @@ test("a Question asked in a new Mind gets an Answer that streams in, and it is s
   await expect(answer.getByTestId("answer-stop")).toHaveCount(0);
   await expect(answer).toContainText("That is all.");
   await expect(answer).toContainText("What is IncarnaMind?");
-  await expect(answer.getByTestId("answer-model")).toContainText("fake-model");
+  // Its steps name the model that wrote it.
+  await expect(await openSteps(window, answer)).toContainText("Answered by fake-model");
   // Rendered as rich text: bold, a list, a formula and code.
   await expect(answer.locator("strong")).toHaveText("scripted");
-  await expect(answer.locator("li")).toHaveCount(2);
+  await expect(answer.getByTestId("assistant-answer-text").locator("li")).toHaveCount(2);
   await expect(answer.locator('[data-type="inline-math"] .katex')).toBeVisible();
   await expect(answer.locator("pre code")).toContainText('console.log("IncarnaMind");');
+  // The Mind holds no Question and no Answer: asking never writes into it.
+  await expect(editor.getByTestId("question")).toHaveCount(0);
+  await expect(editor.getByTestId("answer")).toHaveCount(0);
+
+  // Kept in the Mind, with a link back to its conversation.
+  await pointAt(window, answer.getByTestId("assistant-answer-text"));
+  await pointAndClick(window, answer.getByTestId("answer-add"));
+  await expect(editor.locator("strong")).toHaveText("scripted");
   await first.app.close();
 
+  // Reopened: the link back opens the conversation, its Answer as it was.
   const second = await launchApp(dataDir, { fakeChat: true });
   await second.window.getByTestId("mind-list-item").click();
-  const reopened = second.window.getByTestId("mind-editor");
-  await expect(reopened.getByTestId("question")).toContainText("What is IncarnaMind?");
-  const restored = reopened.getByTestId("answer");
+  await expect(second.window.getByTestId("assistant-empty")).toBeVisible();
+  await pointAndClick(second.window, second.window.getByTestId("conversation-link"));
+  const restored = assistantAnswers(second.window).first();
   await expect(restored).toHaveAttribute("data-status", "done");
   await expect(restored).toContainText("That is all.");
   await expect(restored.locator('[data-type="inline-math"] .katex')).toBeVisible();
+  await expect(second.window.getByTestId("assistant-question")).toContainText(
+    "What is IncarnaMind?",
+  );
   await second.app.close();
 });
 
@@ -82,8 +100,8 @@ test("a Note switched out of Question context looks muted, and asking without a 
   await toggle.click();
   await expect(sideNote).toHaveClass(/context-off/);
 
-  // Asking from the composer without a chat model explains, in its row, what to set up; the
-  // Question isn't left in the note, and its words stay in the composer.
+  // Asking from the composer without a chat model explains, in its row, what to set up; nothing
+  // is kept in the assistant, and the words stay in the composer.
   await sideNote.click();
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type("Is anyone there?");
@@ -92,40 +110,26 @@ test("a Note switched out of Question context looks muted, and asking without a 
   await expect(notReady).toBeVisible();
   await expect(notReady).toContainText("needs a chat model");
   await expect(window.getByTestId("composer-input")).toHaveValue("Is anyone there?");
+  await expect(window.getByTestId("assistant-question")).toHaveCount(0);
+  await expect(window.getByTestId("assistant-empty")).toBeVisible();
   await expect(editor.getByTestId("question")).toHaveCount(0);
-  await expect(editor.getByTestId("answer")).toHaveCount(0);
   await app.close();
 });
 
-test("after asking, the Mind's cursor goes below the Answer; a Question and its Answer are dragged and deleted together", async () => {
+test("in a Mind written before the assistant, a Question and its Answer are dragged and deleted together", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
-  await useLocalChatModel(window);
-  await newMind(window);
+  await mindWrittenBefore(window, "Written before", [
+    { note: "Intro" },
+    { question: "What is IncarnaMind?", answer: "A notebook." },
+    { note: "Next thought" },
+    { heading: "Later" },
+  ]);
+  await window.getByTestId("mind-list-item").filter({ hasText: "Written before" }).click();
   const editor = window.getByTestId("mind-editor");
-  await editor.click();
-  await window.keyboard.type("Intro");
-  await window.keyboard.press("Enter");
-  await window.keyboard.type("## Later");
-  // Clicking right of "Intro" puts the cursor at its end, once the editor has seen it.
-  const intro = editor.locator(":scope > p").first();
-  await intro.click();
-  await expect(intro).toHaveClass(/has-focus/);
-  await window.keyboard.press("Enter");
-
-  // A Question between a Note and a heading: its Answer isn't the last Block.
-  await window.keyboard.press("ControlOrMeta+j");
-  await window.keyboard.type("What is IncarnaMind?");
-  await window.keyboard.press("Enter");
-  const answer = editor.getByTestId("answer");
-  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-
-  // Esc goes back from the composer to the note: what is typed next goes on a new line under
-  // the Answer, not into the Question.
-  await window.keyboard.press("Escape");
-  await window.keyboard.type("Next thought");
   const question = editor.getByTestId("question");
   await expect(question.locator(".question-text")).toHaveText("What is IncarnaMind?");
+  const intro = editor.locator(":scope > p").first();
   const blocks = editor.locator(":scope > *");
   const order = () =>
     blocks.evaluateAll((all) =>
@@ -147,5 +151,47 @@ test("after asking, the Mind's cursor goes below the Answer; a Question and its 
   await (await slideToHandle(window, question)).click();
   await window.getByTestId("block-menu-delete").click();
   await expect.poll(order).toEqual(["Intro", "Next thought", "Later"]);
+  await app.close();
+});
+
+test("in a Mind written before the assistant, an Answer the User edited is written again as changes over their version, which stays until they accept them", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await mindWrittenBefore(window, "Written before", [
+    { question: "What is IncarnaMind?", answer: "A notebook." },
+  ]);
+  await window.getByTestId("mind-list-item").filter({ hasText: "Written before" }).click();
+  const editor = window.getByTestId("mind-editor");
+  const answer = editor.getByTestId("answer");
+  await expect(answer).toContainText("A notebook.");
+  const regenerate = async () => {
+    await pointAt(window, answer);
+    await pointAndClick(window, answer.getByTestId("answer-regenerate"));
+  };
+
+  // Written again, unedited, it is replaced where it is.
+  await regenerate();
+  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  await expect(answer).toContainText("That is all.");
+  await expect(answer).not.toContainText("A notebook.");
+
+  // The User writes in the Answer: it is theirs now.
+  await pointAndClick(window, answer.locator("p").last());
+  await window.keyboard.press("End");
+  await window.keyboard.type(" Mine.");
+  await expect(answer).toContainText("That is all. Mine.");
+
+  // Written again, it comes back as changes over their version, which stays until accepted.
+  await regenerate();
+  const changes = window.getByTestId("proposals-bar");
+  await expect(changes).toBeVisible({ timeout: 15_000 });
+  // The model wrote the same again: the change takes the User's words out.
+  await expect(answer.locator("del.proposal-delete")).toContainText("Mine.");
+  await expect(answer).toContainText("Mine.");
+  await expect(answer).toHaveAttribute("data-status", "done");
+  await pointAndClick(window, changes.getByTestId("proposals-accept-all"));
+  await expect(changes).toHaveCount(0);
+  await expect(answer).not.toContainText("Mine.");
   await app.close();
 });

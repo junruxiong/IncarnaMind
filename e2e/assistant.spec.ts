@@ -3,6 +3,7 @@ import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { Editor } from "@tiptap/core";
 import type { CoreBridge } from "../src/core/api";
 import {
+  assistantAnswers,
   createDataFolder,
   dismissChatSetup,
   dragBy,
@@ -148,15 +149,15 @@ test("a new window's assistant is docked on the right, outside the groups, the c
   );
   await expect(window.getByTestId("assistant-more")).toHaveAccessibleName("More for the assistant");
   await expect(window.getByTestId("assistant-fold")).toHaveAccessibleName("Fold the assistant");
-  await expect(window.getByTestId("assistant-reads")).toHaveText(
-    "Reads “Tides” · searches All Documents",
+  await expect(window.getByTestId("assistant-asked-from")).toHaveText(
+    "Asked from “Tides” · searches All Documents",
   );
   // The composer is the assistant's, the one in the window.
   await expect(window.getByTestId("composer")).toHaveCount(1);
   await expect(assistant.getByTestId("composer-input")).toBeVisible();
   await screenshot(window, "assistant-right");
 
-  // A second and a third group: still one assistant, and it reads the Mind the User is in.
+  // A second and a third group: still one assistant, and it is asked from the Mind the User is in.
   await window.keyboard.press("ControlOrMeta+Alt+Backslash");
   await mindWithText(window, "Moon");
   await window.keyboard.press("ControlOrMeta+Alt+Backslash");
@@ -164,12 +165,12 @@ test("a new window's assistant is docked on the right, outside the groups, the c
   await expect(assistant).toHaveCount(1);
   await expect(window.getByTestId("composer")).toHaveCount(1);
   await window.getByTestId("tab-group").nth(0).getByTestId("mind-editor").click();
-  await expect(window.getByTestId("assistant-reads")).toHaveText(
-    "Reads “Tides” · searches All Documents",
+  await expect(window.getByTestId("assistant-asked-from")).toHaveText(
+    "Asked from “Tides” · searches All Documents",
   );
   await window.getByTestId("tab-group").nth(1).getByTestId("mind-editor").click();
-  await expect(window.getByTestId("assistant-reads")).toHaveText(
-    "Reads “Moon” · searches All Documents",
+  await expect(window.getByTestId("assistant-asked-from")).toHaveText(
+    "Asked from “Moon” · searches All Documents",
   );
   box = await boxOf(assistant);
   const groups = await boxOf(window.getByTestId("tab-groups"));
@@ -391,7 +392,7 @@ test("its ⋯ menu and the keyboard dock, float and fold it; ⌘J unfolds it int
     await window.getByTestId("assistant-fold").click();
     await expect(assistant).toHaveAttribute("data-folded", "true");
     await expect(window.getByTestId("assistant-header")).toBeVisible();
-    await expect(window.getByTestId("assistant-reads")).toBeHidden();
+    await expect(window.getByTestId("assistant-asked-from")).toBeHidden();
     expect((await boxOf(assistant)).height).toBeLessThan(40);
     await screenshot(window, `assistant-folded-${place}`);
     await window.getByTestId("mind-editor").click();
@@ -508,12 +509,12 @@ test("moving, resizing and folding it keep the composer's draft, the Mind's scro
     );
   });
 
-  // Asked: the Answer streams into the Mind while the assistant moves, resizes and folds.
+  // Asked: the Answer streams into the assistant while it moves, resizes and folds.
   const input = window.getByTestId("composer-input");
   await input.click();
   await window.keyboard.type("When do spring tides happen?");
   await window.keyboard.press("Enter");
-  const answer = editor.getByTestId("answer");
+  const answer = assistantAnswers(window);
   await expect(answer).toHaveAttribute("data-status", "streaming");
   await fromMenu(window, "left");
   await dragBy(window, window.getByTestId("assistant-resize"), 40);
@@ -521,7 +522,8 @@ test("moving, resizing and folding it keep the composer's draft, the Mind's scro
   await window.getByTestId("assistant-fold").click();
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(answer).toContainText("That is all.");
-  await expect(editor.getByTestId("answer")).toHaveCount(1);
+  await expect(answer).toHaveCount(1);
+  await expect(editor.getByTestId("answer")).toHaveCount(0);
 
   // A draft stays as it was typed, wherever the assistant goes.
   await input.click();
@@ -544,16 +546,17 @@ test("moving, resizing and folding it keep the composer's draft, the Mind's scro
   await fromMenu(window, "right");
   expect(await scroller.evaluate((element) => element.scrollTop)).toBe(scrolled);
 
-  // History lists the assistant's conversations (#300), newest first: here one asked through
-  // the core, as the conversation in the assistant will ask (#201).
+  // History lists the assistant's conversations (#300), newest first: the one asked here, and
+  // one asked through the core since.
   await window.evaluate(async () => {
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     await bridge.askInConversation({ text: "When do neap tides come?" });
   });
   await window.getByTestId("assistant-history").click();
   const rows = window.getByTestId("assistant-history-row");
-  await expect(rows).toHaveCount(1);
-  await expect(rows).toContainText("When do neap tides come");
+  await expect(rows).toHaveCount(2);
+  await expect(rows.first()).toContainText("When do neap tides come");
+  await expect(rows.last()).toContainText("When do spring tides happen");
   await window.keyboard.press("Escape");
   await app.close();
 });
@@ -568,7 +571,9 @@ test("in Chinese: the header, the line, the menu and the zones", async () => {
   await expect(assistantOf(window)).toHaveAccessibleName("助手");
   await expect(window.getByTestId("assistant-history")).toHaveAccessibleName("历史对话");
   await expect(window.getByTestId("assistant-fold")).toHaveAccessibleName("收起助手");
-  await expect(window.getByTestId("assistant-reads")).toHaveText("正在读“Tides” · 搜索全部文档");
+  await expect(window.getByTestId("assistant-asked-from")).toHaveText(
+    "从“Tides”提问 · 搜索全部文档",
+  );
   await window.getByTestId("assistant-more").click();
   await expect(window.getByTestId("assistant-menu").getByRole("menuitemradio")).toHaveText([
     "停靠在右侧",

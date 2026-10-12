@@ -91,6 +91,8 @@ export interface AgentsOptions {
   version: string;
   /** What the calls read (see ./access). */
   access: Omit<AgentAccessDeps, "admit" | "record" | "citations" | "clock" | "reportError">;
+  /** Whether this agent has IncarnaMind's Skill installed (see ./setup). */
+  skillInstalled(client: string | null): boolean;
   changed(settings: AgentSettings): void;
   called(activity: AgentActivity): void;
   reportError(error: unknown): void;
@@ -191,6 +193,14 @@ export function createAgents(options: AgentsOptions) {
     return row ? toPairing(row) : null;
   };
 
+  const createdPaths = (pairingId: string): string[] => {
+    const row = db.get<{ created_paths: string }>(
+      "SELECT created_paths FROM agent_pairings WHERE id = ?",
+      [pairingId],
+    );
+    return parseList<string>(row?.created_paths ?? "[]").filter((each) => typeof each === "string");
+  };
+
   const requirePairing = (pairingId: unknown): AgentPairing => {
     if (typeof pairingId !== "string" || pairingId === "") {
       throw new InvalidInputError("A pairing id must be text.");
@@ -200,11 +210,15 @@ export function createAgents(options: AgentsOptions) {
     return pairing;
   };
 
-  const settings = (): AgentSettings => ({
-    enabled: enabled(),
-    paused: options.localOnly() ? "local-mode" : null,
-    pairings: livePairings(),
-  });
+  const settings = (): AgentSettings => {
+    const pairings = livePairings();
+    return {
+      enabled: enabled(),
+      paused: options.localOnly() ? "local-mode" : null,
+      pairings,
+      skills: pairings.filter((each) => options.skillInstalled(each.client)).map((each) => each.id),
+    };
+  };
 
   const changed = () => options.changed(settings());
 
@@ -499,6 +513,17 @@ export function createAgents(options: AgentsOptions) {
       await options.secrets.delete(secretName(pairing.id));
       changed();
     },
+
+    /** Records the settings files and folders that setting this pairing's agent up created. */
+    recordCreated(pairingId: string, paths: readonly string[]): void {
+      const all = new Set([...createdPaths(pairingId), ...paths]);
+      db.run("UPDATE agent_pairings SET created_paths = ? WHERE id = ?", [
+        JSON.stringify([...all]),
+        pairingId,
+      ]);
+    },
+
+    created: createdPaths,
 
     async launch(pairingIdInput: unknown): Promise<AgentLaunch> {
       const pairing = requirePairing(pairingIdInput);

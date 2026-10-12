@@ -17,6 +17,7 @@ import type {
   ExternalService,
 } from "../api";
 import type { Consent } from "../consent";
+import type { Meter, MeteredModel } from "../cost/meter";
 import { ChatNotReadyError, InvalidInputError, isRecord } from "../errors";
 import type { Secrets } from "../secrets";
 import type { SettingsStore } from "../settings";
@@ -30,6 +31,7 @@ import {
   startingSupport,
 } from "./capabilities";
 import { catalogFacts, catalogProviderOfKind, modelsProviderOfKind } from "./catalog";
+import { billingOf, ollamaCloudPrice } from "./catalog/billing";
 import { endpointOf } from "./catalog/providers";
 import type { ChatGptPlan } from "./chatgpt/plan";
 import {
@@ -41,7 +43,13 @@ import {
   serviceFor,
 } from "./kinds";
 import { type ListedModel, listProviderModels } from "./modelLists";
-import type { ChatLanguageModel, ChatModelFactory, ChatModelSpec, ContextWindow } from "./models";
+import {
+  type ChatLanguageModel,
+  type ChatModelFactory,
+  type ChatModelSpec,
+  type ContextWindow,
+  summarizesReasoning,
+} from "./models";
 import { isCloudModelName, OLLAMA_CLOUD } from "./ollamaCloud";
 import {
   DEFAULT_OLLAMA_SETTINGS,
@@ -97,6 +105,8 @@ export interface PreparedChatModel {
   window?: ContextWindow;
   /** How the model gives Citations, known before the first request (see ./capabilities). */
   support?: CitationSupport;
+  /** Its reasoning comes back as its provider's summary, which an Answer may show (see ./models). */
+  summarizesReasoning: boolean;
   /**
    * A local model's quotes the Citation check doesn't find are asked for once
    * more (see ../answers/quoteRetry); never a cloud model's.
@@ -199,8 +209,36 @@ export function createChat(options: {
   ollamaModels: OllamaModels;
   /** Whether "Keep everything on this computer" is on: Questions then go only to a model on this computer. */
   localOnly(): boolean;
+  /** Counts every cloud request of the models handed out, and holds the monthly cap (see ../cost/meter). */
+  meter: Pick<Meter, "wrap">;
 }) {
-  const { db, now, settings, secrets, consent, createModel, chatGpt, ollamaModels } = options;
+  const { db, now, settings, secrets, consent, createModel, chatGpt, ollamaModels, meter } =
+    options;
+
+  /** What the meter needs to know of a model: how it's billed, its price and its output limit. */
+  const meteredModel = (
+    server: { kind: ChatProviderKind; service: ExternalService | null },
+    providerId: string,
+    modelId: string,
+    flow: MeteredModel["flow"],
+    capabilities: ModelCapabilities,
+    profile: OllamaModelProfile | null,
+  ): MeteredModel => {
+    const ollamaCloud = server.kind === "ollama" && server.service?.id === OLLAMA_CLOUD.id;
+    return {
+      providerId,
+      kind: server.kind,
+      modelId,
+      flow,
+      billing: billingOf(server.kind, server.service),
+      price: ollamaCloud ? ollamaCloudPrice(modelId) : capabilities.facts.price,
+      maxOutput:
+        server.kind === "ollama"
+          ? (profile?.settings ?? DEFAULT_OLLAMA_SETTINGS).outputTokens
+          : capabilities.facts.maxOutput,
+      ollamaCloud,
+    };
+  };
 
   /** What Ollama says about a model, for the "ollama" kind; null for other kinds, or when it can't say. */
   const profileFor = (kind: ChatProviderKind, baseUrl: string | null, modelId: string) =>
@@ -305,7 +343,7 @@ export function createChat(options: {
     apiKey: string | null,
     modelId: string,
     profile: OllamaModelProfile | null = null,
-    thinking?: "off",
+    thinking?: ChatModelSpec["thinking"],
   ): ChatModelSpec => {
     const { kind } = server;
     if (kind === "chatgpt") {
@@ -315,6 +353,7 @@ export function createChat(options: {
         apiKey: null,
         modelId,
         credentials: chatGpt.credentials,
+        ...(thinking && { thinking }),
       };
     }
     const baseUrl = endpointUrl(kind, server.endpoint) ?? server.baseUrl;
@@ -486,6 +525,24 @@ export function createChat(options: {
 
     exists: (id: string) => rowById(id) !== undefined,
 
+    /**
+     * How requests to `choice` (the default model when left out) are metered,
+     * as known now, without asking any server; null without a model.
+     */
+    metered(choice?: ChatModelChoice): MeteredModel | null {
+      const chosen = choice ?? settings.get().user.chatModel;
+      const row = chosen && rowById(chosen.providerId);
+      if (!chosen || !row || !isChatProviderKind(row.kind)) return null;
+      return meteredModel(
+        { kind: row.kind, service: knownService(row, chosen.modelId) },
+        row.id,
+        chosen.modelId,
+        "chat",
+        capabilitiesOf(row, chosen.modelId),
+        null,
+      );
+    },
+
     /** A provider's kind, and whether its model runs on this computer (it sends to no service); null when it's gone. */
     describe(id: string): { kind: ChatProviderKind; local: boolean } | null {
       const row = rowById(id);
@@ -620,7 +677,20 @@ export function createChat(options: {
         // A model in Ollama is tested with the settings Answers use, so it stays loaded for them.
         const profile = await profileFor(server.kind, server.baseUrl, modelId);
         checkCanChat(profile, modelId);
-        const model = createModel(specFor(server, apiKey, modelId, profile));
+        const facts = resolveCapabilities({
+          catalog: catalogFacts(modelsProviderOfKind(server.kind, server.endpoint), modelId),
+        });
+        const model = meter.wrap(
+          createModel(specFor(server, apiKey, modelId, profile)),
+          meteredModel(
+            { kind: server.kind, service },
+            rowByServer(server)?.id ?? server.catalogId ?? server.kind,
+            modelId,
+            "test",
+            facts,
+            profile,
+          ),
+        );
         await generateText({
           model,
           prompt: "Reply with the word OK.",
@@ -637,12 +707,15 @@ export function createChat(options: {
     /**
      * For Answers (#29): the default model, or `choice` from a Question's model
      * picker, after checking readiness and getting consent for its service on
-     * `flow` (automatic tagging passes "tagging").
+     * `flow` (automatic tagging passes "tagging"). `thinking: "off"` skips
+     * thinking where the model can, for a short request on the chat flow; the
+     * chat flow's other requests ask for a summary of the model's reasoning.
      * Throws `ChatNotReadyError` or `ConsentDeclinedError`; nothing is sent then.
      */
     async prepareModel(
       choice?: ChatModelChoice,
       flow: DataFlowId = "chat",
+      thinking?: "off",
     ): Promise<PreparedChatModel> {
       const readiness = await readinessFor(choice ?? settings.get().user.chatModel, flow);
       if (!readiness.ready) throw new ChatNotReadyError(readiness);
@@ -653,7 +726,13 @@ export function createChat(options: {
       checkCanChat(profile, modelId);
       // The calls that don't write the Answer (tagging, classifying) skip thinking where they can.
       const model = createModel(
-        specFor(provider, apiKey, modelId, profile, flow === "chat" ? undefined : "off"),
+        specFor(
+          provider,
+          apiKey,
+          modelId,
+          profile,
+          thinking ?? (flow === "chat" ? "summary" : "off"),
+        ),
       );
       const row: ProviderRow = {
         id: provider.id,
@@ -663,8 +742,19 @@ export function createChat(options: {
         endpoint: provider.endpoint,
       };
       const capabilities = capabilitiesOf(row, modelId, profile ? ollamaFacts(profile) : undefined);
+      const metered = meter.wrap(
+        model,
+        meteredModel(provider, provider.id, modelId, flow, capabilities, profile),
+      );
       const support = startingSupport(capabilities);
-      const prepared = { model, provider, modelId, capabilities, ...(support && { support }) };
+      const prepared = {
+        model: metered,
+        provider,
+        modelId,
+        capabilities,
+        summarizesReasoning: summarizesReasoning(provider.kind),
+        ...(support && { support }),
+      };
       if (provider.kind !== "ollama") {
         // A cloud model's requests are kept within its own context window, when it is known.
         const window = cloudWindow(capabilities);

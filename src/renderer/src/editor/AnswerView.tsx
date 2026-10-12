@@ -1,5 +1,5 @@
 import { NodeViewContent, NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react";
-import { Fragment, type ReactNode, useId, useMemo, useState } from "react";
+import { Fragment, type ReactNode, useEffect, useId, useMemo, useState } from "react";
 import {
   type AnswerToolCall,
   type ApprovalRequest,
@@ -12,6 +12,7 @@ import {
 } from "../../../core/api";
 import { asksAfterThirdParty } from "../../../shared/approvalRules";
 import { AnswerWriting } from "../answerPhase";
+import { RUN_SCRIPT, SEARCH } from "../answerSteps";
 import { useAnswers } from "../answers";
 import { useApprovals, waitingFor } from "../approvals";
 import { signInAgain } from "../chatGptSignIn";
@@ -20,9 +21,10 @@ import { PlugIcon, ScriptIcon, SkillIcon, StopIcon } from "../components/icons";
 import { FindSourcesLineIcon } from "../components/lineIcons";
 import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
 import { ProblemLine } from "../components/ProblemLine";
+import { formatResetTime } from "../cost";
 import { useFindSources } from "../findSources";
-import { useT } from "../i18n";
-import { ANSWER_PROBLEMS } from "../problems";
+import { useLanguage, useT } from "../i18n";
+import { ANSWER_PROBLEMS, answerProblem } from "../problems";
 import type { SettingsPage } from "../settingsPages";
 import { useAppStore } from "../store";
 import { ChevronRightSmallIcon, RegenerateSmallIcon } from "./icons";
@@ -49,9 +51,6 @@ function toolCallsOf(value: unknown): AnswerToolCall[] {
     return [];
   }
 }
-
-const RUN_SCRIPT = "run_skill_script";
-const SEARCH = "search_documents";
 
 /** Items of the meta line, with a dot between each two. */
 function Dotted({ items }: { items: ReactNode[] }) {
@@ -169,6 +168,8 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
         <AnswerError
           kind={isErrorKind(node.attrs.errorKind) ? node.attrs.errorKind : "unknown"}
           modelId={modelId}
+          providerId={text(node.attrs.providerId)}
+          resetsAt={text(node.attrs.errorResetsAt)}
           details={text(node.attrs.errorMessage)}
           onRetry={questionId ? () => writeAgain() : undefined}
           onOpenSettings={openSettings}
@@ -223,21 +224,34 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
 }
 
 /** A failed Answer, under what was written of it: one line, and the one thing that can fix it. */
-function AnswerError({
+export function AnswerError({
   kind,
   modelId,
+  providerId,
+  resetsAt,
   details,
   onRetry,
   onOpenSettings,
 }: {
   kind: ProviderErrorKind;
   modelId: string | null;
+  providerId: string | null;
+  /** When the plan's limit resets, when its provider said. */
+  resetsAt: string | null;
   details: string | null;
   onRetry?: (() => void) | undefined;
   onOpenSettings(page: SettingsPage): void;
 }) {
   const t = useT();
-  const { line, fix } = ANSWER_PROBLEMS[kind];
+  const language = useLanguage();
+  const provider = useAnswers(
+    (state) => state.models?.find((group) => group.provider.id === providerId)?.provider.kind,
+  );
+  // Whose plan it was decides where its usage is managed.
+  useEffect(() => {
+    if (kind === "plan-limit") useAnswers.getState().loadModels();
+  }, [kind]);
+  const { line, fix } = answerProblem(kind, provider);
   const action =
     fix.kind === "settings"
       ? { label: t(fix.label), onClick: () => onOpenSettings(fix.page) }
@@ -267,6 +281,12 @@ function AnswerError({
         className="mt-1 select-none"
       >
         {t(line, { model: modelId ?? t("answer.error.thisModel") })}
+        {kind === "plan-limit" && resetsAt && (
+          <>
+            <span aria-hidden="true"> · </span>
+            {t("run.stopped.tryAfter", { time: formatResetTime(resetsAt, language) })}
+          </>
+        )}
       </ProblemLine>
     </div>
   );
@@ -277,7 +297,13 @@ function AnswerError({
  * rows, Skills first. A call waiting for the User's approval has no row: its
  * approval card shows instead, after the Answer's text.
  */
-function CallRows({ calls, approvals }: { calls: AnswerToolCall[]; approvals: ApprovalRequest[] }) {
+export function CallRows({
+  calls,
+  approvals,
+}: {
+  calls: AnswerToolCall[];
+  approvals: ApprovalRequest[];
+}) {
   const waitingIds = new Set(approvals.map((request) => request.toolCallId));
   const rows = calls
     .filter(
@@ -287,15 +313,7 @@ function CallRows({ calls, approvals }: { calls: AnswerToolCall[]; approvals: Ap
           call.source === "sources" ||
           (call.source === "skill" && call.tool === RUN_SCRIPT)),
     )
-    .map((call) =>
-      call.source === "connector" ? (
-        <ConnectorCall key={call.id} call={call} />
-      ) : call.source === "sources" ? (
-        <SourcesCall key={call.id} call={call} />
-      ) : (
-        <ScriptCall key={call.id} call={call} />
-      ),
-    );
+    .map((call) => <CallRow key={call.id} call={call} />);
   const skills = skillRows(calls);
   if (skills.length === 0 && rows.length === 0) return null;
   return (
@@ -308,8 +326,15 @@ function CallRows({ calls, approvals }: { calls: AnswerToolCall[]; approvals: Ap
   );
 }
 
+/** The row of a call through a Connector, of Find sources, or of a Skill script. */
+export function CallRow({ call }: { call: AnswerToolCall }) {
+  if (call.source === "connector") return <ConnectorCall call={call} />;
+  if (call.source === "sources") return <SourcesCall call={call} />;
+  return <ScriptCall call={call} />;
+}
+
 /** The approval card for a request: a Connector's Tool, or a Skill script. */
-function ApprovalCard({ request }: { request: ApprovalRequest }) {
+export function ApprovalCard({ request }: { request: ApprovalRequest }) {
   return request.subject.kind === "skill-script" ? (
     <ScriptApprovalCard request={request as SkillScriptApprovalRequest} />
   ) : (
@@ -821,7 +846,7 @@ function skillRows(calls: AnswerToolCall[]): SkillUse[] {
 }
 
 /** A Skill an Answer used, loaded by the model or chosen for the Question, with the files it read. */
-function SkillRow({ name, use, reads }: SkillUse) {
+export function SkillRow({ name, use, reads }: SkillUse) {
   const t = useT();
   const status = use?.status ?? "done";
   const summary =

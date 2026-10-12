@@ -7,7 +7,6 @@
  */
 import type { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
-import { yUndoPluginKey } from "@tiptap/y-tiptap";
 import type * as Y from "yjs";
 import { create } from "zustand";
 import {
@@ -20,6 +19,7 @@ import { mindModelOf } from "../../shared/mindModel";
 import { aiUseOfAccepted, proposalRequestOf } from "../../shared/proposals";
 import { useAnswers } from "./answers";
 import { core } from "./core";
+import { offerEditorUndo } from "./editor/editorUndo";
 import { selectionForEdit } from "./editor/editSelection";
 import {
   editorDoc,
@@ -31,7 +31,6 @@ import {
 } from "./editor/proposalReview";
 import { translateNow } from "./i18n";
 import { useAppStore } from "./store";
-import { useUndo } from "./undo";
 
 /** The languages Translate… offers: each in its own name, and as the model is told it. */
 export const TRANSLATE_LANGUAGES: readonly { id: string; name: string; prompt: string }[] = [
@@ -280,7 +279,8 @@ export async function regenerateChange(
     else set("problems", mindId, { kind: "cant-regenerate" });
     return;
   }
-  if (!made?.action) {
+  // An Answer added from the assistant (#201) isn't asked for again here, nor are changes from before #94.
+  if (made?.source !== "edit-with-ai" || !made.action) {
     set("problems", mindId, { kind: "cant-regenerate" });
     return;
   }
@@ -407,40 +407,5 @@ export function resolveProposalsIn(
         ? t("proposal.rejected.one")
         : t("proposal.rejected", { count });
   speak(mindId, message);
-  offerUndo(editor, message);
-}
-
-interface UndoStack {
-  undoStack: unknown[];
-  on(event: "stack-item-added" | "stack-item-popped", listener: () => void): void;
-  off(event: "stack-item-added" | "stack-item-popped", listener: () => void): void;
-}
-
-/** "Accepted 2 changes · Undo", which takes the step back while nothing has been done since. */
-function offerUndo(editor: Editor, message: string): void {
-  const manager: UndoStack | undefined = yUndoPluginKey.getState(editor.state)?.undoManager;
-  const step = manager?.undoStack.at(-1);
-  if (!manager || step === undefined) return;
-  useUndo.getState().offer({
-    message,
-    undo: async () => {
-      if (!editor.isDestroyed && manager.undoStack.at(-1) === step) editor.commands.undo();
-    },
-  });
-  const offered = useUndo.getState().last?.id;
-  // Once the User edits again, or takes it back with ⌘Z, the line has nothing left to undo.
-  const stale = () => {
-    manager.off("stack-item-added", stale);
-    manager.off("stack-item-popped", stale);
-    stopWatching();
-    if (useUndo.getState().last?.id === offered) useUndo.getState().dismiss();
-  };
-  const stopWatching = useUndo.subscribe((state) => {
-    if (state.last?.id === offered) return;
-    manager.off("stack-item-added", stale);
-    manager.off("stack-item-popped", stale);
-    stopWatching();
-  });
-  manager.on("stack-item-added", stale);
-  manager.on("stack-item-popped", stale);
+  offerEditorUndo(editor, message);
 }

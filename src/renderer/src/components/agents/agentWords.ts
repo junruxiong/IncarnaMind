@@ -3,20 +3,22 @@
  * it is set up, what came of setting it up, and a call in its activity list,
  * all in plain words (no "MCP", "stdio" or "token" outside the details).
  */
-import type {
-  AgentActivity,
-  AgentClient,
-  AgentClientId,
-  AgentSetupResult,
+import {
+  AGENT_CLIENT_IDS,
+  type AgentActivity,
+  type AgentClient,
+  type AgentClientId,
+  type AgentSetupResult,
 } from "../../../../core/api";
 import type { Language } from "../../../../core/language";
+import { clientTitle } from "../../../../shared/agentNames";
 import type { MessageKey, MessageParams } from "../../../../shared/i18n";
 
 type Translate = (key: MessageKey, params?: MessageParams) => string;
 
-/** An agent's name: its own, or "Another agent". */
+/** An agent's name: its own, or "Other agent". */
 export const clientName = (client: Pick<AgentClient, "id" | "name">, t: Translate) =>
-  client.id === "other" ? t("agents.client.other") : client.name;
+  clientTitle(client, t);
 
 /** How connecting an agent goes, in a line under its name. */
 export function setupWords(client: AgentClient, t: Translate): string {
@@ -31,9 +33,13 @@ export function setupWords(client: AgentClient, t: Translate): string {
     case "command":
       return t("agents.setup.command");
     case "manual":
-      return t("agents.setup.manual", { agent });
+      return t("agents.setup.other");
   }
 }
+
+/** A line under an agent's setup, where its row has more to say. */
+export const clientNote = (client: Pick<AgentClient, "id">, t: Translate) =>
+  client.id === "codex" ? t("agents.note.codex") : null;
 
 /** What came of setting an agent up, as one line. */
 export function doneWords(result: AgentSetupResult, agent: string, t: Translate): string {
@@ -77,7 +83,7 @@ export const timeWords = (at: string, language: Language) =>
   );
 
 /** Where the step-by-step help for an agent is: the setup notes, in the interface language. */
-export const helpUrl = (client: AgentClientId, language: Language) =>
+export const helpUrl = (client: AgentClientId | string, language: Language) =>
   `https://github.com/junruxiong/IncarnaMind/blob/main/docs/${
     language === "zh-CN" ? "agents.zh-CN.md" : "agents.md"
-  }#${client}`;
+  }#${(AGENT_CLIENT_IDS as readonly string[]).includes(client) ? client : "other"}`;

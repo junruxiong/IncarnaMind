@@ -32,7 +32,7 @@ export type {
  */
 import type { CitationForm, CitationStyleId } from "../shared/citationStyles";
 import type { TagColour } from "../shared/tagColours";
-import type { UnitKind, UnitLabel } from "../shared/units";
+import type { Anchor, UnitKind, UnitLabel } from "../shared/units";
 import type { Language, LanguagePreference } from "./language";
 
 export interface Mind {
@@ -209,6 +209,23 @@ export const MIND_CONTENT_FIELD = "blocks";
  */
 export const MIND_SETTINGS_FIELD = "settings";
 
+/**
+ * The name of the Y.Map, beside a Mind's Blocks, that says where Blocks came
+ * from: by Block id, a `BlockOrigin`. A Note added from an Answer in the
+ * assistant (#201) keeps its link back to that Answer here, not in the Block's
+ * attributes, which an older version's editor would strip. A Block deleted
+ * since leaves its entry unused. See src/shared/blockOrigins.ts.
+ */
+export const MIND_ORIGINS_FIELD = "origins";
+
+/** Where a Block came from: a Note added from an Answer links back to it. */
+export interface BlockOrigin {
+  /** The Answer, in its conversation (`messageReference`). */
+  from: ArtifactReference;
+  /** The Question it answered, as asked: shown with the link, even once the conversation is gone. */
+  question: string;
+}
+
 /** The attribute every Block keeps its UUID in, in the Mind's Yjs document. */
 export const BLOCK_ID_ATTRIBUTE = "id";
 
@@ -273,9 +290,10 @@ export const MIND_PROPOSAL_REQUESTS_FIELD = "proposalRequests";
 
 /**
  * What made a request's Proposals: Edit with AI (#93), with what it was asked
- * so a change can be made again (regenerated) once it is out of date; or
- * Regenerate of an Answer the User had edited (#94). The assistant (#202) and
- * Enhance (#114) add theirs.
+ * so a change can be made again (regenerated) once it is out of date;
+ * Regenerate of an Answer the User had edited (#94); or an Answer from the
+ * assistant added to a new Mind, as changes to accept (#201). The assistant
+ * (#202) and Enhance (#114) add theirs.
  */
 export type ProposalRequest =
   | (ProposalMaker & {
@@ -285,7 +303,8 @@ export type ProposalRequest =
       /** What the User asked for ("translate", "instruction"); "" for none. */
       instruction?: string;
     })
-  | (ProposalMaker & { source: "answer"; answerId: string });
+  | (ProposalMaker & { source: "answer"; answerId: string })
+  | (ProposalMaker & { source: "answer-added" });
 
 /** The model that made a request's Proposals, and when. */
 export interface ProposalMaker {
@@ -429,6 +448,8 @@ export interface AnswerAttributes {
   errorKind: ProviderErrorKind | null;
   /** The provider's own message about the failure, for details. */
   errorMessage: string | null;
+  /** When the plan's limit that stopped it resets (ISO 8601), when the provider said. */
+  errorResetsAt: string | null;
   /** A fingerprint of the content as it was generated: it differs once the User edits the Answer. */
   generatedHash: string | null;
   /**
@@ -480,6 +501,13 @@ export interface AnswerToolCall {
   approval?: ToolCallApproval;
   /** A search: how many Passages it gave the model. Null otherwise, and while running. */
   resultCount: number | null;
+  /**
+   * A search: the Passages it found, by id (`Citation.passageId`), so the
+   * Citations it led to can be told. Absent on searches made before #391.
+   */
+  passages?: string[];
+  /** A search that failed: why, sorted as an Answer's own failure is. Absent otherwise. */
+  error?: ProviderError;
   /**
    * "use_skill" only: the Question forced this Skill, so the core loaded it up
    * front instead of the model calling the Tool. Absent otherwise.
@@ -740,6 +768,8 @@ export interface UserSettings {
    * everywhere. Copies of the document being checked are left out either way.
    */
   leaveOutOwnFiles: boolean;
+  /** The monthly cap on models billed per token: off (null) by default. */
+  monthlyCap: MonthlyCap | null;
 }
 
 /**
@@ -1094,12 +1124,28 @@ export type DocumentFailureReason =
    */
   | "file-missing"
   /** Anything else, e.g. the processing worker crashed. */
-  | "processing-error";
+  | "processing-error"
+  /**
+   * Scanned pages couldn't be read (#397): the text recognition model
+   * couldn't be downloaded or failed on them. The pages that were read are
+   * searched; Retry reads the others.
+   */
+  | "pages-unread";
 
 export interface DocumentFailure {
   reason: DocumentFailureReason;
   /** Technical detail in English, for logs and tooltips. */
   message: string;
+  /** "pages-unread": the scanned pages that couldn't be read, from 1; empty when none could be. */
+  pages?: number[];
+}
+
+/** Where reading a PDF's scanned pages is (#397), while it is processed. */
+export interface DocumentScanProgress {
+  /** How many of its pages are scans to read. */
+  pages: number;
+  /** How many of them are read so far. */
+  read: number;
 }
 
 /**
@@ -1179,8 +1225,12 @@ export interface Document {
    */
   contentHash: string;
   /**
-   * The file, where the User keeps it: an absolute path. IncarnaMind never
-   * changes it. A web page's is its snapshot, in the data folder.
+   * The file, where the User keeps it on this computer: an absolute path.
+   * IncarnaMind never changes the file. A web page's is its snapshot, in the
+   * data folder. Not what the Document is known by (ADR-0020): that is its
+   * Linked folder and its path inside it, its place in the data folder, or,
+   * for a file added on its own, its id; so it can be elsewhere on another
+   * computer, or after its Linked folder is located somewhere else.
    */
   path: string;
   /** Where the file is: see `DocumentFileStatus`. */
@@ -1194,6 +1244,8 @@ export interface Document {
   status: DocumentStatus;
   /** While `status` is "embedding": the share of its Passages embedded so far, from 0 to 1. Null otherwise. */
   progress: number | null;
+  /** While `status` is "extracting" and its scanned pages are read (#397): how far that is. Null otherwise. */
+  scan: DocumentScanProgress | null;
   /** Set when `status` is "failed": why the latest version read failed. */
   failure: DocumentFailure | null;
   /**
@@ -1776,6 +1828,37 @@ export interface DocumentText {
 }
 
 /**
+ * The scanned pages of a Document's current version (#397): the text read
+ * from each page's picture, and where each of its lines is on the page
+ * (`Anchor.quad`), so the viewer can lay the text over the picture and wash
+ * a quote there.
+ */
+export interface ScannedText {
+  documentId: string;
+  contentHash: string;
+  pages: { page: number; text: string; label: UnitLabel | null; anchors: Anchor[] }[];
+}
+
+/**
+ * Where a Citation's quote was read from a scan (#397), for its card: the
+ * words the text recognition wasn't sure of within it, as the page's text has
+ * them, in order (empty when it was sure of every one).
+ */
+export interface ScannedQuote {
+  unsure: string[];
+}
+
+/** A Citation's quote, as `readScannedQuote` looks it up: its Document, version, Units and quote. */
+export interface ScannedQuoteInput {
+  documentId: string;
+  /** The version it quotes; null for a Citation that doesn't say (the current one is read). */
+  contentHash: string | null;
+  pageFrom: number | null;
+  pageTo: number | null;
+  quote: string;
+}
+
+/**
  * A label with a short description that Documents can carry. IncarnaMind
  * applies Tags automatically, choosing them by their names and descriptions,
  * and the User can add or remove them.
@@ -1886,9 +1969,9 @@ export interface Examples {
  * placeholders (online-only files) aren't read unless the User asks.
  */
 export interface LinkedFolder {
-  /** A random UUID generated on this device. */
+  /** A random UUID generated on this device: the same wherever the folder is (ADR-0020). */
   id: string;
-  /** Absolute, symbolic links resolved. */
+  /** Where it is on this computer: absolute, symbolic links resolved. `locateLinkedFolder` changes it. */
   path: string;
   /** Its own Folder, the root of its Folders. */
   folderId: string;
@@ -2329,13 +2412,100 @@ export type ProviderErrorKind =
    * oldest Question context left out. Nothing is cut silently.
    */
   | "too-long"
+  /** The request could pass the User's monthly cap (`UserSettings.monthlyCap`): nothing was sent. */
+  | "cost-cap"
+  /** The model's reply ended with no text, or none that could be read. */
+  | "no-answer"
   | "unknown";
 
 export interface ProviderError {
   kind: ProviderErrorKind;
   /** The provider's own message, for details. */
   message: string;
+  /** "plan-limit": when the plan's limit resets (ISO 8601), when the provider says. */
+  resetsAt?: string;
 }
+
+/**
+ * How a model's requests are paid for (src/core/providers/catalog/billing.ts):
+ * per token on an API key, from a plan's own limits (the ChatGPT plan), or
+ * not at all (a model on this computer).
+ */
+export type Billing = "per-token" | "plan" | "free";
+
+export type Currency = "USD" | "CNY";
+
+export interface Money {
+  currency: Currency;
+  amount: number;
+}
+
+/**
+ * The most IncarnaMind may spend in a calendar month on models billed per
+ * token. Before each such request its most (its prompt and its output limit)
+ * is reserved, and a request whose reservation would pass the cap isn't sent.
+ * Spending in the other currency counts at a fixed rate.
+ */
+export interface MonthlyCap {
+  amount: number;
+  currency: Currency;
+}
+
+/** One saved provider's use this month. */
+export interface ProviderCost {
+  providerId: string;
+  billing: Billing;
+  requests: number;
+  /** What its requests cost, in each currency they were priced in. */
+  spent: Money[];
+  /** Tokens of requests to models with no known price: counted here, not toward the cap. */
+  unpricedTokens: number;
+}
+
+/** Settings' month-to-date cost: recorded on this computer, never sent. */
+export interface CostSummary {
+  /** When the counted month began (ISO 8601), in the computer's time zone. */
+  monthStart: string;
+  /** What per-token requests cost this month, settled and still reserved, per currency. */
+  spent: Money[];
+  /** All of it in the cap's currency (the other at a fixed rate), when a cap is set. */
+  spentTowardCap: Money | null;
+  cap: MonthlyCap | null;
+  /** The providers used this month. */
+  providers: ProviderCost[];
+}
+
+/**
+ * Why a Run stopped before its work was done, so that a Task can resume from
+ * it later: the monthly cap, or a plan's limit (with when it resets, when the
+ * provider says). Its unfinished items say "not checked" with the reason.
+ */
+export type RunStop = { reason: "cost-cap" } | { reason: "plan-limit"; resetsAt: string | null };
+
+/** A large run to estimate: so many items (a comparison table's cells, verify's sentences…), each about an Answer. */
+export interface RunEstimateInput {
+  items: number;
+  /** The model it would use; the default model when left out. */
+  model?: ChatModelChoice;
+}
+
+/**
+ * The one estimate shown before a large run on a model billed per token,
+ * never asked: its calls, tokens and price, with the month so far. A plan or
+ * a model on this computer gets none: a plan's price is fixed, and none of
+ * the plans IncarnaMind uses says how much of its window is left.
+ */
+export type RunEstimate =
+  | {
+      billing: "per-token";
+      calls: number;
+      tokens: number;
+      /** Null for a model with no known price. */
+      cost: Money | null;
+      spentTowardCap: Money | null;
+      cap: MonthlyCap | null;
+    }
+  | { billing: "plan" | "free" };
 
 export type ConnectionTestResult = { ok: true } | { ok: false; error: ProviderError };
 
@@ -2634,6 +2804,36 @@ export interface AnswerPhaseEvent extends AnswerPlace {
   phase: AnswerPhase;
 }
 
+/**
+ * More of the model's reasoning, as its provider summarized it (#391): only
+ * from a provider whose reasoning is a summary (`AnswerSteps.reasoning`),
+ * never raw chain of thought.
+ */
+export interface AnswerReasoning extends AnswerPlace {
+  answerId: string;
+  text: string;
+}
+
+/**
+ * How an Answer in a conversation was reached, beside its Tool calls and
+ * Citations (#391). Times are ISO 8601, UTC.
+ */
+export interface AnswerSteps {
+  /** When its Question went to the model; null when none did (its Search scope had no Documents). */
+  sentAt: string | null;
+  /** When it ended; null while it is being written. */
+  finishedAt: string | null;
+  /** What it was doing, and from when, oldest first. */
+  phases: { phase: AnswerPhase; at: string }[];
+  /**
+   * The model's reasoning as its provider summarized it (Anthropic's
+   * summarized thinking, the Responses API's reasoning summary), and how long
+   * it thought, in ms: from its first reasoning to the Answer's first text.
+   * Null when the model gave no summary. Raw chain of thought is never kept.
+   */
+  reasoning: { summary: string; ms: number } | null;
+}
+
 /** A Tool call of an Answer started, or finished (see `call.status`). */
 export interface AnswerToolCallEvent extends AnswerPlace {
   answerId: string;
@@ -2807,6 +3007,8 @@ export interface ConversationAnswer {
    * it too, and so does a Mind it is added to. Null: none.
    */
   textOrigin: ThirdPartySource | null;
+  /** How it was reached; null for an Answer written before #391. */
+  steps: AnswerSteps | null;
   /** ISO 8601, UTC. */
   createdAt: string;
   /** ISO 8601, UTC. */
@@ -2860,6 +3062,35 @@ export type ConversationAskResult =
   | { asked: false; reason: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
   /** Nothing was kept or sent: the Question forces a Skill (`skill`) that is off or gone. */
   | { asked: false; reason: "skill-unavailable"; skill: string; state: SkillAvailability };
+
+/** Blocks from an Answer to put into a Mind's note ("Add to note", #201). */
+export interface AddToNoteInput {
+  mindId: string;
+  /**
+   * The Blocks, as the editor writes them in JSON: Notes only (`NOTE_BLOCK_TYPES`)
+   * at the top level, with whatever they hold, Citations included. Their ids are
+   * given anew.
+   */
+  blocks: unknown[];
+  /** Their link back to the Answer they came from; null for none. */
+  origin: BlockOrigin | null;
+  /** The model that wrote the Answer, for the record of AI use; null when unknown. */
+  model: ChatModelChoice | null;
+  /** They wait as changes to accept or reject, each Block one (a new Mind made from an Answer). */
+  proposed?: boolean;
+}
+
+/** What "Add to note" put into a Mind: the ids of its new top-level Blocks, in order. */
+export interface AddedToNote {
+  mindId: string;
+  blockIds: string[];
+}
+
+/** Takes an "Add to note" back: its Blocks leave the Mind, with their links back. */
+export interface UndoAddToNoteInput {
+  mindId: string;
+  blockIds: string[];
+}
 
 /** Where words of a search are in a piece of text: `start` to `end`, in UTF-16 code units. */
 export interface TextRange {
@@ -3000,6 +3231,54 @@ export interface SkillImportError {
 export type SkillImportCheck =
   | { ok: true; preview: SkillImportPreview }
   | { ok: false; error: SkillImportError };
+
+/** What a Skill says in words: its name, when to use it, and its steps (SKILL.md's instructions). */
+export interface SkillDraft {
+  /** As typed: it is written in the format's characters (lowercase letters, digits, hyphens) when saved. */
+  name: string;
+  /** When to use the Skill: what Answers read to choose it. At most 1,024 characters. */
+  description: string;
+  /** What to do, in Markdown, as typed. */
+  steps: string;
+}
+
+/**
+ * Why a Skill wasn't saved, for the field to say.
+ * - "invalid-name": nothing of the name is left in the format's characters.
+ * - "name-taken": another Skill, built-in or the User's, has that name.
+ * - "no-description" and "description-too-long": when to use it is empty, or over 1,024 characters.
+ * - "no-steps": there are no steps.
+ * - "too-large": the steps are over `SKILL_LIMITS.maxInstructionsBytes`.
+ */
+export type SkillSaveProblem =
+  | "invalid-name"
+  | "name-taken"
+  | "no-description"
+  | "description-too-long"
+  | "no-steps"
+  | "too-large";
+
+export type SkillSaveResult = { ok: true; skill: Skill } | { ok: false; problem: SkillSaveProblem };
+
+export interface DraftSkillInput {
+  /** Chosen by the caller, so it can stop the request (`cancelSkillDraft`). */
+  requestId: string;
+  /** The Mind the User just worked in. Its own chat model drafts the Skill, else the default. */
+  mindId: string;
+}
+
+/** What drafting a Skill from a Mind did. */
+export type DraftSkillResult =
+  /** The model's draft, for the User to edit before it is saved. */
+  | { kind: "drafted"; draft: SkillDraft }
+  /** Nothing was sent: the Mind has no Notes, Questions or Answers to learn from. */
+  | { kind: "empty" }
+  /** Nothing was sent: the model can't be used now (local mode included), and `readiness` says why. */
+  | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
+  /** The User stopped it (`cancelSkillDraft`), or declined to send the Mind's text. */
+  | { kind: "cancelled" }
+  /** The model failed, or gave a draft that couldn't be read. */
+  | { kind: "failed"; error: ProviderError };
 
 /** How Skill scripts run. */
 export const SKILL_SCRIPT_LIMITS = {
@@ -3279,6 +3558,8 @@ export interface RegisteredDataFlow {
  * - "reranking-model": downloads the built-in reranking model's files, once,
  *   when the first Documents are ready to search, unless reranking is off or
  *   uses a service.
+ * - "text-recognition-model": downloads the built-in text recognition
+ *   model's files (#397), once, when the first scanned page needs reading.
  * - "transcription-model": downloads the speech-to-text model and Silero VAD,
  *   once, when a Meeting is first transcribed on this computer (#136).
  * - "ollama-pull": Ollama downloads a model from its registry, when the User picks local models.
@@ -3296,6 +3577,7 @@ export const networkTrafficIds = [
   "update-check",
   "embedding-model",
   "reranking-model",
+  "text-recognition-model",
   "transcription-model",
   "ollama-pull",
   "chatgpt-sign-in",
@@ -4351,6 +4633,8 @@ export interface AgentSettings {
    */
   paused: "local-mode" | null;
   pairings: AgentPairing[];
+  /** The pairings whose agent has IncarnaMind's Skill installed, as IncarnaMind wrote it. */
+  skills: string[];
 }
 
 export interface ConnectAgentInput {
@@ -4393,30 +4677,18 @@ export const AGENT_TOOLS = [
   "ask",
 ] as const;
 
-/** The agents Settings → Agents can set IncarnaMind up in (see src/core/agents/clients.ts). */
+/**
+ * The agents Settings → Agents sets IncarnaMind up in, and "other" for the
+ * rest (see src/core/agents/clients.ts). A pairing made before an agent
+ * stopped being listed keeps its own id, so a pairing's `client` is any text.
+ */
 export const AGENT_CLIENT_IDS = [
   "claude-desktop",
   "claude-code",
   "codex",
   "cursor",
-  "vscode",
-  "gemini-cli",
-  "kimi-code",
-  "qwen-code",
-  "codebuddy",
-  "minimax-code",
-  "trae",
-  "qoder",
-  "comate",
-  "cherry-studio",
-  "chatbox",
-  "deepchat",
-  "goose",
-  "opencode",
-  "cline",
-  "kilo",
-  "openclaw",
-  "pi",
+  "antigravity",
+  "workbuddy",
   "other",
 ] as const;
 
@@ -4424,7 +4696,7 @@ export type AgentClientId = (typeof AGENT_CLIENT_IDS)[number];
 
 /**
  * How an agent takes IncarnaMind: "bundle", a file its app installs when
- * opened (Claude); "link", a link its app installs from (Cursor, VS Code);
+ * opened (Claude); "link", a link its app installs from (Cursor);
  * "file", IncarnaMind adds itself to the agent's settings file; "command", one
  * line to paste into a terminal (Claude Code); "manual", settings to paste
  * into the agent's own screen.
@@ -4438,6 +4710,8 @@ export interface AgentClient {
   /** It looks installed on this computer: such agents are listed first. */
   installed: boolean;
   setup: AgentSetupKind;
+  /** Where setting it up puts the Skill that tells it when to use IncarnaMind; null if it reads none. */
+  skillPath: string | null;
 }
 
 /** What setting an agent up will change in its settings file, the pairing's key hidden. */
@@ -4458,12 +4732,26 @@ export interface AgentSetupPreview {
 export type AgentSetupResult =
   | { kind: "opened"; how: "bundle" | "link" }
   | { kind: "wrote"; path: string }
-  | { kind: "copy"; how: "command" | "settings"; text: string; shown: string; path?: string };
+  | {
+      kind: "copy";
+      how: "command" | "settings";
+      text: string;
+      shown: string;
+      path?: string;
+      /**
+       * The Skill (SKILL.md) for the User to add to the agent's own skills
+       * folder, by hand, where IncarnaMind couldn't install it. Apart from
+       * `text`, which is pasted into a settings field that takes only the settings.
+       */
+      skill: string;
+    };
 
 export interface SetUpAgentInput {
   client: AgentClientId;
   /** The Folders it may read; the User picks at least one. */
   folderIds: string[];
+  /** The name the User gave it ("Other agent" only); otherwise its own name. */
+  name?: string;
 }
 
 export interface SetUpAgent {
@@ -4667,6 +4955,17 @@ export interface CoreApi {
    * Block's origin. Restoring what it points into makes it lead there again.
    */
   resolveReference(reference: ArtifactReference): Promise<ReferenceTarget>;
+  /**
+   * "Add to note" (#201) into a Mind that isn't open in the editor: Blocks at the
+   * end of its note (in place of its empty last line), each Citation in them
+   * checked again against its Document, with a link back to the Answer. As
+   * `proposed`, they wait as changes to accept or reject. What is added at once
+   * goes into the record of AI use; a proposal does once it is accepted. The
+   * Mind open in the editor adds at its cursor itself, by the same rules.
+   */
+  addToNote(input: AddToNoteInput): Promise<AddedToNote>;
+  /** Takes the Blocks an "Add to note" put into a Mind back out, with their links back. */
+  undoAddToNote(input: UndoAddToNoteInput): Promise<void>;
 
   getSettings(): Promise<Settings>;
   /**
@@ -4755,6 +5054,26 @@ export interface CoreApi {
    */
   readDocumentText(documentId: string): Promise<DocumentText>;
   /**
+   * The scanned pages of a Document's current version, with where their
+   * lines are (#397): empty when it has none. Throws NotFoundError for an
+   * unknown or deleted Document.
+   */
+  readScannedText(documentId: string): Promise<ScannedText>;
+  /**
+   * Whether a Citation's quote was read from a scan (#397), and the words in
+   * it the reading wasn't sure of; null when the Units it cites weren't
+   * scanned, or its quote isn't in them.
+   */
+  readScannedQuote(input: ScannedQuoteInput): Promise<ScannedQuote | null>;
+  /** The built-in text recognition model's download state (#397). */
+  getTextRecognitionModel(): Promise<EmbeddingModelStatus>;
+  /**
+   * Downloads the built-in text recognition model, or tries again after a
+   * failure; once it is ready, Documents whose scanned pages couldn't be
+   * read are read again. "textRecognitionModel.status" events report progress.
+   */
+  downloadTextRecognitionModel(): Promise<EmbeddingModelStatus>;
+  /**
    * What linking a folder would take (see `LinkedFolderPreview`), from the
    * files' metadata, without reading or changing anything. Throws for a path
    * that isn't a folder.
@@ -4774,6 +5093,18 @@ export interface CoreApi {
   addLinkedFolder(path: string, options?: AddDocumentsOptions): Promise<AddedLinkedFolder>;
   /** The Linked folders, in path order. */
   listLinkedFolders(): Promise<LinkedFolder[]>;
+  /**
+   * Points a Linked folder at where it is on this computer now, after it was
+   * moved or renamed, or when the data folder is opened on another computer
+   * (ADR-0020). Its Documents are looked for at their paths inside it and
+   * keep their ids, versions, Tags and Citations: a file with the same size
+   * and modified time isn't read, and one with the same content isn't
+   * processed again. Returns at once, "scanning". Throws InvalidInputError,
+   * changing nothing, for a folder inside or around another Linked folder,
+   * one that holds none of its files, or one with a file of it already added
+   * on its own.
+   */
+  locateLinkedFolder(linkedFolderId: string, path: string): Promise<LinkedFolder>;
   /**
    * Stops syncing a Linked folder and removes its Documents and Folders from
    * the index. Nothing on disk is touched. Of their stored text, only the
@@ -5022,6 +5353,18 @@ export interface CoreApi {
    * flow to it. A provider that isn't asked, or can't be reached, offers its default.
    */
   listChatModels(): Promise<ChatModelGroup[]>;
+  /**
+   * This month's cost so far, for Settings: what requests billed per token
+   * cost, settled and still reserved, and each provider's use. Recorded on
+   * this computer only.
+   */
+  getCostSummary(): Promise<CostSummary>;
+  /**
+   * The estimate shown before a large run (comparison tables, verify,
+   * contradiction watch, Enhance): for a model billed per token, its calls,
+   * tokens and price; for a plan or a model on this computer, nothing.
+   */
+  estimateRun(input: RunEstimateInput): Promise<RunEstimate>;
 
   /**
    * Asks a Question: its Answer is written into the Mind right after it, as the
@@ -5364,6 +5707,35 @@ export interface CoreApi {
    * on), turned on, not built-in. Returns the copy.
    */
   duplicateSkill(skillId: string): Promise<Skill>;
+  /** A Skill as its editor shows it: its name, its "when to use" and its steps (SKILL.md's instructions). */
+  getSkillDraft(skillId: string): Promise<SkillDraft>;
+  /**
+   * Saves a new Skill the User wrote or edited from a draft, turned on. A name
+   * another Skill has is refused (`name-taken`), never replaced.
+   */
+  createSkill(draft: SkillDraft): Promise<SkillSaveResult>;
+  /**
+   * Saves what the User changed in a Skill that isn't built-in, keeping its
+   * other files and whether it's on. Only the name, the description and the
+   * instructions of its SKILL.md change; every other frontmatter field stays as
+   * written. Throws for a built-in Skill: duplicate it.
+   */
+  updateSkill(skillId: string, draft: SkillDraft): Promise<SkillSaveResult>;
+  /**
+   * Saves a Skill as a zip in the Output location, under the next free name
+   * (as `saveMindExport` does, asking where the first time). The zip imports
+   * again with the same preview.
+   */
+  saveSkillExport(skillId: string): Promise<SavedMindExport>;
+  /**
+   * The chat model drafts a Skill from what the User just did in a Mind: its
+   * Notes, Questions and Answers, the latest weighing most. Sends on the
+   * "chat" flow once the User allows it to the model's service, and in local
+   * mode only a model on this computer is used. Nothing is saved.
+   */
+  draftSkillFromMind(input: DraftSkillInput): Promise<DraftSkillResult>;
+  /** Stops a `draftSkillFromMind` request. Stopping one that is gone does nothing. */
+  cancelSkillDraft(requestId: string): Promise<void>;
   /**
    * The names of the built-in Skills the User removed, which
    * `restoreBuiltInSkills` would install again. Empty when they are all there.
@@ -5534,6 +5906,8 @@ export interface CoreEvents {
   "document.status": Document;
   /** The built-in embedding model's state changed, or its download made progress. */
   "embeddingModel.status": EmbeddingModelStatus;
+  /** The built-in text recognition model's download state changed (#397). */
+  "textRecognitionModel.status": EmbeddingModelStatus;
   /**
    * The embedding model search uses changed, or local mode, or a rebuild made
    * progress (a Document finished) or finished, or the provider failed or recovered.
@@ -5651,6 +6025,7 @@ export interface CoreEvents {
   "answer.started": AnswerStarted;
   /** The Answer is loading its model, searching, or writing: its meta line says which. */
   "answer.phase": AnswerPhaseEvent;
+  "answer.reasoning": AnswerReasoning;
   "answer.delta": AnswerDelta;
   "answer.toolCallStarted": AnswerToolCallEvent;
   "answer.toolCallFinished": AnswerToolCallEvent;
@@ -5711,6 +6086,8 @@ const methods: Record<CoreApiMethod, true> = {
   renameConversation: true,
   deleteConversation: true,
   resolveReference: true,
+  addToNote: true,
+  undoAddToNote: true,
   getSettings: true,
   updateSettings: true,
   getLayout: true,
@@ -5724,9 +6101,14 @@ const methods: Record<CoreApiMethod, true> = {
   deleteDocument: true,
   retryDocument: true,
   readDocumentText: true,
+  readScannedText: true,
+  readScannedQuote: true,
+  getTextRecognitionModel: true,
+  downloadTextRecognitionModel: true,
   previewLinkedFolder: true,
   addLinkedFolder: true,
   listLinkedFolders: true,
+  locateLinkedFolder: true,
   removeLinkedFolder: true,
   listKeptCitationTexts: true,
   updateReference: true,
@@ -5766,6 +6148,8 @@ const methods: Record<CoreApiMethod, true> = {
   testChatConnection: true,
   getChatReadiness: true,
   listChatModels: true,
+  getCostSummary: true,
+  estimateRun: true,
   askQuestion: true,
   regenerateAnswer: true,
   stopAnswer: true,
@@ -5859,6 +6243,12 @@ const methods: Record<CoreApiMethod, true> = {
   setSkillEnabled: true,
   removeSkill: true,
   duplicateSkill: true,
+  getSkillDraft: true,
+  createSkill: true,
+  updateSkill: true,
+  saveSkillExport: true,
+  draftSkillFromMind: true,
+  cancelSkillDraft: true,
   listRemovedBuiltInSkills: true,
   restoreBuiltInSkills: true,
   previewMindExport: true,

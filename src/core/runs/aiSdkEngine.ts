@@ -278,6 +278,29 @@ function splice(
   return out;
 }
 
+/**
+ * The AI SDK's reasoning parts as "reasoning" events: a block starts with an
+ * empty one, and a block after another starts a new paragraph. Null for a
+ * part with no text.
+ */
+export function reasoningReader() {
+  let reasoned = false;
+  let newParagraph = false;
+  return (
+    part: { type: "reasoning-start" } | { type: "reasoning-delta"; text: string },
+  ): Extract<RunEvent, { type: "reasoning" }> | null => {
+    if (part.type === "reasoning-start") {
+      newParagraph = reasoned;
+      return { type: "reasoning", text: "" };
+    }
+    if (!part.text) return null;
+    const text = newParagraph ? `\n\n${part.text}` : part.text;
+    newParagraph = false;
+    reasoned = true;
+    return { type: "reasoning", text };
+  };
+}
+
 /** A failed model call as an event: a refusal before any output (see `RunEvent`), or a failure. */
 function failure(
   error: unknown,
@@ -320,7 +343,20 @@ async function* run(request: RunRequest): AsyncGenerator<RunEvent> {
     tools,
     temperature: request.temperature,
     providerOptions: cacheProviderOptions(request.cacheKey),
-    stopWhen: stepCountIs(maxSteps) as StopCondition<ToolSet>,
+    stopWhen: [
+      stepCountIs(maxSteps) as StopCondition<ToolSet>,
+      ({ steps }) => {
+        const last = steps.at(-1);
+        return (
+          last !== undefined &&
+          (request.endsAfter?.({
+            text: last.text,
+            calls: last.toolCalls.map((call) => ({ id: call.toolCallId, tool: call.toolName })),
+          }) ??
+            false)
+        );
+      },
+    ],
     prepareStep: ({ stepNumber, initialMessages, responseMessages }) => {
       if (stepNumber > 0) {
         for (const message of request.steering?.() ?? []) {
@@ -345,6 +381,7 @@ async function* run(request: RunRequest): AsyncGenerator<RunEvent> {
   });
 
   let produced = false;
+  const reasoning = reasoningReader();
   try {
     for await (const part of result.fullStream) {
       if (signal.aborted || part.type === "abort") return;
@@ -354,6 +391,14 @@ async function* run(request: RunRequest): AsyncGenerator<RunEvent> {
           produced = true;
           yield { type: "text-delta", text: part.text };
           break;
+        case "reasoning-start":
+        case "reasoning-delta": {
+          const event = reasoning(part);
+          if (!event) break;
+          if (event.text) produced = true;
+          yield event;
+          break;
+        }
         case "tool-call":
           produced = true;
           yield {

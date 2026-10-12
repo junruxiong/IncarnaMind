@@ -132,6 +132,19 @@ test("a meeting records from the + menu, after the one-time notice: the bar, ⌘
   const notice = window.getByTestId("meeting-notice");
   await expect(notice).toContainText("Tell everyone you’re recording before you start.");
   await shot(window, "meeting-notice-en");
+  await window.evaluate(async () =>
+    (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+      user: { language: "zh-CN" },
+    }),
+  );
+  const zhNotice = await notice.locator("#meeting-notice-body p").first().textContent();
+  expect(zhNotice).toContain("会议中其他人的声音。音频只保存在");
+  expect(zhNotice).not.toMatch(/[。：] /);
+  await window.evaluate(async () =>
+    (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+      user: { language: "en" },
+    }),
+  );
   await notice.getByRole("button", { name: "Cancel" }).click();
   await expect(notice).toBeHidden();
   expect((await bridge(window))[0]?.status).toBe("ready");

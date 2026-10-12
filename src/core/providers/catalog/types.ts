@@ -80,6 +80,15 @@ export interface RequestQuirks {
    * one of `unless` can't turn it off.
    */
   thinkingOff?: { options: Record<string, Record<string, unknown>>; unless?: readonly string[] };
+  /**
+   * Provider options that ask for the provider's summary of a model's
+   * reasoning, for the calls that write the Answer (#391). Only providers
+   * whose reasoning comes back summarized have them: other providers' is raw
+   * chain of thought, which is never kept. They never turn thinking on: with
+   * `only`, they go to the models whose id starts with one of its prefixes,
+   * the ones that think by default.
+   */
+  reasoningSummary?: { options: Record<string, Record<string, unknown>>; only?: readonly string[] };
 }
 
 /**
@@ -150,6 +159,20 @@ export interface Price {
   cacheRead?: number;
   /** E.g. "Prompts over 100K tokens: $0.50 / $2.50". */
   note?: Localized;
+  /** Outside its peak hours the price is cut, by `factor`. */
+  offPeak?: OffPeak;
+}
+
+/**
+ * The hours a price is full, on the provider's clock (`utcOffset` hours from
+ * UTC), as [from, to) pairs of hours. Weekends are off-peak all day, unless
+ * the peak hours hold `everyDay`.
+ */
+export interface OffPeak {
+  factor: number;
+  utcOffset: number;
+  peakHours: readonly (readonly [number, number])[];
+  everyDay?: true;
 }
 
 /** What a model can do and what it costs. */
