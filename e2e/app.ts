@@ -1108,6 +1108,17 @@ export async function stubClipboard(window: Page) {
 /** A fresh, empty data folder. Remove it with `removeDataFolder`. */
 export const createDataFolder = () => mkdtemp(join(tmpdir(), "incarnamind-smoke-"));
 
+/** Closes an app, and kills it if it hasn't quit in 10 s, so one stuck app can't hold up the worker. */
+async function closeOrKill(app: ElectronApplication): Promise<void> {
+  const quit = app.close().catch(() => undefined);
+  let timer: NodeJS.Timeout | undefined;
+  const stuck = new Promise<"stuck">((resolve) => {
+    timer = setTimeout(() => resolve("stuck"), 10_000);
+  });
+  if ((await Promise.race([quit, stuck])) === "stuck") app.process().kill("SIGKILL");
+  clearTimeout(timer);
+}
+
 /**
  * Removes a data folder, after closing an app the test left open on it. If
  * the test failed, a screenshot of that app's window as the test left it is
@@ -1125,7 +1136,7 @@ export async function removeDataFolder(dataDir: string): Promise<void> {
       const shot = await window.screenshot({ path }).catch(() => undefined);
       if (shot) await info.attach("app-window", { path, contentType: "image/png" });
     }
-    await app.close().catch(() => undefined);
+    await closeOrKill(app);
   }
   await rm(dataDir, { recursive: true, force: true, maxRetries: 3 });
 }
