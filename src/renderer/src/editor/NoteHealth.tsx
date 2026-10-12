@@ -143,15 +143,13 @@ export function NoteHealth({ editor, mindId }: { editor: Editor; mindId: string 
     <>
       {parts.length > 0 && (
         <fieldset className="mind-health" data-testid="mind-health" aria-label={t("health.label")}>
-          {parts.map((part, index) => {
+          {parts.map((part) => {
             const text = label(part, health[part].length);
             return (
               <Fragment key={part}>
-                {index > 0 && (
-                  <span className="mind-health-dot" aria-hidden="true">
-                    ·
-                  </span>
-                )}
+                <span className="mind-health-dot" aria-hidden="true">
+                  ·
+                </span>
                 <button
                   type="button"
                   data-testid={`health-${part}`}

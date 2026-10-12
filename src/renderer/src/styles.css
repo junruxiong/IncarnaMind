@@ -1080,6 +1080,7 @@
   /* The count under the title: quiet status text, pulled up into the title's margin. */
   .mind-count {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 8px;
     margin: -16px 0 16px;
@@ -1088,23 +1089,16 @@
     line-height: 16px;
     color: var(--color-ink-meta);
   }
-  /* The Mind's health under its title (#96): each part moves to its next sentence or Citation. */
+  /* The Mind's health under its title (#96), on the count's line: each part moves to its next sentence or Citation. */
   .mind-health {
     display: flex;
-    min-width: 0;
-    padding: 0;
-    border: 0;
     flex-wrap: wrap;
     align-items: center;
     column-gap: 4px;
-    margin: -12px 0 16px;
-    font-family: var(--font-sans);
-    font-size: 12px;
-    line-height: 20px;
-    color: var(--color-ink-meta);
-  }
-  .mind-count + .mind-health {
-    margin-top: -14px;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
   }
   .mind-health-dot {
     color: var(--color-rule-strong);
@@ -1149,8 +1143,10 @@
     box-shadow: inset 0 0 0 1.25px var(--color-danger);
     color: var(--color-danger);
   }
-  .mind-health-line {
-    margin: -12px 0 16px;
+  .mind-health-line::before {
+    content: "·";
+    margin-right: 8px;
+    color: var(--color-rule-strong);
   }
   .mind-count-button {
     min-width: 0;
