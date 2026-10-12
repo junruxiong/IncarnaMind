@@ -81,7 +81,7 @@ export function AgentPairingRow({
   const copySettings = async (what: "settings" | "skill") => {
     try {
       const setup = await core.copyAgentSetup(pairing.id);
-      await navigator.clipboard.writeText(what === "skill" ? (setup.skill ?? "") : setup.text);
+      await navigator.clipboard.writeText(what === "skill" ? setup.skill : setup.text);
       setCopied(what);
     } catch (error) {
       reportError(error);
