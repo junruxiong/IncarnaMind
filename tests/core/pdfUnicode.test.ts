@@ -82,6 +82,17 @@ describe("Chinese text in a printed PDF", () => {
     expect(await textOf(fixed)).toBe("大潮月，人儿");
   });
 
+  test("a glyph mapped to a radical from the supplement copies as its ideograph, as Noto CJK draws 页", async () => {
+    // 第 1 页 with ⻚ (U+2EDA), 见 with ⻅ (U+2EC5), and 𠘨 (beyond the BMP) with ⺇ (U+2E87).
+    const pdf = chromiumLikePdf(
+      "4 beginbfchar\n<41> <7B2C>\n<42> <2EDA>\n<43> <2EC5>\n<44> <2E87>\nendbfchar\n",
+      "ABCD",
+    );
+    expect(await textOf(pdf)).toBe("第⻚⻅⺇");
+
+    expect(await textOf(unifyIdeographs(pdf))).toBe("第页见𠘨");
+  });
+
   test("a PDF with no radicals, or one not laid out as expected, comes back as it was", async () => {
     const plain = chromiumLikePdf("1 beginbfchar\n<41> <6F6E>\nendbfchar\n", "A");
     expect(unifyIdeographs(plain)).toBe(plain);
