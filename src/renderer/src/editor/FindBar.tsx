@@ -60,13 +60,12 @@ export function FindBar({ editor, onClose }: { editor: Editor; onClose(): void }
   // Each ⌘F puts the cursor in the field, with what is in it selected.
   // biome-ignore lint/correctness/useExhaustiveDependencies: `requests` is what asks for it.
   useEffect(() => {
-    const take = () => {
-      field.current?.focus();
-      field.current?.select();
-    };
-    take();
+    field.current?.focus();
+    field.current?.select();
     // The editor takes the focus back a frame after Esc closes the outline or a menu: not from the field.
-    const frame = requestAnimationFrame(take);
+    const frame = requestAnimationFrame(() => {
+      if (document.activeElement !== field.current) field.current?.focus();
+    });
     return () => cancelAnimationFrame(frame);
   }, [requests]);
 
