@@ -62,7 +62,7 @@ npm install && npm run dev
 
 **Keep a big library tidy.** Tags are added for you, IncarnaMind suggests a Folder for each Document for you to accept, and the choices you make yourself are kept.
 
-**Choose your AI.** Already pay for ChatGPT Plus or Pro? Continue with ChatGPT and ask on your plan, no key needed. Or use your own key from OpenAI, Anthropic, Google, DeepSeek, Qwen, Kimi, GLM, Mistral, xAI, SiliconFlow or OpenRouter, any OpenAI-compatible server, or a free local model through Ollama, so nothing leaves your computer.
+**Choose your AI.** Already pay for ChatGPT Plus or Pro? Continue with ChatGPT and ask on your plan, no key needed. Or use your own key from OpenAI, Anthropic, Google, DeepSeek, Qwen, SiliconFlow or OpenRouter, and more, such as Kimi, GLM, Mistral, xAI or any OpenAI-compatible server, or a free local model through Ollama, so nothing leaves your computer.
 
 **Ask from the AI agent you already use** (experimental, off by default). Connect Claude, Codex, Cursor and others in **Settings → Agents**, on their own plan: they read only the folders you choose, every quote they get from IncarnaMind is checked, and what they read goes to their AI service under its terms. [How to connect each one](docs/agents.md).
 
@@ -84,7 +84,7 @@ There's no account and no IncarnaMind server. Your Minds and the search index st
 <summary><b>Questions</b></summary>
 
 - **Is it free?** Yes: it's open source under the Apache 2.0 licence. With a cloud AI model, you pay its provider for what you use; a local model costs nothing.
-- **Do I need an API key?** No. Continue with ChatGPT on a Plus or Pro plan, or, if [Ollama](https://ollama.com) is running, download a local model in one click. If you pay for Claude, connect the Claude app in **Settings → Agents** (experimental) and ask your Documents there. Or paste a key from OpenAI, Anthropic, Google, DeepSeek, Qwen, Kimi, GLM, Mistral, xAI, SiliconFlow or OpenRouter, or connect any OpenAI-compatible server.
+- **Do I need an API key?** No. Continue with ChatGPT on a Plus or Pro plan, or, if [Ollama](https://ollama.com) is running, download a local model in one click. If you pay for Claude, connect the Claude app in **Settings → Agents** (experimental) and ask your Documents there. Or paste a key from OpenAI, Anthropic, Google, DeepSeek, Qwen, SiliconFlow or OpenRouter, and more in Settings, such as Kimi, GLM, Mistral, xAI or any OpenAI-compatible server.
 - **Is it an alternative to NotebookLM (now Gemini Notebook)?** Yes. IncarnaMind runs on your computer and your files stay there, it works with the model you choose (your own key, a ChatGPT plan, or a local model through Ollama), every citation is checked against the page it quotes, and a Mind exports to Word with its citations.
 - **Can I use my ChatGPT plan?** Yes, with ChatGPT Plus or Pro. In **Settings → Models**, choose **Continue with ChatGPT** and sign in in your browser: Questions then go to OpenAI under your account and count against your plan's limits, with no key.
 - **Does it work offline?** Yes, with a local model through Ollama: reading your files, search and the citation check all run on your computer. Cloud models need the internet. Meaning-based search (embeddings) is optional and off by default.

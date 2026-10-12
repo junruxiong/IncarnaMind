@@ -62,7 +62,7 @@ npm install && npm run dev
 
 **文档再多也不乱。** 标签会自动添加，IncarnaMind 还会给每个文档推荐文件夹，由你确认；你自己做的选择都会保留。
 
-**模型由你来选。** 可以用你自己的 OpenAI、Anthropic、Google、DeepSeek、通义千问、Kimi、智谱 GLM、Mistral、xAI、硅基流动、OpenRouter 密钥，或接入任何兼容 OpenAI 接口的服务；也可以通过 Ollama 使用免费的本地模型，内容不出你的电脑。已经订阅了 ChatGPT Plus 或 Pro，也可以使用 ChatGPT 登录，直接用订阅提问。
+**模型由你来选。** 可以用你自己的 OpenAI、Anthropic、Google、DeepSeek、通义千问、硅基流动、OpenRouter 密钥，还有更多可选，例如 Kimi、智谱 GLM、Mistral、xAI，或任何兼容 OpenAI 接口的服务；也可以通过 Ollama 使用免费的本地模型，内容不出你的电脑。已经订阅了 ChatGPT Plus 或 Pro，也可以使用 ChatGPT 登录，直接用订阅提问。
 
 **在你已经在用的 AI 智能体里提问**（实验功能，默认关闭）。在**设置 → 智能体**里连接 Claude、Codex、Cursor 等，用的是它们自己的订阅：它们只能读你选定的文件夹，从 IncarnaMind 拿到的每条引文都经过核对；它们读到的内容会按其服务条款发给它们的 AI 服务。[各个智能体的连接方法](docs/agents.zh-CN.md)。
 
@@ -84,7 +84,7 @@ npm install && npm run dev
 <summary><b>常见问题</b></summary>
 
 - **要花钱吗？** 不用。IncarnaMind 开源免费（Apache 2.0 许可证）。用云端模型时，按用量付费给模型提供商；用本地模型则完全免费。
-- **一定要有 API 密钥吗？** 不一定。只要 [Ollama](https://ollama.com) 在运行，IncarnaMind 一键就能下载本地模型。也可以填 OpenAI、Anthropic、Google、DeepSeek、通义千问、Kimi、智谱 GLM、Mistral、xAI、硅基流动、OpenRouter 的密钥，或接入任何兼容 OpenAI 接口的服务。订阅了 ChatGPT Plus 或 Pro，可以使用 ChatGPT 登录；订阅了 Claude，可以在**设置 → 智能体**里连接 Claude 应用（实验功能），在 Claude 里问你的文档。
+- **一定要有 API 密钥吗？** 不一定。只要 [Ollama](https://ollama.com) 在运行，IncarnaMind 一键就能下载本地模型。也可以填 OpenAI、Anthropic、Google、DeepSeek、通义千问、硅基流动、OpenRouter 的密钥；“设置”中还有更多提供商，例如 Kimi、智谱 GLM、Mistral、xAI，或任何兼容 OpenAI 接口的服务。订阅了 ChatGPT Plus 或 Pro，可以使用 ChatGPT 登录；订阅了 Claude，可以在**设置 → 智能体**里连接 Claude 应用（实验功能），在 Claude 里问你的文档。
 - **是 NotebookLM（现名 Gemini Notebook）的替代品吗？** 是。IncarnaMind 在你的电脑上运行，文件始终留在本地；模型由你来选（你自己的密钥、ChatGPT 订阅，或通过 Ollama 运行的本地模型）；每条引用都和原文所在页逐一核对；Mind 还能导出为带引用的 Word。
 - **能用我的 ChatGPT 订阅吗？** 能，需要 ChatGPT Plus 或 Pro。在**设置 → 模型**里选**使用 ChatGPT 继续**，在浏览器里完成登录即可：之后的提问会以你的账号发给 OpenAI，计入订阅的用量上限，不需要密钥。
 - **能离线用吗？** 能，配合通过 Ollama 运行的本地模型：读取文件、搜索和引用核对都在你的电脑上完成。云端模型需要联网。按含义搜索（嵌入）是可选功能，默认关闭。
