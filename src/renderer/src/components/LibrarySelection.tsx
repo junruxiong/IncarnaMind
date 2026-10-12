@@ -1,8 +1,9 @@
 import { useEffect, useRef } from "react";
 import type { Document } from "../../../core/api";
+import { commands } from "../commands/registry";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
-import { TagLineIcon } from "./lineIcons";
+import { FolderPlusLineIcon, TagLineIcon } from "./lineIcons";
 import { pickerLabel, TagPicker, tagPopoverClass, useTagPopover } from "./TagPicker";
 import { buttonStyle } from "./ui";
 
@@ -64,7 +65,7 @@ function rangeBetween(ids: readonly string[], from: string, to: string): string[
 /**
  * Above the rows while any in view is selected: select all or none, how
  * many, "Tags…" to add or remove Tags on all of them at once (the Tag
- * picker), and clearing the selection. Esc clears it too.
+ * picker), "New Folder with these", and clearing the selection. Esc clears it too.
  */
 export function LibrarySelectionBar({ shownIds }: { shownIds: readonly string[] }) {
   const t = useT();
@@ -129,6 +130,22 @@ export function LibrarySelectionBar({ shownIds }: { shownIds: readonly string[] 
           <TagPicker documentIds={inView} label={label} onReposition={popover.reposition} />
         )}
       </div>
+      <button
+        type="button"
+        data-testid="library-selection-new-folder"
+        onClick={() =>
+          void commands
+            .run("folder.newWith", {
+              surface: "library",
+              selection: inView.map((id) => ({ kind: "document", id })),
+            })
+            .catch(useAppStore.getState().reportError)
+        }
+        className={buttonStyle("secondary", "sm")}
+      >
+        <FolderPlusLineIcon className="size-3.5" />
+        {t("folder.newWith")}
+      </button>
       <button
         type="button"
         data-testid="library-selection-clear"

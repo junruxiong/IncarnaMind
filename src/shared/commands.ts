@@ -19,6 +19,7 @@ export type ShortcutKeys = Keys | { readonly mac: Keys; readonly other: Keys };
  */
 export const MENU_COMMANDS = {
   "mind.new": { label: "menu.newMind", keys: "CmdOrCtrl+N" },
+  "folder.new": { label: "menu.newFolder", keys: "CmdOrCtrl+Shift+N" },
   "tab.close": { label: "menu.closeTab", keys: "CmdOrCtrl+W" },
   "tab.reopen": { label: "menu.reopenTab", keys: "CmdOrCtrl+Shift+T" },
   // ⌘\ is the sidebar's, as in Notion.
