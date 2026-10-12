@@ -2329,4 +2329,10 @@ export const zhCN = {
     "无法读取 {agent} 的设置文件，IncarnaMind 未作改动。设置已复制：粘贴到 {path} 中。",
   "agents.done.undo": "撤销",
   "agents.bundle.description": "搜索你在 IncarnaMind 中的文档并引用，每条引文都经过核对。",
+  "figure.points": "{value}个百分点",
+  "figure.times": "{value}倍",
+  "figure.rate": "1 {per} = {value} {of}",
+  "figure.about": "约{value}",
+  "figure.yes": "是",
+  "figure.no": "否",
 } satisfies Dictionary;
