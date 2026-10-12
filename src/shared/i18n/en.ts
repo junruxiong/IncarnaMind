@@ -538,6 +538,10 @@ export const en = {
   "documents.status.ready": "Ready",
   "documents.status.failed": "Failed: {reason}",
   "documents.status.noText": "No text found",
+  "documents.status.scanning.one": "Reading 1 scanned page…",
+  "documents.status.scanning.other": "Reading {count} scanned pages… {read} read so far.",
+  "documents.statusShort.scanning": "Reading {read}/{count}",
+  "documents.statusShort.pagesUnread": "Pages unread",
   "documents.statusShort.queued": "Queued",
   "documents.statusShort.extracting": "Reading",
   "documents.statusShort.waiting": "Waiting",
@@ -557,6 +561,12 @@ export const en = {
   "documents.fileShort.missing": "Missing",
   "documents.fileShort.unavailable": "Unavailable",
   "documents.failure.processingError": "something went wrong while processing it",
+  "documents.failure.pagesUnread.one": "scanned page {pages} couldn't be read",
+  "documents.failure.pagesUnread.other": "scanned pages {pages} couldn't be read",
+  "documents.failure.pagesUnread.all": "its scanned pages couldn't be read",
+  "documents.pagesUnread.one": "Scanned page {pages} couldn't be read",
+  "documents.pagesUnread.other": "Scanned pages {pages} couldn't be read",
+  "documents.pagesUnread.all": "The scanned pages couldn't be read",
   "documents.ask": "Ask about this Document",
   "documents.startMind": "Start a Mind from this Document",
   "documents.more": "More actions for {name}",
@@ -650,7 +660,7 @@ export const en = {
   "linkedFolders.state.paused.progress": "Indexing is paused: {indexed} of {files} files indexed",
   "linkedFolders.state.unavailable": "Unavailable",
   "linkedFolders.state.unavailable.full":
-    "The folder can't be reached right now, e.g. its drive is unplugged. Its Documents are still searched from their stored text.",
+    "The folder can't be reached right now, e.g. its drive is unplugged. Its Documents are still searched from their stored text. If it moved, choose Locate folder… in its menu.",
   "linkedFolders.state.downloading": "Downloading…",
   "linkedFolders.state.downloading.full.one": "Downloading 1 online-only file to index it",
   "linkedFolders.state.downloading.full.other":
@@ -674,6 +684,15 @@ export const en = {
   "linkedFolders.reveal.windows": "Show in Explorer",
   "linkedFolders.reveal.other": "Show in file manager",
   "linkedFolders.reveal.unavailableReason": "The folder can't be reached right now.",
+  "linkedFolders.locateAction": "Locate folder…",
+  "linkedFolders.locate.pickTitle": "Locate “{name}”",
+  "linkedFolders.locate.pickButton": "Choose",
+  "linkedFolders.locate.notThis":
+    "None of the files in “{name}” are in that folder. Choose the folder that holds them now.",
+  "linkedFolders.locate.overlaps":
+    "That folder is inside a Linked folder, or holds one. Choose the folder “{name}” is in now.",
+  "linkedFolders.locate.taken":
+    "“{file}” in that folder is in IncarnaMind already, added on its own. Delete it from IncarnaMind, then locate the folder again.",
   "linkedFolders.unlinkAction": "Unlink…",
   "linkedFolders.unlink.title": "Unlink “{name}”?",
   "linkedFolders.unlink.body":
@@ -693,6 +712,8 @@ export const en = {
 
   "status.processing.one": "Processing 1 Document…",
   "status.processing.other": "Processing {count} Documents…",
+  "status.scanning.one": "Reading 1 scanned page…",
+  "status.scanning.other": "Reading {count} scanned pages…",
   "status.tagging.one": "Tagging 1 Document…",
   "status.tagging.other": "Tagging {count} Documents…",
   "status.taggingWaiting": "Tags need a model",
@@ -703,6 +724,14 @@ export const en = {
   "status.rerankDownloading": "Reranking model: {downloaded} of {total} MB",
   "status.rerankDownloadFailed": "Reranking model download failed",
   "status.rerankModelFailed": "Reranking model couldn't start",
+  "status.scanModelDownloading": "Text recognition model: {downloaded} of {total} MB",
+  "status.scanModelDownloadFailed": "Text recognition model download failed",
+  "status.scanModelFailed": "Text recognition model couldn't start",
+  "scan.model.downloading":
+    "Downloading the text recognition model: {downloaded} of {total} MB. Scanned pages are read as soon as it's ready, on this computer.",
+  "scan.model.failed":
+    "The text recognition model couldn't be downloaded: {reason}. Scanned pages can't be read until it is.",
+  "scan.model.loadFailed": "The text recognition model couldn't start on this computer.",
   "status.rebuilding": "Rebuilding search: {done} of {total}",
   "status.searchError": "Search can't use {provider}",
   "status.retry": "Retry",
@@ -1367,6 +1396,9 @@ export const en = {
   "privacy.traffic.embedding-model": "Search model download",
   "privacy.traffic.embedding-model.description":
     "The built-in search model is downloaded once, the first time a Document needs it.",
+  "privacy.traffic.text-recognition-model": "Text recognition model download",
+  "privacy.traffic.text-recognition-model.description":
+    "The built-in text recognition model is downloaded once, the first time a scanned page needs reading. Scans are read on this computer: nothing of them is sent.",
   "privacy.traffic.reranking-model": "Reranking model download",
   "privacy.traffic.reranking-model.description":
     "The built-in reranking model is downloaded once, when there are Documents to search, unless reranking is off or uses a service.",
@@ -1596,6 +1628,10 @@ export const en = {
   "citation.reason.document-removed": "The Document has been deleted.",
   "citation.reason.checking": "The quote is checked when the Answer is finished.",
   "citation.where": "{document}, {location}",
+  "citation.scan": "Text read from a scan",
+  "citation.scan.unsure.one": "Text read from a scan · 1 word may be misread",
+  "citation.scan.unsure.other": "Text read from a scan · {count} words may be misread",
+  "citation.scan.unsureWord": "May be misread: check it on the page",
   "citation.quote": "The quote:",
   "citation.meaning":
     '"Quote found" means these words are where it cites. It doesn\'t mean they support the sentence.',
@@ -2557,6 +2593,7 @@ export const en = {
     "Used in the ChatGPT app’s Work and Codex modes; ordinary Chat mode doesn’t use it.",
   "agents.setup.undoChanged": "{path} has changed since, so IncarnaMind left it as it is.",
   "agents.client.other": "Other agent",
+  "agents.client.codex": "ChatGPT app and Codex",
   "agents.pairing.reads": "Reads {folders}",
   "agents.pairing.readsNothing": "Reads no folders yet",
   "agents.pairing.lastUsed": "Last used {when}",
