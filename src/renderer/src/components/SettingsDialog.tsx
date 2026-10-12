@@ -33,6 +33,7 @@ import {
   sectionTitleClass,
 } from "./ui";
 import { useModal } from "./useModal";
+import { WebSearchSettings } from "./WebSearchSettings";
 
 const languageOptions: readonly { value: LanguagePreference; label: MessageKey }[] = [
   { value: "system", label: "settings.language.system" },
@@ -185,6 +186,7 @@ function PageContent({ page }: { page: SettingsPage }) {
             <EmbeddingSettingsSection />
           </Titled>
           <RerankSettingsSection />
+          <WebSearchSettings />
           <EvidenceSettings />
         </Page>
       );

@@ -15,6 +15,9 @@
  *   provider never answered cost nothing, and its row is soft-deleted.
  *   Reservations left open by a crash settle at the reserved amount at the
  *   next start (`settleOpen`): nothing else is known of them.
+ * - A request that offers the provider's own web search (#128) also
+ *   reserves a search's fee and the input its pages may add, and settles at
+ *   the fee for each search it made.
  * - A ChatGPT plan request is recorded with its tokens and no price: the
  *   plan's own limit is its cap. An Ollama Cloud model's used-up allowance
  *   (HTTP 402) becomes a plan limit, the same stop as the ChatGPT plan's.
@@ -41,6 +44,7 @@ import type { ChatLanguageModel } from "../providers/models";
 import { tokenUsageOf } from "../providers/promptCache";
 import { CostCapError, PlanLimitError } from "../providers/providerErrors";
 import { retryAfterMs } from "../providers/retryAfter";
+import { searchFee } from "../providers/webSearch";
 import type { TokenUsage } from "../runs/engine";
 import type { Database } from "../storage";
 import { costOf, inCurrency, promptTokensOf, reservationOf } from "./price";
@@ -120,6 +124,30 @@ function ollamaLimit(model: MeteredModel, error: unknown): PlanLimitError | null
 const writesCache = (model: MeteredModel) => model.kind === "anthropic";
 
 /**
+ * The input a web search's pages may add to its request, reserved for each:
+ * the provider reads the pages it found as input before the model goes on.
+ */
+const SEARCH_INPUT_TOKENS = 30_000;
+
+/** A request's own web searches (#128), by the name the request gives each, with what one costs. */
+function searchesOffered(tools: CallOptions["tools"]): Map<string, Money> {
+  const offered = new Map<string, Money>();
+  for (const tool of tools ?? []) {
+    const fee = tool.type === "provider" ? searchFee(tool.id) : undefined;
+    if (fee) offered.set(tool.name, fee);
+  }
+  return offered;
+}
+
+/** The name of the search tool a reply's part shows the provider using, or null for any other part. */
+function searchMade(offered: ReadonlyMap<string, Money>, part: object): string | null {
+  if (!("type" in part) || part.type !== "tool-call") return null;
+  if (!("providerExecuted" in part) || part.providerExecuted !== true) return null;
+  const name = "toolName" in part ? part.toolName : null;
+  return typeof name === "string" && offered.has(name) ? name : null;
+}
+
+/**
  * The provider never answered: it refused the request with an HTTP error or a
  * plan's limit, or couldn't be reached. It bills nothing.
  */
@@ -171,16 +199,27 @@ export function createMeter(options: {
     const { price } = model;
     const priced = model.billing === "per-token" && price !== undefined;
     const cacheWrites = writesCache(model);
+    const offered = searchesOffered(params.tools);
+    /** What searches with these tools cost, in the price's currency. */
+    const feesOf = (tools: Iterable<string>) => {
+      if (!priced || !price) return 0;
+      let sum = 0;
+      for (const name of tools) {
+        const fee = offered.get(name);
+        if (fee) sum += inCurrency(fee.amount, fee.currency, price.currency);
+      }
+      return sum;
+    };
     const reserved = priced
       ? reservationOf(
           {
-            promptTokens,
+            promptTokens: promptTokens + offered.size * SEARCH_INPUT_TOKENS,
             outputTokens: params.maxOutputTokens ?? model.maxOutput ?? DEFAULT_OUTPUT_TOKENS,
             cacheWrites,
           },
           price,
           at,
-        )
+        ) + feesOf(offered.keys())
       : null;
     const created = at.toISOString();
     db.transaction(() => {
@@ -228,6 +267,8 @@ export function createMeter(options: {
         ],
       );
     };
+    /** The web searches the reply made, by their tool's name. */
+    const searches: string[] = [];
     /** Settles at what came back when nothing was reported: the prompt's estimate and the output's bytes. */
     const estimated = (outputBytes: number) => {
       const outputTokens = Math.ceil(outputBytes / 3);
@@ -235,13 +276,19 @@ export function createMeter(options: {
         priced && reserved !== null
           ? Math.min(
               reserved,
-              reservationOf({ promptTokens, outputTokens, cacheWrites: false }, price, at),
+              reservationOf({ promptTokens, outputTokens, cacheWrites: false }, price, at) +
+                feesOf(searches),
             )
           : null;
       close(cost, { inputTokens: promptTokens, outputTokens });
     };
 
     return {
+      /** Hears a part of the reply: a web search the provider made is billed. */
+      heard(part: object) {
+        const search = searchMade(offered, part);
+        if (search) searches.push(search);
+      },
       settle(usage: Usage, outputBytes: number) {
         if (!reported(usage)) return estimated(outputBytes);
         const counted = tokenUsageOf({
@@ -252,7 +299,10 @@ export function createMeter(options: {
             cacheWriteTokens: usage.inputTokens.cacheWrite,
           },
         });
-        close(priced ? costOf(counted, price, at, { cacheWrites }) : null, counted);
+        close(
+          priced ? costOf(counted, price, at, { cacheWrites }) + feesOf(searches) : null,
+          counted,
+        );
       },
       /** It ended without a report: a failure after it began, a stop, or a provider that reports none. */
       end: estimated,
@@ -290,6 +340,7 @@ export function createMeter(options: {
             const request = begin(metered, params);
             try {
               const result = await doGenerate();
+              for (const part of result.content) request.heard(part);
               request.settle(result.usage, contentBytes(result.content));
               return result;
             } catch (error) {
@@ -320,6 +371,7 @@ export function createMeter(options: {
                     return;
                   }
                   bytes += streamedBytes(value);
+                  request.heard(value);
                   if (value.type === "finish") request.settle(value.usage, bytes);
                   const limit = value.type === "error" ? ollamaLimit(metered, value.error) : null;
                   controller.enqueue(limit ? { type: "error", error: limit } : value);
