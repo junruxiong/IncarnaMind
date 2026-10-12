@@ -2617,4 +2617,10 @@ export const en = {
   "agents.done.undo": "Undo",
   "agents.bundle.description":
     "Search your IncarnaMind Documents and cite them, with every quote checked.",
+  "figure.points": "{value} percentage points",
+  "figure.times": "{value}x",
+  "figure.rate": "1 {per} = {value} {of}",
+  "figure.about": "about {value}",
+  "figure.yes": "yes",
+  "figure.no": "no",
 } as const satisfies Record<string, string>;
