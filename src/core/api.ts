@@ -112,8 +112,14 @@ export interface CreateMindInput {
  *   (see `GENERATED_MARK`). Older content is version 11 content as it is:
  *   nothing is rewritten, and an Answer without `generatedMarks` is the AI's
  *   as a whole, as it always was.
+ * - 15: the rows a cut chart doesn't draw (#503): `cutRows` beside `rows`
+ *   in a chart's `data`, which Show as table lists. An older version keeps
+ *   them while it changes a chart's kind, columns or title, but its Update
+ *   writes the data again without them. Older charts are version 15 content
+ *   as they are: one with no `cutRows` lists the rows it draws, and nothing
+ *   is rewritten.
  */
-export const CONTENT_SCHEMA_VERSION = 11;
+export const CONTENT_SCHEMA_VERSION = 15;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
