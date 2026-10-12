@@ -42,8 +42,9 @@ import {
   isInstalled,
   mcpServersSnippet,
   SERVER_KEY,
+  type SettingsFile,
   serverEntry,
-  vscodeLink,
+  settingsFilesFor,
   withCodexTable,
   withMcpServersEntry,
   withoutCodexTable,
@@ -82,7 +83,7 @@ export interface AgentSetupOptions {
   reportError(error: unknown): void;
 }
 
-/** A settings file IncarnaMind just wrote, to take back. */
+/** A settings file IncarnaMind just wrote, to take back with Undo. */
 interface Written {
   path: string;
   before: string | null;
@@ -132,7 +133,7 @@ function bundleManifest(launch: AgentLaunch, version: string, description: strin
 export function createAgentSetup(options: AgentSetupOptions) {
   const t = options.say;
   /** Settings files written, by pairing, while their Undo stands. */
-  const written = new Map<string, Written>();
+  const written = new Map<string, Written[]>();
   // Bundles a quit left before their time was up hold a key: they go now.
   readdir(options.tempDir)
     .then((names) =>
@@ -143,24 +144,26 @@ export function createAgentSetup(options: AgentSetupOptions) {
       ),
     )
     .catch(options.reportError);
-  const pathOf = (client: ClientDefinition) =>
-    client.file ? join(options.home, ...client.file.path) : null;
+  const pathOf = (file: SettingsFile) => join(options.home, ...file.path);
 
   /** The file with IncarnaMind's entry for `launch` set, or taken out (null). */
-  const changed = (client: ClientDefinition, before: string | null, launch: AgentLaunch | null) => {
-    if (client.file?.format === "codex-toml") {
+  const changed = (file: SettingsFile, before: string | null, launch: AgentLaunch | null) => {
+    if (file.format === "codex-toml") {
       return launch ? withCodexTable(before, codexTable(launch)) : withoutCodexTable(before ?? "");
     }
     return withMcpServersEntry(before, launch ? serverEntry(launch) : null);
   };
 
   /** What a setup adds to the file: Codex's table, or the entry under `mcpServers`. */
-  const changeShown = (client: ClientDefinition, launch: AgentLaunch) =>
-    client.file?.format === "codex-toml"
+  const changeShown = (file: SettingsFile, launch: AgentLaunch) =>
+    file.format === "codex-toml"
       ? codexTable(launch)
       : `${JSON.stringify({ mcpServers: { [SERVER_KEY]: serverEntry(launch) } }, null, 2)}\n`;
 
-  const nameFor = (client: ClientDefinition) => {
+  const nameFor = (client: ClientDefinition, given: unknown) => {
+    if (client.id === "other" && typeof given === "string" && given.trim() !== "") {
+      return given.trim();
+    }
     const base = client.name || t("agents.client.other");
     const taken = new Set(
       options.agents.settings().pairings.map((pairing) => pairing.name.toLocaleLowerCase()),
@@ -219,25 +222,31 @@ export function createAgentSetup(options: AgentSetupOptions) {
     await options.openPath(path);
   };
 
-  /** Adds IncarnaMind to the agent's settings file; the settings to paste if it can't be read. */
+  /** Adds IncarnaMind to the agent's settings files; the settings to paste if one can't be read. */
   const writeSettings = async (
     client: ClientDefinition,
     pairingId: string,
     launch: AgentLaunch,
   ): Promise<AgentSetupResult> => {
-    const path = pathOf(client) as string;
+    const files = client.files ?? [];
     const token = launch.env[AGENT_TOKEN_ENV] ?? "";
-    const before = await readText(path);
-    let after: string;
-    try {
-      after = changed(client, before, launch);
-    } catch {
-      return copy("settings", changeShown(client, launch), token, path);
+    const planned: Written[] = [];
+    for (const file of files) {
+      const path = pathOf(file);
+      const before = await readText(path);
+      try {
+        planned.push({ path, before, after: changed(file, before, launch) });
+      } catch {
+        // Nothing is written until every file can be.
+        return copy("settings", changeShown(file, launch), token, path);
+      }
     }
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, after, before === null ? { mode: 0o600 } : {});
-    written.set(pairingId, { path, before, after });
-    return { kind: "wrote", path };
+    for (const each of planned) {
+      await mkdir(dirname(each.path), { recursive: true });
+      await writeFile(each.path, each.after, each.before === null ? { mode: 0o600 } : {});
+    }
+    written.set(pairingId, planned);
+    return { kind: "wrote", path: planned[0]?.path ?? "" };
   };
 
   const install = async (
@@ -252,7 +261,7 @@ export function createAgentSetup(options: AgentSetupOptions) {
         return { kind: "opened", how: "bundle" };
       case "link": {
         if (!options.openLink) throw new Error("This copy of IncarnaMind can't open other apps.");
-        await options.openLink(client.id === "cursor" ? cursorLink(launch) : vscodeLink(launch));
+        await options.openLink(cursorLink(launch));
         return { kind: "opened", how: "link" };
       }
       case "file":
@@ -280,10 +289,13 @@ export function createAgentSetup(options: AgentSetupOptions) {
     preview(clientId: unknown): AgentSetupPreview | null {
       const client = clientDefinition(clientId);
       if (!client) throw new InvalidInputError("Unknown agent.");
-      const path = pathOf(client);
-      if (!path) return null;
+      const file = client.files?.[0];
+      if (!file) return null;
       // The key is made when the User confirms; what is shown hides it anyway.
-      return { path, change: changeShown(client, options.agents.launchFor(HIDDEN_KEY)) };
+      return {
+        path: pathOf(file),
+        change: changeShown(file, options.agents.launchFor(HIDDEN_KEY)),
+      };
     },
 
     async setUp(input: unknown): Promise<SetUpAgent> {
@@ -294,7 +306,7 @@ export function createAgentSetup(options: AgentSetupOptions) {
         throw new InvalidInputError("Choose at least one Folder for the agent to read.");
       }
       const { pairing, launch } = await options.agents.connect({
-        name: nameFor(client),
+        name: nameFor(client, input.name),
         folderIds: input.folderIds,
         client: client.id,
       });
@@ -309,15 +321,17 @@ export function createAgentSetup(options: AgentSetupOptions) {
 
     async undo(pairingId: unknown): Promise<void> {
       if (typeof pairingId !== "string") throw new InvalidInputError("A pairing id must be text.");
-      const file = written.get(pairingId);
-      if (file) {
+      const files = written.get(pairingId) ?? [];
+      for (const file of files) {
         if ((await readText(file.path)) !== file.after) {
           throw new InvalidInputError(t("agents.setup.undoChanged", { path: file.path }));
         }
+      }
+      for (const file of files) {
         if (file.before === null) await unlink(file.path);
         else await writeFile(file.path, file.before);
-        written.delete(pairingId);
       }
+      written.delete(pairingId);
       await options.agents.disconnect(pairingId);
     },
 
@@ -333,23 +347,26 @@ export function createAgentSetup(options: AgentSetupOptions) {
     },
 
     /**
-     * Before a pairing is disconnected: takes IncarnaMind out of the agent's
-     * settings file it was written to, if the entry there is still its own.
+     * Before a pairing is disconnected: takes IncarnaMind out of the settings
+     * files it was written to, if the entry there is still its own. Also for
+     * an agent no longer listed, whose pairing IncarnaMind wrote a file for.
      */
     async removeFromSettings(pairingId: unknown): Promise<void> {
       const pairing = options.agents.settings().pairings.find((each) => each.id === pairingId);
-      const client = clientDefinition(pairing?.client);
-      const path = client && pathOf(client);
-      if (!pairing || !client || !path) return;
+      const files = settingsFilesFor(pairing?.client ?? null);
+      if (!pairing || files.length === 0) return;
       written.delete(pairing.id);
       const token = (await options.agents.launch(pairing.id)).env[AGENT_TOKEN_ENV] ?? "";
-      const before = await readText(path);
-      if (before === null || token === "" || !before.includes(token)) return;
-      try {
-        await writeFile(path, changed(client, before, null));
-      } catch (error) {
-        // The User's file is theirs to tidy: the key in it no longer works anyway.
-        options.reportError(error);
+      for (const file of files) {
+        const path = pathOf(file);
+        const before = await readText(path);
+        if (before === null || token === "" || !before.includes(token)) continue;
+        try {
+          await writeFile(path, changed(file, before, null));
+        } catch (error) {
+          // The User's file is theirs to tidy: the key in it no longer works anyway.
+          options.reportError(error);
+        }
       }
     },
   };
