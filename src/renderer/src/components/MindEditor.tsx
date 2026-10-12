@@ -28,14 +28,20 @@ import { ConversationLinks } from "../editor/ConversationLinks";
 import { CitationClusters } from "../editor/citationClusters";
 import { CitationNumbers, redrawFootnotes, setCitationForm } from "../editor/citationNumbers";
 import { CopyCitations } from "../editor/copyCitations";
+import { DocumentChipView } from "../editor/DocumentChipView";
+import { DocumentChipKeys } from "../editor/documentChipKeys";
 import { EndHint, type HintPlace, type HintText, isEmptyMind } from "../editor/EndHint";
 import { selectionForEdit } from "../editor/editSelection";
+import { FindBar } from "../editor/FindBar";
 import { FootnoteArea } from "../editor/FootnoteArea";
 import { FootnotePopover } from "../editor/FootnotePopover";
 import { type FootnoteLabel, footnoteView } from "../editor/FootnoteView";
+import { FindInMind } from "../editor/findInMind";
 import { FootnoteKeys } from "../editor/footnoteSchema";
+import { LinkBubble } from "../editor/LinkBubble";
 import { MarginChecks } from "../editor/MarginChecks";
 import { MathEditing, MathEditor } from "../editor/MathEditor";
+import { MindOutline } from "../editor/MindOutline";
 import { MeetingNotes } from "../editor/meetingNotes";
 import { ComposerDockContext, CountSlotContext, MindIdContext } from "../editor/mindContext";
 import { NoteKeymap } from "../editor/noteKeymap";
@@ -62,6 +68,7 @@ import { requestEdit, startEditing, TRANSLATE_LANGUAGES } from "../editWithAi";
 import { translateNow, useT } from "../i18n";
 import { useMeetingOf, useMeetings } from "../meetings";
 import { isWritingIn } from "../mindStatus";
+import { useMindTools } from "../mindTools";
 import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
 import { askForSuggestion, describeSuggestion } from "../suggestions";
@@ -273,6 +280,7 @@ function MindEditorView({
           answerView: ReactNodeViewRenderer(AnswerView),
           citationView,
           footnoteView: footnoteView(() => footnoteLabel.current),
+          documentChipView: ReactNodeViewRenderer(DocumentChipView, { as: "span" }),
           chartView,
           wordAtomView,
           wordBlockView,
@@ -283,6 +291,7 @@ function MindEditorView({
         CitationClusters,
         CopyCitations,
         FootnoteKeys,
+        DocumentChipKeys,
         MeetingNotes.configure({
           mindId,
           doc,
@@ -324,6 +333,7 @@ function MindEditorView({
         ScopePicker,
         MathEditing.configure({ onEdit: setEditingMath }),
         BlockCommands,
+        FindInMind,
         TableKeys,
         NoteKeymap,
         QuestionCommands.configure({
@@ -489,6 +499,8 @@ function MindEditorView({
     editor,
     selector: ({ editor: current }) => isEmptyMind(current.state.doc),
   });
+  const findShown = useMindTools((state) => state.findMindId === mindId);
+  const outlineShown = useMindTools((state) => state.outlineMindId === mindId);
   const guide = useGettingStarted() !== null && empty && !isExample && !readOnly;
 
   return (
@@ -524,6 +536,11 @@ function MindEditorView({
       {guide && <StartGuide />}
       {!readOnly && <BlockHandle editor={editor} />}
       {!readOnly && <SelectionMenu editor={editor} ai={aiActions} />}
+      {!readOnly && <LinkBubble editor={editor} />}
+      {findShown && <FindBar editor={editor} onClose={() => useMindTools.getState().hideFind()} />}
+      {outlineShown && (
+        <MindOutline editor={editor} onClose={() => useMindTools.getState().hideOutline()} />
+      )}
       <FootnotePopover editor={editor} citationView={citationView} />
       {editingMath !== null && (
         <MathEditor
