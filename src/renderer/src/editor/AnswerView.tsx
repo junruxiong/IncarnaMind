@@ -12,6 +12,7 @@ import {
 } from "../../../core/api";
 import { asksAfterThirdParty } from "../../../shared/approvalRules";
 import { AnswerWriting } from "../answerPhase";
+import { isCalculated, RUN_SCRIPT, SEARCH } from "../answerSteps";
 import { useAnswers } from "../answers";
 import { useApprovals, waitingFor } from "../approvals";
 import { signInAgain } from "../chatGptSignIn";
@@ -51,12 +52,8 @@ function toolCallsOf(value: unknown): AnswerToolCall[] {
   }
 }
 
-const RUN_SCRIPT = "run_skill_script";
-/** The Tool an Answer searches the Documents with: its calls are summed up on the meta line. */
-export const SEARCH = "search_documents";
-
 /** Items of the meta line, with a dot between each two. */
-export function Dotted({ items }: { items: ReactNode[] }) {
+function Dotted({ items }: { items: ReactNode[] }) {
   return items.map((item, index) => (
     // biome-ignore lint/suspicious/noArrayIndexKey: the items are fixed slots of the meta line.
     <Fragment key={index}>
@@ -319,15 +316,7 @@ export function CallRows({
           call.source === "sources" ||
           (call.source === "skill" && call.tool === RUN_SCRIPT)),
     )
-    .map((call) =>
-      call.source === "connector" ? (
-        <ConnectorCall key={call.id} call={call} />
-      ) : call.source === "sources" ? (
-        <SourcesCall key={call.id} call={call} />
-      ) : (
-        <ScriptCall key={call.id} call={call} />
-      ),
-    );
+    .map((call) => <CallRow key={call.id} call={call} />);
   const skills = skillRows(calls);
   if (skills.length === 0 && rows.length === 0) return null;
   return (
@@ -338,6 +327,13 @@ export function CallRows({
       {rows}
     </div>
   );
+}
+
+/** The row of a call through a Connector, of Find sources, or of a Skill script. */
+export function CallRow({ call }: { call: AnswerToolCall }) {
+  if (call.source === "connector") return <ConnectorCall call={call} />;
+  if (call.source === "sources") return <SourcesCall call={call} />;
+  return <ScriptCall call={call} />;
 }
 
 /** The approval card for a request: a Connector's Tool, or a Skill script. */
@@ -853,7 +849,7 @@ function skillRows(calls: AnswerToolCall[]): SkillUse[] {
 }
 
 /** A Skill an Answer used, loaded by the model or chosen for the Question, with the files it read. */
-function SkillRow({ name, use, reads }: SkillUse) {
+export function SkillRow({ name, use, reads }: SkillUse) {
   const t = useT();
   const status = use?.status ?? "done";
   const summary =
@@ -890,15 +886,12 @@ function SkillRow({ name, use, reads }: SkillUse) {
   );
 }
 
-/** The name of the Documents' Tool whose figures an Answer shows (ADR-0021). */
-const CALCULATE = "calculate";
-
 /** How many calculated figures an Answer shows, and how many it couldn't, from its one `calculate` call. */
 export function figuresOf(calls: readonly AnswerToolCall[]): {
   calculated: number;
   uncalculated: number;
 } {
-  const call = calls.find((each) => each.tool === CALCULATE && each.source === "documents");
+  const call = calls.find(isCalculated);
   return { calculated: call?.resultCount ?? 0, uncalculated: call?.uncalculated ?? 0 };
 }
 
@@ -915,7 +908,7 @@ export function UncalculatedLine({ count }: { count: number }) {
 }
 
 /** The searches an Answer ran, summed up on its meta line; it opens the list. */
-export function SearchesSummary({
+function SearchesSummary({
   searches,
   open,
   onToggle,
@@ -947,10 +940,10 @@ export function SearchesSummary({
 }
 
 /**
- * The Answer's steps: what each search was for and what it found, then how
- * many figures it calculated (ADR-0021), which have no Tool-call card.
+ * What each search was for and what it found, then how many figures the
+ * Answer calculated (ADR-0021), which have no Tool-call card.
  */
-export function SearchList({
+function SearchList({
   searches,
   calculated = 0,
 }: {

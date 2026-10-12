@@ -246,6 +246,15 @@ export function SparkLineIcon(props: IconProps) {
   );
 }
 
+export function CalculatorLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <rect x="5" y="3" width="14" height="18" rx="2" />
+      <path d="M8.5 7h7M8.5 11h.01M12 11h.01M15.5 11h.01M8.5 14.5h.01M12 14.5h.01M15.5 14.5h.01M8.5 18h3.5M15.5 18h.01" />
+    </LineIcon>
+  );
+}
+
 export function CheckLineIcon(props: IconProps) {
   return (
     <LineIcon strokeWidth={2.25} {...props}>

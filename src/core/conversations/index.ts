@@ -20,7 +20,9 @@ import {
   type CitedVersions,
 } from "../answers/citedVersions";
 import type {
+  AnswerPhase,
   AnswerStatus,
+  AnswerSteps,
   AnswerToolCall,
   AskedFrom,
   ChatModelChoice,
@@ -66,6 +68,7 @@ export interface AnswerWrite {
   support: CitationSupport | null;
   /** Where the third-party text its Run had read came from (#78); null: none. */
   textOrigin: ThirdPartySource | null;
+  steps: AnswerSteps;
   outcome?: { status: Exclude<AnswerStatus, "streaming">; error: ProviderError | null };
 }
 
@@ -108,6 +111,7 @@ interface MessageRow {
   figures: string;
   tool_calls: string;
   text_origin: string | null;
+  steps: string | null;
   created_at: string;
   updated_at: string;
   /** Joined in: the asked-from Mind's name, and 1 if it is deleted or not on this computer. */
@@ -151,6 +155,52 @@ const ERROR_KINDS: Record<ProviderErrorKind, true> = {
 };
 const isErrorKind = (value: string | null): value is ProviderErrorKind =>
   value !== null && Object.hasOwn(ERROR_KINDS, value);
+
+const PHASES: Record<AnswerPhase, true> = {
+  "waiting-for-consent": true,
+  loading: true,
+  searching: true,
+  writing: true,
+  "checking-quotes": true,
+  "checking-figures": true,
+};
+
+const timeOrNull = (value: unknown): string | null =>
+  typeof value === "string" && !Number.isNaN(Date.parse(value)) ? value : null;
+
+/**
+ * An Answer's steps as stored (JSON); null when there are none (an Answer
+ * written before #391) or they can't be read. Phases a newer version writes are skipped.
+ */
+function storedSteps(value: string | null): AnswerSteps | null {
+  if (value === null) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return null;
+  }
+  if (!isRecord(parsed)) return null;
+  const phases = Array.isArray(parsed.phases) ? parsed.phases.filter(isRecord) : [];
+  const { reasoning } = parsed;
+  return {
+    sentAt: timeOrNull(parsed.sentAt),
+    finishedAt: timeOrNull(parsed.finishedAt),
+    phases: phases.flatMap((each) => {
+      const at = timeOrNull(each.at);
+      return typeof each.phase === "string" && Object.hasOwn(PHASES, each.phase) && at
+        ? [{ phase: each.phase as AnswerPhase, at }]
+        : [];
+    }),
+    reasoning:
+      isRecord(reasoning) &&
+      typeof reasoning.summary === "string" &&
+      reasoning.summary !== "" &&
+      typeof reasoning.ms === "number"
+        ? { summary: reasoning.summary, ms: reasoning.ms }
+        : null,
+  };
+}
 
 /** A conversation's name: the title the User typed, else its own. */
 const nameOf = (row: { title: string; auto_title: string }) => row.title || row.auto_title;
@@ -221,6 +271,7 @@ function toAnswer(row: MessageRow): ConversationAnswer {
     citationSupport: SUPPORTS.find((each) => each === row.citation_support) ?? null,
     toolCalls: storedList<AnswerToolCall>(row.tool_calls),
     textOrigin: parseThirdPartySource(row.text_origin),
+    steps: storedSteps(row.steps),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -601,8 +652,8 @@ export function createConversations(db: Database, now: () => string) {
         db.run(
           `UPDATE conversation_messages SET text = '', citations = '[]', figures = '[]', tool_calls = '[]',
              status = 'streaming', error_kind = NULL, error_message = NULL,
-             citation_support = NULL, text_origin = NULL, provider_id = ?, model_id = ?,
-             updated_at = ?
+             citation_support = NULL, text_origin = NULL, steps = NULL, provider_id = ?,
+             model_id = ?, updated_at = ?
            WHERE id = ?`,
           [answerModel?.providerId ?? null, answerModel?.modelId ?? null, now(), answerId],
         );
@@ -622,7 +673,7 @@ export function createConversations(db: Database, now: () => string) {
       db.transaction(() => {
         db.run(
           `UPDATE conversation_messages SET text = ?, citations = ?, figures = ?, tool_calls = ?,
-             citation_support = ?, text_origin = ?, status = ?, error_kind = ?,
+             citation_support = ?, text_origin = ?, steps = ?, status = ?, error_kind = ?,
              error_message = ?, updated_at = ?
            WHERE id = ?`,
           [
@@ -632,6 +683,7 @@ export function createConversations(db: Database, now: () => string) {
             JSON.stringify(write.toolCalls),
             write.support,
             write.textOrigin,
+            JSON.stringify(write.steps),
             outcome?.status ?? "streaming",
             outcome?.error?.kind ?? null,
             outcome?.error?.message ?? null,
