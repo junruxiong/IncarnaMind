@@ -1,9 +1,11 @@
 import { type FormEvent, useCallback, useEffect, useId, useState } from "react";
 import type { ChatGptPlanModel, ChatProvider } from "../../../../core/api";
 import { core } from "../../core";
+import { formatSpent } from "../../cost";
 import { errorMessage } from "../../errors";
-import { useT } from "../../i18n";
+import { useLanguage, useT } from "../../i18n";
 import { useAppStore } from "../../store";
+import { useCostSummary } from "../SpendingCapSettings";
 import {
   buttonClass,
   fieldLabelClass,
@@ -93,6 +95,7 @@ export function ChatModelSettings() {
               <span data-testid="chat-provider-current" className="text-ui text-ink-secondary">
                 {providerLabel(current, t)}
               </span>
+              <ProviderCostLine providerId={current.id} />
             </div>
             {!changing && (
               <div className={rowButtonsClass}>
@@ -176,6 +179,28 @@ export function ChatModelSettings() {
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * What a provider billed per token cost this month, in its own currency
+ * ("This month: $3.20"), once it has been used. A plan's line is in its own
+ * section, and a model on this computer costs nothing.
+ */
+function ProviderCostLine({ providerId }: { providerId: string }) {
+  const t = useT();
+  const language = useLanguage();
+  const summary = useCostSummary("models");
+  const used = summary?.providers.find(
+    (each) => each.providerId === providerId && each.billing === "per-token",
+  );
+  if (!used) return null;
+  const spent = formatSpent(used.spent, t, language);
+  const tokens = new Intl.NumberFormat(language).format(used.unpricedTokens);
+  return (
+    <span data-testid="chat-provider-cost" className="text-[13px] leading-5 text-ink-meta">
+      {spent ? t("cost.provider.thisMonth", { spent }) : t("cost.provider.unpriced", { tokens })}
+    </span>
   );
 }
 

@@ -59,12 +59,15 @@ export async function chooseCitationStyle(
     const previous = before ?? (await core.getMindCitationStyle(mindId));
     if (previous.chosen && previous.style === style) return true;
     await core.setMindCitationStyle(mindId, style);
-    useUndo.getState().offer({
+    useUndo.getState().push({
       message: t("citationStyle.changed", { style: styleLabel(style, t) }),
       undo: async () => {
         await core.setMindCitationStyle(mindId, previous.chosen ? previous.style : null, {
           folderDefault: previous.folderDefault,
         });
+      },
+      redo: async () => {
+        await core.setMindCitationStyle(mindId, style);
       },
     });
     return true;

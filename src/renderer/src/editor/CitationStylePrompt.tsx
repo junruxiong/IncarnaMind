@@ -71,9 +71,10 @@ export function CitationStylePrompt({
   const settings = doc.getMap<unknown>(MIND_SETTINGS_FIELD);
   const dismiss = () => {
     doc.transact(() => dismissCitationStylePrompt(settings));
-    useUndo.getState().offer({
+    useUndo.getState().push({
       message: t("citationStyle.prompt.dismissed"),
       undo: async () => doc.transact(() => dismissCitationStylePrompt(settings, false)),
+      redo: async () => doc.transact(() => dismissCitationStylePrompt(settings)),
     });
     backToNote();
   };
