@@ -105,6 +105,23 @@ describe("The context window, num_ctx", () => {
     );
     expect(DEFAULT_OLLAMA_SETTINGS.numCtx).toBe(8_192);
   });
+
+  test("a cloud model's window is its own length whatever the free memory; a local model's still follows it", () => {
+    const show = {
+      capabilities: ["completion", "tools"],
+      model_info: { "general.architecture": "gptoss", "gptoss.context_length": 131_072 },
+    };
+    const busy = { totalBytes: 8 * GIB, freeBytes: 1 * GIB };
+    const byHost = { name: "glm:latest", size: 400, remote_host: "https://ollama.com:443" };
+    const byName = { name: "gpt-oss:20b-cloud", size: 400 };
+    expect(profileOf(byHost, show, busy).settings.numCtx).toBe(131_072);
+    expect(profileOf(byName, show, busy).settings.numCtx).toBe(131_072);
+    expect(profileOf(byName, show, { totalBytes: 256 * GIB }).settings.numCtx).toBe(131_072);
+    expect(profileOf({ name: "gpt-oss:20b", size: 400 }, show, busy).settings.numCtx).toBe(8_192);
+    expect(profileOf(byName, { capabilities: ["completion"] }, busy).settings.numCtx).toBe(
+      Math.max(...CONTEXT_SIZES),
+    );
+  });
 });
 
 describe("What a local model can do, from its capabilities", () => {

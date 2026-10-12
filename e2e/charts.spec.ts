@@ -6,6 +6,7 @@ import { footnotesOf, paragraphsOf, part, unzip } from "../tests/helpers/docx";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
+  clickEditItem,
   createDataFolder,
   dismissChatSetup,
   launchApp,
@@ -270,8 +271,15 @@ for (const [language, width] of [
     await pointAndClick(window, menu.getByTestId("chart-series").first());
     await expect(chart.getByTestId("chart-point")).toHaveCount(4);
     await expect(chart.getByTestId("chart-legend")).toHaveCount(0);
-    // ⌘Z brings it back.
+    // ⌘Z brings it back, from the chart's own button, and so does the Edit menu's Undo.
+    await expect(chart.getByTestId("chart-kind")).toBeFocused();
     await window.keyboard.press("ControlOrMeta+z");
+    await expect(chart.getByTestId("chart-point")).toHaveCount(8);
+    await pointAndClick(window, chart.getByTestId("chart-kind"));
+    await pointAndClick(window, menu.getByTestId("chart-series").first());
+    await expect(chart.getByTestId("chart-point")).toHaveCount(4);
+    await expect(chart.getByTestId("chart-kind")).toBeFocused();
+    await clickEditItem(app, "edit.undo");
     await expect(chart.getByTestId("chart-point")).toHaveCount(8);
 
     // A line chart, from the same menu, undone too.

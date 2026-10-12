@@ -213,6 +213,23 @@ export const MIND_CONTENT_FIELD = "blocks";
  */
 export const MIND_SETTINGS_FIELD = "settings";
 
+/**
+ * The name of the Y.Map, beside a Mind's Blocks, that says where Blocks came
+ * from: by Block id, a `BlockOrigin`. A Note added from an Answer in the
+ * assistant (#201) keeps its link back to that Answer here, not in the Block's
+ * attributes, which an older version's editor would strip. A Block deleted
+ * since leaves its entry unused. See src/shared/blockOrigins.ts.
+ */
+export const MIND_ORIGINS_FIELD = "origins";
+
+/** Where a Block came from: a Note added from an Answer links back to it. */
+export interface BlockOrigin {
+  /** The Answer, in its conversation (`messageReference`). */
+  from: ArtifactReference;
+  /** The Question it answered, as asked: shown with the link, even once the conversation is gone. */
+  question: string;
+}
+
 /** The attribute every Block keeps its UUID in, in the Mind's Yjs document. */
 export const BLOCK_ID_ATTRIBUTE = "id";
 
@@ -277,9 +294,10 @@ export const MIND_PROPOSAL_REQUESTS_FIELD = "proposalRequests";
 
 /**
  * What made a request's Proposals: Edit with AI (#93), with what it was asked
- * so a change can be made again (regenerated) once it is out of date; or
- * Regenerate of an Answer the User had edited (#94). The assistant (#202) and
- * Enhance (#114) add theirs.
+ * so a change can be made again (regenerated) once it is out of date;
+ * Regenerate of an Answer the User had edited (#94); or an Answer from the
+ * assistant added to a new Mind, as changes to accept (#201). The assistant
+ * (#202) and Enhance (#114) add theirs.
  */
 export type ProposalRequest =
   | (ProposalMaker & {
@@ -289,7 +307,8 @@ export type ProposalRequest =
       /** What the User asked for ("translate", "instruction"); "" for none. */
       instruction?: string;
     })
-  | (ProposalMaker & { source: "answer"; answerId: string });
+  | (ProposalMaker & { source: "answer"; answerId: string })
+  | (ProposalMaker & { source: "answer-added" });
 
 /** The model that made a request's Proposals, and when. */
 export interface ProposalMaker {
@@ -2955,6 +2974,35 @@ export type ConversationAskResult =
   /** Nothing was kept or sent: the Question forces a Skill (`skill`) that is off or gone. */
   | { asked: false; reason: "skill-unavailable"; skill: string; state: SkillAvailability };
 
+/** Blocks from an Answer to put into a Mind's note ("Add to note", #201). */
+export interface AddToNoteInput {
+  mindId: string;
+  /**
+   * The Blocks, as the editor writes them in JSON: Notes only (`NOTE_BLOCK_TYPES`)
+   * at the top level, with whatever they hold, Citations included. Their ids are
+   * given anew.
+   */
+  blocks: unknown[];
+  /** Their link back to the Answer they came from; null for none. */
+  origin: BlockOrigin | null;
+  /** The model that wrote the Answer, for the record of AI use; null when unknown. */
+  model: ChatModelChoice | null;
+  /** They wait as changes to accept or reject, each Block one (a new Mind made from an Answer). */
+  proposed?: boolean;
+}
+
+/** What "Add to note" put into a Mind: the ids of its new top-level Blocks, in order. */
+export interface AddedToNote {
+  mindId: string;
+  blockIds: string[];
+}
+
+/** Takes an "Add to note" back: its Blocks leave the Mind, with their links back. */
+export interface UndoAddToNoteInput {
+  mindId: string;
+  blockIds: string[];
+}
+
 /** Where words of a search are in a piece of text: `start` to `end`, in UTF-16 code units. */
 export interface TextRange {
   start: number;
@@ -4815,6 +4863,17 @@ export interface CoreApi {
    * Block's origin. Restoring what it points into makes it lead there again.
    */
   resolveReference(reference: ArtifactReference): Promise<ReferenceTarget>;
+  /**
+   * "Add to note" (#201) into a Mind that isn't open in the editor: Blocks at the
+   * end of its note (in place of its empty last line), each Citation in them
+   * checked again against its Document, with a link back to the Answer. As
+   * `proposed`, they wait as changes to accept or reject. What is added at once
+   * goes into the record of AI use; a proposal does once it is accepted. The
+   * Mind open in the editor adds at its cursor itself, by the same rules.
+   */
+  addToNote(input: AddToNoteInput): Promise<AddedToNote>;
+  /** Takes the Blocks an "Add to note" put into a Mind back out, with their links back. */
+  undoAddToNote(input: UndoAddToNoteInput): Promise<void>;
 
   getSettings(): Promise<Settings>;
   /**
@@ -5900,6 +5959,8 @@ const methods: Record<CoreApiMethod, true> = {
   renameConversation: true,
   deleteConversation: true,
   resolveReference: true,
+  addToNote: true,
+  undoAddToNote: true,
   getSettings: true,
   updateSettings: true,
   getLayout: true,

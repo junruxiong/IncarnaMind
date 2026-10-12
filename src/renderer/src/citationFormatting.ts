@@ -67,9 +67,9 @@ export const useCitationFormatting = create<FormattingState>()((set) => ({
     }),
 }));
 
-/** The Mind's formatting, or undefined before the editor has asked. */
-export const useMindFormatting = (mindId: string) =>
-  useCitationFormatting((state) => state.minds[mindId]);
+/** The Mind's formatting, or undefined before the editor has asked, and in the assistant (no Mind). */
+export const useMindFormatting = (mindId: string | null) =>
+  useCitationFormatting((state) => (mindId === null ? undefined : state.minds[mindId]));
 
 /** What a Mind's document says of its citation style, following its changes. */
 export interface MindStyleChoice {
