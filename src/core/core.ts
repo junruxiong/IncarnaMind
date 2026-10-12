@@ -9,10 +9,11 @@ import {
   citationStyleIn,
   setCitationStyle,
 } from "../shared/mindCitationStyle";
+import { mindModelOf } from "../shared/mindModel";
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
 import { agentSocketPath, createAgents } from "./agents";
-import { createAgentSetup } from "./agents/setup";
+import { createAgentSetup, skillInstalled } from "./agents/setup";
 import { createAiUse } from "./aiUse";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
 import { recheckCitation, recheckKept } from "./answers/citations";
@@ -30,6 +31,7 @@ import type {
   CoreApi,
   CoreEventSource,
   Document,
+  EmbeddingModelStatus,
   EmbeddingSettings,
   ExportMindOptions,
   Meeting,
@@ -37,6 +39,7 @@ import type {
   MindCitationStyle,
   OwnFileKind,
   ProviderError,
+  SavedMindExport,
   SearchScope,
   Unsubscribe,
 } from "./api";
@@ -56,6 +59,8 @@ import {
 import { createEvidence, parseCheckedDocument, passageResult } from "./documents/evidence";
 import { createOwnFiles } from "./documents/ownFiles";
 import { createVersionRetention, type VersionRetention } from "./documents/retention";
+import { BUILT_IN_TEXT_RECOGNITION_MODEL, createTextRecognitionModel } from "./documents/scan";
+import { tunedSearch } from "./documents/searchTuning";
 import { fsWatchFolder } from "./documents/watcher";
 import { createWebPages } from "./documents/web";
 import { createEdits } from "./edits";
@@ -97,6 +102,7 @@ import {
   parseMindId,
 } from "./minds";
 import { firstLineOf, readBlocks } from "./mindText";
+import { createNoteAdding } from "./noteAdding";
 import { createOutputFiles } from "./outputFiles";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
 import { readsImages } from "./providers/capabilities";
@@ -128,6 +134,7 @@ import { parseSearchScope, resolveSearchScope } from "./scope";
 import { createSecrets } from "./secrets";
 import { createSettings, isChatModelChoice } from "./settings";
 import { createSkills } from "./skills";
+import { createSkillDrafts } from "./skills/draft";
 import { createScriptRunner } from "./skills/scripts";
 import { createSources, FIND_SOURCES_SENDS } from "./sources";
 import { createSourceHttp } from "./sources/http";
@@ -146,6 +153,7 @@ import {
 } from "./transcription/model";
 import { createUsageData } from "./usageData";
 import { addedCounts, trackUsage } from "./usageTracking";
+import { ensureWorkspace } from "./workspace";
 
 export const DATABASE_FILE = "incarnamind.db";
 
@@ -167,6 +175,15 @@ export interface Core extends CoreApi, CoreEventSource {
    * it. Throws NotFoundError for anything else.
    */
   openDocumentImage(documentId: string, path: string): Promise<DocumentImage>;
+  /**
+   * The number a workbook's cell stores when its shown text isn't that
+   * number written plainly (0.04213 for "4.2%"), from the Document's
+   * current version; null when it shows its number plainly, isn't a number,
+   * or isn't there, and for a CSV. `sheet` is the sheet's name (null for a
+   * CSV). For the Tools that calculate over cells, so not on the bridge.
+   * Throws NotFoundError for an unknown or deleted Document.
+   */
+  readCellNumber(documentId: string, sheet: string | null, ref: string): number | null;
   /**
    * Opens a live Document's file, where it is, in the default app for its
    * type, through the `shell` adapter; a web page opens live, at its
@@ -240,6 +257,7 @@ export function createCore(adapters: CoreAdapters): Core {
   const now = () => (adapters.now?.() ?? new Date()).toISOString();
   try {
     purgeExpired(db, now());
+    ensureWorkspace(db, now);
   } catch (error) {
     db.close();
     throw error;
@@ -337,6 +355,25 @@ export function createCore(adapters: CoreAdapters): Core {
     embedder: adapters.embedder,
     emitStatus: (status) => events.emit("embeddingModel.status", status),
   });
+  // Reads scanned pages (#397), when this copy has a recognizer to read them with.
+  const textRecognitionModel = adapters.textRecognizer
+    ? createTextRecognitionModel({
+        definition: BUILT_IN_TEXT_RECOGNITION_MODEL,
+        source: adapters.textRecognitionModelSource,
+        dataDir,
+        recognizer: adapters.textRecognizer,
+        emitStatus: (status) => events.emit("textRecognitionModel.status", status),
+      })
+    : undefined;
+  /** What `getTextRecognitionModel` says in a copy that has no recognizer: nothing to download. */
+  const textRecognitionUnavailable: EmbeddingModelStatus = {
+    name: BUILT_IN_TEXT_RECOGNITION_MODEL.name,
+    host: new URL(BUILT_IN_TEXT_RECOGNITION_MODEL.source.baseUrl).host,
+    state: "not-downloaded",
+    downloadedBytes: 0,
+    totalBytes: 0,
+    error: null,
+  };
   /** Reports the embedding settings again; set once Documents exist. */
   let embeddingChanged = () => {};
   /** A Document's status changed: during a rebuild, its progress may have too. */
@@ -370,6 +407,7 @@ export function createCore(adapters: CoreAdapters): Core {
       dataDir,
       now,
       model: embedding.model,
+      textRecognition: textRecognitionModel,
       folders,
       emitStatus: (document) => {
         events.emit("document.status", document);
@@ -422,6 +460,7 @@ export function createCore(adapters: CoreAdapters): Core {
         retryMs: adapters.linkedFolders?.retryMs ?? 30_000,
         detectDataless: adapters.linkedFolders?.detectDatalessFiles ?? platform === "darwin",
       },
+      say: (key, params) => translate(settings.get().language, key, params),
     });
     // Old versions' text, and the text kept of unlinked Documents, that no
     // Citation quotes and no feature retains any more goes, at startup only:
@@ -758,12 +797,17 @@ export function createCore(adapters: CoreAdapters): Core {
     query: string,
     documentIds: readonly string[] | null,
     signal?: AbortSignal,
-  ) =>
-    documents.searchTool(query, {
+  ) => {
+    const options = {
       signal,
       rerank: adapters.reranker ?? rerank.active(),
       documentIds: documentIds ?? undefined,
-    });
+    };
+    const tuning = adapters.answerSearch;
+    return tuning
+      ? tunedSearch(tuning, query, options, (tuned) => documents.searchTool(query, tuned))
+      : documents.searchTool(query, options);
+  };
   const resolveScope = (scope: SearchScope) =>
     resolveSearchScope(scope, {
       folderTree: (folderId) => folders.subtree(folderId),
@@ -912,6 +956,15 @@ export function createCore(adapters: CoreAdapters): Core {
     now: () => adapters.now?.() ?? new Date(),
   });
 
+  // "Add to note" into a Mind that isn't open (#201), with its Citations checked where they land.
+  const noteAdding = createNoteAdding({
+    content,
+    requireMind: (mindId) => writableMind(mindId).id,
+    recheck: (input) => recheckCitation(documents, input),
+    recordAiUse: (inputs) => void aiUse.record(inputs),
+    now: () => adapters.now?.() ?? new Date(),
+  });
+
   // The fingerprints of the files IncarnaMind writes (#80). A Document already indexed with
   // the same bytes is marked at once, and every window hears of it.
   const ownFiles = createOwnFiles(db, now);
@@ -942,6 +995,24 @@ export function createCore(adapters: CoreAdapters): Core {
             : options.format === "markdown",
       },
     });
+  // Make this a Skill: the chat model drafts it from the Mind, on the chat flow's consent.
+  const skillDrafts = createSkillDrafts({
+    mindMarkdown: async (mindId) => {
+      const mind = new TextDecoder().decode(
+        (await mindExports.export(mindId, { format: "markdown", includeQuestions: true })).data,
+      );
+      // Questions are asked in the assistant (#201): those asked from this Mind are its work too.
+      const label = translate(settings.get().language, "export.question");
+      const asked = conversations
+        .askedFromMind(mindId)
+        .map(({ question, answer }) => [`**${label}** ${question}`, answer].filter(Boolean));
+      return [mind, ...asked.flat()].join("\n\n");
+    },
+    modelFor: (mindId) =>
+      content.read(mindId, (blocks) => (blocks.doc ? mindModelOf(blocks.doc) : null)) ??
+      settings.get().user.chatModel,
+    chat,
+  });
   // New files: in the Output location, or inside a Linked folder the User allowed.
   const outputs = createOutputFiles({
     db,
@@ -952,6 +1023,28 @@ export function createCore(adapters: CoreAdapters): Core {
     linkedFolders: () => documents.linkedFolders.list(),
     recordOwnFile,
   });
+  /** Saves an export in the Output location, as the window's save: what went wrong is a result, not an error. */
+  const saveExport = async (
+    name: string,
+    data: Uint8Array,
+    after: () => void = () => undefined,
+  ): Promise<SavedMindExport> => {
+    try {
+      const file = await outputs.save({ name, data, ownFile: "export" });
+      after();
+      return { status: "saved", file };
+    } catch (error) {
+      if (error instanceof FileWriteCancelledError) return { status: "cancelled" };
+      if (error instanceof LinkedFolderWritesDeclinedError) {
+        return {
+          status: "not-allowed",
+          linkedFolderId: error.linkedFolderId,
+          linkedFolderPath: error.linkedFolderPath,
+        };
+      }
+      throw error;
+    }
+  };
   const unlinkFolder = (linkedFolderId: string) => {
     documents.linkedFolders.remove(linkedFolderId);
     outputs.forgetLinkedFolder(linkedFolderId);
@@ -1213,6 +1306,19 @@ export function createCore(adapters: CoreAdapters): Core {
     // While the built-in reranking model reranks: by default, unless the User chose otherwise.
     listed: () => rerankingSource.files.length > 0 && rerank.usesBuiltIn(),
   });
+  const textRecognitionSource =
+    adapters.textRecognitionModelSource ?? BUILT_IN_TEXT_RECOGNITION_MODEL.source;
+  const textRecognitionHost = new URL(textRecognitionSource.baseUrl);
+  privacy.traffic.register({
+    id: "text-recognition-model",
+    service: {
+      id: textRecognitionHost.origin,
+      name:
+        textRecognitionHost.host === "huggingface.co" ? "Hugging Face" : textRecognitionHost.host,
+    },
+    // Only a copy that reads scans downloads it.
+    listed: () => textRecognitionModel !== undefined && textRecognitionSource.files.length > 0,
+  });
   const transcriptionSource = adapters.transcriptionModelSource?.model ?? QWEN3_ASR_0_6B.source;
   const transcriptionHost = new URL(transcriptionSource.baseUrl);
   privacy.traffic.register({
@@ -1425,6 +1531,8 @@ export function createCore(adapters: CoreAdapters): Core {
 
   // Outside agents (#351): the User's own agent, paired in Settings, reads its Folders over the
   // socket and gets Citations IncarnaMind minted and checked. Off until the User turns it on.
+  // Where agents keep their settings and skills.
+  const home = adapters.agents?.home ?? homedir();
   const agents = createAgents({
     db,
     now,
@@ -1469,6 +1577,7 @@ export function createCore(adapters: CoreAdapters): Core {
         answers.answerOutside(question, documentIds, signal),
       show: (place) => events.emit("agents.citationShown", place),
     },
+    skillInstalled: (client) => skillInstalled(home, client),
     changed: (value) => events.emit("agents.changed", value),
     called: (activity) => events.emit("agents.activity", activity),
     reportError: (error) => console.error(error),
@@ -1476,7 +1585,6 @@ export function createCore(adapters: CoreAdapters): Core {
   agentsLocalModeChanged = () => agents.localModeChanged();
   agents.start().catch((error: unknown) => console.error(error));
   // Setting IncarnaMind up in the User's agent, from Settings → Agents.
-  const home = adapters.agents?.home ?? homedir();
   const agentSetup = createAgentSetup({
     agents,
     home,
@@ -1583,6 +1691,8 @@ export function createCore(adapters: CoreAdapters): Core {
         ? { status: "available", reference, name: found.name }
         : { status: "deleted", reference, name: found.name, deletedAt: found.deletedAt };
     },
+    addToNote: (input) => noteAdding.add(input),
+    undoAddToNote: async (input) => noteAdding.undo(input),
     getSettings: async () => settings.get(),
     getLayout: async (windowId) => layouts.get(windowId),
     changeLayout: async (windowId, change) => layouts.change(windowId, change),
@@ -1672,6 +1782,23 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     retryDocument: async (id) => documents.retry(id),
     readDocumentText: async (id) => documents.readText(id),
+    readScannedText: async (id) => documents.readScannedText(id),
+    readScannedQuote: async (input) => {
+      if (!isRecord(input) || typeof input.quote !== "string") {
+        throw new InvalidInputError(
+          "readScannedQuote needs a Citation's Document, Units and quote.",
+        );
+      }
+      const unit = (value: unknown) =>
+        typeof value === "number" && Number.isInteger(value) && value >= 1 ? value : null;
+      return documents.readScannedQuote({
+        documentId: typeof input.documentId === "string" ? input.documentId : "",
+        contentHash: typeof input.contentHash === "string" ? input.contentHash : null,
+        pageFrom: unit(input.pageFrom),
+        pageTo: unit(input.pageTo),
+        quote: input.quote,
+      });
+    },
     previewLinkedFolder: (path) => documents.linkedFolders.preview(path),
     addLinkedFolder: async (path, options) => {
       const groupId = library.target(options);
@@ -1686,6 +1813,8 @@ export function createCore(adapters: CoreAdapters): Core {
       return { ...linked, batchId };
     },
     listLinkedFolders: async () => documents.linkedFolders.list(),
+    locateLinkedFolder: (linkedFolderId, path) =>
+      documents.linkedFolders.locate(linkedFolderId, path),
     removeLinkedFolder: async (linkedFolderId) => unlinkFolder(linkedFolderId),
     listKeptCitationTexts: async () => documents.keptCitationTexts(),
     updateReference: async (documentId, patch) => references.update(documentId, patch),
@@ -1743,6 +1872,10 @@ export function createCore(adapters: CoreAdapters): Core {
       documents.setCountedAsEvidence(documentId, counted),
     getEmbeddingModel: async () => embeddingModel.status(),
     downloadEmbeddingModel: async () => embeddingModel.retry(),
+    getTextRecognitionModel: async () =>
+      textRecognitionModel?.status() ?? textRecognitionUnavailable,
+    downloadTextRecognitionModel: async () =>
+      textRecognitionModel?.retry() ?? textRecognitionUnavailable,
 
     getEmbeddingSettings: () => embeddingSettings(),
     saveEmbeddingProvider: async (input) => {
@@ -2073,6 +2206,19 @@ export function createCore(adapters: CoreAdapters): Core {
       skillsChanged();
       return skill;
     },
+    getSkillDraft: async (skillId) => skills.draftOf(skillId),
+    createSkill: async (draft) => {
+      const result = await skills.create(draft);
+      if (result.ok) skillsChanged();
+      return result;
+    },
+    updateSkill: async (skillId, draft) => {
+      const result = await skills.update(skillId, draft);
+      if (result.ok) skillsChanged();
+      return result;
+    },
+    draftSkillFromMind: (input) => skillDrafts.draft(input),
+    cancelSkillDraft: async (requestId) => skillDrafts.cancel(requestId),
     listRemovedBuiltInSkills: async () => skills.removedBuiltIns(),
     restoreBuiltInSkills: async () => {
       const restored = await skills.restoreBuiltIns();
@@ -2090,21 +2236,11 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     saveMindExport: async (mindId, options) => {
       const { fileName, data } = await mindExports.export(mindId, options);
-      try {
-        const file = await outputs.save({ name: fileName, data, ownFile: "export" });
-        recordExport(options);
-        return { status: "saved", file };
-      } catch (error) {
-        if (error instanceof FileWriteCancelledError) return { status: "cancelled" };
-        if (error instanceof LinkedFolderWritesDeclinedError) {
-          return {
-            status: "not-allowed",
-            linkedFolderId: error.linkedFolderId,
-            linkedFolderPath: error.linkedFolderPath,
-          };
-        }
-        throw error;
-      }
+      return saveExport(fileName, data, () => recordExport(options));
+    },
+    saveSkillExport: async (skillId) => {
+      const { fileName, data } = await skills.exportZip(skillId);
+      return saveExport(fileName, data);
     },
     formatCitations: (request) => citationStyles.format(request),
     getMindCitationStyle: async (mindId) => mindCitationStyle(minds.get(mindId).id),
@@ -2149,6 +2285,7 @@ export function createCore(adapters: CoreAdapters): Core {
 
     openDocumentFile: (documentId) => documents.openFile(documentId),
     openDocumentImage: (documentId, path) => documents.openImage(documentId, path),
+    readCellNumber: (documentId, sheet, ref) => documents.cellNumber(documentId, sheet, ref),
     openDocumentInApp: async (documentId) => {
       const address = documents.get(documentId).web?.address;
       if (address) return adapters.browser.open(address);
@@ -2208,6 +2345,7 @@ export function createCore(adapters: CoreAdapters): Core {
       answers.stopAll();
       suggestions.stop();
       edits.stopAll();
+      skillDrafts.stopAll();
       scriptRunner.close();
       approvals.close();
       connectors.close();
@@ -2222,6 +2360,7 @@ export function createCore(adapters: CoreAdapters): Core {
       documents.close();
       embeddingModel.close();
       rerankingModel.close();
+      textRecognitionModel?.close();
       activity.stop();
       aiUse.close();
       events.clear();
