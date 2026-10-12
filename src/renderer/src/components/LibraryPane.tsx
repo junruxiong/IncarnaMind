@@ -38,6 +38,10 @@ import {
 import { formatCount } from "../linkedFolders";
 import { missingList } from "../referenceEditing";
 import { useRequests } from "../requests";
+import { DEFAULT_SORT, sorted } from "../sort";
+import { sortOf, useSort } from "../sortChoices";
+import { documentFields } from "../sortFields";
+import { useSortMenu } from "../sortMenu";
 import { useAppStore } from "../store";
 import { AddDocumentsMenu } from "./AddDocumentsMenu";
 import { CiteAsPanel } from "./CiteAsPanel";
@@ -49,6 +53,7 @@ import { DocumentLineIcon, SettingsLineIcon } from "./lineIcons";
 import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
 import { RecentlyDeleted } from "./RecentlyDeleted";
 import { ReferenceImportPanel } from "./ReferenceImportPanel";
+import { SORT_KEY_LABELS } from "./SortMenu";
 import { rowActionButtonClass } from "./sidebarRows";
 import { DocumentTagChips } from "./TagChips";
 import { useTabPlace } from "./tabs/tabItems";
@@ -152,10 +157,25 @@ function LibrarySheet() {
       );
     });
   }, [documents, assignments, groups, tags, filter, search]);
-  const { shown, options } = useMemo(
+  const { shown: filtered, options } = useMemo(
     () => filterLibrary<Document>(inView, facets, selection),
     [inView, facets, selection],
   );
+  const sortScope = `library:${filter}` as const;
+  const chosenSort = useSort(sortOf(sortScope));
+  const sort = chosenSort ?? DEFAULT_SORT;
+  const shown = useMemo(
+    () => sorted(filtered, chosenSort, documentFields(t), language),
+    [filtered, chosenSort, t, language],
+  );
+  /** A column's header sorts by it, and a second click reverses it. */
+  const sortBy = (key: "name") =>
+    useSort.getState().choose(sortScope, {
+      ...sort,
+      key,
+      direction: sort.key === key && sort.direction === "asc" ? "desc" : "asc",
+    });
+  const sortLabel = `${t(SORT_KEY_LABELS[sort.key])} ${sort.direction === "asc" ? "↑" : "↓"}`;
   const shownIds = useMemo(() => shown.map((doc) => doc.id), [shown]);
   // A row's Shift-click reads the rows in view when clicked, so a change to them redraws no row.
   const shownRef = useRef(shownIds);
@@ -371,7 +391,25 @@ function LibrarySheet() {
                             count: shown.length,
                           })}
             </p>
-            <span className="flex flex-wrap items-center gap-x-4">
+            <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <button
+                type="button"
+                data-testid="library-sort"
+                aria-label={t("sort.bar.label", {
+                  by: t(SORT_KEY_LABELS[sort.key]),
+                  direction: t(sort.direction === "asc" ? "sort.ascending" : "sort.descending"),
+                })}
+                className="hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-accent"
+                onClick={(event) =>
+                  useSortMenu.getState().show({
+                    scope: sortScope,
+                    withFolders: false,
+                    anchor: event.currentTarget,
+                  })
+                }
+              >
+                {t("sort.bar", { by: sortLabel })}
+              </button>
               <button
                 type="button"
                 data-testid="library-recently-deleted"
@@ -396,11 +434,18 @@ function LibrarySheet() {
           ) : (
             <>
               <LibrarySelectionBar shownIds={shownIds} />
-              <div
-                aria-hidden="true"
-                className="library-columns library-column-labels border-y border-rule py-2 text-label font-semibold text-ink-meta"
-              >
-                <span>{t("library.document")}</span>
+              <div className="library-columns library-column-labels border-y border-rule py-2 text-label font-semibold text-ink-meta">
+                <button
+                  type="button"
+                  data-testid="library-sort-name"
+                  title={t("sort.header", { by: t("sort.name") })}
+                  aria-label={t("sort.header", { by: t("sort.name") })}
+                  onClick={() => sortBy("name")}
+                  className="w-fit text-left font-semibold hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
+                >
+                  {t("library.document")}
+                  {sort.key === "name" && (sort.direction === "asc" ? " ↑" : " ↓")}
+                </button>
                 <span>{t("library.folder")}</span>
                 <span>{t("tags.title")}</span>
               </div>
