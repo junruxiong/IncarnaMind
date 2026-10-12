@@ -5,7 +5,7 @@
  * be imported, and whether it carries someone else's tracked changes or
  * comments. Importing reads it whole, before any Mind is made, so a file that
  * can't be read is refused with nothing left behind. Then its package is kept
- * in the data folder ("Word imports/<sha256>.docx", migration 69), the Mind is
+ * in the data folder ("Word imports/<sha256>.docx", migration 75), the Mind is
  * made, titled after the file, and its Blocks are written a batch at a time,
  * the first at once, so a long document shows as it fills in and the app stays
  * responsive; the Mind records how far it has got (`WordImportProgress`) and
