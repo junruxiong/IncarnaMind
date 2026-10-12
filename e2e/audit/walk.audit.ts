@@ -141,12 +141,12 @@ async function chooseFakeModel(window: Page) {
   });
 }
 
-/** Writes a Question in the composer (⌘J), asks it with Enter (it goes on the current line), and waits for the Answer. */
+/** Writes a Question in the composer (⌘J), asks it with Enter, and waits for its Answer in the assistant. */
 async function ask(window: Page, question: string, index: number) {
   await window.keyboard.press("ControlOrMeta+j");
   await typeLike(window, question, 45);
   await window.keyboard.press("Enter");
-  const answer = window.getByTestId("mind-editor").getByTestId("answer").nth(index);
+  const answer = window.getByTestId("assistant-answer").nth(index);
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 30_000 });
   return answer;
 }
@@ -382,7 +382,7 @@ test("A3 a working session: a Linked folder, Answers with Citations, the viewer,
       await window.keyboard.press("ControlOrMeta+j");
       await typeLike(window, "When do spring tides happen?", 50);
       await window.keyboard.press("Enter");
-      const first = window.getByTestId("mind-editor").getByTestId("answer").first();
+      const first = window.getByTestId("assistant-answer").first();
       await expect(first).toHaveAttribute("data-status", "streaming", { timeout: 15_000 });
       const stop = await startFrames(window);
       await window.waitForTimeout(500);
@@ -742,7 +742,7 @@ test("A4 approvals and consent", async () => {
       await window.waitForTimeout(400);
       await shot(window, "A60-approval-card");
       await scan(window, "A60-approval-card");
-      await shot(window.getByTestId("mind-tabs"), "A61-tab-waiting-dot");
+      await shot(window.getByTestId("assistant"), "A61-assistant-waiting-dot");
       await click(window, card.getByTestId("approval-allow-once"));
       const consent = window.getByTestId("consent-dialog");
       await expect(consent).toBeVisible({ timeout: 10_000 });

@@ -5,12 +5,15 @@ import type { CoreBridge } from "../src/core/api";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
+  addToNote,
+  askInAssistant,
   coreOf,
   createDataFolder,
   dismissChatSetup,
   launchApp,
   linkedFolderRow,
   linkFolderFromSidebar,
+  mindWrittenBefore,
   motionSettled,
   newMind,
   removeDataFolder,
@@ -120,15 +123,17 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     if (first) await core.addDocumentTag(first.id, tag.id);
   });
 
-  // A Mind with an Answer that cites a page.
+  // A Mind written before Questions went to the assistant (#201), with a Question and its Answer;
+  // and a Mind holding an Answer added from the assistant, with its Citation of a page.
+  await mindWrittenBefore(window, "Tide questions", [
+    { question: "When do spring tides happen?", answer: "At new moon and at full moon." },
+  ]);
   await newMind(window);
+  await window.getByTestId("mind-title").fill("Cited notes");
   const editor = window.getByTestId("mind-editor");
   await editor.click();
-  await window.keyboard.press("ControlOrMeta+j");
-  await window.keyboard.type("When do spring tides happen?");
-  await window.keyboard.press("Enter");
-  const answer = editor.getByTestId("answer");
-  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  await addToNote(window, await askInAssistant(window, "When do spring tides happen?"));
+  await expect(editor.getByTestId("citation")).toHaveCount(1);
   await newMind(window);
 
   // A Mind: Open, Open to the side; Export as… (the last format first), Export options…; Move to…;
@@ -150,6 +155,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "mind.exportAs.markdown",
     "mind.exportOptions",
     "mind.citationStyle",
+    "skill.fromMind",
     "—",
     "mind.moveTo",
     "—",
@@ -242,6 +248,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "linkedFolder.layout",
     "—",
     "linkedFolder.reveal",
+    "linkedFolder.locate",
     "—",
     "linkedFolder.unlink",
   ]);
@@ -276,7 +283,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
   await expect(tab).toBeFocused();
 
   // An Answer, in its Mind: Copy, Regenerate; then Delete.
-  await window.getByTestId("mind-row").nth(1).getByTestId("mind-list-item").click();
+  await window.getByTestId("mind-list-item").filter({ hasText: "Tide questions" }).click();
   const written = window.getByTestId("mind-editor").getByTestId("answer");
   await expect(written).toBeVisible();
   const answerMenu = written.getByTestId("answer-actions");
@@ -290,7 +297,8 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
   await window.keyboard.press("Escape");
 
   // A Citation: Open, then Remove; its card's ⋯ opens the same.
-  const citation = written.getByTestId("citation");
+  await window.getByTestId("mind-list-item").filter({ hasText: "Cited notes" }).click();
+  const citation = window.getByTestId("mind-editor").getByTestId("citation");
   const citationMenu = citation.getByTestId("citation-actions");
   await rightClick(window, citation.getByTestId("citation-chip"));
   expect(await commandsIn(citationMenu)).toEqual(["citation.open", "—", "citation.remove"]);
@@ -376,6 +384,7 @@ test("each item shows its shortcut as the system writes it, and the labels are i
     "导出为 Markdown（.md）",
     "导出选项…",
     "引用格式…",
+    "做成技能",
     /^移动到…(⇧⌘M|Ctrl\+Shift\+M)$/,
     /^重命名(↩|F2)$/,
     "删除…",

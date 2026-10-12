@@ -6,6 +6,8 @@ import { footnotesOf, paragraphsOf, part, unzip } from "../tests/helpers/docx";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
+  addToNote,
+  askInAssistant,
   closeSettings,
   createDataFolder,
   dismissChatSetup,
@@ -74,19 +76,17 @@ test("Export saves a .docx in one click: the first save asks where new files go,
   await useLocalChatModel(window);
   await addDocuments(window, [join(sources, "Tides.pdf")]);
 
-  // A Note, then a Question whose Answer misquotes its Document.
+  // A Note, then an Answer that misquotes its Document, added from the assistant.
   await newMind(window);
   await window.getByTestId("mind-title").fill("Tides");
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await window.keyboard.type("Notes on tides.");
   await window.keyboard.press("Enter");
-  await window.keyboard.press("ControlOrMeta+j");
-  await window.keyboard.type("When do spring tides happen? Misquote it.");
-  await window.keyboard.press("Enter");
-  const answer = editor.getByTestId("answer");
-  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  const answer = await askInAssistant(window, "When do spring tides happen? Misquote it.");
   await expect(answer.getByTestId("citation")).toHaveAttribute("data-check", "not-found");
+  await addToNote(window, answer);
+  await expect(editor.getByTestId("citation")).toHaveAttribute("data-check", "not-found");
 
   // One click exports in the last format, Word to begin with. The first save asks where new
   // files go, offering IncarnaMind in Documents (the test build's own Documents folder). Esc
@@ -124,7 +124,7 @@ test("Export saves a .docx in one click: the first save asks where new files go,
   await result.getByTestId("export-open").click();
   await expect.poll(() => pathsOpened(app)).toEqual([target]);
 
-  // The file is there: the Note and the Answer, not the Question, and the Citation a footnote.
+  // The file is there: the Notes, the one added from the Answer too, its Citation a footnote.
   const files = unzip(await readFile(target));
   const paragraphs = paragraphsOf(part(files, "word/document.xml")).map((each) => each.text);
   expect(paragraphs).toContain("Notes on tides.");

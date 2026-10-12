@@ -441,6 +441,18 @@ export const linkedFolderCommands: readonly Command[] = [
     },
   },
   {
+    id: "linkedFolder.locate",
+    label: "linkedFolders.locateAction",
+    group: "file",
+    appliesTo: ["linkedFolder"],
+    // Locating it again, where it was, puts it back.
+    reversible: true,
+    run: async (ctx) => {
+      const linked = linkedOf(ctx);
+      if (linked) await store().locateLinkedFolder(linked.id);
+    },
+  },
+  {
     id: "linkedFolder.unlink",
     label: "linkedFolders.unlinkAction",
     group: "danger",

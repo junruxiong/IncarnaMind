@@ -79,7 +79,7 @@ export interface Limits {
 }
 
 /** What the reading of a cell found: its indexed value, and what its look needs. */
-interface ReadCell extends Pick<Cell, "value" | "numeric"> {
+interface ReadCell extends Pick<Cell, "value" | "numeric" | "raw"> {
   /** The cell's type: n, s, inlineStr, str, b, e or d. */
   type: string;
   number?: number;
@@ -215,7 +215,13 @@ export async function readWorkbook(
         }
         if (!cell) continue;
         cellsLeft--;
-        sheet.cells.push({ row: rowNumber, column, value: cell.value, numeric: cell.numeric });
+        sheet.cells.push({
+          row: rowNumber,
+          column,
+          value: cell.value,
+          numeric: cell.numeric,
+          ...(cell.raw !== undefined ? { raw: cell.raw } : {}),
+        });
         sheet.rowCount = Math.max(sheet.rowCount, rowNumber);
         sheet.columnCount = Math.max(sheet.columnCount, column + 1);
       }
@@ -394,6 +400,7 @@ function readCell(
   let value: string;
   let numeric = false;
   let number: number | undefined;
+  let stored: number | undefined;
   let sharedIndex: number | undefined;
   if (type === "s") {
     sharedIndex = Number(raw);
@@ -408,7 +415,10 @@ function readCell(
       number = parsed;
       const format = formats[Number(c.attrs.s ?? 0)];
       value = format ? formatNumber(parsed, format, date1904) : generalNumber(parsed);
-      numeric = !(format && isDateFormat(format));
+      const isDate = format !== undefined && isDateFormat(format);
+      numeric = !isDate;
+      // Excel computes with the stored number; a date stays its ISO text.
+      if (!isDate && value.trim() !== generalNumber(parsed)) stored = parsed;
     }
     numeric = numeric || /^\d{4}-\d\d-\d\d/.test(value);
   } else value = raw; // str (a formula's text), e (an error), d (an ISO date)
@@ -418,6 +428,7 @@ function readCell(
     value,
     numeric,
     type,
+    ...(stored !== undefined ? { raw: stored } : {}),
     ...(number !== undefined ? { number } : {}),
     ...(sharedIndex !== undefined ? { shared: sharedIndex } : {}),
   };

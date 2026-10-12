@@ -17,6 +17,7 @@ registerMenu("mind", [
   "mind.openSide",
   ...EXPORTS,
   "mind.citationStyle",
+  "skill.fromMind",
   "mind.moveTo",
   "mind.rename",
   "mind.delete",
@@ -57,6 +58,7 @@ registerMenu("linkedFolder", [
   "linkedFolder.layout",
   "linkedFolder.download",
   "linkedFolder.reveal",
+  "linkedFolder.locate",
   "linkedFolder.unlink",
 ]);
 

@@ -349,6 +349,27 @@ describe.each(ENGINES)("A Run engine: $name", ({ create }) => {
     expect(run.text).toBe("Written.");
   });
 
+  test("endsAfter: the Run ends after the step it names, with no further model call", async () => {
+    const search = testTool("search_documents");
+    const model = stepsModel([[SEARCH], [SEARCH]], "Written.");
+    const steps: { calls: string[] }[] = [];
+
+    const run = await collect(
+      create(),
+      request(model, {
+        tools: [search],
+        endsAfter: (step) => {
+          steps.push({ calls: step.calls.map((call) => call.tool) });
+          return steps.length === 2;
+        },
+      }),
+    );
+
+    expect(model.doStreamCalls).toHaveLength(2);
+    expect(steps).toEqual([{ calls: ["search_documents"] }, { calls: ["search_documents"] }]);
+    expect(run.events.at(-1)?.type).toBe("finished");
+  });
+
   test("the window: every result the model reads is cut to fit, Tools are withheld when there's no room, and each step's usage is reported before its end", async () => {
     const search = testTool("search_documents", { result: "x".repeat(5_000) });
     const close = testTool("close_issue");
