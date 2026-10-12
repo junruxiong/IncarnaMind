@@ -506,11 +506,9 @@ test("Manage Tags shows how many Documents carry each, edits, merges and deletes
       "Tags: Notes",
     );
 
-    // Deleting says how many Documents lose it.
+    // Deleting asks nothing: the Tag goes to Recently deleted.
     await slideAndClick(window, library.getByRole("button", { name: "Manage tags" }));
     await slideAndClick(window, row("Notes").getByTestId("delete-tag"));
-    await expect(row("Notes")).toContainText("It is taken off 2 Documents.");
-    await slideAndClick(window, row("Notes").getByTestId("confirm-delete-tag"));
     await expect(row("Notes")).toHaveCount(0);
     await slideAndClick(window, dialog.getByRole("button", { name: "Done" }));
     // The filter by the deleted Tag goes with it.

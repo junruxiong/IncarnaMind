@@ -168,6 +168,7 @@ Keys are read from these variables only, never from `OPENAI_API_KEY` and the lik
 | `INCARNAMIND_EVAL_EMBED_KEY` | none | Required with `INCARNAMIND_EVAL_EMBED_KIND`. |
 | `INCARNAMIND_EVAL_EMBED_BASE_URL` | none | An OpenAI-compatible server instead of OpenAI (`openai` only). |
 | `INCARNAMIND_EVAL_RERANK` | none | `all`, or reranking candidates' ids separated by commas (see Reranking candidates). Adds their reranked modes next to the built-in model's, which always runs. |
+| `INCARNAMIND_EVAL_RERANK_CPU` | off | `1` runs the built-in reranking model on the CPU, as on a computer with no GPU. Otherwise it runs on the GPU where it can, as in the app: its GPU file is downloaded into the cache first, so every search runs on the same device. |
 | `INCARNAMIND_EVAL_CACHE` | `~/.cache/incarnamind-eval` | Where the built-in models are kept between runs. |
 | `INCARNAMIND_EVAL_MIN_CITATIONS` | `30` | Citations each language needs for the Citation targets to count. |
 | `INCARNAMIND_EVAL_MAX_ROUNDS` | `3` | Rounds of Questions at most. |

@@ -89,3 +89,10 @@ Web pages and documents other people wrote are now main inputs, so the consequen
 ## Amendment, 2026-10-12: where an Answer is written (ADR-0017)
 
 The opening says an Answer is written into a Mind. With ADR-0017 and #201, an Answer is written in the assistant's conversation instead. A Mind gets it only when the User picks Add to note, or as Proposals the User accepts (#202). The product stays documents-first: wherever an Answer is shown, its Citations are checked against the Documents.
+
+## Amendment, 2026-10-12: web search's Tools (#128)
+
+Web search gives an Answer two Tools of IncarnaMind's own, offered only when the User has it on in Settings → Search, Local mode is off, the Answer's model's provider has a web search of its own, and the Question asks for the web. `search_web` searches through that provider; `read_web_page` saves a page the search found as a Web page Document and gives its Passages to cite.
+
+- **Neither asks the User.** A search sends to a service the User allowed (consent asks before the first). Reading a page is a read from a web host: it fetches only an address a search of the same Run returned, so nothing the model writes, and nothing of the User's, goes with it. An address the model made up is refused with a reason. "Read" from a web host therefore runs by default (`runsByDefault`); a later Tool that fetches an address the model chose sends data, and declares "network". The Research Task's design board (Final-42-Research-Running) shows `fetch_page` asking after a web page was read; with the allowlist there is nothing for that ask to protect, so #130 should revisit it rather than add it.
+- **Both read third-party text.** Search results (titles written by other people) and a page's Passages make the Run third-party (#78): from then on, writes and sends a Tool-level "always" would let through ask.

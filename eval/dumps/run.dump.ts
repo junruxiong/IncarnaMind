@@ -35,6 +35,9 @@ import {
 import { formatOf } from "../lib/formats";
 import { openLibrary } from "../lib/library";
 import { createLog, type Log } from "../lib/log";
+
+<<<<<<< HEAD
+
 import { createWorkerCrossEncoder, openReranker, type ScoringReranker } from "../lib/rerank";
 import {
   GATING_MODE,
@@ -44,6 +47,19 @@ import {
   summarise,
   type Tally,
 } from "../lib/retrieval";
+
+=======
+
+import {
+  createWorkerCrossEncoder,
+  openReranker,
+  prepareGpuFile,
+  type ScoringReranker,
+} from "../lib/rerank";
+import { GATING_MODE, runReranked, runRetrieval, summarise, type Tally } from "../lib/retrieval";
+
+>>>>>>> feat/542-tool-loop-skips-rerank
+
 import { type Dump, formatScore, type Order, type ScoreOptions, scoreDump } from "../score";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
@@ -142,7 +158,7 @@ async function dumpEvaluationSet(
     name: `dump-${name}`,
     embedder: createWorkerEmbedder(),
     modelCache: join(config.cacheDir, "models"),
-    reranker: createWorkerCrossEncoder(),
+    reranker: createWorkerCrossEncoder(config.rerankOnCpu),
     documents: set.documents,
     keep: config.keepData,
     log,
@@ -213,7 +229,7 @@ async function dumpHard(context: Context): Promise<void> {
     name: "dump-hard",
     embedder: createWorkerEmbedder(),
     modelCache: join(config.cacheDir, "models"),
-    reranker: createWorkerCrossEncoder(),
+    reranker: createWorkerCrossEncoder(config.rerankOnCpu),
     documents: available.map((document) => ({ key: document.key, path: document.path as string })),
     keep: config.keepData,
     log,
@@ -292,7 +308,14 @@ test("the dumps", async () => {
       );
     }
   }
-  const reranker = await openReranker(BUILT_IN_RERANKING_MODEL, config.cacheDir, log, GATING_MODE);
+  await prepareGpuFile(config, log);
+  const reranker = await openReranker(
+    BUILT_IN_RERANKING_MODEL,
+    config.cacheDir,
+    log,
+    GATING_MODE,
+    config.rerankOnCpu,
+  );
   const context: Context = {
     config,
     log,

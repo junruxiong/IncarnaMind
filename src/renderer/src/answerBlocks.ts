@@ -1,29 +1,38 @@
 /**
  * An Answer of the assistant's conversations as Blocks (ADR-0017): the Markdown
  * the model wrote made into the node types of Notes, each Citation marker made
- * into its Citation, exactly as an Answer written into a Mind is made. The
+ * into its Citation and each figure marker into its calculated figure's shown
+ * text (ADR-0021), exactly as an Answer written into a Mind is made. The
  * assistant shows them, Copy copies them and Add to note puts them into a note.
  */
 
 import { markdownToBlocks } from "../../core/answers/markdown";
 import type { ConversationAnswer } from "../../core/api";
 import { citationNode, type NodeJSON, withCitations } from "../../shared/blockJson";
+import { withFigures } from "../../shared/figureMarkers";
 
 /**
  * While it is written, what would still change how it looks is held back, and
  * a marker whose Citation hasn't come yet shows as being checked; once it has
- * ended, a marker with no Citation is left out.
+ * ended, a marker with no Citation is left out. A figure marker with no
+ * figure is left out.
  */
 export function answerBlocks(
-  answer: Pick<ConversationAnswer, "text" | "citations" | "status">,
+  answer: Pick<ConversationAnswer, "text" | "citations" | "figures" | "status">,
 ): NodeJSON[] {
   const streaming = answer.status === "streaming";
   const cited = new Map(answer.citations.map(({ marker, ...citation }) => [marker, citation]));
-  return withCitations(markdownToBlocks(answer.text, { streaming }), (marker) => {
+  const figures = new Map(answer.figures.map((figure) => [figure.marker, figure]));
+  const blocks = withCitations(markdownToBlocks(answer.text, { streaming }), (marker) => {
     const citation = cited.get(marker);
     if (citation) return citationNode(citation);
     return streaming ? citationNode(null) : null;
   });
+  return withFigures(
+    blocks,
+    (marker) => figures.get(marker) ?? null,
+    (figure) => figure.shown,
+  );
 }
 
 /** Whether Blocks hold any words: an Answer that failed before writing any has nothing to keep. */
