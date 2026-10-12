@@ -21,7 +21,8 @@ export function UndoLine() {
   const line = useUndo((state) => state.line);
   return (
     <div role="status" aria-live="polite" data-testid="undo-line" className="flex flex-col">
-      {line && <Line key={line.id} line={line} />}
+      {/* A change shown where the User made it, under an Answer in the assistant, isn't shown twice. */}
+      {line && !line.change?.shownAt && <Line key={line.id} line={line} />}
     </div>
   );
 }
@@ -33,13 +34,7 @@ function Line({ line }: { line: UndoLineState }) {
   const shown = useRef<HTMLDivElement>(null);
   useFade(shown);
 
-  useEffect(() => {
-    if (!line.change) return;
-    const timer = setTimeout(() => {
-      if (useUndo.getState().line?.id === line.id) useUndo.getState().dismiss();
-    }, UNDO_SHOWN_MS);
-    return () => clearTimeout(timer);
-  }, [line]);
+  useGoesBy(line.change ? line.id : null);
 
   if (line.problem) {
     const { step, reason, fix } = line.problem;
@@ -85,4 +80,15 @@ function Line({ line }: { line: UndoLineState }) {
       </button>
     </div>
   );
+}
+
+/** A change's line goes after a few seconds, unless a newer line took its place; ⌘Z still reaches it. */
+export function useGoesBy(lineId: number | null): void {
+  useEffect(() => {
+    if (lineId === null) return;
+    const timer = setTimeout(() => {
+      if (useUndo.getState().line?.id === lineId) useUndo.getState().dismiss();
+    }, UNDO_SHOWN_MS);
+    return () => clearTimeout(timer);
+  }, [lineId]);
 }
