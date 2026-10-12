@@ -1,3 +1,4 @@
+import { DataFromNewerVersionError } from "../errors";
 import type { Database } from "./database";
 
 /**
@@ -1362,9 +1363,7 @@ export function migrate(db: Database, list: readonly Migration[] = migrations): 
   const known = new Set(list.map((migration) => migration.version));
   const unknown = [...applied].filter((version) => !known.has(version));
   if (unknown.length > 0) {
-    throw new Error(
-      `The database was written by a newer version of IncarnaMind (it has schema migration ${Math.max(...unknown)}, which this version doesn't know).`,
-    );
+    throw new DataFromNewerVersionError(Math.max(...unknown));
   }
 
   for (const migration of list) {
