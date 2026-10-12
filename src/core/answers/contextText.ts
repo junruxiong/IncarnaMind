@@ -12,6 +12,7 @@
  */
 
 import type * as Y from "yjs";
+import { chosenSeries } from "../../shared/charts";
 import { citationLocation, englishLocation } from "../../shared/locations";
 import type { MarkedCitation } from "../api";
 import {
@@ -113,6 +114,8 @@ function blockMarkdown(block: Block): string {
         .join("\n");
     case "table":
       return tableMarkdown(block.rows);
+    case "chart":
+      return chartMarkdown(block);
     case "image":
     // Only an export writes a Bibliography; a Mind's own Blocks never hold one.
     case "bibliography":
@@ -147,6 +150,60 @@ function tableMarkdown(rows: readonly TableCell[][]): string {
   lines.splice(1, 0, `|${" --- |".repeat(layout.columns)}`);
   return lines.join("\n");
 }
+
+function chartMarkdown(block: Extract<Block, { kind: "chart" }>): string {
+  const { chart } = block;
+  const drawn = chosenSeries(chart);
+  const marks: Marks = {
+    bold: false,
+    italic: false,
+    strike: false,
+    underline: false,
+    highlight: false,
+    code: false,
+    link: null,
+  };
+  const cell = (content: Inline[], header = false): TableCell => ({
+    header,
+    colspan: 1,
+    rowspan: 1,
+    align: null,
+    content: [{ kind: "paragraph", content }],
+  });
+  const words = (text: string): Inline[] => (text ? [{ kind: "text", text, marks }] : []);
+  const rows: TableCell[][] = [
+    [
+      cell(words(chart.data.labelHeading), true),
+      ...drawn.map((series) => cell(words(chart.data.series[series] ?? ""), true)),
+    ],
+    ...chart.data.rows.map((row) => [
+      cell(words(row.label)),
+      ...drawn.map((series) => {
+        const value = row.values[series];
+        if (!value) return cell([]);
+        const source = value.citation
+          ? citationSource(value.citation as unknown as Record<string, unknown>)
+          : null;
+        return cell([
+          ...words(value.shown),
+          ...(source?.source
+            ? ([
+                { kind: "text", text: " ", marks },
+                { kind: "citation", footnote: source, work: blankWork },
+              ] as Inline[])
+            : []),
+        ]);
+      }),
+    ]),
+  ];
+  const cut = chart.data.cutFrom
+    ? ` (its first ${chart.data.rows.length} rows of ${chart.data.cutFrom})`
+    : "";
+  return `Chart, ${chart.kind}${chart.title ? `: ${chart.title}` : ""}${cut}\n\n${tableMarkdown(rows)}`;
+}
+
+/** Question context writes a Citation's source, never its work. */
+const blankWork = { documentId: null, documentName: null, location: null };
 
 function listMarkdown(list: Extract<Block, { kind: "list" }>): string {
   let number = list.start;

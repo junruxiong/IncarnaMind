@@ -4,8 +4,9 @@ import { mindName } from "../../../../shared/naming";
 import { type AddTarget, addAnswer } from "../../addToNote";
 import { answerBlocks } from "../../answerBlocks";
 import { selectedNotes } from "../../answerEditors";
-import { AnswerWriting } from "../../answerPhase";
+import { askedFromLine, stepsScope } from "../../assistantContext";
 import { readMindHandle } from "../../commands/handles";
+import { composerScope, useComposer } from "../../composer";
 import {
   conversationLabel,
   stopWriting,
@@ -14,10 +15,13 @@ import {
   useOpenConversation,
 } from "../../conversations";
 import { useT } from "../../i18n";
+import { type ScopeChip, scopeChips } from "../../scope";
 import { useAppStore } from "../../store";
+import { SearchIcon } from "../icons";
 import { SparkLineIcon } from "../lineIcons";
 import { AddToMindPicker } from "./AddToMindPicker";
 import { WritingLine } from "./AnswerActions";
+import { LiveLine } from "./AnswerSteps";
 import { type AnswerKeeping, AssistantAnswer } from "./AssistantAnswer";
 
 /** How long an Answer a link back led to stays flashed. */
@@ -31,9 +35,10 @@ const notesOf = (answer: ConversationAnswer) =>
 
 /**
  * The conversation the assistant shows (#201): the Questions as bubbles at the
- * right, as in Claude and ChatGPT, and the Answers with their Citations, checks
- * and actions (`AssistantAnswer`); empty, what asking here does. A Question
- * shows the moment it is sent, with its Answer's "Writing…" and Stop under it
+ * right, as in Claude and ChatGPT, and the Answers with their steps,
+ * Citations, checks and actions (`AssistantAnswer`); empty, where the next
+ * Question is asked from and what it searches, and what asking here does. A Question shows
+ * the moment it is sent, with its Answer's first step and Stop under it
  * before the core has checked the model, so asking never looks like nothing
  * happened. It keeps up with an Answer being written while the User is at its
  * foot, and brings an Answer a link back led to into view, flashed.
@@ -50,6 +55,8 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
   const focusedMindName = focusedMindId
     ? (focusedMind && mindName(focusedMind)) || t("mind.untitled")
     : null;
+  const nextScope = useNextScope(focusedMindId);
+  const askedFrom = askedFromLine(t, focusedMind ? focusedMindName : null, nextScope);
   const [picking, setPicking] = useState<{
     answer: ConversationAnswer;
     anchor: HTMLElement;
@@ -121,9 +128,15 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
       className="assistant-log"
     >
       {messages.length === 0 && asking === null && (
-        <p data-testid="assistant-empty" className="assistant-empty">
-          {t("assistant.empty")}
-        </p>
+        <>
+          <p data-testid="assistant-asked-from" title={askedFrom} className="assistant-asked-from">
+            <SearchIcon aria-hidden="true" className="assistant-asked-from-icon" />
+            <span className="assistant-asked-from-text">{askedFrom}</span>
+          </p>
+          <p data-testid="assistant-empty" className="assistant-empty">
+            {t("assistant.empty")}
+          </p>
+        </>
       )}
       {messages.map((message) =>
         message.kind === "question" ? (
@@ -146,16 +159,24 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
           data-status="streaming"
           className="assistant-answer"
         >
+          <LiveLine
+            step={{ kind: "searching" }}
+            scope={stepsScope(
+              t,
+              nextScope.filter((chip) => !chip.deleted),
+            )}
+          />
           {stopWanted ? (
             // Stopped before it started: it says so at once, and stops as it starts.
             <WritingLine
-              writing={<span data-testid="answer-stopped">{t("answer.status.stopped")}</span>}
+              status={
+                <span data-testid="answer-stopped" className="assistant-answer-status">
+                  {t("answer.status.stopped")}
+                </span>
+              }
             />
           ) : (
-            <WritingLine
-              writing={<AnswerWriting answerId={null} waitingForApproval={false} />}
-              onStop={stopWriting}
-            />
+            <WritingLine onStop={stopWriting} />
           )}
         </div>
       )}
@@ -202,4 +223,21 @@ function QuestionBubble({ question, text }: { question?: ConversationQuestion; t
       </p>
     </div>
   );
+}
+
+/** What the next Question searches: the Search scope of the composer of the Mind in focus; none with no Mind. */
+function useNextScope(mindId: string | null): ScopeChip[] {
+  const mind = useAppStore((state) => state.minds.find((each) => each.id === mindId));
+  const draft = useComposer((state) => (mindId ? state.drafts[mindId] : undefined));
+  const folders = useAppStore((state) => state.folders);
+  const groups = useAppStore((state) => state.library?.groups);
+  const deletedGroups = useAppStore((state) => state.library?.deletedGroups);
+  const tags = useAppStore((state) => state.tags);
+  const documents = useAppStore((state) => state.documents);
+  if (!mind) return [];
+  const scope = composerScope(
+    draft ?? { text: "", scope: null, skill: null, pastes: [] },
+    mind.folderId,
+  );
+  return scopeChips({ folders, groups, deletedGroups, tags, documents }, scope);
 }
