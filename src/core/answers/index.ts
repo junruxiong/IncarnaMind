@@ -48,6 +48,7 @@ import {
   type AnswerAttributes,
   type AnswerPhase,
   type AnswerPlace,
+  type AnswerSteps,
   type AnswerToolCall,
   type AnswerUsage,
   type AskResult,
@@ -180,6 +181,8 @@ interface WrittenAnswer {
   support: CitationSupport | null;
   /** Where the third-party text its Run had read came from (#78); null: none. */
   textOrigin: ThirdPartySource | null;
+  /** How it was reached: what an Answer in a conversation shows above its text (#391). */
+  steps: AnswerSteps;
 }
 
 /** What Answers need of the assistant's conversations (see ../conversations). */
@@ -530,6 +533,33 @@ export function createAnswers(options: AnswersOptions) {
       cacheWriteTokens: 0,
     };
     const toolCalls: AnswerToolCall[] = [];
+    /** When the Question went to the model, and when the Answer ended, in ms since the epoch. */
+    let sentAt: number | null = null;
+    let finishedAt: number | null = null;
+    const phases: AnswerSteps["phases"] = [];
+    /** The model's reasoning summary, kept only from a provider that summarizes it. */
+    let reasoning = "";
+    let reasoningStartedAt: number | null = null;
+    let lastReasoningAt: number | null = null;
+    /** When the text the Answer keeps began: a preamble taken back doesn't count. */
+    let firstTextAt: number | null = null;
+    const iso = (ms: number | null) => (ms === null ? null : new Date(ms).toISOString());
+    const steps = (): AnswerSteps => {
+      const summary = reasoning.trim();
+      const thoughtUntil =
+        firstTextAt !== null && reasoningStartedAt !== null && firstTextAt > reasoningStartedAt
+          ? firstTextAt
+          : (lastReasoningAt ?? Date.now());
+      return {
+        sentAt: iso(sentAt),
+        finishedAt: iso(finishedAt),
+        phases: [...phases],
+        reasoning:
+          summary && reasoningStartedAt !== null
+            ? { summary, ms: Math.max(0, thoughtUntil - reasoningStartedAt) }
+            : null,
+      };
+    };
     let skills: SkillSession | null = null;
     const session = createCitationSession(inScope(options.documents, documentIds), {
       onRecord: (marker, citation) =>
@@ -569,6 +599,7 @@ export function createAnswers(options: AnswersOptions) {
             toolCalls,
             support,
             textOrigin,
+            steps: steps(),
           },
           outcome,
         );
@@ -581,6 +612,7 @@ export function createAnswers(options: AnswersOptions) {
     const finish = (outcome: Outcome) => {
       if (finished) return;
       finished = true;
+      finishedAt = Date.now();
       if (timer) clearTimeout(timer);
       active.delete(answerId);
       if (active.size === 0) options.onWritingChange?.(false);
@@ -636,13 +668,20 @@ export function createAnswers(options: AnswersOptions) {
       announce("answer.toolCallStarted", { ...place, answerId, call: { ...call } });
       writeSoon();
     };
-    const callFinished = (id: string, ok: boolean, resultCount: number | null) => {
+    const callFinished = (
+      id: string,
+      ok: boolean,
+      resultCount: number | null,
+      found: Pick<AnswerToolCall, "passages" | "error"> = {},
+    ) => {
       const call = toolCalls.find((each) => each.id === id);
       if (!call) return;
       // A denied call returned the model a result, but never ran; a script that didn't exit with 0 failed.
       const ran = call.script === undefined || call.script.exitCode === 0;
       call.status = ok && call.approval !== "denied" && ran ? "done" : "failed";
       call.resultCount = resultCount;
+      if (found.passages) call.passages = found.passages;
+      if (found.error) call.error = found.error;
       announce("answer.toolCallFinished", { ...place, answerId, call: { ...call } });
       writeSoon();
     };
@@ -896,6 +935,7 @@ export function createAnswers(options: AnswersOptions) {
               : "writing";
         if (finished || phase === shown) return;
         shown = phase;
+        phases.push({ phase, at: new Date().toISOString() });
         announce("answer.phase", { ...place, answerId, phase });
       };
       // Nothing is sent before the User says: the Answer waits for them.
@@ -913,6 +953,7 @@ export function createAnswers(options: AnswersOptions) {
         consenting = false;
         showPhase();
       }
+      sentAt = Date.now();
       if (!(await openSkills()) || !skills) return;
       const { listed, forced } = skills;
       const opened: SkillSession = skills;
@@ -1069,15 +1110,27 @@ export function createAnswers(options: AnswersOptions) {
             usage.cachedInputTokens += event.usage.cachedInputTokens ?? 0;
             usage.cacheWriteTokens += event.usage.cacheWriteTokens ?? 0;
             break;
+          case "reasoning":
+            // Raw chain of thought is dropped: only a provider's own summary is kept.
+            if (!prepared.summarizesReasoning) break;
+            reasoningStartedAt ??= Date.now();
+            if (!event.text) break;
+            lastReasoningAt = Date.now();
+            reasoning += event.text;
+            announce("answer.reasoning", { ...place, answerId, text: event.text });
+            writeSoon();
+            break;
           case "text-delta":
             responded = true;
             showPhase();
+            firstTextAt ??= Date.now();
             markdown += event.text;
             announce("answer.delta", { ...place, answerId, text: event.text });
             writeSoon();
             break;
           case "text-retracted":
             markdown = markdown.slice(0, Math.max(0, markdown.length - event.length));
+            if (markdown === "") firstTextAt = null;
             writeSoon();
             break;
           case "tool-call-started": {
@@ -1097,7 +1150,10 @@ export function createAnswers(options: AnswersOptions) {
             break;
           }
           case "tool-call-finished":
-            callFinished(event.id, event.ok, event.resultCount);
+            callFinished(event.id, event.ok, event.resultCount, {
+              ...(event.passages && { passages: [...event.passages] }),
+              ...(event.error && { error: event.error }),
+            });
             break;
           case "read-third-party":
             if (textOrigin === null) {
@@ -1238,6 +1294,7 @@ export function createAnswers(options: AnswersOptions) {
         toolCalls: answer.toolCalls,
         support: answer.support,
         textOrigin: answer.textOrigin,
+        steps: answer.steps,
         ...(outcome && {
           outcome: {
             status: outcome.status,

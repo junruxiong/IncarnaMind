@@ -224,6 +224,26 @@ describe.each(ENGINES)("A Run engine: $name", ({ create }) => {
     ]);
   });
 
+  // protects=a model's reasoning reaches the caller as reasoning events, one paragraph a block, apart from the text and the messages; fails_when=it comes as text, joins its blocks, or is kept in the Run's messages; no_claim=a scripted model stands in for a provider.
+  test("the model's reasoning comes as reasoning events, a block a paragraph, never as text or in the messages", async () => {
+    const search = testTool("search_documents");
+    const model = scriptedModel((call) =>
+      call.index === 0
+        ? { reasoning: "Find the tide table.", calls: [SEARCH] }
+        : { reasoning: "Six o'clock.", text: "High water is at six." },
+    );
+
+    const run = await collect(create(), request(model, { tools: [search] }));
+
+    const reasoning = run.events.flatMap((event) =>
+      event.type === "reasoning" ? [event.text] : [],
+    );
+    expect(reasoning.join("")).toBe("Find the tide table.\n\nSix o'clock.");
+    expect(reasoning.filter((text) => text === "")).toHaveLength(2);
+    expect(run.text).toBe("High water is at six.");
+    expect(JSON.stringify(run.finished)).not.toContain("tide table");
+  });
+
   test("a denied gate: the Tool never runs, the model reads the gate's text as an ordinary result, and the Run goes on", async () => {
     const close = testTool("close_issue");
     const gate = scriptedGate(() => "deny");

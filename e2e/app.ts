@@ -986,6 +986,39 @@ export async function askInAssistant(window: Page, question: string): Promise<Lo
   return answer;
 }
 
+/** The tiny MCP server the core tests use: `lookup_tide` is read-only, `book_boat` isn't. */
+const TIDE_SERVER = resolve(__dirname, "../tests/fixtures/mcp-server.mjs");
+
+/** Adds the tiny server as a Connector through the core's bridge, waits until it's ready, and returns its id. */
+export async function addTideConnector(window: Page): Promise<string> {
+  return window.evaluate(
+    async ({ node, server }) => {
+      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      const connector = await bridge.addConnector({ name: "Tides", command: node, args: [server] });
+      for (let tries = 0; tries < 300; tries++) {
+        const found = (await bridge.listConnectors()).find((each) => each.id === connector.id);
+        if (found?.state === "ready") return connector.id;
+        await new Promise((done) => setTimeout(done, 100));
+      }
+      throw new Error("The Connector didn't get ready.");
+    },
+    { node: process.execPath, server: TIDE_SERVER },
+  );
+}
+
+/**
+ * Unfolds an Answer's steps in the assistant (#391) with the mouse, unless
+ * they are open, and returns their timeline: the reasoning, the searches,
+ * the Skills and Connector calls it made, and the check.
+ */
+export async function openSteps(window: Page, answer: Locator): Promise<Locator> {
+  const toggle = answer.getByTestId("answer-steps");
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") await pointAndClick(window, toggle);
+  const timeline = answer.getByTestId("answer-timeline");
+  await expect(timeline).toBeVisible();
+  return timeline;
+}
+
 /**
  * Adds an Answer in the assistant to the Mind in focus, at its cursor (or
  * end), with the mouse, as a person keeps one (#201), and waits until it is in.

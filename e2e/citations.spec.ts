@@ -11,6 +11,7 @@ import {
   dismissChatSetup,
   launchApp,
   newMind,
+  openSteps,
   placeAssistant,
   pointAndClick,
   pointAt,
@@ -64,12 +65,11 @@ test("an Answer cites a PDF: its badge says the quote was found, and clicking it
 
   const answer = await ask(window, "When do spring tides happen?");
 
-  // It shows that it searched the Documents, and what for.
-  await pointAt(window, answer.getByTestId("assistant-answer-text"));
-  await expect(answer.getByTestId("answer-tools")).toContainText("Searched your Documents");
-  await answer.getByTestId("answer-tools-toggle").click();
-  await expect(answer.getByTestId("answer-tool-call")).toContainText(
-    "When do spring tides happen?",
+  // Its steps say that it searched the Documents, and what for.
+  await expect(answer.getByTestId("answer-steps")).toContainText("Searched");
+  const steps = await openSteps(window, answer);
+  await expect(steps.locator('[data-step="search"]')).toContainText(
+    "for “When do spring tides happen?”",
   );
 
   // Added to a Note, the sentence keeps its Citation, check result and all.
