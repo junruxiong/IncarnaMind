@@ -5,6 +5,7 @@ import { useLanguage, useT } from "../i18n";
 import { isLive, useMeetingOf, useMeetings } from "../meetings";
 import { clockTime } from "../meetingTime";
 import { useAppStore } from "../store";
+import { CaptureDetails, CaptureDetailsLine, CaptureProblem } from "./CaptureDetails";
 import { CloseLineIcon, RecordingLineIcon } from "./lineIcons";
 import { MeetingBar } from "./MeetingBar";
 import { ProblemLine } from "./ProblemLine";
@@ -14,7 +15,8 @@ import { buttonStyle, fieldLabelClass, inputClass } from "./ui";
 /**
  * A Meeting's place in its Mind, under the title: the start block while it is
  * ready, the meeting bar while it records or is paused, and a line about its
- * audio, with "Delete audio now", once it is paused or stopped.
+ * audio, with "Delete audio now", once it is paused or stopped. Its recording
+ * details (#161) open from the bar, or from the line under a stopped Meeting.
  */
 export function MeetingInMind({ mindId }: { mindId: string }) {
   const meeting = useMeetingOf(mindId);
@@ -23,14 +25,19 @@ export function MeetingInMind({ mindId }: { mindId: string }) {
   if (isLive(meeting)) {
     return (
       <MeetingBar meeting={meeting}>
+        <CaptureProblem meeting={meeting} className="meeting-line" />
         {meeting.status === "paused" && <MeetingAudioLine meeting={meeting} />}
+        <CaptureDetails meeting={meeting} />
       </MeetingBar>
     );
   }
   return (
     <div className="mb-4">
       <TranscriptLines meeting={meeting} className="" />
+      <CaptureProblem meeting={meeting} />
       <MeetingAudioLine meeting={meeting} />
+      <CaptureDetailsLine meeting={meeting} />
+      <CaptureDetails meeting={meeting} />
     </div>
   );
 }

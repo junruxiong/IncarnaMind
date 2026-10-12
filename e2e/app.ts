@@ -10,6 +10,7 @@ import {
   test,
 } from "@playwright/test";
 import type { AssistantPlace, CoreBridge } from "../src/core/api";
+import type { FakeTranscriberOptions } from "../src/core/transcription/fake";
 import type { DocumentLocation } from "../src/shared/documentViewer";
 import type { TestHooks } from "../src/shared/testHooks";
 
@@ -79,6 +80,8 @@ export interface LaunchOptions {
    * always a fake that makes a tone: no test opens a device.
    */
   computerSound?: "allowed" | "denied" | "silent";
+  /** What a Meeting's fake speech-to-text engine does: slow, failing to read stretches, failing over. */
+  transcriber?: FakeTranscriberOptions;
 }
 
 /**
@@ -121,6 +124,7 @@ export async function launchApp(
     chatGpt,
     keepWindow = false,
     computerSound = "allowed",
+    transcriber,
   }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
@@ -137,6 +141,7 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_REFERENCE_LOOKUP;
   delete env.INCARNAMIND_TEST_SOURCES;
   delete env.INCARNAMIND_TEST_CHATGPT;
+  delete env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS;
   // A test never uses the ChatGPT sign-in an agent's shell may point at for checks by hand.
   delete env.INCARNAMIND_CHATGPT_PROFILE;
   env.INCARNAMIND_TEST_AUDIO = "fake";
@@ -157,6 +162,7 @@ export async function launchApp(
   if (fakeChat) env.INCARNAMIND_FAKE_CHAT = "1";
   env.INCARNAMIND_TEST_EMBEDDER = "fake";
   env.INCARNAMIND_TEST_TRANSCRIBER = "fake";
+  if (transcriber) env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS = JSON.stringify(transcriber);
 
   const app = await electron.launch({ args: [appDir], env });
   openApps.set(app, dataDir);
