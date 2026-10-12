@@ -296,10 +296,11 @@ describe("formatting a Mind's Citations", () => {
     };
     const formatted = await format(core, "apa", [work(tea, history)]);
     expect(plain(formatted.clusters[0]?.runs)).toBe("(Lee, 2024, § History, ¶\u00a02)");
-    // Its record has the page's author, date, site and address, so it needs no details.
+    // Its record has the page's author, date, site and address, so it needs no details. The
+    // page's title, "Tea - The Open Encyclopedia", doesn't name the site a second time.
     expect(formatted.bibliography.map((entry) => [plain(entry.runs), entry.needsDetails])).toEqual([
       [
-        "Lee, A. (2024, May 1). Tea - The Open Encyclopedia. The Open Encyclopedia. https://encyclopedia.example/tea",
+        "Lee, A. (2024, May 1). Tea. The Open Encyclopedia. https://encyclopedia.example/tea",
         false,
       ],
     ]);
