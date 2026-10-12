@@ -500,6 +500,34 @@ test("⌘Z goes to the note's own undo in the note, to a field's in a field, and
   await expect.poll(() => mindFolder(window, "Shortlist")).toBeNull();
 });
 
+test("in a Mind's title and the composer, a run of typing is one step to undo and to redo, with ⌘Z and the Edit menu", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await newMind(window);
+  const title = window.getByTestId("mind-title");
+  await title.fill("Upgrade test");
+  const composer = window.getByTestId("composer-input");
+
+  for (const [field, before] of [
+    [title, "Upgrade test"],
+    [composer, ""],
+  ] as const) {
+    await pointAndClick(window, field);
+    await window.keyboard.press("End");
+    await window.keyboard.type(" abc");
+    await expect(field).toHaveValue(`${before} abc`);
+    await undo(window);
+    await expect(field).toHaveValue(before);
+    await redo(window);
+    await expect(field).toHaveValue(`${before} abc`);
+    await clickEditItem(app, "edit.undo");
+    await expect(field).toHaveValue(before);
+    await clickEditItem(app, "edit.redo");
+    await expect(field).toHaveValue(`${before} abc`);
+  }
+  await expect.poll(() => mindTitles(window)).toEqual(["Upgrade test abc"]);
+});
+
 test("an undo the core can't do shows one problem line where it happened, in Chinese too, and its action lets it happen", async () => {
   const { window } = await launchApp(dataDir);
   await dismissChatSetup(window);
