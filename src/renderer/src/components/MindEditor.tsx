@@ -22,6 +22,8 @@ import { CodeBlockView } from "../editor/CodeBlockView";
 import { Composer, type ComposerHandle } from "../editor/Composer";
 import { CitationClusters } from "../editor/citationClusters";
 import { CitationNumbers, redrawFootnotes, setCitationForm } from "../editor/citationNumbers";
+import { DocumentChipView } from "../editor/DocumentChipView";
+import { DocumentChipKeys } from "../editor/documentChipKeys";
 import { EndHint, type HintPlace, type HintText, isEmptyMind } from "../editor/EndHint";
 import { selectionForEdit } from "../editor/editSelection";
 import { FindBar } from "../editor/FindBar";
@@ -244,11 +246,13 @@ function MindEditorView({
           answerView: ReactNodeViewRenderer(AnswerView),
           citationView,
           footnoteView: footnoteView(() => footnoteLabel.current),
+          documentChipView: ReactNodeViewRenderer(DocumentChipView, { as: "span" }),
         }),
         // Footnotes are numbered as the Mind's citation style counts its Citations (#289).
         CitationNumbers.configure({ form: () => citationStyle(styleRef.current).form }),
         CitationClusters,
         FootnoteKeys,
+        DocumentChipKeys,
         Collaboration.configure({ document: doc, field: MIND_CONTENT_FIELD }),
         Placeholder.configure({
           // An empty Mind's line and the line after an Answer have their hint drawn over them (EndHint).

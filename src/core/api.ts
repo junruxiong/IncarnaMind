@@ -95,8 +95,11 @@ export interface CreateMindInput {
  *   `proposalDelete` marks on text, and the `proposal` attribute on Blocks and
  *   on inline nodes (see `PROPOSAL_ATTRIBUTE`). Older content is version 4
  *   content as it is: nothing is rewritten.
+ * - 6: a Document chip the User writes with "@" (`DOCUMENT_CHIP_NODE`), and
+ *   checklists (`taskList` and `taskItem`, whose items keep `checked`). Older
+ *   content is version 6 content as it is: nothing is rewritten.
  */
-export const CONTENT_SCHEMA_VERSION = 4;
+export const CONTENT_SCHEMA_VERSION = 6;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -503,6 +506,14 @@ export const CITATION_NODE = "citation";
  * inside a footnote is part of that footnote's text, with no number of its own.
  */
 export const FOOTNOTE_NODE = "footnote";
+
+/**
+ * The node type of a Document chip, which the User writes with "@" in a Note:
+ * an inline node that names a Document (`documentId`, and its `name` as it was
+ * when the chip was made, shown if the Document is gone) and opens it in the
+ * viewer. It is the User's own text, not a Citation: it checks nothing.
+ */
+export const DOCUMENT_CHIP_NODE = "documentChip";
 
 /**
  * Where a Citation's check stands. The check compares the model's quote with
