@@ -28,6 +28,12 @@ const TIDES = buildPdf([
   { lines: ["Tide tables", "Harbours publish the times of high water every year."] },
 ]);
 
+/** Two short pages, so one Passage covers both: the line about spring tides is on page 1. */
+const TWO_PAGES = buildPdf([
+  { lines: ["Spring tides", "Spring tides happen at new moon and at full moon."] },
+  { lines: ["Tide tables", "Harbours publish the times of high water every year."] },
+]);
+
 let dataDir: string;
 let sources: string;
 test.beforeEach(async () => {
@@ -111,6 +117,23 @@ test("an Answer cites a PDF: its badge says the quote was found, and clicking it
   await expect(groups.first().getByTestId("mind-tab")).toHaveAttribute("aria-selected", "true");
   await expect(groups.first()).toHaveAttribute("data-focused", "true");
   await expect(groups.nth(1).getByTestId("document-tab")).toHaveAttribute("data-preview", "true");
+  await app.close();
+});
+
+test("a quote on page 1 of a Passage that runs onto page 2 is labelled p. 1, as the page it opens at", async () => {
+  await writeFile(join(sources, "Tides.pdf"), TWO_PAGES);
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await addDocuments(window, [join(sources, "Tides.pdf")]);
+
+  const answer = await ask(window, "When do spring tides happen? Name no page.");
+
+  const chip = answer.getByTestId("citation").getByTestId("citation-chip");
+  await expect(chip).toHaveAttribute("aria-label", "Citation 1: Tides, p. 1. Quote found on p. 1");
+  await pointAndClick(window, chip);
+  await expect(window.getByTestId("citation-badge")).toHaveText("Quote found on p. 1");
+  await expect(window.getByTestId("pdf-page-number")).toHaveValue("1");
   await app.close();
 });
 
