@@ -5,7 +5,7 @@ import type { Core } from "../../src/core";
 import { readVtt } from "../../src/core/documents/formats/vtt";
 import { FAKE_LINES } from "../../src/core/transcription/fake";
 import { askAndFinish, citingModel, onlyCitation, type ShownPassage } from "../helpers/citations";
-import { createTempDataFolder } from "../helpers/core";
+import { createTempDataFolder, startCore } from "../helpers/core";
 import { connectToMind } from "../helpers/mindClient";
 import { transcribingCore, transcriptOf, until } from "../helpers/transcription";
 
