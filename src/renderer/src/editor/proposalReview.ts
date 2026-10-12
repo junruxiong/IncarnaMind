@@ -1,4 +1,4 @@
-import { type Editor, Extension } from "@tiptap/core";
+import { type Editor, Extension, getTextBetween, getTextSerializersFromSchema } from "@tiptap/core";
 import { Fragment, type MarkType, type Node as ProseMirrorNode, Slice } from "@tiptap/pm/model";
 import {
   type EditorState,
@@ -556,6 +556,18 @@ export const ProposalReview = Extension.create<{ translate: Translate }>({
           // A pending change isn't the Mind's yet: it is copied as the text it would replace.
           transformCopied: (slice, view) =>
             pendingIn(view.state).length > 0 ? acceptedSlice(slice) : slice,
+
+          // Plain text is read from the Mind's selection, not the copied slice (#504).
+          clipboardTextSerializer: (slice, view) => {
+            if (pendingIn(view.state).length === 0) return "";
+            const { schema } = view.state;
+            const copied = schema.topNodeType.create(null, slice.content);
+            return getTextBetween(
+              copied,
+              { from: 0, to: copied.content.size },
+              { textSerializers: getTextSerializersFromSchema(schema) },
+            );
+          },
 
           handleDOMEvents: {
             mouseover(view, event) {
