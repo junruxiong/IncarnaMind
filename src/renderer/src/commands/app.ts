@@ -3,10 +3,12 @@ import { useCitationStylePicker } from "../citationStylePicker";
 import { blockMenuOpeners } from "../editor/blockMenuOpeners";
 import { noteHolding } from "../editor/noteKeymap";
 import { useFindSources } from "../findSources";
+import { useHistory } from "../history";
 import { currentTabOf } from "../layoutSlice";
 import { startSkillFromMind } from "../makeSkill";
 import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
+import { findTab } from "../tabs";
 import { assistantCommands } from "./assistant";
 import { bibliographyCommands } from "./bibliography";
 import { chartCommands } from "./charts";
@@ -45,10 +47,16 @@ function mindInFront(): string | null {
   return item?.kind === "mind" ? item.mindId : null;
 }
 
-/** The Mind a command acts on: the one a menu names, else the one in front (⌘K, the assistant). */
+/**
+ * The Mind a command acts on: the one a menu names (its row, or the tab showing it), else the
+ * one in front (⌘K, the assistant).
+ */
 function mindOf(ctx: CommandContext): string | null {
   const targets = ctx.selection.length > 0 ? ctx.selection : ctx.focus ? [ctx.focus] : [];
-  return targets.find((each) => each.kind === "mind")?.id ?? mindInFront();
+  const named = targets.find((each) => each.kind === "mind")?.id;
+  const tab = targets.find((each) => each.kind === "tab");
+  const shown = tab ? findTab(useAppStore.getState().layout, tab.id)?.item : undefined;
+  return named ?? (shown?.kind === "mind" ? shown.mindId : null) ?? mindInFront();
 }
 
 const appCommands: readonly Command[] = [
@@ -134,6 +142,21 @@ const appCommands: readonly Command[] = [
         `article[data-mind-id="${mindId}"] [data-testid="references-style"]`,
       );
       useCitationStylePicker.getState().show(mindId, button);
+    },
+  },
+  {
+    // History (#113): the Mind's versions, compared, over the whole window.
+    id: "mind.history",
+    label: "history.command",
+    menuLabel: "history.menu",
+    keywords: ["history.keywords"],
+    group: "main",
+    // Opening it changes nothing; its Restore is taken back with Undo.
+    reversible: true,
+    when: (ctx) => mindOf(ctx) !== null,
+    run: (ctx) => {
+      const mindId = mindOf(ctx);
+      if (mindId) useHistory.getState().open(mindId);
     },
   },
   {

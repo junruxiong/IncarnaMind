@@ -150,6 +150,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "mind.openSide",
     "—",
     "mind.export",
+    "mind.history",
     "mind.citationStyle",
     "skill.fromMind",
     "—",
@@ -261,7 +262,13 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
   const tabMenu = tab.getByTestId("tab-actions");
   const byRightClick = await commandsIn(tabMenu);
   // Its Mind's items first, then the tab's own.
-  expect(byRightClick.slice(0, 4)).toEqual(["mind.export", "—", "mind.delete", "—"]);
+  expect(byRightClick.slice(0, 5)).toEqual([
+    "mind.export",
+    "mind.history",
+    "—",
+    "mind.delete",
+    "—",
+  ]);
   expect(byRightClick.indexOf("tab.rename")).toBeLessThan(byRightClick.indexOf("tab.close"));
   expect(byRightClick.indexOf("tab.close")).toBeLessThan(byRightClick.indexOf("tab.closeOthers"));
   // Close and its kin end the menu, after a rule.
@@ -373,6 +380,7 @@ test("each item shows its shortcut as the system writes it, and the labels are i
     "打开",
     "在侧边打开",
     "导出…",
+    "历史版本",
     "引用格式…",
     "做成技能",
     /^移动到…(⇧⌘M|Ctrl\+Shift\+M)$/,

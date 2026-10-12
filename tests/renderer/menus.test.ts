@@ -114,7 +114,7 @@ describe("the menus", () => {
     }
   });
 
-  test("a Mind's is Open, Open to the side, Export, Make this a Skill, Move to, Rename, then Delete after a rule", () => {
+  test("a Mind's is Open, Open to the side, Export, History, Make this a Skill, Move to, Rename, then Delete after a rule", () => {
     const here = {
       "mind.citationStyle": () => undefined,
       "mind.moveTo": () => undefined,
@@ -125,6 +125,7 @@ describe("the menus", () => {
       "mind.openSide",
       "—",
       "mind.export",
+      "mind.history",
       "mind.citationStyle",
       "skill.fromMind",
       "—",
@@ -140,6 +141,7 @@ describe("the menus", () => {
       "mind.openSide",
       "—",
       "mind.export",
+      "mind.history",
       "skill.fromMind",
       "—",
       "mind.delete",

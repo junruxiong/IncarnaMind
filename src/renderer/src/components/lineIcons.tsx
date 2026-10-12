@@ -404,6 +404,16 @@ export function HistoryLineIcon(props: IconProps) {
   );
 }
 
+/** Restore: an arrow coming round to where it started. */
+export function RestoreLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M4 12a8 8 0 1 0 2.3-5.6" />
+      <path d="M4 4v4h4" />
+    </LineIcon>
+  );
+}
+
 const WINDOW_FRAME = <rect x="3.5" y="4.5" width="17" height="15" rx="2" />;
 
 /** Where the assistant can sit: a window with its place in it marked. */
