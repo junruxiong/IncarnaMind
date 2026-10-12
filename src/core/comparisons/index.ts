@@ -29,7 +29,13 @@ import {
 } from "../../shared/comparisons";
 import { recordProposalRequest, targetHash } from "../../shared/proposals";
 import type { CellAnswer } from "../answers";
-import { createElement, findBlock, type NodeJSON, syncContent, topLevelBlocks } from "../answers/blocks";
+import {
+  createElement,
+  findBlock,
+  type NodeJSON,
+  syncContent,
+  topLevelBlocks,
+} from "../answers/blocks";
 import type { QuestionContext } from "../answers/context";
 import {
   BLOCK_ID_ATTRIBUTE,
@@ -263,7 +269,13 @@ export function createComparisons(options: ComparisonsOptions) {
       case "done":
         patch =
           outcome.value.kind === "answer"
-            ? { status: "done", problem: null, message: null, resetsAt: null, blocks: outcome.value.blocks }
+            ? {
+                status: "done",
+                problem: null,
+                message: null,
+                resetsAt: null,
+                blocks: outcome.value.blocks,
+              }
             : {
                 status: "failed",
                 problem: outcome.value.problem,
@@ -392,7 +404,9 @@ export function createComparisons(options: ComparisonsOptions) {
   function placeOf(blocks: Y.XmlFragment, afterBlockId: string | null): number {
     if (!afterBlockId) return blocks.length;
     const children = topLevelBlocks(blocks);
-    const index = children.findIndex((each) => each.getAttribute(BLOCK_ID_ATTRIBUTE) === afterBlockId);
+    const index = children.findIndex(
+      (each) => each.getAttribute(BLOCK_ID_ATTRIBUTE) === afterBlockId,
+    );
     if (index === -1) return blocks.length;
     const block = children[index] as Y.XmlElement;
     const empty =
@@ -412,9 +426,14 @@ export function createComparisons(options: ComparisonsOptions) {
         .filter((each) => each !== "");
       if (questions.length === 0) throw new InvalidInputError("Add a Question to compare by.");
       if (questions.length > MAX_COMPARISON_QUESTIONS) {
-        throw new InvalidInputError(`A comparison table has at most ${MAX_COMPARISON_QUESTIONS} Questions.`);
+        throw new InvalidInputError(
+          `A comparison table has at most ${MAX_COMPARISON_QUESTIONS} Questions.`,
+        );
       }
-      if (!Array.isArray(input.documentIds) || !input.documentIds.every((id) => typeof id === "string")) {
+      if (
+        !Array.isArray(input.documentIds) ||
+        !input.documentIds.every((id) => typeof id === "string")
+      ) {
         throw new InvalidInputError("documentIds must be a list of Document ids.");
       }
       const counted = new Set(options.evidence([...new Set(input.documentIds as string[])]));
@@ -423,7 +442,9 @@ export function createComparisons(options: ComparisonsOptions) {
         .filter((document) => counted.has(document.id));
       if (documents.length === 0) throw new InvalidInputError("There are no Documents to compare.");
       if (documents.length > MAX_COMPARISON_DOCUMENTS) {
-        throw new InvalidInputError(`A comparison table has at most ${MAX_COMPARISON_DOCUMENTS} Documents.`);
+        throw new InvalidInputError(
+          `A comparison table has at most ${MAX_COMPARISON_DOCUMENTS} Documents.`,
+        );
       }
       const instruction =
         input.instruction === undefined || input.instruction === null
@@ -511,7 +532,8 @@ export function createComparisons(options: ComparisonsOptions) {
       for (const [tableId, fill] of fills) {
         if (fill.mindId !== mindId || fill.controller.signal.aborted) continue;
         const there =
-          options.mindExists(mindId) && content.read(mindId, (blocks) => !!tableIn(blocks, tableId));
+          options.mindExists(mindId) &&
+          content.read(mindId, (blocks) => !!tableIn(blocks, tableId));
         if (!there) fill.controller.abort();
       }
     },

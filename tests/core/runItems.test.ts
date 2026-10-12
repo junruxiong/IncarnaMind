@@ -82,7 +82,14 @@ describe("Running a run's items", () => {
     ]);
     // Each was heard as it ended, once.
     expect(heard.sort()).toEqual(
-      ["a:done", "b:not-checked", "c:done", "d:not-checked", "e:not-checked", "f:not-checked"].sort(),
+      [
+        "a:done",
+        "b:not-checked",
+        "c:done",
+        "d:not-checked",
+        "e:not-checked",
+        "f:not-checked",
+      ].sort(),
     );
   });
 

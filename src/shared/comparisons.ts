@@ -48,14 +48,17 @@ export function comparisonCellOf(attributes: Attributes): ComparisonCellAttribut
   return {
     questionId: text(attributes.questionId) ?? "",
     status,
-    problem: status === "failed" ? ((text(attributes.problem) as ComparisonProblem) ?? "unknown") : null,
+    problem:
+      status === "failed" ? ((text(attributes.problem) as ComparisonProblem) ?? "unknown") : null,
     message: text(attributes.message),
     resetsAt: text(attributes.resetsAt),
   };
 }
 
 /** The stop a cell's problem stands for: the fill stopped there, so the cell wasn't checked. */
-export function cellStop(cell: Pick<ComparisonCellAttributes, "problem" | "resetsAt">): RunStop | null {
+export function cellStop(
+  cell: Pick<ComparisonCellAttributes, "problem" | "resetsAt">,
+): RunStop | null {
   if (cell.problem === "cost-cap") return { reason: "cost-cap" };
   if (cell.problem === "plan-limit") return { reason: "plan-limit", resetsAt: cell.resetsAt };
   return null;
