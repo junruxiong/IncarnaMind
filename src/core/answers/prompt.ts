@@ -66,6 +66,19 @@ export function sourcesInstructions(offered: boolean): string {
 }
 
 /**
+ * Web search's Tools, when offered (#128): read each page used, cite only what
+ * reading gave, and say which pages couldn't be saved.
+ */
+export function webInstructions(offered: boolean): string {
+  if (!offered) return "";
+  return [
+    "You can also search the web with search_web when the Question asks for the web, and read the pages it finds with read_web_page, which saves each page as one of the User's Documents and gives its Passages.",
+    "- Use only what read_web_page gives you from the web, and cite it with cite as any Passage. Never state or cite anything from search_web's list itself, or from a page you didn't read.",
+    "- Read the few pages most likely to answer, one call each. When a page couldn't be saved, say so in one short line that names it, and use the others.",
+  ].join("\n");
+}
+
+/**
  * Connectors that are on but can't be used until the User signs in to them
  * again: their Tools aren't offered, and the Answer says so if it needed them.
  */

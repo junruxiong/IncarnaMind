@@ -27,6 +27,7 @@ describe("Settings", () => {
         leaveOutOwnFiles: true,
         exportOptions: DEFAULT_EXPORT,
         monthlyCap: null,
+        webSearch: false,
       },
       device: {
         sidebarWidth: 248,
@@ -118,6 +119,7 @@ describe("Settings", () => {
       leaveOutOwnFiles: true,
       exportOptions: DEFAULT_EXPORT,
       monthlyCap: null,
+      webSearch: false,
     });
     expect(settings.device).toEqual({
       sidebarWidth: 320,
@@ -177,6 +179,7 @@ describe("Settings", () => {
         leaveOutOwnFiles: false,
         exportOptions: PDF_EXPORT,
         monthlyCap: { amount: 20, currency: "USD" },
+        webSearch: true,
       },
       device,
     });
@@ -192,6 +195,7 @@ describe("Settings", () => {
         leaveOutOwnFiles: false,
         exportOptions: PDF_EXPORT,
         monthlyCap: { amount: 20, currency: "USD" },
+        webSearch: true,
       },
       device,
       language: "zh-CN",

@@ -237,6 +237,8 @@ export interface InstructionOptions {
   connectorTools?: boolean;
   /** The model is offered Find sources' Tool. */
   sourceTools?: boolean;
+  /** The model is offered web search's Tools. */
+  webTools?: boolean;
 }
 
 /** A Tool call at the Answer's gate. */
@@ -935,8 +937,10 @@ function createWritingEngine(options: AiSdkAnswerEngineOptions): AnswerEngine {
         });
 
       // With no Documents there is nothing to search or cite: Skills and
-      // Connector Tools alone, or a plain Answer.
-      if (request.documents.documentCount === 0) {
+      // Connector Tools alone, or a plain Answer. Web search saves what it reads as
+      // Documents, which are cited, so with it the Documents' Tools are offered too.
+      const savesDocuments = request.tools.some((each) => each.provider.kind === "web");
+      if (request.documents.documentCount === 0 && !savesDocuments) {
         if (request.tools.length > 0 && (request.support ?? "tools") === "tools") {
           let unsupported = false;
           for await (const event of fitted(() =>
@@ -1321,6 +1325,7 @@ async function* toolLoop(
     skillTools: request.tools.some((each) => each.provider.kind === "skills"),
     connectorTools: tools.some((each) => each.provider.kind === "connector"),
     sourceTools: tools.some((each) => each.provider.kind === "sources"),
+    webTools: tools.some((each) => each.provider.kind === "web"),
   });
 
   // Within a window: the Question context that fits beside the instructions, the Tools and a search.
