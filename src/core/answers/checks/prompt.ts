@@ -5,6 +5,7 @@
  * one sentence on what the Document says, carrying the marker.
  */
 import type { CitationSupport, ClaimVerdict } from "../../api";
+import { detectLanguage } from "../../documents/textLanguage";
 
 const VERDICTS: readonly ClaimVerdict[] = ["supported", "unsupported", "contradicted"];
 
@@ -76,6 +77,8 @@ export function claimPrompt(input: {
 }): string {
   const context = input.context?.trim();
   const cited = input.cited ?? [];
+  // The paragraph tells a short sentence's language when its own words don't.
+  const language = detectLanguage(input.claim) ?? detectLanguage(`${input.claim} ${context ?? ""}`);
   return [
     ...(context && context !== input.claim.trim()
       ? [
@@ -93,6 +96,7 @@ export function claimPrompt(input: {
       : []),
     "The sentence to check:",
     `<sentence>\n${input.claim.trim()}\n</sentence>`,
+    ...(language ? ["", `It is written in ${language}: write your sentence in ${language}.`] : []),
   ].join("\n");
 }
 
@@ -195,10 +199,9 @@ export function readVerdict(reply: string): ReadVerdict | null {
   const match = line === undefined ? null : (labelled >= 0 ? LABELLED : BARE).exec(line);
   if (line !== undefined && match?.[1]) {
     const verdict = match[1].toLowerCase() as ClaimVerdict;
-    return {
-      verdict,
-      says: cleanSays([line.slice(match[0].length), ...lines.slice(at + 1)].join(" ")),
-    };
+    // One sentence: what follows the verdict on its line, else the next line. Notes after it aren't.
+    const rest = line.slice(match[0].length).trim();
+    return { verdict, says: cleanSays(rest || (lines[at + 1] ?? "")) };
   }
   return jsonVerdict(text);
 }
