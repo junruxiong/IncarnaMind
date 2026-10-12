@@ -277,8 +277,8 @@ function FolderGroup({
   const objectMenu = useObjectMenu({ kind: "folder", id: folder.id });
 
   const onKeyDown = (event: KeyboardEvent) => {
-    // Enter or F2 renames, as in Finder; a click, Space or the arrows open and close it.
-    if ((event.key === "Enter" && !event.nativeEvent.isComposing) || event.key === "F2") {
+    // F2 renames; Enter, a click, Space or the arrows open and close it.
+    if (event.key === "F2") {
       event.preventDefault();
       setRenaming(true);
     } else if (event.key === "ArrowRight" && !expanded) {

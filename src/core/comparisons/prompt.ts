@@ -4,8 +4,9 @@
  * the Question in the User's message, so the Question alone is what a model
  * without Tools searches for and what decides the Answer's language.
  */
-import type { MarkedCitation } from "../api";
+
 import type { QuestionContext } from "../answers/context";
+import type { MarkedCitation } from "../api";
 
 /** What a cell's model replies when its Document doesn't answer the Question. */
 export const NOT_FOUND = "NOT_FOUND";

@@ -29,6 +29,7 @@
  * yet: what one adds is left out, and what one removes is read as it is.
  */
 import * as Y from "yjs";
+import { type ChartAttributes, chartSources, chosenSeries, readChart } from "../shared/charts";
 import { cellProblemMessage, comparisonCellOf, comparisonQuestionsOf } from "../shared/comparisons";
 import { type MessageKey, type MessageParams, translate } from "../shared/i18n";
 import { citationLocation } from "../shared/locations";
@@ -37,10 +38,11 @@ import { cutTitle } from "../shared/naming";
 import { readProposalAttribute } from "../shared/proposals";
 import {
   ANSWER_BLOCK,
+  CHART_NODE,
   CITATION_NODE,
+  type CitedWork,
   COMPARISON_ROW_NODE,
   COMPARISON_TABLE_NODE,
-  type CitedWork,
   FOOTNOTE_NODE,
   PROPOSAL_ATTRIBUTE,
   PROPOSAL_INSERT_MARK,
@@ -127,6 +129,20 @@ export type Block =
   | { kind: "rule" }
   | { kind: "table"; rows: TableCell[][] }
   | { kind: "image"; image: Image }
+  /**
+   * A chart (#436): what it draws, for a picture of it; its values as a table,
+   * the heading row first, without their Citations; and the places they were
+   * quoted from, one Citation each, side by side, numbered with the Mind's
+   * other footnotes. An export that draws its picture adds it as `picture`.
+   */
+  | {
+      kind: "chart";
+      chart: ChartAttributes;
+      table: TableCell[][];
+      sources: Inline[];
+      uncited: number;
+      picture?: Image;
+    }
   | { kind: "question"; content: Inline[] }
   /** The Bibliography a citation style adds at the end of an export (./exports/citations). */
   | { kind: "bibliography"; heading: string; items: BibliographyItem[]; hangingIndent: boolean };
@@ -241,6 +257,9 @@ export function footnotesIn(blocks: readonly Block[]): Footnote[] {
       case "table":
         for (const row of block.rows) for (const cell of row) cell.content.forEach(visit);
         break;
+      case "chart":
+        inInline(block.sources);
+        break;
     }
   };
   blocks.forEach(visit);
@@ -317,6 +336,8 @@ function readBlockElement(element: Y.XmlElement, options: ReadOptions): Block[] 
       return [{ kind: "table", rows: readComparison(element, options) }];
     case "image":
       return [{ kind: "image", image: readImage(element) }];
+    case CHART_NODE:
+      return [readChartBlock(element, options)];
     case QUESTION_BLOCK:
       return options.includeQuestions
         ? [{ kind: "question", content: readInline(element.toArray(), options) }]
@@ -448,6 +469,40 @@ export function tableLayout(rows: readonly (readonly TableCell[])[]): {
     columns = Math.max(columns, column);
   }
   return { rows: laidOut, columns };
+}
+
+function readChartBlock(element: Y.XmlElement, options: ReadOptions): Block {
+  const chart = readChart(element.getAttributes() as Record<string, unknown>);
+  const drawn = chosenSeries(chart);
+  const cell = (text: string, header: boolean, align: TableAlign): TableCell => ({
+    header,
+    colspan: 1,
+    rowspan: 1,
+    align,
+    content: [
+      { kind: "paragraph", content: text ? [{ kind: "text", text, marks: NO_MARKS }] : [] },
+    ],
+  });
+  const table: TableCell[][] = [
+    [
+      cell(chart.data.labelHeading, true, null),
+      ...drawn.map((series) => cell(chart.data.series[series] ?? "", true, "right")),
+    ],
+    ...chart.data.rows.map((row) => [
+      cell(row.label, false, null),
+      ...drawn.map((series) => cell(row.values[series]?.shown ?? "", false, "right")),
+    ]),
+  ];
+  const { places, uncited } = chartSources(chart);
+  const sources: Inline[] = places.map(({ citation }) => {
+    const attributes = citation as unknown as Record<string, unknown>;
+    return {
+      kind: "citation",
+      footnote: options.footnote(attributes),
+      work: citedWork(attributes),
+    };
+  });
+  return { kind: "chart", chart, table, sources, uncited };
 }
 
 function readImage(element: Y.XmlElement): Image {

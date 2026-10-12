@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test, vi } from "vitest";
@@ -18,12 +17,19 @@ import { addAndProcess, createSourceFolder, writeSourceFile } from "../helpers/d
 import { footnotesOf, part, textOf, unzip } from "../helpers/docx";
 import { exportMind, linkWithExports } from "../helpers/evidence";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
-import { note, readMind, resolveChanges, writeMind } from "../helpers/minds";
-import { type ModelCall, type ScriptedReply, scriptedModel, scriptedModels } from "../helpers/models";
+import { note, outline, readMind, resolveChanges, writeMind } from "../helpers/minds";
+import {
+  type ModelCall,
+  type ScriptedReply,
+  scriptedModel,
+  scriptedModels,
+} from "../helpers/models";
 
 /** Three suppliers' terms, a line each. */
-const CORVANE = "Corvane Agreement.\nTermination notice: 90 days.\nLiability cap: 12 months of fees.";
-const HALVARD = "Halvard MSA.\nTermination notice: 6 months.\nLiability cap: twice the annual fees.";
+const CORVANE =
+  "Corvane Agreement.\nTermination notice: 90 days.\nLiability cap: 12 months of fees.";
+const HALVARD =
+  "Halvard MSA.\nTermination notice: 6 months.\nLiability cap: twice the annual fees.";
 const LUMERIC = "Lumeric Order Form.\nTermination notice: 30 days.\nGoverning law: New York.";
 
 const SUPPLIERS = [
@@ -50,7 +56,10 @@ function cellAsked(call: ModelCall): { question: string; document: string } {
 
 /** The line of a Passage that shares a word of four letters or more with the Question. */
 function lineFor(passages: readonly ShownPassage[], question: string) {
-  const words = question.toLowerCase().split(/\W+/).filter((word) => word.length >= 4);
+  const words = question
+    .toLowerCase()
+    .split(/\W+/)
+    .filter((word) => word.length >= 4);
   for (const passage of passages) {
     for (const line of passage.text.split("\n")) {
       if (words.some((word) => line.toLowerCase().includes(word))) return { passage, line };
@@ -64,7 +73,9 @@ function lineFor(passages: readonly ShownPassage[], question: string) {
  * cites the line that answers it and answers with that line, or replies
  * NOT_FOUND when the Document has none. `before` may answer a request first.
  */
-function cellModel(before?: (call: ModelCall, asked: ReturnType<typeof cellAsked>) => ScriptedReply | null) {
+function cellModel(
+  before?: (call: ModelCall, asked: ReturnType<typeof cellAsked>) => ScriptedReply | null,
+) {
   return scriptedModel((call) => {
     const asked = cellAsked(call);
     const early = before?.(call, asked);
@@ -78,7 +89,10 @@ function cellModel(before?: (call: ModelCall, asked: ReturnType<typeof cellAsked
     if (!call.results.some((result) => result.tool === "cite")) {
       return {
         calls: [
-          { tool: "cite", input: { citations: [{ marker: 1, passage: found.passage.id, quote: found.line }] } },
+          {
+            tool: "cite",
+            input: { citations: [{ marker: 1, passage: found.passage.id, quote: found.line }] },
+          },
         ],
       };
     }
@@ -139,7 +153,11 @@ const fillEnded = (core: Core, tableId: string) =>
   });
 
 /** Asks for a comparison table and waits for it to fill. */
-async function compare(core: Core, client: MindClient, input: Parameters<Core["compareDocuments"]>[0]) {
+async function compare(
+  core: Core,
+  client: MindClient,
+  input: Parameters<Core["compareDocuments"]>[0],
+) {
   const filling: CoreEvents["comparison.filling"][] = [];
   const stop = core.on("comparison.filling", (event) => filling.push(event));
   const result = await core.compareDocuments(input);
@@ -151,15 +169,25 @@ async function compare(core: Core, client: MindClient, input: Parameters<Core["c
 }
 
 /** A core with a cloud model billed per token, allowed to be sent to, and the suppliers' terms added. */
-async function cloudSetUp(model: MockLanguageModelV4, provider: { kind: "anthropic" | "ollama"; modelId: string } = { kind: "anthropic", modelId: "claude-haiku-5-5" }) {
-  const core = startCore(await createTempDataFolder(), { createChatModel: scriptedModels(model).createChatModel });
+async function cloudSetUp(
+  model: MockLanguageModelV4,
+  provider: { kind: "anthropic" | "ollama"; modelId: string } = {
+    kind: "anthropic",
+    modelId: "claude-haiku-5-5",
+  },
+) {
+  const core = startCore(await createTempDataFolder(), {
+    createChatModel: scriptedModels(model).createChatModel,
+  });
   core.on("consent.requested", (asked) => void core.respondToConsent(asked.requestId, true));
   const saved = await core.saveChatProvider(
     provider.kind === "ollama" ? provider : { ...provider, apiKey: "sk-test" },
   );
   if (saved.service) await core.allowDataFlow("chat", saved.service.id);
   const sources = await createSourceFolder();
-  const paths = await Promise.all(SUPPLIERS.map((file) => writeSourceFile(sources, file.name, file.contents)));
+  const paths = await Promise.all(
+    SUPPLIERS.map((file) => writeSourceFile(sources, file.name, file.contents)),
+  );
   const documents = await addAndProcess(core, paths);
   const mind = await core.createMind({ title: "Shortlist" });
   const client = await connectToMind(core, mind.id);
@@ -192,7 +220,11 @@ describe("Compare Documents", () => {
     ]);
     const cited = table.rows.flatMap((row, index) =>
       row.cells.flatMap((cell) =>
-        cell.citations.map((citation) => ({ row: index, document: citation.documentId, check: citation.check })),
+        cell.citations.map((citation) => ({
+          row: index,
+          document: citation.documentId,
+          check: citation.check,
+        })),
       ),
     );
     expect(cited).toHaveLength(5);
@@ -221,13 +253,15 @@ describe("Compare Documents", () => {
       afterBlockId: first.attrs?.id as string,
     });
 
-    const order: string[] = [];
-    readMind(client).forEach((block) => order.push(block.type.name));
-    expect(order).toEqual(["paragraph", "comparisonTable", "paragraph"]);
+    expect(outline(client)).toEqual(["paragraph", "comparisonTable", "paragraph"]);
     expect(tableIn(client).proposal).toMatchObject({ kind: "insert" });
     // Waiting, it isn't the Mind's yet: an export or Question context leaves it out.
     const read = () =>
-      readBlocks(client.blocks, { includeQuestions: true, footnote: () => ({ source: "", unverified: false }), trimBeforeCitation: false });
+      readBlocks(client.blocks, {
+        includeQuestions: true,
+        footnote: () => ({ source: "", unverified: false }),
+        trimBeforeCitation: false,
+      });
     expect(read().map((block) => block.kind)).toEqual(["paragraph", "paragraph"]);
 
     const accepted = await resolveChanges(client, "accept");
@@ -241,17 +275,10 @@ describe("Compare Documents", () => {
       documentIds: documents.map((document) => document.id),
       questions: ["Governing law"],
     });
-    let tables = 0;
-    readMind(client).forEach((block) => {
-      if (block.type.name === "comparisonTable") tables++;
-    });
-    expect(tables).toBe(2);
+    const tables = () => outline(client).filter((type) => type === "comparisonTable");
+    expect(tables()).toHaveLength(2);
     await resolveChanges(client, "reject");
-    tables = 0;
-    readMind(client).forEach((block) => {
-      if (block.type.name === "comparisonTable") tables++;
-    });
-    expect(tables).toBe(1);
+    expect(tables()).toHaveLength(1);
   });
 
   test("rejecting the table while it fills stops the fill: nothing more is asked", async () => {
@@ -284,7 +311,7 @@ describe("Compare Documents", () => {
 
     expect(answers).toBe(1);
     expect(await core.listFillingComparisons()).toEqual([]);
-    readMind(client).forEach((block) => expect(block.type.name).not.toBe("comparisonTable"));
+    expect(outline(client)).not.toContain("comparisonTable");
   });
 
   test("on a model off this computer, at most 4 cells are written at once; on one on it, one at a time", async () => {
@@ -354,7 +381,11 @@ describe("Compare Documents", () => {
     const limited = new Set<string>();
     const model = cellModel((call, asked) => {
       // Halvard's first try is refused, as a busy provider does.
-      if (call.results.length === 0 && asked.document === "Halvard" && !limited.has(asked.question)) {
+      if (
+        call.results.length === 0 &&
+        asked.document === "Halvard" &&
+        !limited.has(asked.question)
+      ) {
         limited.add(asked.question);
         return { error: { status: 429, message: "Too many requests" } };
       }
@@ -388,7 +419,10 @@ describe("Compare Documents", () => {
       }
       // The first cell waits, so a Document can be deleted while the table fills.
       return asked.document === "Corvane" && asked.question === "Termination notice"
-        ? { calls: [{ tool: "search_documents", input: { query: asked.question } }], pause: { after: 0, until: held } }
+        ? {
+            calls: [{ tool: "search_documents", input: { query: asked.question } }],
+            pause: { after: 0, until: held },
+          }
         : null;
     });
     const { core, client, mind, documents } = await setUpWithDocuments(model, [
@@ -436,7 +470,10 @@ describe("Compare Documents", () => {
         ? { error: { status: 402, message: "You have reached your weekly usage limit" } }
         : null,
     );
-    const { core, client, mind, documents } = await cloudSetUp(model, { kind: "ollama", modelId: "glm-5.3:cloud" });
+    const { core, client, mind, documents } = await cloudSetUp(model, {
+      kind: "ollama",
+      modelId: "glm-5.3:cloud",
+    });
 
     await compare(core, client, {
       mindId: mind.id,
@@ -485,7 +522,11 @@ describe("Compare Documents", () => {
 
     expect(tableIn(client).rows.map((row) => row.document)).toEqual(["Corvane", "Halvard"]);
     await expect(
-      core.compareDocuments({ mindId: mind.id, documentIds: [exported.id], questions: ["Termination notice"] }),
+      core.compareDocuments({
+        mindId: mind.id,
+        documentIds: [exported.id],
+        questions: ["Termination notice"],
+      }),
     ).rejects.toThrow(InvalidInputError);
   });
 
@@ -495,7 +536,11 @@ describe("Compare Documents", () => {
       core.compareDocuments({ mindId: mind.id, documentIds: [], questions: QUESTIONS }),
     ).rejects.toThrow("There are no Documents to compare.");
     await expect(
-      core.compareDocuments({ mindId: mind.id, documentIds: documents.map((each) => each.id), questions: ["  "] }),
+      core.compareDocuments({
+        mindId: mind.id,
+        documentIds: documents.map((each) => each.id),
+        questions: ["  "],
+      }),
     ).rejects.toThrow("Add a Question to compare by.");
   });
 
@@ -510,12 +555,21 @@ describe("Compare Documents", () => {
 
     // As the editor's "+ Question" does: a column, and a waiting cell in each row.
     client.doc.transact(() => {
-      const table = client.blocks.toArray().find(
-        (block): block is Y.XmlElement => block instanceof Y.XmlElement && block.nodeName === "comparisonTable",
-      );
+      const table = client.blocks
+        .toArray()
+        .find(
+          (block): block is Y.XmlElement =>
+            block instanceof Y.XmlElement && block.nodeName === "comparisonTable",
+        );
       if (!table) throw new Error("No table.");
-      const questions = table.getAttribute("questions") as unknown as { id: string; text: string }[];
-      table.setAttribute("questions", [...questions, { id: "q-law", text: "Governing law" }] as never);
+      const questions = table.getAttribute("questions") as unknown as {
+        id: string;
+        text: string;
+      }[];
+      table.setAttribute("questions", [
+        ...questions,
+        { id: "q-law", text: "Governing law" },
+      ] as never);
       for (const row of table.toArray()) {
         if (!(row instanceof Y.XmlElement)) continue;
         const cell = new Y.XmlElement("comparisonCell");
@@ -570,9 +624,17 @@ describe("Compare Documents", () => {
 
     const files = unzip((await core.exportMind(mind.id, { format: "docx" })).data);
     const word = part(files, "word/document.xml");
-    const rows = [...(/<w:tbl>[\s\S]*<\/w:tbl>/.exec(word)?.[0] ?? "").matchAll(/<w:tr>([\s\S]*?)<\/w:tr>/g)];
+    const rows = [
+      ...(/<w:tbl>[\s\S]*<\/w:tbl>/.exec(word)?.[0] ?? "").matchAll(/<w:tr>([\s\S]*?)<\/w:tr>/g),
+    ];
     expect(rows[0]?.[1]).toContain("<w:tblHeader/>");
-    expect(rows.map((row) => [...(row[1] ?? "").matchAll(/<w:tc>([\s\S]*?)<\/w:tc>/g)].map((cell) => textOf(cell[1] ?? "")))).toEqual([
+    expect(
+      rows.map((row) =>
+        [...(row[1] ?? "").matchAll(/<w:tc>([\s\S]*?)<\/w:tc>/g)].map((cell) =>
+          textOf(cell[1] ?? ""),
+        ),
+      ),
+    ).toEqual([
       ["Document", "Termination notice", "Liability cap"],
       ["Corvane", "90 days[1]", "12 months of fees[2]"],
       ["Halvard", "6 months[3]", "twice the annual fees[4]"],
@@ -581,13 +643,18 @@ describe("Compare Documents", () => {
     expect(Object.values(footnotesOf(part(files, "word/footnotes.xml")))).toHaveLength(5);
 
     await core.updateSettings({ user: { language: "zh-CN" } });
-    const chinese = new TextDecoder().decode((await core.exportMind(mind.id, { format: "markdown" })).data);
+    const chinese = new TextDecoder().decode(
+      (await core.exportMind(mind.id, { format: "markdown" })).data,
+    );
     expect(chinese).toContain("| 文档 | Termination notice | Liability cap |");
     expect(chinese).toContain("| Lumeric（来源已删除） | 30 days[^5] | 未找到 |");
   });
 
   test("the table survives sync and a restart: another device sees its cells, and they're there after reopening", async () => {
-    const { core, client, mind, documents, dataDir } = await setUpWithDocuments(cellModel(), SUPPLIERS);
+    const { core, client, mind, documents, dataDir } = await setUpWithDocuments(
+      cellModel(),
+      SUPPLIERS,
+    );
     const other = await connectToMind(core, mind.id);
     other.goOffline();
     writeMind(other, [note("Written offline on another computer.")]);
@@ -598,10 +665,16 @@ describe("Compare Documents", () => {
       questions: QUESTIONS,
     });
     await other.goOnline();
-    expect(tableIn(other).rows.map((row) => row.cells[0]?.text)).toEqual(["90 days", "6 months", "30 days"]);
+    expect(tableIn(other).rows.map((row) => row.cells[0]?.text)).toEqual([
+      "90 days",
+      "6 months",
+      "30 days",
+    ]);
 
     core.close();
-    const reopened = startCore(dataDir, { createChatModel: scriptedModels(cellModel()).createChatModel });
+    const reopened = startCore(dataDir, {
+      createChatModel: scriptedModels(cellModel()).createChatModel,
+    });
     const again = await connectToMind(reopened, mind.id);
     expect(tableIn(again).rows.map((row) => row.cells[1]?.text)).toEqual([
       "12 months of fees",

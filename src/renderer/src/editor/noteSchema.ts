@@ -13,6 +13,7 @@ import {
   NOTE_BLOCK_TYPES,
   QUESTION_BLOCK,
 } from "../../../core/api";
+import { Chart } from "./chartSchema";
 import { Citation } from "./citationSchema";
 import { lowlight } from "./codeLanguages";
 import { ComparisonCell, ComparisonRow, ComparisonTable } from "./comparisonSchema";
@@ -54,6 +55,8 @@ export interface NoteSchemaOptions {
   citationView?: NodeViewRenderer;
   /** Draws the markers of the User's footnotes, e.g. as numbers that open their text. */
   footnoteView?: NodeViewRenderer;
+  /** Draws charts, with their menus and their points' cards. */
+  chartView?: NodeViewRenderer;
   /** Draw comparison tables (#98): the table with its heading row, each row's Document, each cell's state. */
   comparisonViews?: {
     table: NodeViewRenderer;
@@ -69,8 +72,9 @@ export interface NoteSchemaOptions {
  * an "include in Question context" flag. Questions and Answers, top-level
  * only. Citations, inline in Answers and in whatever they are copied into,
  * table cells included. Footnotes the User writes, inline, each holding its
- * text. Comparison tables, top-level only. Proposals the AI made, waiting for
- * the User (see `proposalSchema`).
+ * text. Charts, drawn from a table or from cited figures, each value with its
+ * Citation (#436). Comparison tables, top-level only (#98). Proposals the AI
+ * made, waiting for the User (see `proposalSchema`).
  * Every Block and every footnote has a UUID. The editor adds its interface on
  * top (collaboration, menus, the drag handle, smart typography); tests use
  * this alone.
@@ -82,6 +86,7 @@ export function noteExtensions({
   answerView,
   citationView,
   footnoteView,
+  chartView,
   comparisonViews,
 }: NoteSchemaOptions = {}): Extensions {
   const onClick = onEditMath && ((_node: unknown, pos: number) => onEditMath(pos));
@@ -117,6 +122,7 @@ export function noteExtensions({
     Answer.configure({ view: answerView ?? null }),
     Citation.configure({ view: citationView ?? null }),
     Footnote.configure({ view: footnoteView ?? null }),
+    Chart.configure({ view: chartView ?? null }),
     ComparisonTable.configure({ view: comparisonViews?.table ?? null }),
     ComparisonRow.configure({ view: comparisonViews?.row ?? null }),
     ComparisonCell.configure({ view: comparisonViews?.cell ?? null }),
