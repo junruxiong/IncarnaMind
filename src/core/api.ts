@@ -112,11 +112,18 @@ export interface CreateMindInput {
  *   (see `GENERATED_MARK`). Older content is version 11 content as it is:
  *   nothing is rewritten, and an Answer without `generatedMarks` is the AI's
  *   as a whole, as it always was.
- * - 12: comparison tables (#98): `COMPARISON_TABLE_NODE`, `COMPARISON_ROW_NODE`
- *   and `COMPARISON_CELL_NODE`. Older content is version 12 content as it is:
+ * - 14: a chart value's scale (#579): `scale` beside `unit` on each value in
+ *   a chart's `data`, so a number with no unit or scale isn't drawn among
+ *   "$… million". An older version keeps it while it changes a chart's kind,
+ *   columns or title, but its Update writes the values again without it.
+ *   Older charts are version 14 content as they are: a value with no `scale`
+ *   is one whose scale isn't known, and nothing is rewritten.
+ * - 15 and 16: reserved by work in progress.
+ * - 17: comparison tables (#98): `COMPARISON_TABLE_NODE`, `COMPARISON_ROW_NODE`
+ *   and `COMPARISON_CELL_NODE`. Older content is version 17 content as it is:
  *   nothing is rewritten.
  */
-export const CONTENT_SCHEMA_VERSION = 12;
+export const CONTENT_SCHEMA_VERSION = 17;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
