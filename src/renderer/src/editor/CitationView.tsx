@@ -26,9 +26,11 @@ import { type MindFormatting, useMindFormatting } from "../citationFormatting";
 import { citationHandle } from "../commands/handles";
 import { type CommandContext, commands } from "../commands/registry";
 import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
+import { useTabPlace } from "../components/tabs/tabItems";
 import { useGap, useLanguage, useT } from "../i18n";
 import { groupsMerged } from "../layoutSlice";
 import type { ObjectRef } from "../objects";
+import { openCited as openCitedPlace, quoteSaysSo } from "../openCited";
 import { recordUsage, useAppStore } from "../store";
 import { pageDate } from "../webPages";
 import {
@@ -41,7 +43,6 @@ import { citationNumberOf } from "./citationNumbers";
 import { QuoteWithUnsureWords, ScanLine, useScannedQuote } from "./citationScan";
 import { CheckMarkIcon, CheckStateIcon } from "./icons";
 import { InFootnoteContext, MindIdContext, RegenerateAnswerContext } from "./mindContext";
-import { quoteSaysSo, useOpenCited } from "./openCited";
 import { Popover } from "./Popover";
 import { onPeek, peekCitation } from "./peek";
 import { StyledRuns, StyledRunView } from "./StyledRuns";
@@ -101,7 +102,8 @@ export function CitationView({
     state.status.kind === "ready" ? state.documents : null,
   );
   const kept = useAppStore((state) => state.keptCitationTexts);
-  const openPlace = useOpenCited();
+  /** The Mind's group: the Document opens in the group to its right. */
+  const place = useTabPlace();
   const state = citationState(attributes, documents, kept);
   const location = citationLocation(attributes);
   const where = location ? formatLocation(location, t) : null;
@@ -115,7 +117,7 @@ export function CitationView({
   const [pinned, setPinned] = useState(false);
   /** Hovered or focused, with the card, the marker or its mark. */
   const [peeking, setPeeking] = useState(false);
-  const shown = pinned || peeking;
+  const open = pinned || peeking;
   const marker = useRef<HTMLButtonElement>(null);
   /** The marker whose card the pointer over this one asks for: its own, or a neighbour's. */
   const pointed = useRef<HTMLElement | null>(null);
@@ -146,8 +148,15 @@ export function CitationView({
     };
   }, [hold]);
 
-  /** Opens the cited place, with the quote to highlight if asked (see `useOpenCited`). */
-  const openCited = (withQuote: boolean) => openPlace(attributes, state, { withQuote, number });
+  /** Opens the cited place, or the Document; amber when opened anyway after "not found". */
+  const openCited = (withQuote: boolean) => {
+    const documentId = state.documentId ?? attributes.documentId;
+    if (!documentId) return;
+    openCitedPlace(
+      { ...attributes, documentId },
+      { check: state.check, withQuote, number, label: where, from: place?.groupId },
+    );
+  };
 
   const onClick = () => {
     setPinned(true);
@@ -171,13 +180,13 @@ export function CitationView({
   openFromCardRef.current = openFromCard;
   // "Open cited page" (a command) opens the Citation whose card shows.
   useEffect(() => {
-    if (!shown) return;
+    if (!open) return;
     const handle = { open: () => openFromCardRef.current() };
     citationHandle.current = handle;
     return () => {
       if (citationHandle.current === handle) citationHandle.current = null;
     };
-  }, [shown]);
+  }, [open]);
 
   const menuId = useId();
   const objectMenu = useObjectMenu({ kind: "citation", id: menuId });
@@ -251,7 +260,7 @@ export function CitationView({
         aria-label={label}
         title={styled.kind === "runs" ? undefined : label}
         aria-haspopup="dialog"
-        aria-expanded={shown}
+        aria-expanded={open}
         // Keep the editor's selection and focus where they are.
         onMouseDown={(event) => event.preventDefault()}
         // In a cluster, the pointer shows the card of the Citation whose words it is over.
@@ -293,7 +302,7 @@ export function CitationView({
         className="citation-menu-anchor"
         tabIndex={-1}
       />
-      {shown &&
+      {open &&
         marker.current &&
         // In the body, not the editor: ProseMirror must not see the card's events.
         createPortal(

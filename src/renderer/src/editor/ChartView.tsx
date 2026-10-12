@@ -24,8 +24,11 @@ import {
   citationSource,
   citationState,
 } from "../../../shared/citations";
+import { citationLocation, formatLocation } from "../../../shared/locations";
 import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
+import { useTabPlace } from "../components/tabs/tabItems";
 import { useLanguage, useT } from "../i18n";
+import { openCited, quoteSaysSo } from "../openCited";
 import { useAppStore } from "../store";
 import { ChartFoot } from "./ChartFoot";
 import { ChartKindMenu } from "./ChartKindMenu";
@@ -34,7 +37,6 @@ import { ChartPointCard } from "./ChartPointCard";
 import { ChartValues } from "./ChartValues";
 import { changeChart, chartTable, tableUpdate, toggledSeries, withKind } from "./chartCommands";
 import { type ChartHandle, chartHandles } from "./chartHandles";
-import { quoteSaysSo, useOpenCited } from "./openCited";
 import { Popover } from "./Popover";
 
 /** As a Citation's card: the pointer rests a moment before it shows, and may leave a moment before it goes. */
@@ -163,7 +165,8 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
     state.status.kind === "ready" ? state.documents : null,
   );
   const kept = useAppStore((state) => state.keptCitationTexts);
-  const openPlace = useOpenCited();
+  /** The Mind's group: the Document opens in the group to its right. */
+  const place = useTabPlace();
   const { card, peek, hold, pin, dismiss } = usePointCard();
 
   const stateOf = useCallback(
@@ -282,9 +285,18 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
     const value = chart.data.rows[point.row]?.values[point.series];
     const state = stateOf(value);
     if (!value?.citation || !state) return;
-    openPlace(value.citation, state, {
-      withQuote: quoteSaysSo(state.check) || state.reason === "document-removed",
-    });
+    const documentId = state.documentId ?? value.citation.documentId;
+    if (!documentId) return;
+    const location = citationLocation(value.citation);
+    openCited(
+      { ...value.citation, documentId },
+      {
+        check: state.check,
+        withQuote: quoteSaysSo(state.check) || state.reason === "document-removed",
+        label: location ? formatLocation(location, t) : null,
+        from: place?.groupId,
+      },
+    );
   };
   const events: PointEvents = {
     peek: (point, anchor, source, on) => peek(point, anchor, source, on),

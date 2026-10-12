@@ -19,6 +19,7 @@ import {
   interceptOpenExternal,
   launchApp,
   newMind,
+  openSteps,
   removeDataFolder,
   setWindowSize,
   urlsOpened,
@@ -275,7 +276,7 @@ test("an Answer asked to find papers searches the providers, and Show results op
     const answer = assistantAnswers(window).last();
     await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
     await expect(answer).toContainText("I found these papers:");
-    const call = answer.getByTestId("answer-sources-call");
+    const call = (await openSteps(window, answer)).getByTestId("answer-sources-call");
     await expect(call).toContainText("Found sources for “CRISPR off-target detection”");
     await expect(call).toContainText("9 found");
     if (SCREENSHOTS)
