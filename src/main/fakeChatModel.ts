@@ -14,7 +14,8 @@
  * with "rows" quotes two lines, so a sheet's Citation covers a range of rows; one that
  * asks for it "as a table" gets a Markdown table with its markers in a cell; one that
  * asks "by quarter" (按季度) gets a table of quarterly figures, its marker in each cell
- * but the last, to chart (#436); "分季度" gets the same in Chinese, in 万元.
+ * but the last, to chart (#436); "分季度" gets the same in Chinese, in 万元, and
+ * "in millions" each figure as "$289.4 million".
  * One that asks how much something grew (增长) has the growth from the first
  * two numbers of its quote calculated, and writes it with its marker.
  * Before its search it reasons, a line that quotes the Question, as a model
@@ -122,14 +123,14 @@ const tableAnswer = (markers: string) =>
 const AS_A_TABLE = /\bas a table\b/i;
 
 /** The scripted Answer to a Question that asks for figures by quarter: a table of them, each cited but the last. */
-const figuresAnswer = (marker: string) =>
+const figuresAnswer = (marker: string, written = (figure: string) => figure) =>
   [
     "| Quarter | 2024 | 2025 |",
     "|:--|--:|--:|",
-    `| Q1 | 289.4 ${marker} | 341.5 ${marker} |`,
-    `| Q2 | 301.2 ${marker} | 362.0 ${marker} |`,
-    `| Q3 | 309.8 ${marker} | 377.9 ${marker} |`,
-    `| Q4 | 330.6 ${marker} | 401.2 |`,
+    `| Q1 | ${written("289.4")} ${marker} | ${written("341.5")} ${marker} |`,
+    `| Q2 | ${written("301.2")} ${marker} | ${written("362.0")} ${marker} |`,
+    `| Q3 | ${written("309.8")} ${marker} | ${written("377.9")} ${marker} |`,
+    `| Q4 | ${written("330.6")} ${marker} | ${written("401.2")} |`,
     "",
     "That is all.",
   ].join("\n");
@@ -150,6 +151,7 @@ const chineseFiguresAnswer = (marker: string) =>
 /** A Question that asks for figures by quarter. */
 const BY_QUARTER = /\bby quarter\b|按季度/i;
 const BY_QUARTER_CHINESE = /分季度/;
+const IN_MILLIONS = /\bin millions\b/i;
 
 /** The text of the last user message: the Question, at the end of its Question context. */
 function lastQuestion(prompt: Prompt): string {
@@ -576,7 +578,10 @@ function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
   const answer = BY_QUARTER_CHINESE.test(question)
     ? chineseFiguresAnswer(recorded[0] ?? "")
     : BY_QUARTER.test(question)
-      ? figuresAnswer(recorded[0] ?? "")
+      ? figuresAnswer(
+          recorded[0] ?? "",
+          IN_MILLIONS.test(question) ? (figure) => `$${figure} million` : undefined,
+        )
       : AS_A_TABLE.test(question)
         ? tableAnswer(recorded.join(" "))
         : recorded.length > 1
