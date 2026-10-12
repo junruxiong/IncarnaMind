@@ -11,6 +11,7 @@ import type { AgentLauncher } from "./agents";
 import type { AnswerEngine } from "./answers/engine";
 import type { AudioSource, ExternalService, SandboxLevel, SecretProtection } from "./api";
 import type { Reranker } from "./documents/searchTool";
+import type { AnswerSearchTuning } from "./documents/searchTuning";
 import type { WatchFolder } from "./documents/watcher";
 import type { FetchLimits } from "./documents/web/fetch";
 import type { ChatGptPlanEndpoints } from "./providers/chatgpt/plan";
@@ -326,10 +327,63 @@ export interface CrossEncoder {
   close(): void;
 }
 
-/** One file of the built-in embedding model, as recorded when the app was built. */
+/** The text-recognition model's downloaded files (#397), as the core hands them to a `TextRecognizer`. */
+export interface TextRecognitionFiles {
+  /** The ONNX model that finds the lines of text on a page: an absolute path. */
+  detector: string;
+  /** The ONNX model that reads each line, its character list inside it: an absolute path. */
+  recognizer: string;
+}
+
+/** A page's picture in shades of grey, one byte a pixel, row by row. */
+export interface PagePicture {
+  width: number;
+  height: number;
+  pixels: Uint8Array;
+}
+
+/** A corner of a line's box, in the picture's pixels. */
+export type PicturePoint = [number, number];
+
+/** A line of text read from a page's picture. */
+export interface RecognizedLine {
+  text: string;
+  /** Its box's corners: top-left, top-right, bottom-right, bottom-left, as the text runs. */
+  quad: [PicturePoint, PicturePoint, PicturePoint, PicturePoint];
+  /** How sure the model is of the line, from 0 to 1: the mean of its characters'. */
+  confidence: number;
+  /**
+   * Its characters, in order (`text` is their text joined): how sure the
+   * model is of each, from 0 to 1, and where its middle is along the line,
+   * from 0 (where the line starts) to 1.
+   */
+  characters: { text: string; confidence: number; at: number }[];
+}
+
+/**
+ * Reads the text on pages' pictures (#397), off the core's thread: the
+ * desktop app runs the built-in model in an Electron utility process, and
+ * tests pass a fake. The core downloads and checks the files first.
+ */
+export interface TextRecognizer {
+  /** Loads the model, if it isn't loaded already. Rejects if it can't start. */
+  load(files: TextRecognitionFiles): Promise<void>;
+  /**
+   * The lines of text on a page's picture, in no particular order. `page` is
+   * its page number, which only a fake reads. Rejects if the model isn't
+   * loaded or fails on it.
+   */
+  read(picture: PagePicture, page: number): Promise<RecognizedLine[]>;
+  /** Stops the model and frees its memory. Loading again starts it afresh. */
+  close(): void;
+}
+
+/** One file of a built-in model, as recorded when the app was built. */
 export interface ModelFile {
-  /** Relative to the source's base URL, and to the model's folder in the data folder. */
+  /** Relative to the model's folder in the data folder, and to the source's base URL unless `url` says. */
   path: string;
+  /** Where it is downloaded from, when it isn't at `path` under the source's base URL. */
+  url?: string;
   size: number;
   /** SHA-256 of the file, in hex. */
   sha256: string;
@@ -567,6 +621,17 @@ export interface CoreAdapters {
   /** Runs the built-in reranking model (see `CrossEncoder`), when the User turns it on. */
   crossEncoder: CrossEncoder;
   /**
+   * Reads scanned pages with the built-in text recognition model (#397).
+   * Absent (tests that don't need it): a PDF's scanned pages are left with
+   * the little text they have.
+   */
+  textRecognizer?: TextRecognizer;
+  /**
+   * Where the text recognition model's files come from. Defaults to the
+   * pinned Hugging Face revisions; tests give no files for a fake that needs none.
+   */
+  textRecognitionModelSource?: EmbeddingModelSource;
+  /**
    * Where the built-in reranking model's files come from. Defaults to the
    * pinned Hugging Face revision; tests give no files for a fake that needs none.
    */
@@ -654,6 +719,12 @@ export interface CoreAdapters {
    * Voyage key (an alternative search layer plugs in here). None by default.
    */
   reranker?: Reranker;
+  /**
+   * Tunes and watches the search Tool for Answers' searches (reranking depth,
+   * Passages handed, a callback with each search's timings). Only the
+   * evaluation passes one.
+   */
+  answerSearch?: AnswerSearchTuning;
   /**
    * Sends crash reports once the User opts in (see `CrashReporter`). Absent
    * when this copy can't send any: Settings then doesn't offer them.

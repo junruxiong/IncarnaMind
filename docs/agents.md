@@ -64,9 +64,13 @@ Click **Connect**: IncarnaMind adds itself to WorkBuddy's MCP settings, `~/.work
 <a id="other"></a>
 ### Other agent
 
-Any other agent that can start a local MCP server works. Click **Connect**, and give it a name if you like: IncarnaMind copies its settings, in the `mcpServers` form most agents take (`{ "mcpServers": { "incarnamind": { "command", "args", "env" } } }`). Paste them where your agent adds an MCP server, then restart it. If your agent asks for the command, its arguments and its environment one by one, take them from the same settings: the **Details for technical users** of the connected agent show them again. IncarnaMind doesn't write into these agents' files.
+Any other agent that can start a local MCP server works. Click **Connect**, and give it a name if you like: IncarnaMind copies its settings, in the `mcpServers` form most agents take (`{ "mcpServers": { "incarnamind": { "command", "args", "env" } } }`). Paste them where your agent adds an MCP server, then restart it. If your agent asks for the command, its arguments and its environment one by one, the **Details for technical users** of the connected agent show each one, with its own **Copy** (the key is hidden on screen and included when you copy). IncarnaMind doesn't write into these agents' files.
 
 Chat apps that only work on the internet (ChatGPT and Claude on the web, Gemini, Le Chat, Grok, Microsoft 365 Copilot, 扣子, 元宝) can't reach IncarnaMind, which serves only this computer.
+
+## The Skill
+
+Without a hint, an agent sometimes answers from memory instead of looking in your Documents. So where an agent reads Skills, **Connect** also adds a short Skill, `incarnamind`, that tells it when to use IncarnaMind. It goes in the agent's own skills folder: `~/.claude/skills/` for Claude Code ([docs](https://code.claude.com/docs/en/skills)), `~/.agents/skills/` for Codex ([docs](https://learn.chatgpt.com/docs/build-skills)), `~/.cursor/skills/` for Cursor ([docs](https://cursor.com/docs/context/skills)) and `~/.gemini/config/skills/` for Antigravity ([docs](https://www.antigravity.google/docs/skills)). **Disconnect** (and **Undo**) removes it, unless you have changed the file. For the other agents, **Details for technical users** has **Copy Skill**: save it as `SKILL.md` in a folder named `incarnamind` inside your agent's skills folder.
 
 ## If something goes wrong
 
@@ -76,7 +80,7 @@ Your agent passes on what IncarnaMind says, in plain words.
 - **"This agent can't read any Documents yet"**: choose its folders in Settings → Agents → **Folders…**.
 - **"Connected agents are paused"**: turn off **Keep everything on this computer** in Settings → Search.
 - **"This agent isn't connected to IncarnaMind any more"**: it was disconnected. Click **Connect** again.
-- **An answer from IncarnaMind takes long**: asking IncarnaMind writes a whole Answer on your own chat model. Some agents stop waiting after a minute; Codex is given five minutes when IncarnaMind sets it up.
+- **An answer from IncarnaMind takes long**: asking IncarnaMind writes a whole Answer on your own chat model. Some agents stop waiting after a minute; Codex is given two minutes when IncarnaMind sets it up.
 
 ## For technical users
 

@@ -4,12 +4,13 @@ import * as Y from "yjs";
 import { type CoreBridge, MIND_CONTENT_FIELD, type ThirdPartySource } from "../src/core/api";
 import { setTextOrigin } from "../src/shared/textOrigins";
 import {
-  clickEmptyLine,
+  assistantAnswers,
   createDataFolder,
   dismissChatSetup,
   launchApp,
   newMind,
   pointAndClick,
+  pointAt,
   removeDataFolder,
   setWindowSize,
   useLocalChatModel,
@@ -44,7 +45,8 @@ async function addTideConnector(window: Page): Promise<string> {
 }
 
 /**
- * A Mind holding one Note, and an empty line to ask from; with `origin`, the
+ * A Mind holding one Note, then a Question about it with its Answer, as Minds
+ * held them before Questions went to the assistant (#201); with `origin`, the
  * Note is recorded as third-party text, as importing someone else's .docx
  * records it (#104). Made through the core's bridge, then closed, as a Mind
  * from before; returns its id.
@@ -62,7 +64,16 @@ async function mindWithNote(
     return element;
   };
   const note = paragraph("The landlord's draft: book the survey boat from Dover on Friday.");
-  doc.getXmlFragment(MIND_CONTENT_FIELD).push([note, paragraph("")]);
+  const questionId = crypto.randomUUID();
+  const question = new Y.XmlElement("question");
+  question.setAttribute("id", questionId);
+  question.insert(0, [new Y.XmlText("Please book_boat from Dover")]);
+  const answer = new Y.XmlElement("answer");
+  answer.setAttribute("id", crypto.randomUUID());
+  answer.setAttribute("questionId", questionId);
+  answer.setAttribute("status", "done");
+  answer.insert(0, [paragraph("Not booked yet.")]);
+  doc.getXmlFragment(MIND_CONTENT_FIELD).push([note, question, answer, paragraph("")]);
   if (origin) setTextOrigin(doc, [String(note.getAttribute("id"))], origin);
   return window.evaluate(
     async ({ title, update }) => {
@@ -76,7 +87,7 @@ async function mindWithNote(
   );
 }
 
-/** Writes a Question on a new line of the Mind and asks it. */
+/** Asks a Question in the assistant, beside the Mind. */
 async function ask(window: Page, text: string): Promise<void> {
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type(text);
@@ -95,7 +106,7 @@ test("a Tool that may change something pauses the Answer with an approval card: 
   await ask(window, "Please book_boat from Dover");
 
   // The fake model calls book_boat: the Answer waits, showing the Tool, its Connector and the arguments.
-  const answer = editor.getByTestId("answer").first();
+  const answer = assistantAnswers(window).first();
   const card = answer.getByTestId("approval-card");
   await expect(card).toBeVisible({ timeout: 15_000 });
   await expect(card).toHaveAttribute("data-tool", "book_boat");
@@ -123,11 +134,10 @@ test("a Tool that may change something pauses the Answer with an approval card: 
   // The card shows the arguments that were sent.
   await expect(call).toContainText('{"place":"Dover"}');
 
-  // A second Question, on the empty line after the Answer: Deny. The call isn't made, and the
-  // Answer still finishes.
-  await clickEmptyLine(editor.locator(":scope > p").last());
+  // A second Question, in the same conversation: Deny. The call isn't made, and the Answer
+  // still finishes.
   await ask(window, "Now book_boat from Calais");
-  const second = editor.getByTestId("answer").nth(1);
+  const second = assistantAnswers(window).nth(1);
   const secondCard = second.getByTestId("approval-card");
   await expect(secondCard).toBeVisible({ timeout: 15_000 });
   await expect(secondCard.getByTestId("approval-argument")).toContainText("Calais");
@@ -157,16 +167,20 @@ test("in a Mind holding imported text, a write the User always allows asks, says
   await mindWithNote(window, "Imported lease", "imported");
   await mindWithNote(window, "My own lease notes", null);
   const editor = window.getByTestId("mind-editor");
-  const open = async (title: string) => {
+  /** Opens the Mind and writes its Answer again, which asks for the call once more. */
+  const regenerateIn = async (title: string) => {
     await pointAndClick(window, window.getByTestId("mind-list-item").filter({ hasText: title }));
     await expect(editor).toContainText("The landlord's draft");
-    await clickEmptyLine(editor.locator(":scope > p").last());
+    const answer = editor.getByTestId("answer").first();
+    await pointAt(window, answer);
+    await pointAndClick(window, answer.getByTestId("answer-regenerate"));
+    return answer;
   };
 
-  // Someone else's text is in the Question context: the always-allowed write asks, and says why.
-  await open("Imported lease");
-  await ask(window, "Please book_boat from Dover");
-  const answer = editor.getByTestId("answer").first();
+  // Someone else's text is in the Question context: written again, the always-allowed write
+  // asks, and says why. (A Question in a Mind is one written there before Questions went to
+  // the assistant, #201: its Answer is still written again there, from the Notes above it.)
+  const answer = await regenerateIn("Imported lease");
   const card = answer.getByTestId("approval-card");
   await expect(card).toBeVisible({ timeout: 15_000 });
   await expect(card).toHaveAttribute("data-tool", "book_boat");
@@ -194,9 +208,7 @@ test("in a Mind holding imported text, a write the User always allows asks, says
   );
 
   // The same Note, the User's own: "always" holds, and the call runs without a card.
-  await open("My own lease notes");
-  await ask(window, "Please book_boat from Dover");
-  const own = editor.getByTestId("answer").first();
+  const own = await regenerateIn("My own lease notes");
   await expect(own).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(own).toContainText("book_boat said: Booked a boat trip from Dover.");
   await expect(own.getByTestId("approval-card")).toHaveCount(0);

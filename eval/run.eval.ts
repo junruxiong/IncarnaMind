@@ -65,6 +65,7 @@ import {
   summarise,
   TOP_K,
 } from "./lib/retrieval";
+import { answerOptionsOf } from "./lib/timing";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 
@@ -210,6 +211,7 @@ async function runFormats(config: EvalConfig, log: Log): Promise<FormatsReport> 
     reranker: createWorkerCrossEncoder(),
     documents: set.documents,
     keep: config.keepData,
+    ...answerOptionsOf(config),
     log,
     // A scanned page has no text: the Questions about it are known gaps.
     allowUnprocessed: true,
@@ -298,6 +300,7 @@ test("retrieval and Citation evaluation", async () => {
     documents: set.documents,
     ...(ollamaModels && { ollamaModels }),
     keep: config.keepData,
+    ...answerOptionsOf(config),
     log,
   });
   let report: EvalReport;
