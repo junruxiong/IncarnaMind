@@ -9,6 +9,7 @@ import { CopyCitations } from "../../editor/copyCitations";
 import { MarginChecks } from "../../editor/MarginChecks";
 import { RegenerateAnswerContext } from "../../editor/mindContext";
 import { noteExtensions } from "../../editor/noteSchema";
+import { useTableFades } from "./useTableFades";
 
 /** A Citation redraws when it changes, and when its number does (as in a Mind). */
 const citationView = ReactNodeViewRenderer(CitationView, {
@@ -61,6 +62,9 @@ export function AnswerText({
     [],
   );
 
+  const frame = useRef<HTMLDivElement>(null);
+  useTableFades(frame);
+
   useEffect(() => lendAnswerEditor(answerId, editor), [answerId, editor]);
 
   useEffect(() => {
@@ -78,7 +82,7 @@ export function AnswerText({
   return (
     // A quote not found offers to write the Answer again, from its Citation's card.
     <RegenerateAnswerContext.Provider value={regenerate}>
-      <div className="assistant-answer-frame">
+      <div ref={frame} className="assistant-answer-frame">
         <EditorContent editor={editor} />
         <MarginChecks editor={editor} />
       </div>
