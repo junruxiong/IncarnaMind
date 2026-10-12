@@ -2,7 +2,7 @@
 
 *Experimental.* [中文版](agents.zh-CN.md)
 
-If you already use an AI agent, such as Claude, Codex, Cursor or Kimi, you can let it search the folders you choose in IncarnaMind and quote them. Every quote it gets from IncarnaMind is checked against your Document, and you can open any of them in IncarnaMind to see it in place.
+If you already use an AI agent, such as Claude, ChatGPT, Codex, Cursor or Antigravity, you can let it search the folders you choose in IncarnaMind and quote them. Every quote it gets from IncarnaMind is checked against your Document, and you can open any of them in IncarnaMind to see it in place.
 
 ## Before you start
 
@@ -34,7 +34,7 @@ Menu names can differ a little between versions of each app.
 <a id="claude-desktop"></a>
 ### Claude (the desktop app)
 
-Click **Connect**. Claude opens and shows IncarnaMind: click **Install**. Then start a new chat.
+Click **Connect**. Claude opens and shows IncarnaMind: click **Install**. Then start a new chat. Every Claude plan works, the free one included.
 
 <a id="claude-code"></a>
 ### Claude Code
@@ -42,109 +42,35 @@ Click **Connect**. Claude opens and shows IncarnaMind: click **Install**. Then s
 Click **Connect**: IncarnaMind copies one line. Paste it into Terminal (Windows: PowerShell) and press Return. Start a new Claude Code session; `/mcp` lists IncarnaMind.
 
 <a id="codex"></a>
-### Codex, and the ChatGPT desktop app
+### ChatGPT app and Codex
 
-Click **Connect**: IncarnaMind adds itself to Codex's settings file, and shows you first what it adds. Start a new Codex session. The ChatGPT desktop app uses the same settings as Codex on your computer. Right after connecting, **Undo** takes the change back.
+One setting serves both. Click **Connect**: IncarnaMind adds itself to Codex's settings file (`~/.codex/config.toml`), and shows you first what it adds. Start a new Codex session. The ChatGPT desktop app reads the same file in its **Work** and **Codex** modes (Plus, Pro, Business and Enterprise); ordinary **Chat** mode doesn't use it. Right after connecting, **Undo** takes the change back.
 
 <a id="cursor"></a>
 ### Cursor
 
 Click **Connect**. Cursor opens and asks to install IncarnaMind: click **Install**.
 
-<a id="vscode"></a>
-### VS Code
+<a id="antigravity"></a>
+### Antigravity
 
-Click **Connect**. VS Code opens and asks to install IncarnaMind: click **Install**. Use it from Copilot Chat in agent mode.
+The way in for Google AI Pro and Ultra subscribers. Click **Connect**: IncarnaMind adds itself to Antigravity's MCP settings, `~/.gemini/config/mcp_config.json` (Google's [MCP page](https://www.antigravity.google/docs/mcp/) gives this path), and shows you first what it adds. In Antigravity, open the agent panel's **MCP Servers** menu to check that IncarnaMind is listed, and start a new conversation.
 
-<a id="gemini-cli"></a>
-### Gemini CLI
+<a id="workbuddy"></a>
+### WorkBuddy
 
-Click **Connect**: IncarnaMind adds itself to Gemini CLI's settings. Start Gemini CLI again.
-
-<a id="kimi-code"></a>
-### Kimi Code CLI
-
-Click **Connect**: IncarnaMind adds itself to Kimi Code's settings. Start Kimi Code again.
-
-<a id="qwen-code"></a>
-### Qwen Code
-
-Click **Connect**: IncarnaMind adds itself to Qwen Code's settings. Start Qwen Code again.
-
-<a id="codebuddy"></a>
-### CodeBuddy
-
-Click **Connect**: IncarnaMind adds itself to CodeBuddy's settings. Start CodeBuddy again.
-
-<a id="minimax-code"></a>
-### MiniMax Code
-
-Click **Connect**: IncarnaMind adds itself to MiniMax Code's settings. Start MiniMax Code again.
-
-<a id="trae"></a>
-### Trae
-
-Click **Connect**: IncarnaMind copies its settings. In Trae, open **Settings → MCP → Add → Add manually**, paste, and save.
-
-<a id="qoder"></a>
-### Qoder
-
-Click **Connect**: IncarnaMind copies its settings. In Qoder, open its MCP settings, add a server, paste, and save.
-
-<a id="comate"></a>
-### Comate
-
-Click **Connect**: IncarnaMind copies its settings. In Comate, open the MCP settings, click **+ Configure** to open its settings file, paste IncarnaMind's entry, and save.
-
-<a id="cherry-studio"></a>
-### Cherry Studio
-
-Click **Connect**: IncarnaMind copies its settings. In Cherry Studio, open **Settings → MCP → MCP Servers → Add**, choose to import from JSON (or fill in the command, arguments and environment from the settings you copied), save, then turn it on for the assistant you chat with.
-
-<a id="chatbox"></a>
-### Chatbox
-
-Click **Connect**: IncarnaMind copies its settings. In Chatbox, open **Settings → MCP → Add Server**, and fill in the command, the arguments and the environment from the settings you copied.
-
-<a id="deepchat"></a>
-### DeepChat
-
-Click **Connect**: IncarnaMind copies its settings. In DeepChat, add an MCP server in its settings and paste them.
-
-<a id="goose"></a>
-### Goose
-
-Click **Connect**: IncarnaMind copies its settings. In Goose, open **Extensions → Add custom extension**, choose STDIO, and fill in the command, the arguments and the two environment values from the settings you copied.
-
-<a id="opencode"></a>
-### OpenCode
-
-Click **Connect**: IncarnaMind copies its settings. In `opencode.json`, add under `"mcp"` an entry `"incarnamind"` with `"type": "local"`, `"command"` set to the command followed by its arguments, and `"environment"` set to the environment from the settings you copied.
-
-<a id="cline"></a>
-### Cline
-
-Click **Connect**: IncarnaMind copies its settings. In Cline, open **MCP Servers → Configure**, paste IncarnaMind's entry into `mcpServers`, and save.
-
-<a id="kilo"></a>
-### Kilo Code
-
-Click **Connect**: IncarnaMind copies its settings. Add them to Kilo Code's MCP settings as for OpenCode above.
-
-<a id="openclaw"></a>
-### OpenClaw
-
-Click **Connect**: IncarnaMind copies its settings. Add IncarnaMind as an MCP server in OpenClaw with the command, arguments and environment you copied.
-
-<a id="pi"></a>
-### pi
-
-Click **Connect**: IncarnaMind copies its settings. Add IncarnaMind as an MCP server in pi with the command, arguments and environment you copied.
+Click **Connect**: IncarnaMind adds itself to WorkBuddy's MCP settings, `~/.workbuddy/mcp.json` (the path in WorkBuddy's [MCP guide](https://www.codebuddy.cn/docs/workbuddy/From-Beginner-to-Expert-Guide/Function-Description/MCP-Guide)), and shows you first what it adds. In WorkBuddy, open **Settings → MCP**: a green status means it is connected.
 
 <a id="other"></a>
-### Another agent
+### Other agent
 
-Click **Connect**: IncarnaMind copies its settings, in the `mcpServers` form most agents take. Paste them where your agent adds an MCP server, then restart it. Any agent that can start a local MCP server works.
+Any other agent that can start a local MCP server works. Click **Connect**, and give it a name if you like: IncarnaMind copies its settings, in the `mcpServers` form most agents take (`{ "mcpServers": { "incarnamind": { "command", "args", "env" } } }`). Paste them where your agent adds an MCP server, then restart it. If your agent asks for the command, its arguments and its environment one by one, take them from the same settings: the **Details for technical users** of the connected agent show them again. IncarnaMind doesn't write into these agents' files.
+
+Chat apps that only work on the internet (ChatGPT and Claude on the web, Gemini, Le Chat, Grok, Microsoft 365 Copilot, 扣子, 元宝) can't reach IncarnaMind, which serves only this computer.
+
+## The Skill
+
+Without a hint, an agent sometimes answers from memory instead of looking in your Documents. So where an agent reads Skills, **Connect** also adds a short Skill, `incarnamind`, that tells it when to use IncarnaMind. It goes in the agent's own skills folder: `~/.claude/skills/` for Claude Code ([docs](https://code.claude.com/docs/en/skills)), `~/.agents/skills/` for Codex ([docs](https://learn.chatgpt.com/docs/build-skills)), `~/.cursor/skills/` for Cursor ([docs](https://cursor.com/docs/context/skills)) and `~/.gemini/config/skills/` for Antigravity ([docs](https://www.antigravity.google/docs/skills)). **Disconnect** (and **Undo**) removes it, unless you have changed the file. For the other agents, **Details for technical users** has **Copy Skill**: save it as `SKILL.md` in a folder named `incarnamind` inside your agent's skills folder.
 
 ## If something goes wrong
 
@@ -154,7 +80,7 @@ Your agent passes on what IncarnaMind says, in plain words.
 - **"This agent can't read any Documents yet"**: choose its folders in Settings → Agents → **Folders…**.
 - **"Connected agents are paused"**: turn off **Keep everything on this computer** in Settings → Search.
 - **"This agent isn't connected to IncarnaMind any more"**: it was disconnected. Click **Connect** again.
-- **An answer from IncarnaMind takes long**: asking IncarnaMind writes a whole Answer on your own chat model. Some agents stop waiting after a minute; Codex is given five minutes when IncarnaMind sets it up.
+- **An answer from IncarnaMind takes long**: asking IncarnaMind writes a whole Answer on your own chat model. Some agents stop waiting after a minute; Codex is given two minutes when IncarnaMind sets it up.
 
 ## For technical users
 

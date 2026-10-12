@@ -10,7 +10,7 @@
  * a block or two. Every block after a sheet's first repeats its header row
  * at the top, so each Passage knows its columns. Pure.
  */
-import type { TextUnit } from "../../../shared/units";
+import { columnName, type TextUnit } from "../../../shared/units";
 import type { SheetLayout, WorkbookLayout } from "./sheetLayout";
 
 /** The most rows a block holds. */
@@ -31,6 +31,12 @@ export interface Cell {
   value: string;
   /** A number (or date), shown right-aligned. */
   numeric: boolean;
+  /**
+   * The cell's number as the file stores it, when its shown text isn't that
+   * number written plainly ("4.2%" for 0.04213). Not for dates, which stay
+   * ISO text.
+   */
+  raw?: number;
 }
 
 export interface Sheet {
@@ -114,6 +120,13 @@ export function gridUnits(sheets: readonly Sheet[], named: boolean, firstUnit = 
         at++;
       }
       const first = block[0] as number;
+      // Sparse: only cells whose shown text isn't their number, by reference ("C12").
+      const values: Record<string, number> = {};
+      for (const number of block) {
+        for (const cell of rows.get(number) ?? []) {
+          if (cell.raw !== undefined) values[`${columnName(cell.column)}${number}`] = cell.raw;
+        }
+      }
       const repeatHeader = header !== null && headerLine !== null && first > header;
       units.push({
         page: firstUnit + units.length,
@@ -125,6 +138,7 @@ export function gridUnits(sheets: readonly Sheet[], named: boolean, firstUnit = 
           rows: repeatHeader ? [header, ...block] : block,
           column: firstColumn,
           ...(repeatHeader ? { header: true } : {}),
+          ...(Object.keys(values).length > 0 ? { values } : {}),
         },
         text: (repeatHeader ? [headerLine, ...lines] : lines).join("\n"),
         anchors: null,

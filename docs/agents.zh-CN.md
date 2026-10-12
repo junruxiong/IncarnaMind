@@ -2,7 +2,7 @@
 
 *实验功能。* [English](agents.md)
 
-如果你已经在用 AI 智能体，例如 Claude、Codex、Cursor 或 Kimi，可以让它搜索你在 IncarnaMind 中选择的文件夹并引用其中内容。它从 IncarnaMind 得到的每条引文都会与你的文档核对，你也可以在 IncarnaMind 中打开任意一条，查看它在文档中的位置。
+如果你已经在用 AI 智能体，例如 Claude、ChatGPT、Codex、Cursor 或 Antigravity，可以让它搜索你在 IncarnaMind 中选择的文件夹并引用其中内容。它从 IncarnaMind 得到的每条引文都会与你的文档核对，你也可以在 IncarnaMind 中打开任意一条，查看它在文档中的位置。
 
 ## 开始之前
 
@@ -34,7 +34,7 @@
 <a id="claude-desktop"></a>
 ### Claude（桌面应用）
 
-点击“连接”。Claude 会打开并显示 IncarnaMind：点击“安装”，然后新建一个对话。
+点击“连接”。Claude 会打开并显示 IncarnaMind：点击“安装”，然后新建一个对话。所有 Claude 套餐都可用，包括免费版。
 
 <a id="claude-code"></a>
 ### Claude Code
@@ -42,109 +42,35 @@
 点击“连接”：IncarnaMind 会复制一行命令。把它粘贴到终端（Windows 中为 PowerShell）中运行。新开一个 Claude Code 会话，输入 `/mcp` 即可看到 IncarnaMind。
 
 <a id="codex"></a>
-### Codex，以及 ChatGPT 桌面应用
+### ChatGPT 应用和 Codex
 
-点击“连接”：IncarnaMind 会把自己添加到 Codex 的设置文件中，并先让你看到要添加的内容。新开一个 Codex 会话即可使用。ChatGPT 桌面应用与这台电脑上的 Codex 使用同一份设置。连接后可立即点击“撤销”恢复原样。
+一份设置同时适用于两者。点击“连接”：IncarnaMind 会把自己添加到 Codex 的设置文件（`~/.codex/config.toml`）中，并先让你看到要添加的内容。新开一个 Codex 会话即可使用。ChatGPT 桌面应用在“工作”和 Codex 模式下读取同一个文件（Plus、Pro、Business 和 Enterprise）；普通对话模式不会用到。连接后可立即点击“撤销”恢复原样。
 
 <a id="cursor"></a>
 ### Cursor
 
 点击“连接”。Cursor 会打开并询问是否安装 IncarnaMind：点击“安装”。
 
-<a id="vscode"></a>
-### VS Code
+<a id="antigravity"></a>
+### Antigravity
 
-点击“连接”。VS Code 会打开并询问是否安装 IncarnaMind：点击“安装”。在 Copilot Chat 的智能体模式中使用。
+Google AI Pro 和 Ultra 订阅用户的接入方式。点击“连接”：IncarnaMind 会把自己添加到 Antigravity 的 MCP 设置 `~/.gemini/config/mcp_config.json` 中（路径见 Google 的 [MCP 说明页](https://www.antigravity.google/docs/mcp/)），并先让你看到要添加的内容。在 Antigravity 中打开智能体面板的 MCP Servers 菜单，确认 IncarnaMind 已列出，然后新开一个对话。
 
-<a id="gemini-cli"></a>
-### Gemini CLI
+<a id="workbuddy"></a>
+### WorkBuddy
 
-点击“连接”：IncarnaMind 会把自己添加到 Gemini CLI 的设置中。重新启动 Gemini CLI 即可。
-
-<a id="kimi-code"></a>
-### Kimi Code CLI
-
-点击“连接”：IncarnaMind 会把自己添加到 Kimi Code 的设置中。重新启动 Kimi Code 即可。
-
-<a id="qwen-code"></a>
-### Qwen Code
-
-点击“连接”：IncarnaMind 会把自己添加到 Qwen Code 的设置中。重新启动 Qwen Code 即可。
-
-<a id="codebuddy"></a>
-### CodeBuddy
-
-点击“连接”：IncarnaMind 会把自己添加到 CodeBuddy 的设置中。重新启动 CodeBuddy 即可。
-
-<a id="minimax-code"></a>
-### MiniMax Code
-
-点击“连接”：IncarnaMind 会把自己添加到 MiniMax Code 的设置中。重新启动 MiniMax Code 即可。
-
-<a id="trae"></a>
-### Trae
-
-点击“连接”：IncarnaMind 会复制它的设置。在 Trae 中打开“设置 → MCP → 添加 → 手动添加”，粘贴后保存。
-
-<a id="qoder"></a>
-### Qoder
-
-点击“连接”：IncarnaMind 会复制它的设置。在 Qoder 中打开 MCP 设置，添加服务器，粘贴后保存。
-
-<a id="comate"></a>
-### 百度 Comate
-
-点击“连接”：IncarnaMind 会复制它的设置。在 Comate 的 MCP 设置中点击“+ 配置”打开设置文件，粘贴 IncarnaMind 这一项后保存。
-
-<a id="cherry-studio"></a>
-### Cherry Studio
-
-点击“连接”：IncarnaMind 会复制它的设置。在 Cherry Studio 中打开“设置 → MCP → MCP 服务器 → 添加”，选择从 JSON 导入（或按复制的设置填入命令、参数和环境变量）并保存，再到你对话所用的助手中启用它。
-
-<a id="chatbox"></a>
-### Chatbox
-
-点击“连接”：IncarnaMind 会复制它的设置。在 Chatbox 中打开“设置 → MCP → 添加服务器”，按复制的设置填入命令、参数和环境变量。
-
-<a id="deepchat"></a>
-### DeepChat
-
-点击“连接”：IncarnaMind 会复制它的设置。在 DeepChat 的设置中添加 MCP 服务器并粘贴。
-
-<a id="goose"></a>
-### Goose
-
-点击“连接”：IncarnaMind 会复制它的设置。在 Goose 中打开“Extensions → Add custom extension”，选择 STDIO，按复制的设置填入命令、参数和两个环境变量。
-
-<a id="opencode"></a>
-### OpenCode
-
-点击“连接”：IncarnaMind 会复制它的设置。在 `opencode.json` 的 `"mcp"` 下添加一项 `"incarnamind"`：`"type"` 设为 `"local"`，`"command"` 设为命令加上它的参数，`"environment"` 设为复制的设置中的环境变量。
-
-<a id="cline"></a>
-### Cline
-
-点击“连接”：IncarnaMind 会复制它的设置。在 Cline 中打开“MCP Servers → Configure”，把 IncarnaMind 这一项粘贴到 `mcpServers` 中并保存。
-
-<a id="kilo"></a>
-### Kilo Code
-
-点击“连接”：IncarnaMind 会复制它的设置。按上面 OpenCode 的方式添加到 Kilo Code 的 MCP 设置中。
-
-<a id="openclaw"></a>
-### OpenClaw
-
-点击“连接”：IncarnaMind 会复制它的设置。在 OpenClaw 中用复制的命令、参数和环境变量添加一个 MCP 服务器。
-
-<a id="pi"></a>
-### pi
-
-点击“连接”：IncarnaMind 会复制它的设置。在 pi 中用复制的命令、参数和环境变量添加一个 MCP 服务器。
+点击“连接”：IncarnaMind 会把自己添加到 WorkBuddy 的 MCP 设置 `~/.workbuddy/mcp.json` 中（路径见 WorkBuddy 的 [MCP 指南](https://www.codebuddy.cn/docs/workbuddy/From-Beginner-to-Expert-Guide/Function-Description/MCP-Guide)），并先让你看到要添加的内容。在 WorkBuddy 的“设置 → MCP”中查看：状态为绿色即已连接。
 
 <a id="other"></a>
 ### 其他智能体
 
-点击“连接”：IncarnaMind 会以大多数智能体接受的 `mcpServers` 格式复制它的设置。在你的智能体添加 MCP 服务器的地方粘贴，然后重新启动它。任何能启动本地 MCP 服务器的智能体都可以使用。
+任何能启动本地 MCP 服务器的智能体都可以使用。点击“连接”，也可以给它起个名字：IncarnaMind 会复制它的设置，格式是多数智能体采用的 `mcpServers` 形式（`{ "mcpServers": { "incarnamind": { "command", "args", "env" } } }`）。把它粘贴到你的智能体添加 MCP 服务器的地方，然后重新启动。如果智能体要求分别填写命令、参数和环境变量，可以从同一份设置中取用：已连接智能体的“技术细节”会再次显示。IncarnaMind 不会写入这些智能体的文件。
+
+只能在互联网上使用的聊天应用（网页版 ChatGPT 和 Claude、Gemini、Le Chat、Grok、Microsoft 365 Copilot、扣子、元宝）无法连接 IncarnaMind，因为它只服务这台电脑。
+
+## 技能
+
+没有提示时，智能体有时会凭记忆回答，而不去查看你的文档。所以对读取技能的智能体，点击“连接”时还会添加一个简短的技能 `incarnamind`，告诉它何时使用 IncarnaMind。它放在智能体自己的技能文件夹中：Claude Code 是 `~/.claude/skills/`（[文档](https://code.claude.com/docs/en/skills)），Codex 是 `~/.agents/skills/`（[文档](https://learn.chatgpt.com/docs/build-skills)），Cursor 是 `~/.cursor/skills/`（[文档](https://cursor.com/docs/context/skills)），Antigravity 是 `~/.gemini/config/skills/`（[文档](https://www.antigravity.google/docs/skills)）。点击“断开连接”（或“撤销”）会把它删除，除非你改过这个文件。其他智能体可在“技术细节”中点击“复制技能”：把它保存为 SKILL.md，放进智能体技能文件夹中名为 `incarnamind` 的文件夹。
 
 ## 遇到问题时
 
@@ -154,7 +80,7 @@
 - **“这个智能体还不能读取任何文档”**：在“设置 → 智能体 → 文件夹…”中为它选择文件夹。
 - **“已连接的智能体暂停使用”**：在“设置 → 搜索”中关闭“所有内容都留在这台电脑上”。
 - **“这个智能体已不再连接 IncarnaMind”**：它已断开连接，重新点击“连接”即可。
-- **IncarnaMind 的回答需要较长时间**：向 IncarnaMind 提问时，它会用你自己的对话模型生成完整的回答。有些智能体只等待一分钟；由 IncarnaMind 设置的 Codex 会等待五分钟。
+- **IncarnaMind 的回答需要较长时间**：向 IncarnaMind 提问时，它会用你自己的对话模型生成完整的回答。有些智能体只等待一分钟；由 IncarnaMind 设置的 Codex 会等待两分钟。
 
 ## 技术细节
 
