@@ -148,14 +148,14 @@ export function stepFind(editor: Editor, step: 1 | -1): void {
   scrollToCurrent(editor);
 }
 
-/** Clears the marks; with `select`, the cursor goes to the current match, as the find bar closes. */
+/** Clears the marks; with `select`, the cursor goes to the current match, if any, and the editor takes the focus, as the find bar closes. */
 export function clearFind(editor: Editor, select = false): void {
   const state = findStateOf(editor);
   const match = state.matches[state.current];
   const tr = editor.state.tr.setMeta(KEY, { clear: true });
   if (select && match) tr.setSelection(TextSelection.create(tr.doc, match.from, match.to));
   editor.view.dispatch(tr);
-  if (select && match) editor.commands.focus();
+  if (select) editor.commands.focus();
 }
 
 function scrollToCurrent(editor: Editor): void {

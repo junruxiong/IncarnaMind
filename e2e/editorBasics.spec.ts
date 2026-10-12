@@ -368,7 +368,7 @@ test("find in the Mind works while an Answer streams into the assistant, and cou
   await setWindowSize(running.app, window, 1280, 700);
   await newMind(window);
   const editor = window.getByTestId("mind-editor");
-  await editor.click();
+  await pointAndClick(window, editor);
   await window.keyboard.type("Tides follow the Moon, and tides are strongest at new moon.");
   await window.keyboard.press("ControlOrMeta+J");
   await window.keyboard.type("What are tides?");
@@ -382,7 +382,9 @@ test("find in the Mind works while an Answer streams into the assistant, and cou
   await expect(count).toHaveText("1 of 2");
   // Writing in the Mind meanwhile is counted as it is written.
   await window.keyboard.press("Escape");
-  await editor.press("End");
+  await expect(editor).toBeFocused();
+  await window.keyboard.press("End");
+  await window.evaluate(() => new Promise((done) => requestAnimationFrame(() => done(null))));
   await window.keyboard.type(" Tides again.");
   await window.keyboard.press("ControlOrMeta+F");
   await window.keyboard.type("tides");
