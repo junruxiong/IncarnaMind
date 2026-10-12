@@ -491,8 +491,18 @@ test("notes during the call: typed lines get their time, Mark (⌘D) and Add to 
   await expect(window.getByTestId("meeting-mark")).toContainText("标记");
   await typed.hover();
   await shot(window, "meeting-typed-time-wide-zh");
+  const fourth = lines.nth(3);
+  await expect(fourth).toBeVisible({ timeout: 20_000 });
+  await fourth.hover();
+  await fourth.getByTestId("transcript-add").click();
+  await expect(window.getByTestId("undo-message")).toHaveText("已将转写稿中的一句加入笔记");
   await third.hover();
   await expect(third.getByTestId("transcript-add")).toContainText("加入笔记");
+  // Reserved at the line's end: it covers no words, and nothing moves when it shows.
+  const words = await third.locator(".transcript-text").boundingBox();
+  const button = await third.getByTestId("transcript-add").boundingBox();
+  if (!words || !button) throw new Error("The line isn't drawn.");
+  expect(button.x).toBeGreaterThanOrEqual(words.x + words.width - 1);
   await shot(window, "meeting-add-to-note-wide-zh");
   await setWindowSize(app, window, 900, 700);
   await window
