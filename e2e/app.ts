@@ -584,8 +584,8 @@ export async function setWindowSize(
  * while it hasn't. On Linux (Xvfb) a size asked for while the window is still
  * taking the one before it (a launch sets one, then a test its own) is
  * sometimes dropped, and the page stays as it was (#459). Asking again for the
- * same size does not help, as Electron skips a size it already holds as the
- * window's (#470 did not fix it), so every second ask goes one pixel off the
+ * same size didn't help on CI, probably because Electron skips a size it
+ * already holds as the window's, so every other ask goes one pixel off the
  * target first, which makes a real change and so a new resize. The launch also
  * waits for the height; `setWindowSize` only the width.
  */
