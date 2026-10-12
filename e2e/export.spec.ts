@@ -347,19 +347,21 @@ test("an export saved into a Linked folder is IncarnaMind's file: its viewer say
   await expect(line).toBeVisible();
 
   // Its menu shows the choice both ways.
-  const choice = exported.getByTestId("document-evidence");
+  const countItem = exported.getByTestId("document.countAsEvidence");
+  const leaveOutItem = exported.getByTestId("document.leaveOutOfEvidence");
   await openDocumentMenu(exported);
-  await expect(choice).toHaveText("Count as evidence");
-  await choice.click();
+  await expect(countItem).toHaveText("Count as evidence");
+  await countItem.click();
   await expect(line).toHaveCount(0);
   await openDocumentMenu(exported);
-  await expect(choice).toHaveText("Don't count as evidence");
-  await choice.click();
+  await expect(leaveOutItem).toHaveText("Don't count as evidence");
+  await leaveOutItem.click();
   await expect(line).toBeVisible();
   await expect(undo.getByTestId("undo-message")).toHaveText("“Tides” no longer counts as evidence");
   // The User's own file has no such choice.
   await openDocumentMenu(moon);
-  await expect(moon.getByTestId("document-evidence")).toHaveCount(0);
+  await expect(moon.getByTestId("document.countAsEvidence")).toHaveCount(0);
+  await expect(moon.getByTestId("document.leaveOutOfEvidence")).toHaveCount(0);
   await window.keyboard.press("Escape");
 
   // In Chinese, at the narrowest window, the line wraps by word inside the viewer.
@@ -386,7 +388,8 @@ test("an export saved into a Linked folder is IncarnaMind's file: its viewer say
   await closeSettings(window);
   await expect(line).toHaveCount(0);
   await openDocumentMenu(exported);
-  await expect(choice).toHaveCount(0);
+  await expect(exported.getByTestId("document.countAsEvidence")).toHaveCount(0);
+  await expect(exported.getByTestId("document.leaveOutOfEvidence")).toHaveCount(0);
   await window.keyboard.press("Escape");
   await window.getByTestId("open-library").click();
   const library = window.getByTestId("library");

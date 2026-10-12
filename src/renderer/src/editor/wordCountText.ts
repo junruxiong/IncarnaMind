@@ -1,5 +1,11 @@
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { FOOTNOTE_NODE, QUESTION_BLOCK } from "../../../core/api";
+import {
+  FOOTNOTE_NODE,
+  PROPOSAL_ATTRIBUTE,
+  PROPOSAL_INSERT_MARK,
+  QUESTION_BLOCK,
+} from "../../../core/api";
+import { readProposalAttribute } from "../../../shared/proposals";
 import { countText, type TextCount } from "../../../shared/wordCount";
 
 /**
@@ -13,15 +19,21 @@ export const UNCOUNTED_BLOCKS: readonly string[] = [QUESTION_BLOCK];
 /** A leaf's text: a line break is one, and a Citation marker or a formula is none. */
 const leafText = (leaf: ProseMirrorNode) => (leaf.type.name === "hardBreak" ? "\n" : "");
 
+/** Words or a node a Proposal adds: not the Mind's until it is accepted (#94). */
+const proposed = (node: ProseMirrorNode) =>
+  readProposalAttribute(node.attrs[PROPOSAL_ATTRIBUTE])?.kind === "insert" ||
+  node.marks.some((mark) => mark.type.name === PROPOSAL_INSERT_MARK);
+
 /**
  * `doc.textBetween(from, to, "\n", leafText)`, but without the text a
- * footnote holds: only its marker is in the line, and a marker counts as none.
+ * footnote holds (only its marker is in the line, and a marker counts as
+ * none) or what a Proposal still waiting adds.
  */
 function visibleText(doc: ProseMirrorNode, from: number, to: number): string {
   let text = "";
   let first = true;
   doc.nodesBetween(from, to, (node, pos) => {
-    if (node.type.name === FOOTNOTE_NODE) return false;
+    if (node.type.name === FOOTNOTE_NODE || proposed(node)) return false;
     const nodeText = node.isText
       ? (node.text ?? "").slice(Math.max(from, pos) - pos, to - pos)
       : node.isLeaf
@@ -48,7 +60,7 @@ export function countableText(
 ): string {
   const parts: string[] = [];
   doc.forEach((block, offset) => {
-    if (uncounted.includes(block.type.name)) return;
+    if (uncounted.includes(block.type.name) || proposed(block)) return;
     const start = offset;
     const end = offset + block.nodeSize;
     const from = range ? Math.max(range.from, start) : start;
