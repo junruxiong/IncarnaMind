@@ -204,6 +204,7 @@ describe("An Answer as Blocks", () => {
     const streaming = answerBlocks({
       text: "Tides [^1] and moons [^2] too",
       citations: [],
+      figures: [],
       status: "streaming",
     });
     const markers: unknown[] = [];
@@ -218,7 +219,12 @@ describe("An Answer as Blocks", () => {
     streaming.forEach(visit);
     expect(markers).toEqual(["checking", "checking"]);
 
-    const ended = answerBlocks({ text: "Tides [^1].", citations: [], status: "done" });
+    const ended = answerBlocks({
+      text: "Tides [^1].",
+      citations: [],
+      figures: [],
+      status: "done",
+    });
     expect(ended).toEqual([{ type: "paragraph", content: [{ type: "text", text: "Tides." }] }]);
   });
 });

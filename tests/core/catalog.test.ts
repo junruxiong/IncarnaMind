@@ -4,6 +4,7 @@ import { describe, expect, test } from "vitest";
 import { RECOMMENDED_OLLAMA_MODEL } from "../../src/core";
 import { type ChatProviderKind, chatProviderKinds } from "../../src/core/api";
 import {
+  calculates,
   cloudWindow,
   givesStructuredOutput,
   readsImages,
@@ -184,6 +185,23 @@ describe("The provider catalog", () => {
     expect(isNonChatModel("openai", "whisper-1")).toBe(true);
     expect(isNonChatModel("google", "gemini-embedding-001")).toBe(true);
     expect(isNonChatModel("openai", "gpt-7-preview")).toBe(false);
+  });
+
+  test.each<[ChatProviderKind, string, boolean]>([
+    ["anthropic", "claude-haiku-5-5", true],
+    ["anthropic", "claude-sonnet-5-5", true],
+    ["openai", "gpt-6-luna", true],
+    ["chatgpt", "gpt-6-sol", true],
+    ["openrouter", "openai/gpt-6-luna", false],
+    ["google", "gemini-3.8-flash", false],
+    ["deepseek", "deepseek-flash", false],
+    ["qwen", "qwen3.7-flash", false],
+    ["siliconflow", "deepseek-ai/DeepSeek-V4", false],
+    ["ollama", "gpt-oss:20b-cloud", false],
+    ["ollama", "qwen3.5:4b", false],
+  ])("%s %s is offered calculate by the catalog: %s", (kind, modelId, offered) => {
+    // Only models measured to use it well (#438); the evaluation (#441) turns on more.
+    expect(calculates(fromCatalog(kind, modelId))).toBe(offered);
   });
 
   test.each<[ChatProviderKind, string, boolean]>([

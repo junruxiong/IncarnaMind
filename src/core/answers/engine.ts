@@ -8,8 +8,9 @@
  * How the model cites depends on what it can do (see `CitationSupport`):
  * - "tools": a Tool-calling loop (ADR-0007), run by a Run engine (see
  *   ../runs/engine; AI SDK 7 by default). The model searches the Documents
- *   with `search_documents` as often as it needs, and gives the records of its
- *   Citation markers with `cite`. The Answer keeps what is its own on top of
+ *   with `search_documents` as often as it needs, gives the records of its
+ *   Citation markers with `cite`, and has the numbers it works out calculated
+ *   with `calculate` (./calculations). The Answer keeps what is its own on top of
  *   the engine's events: the search phase, preambles taken back, the records
  *   and the markers they place.
  * - "structured-output": for a model that can't call Tools, or a small local
@@ -44,7 +45,7 @@
  * what the provider refused.
  *
  * Every Tool the loop offers has one shape and comes from a Tool provider
- * (see ../tools): the Documents' two (made here, from `AnswerTools`), and
+ * (see ../tools): the Documents' own (made here, from `AnswerTools`), and
  * those the request brings: the Skills' (`use_skill`, `read_skill_file`,
  * `run_skill_script`, see ../skills/tools) and each Connector's. A call that
  * asks the User first waits in the request's `gate`, which the engine awaits
@@ -58,14 +59,16 @@
  * set (`ToolSet`): an Answer every Tool, a check Run the Documents' search
  * and `cite` only. The loop names none of the Tools but the Documents' own:
  * every call shows as a Tool-call card, from its provider, except `cite`,
- * whose records become Citations; results that aren't Passages are never
- * cited. With Skills or Connector Tools but no Documents, the loop runs with
+ * whose records become Citations, and `calculate`, whose figures become the
+ * Answer's calculated figures (ADR-0021); results that aren't Passages are
+ * never cited. With Skills or Connector Tools but no Documents, the loop runs with
  * those alone; a model that can't call Tools answers without.
  */
 import { generateText, jsonSchema, Output, parsePartialJson, streamText } from "ai";
 import type {
   AnswerPhase,
   CitationSupport,
+  FigureRetry,
   ProviderError,
   QuoteRetry,
   ReadThirdPartySource,
@@ -89,8 +92,10 @@ import type {
   TokenUsage,
 } from "../runs/engine";
 import { DOCUMENT_TOOLS, offeredTools, type Tool, type ToolProviderInfo } from "../tools";
+import { asksForFigureFixes, type FigureProblem, givenList } from "./calculations";
 import { asksForFixes } from "./citations";
 import { earlierContext } from "./context";
+import { retryFigures } from "./figureRetry";
 import { missingMarkerEvents, textEdits } from "./markerPlacement";
 import {
   SEARCH_QUERY_INSTRUCTIONS,
@@ -200,6 +205,16 @@ export interface AnswerTools {
    * there. Whether it did; if not, the record stays as it was.
    */
   correctQuote?(marker: number, quote: string): boolean;
+  /**
+   * Takes calculated figures (ADR-0021, ./calculations); returns what to tell
+   * the model about them. Absent: the Answer offers no `calculate`.
+   */
+  calculate?(figures: readonly unknown[], options?: CiteOptions): string;
+  /**
+   * The figures structured output gave that couldn't be worked out: what its
+   * one request to fix them asks about (see ./figureRetry).
+   */
+  figureProblems?(): FigureProblem[];
 }
 
 /** A record whose quote the check doesn't find, with the text of the Passage it names (see `AnswerTools.unfoundQuotes`). */
@@ -327,11 +342,16 @@ export type AnswerEngineEvent =
    * What the Answer is doing now: searching the Documents, the model's turn,
    * or asking the model once more for exact quotes (see ./quoteRetry).
    */
-  | { type: "phase"; phase: Extract<AnswerPhase, "searching" | "writing" | "checking-quotes"> }
+  | {
+      type: "phase";
+      phase: Extract<AnswerPhase, "searching" | "writing" | "checking-quotes" | "checking-figures">;
+    }
   /** The engine put in `count` Citation markers the model left out of its text (see ./markerPlacement). */
   | { type: "markers-placed"; count: number }
   /** The model was asked once more for exact quotes (see ./quoteRetry), and what that gave. */
   | { type: "quotes-retried"; retry: QuoteRetry }
+  /** The model was asked once more for the figures it gave that couldn't be worked out (see ./figureRetry). */
+  | { type: "figures-retried"; retry: FigureRetry }
   /**
    * The model's reasoning as its provider streams it (see `RunEvent`): a
    * summary or raw chain of thought, which the Answer keeps or drops.
@@ -345,7 +365,7 @@ export type AnswerEngineEvent =
    */
   | { type: "text-retracted"; length: number }
   /**
-   * A Tool call started, for its Tool-call card: any Tool but `cite`, or the
+   * A Tool call started, for its Tool-call card: any Tool but `cite` and `calculate`, or the
    * search the engine makes for a model without Tools. `tool` is its name at
    * its `provider` (a Connector's "create_issue"); `input`, what the card
    * shows of the arguments (e.g. a search's `{ query }`; a Connector's, as sent).
@@ -459,7 +479,8 @@ export function searchToolDescription(languages: readonly DocumentLanguage[]): s
   );
   return `${base} The Documents are in ${listed(names)}. Search finds Passages best in their own language: when the Question is in another language than the Documents it may be about, search with the query translated into their language too.`;
 }
-const MARKER = /\[\^\d{1,4}\]/;
+/** A Citation marker ("[^1]") or a figure marker ("[=1]"): the Answer is being written. */
+const MARKER = /\[[\^=]\d{1,4}\]/;
 
 /**
  * What a one-pass attempt yields when its provider refused the request before
@@ -484,6 +505,96 @@ function refusalOf(
   if (feature && refusesFeature(error, feature)) return { type: "unsupported" };
   return null;
 }
+
+const calculationsSchema = {
+  type: "array",
+  items: {
+    type: "object",
+    properties: {
+      marker: {
+        type: "integer",
+        description:
+          "The figure's marker number: 1 for [=1]. Figures are numbered apart from Citations.",
+      },
+      label: {
+        type: "string",
+        description: 'What the result is, with its period: "Revenue growth 2025".',
+      },
+      inputs: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: "A short name for the formula: rev2024." },
+            label: {
+              type: "string",
+              description: 'What it is, with its year or period: "Revenue 2024".',
+            },
+            citation: {
+              type: "integer",
+              description:
+                "The marker of a Citation record with the number in its quote: 1 for [^1]. Or give passage, location and quote instead.",
+            },
+            passage: {
+              type: "string",
+              description: "Instead of citation: the Passage's id, e.g. P1.",
+            },
+            location: {
+              type: "string",
+              description: "With passage: where the quote is, as for a Citation.",
+            },
+            quote: {
+              type: "string",
+              description: "With passage: a short quote holding the number, copied word for word.",
+            },
+            number: {
+              type: "string",
+              description: 'The number as it is written in the quote: "1.2亿", "$1,482.6 million".',
+            },
+            position: {
+              type: "integer",
+              description:
+                "Instead of number, when the number is in the quote twice: its place among the quote's numbers, 1 for the first.",
+            },
+            unitQuote: {
+              type: "string",
+              description:
+                'When the number\'s scale or currency is only in a table\'s heading or caption ("单位：万元", "in millions"): that line, copied word for word from the same Passage.',
+            },
+            reading: {
+              type: "integer",
+              description:
+                "Only when told the number can be read more than one way: the reading to use, as numbered then.",
+            },
+            rate: {
+              type: "string",
+              description:
+                'Only for an exchange rate: the currencies it converts, as "CNY per USD".',
+            },
+          },
+          required: ["name"],
+        },
+      },
+      formula: {
+        type: "string",
+        description:
+          "In Excel's syntax, over the inputs' names: (rev2025 - rev2024) / rev2024, SUM(q1, q2, q3, q4), RRI(4, start, end), a > b. A percent is a share, 25% is 0.25: never multiply by 100, give as instead.",
+      },
+      as: {
+        type: "string",
+        enum: ["number", "percent", "points", "currency", "times", "yes-no"],
+        description:
+          "How to show the result: percent for a growth rate or a share. Default: from the inputs.",
+      },
+      decimals: { type: "integer", description: "Decimal places, when the default won't do." },
+      scale: {
+        type: "string",
+        description: "Show an amount in this scale: 万, 亿, thousand, million, billion.",
+      },
+    },
+    required: ["marker", "inputs", "formula"],
+  },
+} as const;
 
 const recordsSchema = {
   type: "array",
@@ -1002,13 +1113,15 @@ interface DocumentToolsHooks {
 
 /**
  * The Documents as a Tool provider, for one go of the Tool-calling loop:
- * `search_documents`, which reads the Documents, and `cite`, whose records
- * become this Answer's Citations: nothing beyond it.
+ * `search_documents`, which reads the Documents; `cite`, whose records become
+ * this Answer's Citations; and `calculate`, whose figures become its
+ * calculated figures (ADR-0021), when the Answer takes them. The last two
+ * reach nothing beyond the Answer.
  */
 export function documentTools(
   documents: AnswerTools,
   hooks: DocumentToolsHooks,
-): { search: Tool; cite: Tool } {
+): { search: Tool; cite: Tool; calculate: Tool | null } {
   const own = (name: string) => ({ name, provider: DOCUMENTS_PROVIDER, providerTool: name });
   return {
     search: {
@@ -1064,6 +1177,24 @@ export function documentTools(
         return documents.cite(records);
       },
     },
+    calculate: documents.calculate
+      ? {
+          ...own(DOCUMENT_TOOLS.calculate),
+          description:
+            'Work out a number from numbers in the Passages instead of in your head, and get its result back. Give figures, each {marker, label, inputs, formula, as}. Each input is {name, label, citation, number}: citation is the marker of a cite record whose quote has the number (1 for [^1]), or give passage, location and quote instead; number is the number as it is written there. The formula is in Excel\'s syntax over the inputs\' names. For example: {"figures": [{"marker": 1, "label": "Revenue growth 2025", "inputs": [{"name": "r24", "label": "Revenue 2024", "citation": 1, "number": "$1,231.0 million"}, {"name": "r25", "label": "Revenue 2025", "citation": 1, "number": "$1,482.6 million"}], "formula": "r25 / r24 - 1", "as": "percent"}]}. IncarnaMind reads each number from its quote, checks the quote and does the arithmetic. Write the figure\'s marker, such as [=1], in the number\'s place; never write the number yourself.',
+          inputSchema: {
+            type: "object",
+            properties: { figures: calculationsSchema },
+            required: ["figures"],
+          },
+          effects: () => [],
+          // Numbers, and IncarnaMind's own words.
+          untrustedResult: false,
+          async call({ figures }) {
+            return documents.calculate?.(givenList(figures)) ?? "";
+          },
+        }
+      : null,
   };
 }
 
@@ -1134,6 +1265,10 @@ async function* toolLoop(
       : null;
   const search = documents?.search ?? null;
   const cite = documents?.cite ?? null;
+  const calculate = documents?.calculate ?? null;
+  /** `cite` and `calculate` record something for the Answer: they have no Tool-call card. */
+  const recording = (tool: Tool | undefined): boolean =>
+    tool !== undefined && (tool === cite || tool === calculate);
   /**
    * Whether this Run has read untrusted content: from the first call of a
    * Tool with `untrustedResult` that returned some, each call's gate is told.
@@ -1151,8 +1286,8 @@ async function* toolLoop(
     thirdParty.push({ via: "read", source });
     unannounced.push(source);
   };
-  /** Whether `cite`'s reply to each call asked the model to fix records, by the call's id. */
-  const citeAskedForFixes = new Map<string, boolean>();
+  /** Whether the reply of `cite` or `calculate` to each call asked the model to fix what it gave, by the call's id. */
+  const askedForFixes = new Map<string, boolean>();
   /**
    * A Tool as the engine calls it: one with untrusted results taints the Run
    * once it returns some; one that counts what it found (Find sources) says
@@ -1171,15 +1306,18 @@ async function* toolLoop(
         ? (results.get(context.toolCallId) ?? 0) > 0
         : result.trim() !== "";
       if (tool.untrustedResult && read) tainted = true;
-      if (tool === cite) citeAskedForFixes.set(context.toolCallId, asksForFixes(result));
+      if (tool === cite) askedForFixes.set(context.toolCallId, asksForFixes(result));
+      if (tool === calculate) askedForFixes.set(context.toolCallId, asksForFigureFixes(result));
       return result;
     },
   });
   /** The Tools offered, by the name the model calls them; never a Connector's with one of ours. */
   const offered = new Map(
-    offeredTools([...(documents ? [documents.search, documents.cite] : []), ...request.tools]).map(
-      (each) => [each.name, each],
-    ),
+    offeredTools([
+      ...(documents ? [documents.search, documents.cite] : []),
+      ...(calculate ? [calculate] : []),
+      ...request.tools,
+    ]).map((each) => [each.name, each]),
   );
   const tools = [...offered.values()];
   const instructions = request.instructions(mode, {
@@ -1211,7 +1349,9 @@ async function* toolLoop(
     window = {
       // What another provider's Tool returns (or the gate gives instead) is cut to the room left.
       fitResult: (text, tool) =>
-        tool === search?.name || tool === cite?.name ? text : account.result(text),
+        tool === search?.name || tool === cite?.name || tool === calculate?.name
+          ? text
+          : account.result(text),
       canCallTools: () => account.canCallTools(),
       stepFinished: ({ inputTokens, outputTokens }) =>
         account.stepFinished({ inputTokens, outputTokens }),
@@ -1225,6 +1365,11 @@ async function* toolLoop(
   let stepTools: Tool[] = [];
   /** An earlier step wrote the Answer and recorded its Citations: text with markers after that is a second copy. */
   let answered = false;
+  /**
+   * The last text written beside `cite` or `calculate` alone, with no marker
+   * in it, and taken back: the Answer, if the model never writes another.
+   */
+  let unmarked = "";
   /** The Tool of each call, by its id. */
   const calls = new Map<string, Tool>();
   /** Searches running now: the Answer is "searching" while there are any. */
@@ -1243,13 +1388,14 @@ async function* toolLoop(
         : RUN;
     },
     window,
-    // The Answer written beside `cite` and every record taken is complete: another call would only write it again.
+    // The Answer written beside `cite` or `calculate`, with all they were given taken, is complete:
+    // another call would only write it again.
     endsAfter: (step) =>
       cite !== null &&
       MARKER.test(step.text) &&
       step.calls.length > 0 &&
       step.calls.every(
-        (call) => offered.get(call.tool) === cite && citeAskedForFixes.get(call.id) === false,
+        (call) => recording(offered.get(call.tool)) && askedForFixes.get(call.id) === false,
       ),
     temperature,
     signal,
@@ -1275,8 +1421,9 @@ async function* toolLoop(
         if (called === search && searching++ === 0) {
           yield { type: "phase", phase: "searching" };
         }
-        // Every call has a Tool-call card but `cite`'s: its records become Citations.
-        if (called !== cite) {
+        // Every call has a Tool-call card but those of `cite` and `calculate`: what they record
+        // becomes the Answer's Citations and figures.
+        if (!recording(called)) {
           yield {
             type: "tool-call-started",
             id: event.id,
@@ -1292,7 +1439,7 @@ async function* toolLoop(
         // A failed call (a Skill or file that isn't there, a Connector's failure or a declined
         // consent) is told to the model; its card says it failed.
         const called = calls.get(event.id);
-        if (called && called !== cite) {
+        if (called && !recording(called)) {
           const passages = found.get(event.id);
           const error = failures.get(event.id);
           yield {
@@ -1312,17 +1459,20 @@ async function* toolLoop(
       case "step-finished": {
         yield { type: "usage", usage: event.usage };
         // Text before a call with a Tool-call card (a search, a Skill, a Connector's Tool), or
-        // before records with no marker in it, was a preamble.
+        // before records or figures with no marker in it, was a preamble.
+        const recorded = stepTools.some(recording);
         const preamble =
-          stepTools.some((each) => each !== cite) ||
-          (cite !== null && stepTools.includes(cite) && !MARKER.test(stepText));
-        // After `cite` asked for fixes to an Answer written beside it, the model writes the Answer again.
+          stepTools.some((each) => !recording(each)) || (recorded && !MARKER.test(stepText));
+        // After `cite` or `calculate` asked for fixes to an Answer written beside it, the model
+        // writes the Answer again.
         const again = answered && MARKER.test(stepText);
         if ((preamble || again) && stepText) {
           yield { type: "text-retracted", length: stepText.length };
+          if (recorded && !stepTools.some((each) => !recording(each)) && !again)
+            unmarked = stepText;
         } else {
           keptText += stepText;
-          if (cite !== null && stepTools.includes(cite) && MARKER.test(stepText)) answered = true;
+          if (recorded && MARKER.test(stepText)) answered = true;
         }
         stepText = "";
         stepTools = [];
@@ -1345,6 +1495,10 @@ async function* toolLoop(
         yield { type: "failed", error: event.error };
         return;
       case "finished":
+        if (keptText.trim() === "" && unmarked.trim() !== "") {
+          keptText = unmarked;
+          yield { type: "text-delta", text: unmarked };
+        }
         yield* missingMarkerEvents(keptText, cited, request.documents);
         yield { type: "finished" };
         return;
@@ -1382,14 +1536,15 @@ async function* structured(
     temperature,
     providerOptions: cacheProviderOptions(request.cacheKey),
     output: Output.object({
-      schema: jsonSchema<{ answer: string; citations: unknown }>({
+      schema: jsonSchema<{ answer: string; citations: unknown; calculations?: unknown }>({
         type: "object",
         properties: {
           answer: {
             type: "string",
-            description: "The Answer, in Markdown, with Citation markers.",
+            description: "The Answer, in Markdown, with Citation markers and figure markers.",
           },
           citations: recordsSchema,
+          ...(request.documents.calculate && { calculations: calculationsSchema }),
         },
         required: ["answer", "citations"],
       }),
@@ -1456,6 +1611,17 @@ async function* structured(
     const placed = yield* missingMarkerEvents(emitted, records, request.documents);
     if (budget) yield* retryQuotes(request, placed, temperature, budget);
     if (signal.aborted) return;
+    // Worked out once the quotes are as good as they will be, since figures read their numbers there.
+    const calculations = givenList((value as { calculations?: unknown } | undefined)?.calculations);
+    if (calculations.length > 0 && request.documents.calculate) {
+      try {
+        request.documents.calculate(calculations, { structured: true });
+      } catch (error) {
+        console.error(`The figures couldn't be worked out: ${messageOf(error)}`);
+      }
+      if (budget) yield* retryFigures(request, placed, temperature, budget);
+      if (signal.aborted) return;
+    }
   }
   yield { type: "finished" };
 }
