@@ -4,6 +4,7 @@ import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { Editor } from "@tiptap/core";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
+  acceptPlainTextKeys,
   addDocuments,
   askInAssistant,
   assistantAnswers,
@@ -396,6 +397,7 @@ test("a number the Answer works out is calculated: its text shows the figure, an
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
   // A model measured to use calculate (ADR-0021): the scripted model answers in its place.
+  await acceptPlainTextKeys(window);
   await window.evaluate(async () => {
     const core = (
       globalThis as unknown as {
