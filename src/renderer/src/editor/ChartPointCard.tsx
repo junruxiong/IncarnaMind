@@ -1,6 +1,5 @@
 import type { CitationAttributes } from "../../../core/api";
-import { badgeMessage, type CitationState } from "../../../shared/citations";
-import { citationLocation, formatLocation } from "../../../shared/locations";
+import { badgeMessage, type CitationState, citationSource } from "../../../shared/citations";
 import { useT } from "../i18n";
 import { ChartCheck } from "./ChartCheck";
 
@@ -24,9 +23,7 @@ export function ChartPointCard({
   onOpen(): void;
 }) {
   const t = useT();
-  const location = citation ? citationLocation(citation) : null;
-  const where = location ? formatLocation(location, t) : null;
-  const name = citation?.documentName ?? "";
+  const source = citation ? citationSource(citation, t) : null;
   const badge = citation && state ? badgeMessage(state, citation, t) : null;
   const canOpen = state !== null && state.documentId !== null;
   return (
@@ -41,8 +38,10 @@ export function ChartPointCard({
         {citation && state && badge ? (
           <>
             <ChartCheck check={state.check} label={t(badge.key, badge.params)} />
-            <span className="chart-card-where" title={where ? `${name}, ${where}` : name}>
-              {where ? t("chart.point.where", { document: name, location: where }) : name}
+            <span className="chart-card-where" title={source?.text}>
+              {source?.where
+                ? t("chart.point.where", { document: source.name, location: source.where })
+                : source?.name}
             </span>
             {canOpen && (
               <button
