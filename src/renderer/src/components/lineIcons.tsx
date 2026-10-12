@@ -296,6 +296,15 @@ export function RecordingLineIcon(props: IconProps) {
   );
 }
 
+/** How a recording went, its recording details: a pulse, as a call's health is in Teams. */
+export function PulseLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M3 12h4l2.5-6 5 12 2.5-6h4" />
+    </LineIcon>
+  );
+}
+
 /** Split to the right: a window cut in two halves, as in VS Code. */
 export function SplitLineIcon(props: IconProps) {
   return (
