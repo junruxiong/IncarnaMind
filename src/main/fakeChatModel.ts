@@ -23,6 +23,10 @@
  *
  * A Question with "blank reply" in it gets a reply with no text at all.
  *
+ * A Question about the User's notes or what they selected ("notes", "selected",
+ * 笔记, 选中), asked beside a Mind, gets an Answer that starts by saying what it
+ * read of the Mind: its name and first line, and the selected text.
+ *
  * With Skills: a Question that names a listed Skill gets it loaded with
  * use_skill first. An Answer that follows a Skill (forced, or loaded) starts
  * by saying which.
@@ -151,12 +155,36 @@ const chineseFiguresAnswer = (marker: string) =>
 const BY_QUARTER = /\bby quarter\b|按季度/i;
 const BY_QUARTER_CHINESE = /分季度/;
 
-/** The text of the last user message: the Question, at the end of its Question context. */
-function lastQuestion(prompt: Prompt): string {
+/** The text of the last user message: the Question, after what it is asked beside. */
+function lastUserText(prompt: Prompt): string {
   const last = prompt.filter((message) => message.role === "user").at(-1);
   if (!last || typeof last.content === "string") return "";
-  const text = last.content.map((part) => (part.type === "text" ? part.text : "")).join("");
-  return text.split("\n\n").at(-1) ?? "";
+  return last.content.map((part) => (part.type === "text" ? part.text : "")).join("");
+}
+
+/** The Question, at the end of its Question context. */
+const lastQuestion = (prompt: Prompt): string => lastUserText(prompt).split("\n\n").at(-1) ?? "";
+
+/** A Question about the User's notes or what they selected in them. */
+const ABOUT_THE_MIND = /\bnotes?\b|\bselect(?:ed|ion)\b|笔记|选中/i;
+
+/** What the Answer says it read of the Mind a Question about it was asked beside, if any. */
+function mindRead(prompt: Prompt): string | null {
+  if (!ABOUT_THE_MIND.test(lastQuestion(prompt))) return null;
+  const text = lastUserText(prompt);
+  const mind = /<mind name="([^"]*)">\n([\s\S]*?)<\/mind>/.exec(text);
+  if (!mind) return null;
+  const first = (mind[2] ?? "")
+    .split("\n")
+    .map((line) => line.replace(/^#+\s*/, "").trim())
+    .find((line) => line !== "" && line !== "[…]")
+    // A short Answer, however long the line.
+    ?.slice(0, 80);
+  const selection = /<selection>\n([\s\S]*?)\n<\/selection>/.exec(text)?.[1];
+  return [
+    first ? `Read “${mind[1]}”, which starts: ${first}` : `Read “${mind[1]}”, which is empty.`,
+    ...(selection ? [`About what you selected: ${selection}`] : []),
+  ].join("\n\n");
 }
 
 /** The text results of the Tool calls so far, by Tool name, oldest first. */
@@ -477,6 +505,8 @@ function nextReply(prompt: Prompt, tools: readonly OfferedTool[]): Reply {
           : "I found no papers.",
     };
   }
+  const mindLine = mindRead(prompt);
+  if (mindLine) said.unshift(mindLine);
   if (names.includes("search_web")) {
     const searched = lastResult(prompt, "search_web");
     if (searched === undefined) return { tool: "search_web", input: { query: question } };

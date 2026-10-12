@@ -348,6 +348,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
       /^New Mind here$/,
       /^Organize this Folder$/,
       /^Edit description…$/,
+      /^Sort by…$/,
       /^RenameF2$/,
       /^Delete$/,
     ]);
@@ -361,7 +362,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     await expect(renamed).toHaveCount(0);
     await expect(notInAFolder(window).getByTestId("mind-list-item")).toHaveText("Shortlist");
     await expect(composer.getByTestId("composer-scope-all")).toBeVisible();
-    await expect(answer.getByTestId("answer-steps")).toHaveText("Asked from Shortlist");
+    await expect(answer.getByTestId("answer-steps-line")).toHaveText("Asked from Shortlist");
 
     // In Chinese, the same tree.
     await window.evaluate(() =>

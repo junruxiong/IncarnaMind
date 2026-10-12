@@ -39,6 +39,9 @@ test("the Privacy page lists the data flows and the update check, and offers no 
   // Every registered flow, with what it sends and where.
   const chat = privacy.locator('[data-testid="data-flow"][data-flow-id="chat"]');
   await expect(chat).toContainText("Chat");
+  await expect(chat).toContainText(
+    "The Mind you're in: its text, your Notes and earlier Answers, except Notes you've excluded",
+  );
   await expect(chat).toContainText("Passages from your Documents");
   await expect(privacy.locator('[data-flow-id="tagging"]')).toContainText("Automatic Tags");
   const service = chat.getByTestId("data-flow-service");
@@ -90,6 +93,19 @@ test("the Privacy page lists the data flows and the update check, and offers no 
   });
   await expect(privacy.locator('[data-traffic-id="usage-data"]')).toHaveCount(0);
   await expect(window.getByTestId("usage-data-dialog")).toBeHidden();
+
+  // In Chinese, what the chat flow sends.
+  const language = (value: "en" | "zh-CN") =>
+    window.evaluate(
+      (chosen) =>
+        (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+          user: { language: chosen },
+        }),
+      value,
+    );
+  await language("zh-CN");
+  await expect(chat).toContainText("你所在的 Mind：正文、笔记和之前的回答，不含你排除的笔记");
+  await language("en");
   await app.close();
 
   // The choice about update checks is kept.

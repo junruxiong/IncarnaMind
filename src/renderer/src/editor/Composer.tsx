@@ -49,6 +49,7 @@ import { AskProblem } from "./AskProblem";
 import { EditStatus } from "./EditStatus";
 import { AskArrowIcon, CollapseIcon, ExpandIcon, RemoveIcon } from "./icons";
 import { ModelChip } from "./ModelChip";
+import { mindFocusOf } from "./mindFocus";
 import { PasteChip, usePasteLabel } from "./PasteChip";
 import { SkillChip } from "./QuestionView";
 import { ScopeChips } from "./ScopeChips";
@@ -400,10 +401,11 @@ export function Composer({
     setExpanded(false);
     setViewing(null);
     setPicking(null);
-    // In the assistant's conversation: the Mind is read, never written to.
+    // In the assistant's conversation: the Mind is read, what is selected in it first, never written to.
     const asked = await askInAssistant({
       mindId,
       text,
+      focus: editor.isDestroyed ? null : mindFocusOf(editor.state),
       scope: composerScope(current, folderId),
       model: mindModelOf(doc),
       forcedSkill: current.skill,
