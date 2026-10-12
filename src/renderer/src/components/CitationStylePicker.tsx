@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { CITATION_STYLES, type CitationStyleId } from "../../../shared/citationStyles";
 import { translate } from "../../../shared/i18n";
 import { chooseCitationStyle, useCitationStylePicker } from "../citationStylePicker";
-import { useT } from "../i18n";
+import { useGap, useT } from "../i18n";
 import { SearchPicker } from "./SearchPicker";
 
 /**
@@ -13,6 +13,7 @@ import { SearchPicker } from "./SearchPicker";
  */
 export function CitationStylePickerHost() {
   const t = useT();
+  const gap = useGap();
   const open = useCitationStylePicker((state) => state.open);
   const close = useCitationStylePicker((state) => state.close);
   /** Where the picker opens when nothing was given to open beside: the top of the window. */
@@ -47,7 +48,8 @@ export function CitationStylePickerHost() {
         className="w-72"
         footer={
           <>
-            {t("citationStyle.credit")}{" "}
+            {t("citationStyle.credit")}
+            {gap(t("citationStyle.credit"), "citationstyles.org")}
             <a
               href="https://citationstyles.org/"
               target="_blank"

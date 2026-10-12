@@ -1,5 +1,5 @@
 import { isMacOS } from "@tiptap/core";
-import { useT } from "../i18n";
+import { useGap, useT } from "../i18n";
 import { useMeetings } from "../meetings";
 import {
   buttonClass,
@@ -19,9 +19,14 @@ import { useModal } from "./useModal";
  */
 export function MeetingNoticeDialog() {
   const t = useT();
+  const gap = useGap();
   const waiting = useMeetings((state) => state.noticeFor);
   const { acceptNotice, cancelNotice } = useMeetings.getState();
   const dialog = useModal(waiting !== null);
+  const recording = t(
+    waiting?.systemAudio === false ? "meetings.notice.microphone" : "meetings.notice.both",
+  );
+  const kept = t(isMacOS() ? "meetings.notice.kept.mac" : "meetings.notice.kept.other");
 
   return (
     <dialog
@@ -38,12 +43,9 @@ export function MeetingNoticeDialog() {
         </h2>
         <div id="meeting-notice-body" className="flex flex-col gap-2">
           <p className={dialogTextClass}>
-            {t(
-              waiting?.systemAudio === false
-                ? "meetings.notice.microphone"
-                : "meetings.notice.both",
-            )}{" "}
-            {t(isMacOS() ? "meetings.notice.kept.mac" : "meetings.notice.kept.other")}
+            {recording}
+            {gap(recording, kept)}
+            {kept}
           </p>
           <p className={dialogTextClass}>{t("meetings.notice.tell")}</p>
         </div>

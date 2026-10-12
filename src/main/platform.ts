@@ -26,6 +26,7 @@ import { createElectronAudioCapture } from "./meetings/capture";
 import { createLoginShellProcesses } from "./processes";
 import { createUtilityProcessCrossEncoder } from "./reranker";
 import { loadOsSandbox } from "./sandbox";
+import { createUtilityProcessTextRecognizer } from "./scanReader";
 import { createFileKeychain, SECRETS_FILE, type SecretCipher } from "./secretsFile";
 import { createUtilityProcessTranscriber } from "./transcriber";
 import { createPostHogSender } from "./usageData";
@@ -67,7 +68,7 @@ export const systemBrowser: Browser = {
 };
 
 /** The apps whose install links Settings → Agents opens (#351), and no others. */
-const AGENT_LINK_SCHEMES = new Set(["cursor:", "vscode:"]);
+const AGENT_LINK_SCHEMES = new Set(["cursor:"]);
 
 /** Opens an agent's install link in its app: its app shows what it installs, and asks. */
 async function openAgentLink(url: string): Promise<void> {
@@ -156,6 +157,9 @@ export async function chooseExecutor(log: Logger): Promise<Executor | undefined>
  */
 const fakeEmbedder =
   import.meta.env.MODE === "test" && process.env.INCARNAMIND_TEST_EMBEDDER === "fake";
+
+/** With the fake models, what the fake text recognition model reads on each scanned page (#397). */
+const fakeScans = fakeEmbedder ? (process.env.INCARNAMIND_TEST_SCANS ?? null) : null;
 
 /**
  * Test-only launch flag: the smoke tests transcribe Meetings with a fake
@@ -424,10 +428,14 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
       },
     }),
     crossEncoder: createUtilityProcessCrossEncoder({ fake: fakeEmbedder }),
+    textRecognizer: createUtilityProcessTextRecognizer(
+      fakeEmbedder ? { fake: { script: fakeScans } } : {},
+    ),
     // The fake models have no files to download.
     ...(fakeEmbedder && {
       embeddingModelSource: { baseUrl: "http://localhost/", files: [] },
       rerankingModelSource: { baseUrl: "http://localhost/", files: [] },
+      textRecognitionModelSource: { baseUrl: "http://localhost/", files: [] },
     }),
   };
 }

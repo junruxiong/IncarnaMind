@@ -44,7 +44,10 @@ export async function countAsEvidence(
     undo: async () => {
       for (const document of documents) await core.setCountedAsEvidence(document.id, !counted);
     },
+    redo: async () => {
+      for (const document of documents) await core.setCountedAsEvidence(document.id, counted);
+    },
   };
-  useUndo.getState().offer(undoable);
+  useUndo.getState().push(undoable);
   return undoable;
 }

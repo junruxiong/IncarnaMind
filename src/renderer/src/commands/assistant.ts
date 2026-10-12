@@ -1,16 +1,32 @@
-import type { AssistantDock } from "../../../core/api";
+import type { AssistantDock, ConversationAnswer } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
+import { addAnswer } from "../addToNote";
+import { answerBlocks, hasText } from "../answerBlocks";
+import { copyAnswer, selectedNotes } from "../answerEditors";
 import { shownDock } from "../assistantPlace";
 import { useComposer } from "../composer";
+import {
+  answerBeingWritten,
+  clearConversation,
+  conversationById,
+  lastAnswer,
+  regenerateAnswer,
+  startNewChat,
+  stopWriting,
+  useConversations,
+} from "../conversations";
 import { startEditing } from "../editWithAi";
+import { assistantTabOf, groupsMerged } from "../layoutSlice";
 import { useAppStore } from "../store";
 import { assistantHandle, noteHandle } from "./handles";
 import type { Command } from "./registry";
 
 /*
- * The assistant's commands (#253): where it sits, folding it, ⌘J to its
- * composer, New chat and History. Its ⋯ menu, its header and rail, and ⌘K
- * run these, so each has a keyboard and a menu way beside the drag.
+ * The assistant's commands (#253, #201): where it sits, folding it, ⌘J to its
+ * composer, New chat and History; adding, copying, regenerating and stopping
+ * an Answer, the last Answer to a new Mind, and clearing the conversation.
+ * Its ⋯ menu, its header and rail, its Answers' buttons and ⌘K run these, so
+ * each has a keyboard and a menu way beside the drag.
  */
 
 const store = () => useAppStore.getState();
@@ -59,6 +75,74 @@ function askOrEdit(): void {
   focusComposer();
 }
 
+/** New chat: the assistant shows a new, empty conversation (an empty one is reused), ready to ask. */
+export function newChat(): void {
+  startNewChat();
+  focusComposer();
+}
+
+/** The Answer an Answer's command acts on: the one the focus is in, else the newest. */
+function answerInFocus(): ConversationAnswer | undefined {
+  const active = document.activeElement;
+  const id = active?.closest("[data-answer-id]")?.getAttribute("data-answer-id");
+  const focused = useConversations
+    .getState()
+    .messages.find((each) => each.kind === "answer" && each.id === id);
+  return focused?.kind === "answer" && focused.status !== "streaming" ? focused : lastAnswer();
+}
+
+/** Whether an Answer has something to keep: not one that failed before writing a word. */
+const keepable = (answer: ConversationAnswer | undefined): answer is ConversationAnswer =>
+  answer !== undefined && hasText(answerBlocks(answer));
+
+const noAnswer = (): true | { reason: MessageKey } =>
+  keepable(answerInFocus()) ? true : { reason: "assistant.lastToNewMind.unavailable" };
+
+/** What to add of an Answer: what is selected in it, or all of it. */
+const notesOf = (answer: ConversationAnswer) =>
+  selectedNotes(answer.id) ?? answerBlocks({ ...answer, status: "done" });
+
+/**
+ * ⌘⇧A: adds the Answer in focus, or the newest, to the Mind in focus, as its
+ * Add to note does; with no Mind in focus, its ▾ opens to choose one.
+ */
+function addAnswerInFocus(): void {
+  const answer = answerInFocus();
+  if (!keepable(answer)) return;
+  const item = assistantTabOf(store().layout, groupsMerged())?.item;
+  if (item?.kind !== "mind") {
+    if (folded()) void store().placeAssistant({ folded: false });
+    document
+      .querySelector<HTMLElement>(`[data-answer-id="${answer.id}"] [data-testid="answer-add-to"]`)
+      ?.click();
+    return;
+  }
+  const conversation = conversationById(answer.conversationId);
+  void addAnswer(
+    { answer, conversation, blocks: notesOf(answer) },
+    {
+      kind: "mind",
+      mindId: item.mindId,
+    },
+  );
+}
+
+/** "Add the last Answer to a new Mind", as Add to note ▾ → New Mind does. */
+function lastToNewMind(): void {
+  const answer = lastAnswer();
+  if (!keepable(answer)) return;
+  const conversation = conversationById(answer.conversationId);
+  void addAnswer(
+    { answer, conversation, blocks: answerBlocks({ ...answer, status: "done" }) },
+    { kind: "new" },
+  );
+}
+
+const conversationEmpty = (): true | { reason: MessageKey } =>
+  useConversations.getState().messages.length > 0
+    ? true
+    : { reason: "assistant.clear.unavailable" };
+
 export const assistantCommands: readonly Command[] = [
   ...DOCKS.map(
     ({ dock, label }): Command => ({
@@ -90,15 +174,86 @@ export const assistantCommands: readonly Command[] = [
     run: askOrEdit,
   },
   {
-    // An empty conversation is reused, so with no conversations kept yet (#258),
-    // New chat is the empty one, ready to ask in.
+    // The conversation it leaves stays in History (#258).
     id: "assistant.newChat",
     label: "assistant.newChat",
     shortcut: { keys: "CmdOrCtrl+Shift+O" },
     group: "main",
     reversible: true,
     when: isThere,
-    run: focusComposer,
+    run: newChat,
+  },
+  {
+    id: "answer.addToNote",
+    label: "command.answer.addToNote",
+    shortcut: { keys: "CmdOrCtrl+Shift+A" },
+    group: "main",
+    // Undo, on its line under the Answer, or ⌘Z.
+    reversible: true,
+    when: isThere,
+    enabled: noAnswer,
+    run: addAnswerInFocus,
+  },
+  {
+    // Not "answer.copy": that is the Copy in the menu of an Answer in a Mind written before.
+    id: "assistant.copyAnswer",
+    label: "command.answer.copy",
+    shortcut: { keys: "CmdOrCtrl+Shift+C" },
+    group: "edit",
+    // Copying changes nothing.
+    reversible: true,
+    when: isThere,
+    enabled: noAnswer,
+    run: () => {
+      const answer = answerInFocus();
+      if (keepable(answer)) void copyAnswer(answer.id);
+    },
+  },
+  {
+    id: "assistant.regenerateAnswer",
+    label: "command.answer.regenerate",
+    group: "main",
+    // As Regenerate in a Mind: the Answer is written again in its place.
+    reversible: true,
+    when: isThere,
+    enabled: () => (answerInFocus() ? true : { reason: "assistant.lastToNewMind.unavailable" }),
+    run: () => {
+      const answer = answerInFocus();
+      if (answer) void regenerateAnswer(answer.id);
+    },
+  },
+  {
+    // The composer's Stop, which its send button is while an Answer is written.
+    id: "answer.stop",
+    label: "command.answer.stop",
+    group: "main",
+    // What was written stays, and Regenerate writes it again.
+    reversible: true,
+    when: isThere,
+    enabled: () =>
+      answerBeingWritten() !== null ? true : { reason: "command.answer.stop.unavailable" },
+    run: stopWriting,
+  },
+  {
+    id: "assistant.lastToNewMind",
+    label: "assistant.lastToNewMind",
+    group: "main",
+    // Undo deletes the Mind it made.
+    reversible: true,
+    when: isThere,
+    enabled: () =>
+      keepable(lastAnswer()) ? true : { reason: "assistant.lastToNewMind.unavailable" },
+    run: lastToNewMind,
+  },
+  {
+    id: "assistant.clear",
+    label: "assistant.clear",
+    group: "danger",
+    // To Recently deleted, with Undo.
+    reversible: true,
+    when: isThere,
+    enabled: conversationEmpty,
+    run: () => clearConversation().catch(store().reportError),
   },
   {
     // No shortcut: ⌘Y, the browsers' History key on a Mac, is Redo on Windows.

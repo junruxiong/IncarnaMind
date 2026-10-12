@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import {
+  assistantAnswers,
   useLocalChatModel as connectLocalChatModel,
   createDataFolder,
   dismissChatSetup,
@@ -228,7 +229,7 @@ test("filters by year, format and status with counts, and asks about the Documen
   }
 });
 
-test("starts a Mind named after the Folder with its scoped Question first, in English and Chinese", async () => {
+test("starts a Mind named after the Folder, its composer scoped to the Folder, and the Question asked goes to the assistant, in English and Chinese", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   try {
     await dismissChatSetup(window);
@@ -275,28 +276,17 @@ test("starts a Mind named after the Folder with its scoped Question first, in En
     await window.keyboard.type("What do these say about tides?");
     await screenshot(window, "library-start-mind");
 
-    // Asked, the Question is the Mind's first Block, with the Folder as its Search scope.
+    // Asked, in the assistant, with the Folder as its Search scope; the new Mind stays empty.
     await connectLocalChatModel(window);
     await window.keyboard.press("Enter");
-    await expect
-      .poll(() =>
-        editor.evaluate(
-          (element) =>
-            element.firstElementChild?.matches(
-              '[data-testid="question"], :has(> [data-testid="question"])',
-            ) === true,
-        ),
-      )
-      .toBe(true);
-    const chip = editor.getByTestId("question").getByTestId("scope-chip");
-    await expect(chip).toHaveText(FOLDER);
-    await expect(chip).toHaveAttribute("data-id", folderId ?? "");
-    await expect(editor.getByTestId("question").locator(".question-text")).toHaveText(
+    await expect(window.getByTestId("assistant-question")).toContainText(
       "What do these say about tides?",
     );
-    await expect(editor.getByTestId("answer")).toHaveAttribute("data-status", "done", {
-      timeout: 15_000,
-    });
+    const answer = assistantAnswers(window).first();
+    await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+    await expect(answer.getByTestId("answer-steps")).toContainText(`Searched ${FOLDER} ·`);
+    await expect(editor.getByTestId("question")).toHaveCount(0);
+    await expect(editor.getByTestId("answer")).toHaveCount(0);
   } finally {
     await app.close();
   }

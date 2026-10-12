@@ -26,6 +26,7 @@
  * lines, narrowed to those the quote covers ("Revenue, rows 12–14"); for
  * sections, the heading it sits under.
  */
+import { citationNode, type NodeJSON } from "../../shared/blockJson";
 import {
   englishLocation,
   locationOf,
@@ -39,9 +40,7 @@ import { findQuote, lostLigatures, type MatchOptions } from "../../shared/quoteM
 import { foldRadicals } from "../../shared/text";
 import { sameRun } from "../../shared/units";
 import {
-  CITATION_NODE,
   type Citation,
-  type CitationAttributes,
   type CitationCheck,
   type CitationCheckReason,
   type CitationRecheck,
@@ -51,7 +50,6 @@ import {
 import type { CitationSource } from "../documents";
 import type { PageText } from "../documents/passages";
 import type { WindowedPassage } from "../documents/search";
-import type { NodeJSON } from "./blocks";
 import { withCueMarks } from "./cueMarks";
 import type {
   AnswerTools,
@@ -64,8 +62,10 @@ import type {
 /** How many times one Answer may search; later searches are refused, so the model answers. */
 const MAX_SEARCHES_PER_ANSWER = 5;
 
-/** A Citation marker as the model writes it in the text: "[^1]". */
-const CITATION_MARKER = /\[\^(\d{1,4})\]/g;
+const FIX_THESE = "Fix these with another cite call:";
+
+/** Whether what `cite` told the model asks it to fix records, which the Tool loop must not end before. */
+export const asksForFixes = (told: string): boolean => told.includes(FIX_THESE);
 
 /**
  * Where a new Unit starts inside a Passage given to the model ("[p. 4]",
@@ -143,11 +143,12 @@ interface Cited {
 /**
  * The Units a record cites, in order. A record names a Location ("slide 4",
  * "Revenue, rows 12–14", "§ 2.1 Sensitivity"), or for a PDF or deck, its
- * pages. One that names none cites the Passage's own Units; when they are
- * more than two, the quote's own Unit (or two) among them, if it is there:
- * a PDF's too, as a small model often names no page, and a Passage of a
- * page with little text runs over three or four (#67: 梯度下降法's covers
- * pp. 1–4). `units` are the Passage's.
+ * pages. One that names none cites the quote's own Unit (or two) among the
+ * Passage's, if it is there, else the Passage's own Units: a small model often
+ * names no page, and a Passage runs onto a second page (#519) or, with little
+ * text on a page, over three or four (#67: 梯度下降法's covers pp. 1–4). Two
+ * pages named, as a model copies a Passage's, narrow to the quote's own the same
+ * way. `units` are the Passage's.
  */
 function citedUnits(
   record: Pick<CitationRecordInput, "pageFrom" | "pageTo" | "location" | "quote">,
@@ -179,18 +180,31 @@ function citedUnits(
   if ((kind === "page" || kind === "slide") && (from !== null || to !== null)) {
     const first = (from ?? to) as number;
     const last = (to ?? from) as number;
-    return {
-      range: { pageFrom: Math.min(first, last), pageTo: Math.max(first, last) },
-      requested: null,
-      unresolved: false,
-    };
+    const named = { pageFrom: Math.min(first, last), pageTo: Math.max(first, last) };
+    // More than two pages named stay so, for the check to reject.
+    const narrowed =
+      named.pageTo - named.pageFrom + 1 <= MAX_CITED_PAGES
+        ? locatedAmong(units, named, record, matching)
+        : null;
+    return { range: narrowed ?? named, requested: null, unresolved: false };
   }
-  if (own.pageTo - own.pageFrom + 1 > MAX_CITED_PAGES) {
-    const quote = cleanQuote(typeof record.quote === "string" ? record.quote : "");
-    const found = locateQuote(units, quote, matching);
-    if (found) return { range: found, requested: null, unresolved: false };
-  }
-  return { range: own, requested: null, unresolved: false };
+  const located = locatedAmong(units, own, record, matching);
+  return { range: located ?? own, requested: null, unresolved: false };
+}
+
+/** Where the record's quote is within these pages of the Passage's Units, when they are more than one. */
+function locatedAmong(
+  units: readonly PageText[],
+  pages: { pageFrom: number; pageTo: number },
+  record: Pick<CitationRecordInput, "quote">,
+  matching: Matching,
+): PageRange | null {
+  if (pages.pageTo === pages.pageFrom) return null;
+  const quote = cleanQuote(typeof record.quote === "string" ? record.quote : "");
+  const among = units.filter(
+    (unit) => unit.page !== null && unit.page >= pages.pageFrom && unit.page <= pages.pageTo,
+  );
+  return locateQuote(among, quote, matching);
 }
 
 /** The first Unit, or two consecutive Units of one run, among `units` whose text holds the quote. */
@@ -556,26 +570,6 @@ const toCitation = (record: Accepted, result: CheckResult | null): Citation => (
   checkReason: result?.checkReason ?? null,
 });
 
-/** A Citation node's attributes: every one set (null ones are left out, as y-tiptap stores them). */
-function citationNode(citation: Citation | null): NodeJSON {
-  const attrs: CitationAttributes = citation ?? {
-    passageId: null,
-    documentId: null,
-    documentName: null,
-    contentHash: null,
-    pageFrom: null,
-    pageTo: null,
-    location: null,
-    quote: null,
-    check: "checking",
-    checkReason: null,
-  };
-  return {
-    type: CITATION_NODE,
-    attrs: Object.fromEntries(Object.entries(attrs).filter(([, value]) => value !== null)),
-  };
-}
-
 export interface CitationSessionEvents {
   /** The model gave a valid record for a marker (again: it replaces the earlier one). */
   onRecord(marker: number, citation: Citation): void;
@@ -816,7 +810,7 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       ? `Recorded ${recorded.map((marker) => `[^${marker}]`).join(", ")}.`
       : "Nothing was recorded.";
     const fix = problems.length
-      ? ` Fix these with another cite call:\n- ${problems.join("\n- ")}`
+      ? ` ${FIX_THESE}\n- ${problems.join("\n- ")}`
       : " Write the Answer now if you haven't yet; don't repeat it.";
     return `${done}${fix}`;
   }
@@ -882,6 +876,7 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       return {
         text: formatPassages(formatted),
         passageCount: found.length,
+        passageIds: found.map((passage) => passage.passageId),
         ranks: found.map((passage, index) => passage.rank ?? index),
         // Someone else wrote a saved web page: reading it makes the Run third-party (#78).
         ...(found.some((passage) => passage.documentKind === "web") && {
@@ -993,63 +988,6 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       };
     },
   };
-}
-
-/**
- * Turns the markers in an Answer's text into Citation nodes: `node` gives a
- * marker's node, or null to remove the marker (with the space before it, so
- * "a claim [^3]." reads "a claim."). Text marked as code keeps its markers.
- */
-export function withCitations(
-  blocks: readonly NodeJSON[],
-  node: (marker: number) => NodeJSON | null,
-): NodeJSON[] {
-  return blocks.map((block) => replaceMarkers(block, node));
-}
-
-function replaceMarkers(block: NodeJSON, node: (marker: number) => NodeJSON | null): NodeJSON {
-  if (!block.content) return block;
-  const content: NodeJSON[] = [];
-  for (const child of block.content) {
-    const isCode = child.marks?.some((mark) => mark.type === "code") ?? false;
-    if (child.type !== "text" || !child.text || isCode) {
-      content.push(replaceMarkers(child, node));
-      continue;
-    }
-    let last = 0;
-    for (const match of child.text.matchAll(CITATION_MARKER)) {
-      let before = child.text.slice(last, match.index);
-      const citation = node(Number(match[1]));
-      // A removed marker takes the space before it, unless a word follows.
-      if (!citation) {
-        const after = child.text.slice(match.index + match[0].length);
-        if (!/^\p{L}/u.test(after)) before = before.replace(/[ \t]+$/, "");
-      }
-      if (before) content.push({ ...child, text: before });
-      if (citation) content.push(citation);
-      last = match.index + match[0].length;
-    }
-    const rest = child.text.slice(last);
-    if (rest) content.push(last === 0 ? child : { ...child, text: rest });
-  }
-  // Two text nodes with the same marks that a removed marker left side by side become one.
-  const merged: NodeJSON[] = [];
-  for (const child of content) {
-    const previous = merged.at(-1);
-    if (
-      previous?.type === "text" &&
-      child.type === "text" &&
-      JSON.stringify(previous.marks ?? []) === JSON.stringify(child.marks ?? [])
-    ) {
-      merged[merged.length - 1] = {
-        ...previous,
-        text: `${previous.text ?? ""}${child.text ?? ""}`,
-      };
-    } else {
-      merged.push(child);
-    }
-  }
-  return { ...block, content: merged };
 }
 
 /**

@@ -249,6 +249,73 @@ test("first-run chat setup appears on a fresh data folder and can be set up late
   await second.app.close();
 });
 
+test("first-run's line under an API key names only the providers listed below it, and says the others are in Settings", async () => {
+  const { app, window } = await launchApp(dataDir);
+  const setup = window.getByTestId("chat-setup");
+  await setup.getByTestId("chat-choice-api-key").check();
+  const row = setup.locator("label").filter({ has: window.getByTestId("chat-choice-api-key") });
+  const radios = setup.getByTestId("provider-form").getByRole("radio");
+
+  const lists = {
+    en: {
+      names: ["Anthropic", "OpenAI", "Google", "OpenRouter", "DeepSeek", "Qwen", "SiliconFlow"],
+      others: "More providers are in Settings.",
+    },
+    "zh-CN": {
+      names: ["Anthropic", "OpenAI", "Google", "OpenRouter", "DeepSeek", "通义千问", "硅基流动"],
+      others: "更多提供商在“设置”中。",
+    },
+  } as const;
+  for (const language of ["zh-CN", "en"] as const) {
+    await window.evaluate(
+      async (user) => {
+        await (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+          user,
+        });
+      },
+      { language },
+    );
+    const { names, others } = lists[language];
+    await expect(row).toContainText(others);
+    const line = (await row.innerText()).split(others)[0] ?? "";
+    await expect(radios).toHaveCount(7);
+    for (const name of names) expect(line).toContain(name);
+    const labels = await setup.getByTestId("provider-form").locator("label").allInnerTexts();
+    for (const name of names) expect(labels.some((label) => label.startsWith(name))).toBe(true);
+    for (const promised of ["Kimi", "GLM", "Mistral", "xAI", "OpenAI-compatible", "兼容"]) {
+      expect(line).not.toContain(promised);
+    }
+  }
+
+  await dismissChatSetup(window);
+  const settings = await openSettings(window, "models");
+  await expect(settings.getByTestId("chat-choice-api-key")).toBeVisible();
+  await expect(
+    settings.locator("label").filter({ has: window.getByTestId("chat-choice-api-key") }),
+  ).toContainText(
+    "Kimi, GLM, Mistral, xAI, OpenRouter, SiliconFlow, or an OpenAI-compatible server",
+  );
+  await app.close();
+});
+
+test("in Chinese, the provider form has no space after full-width punctuation where its pieces join", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await window.evaluate(async () =>
+    (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+      user: { language: "zh-CN" },
+    }),
+  );
+  const form = window.getByTestId("chat-setup").getByTestId("provider-form");
+  await window.getByTestId("chat-choice-api-key").check();
+  await form.getByRole("radio", { name: "OpenAI", exact: true }).check();
+  const facts = (await form.getByTestId("provider-facts").innerText()).replace(/\s+/g, " ");
+  expect(facts).toMatch(/^数据使用：\S/);
+  const credits = await form.getByTestId("provider-plan-credits").innerText();
+  expect(credits).toMatch(/。了解更多/);
+  expect(`${facts}${credits}`).not.toMatch(/[。：] /);
+  await app.close();
+});
+
 test('after "Don\'t allow", a connection test offers to ask again, and asks before sending anything', async () => {
   const { app, window } = await launchApp(dataDir);
   const form = window.getByTestId("chat-setup").getByTestId("provider-form");

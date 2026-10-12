@@ -51,10 +51,11 @@ export interface FilesBridge {
   showDocumentInFolder(documentId: string): Promise<void>;
   /**
    * Shows the system's open dialog for a folder to link (see
-   * `CoreApi.addLinkedFolder`). Resolves with its absolute path, or null if
-   * the User cancelled.
+   * `CoreApi.addLinkedFolder`), or, given a Linked folder's id, for where
+   * that folder is now (see `CoreApi.locateLinkedFolder`). Resolves with its
+   * absolute path, or null if the User cancelled.
    */
-  pickLinkedFolder(): Promise<string | null>;
+  pickLinkedFolder(locating?: string): Promise<string | null>;
   /**
    * Shows the system's open dialog for Documents to add, as a sheet on the
    * window, starting in the folder last picked from (else Downloads).
@@ -80,6 +81,8 @@ export interface FilesBridge {
   onMenuCommand(listener: (command: MenuCommand) => void): () => void;
   /** Tells the application menu whether the sidebar is hidden, so View says "Hide Sidebar" or "Show Sidebar". */
   setSidebarHidden(hidden: boolean): void;
+  /** Tells the Edit menu where Undo and Redo go now, and what they would take back or do again. */
+  setEditMenu(state: EditMenuState): void;
   /** The window's title bar (./titleBar.ts), for the page to keep room for the window's buttons. */
   readonly titleBar: TitleBar;
   /**
@@ -91,6 +94,19 @@ export interface FilesBridge {
 
 /** The command the application menu asks the window to run (see src/main/menu.ts). */
 export type MenuCommand = MenuCommandId;
+
+/**
+ * What the Edit menu's Undo and Redo show for the window in front: whether the
+ * focus is in a field or the note, whose own undo they reach, or neither (`text`
+ * null), where they reach the app's changes. `undo` and `redo` name the change
+ * each would reach ("Move 3 Documents"; "" for one without a name), or are null
+ * when there is none. The window decides where they go when they are chosen.
+ */
+export interface EditMenuState {
+  text: "field" | "note" | null;
+  undo: string | null;
+  redo: string | null;
+}
 
 export type SkillPickKind = "folder" | "zip";
 
@@ -118,6 +134,8 @@ export const FILES_CHANNELS = {
   logError: "files:logError",
   /** From the page: the sidebar is hidden (true) or shown (false), for the View menu's label. */
   sidebarHidden: "app:sidebarHidden",
+  /** From the page: where the Edit menu's Undo and Redo go now (`EditMenuState`). */
+  editMenu: "app:editMenu",
   /** From the main process: a command chosen in the application menu. */
   menuCommand: "app:menuCommand",
   /** From the main process: the window entered (true) or left (false) full screen. */

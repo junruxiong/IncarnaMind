@@ -18,15 +18,17 @@ import {
   sectionTitleClass,
 } from "../ui";
 import { AgentPairingRow, type JustSetUp } from "./AgentPairingRow";
-import { clientName, setupWords } from "./agentWords";
+import { clientName, clientNote, setupWords } from "./agentWords";
 import { ConnectAgentDialog } from "./ConnectAgentDialog";
 
 /**
  * Settings → Agents (#351, experimental): the User's own AI agent (Claude,
  * Codex, Cursor…) searching the Folders they choose, with checked Citations.
  * Off by default. On, it lists the agents connected, each with its Folders,
- * activity and Disconnect, then every agent IncarnaMind can be set up in,
- * those on this computer first: Connect asks once, in plain words, what the
+ * activity and Disconnect, then the agents IncarnaMind is set up in (a few
+ * first-class ones, and "Other agent" for the rest; ADR-0019), those on this
+ * computer first. A row is one entry of the list in src/core/agents/clients.ts,
+ * so a connected app can be listed beside them. Connect asks once, in plain words, what the
  * agent may read and where that goes, then sets it up in one click where the
  * agent allows it (see src/core/agents/setup.ts). What's technical (settings
  * to copy) stays behind "Details".
@@ -54,11 +56,15 @@ export function AgentsSettings() {
 
   const turn = (enabled: boolean) => core.setAgentsEnabled(enabled).then(setSettings, reportError);
 
-  const allow = async (client: AgentClient, folderIds: string[]) => {
+  const allow = async (client: AgentClient, folderIds: string[], name: string) => {
     setBusy(true);
     setProblem(null);
     try {
-      const { pairing, result } = await core.setUpAgent({ client: client.id, folderIds });
+      const { pairing, result } = await core.setUpAgent({
+        client: client.id,
+        folderIds,
+        ...(name && { name }),
+      });
       setJustSetUp({ pairingId: pairing.id, result });
       setConnecting(null);
       // The agent is connected either way: "Copy settings" in its details copies it again.
@@ -71,8 +77,6 @@ export function AgentsSettings() {
     }
   };
 
-  const installed = clients?.filter((client) => client.installed) ?? [];
-  const others = clients?.filter((client) => !client.installed) ?? [];
   const clientRow = (client: AgentClient) => (
     <li
       key={client.id}
@@ -83,6 +87,7 @@ export function AgentsSettings() {
       <div className="flex min-w-0 flex-col gap-0.5">
         <span className={rowTitleClass}>{clientName(client, t)}</span>
         <span className={rowTextClass}>{setupWords(client, t)}</span>
+        {clientNote(client, t) && <span className={hintClass}>{clientNote(client, t)}</span>}
       </div>
       <div className={rowButtonsClass}>
         <button
@@ -155,6 +160,7 @@ export function AgentsSettings() {
               <AgentPairingRow
                 key={pairing.id}
                 pairing={pairing}
+                skillInstalled={settings.skills.includes(pairing.id)}
                 folders={folders}
                 justSetUp={justSetUp}
                 onUndone={() => setJustSetUp(null)}
@@ -168,20 +174,10 @@ export function AgentsSettings() {
         <section data-testid="agents-clients">
           <h4 className={sectionTitleClass}>{t("agents.settings.connect")}</h4>
           <p className={sectionNoteClass}>{t("agents.settings.connect.note")}</p>
-          {installed.length > 0 && (
-            <>
-              <p className={`${hintClass} mb-1`}>{t("agents.setup.installed")}</p>
-              <ul data-testid="agents-installed" className={`${ruledListClass} mb-3`}>
-                {installed.map(clientRow)}
-              </ul>
-            </>
-          )}
-          <details data-testid="agents-more" open={installed.length === 0}>
-            <summary className="cursor-pointer py-1 text-[13px] leading-5 text-ink-secondary">
-              {t("agents.settings.more")}
-            </summary>
-            <ul className={ruledListClass}>{others.map(clientRow)}</ul>
-          </details>
+          <ul data-testid="agents-list" className={ruledListClass}>
+            {clients.map(clientRow)}
+          </ul>
+          <p className={`${hintClass} mt-2`}>{t("agents.settings.web")}</p>
         </section>
       )}
 
@@ -190,7 +186,7 @@ export function AgentsSettings() {
         folders={folders}
         busy={busy}
         problem={problem}
-        onAllow={(folderIds) => connecting && void allow(connecting, folderIds)}
+        onAllow={(folderIds, name) => connecting && void allow(connecting, folderIds, name)}
         onClose={() => {
           setConnecting(null);
           setProblem(null);

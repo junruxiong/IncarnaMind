@@ -47,7 +47,7 @@ _Avoid_: chat (except in "New chat"), thread, session
 ### Documents
 
 **Document**:
-A file on the User's computer, at its path, that IncarnaMind has indexed for Answers to draw on, or a Web page. A file stays where the User keeps it; IncarnaMind keeps the text it read from it. A Web page's snapshot is kept in IncarnaMind's data folder. The same file in two places is two Documents.
+A file the User keeps, in a Linked folder or added on its own, that IncarnaMind has indexed for Answers to draw on, or a Web page. A file stays where the User keeps it; IncarnaMind keeps the text it read from it. A Web page's snapshot is kept in IncarnaMind's data folder. A Document is known by its Linked folder and its path inside it, or as a file of its own, never by where it is on one computer, so it stays the same Document when its Linked folder moves or is on another of the User's computers. Each version of its file is known by its content. The same file in two places is two Documents.
 _Avoid_: file, doc, source
 
 **Web page**:
@@ -62,8 +62,12 @@ _Avoid_: deleted, broken
 A Document whose Linked folder can't be reached for now, such as on an unplugged drive. It is still searched, from its stored text; only its file can't be opened.
 _Avoid_: offline, missing
 
+**Scanned page**:
+A page of a PDF that is a picture of text, such as a scan, with little or no text of its own. IncarnaMind reads its text from the picture on the User's computer (text recognition, also called OCR) and keeps it as the page's text, so it is searched and cited like any other page; a Citation of it says its text was read from a scan.
+_Avoid_: image page, OCR page
+
 **Linked folder**:
-A folder on the User's computer that IncarnaMind keeps in sync: every supported file in it, at any depth, is a Document, and new, changed and removed files are picked up. IncarnaMind never changes or deletes a file in it, and adds a new file there only once the User allows it for that folder. Files a cloud drive keeps online only are indexed when the User asks.
+A folder on the User's computer that IncarnaMind keeps in sync: every supported file in it, at any depth, is a Document, and new, changed and removed files are picked up. IncarnaMind never changes or deletes a file in it, and adds a new file there only once the User allows it for that folder. Files a cloud drive keeps online only are indexed when the User asks. Moved, renamed or on another computer, it is located again from its menu and keeps its Documents.
 _Avoid_: workspace, vault, source
 
 **Other Documents**:
@@ -156,7 +160,7 @@ A script that comes with a Skill, which an Answer can run on the User's computer
 _Avoid_: tool script, code execution
 
 **Outside agent**:
-An AI agent the User runs themselves, such as Claude Code or Codex, connected to IncarnaMind so it can search and read the Folders the User shares with it and cite them with Citations IncarnaMind checks. The User connects each one in Settings, with its own Folders (none until chosen), its own consent and a list of every call it made; disconnecting it stops it at once, and Local mode pauses it.
+An AI agent the User runs themselves, such as Claude Code or Codex, connected to IncarnaMind so it can search and read the Folders the User shares with it and cite them with Citations IncarnaMind checks. The User connects each one in Settings, with its own Folders (none until chosen), its own consent and a list of every call it made; disconnecting it stops it at once, and Local mode pauses it. Where the agent reads Skills, connecting it also installs a Skill in the agent's own skills folder that tells it when to use IncarnaMind, and disconnecting removes it if the User hasn't changed it.
 _Avoid_: harness, plugin, client, bot
 
 **Built-in Skill**:
@@ -176,6 +180,10 @@ _Avoid_: snapshot, version, backup, undo
 **Recently deleted**:
 Where a deleted Mind, Conversation, Document, Folder or Tag waits for 30 days, from where it can be restored or deleted permanently. Deleting never touches the User's files.
 _Avoid_: trash, bin, archive
+
+**Undo line**:
+The one short line that says what the User just changed, with Undo, shown after any change that can be taken back: "Moved 3 Documents to Finance · Undo". Its Undo does what ⌘Z does.
+_Avoid_: toast, snackbar, notification
 
 ### Checks
 
@@ -221,6 +229,16 @@ _Avoid_: grid, spreadsheet
 What IncarnaMind has been asked to remember about the User, kept only when the User says so and open to read, change and delete.
 _Avoid_: history, profile, learned preferences
 
+### Cost
+
+**Monthly cap**:
+The most IncarnaMind may spend in a calendar month on the models the User pays for by the token, on their own keys; off until the User sets it. A request that could pass it isn't sent, and a run it stops says so.
+_Avoid_: budget, quota, spending limit
+
+**Plan**:
+A subscription the User signs in with, such as ChatGPT Plus, whose own limits apply instead of a price. A plan's limit stops a run as the monthly cap does.
+_Avoid_: subscription key, membership
+
 ### Meetings
 
 **Meeting**:
@@ -244,6 +262,10 @@ _Avoid_: shared folder, workspace, permission
 **Output location**:
 The folder the User picks for the files IncarnaMind creates, such as exports and Documents a Task saves. IncarnaMind writes nowhere else without asking.
 _Avoid_: export folder, downloads, save path
+
+**Workspace**:
+Everything one data folder holds (Minds, Conversations, the Documents' index and settings), known by one random id with no account behind it. A copy of the data folder is the same workspace, and the User's computers will share one when they sync. Not shown to the User.
+_Avoid_: account, vault, Library (the view of Documents)
 
 ### Privacy
 
