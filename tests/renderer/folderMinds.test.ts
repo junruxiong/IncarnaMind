@@ -7,7 +7,7 @@ import type {
   Mind,
 } from "../../src/core/api";
 import { chosenScope, composerScope, NO_SCOPE } from "../../src/renderer/src/composer";
-import { movedLocally, moveMessage, undoMoves } from "../../src/renderer/src/moves";
+import { movedLocally, moveMessage, moveName, undoMoves } from "../../src/renderer/src/moves";
 import { scopeChips } from "../../src/renderer/src/scope";
 import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
 import { hasSearchScope } from "../../src/shared/searchScope";
@@ -170,6 +170,20 @@ describe("moving Minds and Documents", () => {
     expect(moveMessage(t, { mindIds: ["shortlist"], documentIds: ["a"] }, "Finance", names)).toBe(
       "Moved 2 items to Finance",
     );
+  });
+
+  test("the Edit menu names the move: one by its name, several by how many of what", () => {
+    const names = { minds, documents: [] };
+    expect(moveName(t, { mindIds: ["shortlist"] }, names)).toBe("Move “Shortlist”");
+    expect(moveName(t, { documentIds: ["a", "b", "c"] }, names)).toBe("Move 3 Documents");
+    expect(moveName(t, { mindIds: ["shortlist"], documentIds: ["a"] }, names)).toBe("Move 2 items");
+    expect(
+      moveName(
+        (key, params) => translate("zh-CN", key, params),
+        { mindIds: ["shortlist", "notes"] },
+        names,
+      ),
+    ).toBe("移动 2 个 Mind");
   });
 
   test("the line names a conversation moved, or counts them", () => {

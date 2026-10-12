@@ -14,6 +14,7 @@ describe("Settings", () => {
         imageModel: null,
         suggestWhileWriting: false,
         leaveOutOwnFiles: true,
+        monthlyCap: null,
       },
       device: {
         sidebarWidth: 248,
@@ -105,6 +106,7 @@ describe("Settings", () => {
       imageModel: null,
       suggestWhileWriting: false,
       leaveOutOwnFiles: true,
+      monthlyCap: null,
     });
     expect(settings.device).toEqual({
       sidebarWidth: 320,
@@ -158,7 +160,12 @@ describe("Settings", () => {
       motion: "reduced" as const,
     };
     await before.updateSettings({
-      user: { language: "zh-CN", suggestWhileWriting: true, leaveOutOwnFiles: false },
+      user: {
+        language: "zh-CN",
+        suggestWhileWriting: true,
+        leaveOutOwnFiles: false,
+        monthlyCap: { amount: 20, currency: "USD" },
+      },
       device,
     });
     before.close();
@@ -173,6 +180,7 @@ describe("Settings", () => {
         imageModel: null,
         suggestWhileWriting: true,
         leaveOutOwnFiles: false,
+        monthlyCap: { amount: 20, currency: "USD" },
       },
       device,
       language: "zh-CN",
