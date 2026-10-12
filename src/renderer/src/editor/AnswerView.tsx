@@ -12,13 +12,13 @@ import {
 } from "../../../core/api";
 import { asksAfterThirdParty } from "../../../shared/approvalRules";
 import { AnswerWriting } from "../answerPhase";
-import { RUN_SCRIPT, SEARCH } from "../answerSteps";
+import { isCalculated, RUN_SCRIPT, SEARCH } from "../answerSteps";
 import { useAnswers } from "../answers";
 import { useApprovals, waitingFor } from "../approvals";
 import { signInAgain } from "../chatGptSignIn";
 import { useIsExampleAnswer } from "../components/GettingStarted";
 import { PlugIcon, ScriptIcon, SkillIcon, StopIcon } from "../components/icons";
-import { FindSourcesLineIcon } from "../components/lineIcons";
+import { DocumentLineIcon, FindSourcesLineIcon } from "../components/lineIcons";
 import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
 import { ProblemLine } from "../components/ProblemLine";
 import { formatResetTime } from "../cost";
@@ -27,6 +27,7 @@ import { useLanguage, useT } from "../i18n";
 import { ANSWER_PROBLEMS, answerProblem } from "../problems";
 import type { SettingsPage } from "../settingsPages";
 import { useAppStore } from "../store";
+import { reasonKey } from "../webPages";
 import { ChevronRightSmallIcon, RegenerateSmallIcon } from "./icons";
 import { useMindId } from "./mindContext";
 import { ThirdPartyLine } from "./ThirdPartyLine";
@@ -136,6 +137,7 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
       />,
     );
   }
+  const { calculated, uncalculated } = figuresOf(toolCalls);
 
   return (
     <NodeViewWrapper
@@ -158,9 +160,11 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
 
       <NodeViewContent className="answer-content" />
 
+      {!streaming && uncalculated > 0 && <UncalculatedLine count={uncalculated} />}
+
       {searchesOpen && (
         <div contentEditable={false} className="answer-searches-open">
-          <SearchList searches={searches} />
+          <SearchList searches={searches} calculated={calculated} />
         </div>
       )}
 
@@ -311,6 +315,7 @@ export function CallRows({
         !waitingIds.has(call.id) &&
         (call.source === "connector" ||
           call.source === "sources" ||
+          call.source === "web" ||
           (call.source === "skill" && call.tool === RUN_SCRIPT)),
     )
     .map((call) => <CallRow key={call.id} call={call} />);
@@ -326,10 +331,11 @@ export function CallRows({
   );
 }
 
-/** The row of a call through a Connector, of Find sources, or of a Skill script. */
+/** The row of a call through a Connector, of Find sources, of web search, or of a Skill script. */
 export function CallRow({ call }: { call: AnswerToolCall }) {
   if (call.source === "connector") return <ConnectorCall call={call} />;
   if (call.source === "sources") return <SourcesCall call={call} />;
+  if (call.source === "web") return <WebCall call={call} />;
   return <ScriptCall call={call} />;
 }
 
@@ -801,6 +807,71 @@ function SourcesCall({ call }: { call: AnswerToolCall }) {
   );
 }
 
+/** What a call of web search said: running, what it searched for, or the page it saved or why not (#128). */
+function webCallText(t: ReturnType<typeof useT>, call: AnswerToolCall): string {
+  const running = call.status === "running";
+  if (call.tool === "search_web") {
+    const query = field(call, "query");
+    if (running) return t("web.call.searching", { query });
+    return t(call.status === "failed" ? "web.call.searchFailed" : "web.call.searched", { query });
+  }
+  const page = call.webPage;
+  const address = page?.address ?? field(call, "url");
+  if (page && "documentId" in page) return t("web.call.saved", { name: page.name });
+  if (running) return t("web.call.reading", { address });
+  return t("web.call.notSaved", {
+    address,
+    reason: t(reasonKey(page && "failure" in page ? page.failure : "unreachable")),
+  });
+}
+
+/**
+ * A call of web search: a search, with how many pages it found; or a page
+ * read, saved as a Document that opens from here, or why it couldn't be saved.
+ */
+function WebCall({ call }: { call: AnswerToolCall }) {
+  const t = useT();
+  const running = call.status === "running";
+  const page = call.webPage;
+  const saved = page && "documentId" in page ? page : null;
+  const count = call.tool === "search_web" && call.status === "done" ? call.resultCount : null;
+  const text = webCallText(t, call);
+  return (
+    <div
+      contentEditable={false}
+      data-testid="answer-web-call"
+      data-tool={call.tool}
+      data-status={call.status}
+      className="answer-call"
+    >
+      <span className="answer-call-summary answer-call-summary--static">
+        <DocumentLineIcon
+          kind="web"
+          className={`answer-call-icon ${running ? "animate-pulse" : ""}`}
+        />
+        <span className="answer-call-text" title={text}>
+          {text}
+        </span>
+        {count !== null && (
+          <span className="answer-call-note">
+            · {t(count === 1 ? "web.call.pages.one" : "web.call.pages", { count })}
+          </span>
+        )}
+        {saved && (
+          <button
+            type="button"
+            data-testid="answer-web-open"
+            onClick={() => useAppStore.getState().openDocument({ documentId: saved.documentId })}
+            className="answer-action"
+          >
+            {t("web.call.open")}
+          </button>
+        )}
+      </span>
+    </div>
+  );
+}
+
 /** A remote Connector the Answer couldn't use: it waits for the User to sign in again. */
 function SignInRequired({ connector }: { connector: string }) {
   const t = useT();
@@ -883,6 +954,27 @@ export function SkillRow({ name, use, reads }: SkillUse) {
   );
 }
 
+/** How many calculated figures an Answer shows, and how many it couldn't, from its one `calculate` call. */
+export function figuresOf(calls: readonly AnswerToolCall[]): {
+  calculated: number;
+  uncalculated: number;
+} {
+  const call = calls.find(isCalculated);
+  return { calculated: call?.resultCount ?? 0, uncalculated: call?.uncalculated ?? 0 };
+}
+
+/** Under an Answer whose figures some couldn't be calculated: their numbers are missing from its text. */
+export function UncalculatedLine({ count }: { count: number }) {
+  const t = useT();
+  return (
+    <p contentEditable={false} data-testid="answer-uncalculated" className="answer-info">
+      {count === 1
+        ? t("answer.figures.uncalculated.one")
+        : t("answer.figures.uncalculated", { count })}
+    </p>
+  );
+}
+
 /** The searches an Answer ran, summed up on its meta line; it opens the list. */
 function SearchesSummary({
   searches,
@@ -915,8 +1007,17 @@ function SearchesSummary({
   );
 }
 
-/** What each search was for, and what it found. */
-function SearchList({ searches }: { searches: AnswerToolCall[] }) {
+/**
+ * What each search was for and what it found, then how many figures the
+ * Answer calculated (ADR-0021), which have no Tool-call card.
+ */
+function SearchList({
+  searches,
+  calculated = 0,
+}: {
+  searches: AnswerToolCall[];
+  calculated?: number;
+}) {
   const t = useT();
   const results = (call: AnswerToolCall) =>
     call.status === "failed"
@@ -940,6 +1041,13 @@ function SearchList({ searches }: { searches: AnswerToolCall[] }) {
           </li>
         );
       })}
+      {calculated > 0 && (
+        <li data-testid="answer-figures">
+          {calculated === 1
+            ? t("answer.figures.calculated.one")
+            : t("answer.figures.calculated", { count: calculated })}
+        </li>
+      )}
     </ul>
   );
 }

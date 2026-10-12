@@ -36,6 +36,28 @@ jobs:
       - run: npm run lint
       - run: npm test
 
+  # The Word corpus (eval/word/README.md): every file opens in LibreOffice headless. Not a required
+  # check; it installs LibreOffice, which the other jobs don't need.
+  word-corpus:
+    name: Word corpus opens in LibreOffice
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      INCARNAMIND_WORD_REQUIRE_LIBREOFFICE: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Install LibreOffice Writer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libreoffice-writer
+      - run: npm run eval:word
+
   # Every pull request runs the smoke test on Linux, where runners are plentiful; macOS runs
   # it every night (nightly.yml), for what only macOS has, such as the traffic lights.
   # The suite is split into shards that run at once: as one job it took about 20 minutes, and
@@ -67,6 +89,9 @@ jobs:
             sleep 20
           done
           exit 1
+      # Chinese faces, as a Linux system with Chinese has (DESIGN.md, Typography): the runner has
+      # none, so a printed PDF would hold no Chinese for the export specs to read back.
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends fonts-noto-cjk
       # The app needs a display: a virtual one, bigger than the window the specs set
       # (e2e/app.ts), at full colour depth. xvfb-run's own default is 640 × 480 at 8 bits.
       - run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" npm run test:smoke -- --shard=${{ matrix.shard }}/4

@@ -43,6 +43,7 @@ function weatherCrossEncoder() {
   const crossEncoder: CrossEncoder = {
     async load() {
       loaded = true;
+      return { device: "cpu" };
     },
     async score(query, texts) {
       if (!loaded) throw new Error("Not loaded.");
@@ -107,11 +108,13 @@ describe("Rerank", { timeout: 30_000 }, () => {
       service: null,
       paused: false,
       model: expect.objectContaining({ name: BUILT_IN_RERANKING_MODEL.name, state: "ready" }),
+      runsOn: null,
     });
     const shown = await ask();
 
     // The built-in model prefers Weather, so its Passages come first.
     expect(shown[0]?.document).toBe("Weather");
+    expect(await core.getRerankSettings()).toMatchObject({ runsOn: "cpu" });
     expect(weather.calls).toHaveLength(1);
     expect(requests).toEqual([]);
     expect(rerankers.calls).toEqual([]);
@@ -165,6 +168,7 @@ describe("Rerank", { timeout: 30_000 }, () => {
       service: COHERE,
       paused: false,
       model: expect.objectContaining({ name: BUILT_IN_RERANKING_MODEL.name }),
+      runsOn: null,
     };
     expect(saved).toEqual(expected);
     expect(await changed).toEqual(expected);
@@ -383,6 +387,7 @@ describe("The built-in reranking model", { timeout: 30_000 }, () => {
       service: null,
       paused: false,
       model: expect.objectContaining({ name: BUILT_IN_RERANKING_MODEL.name, state: "ready" }),
+      runsOn: null,
     });
     const shown = await ask();
 
@@ -512,7 +517,7 @@ describe("The built-in reranking model", { timeout: 30_000 }, () => {
 
   test("a model that fails as it reranks leaves search's order", async () => {
     const failing: CrossEncoder = {
-      load: async () => {},
+      load: async () => ({ device: "cpu" }),
       score: async () => {
         throw new Error("The reranking process stopped (exit code 1).");
       },
