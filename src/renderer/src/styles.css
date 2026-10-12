@@ -3895,6 +3895,35 @@
     font-size: var(--text-meta);
     color: var(--color-ink-meta);
   }
+  /* The composer's "/" picker: each Skill's name over what it is for, the User's and the built-in ones apart. */
+  .skill-choices {
+    width: min(340px, calc(100vw - 32px));
+    max-height: min(340px, 40vh);
+    overflow-y: auto;
+  }
+  .skill-choice {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    gap: 0;
+    height: auto;
+    min-height: 44px;
+    padding-block: 4px;
+  }
+  .skill-choice-description {
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--color-ink-secondary);
+  }
+  .skill-choice-manage {
+    margin-top: 4px;
+    border-top: 1px solid var(--color-rule);
+    border-radius: 0 0 6px 6px;
+    color: var(--color-ink-secondary);
+    &:hover {
+      background: var(--color-hover);
+    }
+  }
   .editor-menu-empty {
     padding: 4px 8px;
     font-size: 13px;
