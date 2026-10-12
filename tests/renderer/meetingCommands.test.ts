@@ -176,6 +176,35 @@ describe("the meeting commands", () => {
   });
 });
 
+describe("Mark (#139)", () => {
+  test("is ⌘D on macOS and Ctrl+D elsewhere, a window-wide key, named in both languages", () => {
+    const mark = command("meeting.mark");
+    expect(mark.shortcut?.list).toBeUndefined();
+    expect(keysLabel(keysOn(mark.shortcut?.keys ?? "", true), true)).toBe("⌘D");
+    expect(keysLabel(keysOn(mark.shortcut?.keys ?? "", false), false)).toBe("Ctrl+D");
+    expect(labelOf(mark, IN_MIND, en)).toBe("Mark this moment");
+    expect(labelOf(mark, IN_MIND, zh)).toBe("标记此刻");
+    expect(mark.reversible).toBe(true);
+  });
+
+  test("is offered while Meetings are on, and works only while audio is recorded", () => {
+    const mark = command("meeting.mark");
+    meetingsOn(false);
+    expect(offered(mark, IN_MIND)).toBe(false);
+
+    meetingsOn();
+    expect(offered(mark, IN_MIND)).toBe(true);
+    expect(mark.enabled?.(IN_MIND)).toEqual({ reason: "meetings.command.noneLive" });
+
+    stores.useMeetings.setState({ meetings: [meeting("m1", "mind-1", "paused")] });
+    showing("mind-1");
+    expect(mark.enabled?.(IN_MIND)).toEqual({ reason: "meetings.command.markPaused" });
+
+    stores.useMeetings.setState({ meetings: [meeting("m1", "mind-1", "recording")] });
+    expect(isEnabled(mark, IN_MIND)).toBe(true);
+  });
+});
+
 describe("Recording details (#161)", () => {
   test("show and hide the details of the meeting in view once it has started, named in both languages", async () => {
     meetingsOn();
