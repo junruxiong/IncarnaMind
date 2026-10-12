@@ -579,6 +579,7 @@ export const FOOTNOTE_NODE = "footnote";
  */
 export const DOCUMENT_CHIP_NODE = "documentChip";
 
+/**
  * The node type of a chart (#436): a Block with no text of its own, whose
  * attributes hold what it draws (see `ChartAttributes` in
  * src/shared/charts.ts): its kind, its title, the series drawn, and its
