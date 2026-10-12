@@ -178,6 +178,7 @@ const FORMAT_ORDER: readonly DocumentKind[] = [
   "markdown",
   "text",
   "web",
+  "transcript",
 ];
 
 const byOrder =
@@ -194,6 +195,7 @@ const FORMAT_LABELS: Record<DocumentKind, MessageKey> = {
   markdown: "library.format.markdown",
   text: "library.format.text",
   web: "library.format.web",
+  transcript: "library.format.transcript",
 };
 
 const STATUS_LABELS: Record<LibraryStatus, MessageKey> = {

@@ -282,7 +282,7 @@ describe("Versions retained by features other than Citations", { timeout: 30_000
     const dataDir = await createTempDataFolder();
     startCore(dataDir).close();
     // As a later sync might bring it: a Location of a kind this version doesn't know.
-    const transcript = JSON.stringify({ kind: "time", from: 120, to: 135 });
+    const newer = JSON.stringify({ kind: "area", page: 3, box: [0.1, 0.2, 0.5, 0.4] });
     const db = openDatabase(join(dataDir, DATABASE_FILE));
     try {
       db.run(
@@ -290,7 +290,7 @@ describe("Versions retained by features other than Citations", { timeout: 30_000
            page_from, page_to, location, created_at, updated_at)
          VALUES ('a8d3c6f0-5b1e-4c2a-9f7d-0e4b2a6c8d10', 'check-result', 'result-1',
            'document-1', 'abc', 3, 3, ?, '2026-10-06T09:00:00.000Z', '2026-10-06T09:00:00.000Z')`,
-        [transcript],
+        [newer],
       );
     } finally {
       db.close();
@@ -303,7 +303,7 @@ describe("Versions retained by features other than Citations", { timeout: 30_000
     ]);
     core.retention.retain("check-result", "result-1", [version]);
     expect(queryDatabase(dataDir, "SELECT location, deleted_at FROM retained_versions")).toEqual([
-      { location: transcript, deleted_at: null },
+      { location: newer, deleted_at: null },
     ]);
   });
 

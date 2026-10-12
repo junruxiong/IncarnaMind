@@ -17,6 +17,9 @@
  * Its audio is kept for at most a day after the last stretch, then deleted;
  * the User can delete it sooner. While audio is being captured, background
  * work holds back (`onCapturingChange`): live capture comes first.
+ *
+ * Where this copy can transcribe, the audio also goes to the Meeting's
+ * Transcript as it comes (./transcript, #136).
  */
 import { randomUUID } from "node:crypto";
 import { translate } from "../../shared/i18n";
@@ -47,6 +50,7 @@ import {
   removeUnfinished,
   writePart,
 } from "./audioFiles";
+import type { Transcripts } from "./transcript";
 
 /** Samples arriving this much later than the ones before them could have: a new run starts where they belong. */
 const DISCONTINUITY_MS = 1000;
@@ -126,13 +130,15 @@ export interface MeetingsOptions {
   changed(meetings: Meeting[]): void;
   /** Whether audio is being captured, each time that changes. */
   onCapturingChange(capturing: boolean): void;
+  /** Transcribes Meetings (#136); absent where this copy can't. */
+  transcripts?: Transcripts;
   log: Logger;
 }
 
 export type Meetings = ReturnType<typeof createMeetings>;
 
 export function createMeetings(options: MeetingsOptions) {
-  const { db, now, capture, log } = options;
+  const { db, now, capture, transcripts, log } = options;
   const clock = () => Date.parse(now());
   const folderOf = (meetingId: string) => meetingFolder(options.dataDir, meetingId);
   let live: Live | null = null;
@@ -199,6 +205,7 @@ export function createMeetings(options: MeetingsOptions) {
         deletedAt: row.audio_deleted_at,
       },
       saveError: current?.saveError ?? null,
+      transcript: transcripts && row.status !== "ready" ? transcripts.of(row.id) : null,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -305,6 +312,7 @@ export function createMeetings(options: MeetingsOptions) {
       };
       current.runs.set(source, run);
     }
+    transcripts?.hear(current.meetingId, samples, run.startMs + msOf(run.samples));
     run.waiting.push(samples);
     run.waitingSamples += samples.length;
     run.samples += samples.length;
@@ -361,6 +369,7 @@ export function createMeetings(options: MeetingsOptions) {
     }
     live = current;
     options.onCapturingChange(true);
+    transcripts?.begin(row.id, period.offsetMs);
     current.session = capture.start(
       { systemAudio: systemAudio && capture.systemAudio },
       {
@@ -386,7 +395,12 @@ export function createMeetings(options: MeetingsOptions) {
     });
     options.onCapturingChange(false);
     const audioEnd = Math.max(0, ...current.ends.values());
-    return Math.max(clock() - Date.parse(current.period.start), audioEnd - current.period.offsetMs);
+    const length = Math.max(
+      clock() - Date.parse(current.period.start),
+      audioEnd - current.period.offsetMs,
+    );
+    transcripts?.end(current.meetingId, current.period.offsetMs + length);
+    return length;
   }
 
   /** Ends the Meeting's open stretch, if it has one, and returns its stretches. */
@@ -471,7 +485,10 @@ export function createMeetings(options: MeetingsOptions) {
         last.durationMs = audioEnd - last.offsetMs;
       }
       // Asleep when IncarnaMind closed, or cut off: either way it didn't record until now.
-      if (last) last.endedBy = "interrupted";
+      if (last) {
+        last.endedBy = "interrupted";
+        transcripts?.recovered(row.id, last.offsetMs + (last.durationMs ?? 0));
+      }
       save(row.id, {
         status: "paused",
         paused_by: "interrupted",
@@ -483,6 +500,12 @@ export function createMeetings(options: MeetingsOptions) {
   }
 
   recover();
+  // A Transcript a quit cut off while it was being finished is finished now.
+  for (const { id } of db.all<{ id: string }>(
+    "SELECT id FROM meetings WHERE deleted_at IS NULL AND status = 'stopped'",
+  )) {
+    transcripts?.resume(id);
+  }
   sweep();
   const sweeping = setInterval(() => {
     try {
@@ -629,8 +652,16 @@ export function createMeetings(options: MeetingsOptions) {
         stopped_at: now(),
         audio_expires_at: expiryOf(row.id, periods),
       });
+      transcripts?.stop(row.id);
       log.info("meeting.stopped", { meetingId: row.id });
       changed();
+      return toMeeting(rowOf(row.id));
+    },
+
+    retryTranscript(meetingId: unknown): Meeting {
+      const row = rowOf(meetingId);
+      if (!transcripts) throw new InvalidInputError("This copy of IncarnaMind can't transcribe.");
+      transcripts.retry(row.id);
       return toMeeting(rowOf(row.id));
     },
 
@@ -660,6 +691,7 @@ export function createMeetings(options: MeetingsOptions) {
       const at = now();
       for (const row of rows) {
         if (live?.meetingId === row.id) end(live);
+        transcripts?.forget(row.id);
         deleteAudio(row.id, "discarded");
         db.run("UPDATE meetings SET deleted_at = ?, updated_at = ? WHERE id = ?", [at, at, row.id]);
       }

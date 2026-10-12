@@ -3,6 +3,7 @@ import type { Document } from "../../../core/api";
 import { displayName, sourceOf } from "../../../shared/documentNames";
 import { CountItLine } from "../components/CountItLine";
 import { DocumentLineIcon, PinLineIcon } from "../components/lineIcons";
+import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
 import { ProblemLine } from "../components/ProblemLine";
 import { DocumentTagChips } from "../components/TagChips";
 import { files } from "../core";
@@ -59,6 +60,7 @@ export function ViewerHeader({
   /** Why the Document's own app couldn't open it, until it is tried again. */
   const [problem, setProblem] = useState<string | null>(null);
   const leftOut = useLeftOutOfEvidence(document);
+  const objectMenu = useObjectMenu({ kind: "document", id: document?.id ?? "" });
 
   // A copy named after the Document opens, as from the sidebar's file menu.
   const openExternally = () => {
@@ -73,7 +75,11 @@ export function ViewerHeader({
 
   return (
     <>
-      <header data-testid="viewer-header" className="viewer-header">
+      <header
+        data-testid="viewer-header"
+        {...(document ? objectMenu.rowProps : {})}
+        className="viewer-header"
+      >
         {leading}
         {document && (
           <DocumentLineIcon
@@ -126,6 +132,13 @@ ${sourceOf(document)}`
           >
             <OpenExternallyIcon className="size-4" />
           </button>
+        )}
+        {document && (
+          <ObjectMenu
+            target={{ kind: "document", id: document.id }}
+            label={t("documents.more", { name: displayName(document) })}
+            className="viewer-icon-button"
+          />
         )}
       </header>
       {problem && (
