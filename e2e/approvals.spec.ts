@@ -195,5 +195,22 @@ test("in a Mind holding imported text, a write the User always allows asks, says
   await expect(own).toContainText("book_boat said: Booked a boat trip from Dover.");
   await expect(own.getByTestId("approval-card")).toHaveCount(0);
   await expect(own.getByTestId("answer-connector-call")).not.toHaveAttribute("data-approval");
+
+  // Asked in the assistant beside the Mind holding imported text: the Question reads that Mind
+  // (#544), so the write asks there too, and says the Mind is why.
+  await pointAndClick(
+    window,
+    window.getByTestId("mind-list-item").filter({ hasText: "Imported lease" }),
+  );
+  await expect(editor).toContainText("The landlord's draft");
+  await ask(window, "Now book_boat from Dover");
+  const asked = assistantAnswers(window).last();
+  const askedCard = asked.getByTestId("approval-card");
+  await expect(askedCard).toBeVisible({ timeout: 15_000 });
+  await expect(askedCard.getByTestId("approval-third-party")).toHaveText(
+    "This Mind contains imported text, so it asks you first.",
+  );
+  await pointAndClick(window, askedCard.getByTestId("approval-deny"));
+  await expect(asked).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await app.close();
 });
