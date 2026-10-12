@@ -445,14 +445,12 @@ test("a Mind is renamed in place from its sidebar row, and Not in a Folder folds
   await field.press("Escape");
   await expect(rows.filter({ hasText: "Beta research" })).toHaveCount(1);
 
-  // By keyboard: Enter on the open Mind's row (selected) types its title in place, as F2 does.
+  // By keyboard: Enter on the open Mind's row only opens it; F2 types its title in place.
   const betaRow = rows.filter({ hasText: "Beta research" });
   await betaRow.click();
   await betaRow.focus();
   await window.keyboard.press("Enter");
-  await expect(field).toBeFocused();
-  await window.keyboard.press("Escape");
-  await expect(betaRow).toBeFocused();
+  await expect(field).toHaveCount(0);
   await window.keyboard.press("F2");
   await expect(field).toBeFocused();
   await window.keyboard.press("Escape");

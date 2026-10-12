@@ -8,10 +8,11 @@
  * { type: "finish", id, stream } and { type: "drop", stream }. The other end
  * answers a load or a finish with { type: "done", id } or { type: "error",
  * id, message }, and reports { type: "segment", segment }, { type:
- * "progress", stream, doneMs } and { type: "failed", stream, message } as
- * they happen.
+ * "progress", stream, doneMs }, { type: "failed", stream, message } and
+ * { type: "switched", change } as they happen.
  */
 import type {
+  EngineSwitch,
   SpeechSegment,
   Transcriber,
   TranscriberListener,
@@ -30,7 +31,8 @@ export type TranscriberResponse =
   | { type: "error"; id: number; message: string }
   | { type: "segment"; segment: SpeechSegment }
   | { type: "progress"; stream: string; doneMs: number }
-  | { type: "failed"; stream: string; message: string };
+  | { type: "failed"; stream: string; message: string }
+  | { type: "switched"; change: EngineSwitch };
 
 /** A running process that serves the engine, as the side that sends requests sees it. */
 export interface TranscriberChannel {
@@ -76,6 +78,9 @@ export function createChannelTranscriber(start: () => TranscriberChannel): Trans
           return;
         case "failed":
           for (const listener of listeners) listener.failed(response.stream, response.message);
+          return;
+        case "switched":
+          for (const listener of listeners) listener.switched(response.change);
           return;
       }
     });
