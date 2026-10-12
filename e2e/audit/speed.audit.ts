@@ -267,24 +267,27 @@ async function typeFor(window: Page, count: number, delay = 80) {
 }
 
 /**
- * In the open, focused Mind: asks Questions (answered with Citations by the
- * fake model), then pastes their cited sentences and Notes through the
+ * Beside the open, focused Mind: asks a Question in the assistant (answered
+ * with Citations by the fake model) and adds its Answer to the note with
+ * ⌘⇧A, as a person keeps one (#201).
+ */
+async function askAndKeep(window: Page, question: string, index: number, timeout: number) {
+  await window.keyboard.press("ControlOrMeta+j");
+  await window.keyboard.type(question, { delay: 20 });
+  await window.keyboard.press("Enter");
+  const answer = window.getByTestId("assistant-answer").nth(index);
+  await expect(answer).toHaveAttribute("data-status", "done", { timeout });
+  await window.keyboard.press("ControlOrMeta+Shift+A");
+  await expect(answer.getByTestId("answer-added")).toBeVisible();
+}
+
+/**
+ * In the open, focused Mind: asks Questions and keeps their Answers
+ * (`askAndKeep`), then pastes their cited sentences and Notes through the
  * editor's own clipboard HTML until it has ~300 top-level blocks.
  */
 async function buildLongMind(window: Page, questions: string[]) {
-  for (const [i, question] of questions.entries()) {
-    await window.keyboard.press("ControlOrMeta+j");
-    await window.keyboard.type(question, { delay: 20 });
-    await window.keyboard.press("Enter");
-    await expect(window.getByTestId("answer").nth(i)).toHaveAttribute("data-status", "done", {
-      timeout: 60_000,
-    });
-    await window
-      .getByTestId("mind-editor")
-      .locator(":scope > p")
-      .last()
-      .click({ position: { x: 4, y: 14 } });
-  }
+  for (const [i, question] of questions.entries()) await askAndKeep(window, question, i, 60_000);
   await window.getByTestId("mind-editor").evaluate((dom) => {
     const { view, commands } = (dom as unknown as { editor: Editor }).editor;
     const sentences: string[] = [];
@@ -438,12 +441,7 @@ test("B1 startup: cold (fresh data folder) and warm, 3× each", async () => {
     await click(first.window, first.window.getByTestId("plus-menu"));
     await click(first.window, first.window.getByTestId("plus-new-mind"));
     await click(first.window, first.window.getByTestId("mind-editor"));
-    await first.window.keyboard.press("ControlOrMeta+j");
-    await first.window.keyboard.type("When do spring tides happen?", { delay: 30 });
-    await first.window.keyboard.press("Enter");
-    await expect(first.window.getByTestId("answer")).toHaveAttribute("data-status", "done", {
-      timeout: 30_000,
-    });
+    await askAndKeep(first.window, "When do spring tides happen?", 0, 30_000);
     await first.window.waitForTimeout(1500);
   } finally {
     if (first) await close(first);
@@ -451,8 +449,10 @@ test("B1 startup: cold (fresh data folder) and warm, 3× each", async () => {
   const warm: unknown[] = [];
   for (let i = 0; i < RUNS; i++) {
     const { launched, result } = await timedLaunch(dataDir, "mind-editor", true);
-    // The open Mind's Answer is back on screen.
-    await expect(launched.window.getByTestId("answer")).toBeVisible();
+    // The open Mind's Citations, kept from the Answer, are back on screen.
+    await expect(
+      launched.window.getByTestId("mind-editor").getByTestId("citation").first(),
+    ).toBeVisible();
     warm.push({ ...result, answerShownMs: Date.now() - launched.timing.launchMs });
     if (i === 0) await shot(launched.window, "B01-warm-start");
     await close(launched);
@@ -541,25 +541,16 @@ test("B2 typing: a short Mind and a long one (~300 blocks, many Citations)", asy
       await bridge.updateSettings({ user: { suggestWhileWriting: false } });
     });
 
-    // A long Mind: Questions answered with Citations, then their cited sentences
-    // and Notes pasted (through the editor's own clipboard HTML) until ~300 blocks.
+    // A long Mind: Questions answered with Citations in the assistant and kept in the note,
+    // then their cited sentences and Notes pasted (through the editor's own clipboard HTML)
+    // until ~300 blocks.
     await window.keyboard.press("Enter");
     for (const [i, question] of [
       "When do spring tides happen?",
       "What does each document say about tides and the harbour?",
       "What does each report say about the harbour survey rows?",
     ].entries()) {
-      await window.keyboard.press("ControlOrMeta+j");
-      await window.keyboard.type(question, { delay: 20 });
-      await window.keyboard.press("Enter");
-      await expect(window.getByTestId("answer").nth(i)).toHaveAttribute("data-status", "done", {
-        timeout: 30_000,
-      });
-      await window
-        .getByTestId("mind-editor")
-        .locator(":scope > p")
-        .last()
-        .click({ position: { x: 4, y: 14 } });
+      await askAndKeep(window, question, i, 30_000);
     }
     const blocks = await window.getByTestId("mind-editor").evaluate((dom) => {
       const { view, commands } = (dom as unknown as { editor: Editor }).editor;

@@ -297,7 +297,7 @@ test("Documents: renamed, moved, tagged and deleted, each back with ⌘Z and aga
 test("Tags: renamed, recoloured, merged and deleted in Manage Tags, each back with ⌘Z and again with ⇧⌘Z", async () => {
   test.setTimeout(120_000);
   await writeFile(join(sources, "Lab notes.txt"), "Notes from the lab.\n");
-  const { window } = await launchApp(dataDir);
+  const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await addDocuments(window, [join(sources, "Lab notes.txt")]);
   const ids = await read(window, async (core) => {
@@ -334,7 +334,12 @@ test("Tags: renamed, recoloured, merged and deleted in Manage Tags, each back wi
   // Renamed and recoloured in one edit.
   await manage();
   await pointAndClick(window, row(ids.report).getByTestId("edit-tag"));
-  await row(ids.report).getByTestId("tag-name-input").fill("Reports");
+  const name = row(ids.report).getByTestId("tag-name-input");
+  await name.fill("Reports");
+  // The Edit menu's Undo in a dialog's field is the field's own.
+  await clickEditItem(app, "edit.undo");
+  await expect(name).toHaveValue("Report");
+  await name.fill("Reports");
   await pointAndClick(window, row(ids.report).locator('label:has([data-colour="teal"])'));
   await pointAndClick(window, row(ids.report).getByTestId("save-tag"));
   await expect(row(ids.report).getByTestId("tag-row-name")).toHaveText("Reports");
@@ -461,9 +466,20 @@ test("⌘Z goes to the note's own undo in the note, to a field's in a field, and
   // And the Edit menu's, chosen there.
   await composer.fill("");
   await window.keyboard.type("Tides");
-  await expect.poll(() => editItem(app, "edit.undo")).toEqual({ label: "Undo", enabled: true });
+  await expect(composer).toHaveValue("Tides");
   await clickEditItem(app, "edit.undo");
   await expect(composer).not.toHaveValue("Tides");
+  expect(await mindFolder(window, "Shortlist")).toBe(finance);
+  // Even chosen right after clicking into the field from where the menu names the last change.
+  await composer.fill("");
+  await window.keyboard.type("Neap");
+  await leaveText(window);
+  await expect
+    .poll(() => editItem(app, "edit.undo"))
+    .toEqual({ label: "Undo Move “Shortlist”", enabled: true });
+  await pointAndClick(window, composer);
+  await clickEditItem(app, "edit.undo");
+  await expect(composer).not.toHaveValue("Neap");
   expect(await mindFolder(window, "Shortlist")).toBe(finance);
 
   // Anywhere else: the last change, and the Edit menu names it.
@@ -482,6 +498,34 @@ test("⌘Z goes to the note's own undo in the note, to a field's in a field, and
   await expect.poll(() => mindFolder(window, "Shortlist")).toBe(finance);
   await clickEditItem(app, "edit.undo");
   await expect.poll(() => mindFolder(window, "Shortlist")).toBeNull();
+});
+
+test("in a Mind's title and the composer, a run of typing is one step to undo and to redo, with ⌘Z and the Edit menu", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await newMind(window);
+  const title = window.getByTestId("mind-title");
+  await title.fill("Upgrade test");
+  const composer = window.getByTestId("composer-input");
+
+  for (const [field, before] of [
+    [title, "Upgrade test"],
+    [composer, ""],
+  ] as const) {
+    await pointAndClick(window, field);
+    await window.keyboard.press("End");
+    await window.keyboard.type(" abc");
+    await expect(field).toHaveValue(`${before} abc`);
+    await undo(window);
+    await expect(field).toHaveValue(before);
+    await redo(window);
+    await expect(field).toHaveValue(`${before} abc`);
+    await clickEditItem(app, "edit.undo");
+    await expect(field).toHaveValue(before);
+    await clickEditItem(app, "edit.redo");
+    await expect(field).toHaveValue(`${before} abc`);
+  }
+  await expect.poll(() => mindTitles(window)).toEqual(["Upgrade test abc"]);
 });
 
 test("an undo the core can't do shows one problem line where it happened, in Chinese too, and its action lets it happen", async () => {

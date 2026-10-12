@@ -305,6 +305,7 @@ export function proposalRequestOf(doc: Y.Doc, request: string): ProposalRequest 
   if (source === "answer") {
     return isText(record.answerId) ? { ...made, source, answerId: record.answerId } : null;
   }
+  if (source === "answer-added") return { ...made, source };
   if (source !== "edit-with-ai") return null;
   const action = editActions.find((each) => each === record.action);
   return {
@@ -320,7 +321,8 @@ export function proposalRequestOf(doc: Y.Doc, request: string): ProposalRequest 
  * Proposal that added text which stays, with the model that wrote it and the
  * Blocks holding it. A Proposal that only removed words wrote nothing, and
  * one from an Answer's Regenerate stays in its Answer, which isn't recorded
- * (an Answer in a Mind is the AI's as it is).
+ * (an Answer in a Mind is the AI's as it is). An Answer from the assistant
+ * made into a new Mind (#201) is recorded as an Answer added.
  */
 export function aiUseOfAccepted(
   doc: Y.Doc,
@@ -336,7 +338,7 @@ export function aiUseOfAccepted(
       return [
         {
           mindId,
-          kind: "edit-with-ai-accepted",
+          kind: made?.source === "answer-added" ? "answer-added" : "edit-with-ai-accepted",
           providerId: made?.providerId ?? null,
           modelId: made?.modelId ?? null,
           characters: proposal.characters,
