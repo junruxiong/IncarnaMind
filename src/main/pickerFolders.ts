@@ -40,6 +40,12 @@ export function startFolder(dataDir: string, kind: PickerKind, fallback: string)
   return last && isFolder(last) ? last : fallback;
 }
 
+/** Where a dialog looking for what was at `path` starts: the folder it was in, if that is still there. */
+export function startNear(path: string, fallback: string): string {
+  const parent = dirname(path);
+  return parent !== path && isFolder(parent) ? parent : fallback;
+}
+
 /** Remembers where the User picked from: the folder holding the picked file, or the picked folder's parent. */
 export function rememberPick(dataDir: string, kind: PickerKind, picked: string): void {
   const saved = read(dataDir);
