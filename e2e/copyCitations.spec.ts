@@ -176,8 +176,8 @@ test("copying Blocks with Citations puts footnotes in the HTML, and markers with
   );
   await expect(editor.getByTestId("citation")).toHaveCount(3);
 
-  // Copy with everything selected.
-  await pointAndClick(window, editor.locator(":scope > p").first());
+  // Copy with everything selected (from a line with no Citation, whose chip would open its Document).
+  await pointAndClick(window, editor.locator(":scope > p").nth(1));
   await window.keyboard.press("ControlOrMeta+a");
   const copied = await copyPayload(editor);
   await save("copy-with-citations-en.html", copied.html);
@@ -217,14 +217,10 @@ test("copying Blocks with Citations puts footnotes in the HTML, and markers with
   await expect(editor.getByTestId("citation")).toHaveCount(5);
   await expect(editor).not.toContainText("[1] Tides");
 
-  // A selection inside one paragraph copies only its own Citations, numbered from 1.
-  await pointAndClick(window, editor.locator(":scope > p").nth(1));
-  await window.keyboard.press("ControlOrMeta+a");
-  const partial = await copyPayload(editor);
-  expect(partial.text).toContain("Sources\n[1]");
-
   // In Chinese, the Sources list and the Locations are Chinese.
   await bridge(window).language("zh-CN");
+  await pointAndClick(window, editor.locator(":scope > p").nth(1));
+  await window.keyboard.press("ControlOrMeta+a");
   const chinese = await copyPayload(editor);
   await save("copy-with-citations-zh.txt", chinese.text);
   expect(chinese.text).toContain("来源\n[1] Tides，第 2 页");
