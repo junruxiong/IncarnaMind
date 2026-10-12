@@ -92,6 +92,7 @@ import { chatGroupClassifier, decisionGroupClassifier } from "./library/classifi
 import { documentPageImages } from "./library/pageImages";
 import { createMeetings } from "./meetings";
 import { listParts, meetingFolder } from "./meetings/audioFiles";
+import { createCaptureHealth } from "./meetings/health";
 import { createTranscripts } from "./meetings/transcript";
 import { accessFor, isKnownKind } from "./mindAccess";
 import { createMindContent } from "./mindContent";
@@ -1443,6 +1444,12 @@ export function createCore(adapters: CoreAdapters): Core {
   const meetingsChanged = () => {
     if (listMeetings) events.emit("meetings.changed", listMeetings());
   };
+  const captureHealth = createCaptureHealth({
+    dataDir,
+    now,
+    log: adapters.log ?? silentLogger,
+    changed: meetingsChanged,
+  });
   const transcriber = adapters.transcriber;
   const transcripts =
     transcriber &&
@@ -1494,6 +1501,7 @@ export function createCore(adapters: CoreAdapters): Core {
           [modelId]: ratio,
         });
       },
+      health: captureHealth,
       changed: meetingsChanged,
       log: adapters.log ?? silentLogger,
     });
@@ -1527,6 +1535,7 @@ export function createCore(adapters: CoreAdapters): Core {
       documents.hold(capturing);
     },
     ...(transcripts && { transcripts }),
+    health: captureHealth,
     log: adapters.log ?? silentLogger,
   });
   listMeetings = () => meetings.list();
