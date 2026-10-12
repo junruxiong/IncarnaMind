@@ -218,6 +218,81 @@ test("an agent set up by pasting its settings searches, its activity shows each 
   }
 });
 
+test("an Other agent's Details show the command, arguments and environment, each copied whole, in English and Chinese", async () => {
+  const { app, window } = await launchApp(dataDir, { home });
+  try {
+    await dismissChatSetup(window);
+    await withCoast(window);
+    await catchCopies(window);
+    await acceptPlainTextKeys(window);
+    const page = await openSettings(window, "agents");
+    await page.getByTestId("agents-enabled").click();
+    await page
+      .getByTestId("agents-list")
+      .locator('[data-client="other"]')
+      .getByTestId("agent-connect")
+      .click();
+    const dialog = window.getByTestId("connect-agent-dialog");
+    await dialog.getByTestId("connect-agent-folder").check();
+    await dialog.getByTestId("connect-agent-allow").click();
+
+    const row = page.getByTestId("agent-pairing").filter({ hasText: "Other agent" });
+    await expect(row.getByTestId("agent-setup-done")).toContainText("Details for technical users");
+    const all = JSON.parse(await copied(window)) as {
+      mcpServers: { incarnamind: { command: string; args: string[]; env: Record<string, string> } };
+    };
+    const server = all.mcpServers.incarnamind;
+    const key = server.env.INCARNAMIND_AGENT_TOKEN ?? "";
+    expect(key).not.toBe("");
+
+    await row.locator("summary", { hasText: "Details for technical users" }).click();
+    const launch = row.getByTestId("agent-launch");
+    await expect(launch).toContainText("Command");
+    await expect(launch).toContainText("Arguments");
+    await expect(launch).toContainText("Environment");
+    await expect(launch).toContainText("INCARNAMIND_AGENT_TOKEN=•••••••");
+    expect(await launch.innerText()).not.toContain(key);
+    await shot(window, "agents-other-details");
+
+    const copyOf = async (id: string) => {
+      await launch.getByTestId(`agent-launch-${id}`).getByTestId("agent-launch-copy").click();
+      return copied(window);
+    };
+    const command = await copyOf("command");
+    const args = (await copyOf("args")).split("\n");
+    const env: Record<string, string> = {};
+    for (const name of Object.keys(server.env)) {
+      const line = await copyOf(`env-${name}`);
+      env[name] = line.slice(name.length + 1);
+    }
+    expect(command).toBe(server.command);
+    expect(args).toEqual(server.args);
+    expect(env).toEqual(server.env);
+    expect(env.INCARNAMIND_AGENT_TOKEN).toBe(key);
+
+    const agent = new Client({ name: "test-agent", version: "1.0.0" });
+    await agent.connect(new StdioClientTransport({ command, args, env, stderr: "pipe" }));
+    try {
+      const found = await agent.callTool({ name: "search", arguments: { query: "spring tides" } });
+      expect(found.isError ?? false).toBe(false);
+    } finally {
+      await agent.close();
+    }
+
+    await window.evaluate(async () => {
+      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      await bridge.updateSettings({ user: { language: "zh-CN" } });
+    });
+    await expect(launch).toContainText("命令");
+    await expect(launch).toContainText("参数");
+    await expect(launch).toContainText("环境变量");
+    await expect(launch).toContainText("INCARNAMIND_AGENT_TOKEN=•••••••");
+    await shot(window, "agents-other-details-zh");
+  } finally {
+    await app.close();
+  }
+});
+
 test("in Chinese the Codex agent is named in Chinese in the list, the dialog and the connected row", async () => {
   await mkdir(join(home, ".codex"));
   const { app, window } = await launchApp(dataDir, { home });
