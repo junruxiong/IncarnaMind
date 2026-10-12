@@ -1084,6 +1084,7 @@ export const en = {
   "providers.test.too-long": "The model's context window is too small for even a short request.",
   "providers.test.cost-cap":
     "Nothing was sent: this month's spending cap is reached. Change it in Settings → General.",
+  "providers.test.no-answer": "The model sent no reply.",
   "providers.test.unknown": "The test didn't work.",
 
   "providers.secrets.plainText.title": "No keyring is running",
@@ -1530,6 +1531,7 @@ export const en = {
   "answer.error.useLocal": "Use a local model",
   "answer.error.too-long":
     "This Question is too long for the model’s context window, even with nothing before it. Shorten it, or choose another model",
+  "answer.error.no-answer": "The model sent no Answer",
   "answer.error.unknown": "This Answer couldn't be written",
   "answer.error.not-signed-in": "You're not signed in to ChatGPT",
   "answer.error.plan-limit": "Your ChatGPT plan's usage limit is reached",
