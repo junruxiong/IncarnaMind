@@ -11,7 +11,7 @@ import {
   type SearchScope,
 } from "../../src/core";
 import { migrate, migrations, openDatabase } from "../../src/core/storage";
-import { answerEnded, setUpWithDocuments } from "../helpers/citations";
+import { answerEnded, recordSearches, setUpWithDocuments } from "../helpers/citations";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import type { MindClient } from "../helpers/mindClient";
 import { question, writeMind } from "../helpers/minds";
@@ -43,13 +43,8 @@ function searchingModel(): MockLanguageModelV4 {
 
 /** Three Documents and a Mind, in a core whose searches are recorded by the Documents searched. */
 async function setUp() {
-  const searches: string[][] = [];
-  const setup = await setUpWithDocuments(searchingModel(), FILES, {
-    reranker: async (_query, candidates) => {
-      searches.push([...new Set(candidates.map((candidate) => candidate.documentName))].sort());
-      return [...candidates];
-    },
-  });
+  const { searches, answerSearch } = recordSearches();
+  const setup = await setUpWithDocuments(searchingModel(), FILES, { answerSearch });
   const byName = Object.fromEntries(setup.documents.map((each) => [each.name, each])) as Record<
     string,
     Document

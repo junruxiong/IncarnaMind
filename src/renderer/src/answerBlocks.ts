@@ -2,12 +2,14 @@
  * An Answer of the assistant's conversations as Blocks (ADR-0017): the Markdown
  * the model wrote made into the node types of Notes, each Citation marker made
  * into its Citation and each figure marker into its calculated figure's shown
- * text (ADR-0021), exactly as an Answer written into a Mind is made. The
- * assistant shows them, Copy copies them and Add to note puts them into a note.
+ * text (ADR-0021), its words AI text, exactly as an Answer written into a Mind
+ * is made. The assistant shows them, Copy copies them and Add to note puts
+ * them into a note.
  */
 
 import { markdownToBlocks } from "../../core/answers/markdown";
 import type { ConversationAnswer } from "../../core/api";
+import { asGenerated } from "../../shared/aiText";
 import { citationNode, type NodeJSON, withCitations } from "../../shared/blockJson";
 import { withFigures } from "../../shared/figureMarkers";
 
@@ -28,10 +30,12 @@ export function answerBlocks(
     if (citation) return citationNode(citation);
     return streaming ? citationNode(null) : null;
   });
-  return withFigures(
-    blocks,
-    (marker) => figures.get(marker) ?? null,
-    (figure) => figure.shown,
+  return asGenerated(
+    withFigures(
+      blocks,
+      (marker) => figures.get(marker) ?? null,
+      (figure) => figure.shown,
+    ),
   );
 }
 

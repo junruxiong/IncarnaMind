@@ -9,7 +9,8 @@
  *
  * 1. The Question context loses its oldest content first, as
  *    `buildQuestionContext` does (see `fitQuestionContext`), down to the
- *    Question alone. In the Tool loop, room for one search is kept first.
+ *    Question alone; the Mind read with a Question in the assistant goes
+ *    last, cut by its own rules. In the Tool loop, room for one search is kept first.
  * 2. Search results keep the most relevant Passages that fit what is left,
  *    by the search's own ranks (see `SearchResultForModel.ranks`), in the
  *    order the search gave them, and other Tool results are cut at the end.
@@ -29,7 +30,7 @@
  */
 import type { ProviderError } from "../api";
 import type { ContextWindow } from "../providers/models";
-import { estimateTokens, fitQuestionContext } from "./context";
+import { estimateTokens, fitQuestionContext, head, type RequestMind } from "./context";
 import type { AnswerMessage } from "./engine";
 
 /** The factor on the estimate until a request's real count is known. */
@@ -59,22 +60,13 @@ const NO_ROOM_FOR_RESULT =
 /** Added where a Tool result was cut. */
 const CUT_RESULT = "\n…(the rest doesn't fit in your context)";
 
-/** The start of `text` that is about `tokens` estimated tokens long. */
-function head(text: string, tokens: number): string {
-  let used = 0;
-  let end = 0;
-  for (const char of text) {
-    const cost = estimateTokens(char);
-    if (used + cost > tokens) break;
-    used += cost;
-    end += char.length;
-  }
-  return text.slice(0, end);
-}
-
-/** The request's Question context, fitted, and its estimated size; or why it can't fit. */
+/**
+ * The request's Question context, fitted, and its estimated size, and how much
+ * of the Mind read with the Question it kept when that had to be cut; or why
+ * it can't fit.
+ */
 export type Fitted =
-  | { ok: true; messages: AnswerMessage[]; estimated: number }
+  | { ok: true; messages: AnswerMessage[]; estimated: number; mindCut?: "part" | "none" }
   | { ok: false; error: ProviderError };
 
 export interface FitRequest {
@@ -86,6 +78,8 @@ export interface FitRequest {
   tools?: string;
   /** Tokens to keep free for what the request will gain, e.g. search results. */
   reserve?: number;
+  /** The Mind read with the Question, cut by its own rules if it doesn't fit whole. */
+  mind?: RequestMind;
 }
 
 export type WindowBudget = ReturnType<typeof createWindowBudget>;
@@ -182,13 +176,29 @@ export function createWindowBudget(
         return { ok: false, error: tooLong(fixed + question + window.outputTokens) };
       const forContext = Math.max(question, room - (request.reserve ?? 0));
       const overhead = MESSAGE_TOKENS * request.messages.length;
+      const given = request.mind;
+      let mindCut: "part" | "none" | undefined;
+      const mind = given && {
+        text: given.text,
+        cut: (tokens: number) => {
+          const text = given.cut(tokens);
+          mindCut = text ? "part" : "none";
+          return text;
+        },
+      };
       const messages = fitQuestionContext(
         request.messages,
         request.question,
         Math.floor((forContext - overhead) / current),
+        mind,
       );
       if (!messages) return { ok: false, error: tooLong(fixed + question + window.outputTokens) };
-      return { ok: true, messages, estimated: fixed + messagesTokens(messages) };
+      return {
+        ok: true,
+        messages,
+        estimated: fixed + messagesTokens(messages),
+        ...(mindCut && { mindCut }),
+      };
     },
 
     /**
