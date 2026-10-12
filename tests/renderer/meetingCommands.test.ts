@@ -204,3 +204,38 @@ describe("Mark (#139)", () => {
     expect(isEnabled(mark, IN_MIND)).toBe(true);
   });
 });
+
+describe("Recording details (#161)", () => {
+  test("show and hide the details of the meeting in view once it has started, named in both languages", async () => {
+    meetingsOn();
+    const details = command("meeting.details");
+    expect(details.reversible).toBe(true);
+    expect(details.enabled?.(IN_MIND)).toEqual({ reason: "meetings.health.none" });
+    stores.useMeetings.setState({ meetings: [meeting("m1", "mind-1", "ready")] });
+    showing("mind-1");
+    expect(isEnabled(details, IN_MIND)).toBe(false);
+
+    stores.useMeetings.setState({
+      meetings: [meeting("m1", "mind-1", "stopped")],
+      detailsShown: {},
+    });
+    expect(isEnabled(details, IN_MIND)).toBe(true);
+    expect(labelOf(details, IN_MIND, en)).toBe("Show recording details");
+    expect(labelOf(details, IN_MIND, zh)).toBe("显示录制详情");
+    await commands.run("meeting.details", IN_MIND);
+    expect(stores.useMeetings.getState().detailsShown).toEqual({ m1: true });
+    expect(labelOf(details, IN_MIND, en)).toBe("Hide recording details");
+    expect(labelOf(details, IN_MIND, zh)).toBe("隐藏录制详情");
+    await commands.run("meeting.details", IN_MIND);
+    expect(stores.useMeetings.getState().detailsShown).toEqual({ m1: false });
+  });
+
+  test("are offered in a meeting's Mind even once Meetings are turned off", () => {
+    const details = command("meeting.details");
+    meetingsOn(false);
+    expect(offered(details, IN_MIND)).toBe(false);
+    stores.useMeetings.setState({ meetings: [meeting("m1", "mind-1", "stopped")] });
+    showing("mind-1");
+    expect(offered(details, IN_MIND)).toBe(true);
+  });
+});
