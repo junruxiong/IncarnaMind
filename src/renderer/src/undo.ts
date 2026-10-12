@@ -14,9 +14,17 @@ export interface Undoable {
   name?: string;
   /** Takes it back. Throws `UndoRefused` when a fix would let it. */
   undo(): Promise<void>;
+  /**
+   * Where its line shows, when that is where the User acted rather than the
+   * sidebar's foot: under an Answer in the assistant (`answerUndoPlace`).
+   */
+  shownAt?: string;
   /** Does it again once taken back. Without it, taking it back ends what can be redone. */
   redo?(): Promise<void>;
 }
+
+/** Where the line of what was done with an Answer in the assistant shows: under that Answer. */
+export const answerUndoPlace = (answerId: string) => `answer:${answerId}`;
 
 /** The one action that lets a refused undo or redo happen. */
 export interface UndoFix {

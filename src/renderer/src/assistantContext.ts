@@ -1,5 +1,5 @@
 import type { Translate } from "./objects";
-import type { ScopeChip } from "./scope";
+import { DELETED_NAMES, type ScopeChip } from "./scope";
 
 /**
  * The 12px line under the assistant's header: what the next Question reads
@@ -24,4 +24,19 @@ export function readsLine(
     count: named.length - 1,
     total: named.length,
   });
+}
+
+/**
+ * What a Question in the assistant searched, on its Answer's meta line:
+ * "“Thesis”", "“Thesis” and 2 more", or "All Documents". A Folder deleted
+ * since is still named, it was searched then; one gone without its name (a
+ * Linked folder's folder removed on disk) is a "Deleted Folder", never left
+ * out: an Answer that searched nothing doesn't read as having searched everything.
+ */
+export function scopeLine(t: Translate, scope: readonly ScopeChip[]): string {
+  const first = scope[0];
+  if (!first) return t("assistant.scope.all");
+  const name = first.name ?? t(DELETED_NAMES[first.kind]);
+  if (scope.length === 1) return t("assistant.scope.one", { scope: name });
+  return t("assistant.scope.more", { scope: name, count: scope.length - 1, total: scope.length });
 }

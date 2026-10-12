@@ -9,6 +9,8 @@ import {
   type Page,
   test,
 } from "@playwright/test";
+import type { Editor } from "@tiptap/core";
+import * as Y from "yjs";
 import type { AssistantPlace, CoreBridge } from "../src/core/api";
 import type { DocumentLocation } from "../src/shared/documentViewer";
 import type { TestHooks } from "../src/shared/testHooks";
@@ -882,25 +884,6 @@ export async function dragBlock(window: Page, block: Locator, target: Locator): 
   await window.mouse.up();
 }
 
-/**
- * Puts the cursor on an empty line as a person does, clicking where its text
- * would start: further along, the hint over the line after an Answer has its
- * "press ⌘J…" link, which starts a Question once the cursor is on the line.
- */
-export async function clickEmptyLine(line: Locator): Promise<void> {
-  await line.click({ position: { x: 4, y: 14 } });
-  // What is typed next goes where the caret is: wait until it is on the line.
-  await expect
-    .poll(() =>
-      line.evaluate((element) => {
-        const caret = element.ownerDocument.getSelection()?.anchorNode;
-        const focused = element.ownerDocument.activeElement;
-        return !!caret && element.contains(caret) && !!focused && focused.contains(element);
-      }),
-    )
-    .toBe(true);
-}
-
 /** Where `words` are drawn in a line of text: their left and right edges, and their middle line. */
 async function wordsBox(line: Locator, words: string) {
   const box = await line.evaluate((element, wanted) => {
@@ -948,6 +931,155 @@ export async function slideSelect(
 export async function enterContent(window: Page): Promise<void> {
   await window.getByTestId("mind-title").press("Enter");
   await expect(window.getByTestId("mind-editor")).toBeFocused();
+}
+
+/**
+ * Puts the cursor at the end of a line of text as a person does: slides to
+ * the right of its words and clicks there (Home and End don't move the
+ * cursor on macOS).
+ */
+export async function clickEndOf(window: Page, line: Locator): Promise<void> {
+  const box = await line.boundingBox();
+  if (!box) throw new Error("The line isn't visible.");
+  const x = box.x + box.width - 4;
+  const y = box.y + box.height - 10;
+  await window.mouse.move(x, y, { steps: 6 });
+  await window.mouse.click(x, y);
+  // A key pressed next acts where the editor's cursor is: wait until it is in the line.
+  await expect
+    .poll(() =>
+      line.evaluate((element) => {
+        const root = element.closest(".ProseMirror") as (Element & { editor?: Editor }) | null;
+        const view = root?.editor?.view;
+        if (!view) return false;
+        const { from, empty } = view.state.selection;
+        const at = view.domAtPos(from).node;
+        return empty && element.contains(at);
+      }),
+    )
+    .toBe(true);
+}
+
+/** Slides the mouse onto an element, in steps, as a person does, and leaves it there. */
+export async function pointAt(window: Page, target: Locator): Promise<void> {
+  await target.scrollIntoViewIfNeeded();
+  const box = await target.boundingBox();
+  if (!box) throw new Error("The element isn't visible.");
+  await window.mouse.move(box.x + Math.min(box.width / 2, 40), box.y + box.height / 2, {
+    steps: 8,
+  });
+}
+
+/** The assistant's Answers (#201), in the conversation it shows. */
+export const assistantAnswers = (window: Page) =>
+  window.getByTestId("assistant").getByTestId("assistant-answer");
+
+/**
+ * Asks a Question as a person does: ⌘J, the words, Enter. It is asked in the
+ * assistant's conversation (#201); resolves with its Answer there once it is
+ * written (the scripted model's, with `fakeChat`).
+ */
+export async function askInAssistant(window: Page, question: string): Promise<Locator> {
+  const answers = assistantAnswers(window);
+  const before = await answers.count();
+  await window.keyboard.press("ControlOrMeta+j");
+  await expect(window.getByTestId("composer-input")).toBeFocused();
+  await window.keyboard.type(question);
+  await window.keyboard.press("Enter");
+  const questions = window.getByTestId("assistant").getByTestId("assistant-question");
+  await expect(questions.last()).toContainText(question);
+  await expect(answers).toHaveCount(before + 1);
+  const answer = answers.last();
+  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  return answer;
+}
+
+/**
+ * Adds an Answer in the assistant to the Mind in focus, at its cursor (or
+ * end), with the mouse, as a person keeps one (#201), and waits until it is in.
+ */
+export async function addToNote(window: Page, answer: Locator): Promise<void> {
+  await pointAt(window, answer.getByTestId("assistant-answer-text"));
+  await pointAndClick(window, answer.getByTestId("answer-add"));
+  await expect(answer.getByTestId("answer-added")).toBeVisible();
+}
+
+/** A Block of a Mind as Minds held them before Questions went to the assistant (#201). */
+export type BlockFromBefore =
+  | { note: string }
+  | { heading: string }
+  | { question: string; answer: string };
+
+/**
+ * Makes a Mind as one written before Questions were asked in the assistant
+ * (#201) holds them: its Questions and Answers in the note, among its Notes.
+ * Made through the core's bridge, in the stored shape. Returns its id.
+ */
+export async function mindWrittenBefore(
+  window: Page,
+  title: string,
+  blocks: BlockFromBefore[],
+): Promise<string> {
+  const doc = new Y.Doc();
+  const fragment = doc.getXmlFragment("blocks");
+  const element = (
+    type: string,
+    text: string,
+    attributes: Record<string, number> = {},
+    id: string = crypto.randomUUID(),
+  ) => {
+    const node = new Y.XmlElement(type);
+    node.setAttribute("id", id);
+    // Stored as the editor stores them: a heading's level is a number.
+    for (const [key, value] of Object.entries(attributes)) {
+      node.setAttribute(key, value as unknown as string);
+    }
+    if (text) node.insert(0, [new Y.XmlText(text)]);
+    return node;
+  };
+  for (const block of blocks) {
+    if ("note" in block) fragment.push([element("paragraph", block.note)]);
+    else if ("heading" in block) fragment.push([element("heading", block.heading, { level: 2 })]);
+    else {
+      const questionId = crypto.randomUUID();
+      const question = element("question", block.question, {}, questionId);
+      const answer = new Y.XmlElement("answer");
+      answer.setAttribute("id", crypto.randomUUID());
+      answer.setAttribute("questionId", questionId);
+      answer.setAttribute("status", "done");
+      answer.insert(0, [element("paragraph", block.answer)]);
+      fragment.push([question, answer]);
+    }
+  }
+  const update = Array.from(Y.encodeStateAsUpdate(doc));
+  return window.evaluate(
+    async ([name, change]) => {
+      const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      const mind = await core.createMind({ title: name });
+      await core.applyMindUpdate(mind.id, new Uint8Array(change));
+      await core.closeMind(mind.id);
+      return mind.id;
+    },
+    [title, update] as const,
+  );
+}
+
+/**
+ * Stubs the window's clipboard, so a test can read what Copy wrote and the
+ * computer's own clipboard stays as it was. `copied()` gives it, by type.
+ */
+export async function stubClipboard(window: Page) {
+  await window.evaluate(() => {
+    const copied: Record<string, string> = {};
+    (globalThis as { copied?: unknown }).copied = copied;
+    navigator.clipboard.write = async (items: ClipboardItem[]) => {
+      for (const item of items) {
+        for (const type of item.types) copied[type] = await (await item.getType(type)).text();
+      }
+    };
+  });
+  return () =>
+    window.evaluate(() => (globalThis as { copied?: Record<string, string> }).copied ?? {});
 }
 
 /** A fresh, empty data folder. Remove it with `removeDataFolder`. */
