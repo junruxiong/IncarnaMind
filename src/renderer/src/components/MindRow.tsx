@@ -25,8 +25,8 @@ import {
  * A Mind in the sidebar's tree, in its Folder (`depth` 1) or Not in a Folder
  * (0): its title, and an amber dot while one of its Answers waits for the
  * User's approval. Clicking opens it (⌘-click or a middle click in a new
- * tab). It renames in place: double-click it, press Enter on it while it is
- * open, or F2; Enter saves, Esc cancels, and a blank title changes nothing.
+ * tab). Enter opens it. It renames in place: double-click it or press F2;
+ * Enter saves, Esc cancels, and a blank title changes nothing.
  * It drags onto a Folder; its menu (⋯, or a right-click) and ⇧⌘M offer the
  * same as "Move to…".
  */
@@ -68,8 +68,7 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
-    // F2, or Enter on the Mind already open (selected): its title, in place.
-    if (event.key === "F2" || (event.key === "Enter" && isOpen && !event.metaKey)) {
+    if (event.key === "F2") {
       event.preventDefault();
       setRenaming(true);
     } else if (isMoveToKey(event)) {

@@ -18,6 +18,7 @@ export const PROPOSAL_NODE_TYPES = [
   "blockMath",
   "horizontalRule",
   "table",
+  "chart",
   "citation",
   "footnote",
   "inlineMath",

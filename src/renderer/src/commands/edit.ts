@@ -14,8 +14,11 @@ import { type Command, type CommandContext, fromMenu } from "./registry";
 function placeOf(ctx: CommandContext): EditMenuState["text"] {
   if (ctx.surface === "palette") return null;
   const focus = document.activeElement;
-  if (!typesText(focus)) return null;
-  return noteAround(focus) ? "note" : "field";
+  const typing = typesText(focus);
+  if (typing && !(focus instanceof HTMLElement && focus.isContentEditable)) return "field";
+  // A chart's buttons and values (#436) are in the note, though not text: ⌘Z there takes back the note's change.
+  if (noteAround(focus)) return "note";
+  return typing ? "field" : null;
 }
 
 const nameOf = (change: Undoable | undefined) => (change ? (change.name ?? "") : null);

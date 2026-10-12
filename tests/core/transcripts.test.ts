@@ -1,95 +1,20 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
-import type { Core, Meeting, MeetingTranscript } from "../../src/core";
+import type { Core } from "../../src/core";
 import { readVtt } from "../../src/core/documents/formats/vtt";
-import { createFakeCapture } from "../../src/core/meetings/fakeCapture";
-import {
-  createFakeSpeechEngine,
-  FAKE_LINES,
-  type FakeSpeechOptions,
-} from "../../src/core/transcription/fake";
+import { FAKE_LINES } from "../../src/core/transcription/fake";
 import { askAndFinish, citingModel, onlyCitation, type ShownPassage } from "../helpers/citations";
-import { createTempDataFolder, manualClock, startCore } from "../helpers/core";
+import { createTempDataFolder, startCore } from "../helpers/core";
 import { connectToMind } from "../helpers/mindClient";
-import { scriptedModels } from "../helpers/models";
-import { inProcessTranscriber, NO_TRANSCRIPTION_FILES } from "../helpers/transcription";
+import { transcribingCore, transcriptOf, until } from "../helpers/transcription";
 
 const SECOND = 1000;
-
-/**
- * A core that records Meetings with the fake capture (a tone from each
- * source) and transcribes them with the fake engine behind the channel the
- * desktop app uses: every two seconds of sound is a line, saying the next of
- * `FAKE_LINES`. The clock moves with the audio the test records.
- */
-async function transcribingCore(
-  dataDir: string,
-  {
-    engine = {},
-    model,
-    loads,
-  }: {
-    engine?: FakeSpeechOptions;
-    model?: Parameters<typeof scriptedModels>[0];
-    /** The engine starts once this resolves, as a model loading slowly does. */
-    loads?: Promise<void>;
-  } = {},
-) {
-  const clock = manualClock();
-  const capture = createFakeCapture();
-  const engineHost = inProcessTranscriber(engine, async () => {
-    await loads;
-    return createFakeSpeechEngine(engine);
-  });
-  const models = model ? scriptedModels(model) : undefined;
-  const core = startCore(dataDir, {
-    audioCapture: capture,
-    transcriber: engineHost.transcriber,
-    transcriptionModelSource: NO_TRANSCRIPTION_FILES,
-    now: clock.now,
-    ...(models && { createChatModel: models.createChatModel }),
-  });
-  await core.updateSettings({ device: { meetingsEnabled: true, meetingNoticeAccepted: true } });
-  await core.setOutputLocation(join(dataDir, "Documents", "IncarnaMind"));
-  const record = (ms: number, sources: ("microphone" | "system")[] = ["microphone", "system"]) => {
-    for (let at = 0; at < ms; at += 500) {
-      const step = Math.min(500, ms - at);
-      clock.advance(step);
-      for (const source of sources) capture.push(source, step);
-    }
-  };
-  return { core, capture, clock, record, engineHost };
-}
 
 async function documentOf(core: Core, documentId: string) {
   const document = (await core.listDocuments()).find((each) => each.id === documentId);
   if (!document) throw new Error(`No Document ${documentId}.`);
   return document;
-}
-
-async function transcriptOf(core: Core, meetingId: string): Promise<MeetingTranscript> {
-  const meeting = (await core.listMeetings()).find((each) => each.id === meetingId);
-  if (!meeting?.transcript) throw new Error(`Meeting ${meetingId} has no transcript.`);
-  return meeting.transcript;
-}
-
-/** Waits, with real time, until the Meeting's Transcript is as `ready` wants it. */
-async function until(
-  core: Core,
-  meetingId: string,
-  ready: (transcript: MeetingTranscript, meeting: Meeting) => boolean,
-): Promise<MeetingTranscript> {
-  return vi.waitFor(
-    async () => {
-      const meeting = (await core.listMeetings()).find((each) => each.id === meetingId);
-      if (!meeting?.transcript || !ready(meeting.transcript, meeting)) {
-        throw new Error(`Not yet: ${JSON.stringify(meeting?.transcript)}`);
-      }
-      return meeting.transcript;
-    },
-    { timeout: 20_000, interval: 20 },
-  );
 }
 
 describe("A Meeting's live Transcript", { timeout: 60_000 }, () => {
