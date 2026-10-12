@@ -2,7 +2,7 @@ import { rm, writeFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 import { type DocumentFile, InvalidInputError, NotFoundError } from "../../src/core";
 import { createTempDataFolder, startCore } from "../helpers/core";
-import { addAndProcess, waitForProcessing, writeSourceFile } from "../helpers/documents";
+import { addAndProcess, sha256, waitForDocuments, writeSourceFile } from "../helpers/documents";
 import { buildPdf } from "../helpers/pdf";
 
 /** Reads an opened Document file's stream to the end. */
@@ -51,14 +51,15 @@ describe("opening a Document's file for the viewer", { timeout: 30_000 }, () => 
     const [document] = await addAndProcess(core, [path]);
     if (!document) throw new Error("Nothing was added.");
 
-    await writeFile(path, "# Notes, edited\n\nWith a second paragraph.\n");
+    const edited = "# Notes, edited\n\nWith a second paragraph.\n";
+    await writeFile(path, edited);
     const file = await core.openDocumentFile(document.id);
 
-    expect(new TextDecoder().decode(await readAll(file))).toBe(
-      "# Notes, edited\n\nWith a second paragraph.\n",
-    );
-    const [processed] = await waitForProcessing(core, [document.id]);
-    expect(processed?.contentHash).not.toBe(document.contentHash);
+    expect(new TextDecoder().decode(await readAll(file))).toBe(edited);
+    // Read now, or by the pass the watcher already started for the same change.
+    await waitForDocuments(core, (documents) => {
+      expect(documents[0]).toMatchObject({ contentHash: sha256(edited), status: "ready" });
+    });
     expect(await core.searchPassages("paragraph", { mode: "keyword" })).toHaveLength(1);
   });
 
