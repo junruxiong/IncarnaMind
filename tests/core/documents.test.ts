@@ -104,7 +104,7 @@ describe("Documents", { timeout: 30_000 }, () => {
         taggingError: null,
         // Read while it's processed.
         creationDate: null,
-        modifiedAt: (await stat(path)).mtime.toISOString(),
+        modifiedAt: new Date((await stat(path)).mtimeMs).toISOString(),
         title: null,
         web: null,
         reference: null,
