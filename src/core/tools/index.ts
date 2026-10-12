@@ -21,8 +21,8 @@
  */
 import type { Effect, ReadThirdPartySource } from "../api";
 
-/** v1's providers, and Find sources; later ones add their kind here. */
-export type ToolProviderKind = "documents" | "skills" | "connector" | "sources";
+/** v1's providers, Find sources and web search; later ones add their kind here. */
+export type ToolProviderKind = "documents" | "skills" | "connector" | "sources" | "web";
 
 /** Which provider a Tool comes from: for its Tool-call card, its approvals and the log. */
 export interface ToolProviderInfo {
@@ -104,6 +104,9 @@ export const SKILL_TOOLS = {
 /** The name of Find sources' Tool (#296). */
 export const SOURCE_TOOLS = { find: "find_sources" } as const;
 
+/** The names of web search's Tools (#128). */
+export const WEB_TOOLS = { search: "search_web", read: "read_web_page" } as const;
+
 /**
  * IncarnaMind's own Tools' names. They are reserved: a Tool from outside
  * IncarnaMind (a Connector's) never takes one (see `offeredTools`).
@@ -112,6 +115,7 @@ export const RESERVED_TOOL_NAMES: ReadonlySet<string> = new Set<string>([
   ...Object.values(DOCUMENT_TOOLS),
   ...Object.values(SKILL_TOOLS),
   ...Object.values(SOURCE_TOOLS),
+  ...Object.values(WEB_TOOLS),
 ]);
 
 /** A Tool from outside IncarnaMind: a Connector's. Every other provider is IncarnaMind's own. */

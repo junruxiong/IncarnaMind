@@ -13,6 +13,7 @@ describe("Settings", () => {
         suggestWhileWriting: false,
         leaveOutOwnFiles: true,
         monthlyCap: null,
+        webSearch: false,
       },
       device: {
         sidebarWidth: 248,
@@ -103,6 +104,7 @@ describe("Settings", () => {
       suggestWhileWriting: false,
       leaveOutOwnFiles: true,
       monthlyCap: null,
+      webSearch: false,
     });
     expect(settings.device).toEqual({
       sidebarWidth: 320,
@@ -161,6 +163,7 @@ describe("Settings", () => {
         suggestWhileWriting: true,
         leaveOutOwnFiles: false,
         monthlyCap: { amount: 20, currency: "USD" },
+        webSearch: true,
       },
       device,
     });
@@ -175,6 +178,7 @@ describe("Settings", () => {
         suggestWhileWriting: true,
         leaveOutOwnFiles: false,
         monthlyCap: { amount: 20, currency: "USD" },
+        webSearch: true,
       },
       device,
       language: "zh-CN",

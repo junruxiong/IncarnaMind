@@ -60,6 +60,7 @@ const userScope: Scope<UserSettings> = {
     suggestWhileWriting: false,
     leaveOutOwnFiles: true,
     monthlyCap: null,
+    webSearch: false,
   },
   validators: {
     language: isLanguagePreference,
@@ -68,6 +69,7 @@ const userScope: Scope<UserSettings> = {
     suggestWhileWriting: isBoolean,
     leaveOutOwnFiles: isBoolean,
     monthlyCap: (value): value is MonthlyCap | null => value === null || isMonthlyCap(value),
+    webSearch: isBoolean,
   },
 };
 

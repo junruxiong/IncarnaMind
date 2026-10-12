@@ -116,6 +116,44 @@ describe("an Answer's steps", () => {
     expect(foldedLine(steps)).toEqual({ kind: "searched", sources: 3, extraScopes: 0 });
   });
 
+  // protects=an Answer that searched only the web folds to that, its calls each a row in order, and a web search beside a Document search counts as one more scope; fails_when=it folds to the Mind it was asked from, groups the web calls with searches, or drops one; no_claim=how the rows are worded.
+  test("an Answer that searched the web folds to that, each search and page read a row of its own", () => {
+    const searched: AnswerToolCall = {
+      id: "w1",
+      tool: "search_web",
+      source: "web",
+      input: { query: "park cooling" },
+      status: "done",
+      resultCount: 6,
+    };
+    const read: AnswerToolCall = {
+      id: "w2",
+      tool: "read_web_page",
+      source: "web",
+      input: { url: "https://news.example/parks" },
+      status: "done",
+      resultCount: 3,
+      webPage: { address: "https://news.example/parks", documentId: "d9", name: "Parks" },
+    };
+    const steps = input(
+      { toolCalls: [searched, read], citations: [citation(1, "p", "d9", 1)] },
+      { askedFrom: MIND },
+    );
+    expect(stepRows(steps).map((row) => (row.kind === "call" ? row.call.id : row.kind))).toEqual([
+      "answered",
+      "asked",
+      "w1",
+      "w2",
+      "check",
+    ]);
+    expect(foldedLine(steps)).toEqual({ kind: "searched-web", sources: 1 });
+    expect(foldedLine(input({ toolCalls: [search("s1", "parks"), searched, read] }))).toEqual({
+      kind: "searched",
+      sources: 0,
+      extraScopes: 1,
+    });
+  });
+
   // protects=a failed search is its own row where it happened, never grouped; fails_when=it joins a search row or moves; no_claim=none beyond protects.
   test("a failed call sits where it happened, between the searches it parts", () => {
     const failed = search("s2", "sensor readings", {
