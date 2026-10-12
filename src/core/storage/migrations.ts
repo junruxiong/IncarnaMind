@@ -1335,7 +1335,19 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
-    version: 65,
+    version: 67,
+    description: "Answers in conversations keep their calculated figures (#438)",
+    sql: `
+      -- An Answer's calculated figures (src/core/answers/calculations.ts, ADR-0021), as a JSON
+      -- list: each figure's marker ("[=1]" in the text), label, formula, inputs (each with the
+      -- Citation it reads its number from, the number as written and where, and the cell or the
+      -- unit line it came with), result, shown text, and the evaluator version it was worked out
+      -- by. '[]' for a Question, and for an Answer with none.
+      ALTER TABLE conversation_messages ADD COLUMN figures TEXT NOT NULL DEFAULT '[]';
+    `,
+  },
+  {
+    version: 74,
     description: "Models the User added to a provider's model menu (#513)",
     sql: `
       -- A model id the catalog does not offer in the menu by default (an unknown, deprecated or
@@ -1350,18 +1362,6 @@ export const migrations: readonly Migration[] = [
       ) STRICT;
       CREATE UNIQUE INDEX chat_menu_models_by_model ON chat_menu_models (provider_id, model_id)
         WHERE deleted_at IS NULL;
-    `,
-  },
-  {
-    version: 67,
-    description: "Answers in conversations keep their calculated figures (#438)",
-    sql: `
-      -- An Answer's calculated figures (src/core/answers/calculations.ts, ADR-0021), as a JSON
-      -- list: each figure's marker ("[=1]" in the text), label, formula, inputs (each with the
-      -- Citation it reads its number from, the number as written and where, and the cell or the
-      -- unit line it came with), result, shown text, and the evaluator version it was worked out
-      -- by. '[]' for a Question, and for an Answer with none.
-      ALTER TABLE conversation_messages ADD COLUMN figures TEXT NOT NULL DEFAULT '[]';
     `,
   },
 ];
