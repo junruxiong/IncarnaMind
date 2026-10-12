@@ -18,7 +18,7 @@ export function cellContext(
 ): QuestionContext {
   const framing = [
     `This is one cell of a comparison table: its row is the Document "${documentName}", its column the Question below. Answer from that Document alone.`,
-    "- Answer in as few words as the answer needs: the figure, date, name or short phrase, with its citation marker. No preamble, and no sentence around it unless the answer is one.",
+    "- Answer the way a table's cell holds a value: the figure, period, date, name or short phrase alone (a few words, like a period of notice given as its length), then its citation marker. No preamble, no conditions or who it applies to unless they change the answer, and no sentence around it.",
     `- If the Document doesn't answer the Question, reply with exactly ${NOT_FOUND} and nothing else.`,
     ...(instruction ? [`- The User asked the table to show this too: ${instruction}`] : []),
   ].join("\n");
@@ -30,8 +30,10 @@ export function cellContext(
  * an Answer with no Citation, which a comparison table of cited Answers can't show.
  */
 export function saysNotFound(markdown: string, citations: readonly MarkedCitation[]): boolean {
-  if (citations.length === 0) return true;
-  // "NOT_FOUND", "Not found.", "**NOT FOUND**" [^1]…
-  const bare = markdown.replace(/\[\^\d+\]|[\s*_`"'“”.。!！-]/g, "").toUpperCase();
-  return bare === "NOTFOUND";
+  return citations.length === 0 || isNotFoundReply(markdown);
+}
+
+/** The reply is `NOT_FOUND` alone: "NOT_FOUND", "Not found.", "**NOT FOUND**" [^1]… */
+export function isNotFoundReply(markdown: string): boolean {
+  return markdown.replace(/\[\^\d+\]|[\s*_`"'“”.。!！-]/g, "").toUpperCase() === "NOTFOUND";
 }

@@ -1,6 +1,8 @@
 import { NodeViewContent, NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react";
 import { type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { RunStop } from "../../../core/api";
 import {
+  cellStop,
   cellToFill,
   comparisonCellOf,
   comparisonQuestionsOf,
@@ -17,27 +19,33 @@ import {
 import { PlusLineIcon } from "../components/lineIcons";
 import { ProblemLine } from "../components/ProblemLine";
 import { ReadinessLine } from "../components/providers/ChatReadinessNotice";
+import { runStopText } from "../cost";
 import { resolveProposalsIn } from "../editWithAi";
-import { useT } from "../i18n";
+import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
 import { addComparisonColumn } from "./comparisonCommands";
 import { CollapseIcon, ExpandIcon, TableIcon } from "./icons";
 import { useMindId } from "./mindContext";
 
-/** The table's cells: how many, how many have their outcome, and how many filling again would write. */
+/**
+ * The table's cells: how many, how many have their outcome, how many filling
+ * again would write, and the monthly cap or plan's limit that stopped a fill.
+ */
 function cellCounts(node: ReactNodeViewProps["node"]) {
   let total = 0;
   let settled = 0;
   let toFill = 0;
+  let stop: RunStop | null = null;
   node.forEach((row) => {
     row.forEach((cell) => {
       const state = comparisonCellOf(cell.attrs);
       total++;
       if (state.status === "done" || state.status === "failed") settled++;
       if (cellToFill(state)) toFill++;
+      stop ??= cellStop(state);
     });
   });
-  return { total, settled, toFill };
+  return { total, settled, toFill, stop: stop as RunStop | null };
 }
 
 /**
@@ -115,7 +123,9 @@ export function ComparisonTableView({ node, editor }: ReactNodeViewProps) {
   );
   const wrapper = useRef<HTMLDivElement>(null);
   const [adding, setAdding] = useState(false);
-  const { total, settled, toFill } = cellCounts(node);
+  const { total, settled, toFill, stop } = cellCounts(node);
+  const language = useLanguage();
+  const openSettings = useAppStore((state) => state.openSettings);
   const editable = editor.isEditable;
   const ref = { mindId, tableId };
 
@@ -263,6 +273,20 @@ export function ComparisonTableView({ node, editor }: ReactNodeViewProps) {
               {t("answer.error.consent-declined")}
             </ProblemLine>
           )}
+        </div>
+      )}
+      {!problem && !filling && stop && (
+        <div contentEditable={false} data-comparison-ui className="comparison-problem">
+          <ProblemLine
+            testId="comparison-stopped"
+            action={
+              stop.reason === "cost-cap"
+                ? { label: t("answer.error.changeCap"), onClick: () => openSettings("general") }
+                : undefined
+            }
+          >
+            {runStopText(stop, t, language)}
+          </ProblemLine>
         </div>
       )}
       <div className="comparison-frame">
