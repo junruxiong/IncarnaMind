@@ -366,6 +366,7 @@ test("retrieval and Citation evaluation", async () => {
         config.cacheDir,
         log,
         GATING_MODE,
+        config.rerankOnCpu,
       );
       try {
         await runSearchTool(
