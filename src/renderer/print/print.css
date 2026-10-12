@@ -170,8 +170,30 @@ sup.note-ref {
   vertical-align: super;
 }
 
+/* Markers side by side, as a chart's sources are: "¹,²", not "¹²". */
+sup.note-ref + sup.note-ref::before {
+  content: ",";
+}
+
 .unverified {
   color: var(--warning);
+}
+
+.chart-picture {
+  margin-bottom: 4pt;
+  text-align: center;
+}
+
+.caption {
+  margin-bottom: 6pt;
+  font-family: var(--sans);
+  font-size: 9.5pt;
+  line-height: 1.4;
+  color: var(--ink-answer);
+}
+
+.caption.keep-next:has(+ .chart-sources) {
+  margin-bottom: 2pt;
 }
 
 a {

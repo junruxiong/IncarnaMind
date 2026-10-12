@@ -8,10 +8,10 @@
  */
 import type { StyledRun } from "../api";
 import { type Block, type Footnote, type Inline, type Marks, tableLayout } from "../mindText";
-import type { MarkdownLabels } from "./markdown";
+import type { ExportLabels } from "./labels";
 import { latexToMathMl } from "./math";
 
-export type PrintLabels = MarkdownLabels;
+export type PrintLabels = ExportLabels;
 
 export interface PrintHtml {
   body: string;
@@ -158,6 +158,8 @@ class PrintWriter {
         const html = imageHtml(block.image.src, block.image.alt);
         return html ? `<p class="image">${html}</p>` : "";
       }
+      case "chart":
+        return this.chart(block);
       case "bibliography": {
         const entries = block.items
           .map((item) => {
@@ -169,6 +171,30 @@ class PrintWriter {
         return `<section class="bibliography${hanging}"><h2>${escapeHtml(block.heading)}</h2>${entries}</section>`;
       }
     }
+  }
+
+  /**
+   * A chart as Word has it (#436): its picture, or with none (a host that can't draw one) the
+   * table of its values; its caption; and its sources, each a numbered footnote in the Mind's
+   * citation style. The picture and the caption keep with what follows them across a page break.
+   */
+  private chart(block: Extract<Block, { kind: "chart" }>): string {
+    const { labels } = this;
+    const picture = block.picture ? imageHtml(block.picture.src, block.picture.alt) : "";
+    const shown = picture
+      ? `<p class="image chart-picture keep-next">${picture}</p>`
+      : this.table(block.table);
+    const sources: string[] = [];
+    const cited = this.inline(block.sources);
+    if (cited) sources.push(escapeHtml(labels.chartSources) + cited);
+    if (block.uncited > 0) sources.push(escapeHtml(labels.chartUncited(block.uncited)));
+    const { rows, cutFrom } = block.chart.data;
+    if (cutFrom !== null) sources.push(escapeHtml(labels.chartCut(rows.length, cutFrom)));
+    const keep = sources.length > 0 ? " keep-next" : "";
+    const caption = `<p class="caption${keep}">${escapeHtml(labels.chart(block.chart.title))}</p>`;
+    const line =
+      sources.length > 0 ? `<p class="caption chart-sources">${sources.join(" ")}</p>` : "";
+    return shown + caption + line;
   }
 
   /** A table as laid out for Word and Markdown, its cells spanning as in the Mind. */

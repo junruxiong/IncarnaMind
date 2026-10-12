@@ -87,6 +87,10 @@ function cutAt(block: HTMLElement, at: LineStart): HTMLElement {
 const isHeading = (element: Element | null) =>
   element !== null && /^h[1-6]$/.test(element.localName);
 
+/** A heading, or a chart's picture or caption: it goes on to the next page with what follows it. */
+const keepsWithNext = (element: Element | null): element is HTMLElement =>
+  element instanceof HTMLElement && (isHeading(element) || element.classList.contains("keep-next"));
+
 /** Blocks split between lines of text. */
 const splitsByLine = (block: Element) =>
   block.matches("p:not(.image), pre, .entry") && !block.querySelector("img");
@@ -192,10 +196,13 @@ class Paginator {
         this.page = this.newPage();
         continue;
       }
-      // A heading stays with what follows it.
-      const last = page.body.lastElementChild;
+      // A heading, and a chart's picture and caption, stay with what follows them.
       queue.unshift(rest);
-      if (isHeading(last) && page.body.childElementCount > 1 && last instanceof HTMLElement) {
+      for (
+        let last = page.body.lastElementChild;
+        keepsWithNext(last) && page.body.childElementCount > 1;
+        last = page.body.lastElementChild
+      ) {
         this.removeNotes(page, last);
         last.remove();
         queue.unshift(last);
