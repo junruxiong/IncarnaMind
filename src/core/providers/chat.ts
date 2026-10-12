@@ -15,6 +15,7 @@ import type {
   ConnectionTestResult,
   DataFlowId,
   ExternalService,
+  OtherModel,
   SetChatModelInMenuInput,
 } from "../api";
 import type { Consent } from "../consent";
@@ -31,7 +32,12 @@ import {
   resolveCapabilities,
   startingSupport,
 } from "./capabilities";
-import { catalogFacts, catalogProviderOfKind, modelsProviderOfKind } from "./catalog";
+import {
+  cannotAnswerReason,
+  catalogFacts,
+  catalogProviderOfKind,
+  modelsProviderOfKind,
+} from "./catalog";
 import { billingOf, ollamaCloudPrice } from "./catalog/billing";
 import { endpointOf } from "./catalog/providers";
 import type { ChatGptPlan } from "./chatgpt/plan";
@@ -630,10 +636,13 @@ export function createChat(options: {
           const roles = catalogProviderOfKind(provider.kind)?.roles;
           const roleModels = [roles?.answers, roles?.strongest, roles?.quickTasks];
           const addedIds = menuModelsOf(row.id);
-          const other = listed
-            .filter((each) => each.other && !addedIds.includes(each.id))
-            .map((each) => each.id);
-          const added = addedIds.filter((id) => !inMenu.includes(id));
+          const other = listed.flatMap((each): OtherModel[] =>
+            each.other ? [{ id: each.id, ...each.other }] : [],
+          );
+          const added = addedIds.filter(
+            (id) =>
+              !inMenu.includes(id) && other.find((each) => each.id === id)?.why !== "cannot-answer",
+          );
           const models = [
             ...new Set([
               ...defaultModel,
@@ -666,8 +675,18 @@ export function createChat(options: {
       if (!isRecord(input)) throw new InvalidInputError("setChatModelInMenu expects an object.");
       const { providerId, inMenu } = input as Partial<SetChatModelInMenuInput>;
       const modelId = parseModelId(input.modelId);
-      if (typeof providerId !== "string" || !rowById(providerId)) {
+      const row = typeof providerId === "string" ? rowById(providerId) : undefined;
+      if (typeof providerId !== "string" || !row) {
         throw new InvalidInputError("That chat provider isn't saved.");
+      }
+      if (
+        inMenu === true &&
+        cannotAnswerReason(
+          modelsProviderOfKind(row.kind as ChatProviderKind, row.endpoint),
+          modelId,
+        )
+      ) {
+        throw new InvalidInputError(`${modelId} can't answer Questions here.`);
       }
       if (typeof inMenu !== "boolean") throw new InvalidInputError("inMenu must be true or false.");
       const at = now();

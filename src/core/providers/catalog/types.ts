@@ -200,6 +200,8 @@ export interface CatalogModel extends Partial<ModelFacts> {
 /** The generated model facts of one provider (models.json). */
 export interface GeneratedProviderModels {
   models: CatalogModel[];
+  /** Ids a source says answer by another API than chat: completions, or in audio. */
+  cannotAnswer: Record<string, "completion" | "audio">;
   /** Ids the provider lists that aren't chat models (embeddings, speech, images…): never offered. */
   nonChat: string[];
 }
@@ -210,6 +212,8 @@ export interface CatalogOverrides {
   providers: Record<string, Partial<ModelFacts>>;
   /** Facts for one model, by provider and model id. */
   models: Record<string, Record<string, Partial<ModelFacts>>>;
+  /** Ids that need another API than chat, by provider, where no source says so. */
+  cannotAnswer: Record<string, Record<string, "deep-research" | "computer-use">>;
 }
 
 /** A model recommended for Ollama on this computer, with what the server doesn't report reliably. */
