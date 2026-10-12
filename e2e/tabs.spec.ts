@@ -88,13 +88,19 @@ test("Minds open as tabs; the sidebar shows an open one, opens another in a new 
   await expect(titlesOf(window)).toHaveText(["Beta", "Gamma"]);
   await expect(activeTab(window)).toContainText("Gamma");
 
-  // ⌘-click (Ctrl-click), or a middle click, opens it in the group to the right.
-  await sidebarMind(window, "Alpha").click({ modifiers: ["ControlOrMeta"] });
+  // ⌘-click (Ctrl-click) selects it and opens nothing; the menu's "Open to the side" opens it in the group to the right.
   const groups = window.getByTestId("tab-group");
+  await sidebarMind(window, "Alpha").click({ modifiers: ["ControlOrMeta"] });
+  await expect(groups).toHaveCount(1);
+  // The open Mind and Alpha are selected, so their menu has only what applies to both; Esc clears.
+  await window.keyboard.press("Escape");
+  await sidebarMind(window, "Alpha").click({ button: "right" });
+  await window.getByTestId("mind.openSide").click();
   await expect(groups).toHaveCount(2);
   await expect(groups.nth(1).getByTestId("tab-title")).toHaveText(["Alpha"]);
   await groups.nth(1).getByTestId("tab-close").click();
   await expect(groups).toHaveCount(1);
+  // A middle click opens it to the right as well.
   await sidebarMind(window, "Alpha").click({ button: "middle" });
   await expect(groups).toHaveCount(2);
   await expect(groups.nth(1).getByTestId("tab-title")).toHaveText(["Alpha"]);

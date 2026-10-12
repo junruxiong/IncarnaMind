@@ -832,7 +832,10 @@ export async function expectFirstTabAtCardStart(window: Page, firstTab: Locator)
 export async function pointAndClick(
   window: Page,
   target: Locator,
-  { button = "left" }: { button?: "left" | "right" } = {},
+  {
+    button = "left",
+    modifiers = [],
+  }: { button?: "left" | "right"; modifiers?: readonly ("ControlOrMeta" | "Shift")[] } = {},
 ): Promise<void> {
   await target.scrollIntoViewIfNeeded();
   const box = await target.boundingBox();
@@ -840,7 +843,12 @@ export async function pointAndClick(
   const x = box.x + box.width / 2;
   const y = box.y + box.height / 2;
   await window.mouse.move(x, y, { steps: 8 });
-  await window.mouse.click(x, y, { button });
+  for (const key of modifiers) await window.keyboard.down(key);
+  try {
+    await window.mouse.click(x, y, { button });
+  } finally {
+    for (const key of modifiers.toReversed()) await window.keyboard.up(key);
+  }
 }
 
 /**

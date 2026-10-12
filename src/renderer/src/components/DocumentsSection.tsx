@@ -14,6 +14,7 @@ import { useLanguage, useT } from "../i18n";
 import { currentTabOf } from "../layoutSlice";
 import { fileStatusLabel } from "../linkedFolders";
 import { scanningStatus, unreadPages } from "../scanStatus";
+import { extendThroughRows, rowsIn, useSelectable, useSelectionOrder } from "../selection";
 import { selectVisibleDocuments, useAppStore } from "../store";
 import { chipsOf, tagIndex } from "../tagEditing";
 import { moveThroughRows, TREE_ROW } from "../treeKeys";
@@ -130,6 +131,9 @@ export function DocumentsSection() {
   );
   const addDocuments = useAppStore((state) => state.addDocuments);
   const picker = useRef<HTMLInputElement>(null);
+  const tree = useRef<HTMLDivElement>(null);
+  // ⌘A and Shift-click reach the rows in view: every Mind and Document the tree draws.
+  useSelectionOrder("sidebar", () => rowsIn(tree.current));
   const tags = useAppStore((state) => state.tags);
   // Built once per change to the Tags, so each row only looks its own up.
   const tagsById = useMemo(() => tagIndex(tags), [tags]);
@@ -180,7 +184,9 @@ export function DocumentsSection() {
     <div
       data-testid="documents-section"
       {...tagNamesTipListProps}
-      onKeyDown={(event) => moveThroughRows(event)}
+      onKeyDown={(event) => {
+        if (!moveThroughRows(event)) extendThroughRows(event, "sidebar");
+      }}
     >
       {/* Files given straight to the page arrive here, as from the dialog: the smoke tests add them so. */}
       <input
@@ -234,13 +240,15 @@ export function DocumentsSection() {
       )}
       {/* Under the switcher, so it never moves; in the Tags view, the chosen Tags say it. */}
       {view !== "tags" && <ActiveTagFilter />}
-      {view === "folders" ? (
-        <LibraryFolders documents={documents} renderDocument={renderDocument} />
-      ) : view === "tags" ? (
-        <SidebarTags renderDocument={renderDocument} />
-      ) : (
-        <FolderTree documents={documents} filtering={filtering} renderDocument={renderDocument} />
-      )}
+      <div ref={tree} role="tree" aria-multiselectable="true" aria-label={t("sidebar.tree")}>
+        {view === "folders" ? (
+          <LibraryFolders documents={documents} renderDocument={renderDocument} />
+        ) : view === "tags" ? (
+          <SidebarTags renderDocument={renderDocument} />
+        ) : (
+          <FolderTree documents={documents} filtering={filtering} renderDocument={renderDocument} />
+        )}
+      </div>
       {/* The Tags view lists every Tag, whatever the filter. */}
       {empty &&
         view !== "tags" &&
@@ -295,10 +303,15 @@ const DocumentRow = memo(function DocumentRow({
     const shown = currentTabOf(state.layout)?.item;
     return shown?.kind === "document" && shown.documentId === item.id;
   });
-  const muted = !isOpen && (isProcessing(item.status) || item.fileStatus !== "available");
   const objectMenu = useObjectMenu({ kind: "document", id: item.id });
+  const select = useSelectable({ kind: "document", id: item.id }, "sidebar", () =>
+    openDocument({ documentId: item.id }),
+  );
+  const lit = isOpen || select.selected;
+  const muted = !lit && (isProcessing(item.status) || item.fileStatus !== "available");
 
   return (
+    // biome-ignore lint/a11y/useFocusableInteractive: the row's own button takes the focus, and the arrow keys move between them.
     <li
       data-testid="document-list-item"
       data-document-id={item.id}
@@ -307,8 +320,10 @@ const DocumentRow = memo(function DocumentRow({
       data-status={item.status}
       data-file-status={item.fileStatus}
       data-tagging={item.tagging}
+      role="treeitem"
+      {...select.rowProps}
       {...(renaming ? {} : objectMenu.rowProps)}
-      className={rowClass(isOpen, muted ? "muted" : "item")}
+      className={rowClass(lit, muted ? "muted" : "item")}
     >
       {renaming ? (
         <div
@@ -337,8 +352,9 @@ const DocumentRow = memo(function DocumentRow({
           title={[shownName === source ? shownName : `${shownName}\n${source}`, tagNames]
             .filter(Boolean)
             .join("\n")}
-          // A preview beside the Mind, or in the group already showing a Document.
-          onClick={() => openDocument({ documentId: item.id })}
+          // A click opens it, in a preview beside the Mind or in the group already showing a Document;
+          // ⌘-click and Shift-click select (`useSelectable`).
+          onClick={select.onClick}
           onDoubleClick={() => setRenaming(true)}
           onKeyDown={(event) => {
             if (event.key === "F2") {
@@ -349,7 +365,7 @@ const DocumentRow = memo(function DocumentRow({
           className={rowButtonClass}
           style={rowPadding(depth)}
         >
-          <DocumentLineIcon kind={item.kind} className={rowIconClass(isOpen)} />
+          <DocumentLineIcon kind={item.kind} className={rowIconClass(lit)} />
           {/* Takes what the status leaves; in it, the name gives way before the colours. */}
           <span className="flex min-w-0 flex-1 items-center gap-2">
             <span data-testid="row-text" className="min-w-0 truncate">
