@@ -41,9 +41,22 @@ const PROVIDERS = [
       },
     ],
     docsUrl: "https://docs.anthropic.com/en/docs/about-claude/models",
-    // Claude 5.5 thinks by default (adaptively): a small call with a short reply runs out of room
-    // before it writes anything (#282).
-    request: { thinkingOff: { options: { anthropic: { thinking: { type: "disabled" } } } } },
+    request: {
+      // Claude 5.5 thinks by default (adaptively): a small call with a short reply runs out of room
+      // before it writes anything (#282).
+      thinkingOff: { options: { anthropic: { thinking: { type: "disabled" } } } },
+      // Claude 5 models think by default, and return only an empty block unless asked for the summary.
+      reasoningSummary: {
+        options: { anthropic: { thinking: { type: "adaptive", display: "summarized" } } },
+        only: [
+          "claude-fable-5",
+          "claude-mythos-5",
+          "claude-opus-5",
+          "claude-sonnet-5",
+          "claude-haiku-5",
+        ],
+      },
+    },
     roles: {
       answers: "claude-sonnet-5-5",
       strongest: "claude-fable-5-1",
@@ -95,8 +108,11 @@ const PROVIDERS = [
       },
     ],
     docsUrl: "https://platform.openai.com/docs/models",
-    // The Responses API keeps each request on OpenAI's servers unless it says not to.
-    request: { store: false },
+    request: {
+      // The Responses API keeps each request on OpenAI's servers unless it says not to.
+      store: false,
+      reasoningSummary: { options: { openai: { reasoningSummary: "auto" } } },
+    },
     roles: {
       answers: "gpt-6.1-sol",
       strongest: "gpt-6-astra",

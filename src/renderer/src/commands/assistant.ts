@@ -10,6 +10,7 @@ import {
   clearConversation,
   conversationById,
   lastAnswer,
+  regenerateAnswer,
   startNewChat,
   stopWriting,
   useConversations,
@@ -22,10 +23,10 @@ import type { Command } from "./registry";
 
 /*
  * The assistant's commands (#253, #201): where it sits, folding it, ⌘J to its
- * composer, New chat and History; adding, copying and stopping an Answer, the
- * last Answer to a new Mind, and clearing the conversation. Its ⋯ menu, its header
- * and rail, its Answers' buttons and ⌘K run these, so each has a keyboard and
- * a menu way beside the drag.
+ * composer, New chat and History; adding, copying, regenerating and stopping
+ * an Answer, the last Answer to a new Mind, and clearing the conversation.
+ * Its ⋯ menu, its header and rail, its Answers' buttons and ⌘K run these, so
+ * each has a keyboard and a menu way beside the drag.
  */
 
 const store = () => useAppStore.getState();
@@ -206,6 +207,19 @@ export const assistantCommands: readonly Command[] = [
     run: () => {
       const answer = answerInFocus();
       if (keepable(answer)) void copyAnswer(answer.id);
+    },
+  },
+  {
+    id: "assistant.regenerateAnswer",
+    label: "command.answer.regenerate",
+    group: "main",
+    // As Regenerate in a Mind: the Answer is written again in its place.
+    reversible: true,
+    when: isThere,
+    enabled: () => (answerInFocus() ? true : { reason: "assistant.lastToNewMind.unavailable" }),
+    run: () => {
+      const answer = answerInFocus();
+      if (answer) void regenerateAnswer(answer.id);
     },
   },
   {

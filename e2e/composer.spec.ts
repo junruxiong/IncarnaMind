@@ -14,6 +14,7 @@ import {
   dismissChatSetup,
   enterContent,
   launchApp,
+  openSteps,
   pointAndClick,
   pointAt,
   removeDataFolder,
@@ -208,17 +209,17 @@ test("typing in the composer and pressing Enter shows the Question in the assist
   await screenshot(window, "composer-typed-en");
   await window.keyboard.press("Enter");
 
-  // A bubble at the right of the assistant, in the compact sizes; its Answer under it.
+  // A bubble at the right of the assistant, in the assistant's reading size; its Answer under it.
   const question = window.getByTestId("assistant-question");
   await expect(question).toHaveCount(1);
   await expect(question).toContainText("When do spring tides happen?");
   const bubble = question.locator(".assistant-question-bubble");
-  await expect(bubble).toHaveCSS("font-size", "13px");
+  await expect(bubble).toHaveCSS("font-size", "14px");
   const answer = assistantAnswers(window).first();
   await expect(answer).toHaveAttribute("data-status", "streaming");
   // While it is written: the pulsing dot and Stop show; it is read out in a polite live region.
   await expect(answer.getByTestId("answer-writing")).toBeVisible();
-  await expect.poll(() => opacityOf(answer.getByTestId("answer-meta"))).toBe(1);
+  await expect.poll(() => opacityOf(answer.getByTestId("answer-actions"))).toBe(1);
   const live = composer.getByTestId("composer-live");
   await expect(live).toHaveAttribute("aria-live", "polite");
   await expect(live).toHaveText(/Writing the Answer…|Your Documents answer this/);
@@ -240,14 +241,14 @@ test("typing in the composer and pressing Enter shows the Question in the assist
   await expect(input).toBeFocused();
   await expect(ask).toBeDisabled();
 
-  // The newest Answer shows its actions at rest: Copy, Add to note, Regenerate, its model and
-  // what it searched.
+  // The newest Answer shows its actions at rest, Copy and Add to note only; its steps, folded
+  // above it, say what it searched, and Regenerate is at their end.
   await window.mouse.move(10, 10);
-  await expect.poll(() => opacityOf(answer.getByTestId("answer-meta"))).toBe(1);
-  await expect(answer.getByTestId("answer-model")).toHaveText("fake-model");
-  await expect(answer.getByTestId("answer-scope")).toHaveText("All Documents");
-  await expect(answer.getByTestId("answer-tools")).toContainText("Searched your Documents");
-  await expect(answer.getByTestId("answer-regenerate")).toBeVisible();
+  const actions = answer.getByTestId("answer-actions");
+  await expect.poll(() => opacityOf(actions)).toBe(1);
+  await expect(actions).toHaveText("CopyAdd to note");
+  await expect(answer.getByTestId("answer-steps")).toHaveText("Searched All Documents · 1 source");
+  await expect(answer.getByTestId("answer-regenerate")).toHaveCount(0);
   await screenshot(window, "composer-answered-en");
 
   // An earlier one shows them on hover only.
@@ -257,9 +258,9 @@ test("typing in the composer and pressing Enter shows the Question in the assist
     timeout: 15_000,
   });
   await window.mouse.move(10, 10);
-  await expect.poll(() => opacityOf(answer.getByTestId("answer-meta"))).toBe(0);
+  await expect.poll(() => opacityOf(answer.getByTestId("answer-actions"))).toBe(0);
   await pointAt(window, answer.getByTestId("assistant-answer-text"));
-  await expect.poll(() => opacityOf(answer.getByTestId("answer-meta"))).toBe(1);
+  await expect.poll(() => opacityOf(answer.getByTestId("answer-actions"))).toBe(1);
   await screenshot(window, "answer-hover-en");
   await expect.poll(() => order(editor)).toEqual(["Spring tides come twice a month."]);
   await app.close();
@@ -286,17 +287,18 @@ test("Stop keeps what streamed, and Regenerate writes the Answer again", async (
   const kept = await answer.locator(".assistant-answer-text").textContent();
   expect(kept).toContain("scripted");
   expect(kept).not.toContain("That is all.");
-  // Stopped: it says so under its last line, at rest too, with Regenerate.
+  // Stopped: it says so under its last line, at rest too.
   await window.mouse.move(10, 10);
   await expect(answer.getByTestId("answer-stopped")).toHaveText("Stopped");
-  await expect.poll(() => opacityOf(answer.getByTestId("answer-meta"))).toBe(1);
+  await expect.poll(() => opacityOf(answer.getByTestId("answer-actions"))).toBe(1);
   await expect(composer.getByTestId("composer-live")).toContainText("The Answer was stopped.");
   // What streamed stays: a moment later it is still all there is.
   await window.waitForTimeout(800);
   await expect(answer.locator(".assistant-answer-text")).toHaveText(kept ?? "");
   await screenshot(window, "answer-stopped-en");
 
-  // Regenerate, under it, writes it again in full, in its place.
+  // Regenerate, at the end of its steps, writes it again in full, in its place.
+  await openSteps(window, answer);
   await pointAndClick(window, answer.getByTestId("answer-regenerate"));
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(answer).toContainText("That is all.");
@@ -324,8 +326,8 @@ test("sending empties the composer and shows the Question with its Answer on its
     await pointAndClick(window, input);
 
     // Ollama is slow to say where the model runs, so the Question waits on it. Meanwhile, at
-    // once: the composer is empty, the Question is in the assistant with "Writing…" and Stop
-    // under it, and the send button is Stop. A second Enter, in the empty composer, does nothing.
+    // once: the composer is empty, the Question is in the assistant with its first step,
+    // searching, and Stop under it, and the send button is Stop. A second Enter, in the empty composer, does nothing.
     ollama.hold();
     await window.keyboard.type(LONG_QUESTION);
     await window.keyboard.press("Enter");
@@ -334,14 +336,14 @@ test("sending empties the composer and shows the Question with its Answer on its
     await expect(input).toBeFocused();
     await expect(questions).toHaveCount(1);
     await expect(questions).toContainText(LONG_QUESTION);
-    await expect(onItsWay.getByTestId("answer-writing")).toHaveText("Writing…");
+    await expect(onItsWay.getByTestId("answer-writing")).toHaveText("Searching All Documents…");
     await expect(onItsWay.getByTestId("answer-stop")).toBeVisible();
     await expect(stop).toHaveAccessibleName("Stop the Answer");
     await expect(ask).toHaveCount(0);
     await expect(answers).toHaveCount(0);
     await screenshot(window, "composer-stop-on-its-way-en");
 
-    // Once Ollama answers, the Answer streams in where "Writing…" was, Stop still under it and
+    // Once Ollama answers, the Answer streams in where its first step was, Stop still under it and
     // in the composer; then it is written. One Question, one Answer.
     ollama.release();
     const first = answers.first();
@@ -447,7 +449,7 @@ test("Stop works before the Answer has started; a Question that can't be asked p
     await expect(answers).toHaveCount(1);
     await expect(ask).toBeEnabled();
 
-    // In Chinese, on this computer again: "Writing…" and Stop say so in Chinese.
+    // In Chinese, on this computer again: the first step and Stop say so in Chinese.
     await bridge(window).localOnly(false);
     ollama.inTheCloud(false);
     await bridge(window).language("zh-CN");
@@ -456,7 +458,7 @@ test("Stop works before the Answer has started; a Question that can't be asked p
     await window.keyboard.press("Enter");
     await expect(input).toHaveValue("");
     await expect(refusal).toHaveCount(0);
-    await expect(onItsWay.getByTestId("answer-writing")).toHaveText("正在回答…");
+    await expect(onItsWay.getByTestId("answer-writing")).toHaveText("正在搜索全部文档…");
     await expect(onItsWay.getByTestId("answer-stop")).toHaveText("停止");
     await expect(stop).toHaveAccessibleName("停止生成回答");
     await screenshot(window, "composer-stop-on-its-way-zh");
@@ -595,7 +597,7 @@ test("the model chip chooses the model for one Mind, which remembers it after a 
     await window.keyboard.press("Enter");
     const answer = assistantAnswers(window).first();
     await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-    await expect(answer.getByTestId("answer-model")).toHaveText("other-model");
+    await expect(await openSteps(window, answer)).toContainText("Answered by other-model");
 
     // A new Mind takes the default; by keyboard, the menu opens and closes again.
     await pointAndClick(window, window.getByTestId("plus-menu"));
@@ -627,7 +629,7 @@ test("the model chip chooses the model for one Mind, which remembers it after a 
     await window.keyboard.press("Enter");
     const other = assistantAnswers(window).first();
     await expect(other).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-    await expect(other.getByTestId("answer-model")).toHaveText("fake-model");
+    await expect(await openSteps(window, other)).toContainText("Answered by fake-model");
 
     // In Chinese.
     await bridge(window).language("zh-CN");
@@ -801,9 +803,10 @@ test("in Chinese: the composer with a Search scope and a Skill chosen from its p
   await expect(composer.getByTestId("composer-live")).toContainText("回答已生成。");
   const question = window.getByTestId("assistant-question");
   await expect(question.getByTestId("assistant-question-skill")).toHaveText("literature-review");
-  await expect(answer.getByTestId("answer-scope")).toHaveText("“Tides”");
-  await pointAt(window, answer.getByTestId("assistant-answer-text"));
+  await expect(answer.getByTestId("answer-steps")).toContainText("已搜索“Tides”");
+  await openSteps(window, answer);
   await expect(answer.getByTestId("answer-regenerate")).toHaveText("重新生成");
+  await pointAt(window, answer.getByTestId("assistant-answer-text"));
   await expect(answer.getByTestId("answer-add")).toHaveText("添加到笔记");
   await screenshot(window, "answer-hover-zh");
 

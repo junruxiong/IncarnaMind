@@ -5,6 +5,7 @@ import type {
   LibraryGroup,
   SecretStorageStatus,
 } from "../../../../core/api";
+import { clientInSentence } from "../../../../shared/agentNames";
 import { core } from "../../core";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
@@ -23,7 +24,6 @@ import {
   primaryButtonClass,
 } from "../ui";
 import { useModal } from "../useModal";
-import { clientName } from "./agentWords";
 
 /**
  * The one confirmation before an agent is connected (#351), which is also the
@@ -80,7 +80,7 @@ export function ConnectAgentDialog({
   }, [clientId, reportError]);
   const canKeepKey = storage?.canSave !== false;
 
-  const agent = client ? name.trim() || clientName(client, t) : "";
+  const agent = client ? name.trim() || clientInSentence(client, t) : "";
   const toggle = (folderId: string, on: boolean) => {
     const next = new Set(chosen);
     if (on) next.add(folderId);
@@ -113,7 +113,7 @@ export function ConnectAgentDialog({
               type="text"
               data-testid="connect-agent-name"
               value={name}
-              placeholder={t("agents.client.other")}
+              placeholder={t("agents.connect.namePlaceholder")}
               onChange={(event) => setName(event.target.value)}
               className={inputClass}
             />
