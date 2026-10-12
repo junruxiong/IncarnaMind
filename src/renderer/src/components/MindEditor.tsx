@@ -44,6 +44,7 @@ import { askInEditor, QuestionCommands } from "../editor/questionCommands";
 import { QuestionFold } from "../editor/questionFold";
 import { ReferencesBlock } from "../editor/ReferencesBlock";
 import { ScopePicker } from "../editor/ScopePicker";
+import { SectionBreakDialog } from "../editor/SectionBreakDialog";
 import { type SelectionAction, SelectionMenu } from "../editor/SelectionMenu";
 import { SlashMenu } from "../editor/SlashMenu";
 import { noteSlashItems, skillSlashItems } from "../editor/slashItems";
@@ -51,7 +52,9 @@ import { Suggestions } from "../editor/suggestions";
 import { TableMenu } from "../editor/TableMenu";
 import { TableKeys } from "../editor/tableCommands";
 import { SmartTypography } from "../editor/typography";
+import { wordAtomView, wordBlockView } from "../editor/WordAtomView";
 import { WordCount } from "../editor/WordCount";
+import { useWordFile, WordOrigin } from "../editor/WordOrigin";
 import { requestEdit, startEditing, TRANSLATE_LANGUAGES } from "../editWithAi";
 import { translateNow, useT } from "../i18n";
 import { useMeetingOf } from "../meetings";
@@ -244,6 +247,10 @@ function MindEditorView({
       : t("editor.footnote.label", { number });
   /** The position of the formula whose LaTeX is being edited. */
   const [editingMath, setEditingMath] = useState<number | null>(null);
+  /** A change that would delete a Word file's section break, waiting for the User to say (#104). */
+  const [sectionBreakRetry, setSectionBreakRetry] = useState<(() => void) | null>(null);
+  /** A Mind still filling in from a Word file can't be edited until it has (#104). */
+  const importing = useWordFile(doc).progress !== null;
   /** The Mind's citation style, followed as it changes (#289). */
   const styleChoice = useMindStyleChoice(doc);
   const { style } = styleChoice;
@@ -264,6 +271,9 @@ function MindEditorView({
           citationView,
           footnoteView: footnoteView(() => footnoteLabel.current),
           chartView,
+          wordAtomView,
+          wordBlockView,
+          onSectionBreakDelete: (retry) => setSectionBreakRetry(() => retry),
         }),
         // Footnotes are numbered as the Mind's citation style counts its Citations (#289).
         CitationNumbers.configure({ form: () => citationStyle(styleRef.current).form }),
@@ -324,6 +334,10 @@ function MindEditorView({
     },
     [doc, readOnly],
   );
+
+  useEffect(() => {
+    if (!editor.isDestroyed) editor.setEditable(!readOnly && !importing);
+  }, [editor, readOnly, importing]);
 
   // The Citations and References in the Mind's citation style (#289), formatted off the
   // window's thread, and the footnotes numbered again when the style counts Citations otherwise.
@@ -466,7 +480,15 @@ function MindEditorView({
 
   return (
     <MindIdContext.Provider value={mindId}>
-      {countSlot && createPortal(<WordCount editor={editor} doc={doc} />, countSlot)}
+      {countSlot &&
+        createPortal(
+          <>
+            <WordOrigin doc={doc} />
+            <WordCount editor={editor} doc={doc} />
+          </>,
+          countSlot,
+        )}
+      <SectionBreakDialog retry={sectionBreakRetry} onClose={() => setSectionBreakRetry(null)} />
       {readOnly && <MindNotice kind="read-only" />}
       <div className={`mind-editor-frame ${guide ? "mind-editor-frame--guide" : ""}`}>
         {!readOnly && <ProposalBars editor={editor} mindId={mindId} />}

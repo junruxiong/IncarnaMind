@@ -10,7 +10,10 @@
  * they appear.
  *
  * Node types are those the editor stores (Tiptap's names, see `noteSchema`),
- * plus Tiptap's tables and images, which are read when a Mind has them.
+ * plus Tiptap's tables and images, which are read when a Mind has them. What a
+ * Word import kept as it is reads as the text it holds or shows (a text box's,
+ * a field's result), a Word footnote as a footnote, and a deletion, a comment
+ * and the invisible marks as nothing (`wordAtomText`).
  *
  * What this version doesn't know:
  *
@@ -34,6 +37,7 @@ import { citationLocation } from "../shared/locations";
 import type { TableAlign } from "../shared/markdownTables";
 import { cutTitle } from "../shared/naming";
 import { readProposalAttribute } from "../shared/proposals";
+import { readWordAtom, wordAtomText } from "../shared/wordFiles";
 import {
   ANSWER_BLOCK,
   CHART_NODE,
@@ -44,6 +48,8 @@ import {
   PROPOSAL_INSERT_MARK,
   QUESTION_BLOCK,
   type StyledRun,
+  WORD_ATOM_NODE,
+  WORD_BLOCK_NODE,
 } from "./api";
 
 export interface Marks {
@@ -276,6 +282,7 @@ const INLINE_TYPES: ReadonlySet<string> = new Set([
   "image",
   CITATION_NODE,
   FOOTNOTE_NODE,
+  WORD_ATOM_NODE,
 ]);
 
 const hasBlockChildren = (element: Y.XmlElement) =>
@@ -319,6 +326,17 @@ function readBlockElement(element: Y.XmlElement, options: ReadOptions): Block[] 
       return [{ kind: "image", image: readImage(element) }];
     case CHART_NODE:
       return [readChartBlock(element, options)];
+    case WORD_BLOCK_NODE: {
+      // Kept as is from a Word file: its text, a paragraph a line.
+      const text = wordAtomText(readWordAtom(element.getAttributes() as Record<string, unknown>));
+      return text
+        .split("\n")
+        .filter((line) => line.trim() !== "")
+        .map((line) => ({
+          kind: "paragraph",
+          content: [{ kind: "text", text: line, marks: NO_MARKS }],
+        }));
+    }
     case QUESTION_BLOCK:
       return options.includeQuestions
         ? [{ kind: "question", content: readInline(element.toArray(), options) }]
@@ -491,6 +509,22 @@ function readInline(
         case "image":
           content.push({ kind: "image", image: readImage(child) });
           break;
+        case WORD_ATOM_NODE: {
+          const atom = readWordAtom(child.getAttributes() as Record<string, unknown>);
+          // A Word file's footnote reads as a footnote, as one the User wrote does.
+          if ((atom.kind === "footnote" || atom.kind === "endnote") && !inFootnote && atom.text) {
+            if (options.trimBeforeFootnote ?? options.trimBeforeCitation)
+              trimTrailingSpace(content);
+            content.push({
+              kind: "footnote",
+              content: [{ kind: "text", text: atom.text, marks: NO_MARKS }],
+            });
+            break;
+          }
+          const text = wordAtomText(atom);
+          if (text) content.push({ kind: "text", text, marks: NO_MARKS });
+          break;
+        }
         case CITATION_NODE: {
           if (options.trimBeforeCitation && !inFootnote) trimTrailingSpace(content);
           const attributes = child.getAttributes() as Record<string, unknown>;
@@ -563,6 +597,9 @@ export function plainText(element: Y.XmlElement | Y.XmlText, footnotes = false):
       .join("");
   }
   if (!footnotes && element.nodeName === FOOTNOTE_NODE) return "";
+  if (element.nodeName === WORD_ATOM_NODE || element.nodeName === WORD_BLOCK_NODE) {
+    return wordAtomText(readWordAtom(element.getAttributes() as Record<string, unknown>));
+  }
   return element
     .toArray()
     .map((child) =>
