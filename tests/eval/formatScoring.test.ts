@@ -135,9 +135,18 @@ const CITATIONS = {
 
 describe("The every-format set's report", () => {
   test("groups Documents by format as Users name them", () => {
-    expect(["a.docx", "a.pptx", "a.xlsx", "a.csv", "a.md", "a.txt", "a.pdf"].map(formatOf)).toEqual(
-      ["word", "powerpoint", "spreadsheet", "spreadsheet", "text", "text", "pdf"],
-    );
+    expect(
+      ["a.docx", "a.pptx", "a.xlsx", "a.csv", "a.md", "a.txt", "a.pdf", "a.vtt"].map(formatOf),
+    ).toEqual([
+      "word",
+      "powerpoint",
+      "spreadsheet",
+      "spreadsheet",
+      "text",
+      "text",
+      "pdf",
+      "transcript",
+    ]);
     expect(() => formatOf("a.png")).toThrow(/a\.png/);
   });
 
@@ -151,6 +160,7 @@ describe("The every-format set's report", () => {
       ["Excel and CSV", 2],
       ["Markdown and plain text", 0],
       ["PDF", 1],
+      ["Transcript", 0],
     ]);
     expect(of("powerpoint")?.retrieval).toEqual({
       [GATING_MODE]: {

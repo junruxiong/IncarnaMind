@@ -9,16 +9,33 @@
  * only in US dollars (the Chinese regions of providers that bill in yuan) have
  * their yuan prices here, from the providers' own price pages.
  */
-import type { CatalogOverrides, Price } from "./types";
+import type { CatalogOverrides, OffPeak, Price } from "./types";
 
 /** A price in yuan per million tokens. */
-const yuan = (input: number, output: number, cacheRead?: number, note?: Price["note"]): Price => ({
+const yuan = (
+  input: number,
+  output: number,
+  cacheRead?: number,
+  note?: Price["note"],
+  offPeak?: OffPeak,
+): Price => ({
   currency: "CNY",
   input,
   output,
   ...(cacheRead !== undefined && { cacheRead }),
   ...(note && { note }),
+  ...(offPeak && { offPeak }),
 });
+
+/** DeepSeek's peak: weekdays 09:00–12:00 and 14:00–18:00 Beijing time; half price otherwise. */
+const DEEPSEEK_PEAK: OffPeak = {
+  factor: 0.5,
+  utcOffset: 8,
+  peakHours: [
+    [9, 12],
+    [14, 18],
+  ],
+};
 
 /** Kimi fixes its sampling (any other temperature is an error) and rejects a forced Tool choice. */
 const KIMI = { temperature: false, forcedToolChoice: false } as const;
@@ -83,16 +100,28 @@ export const OVERRIDES: CatalogOverrides = {
     deepseek: {
       // The peak price, from the Chinese price page; the rest of the day it is half.
       "deepseek-flash": {
-        price: yuan(2, 8, 0.04, {
-          en: "Half outside weekdays 09:00–12:00 and 14:00–18:00 Beijing time: ¥1 / ¥4",
-          zh: "非北京时间工作日 9:00–12:00、14:00–18:00 的时段为半价：¥1 / ¥4",
-        }),
+        price: yuan(
+          2,
+          8,
+          0.04,
+          {
+            en: "Half outside weekdays 09:00–12:00 and 14:00–18:00 Beijing time: ¥1 / ¥4",
+            zh: "非北京时间工作日 9:00–12:00、14:00–18:00 的时段为半价：¥1 / ¥4",
+          },
+          DEEPSEEK_PEAK,
+        ),
       },
       "deepseek-v4-pro": {
-        price: yuan(9, 27, 0.3, {
-          en: "Half outside weekdays 09:00–12:00 and 14:00–18:00 Beijing time: ¥4.5 / ¥13.5",
-          zh: "非北京时间工作日 9:00–12:00、14:00–18:00 的时段为半价：¥4.5 / ¥13.5",
-        }),
+        price: yuan(
+          9,
+          27,
+          0.3,
+          {
+            en: "Half outside weekdays 09:00–12:00 and 14:00–18:00 Beijing time: ¥4.5 / ¥13.5",
+            zh: "非北京时间工作日 9:00–12:00、14:00–18:00 的时段为半价：¥4.5 / ¥13.5",
+          },
+          DEEPSEEK_PEAK,
+        ),
       },
     },
     qwen: {
@@ -125,10 +154,21 @@ export const OVERRIDES: CatalogOverrides = {
     },
     siliconflow: {
       "deepseek-ai/DeepSeek-V4-Flash": {
-        price: yuan(3, 9, undefined, {
-          en: "From 02:00 to 08:00: ¥1.5 / ¥4.5",
-          zh: "凌晨 2 点至 8 点：¥1.5 / ¥4.5",
-        }),
+        price: yuan(
+          3,
+          9,
+          undefined,
+          { en: "From 02:00 to 08:00: ¥1.5 / ¥4.5", zh: "凌晨 2 点至 8 点：¥1.5 / ¥4.5" },
+          {
+            factor: 0.5,
+            utcOffset: 8,
+            peakHours: [
+              [0, 2],
+              [8, 24],
+            ],
+            everyDay: true,
+          },
+        ),
       },
       // Free.
       "Qwen/Qwen3-8B": { price: yuan(0, 0) },
