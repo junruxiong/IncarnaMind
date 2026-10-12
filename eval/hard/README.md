@@ -34,7 +34,7 @@ npm run eval:hard
 - **Searching and reranking:** about 10 minutes.
 - **Memory:** the run reports its peak; expect a few GB (the embedding and reranking models are about 1 GB each while loaded; the vectors about 75 MB).
 - **Without a chat model:** about an hour all told, with nothing sent anywhere once the models are cached.
-- **With a chat model:** 205 Answers more, each with up to 5 searches: two to three hours. At `claude-sonnet-5-5`'s $2 and $10 per million input and output tokens, with 25,000 to 50,000 input and about 1,000 output tokens an Answer, that is about $12 to $25.
+- **With a chat model:** 225 Answers more, each with up to 5 searches: two to three hours. At `claude-sonnet-5-5`'s $2 and $10 per million input and output tokens, with 25,000 to 50,000 input and about 1,000 output tokens an Answer, that is about $12 to $25.
 
 `INCARNAMIND_EVAL_KEEP_DATA=1` keeps the data folder; `INCARNAMIND_EVAL_CACHE` moves the cache.
 
@@ -92,8 +92,10 @@ npm run eval:hard
 | `unanswerable` | The library doesn't say | None: an Answer should cite nothing |
 | `cross-lingual` | Asked in the other language from its Document's, with `translatedQuery` | One Passage, in a Document with no translation in the Question's language |
 | `near-duplicate` | Two versions of a Document differ, and the Question names which | One Passage, whose quote is in no other version |
+| `false-premise` | The Question takes for granted what the Documents don't say: an approval, a figure, a cause (`premise` says what) | The Passage that says what the Documents do say |
+| `disagreeing` | Two Documents disagree, one newer and one older, and the Question doesn't say which it means | Two Passages, the newer first; `newer` and `older` give what each says, in the forms an Answer may write it |
 
-205 Questions:
+225 Questions:
 
 | Difficulty | English | Chinese |
 |---|---|---|
@@ -105,14 +107,16 @@ npm run eval:hard
 | unanswerable | 19 | 6 |
 | cross-lingual | 8 (about Chinese Documents) | 18 (about English Documents) |
 | near-duplicate | 16 | 8 |
+| false-premise | 5 | 5 |
+| disagreeing | 5 | 5 |
 
-Per domain: contracts 33, filings 46, papers 32, reports 57, manuals 16, medical 21. 17 of them ask about Word, Excel, PowerPoint or CSV files; 64 come from benchmarks (CUAD 25, FinanceBench 24, Qasper 15).
+Per domain: contracts 34, filings 50, papers 32, reports 65, manuals 19, medical 25. 17 of them ask about Word, Excel, PowerPoint or CSV files; 64 come from benchmarks (CUAD 25, FinanceBench 24, Qasper 15).
 
 **Sources.** CUAD's clause annotations (contracts), Qasper's evidence (papers) and FinanceBench's evidence pages (filings), each mapped to the pages the app stores and reworded where the original assumed the Document was in front of the reader (`benchmark` names the original). The rest were written for this library, in English and Chinese, from the Documents' text.
 
 **Checks.**
 
-- `tests/eval/hardQuestions.test.ts` checks the rules above, at least 15 Questions per difficulty with both languages in each, and every domain.
+- `tests/eval/hardQuestions.test.ts` checks the rules above, at least 15 Questions per difficulty (10 for `false-premise` and `disagreeing`) with both languages in each, and every domain.
 - Every quote was checked against the text the app's own processing extracts (`processFile`, pdf.js), one Document at a time: on its expected Units, on no other, inside a covering Passage; near-duplicates against their other versions. The run checks again on what it stored.
 - Unanswerable Questions were checked by searching the whole library's extracted text for their subject.
 
@@ -123,6 +127,10 @@ Per domain: contracts 33, filings 46, papers 32, reports 57, manuals 16, medical
 - **Modes:** keyword; keyword top 20 + rerank; keyword top 60 + rerank (the search Tool's default, with embeddings off); hybrid; hybrid + rerank (the search Tool with embeddings on, the one to compare the default with); vector.
 - **Reported:** per difficulty, per domain, per language, and per domain × difficulty in each mode; ranks per Question; indexing time in two passes (every Document ready with embeddings off; then embedding every Passage, and the embedding model's own time), Passages and peak memory after each; keyword search's time per query (median, 95th percentile) beside the reranker's.
 - **Citations,** with a chat model, per difficulty: the gating set's figures, how many Answers cite a Document the Question needs (for a near-duplicate, the right version, and how many cite another), and, for unanswerable Questions, how many are answered without a Citation and how many decline (the Answer says the Documents don't answer the Question), with or without Citations, per language. A phrase rule in English and Chinese judges the decline (`eval/lib/declines.ts`: the app's own wording, "isn't in your Documents", "the Documents don't say", "the closest they come", 文档中没有提到, 文档未说明, 没有找到相关, and so on). A nearby fact cited without saying so is not a decline. The reviewer sheet lists the Answers the rule missed for a person to mark.
+- **The Answer rules** (#548), with a chat model, reported per model and not gating:
+  - **Premise flagged first:** of the Answers to `false-premise` Questions, those whose first paragraph says the premise doesn't hold: the decline rule, or a negation or a word naming the premise ("didn't", "hasn't", "in fact", "assumes"; 没有, 并非, 不是…而是, 实际上). A phrase rule on the opening, not a judgement of the whole Answer.
+  - **Newer source leads:** of the Answers to `disagreeing` Questions, those that cite the newer Document and give what it says before what the older one says (or only the newer's), each found in the forms `newer` and `older` list, standing on its own ("4.8" isn't found in "14.8"), with grouped digits read alike. How many name the older one too is reported beside it.
+  - `report.md` lists each of these Answers with what the rules found and how it opens; `answers.md` has the whole text.
 
 ## Dumps, and scoring other orders offline
 
