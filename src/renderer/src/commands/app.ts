@@ -10,6 +10,7 @@ import { useAppStore } from "../store";
 import { assistantCommands } from "./assistant";
 import { bibliographyCommands } from "./bibliography";
 import { chartCommands } from "./charts";
+import { deletedCommands } from "./deleted";
 import { editCommands } from "./edit";
 import { evidenceCommands } from "./evidence";
 import { footnoteCommands } from "./footnotes";
@@ -62,6 +63,7 @@ const appCommands: readonly Command[] = [
   ...folderCommands,
   ...tagCommands,
   ...linkedFolderCommands,
+  ...deletedCommands,
   ...answerCommands,
   ...citationCommands,
   ...tabCommands,

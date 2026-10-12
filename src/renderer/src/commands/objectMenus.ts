@@ -53,6 +53,8 @@ registerMenu("linkedFolder", [
   "linkedFolder.unlink",
 ]);
 
+registerMenu("deleted", ["deleted.restore", "deleted.deletePermanently"]);
+
 // A tab's menu is its Mind's, then the tab's own.
 registerMenu("tab", ["mind.export", "mind.moveTo", "mind.delete"], 0);
 registerMenu(
