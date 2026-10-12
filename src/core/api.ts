@@ -2399,6 +2399,8 @@ export type ProviderErrorKind =
   | "too-long"
   /** The request could pass the User's monthly cap (`UserSettings.monthlyCap`): nothing was sent. */
   | "cost-cap"
+  /** The model's reply ended with no text, or none that could be read. */
+  | "no-answer"
   | "unknown";
 
 export interface ProviderError {
