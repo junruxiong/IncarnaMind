@@ -19,7 +19,7 @@ import {
   rowTitleClass,
   ruledRowClass,
 } from "../ui";
-import { activityWords, doneWords, helpUrl, timeWords } from "./agentWords";
+import { activityWords, doneWords, helpUrl, pairingInSentence, timeWords } from "./agentWords";
 
 /** What setting this agent up just did, shown under it until the page goes. */
 export interface JustSetUp {
@@ -124,12 +124,12 @@ export function AgentPairingRow({
         </span>
         {skillInstalled && (
           <span data-testid="agent-pairing-skill" className={hintClass}>
-            {t("agents.pairing.skill", { agent: pairing.name })}
+            {t("agents.pairing.skill", { agent: pairingInSentence(pairing, t) })}
           </span>
         )}
         {done && (
           <p data-testid="agent-setup-done" role="status" className={`${rowTextClass} mt-1`}>
-            {doneWords(done, pairing.name, t)}
+            {doneWords(done, pairing, t)}
             {done.kind === "wrote" && (
               <>
                 <span aria-hidden="true"> · </span>
@@ -161,7 +161,7 @@ export function AgentPairingRow({
         {open === "folders" && (
           <fieldset data-testid="agent-pairing-folders" className="mt-2 flex flex-col">
             <legend className="text-[13px] leading-5 font-semibold text-ink">
-              {t("agents.pairing.foldersTitle", { agent: pairing.name })}
+              {t("agents.pairing.foldersTitle", { agent: pairingInSentence(pairing, t) })}
             </legend>
             {folders.map((folder) => (
               <label
@@ -291,7 +291,7 @@ function RenameAgent({ pairing, onDone }: { pairing: AgentPairing; onDone(): voi
       ref={field}
       value={value}
       data-testid="agent-pairing-rename"
-      aria-label={t("agents.pairing.renameLabel", { agent: pairing.name })}
+      aria-label={t("agents.pairing.renameLabel", { agent: pairingInSentence(pairing, t) })}
       onChange={(event) => setValue(event.target.value)}
       onKeyDown={(event) => {
         if (event.nativeEvent.isComposing) return;

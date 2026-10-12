@@ -103,13 +103,13 @@ test("off by default; Connect asks once, writes Codex's settings as shown, and U
     await expect(codex).toContainText("ChatGPT app and Codex");
     await expect(codex).toContainText("ordinary Chat mode doesn’t use it");
     await expect(codex).toContainText(
-      "IncarnaMind adds itself to ChatGPT app and Codex’s settings",
+      "IncarnaMind adds itself to the settings of the ChatGPT app or Codex",
     );
     await shot(window, "agents-on");
     await codex.getByTestId("agent-connect").click();
 
     const dialog = window.getByTestId("connect-agent-dialog");
-    await expect(dialog).toContainText("Let ChatGPT app and Codex read your Documents?");
+    await expect(dialog).toContainText("Let the ChatGPT app or Codex read your Documents?");
     await expect(dialog).toContainText("Some plans may use it to train their models.");
     await expect(dialog.getByTestId("connect-agent-change")).toContainText(codexSettings);
     const skillFile = join(home, ".agents", "skills", "incarnamind", "SKILL.md");
@@ -128,7 +128,7 @@ test("off by default; Connect asks once, writes Codex's settings as shown, and U
       .getByTestId("agent-pairing")
       .filter({ hasText: "ChatGPT app and Codex" });
     await expect(connected.getByTestId("agent-setup-done")).toContainText(
-      "Added to ChatGPT app and Codex’s settings.",
+      "Added to the settings of the ChatGPT app or Codex.",
     );
     await expect(connected.getByTestId("agent-pairing-reads")).toHaveText("Reads Coast");
     await expect(connected.getByTestId("agent-pairing-skill")).toContainText("Skill installed");
@@ -162,11 +162,16 @@ test("an agent set up by pasting its settings searches, its activity shows each 
       .getByTestId("agent-connect")
       .click();
     const dialog = window.getByTestId("connect-agent-dialog");
-    await expect(dialog).toContainText("Let Other agent read your Documents?");
+    await expect(dialog).toContainText("Let your agent read your Documents?");
+    await expect(dialog.getByTestId("connect-agent-name")).toHaveAttribute(
+      "placeholder",
+      "My agent",
+    );
+    await shot(window, "agents-connect-other-en");
     await dialog.getByTestId("connect-agent-folder").check();
     await dialog.getByTestId("connect-agent-allow").click();
 
-    const row = page.getByTestId("agent-pairing").filter({ hasText: "Other agent" });
+    const row = page.locator('[data-testid="agent-pairing"][data-name="Other agent"]');
     await expect(row.getByTestId("agent-setup-done")).toContainText("Copied.");
     const settings = JSON.parse(await copied(window)) as {
       mcpServers: { incarnamind: { command: string; args: string[]; env: Record<string, string> } };
@@ -233,14 +238,28 @@ test("in Chinese the Codex agent is named in Chinese in the list, the dialog and
     });
     await window.getByRole("button", { name: "设置" }).click();
     const page = await showSettingsPage(window, "agents");
+    await page
+      .getByTestId("agents-list")
+      .locator('[data-client="other"]')
+      .getByTestId("agent-connect")
+      .click();
+    const other = window.getByTestId("connect-agent-dialog");
+    await expect(other).toContainText("允许你的智能体读取你的文档？");
+    await expect(other.getByTestId("connect-agent-name")).toHaveAttribute(
+      "placeholder",
+      "我的智能体",
+    );
+    await shot(window, "agents-connect-other-zh");
+    await other.getByRole("button", { name: "取消" }).click();
+    await expect(other).toBeHidden();
     const codex = page.getByTestId("agents-list").locator('[data-client="codex"]');
     await shot(window, "agents-codex-name-zh-list");
-    await expect(codex).toContainText("IncarnaMind 会把自己添加到 ChatGPT 应用和 Codex 的设置中");
+    await expect(codex).toContainText("IncarnaMind 会把自己添加到 ChatGPT 应用或 Codex 的设置中");
     await codex.getByTestId("agent-connect").click();
 
     const dialog = window.getByTestId("connect-agent-dialog");
     await shot(window, "agents-codex-name-zh-dialog");
-    await expect(dialog).toContainText("允许 ChatGPT 应用和 Codex 读取你的文档？");
+    await expect(dialog).toContainText("允许 ChatGPT 应用或 Codex 读取你的文档？");
     await acceptPlainTextKeys(window, dialog);
     await dialog.getByTestId("connect-agent-folder").check();
     await dialog.getByTestId("connect-agent-allow").click();
@@ -249,7 +268,7 @@ test("in Chinese the Codex agent is named in Chinese in the list, the dialog and
     const connected = page.getByTestId("agent-pairing").filter({ hasText: "ChatGPT 应用和 Codex" });
     await shot(window, "agents-codex-name-zh-connected-900");
     await expect(connected.getByTestId("agent-setup-done")).toContainText(
-      "已添加到 ChatGPT 应用和 Codex 的设置中。开始一个新的 ChatGPT 应用和 Codex 会话即可使用。",
+      "已添加到 ChatGPT 应用或 Codex 的设置中。在 ChatGPT 应用或 Codex 中开始一个新会话即可使用。",
     );
     await setWindowSize(app, window, 1440, 900);
     await shot(window, "agents-codex-name-zh-connected-wide");
