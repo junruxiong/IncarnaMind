@@ -40,6 +40,7 @@ export type {
   PagePicture,
   Paths,
   Pictures,
+  Printer,
   ProcessLauncher,
   RecognizedLine,
   RerankingCheck,

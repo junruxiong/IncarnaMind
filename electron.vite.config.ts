@@ -88,9 +88,10 @@ function fontLicences(): Plugin {
 }
 
 // Entry points follow electron-vite's defaults (src/main, src/preload and src/renderer), plus the
-// hidden window that records a Meeting's audio: its preload and its page (ADR-0015), the page of
-// the hidden window that draws a cited page (#133), and the shim an outside agent starts to reach
-// the app (#351), run by the app's binary as plain Node.
+// hidden window that records a Meeting's audio: its preload and its page (ADR-0015), the hidden
+// window that prints PDF exports (#100), the page of the hidden window that draws a cited page
+// (#133), and the shim an outside agent starts to reach the app (#351), run by the app's binary as
+// plain Node.
 export default defineConfig({
   main: {
     build: {
@@ -122,6 +123,7 @@ export default defineConfig({
         input: {
           index: resolve(__dirname, "src/renderer/index.html"),
           capture: resolve(__dirname, "src/renderer/capture.html"),
+          print: resolve(__dirname, "src/renderer/print.html"),
           citedPage: resolve(__dirname, "src/renderer/citedPage.html"),
         },
       },
