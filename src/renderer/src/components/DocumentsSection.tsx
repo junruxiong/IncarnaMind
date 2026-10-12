@@ -35,16 +35,6 @@ import {
   rowPadding,
 } from "./sidebarRows";
 import { TagMarks, TagNamesTip, tagNamesTipListProps } from "./TagMarks";
-import {
-  buttonClass,
-  dangerButtonClass,
-  dialogActionsClass,
-  dialogBodyClass,
-  dialogClass,
-  dialogTextClass,
-  dialogTitleClass,
-} from "./ui";
-import { useModal } from "./useModal";
 
 /** What the file picker offers. The core decides what it takes. */
 const ACCEPTED_FILES = ".pdf,.docx,.pptx,.xlsx,.csv,.txt,.md,.markdown";
@@ -445,60 +435,5 @@ function RenameInput({ item, onDone }: { item: Document; onDone(): void }) {
       onBlur={() => finish(true)}
       className={rowInputClass}
     />
-  );
-}
-
-/** Asks before deleting a Document, or removing a missing one. */
-export function DeleteDocumentDialog({
-  target,
-  onClose,
-}: {
-  target: Document | null;
-  onClose(): void;
-}) {
-  const t = useT();
-  const dialog = useModal(target !== null);
-  const deleteDocument = useAppStore((state) => state.deleteDocument);
-
-  // A missing Document's file is gone already: removing it drops what IncarnaMind kept of it.
-  const missing = target?.fileStatus === "missing";
-
-  const confirm = () => {
-    if (target) void deleteDocument(target.id);
-    onClose();
-  };
-
-  return (
-    <dialog
-      ref={dialog}
-      onClose={onClose}
-      data-testid="delete-document-dialog"
-      aria-labelledby="delete-document-title"
-      className={`${dialogClass} w-[26rem]`}
-    >
-      <div className={dialogBodyClass}>
-        <h2 id="delete-document-title" className={dialogTitleClass}>
-          {t(missing ? "documents.remove.title" : "documents.delete.title")}
-        </h2>
-        <p className={dialogTextClass}>
-          {t(missing ? "documents.remove.body" : "documents.delete.body", {
-            name: target?.name ?? "",
-          })}
-        </p>
-        <div className={dialogActionsClass}>
-          <button type="button" onClick={onClose} className={buttonClass}>
-            {t("documents.delete.cancel")}
-          </button>
-          <button
-            type="button"
-            data-testid="confirm-delete-document"
-            onClick={confirm}
-            className={dangerButtonClass}
-          >
-            {t(missing ? "documents.remove.confirm" : "documents.delete.confirm")}
-          </button>
-        </div>
-      </div>
-    </dialog>
   );
 }

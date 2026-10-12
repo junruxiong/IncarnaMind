@@ -377,7 +377,7 @@ test("each item shows its shortcut as the system writes it, and the labels are i
     "做成技能",
     /^移动到…(⇧⌘M|Ctrl\+Shift\+M)$/,
     /^重命名F2$/,
-    "删除…",
+    "删除",
   ]);
   await screenshot(window, "menu-mind-zh-narrow");
   // The menu stays inside the window and its items on one line each, at this width.
@@ -470,7 +470,7 @@ test("a Document's Tags…, a Folder's Edit description and a Tag's Rename and D
   await expect(dialog).toBeHidden();
   await rightClick(window, tag.getByTestId("row-text"));
   await tag.getByTestId("tag.delete").click();
-  await expect(dialog.getByTestId("confirm-delete-tag")).toBeVisible();
+  await expect(window.getByTestId("undo-message")).toHaveText("Moved “Tides” to Recently deleted");
   await app.close();
 });
 
