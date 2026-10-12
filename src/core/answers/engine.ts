@@ -79,7 +79,7 @@ import {
   contextOverflow,
   refusesFeature,
 } from "../providers/providerErrors";
-import { createAiSdkRunEngine } from "../runs/aiSdkEngine";
+import { createAiSdkRunEngine, reasoningReader } from "../runs/aiSdkEngine";
 import type {
   GateDecision,
   RunEngine,
@@ -152,6 +152,8 @@ export interface SearchResultForModel {
   /** The Passages, formatted for the model, or a sentence saying there are none. */
   text: string;
   passageCount: number;
+  /** The Passages found, by id, as their Citations name them: what an Answer's steps show each search led to. */
+  passageIds?: readonly string[];
   /**
    * Each Passage's relevance, in the order `text` has them (reading order):
    * 0 the most relevant. A window too small for all of them keeps the most
@@ -338,6 +340,11 @@ export type AnswerEngineEvent =
   | { type: "markers-placed"; count: number }
   /** The model was asked once more for exact quotes (see ./quoteRetry), and what that gave. */
   | { type: "quotes-retried"; retry: QuoteRetry }
+  /**
+   * The model's reasoning as its provider streams it (see `RunEvent`): a
+   * summary or raw chain of thought, which the Answer keeps or drops.
+   */
+  | { type: "reasoning"; text: string }
   /** More of the Answer's text (Markdown, with Citation markers), in order. */
   | { type: "text-delta"; text: string }
   /**
@@ -358,7 +365,16 @@ export type AnswerEngineEvent =
       tool: string;
       input: Record<string, unknown>;
     }
-  | { type: "tool-call-finished"; id: string; ok: boolean; resultCount: number | null }
+  | {
+      type: "tool-call-finished";
+      id: string;
+      ok: boolean;
+      resultCount: number | null;
+      /** A search: the Passages it found, by id. */
+      passages?: readonly string[];
+      /** A search that failed: why. */
+      error?: ProviderError;
+    }
   /**
    * The Run read third-party text (#78): a search found a saved web page's
    * Passages. Once per source, before the Tool-call card of the call that read it finishes.
@@ -877,12 +893,24 @@ function createWritingEngine(options: AiSdkAnswerEngineOptions): AnswerEngine {
               read.add(source);
               yield { type: "read-third-party", source };
             }
-            yield { type: "tool-call-finished", id, ok: true, resultCount: result.passageCount };
+            yield {
+              type: "tool-call-finished",
+              id,
+              ok: true,
+              resultCount: result.passageCount,
+              ...(result.passageIds && { passages: result.passageIds }),
+            };
             results.push(result);
           } catch (error) {
             if (signal.aborted) throw error;
             console.error(error);
-            yield { type: "tool-call-finished", id, ok: false, resultCount: null };
+            yield {
+              type: "tool-call-finished",
+              id,
+              ok: false,
+              resultCount: null,
+              error: classifyProviderError(error),
+            };
           }
         }
         searched =
@@ -970,8 +998,10 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
 interface DocumentToolsHooks {
   /** A search's result as the model gets it: within a window, the Passages that fit (see ./window). */
   fit(found: SearchResultForModel): SearchResultForModel;
-  /** A search gave the model `count` Passages: its Tool-call card says so. */
-  searched(toolCallId: string, count: number): void;
+  /** A search gave the model `count` Passages, of those it found (`passageIds`): its Tool-call card says so. */
+  searched(toolCallId: string, count: number, passageIds?: readonly string[]): void;
+  /** A search failed: its card says why. */
+  failed?(toolCallId: string, error: unknown): void;
   /** The model gave these records: the engine places their markers if it leaves them out. */
   cited(records: readonly CitationRecordInput[]): void;
 }
@@ -1011,12 +1041,15 @@ export function documentTools(
           found = await documents.searchDocuments(String(query ?? ""), signal, { rerank: false });
         } catch (error) {
           // A failed search is the app's problem, so it is logged; the model is told it failed.
-          if (!signal.aborted) console.error(error);
+          if (!signal.aborted) {
+            console.error(error);
+            hooks.failed?.(toolCallId, error);
+          }
           throw error;
         }
         for (const source of found.thirdParty ?? []) readThirdParty?.(source);
         const result = hooks.fit(found);
-        hooks.searched(toolCallId, result.passageCount);
+        hooks.searched(toolCallId, result.passageCount, found.passageIds);
         return result.text;
       },
     },
@@ -1083,6 +1116,10 @@ async function* toolLoop(
   const { signal } = request;
   /** Passages each search gave, by Tool call. */
   const results = new Map<string, number>();
+  /** The Passages each search found, by Tool call, by id. */
+  const found = new Map<string, readonly string[]>();
+  /** Why each search that failed did, by Tool call. */
+  const failures = new Map<string, ProviderError>();
   /** The records the model gave, in order. */
   const cited: CitationRecordInput[] = [];
   /** The account of the window, once the first request is sized. */
@@ -1093,7 +1130,11 @@ async function* toolLoop(
       ? documentTools(request.documents, {
           fit: (found) =>
             loop ? loop.passages(found.text, found.passageCount, found.ranks) : found,
-          searched: (toolCallId, count) => results.set(toolCallId, count),
+          searched: (toolCallId, count, passageIds) => {
+            results.set(toolCallId, count);
+            if (passageIds) found.set(toolCallId, passageIds);
+          },
+          failed: (toolCallId, error) => failures.set(toolCallId, classifyProviderError(error)),
           cited: (records) => cited.push(...records),
         })
       : null;
@@ -1220,6 +1261,9 @@ async function* toolLoop(
   })) {
     if (signal.aborted) return;
     switch (event.type) {
+      case "reasoning":
+        yield event;
+        break;
       case "text-delta": {
         let { text } = event;
         // A new step's text goes on from the last kept text in a new paragraph.
@@ -1254,11 +1298,15 @@ async function* toolLoop(
         // consent) is told to the model; its card says it failed.
         const called = calls.get(event.id);
         if (called && called !== cite) {
+          const passages = found.get(event.id);
+          const error = failures.get(event.id);
           yield {
             type: "tool-call-finished",
             id: event.id,
             ok: event.ok,
             resultCount: results.get(event.id) ?? null,
+            ...(passages && { passages }),
+            ...(error && { error }),
           };
         }
         if (called === search && --searching === 0) {
@@ -1358,6 +1406,7 @@ async function* structured(
 
   let raw = "";
   let emitted = "";
+  const reasoning = reasoningReader();
   const emit = function* (value: unknown): Generator<AnswerEngineEvent> {
     if (typeof value !== "string" || value === emitted) return;
     yield* textEdits(emitted, value);
@@ -1367,7 +1416,10 @@ async function* structured(
   try {
     for await (const part of result.fullStream) {
       if (signal.aborted || part.type === "abort") return;
-      if (part.type === "text-delta") {
+      if (part.type === "reasoning-start" || part.type === "reasoning-delta") {
+        const event = reasoning(part);
+        if (event) yield event;
+      } else if (part.type === "text-delta") {
         raw += part.text;
         const { value } = await parseAnswerJson(raw);
         yield* emit((value as { answer?: unknown } | undefined)?.answer);
@@ -1423,6 +1475,7 @@ async function* plain(
   const { signal } = request;
   const estimated = sized?.estimated;
   let produced = false;
+  const reasoning = reasoningReader();
   try {
     const result = streamText({
       model: request.model,
@@ -1435,7 +1488,10 @@ async function* plain(
     });
     for await (const part of result.fullStream) {
       if (signal.aborted || part.type === "abort") return;
-      if (part.type === "text-delta") {
+      if (part.type === "reasoning-start" || part.type === "reasoning-delta") {
+        const event = reasoning(part);
+        if (event) yield event;
+      } else if (part.type === "text-delta") {
         if (!part.text) continue;
         produced = true;
         yield { type: "text-delta", text: part.text };

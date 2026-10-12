@@ -2,9 +2,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { ConversationAnswer } from "../../../../core/api";
 import { copyAnswer } from "../../answerEditors";
 import { shortcutLabel } from "../../commands/keymap";
-import { regenerateAnswer, stopAnswer } from "../../conversations";
-import { Dotted } from "../../editor/AnswerView";
-import { RegenerateSmallIcon } from "../../editor/icons";
+import { stopAnswer } from "../../conversations";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
 import { answerUndoPlace, useUndo } from "../../undo";
@@ -16,18 +14,16 @@ import { useGoesBy } from "../UndoLine";
 const COPIED_MS = 1500;
 
 /**
- * Under an Answer in the assistant (#201; DESIGN.md, Answer):
- * "Copy · Add to note ▾ · Regenerate", then its model, Search scope and
- * searches; on hover or focus, and always on the newest. While it is written,
- * what it is doing and Stop. Once added, "Added to “{Mind}” · Undo" (⌘Z too),
- * while that can be taken back. Tab reaches each by its name.
+ * Under an Answer in the assistant (#201, #391; DESIGN.md, Answer): only
+ * "Copy · Add to note ▾", after "Stopped" for one stopped; on hover or focus,
+ * and always on the newest. Its model, scope and searches are in its steps.
+ * While it is written, Stop. Once added, "Added to “{Mind}” · Undo" (⌘Z
+ * too), while that can be taken back. Tab reaches each by its name.
  */
 export function AnswerActions({
   answer,
   streaming,
   canKeep,
-  writing,
-  meta,
   focusedMindName,
   onAdd,
   onPick,
@@ -36,10 +32,6 @@ export function AnswerActions({
   streaming: boolean;
   /** It has something to keep: Copy and Add to note. */
   canKeep: boolean;
-  /** What it is doing, while it is written. */
-  writing: ReactNode;
-  /** Its model, Search scope and searches. */
-  meta: ReactNode[];
   /** The Mind in focus, which Add to note adds to; null opens the ▾ instead. */
   focusedMindName: string | null;
   onAdd(): void;
@@ -68,7 +60,7 @@ export function AnswerActions({
     return () => clearTimeout(timer);
   }, [copied]);
 
-  if (streaming) return <WritingLine writing={writing} onStop={() => stopAnswer(answer.id)} />;
+  if (streaming) return <WritingLine onStop={() => stopAnswer(answer.id)} />;
 
   if (added) {
     return (
@@ -108,9 +100,14 @@ export function AnswerActions({
     <div
       role="group"
       aria-label={t("answer.actions")}
-      data-testid="answer-meta"
+      data-testid="answer-actions"
       className="assistant-answer-actions"
     >
+      {answer.status === "stopped" && (
+        <span data-testid="answer-stopped" className="assistant-answer-status">
+          {t("answer.status.stopped")}
+        </span>
+      )}
       {canKeep && (
         <>
           <button
@@ -161,33 +158,19 @@ export function AnswerActions({
           </span>
         </>
       )}
-      <button
-        type="button"
-        data-testid="answer-regenerate"
-        aria-label={t("answer.regenerate")}
-        title={t("answer.regenerate")}
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={() => void regenerateAnswer(answer.id)}
-        className="assistant-answer-action"
-      >
-        <RegenerateSmallIcon className="size-3.5" />
-        {t("answer.regenerate")}
-      </button>
-      {meta.length > 0 && (
-        <span className="assistant-answer-meta">
-          <Dotted items={meta} />
-        </span>
-      )}
     </div>
   );
 }
 
-/** Under an Answer being written, or on its way: what it is doing, and Stop unless it is stopping. */
-export function WritingLine({ writing, onStop }: { writing: ReactNode; onStop?: () => void }) {
+/**
+ * Under an Answer being written, or on its way: Stop, or what it says
+ * instead (that it stopped before it started). Its step is on its steps' line.
+ */
+export function WritingLine({ status, onStop }: { status?: ReactNode; onStop?: () => void }) {
   const t = useT();
   return (
-    <div data-testid="answer-meta" className="assistant-answer-actions">
-      <span className="assistant-answer-meta">{writing}</span>
+    <div data-testid="answer-actions" className="assistant-answer-actions">
+      {status}
       {onStop && (
         <button
           type="button"

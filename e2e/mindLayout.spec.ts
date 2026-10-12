@@ -1,11 +1,12 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { type ElectronApplication, expect, type Locator, type Page, test } from "@playwright/test";
 import type { Editor } from "@tiptap/core";
 import type { CoreBridge } from "../src/core/api";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
+  addTideConnector,
   addToNote,
   askInAssistant,
   assistantAnswers,
@@ -31,9 +32,6 @@ const TIDES = buildPdf([
   { lines: ["Spring and neap tides", "Spring tides happen at new moon and at full moon."] },
   { lines: ["Tide tables", "Harbours publish the times of high water every year."] },
 ]);
-
-/** The tiny MCP server the core tests use: `book_boat` may change something, so it asks. */
-const TIDE_SERVER = resolve(__dirname, "../tests/fixtures/mcp-server.mjs");
 
 /** DESIGN.md, Layout: the Mind's left margin for controls, its measure, its right margin for checks. */
 const LEFT_MARGIN = 56;
@@ -347,23 +345,6 @@ test("a quote, a highlight, a code block and a formula keep the text edge too; t
   await screenshot(window, "blocks.png");
   await app.close();
 });
-
-/** Adds the tiny server as a Connector through the core's bridge, and waits until it's ready. */
-async function addTideConnector(window: Page): Promise<void> {
-  await window.evaluate(
-    async ({ node, server }) => {
-      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-      const connector = await bridge.addConnector({ name: "Tides", command: node, args: [server] });
-      for (let tries = 0; tries < 300; tries++) {
-        const found = (await bridge.listConnectors()).find((each) => each.id === connector.id);
-        if (found?.state === "ready") return;
-        await new Promise((done) => setTimeout(done, 100));
-      }
-      throw new Error("The Connector didn't get ready.");
-    },
-    { node: process.execPath, server: TIDE_SERVER },
-  );
-}
 
 /** A Skill with one tiny JavaScript script, which greets its first argument. */
 async function importGreeterSkill(window: Page): Promise<void> {
