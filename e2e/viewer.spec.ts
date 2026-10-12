@@ -321,6 +321,15 @@ test("in a narrow viewer with the outline open, Fit width fits the page in the w
   await expect(docx).toHaveAttribute("data-rendered", "yes");
   await viewer.getByTestId("viewer-outline-button").click();
   await expect(viewer.getByTestId("viewer-outline")).toBeVisible();
+  // Its icon is a list, not Show sidebar's window, and they have their own tooltips.
+  const outlineButton = viewer.getByTestId("viewer-outline-button");
+  const sidebarButton = window.getByTestId("sidebar-toggle");
+  expect(await outlineButton.locator("svg").innerHTML()).not.toBe(
+    await sidebarButton.locator("svg").innerHTML(),
+  );
+  expect(await outlineButton.getAttribute("title")).not.toBe(
+    await sidebarButton.getAttribute("title"),
+  );
   await expect.poll(() => fitsAcross(docx, docx.locator("section.docx").first())).toBe(true);
   await screenshot(viewer, "viewer-docx-outline");
   await app.close();
