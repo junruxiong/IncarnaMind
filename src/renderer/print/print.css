@@ -1,0 +1,335 @@
+/*
+ * A Mind printed as a document (#100): the writing font, the app's ink and rules
+ * (DESIGN.md, Colors), and footnotes under a short rule at each page's foot.
+ * Sizes are in points, as in print; the page's own size comes from print.ts.
+ */
+:root {
+  --ink: #17191c;
+  --ink-answer: #3b4048;
+  --ink-meta: #656b74;
+  --rule: #e3e5e9;
+  --rule-strong: #d5d8dd;
+  --frame: #f4f5f7;
+  --warning: #9a4a06;
+  --serif:
+    "Source Serif 4", "Songti SC", "STSong", "SimSun", "Noto Serif CJK SC", "Source Han Serif SC",
+    ui-serif, Georgia, serif;
+  --sans:
+    "Source Sans 3", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC",
+    "Source Han Sans SC", ui-sans-serif, system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #ffffff;
+}
+
+body {
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 11pt;
+  line-height: 1.5;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+  overflow-wrap: break-word;
+}
+
+.source {
+  position: absolute;
+  top: 0;
+  left: -10000px;
+  width: calc(var(--page-width) - 2 * var(--page-margin));
+}
+
+.page {
+  position: relative;
+  box-sizing: border-box;
+  width: var(--page-width);
+  height: var(--page-height);
+  padding: var(--page-margin);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  break-after: page;
+}
+
+.page-body {
+  display: flow-root;
+  flex: none;
+}
+
+.page-notes {
+  margin-top: auto;
+  padding-top: 10pt;
+  font-size: 9pt;
+  line-height: 1.4;
+  color: var(--ink-answer);
+}
+
+.page-notes::before {
+  content: "";
+  display: block;
+  width: 33%;
+  margin-bottom: 6pt;
+  border-top: 0.75pt solid var(--rule-strong);
+}
+
+.page-notes:empty {
+  display: none;
+}
+
+.note {
+  display: flex;
+  gap: 6pt;
+}
+
+.note + .note {
+  margin-top: 2pt;
+}
+
+.note-number {
+  flex: none;
+  min-width: 1.4em;
+  font-family: var(--sans);
+  font-variant-numeric: tabular-nums;
+}
+
+.note-text {
+  min-width: 0;
+}
+
+.page-number {
+  position: absolute;
+  right: 0;
+  bottom: calc(var(--page-margin) / 2);
+  left: 0;
+  text-align: center;
+  font-family: var(--sans);
+  font-size: 9pt;
+  color: var(--ink-meta);
+}
+
+.mind-title {
+  margin: 0 0 16pt;
+  font-size: 22pt;
+  line-height: 1.25;
+  font-weight: 600;
+  font-variation-settings: "opsz" 48;
+}
+
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin: 14pt 0 6pt;
+  line-height: 1.3;
+  font-weight: 600;
+}
+
+h2 {
+  font-size: 15pt;
+}
+
+h3 {
+  font-size: 13pt;
+}
+
+h4,
+h5,
+h6 {
+  font-size: 11pt;
+}
+
+.page-body > :first-child {
+  margin-top: 0;
+}
+
+p {
+  margin: 0 0 8pt;
+}
+
+.question {
+  font-family: var(--sans);
+  font-size: 10pt;
+  color: var(--ink-meta);
+}
+
+.question-label {
+  font-weight: 600;
+}
+
+sup.note-ref {
+  margin-left: 0.5pt;
+  font-family: var(--sans);
+  font-size: 0.65em;
+  line-height: 0;
+  vertical-align: super;
+}
+
+/* Markers side by side, as a chart's sources are: "¹,²", not "¹²". */
+sup.note-ref + sup.note-ref::before {
+  content: ",";
+}
+
+.unverified {
+  color: var(--warning);
+}
+
+.chart-picture {
+  margin-bottom: 4pt;
+  text-align: center;
+}
+
+.caption {
+  margin-bottom: 6pt;
+  font-family: var(--sans);
+  font-size: 9.5pt;
+  line-height: 1.4;
+  color: var(--ink-answer);
+}
+
+.caption.keep-next:has(+ .chart-sources) {
+  margin-bottom: 2pt;
+}
+
+a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--rule-strong);
+  text-underline-offset: 2pt;
+}
+
+mark {
+  background: #fcebc0;
+  color: inherit;
+}
+
+code {
+  font-family: var(--mono);
+  font-size: 0.88em;
+}
+
+pre {
+  margin: 0 0 8pt;
+  padding: 6pt 8pt;
+  border-radius: 4px;
+  background: var(--frame);
+  font-family: var(--mono);
+  font-size: 8.5pt;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+pre code {
+  font-size: inherit;
+}
+
+blockquote {
+  margin: 0 0 8pt;
+  padding-left: 12pt;
+  border-left: 2pt solid var(--rule-strong);
+  color: var(--ink-answer);
+}
+
+ul,
+ol {
+  margin: 0 0 8pt;
+  padding-left: 20pt;
+}
+
+li > p {
+  margin-bottom: 3pt;
+}
+
+li.continued {
+  list-style: none;
+}
+
+hr {
+  margin: 10pt 0;
+  border: 0;
+  border-top: 0.75pt solid var(--rule-strong);
+}
+
+table {
+  width: 100%;
+  margin: 0 0 10pt;
+  border-collapse: collapse;
+  font-size: 10pt;
+  line-height: 1.4;
+}
+
+th,
+td {
+  padding: 4pt 6pt;
+  border: 0.75pt solid var(--rule-strong);
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  background: var(--frame);
+  font-family: var(--sans);
+  font-weight: 600;
+}
+
+th > :last-child,
+td > :last-child {
+  margin-bottom: 0;
+}
+
+.align-left {
+  text-align: left;
+}
+
+.align-center {
+  text-align: center;
+}
+
+.align-right {
+  text-align: right;
+}
+
+.math-display {
+  margin: 4pt 0 10pt;
+  text-align: center;
+}
+
+math {
+  font-size: 1.05em;
+}
+
+.math-source {
+  color: var(--ink-answer);
+}
+
+img {
+  max-width: 100%;
+  max-height: calc(var(--page-height) - 2 * var(--page-margin) - 24pt);
+}
+
+.image-missing {
+  color: var(--ink-meta);
+}
+
+.small-caps {
+  font-variant: small-caps;
+}
+
+.bibliography-heading {
+  margin-top: 18pt;
+}
+
+.entry {
+  margin-bottom: 6pt;
+}
+
+.entry.hanging {
+  padding-left: 2em;
+  text-indent: -2em;
+}

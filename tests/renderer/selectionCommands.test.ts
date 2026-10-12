@@ -83,6 +83,15 @@ describe("a selection of Documents", () => {
     expect(start && labelOf(start.command, ctx, chinese)).toBe("用这 3 个文档新建 Mind");
   });
 
+  test("offers Delete with the count", () => {
+    const entries = buildMenu("document", { ...ctx, here }).flatMap((entry) =>
+      entry === "rule" ? [] : [entry],
+    );
+    const remove = entries.find((entry) => entry.command.id === "document.delete");
+    expect(remove && menuLabelOf(remove.command, ctx, english)).toBe("Delete 3 Documents");
+    expect(remove && menuLabelOf(remove.command, ctx, chinese)).toBe("删除 3 个文档");
+  });
+
   test("a single Document keeps its own words", () => {
     const one = selectionOf([doc("a")]);
     const ask = commands.get("document.ask");
