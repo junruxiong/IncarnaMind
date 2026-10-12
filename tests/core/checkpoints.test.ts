@@ -209,6 +209,33 @@ describe("Saving a Checkpoint", () => {
     await expect(core.saveCheckpoint(mind.id, "accept")).rejects.toThrow(NotFoundError);
   });
 
+  test("a Regenerate that can't start saves none: an Answer that isn't there, or no model ready", async () => {
+    const core = startCore(await createTempDataFolder());
+    const mind = await core.createMind({ title: "Tides" });
+    const client = await connectToMind(core, mind.id);
+    writeMind(client, [
+      {
+        type: "question",
+        attrs: { id: "question-1" },
+        content: [{ type: "text", text: "When are spring tides?" }],
+      },
+      {
+        type: "answer",
+        attrs: { id: "answer-1", questionId: "question-1", status: "done" },
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: "At new and full moon." }] },
+        ],
+      },
+    ]);
+    await client.settled();
+    await expect(core.regenerateAnswer({ mindId: mind.id, answerId: "nothing" })).rejects.toThrow(
+      NotFoundError,
+    );
+    const result = await core.regenerateAnswer({ mindId: mind.id, answerId: "answer-1" });
+    expect(result.asked).toBe(false);
+    expect((await core.listCheckpoints(mind.id)).checkpoints).toEqual([]);
+  });
+
   test("after five minutes without a change, an idle one is saved; quitting before then saves none", async () => {
     const dataDir = await createTempDataFolder();
     const core = startCore(dataDir);
@@ -556,10 +583,9 @@ describe("Citations in Checkpoints", { timeout: 30_000 }, () => {
     const { answerId } = await askAndFinish(core, client, mind.id, "When are spring tides?");
 
     // Regenerate: a Checkpoint first, holding the Answer and its Citation.
-    const regenerating = core.regenerateAnswer({ mindId: mind.id, answerId });
+    await core.regenerateAnswer({ mindId: mind.id, answerId });
     const [beforeRegenerate] = (await core.listCheckpoints(mind.id)).checkpoints;
     expect(beforeRegenerate?.reason).toBe("regenerate");
-    await regenerating;
     await answerEnded(core, answerId);
 
     // The file changes, so version 1 is an old one; then the Answer, and its Citation, go.
