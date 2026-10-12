@@ -516,6 +516,12 @@ export function createDocuments(options: DocumentsOptions) {
    * those of the version indexed read by today's reader, those a Citation
    * quotes or a feature retains, and those a job read before it was stopped.
    */
+  /**
+   * At startup, what Citations point to in the PDFs whose pages an older
+   * reader read, found in one walk over the Minds for all of them (see `keptScans`).
+   */
+  let citedAtStart: ReadonlyMap<string, CitedUnits[]> | null = null;
+
   function keptScans(row: Pick<DocumentRow, "id" | "content_hash">): ScanJob["keep"] {
     const reader = textRecognition?.reader;
     const stored = db
@@ -532,7 +538,7 @@ export function createDocuments(options: DocumentsOptions) {
     const older = stored.some((unit) => unit.label?.scan?.reader !== reader);
     const cited = new Set<number>();
     if (older) {
-      for (const units of options.citedUnits?.([row.id]) ?? []) {
+      for (const units of citedAtStart?.get(row.id) ?? options.citedUnits?.([row.id]) ?? []) {
         if (units.contentHash !== null && units.contentHash !== row.content_hash) continue;
         for (const unit of stored) {
           const page = unit.page ?? 0;
@@ -1301,10 +1307,28 @@ export function createDocuments(options: DocumentsOptions) {
      WHERE deleted_at IS NULL AND status IN ('queued', 'extracting')
      ORDER BY created_at, rowid`,
   );
+  // After a better reader came, many scanned PDFs are read again: their Citations are found at once.
+  const upgraded = textRecognition
+    ? db
+        .all<{ document_id: string }>(
+          `SELECT DISTINCT dp.document_id FROM documents d
+           JOIN document_pages dp ON dp.document_id = d.id AND dp.content_hash = d.content_hash
+           WHERE d.deleted_at IS NULL AND d.kind = 'pdf' AND d.status IN ('queued', 'extracting')
+             AND dp.deleted_at IS NULL AND json_extract(dp.label, '$.scan.reader') != ?`,
+          [textRecognition.reader],
+        )
+        .map((each) => each.document_id)
+    : [];
+  if (upgraded.length > 0 && options.citedUnits) {
+    const byDocument = new Map<string, CitedUnits[]>(upgraded.map((id) => [id, []]));
+    for (const units of options.citedUnits(upgraded)) byDocument.get(units.documentId)?.push(units);
+    citedAtStart = byDocument;
+  }
   for (const row of unfinished) {
     if (row.status === "extracting") setStatus(row.id, "queued");
     if (!isPaused(row.id)) processor.enqueue(jobFor(row));
   }
+  citedAtStart = null;
 
   /**
    * Puts every Document with Passages to search whose vectors aren't all from

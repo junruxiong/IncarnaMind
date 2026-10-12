@@ -108,6 +108,11 @@ export function createOnnxTextRecognizer(): TextRecognizer {
       executionProviders: ["cpu"],
       graphOptimizationLevel: "all",
       intraOpNumThreads: threads(),
+      // Each page and batch has a size of its own, so planning memory per size gains nothing,
+      // and in Electron's utility process the arena's large blocks crashed it at the second page.
+      // Without them, memory goes back as each page is done.
+      enableCpuMemArena: false,
+      enableMemPattern: false,
     } as const;
     const listed = onnxMetadata(await readFile(recognizerFile)).character;
     if (!listed) throw new Error("The recognition model has no character list.");

@@ -460,7 +460,7 @@ export const zhCN = {
   "documents.status.scanning.one": "正在识别 1 页扫描件…",
   "documents.status.scanning.other": "正在识别 {count} 页扫描件…已识别 {read} 页。",
   "documents.statusShort.scanning": "识别中 {read}/{count}",
-  "documents.statusShort.pagesUnread": "有页未识别",
+  "documents.statusShort.pagesUnread": "页未识别",
   "documents.statusShort.queued": "排队中",
   "documents.statusShort.extracting": "读取中",
   "documents.statusShort.waiting": "等待中",

@@ -243,7 +243,12 @@ function windowsEngine(root: string): Engine {
         ],
         { maxBuffer: 64 * 1024 * 1024 },
       );
-      return { text: stdout.trim(), ms: performance.now() - started };
+      const lines = stdout.trim().split(/\r?\n/);
+      const timed = /^## (\d+)$/.exec(lines.at(-1) ?? "");
+      return {
+        text: (timed ? lines.slice(0, -1) : lines).join("\n"),
+        ms: timed ? Number(timed[1]) : performance.now() - started,
+      };
     },
     close() {},
   };

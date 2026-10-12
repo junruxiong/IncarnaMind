@@ -149,6 +149,54 @@ describe("Scanned pages are read on this computer (#397)", { timeout: 60_000 }, 
     expect(unitsOf(plainDir, left).map((unit) => unit.text)).toEqual([units[0]?.text, ""]);
   });
 
+  test("a scan with a stamp on it is read; a blank page and a small picture aren't", async () => {
+    const dataDir = await createTempDataFolder();
+    const { recognizer, read } = countingRecognizer({
+      pages: { 1: { lines: linesOf("zh-noisy") } },
+    });
+    const core = startCore(dataDir, scanning(recognizer));
+    const document = await addPdf(
+      core,
+      "Report.pdf",
+      buildPdf([
+        { lines: ["Received 12 March 2025"], scan: picture("zh-noisy") },
+        {},
+        { lines: ["Figure 2"], image: true },
+      ]),
+    );
+    expect(read).toEqual([1]);
+    const units = unitsOf(dataDir, document);
+    expect(units[0]?.text).toContain("本月门店总客流量为十二万三千人次");
+    expect(units.slice(1).map((unit) => [unit.text, unit.label])).toEqual([
+      ["", null],
+      ["Figure 2", null],
+    ]);
+  });
+
+  test("a scan an older version found no text in is read at the next start", async () => {
+    const dataDir = await createTempDataFolder();
+    const before = startCore(dataDir);
+    const document = await addPdf(before, "Lease.pdf", buildPdf([{ scan: picture("zh-clean") }]));
+    expect(document.status).toBe("no-text");
+    before.close();
+    const db = openDatabase(join(dataDir, DATABASE_FILE));
+    try {
+      db.run("UPDATE documents SET processing_version = 7");
+    } finally {
+      db.close();
+    }
+
+    const { recognizer, read } = countingRecognizer({
+      pages: { 1: { lines: linesOf("zh-clean") } },
+    });
+    const after = startCore(dataDir, scanning(recognizer));
+    const [reread] = await waitForProcessing(after, [document.id]);
+    expect(reread?.status).toBe("ready");
+    expect(read).toEqual([1]);
+    const [found] = await after.searchPassages("押金", { mode: "keyword" });
+    expect(found).toMatchObject({ documentId: document.id, pageFrom: 1 });
+  });
+
   test("an Answer cites a scanned page, and the Citation check finds its quote", async () => {
     const quote = "Either party may terminate this Agreement for convenience";
     const model = citingModel({

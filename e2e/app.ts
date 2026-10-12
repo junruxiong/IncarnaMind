@@ -79,6 +79,11 @@ export interface LaunchOptions {
    * always a fake that makes a tone: no test opens a device.
    */
   computerSound?: "allowed" | "denied" | "silent";
+  /**
+   * What the fake text recognition model reads on each scanned page (#397):
+   * a JSON file of a `FakeScanScript`. Without, it reads nothing on them.
+   */
+  scans?: string;
 }
 
 /**
@@ -121,6 +126,7 @@ export async function launchApp(
     chatGpt,
     keepWindow = false,
     computerSound = "allowed",
+    scans,
   }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
@@ -137,6 +143,7 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_REFERENCE_LOOKUP;
   delete env.INCARNAMIND_TEST_SOURCES;
   delete env.INCARNAMIND_TEST_CHATGPT;
+  delete env.INCARNAMIND_TEST_SCANS;
   // A test never uses the ChatGPT sign-in an agent's shell may point at for checks by hand.
   delete env.INCARNAMIND_CHATGPT_PROFILE;
   env.INCARNAMIND_TEST_AUDIO = "fake";
@@ -152,6 +159,7 @@ export async function launchApp(
   if (referenceLookup) env.INCARNAMIND_TEST_REFERENCE_LOOKUP = referenceLookup;
   if (sources) env.INCARNAMIND_TEST_SOURCES = sources;
   if (chatGpt) env.INCARNAMIND_TEST_CHATGPT = chatGpt;
+  if (scans) env.INCARNAMIND_TEST_SCANS = scans;
   env.INCARNAMIND_DATA_DIR = dataDir;
   env.INCARNAMIND_TEST_HOOKS = "1";
   if (fakeChat) env.INCARNAMIND_FAKE_CHAT = "1";

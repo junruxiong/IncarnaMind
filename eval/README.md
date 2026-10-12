@@ -426,6 +426,7 @@ The check now ignores letter case, reads "[^36]" as "[36]", and finds a quote wi
 - **Entry point:**
   - `run.eval.ts`: the run, from start to finish.
   - `dumps/run.dump.ts`: `npm run eval:dump`, with its own `vitest.config.ts`. `score.ts`: `npm run eval:score`, the dump format and the scorer, which Node runs as it is.
+  - `ocr/`: `npm run eval:ocr`, the comparison that chose how scanned pages are read (#397), with its own `vitest.config.ts` and [README](ocr/README.md).
   - `vitest.config.ts`: Vitest compiles the TypeScript and bundles the worker threads, as it does for the unit tests. Its config includes only `*.eval.ts`.
 - **`lib/`:**
   - `config.ts`: the environment variables.
