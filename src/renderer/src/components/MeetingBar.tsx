@@ -8,6 +8,7 @@ import { useT } from "../i18n";
 import { useMeetings, useMeetingTime } from "../meetings";
 import { clockTime, durationLabel } from "../meetingTime";
 import { hideTranscript, showTranscript, useDocumentTab } from "../transcripts";
+import { CaptureDetailsToggle } from "./CaptureDetails";
 import {
   BookmarkLineIcon,
   DocumentLineIcon,
@@ -113,6 +114,7 @@ function MeetingControls({ meeting }: { meeting: Meeting }) {
         {t("meetings.mark")}
       </button>
       <TranscriptToggle meeting={meeting} />
+      <CaptureDetailsToggle meeting={meeting} />
     </div>
   );
 }

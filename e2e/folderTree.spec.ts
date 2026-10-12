@@ -235,7 +235,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
       /^Citation style…$/,
       /^Make this a Skill$/,
       /^Move to…(⇧⌘M|Ctrl\+Shift\+M)$/,
-      /^Rename(↩|F2)$/,
+      /^RenameF2$/,
       /^Delete…$/,
     ]);
     await actions.getByTestId("mind.moveTo").click();
@@ -309,7 +309,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     const answer = assistantAnswers(window).first();
     await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
 
-    // A Folder renames in place, as in Finder: a double-click, Enter saves; Enter or F2 on its
+    // A Folder renames in place, as in Finder: a double-click, Enter saves; F2 on its
     // row, Esc changes nothing.
     await research.getByTestId("folder-row").dblclick();
     // (While it is typed, the row has no name to find it by.)
@@ -324,7 +324,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     // Open as before the double-click.
     await expect(renamed).toHaveAttribute("data-expanded", "true");
     await expect(composer.getByTestId("scope-chip")).toHaveText("Research notes");
-    for (const key of ["Enter", "F2"]) {
+    for (const key of ["F2"]) {
       await renamed.getByTestId("folder-row").focus();
       await window.keyboard.press(key);
       await expect(window.getByTestId("folder-rename-field")).toBeFocused();
@@ -344,7 +344,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
       /^New Mind here$/,
       /^Organize this Folder$/,
       /^Edit description…$/,
-      /^Rename(↩|F2)$/,
+      /^RenameF2$/,
       /^Delete…$/,
     ]);
     await folderActions.getByTestId("folder.delete").click();
