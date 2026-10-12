@@ -40,7 +40,7 @@ import {
 } from "./citationClusters";
 import { citationNumberOf } from "./citationNumbers";
 import { CheckMarkIcon, CheckStateIcon } from "./icons";
-import { InFootnoteContext, useMindId } from "./mindContext";
+import { InFootnoteContext, MindIdContext, RegenerateAnswerContext } from "./mindContext";
 import { Popover } from "./Popover";
 import { onPeek, peekCitation } from "./peek";
 import { StyledRuns, StyledRunView } from "./StyledRuns";
@@ -95,7 +95,9 @@ export function CitationView({
   decorations,
 }: ReactNodeViewProps) {
   const t = useT();
-  const mindId = useMindId();
+  // None in the assistant, whose Answers are read only and say how they are written again.
+  const mindId = useContext(MindIdContext);
+  const regenerateHere = useContext(RegenerateAnswerContext);
   const attributes = node.attrs as CitationAttributes;
   const documents = useAppStore((state) =>
     state.status.kind === "ready" ? state.documents : null,
@@ -212,10 +214,13 @@ export function CitationView({
     ...(state.reason !== "document-removed" && {
       "citation.open": () => openFromCardRef.current(),
     }),
-    "citation.remove": () => {
-      dismiss();
-      deleteNode();
-    },
+    // Not where the text can't be changed, such as an Answer in the assistant.
+    ...(editor.isEditable && {
+      "citation.remove": () => {
+        dismiss();
+        deleteNode();
+      },
+    }),
   };
 
   // The number, the Document, where it points and the check: the marker only shows the number.
@@ -342,18 +347,29 @@ export function CitationView({
                 dismiss();
                 if (!groupsMerged()) editor.view.focus();
               }}
-              onRemove={() => {
-                dismiss();
-                deleteNode();
-              }}
+              onRemove={
+                editor.isEditable
+                  ? () => {
+                      dismiss();
+                      deleteNode();
+                    }
+                  : null
+              }
               onRegenerate={() => {
-                const answer = answerAround(editor, getPos());
                 dismiss();
-                if (answer) {
+                if (regenerateHere) {
+                  regenerateHere();
+                  return;
+                }
+                const answer = answerAround(editor, getPos());
+                if (answer && mindId) {
                   void useAnswers.getState().regenerate(mindId, answer.answerId, answer.questionId);
                 }
               }}
-              inAnswer={answerAround(editor, getPos()) !== null}
+              inAnswer={
+                regenerateHere !== null ||
+                (mindId !== null && answerAround(editor, getPos()) !== null)
+              }
               menu={{ target: { kind: "citation", id: menuId }, here }}
               note={noteOf(formatting, inCluster)}
             />
@@ -476,7 +492,8 @@ function CitationCard({
   /** In a note style, the note the Citation is written in, as an export will write it. */
   note: readonly StyledRun[] | null;
   onOpen(withQuote: boolean): void;
-  onRemove(): void;
+  /** Null where the text can't be changed, such as an Answer in the assistant. */
+  onRemove: (() => void) | null;
   onRegenerate(): void;
 }) {
   const t = useT();
@@ -559,14 +576,16 @@ function CitationCard({
             >
               {t(`citation.openAnyway.${opens}`)}
             </button>
-            <button
-              type="button"
-              data-testid="citation-remove"
-              className="citation-card-action"
-              onClick={onRemove}
-            >
-              {t("citation.remove")}
-            </button>
+            {onRemove && (
+              <button
+                type="button"
+                data-testid="citation-remove"
+                className="citation-card-action"
+                onClick={onRemove}
+              >
+                {t("citation.remove")}
+              </button>
+            )}
             {inAnswer && (
               <button
                 type="button"
