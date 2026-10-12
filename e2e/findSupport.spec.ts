@@ -55,13 +55,16 @@ test.afterEach(async () => {
   await removeDataFolder(sources);
 });
 
-/** A new Mind with one paragraph of these sentences, and the Tides PDF to check against. */
-async function mindWithSentences(sentences: readonly string[]) {
+/** Launches with the scripted model and the Tides PDF to check against. */
+async function launchWithTides() {
   await writeFile(join(sources, "Tides.pdf"), TIDES);
   const running = await launchApp(dataDir, { fakeChat: true });
-  const { window } = running;
-  await dismissChatSetup(window);
-  await useLocalChatModel(window);
+  await dismissChatSetup(running.window);
+  return running;
+}
+
+/** A new Mind with one paragraph of these sentences, once the Tides PDF is added. */
+async function mindWithSentences(window: Page, sentences: readonly string[]) {
   await addDocuments(window, [join(sources, "Tides.pdf")]);
   await newMind(window);
   const editor = window.getByTestId("mind-editor");
@@ -69,7 +72,7 @@ async function mindWithSentences(sentences: readonly string[]) {
   await window.keyboard.type(sentences.join(" "));
   const line = editor.locator(":scope > p").first();
   await expect(line).toHaveText(sentences.join(" "));
-  return { ...running, editor, line };
+  return { editor, line };
 }
 
 /** Selects from the line's first words to its last, with the mouse, and chooses an action in the menu. */
@@ -83,7 +86,9 @@ async function checkAll(window: Page, line: Locator, first: string, last: string
 const marks = (window: Page) => window.getByTestId("claim-mark");
 
 test("Find support on two sentences: one is supported and its Citation is added, the other is marked unsupported", async () => {
-  const { app, window, editor, line } = await mindWithSentences([SUPPORTED, UNSUPPORTED]);
+  const { app, window } = await launchWithTides();
+  await useLocalChatModel(window);
+  const { editor, line } = await mindWithSentences(window, [SUPPORTED, UNSUPPORTED]);
   await setWindowSize(app, window, 1440, 900);
   const health = window.getByTestId("mind-health");
   await expect(health.getByTestId("health-noCitation")).toHaveText("2 with no Citation");
@@ -112,7 +117,9 @@ test("Find support on two sentences: one is supported and its Citation is added,
   await pointAndClick(window, unsupported);
   const card = window.getByTestId("claim-card");
   await expect(card.getByTestId("claim-badge")).toHaveText("Unsupported");
-  await expect(card.getByTestId("claim-nothing")).toHaveText("Nothing in your Documents says this.");
+  await expect(card.getByTestId("claim-nothing")).toHaveText(
+    "Nothing in your Documents says this.",
+  );
   await window.keyboard.press("Escape");
   await expect(card).toBeHidden();
 
@@ -148,7 +155,9 @@ test("Find support on two sentences: one is supported and its Citation is added,
 });
 
 test("In Chinese and a narrow window: Check against Documents marks a contradiction and a sentence it couldn't check", async () => {
-  const { app, window, line } = await mindWithSentences([CONTRADICTED, BLANK]);
+  const { app, window } = await launchWithTides();
+  await useLocalChatModel(window);
+  const { line } = await mindWithSentences(window, [CONTRADICTED, BLANK]);
   await setLanguage(window, "zh-CN");
   await setWindowSize(app, window, 900, 720);
   const health = window.getByTestId("mind-health");
