@@ -125,7 +125,8 @@ export function webTools(options: WebToolsOptions): Tool[] {
         url: { type: "string", description: `The page's address, as ${WEB_TOOLS.search} gave it.` },
         query: {
           type: "string",
-          description: "What to look for in the page; the Question when left out.",
+          description:
+            "What to look for in the page, in the page's language; the Question when left out.",
         },
       },
       required: ["url"],
@@ -155,7 +156,17 @@ export function webTools(options: WebToolsOptions): Tool[] {
       if (saved.outcome === "failed") return refuse(saved.reason);
       const query =
         typeof input.query === "string" && input.query.trim() ? input.query : options.question;
-      const found = await options.passages(saved.documentId, query, context.signal);
+      let found = await options.passages(saved.documentId, query, context.signal);
+      // Asked in another language than the page's, its words may be nowhere on it: its title's are.
+      if (found.passageCount === 0) {
+        const byTitle = await options.passages(saved.documentId, saved.name, context.signal);
+        if (byTitle.passageCount > 0) {
+          found = {
+            ...byTitle,
+            text: `Nothing on the page matched "${query}". These are its Passages that match its title; read it again with a query in the page's language to find others.\n\n${byTitle.text}`,
+          };
+        }
+      }
       context.readThirdParty?.("web-page");
       context.counted?.(found.passageCount);
       options.read(context.toolCallId, { address, documentId: saved.documentId, name: saved.name });
