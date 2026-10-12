@@ -46,6 +46,7 @@ import { createCitationStyles } from "./citationStyles";
 import { createConnectors } from "./connectors";
 import { createConsent, type DataFlowRegistry } from "./consent";
 import { createConversations } from "./conversations";
+import { createMeter } from "./cost/meter";
 import {
   createDocuments,
   type DocumentFile,
@@ -597,6 +598,13 @@ export function createCore(adapters: CoreAdapters): Core {
   chatGpt.forgetCodexSignIn().catch((error: unknown) => {
     console.error("The experimental ChatGPT provider's sign-in couldn't be removed.", error);
   });
+  const meter = createMeter({
+    db,
+    now: () => adapters.now?.() ?? new Date(),
+    cap: () => settings.get().user.monthlyCap,
+  });
+  // Nothing is in flight yet: what is still reserved was left by a crash.
+  meter.settleOpen();
   const chat = createChat({
     db,
     now,
@@ -607,6 +615,7 @@ export function createCore(adapters: CoreAdapters): Core {
     chatGpt,
     ollamaModels: adapters.ollamaModels ?? createOllamaModels(),
     localOnly: () => embedding.localOnly(),
+    meter,
   });
 
   /** Set once readiness can be reported: Connectors turned on or off change what chat sends. */
@@ -1777,6 +1786,20 @@ export function createCore(adapters: CoreAdapters): Core {
     testChatConnection: (input) => loggingTest("chat")(chat.test(input)),
     getChatReadiness: () => chat.readiness(),
     listChatModels: () => chat.listModels(),
+    getCostSummary: async () => meter.summary(),
+    estimateRun: async (input) => {
+      if (!isRecord(input)) throw new InvalidInputError("estimateRun expects an object.");
+      const { items, model } = input;
+      if (typeof items !== "number" || !Number.isInteger(items) || items < 0 || items > 100_000) {
+        throw new InvalidInputError("items must be a whole number from 0 to 100,000.");
+      }
+      if (model !== undefined && !isChatModelChoice(model)) {
+        throw new InvalidInputError("model must be a provider and a model.");
+      }
+      const metered = chat.metered(model);
+      if (!metered) throw new InvalidInputError("There is no model to estimate for.");
+      return meter.estimate(metered, items);
+    },
 
     askQuestion: async (input) => answers.ask(input),
     regenerateAnswer: async (input) => answers.regenerate(input),

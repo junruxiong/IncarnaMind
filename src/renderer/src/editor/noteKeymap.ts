@@ -1,9 +1,9 @@
 import { type Editor, Extension } from "@tiptap/core";
 import { Plugin, PluginKey, type Selection } from "@tiptap/pm/state";
+import { BLOCK_ID_ATTRIBUTE } from "../../../core/api";
 import { runShortcut } from "../commands/keymap";
 import type { ObjectRef } from "../objects";
 import { findBlock } from "./blockCommands";
-import { BLOCK_ID_ATTRIBUTE } from "./noteSchema";
 
 const openNotes = new Set<Editor>();
 
