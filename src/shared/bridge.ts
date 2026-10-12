@@ -23,6 +23,8 @@ export interface FilesBridge {
   pathForFile(file: File): string;
   /** Shows a file IncarnaMind saved (`CoreApi.saveMindExport`), selected in the system's file manager. */
   showSavedFile(path: string): Promise<void>;
+  /** Opens a file IncarnaMind saved (`CoreApi.saveMindExport`) in the system's default app for it. */
+  openSavedFile(path: string): Promise<void>;
   /**
    * Shows the system's open dialog for the Output location (see
    * `CoreApi.setOutputLocation`), starting at the current one. Resolves with
@@ -121,6 +123,7 @@ export interface RendererErrorReport {
 /** The main process's channels for the `FilesBridge` methods that need it. */
 export const FILES_CHANNELS = {
   showSavedFile: "files:showSavedFile",
+  openSavedFile: "files:openSavedFile",
   pickOutputLocation: "files:pickOutputLocation",
   openDataFolder: "files:openDataFolder",
   openLogsFolder: "files:openLogsFolder",
