@@ -31,12 +31,12 @@ test("a fresh data folder has the three built-in Skills: labelled in Settings, a
   await openSettings(window, "skills");
   const section = window.getByTestId("skills-settings");
   const items = section.getByTestId("skill-item");
+  await expect(section.getByTestId("skills-built-in").getByTestId("skill-item")).toHaveCount(3);
   await expect(items).toHaveCount(3);
   for (const [index, name] of BUILT_IN.entries()) {
     const item = items.nth(index);
     await expect(item).toHaveAttribute("data-skill-name", name);
     await expect(item).toHaveAttribute("data-built-in", "true");
-    await expect(item.getByTestId("skill-built-in")).toHaveText("Built-in");
     await expect(item.getByTestId("skill-enabled")).toBeChecked();
     await expect(item).toContainText("Licence: Apache-2.0");
   }
@@ -46,7 +46,11 @@ test("a fresh data folder has the three built-in Skills: labelled in Settings, a
   // Removed, a built-in Skill can be restored.
   const itemNamed = (name: string) =>
     section.locator(`[data-testid="skill-item"][data-skill-name="${name}"]`);
-  await itemNamed("summarise-document").getByTestId("skill-remove").click();
+  const itemAction = async (name: string, action: string) => {
+    await itemNamed(name).getByTestId("skill-menu").click();
+    await itemNamed(name).getByTestId(action).click();
+  };
+  await itemAction("summarise-document", "skill-remove");
   await expect(items).toHaveCount(2);
   await expect(restore).toHaveText("Restore built-in Skills");
   await restore.click();
@@ -55,11 +59,14 @@ test("a fresh data folder has the three built-in Skills: labelled in Settings, a
   await expect(restore).toHaveCount(0);
 
   // Duplicated as the User's own: a copy that isn't built-in.
-  await itemNamed("mind-to-report").getByTestId("skill-duplicate").click();
+  await itemAction("mind-to-report", "skill-duplicate");
   const copy = itemNamed("mind-to-report-copy");
   await expect(copy).toHaveAttribute("data-built-in", "false");
-  await expect(copy.getByTestId("skill-built-in")).toHaveCount(0);
+  await expect(section.getByTestId("skills-yours").getByTestId("skill-item")).toHaveCount(1);
+  await copy.getByTestId("skill-menu").click();
   await expect(copy.getByTestId("skill-duplicate")).toHaveCount(0);
+  await expect(copy.getByTestId("skill-edit")).toBeVisible();
+  await window.keyboard.press("Escape");
   await expect(items).toHaveCount(4);
   await closeSettings(window);
 

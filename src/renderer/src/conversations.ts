@@ -243,7 +243,7 @@ export async function clearConversation(): Promise<void> {
   const name = conversationLabel(conversationById(openId));
   await core.deleteConversation(openId);
   startNewChat();
-  useUndo.getState().offer({
+  useUndo.getState().push({
     message: translateNow("assistant.cleared", { title: name }),
     undo: async () => {
       await core.restore([{ kind: "conversation", id: openId }]);

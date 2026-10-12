@@ -128,6 +128,9 @@ export function AssistantAnswer({
         <AnswerError
           kind={answer.errorKind ?? "unknown"}
           modelId={answer.model?.modelId ?? null}
+          providerId={answer.model?.providerId ?? null}
+          // A conversation doesn't keep when a plan's limit resets: the line says so without it.
+          resetsAt={null}
           details={answer.errorMessage}
           onRetry={regenerate}
           onOpenSettings={openSettings}
