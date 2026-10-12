@@ -149,7 +149,7 @@ test("a Mind citing a paper offers a citation style; chosen, its Citations and R
     "Bowler, D. E., & Buyung-Ali, L. (2010). Tides and the Moon. Ocean Review, 12, 1–20.",
   );
   await expect(entries.nth(1)).toHaveAttribute("data-needs-details", "true");
-  await expect(entries.nth(1)).toContainText("Lease agreement");
+  await expect(entries.nth(1)).toContainText(/Lease agreement\. Plain text, added \d+ \w+ \d{4}\./);
   await screenshot(window, "references-apa-en");
 
   // "Needs details" opens the Document's "Cite as" right there, at its first gap, its title.

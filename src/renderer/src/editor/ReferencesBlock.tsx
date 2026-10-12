@@ -22,7 +22,7 @@ import { useAppStore } from "../store";
 import { citationClusters } from "./citationClusters";
 import { Popover } from "./Popover";
 import { StyledRuns } from "./StyledRuns";
-import { bibliographyClipboard, runsText } from "./styledText";
+import { bibliographyClipboard } from "./styledText";
 
 /** How long "Copied" shows before the button says "Copy" again. */
 const COPIED_MS = 1500;
@@ -30,7 +30,7 @@ const COPIED_MS = 1500;
 /**
  * The Mind's References (#289, the Bibliography of #102), at its end, kept up to date: every
  * Document it cites, once, in its citation style. Its header holds the style picker, Copy and
- * Export. A Document whose reference record is too thin to cite is listed by its name, marked
+ * Export. A Document whose reference record is too thin to cite is listed as the style can, marked
  * "Needs details", which opens its "Cite as" panel (#286) right there. Shown once the Mind has
  * a Citation.
  */
@@ -186,10 +186,10 @@ function ReferenceEntry({
       )}
       <span className="references-text">
         {entry.needsDetails ? (
-          // Too thin to print as a reference: its Document's name, and the way to fill it in.
+          // Too thin to print as a reference: what is known of it, and the way to fill it in.
           <>
             <span className="references-thin">
-              {document ? displayName(document) : runsText(entry.runs)}
+              <StyledRuns runs={entry.runs} />
             </span>{" "}
             <NeedsDetails document={document} readOnly={readOnly} />
           </>
