@@ -50,7 +50,10 @@ export interface Processor {
    * "stopped"; another still reports its result, as does every metadata job.
    */
   cancel(documentId: string): void;
-  /** Holds jobs back, while a Meeting is recorded (#135): the one in the worker finishes, the rest wait. */
+  /**
+   * Holds jobs back, while a Meeting is recorded (#135): the one in the worker finishes, the
+   * rest wait, except a Transcript's, which is the recording itself and small (#136).
+   */
   hold(held: boolean): void;
   /** Stops the worker. Jobs not yet finished are dropped without a result. */
   close(): void;
@@ -130,10 +133,17 @@ export function createProcessor(
     return started;
   }
 
+  /** The next job to run: the first in line, or while held, the first Transcript's. */
+  function take(): WorkerJob | undefined {
+    if (!held) return queue.shift();
+    const index = queue.findIndex((job) => job.task === "process" && job.kind === "transcript");
+    return index === -1 ? undefined : queue.splice(index, 1)[0];
+  }
+
   function pump(): void {
     pumpScheduled = false;
-    if (closed || held || current) return;
-    const job = queue.shift();
+    if (closed || current) return;
+    const job = take();
     if (!job) return;
     current = { id: nextId++, job };
     if (job.task === "process") call(() => handlers.onStart(job));

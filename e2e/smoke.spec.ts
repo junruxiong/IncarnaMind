@@ -103,7 +103,7 @@ test("the sidebar lists the most recently edited Mind first, and a deleted Mind 
   const older = window.getByTestId("mind-row").filter({ hasText: "Older" });
   await older.hover();
   await older.getByTestId("mind-menu").click();
-  await older.getByTestId("delete-mind").click();
+  await older.getByTestId("mind.delete").click();
   await window.getByTestId("confirm-delete-mind").click();
   await expect(items).toHaveText(["Newer"]);
   await expect(window.getByTestId("mind-tab").getByTestId("tab-title")).toHaveText(["Newer"]);
@@ -148,7 +148,7 @@ test("added files are processed, show as ready in the sidebar, and can be delete
     await expect(restored).toHaveCount(2);
     const doomed = restored.filter({ hasText: "Reading notes" });
     await openDocumentMenu(doomed);
-    await doomed.getByTestId("delete-document").click();
+    await doomed.getByTestId("document.delete").click();
     await second.window.getByTestId("confirm-delete-document").click();
     await expect(restored).toHaveCount(1);
     await expect(restored).toHaveAttribute("data-status", "ready");
@@ -214,10 +214,12 @@ test("first-run chat setup appears on a fresh data folder and can be set up late
   await expect(setup).toBeVisible();
   await expect(setup.getByTestId("chat-provider-choices").getByRole("radio")).toHaveCount(3);
   await expect(setup.getByRole("radio", { checked: true })).toHaveCount(0);
-  // Choosing an API key offers the eleven providers and an OpenAI-compatible server, none chosen yet.
+  // Choosing an API key offers the seven first-class providers that take a key (ADR-0019), none
+  // chosen yet, and no "More providers": the rest are in Settings.
+  await expect(setup.getByTestId("provider-more-toggle")).toHaveCount(0);
   await setup.getByTestId("chat-choice-api-key").check();
   const providerChoices = setup.getByTestId("provider-form").getByRole("radio");
-  await expect(providerChoices).toHaveCount(12);
+  await expect(providerChoices).toHaveCount(7);
   await expect(
     setup.getByTestId("provider-form").getByRole("radio", { checked: true }),
   ).toHaveCount(0);
@@ -275,7 +277,7 @@ test("first run fits a small window; the not-ready notice and a long title keep 
   await setup.getByTestId("chat-choice-api-key").check();
   await setup
     .getByTestId("provider-form")
-    .getByRole("radio", { name: "OpenAI-compatible server" })
+    .getByRole("radio", { name: "OpenAI", exact: true })
     .check();
   // The form makes the dialog scroll, and "Set up later" stays in view.
   await expect(setup.getByTestId("chat-setup-later")).toBeInViewport();
@@ -326,8 +328,11 @@ test("the window opens at the size and place it was left at", async () => {
 
 test("an API key typed for one chat provider is cleared when another is chosen, or when the server changes", async () => {
   const { app, window } = await launchApp(dataDir);
-  const form = window.getByTestId("chat-setup").getByTestId("provider-form");
-  await window.getByTestId("chat-choice-api-key").check();
+  await dismissChatSetup(window);
+  // A server the User gives is among the "More providers" in Settings.
+  const settings = await openSettings(window, "models");
+  const form = settings.getByTestId("provider-form");
+  await settings.getByTestId("chat-choice-api-key").check();
   const key = form.getByLabel(/^API key/);
   const test = form.getByRole("button", { name: "Test connection" });
 
@@ -339,6 +344,7 @@ test("an API key typed for one chat provider is cleared when another is chosen, 
   await expect(test).toBeDisabled();
 
   // For a server, the key stays while the address is fixed, and goes once it names another host.
+  await form.getByTestId("provider-more-toggle").click();
   await form.getByRole("radio", { name: "OpenAI-compatible server" }).check();
   const server = form.getByLabel("Server URL");
   await server.fill("https://api.example.com/v1");
@@ -376,8 +382,6 @@ test("a Linked folder shows its Folders as on disk, and files added on their own
     await showSourceLocations(window);
     await expect(looseItem).toHaveAttribute("data-depth", "0");
     await expect(others).toHaveCount(0);
-    // Folders on disk come from the disk: there is no moving a Document into one.
-    await expect(window.getByTestId("move-document")).toHaveCount(0);
 
     // "Add folder…" links a folder, picked with the system's picker (answered by the test),
     // once the User confirms in the link dialog.

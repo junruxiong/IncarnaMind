@@ -134,7 +134,7 @@ test("a new window's assistant is docked on the right, outside the groups, the c
   expect(box.x).toBeGreaterThan(card.x + card.width);
   near(box.y, card.y);
   near(box.y + box.height, card.y + card.height);
-  near(box.width, 360);
+  near(box.width, 320);
   // Its header ends level with the card's tab strip.
   const header = await boxOf(window.getByTestId("assistant-header"));
   const strip = await boxOf(window.getByTestId("tab-strip").first());
@@ -271,7 +271,7 @@ test("it resizes by mouse and by keys docked on each side, at the bottom and flo
 
   // On the right: the line left of it.
   await dragBy(window, rod, -80);
-  await expect.poll(() => widthOf(assistant)).toBeGreaterThan(430);
+  await expect.poll(() => widthOf(assistant)).toBeGreaterThan(390);
   const dragged = await widthOf(assistant);
   await rod.focus();
   await window.keyboard.press("ArrowLeft");
@@ -284,18 +284,18 @@ test("it resizes by mouse and by keys docked on each side, at the bottom and flo
   await dragBy(window, rod, -2000);
   await expect.poll(async () => Math.round(await widthOf(cardOf(window)))).toBe(360);
   await rod.dblclick();
-  await expect.poll(() => widthOf(assistant)).toBe(360);
+  await expect.poll(() => widthOf(assistant)).toBe(320);
 
   // On the left: the line right of it.
   await fromMenu(window, "left");
   await dragBy(window, rod, 60);
-  await expect.poll(() => widthOf(assistant)).toBeGreaterThan(410);
+  await expect.poll(() => widthOf(assistant)).toBeGreaterThan(370);
   const left = await widthOf(assistant);
   await rod.focus();
   await window.keyboard.press("ArrowRight");
   await expect.poll(() => widthOf(assistant)).toBe(left + 10);
   await rod.dblclick();
-  await expect.poll(() => widthOf(assistant)).toBe(360);
+  await expect.poll(() => widthOf(assistant)).toBe(320);
 
   // At the bottom: the line above it, with ↑ and ↓.
   await fromMenu(window, "bottom");
@@ -371,7 +371,7 @@ test("its ⋯ menu and the keyboard dock, float and fold it; ⌘J unfolds it int
   await expect(assistant).toHaveAttribute("data-folded", "true");
   await expect(window.getByTestId("assistant-rail")).toBeVisible();
   await expect.poll(() => widthOf(assistant)).toBe(44);
-  expect(await widthOf(cardOf(window))).toBeGreaterThan(cardWidth + 300);
+  expect(await widthOf(cardOf(window))).toBeGreaterThan(cardWidth + 260);
   const rail = window.getByTestId("assistant-rail");
   await expect(rail.getByRole("button")).toHaveCount(3);
   await expect(rail.getByTestId("assistant-fold")).toHaveAccessibleName(
@@ -428,7 +428,7 @@ test("under 1,000px a side dock sits at the bottom and goes back when wider; gro
   const rod = window.getByTestId("assistant-resize");
   await rod.focus();
   await window.keyboard.press("Shift+ArrowRight");
-  await expect.poll(() => widthOf(assistant)).toBe(410);
+  await expect.poll(() => widthOf(assistant)).toBe(370);
 
   // Narrow: at the bottom, the choice kept.
   await setWindowSize(app, window, 960, 660);
@@ -443,7 +443,7 @@ test("under 1,000px a side dock sits at the bottom and goes back when wider; gro
   await screenshot(window, "assistant-narrow-960");
   await setWindowSize(app, window, 1600, 660);
   await expect(assistant).toHaveAttribute("data-dock", "right");
-  await expect.poll(() => widthOf(assistant)).toBe(410);
+  await expect.poll(() => widthOf(assistant)).toBe(370);
 
   // With a Document beside the Mind: at 1,280px the card beside the assistant is too narrow
   // for two groups, which share one strip; folding it, or the bottom, gives the room back.
@@ -478,7 +478,7 @@ test("under 1,000px a side dock sits at the bottom and goes back when wider; gro
   await expect(assistant).toHaveAttribute("data-folded", "true");
   await window.keyboard.press("ControlOrMeta+j");
   await expect(assistant).not.toHaveAttribute("data-folded");
-  await expect.poll(() => widthOf(assistant)).toBe(410);
+  await expect.poll(() => widthOf(assistant)).toBe(370);
   // Floating, it keeps its distance to its corner after a restart too.
   await fromMenu(window, "float");
   const floating = await boxOf(assistant);

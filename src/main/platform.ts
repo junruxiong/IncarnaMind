@@ -28,6 +28,7 @@ import { createUtilityProcessCrossEncoder } from "./reranker";
 import { loadOsSandbox } from "./sandbox";
 import { createUtilityProcessTextRecognizer } from "./scanReader";
 import { createFileKeychain, SECRETS_FILE, type SecretCipher } from "./secretsFile";
+import { createUtilityProcessTranscriber } from "./transcriber";
 import { createPostHogSender } from "./usageData";
 
 /**
@@ -67,7 +68,7 @@ export const systemBrowser: Browser = {
 };
 
 /** The apps whose install links Settings → Agents opens (#351), and no others. */
-const AGENT_LINK_SCHEMES = new Set(["cursor:", "vscode:"]);
+const AGENT_LINK_SCHEMES = new Set(["cursor:"]);
 
 /** Opens an agent's install link in its app: its app shows what it installs, and asks. */
 async function openAgentLink(url: string): Promise<void> {
@@ -159,6 +160,14 @@ const fakeEmbedder =
 
 /** With the fake models, what the fake text recognition model reads on each scanned page (#397). */
 const fakeScans = fakeEmbedder ? (process.env.INCARNAMIND_TEST_SCANS ?? null) : null;
+
+/**
+ * Test-only launch flag: the smoke tests transcribe Meetings with a fake
+ * speech-to-text engine in the utility process, so no model is downloaded
+ * (#136). Only a test build honours it.
+ */
+const fakeTranscriber =
+  import.meta.env.MODE === "test" && process.env.INCARNAMIND_TEST_TRANSCRIBER === "fake";
 
 /**
  * The built-in Skills: in a packaged app, where electron-builder copied them
@@ -411,6 +420,13 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
       openLink: openAgentLink,
     },
     embedder: createUtilityProcessEmbedder({ fake: fakeEmbedder }),
+    transcriber: createUtilityProcessTranscriber({ fake: fakeTranscriber }),
+    ...(fakeTranscriber && {
+      transcriptionModelSource: {
+        model: { baseUrl: "http://localhost/", files: [] },
+        vad: { baseUrl: "http://localhost/", files: [] },
+      },
+    }),
     crossEncoder: createUtilityProcessCrossEncoder({ fake: fakeEmbedder }),
     textRecognizer: createUtilityProcessTextRecognizer(
       fakeEmbedder ? { fake: { script: fakeScans } } : {},
