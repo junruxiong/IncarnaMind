@@ -18,6 +18,10 @@ _Avoid_: message
 A Block the User writes.
 _Avoid_: text block
 
+**Chart**:
+A Block in a Mind that draws values from a table or from cited figures (a bar, line, pie or scatter chart), each value kept with where it came from and its Citation, so each point can be traced to its source.
+_Avoid_: graph, plot, figure (a figure is a number)
+
 **Question**:
 What the User asks for an Answer: a Block in a Mind, or a message in a Conversation.
 _Avoid_: query, prompt
