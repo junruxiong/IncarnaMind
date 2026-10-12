@@ -9,6 +9,7 @@ import type { ChildProcess } from "node:child_process";
 import type { AgentLauncher } from "./agents";
 import type { AnswerEngine } from "./answers/engine";
 import type { AudioSource, ExternalService, SandboxLevel, SecretProtection } from "./api";
+import type { StatIdentity } from "./documents/files";
 import type { Reranker } from "./documents/searchTool";
 import type { WatchFolder } from "./documents/watcher";
 import type { FetchLimits } from "./documents/web/fetch";
@@ -139,6 +140,12 @@ export interface LinkedFolderOptions {
    * tests may pass a fake.
    */
   watch?: WatchFolder;
+  /**
+   * Reads a file's device, file number and creation time, which a file moved
+   * and edited while IncarnaMind didn't see it is recognised by. Defaults to
+   * Node's `stat`; tests may pass one that puts files on other disks.
+   */
+  stat?: StatIdentity;
 }
 
 export interface SpawnOptions {
