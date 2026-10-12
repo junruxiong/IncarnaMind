@@ -88,7 +88,10 @@ export function useKeymap(): void {
     };
     window.addEventListener("keydown", onKey);
     const stopMenu = files.onMenuCommand((id) => {
-      if (!dialogOpen()) commands.run(id, contextAt(document.activeElement)).catch(report);
+      const focus = document.activeElement;
+      // In text, Undo and Redo are the text's own, as their keys are, in a dialog too.
+      const textsOwn = commands.get(id)?.shortcut?.outsideText === true && typesText(focus);
+      if (textsOwn || !dialogOpen()) commands.run(id, contextAt(focus)).catch(report);
     });
     return () => {
       window.removeEventListener("keydown", onKey);
