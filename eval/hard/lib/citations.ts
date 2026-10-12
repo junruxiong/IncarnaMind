@@ -6,7 +6,9 @@
  * Question needs (for a near-duplicate one, the right version, and how many
  * cite another version), and, for the unanswerable Questions, how many are
  * answered without a Citation, and how many say the Documents don't answer
- * them (./declines), with or without Citations.
+ * them (./declines), with or without Citations. For the false-premise and
+ * disagreeing Questions, how many Answers follow the Answer rules of #548
+ * (./answerRules): the premise flagged first, the newer Document leading.
  */
 
 import {
@@ -21,6 +23,7 @@ import { declines } from "../../lib/declines";
 import type { EvalLanguage, EvalQuestion } from "../../lib/evaluationSet";
 import type { Library } from "../../lib/library";
 import type { Log } from "../../lib/log";
+import { flagsPremise, newerLeads, opening } from "./answerRules";
 import { type Manifest, siblingsOf } from "./manifest";
 import { DIFFICULTIES, type Difficulty, type HardQuestion } from "./questions";
 
@@ -35,11 +38,61 @@ export interface DifficultyCitations extends GroupSummary {
   declines: number;
   /** The same per language, of the Answers to the unanswerable Questions. */
   declinesByLanguage: Record<EvalLanguage, { answers: number; declines: number }>;
+  /** False-premise Questions: Answers whose opening says the Documents don't support the premise. */
+  premiseFlagged: number;
+  /** Disagreeing Questions: Answers giving what the newer Document says before what the older one says. */
+  newerLeads: number;
+  /** Disagreeing Questions: Answers that give what the older Document says too. */
+  namesOlder: number;
+}
+
+/** What the Answer rules (./answerRules) found in one Answer to a false-premise or disagreeing Question. */
+export interface AnswerRuleResult {
+  questionId: string;
+  difficulty: "false-premise" | "disagreeing";
+  /**
+   * False premise: flagged in the Answer's opening. Disagreeing: what the
+   * newer Document says comes first, and the Answer cites that Document.
+   */
+  followed: boolean;
+  /** Disagreeing: the Answer gives what the older Document says too. */
+  namesOlder: boolean;
+  /** The Answer's first paragraph, for a reviewer. */
+  opening: string;
 }
 
 export interface HardCitations {
   run: CitationRun;
   byDifficulty: Partial<Record<Difficulty, DifficultyCitations>>;
+  /** Each Answer to a false-premise or disagreeing Question, as the Answer rules read it. */
+  rules: AnswerRuleResult[];
+}
+
+/**
+ * What the Answer rules find in an Answer, for a false-premise or disagreeing
+ * Question; null for any other. `documentName`: a Document's name, by its key.
+ */
+export function answerRuleResult(
+  answer: Pick<AnswerRecord, "questionId" | "text" | "citations">,
+  question: HardQuestion,
+  documentName: (key: string) => string | undefined,
+): AnswerRuleResult | null {
+  const base = { questionId: answer.questionId, opening: opening(answer.text) };
+  if (question.difficulty === "false-premise") {
+    return {
+      ...base,
+      difficulty: "false-premise",
+      followed: flagsPremise(answer.text),
+      namesOlder: false,
+    };
+  }
+  if (question.difficulty === "disagreeing" && question.newer && question.older) {
+    const { leads, namesOlder } = newerLeads(answer.text, question.newer, question.older);
+    const newer = documentName(question.newer.document);
+    const citesNewer = answer.citations.some((citation) => citation.documentName === newer);
+    return { ...base, difficulty: "disagreeing", followed: leads && citesNewer, namesOlder };
+  }
+  return null;
 }
 
 /** As the gating set's Citation part takes Questions: it reads only the id, language and wording. */
@@ -68,6 +121,9 @@ export function summariseDifficulty(
   let citingExpected = 0;
   let citingOtherVersion = 0;
   let withoutCitation = 0;
+  let premiseFlagged = 0;
+  let leading = 0;
+  let namesOlder = 0;
   const declinesByLanguage: DifficultyCitations["declinesByLanguage"] = {
     en: { answers: 0, declines: 0 },
     zh: { answers: 0, declines: 0 },
@@ -92,6 +148,12 @@ export function summariseDifficulty(
       declinesByLanguage[answer.language].answers++;
       if (answer.declines) declinesByLanguage[answer.language].declines++;
     }
+    const rule = answerRuleResult(answer, question, documentName);
+    if (rule?.difficulty === "false-premise" && rule.followed) premiseFlagged++;
+    if (rule?.difficulty === "disagreeing") {
+      if (rule.followed) leading++;
+      if (rule.namesOlder) namesOlder++;
+    }
   }
   return {
     ...summariseGroup(answers),
@@ -100,6 +162,9 @@ export function summariseDifficulty(
     withoutCitation,
     declines: declinesByLanguage.en.declines + declinesByLanguage.zh.declines,
     declinesByLanguage,
+    premiseFlagged,
+    newerLeads: leading,
+    namesOlder,
   };
 }
 
@@ -136,6 +201,11 @@ export async function runHardCitations(
       byDifficulty[difficulty] = summariseDifficulty(answers, byId, documentName, manifest);
     }
   }
+  const rules = run.answers.flatMap((answer) => {
+    const question = byId.get(answer.questionId);
+    const rule = question ? answerRuleResult(answer, question, documentName) : null;
+    return rule ? [rule] : [];
+  });
   // The hard tier never gates: the gating set's targets don't apply.
-  return { run: { ...run, gating: false, failures: [] }, byDifficulty };
+  return { run: { ...run, gating: false, failures: [] }, byDifficulty, rules };
 }
