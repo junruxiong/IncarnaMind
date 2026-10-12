@@ -7,6 +7,7 @@ import {
   launchApp,
   newMind,
   openSettings,
+  openSteps,
   removeDataFolder,
   useLocalChatModel,
 } from "./app";
@@ -97,7 +98,7 @@ test("a fresh data folder has the three built-in Skills: labelled in Settings, a
   await expect(chip).toHaveText("literature-review");
   const answer = assistantAnswers(window).first();
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-  const card = answer.getByTestId("answer-skill");
+  const card = (await openSteps(window, answer)).getByTestId("answer-skill");
   await expect(card).toHaveAttribute("data-skill-name", "literature-review");
   await expect(card).toHaveAttribute("data-forced", "true");
   await expect(answer).toContainText("Following the Skill literature-review.");

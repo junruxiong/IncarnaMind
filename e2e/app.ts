@@ -12,6 +12,7 @@ import {
 import type { Editor } from "@tiptap/core";
 import * as Y from "yjs";
 import type { AssistantPlace, CoreBridge } from "../src/core/api";
+import type { FakeTranscriberOptions } from "../src/core/transcription/fake";
 import type { DocumentLocation } from "../src/shared/documentViewer";
 import type { TestHooks } from "../src/shared/testHooks";
 
@@ -81,6 +82,8 @@ export interface LaunchOptions {
    * always a fake that makes a tone: no test opens a device.
    */
   computerSound?: "allowed" | "denied" | "silent";
+  /** What a Meeting's fake speech-to-text engine does: slow, failing to read stretches, failing over. */
+  transcriber?: FakeTranscriberOptions;
   /**
    * What the fake text recognition model reads on each scanned page (#397):
    * a JSON file of a `FakeScanScript`. Without, it reads nothing on them.
@@ -128,6 +131,7 @@ export async function launchApp(
     chatGpt,
     keepWindow = false,
     computerSound = "allowed",
+    transcriber,
     scans,
   }: LaunchOptions = {},
 ): Promise<RunningApp> {
@@ -145,6 +149,7 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_REFERENCE_LOOKUP;
   delete env.INCARNAMIND_TEST_SOURCES;
   delete env.INCARNAMIND_TEST_CHATGPT;
+  delete env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS;
   delete env.INCARNAMIND_TEST_SCANS;
   // A test never uses the ChatGPT sign-in an agent's shell may point at for checks by hand.
   delete env.INCARNAMIND_CHATGPT_PROFILE;
@@ -167,6 +172,7 @@ export async function launchApp(
   if (fakeChat) env.INCARNAMIND_FAKE_CHAT = "1";
   env.INCARNAMIND_TEST_EMBEDDER = "fake";
   env.INCARNAMIND_TEST_TRANSCRIBER = "fake";
+  if (transcriber) env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS = JSON.stringify(transcriber);
 
   const app = await electron.launch({ args: [appDir], env });
   openApps.set(app, dataDir);
@@ -1015,6 +1021,39 @@ export async function askInAssistant(window: Page, question: string): Promise<Lo
   const answer = answers.last();
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   return answer;
+}
+
+/** The tiny MCP server the core tests use: `lookup_tide` is read-only, `book_boat` isn't. */
+const TIDE_SERVER = resolve(__dirname, "../tests/fixtures/mcp-server.mjs");
+
+/** Adds the tiny server as a Connector through the core's bridge, waits until it's ready, and returns its id. */
+export async function addTideConnector(window: Page): Promise<string> {
+  return window.evaluate(
+    async ({ node, server }) => {
+      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      const connector = await bridge.addConnector({ name: "Tides", command: node, args: [server] });
+      for (let tries = 0; tries < 300; tries++) {
+        const found = (await bridge.listConnectors()).find((each) => each.id === connector.id);
+        if (found?.state === "ready") return connector.id;
+        await new Promise((done) => setTimeout(done, 100));
+      }
+      throw new Error("The Connector didn't get ready.");
+    },
+    { node: process.execPath, server: TIDE_SERVER },
+  );
+}
+
+/**
+ * Unfolds an Answer's steps in the assistant (#391) with the mouse, unless
+ * they are open, and returns their timeline: the reasoning, the searches,
+ * the Skills and Connector calls it made, and the check.
+ */
+export async function openSteps(window: Page, answer: Locator): Promise<Locator> {
+  const toggle = answer.getByTestId("answer-steps");
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") await pointAndClick(window, toggle);
+  const timeline = answer.getByTestId("answer-timeline");
+  await expect(timeline).toBeVisible();
+  return timeline;
 }
 
 /**
