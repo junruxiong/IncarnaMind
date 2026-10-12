@@ -298,6 +298,24 @@ test("first-run's line under an API key names only the providers listed below it
   await app.close();
 });
 
+test("in Chinese, the provider form has no space after full-width punctuation where its pieces join", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await window.evaluate(async () =>
+    (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+      user: { language: "zh-CN" },
+    }),
+  );
+  const form = window.getByTestId("chat-setup").getByTestId("provider-form");
+  await window.getByTestId("chat-choice-api-key").check();
+  await form.getByRole("radio", { name: "OpenAI", exact: true }).check();
+  const facts = (await form.getByTestId("provider-facts").innerText()).replace(/\s+/g, " ");
+  expect(facts).toMatch(/^数据使用：\S/);
+  const credits = await form.getByTestId("provider-plan-credits").innerText();
+  expect(credits).toMatch(/。了解更多/);
+  expect(`${facts}${credits}`).not.toMatch(/[。：] /);
+  await app.close();
+});
+
 test('after "Don\'t allow", a connection test offers to ask again, and asks before sending anything', async () => {
   const { app, window } = await launchApp(dataDir);
   const form = window.getByTestId("chat-setup").getByTestId("provider-form");
