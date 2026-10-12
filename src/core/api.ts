@@ -32,7 +32,7 @@ export type {
  */
 import type { CitationForm, CitationStyleId } from "../shared/citationStyles";
 import type { TagColour } from "../shared/tagColours";
-import type { UnitKind, UnitLabel } from "../shared/units";
+import type { Anchor, UnitKind, UnitLabel } from "../shared/units";
 import type { Language, LanguagePreference } from "./language";
 
 export interface Mind {
@@ -1109,12 +1109,28 @@ export type DocumentFailureReason =
    */
   | "file-missing"
   /** Anything else, e.g. the processing worker crashed. */
-  | "processing-error";
+  | "processing-error"
+  /**
+   * Scanned pages couldn't be read (#397): the text recognition model
+   * couldn't be downloaded or failed on them. The pages that were read are
+   * searched; Retry reads the others.
+   */
+  | "pages-unread";
 
 export interface DocumentFailure {
   reason: DocumentFailureReason;
   /** Technical detail in English, for logs and tooltips. */
   message: string;
+  /** "pages-unread": the scanned pages that couldn't be read, from 1; empty when none could be. */
+  pages?: number[];
+}
+
+/** Where reading a PDF's scanned pages is (#397), while it is processed. */
+export interface DocumentScanProgress {
+  /** How many of its pages are scans to read. */
+  pages: number;
+  /** How many of them are read so far. */
+  read: number;
 }
 
 /**
@@ -1213,6 +1229,8 @@ export interface Document {
   status: DocumentStatus;
   /** While `status` is "embedding": the share of its Passages embedded so far, from 0 to 1. Null otherwise. */
   progress: number | null;
+  /** While `status` is "extracting" and its scanned pages are read (#397): how far that is. Null otherwise. */
+  scan: DocumentScanProgress | null;
   /** Set when `status` is "failed": why the latest version read failed. */
   failure: DocumentFailure | null;
   /**
@@ -1792,6 +1810,37 @@ export interface DocumentText {
    * `page` being the Unit's number, from 1. Empty if no text is indexed.
    */
   pages: { page: number; text: string; kind: UnitKind; label: UnitLabel | null }[];
+}
+
+/**
+ * The scanned pages of a Document's current version (#397): the text read
+ * from each page's picture, and where each of its lines is on the page
+ * (`Anchor.quad`), so the viewer can lay the text over the picture and wash
+ * a quote there.
+ */
+export interface ScannedText {
+  documentId: string;
+  contentHash: string;
+  pages: { page: number; text: string; label: UnitLabel | null; anchors: Anchor[] }[];
+}
+
+/**
+ * Where a Citation's quote was read from a scan (#397), for its card: the
+ * words the text recognition wasn't sure of within it, as the page's text has
+ * them, in order (empty when it was sure of every one).
+ */
+export interface ScannedQuote {
+  unsure: string[];
+}
+
+/** A Citation's quote, as `readScannedQuote` looks it up: its Document, version, Units and quote. */
+export interface ScannedQuoteInput {
+  documentId: string;
+  /** The version it quotes; null for a Citation that doesn't say (the current one is read). */
+  contentHash: string | null;
+  pageFrom: number | null;
+  pageTo: number | null;
+  quote: string;
 }
 
 /**
@@ -3460,6 +3509,8 @@ export interface RegisteredDataFlow {
  * - "reranking-model": downloads the built-in reranking model's files, once,
  *   when the first Documents are ready to search, unless reranking is off or
  *   uses a service.
+ * - "text-recognition-model": downloads the built-in text recognition
+ *   model's files (#397), once, when the first scanned page needs reading.
  * - "transcription-model": downloads the speech-to-text model and Silero VAD,
  *   once, when a Meeting is first transcribed on this computer (#136).
  * - "ollama-pull": Ollama downloads a model from its registry, when the User picks local models.
@@ -3477,6 +3528,7 @@ export const networkTrafficIds = [
   "update-check",
   "embedding-model",
   "reranking-model",
+  "text-recognition-model",
   "transcription-model",
   "ollama-pull",
   "chatgpt-sign-in",
@@ -4953,6 +5005,26 @@ export interface CoreApi {
    */
   readDocumentText(documentId: string): Promise<DocumentText>;
   /**
+   * The scanned pages of a Document's current version, with where their
+   * lines are (#397): empty when it has none. Throws NotFoundError for an
+   * unknown or deleted Document.
+   */
+  readScannedText(documentId: string): Promise<ScannedText>;
+  /**
+   * Whether a Citation's quote was read from a scan (#397), and the words in
+   * it the reading wasn't sure of; null when the Units it cites weren't
+   * scanned, or its quote isn't in them.
+   */
+  readScannedQuote(input: ScannedQuoteInput): Promise<ScannedQuote | null>;
+  /** The built-in text recognition model's download state (#397). */
+  getTextRecognitionModel(): Promise<EmbeddingModelStatus>;
+  /**
+   * Downloads the built-in text recognition model, or tries again after a
+   * failure; once it is ready, Documents whose scanned pages couldn't be
+   * read are read again. "textRecognitionModel.status" events report progress.
+   */
+  downloadTextRecognitionModel(): Promise<EmbeddingModelStatus>;
+  /**
    * What linking a folder would take (see `LinkedFolderPreview`), from the
    * files' metadata, without reading or changing anything. Throws for a path
    * that isn't a folder.
@@ -5785,6 +5857,8 @@ export interface CoreEvents {
   "document.status": Document;
   /** The built-in embedding model's state changed, or its download made progress. */
   "embeddingModel.status": EmbeddingModelStatus;
+  /** The built-in text recognition model's download state changed (#397). */
+  "textRecognitionModel.status": EmbeddingModelStatus;
   /**
    * The embedding model search uses changed, or local mode, or a rebuild made
    * progress (a Document finished) or finished, or the provider failed or recovered.
@@ -5977,6 +6051,10 @@ const methods: Record<CoreApiMethod, true> = {
   deleteDocument: true,
   retryDocument: true,
   readDocumentText: true,
+  readScannedText: true,
+  readScannedQuote: true,
+  getTextRecognitionModel: true,
+  downloadTextRecognitionModel: true,
   previewLinkedFolder: true,
   addLinkedFolder: true,
   listLinkedFolders: true,
