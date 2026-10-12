@@ -119,5 +119,6 @@ A .docx can also be imported as a Mind, from "Import a Word file…" in the + me
 - **Refused before a Mind is made, with the reason:** a .doc, a .docm or a package with macros, an encrypted file, Strict Open XML, a damaged package or XML (a DOCTYPE included), and a file over the size limits for Office files.
 - **Whose document:** the import screen asks. A file with tracked changes or comments is someone else's by default, naming their authors; someone else's makes every Block third-party text (#78).
 - **Long files** are read whole before the Mind is made (a 300-page file in about a second), then written into it in batches that double in size, so the editor draws it a few times rather than hundreds; the Mind says how far it has got and can't be edited until it is done. An import a quit cut short goes on at the next start.
+- **Checked on the Word corpus (#84):** `npm run eval:word` imports each file and checks that the editor takes every node and that every paragraph's text is kept; all 238 files pass, the two in Strict Open XML refused as above.
 - **Unchanged:** Word Documents are read and previewed as before.
 
