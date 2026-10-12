@@ -2464,6 +2464,10 @@ export const zhCN = {
   "agents.pairing.copySkill.hint":
     "将它保存为 SKILL.md，放进智能体技能文件夹中名为 incarnamind 的文件夹，智能体就知道何时使用 IncarnaMind。",
   "agents.pairing.copied": "已复制",
+  "agents.pairing.copy": "复制",
+  "agents.pairing.command": "命令",
+  "agents.pairing.args": "参数",
+  "agents.pairing.env": "环境变量",
   "agents.activity.empty": "还没有调用记录。",
   "agents.activity.search": "搜索了“{text}”",
   "agents.activity.read_passages": "读取了段落",
@@ -2506,7 +2510,7 @@ export const zhCN = {
   "agents.done.command": "已复制。粘贴到终端中运行。",
   "agents.done.settings": "已复制。在 {agent} 中把它添加为新的服务器，然后重新启动 {agent}。",
   "agents.done.settings.other":
-    "已复制。在智能体添加服务器的地方粘贴，然后重新启动智能体。如果它要求分别填写命令、参数和环境变量，它们就在你复制的设置里（技术细节）。",
+    "已复制。在智能体添加服务器的地方粘贴，然后重新启动智能体。如果它要求分别填写命令、参数和环境变量，可在“技术细节”里逐项复制。",
   "agents.done.unreadable":
     "无法读取 {agent} 的设置文件，IncarnaMind 未作改动。设置已复制：粘贴到 {path} 中。",
   "agents.done.undo": "撤销",
