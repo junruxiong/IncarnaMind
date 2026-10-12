@@ -10,6 +10,7 @@ import {
   expectReadyDocuments,
   launchApp,
   newMind,
+  openSteps,
   removeDataFolder,
   sidebarFolder,
 } from "./app";
@@ -100,15 +101,15 @@ test("typing @ in the composer limits the search to a Folder: the Answer cites o
   );
   const answer = assistantAnswers(window).last();
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-  const searched = answer.getByTestId("answer-scope");
-  await expect(searched).toHaveText("“Ocean”");
+  const searched = answer.getByTestId("answer-steps");
+  await expect(searched).toContainText("Searched Ocean ·");
   await expect(composerChip).toHaveText("Ocean");
   await expect(composerChip).toHaveAttribute("data-id", oceanId);
   await expect(editor.getByTestId("question")).toHaveCount(0);
 
   // It searched only the Ocean Folder, and cites its Document.
-  await answer.getByTestId("answer-tools-toggle").click();
-  await expect(answer.getByTestId("answer-tool-call")).toContainText("1 Passage");
+  const steps = await openSteps(window, answer);
+  await expect(steps.getByTestId("answer-step-found")).toContainText("1 passage found");
   const citation = answer.getByTestId("citation");
   await expect(citation).toHaveCount(1);
   await expect(citation).toHaveAttribute("data-check", "found");
@@ -119,11 +120,11 @@ test("typing @ in the composer limits the search to a Folder: the Answer cites o
   );
 
   // Once the folder is renamed on disk, its Folder is gone: the composer's chip shows it,
-  // struck through, the Answer's line says so, and regenerating searches nothing.
+  // struck through, the Answer's steps say so, and regenerating searches nothing.
   await rename(join(notes, "Ocean"), join(notes, "Sea"));
   await expect(composerChip).toHaveAttribute("data-deleted", "true");
   await expect(composerChip.locator("s")).toHaveText("Deleted Folder");
-  await expect(searched).toHaveText("“Deleted Folder”");
+  await expect(searched).toContainText("Searched Deleted Folder ·");
   await answer.hover();
   await answer.getByTestId("answer-regenerate").click();
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
@@ -185,8 +186,8 @@ test("an in-app folder scopes answers and deleting it never broadens the search"
     await window.keyboard.press("Enter");
     const answer = assistantAnswers(window).last();
     await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-    const searched = answer.getByTestId("answer-scope");
-    await expect(searched).toHaveText("“Ocean research”");
+    const searched = answer.getByTestId("answer-steps");
+    await expect(searched).toContainText("Searched Ocean research ·");
     await expect(answer.getByTestId("citation")).toHaveCount(1);
     await expect(answer.getByTestId("citation-chip")).toHaveAttribute(
       "aria-label",
@@ -199,10 +200,10 @@ test("an in-app folder scopes answers and deleting it never broadens the search"
     );
     await expect(composerChip).toHaveAttribute("data-deleted", "true");
     // A deleted Folder keeps its name where it is named: struck through on the chip, and on
-    // the line of the Answer that searched it.
+    // the steps of the Answer that searched it.
     await expect(composerChip.locator("s")).toHaveText("Ocean research");
-    await expect(searched).toHaveText("“Ocean research”");
-    await answer.hover();
+    await expect(searched).toContainText("Searched Ocean research ·");
+    await openSteps(window, answer);
     await answer.getByTestId("answer-regenerate").click();
     await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
     await expect(answer).toContainText("has no Documents to search");
@@ -256,7 +257,9 @@ test("a Mind in a Folder asks within it by default: its chip can be taken out to
     await window.keyboard.press("Enter");
     const answers = assistantAnswers(window);
     await expect(answers.first()).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-    await expect(answers.first().getByTestId("answer-scope")).toHaveText("“Ocean research”");
+    await expect(answers.first().getByTestId("answer-steps")).toContainText(
+      "Searched Ocean research ·",
+    );
     await expect(answers.first().getByTestId("citation-chip")).toHaveAttribute(
       "aria-label",
       /^Citation 1: Tide tables/,
@@ -270,11 +273,12 @@ test("a Mind in a Folder asks within it by default: its chip can be taken out to
     await window.keyboard.press("Enter");
     const second = answers.nth(1);
     await expect(second).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-    await second.getByTestId("answer-tools-toggle").click();
-    await expect(second.getByTestId("answer-tool-call")).toContainText("2 Passages");
+    await expect((await openSteps(window, second)).getByTestId("answer-step-found")).toContainText(
+      "2 passages found",
+    );
     await expect(composer.getByTestId("composer-scope-all")).toBeVisible();
 
-    // Deleted, the Folder's Mind is Not in a Folder; the first Answer's line keeps its name.
+    // Deleted, the Folder's Mind is Not in a Folder; the first Answer's steps keep its name.
     await window.evaluate(
       async (id) =>
         (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.deleteLibraryGroup(id),
@@ -283,8 +287,10 @@ test("a Mind in a Folder asks within it by default: its chip can be taken out to
     await expect(window.getByTestId("not-in-a-folder").getByTestId("mind-list-item")).toHaveCount(
       1,
     );
-    await expect(answers.first().getByTestId("answer-scope")).toHaveText("“Ocean research”");
-    await expect(second.getByTestId("answer-scope")).toHaveText("All Documents");
+    await expect(answers.first().getByTestId("answer-steps")).toContainText(
+      "Searched Ocean research ·",
+    );
+    await expect(second.getByTestId("answer-steps")).toContainText("Searched All Documents ·");
     await expect(composer.getByTestId("composer-scope-all")).toBeVisible();
   } finally {
     await app.close();

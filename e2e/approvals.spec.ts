@@ -1,23 +1,21 @@
-import { resolve } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import * as Y from "yjs";
 import { type CoreBridge, MIND_CONTENT_FIELD, type ThirdPartySource } from "../src/core/api";
 import { setTextOrigin } from "../src/shared/textOrigins";
 import {
+  addTideConnector,
   assistantAnswers,
   createDataFolder,
   dismissChatSetup,
   launchApp,
   newMind,
+  openSteps,
   pointAndClick,
   pointAt,
   removeDataFolder,
   setWindowSize,
   useLocalChatModel,
 } from "./app";
-
-/** The tiny MCP server the core tests use: `lookup_tide` is read-only, `book_boat` isn't. */
-const TIDE_SERVER = resolve(__dirname, "../tests/fixtures/mcp-server.mjs");
 
 let dataDir: string;
 test.beforeEach(async () => {
@@ -26,23 +24,6 @@ test.beforeEach(async () => {
 test.afterEach(async () => {
   await removeDataFolder(dataDir);
 });
-
-/** Adds the tiny server as a Connector through the core's bridge, waits until it's ready, and returns its id. */
-async function addTideConnector(window: Page): Promise<string> {
-  return window.evaluate(
-    async ({ node, server }) => {
-      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-      const connector = await bridge.addConnector({ name: "Tides", command: node, args: [server] });
-      for (let tries = 0; tries < 300; tries++) {
-        const found = (await bridge.listConnectors()).find((each) => each.id === connector.id);
-        if (found?.state === "ready") return connector.id;
-        await new Promise((done) => setTimeout(done, 100));
-      }
-      throw new Error("The Connector didn't get ready.");
-    },
-    { node: process.execPath, server: TIDE_SERVER },
-  );
-}
 
 /**
  * A Mind holding one Note, then a Question about it with its Answer, as Minds
@@ -128,7 +109,8 @@ test("a Tool that may change something pauses the Answer with an approval card: 
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(answer).toContainText("book_boat said: Booked a boat trip from Dover.");
   await expect(answer).toContainText("That is all.");
-  const call = answer.getByTestId("answer-connector-call");
+  // The call's row is in the Answer's steps.
+  const call = (await openSteps(window, answer)).getByTestId("answer-connector-call");
   await expect(call).toHaveAttribute("data-approval", "allowed");
   await expect(call).toContainText("Asked Tides with your approval: book_boat");
   // The card shows the arguments that were sent.
@@ -145,7 +127,7 @@ test("a Tool that may change something pauses the Answer with an approval card: 
   await expect(second).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(second).toContainText("book_boat said: The User denied this call of book_boat");
   await expect(second).toContainText("That is all.");
-  const denied = second.getByTestId("answer-connector-call");
+  const denied = (await openSteps(window, second)).getByTestId("answer-connector-call");
   await expect(denied).toHaveAttribute("data-approval", "denied");
   await expect(denied).toContainText("Not allowed: Tides: book_boat");
   await app.close();

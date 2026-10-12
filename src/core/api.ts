@@ -99,11 +99,15 @@ export interface CreateMindInput {
  *   and its `proposal` attributes (see `ProposalRef`), so it goes out of date
  *   once that text changes. Version 4 Proposals have none and never go out
  *   of date: nothing is rewritten.
- * - 6: a Document chip the User writes with "@" (`DOCUMENT_CHIP_NODE`), and
+ * - 7: charts (`CHART_NODE`, #436): a Block that draws values from a table
+ *   or from cited figures, each kept with its Citation. Older content is
+ *   version 7 content as it is: nothing is rewritten. A version before 7
+ *   opens a Mind with a chart read-only, as its editor would drop the chart.
+ * - 8: a Document chip the User writes with "@" (`DOCUMENT_CHIP_NODE`), and
  *   checklists (`taskList` and `taskItem`, whose items keep `checked`). Older
- *   content is version 6 content as it is: nothing is rewritten.
+ *   content is version 8 content as it is: nothing is rewritten.
  */
-export const CONTENT_SCHEMA_VERSION = 6;
+export const CONTENT_SCHEMA_VERSION = 8;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -332,6 +336,7 @@ export const NOTE_BLOCK_TYPES = [
   "taskList",
   "horizontalRule",
   "table",
+  "chart",
 ] as const;
 
 /** The node type of a Question Block. Its content is the User's text (inline). */
@@ -498,6 +503,13 @@ export interface AnswerToolCall {
   /** A search: how many Passages it gave the model. Null otherwise, and while running. */
   resultCount: number | null;
   /**
+   * A search: the Passages it found, by id (`Citation.passageId`), so the
+   * Citations it led to can be told. Absent on searches made before #391.
+   */
+  passages?: string[];
+  /** A search that failed: why, sorted as an Answer's own failure is. Absent otherwise. */
+  error?: ProviderError;
+  /**
    * "use_skill" only: the Question forced this Skill, so the core loaded it up
    * front instead of the model calling the Tool. Absent otherwise.
    */
@@ -566,6 +578,13 @@ export const FOOTNOTE_NODE = "footnote";
  * viewer. It is the User's own text, not a Citation: it checks nothing.
  */
 export const DOCUMENT_CHIP_NODE = "documentChip";
+
+ * The node type of a chart (#436): a Block with no text of its own, whose
+ * attributes hold what it draws (see `ChartAttributes` in
+ * src/shared/charts.ts): its kind, its title, the series drawn, and its
+ * values, each with where it came from and the Citation that was there.
+ */
+export const CHART_NODE = "chart";
 
 /**
  * Where a Citation's check stands. The check compares the model's quote with
@@ -2801,6 +2820,36 @@ export interface AnswerPhaseEvent extends AnswerPlace {
   phase: AnswerPhase;
 }
 
+/**
+ * More of the model's reasoning, as its provider summarized it (#391): only
+ * from a provider whose reasoning is a summary (`AnswerSteps.reasoning`),
+ * never raw chain of thought.
+ */
+export interface AnswerReasoning extends AnswerPlace {
+  answerId: string;
+  text: string;
+}
+
+/**
+ * How an Answer in a conversation was reached, beside its Tool calls and
+ * Citations (#391). Times are ISO 8601, UTC.
+ */
+export interface AnswerSteps {
+  /** When its Question went to the model; null when none did (its Search scope had no Documents). */
+  sentAt: string | null;
+  /** When it ended; null while it is being written. */
+  finishedAt: string | null;
+  /** What it was doing, and from when, oldest first. */
+  phases: { phase: AnswerPhase; at: string }[];
+  /**
+   * The model's reasoning as its provider summarized it (Anthropic's
+   * summarized thinking, the Responses API's reasoning summary), and how long
+   * it thought, in ms: from its first reasoning to the Answer's first text.
+   * Null when the model gave no summary. Raw chain of thought is never kept.
+   */
+  reasoning: { summary: string; ms: number } | null;
+}
+
 /** A Tool call of an Answer started, or finished (see `call.status`). */
 export interface AnswerToolCallEvent extends AnswerPlace {
   answerId: string;
@@ -2974,6 +3023,8 @@ export interface ConversationAnswer {
    * it too, and so does a Mind it is added to. Null: none.
    */
   textOrigin: ThirdPartySource | null;
+  /** How it was reached; null for an Answer written before #391. */
+  steps: AnswerSteps | null;
   /** ISO 8601, UTC. */
   createdAt: string;
   /** ISO 8601, UTC. */
@@ -4489,9 +4540,78 @@ export interface Meeting {
   saveError: string | null;
   /** Its Transcript, made on this computer (#136); null before it starts, or where this copy can't transcribe. */
   transcript: MeetingTranscript | null;
+  /** How well its capture went, so a bad recording can be explained (#161). */
+  health: CaptureHealth;
   createdAt: string;
   updatedAt: string;
 }
+
+/**
+ * How well a Meeting's capture went (#161): only numbers, times and kinds,
+ * never a word of its Transcript or any of its audio. It goes into the log as
+ * it happens, too.
+ */
+export interface CaptureHealth {
+  /**
+   * Live transcription on this computer: the time decoding took over the
+   * length of the speech it decoded, so under 1 keeps up with the Meeting.
+   * Null until some speech has been transcribed live.
+   */
+  realTimeFactor: number | null;
+  /** How much speech `realTimeFactor` is measured on, in ms. */
+  measuredMs: number;
+  /** Whether that is fast enough for live text; null until measured. */
+  keepsUp: boolean | null;
+  /** What happened to the capture, in the order it happened. */
+  events: CaptureHealthEvent[];
+}
+
+export type CaptureHealthEvent = {
+  /** When it happened (ISO 8601). */
+  at: string;
+  /** Where it happened, in the Meeting's time. */
+  atMs: number;
+} & CaptureEvent;
+
+/**
+ * What happened to a Meeting's capture:
+ * - "audioLost": a source's audio is missing for `durationMs` (see `AudioLossCause`).
+ * - "audioRecovered": IncarnaMind closed or crashed while recording, at
+ *   `atMs`, and the `durationMs` saved before then since recording last
+ *   started, in `parts`, was found at the next start.
+ * - "restarted": the transcription process stopped and was started again;
+ *   the speech it had not finished is a gap, transcribed again after the
+ *   Meeting stops while its audio is kept.
+ * - "behind": live text fell behind; the rest is transcribed after the Meeting stops.
+ * - "notTranscribed": a stretch of speech the engine couldn't read has no text.
+ * - "switched": transcription moved from one engine to another (#141, #462).
+ */
+export type CaptureEvent =
+  | { kind: "audioLost"; source: AudioSource; cause: AudioLossCause; durationMs: number }
+  | { kind: "audioRecovered"; parts: number; durationMs: number }
+  | { kind: "restarted"; gapMs: number }
+  | { kind: "behind" }
+  | { kind: "notTranscribed"; durationMs: number }
+  | {
+      kind: "switched";
+      from: TranscriptionEngine;
+      to: TranscriptionEngine;
+      reason: EngineSwitchReason;
+    };
+
+/**
+ * Why audio is missing: a part couldn't be saved because the disk was full
+ * ("full"), IncarnaMind wasn't allowed to write it ("denied") or something
+ * else went wrong ("error"); IncarnaMind closed while a part was being saved
+ * ("closed"); or no audio came in for a while ("stalled"), as when a device changes.
+ */
+export type AudioLossCause = "full" | "denied" | "error" | "closed" | "stalled";
+
+/** Where a Meeting's speech is turned into text: on this computer, or by a cloud service (#141). */
+export type TranscriptionEngine = "local" | "cloud";
+
+/** Why transcription moved to another engine: the one before fell behind or failed, or the User chose. */
+export type EngineSwitchReason = "behind" | "failed" | "user";
 
 /**
  * Where a Meeting's Transcript is (#136):
@@ -5990,6 +6110,7 @@ export interface CoreEvents {
   "answer.started": AnswerStarted;
   /** The Answer is loading its model, searching, or writing: its meta line says which. */
   "answer.phase": AnswerPhaseEvent;
+  "answer.reasoning": AnswerReasoning;
   "answer.delta": AnswerDelta;
   "answer.toolCallStarted": AnswerToolCallEvent;
   "answer.toolCallFinished": AnswerToolCallEvent;
