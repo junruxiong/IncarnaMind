@@ -18,6 +18,7 @@ import {
   MAX_CHART_VALUES,
   seriesName as nameOfSeries,
   readChart,
+  unitlessRows,
 } from "../../../shared/charts";
 import {
   badgeMessage,
@@ -264,7 +265,7 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
     }
     if (chart.kind === "pie") {
       const total = points.reduce((sum, each) => sum + each.value.value, 0);
-      // Only a slice has a share: not a row cut from the drawing.
+      // Only a slice has a share: not a value left out of the drawing, nor a row cut from it.
       const value = points.find((each) => samePoint(each, point))?.value.value;
       if (value === undefined || total <= 0) return null;
       const share = new Intl.NumberFormat(language, {
@@ -319,12 +320,15 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
       // A quote that wasn't found opens from its card's Open, as a Citation's does.
       if (state && state.check !== "not-found") openValue(point);
     },
-    label: (point) =>
-      t("chart.point", {
+    label: (point) => {
+      const source = sourceText(listed[point.row]?.values[point.series]);
+      const noUnit = unitlessRows(chart.data, point.series).has(point.row);
+      return t("chart.point", {
         label: titleOf(point),
         value: valueText(point),
-        source: sourceText(listed[point.row]?.values[point.series]),
-      }),
+        source: noUnit ? `${source} · ${t("chart.point.noUnit")}` : source,
+      });
+    },
   };
 
   const objectMenu = useObjectMenu({ kind: "chart", id: blockId });
@@ -338,6 +342,9 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
   const legend = !asTable ? chartLegend(chart, seriesName) : [];
   const shownCard = card ? listed[card.point.row]?.values[card.point.series] : null;
   const shownState = stateOf(shownCard);
+  const shownUnitless = card
+    ? unitlessRows(chart.data, card.point.series).has(card.point.row)
+    : false;
   const foundShown = found && card && samePoint(card.point, found.point) ? found : null;
 
   /**
@@ -522,7 +529,7 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
               }
               value={valueText(card.point)}
               detail={detailOf(card.point)}
-              notDrawn={shownCard.value === null}
+              notDrawn={shownCard.value === null ? "number" : shownUnitless ? "unit" : null}
               cut={
                 chart.data.cutFrom
                   ? t("chart.cut", {

@@ -314,6 +314,7 @@ test("a Mind with one chart prints its picture, drawn at twice its size, its cap
     shown,
     value: Number(shown),
     unit: null,
+    scale: null,
     citation: cited,
     from: { kind: "cell", row, column: 1 },
   });

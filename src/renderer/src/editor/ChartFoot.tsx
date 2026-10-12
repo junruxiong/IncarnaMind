@@ -70,6 +70,9 @@ export function ChartFoot({
     sources.notDrawn > 0
       ? t(`chart.source.notDrawn.${plural(sources.notDrawn)}`, { count: sources.notDrawn })
       : null,
+    sources.noUnit > 0
+      ? t(`chart.source.noUnit.${plural(sources.noUnit)}`, { count: sources.noUnit })
+      : null,
   ].filter((part) => part !== null);
   const line = (parts: ReactNode[]) =>
     parts.map((part, index) => (
