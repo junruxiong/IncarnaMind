@@ -1,3 +1,4 @@
+import { DataFromNewerVersionError } from "../errors";
 import type { Database } from "./database";
 
 /**
@@ -1322,6 +1323,17 @@ export const migrations: readonly Migration[] = [
       ALTER TABLE agent_pairings ADD COLUMN created_paths TEXT NOT NULL DEFAULT '[]';
     `,
   },
+  {
+    version: 62,
+    description: "Answers in conversations keep how they were reached: their steps (#391)",
+    sql: `
+      -- An Answer's steps (src/core/answers, AnswerSteps), as JSON: when its Question went to the
+      -- model and when it ended, its phases and when each began (ISO 8601, UTC), and its model's
+      -- reasoning summary and how long it thought, from a provider that summarizes reasoning
+      -- (raw chain of thought is never stored). NULL: an Answer written before, and Questions.
+      ALTER TABLE conversation_messages ADD COLUMN steps TEXT;
+    `,
+  },
 ];
 
 /**
@@ -1344,9 +1356,7 @@ export function migrate(db: Database, list: readonly Migration[] = migrations): 
   const known = new Set(list.map((migration) => migration.version));
   const unknown = [...applied].filter((version) => !known.has(version));
   if (unknown.length > 0) {
-    throw new Error(
-      `The database was written by a newer version of IncarnaMind (it has schema migration ${Math.max(...unknown)}, which this version doesn't know).`,
-    );
+    throw new DataFromNewerVersionError(Math.max(...unknown));
   }
 
   for (const migration of list) {
