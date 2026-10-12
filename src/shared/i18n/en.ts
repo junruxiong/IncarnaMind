@@ -1392,7 +1392,7 @@ export const en = {
   "consent.flow.chat": "Chat",
   "consent.flow.chat.purpose": "answer your Questions",
   "consent.data.blocks":
-    "Your draft: the Blocks above the Question, with your Notes and earlier Answers",
+    "The Mind you're in: its text, your Notes and earlier Answers, except Notes you've excluded",
   "consent.data.passages": "Passages from your Documents that match the Question",
   "consent.data.tool-results":
     "Results of the Tools an Answer uses, such as Connectors and Skill scripts",
@@ -2766,9 +2766,9 @@ export const en = {
     "Resize the assistant: ↑ and ↓ move it; a double-click restores its size",
   "assistant.resize.float":
     "Resize the assistant: the arrow keys change its size; a double-click restores it",
-  "assistant.askedFrom.all": "Asked from “{mind}” · searches All Documents",
-  "assistant.askedFrom.one": "Asked from “{mind}” · searches “{scope}”",
-  "assistant.askedFrom.more": "Asked from “{mind}” · searches “{scope}” and {count} more",
+  "assistant.reads.all": "Reads “{mind}” · searches All Documents",
+  "assistant.reads.one": "Reads “{mind}” · searches “{scope}”",
+  "assistant.reads.more": "Reads “{mind}” · searches “{scope}” and {count} more",
   "assistant.searchesAll": "Searches All Documents",
   "assistant.empty":
     "Ask about the Mind you’re in or your Documents. Answers stay here, every Citation checked, until you add one to a note.",
@@ -2782,6 +2782,9 @@ export const en = {
   "steps.sources": "{count} sources",
   "steps.sources.one": "1 source",
   "steps.sources.none": "no sources",
+  "steps.read": "Read {mind}",
+  "steps.read.part": "Read part of {mind}",
+  "steps.read.deleted": "Read a deleted Mind",
   "steps.asked": "Asked from {mind}",
   "steps.asked.deleted": "Asked from a deleted Mind",
   "steps.answered": "Answered by {model}",
@@ -2801,6 +2804,7 @@ export const en = {
   "steps.check.notFound": "{count} not found",
   "steps.failed.search": "Couldn’t search {scope}",
   "steps.failed.search.auth": "Couldn’t search {scope}: the key for a search model was refused",
+  "steps.live.reading": "Reading {mind}…",
   "steps.live.searching": "Searching {scope}…",
   "steps.live.checking": "Checking {count} Citations…",
   "steps.live.checking.one": "Checking 1 Citation…",
