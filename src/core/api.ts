@@ -1420,6 +1420,12 @@ export interface Document {
    */
   creationDate: string | null;
   /**
+   * When the file was last modified, as the file system says, as last seen
+   * when it was indexed or its folder rescanned. ISO 8601, UTC. Null for a
+   * Document with no file of its own, and until a scan has seen it.
+   */
+  modifiedAt: string | null;
+  /**
    * The Document's own title (#213), for when its file name is machine-made
    * (a UUID, "Untitled"): the title in its properties, else its first
    * heading, else its first line. Null if it has none, or until it is read.
