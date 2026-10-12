@@ -50,7 +50,13 @@ import {
   serviceFor,
 } from "./kinds";
 import { type ListedModel, listProviderModels } from "./modelLists";
-import type { ChatLanguageModel, ChatModelFactory, ChatModelSpec, ContextWindow } from "./models";
+import {
+  type ChatLanguageModel,
+  type ChatModelFactory,
+  type ChatModelSpec,
+  type ContextWindow,
+  summarizesReasoning,
+} from "./models";
 import { isCloudModelName, OLLAMA_CLOUD } from "./ollamaCloud";
 import {
   DEFAULT_OLLAMA_SETTINGS,
@@ -106,6 +112,8 @@ export interface PreparedChatModel {
   window?: ContextWindow;
   /** How the model gives Citations, known before the first request (see ./capabilities). */
   support?: CitationSupport;
+  /** Its reasoning comes back as its provider's summary, which an Answer may show (see ./models). */
+  summarizesReasoning: boolean;
   /**
    * A local model's quotes the Citation check doesn't find are asked for once
    * more (see ../answers/quoteRetry); never a cloud model's.
@@ -352,7 +360,7 @@ export function createChat(options: {
     apiKey: string | null,
     modelId: string,
     profile: OllamaModelProfile | null = null,
-    thinking?: "off",
+    thinking?: ChatModelSpec["thinking"],
   ): ChatModelSpec => {
     const { kind } = server;
     if (kind === "chatgpt") {
@@ -362,6 +370,7 @@ export function createChat(options: {
         apiKey: null,
         modelId,
         credentials: chatGpt.credentials,
+        ...(thinking && { thinking }),
       };
     }
     const baseUrl = endpointUrl(kind, server.endpoint) ?? server.baseUrl;
@@ -768,7 +777,8 @@ export function createChat(options: {
      * For Answers (#29): the default model, or `choice` from a Question's model
      * picker, after checking readiness and getting consent for its service on
      * `flow` (automatic tagging passes "tagging"). `thinking: "off"` skips
-     * thinking where the model can, for a short request on the chat flow.
+     * thinking where the model can, for a short request on the chat flow; the
+     * chat flow's other requests ask for a summary of the model's reasoning.
      * Throws `ChatNotReadyError` or `ConsentDeclinedError`; nothing is sent then.
      */
     async prepareModel(
@@ -790,7 +800,7 @@ export function createChat(options: {
           apiKey,
           modelId,
           profile,
-          thinking ?? (flow === "chat" ? undefined : "off"),
+          thinking ?? (flow === "chat" ? "summary" : "off"),
         ),
       );
       const row: ProviderRow = {
@@ -811,6 +821,7 @@ export function createChat(options: {
         provider,
         modelId,
         capabilities,
+        summarizesReasoning: summarizesReasoning(provider.kind),
         ...(support && { support }),
       };
       if (provider.kind !== "ollama") {

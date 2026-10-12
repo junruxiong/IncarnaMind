@@ -355,7 +355,7 @@ test("each item shows its shortcut as the system writes it, and the labels are i
 
   await rightClick(window, mind.getByTestId("mind-list-item"));
   await expect(menu.getByTestId("mind.moveTo")).toHaveText(/^Move to…(⇧⌘M|Ctrl\+Shift\+M)$/);
-  await expect(menu.getByTestId("mind.rename")).toHaveText(/^Rename(↩|F2)$/);
+  await expect(menu.getByTestId("mind.rename")).toHaveText(/^RenameF2$/);
   await screenshot(window, "menu-mind-narrow");
   await window.keyboard.press("Escape");
 
@@ -372,7 +372,7 @@ test("each item shows its shortcut as the system writes it, and the labels are i
     "引用格式…",
     "做成技能",
     /^移动到…(⇧⌘M|Ctrl\+Shift\+M)$/,
-    /^重命名(↩|F2)$/,
+    /^重命名F2$/,
     "删除…",
   ]);
   await screenshot(window, "menu-mind-zh-narrow");
