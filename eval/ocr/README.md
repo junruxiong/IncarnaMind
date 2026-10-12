@@ -29,7 +29,7 @@ Every engine reads English, Simplified and Traditional Chinese at once, as the a
 
 ## Results, 2026-10-12
 
-Apple M2 Max, macOS 26, under heavy load from other work (load average 25–80 on 12 cores): times are slower than on an idle machine, and only comparable with each other. Windows.Media.Ocr ran on GitHub's `windows-latest` runner, with the Chinese OCR packs installed.
+Apple M2 Max, macOS 26, under heavy load from other work (load average 25–80 on 12 cores): times are slower than on an idle machine, and only comparable with each other. Windows.Media.Ocr ran on GitHub's `windows-latest` runner (Windows Server 2025), with the Simplified and Traditional Chinese OCR packs installed, reading each page with each language's engine; its readings were scored here.
 
 | Engine | All | English | Chinese | Noisy | Table | Held out | Quotes found | Time a page | What it adds |
 |---|---|---|---|---|---|---|---|---|---|
@@ -37,9 +37,12 @@ Apple M2 Max, macOS 26, under heavy load from other work (load average 25–80 o
 | PP-OCRv5 server | 1.2% | 2.3% | 0.5% | 2.1% | 0.3% | 2.0% | 71/91 | 14.4 s | 173 MB download |
 | PP-OCRv4 mobile | 7.7% | 13.7% | 4.1% | 9.3% | 4.1% | 9.4% | 41/91 | 1.28 s | 15.6 MB download |
 | macOS Vision (accurate) | 1.1% | 1.0% | 0.1% | 0.5% | 5.3% | 0.3% | 76/91 | 0.81 s | a Swift helper; macOS only |
-| Windows.Media.Ocr | WINDOWS_ALL | WINDOWS_EN | WINDOWS_ZH | WINDOWS_NOISY | WINDOWS_TABLE | WINDOWS_HELD | WINDOWS_QUOTES | WINDOWS_TIME | a helper; Windows only, each language's OCR pack |
+| Windows.Media.Ocr, each page's own language | 8.6% | 0.2% | 1.4% | 0.7% | 62.9% | 1.1% | 64/91 | 0.21 s\* | a helper; Windows only, and each language's OCR pack |
+| Windows.Media.Ocr, as set up in English | 57.9% | 0.2% | 99.9% | 50.0% | 62.9% | 50.0% | 38/91 | 0.21 s\* | the same |
 | Tesseract 5, tessdata_best | 8.9% | 0.2% | 17.1% | 6.3% | 1.9% | 4.2% | 66/91 | 1.74 s | 41.5 MB of models, and tesseract.js |
 | Tesseract 5, tessdata_fast | 10.7% | 0.6% | 20.6% | 9.7% | 1.6% | 8.4% | 64/91 | 1.15 s | 8.9 MB of models, and tesseract.js |
+
+\* On GitHub's Windows runner, a different and idle machine: not comparable with the other times. Windows.Media.Ocr gives its lines as it finds them, with no reading order of ours: it reads the tables' columns one after the other (62.9% on `table`); the app could put its words in order as it does Vision's. Without the table it had 0.9% of characters wrong and 63 of 78 quotes, given each page's language. Set up in English, as most Windows computers outside China are, it reads no Chinese at all; with the Chinese pack only, English drops to 4.3% wrong and 39 of 91 quotes.
 
 The three PaddleOCR models are read the same way, each line at 15 pixels (see below); read at full size, PP-OCRv5 server had 2.0% of the six first pages' characters wrong, and 55 of 73 quotes.
 
@@ -58,7 +61,7 @@ Per page (CER, quotes found, time):
 
 ## Why PP-OCRv5 mobile
 
-- **The same everywhere.** It runs on onnxruntime-node, which the app already ships for its embedding and reranking models, with the same results on macOS, Windows and Linux. The system engines can't be that: Linux has none; Vision is macOS only; Windows.Media.Ocr reads one language at a time and only with that language's OCR pack, which a Windows set up in English doesn't have for Chinese, so the same scan would read differently on each system.
+- **The same everywhere.** It runs on onnxruntime-node, which the app already ships for its embedding and reranking models, with the same results on macOS, Windows and Linux. The system engines can't be that: Linux has none; Vision is macOS only; Windows.Media.Ocr reads one language at a time and only with that language's OCR pack, which a Windows set up in English doesn't have for Chinese (it read none of the Chinese pages), so the same scan would read differently on each system.
 - **The most accurate here,** with the most quotes found, in English and Chinese, on clean and noisy pages and on tables, and on the two pages drawn after it was tuned. Vision is about as good and a little faster, on macOS only. Tesseract reads English as well, but Chinese poorly (14–21% of characters wrong; whole lines of Chinese read as Latin letters), and the app would ship it as tesseract.js, slower than the command measured here.
 - **Small and fast enough:** two pinned files, 21.5 MB together (PP-OCRv5 server is 173 MB and 15 times slower), downloaded the first time a scanned page needs reading; about a second a page on a busy laptop, in a utility process that uses at most half the cores.
 - **One model for Simplified and Traditional Chinese, English and Japanese,** at no extra cost (PP-OCRv4's model has no Traditional characters).
