@@ -13,7 +13,7 @@
  * Answer, and only when a figure is in error and its marker is in the text.
  */
 import { jsonSchema, Output, streamText } from "ai";
-import { givenList } from "./calculations";
+import { givenList, whole } from "./calculations";
 import type { AnswerEngineEvent, AnswerRequest } from "./engine";
 import { FIGURE_RETRY_INSTRUCTIONS, type FigureToRetry, figureRetryPrompt } from "./prompt";
 import { nearestExcerpt, replyJson } from "./quoteRetry";
@@ -103,9 +103,10 @@ export async function* retryFigures(
   if (signal.aborted) return;
   const markers = new Set(asked.map((figure) => figure.marker));
   const reply = (await replyJson(raw)) as { calculations?: unknown } | undefined;
-  const fixed = givenList(reply?.calculations).filter((figure) =>
-    markers.has(Number((figure as { marker?: unknown } | null)?.marker)),
-  );
+  const fixed = givenList(reply?.calculations).filter((figure) => {
+    const marker = whole((figure as { marker?: unknown } | null)?.marker);
+    return marker !== null && markers.has(marker);
+  });
   if (fixed.length > 0) {
     try {
       documents.calculate(fixed, { structured: true });

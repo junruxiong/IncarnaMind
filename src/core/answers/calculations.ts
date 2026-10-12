@@ -126,7 +126,7 @@ const text = (value: unknown): string | null =>
   typeof value === "string" ? value : typeof value === "number" ? String(value) : null;
 
 /** A whole number, as given or written as text ("2", "[^2]", "[=2]", "#2"). */
-function whole(value: unknown): number | null {
+export function whole(value: unknown): number | null {
   if (typeof value === "number") return Number.isInteger(value) ? value : null;
   if (typeof value !== "string") return null;
   const match = /^\s*\[?[\^=#]?\s*(\d{1,4})\s*\]?\s*$/.exec(value);
