@@ -82,6 +82,19 @@ describe("setting an agent up", () => {
       ["cursor", true],
     ]);
     expect(clients.at(-1)).toMatchObject({ id: "other", installed: false, setup: "manual" });
+    // Only the first-class agents, and "Other agent" for the rest (ADR-0019).
+    expect(clients.map((each) => each.id).sort()).toEqual(
+      [
+        "antigravity",
+        "claude-code",
+        "claude-desktop",
+        "codex",
+        "cursor",
+        "other",
+        "workbuddy",
+      ].sort(),
+    );
+    expect(clients.find((each) => each.id === "codex")?.name).toBe("ChatGPT app and Codex");
   });
 
   it("writes Codex's settings as shown, works from them, and takes them back with Undo", async () => {
@@ -98,7 +111,11 @@ describe("setting an agent up", () => {
 
     const { pairing, result } = await core.setUpAgent({ client: "codex", folderIds: [coast.id] });
     expect(result).toEqual({ kind: "wrote", path });
-    expect(pairing).toMatchObject({ name: "Codex", client: "codex", folderIds: [coast.id] });
+    expect(pairing).toMatchObject({
+      name: "ChatGPT app and Codex",
+      client: "codex",
+      folderIds: [coast.id],
+    });
     const written = await readFile(path, "utf8");
     expect(written.startsWith(theirs.trimEnd())).toBe(true);
     const token = (await core.getAgentLaunch(pairing.id)).env[TOKEN_ENV] ?? "";
@@ -110,39 +127,45 @@ describe("setting an agent up", () => {
     expect((await core.getAgents()).pairings).toEqual([]);
   });
 
-  it("adds itself to an mcpServers file, keeps the User's servers, and leaves when disconnected", async () => {
-    const { core, home, coast } = await started();
-    const path = join(home, ".gemini", "settings.json");
-    await mkdir(join(home, ".gemini"));
-    await writeFile(
-      path,
-      JSON.stringify({ theme: "dark", mcpServers: { notes: { command: "n" } } }),
-    );
+  it.each([
+    ["antigravity", [".gemini", "config", "mcp_config.json"], "Antigravity"],
+    ["workbuddy", [".workbuddy", "mcp.json"], "WorkBuddy"],
+  ] as const)(
+    "adds itself to %s's own mcpServers file, keeps the User's servers, and leaves when disconnected",
+    async (client, segments, name) => {
+      const { core, home, coast } = await started();
+      const path = join(home, ...segments);
+      await mkdir(join(path, ".."), { recursive: true });
+      await writeFile(
+        path,
+        JSON.stringify({ theme: "dark", mcpServers: { notes: { command: "n" } } }),
+      );
 
-    const { pairing, result } = await core.setUpAgent({
-      client: "gemini-cli",
-      folderIds: [coast.id],
-    });
-    expect(result.kind).toBe("wrote");
-    const settings = JSON.parse(await readFile(path, "utf8"));
-    expect(settings.theme).toBe("dark");
-    expect(Object.keys(settings.mcpServers)).toEqual(["notes", "incarnamind"]);
-    await searchesThrough(core, launchIn(settings.mcpServers.incarnamind));
+      const preview = await core.previewAgentSetup(client);
+      expect(preview?.path).toBe(path);
+      const { pairing, result } = await core.setUpAgent({ client, folderIds: [coast.id] });
+      expect(result).toEqual({ kind: "wrote", path });
+      expect(pairing.name).toBe(name);
+      const settings = JSON.parse(await readFile(path, "utf8"));
+      expect(settings.theme).toBe("dark");
+      expect(Object.keys(settings.mcpServers)).toEqual(["notes", "incarnamind"]);
+      await searchesThrough(core, launchIn(settings.mcpServers.incarnamind));
 
-    await core.disconnectAgent(pairing.id);
-    expect(JSON.parse(await readFile(path, "utf8"))).toEqual({
-      theme: "dark",
-      mcpServers: { notes: { command: "n" } },
-    });
-  });
+      await core.disconnectAgent(pairing.id);
+      expect(JSON.parse(await readFile(path, "utf8"))).toEqual({
+        theme: "dark",
+        mcpServers: { notes: { command: "n" } },
+      });
+    },
+  );
 
   it("leaves a settings file it can't read alone, and gives the settings to paste instead", async () => {
     const { core, home, coast } = await started();
-    const path = join(home, ".qwen", "settings.json");
-    await mkdir(join(home, ".qwen"));
+    const path = join(home, ".workbuddy", "mcp.json");
+    await mkdir(join(home, ".workbuddy"));
     await writeFile(path, "{ // comments aren't JSON\n}");
     const { pairing, result } = await core.setUpAgent({
-      client: "qwen-code",
+      client: "workbuddy",
       folderIds: [coast.id],
     });
     expect(result).toMatchObject({ kind: "copy", how: "settings", path });
@@ -153,12 +176,72 @@ describe("setting an agent up", () => {
     expect(result.shown).not.toContain(token);
   });
 
-  it("opens Cursor and VS Code on their own install links", async () => {
+  it.each([
+    ["gemini-cli", [".gemini", "settings.json"]],
+    ["qwen-code", [".qwen", "settings.json"]],
+    ["codebuddy", [".codebuddy", ".mcp.json"]],
+  ] as const)(
+    "keeps a pairing made for %s, now an agent that is no longer listed, and Disconnect takes out its unchanged entry",
+    async (client, segments) => {
+      const { core, home, coast } = await started();
+      const path = join(home, ...segments);
+      await mkdir(join(path, ".."), { recursive: true });
+      const { launch, pairing } = await core.connectAgent({
+        name: "Old pairing",
+        client,
+        folderIds: [coast.id],
+      });
+      await writeFile(
+        path,
+        JSON.stringify({
+          theme: "dark",
+          mcpServers: { notes: { command: "n" }, incarnamind: launchIn(launch) },
+        }),
+      );
+      await searchesThrough(core, launch);
+      expect((await core.listAgentClients()).some((each) => (each.id as string) === client)).toBe(
+        false,
+      );
+
+      await core.disconnectAgent(pairing.id);
+      expect(JSON.parse(await readFile(path, "utf8"))).toEqual({
+        theme: "dark",
+        mcpServers: { notes: { command: "n" } },
+      });
+      expect((await core.getAgents()).pairings).toEqual([]);
+    },
+  );
+
+  it("leaves a retired agent's entry alone once the User has changed it, and still disconnects", async () => {
+    const { core, home } = await started();
+    const path = join(home, ".gemini", "settings.json");
+    await mkdir(join(home, ".gemini"));
+    const { pairing } = await core.connectAgent({ name: "Old pairing", client: "gemini-cli" });
+    const theirs = JSON.stringify({ mcpServers: { incarnamind: { command: "mine" } } });
+    await writeFile(path, theirs);
+    await core.disconnectAgent(pairing.id);
+    expect(await readFile(path, "utf8")).toBe(theirs);
+    expect((await core.getAgents()).pairings).toEqual([]);
+  });
+
+  it('gives "Other agent" settings an MCP client can start, under the name the User types', async () => {
+    const { core, coast } = await started();
+    const { pairing, result } = await core.setUpAgent({
+      client: "other",
+      folderIds: [coast.id],
+      name: "Research bot",
+    });
+    expect(pairing.name).toBe("Research bot");
+    if (result.kind !== "copy") throw new Error("Expected settings to copy.");
+    expect(result).toMatchObject({ how: "settings" });
+    const settings = JSON.parse(result.text);
+    await searchesThrough(core, launchIn(settings.mcpServers.incarnamind));
+  });
+
+  it("opens Cursor on its own install link", async () => {
     const { core, links, coast } = await started();
     const cursor = await core.setUpAgent({ client: "cursor", folderIds: [coast.id] });
-    const vscode = await core.setUpAgent({ client: "vscode", folderIds: [coast.id] });
     expect(cursor.result).toEqual({ kind: "opened", how: "link" });
-    expect(vscode.result).toEqual({ kind: "opened", how: "link" });
 
     const cursorUrl = new URL(links[0] ?? "");
     expect(cursorUrl.protocol).toBe("cursor:");
@@ -166,9 +249,6 @@ describe("setting an agent up", () => {
       Buffer.from(cursorUrl.searchParams.get("config") ?? "", "base64").toString(),
     );
     await searchesThrough(core, launchIn(config));
-    expect(links[1]?.startsWith("vscode:mcp/install?")).toBe(true);
-    const vscodeConfig = JSON.parse(decodeURIComponent(links[1]?.split("?")[1] ?? ""));
-    expect(vscodeConfig).toMatchObject({ name: "incarnamind", type: "stdio" });
   });
 
   it("opens Claude on an install bundle carrying the shim, in English and Chinese", async () => {
@@ -226,7 +306,7 @@ describe("setting an agent up", () => {
     const { core, coast } = await started();
     await core.setUpAgent({ client: "other", folderIds: [coast.id] });
     const second = await core.setUpAgent({ client: "other", folderIds: [coast.id] });
-    expect(second.pairing.name).toBe("Another agent 2");
+    expect(second.pairing.name).toBe("Other agent 2");
     await expect(core.setUpAgent({ client: "codex", folderIds: [] })).rejects.toThrow(/Folder/);
   });
 
