@@ -65,3 +65,7 @@ An old version's text was kept only while a Citation quoted it. Check results (t
 - The start-up clean-up keeps a version that a Citation quotes or something retains. It reads every retained version with one query, beside its walk over Minds, which isn't extended.
 - Unlinking a Linked folder keeps the Units retained, as it keeps those Citations point to.
 - Once its last owner releases a version, and no Citation quotes it, its text goes at the next start. A release stays as a deleted row for 30 days, for a later sync to pass on, and is then forgotten.
+
+## Amendment: a Document is known by where it belongs, not by its path (2026-10-11, #171)
+
+"A Document is a file at a path" becomes "a file at a place": its Linked folder and its path inside it, the data folder, or a file of its own (ADR-0020). Its absolute path is where that place is on this computer, and differs on another. A Linked folder that moved, or that is somewhere else on another computer, is pointed at where it is now with Locate folder… in its menu: its Documents keep their ids, versions, Tags and Citations, and a file whose content didn't change isn't processed again (migration 58). The same content in two places is still two Documents, and a file that moves within what IncarnaMind watches is still found by its content.
