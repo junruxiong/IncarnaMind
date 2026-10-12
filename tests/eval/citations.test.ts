@@ -40,8 +40,13 @@ const PARAPHRASE: EvalQuestion = {
 const first = (passages: ShownPassage[]) => passages[0]?.id ?? "none";
 
 /** The evaluation's library over a core the test set up. */
-const libraryOf = (core: Library["core"], dataDir: string): Library => ({
+const libraryOf = (
+  core: Library["core"],
+  dataDir: string,
+  timings: Library["timings"] = null,
+): Library => ({
   core,
+  timings,
   dataDir,
   documents: new Map(),
   processingSeconds: 0,
