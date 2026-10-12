@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+  assistantAnswers,
   closeSettings,
   createDataFolder,
   dismissChatSetup,
@@ -92,9 +93,9 @@ test("a fresh data folder has the three built-in Skills: labelled in Settings, a
   // Asked, the Question carries it and the Answer follows it, as with any forced Skill.
   await window.keyboard.type("What do my Documents say about tides?");
   await window.keyboard.press("Enter");
-  const chip = editor.getByTestId("question").getByTestId("question-skill");
+  const chip = window.getByTestId("assistant-question").getByTestId("assistant-question-skill");
   await expect(chip).toHaveText("literature-review");
-  const answer = editor.getByTestId("answer");
+  const answer = assistantAnswers(window).first();
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   const card = answer.getByTestId("answer-skill");
   await expect(card).toHaveAttribute("data-skill-name", "literature-review");

@@ -8,7 +8,8 @@
  *   (see `citingMode`): "tools" with the `tools` capability, unless the model
  *   is small; else structured output. Ollama holds any completion model to a
  *   JSON schema with `format`.
- * - Its context window, `num_ctx` (see `chooseNumCtx`), and the output cap.
+ * - Its context window, `num_ctx` (see `chooseNumCtx`; a cloud model's is its
+ *   own length, whatever this computer's memory), and the output cap.
  * - `think`: off, so a model answers at once, unless it can only think.
  *
  * Looked up with plain `fetch`: `/api/tags` for the model's digest and size,
@@ -19,7 +20,7 @@
 import { freemem, totalmem } from "node:os";
 import type { CitationSupport } from "../api";
 import { isRecord } from "../errors";
-import { isRemoteEntry } from "./ollamaCloud";
+import { isCloudModelName, isRemoteEntry } from "./ollamaCloud";
 
 /** The settings every chat request to one model carries. */
 export interface OllamaModelSettings {
@@ -284,13 +285,17 @@ export function profileOf(
   const capabilities = listed?.filter((each): each is string => typeof each === "string") ?? null;
   const modelInfo = isRecord(show.model_info) ? show.model_info : {};
   const contextLength = contextLengthOf(modelInfo, tag);
-  const numCtx = chooseNumCtx({
-    weightsBytes: numberOf(tag.size) ?? 0,
-    kvBytesPerToken: kvBytesPerToken(modelInfo),
-    contextLength,
-    memoryBytes: memory.totalBytes,
-    ...(memory.freeBytes !== undefined && { freeBytes: memory.freeBytes }),
-  });
+  const remote = isRemoteEntry(tag) || isRemoteEntry(show);
+  const numCtx =
+    remote || isCloudModelName(String(tag.name ?? ""))
+      ? (contextLength ?? CONTEXT_SIZES[0])
+      : chooseNumCtx({
+          weightsBytes: numberOf(tag.size) ?? 0,
+          kvBytesPerToken: kvBytesPerToken(modelInfo),
+          contextLength,
+          memoryBytes: memory.totalBytes,
+          ...(memory.freeBytes !== undefined && { freeBytes: memory.freeBytes }),
+        });
   const think = thinkFor(show);
   const parameters = parameterCount(
     modelInfo,
@@ -303,7 +308,7 @@ export function profileOf(
     parameters,
     support: citingMode(capabilities, parameters),
     chat: capabilities ? capabilities.includes("completion") : true,
-    remote: isRemoteEntry(tag) || isRemoteEntry(show),
+    remote,
     settings: {
       numCtx,
       outputTokens: outputTokensFor(numCtx, think),
