@@ -22,7 +22,7 @@
  *   its Tools instead. And it gives Ollama's errors (`{"error": "…"}`) the
  *   shape the provider reads, so they keep their message.
  */
-import { wrapLanguageModel } from "ai";
+import { APICallError, wrapLanguageModel } from "ai";
 import { createOllama } from "ollama-ai-provider-v2";
 import { isRecord } from "../errors";
 import type { ChatLanguageModel } from "./models";
@@ -96,47 +96,64 @@ async function withErrorShape(response: Response): Promise<Response> {
 }
 
 /**
- * What a streamed reply's line is, if the provider can't read it as a chunk:
- * Ollama's `{"error": …}` line, or text that isn't JSON. Never the line itself,
- * which holds the User's Documents.
+ * The status an error Ollama sent mid-stream stands for, so it is sorted as a
+ * failed request is (see ./providerErrors): a limit, a refused sign-in, an
+ * unknown model, or the provider's own error.
  */
-export function unreadableLineKind(line: string): "error-line" | "not-json" | null {
-  const parsed = parseJson(line);
-  if (!isRecord(parsed)) return "not-json";
-  return "error" in parsed ? "error-line" : null;
+function statusOfStreamError(message: string): number {
+  if (/usage limit|rate limit|too many requests/i.test(message)) return 429;
+  if (/unauthorized|not signed in|sign in|api key|forbidden/i.test(message)) return 401;
+  if (/not found|does not exist/i.test(message)) return 404;
+  return 500;
 }
 
 /**
- * Passes a streamed reply on line by line, but not the lines the provider
- * can't read: it only warns of them, with the line's text in its warning, and
- * the reply can then end with nothing in it. They are logged here instead.
+ * Passes a streamed reply on line by line. An `{"error": …}` line, which the
+ * provider would drop, ends the reply with that error: Ollama's own words
+ * (never the User's Documents) say why it failed. Text that isn't JSON is
+ * dropped and logged by kind only, as it might hold Documents: the provider's
+ * warning would quote it, and the reply could end with nothing in it.
  */
-function droppingUnreadableLines(response: Response, modelId: string): Response {
+function readingStreamErrors(response: Response, modelId: string): Response {
   if (!response.body) return response;
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
   let pending = "";
-  const readable = (line: string) => {
-    if (!line.trim()) return false;
-    const kind = unreadableLineKind(line);
-    if (kind) {
+  const forward = (line: string, controller: TransformStreamDefaultController<Uint8Array>) => {
+    if (!line.trim()) return;
+    const parsed = parseJson(line);
+    if (!isRecord(parsed)) {
       console.warn(
-        `A line of the reply couldn't be read: provider=ollama model=${modelId} kind=${kind}`,
+        `A line of the reply couldn't be read: provider=ollama model=${modelId} kind=not-json`,
       );
+      return;
     }
-    return kind === null;
+    if (!("error" in parsed)) {
+      controller.enqueue(encoder.encode(`${line}\n`));
+      return;
+    }
+    const message = ollamaErrorMessage(parsed) ?? "Ollama reported an error.";
+    console.warn(
+      `The reply ended with an error: provider=ollama model=${modelId} error=${message}`,
+    );
+    controller.error(
+      new APICallError({
+        message,
+        url: response.url,
+        requestBodyValues: {},
+        statusCode: statusOfStreamError(message),
+      }),
+    );
   };
   const body = response.body.pipeThrough(
     new TransformStream<Uint8Array, Uint8Array>({
       transform(chunk, controller) {
         const lines = (pending + decoder.decode(chunk, { stream: true })).split("\n");
         pending = lines.pop() ?? "";
-        for (const line of lines) {
-          if (readable(line)) controller.enqueue(encoder.encode(`${line}\n`));
-        }
+        for (const line of lines) forward(line, controller);
       },
       flush(controller) {
-        if (readable(pending)) controller.enqueue(encoder.encode(`${pending}\n`));
+        forward(pending, controller);
       },
     }),
   );
@@ -165,7 +182,7 @@ export function createOllamaFetch(
     }
     const response = await fetcher(url, next);
     if (!response.ok) return withErrorShape(response);
-    return next !== init ? droppingUnreadableLines(response, modelId) : response;
+    return next !== init ? readingStreamErrors(response, modelId) : response;
   };
   return ollamaFetch as typeof globalThis.fetch;
 }
