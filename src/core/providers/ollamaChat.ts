@@ -22,7 +22,7 @@
  *   its Tools instead. And it gives Ollama's errors (`{"error": "…"}`) the
  *   shape the provider reads, so they keep their message.
  */
-import { wrapLanguageModel } from "ai";
+import { APICallError, wrapLanguageModel } from "ai";
 import { createOllama } from "ollama-ai-provider-v2";
 import { isRecord } from "../errors";
 import type { ChatLanguageModel } from "./models";
@@ -95,10 +95,80 @@ async function withErrorShape(response: Response): Promise<Response> {
   });
 }
 
+/**
+ * The status an error Ollama sent mid-stream stands for, so it is sorted as a
+ * failed request is (see ./providerErrors): a limit, a refused sign-in, an
+ * unknown model, or the provider's own error.
+ */
+function statusOfStreamError(message: string): number {
+  if (/usage limit|rate limit|too many requests/i.test(message)) return 429;
+  if (/unauthorized|not signed in|sign in|api key|forbidden/i.test(message)) return 401;
+  if (/not found|does not exist/i.test(message)) return 404;
+  return 500;
+}
+
+/**
+ * Passes a streamed reply on line by line. An `{"error": …}` line, which the
+ * provider would drop, ends the reply with that error: Ollama's own words
+ * (never the User's Documents) say why it failed. Text that isn't JSON is
+ * dropped and logged by kind only, as it might hold Documents: the provider's
+ * warning would quote it, and the reply could end with nothing in it.
+ */
+function readingStreamErrors(response: Response, modelId: string): Response {
+  if (!response.body) return response;
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  let pending = "";
+  const forward = (line: string, controller: TransformStreamDefaultController<Uint8Array>) => {
+    if (!line.trim()) return;
+    const parsed = parseJson(line);
+    if (!isRecord(parsed)) {
+      console.warn(
+        `A line of the reply couldn't be read: provider=ollama model=${modelId} kind=not-json`,
+      );
+      return;
+    }
+    if (!("error" in parsed)) {
+      controller.enqueue(encoder.encode(`${line}\n`));
+      return;
+    }
+    const message = ollamaErrorMessage(parsed) ?? "Ollama reported an error.";
+    console.warn(
+      `The reply ended with an error: provider=ollama model=${modelId} error=${message}`,
+    );
+    controller.error(
+      new APICallError({
+        message,
+        url: response.url,
+        requestBodyValues: {},
+        statusCode: statusOfStreamError(message),
+      }),
+    );
+  };
+  const body = response.body.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        const lines = (pending + decoder.decode(chunk, { stream: true })).split("\n");
+        pending = lines.pop() ?? "";
+        for (const line of lines) forward(line, controller);
+      },
+      flush(controller) {
+        forward(pending, controller);
+      },
+    }),
+  );
+  return new Response(body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+}
+
 /** The `fetch` the provider uses: shapes chat requests, and failed responses. */
 export function createOllamaFetch(
   settings: OllamaModelSettings,
   fetcher: typeof globalThis.fetch = globalThis.fetch,
+  modelId = "",
 ): typeof globalThis.fetch {
   const ollamaFetch = async (input: Parameters<typeof globalThis.fetch>[0], init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
@@ -111,7 +181,8 @@ export function createOllamaFetch(
       next = { ...init, headers, body: JSON.stringify(shapeChatRequest(body, settings)) };
     }
     const response = await fetcher(url, next);
-    return response.ok ? response : withErrorShape(response);
+    if (!response.ok) return withErrorShape(response);
+    return next !== init ? readingStreamErrors(response, modelId) : response;
   };
   return ollamaFetch as typeof globalThis.fetch;
 }
@@ -127,7 +198,7 @@ export function createOllamaChatModel(options: {
   const { settings } = options;
   const provider = createOllama({
     baseURL: `${options.baseUrl}/api`,
-    fetch: createOllamaFetch(settings, options.fetch),
+    fetch: createOllamaFetch(settings, options.fetch, options.modelId),
   });
   return wrapLanguageModel({
     model: provider(options.modelId),
@@ -135,6 +206,12 @@ export function createOllamaChatModel(options: {
       specificationVersion: "v4",
       transformParams: async ({ params }) => ({
         ...params,
+        // The provider warns of, and drops, the reasoning an earlier step sent back.
+        prompt: params.prompt.map((message) =>
+          message.role === "assistant"
+            ? { ...message, content: message.content.filter((part) => part.type !== "reasoning") }
+            : message,
+        ),
         providerOptions: {
           ...params.providerOptions,
           ollama: {

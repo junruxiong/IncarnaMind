@@ -22,7 +22,7 @@ import { mkdir, readdir, readFile, rm, rmdir, unlink, writeFile } from "node:fs/
 import { dirname, join } from "node:path";
 import { deflateRawSync } from "node:zlib";
 import { clientTitle } from "../../shared/agentNames";
-import { AGENT_TOKEN_ENV } from "../../shared/agentSocket";
+import { AGENT_TOKEN_ENV, HIDDEN_KEY } from "../../shared/agentSocket";
 import { translate } from "../../shared/i18n";
 import type { MessageKey, MessageParams } from "../../shared/i18n/types";
 import type {
@@ -42,7 +42,6 @@ import {
   clientDefinition,
   codexTable,
   cursorLink,
-  HIDDEN_KEY,
   hideToken,
   isEmptySettings,
   isInstalled,

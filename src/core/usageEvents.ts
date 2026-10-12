@@ -119,6 +119,7 @@ const ANSWER_ERRORS = [
   "blocked",
   "too-long",
   "cost-cap",
+  "no-answer",
   "unknown",
 ] as const;
 const DOCUMENT_ERRORS = [
