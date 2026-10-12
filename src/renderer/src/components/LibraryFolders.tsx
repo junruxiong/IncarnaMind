@@ -1,4 +1,4 @@
-import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useEffect, useMemo } from "react";
 import { create } from "zustand";
 import type { Document, LibraryGroup, Mind } from "../../../core/api";
 import { useFolderDrop } from "../folderDrag";
@@ -6,17 +6,12 @@ import { useT } from "../i18n";
 import { currentMindIdOf, currentTabOf } from "../layoutSlice";
 import { useAppStore } from "../store";
 import { TREE_ROW } from "../treeKeys";
+import { useRename } from "../useRename";
+import { InlineName } from "./InlineName";
 import { ChevronDownLineIcon, ChevronRightLineIcon, FolderLineIcon } from "./lineIcons";
 import { MindRow } from "./MindRow";
 import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
-import {
-  rowActionsClass,
-  rowButtonClass,
-  rowClass,
-  rowIconClass,
-  rowInputClass,
-  rowPadding,
-} from "./sidebarRows";
+import { rowActionsClass, rowButtonClass, rowClass, rowIconClass, rowPadding } from "./sidebarRows";
 import {
   buttonClass,
   dangerButtonClass,
@@ -270,18 +265,17 @@ function FolderGroup({
       currentTabOf(state.layout)?.item.kind === "library" && state.libraryFilter === folder.id,
   );
   const drop = useFolderDrop(folder.id);
-  const [renaming, setRenaming] = useState(false);
-  const button = useRef<HTMLButtonElement>(null);
+  // The first click of a double-click folds or unfolds it: back as it was before renaming.
+  const rename = useRename<HTMLButtonElement>(`folder:${folder.id}`, () =>
+    useFolds.getState().toggle(folder.id),
+  );
   const count = documents.length;
   const t = useT();
   const objectMenu = useObjectMenu({ kind: "folder", id: folder.id });
 
   const onKeyDown = (event: KeyboardEvent) => {
-    // F2 renames; Enter, a click, Space or the arrows open and close it.
-    if (event.key === "F2") {
-      event.preventDefault();
-      setRenaming(true);
-    } else if (event.key === "ArrowRight" && !expanded) {
+    // Enter, a click, Space or the arrows open and close it.
+    if (event.key === "ArrowRight" && !expanded) {
       event.preventDefault();
       useFolds.getState().toggle(folder.id);
     } else if (event.key === "ArrowLeft" && expanded) {
@@ -303,21 +297,20 @@ function FolderGroup({
       className={`rounded-md ${drop.active ? dropLit : ""}`}
     >
       {/* biome-ignore lint/a11y/noStaticElementInteractions: a right-click shortcut to the row's menu, whose ⋯ button is the way in by keyboard. */}
-      <div {...(renaming ? {} : objectMenu.rowProps)} className={rowClass(selected)}>
-        {renaming ? (
+      <div {...(rename.renaming ? {} : objectMenu.rowProps)} className={rowClass(selected)}>
+        {rename.renaming ? (
           <span className="flex h-full w-full min-w-0 items-center gap-2 pr-1 pl-2">
             <FolderLineIcon className={rowIconClass(selected)} />
-            <RenameFolder
-              folder={folder}
-              onDone={() => {
-                setRenaming(false);
-                requestAnimationFrame(() => button.current?.focus());
-              }}
+            <InlineName
+              value={folder.name}
+              label={t("folder.renameLabel", { name: folder.name })}
+              testId="folder-rename-field"
+              {...rename.field((name) => useAppStore.getState().renameFolder(folder.id, name))}
             />
           </span>
         ) : (
           <button
-            ref={button}
+            {...rename.nameProps}
             type="button"
             {...TREE_ROW}
             data-testid="folder-row"
@@ -328,12 +321,10 @@ function FolderGroup({
               // The second click of a double-click renames instead.
               if (event.detail <= 1) useFolds.getState().toggle(folder.id);
             }}
-            onDoubleClick={() => {
-              // Back as it was before the first click opened or closed it.
-              useFolds.getState().toggle(folder.id);
-              setRenaming(true);
+            onKeyDown={(event) => {
+              rename.nameProps.onKeyDown(event);
+              onKeyDown(event);
             }}
-            onKeyDown={onKeyDown}
             className={rowButtonClass}
           >
             <FolderLineIcon className={rowIconClass(selected)} />
@@ -345,12 +336,12 @@ function FolderGroup({
             </span>
           </button>
         )}
-        {!renaming && (
+        {!rename.renaming && (
           <div className={rowActionsClass}>
             <ObjectMenu
               target={{ kind: "folder", id: folder.id }}
               label={t("folder.more", { name: folder.name })}
-              here={{ "folder.rename": () => setRenaming(true) }}
+              here={{ "folder.rename": rename.start }}
             />
           </div>
         )}
@@ -428,46 +419,6 @@ function NotInAFolder({
         />
       )}
     </section>
-  );
-}
-
-/** A Folder's name typed in its row: Enter or leaving the field saves, Esc cancels. */
-function RenameFolder({ folder, onDone }: { folder: LibraryGroup; onDone(): void }) {
-  const t = useT();
-  const [value, setValue] = useState(folder.name);
-  const field = useRef<HTMLInputElement>(null);
-  const finished = useRef(false);
-
-  useEffect(() => {
-    field.current?.focus();
-    field.current?.select();
-  }, []);
-
-  const finish = (save: boolean) => {
-    if (finished.current) return;
-    finished.current = true;
-    if (save) void useAppStore.getState().renameFolder(folder.id, value);
-    onDone();
-  };
-
-  return (
-    <input
-      ref={field}
-      value={value}
-      data-testid="folder-rename-field"
-      aria-label={t("folder.renameLabel", { name: folder.name })}
-      onChange={(event) => setValue(event.target.value)}
-      onKeyDown={(event) => {
-        if (event.nativeEvent.isComposing) return;
-        if (event.key === "Enter" || event.key === "Escape") {
-          event.preventDefault();
-          event.stopPropagation();
-          finish(event.key === "Enter");
-        }
-      }}
-      onBlur={() => finish(true)}
-      className={rowInputClass}
-    />
   );
 }
 

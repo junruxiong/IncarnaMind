@@ -3,6 +3,8 @@ import type { Document } from "../../../core/api";
 import { useT } from "../i18n";
 import type { ObjectRef } from "../objects";
 import { TREE_ROW } from "../treeKeys";
+import { useRename } from "../useRename";
+import { InlineName } from "./InlineName";
 import { ChevronDownLineIcon, ChevronRightLineIcon } from "./lineIcons";
 import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
 import { rowActionsClass, rowButtonClass, rowClass } from "./sidebarRows";
@@ -29,6 +31,7 @@ export function BrowseGroup({
   expanded,
   onOpen,
   onToggle,
+  rename,
   renderDocument,
 }: {
   testId: string;
@@ -50,31 +53,46 @@ export function BrowseGroup({
   expanded: boolean;
   onOpen(): void;
   onToggle(): void;
+  /** Renames it in place, if it can be: what the field is called, and the name to keep. */
+  rename?: { label: string; commit(name: string): void | Promise<void> };
   renderDocument(document: Document, depth: number): ReactNode;
 }) {
   const t = useT();
   const count = documents.length;
   const Chevron = expanded ? ChevronDownLineIcon : ChevronRightLineIcon;
   const objectMenu = useObjectMenu(object ?? { kind: "tag", id: "" });
+  const naming = useRename<HTMLButtonElement>(`${testId}:${object?.id ?? name}`);
+  const renaming = naming.renaming && rename !== undefined;
   return (
     <li data-testid={testId} data-count={count} {...data}>
       <div className={rowClass(selected)} {...(object ? objectMenu.rowProps : {})}>
-        <button
-          type="button"
-          {...TREE_ROW}
-          aria-current={selectedAs === "current" && selected ? "page" : undefined}
-          aria-pressed={selectedAs === "pressed" ? selected : undefined}
-          className={rowButtonClass}
-          onClick={onOpen}
-        >
-          {icon}
-          <span data-testid="row-text" className="min-w-0 flex-1 truncate" title={title}>
-            {name}
+        {renaming ? (
+          <span className={`${rowButtonClass} pr-1`}>
+            {icon}
+            <InlineName value={name} label={rename.label} {...naming.field(rename.commit)} />
           </span>
-          <span data-testid="browse-count" className="pr-2 text-[12px] tabular-nums text-ink-meta">
-            {count}
-          </span>
-        </button>
+        ) : (
+          <button
+            type="button"
+            {...(rename ? naming.nameProps : {})}
+            {...TREE_ROW}
+            aria-current={selectedAs === "current" && selected ? "page" : undefined}
+            aria-pressed={selectedAs === "pressed" ? selected : undefined}
+            className={rowButtonClass}
+            onClick={onOpen}
+          >
+            {icon}
+            <span data-testid="row-text" className="min-w-0 flex-1 truncate" title={title}>
+              {name}
+            </span>
+            <span
+              data-testid="browse-count"
+              className="pr-2 text-[12px] tabular-nums text-ink-meta"
+            >
+              {count}
+            </span>
+          </button>
+        )}
         {count > 0 ? (
           <button
             type="button"
@@ -89,9 +107,13 @@ export function BrowseGroup({
           // Where the chevron would be, so every count lines up.
           <span aria-hidden="true" className="size-6 shrink-0" />
         )}
-        {object && (
+        {object && !renaming && (
           <div className={rowActionsClass} style={{ right: 29 }}>
-            <ObjectMenu target={object} label={t("tags.menu.of", { name })} />
+            <ObjectMenu
+              target={object}
+              label={t("tags.menu.of", { name })}
+              here={rename ? { "tag.rename": naming.start } : undefined}
+            />
           </div>
         )}
       </div>

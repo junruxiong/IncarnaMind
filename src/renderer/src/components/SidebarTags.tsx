@@ -1,5 +1,6 @@
 import { type ReactNode, useMemo, useState } from "react";
 import type { Document } from "../../../core/api";
+import { core } from "../core";
 import { useT } from "../i18n";
 import { isShown } from "../layoutSlice";
 import { documentsByTag, NEEDS_REVIEW } from "../libraryFilters";
@@ -45,6 +46,7 @@ export function SidebarTags({
     mark: ReactNode,
     title?: string,
     objectOf?: ObjectRef,
+    rename?: { label: string; commit(name: string): void | Promise<void> },
   ) => (
     <BrowseGroup
       key={value}
@@ -74,6 +76,7 @@ export function SidebarTags({
           return next;
         })
       }
+      rename={rename}
       renderDocument={renderDocument}
     />
   );
@@ -93,6 +96,12 @@ export function SidebarTags({
               <TagDot colour={tag.colour} size="md" />,
               tag.description || tag.name,
               { kind: "tag", id: tag.id },
+              {
+                label: t("tag.renameLabel", { name: tag.name }),
+                commit: async (next) => {
+                  await core.updateTag(tag.id, { name: next });
+                },
+              },
             ),
           )}
         </ul>
