@@ -118,6 +118,9 @@ export interface CreateMindInput {
  *   columns or title, but its Update writes the values again without it.
  *   Older charts are version 14 content as they are: a value with no `scale`
  *   is one whose scale isn't known, and nothing is rewritten.
+ * - 15: what a Word import keeps as it is (`WORD_ATOM_NODE`, `WORD_BLOCK_NODE`,
+ *   #104) and pictures in the text (`IMAGE_NODE`). Older content is version 15
+ *   content as it is: nothing is rewritten.
  * - 16: the rows a cut chart doesn't draw (#503): `cutRows` beside `rows`
  *   in a chart's `data`, which Show as table lists. An older version keeps
  *   them while it changes a chart's kind, columns or title, but its Update
@@ -367,6 +370,7 @@ export const NOTE_BLOCK_TYPES = [
   "horizontalRule",
   "table",
   "chart",
+  "wordBlock",
 ] as const;
 
 /** The node type of a Question Block. Its content is the User's text (inline). */
@@ -648,6 +652,199 @@ export const DOCUMENT_CHIP_NODE = "documentChip";
  * values, each with where it came from and the Citation that was there.
  */
 export const CHART_NODE = "chart";
+
+/**
+ * What a Mind imported from a Word file (#104) keeps as it is: content the
+ * editor can't represent, shown in place, never edited inside, which export
+ * writes back as the original XML (#105). `WORD_ATOM_NODE` sits inside a
+ * paragraph's text (a field, a content control, a text box, a bookmark…),
+ * `WORD_BLOCK_NODE` is a Block of its own (a block content control, a nested
+ * table, a header or footer). Both hold `WordAtomAttributes`.
+ */
+export const WORD_ATOM_NODE = "wordAtom";
+export const WORD_BLOCK_NODE = "wordBlock";
+
+/** A picture in a paragraph's text, as Tiptap names it: a .docx's inline pictures (#104). */
+export const IMAGE_NODE = "image";
+
+/**
+ * What a kept-as-is atom is. Bookmarks, other ranges (a comment's, an
+ * editing permission's, a move's), section breaks and page breaks are
+ * invisible; the rest show their text, or a mark of their own.
+ */
+export type WordAtomKind =
+  | "field"
+  | "control"
+  | "textBox"
+  | "shape"
+  | "smartArt"
+  | "chart"
+  | "picture"
+  | "object"
+  | "equation"
+  | "symbol"
+  | "footnote"
+  | "endnote"
+  | "comment"
+  | "insertion"
+  | "deletion"
+  | "bookmark"
+  | "range"
+  | "sectionBreak"
+  | "pageBreak"
+  | "table"
+  | "header"
+  | "footer"
+  | "other";
+
+/**
+ * The attributes of a kept-as-is atom (`WORD_ATOM_NODE`, `WORD_BLOCK_NODE`).
+ *
+ * `source` says where its XML is in the Mind's stored Word package
+ * (`WordFileInfo.part` unless it names a part): an element by its qualified
+ * name and its place among the elements of that name in the part, from 0, in
+ * document order, nested ones and those in `mc:Fallback` counted ("w:sdt#3"),
+ * or a run of elements from one to another ("w:r#40..w:r#44", a field), or a
+ * whole part ("word/header1.xml").
+ */
+export interface WordAtomAttributes {
+  kind: WordAtomKind;
+  /** What it shows: a field's result, a control's text, a footnote's number. */
+  label: string;
+  /** Its text, read for Questions and search: a text box's, a comment's, a footnote's. */
+  text: string;
+  source: string | null;
+  /** More about it: a change's or a comment's author and date, a field's type. */
+  info: WordAtomInfo | null;
+}
+
+export interface WordAtomInfo {
+  author?: string;
+  /** As the file has it, ISO 8601. */
+  date?: string;
+  /** A field's type, the first word of its instruction: "DATE", "REF", "TOC". */
+  field?: string;
+  /** Shown on a line of its own: a display equation, a drawing in a paragraph by itself. */
+  display?: boolean;
+  /** A bookmark's name. */
+  name?: string;
+}
+
+/**
+ * Why a Word file isn't imported, said before any Mind is made:
+ * - "legacy": a Word 97–2003 file (.doc);
+ * - "macros": a macro-enabled file (.docm): IncarnaMind never runs macros;
+ * - "encrypted": protected with a password;
+ * - "strict": saved as Strict Open XML;
+ * - "damaged": not a Word document that can be read (a broken package or XML);
+ * - "too-large": over the size limits for Office files (ADR-0011, #77);
+ * - "unreadable": the file couldn't be read (moved, or not allowed).
+ */
+export type WordRefusalReason =
+  | "legacy"
+  | "macros"
+  | "encrypted"
+  | "strict"
+  | "damaged"
+  | "too-large"
+  | "unreadable";
+
+/** Whose document an imported Word file is: someone else's makes its Blocks third-party text (#78). */
+export type WordOrigin = "own" | "someone-else";
+
+/** What the import screen needs to know about a Word file before it is imported (`checkWordFile`). */
+export interface WordFileCheck {
+  /** The file's name, as the User sees it ("Lease, draft 4.docx"). */
+  fileName: string;
+  /** Why it can't be imported; null when it can. */
+  refusal: WordRefusalReason | null;
+  /** What the import screen starts on: someone else's when the file carries tracked changes or comments. */
+  origin: WordOrigin;
+  /** Who wrote its tracked changes and comments, in the order they first appear. */
+  authors: string[];
+  /** Its tracked changes, of every kind (paragraph marks, formatting and moves too). */
+  changes: number;
+  comments: number;
+}
+
+export interface ImportWordFileInput {
+  /** The .docx's absolute path. */
+  path: string;
+  origin: WordOrigin;
+  /** The Folder to make the Mind in; none, or null: Not in a Folder. */
+  folderId?: string | null;
+}
+
+/**
+ * How an import went: the new Mind, which goes on filling in with the
+ * file's content (`WordImportProgress`), or why the file was refused, with
+ * no Mind made.
+ */
+export type ImportWordFileResult =
+  | { ok: true; mind: Mind }
+  | { ok: false; refusal: WordRefusalReason };
+
+/**
+ * What a Word import did with the file, by count, so nothing is dropped
+ * without a word: what became editable, and what is kept as is, by kind.
+ */
+export interface WordImportReport {
+  paragraphs: number;
+  headings: number;
+  listItems: number;
+  tables: number;
+  images: number;
+  links: number;
+  kept: Partial<Record<WordAtomKind, number>>;
+  /** Tracked changes, of every kind, and comments, whoever made them. */
+  changes: number;
+  comments: number;
+  sections: number;
+}
+
+/**
+ * The name of the Y.Map, beside the Blocks of a Mind imported from a Word
+ * file, that says what it was imported from (see src/shared/wordFiles.ts):
+ * the file (`WordFileInfo`), how far the import has got
+ * (`WordImportProgress`), and what it did (`WordImportReport`).
+ */
+export const MIND_WORD_FIELD = "word";
+
+/**
+ * The name of the Y.Map that says which paragraph or table of the stored Word
+ * package each of the Mind's nodes was imported from, by node id
+ * (`WordSource`), for export to write into the original (#105).
+ */
+export const MIND_WORD_SOURCES_FIELD = "wordSources";
+
+/** The Word file a Mind was imported from. Its package is kept in the data folder by `sha256`. */
+export interface WordFileInfo {
+  /** As the User named it, with its extension. */
+  name: string;
+  sha256: string;
+  size: number;
+  /** The package's main document part: "word/document.xml". */
+  part: string;
+}
+
+/** How far an import has got, in top-level Blocks. While `done` is under `total`, the Mind can't be edited. */
+export interface WordImportProgress {
+  done: number;
+  total: number;
+}
+
+/**
+ * Where a node of a Mind imported from a Word file came from, in the main
+ * document part: `p`, the paragraph's `w14:paraId`, when it has one no other
+ * paragraph shares; else `n`, the element's place, as in
+ * `WordAtomAttributes.source` ("w:p#12", "w:tbl#3"). `f` is the node's
+ * fingerprint as imported (`wordFingerprint`): one that differs now was edited.
+ */
+export interface WordSource {
+  n: string;
+  p?: string;
+  f: string;
+}
 
 /**
  * Where a Citation's check stands. The check compares the model's quote with
@@ -5283,6 +5480,20 @@ export interface CoreApi {
 
   /** Makes a Mind, in a Folder if given (it must exist), and returns it. */
   createMind(input?: CreateMindInput): Promise<Mind>;
+  /**
+   * Reads a Word file for the import screen (#104): whether it can be imported, and
+   * whose document it looks like. Keeps nothing, and changes nothing.
+   */
+  checkWordFile(path: string): Promise<WordFileCheck>;
+  /**
+   * Imports a .docx as a new Mind (#104), titled after the file, keeping a copy of its
+   * package in the data folder to export back into (#105), so the file may move or go.
+   * A file that can't be imported is refused before any Mind is made. Otherwise the Mind
+   * is returned at once and fills in with the file's content, a batch at a time
+   * (`WordImportProgress` in its document; an import a quit cut short goes on at the
+   * next start). Someone else's document makes every Block third-party text (#78).
+   */
+  importWordFile(input: ImportWordFileInput): Promise<ImportWordFileResult>;
   /** Minds that are not deleted, most recently updated first. Editing a Mind's content updates it. */
   listMinds(): Promise<Mind[]>;
   /** Changes a Mind's title (trimmed; empty means "Untitled") and returns the Mind. */
@@ -6467,6 +6678,8 @@ export type CoreApiMethod = keyof CoreApi;
 // A Record over every method name: adding a method to CoreApi without listing it here fails the type-check.
 const methods: Record<CoreApiMethod, true> = {
   createMind: true,
+  checkWordFile: true,
+  importWordFile: true,
   listMinds: true,
   renameMind: true,
   deleteMind: true,
