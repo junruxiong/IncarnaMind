@@ -97,8 +97,40 @@ describe("Fitting an Answer into a local model's window", () => {
     expect(ended.event).toBe("failed");
     expect(ended.payload).toMatchObject({ error: { kind: "too-long" } });
     expect(ollama.chats).toHaveLength(0);
-    expect(translate("en", "answer.error.too-long")).toMatch(/too long for the local model/);
+    expect(translate("en", "answer.error.too-long")).toMatch(
+      /too long for the model’s context window/,
+    );
     expect(translate("zh-CN", "answer.error.too-long")).toMatch(/上下文窗口/);
+  });
+
+  test("a cloud model gets its own window whatever the memory, and a long conversation fits it", async () => {
+    const cloud = {
+      ...QWEN35,
+      name: "gpt-oss:20b-cloud",
+      remote: true,
+      modelInfo: { "general.architecture": "gptoss", "gptoss.context_length": 131_072 },
+    };
+    const ollama = await startOllamaServer({
+      models: [cloud],
+      reply: () => ({ content: "They are about lorem ipsum." }),
+    });
+    const { core, mind, client } = await setUpLocalModel(ollama, cloud.name, { memory: 8 * GIB });
+    core.on("consent.requested", (request) => {
+      void core.respondToConsent(request.requestId, true);
+    });
+    const { notes, asked } = bigMind();
+    writeMind(client, [...notes, asked]);
+
+    const { ended } = await askAndEnd(core, client, mind.id, asked.attrs.id);
+
+    expect(ended.event).toBe("finished");
+    const [chat] = ollama.chats;
+    expect(chat).toMatchObject({ refused: false, cut: false });
+    expect(chat?.body).toMatchObject({ options: { num_ctx: 131_072 } });
+    const text = messagesOf(chat?.body ?? {})
+      .map((message) => message.content)
+      .join("\n\n");
+    expect([...text.matchAll(/Note \d\d:/g)].length).toBeGreaterThan(15);
   });
 
   test("Ollama's refusal of a request that is too long reads as too long, with its counts", () => {
