@@ -9,7 +9,12 @@ import {
   type FormattedCluster,
   type StyledRun,
 } from "../../../core/api";
-import { badgeMessage, type CitationState, citationState } from "../../../shared/citations";
+import {
+  badgeMessage,
+  type CitationState,
+  citationSource,
+  citationState,
+} from "../../../shared/citations";
 import {
   citationLocation,
   formatLocation,
@@ -21,7 +26,7 @@ import { type MindFormatting, useMindFormatting } from "../citationFormatting";
 import { citationHandle } from "../commands/handles";
 import { type CommandContext, commands } from "../commands/registry";
 import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
-import { useLanguage, useT } from "../i18n";
+import { useGap, useLanguage, useT } from "../i18n";
 import { groupsMerged } from "../layoutSlice";
 import type { ObjectRef } from "../objects";
 import { recordUsage, useAppStore } from "../store";
@@ -33,12 +38,14 @@ import {
   memberMarker,
 } from "./citationClusters";
 import { citationNumberOf } from "./citationNumbers";
+import { QuoteWithUnsureWords, ScanLine, useScannedQuote } from "./citationScan";
 import { CheckMarkIcon, CheckStateIcon } from "./icons";
 import { InFootnoteContext, MindIdContext, RegenerateAnswerContext } from "./mindContext";
 import { quoteSaysSo, useOpenCited } from "./openCited";
 import { Popover } from "./Popover";
 import { onPeek, peekCitation } from "./peek";
 import { StyledRuns, StyledRunView } from "./StyledRuns";
+import { runsText } from "./styledText";
 
 /** How long a pointer rests on a Citation before its card shows, and how long it may leave before it goes. */
 const SHOW_MS = 120;
@@ -100,13 +107,10 @@ export function CitationView({
   const where = location ? formatLocation(location, t) : null;
   const badge = badgeMessage(state, attributes, t);
   const badgeText = t(badge.key, badge.params);
-  const documentName = attributes.documentName ?? "";
   const number = citationNumberOf(decorations);
   // In a footnote's text it is part of the footnote: it shows where it points, not a number.
   const inFootnote = useContext(InFootnoteContext);
-  const pointsTo = where
-    ? t("citation.where", { document: documentName, location: where })
-    : documentName;
+  const pointsTo = citationSource(attributes, t).text;
   /** Clicked: the card stays until it is dismissed. */
   const [pinned, setPinned] = useState(false);
   /** Hovered or focused, with the card, the marker or its mark. */
@@ -465,6 +469,7 @@ function CitationCard({
 }) {
   const t = useT();
   const language = useLanguage();
+  const gap = useGap();
   const web = useAppStore(
     (store) => store.documents.find((each) => each.id === state.documentId)?.web ?? null,
   );
@@ -483,7 +488,7 @@ function CitationCard({
       ? name
       : null
     : where
-      ? t("citation.where", { document: name, location: where })
+      ? citationSource(attributes, t).text
       : name;
   const reason =
     state.check === "checking"
@@ -492,6 +497,7 @@ function CitationCard({
         ? t(`citation.reason.${state.reason}`)
         : null;
   const removed = state.reason === "document-removed";
+  const scanned = useScannedQuote(attributes);
   return (
     <div className={`citation-card citation-card--${state.check}`} contentEditable={false}>
       <div className="citation-card-head">
@@ -500,6 +506,7 @@ function CitationCard({
           <span>{badgeText}</span>
         </p>
         {source && <p className="citation-card-source">{source}</p>}
+        {scanned && <ScanLine scanned={scanned} />}
         {web && fetchedAt && (
           <p data-testid="citation-web-source" className="citation-card-source">
             {web.siteName} · {t("webPages.fetched", { date: pageDate(fetchedAt, language) })}
@@ -510,7 +517,9 @@ function CitationCard({
         <figure className="citation-card-quote">
           <figcaption className="sr-only">{t("citation.quote")}</figcaption>
           <blockquote>
-            <span className="citation-card-wash">{attributes.quote}</span>
+            <span className="citation-card-wash">
+              <QuoteWithUnsureWords quote={attributes.quote} unsure={scanned?.unsure ?? []} />
+            </span>
           </blockquote>
         </figure>
       )}
@@ -521,7 +530,8 @@ function CitationCard({
       )}
       {note && (
         <p data-testid="citation-styled-note" className="citation-card-styled">
-          <span className="citation-card-styled-label">{t("citation.note")}</span>{" "}
+          <span className="citation-card-styled-label">{t("citation.note")}</span>
+          {gap(t("citation.note"), runsText(note))}
           <StyledRuns runs={note} />
         </p>
       )}

@@ -4,7 +4,7 @@
  * the agent's settings file written only as shown, with Undo, and tidied when
  * the agent is disconnected. Every path is in a temporary home folder.
  */
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { AgentLaunch, Core } from "../../src/core";
@@ -12,7 +12,7 @@ import { SERVER_INSTRUCTIONS } from "../../src/core/agents/mcp";
 import { SKILL_MARKDOWN } from "../../src/core/agents/skill";
 import { openPackage } from "../../src/core/documents/formats/zip";
 import { agentsAdapter, buildAgentShim, connectLegacyAgent } from "../helpers/agents";
-import { createTempDataFolder, startCore } from "../helpers/core";
+import { createMemoryKeychain, createTempDataFolder, startCore } from "../helpers/core";
 import { addAndProcess, createSourceFolder, writeSourceFile } from "../helpers/documents";
 
 const TOKEN_ENV = "INCARNAMIND_AGENT_TOKEN";
@@ -99,6 +99,18 @@ describe("setting an agent up", () => {
     expect(clients.find((each) => each.id === "codex")?.name).toBe("ChatGPT app and Codex");
   });
 
+  it("names a new Codex pairing in the interface language, and keeps the name it had", async () => {
+    const { core, coast } = await started();
+    const english = await core.setUpAgent({ client: "codex", folderIds: [coast.id] });
+    expect(english.pairing.name).toBe("ChatGPT app and Codex");
+    await core.updateSettings({ user: { language: "zh-CN" } });
+    const chinese = await core.setUpAgent({ client: "codex", folderIds: [coast.id] });
+    expect(chinese.pairing.name).toBe("ChatGPT 应用和 Codex");
+    expect((await core.getAgents()).pairings.map((each) => each.name)).toContain(
+      "ChatGPT app and Codex",
+    );
+  });
+
   it("writes Codex's settings as shown, works from them, and takes them back with Undo", async () => {
     const { core, home, coast } = await started();
     const path = join(home, ".codex", "config.toml");
@@ -162,6 +174,99 @@ describe("setting an agent up", () => {
       });
     },
   );
+
+  describe("Disconnect and the settings file IncarnaMind made", () => {
+    /** Connects, quits and starts again on the same folders, as a restart does. */
+    async function restarted(
+      client: "workbuddy" | "antigravity" | "codex",
+      existing?: { file: readonly string[]; text: string },
+    ) {
+      const dataDir = await createTempDataFolder();
+      const home = await createTempDataFolder();
+      const tempDir = await createTempDataFolder();
+      const keychain = createMemoryKeychain();
+      const start = async () =>
+        startCore(dataDir, {
+          keychain,
+          paths: { dataDir, documents: join(dataDir, "Documents"), tempDir },
+          agents: {
+            ...(await agentsAdapter(dataDir)),
+            shimScript: await buildAgentShim(),
+            home,
+            applications: [await createTempDataFolder()],
+          },
+        });
+      const first = await start();
+      await first.setAgentsEnabled(true);
+      const coast = await first.createLibraryGroup({ name: "Coast", description: "The sea." });
+      if (existing) {
+        await mkdir(join(home, ...existing.file.slice(0, -1)), { recursive: true });
+        await writeFile(join(home, ...existing.file), existing.text);
+      }
+      const { pairing } = await first.setUpAgent({ client, folderIds: [coast.id] });
+      first.close();
+      return { core: await start(), home, pairing, coast };
+    }
+
+    it.each([
+      ["workbuddy", ".workbuddy", [".workbuddy", "mcp.json"]],
+      ["antigravity", ".gemini", [".gemini", "config", "mcp_config.json"]],
+      ["codex", ".codex", [".codex", "config.toml"]],
+    ] as const)(
+      "takes away the file and the folder it made for %s, and the agent stays among those not on this computer",
+      async (client, folder, file) => {
+        const { core, home, pairing } = await restarted(client);
+        expect(await readFile(join(home, ...file), "utf8")).toContain("incarnamind");
+        expect((await core.listAgentClients()).find((each) => each.id === client)?.installed).toBe(
+          true,
+        );
+        await core.disconnectAgent(pairing.id);
+        await expect(stat(join(home, folder))).rejects.toThrow(/ENOENT/);
+        expect((await core.listAgentClients()).find((each) => each.id === client)?.installed).toBe(
+          false,
+        );
+      },
+    );
+
+    it("Undo takes the folder it made away too", async () => {
+      const { core, home, coast } = await started();
+      const { pairing } = await core.setUpAgent({ client: "workbuddy", folderIds: [coast.id] });
+      await core.undoAgentSetup(pairing.id);
+      await expect(stat(join(home, ".workbuddy"))).rejects.toThrow(/ENOENT/);
+    });
+
+    it.each([
+      [
+        "codex",
+        [".codex", "config.toml"],
+        'model = "gpt-6-luna"\n\n[mcp_servers.github]\ncommand = "gh-mcp"\n',
+      ],
+      [
+        "antigravity",
+        [".gemini", "config", "mcp_config.json"],
+        `${JSON.stringify({ theme: "dark", mcpServers: { notes: { command: "n" } } }, null, 2)}\n`,
+      ],
+    ] as const)(
+      "keeps the %s file that was there before, byte for byte",
+      async (client, file, text) => {
+        const { core, home, pairing } = await restarted(client, { file, text });
+        await core.disconnectAgent(pairing.id);
+        expect(await readFile(join(home, ...file), "utf8")).toBe(text);
+      },
+    );
+
+    it("keeps a file it made once the User added a server of their own, with only that server left", async () => {
+      const { core, home, pairing } = await restarted("workbuddy");
+      const path = join(home, ".workbuddy", "mcp.json");
+      const settings = JSON.parse(await readFile(path, "utf8"));
+      settings.mcpServers.notes = { command: "n" };
+      await writeFile(path, JSON.stringify(settings));
+      await core.disconnectAgent(pairing.id);
+      expect(JSON.parse(await readFile(path, "utf8"))).toEqual({
+        mcpServers: { notes: { command: "n" } },
+      });
+    });
+  });
 
   it("leaves a settings file it can't read alone, and gives the settings to paste instead", async () => {
     const { core, home, coast } = await started();
@@ -351,6 +456,7 @@ describe("the Skill that installs with an agent's connection", () => {
     "is written for %s where its docs say it reads Skills, and taken out when disconnected",
     async (client, folder) => {
       const { core, home, coast } = await started();
+      await mkdir(join(home, ...folder), { recursive: true });
       const file = join(home, ...folder, "incarnamind", "SKILL.md");
       const { pairing } = await core.setUpAgent({ client, folderIds: [coast.id] });
       expect(await readFile(file, "utf8")).toBe(SKILL_MARKDOWN);
@@ -361,11 +467,18 @@ describe("the Skill that installs with an agent's connection", () => {
 
       await core.disconnectAgent(pairing.id);
       await expect(readFile(file, "utf8")).rejects.toThrow(/ENOENT/);
-      // Its folder goes with it; the agent's own skills folder stays.
+      // Its folder goes with it; the agent's own skills folder, which was there, stays.
       expect(await readdir(join(home, ...folder))).toEqual([]);
       expect((await core.getAgents()).skills).toEqual([]);
     },
   );
+
+  it("takes away the skills folder too when IncarnaMind made it", async () => {
+    const { core, home, coast } = await started();
+    const { pairing } = await core.setUpAgent({ client: "codex", folderIds: [coast.id] });
+    await core.disconnectAgent(pairing.id);
+    await expect(stat(join(home, ".agents"))).rejects.toThrow(/ENOENT/);
+  });
 
   it("is taken out by Undo too", async () => {
     const { core, home, coast } = await started();
