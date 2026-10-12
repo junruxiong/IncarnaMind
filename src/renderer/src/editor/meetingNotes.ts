@@ -4,7 +4,9 @@ import type * as Y from "yjs";
 import { BLOCK_ID_ATTRIBUTE, CITATION_NODE, type CitationAttributes } from "../../../core/api";
 import { setBlockTimes } from "../../../shared/blockTimes";
 import { useAppStore } from "../store";
+import { asOneStep } from "./editorUndo";
 import { type MeetingTimesOptions, meetingTimesPlugin } from "./meetingTimes";
+import { notePlace } from "./notePlace";
 
 /**
  * The notes written in a Meeting's Mind (#139): where a Mark and a transcript
@@ -68,49 +70,39 @@ export async function noteOf(mindId: string): Promise<MeetingNote | null> {
   return opened;
 }
 
-type Place = { kind: "after"; pos: number } | { kind: "replace"; from: number; to: number };
-
 /**
- * Where a new bullet goes: after the bullet the cursor is in, else after the
- * Block it is in, else (an empty line) in its place. A note the cursor was
- * never in takes it at the end.
+ * Where a new bullet goes: after the bullet the cursor is in, else where Add
+ * to note puts an Answer (`notePlace`): after the Block the cursor is in, in
+ * an empty line's place, at the end if the cursor was never in the notes.
  */
-function placeOf(state: EditorState, visitedBefore: boolean): Place {
-  const { doc } = state;
-  if (!visitedBefore) return { kind: "after", pos: doc.content.size };
-  const { $from } = state.selection;
-  for (let depth = $from.depth; depth > 0; depth--) {
-    if ($from.node(depth).type.name === "listItem") {
-      return { kind: "after", pos: $from.after(depth) };
+function placeOf(
+  state: EditorState,
+  visitedBefore: boolean,
+): { from: number; to: number; inList: boolean } {
+  if (visitedBefore) {
+    const { $from } = state.selection;
+    for (let depth = $from.depth; depth > 0; depth--) {
+      if ($from.node(depth).type.name === "listItem") {
+        const after = $from.after(depth);
+        return { from: after, to: after, inList: true };
+      }
     }
   }
-  if ($from.depth === 0) return { kind: "after", pos: doc.content.size };
-  const top = $from.node(1);
-  const from = $from.before(1);
-  const to = $from.after(1);
-  return top.type.name === "paragraph" && top.content.size === 0
-    ? { kind: "replace", from, to }
-    : { kind: "after", pos: to };
-}
-
-export interface AddedBullet {
-  /** The id of its line. */
-  id: string;
-  /** Takes it back, if the line still holds only what was put there. */
-  remove(): void;
+  return { ...notePlace(state.doc, visitedBefore ? state.selection : null), inList: false };
 }
 
 /**
  * Puts a new bullet with this content in the Mind's notes, taking the time
- * `ms` (null: none, as when nothing records). It moves the cursor into the
- * bullet only with `focus`. Null if the editor can't take it.
+ * `ms` (null: none, as when nothing records), as one step of the note's Undo.
+ * It moves the cursor into the bullet only with `focus`. Returns its line's
+ * id, or null if the editor can't take it.
  */
 export function addBullet(
   { editor, doc }: MeetingNote,
   content: JSONContent[],
   ms: number | null,
   focus: boolean,
-): AddedBullet | null {
+): string | null {
   if (editor.isDestroyed || !editor.isEditable) return null;
   const { state } = editor;
   const { schema } = state;
@@ -120,49 +112,21 @@ export function addBullet(
   const item = itemType.create(null, schema.nodeFromJSON({ type: "paragraph", content }));
   const place = placeOf(state, visited.has(editor));
   const tr = state.tr;
-  let paragraph: number;
-  if (place.kind === "after") {
-    // Next to a bullet it joins its list; anywhere else it starts one.
-    const $pos = state.doc.resolve(place.pos);
-    const inList = $pos.parent.type === bullets || $pos.parent.type.name === "orderedList";
-    tr.insert(place.pos, inList ? item : bullets.create(null, item));
-    paragraph = place.pos + (inList ? 1 : 2);
-  } else {
-    tr.replaceWith(place.from, place.to, bullets.create(null, item));
-    paragraph = place.from + 2;
-  }
+  tr.replaceWith(place.from, place.to, place.inList ? item : bullets.create(null, item));
+  const paragraph = place.from + (place.inList ? 1 : 2);
   if (focus) tr.setSelection(TextSelection.create(tr.doc, paragraph + 1)).scrollIntoView();
-  editor.view.dispatch(tr);
+  asOneStep(editor, () => editor.view.dispatch(tr));
   if (focus) editor.view.focus();
 
   // The id is given as the line is added, by the editor's unique IDs.
   const id: unknown = editor.state.doc.nodeAt(paragraph)?.attrs[BLOCK_ID_ATTRIBUTE];
   if (typeof id !== "string") return null;
   if (ms !== null) setBlockTimes(doc, [id], ms);
-  return { id, remove: () => removeBullet(editor, id, content.length === 0) };
-}
-
-/** Removes the bullet whose line has this id, and its list if it was the only one in it. */
-function removeBullet(editor: Editor, id: string, onlyIfEmpty: boolean): void {
-  if (editor.isDestroyed) return;
-  const { doc } = editor.state;
-  let found: number | null = null;
-  doc.descendants((node, pos) => {
-    if (found === null && node.attrs[BLOCK_ID_ATTRIBUTE] === id) found = pos;
-    return found === null;
-  });
-  if (found === null) return;
-  const paragraph = doc.nodeAt(found);
-  if (!paragraph || (onlyIfEmpty && paragraph.content.size > 0)) return;
-  const $pos = doc.resolve(found);
-  if ($pos.parent.type.name !== "listItem") return;
-  const alone = $pos.node($pos.depth - 1).childCount === 1;
-  const depth = alone ? $pos.depth - 1 : $pos.depth;
-  editor.view.dispatch(editor.state.tr.delete($pos.before(depth), $pos.after(depth)));
+  return id;
 }
 
 /** A new empty bullet with the time of this moment, the cursor in it. */
-export function markNow(note: MeetingNote, ms: number): AddedBullet | null {
+export function markNow(note: MeetingNote, ms: number): string | null {
   return addBullet(note, [], ms, true);
 }
 
@@ -193,7 +157,7 @@ export function addTranscriptLine(
   note: MeetingNote,
   line: { text: string; citation: CitationAttributes },
   ms: number | null,
-): AddedBullet | null | "already" {
+): string | null | "already" {
   const { editor } = note;
   const { documentId, quote } = line.citation;
   if (documentId && quote) {
