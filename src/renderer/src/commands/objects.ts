@@ -323,10 +323,13 @@ export const tagCommands: readonly Command[] = [
   {
     id: "tag.rename",
     label: "tag.rename",
+    rowKeys: RENAME_KEYS,
     group: "edit",
     appliesTo: ["tag"],
     reversible: true,
     run(ctx) {
+      // In its row where it has a field; elsewhere, in the Tags dialog.
+      if (ctx.here?.["tag.rename"]) return ctx.here["tag.rename"]();
       useRequests.getState().ask({ manageTag: { id: idsOf(ctx, "tag")[0] ?? "" } });
       store().openTagsDialog();
     },

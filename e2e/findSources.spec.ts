@@ -94,13 +94,15 @@ test("Add Documents ▾ → Find sources… asks each provider once, then adds a
       "openFDA",
       "DailyMed",
       "ClinicalTrials.gov",
+      "eCFR",
     ]);
-    // Papers are searched; drug labels and trials only when chosen.
+    // Papers are searched; drug labels, trials and regulations only when chosen.
     for (const [name, pressed] of [
       ["OpenAlex", "true"],
       ["PubMed", "true"],
       ["openFDA", "false"],
       ["ClinicalTrials.gov", "false"],
+      ["eCFR", "false"],
     ] as const) {
       await expect(
         panel.getByTestId("find-sources-provider").filter({ hasText: name }),
@@ -351,6 +353,98 @@ test("choosing openFDA finds a drug label and shows its disclaimer; an openFDA k
     expect(services.requests.filter((request) => request.path.startsWith("/openalex/"))).toEqual(
       [],
     );
+  } finally {
+    await app.close();
+  }
+});
+
+test("choosing the eCFR finds a regulation marked as an unofficial compilation; GovInfo asks for its key, then finds the US Code", async () => {
+  const { app, window } = await launchApp(dataDir, { sources: services.url });
+  try {
+    await dismissChatSetup(window);
+    await setWindowSize(app, window, 1280, 800);
+    // Linux runners have no keyring: the key is kept in plain text, as the User would accept.
+    await acceptPlainTextKeys(window);
+    await window.getByTestId("open-library").click();
+    const add = window.getByTestId("library-add-documents");
+    await add.hover();
+    await add.click();
+    await window.getByTestId("library-find-sources").click();
+    const panel = window.getByTestId("find-sources");
+    const ecfr = panel.getByTestId("find-sources-provider").filter({ hasText: "eCFR" });
+    const govinfoKey = panel.locator('[data-provider="govinfo"]');
+
+    // GovInfo's key line shows once the eCFR, the provider it is listed with, is chosen.
+    await expect(govinfoKey).toHaveCount(0);
+    await ecfr.hover();
+    await ecfr.click();
+    await expect(ecfr).toHaveAttribute("aria-pressed", "true");
+    await expect(govinfoKey.getByTestId("find-sources-key-open")).toHaveText("GovInfo key…");
+
+    // A citation is looked up at the eCFR; GovInfo, with no key, is off and says why.
+    await panel.getByTestId("find-sources-query").fill("17 CFR 240.10b-5");
+    await panel.getByTestId("find-sources-query").press("Enter");
+    await allowProviders(window, ["eCFR"], "What you search for: the words and filters");
+    const rule = result(panel, "17 CFR 240.10b-5 Employment of manipulative and deceptive devices");
+    await expect(rule.getByTestId("find-sources-result-facts")).toHaveText(
+      "Open access · full text · Public domain · Unofficial compilation, not the official edition · Found on eCFR",
+    );
+    const problem = panel.getByTestId("find-sources-problem");
+    await expect(problem).toHaveText("GovInfo is off: it needs your own free key · Add key…");
+    expect(services.requests.filter((request) => request.path.startsWith("/govinfo/"))).toEqual([]);
+    if (SCREENSHOTS) {
+      await window.screenshot({ path: join(SCREENSHOTS, "us-law-regulation-en-1280.png") });
+    }
+
+    // "Add key…" opens the field where the key goes, with where to get one; saving searches again.
+    await problem.getByRole("button", { name: "Add key…" }).click();
+    const key = govinfoKey.getByTestId("find-sources-key");
+    await expect(key).toBeFocused();
+    await expect(govinfoKey.getByTestId("find-sources-key-sign-up")).toHaveAttribute(
+      "href",
+      "https://www.govinfo.gov/api-signup",
+    );
+    await key.fill("not-a-real-govinfo-key-42");
+    await key.press("Enter");
+    await allowProviders(window, ["GovInfo"], "Your own key for this service");
+    await expect(govinfoKey.getByTestId("find-sources-key-set")).toHaveText("Key saved");
+    await expect(problem).toHaveCount(0);
+    await expect(panel.getByTestId("find-sources-count")).toHaveText("2 results");
+
+    // The US Code, at GovInfo, with the key in a header and never in an address.
+    await panel.getByTestId("find-sources-query").fill("42 U.S.C. § 1983");
+    await panel.getByTestId("find-sources-query").press("Enter");
+    const code = result(panel, "42 U.S.C. § 1983 Civil action for deprivation of rights");
+    await expect(code).toContainText("United States Code, 2024 edition");
+    await code.getByTestId("find-sources-add").hover();
+    await code.getByTestId("find-sources-add").click();
+    await expect(code.getByTestId("find-sources-added")).toHaveText(
+      "Added, not in a Folder · Open",
+    );
+    const asked = services.requests.filter((request) => request.path.startsWith("/govinfo/"));
+    expect(
+      asked.some((request) => request.headers["x-api-key"] === "not-a-real-govinfo-key-42"),
+    ).toBe(true);
+    expect(asked.every((request) => !request.path.includes("not-a-real-govinfo-key"))).toBe(true);
+
+    // In Chinese, at the narrowest window, the regulation's result says it is unofficial, and fits.
+    const core = await bridge(window);
+    await core.evaluate((each) => each.updateSettings({ user: { language: "zh-CN" } }));
+    await setWindowSize(app, window, 900, 660);
+    await panel.getByTestId("find-sources-query").fill("17 CFR 240.10b-5");
+    await panel.getByTestId("find-sources-query").press("Enter");
+    const unofficial = result(panel, "17 CFR 240.10b-5 Employment").first();
+    await expect(unofficial.getByTestId("find-sources-result-facts")).toContainText(
+      "非官方汇编，不是官方版本",
+    );
+    const scroller = window.getByTestId("library").locator(".overflow-y-auto").first();
+    expect(
+      await scroller.evaluate((element) => element.scrollWidth - element.clientWidth),
+    ).toBeLessThanOrEqual(0);
+    if (SCREENSHOTS) {
+      await unofficial.scrollIntoViewIfNeeded();
+      await window.screenshot({ path: join(SCREENSHOTS, "us-law-regulation-zh-900.png") });
+    }
   } finally {
     await app.close();
   }
