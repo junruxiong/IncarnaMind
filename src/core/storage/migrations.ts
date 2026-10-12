@@ -1346,6 +1346,32 @@ export const migrations: readonly Migration[] = [
       ALTER TABLE conversation_messages ADD COLUMN figures TEXT NOT NULL DEFAULT '[]';
     `,
   },
+  {
+    version: 73,
+    description: "Checkpoints: a Mind as it was before an AI change, or after a pause (#113)",
+    sql: `
+      -- One row per Checkpoint (src/core/checkpoints): the Mind's whole Yjs document as one
+      -- update (v1), and its Yjs snapshot, so a state already saved isn't saved again (a
+      -- snapshot holds what was deleted, which a state vector doesn't). reason is 'accept',
+      -- 'regenerate', 'enhance', 'compare', 'others', 'restore' or 'idle', checked in code. Only
+      -- idle ones are thinned as they age: a thinned row is marked deleted with its data
+      -- emptied, and forgotten 30 days later. The Document versions a Checkpoint's Citations
+      -- quote are retained in retained_versions (kind 'checkpoint'). No foreign key: a later
+      -- sync may deliver a row before its Mind.
+      CREATE TABLE mind_checkpoints (
+        id TEXT PRIMARY KEY NOT NULL,
+        mind_id TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        data BLOB NOT NULL,
+        snapshot BLOB NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX mind_checkpoints_by_mind ON mind_checkpoints (mind_id, created_at)
+        WHERE deleted_at IS NULL;
+    `,
+  },
 ];
 
 /**

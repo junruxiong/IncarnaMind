@@ -46,6 +46,7 @@ import type {
 } from "./api";
 import { createApprovals } from "./approvals";
 import { createBackgroundQueue } from "./backgroundQueue";
+import { createCheckpoints } from "./checkpoints";
 import { createCitationStyles } from "./citationStyles";
 import { createConnectors } from "./connectors";
 import { createConsent, type DataFlowRegistry } from "./consent";
@@ -294,6 +295,7 @@ export function createCore(adapters: CoreAdapters): Core {
     events.emit("mind.update", { mindId, update });
     // Only notes the change; what became of AI text is worked out once the Mind is quiet.
     aiUse.contentStored(mindId);
+    checkpoints.edited(mindId);
     const renamed = minds.setAutoTitle(mindId, content.peek(mindId, firstLineOf));
     if (minds.markEdited(mindId) || renamed) mindsChanged();
   });
@@ -400,6 +402,17 @@ export function createCore(adapters: CoreAdapters): Core {
   const privacyChanged = () => events.emit("privacy.changed", privacy.status());
   const platform = process.platform;
   const retention = createVersionRetention(db, now);
+  // History (#113): a Checkpoint before every AI change, and after a pause in editing.
+  const checkpoints = createCheckpoints({
+    db,
+    now,
+    content,
+    retention,
+    requireMind: (mindId) => writableMind(mindId).id,
+    changed: (mindId) => events.emit("checkpoints.changed", { mindId }),
+    say: (key) => translate(settings.get().language, key),
+    reportError: (error) => console.error(error),
+  });
   let documents: ReturnType<typeof createDocuments>;
   /** Set once created, so a failure after it can close it. */
   let createdDocuments: ReturnType<typeof createDocuments> | undefined;
@@ -1689,6 +1702,10 @@ export function createCore(adapters: CoreAdapters): Core {
     closeMind: async (mindId) => {
       content.close(parseMindId(mindId));
     },
+    saveCheckpoint: async (mindId, reason) => checkpoints.save(mindId, reason),
+    listCheckpoints: async (mindId) => checkpoints.list(mindId),
+    compareCheckpoints: async (input) => checkpoints.compare(input),
+    restoreCheckpoint: async (mindId, checkpointId) => checkpoints.restore(mindId, checkpointId),
     askInConversation: async (input) =>
       answers.askInConversation(conversations.parseQuestion(input)),
     regenerateConversationAnswer: async (input) => answers.regenerateInConversation(input),
@@ -1963,7 +1980,10 @@ export function createCore(adapters: CoreAdapters): Core {
     },
 
     askQuestion: async (input) => answers.ask(input),
-    regenerateAnswer: async (input) => answers.regenerate(input),
+    regenerateAnswer: async (input) => {
+      if (isRecord(input)) checkpoints.save(input.mindId, "regenerate");
+      return answers.regenerate(input);
+    },
     stopAnswer: async (input) => answers.stop(input),
     suggestNext: (request) => suggestions.suggest(request),
     cancelSuggestion: async (requestId) => suggestions.cancel(requestId),
@@ -2390,6 +2410,7 @@ export function createCore(adapters: CoreAdapters): Core {
       rerankingModel.close();
       textRecognitionModel?.close();
       activity.stop();
+      checkpoints.close();
       aiUse.close();
       events.clear();
       content.closeAll();
