@@ -10,9 +10,13 @@ import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
 import { findTab } from "../tabs";
 import { assistantCommands } from "./assistant";
+import { bibliographyCommands } from "./bibliography";
 import { chartCommands } from "./charts";
+import { deletedCommands } from "./deleted";
 import { editCommands } from "./edit";
 import { evidenceCommands } from "./evidence";
+import { exportCommands } from "./exports";
+import { fileCommands } from "./fileInfo";
 import { footnoteCommands } from "./footnotes";
 import { citationHandle, findHandle, sidebarHandle } from "./handles";
 import { linkCommands } from "./links";
@@ -75,12 +79,15 @@ const appCommands: readonly Command[] = [
   ...folderCommands,
   ...tagCommands,
   ...linkedFolderCommands,
+  ...deletedCommands,
   ...answerCommands,
   ...citationCommands,
   ...tabCommands,
   ...meetingCommands,
   ...webPageCommands,
+  ...fileCommands,
   ...evidenceCommands,
+  ...exportCommands,
   {
     ...fromMenu("settings.open"),
     group: "open",
@@ -265,6 +272,7 @@ const appCommands: readonly Command[] = [
   },
   ...footnoteCommands,
   ...linkCommands,
+  ...bibliographyCommands,
   ...tableCommands,
   ...chartCommands,
   ...proposalCommands,

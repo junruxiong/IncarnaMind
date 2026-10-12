@@ -11,19 +11,50 @@
  * over the same searches, one model and one mode at a time, so each mode's
  * timings are its own.
  */
-import type { CrossEncoder, PassageSearchResult, RerankingModelDefinition } from "../../src/core";
+import { join } from "node:path";
+import {
+  BUILT_IN_RERANKING_MODEL,
+  type CrossEncoder,
+  type PassageSearchResult,
+  type RerankingModelDefinition,
+} from "../../src/core";
+import { downloadModel, isModelDownloaded } from "../../src/core/embedding/download";
 import {
   type CrossEncoderResponse,
   createChannelCrossEncoder,
 } from "../../src/core/reranking/channel";
 import { createRerankingModel } from "../../src/core/reranking/index";
+import type { EvalConfig } from "./config";
 import type { Log } from "./log";
 import startRerankerWorker from "./rerankerWorker?nodeWorker";
 import { downloadSize } from "./rerankingModels";
 
-/** A reranking model, run on a worker thread so it never blocks the core's thread. */
-export function createWorkerCrossEncoder(): CrossEncoder {
-  return createChannelCrossEncoder(() => {
+/**
+ * Downloads the built-in reranking model's GPU file into the model cache,
+ * once, unless the run reranks on the CPU: the app downloads it only after
+ * a search has found a GPU adapter, and runs on the GPU from the next one,
+ * but a run's searches must all run on the same device.
+ */
+export async function prepareGpuFile(config: EvalConfig, log: Log): Promise<void> {
+  const { gpu, name, source } = BUILT_IN_RERANKING_MODEL;
+  if (!gpu || config.rerankOnCpu) return;
+  const directory = join(config.cacheDir, "models", gpu.folder);
+  if (isModelDownloaded(directory, [gpu.file])) return;
+  log(`Downloading ${name}'s GPU file (${Math.round(gpu.file.size / 1e6)} MB)`);
+  await downloadModel({
+    directory,
+    source: { baseUrl: source.baseUrl, files: [gpu.file] },
+    signal: new AbortController().signal,
+    onProgress: () => {},
+  });
+}
+
+/**
+ * A reranking model, run on a worker thread so it never blocks the core's
+ * thread; on the CPU only with `onCpu`, as on a computer with no GPU.
+ */
+export function createWorkerCrossEncoder(onCpu = false): CrossEncoder {
+  const crossEncoder = createChannelCrossEncoder(() => {
     const worker = startRerankerWorker({ name: "incarnamind-eval-reranking" });
     worker.on("error", (error) => console.error("The reranking worker failed:", error));
     return {
@@ -34,6 +65,8 @@ export function createWorkerCrossEncoder(): CrossEncoder {
       stop: () => void worker.terminate(),
     };
   });
+  if (!onCpu) return crossEncoder;
+  return { ...crossEncoder, load: ({ gpu: _gpu, ...files }) => crossEncoder.load(files) };
 }
 
 /** How long something took per search, in milliseconds. */
@@ -108,6 +141,7 @@ export async function openReranker(
   cacheDir: string,
   log: Log,
   mode = `rerank:${definition.id}`,
+  onCpu = false,
 ): Promise<ScoringReranker> {
   let lastLogged = 0;
   const ready = Promise.withResolvers<void>();
@@ -115,7 +149,7 @@ export async function openReranker(
     definition,
     // The model cache's models/ is where the core would keep it in a data folder.
     dataDir: cacheDir,
-    crossEncoder: createWorkerCrossEncoder(),
+    crossEncoder: createWorkerCrossEncoder(onCpu),
     emitStatus: (status) => {
       if (status.state === "ready") ready.resolve();
       else if (status.state === "failed") {
@@ -149,8 +183,10 @@ export async function openReranker(
     const ranked = await model.rerank(query, passages);
     const ms = performance.now() - started;
     // The first call loads the model.
-    if (loadSeconds === 0) loadSeconds = ms / 1000;
-    else latencies.push(ms);
+    if (loadSeconds === 0) {
+      loadSeconds = ms / 1000;
+      log(`${definition.name} reranks on the ${model.device()?.toUpperCase() ?? "unknown device"}`);
+    } else latencies.push(ms);
     if (!ranked) throw new Error(`${definition.name} isn't ready.`);
     return ranked;
   };

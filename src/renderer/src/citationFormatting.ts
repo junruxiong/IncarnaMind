@@ -17,6 +17,7 @@ import {
   type StyledRun,
 } from "../../core/api";
 import type { CitationStyleId } from "../../shared/citationStyles";
+import { bibliographyShown } from "../../shared/mindBibliography";
 import {
   chosenCitationStyle,
   citationStyleIn,
@@ -78,12 +79,15 @@ export interface MindStyleChoice {
   chosen: boolean;
   /** The User closed the prompt that offers a style, for this Mind. */
   promptDismissed: boolean;
+  /** The Mind shows its Bibliography without a style (#102); a styled Mind always does. */
+  bibliography: boolean;
 }
 
 const choiceIn = (settings: Y.Map<unknown>): MindStyleChoice => ({
   style: citationStyleIn(settings),
   chosen: chosenCitationStyle(settings) !== null,
   promptDismissed: citationStylePromptDismissed(settings),
+  bibliography: bibliographyShown(settings),
 });
 
 /** The Mind's style, whether it chose it, and whether it closed the offer of one. */
@@ -96,7 +100,8 @@ export function useMindStyleChoice(doc: Y.Doc): MindStyleChoice {
         const now = choiceIn(settings);
         return now.style === before.style &&
           now.chosen === before.chosen &&
-          now.promptDismissed === before.promptDismissed
+          now.promptDismissed === before.promptDismissed &&
+          now.bibliography === before.bibliography
           ? before
           : now;
       });

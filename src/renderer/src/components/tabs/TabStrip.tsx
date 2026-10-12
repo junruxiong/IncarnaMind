@@ -9,6 +9,7 @@ import {
 import type { LayoutGroup, LayoutTab } from "../../../../core/api";
 import { shortcutLabel } from "../../commands/keymap";
 import { commands } from "../../commands/registry";
+import { FORMAT_LABELS, useExports } from "../../exports";
 import { useT } from "../../i18n";
 import { focusedGroupOf, groupOfTab } from "../../layoutSlice";
 import { useAppStore } from "../../store";
@@ -154,14 +155,25 @@ export function TabStrip({
   );
 }
 
+/** Export: one click exports the Mind in the last format, as ⇧⌘E does (#100). */
 function ExportButton({ mindId }: { mindId: string }) {
   const t = useT();
+  const format = useAppStore((state) => state.settings?.user.exportOptions.format ?? "docx");
+  const saving = useExports(
+    (state) => state.result?.mindId === mindId && state.result.state === "saving",
+  );
+  const label = t("export.action.title", {
+    format: t(FORMAT_LABELS[format]),
+    shortcut: shortcutLabel("mind.export"),
+  });
   return (
     <button
       type="button"
       data-testid="export-mind"
-      aria-label={t("export.action.label")}
-      title={t("export.action.label")}
+      data-format={format}
+      aria-label={label}
+      aria-busy={saving || undefined}
+      title={label}
       onClick={() =>
         commands
           .run("mind.export", { focus: { kind: "mind", id: mindId }, surface: "mind" })

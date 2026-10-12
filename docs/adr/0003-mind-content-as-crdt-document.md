@@ -29,3 +29,7 @@ The assistant's conversations are kept by the core in SQLite, not as Minds (ADR-
 ## Amendment: where third-party text came from (2026-10-11, #78)
 
 A Mind's Yjs document keeps, beside its Blocks, a `textOrigins` map: for each Block, top-level or nested, that holds third-party text (ADR-0013, amended), where it came from ("imported", "web-page" or "checked-document"), by Block id. It is a map rather than a Block attribute: an attribute would have to be declared on every node type a Block can be, nested ones too, and an older version's editor would strip it unless the content schema version rose, which would make every Mind written since open read-only there. An older version keeps the map as it is, so the content schema version stays 4. A Block deleted since leaves its entry unused. A copy pasted elsewhere gets a new id and counts as the User's, as text pasted from another app does.
+
+## Amendment: when each line of a Meeting's notes was written (2026-10-12, #139)
+
+A Mind's Yjs document keeps a `blockTimes` map beside its Blocks: for each line the User writes while the Meeting records, the Meeting's time in ms, by Block id. It is a map for the same reason as `textOrigins`: an attribute would make an older version's editor strip it, or need the content schema version to rise, so the version stays as it is. A line takes its time when it first has text, a Mark when it is made, and nothing is taken while the Meeting is paused or stopped. A Block deleted since leaves its entry unused; a copy pasted elsewhere has no time.

@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { QUESTION_BLOCK, type Skill } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
 import { SkillIcon } from "../components/icons";
+import { showBibliography } from "./bibliographyCommands";
 import { insertFootnote } from "./footnoteSchema";
 import { TableIcon } from "./icons";
 import { emptyTable } from "./tableCommands";
@@ -190,6 +191,16 @@ export const noteSlashItems: readonly SlashItem[] = [
       // No focus command: its focus comes a frame later, and would take it from the footnote's text.
       editor.commands.deleteRange(range);
       insertFootnote(editor);
+    },
+  },
+  {
+    id: "bibliography",
+    label: "editor.slash.bibliography",
+    keywords: ["sources", "references", "citations", "cankao", "wenxian"],
+    icon: "§",
+    run(editor, range) {
+      editor.chain().focus().deleteRange(range).run();
+      showBibliography(editor);
     },
   },
 ];

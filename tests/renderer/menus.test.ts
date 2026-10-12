@@ -54,7 +54,13 @@ beforeAll(async () => {
   };
   await import("../../src/renderer/src/commands/app");
   const { useAppStore } = await import("../../src/renderer/src/store");
-  useAppStore.setState({ minds: [{ id: "one" } as never] });
+  useAppStore.setState({
+    minds: [{ id: "one" } as never],
+    documents: [
+      { id: "one", path: "/Contracts/MSA.pdf", web: null, fileStatus: "available" } as never,
+    ],
+    linkedFolders: [{ id: "one", path: "/Contracts", status: "idle" } as never],
+  });
 });
 
 describe("the menus", () => {
@@ -108,7 +114,7 @@ describe("the menus", () => {
     }
   });
 
-  test("a Mind's is Open, Open to the side, Outline, Export, Make this a Skill, Move to, Rename, then Delete after a rule", () => {
+  test("a Mind's is Open, Open to the side, Outline, Export as… and Export options…, Make this a Skill, Move to, Rename, then Delete after a rule", () => {
     const here = {
       "mind.citationStyle": () => undefined,
       "mind.moveTo": () => undefined,
@@ -120,6 +126,9 @@ describe("the menus", () => {
       "—",
       "mind.outline",
       "mind.export",
+      "mind.exportAs.pdf",
+      "mind.exportAs.markdown",
+      "mind.exportOptions",
       "mind.citationStyle",
       "skill.fromMind",
       "—",
@@ -136,10 +145,39 @@ describe("the menus", () => {
       "—",
       "mind.outline",
       "mind.export",
+      "mind.exportAs.pdf",
+      "mind.exportAs.markdown",
+      "mind.exportOptions",
       "skill.fromMind",
       "—",
       "mind.delete",
     ]);
+  });
+
+  test("a Document's file group is Open in default app, Show in folder, Copy path, then Get info", () => {
+    const here = { "document.rename": () => undefined };
+    const ids = idsIn(buildMenu("document", focusOn("document", here)));
+    const start = ids.indexOf("document.openExternally");
+    expect(ids.slice(start, ids.indexOf("—", start))).toEqual([
+      "document.openExternally",
+      "document.showInFolder",
+      "file.copyPath",
+      "file.info",
+    ]);
+    expect(ids.at(-1)).toBe("document.delete");
+  });
+
+  test("a Linked folder's has Copy path and Get info with its file items", () => {
+    const ids = idsIn(buildMenu("linkedFolder", focusOn("linkedFolder")));
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        "linkedFolder.reveal",
+        "file.copyPath",
+        "file.info",
+        "linkedFolder.locate",
+      ]),
+    );
+    expect(ids.indexOf("file.copyPath")).toBe(ids.indexOf("linkedFolder.reveal") + 1);
   });
 
   test("a feature adds its items to a kind's menu, and they take their group's place", () => {
@@ -165,7 +203,7 @@ describe("the menus", () => {
         label: "mind.open",
         group: "danger",
         appliesTo: ["conversation"],
-        reversible: { confirm: "mind.delete.body" },
+        reversible: { confirm: "deleted.confirm.foot" },
         run: () => undefined,
       },
     ];
@@ -217,7 +255,7 @@ describe("the menus", () => {
     ];
     commands.register({
       id: "test.count",
-      label: (ctx, t) => `${t("mind.delete.confirm")} ${ctx.selection.length}`,
+      label: (ctx, t) => `${t("deleted.restore")} ${ctx.selection.length}`,
       group: "danger",
       appliesTo: ["document"],
       reversible: true,

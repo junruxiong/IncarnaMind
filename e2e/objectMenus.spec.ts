@@ -136,7 +136,8 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
   await expect(editor.getByTestId("citation")).toHaveCount(1);
   await newMind(window);
 
-  // A Mind: Open, Open to the side; Outline, Export; Move to…; Rename; then Delete after a rule.
+  // A Mind: Open, Open to the side; Export as… (the last format first), Export options…; Move to…;
+  // Rename; then Delete after a rule.
   const mind = window.getByTestId("mind-row").first();
   const mindMenu = await sameFromBothWays(
     window,
@@ -151,6 +152,9 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "—",
     "mind.outline",
     "mind.export",
+    "mind.exportAs.pdf",
+    "mind.exportAs.markdown",
+    "mind.exportOptions",
     "mind.citationStyle",
     "skill.fromMind",
     "—",
@@ -187,6 +191,8 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "—",
     "document.openExternally",
     "document.showInFolder",
+    "file.copyPath",
+    "file.info",
     "—",
     "document.delete",
   ]);
@@ -245,6 +251,8 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "linkedFolder.layout",
     "—",
     "linkedFolder.reveal",
+    "file.copyPath",
+    "file.info",
     "linkedFolder.locate",
     "—",
     "linkedFolder.unlink",
@@ -258,9 +266,12 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
   const tabMenu = tab.getByTestId("tab-actions");
   const byRightClick = await commandsIn(tabMenu);
   // Its Mind's items first, then the tab's own.
-  expect(byRightClick.slice(0, 5)).toEqual([
+  expect(byRightClick.slice(0, 8)).toEqual([
     "mind.outline",
     "mind.export",
+    "mind.exportAs.pdf",
+    "mind.exportAs.markdown",
+    "mind.exportOptions",
     "—",
     "mind.delete",
     "—",
@@ -338,13 +349,11 @@ test("the context-menu key and Shift+F10 open the focused row's menu; arrows mov
     await expect(row).toBeFocused();
   }
 
-  // Enter runs the focused item: Export… opens the export dialog for this Mind.
+  // Enter runs the focused item: Export options… opens the options sheet for this Mind.
   await row.focus();
   await window.keyboard.press("Shift+F10");
-  await window.keyboard.press("ArrowDown");
-  await window.keyboard.press("ArrowDown");
-  await window.keyboard.press("ArrowDown");
-  await expect(menu.getByTestId("mind.export")).toBeFocused();
+  for (let step = 0; step < 6; step++) await window.keyboard.press("ArrowDown");
+  await expect(menu.getByTestId("mind.exportOptions")).toBeFocused();
   await window.keyboard.press("Enter");
   await expect(window.getByTestId("export-dialog")).toBeVisible();
   await expect(menu).toBeHidden();
@@ -377,12 +386,15 @@ test("each item shows its shortcut as the system writes it, and the labels are i
     "打开",
     "在侧边打开",
     /^大纲(⌥⌘L|Ctrl\+Alt\+L)$/,
-    "导出…",
+    /^导出为 Word（\.docx）(⇧⌘E|Ctrl\+Shift\+E)$/,
+    "导出为 PDF",
+    "导出为 Markdown（.md）",
+    "导出选项…",
     "引用格式…",
     "做成技能",
     /^移动到…(⇧⌘M|Ctrl\+Shift\+M)$/,
     /^重命名F2$/,
-    "删除…",
+    "删除",
   ]);
   await screenshot(window, "menu-mind-zh-narrow");
   // The menu stays inside the window and its items on one line each, at this width.
@@ -475,7 +487,7 @@ test("a Document's Tags…, a Folder's Edit description and a Tag's Rename and D
   await expect(dialog).toBeHidden();
   await rightClick(window, tag.getByTestId("row-text"));
   await tag.getByTestId("tag.delete").click();
-  await expect(dialog.getByTestId("confirm-delete-tag")).toBeVisible();
+  await expect(window.getByTestId("undo-message")).toHaveText("Moved “Tides” to Recently deleted");
   await app.close();
 });
 
