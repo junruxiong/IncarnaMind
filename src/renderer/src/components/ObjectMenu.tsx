@@ -25,6 +25,7 @@ const TEST_ID_PREFIX: Record<ObjectKind, string> = {
   linkedFolder: "linked-folder",
   deleted: "deleted",
   citation: "citation",
+  chart: "chart",
   answer: "answer",
   block: "block",
   tab: "tab",

@@ -313,8 +313,38 @@ export interface Embedder {
   close(): void;
 }
 
-/** The built-in reranking model's downloaded files: the same kinds as the embedding model's. */
-export type RerankingModelFiles = EmbeddingModelFiles;
+/**
+ * A query and texts with the scores the reranking model as trained (fp32, on
+ * the CPU) gives them, which its GPU file must match before it reranks.
+ */
+export interface RerankingCheck {
+  query: string;
+  texts: readonly string[];
+  /** Logits, one per text. */
+  scores: readonly number[];
+}
+
+/** The built-in reranking model's downloaded files: the embedding model's kinds, and its GPU file if it has one. */
+export interface RerankingModelFiles extends EmbeddingModelFiles {
+  /** The model's GPU file, null while it isn't downloaded, and the check it must pass. */
+  gpu?: { model: string | null; check: RerankingCheck };
+}
+
+/**
+ * Why a reranking model with a GPU file runs on the CPU:
+ * - "not-downloaded": a GPU adapter was found, but the GPU file isn't downloaded yet;
+ * - "no-adapter": no GPU adapter was found;
+ * - "session": the model failed on the GPU;
+ * - "check": the GPU's scores for the check were off by more than 0.1 logits.
+ */
+export type CpuFallbackReason = "not-downloaded" | "no-adapter" | "session" | "check";
+
+/** Where `CrossEncoder.load` runs the model. */
+export interface RerankingDevice {
+  device: "gpu" | "cpu";
+  /** Set when the model has a GPU file but runs on the CPU; `message` is technical detail in English, for the log. */
+  fallback?: { reason: CpuFallbackReason; message: string };
+}
 
 /**
  * Runs the built-in reranking model, a cross-encoder, off the core's thread:
@@ -322,8 +352,12 @@ export type RerankingModelFiles = EmbeddingModelFiles;
  * pass a deterministic fake. The core downloads and checks the files first.
  */
 export interface CrossEncoder {
-  /** Loads the model, if it isn't loaded already. Rejects if the model can't start. */
-  load(files: RerankingModelFiles): Promise<void>;
+  /**
+   * Loads the model, if it isn't loaded already, on the GPU when its GPU file
+   * is given and passes the check, otherwise on the CPU. Rejects if the model
+   * can't start.
+   */
+  load(files: RerankingModelFiles): Promise<RerankingDevice>;
   /**
    * How well each text answers the query, in the order given: the model's own
    * scores, higher is better. Rejects if the model isn't loaded or fails.
@@ -570,6 +604,16 @@ export interface EngineSwitch {
   reason: EngineSwitchReason;
 }
 
+/**
+ * Draws an SVG document as a PNG, for a picture in an export (a chart in a
+ * Word file, #436). The desktop app draws it in a hidden window that loads
+ * nothing from the network (src/main/pictures.ts); tests pass a fake.
+ */
+export interface Pictures {
+  /** The SVG drawn at its own size in pixels (its `width` and `height`), as PNG bytes. */
+  png(svg: string): Promise<Uint8Array>;
+}
+
 export interface CoreAdapters {
   paths: Paths;
   /** The OS's preferred languages, most preferred first, as BCP 47 tags such as "zh-Hans-CN". */
@@ -581,6 +625,11 @@ export interface CoreAdapters {
    * Absent (tests that don't need it): both are refused.
    */
   shell?: FileShell;
+  /**
+   * Draws a chart's picture for a Word export. Absent (tests that don't need
+   * it): a chart goes into Word as the table of its values instead.
+   */
+  pictures?: Pictures;
   /** How Linked folders are watched (see `LinkedFolderOptions`). */
   linkedFolders?: LinkedFolderOptions;
   /**
