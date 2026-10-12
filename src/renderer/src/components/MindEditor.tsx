@@ -1,6 +1,7 @@
 import "katex/dist/katex.min.css";
 import Collaboration from "@tiptap/extension-collaboration";
 import { Focus, Placeholder } from "@tiptap/extensions";
+import { Selection } from "@tiptap/pm/state";
 import { EditorContent, ReactNodeViewRenderer, useEditor, useEditorState } from "@tiptap/react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -9,17 +10,19 @@ import { ANSWER_BLOCK, MIND_CONTENT_FIELD, type MindAccess } from "../../../core
 import { citationStyle } from "../../../shared/citationStyles";
 import { translate } from "../../../shared/i18n";
 import { useCitationFormattingFor, useMindStyleChoice } from "../citationFormatting";
-import { noteHandle } from "../commands/handles";
+import { noteHandle, readMindHandle } from "../commands/handles";
 import { shortcutLabel } from "../commands/keymap";
 import { useComposer } from "../composer";
 import { core } from "../core";
 import { AnswerView } from "../editor/AnswerView";
 import { BlockHandle } from "../editor/BlockHandle";
 import { BlockCommands } from "../editor/blockCommands";
+import { BlockOrigins } from "../editor/blockOrigins";
 import { CitationStylePrompt } from "../editor/CitationStylePrompt";
 import { CitationView } from "../editor/CitationView";
 import { CodeBlockView } from "../editor/CodeBlockView";
 import { Composer, type ComposerHandle } from "../editor/Composer";
+import { ConversationLinks } from "../editor/ConversationLinks";
 import { CitationClusters } from "../editor/citationClusters";
 import { CitationNumbers, redrawFootnotes, setCitationForm } from "../editor/citationNumbers";
 import { DocumentChipView } from "../editor/DocumentChipView";
@@ -194,9 +197,9 @@ function MindEditorView({
   const countSlot = useContext(CountSlotContext);
   const composer = useRef<ComposerHandle>(null);
   /**
-   * Whether the Mind's cursor is where the next Question goes: since the
-   * editor last had the focus, only the composer (and its menus) has had it.
-   * Otherwise a Question goes at the end of the Mind.
+   * Whether the Mind's cursor is where Add to note puts an Answer (#201): since
+   * the editor last had the focus, only the assistant (its composer, its
+   * Answers, its menus) has had it. Otherwise an Answer goes at the end of the Mind.
    */
   const cursorInMind = useRef(false);
   const placeholder = useRef("");
@@ -254,6 +257,8 @@ function MindEditorView({
         FootnoteKeys,
         DocumentChipKeys,
         Collaboration.configure({ document: doc, field: MIND_CONTENT_FIELD }),
+        // Notes added from an Answer, with their links back to it (#201).
+        BlockOrigins.configure({ doc }),
         Placeholder.configure({
           // An empty Mind's line and the line after an Answer have their hint drawn over them (EndHint).
           placeholder: ({ editor: current, pos }) => {
@@ -329,6 +334,36 @@ function MindEditorView({
     };
   }, [editor, mindId, doc, readOnly]);
 
+  // The Mind the assistant reads (it draws this Mind's composer): Add to note puts an Answer
+  // here through this editor, and a second Esc in the assistant comes back here.
+  const reads = dock !== null && !readOnly;
+  useEffect(() => {
+    if (!reads) return;
+    const handle = {
+      editor,
+      mindId,
+      doc,
+      cursorInMind: () => cursorInMind.current,
+      returnToNote() {
+        if (editor.isDestroyed) return;
+        // Where the cursor was, or at the end, at once: what is typed next goes there.
+        // (Tiptap's `focus` waits a frame, and the first keys would go elsewhere.)
+        if (!cursorInMind.current) {
+          editor.commands.command(({ tr }) => {
+            tr.setSelection(Selection.atEnd(tr.doc));
+            return true;
+          });
+        }
+        editor.view.focus();
+        editor.view.dispatch(editor.state.tr.scrollIntoView());
+      },
+    };
+    readMindHandle.current = handle;
+    return () => {
+      if (readMindHandle.current === handle) readMindHandle.current = null;
+    };
+  }, [reads, editor, mindId, doc]);
+
   // The selection menu's AI section: each comes back as changes to accept or reject.
   const aiActions = useMemo((): SelectionAction[] => {
     const available = (current: typeof editor) => selectionForEdit(current.state) !== null;
@@ -370,10 +405,10 @@ function MindEditorView({
     if (!editor.isDestroyed) redrawFootnotes(editor.view);
   }, [editor, label, emptyFormula]);
 
-  // The cursor is where the next Question goes while the focus is in the editor, or has gone
-  // from it only to the assistant the composer is in (its menus, its header); anywhere else,
-  // Questions go at the end of the Mind. A dialog that asks something on the way (consent to
-  // send, say) gives the focus back: it doesn't count.
+  // The cursor is where Add to note puts an Answer while the focus is in the editor, or has gone
+  // from it only to the assistant the composer is in (its Answers, its menus, its header);
+  // anywhere else, Answers go at the end of the Mind. A dialog that asks something on the way
+  // (consent to send, say) gives the focus back: it doesn't count.
   useEffect(() => {
     const assistant = dock?.closest("[data-assistant]") ?? dock;
     const onFocusIn = (event: FocusEvent) => {
@@ -428,6 +463,7 @@ function MindEditorView({
         <EditorContent editor={editor} />
         {!readOnly && <EndHint editor={editor} text={hintText} onAsk={askOnLine} />}
         <MarginChecks editor={editor} />
+        <ConversationLinks editor={editor} />
         {!readOnly && <TableMenu editor={editor} />}
         <FootnoteArea editor={editor} citationView={citationView} />
         {style !== "numbered" && (
@@ -439,16 +475,7 @@ function MindEditorView({
       </div>
       {dock &&
         !readOnly &&
-        createPortal(
-          <Composer
-            ref={composer}
-            editor={editor}
-            doc={doc}
-            mindId={mindId}
-            cursorInMind={cursorInMind}
-          />,
-          dock,
-        )}
+        createPortal(<Composer ref={composer} editor={editor} doc={doc} mindId={mindId} />, dock)}
       {guide && <StartGuide />}
       {!readOnly && <BlockHandle editor={editor} />}
       {!readOnly && <SelectionMenu editor={editor} ai={aiActions} />}

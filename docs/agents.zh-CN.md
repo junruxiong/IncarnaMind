@@ -64,9 +64,13 @@ Google AI Pro 和 Ultra 订阅用户的接入方式。点击“连接”：Incar
 <a id="other"></a>
 ### 其他智能体
 
-任何能启动本地 MCP 服务器的智能体都可以使用。点击“连接”，也可以给它起个名字：IncarnaMind 会复制它的设置，格式是多数智能体采用的 `mcpServers` 形式（`{ "mcpServers": { "incarnamind": { "command", "args", "env" } } }`）。把它粘贴到你的智能体添加 MCP 服务器的地方，然后重新启动。如果智能体要求分别填写命令、参数和环境变量，可以从同一份设置中取用：已连接智能体的“技术细节”会再次显示。IncarnaMind 不会写入这些智能体的文件。
+任何能启动本地 MCP 服务器的智能体都可以使用。点击“连接”，也可以给它起个名字：IncarnaMind 会复制它的设置，格式是多数智能体采用的 `mcpServers` 形式（`{ "mcpServers": { "incarnamind": { "command", "args", "env" } } }`）。把它粘贴到你的智能体添加 MCP 服务器的地方，然后重新启动。如果智能体要求分别填写命令、参数和环境变量，已连接智能体的“技术细节”会逐项显示，每项都有自己的“复制”（屏幕上密钥是隐藏的，复制时会包含密钥）。IncarnaMind 不会写入这些智能体的文件。
 
 只能在互联网上使用的聊天应用（网页版 ChatGPT 和 Claude、Gemini、Le Chat、Grok、Microsoft 365 Copilot、扣子、元宝）无法连接 IncarnaMind，因为它只服务这台电脑。
+
+## 技能
+
+没有提示时，智能体有时会凭记忆回答，而不去查看你的文档。所以对读取技能的智能体，点击“连接”时还会添加一个简短的技能 `incarnamind`，告诉它何时使用 IncarnaMind。它放在智能体自己的技能文件夹中：Claude Code 是 `~/.claude/skills/`（[文档](https://code.claude.com/docs/en/skills)），Codex 是 `~/.agents/skills/`（[文档](https://learn.chatgpt.com/docs/build-skills)），Cursor 是 `~/.cursor/skills/`（[文档](https://cursor.com/docs/context/skills)），Antigravity 是 `~/.gemini/config/skills/`（[文档](https://www.antigravity.google/docs/skills)）。点击“断开连接”（或“撤销”）会把它删除，除非你改过这个文件。其他智能体可在“技术细节”中点击“复制技能”：把它保存为 SKILL.md，放进智能体技能文件夹中名为 `incarnamind` 的文件夹。
 
 ## 遇到问题时
 
@@ -76,7 +80,7 @@ Google AI Pro 和 Ultra 订阅用户的接入方式。点击“连接”：Incar
 - **“这个智能体还不能读取任何文档”**：在“设置 → 智能体 → 文件夹…”中为它选择文件夹。
 - **“已连接的智能体暂停使用”**：在“设置 → 搜索”中关闭“所有内容都留在这台电脑上”。
 - **“这个智能体已不再连接 IncarnaMind”**：它已断开连接，重新点击“连接”即可。
-- **IncarnaMind 的回答需要较长时间**：向 IncarnaMind 提问时，它会用你自己的对话模型生成完整的回答。有些智能体只等待一分钟；由 IncarnaMind 设置的 Codex 会等待五分钟。
+- **IncarnaMind 的回答需要较长时间**：向 IncarnaMind 提问时，它会用你自己的对话模型生成完整的回答。有些智能体只等待一分钟；由 IncarnaMind 设置的 Codex 会等待两分钟。
 
 ## 技术细节
 

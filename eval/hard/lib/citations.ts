@@ -49,6 +49,7 @@ export const asEvalQuestion = (question: HardQuestion): EvalQuestion => ({
   crossLingual: question.difficulty === "cross-lingual",
   question: question.question,
   expected: question.expected[0] ?? { document: "", pages: [1, 1], quote: "" },
+  expectedAll: question.expected,
 });
 
 /** The figures for a group of Answers to the hard tier's Questions. */
@@ -107,7 +108,8 @@ export async function runHardCitations(
   library: Library,
   questions: readonly HardQuestion[],
   chat: ChatSettings,
-  config: Pick<EvalConfig, "answerTimeoutMs">,
+  config: Pick<EvalConfig, "answerTimeoutMs"> &
+    Partial<Pick<EvalConfig, "rerankDepth" | "maxPassages">>,
   manifest: Pick<Manifest, "documents">,
   log: Log,
 ): Promise<HardCitations> {

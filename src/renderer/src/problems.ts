@@ -1,4 +1,5 @@
-import type { ProviderErrorKind } from "../../core/api";
+import type { ChatProviderKind, ProviderErrorKind } from "../../core/api";
+import { OLLAMA_USAGE_URL } from "../../core/providers/catalog/billing";
 import type { MessageKey } from "../../shared/i18n";
 import { CHATGPT_USAGE_URL } from "./chatGptUsage";
 import type { SettingsPage } from "./settingsPages";
@@ -50,6 +51,7 @@ export const ANSWER_PROBLEMS: Record<ProviderErrorKind, AnswerProblem> = {
   provider: { line: "answer.error.provider", fix: retry },
   // A local model's context window: trying again can't help, shortening the Question does.
   "too-long": { line: "answer.error.too-long", fix: { kind: "none" } },
+  "no-answer": { line: "answer.error.no-answer", fix: retry },
   unknown: { line: "answer.error.unknown", fix: retry },
   // The ChatGPT plan provider.
   "not-signed-in": {
@@ -61,12 +63,31 @@ export const ANSWER_PROBLEMS: Record<ProviderErrorKind, AnswerProblem> = {
     line: "answer.error.plan-limit",
     fix: { kind: "link", url: CHATGPT_USAGE_URL, label: "answer.error.manageUsage" },
   },
+  // The User's own monthly cap: raising it (or waiting for next month) is the way on.
+  "cost-cap": {
+    line: "answer.error.cost-cap",
+    fix: { kind: "settings", page: "general", label: "answer.error.changeCap" },
+  },
   // Only another model helps: a plan that can't be used in other apps stays so.
   blocked: {
     line: "answer.error.blocked",
     fix: { kind: "settings", page: "models", label: "answer.error.chooseModel" },
   },
 };
+
+/** A failed Answer's problem, for the provider that wrote it: an Ollama Cloud allowance is Ollama's to manage. */
+export function answerProblem(
+  kind: ProviderErrorKind,
+  provider: ChatProviderKind | undefined,
+): AnswerProblem {
+  if (kind === "plan-limit" && provider === "ollama") {
+    return {
+      line: "answer.error.plan-limit.ollama",
+      fix: { kind: "link", url: OLLAMA_USAGE_URL, label: "answer.error.manageUsage" },
+    };
+  }
+  return ANSWER_PROBLEMS[kind];
+}
 
 /**
  * Why a file couldn't be written, in a few words, for "Couldn't save: …".

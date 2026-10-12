@@ -1233,6 +1233,95 @@ export const migrations: readonly Migration[] = [
       ALTER TABLE conversation_messages ADD COLUMN text_origin TEXT;
     `,
   },
+  {
+    version: 56,
+    description: "Each cloud model request's tokens and cost, for the monthly cap (#83)",
+    sql: `
+      -- One row per request to a cloud chat model (src/core/cost/meter.ts). A request billed per
+      -- token is first 'reserved' at its most (its prompt and its output limit), then 'settled' at
+      -- what its provider reported, or at the reservation when it reported nothing. A request
+      -- the provider refused before answering is soft-deleted: it cost nothing. A ChatGPT plan
+      -- request has no price: its tokens are recorded, never its cost.
+      -- billing: 'per-token' | 'plan'; status: 'reserved' | 'settled'; flow: the data flow it
+      -- went out on ('chat', 'tagging'…) or 'test'. Amounts are in currency ('USD' | 'CNY'),
+      -- NULL with no known price.
+      CREATE TABLE model_requests (
+        id TEXT PRIMARY KEY NOT NULL,
+        provider_id TEXT NOT NULL,
+        model_id TEXT NOT NULL,
+        flow TEXT NOT NULL,
+        billing TEXT NOT NULL,
+        status TEXT NOT NULL,
+        currency TEXT,
+        reserved REAL,
+        cost REAL,
+        input_tokens INTEGER,
+        cached_input_tokens INTEGER,
+        cache_write_tokens INTEGER,
+        output_tokens INTEGER,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX model_requests_by_created_at ON model_requests (created_at)
+        WHERE deleted_at IS NULL;
+      CREATE INDEX model_requests_reserved ON model_requests (status)
+        WHERE status = 'reserved' AND deleted_at IS NULL;
+    `,
+  },
+  {
+    version: 58,
+    description:
+      "Documents known by where they belong, not by their path on one computer (ADR-0020)",
+    sql: `
+      -- Where a Document's file belongs, the same on every computer. source_kind:
+      -- 'linked-folder' (relative_path is inside its Linked folder), 'data-folder' (a file
+      -- IncarnaMind keeps, such as a web page's snapshot: relative_path is inside the data
+      -- folder) or 'file' (added on its own: nothing but its id; relative_path is NULL),
+      -- checked in code, so a kind a newer version adds is left alone. relative_path has "/"
+      -- between names on every system. path, file_mtime_ms and file_status, and a Linked
+      -- folder's path, are this computer's: derived from these, or seen here, never synced.
+      -- The core marks the files in the data folder at its next start: only it knows where
+      -- that is. Files aren't read: each is found where it was.
+      ALTER TABLE documents ADD COLUMN source_kind TEXT NOT NULL DEFAULT 'file';
+      ALTER TABLE documents ADD COLUMN relative_path TEXT;
+      -- A Linked folder's path has "/" first on macOS and Linux, and "\\" between names on
+      -- Windows, which become "/". A path not inside its Linked folder gets none.
+      UPDATE documents SET source_kind = 'linked-folder', relative_path = (
+        SELECT CASE
+          WHEN substr(l.path, 1, 1) = '/' THEN CASE
+            WHEN substr(documents.path, 1, length(rtrim(l.path, '/')) + 1) = rtrim(l.path, '/') || '/'
+            THEN substr(documents.path, length(rtrim(l.path, '/')) + 2) END
+          ELSE CASE
+            WHEN substr(documents.path, 1, length(rtrim(l.path, '\\')) + 1) = rtrim(l.path, '\\') || '\\'
+            THEN replace(substr(documents.path, length(rtrim(l.path, '\\')) + 2), '\\', '/') END
+        END
+        FROM linked_folders l WHERE l.id = documents.linked_folder_id
+      ) WHERE linked_folder_id IS NOT NULL;
+      CREATE UNIQUE INDEX documents_by_place ON documents (linked_folder_id, relative_path)
+        WHERE deleted_at IS NULL AND linked_folder_id IS NOT NULL;
+
+      -- The workspace: everything this data folder holds. One live row, made by the core at
+      -- its first start; computers that sync a User's Minds will share it. No account.
+      CREATE TABLE workspace (
+        id TEXT PRIMARY KEY NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+    `,
+  },
+  {
+    version: 59,
+    description:
+      "Outside agents remember the settings files and folders IncarnaMind created (#495)",
+    sql: `
+      -- The settings files, and the folders for them, that setting an agent up created because
+      -- they did not exist (a JSON list of absolute paths, shallowest first), so Disconnect can
+      -- take back what IncarnaMind made and nothing the User had. On this device only.
+      ALTER TABLE agent_pairings ADD COLUMN created_paths TEXT NOT NULL DEFAULT '[]';
+    `,
+  },
 ];
 
 /**

@@ -4,6 +4,8 @@ import { expect, type Locator, type Page, test } from "@playwright/test";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
+  addToNote,
+  assistantAnswers,
   createDataFolder,
   dismissChatSetup,
   launchApp,
@@ -318,7 +320,7 @@ const TIDES = buildPdf([
   { lines: ["Tide tables", "Harbours publish the times of high water every year."] },
 ]);
 
-test("an Answer written as a Markdown table shows as a table, with its Citation found in a cell, also after reopening", async () => {
+test("an Answer written as a Markdown table shows as a table, with its Citation found in a cell; added to the note it is one there, also after reopening", async () => {
   await writeFile(join(sources, "Tides.pdf"), TIDES);
   const first = await launchApp(dataDir, { fakeChat: true });
   const { window } = first;
@@ -331,7 +333,7 @@ test("an Answer written as a Markdown table shows as a table, with its Citation 
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type("When do spring tides happen? Answer as a table.");
   await window.keyboard.press("Enter");
-  const answer = editor.getByTestId("answer");
+  const answer = assistantAnswers(window).last();
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
 
   // The heading row, two rows, the "<br>" a line break, and the second column aligned right.
@@ -349,7 +351,7 @@ test("an Answer written as a Markdown table shows as a table, with its Citation 
     "aria-label",
     "Citation 1: Tides, p. 2. Quote found on p. 2",
   );
-  const check = window.getByTestId("margin-check");
+  const check = answer.getByTestId("margin-check");
   await expect(check).toHaveAttribute("data-check", "found");
   // The check is level with the cell's line.
   const chip = await citation.getByTestId("citation-chip").boundingBox();
@@ -357,11 +359,20 @@ test("an Answer written as a Markdown table shows as a table, with its Citation 
   if (!chip || !mark) throw new Error("The Citation or its check isn't visible.");
   expect(Math.abs(chip.y + chip.height / 2 - (mark.y + mark.height / 2))).toBeLessThanOrEqual(10);
   await screenshot(window, "table-answer-en");
+
+  // Added to the note, it is a table there, its Citation found in the same cell.
+  await addToNote(window, answer);
+  const added = editor.locator("table");
+  await expect(added.locator("th")).toHaveText(["Claim", "Where"]);
+  await expect(added.locator("td").first().getByTestId("citation")).toHaveAttribute(
+    "data-check",
+    "found",
+  );
   await first.app.close();
 
   const second = await launchApp(dataDir, { fakeChat: true });
   await second.window.getByTestId("mind-list-item").click();
-  const reopened = second.window.getByTestId("mind-editor").getByTestId("answer").locator("table");
+  const reopened = second.window.getByTestId("mind-editor").locator("table");
   await expect(reopened.locator("td").first().getByTestId("citation")).toHaveAttribute(
     "data-check",
     "found",

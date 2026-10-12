@@ -25,6 +25,9 @@ export const MENU_COMMANDS = {
   "tab.split": { label: "menu.splitRight", keys: "CmdOrCtrl+Alt+\\" },
   "settings.open": { label: "menu.settings", keys: "CmdOrCtrl+," },
   "sidebar.toggle": { label: "menu.hideSidebar", keys: "CmdOrCtrl+\\" },
+  // In a field the menu takes them back itself, as the field's own undo (src/main/menu.ts).
+  "edit.undo": { label: "menu.undo", keys: "CmdOrCtrl+Z" },
+  "edit.redo": { label: "menu.redo", keys: "CmdOrCtrl+Shift+Z" },
 } as const satisfies Record<CommandId, { label: MessageKey; keys: Keys }>;
 
 export type MenuCommandId = keyof typeof MENU_COMMANDS;

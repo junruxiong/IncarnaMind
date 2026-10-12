@@ -5,10 +5,12 @@ import { noteHolding } from "../editor/noteKeymap";
 import { useFindSources } from "../findSources";
 import { currentTabOf } from "../layoutSlice";
 import { useMindTools } from "../mindTools";
+import { startSkillFromMind } from "../makeSkill";
 import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
 import { findTab } from "../tabs";
 import { assistantCommands } from "./assistant";
+import { editCommands } from "./edit";
 import { evidenceCommands } from "./evidence";
 import { footnoteCommands } from "./footnotes";
 import { citationHandle, findHandle, sidebarHandle } from "./handles";
@@ -53,6 +55,12 @@ function outlineMind(ctx: CommandContext): string | null {
   return mindInFront();
 }
 
+/** The Mind a command acts on: the one a menu names, else the one in front (⌘K, the assistant). */
+function mindOf(ctx: CommandContext): string | null {
+  const targets = ctx.selection.length > 0 ? ctx.selection : ctx.focus ? [ctx.focus] : [];
+  return targets.find((each) => each.kind === "mind")?.id ?? mindInFront();
+}
+
 const appCommands: readonly Command[] = [
   {
     ...fromMenu("mind.new"),
@@ -60,6 +68,7 @@ const appCommands: readonly Command[] = [
     reversible: true,
     run: () => useAppStore.getState().createMind(),
   },
+  ...editCommands,
   ...mindCommands,
   ...documentCommands,
   ...folderCommands,
@@ -133,6 +142,19 @@ const appCommands: readonly Command[] = [
         `article[data-mind-id="${mindId}"] [data-testid="references-style"]`,
       );
       useCitationStylePicker.getState().show(mindId, button);
+    },
+  },
+  {
+    // The AI drafts it in the Mind's card; nothing is saved until the User saves it.
+    id: "skill.fromMind",
+    label: "skills.make.command",
+    keywords: ["skills.settings.title"],
+    group: "main",
+    reversible: true,
+    when: (ctx) => mindOf(ctx) !== null,
+    run: (ctx) => {
+      const mindId = mindOf(ctx);
+      if (mindId) return startSkillFromMind(mindId);
     },
   },
   {
