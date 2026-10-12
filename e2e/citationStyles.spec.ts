@@ -287,10 +287,16 @@ test("in Chinese: the offer puts GB/T 7714 first; chosen, raised numbers and 参
 
   // At the narrowest window the header wraps by word and nothing spills out of the column.
   await setWindowSize(app, window, 900, 660);
-  const column = await window.getByTestId("mind-pane").boundingBox();
-  const head = await references.locator(".references-head").boundingBox();
-  if (!column || !head) throw new Error("The References or the Mind aren't on screen.");
-  expect(head.x + head.width).toBeLessThanOrEqual(column.x + column.width + 1);
+  await expect(window.getByTestId("workbench")).toHaveAttribute("data-dock", "bottom");
+  const bounds = await references.locator(".references-head").evaluate((head) => {
+    const column = head.closest('[data-testid="mind-pane"]');
+    if (!column) throw new Error("The References aren't in the Mind.");
+    return {
+      headRight: head.getBoundingClientRect().right,
+      columnRight: column.getBoundingClientRect().right,
+    };
+  });
+  expect(bounds.headRight).toBeLessThanOrEqual(bounds.columnRight + 1);
   await screenshot(window, "references-narrow-zh");
   await app.close();
 });

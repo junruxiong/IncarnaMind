@@ -160,8 +160,10 @@ for (const language of ["en", "zh-CN"] as const) {
       await expect(
         window.locator('[data-testid="mind-count-basis"][aria-checked="true"]'),
       ).toBeFocused();
-      await window.getByTestId("mind-count-target").fill(language === "en" ? "8,000" : "3万");
-      await window.keyboard.press("Enter");
+      const target = window.getByTestId("mind-count-target");
+      await target.click();
+      await target.fill(language === "en" ? "8,000" : "3万");
+      await target.press("Enter");
       await expect(window.getByTestId("mind-count-progress")).toBeVisible();
       // The count waits for a pause in typing.
       await expect(button).not.toHaveAttribute("data-total", "0");
