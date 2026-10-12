@@ -20,11 +20,26 @@ const PROVIDERS = [
   {
     id: "anthropic",
     name: { en: "Anthropic", zh: "Anthropic" },
+    support: "first-class",
     group: "international",
     adapter: "anthropic",
     endpoints: [{ id: "global", label: GLOBAL, baseUrl: "https://api.anthropic.com/v1" }],
     apiKey: "required",
     keyUrl: "https://platform.claude.com/settings/keys",
+    keyGuide: [
+      {
+        en: "Open Get a key and sign in to the Anthropic Console.",
+        zh: "点“获取密钥”，登录 Anthropic Console。",
+      },
+      {
+        en: "Add credit under Billing. A Claude Max or Team plan includes monthly API credits: link the plan to this Console organization in claude.ai's Billing first. Pro doesn't include any.",
+        zh: "在 Billing 中充值。Claude Max 或 Team 订阅每月附带 API 额度：先在 claude.ai 的账单设置里把订阅关联到这个 Console 组织。Pro 订阅不含 API 额度。",
+      },
+      {
+        en: "Create a key, copy it (it's shown once) and paste it here.",
+        zh: "新建一个密钥，复制（只显示一次），粘贴到这里。",
+      },
+    ],
     docsUrl: "https://docs.anthropic.com/en/docs/about-claude/models",
     // Claude 5.5 thinks by default (adaptively): a small call with a short reply runs out of room
     // before it writes anything (#282).
@@ -59,11 +74,26 @@ const PROVIDERS = [
   {
     id: "openai",
     name: { en: "OpenAI", zh: "OpenAI" },
+    support: "first-class",
     group: "international",
     adapter: "openai",
     endpoints: [{ id: "global", label: GLOBAL, baseUrl: "https://api.openai.com/v1" }],
     apiKey: "required",
     keyUrl: "https://platform.openai.com/api-keys",
+    keyGuide: [
+      {
+        en: "Open Get a key and sign in to the OpenAI platform.",
+        zh: "点“获取密钥”，登录 OpenAI 平台。",
+      },
+      {
+        en: "Add credit under Billing. A ChatGPT plan doesn't include API use; with Plus or Pro, Continue with ChatGPT needs no key.",
+        zh: "在 Billing 中充值。ChatGPT 订阅不含 API 用量；有 Plus 或 Pro 的话，可改用“使用 ChatGPT 继续”，无需密钥。",
+      },
+      {
+        en: "Create a key, copy it (it's shown once) and paste it here.",
+        zh: "新建一个密钥，复制（只显示一次），粘贴到这里。",
+      },
+    ],
     docsUrl: "https://platform.openai.com/docs/models",
     // The Responses API keeps each request on OpenAI's servers unless it says not to.
     request: { store: false },
@@ -97,6 +127,7 @@ const PROVIDERS = [
   {
     id: "google",
     name: { en: "Google", zh: "Google" },
+    support: "first-class",
     group: "international",
     adapter: "google",
     endpoints: [
@@ -108,6 +139,20 @@ const PROVIDERS = [
     ],
     apiKey: "required",
     keyUrl: "https://aistudio.google.com/apikey",
+    keyGuide: [
+      {
+        en: "Open Get a key and sign in with your Google account.",
+        zh: "点“获取密钥”，用 Google 账号登录。",
+      },
+      {
+        en: "Choose Create API key, and a project if it asks.",
+        zh: "选择“Create API key”，如有提示再选一个项目。",
+      },
+      {
+        en: "Copy the key and paste it here.",
+        zh: "复制密钥，粘贴到这里。",
+      },
+    ],
     docsUrl: "https://ai.google.dev/gemini-api/docs/models",
     roles: {
       answers: "gemini-3.8-flash",
@@ -139,11 +184,26 @@ const PROVIDERS = [
   {
     id: "openrouter",
     name: { en: "OpenRouter", zh: "OpenRouter" },
+    support: "first-class",
     group: "international",
     adapter: "openrouter",
     endpoints: [{ id: "global", label: GLOBAL, baseUrl: "https://openrouter.ai/api/v1" }],
     apiKey: "required",
     keyUrl: "https://openrouter.ai/settings/keys",
+    keyGuide: [
+      {
+        en: "Open Get a key and sign in to OpenRouter.",
+        zh: "点“获取密钥”，登录 OpenRouter。",
+      },
+      {
+        en: "Add credit under Credits. One balance pays for every model.",
+        zh: "在 Credits 中充值。一份余额可用于所有模型。",
+      },
+      {
+        en: "Create a key, copy it (it's shown once) and paste it here.",
+        zh: "新建一个密钥，复制（只显示一次），粘贴到这里。",
+      },
+    ],
     docsUrl: "https://openrouter.ai/models",
     request: {
       // Route only to providers that don't keep or train on prompts, and only to those that
@@ -176,6 +236,7 @@ const PROVIDERS = [
   {
     id: "mistral",
     name: { en: "Mistral", zh: "Mistral" },
+    support: "best-effort",
     group: "international",
     adapter: "mistral",
     endpoints: [{ id: "global", label: GLOBAL, baseUrl: "https://api.mistral.ai/v1" }],
@@ -207,6 +268,7 @@ const PROVIDERS = [
   {
     id: "xai",
     name: { en: "xAI", zh: "xAI" },
+    support: "best-effort",
     group: "international",
     adapter: "xai",
     endpoints: [{ id: "global", label: GLOBAL, baseUrl: "https://api.x.ai/v1" }],
@@ -237,11 +299,26 @@ const PROVIDERS = [
   {
     id: "deepseek",
     name: { en: "DeepSeek", zh: "DeepSeek 深度求索" },
+    support: "first-class",
     group: "china",
     adapter: "deepseek",
     endpoints: [{ id: "global", label: GLOBAL, baseUrl: "https://api.deepseek.com" }],
     apiKey: "required",
     keyUrl: "https://platform.deepseek.com/api_keys",
+    keyGuide: [
+      {
+        en: "Open Get a key and sign up or sign in to the DeepSeek platform.",
+        zh: "点“获取密钥”，注册或登录 DeepSeek 开放平台。",
+      },
+      {
+        en: "Top up your balance. API use is paid by what you use.",
+        zh: "充值账户余额。API 按用量计费。",
+      },
+      {
+        en: "Create a key, copy it (it's shown once) and paste it here.",
+        zh: "新建一个密钥，复制（只显示一次），粘贴到这里。",
+      },
+    ],
     docsUrl: "https://api-docs.deepseek.com/quick_start/pricing",
     request: { thinkingOff: { options: { deepseek: { thinking: { type: "disabled" } } } } },
     roles: {
@@ -269,6 +346,7 @@ const PROVIDERS = [
   {
     id: "qwen",
     name: { en: "Qwen (Alibaba Cloud Model Studio)", zh: "通义千问（阿里云百炼）" },
+    support: "first-class",
     group: "china",
     adapter: "alibaba",
     // Each region has its own key and model list: a key works only in the region it was made in.
@@ -288,6 +366,20 @@ const PROVIDERS = [
     ],
     apiKey: "required",
     keyUrl: "https://bailian.console.aliyun.com/?tab=model#/api-key",
+    keyGuide: [
+      {
+        en: "Pick the region of your account above, then open Get a key. A key works only in its own region.",
+        zh: "先在上方选择账号所在的地域，再点“获取密钥”。密钥只在创建它的地域有效。",
+      },
+      {
+        en: "Sign in to Model Studio and turn it on if it asks. New accounts may get free use for a while.",
+        zh: "登录百炼并按提示开通。新账号可能有一段时间的免费额度。",
+      },
+      {
+        en: "Create a key, copy it and paste it here.",
+        zh: "新建一个 API-KEY，复制，粘贴到这里。",
+      },
+    ],
     docsUrl: "https://www.alibabacloud.com/help/en/model-studio/regions",
     request: { thinkingOff: { options: { alibaba: { enableThinking: false } } } },
     roles: {
@@ -315,6 +407,7 @@ const PROVIDERS = [
   {
     id: "kimi",
     name: { en: "Kimi (Moonshot AI)", zh: "Kimi（月之暗面）" },
+    support: "best-effort",
     group: "china",
     adapter: "moonshotai",
     endpoints: [
@@ -360,6 +453,7 @@ const PROVIDERS = [
   {
     id: "glm",
     name: { en: "GLM (Zhipu / Z.ai)", zh: "智谱 GLM" },
+    support: "best-effort",
     group: "china",
     adapter: "zai",
     // BigModel (mainland China) and Z.ai (international) are separate platforms with separate keys.
@@ -413,6 +507,7 @@ const PROVIDERS = [
   {
     id: "siliconflow",
     name: { en: "SiliconFlow", zh: "硅基流动" },
+    support: "first-class",
     group: "china",
     adapter: "openai-compatible",
     endpoints: [
@@ -431,6 +526,20 @@ const PROVIDERS = [
     ],
     apiKey: "required",
     keyUrl: "https://cloud.siliconflow.cn/account/ak",
+    keyGuide: [
+      {
+        en: "Pick the region of your account above, then open Get a key.",
+        zh: "先在上方选择账号所在的地域，再点“获取密钥”。",
+      },
+      {
+        en: "Sign in to SiliconFlow. In mainland China it asks you to verify your identity first.",
+        zh: "登录硅基流动。中国大陆账号需要先完成实名认证。",
+      },
+      {
+        en: "Create a key, copy it and paste it here.",
+        zh: "新建一个 API 密钥，复制，粘贴到这里。",
+      },
+    ],
     docsUrl: "https://docs.siliconflow.cn/cn/userguide/quickstart",
     request: {
       openAiCompatible: { includeUsage: true, supportsStructuredOutputs: true },
@@ -461,6 +570,7 @@ const PROVIDERS = [
   {
     id: "ollama",
     name: { en: "Ollama", zh: "Ollama" },
+    support: "first-class",
     group: "local",
     adapter: "ollama",
     endpoints: [],
@@ -483,6 +593,7 @@ const PROVIDERS = [
   {
     id: "openai-compatible",
     name: { en: "OpenAI-compatible server", zh: "OpenAI 兼容服务器" },
+    support: "best-effort",
     group: "other",
     adapter: "openai-compatible",
     endpoints: [],
@@ -517,6 +628,35 @@ export const catalogProvider = (id: string | null | undefined): CatalogProvider 
  */
 export const catalogProviderOfKind = (kind: ChatProviderKind): CatalogProvider | undefined =>
   catalogProvider(kind);
+
+/**
+ * The providers set up with a key or a server address, in catalog order: every
+ * hosted provider, then a server the User gives. Ollama has its own card.
+ */
+export const KEY_PROVIDER_KINDS: readonly ChatProviderKind[] = CATALOG_PROVIDERS.filter(
+  (each) => each.endpoints.length > 0 || each.id === "openai-compatible",
+).map((each) => each.id as ChatProviderKind);
+
+/**
+ * The providers to offer for a key, in the two groups the screens show: `main`,
+ * the first-class ones and any best-effort one the User already set up (it
+ * stays among their providers whatever its tier), and `more`, under "More
+ * providers". The first-run setup shows `main` for a User with none set up.
+ */
+export function keyProviderGroups(setUp: readonly ChatProviderKind[] = []): {
+  main: ChatProviderKind[];
+  more: ChatProviderKind[];
+} {
+  const firstClass = KEY_PROVIDER_KINDS.filter(
+    (kind) => catalogProviderOfKind(kind)?.support === "first-class",
+  );
+  // Set up, then listed after the first-class ones rather than among them.
+  const keptSetUp = KEY_PROVIDER_KINDS.filter(
+    (kind) => !firstClass.includes(kind) && setUp.includes(kind),
+  );
+  const main = [...firstClass, ...keptSetUp];
+  return { main, more: KEY_PROVIDER_KINDS.filter((kind) => !main.includes(kind)) };
+}
 
 /** The provider's endpoint with this id, else its first (the default); none for a server the User gives. */
 export const endpointOf = (

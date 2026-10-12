@@ -15,8 +15,6 @@ import { useAppStore } from "./store";
 type AskBlock =
   /** Questions can't be asked yet: the Question explains why. */
   | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
-  /** The User edited the Answer: the Answer asks before replacing it. */
-  | { kind: "edited"; answerId: string }
   /** The Question forces a Skill that is off or gone: the Question says which. */
   | { kind: "skill-unavailable"; skill: string; state: Exclude<SkillAvailability, "enabled"> }
   | { kind: "error"; message: string };
@@ -31,20 +29,15 @@ interface AnswersState {
   /** The models a Question's picker offers; null until first asked for. */
   models: ChatModelGroup[] | null;
 
-  /** Asks a Question; with `discardEdits`, replaces an Answer the User edited. */
-  ask(mindId: string, questionId: string, discardEdits?: boolean): Promise<AskResult | null>;
+  /** Asks a Question; an Answer the User edited comes back as changes over their version. */
+  ask(mindId: string, questionId: string): Promise<AskResult | null>;
   /**
    * Asks a Question just put into the Mind from its composer: why it couldn't
    * be asked is kept for the composer (`composerKey`), not for the Question.
    */
   askFromComposer(mindId: string, questionId: string): Promise<AskResult | null>;
-  /** Writes an Answer again; with `discardEdits`, even if the User edited it. */
-  regenerate(
-    mindId: string,
-    answerId: string,
-    questionId: string,
-    discardEdits?: boolean,
-  ): Promise<void>;
+  /** Writes an Answer again; one the User edited comes back as changes over their version. */
+  regenerate(mindId: string, answerId: string, questionId: string): Promise<void>;
   stop(mindId: string, answerId: string): void;
   dismiss(questionId: string): void;
   /** Loads the picker's models, unless they are loaded already. */
@@ -61,13 +54,11 @@ function settle(key: string, result: AskResult | null, error?: unknown): void {
       blocked[key] =
         result.reason === "not-ready"
           ? { kind: "not-ready", readiness: result.readiness }
-          : result.reason === "edited"
-            ? { kind: "edited", answerId: result.answerId }
-            : {
-                kind: "skill-unavailable",
-                skill: result.skill,
-                state: result.state === "disabled" ? "disabled" : "removed",
-              };
+          : {
+              kind: "skill-unavailable",
+              skill: result.skill,
+              state: result.state === "disabled" ? "disabled" : "removed",
+            };
     }
     return { blocked };
   });
@@ -80,9 +71,9 @@ export const useAnswers = create<AnswersState>()((set, get) => ({
   phases: {},
   models: null,
 
-  async ask(mindId, questionId, discardEdits) {
+  async ask(mindId, questionId) {
     try {
-      const result = await core.askQuestion({ mindId, questionId, discardEdits });
+      const result = await core.askQuestion({ mindId, questionId });
       settle(questionId, result);
       return result;
     } catch (error) {
@@ -103,9 +94,9 @@ export const useAnswers = create<AnswersState>()((set, get) => ({
     }
   },
 
-  async regenerate(mindId, answerId, questionId, discardEdits) {
+  async regenerate(mindId, answerId, questionId) {
     try {
-      settle(questionId, await core.regenerateAnswer({ mindId, answerId, discardEdits }));
+      settle(questionId, await core.regenerateAnswer({ mindId, answerId }));
     } catch (error) {
       // E.g. its Question was deleted: there may be no Question to show this, so the app does.
       settle(questionId, null);
