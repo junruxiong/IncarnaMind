@@ -19,6 +19,7 @@ import { ResizeRod } from "./components/ResizeRod";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { Sidebar } from "./components/Sidebar";
 import { SidebarControlContext } from "./components/SidebarToggle";
+import { SortMenu } from "./components/SortMenu";
 import { TagsDialog } from "./components/TagsDialog";
 import { TabNoticeLine } from "./components/tabs/TabNoticeLine";
 import { UsageDataDialog } from "./components/UsageDataDialog";
@@ -258,6 +259,7 @@ function Workspace() {
         <SettingsDialog />
         <TagsDialog />
         <RequestedDialogs />
+        <SortMenu />
         <InfoPanel />
         <AddWebPageDialog />
         <ChatSetupDialog />
