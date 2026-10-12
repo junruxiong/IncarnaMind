@@ -583,8 +583,11 @@ export async function setWindowSize(
  * Asks for the content size and waits until the page has it, asking again
  * while it hasn't. On Linux (Xvfb) a size asked for while the window is still
  * taking the one before it (a launch sets one, then a test its own) is
- * sometimes dropped, and the page stays as it was (#459), so one ask is not
- * enough. The launch also waits for the height; `setWindowSize` only the width.
+ * sometimes dropped, and the page stays as it was (#459). Asking again for the
+ * same size does not help, as Electron skips a size it already holds as the
+ * window's (#470 did not fix it), so every second ask goes one pixel off the
+ * target first, which makes a real change and so a new resize. The launch also
+ * waits for the height; `setWindowSize` only the width.
  */
 async function resizeContent(
   app: ElectronApplication,
@@ -593,27 +596,47 @@ async function resizeContent(
   height: number,
   { message, waitForHeight = false }: { message?: string; waitForHeight?: boolean } = {},
 ): Promise<void> {
-  const ask = () =>
+  const ask = (size: { width: number; height: number }) =>
     app.evaluate(
-      ({ BrowserWindow }, size) =>
-        BrowserWindow.getAllWindows()[0]?.setContentSize(size.width, size.height),
-      { width, height },
+      ({ BrowserWindow }, asked) =>
+        BrowserWindow.getAllWindows()[0]?.setContentSize(asked.width, asked.height),
+      size,
     );
-  await ask();
-  await expect
-    .poll(
-      async () => {
-        const [innerWidth, innerHeight] = await window.evaluate(() => [
-          globalThis.innerWidth,
-          globalThis.innerHeight,
-        ]);
-        const arrived = innerWidth === width && (!waitForHeight || innerHeight === height);
-        if (!arrived) await ask();
-        return [innerWidth, waitForHeight ? innerHeight : height];
-      },
-      { message },
-    )
-    .toEqual([width, height]);
+  const look = async () => {
+    const [innerWidth, innerHeight] = await window.evaluate(() => [
+      globalThis.innerWidth,
+      globalThis.innerHeight,
+    ]);
+    return { innerWidth, innerHeight };
+  };
+  let asks = 0;
+  await ask({ width, height });
+  try {
+    await expect
+      .poll(
+        async () => {
+          const { innerWidth, innerHeight } = await look();
+          const arrived = innerWidth === width && (!waitForHeight || innerHeight === height);
+          if (!arrived) {
+            asks += 1;
+            if (asks % 2 === 1) await ask({ width: width + 1, height: height + 1 });
+            await ask({ width, height });
+          }
+          return [innerWidth, waitForHeight ? innerHeight : height];
+        },
+        { message },
+      )
+      .toEqual([width, height]);
+  } catch (error) {
+    const contentSize = await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0]?.getContentSize(),
+    );
+    const page = await look();
+    throw new Error(
+      `${message ?? "The window did not reach its size"}: asked ${width} × ${height} ${asks} times; the window's content is ${contentSize?.join(" × ")}, the page ${page.innerWidth} × ${page.innerHeight}.`,
+      { cause: error },
+    );
+  }
 }
 
 /** How many animations are running (src/renderer/src/motion.ts), leaving copies included. */
