@@ -8,11 +8,12 @@ import {
   type AgentActivity,
   type AgentClient,
   type AgentClientId,
+  type AgentPairing,
   type AgentSetupResult,
 } from "../../../../core/api";
 import type { Language } from "../../../../core/language";
-import { clientTitle } from "../../../../shared/agentNames";
-import type { MessageKey, MessageParams } from "../../../../shared/i18n";
+import { clientInSentence, clientTitle } from "../../../../shared/agentNames";
+import { type MessageKey, type MessageParams, translate } from "../../../../shared/i18n";
 
 type Translate = (key: MessageKey, params?: MessageParams) => string;
 
@@ -20,9 +21,29 @@ type Translate = (key: MessageKey, params?: MessageParams) => string;
 export const clientName = (client: Pick<AgentClient, "id" | "name">, t: Translate) =>
   clientTitle(client, t);
 
+/**
+ * What a sentence calls a connected agent: its name, or, while it still has the
+ * name the list gave it, the words a sentence can hold ("your agent").
+ */
+export function pairingInSentence(
+  pairing: Pick<AgentPairing, "name" | "client">,
+  t: Translate,
+): string {
+  const client = pairing.client === "other" || pairing.client === "codex" ? pairing.client : null;
+  if (client === null) return pairing.name;
+  const listNames = (["en", "zh-CN"] as const).map((language) =>
+    translate(language, client === "other" ? "agents.client.other" : "agents.client.codex"),
+  );
+  const isListName = listNames.some((listName) => {
+    const rest = pairing.name.slice(listName.length);
+    return pairing.name.startsWith(listName) && (rest === "" || /^ \d+$/.test(rest));
+  });
+  return isListName ? clientInSentence({ id: client, name: "" }, t) : pairing.name;
+}
+
 /** How connecting an agent goes, in a line under its name. */
 export function setupWords(client: AgentClient, t: Translate): string {
-  const agent = clientName(client, t);
+  const agent = clientInSentence(client, t);
   switch (client.setup) {
     case "bundle":
       return t("agents.setup.bundle");
@@ -42,7 +63,12 @@ export const clientNote = (client: Pick<AgentClient, "id">, t: Translate) =>
   client.id === "codex" ? t("agents.note.codex") : null;
 
 /** What came of setting an agent up, as one line. */
-export function doneWords(result: AgentSetupResult, agent: string, t: Translate): string {
+export function doneWords(
+  result: AgentSetupResult,
+  pairing: Pick<AgentPairing, "name" | "client">,
+  t: Translate,
+): string {
+  const agent = pairingInSentence(pairing, t);
   switch (result.kind) {
     case "opened":
       return result.how === "bundle" ? t("agents.done.bundle") : t("agents.done.link", { agent });
@@ -51,7 +77,7 @@ export function doneWords(result: AgentSetupResult, agent: string, t: Translate)
     case "copy":
       if (result.path) return t("agents.done.unreadable", { agent, path: result.path });
       if (result.how === "command") return t("agents.done.command");
-      return agent === t("agents.client.other")
+      return pairing.client === "other"
         ? t("agents.done.settings.other")
         : t("agents.done.settings", { agent });
   }
