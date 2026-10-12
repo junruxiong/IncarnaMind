@@ -1077,6 +1077,23 @@
     }
   }
 
+  /* A Mind imported from a Word file: where it came from, or how far its import has got (#104). */
+  .mind-word {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    margin: -16px 0 6px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink-meta);
+
+    + .mind-count {
+      margin-top: 0;
+    }
+  }
+
   /* The count under the title: quiet status text, pulled up into the title's margin. */
   .mind-count {
     display: flex;
@@ -1432,7 +1449,6 @@
     overflow: auto;
     font: inherit;
     white-space: pre-wrap;
-    overflow-wrap: anywhere;
     color: var(--color-ink);
   }
   .composer-controls {
@@ -2653,7 +2669,6 @@
     line-height: 18px;
     color: var(--color-ink-secondary);
     white-space: pre-wrap;
-    overflow-wrap: anywhere;
     user-select: text;
   }
   .answer-call-detail-label {
@@ -2727,7 +2742,6 @@
   }
   .approval-title-text {
     min-width: 0;
-    overflow-wrap: anywhere;
   }
   .approval-dot {
     width: 8px;
@@ -2775,7 +2789,6 @@
       margin: 0;
       color: var(--color-ink);
       white-space: pre-wrap;
-      overflow-wrap: anywhere;
     }
     pre {
       font-family: var(--font-mono);
@@ -3228,6 +3241,127 @@
     &[data-check="found"] {
       background: var(--color-success-wash);
       color: var(--color-success);
+    }
+  }
+
+  /*
+   * What a Word import kept as it is (#104; the board Final-30-Word-Import):
+   * quiet, on the frame, never edited inside. A chip in the text (a field, a
+   * control), a box on its own line (a text box, a shape, a chart) whose
+   * label shows on hover or when reached by keyboard, a raised footnote
+   * number, a comment's mark, someone else's change underlined or struck,
+   * and nothing at all for a bookmark, a range or a break.
+   */
+  .word-atom {
+    cursor: default;
+    user-select: none;
+
+    &.ProseMirror-selectednode {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 1px;
+      border-radius: 4px;
+    }
+  }
+  .word-atom-chip {
+    padding: 1px 4px;
+    border-radius: 4px;
+    background: var(--color-frame);
+    color: var(--color-ink-secondary);
+  }
+  .word-atom-note {
+    padding: 0 2px;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    line-height: 0;
+    font-weight: 600;
+    color: var(--color-ink-secondary);
+  }
+  .word-atom-comment {
+    display: inline-flex;
+    padding: 1px 2px;
+    vertical-align: -1px;
+    color: var(--color-ink-meta);
+  }
+  .word-atom-insertion {
+    color: var(--color-ink-secondary);
+    text-decoration: underline;
+    text-decoration-color: var(--color-ink-meta);
+    text-underline-offset: 3px;
+  }
+  .word-atom-deletion {
+    color: var(--color-ink-meta);
+    text-decoration: line-through;
+  }
+  .word-atom-box,
+  .word-block {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 12px 16px 14px;
+    border-radius: 8px;
+    background: var(--color-frame);
+    box-shadow: inset 0 0 0 1px var(--color-rule);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 22px;
+    color: var(--color-ink-secondary);
+    white-space: pre-wrap;
+    cursor: default;
+    user-select: none;
+
+    &:hover,
+    &.ProseMirror-selectednode {
+      box-shadow: inset 0 0 0 1px var(--color-rule-strong);
+    }
+    &.ProseMirror-selectednode {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 1px;
+    }
+    &:hover .word-atom-label,
+    &.ProseMirror-selectednode .word-atom-label {
+      opacity: 1;
+    }
+  }
+  /*
+   * In the line, not a block of its own: ProseMirror keeps an empty mark on
+   * each side of an uneditable node for the cursor, which beside a block would
+   * be a line's gap above and below the box.
+   */
+  .word-atom-box {
+    display: inline-flex;
+    width: 100%;
+    box-sizing: border-box;
+    vertical-align: top;
+  }
+  .word-atom-label {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 4px;
+    background: var(--color-sheet);
+    box-shadow: inset 0 0 0 1px var(--color-rule);
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+    white-space: nowrap;
+    opacity: 0;
+  }
+  /* A picture in the text, at the size Word drew it, never wider than the text. */
+  .mind-image {
+    display: inline;
+    max-width: 100%;
+    height: auto;
+    vertical-align: bottom;
+
+    &.ProseMirror-selectednode {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 2px;
     }
   }
 
@@ -5903,7 +6037,6 @@
     line-height: 22px;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
-    overflow-wrap: anywhere;
   }
   .chart-card-detail {
     font-size: 12px;
