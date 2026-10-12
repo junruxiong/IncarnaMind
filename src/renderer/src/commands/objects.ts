@@ -8,6 +8,7 @@ import { fileStatusLabel, folderName, formatCount, revealLabelKey } from "../lin
 import { useRequests } from "../requests";
 import { useAppStore } from "../store";
 import { findTab } from "../tabs";
+import { deleteTag } from "../tagChanges";
 import { type Command, type CommandContext, needsHere } from "./registry";
 import { documentsOf, everyDocument, idsOf } from "./targets";
 
@@ -110,10 +111,10 @@ export const mindCommands: readonly Command[] = [
     destructive: true,
     appliesTo: ["mind", "tab"],
     when: ofMind,
-    reversible: { confirm: "mind.delete.body" },
-    run(ctx) {
+    reversible: true,
+    async run(ctx) {
       const mind = mindOf(ctx);
-      if (mind) useRequests.getState().ask({ deleteMind: mind });
+      if (mind) await store().deleteMind(mind.id);
     },
   },
 ];
@@ -230,12 +231,9 @@ export const documentCommands: readonly Command[] = [
     group: "danger",
     destructive: true,
     appliesTo: ["document"],
-    // Until Undo replaces the question (#228), one Document at a time.
-    when: (ctx) => documentsOf(ctx).length === 1,
-    reversible: { confirm: "documents.delete.body" },
-    run(ctx) {
-      const [document] = documentsOf(ctx);
-      if (document) useRequests.getState().ask({ deleteDocument: document });
+    reversible: true,
+    async run(ctx) {
+      await store().deleteDocuments(documentsOf(ctx).map((document) => document.id));
     },
   },
 ];
@@ -313,10 +311,10 @@ export const folderCommands: readonly Command[] = [
     group: "danger",
     destructive: true,
     appliesTo: ["folder"],
-    reversible: { confirm: "folder.delete.body" },
-    run(ctx) {
+    reversible: true,
+    async run(ctx) {
       const folder = folderOf(ctx);
-      if (folder) useRequests.getState().ask({ deleteFolder: folder });
+      if (folder) await store().deleteFolder(folder.id);
     },
   },
 ];
@@ -344,7 +342,7 @@ export const tagCommands: readonly Command[] = [
     run(ctx) {
       // In its row where it has a field; elsewhere, in the Tags dialog.
       if (ctx.here?.["tag.rename"]) return ctx.here["tag.rename"]();
-      useRequests.getState().ask({ manageTag: { id: idsOf(ctx, "tag")[0] ?? "", mode: "edit" } });
+      useRequests.getState().ask({ manageTag: { id: idsOf(ctx, "tag")[0] ?? "" } });
       store().openTagsDialog();
     },
   },
@@ -354,11 +352,8 @@ export const tagCommands: readonly Command[] = [
     group: "danger",
     destructive: true,
     appliesTo: ["tag"],
-    reversible: { confirm: "tags.dialog.delete.body" },
-    run(ctx) {
-      useRequests.getState().ask({ manageTag: { id: idsOf(ctx, "tag")[0] ?? "", mode: "delete" } });
-      store().openTagsDialog();
-    },
+    reversible: true,
+    run: (ctx) => deleteTag(idsOf(ctx, "tag")[0] ?? "").catch(reportError),
   },
   {
     id: "tag.manage",

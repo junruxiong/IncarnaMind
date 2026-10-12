@@ -155,8 +155,8 @@ test("an Answer streams into the assistant and leaves the Mind as it was; Add to
   await expect(second).toContainText("That is all.");
   expect(await noteJSON(editor)).toBe(before);
 
-  // Copy takes the Answer with its Citation: as HTML that pastes back as a Citation, and as
-  // text that names its source.
+  // Copy takes the Answer with its Citation: as HTML that pastes back as a Citation and into
+  // Word as a footnote, and as text with a marker and the source in a Sources list.
   const copied = await stubClipboard(window);
   await pointAt(window, answer.getByTestId("assistant-answer-text"));
   await pointAndClick(window, answer.getByTestId("answer-copy"));
@@ -164,7 +164,8 @@ test("an Answer streams into the assistant and leaves the Mind as it was; Add to
   const clipboard = await copied();
   expect(clipboard["text/html"]).toContain('data-type="citation"');
   expect(clipboard["text/plain"]).toContain("Your Documents answer this");
-  expect(clipboard["text/plain"]).toContain("[Tides, p. 2]");
+  expect(clipboard["text/html"]).toContain("mso-footnote-id:ftn1");
+  expect(clipboard["text/plain"]).toContain("Sources\n[1] Tides, p. 2");
 
   // Add to note: at the note's cursor, named in its tooltip; the Citation is found there too.
   await pointAt(window, answer.getByTestId("assistant-answer-text"));
@@ -364,7 +365,7 @@ test("the keyboard reaches it all: ⌘J, Tab through an Answer's actions, ⌘⇧
   // as a keyboard reports them with Shift held: "C" and "A" (Linux's editor reads a lowercase
   // letter with Shift as the same letter without it, and Ctrl+A selects all).
   await window.keyboard.press("ControlOrMeta+Shift+C");
-  await expect.poll(async () => (await copied())["text/plain"] ?? "").toContain("[Tides, p. 2]");
+  await expect.poll(async () => (await copied())["text/plain"] ?? "").toContain("[1] Tides, p. 2");
   await pointAndClick(window, editor.locator(":scope > p").nth(1));
   await window.keyboard.press("ControlOrMeta+Shift+A");
   await expect

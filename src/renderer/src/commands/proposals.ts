@@ -56,8 +56,7 @@ function withProposals() {
 function resolveAll(outcome: "accept" | "reject"): void {
   const note = withProposals();
   if (!note) return;
-  const ids = pendingIn(note.editor.state).map((each) => each.id);
-  resolveProposalsIn(note.editor, note.mindId, ids, outcome);
+  resolveProposalsIn(note.editor, note.mindId, "all", outcome);
 }
 
 /** The Mind last written in, while it has text selected that Edit with AI can change. */
