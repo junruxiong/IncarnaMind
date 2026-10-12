@@ -8,6 +8,7 @@ import {
   addDocuments,
   addTideConnector,
   assistantAnswers,
+  useLocalChatModel as connectLocalChatModel,
   createDataFolder,
   dismissChatSetup,
   launchApp,
@@ -17,7 +18,6 @@ import {
   removeDataFolder,
   setWindowSize,
   sidebarFolder,
-  useLocalChatModel,
 } from "./app";
 
 /**
@@ -116,7 +116,7 @@ async function start(options: { documents?: boolean; local?: boolean } = {}) {
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
   if (options.local) {
-    await useLocalChatModel(window);
+    await connectLocalChatModel(window);
   } else {
     await acceptPlainTextKeys(window);
     await core(window).anthropic();
