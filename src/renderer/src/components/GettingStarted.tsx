@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { GettingStarted } from "../../../core/api";
 import { shortcutLabel } from "../commands/keymap";
 import { CheckMarkIcon } from "../editor/icons";
-import { useT } from "../i18n";
+import { useGap, useT } from "../i18n";
 import { useAppStore } from "../store";
 import { AskIcon, PlugIcon } from "./icons";
 import { ChevronRightLineIcon, CloseLineIcon } from "./lineIcons";
@@ -103,6 +103,7 @@ function StepMark({ number, done, next }: { number: number; done: boolean; next:
  */
 export function GetStartedCard() {
   const t = useT();
+  const gap = useGap();
   const steps = useGettingStarted();
   const updateGettingStarted = useAppStore((state) => state.updateGettingStarted);
   const openExamples = useAppStore((state) => state.openExamples);
@@ -127,7 +128,8 @@ export function GetStartedCard() {
     >
       <div className="flex items-center justify-between pb-1 pl-2">
         <h2 id="get-started-title" className="text-[13px] leading-5 font-semibold text-ink">
-          {t("gettingStarted.title")}{" "}
+          {t("gettingStarted.title")}
+          {gap(t("gettingStarted.title"), t("gettingStarted.count", { done, total: steps.length }))}
           <span data-testid="get-started-count" className="font-normal text-ink-meta">
             {t("gettingStarted.count", { done, total: steps.length })}
           </span>
@@ -201,6 +203,7 @@ export function GetStartedCard() {
  */
 export function ExampleBanner() {
   const t = useT();
+  const gap = useGap();
   const createMind = useAppStore((state) => state.createMind);
   const removeExamples = useAppStore((state) => state.removeExamples);
   return (
@@ -226,7 +229,8 @@ export function ExampleBanner() {
       </svg>
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <p>
-          <strong className="font-semibold text-ink">{t("examples.banner.title")}</strong>{" "}
+          <strong className="font-semibold text-ink">{t("examples.banner.title")}</strong>
+          {gap(t("examples.banner.title"), t("examples.banner.body"))}
           {t("examples.banner.body")}
         </p>
         <div className="flex flex-wrap gap-2">
@@ -293,6 +297,7 @@ function GuideStep({
  */
 export function StartGuide() {
   const t = useT();
+  const gap = useGap();
   const progress = useAppStore((state) => state.settings?.device.gettingStarted);
   const examplesAvailable = useAppStore((state) => state.examples?.available === true);
   const addLinkedFolder = useAppStore((state) => state.addLinkedFolder);
@@ -388,7 +393,8 @@ export function StartGuide() {
       </ol>
       {examplesAvailable && (
         <p className="mt-5 text-ui text-ink-meta">
-          {t("startGuide.example.lead")}{" "}
+          {t("startGuide.example.lead")}
+          {gap(t("startGuide.example.lead"), t("startGuide.example.open"))}
           <button
             type="button"
             data-testid="start-open-example"

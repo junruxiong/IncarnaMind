@@ -26,10 +26,18 @@
  * (without its subfolders): a change is read as a new version, a deleted
  * file goes missing, and a file moved or renamed into a folder watched so is
  * followed by its content. Nothing else in such a folder is added.
+ *
+ * A Document is known by where its file belongs, the same on every computer
+ * (ADR-0020): its Linked folder and its path inside it, its path inside the
+ * data folder, or, for a file added on its own, nothing but its id. Its `path`
+ * is where that is on this computer: a Linked folder found somewhere else
+ * (`locate`) takes its Documents with it.
  */
 import { randomUUID } from "node:crypto";
+import { realpathSync } from "node:fs";
 import { open, realpath, rm } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, sep } from "node:path";
+import type { MessageKey, MessageParams } from "../../shared/i18n";
 import type {
   DocumentKind,
   LinkedFolder,
@@ -71,13 +79,36 @@ export interface FileRow {
   file_status: string;
   linked_folder_id: string | null;
   folder_id: string | null;
+  source_kind: string;
+  relative_path: string | null;
   status: string;
   /** Unless "failed": the latest version read failed, and this is the last good one. */
   failure_reason: string | null;
 }
 
 const FILE_COLUMNS = `id, path, name, kind, content_hash, size, file_mtime_ms, file_status,
-  linked_folder_id, folder_id, status, failure_reason`;
+  linked_folder_id, folder_id, source_kind, relative_path, status, failure_reason`;
+
+/**
+ * Where a Document's file belongs (`documents.source_kind`): in a Linked
+ * folder, in the data folder (a web page's snapshot, saved text, the old
+ * layout's copies), or added on its own.
+ */
+type SourceKind = "linked-folder" | "data-folder" | "file";
+
+/** Where a file belongs, and its Folder: what `placeOf` works out from its path. */
+interface Place {
+  linkedFolderId: string | null;
+  folderId: string | null;
+  sourceKind: SourceKind;
+  relativePath: string | null;
+}
+
+/** At most this many of a Linked folder's files are looked for in a folder offered as its new place. */
+const LOCATE_SAMPLE = 100;
+
+/** The file at `relative` ("/" between names) inside `folder`, on this computer. */
+const pathIn = (folder: string, relative: string) => join(folder, ...relative.split("/"));
 
 interface LinkedFolderRow {
   id: string;
@@ -170,8 +201,14 @@ export interface LibraryHooks {
 export interface LibraryOptions {
   db: Database;
   now: () => string;
-  /** The data folder: Documents copied into its `documents/` by the old layout live there until relinked. */
+  /**
+   * The data folder: the files IncarnaMind keeps (web pages' snapshots, saved
+   * text) are its Documents' files, and so are copies the old layout made in
+   * its `documents/`, until relinked.
+   */
   dataDir: string;
+  /** Says something to the User, in their language. */
+  say(key: MessageKey, params?: MessageParams): string;
   folders: Folders;
   hooks: LibraryHooks;
   watch: WatchFolder;
@@ -207,6 +244,24 @@ async function canOpen(path: string): Promise<boolean> {
   }
 }
 
+/**
+ * Whether `folder` holds one of a Linked folder's files at its relative path,
+ * those whose file was last seen first: a few of them are enough to tell the
+ * folder it moved to from a wrong one, which would leave all of them missing.
+ */
+async function holdsAny(
+  folder: string,
+  documents: readonly { relative_path: string; file_status: string }[],
+): Promise<boolean> {
+  const sample = [...documents]
+    .sort((a, b) => Number(a.file_status === "missing") - Number(b.file_status === "missing"))
+    .slice(0, LOCATE_SAMPLE);
+  for (const each of sample) {
+    if (await statFile(pathIn(folder, each.relative_path)).catch(() => undefined)) return true;
+  }
+  return false;
+}
+
 /** Strings from `from` (inclusive) to `to` (exclusive): every path inside the folder `prefix`. */
 const insideRange = (prefix: string) => {
   const folder = prefix.endsWith(sep) ? prefix : `${prefix}${sep}`;
@@ -215,9 +270,52 @@ const insideRange = (prefix: string) => {
 };
 
 export function createLibrary(options: LibraryOptions) {
-  const { db, now, folders, hooks } = options;
+  const { db, now, folders, hooks, say } = options;
   const legacyFolder = join(options.dataDir, "documents");
   const isLegacyCopy = (path: string) => path !== legacyFolder && isInside(legacyFolder, path);
+  /** The data folder as given, then with links resolved, as the files added from it are. */
+  const dataFolders = [...new Set([options.dataDir, realpathSync(options.dataDir)])];
+  const realDataFolder = dataFolders.at(-1) ?? options.dataDir;
+
+  /** A path's place inside the data folder ("/" between names), or null if it isn't in it. */
+  const insideDataFolder = (path: string): string | null => {
+    const folder = dataFolders.find((each) => path !== each && isInside(each, path));
+    return folder === undefined ? null : relativePath(folder, path);
+  };
+
+  // The files IncarnaMind keeps are wherever the data folder is now, also when it moved
+  // or was copied to another computer. Files added on their own from inside it (the old
+  // layout's copies, saved text) are such files. Derived on each computer, like `path`,
+  // so updated_at is left alone.
+  db.transaction(() => {
+    for (const row of db.all<{
+      id: string;
+      path: string | null;
+      source_kind: string;
+      relative_path: string | null;
+    }>(
+      `SELECT id, path, source_kind, relative_path FROM documents
+       WHERE linked_folder_id IS NULL AND source_kind IN ('data-folder', 'file')`,
+    )) {
+      if (row.source_kind === "data-folder" && row.relative_path !== null) {
+        const relative = row.relative_path;
+        if (!dataFolders.some((folder) => pathIn(folder, relative) === row.path)) {
+          db.run("UPDATE documents SET path = ? WHERE id = ?", [
+            pathIn(realDataFolder, relative),
+            row.id,
+          ]);
+        }
+        continue;
+      }
+      const relative = row.path === null ? null : insideDataFolder(row.path);
+      if (row.source_kind === "file" && relative !== null) {
+        db.run("UPDATE documents SET source_kind = 'data-folder', relative_path = ? WHERE id = ?", [
+          relative,
+          row.id,
+        ]);
+      }
+    }
+  });
 
   const watchers = new Map<string, FolderWatcher>();
   /** The folders holding files added on their own, each watched without its subfolders. */
@@ -489,22 +587,49 @@ export function createLibrary(options: LibraryOptions) {
     );
   };
 
-  /** Where a file belongs: its Linked folder and Folder, or neither for a single file. */
-  const placeOf = (path: string, owner: LinkedFolderRow | null) =>
-    owner
-      ? {
-          linkedFolderId: owner.id as string | null,
-          folderId: folderIdFor(owner.id, parentOf(relativePath(owner.path, path))) as
-            | string
-            | null,
-        }
-      : { linkedFolderId: null, folderId: null };
+  /**
+   * Where a file belongs: its Linked folder, its path there and its Folder;
+   * else its path in the data folder; else nowhere but itself, added on its own.
+   */
+  const placeOf = (path: string, owner: LinkedFolderRow | null): Place => {
+    if (owner) {
+      const relative = relativePath(owner.path, path);
+      return {
+        linkedFolderId: owner.id,
+        folderId: folderIdFor(owner.id, parentOf(relative)),
+        sourceKind: "linked-folder",
+        relativePath: relative,
+      };
+    }
+    const kept = insideDataFolder(path);
+    return {
+      linkedFolderId: null,
+      folderId: null,
+      sourceKind: kept === null ? "file" : "data-folder",
+      relativePath: kept,
+    };
+  };
 
-  /** The User removed a Document at this path from this Linked folder: its file stays out. */
-  const removedByUser = (path: string, linkedFolderId: string) =>
+  /** A Place's columns, set together with `placeValues`. */
+  const PLACE_COLUMNS = "linked_folder_id = ?, folder_id = ?, source_kind = ?, relative_path = ?";
+  const placeValues = (place: Place) =>
+    [place.linkedFolderId, place.folderId, place.sourceKind, place.relativePath] as const;
+
+  const placeDiffers = (row: FileRow, place: Place) =>
+    row.linked_folder_id !== place.linkedFolderId ||
+    row.folder_id !== place.folderId ||
+    row.source_kind !== place.sourceKind ||
+    row.relative_path !== place.relativePath;
+
+  /**
+   * The User removed the Document at this path from this Linked folder: its
+   * file stays out, wherever the folder is.
+   */
+  const removedByUser = (path: string, owner: LinkedFolderRow) =>
     db.get(
-      "SELECT 1 FROM documents WHERE path = ? AND linked_folder_id = ? AND deleted_at IS NOT NULL",
-      [path, linkedFolderId],
+      `SELECT 1 FROM documents
+       WHERE linked_folder_id = ? AND relative_path = ? AND deleted_at IS NOT NULL`,
+      [owner.id, relativePath(owner.path, path)],
     ) !== undefined;
 
   /** The owner may have been removed or paused since the pass began: then its files are left alone. */
@@ -539,8 +664,7 @@ export function createLibrary(options: LibraryOptions) {
    */
   async function checkKnown(row: FileRow, file: Found, changes: Changes): Promise<boolean> {
     const place = placeOf(row.path, file.owner);
-    const placeChanged =
-      row.linked_folder_id !== place.linkedFolderId || row.folder_id !== place.folderId;
+    const placeChanged = placeDiffers(row, place);
     const unchanged = row.size === file.size && row.file_mtime_ms === file.mtimeMs;
     // A placeholder isn't read: what was indexed of it stands.
     if (file.onlineOnly || unchanged) {
@@ -551,9 +675,9 @@ export function createLibrary(options: LibraryOptions) {
       }
       if (placeChanged || row.file_status !== "available") {
         db.run(
-          `UPDATE documents SET linked_folder_id = ?, folder_id = ?, file_status = 'available',
-             updated_at = ? WHERE id = ?`,
-          [place.linkedFolderId, place.folderId, now(), row.id],
+          `UPDATE documents SET ${PLACE_COLUMNS}, file_status = 'available', updated_at = ?
+           WHERE id = ?`,
+          [...placeValues(place), now(), row.id],
         );
         changes.announced.add(row.id);
       }
@@ -576,9 +700,9 @@ export function createLibrary(options: LibraryOptions) {
     const recovered = !newVersion && current.status !== "failed" && current.failure_reason !== null;
     db.run(
       `UPDATE documents SET size = ?, file_mtime_ms = ?, file_status = 'available',
-         linked_folder_id = ?, folder_id = ?, updated_at = ?
+         ${PLACE_COLUMNS}, updated_at = ?
        WHERE id = ?`,
-      [hashed.size, file.mtimeMs, place.linkedFolderId, place.folderId, now(), row.id],
+      [hashed.size, file.mtimeMs, ...placeValues(place), now(), row.id],
     );
     if (recovered) {
       db.run(
@@ -666,10 +790,10 @@ export function createLibrary(options: LibraryOptions) {
     // A name that was the file's name follows the file; one the User chose stays.
     const name = row.name === nameFromPath(row.path) ? nameFromPath(file.path) : row.name;
     db.run(
-      `UPDATE documents SET path = ?, linked_folder_id = ?, folder_id = ?, file_status = 'available',
+      `UPDATE documents SET path = ?, ${PLACE_COLUMNS}, file_status = 'available',
          size = ?, file_mtime_ms = ?, name = ?, updated_at = ?
        WHERE id = ? AND deleted_at IS NULL`,
-      [file.path, place.linkedFolderId, place.folderId, size, file.mtimeMs, name, now(), row.id],
+      [file.path, ...placeValues(place), size, file.mtimeMs, name, now(), row.id],
     );
     changes.announced.add(row.id);
     noteMoved(row, place, changes);
@@ -692,7 +816,7 @@ export function createLibrary(options: LibraryOptions) {
     changes: Changes,
     explicit: boolean,
   ): Promise<string | undefined> {
-    if (!explicit && file.owner && removedByUser(file.path, file.owner.id)) return undefined;
+    if (!explicit && file.owner && removedByUser(file.path, file.owner)) return undefined;
     let hashed: Awaited<ReturnType<typeof hashFile>>;
     try {
       hashed = await hashFile(file.path);
@@ -714,8 +838,8 @@ export function createLibrary(options: LibraryOptions) {
     const at = now();
     db.run(
       `INSERT INTO documents (id, content_hash, name, kind, size, status, path, linked_folder_id,
-         folder_id, file_status, file_mtime_ms, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, 'available', ?, ?, ?)`,
+         folder_id, source_kind, relative_path, file_status, file_mtime_ms, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, 'available', ?, ?, ?)`,
       [
         id,
         hashed.contentHash,
@@ -723,8 +847,7 @@ export function createLibrary(options: LibraryOptions) {
         file.kind,
         hashed.size,
         file.path,
-        place.linkedFolderId,
-        place.folderId,
+        ...placeValues(place),
         file.mtimeMs,
         at,
         at,
@@ -1213,6 +1336,70 @@ export function createLibrary(options: LibraryOptions) {
       watchSingles(); // a file added on its own inside it is watched by itself now
       if (foldersChanged) hooks.foldersChanged();
       announceFolders();
+    },
+
+    /**
+     * Points a Linked folder at where it is on this computer now (see
+     * `CoreApi.locateLinkedFolder`): each of its Documents is looked for at
+     * its path inside it, keeping its id, versions and Citations, and the
+     * next pass reads only what changed. Refused, and nothing changes, for a
+     * folder that overlaps another Linked folder, holds none of its files,
+     * or holds one of them already added on its own.
+     */
+    async locate(idInput: unknown, input: unknown): Promise<LinkedFolder> {
+      const row = getRow(idInput);
+      const path = await resolveFolder(input);
+      const name = basename(row.path) || row.path;
+      if (path !== row.path) {
+        const others = liveFolders().filter((each) => each.id !== row.id);
+        if (others.some((each) => isInside(each.path, path) || isInside(path, each.path))) {
+          throw new InvalidInputError(say("linkedFolders.locate.overlaps", { name }));
+        }
+        const placed = db.all<{
+          id: string;
+          relative_path: string;
+          live: number;
+          file_status: string;
+        }>(
+          `SELECT id, relative_path, deleted_at IS NULL AS live, file_status FROM documents
+           WHERE linked_folder_id = ? AND relative_path IS NOT NULL`,
+          [row.id],
+        );
+        const live = placed.filter((each) => each.live === 1);
+        if (live.length > 0 && !(await holdsAny(path, live))) {
+          throw new InvalidInputError(say("linkedFolders.locate.notThis", { name }));
+        }
+        const taken = live
+          .map((each) => documentAt(pathIn(path, each.relative_path)))
+          .find((other) => other !== undefined && other.linked_folder_id !== row.id);
+        if (taken) {
+          throw new InvalidInputError(
+            say("linkedFolders.locate.taken", { file: basename(taken.path) }),
+          );
+        }
+        db.transaction(() => {
+          db.run("UPDATE linked_folders SET path = ? WHERE id = ?", [path, row.id]);
+          // Each path is unique: set aside first, as one Document's new path may be another's old one.
+          db.run(
+            `UPDATE documents SET path = 'locating:' || id
+             WHERE linked_folder_id = ? AND relative_path IS NOT NULL`,
+            [row.id],
+          );
+          for (const each of placed) {
+            db.run("UPDATE documents SET path = ? WHERE id = ?", [
+              pathIn(path, each.relative_path),
+              each.id,
+            ]);
+          }
+        });
+        stopWatcher(row.id);
+        onlineOnly.delete(row.id);
+        for (const file of unreadable) if (isInside(row.path, file)) unreadable.delete(file);
+      }
+      statuses.set(row.id, "scanning");
+      request({ folders: [row.id] });
+      announceFolders();
+      return toLinkedFolder(getRow(row.id));
     },
 
     setLayout(idInput: unknown, layout: unknown): LinkedFolder {

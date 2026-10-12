@@ -17,6 +17,31 @@ export interface PdfPage {
   image?: boolean;
   /** A valid compressed raster for exercising oversized-image limits. */
   imageDimensions?: readonly [number, number];
+  /**
+   * A scanned page (#397): this JPEG picture filling an A4 page, under any
+   * lines, as a scanner makes it.
+   */
+  scan?: Uint8Array;
+}
+
+/** A JPEG's width, height and number of colour components, from its frame header. */
+export function jpegSize(jpeg: Uint8Array): { width: number; height: number; components: number } {
+  let at = 2;
+  while (at + 9 < jpeg.length) {
+    if (jpeg[at] !== 0xff) throw new Error("Not a JPEG.");
+    const marker = jpeg[at + 1] as number;
+    const length = ((jpeg[at + 2] as number) << 8) | (jpeg[at + 3] as number);
+    // Start of frame (baseline, extended, progressive or lossless), not a table.
+    if (marker >= 0xc0 && marker <= 0xc3) {
+      return {
+        height: ((jpeg[at + 5] as number) << 8) | (jpeg[at + 6] as number),
+        width: ((jpeg[at + 7] as number) << 8) | (jpeg[at + 8] as number),
+        components: jpeg[at + 9] as number,
+      };
+    }
+    at += 2 + length;
+  }
+  throw new Error("The JPEG has no frame header.");
 }
 
 /** An entry of a PDF's outline (its bookmarks). */
@@ -70,7 +95,8 @@ const toUcs2Hex = (text: string) =>
     .join("");
 
 function contentStream(page: PdfPage): string {
-  const parts: string[] = [];
+  // A scan's picture first: any lines are written over it, as a stamp is.
+  const parts: string[] = page.scan ? ["q 595 0 0 842 0 0 cm /Scan Do Q"] : [];
   let y = TOP;
   for (const line of page.lines ?? []) {
     if (/[^\x20-\xff]/.test(line)) throw new Error(`Not Latin-1: ${line}`);
@@ -197,9 +223,21 @@ export function buildPdf(pages: readonly PdfPage[], options: PdfOptions = {}): U
   pages.forEach((page, index) => {
     const pageId = 6 + index * 2;
     const content = contentStream(page);
+    let scan = "";
+    if (page.scan) {
+      const id = nextId++;
+      const { width, height, components } = jpegSize(page.scan);
+      const data = Buffer.from(page.scan).toString("latin1");
+      objects[id] =
+        `<< /Type /XObject /Subtype /Image /Width ${width} /Height ${height} ` +
+        `/ColorSpace /${components === 1 ? "DeviceGray" : "DeviceRGB"} /BitsPerComponent 8 ` +
+        `/Filter /DCTDecode /Length ${data.length} >>\nstream\n${data}\nendstream`;
+      scan = ` /XObject << /Scan ${id} 0 R >>`;
+    }
+    const size = page.scan ? "595 842" : "612 792";
     objects[pageId] =
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] ` +
-      `/Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${pageId + 1} 0 R >>`;
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${size}] ` +
+      `/Resources << /Font << /F1 3 0 R /F2 4 0 R >>${scan} >> /Contents ${pageId + 1} 0 R >>`;
     objects[pageId + 1] = `<< /Length ${content.length} >>\nstream\n${content}\nendstream`;
   });
 

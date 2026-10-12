@@ -103,6 +103,8 @@ export interface OllamaModelStub {
   digest?: string;
   /** `/api/show`'s `model_info`. */
   modelInfo?: Record<string, unknown>;
+  /** Listed in `/api/tags` as running on ollama.com (`remote_host`). */
+  remote?: boolean;
   /** `/api/show`'s `thinking`. */
   thinking?: { values: boolean[]; default: boolean };
 }
@@ -169,6 +171,7 @@ export async function startOllamaServer(options: {
           digest: model.digest ?? `digest-of-${model.name}`,
           details: {},
           capabilities: model.capabilities,
+          ...(model.remote && { remote_host: "https://ollama.com:443", remote_model: model.name }),
         })),
       });
       return;
