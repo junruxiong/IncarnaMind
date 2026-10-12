@@ -816,7 +816,7 @@ describe("exporting a Mind", () => {
   test("refuses unknown formats and Minds", async () => {
     const { core, mind } = await setUp();
     await expect(
-      core.exportMind(mind.id, { format: "pdf" } as unknown as { format: "docx" }),
+      core.exportMind(mind.id, { format: "odt" } as unknown as { format: "docx" }),
     ).rejects.toThrow(InvalidInputError);
     await expect(
       core.exportMind(mind.id, { format: "docx", includeQuestions: "yes" } as unknown as {
