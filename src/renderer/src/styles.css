@@ -3555,6 +3555,12 @@
     box-decoration-break: clone;
     -webkit-box-decoration-break: clone;
   }
+  /* A word read from a scan that may be misread (#397): a spellchecker's wavy line, in amber. */
+  .citation-card-unsure {
+    text-decoration: underline wavy var(--color-attention);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+  }
   /* A Citation's verdict, the one line a claim check adds. */
   .citation-card-verdict {
     padding-left: 22px;

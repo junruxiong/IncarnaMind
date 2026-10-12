@@ -96,6 +96,7 @@ describe("Documents", { timeout: 30_000 }, () => {
         pageCount: null,
         status: expect.stringMatching(/^(queued|extracting)$/),
         progress: null,
+        scan: null,
         failure: null,
         folderId: null,
         tags: [],
