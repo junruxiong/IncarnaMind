@@ -1,0 +1,209 @@
+{
+  "about": "What providers reported for each model call of real Answers, recorded on 2026-10-12 in a test build: five short Questions per model about two short Markdown Documents, each Answer in a new Mind (it searches, then answers). In order; each inner list is one Answer's calls. input counts all input tokens; cached and written are the parts read from and written to the prompt cache.",
+  "answers": {
+    "anthropic/claude-haiku-5-5": [
+      [
+        {
+          "input": 2503,
+          "cached": 0,
+          "written": 2409,
+          "output": 116
+        },
+        {
+          "input": 2917,
+          "cached": 2409,
+          "written": 506,
+          "output": 117
+        },
+        {
+          "input": 3077,
+          "cached": 2915,
+          "written": 160,
+          "output": 33
+        }
+      ],
+      [
+        {
+          "input": 2509,
+          "cached": 1212,
+          "written": 1207,
+          "output": 110
+        },
+        {
+          "input": 3233,
+          "cached": 2419,
+          "written": 812,
+          "output": 439
+        },
+        {
+          "input": 3727,
+          "cached": 3231,
+          "written": 494,
+          "output": 130
+        }
+      ],
+      [
+        {
+          "input": 2512,
+          "cached": 2419,
+          "written": 0,
+          "output": 121
+        },
+        {
+          "input": 3001,
+          "cached": 2419,
+          "written": 580,
+          "output": 109
+        },
+        {
+          "input": 3153,
+          "cached": 2999,
+          "written": 152,
+          "output": 60
+        }
+      ],
+      [
+        {
+          "input": 2505,
+          "cached": 2419,
+          "written": 0,
+          "output": 103
+        },
+        {
+          "input": 2976,
+          "cached": 2419,
+          "written": 555,
+          "output": 106
+        },
+        {
+          "input": 3125,
+          "cached": 2974,
+          "written": 149,
+          "output": 45
+        }
+      ],
+      [
+        {
+          "input": 2507,
+          "cached": 2419,
+          "written": 0,
+          "output": 107
+        },
+        {
+          "input": 3070,
+          "cached": 2419,
+          "written": 649,
+          "output": 117
+        },
+        {
+          "input": 3230,
+          "cached": 3068,
+          "written": 160,
+          "output": 89
+        }
+      ]
+    ],
+    "openai/gpt-6-luna": [
+      [
+        {
+          "input": 1373,
+          "cached": 0,
+          "written": 1370,
+          "output": 32
+        },
+        {
+          "input": 1503,
+          "cached": 1370,
+          "written": 130,
+          "output": 54
+        },
+        {
+          "input": 1586,
+          "cached": 1500,
+          "written": 83,
+          "output": 33
+        }
+      ],
+      [
+        {
+          "input": 1379,
+          "cached": 0,
+          "written": 1376,
+          "output": 26
+        },
+        {
+          "input": 1615,
+          "cached": 1376,
+          "written": 236,
+          "output": 57
+        },
+        {
+          "input": 1701,
+          "cached": 1612,
+          "written": 86,
+          "output": 25
+        }
+      ],
+      [
+        {
+          "input": 1379,
+          "cached": 0,
+          "written": 1376,
+          "output": 30
+        },
+        {
+          "input": 1619,
+          "cached": 1376,
+          "written": 240,
+          "output": 49
+        },
+        {
+          "input": 1697,
+          "cached": 1616,
+          "written": 78,
+          "output": 18
+        }
+      ],
+      [
+        {
+          "input": 1383,
+          "cached": 0,
+          "written": 1380,
+          "output": 37
+        },
+        {
+          "input": 1630,
+          "cached": 1380,
+          "written": 247,
+          "output": 58
+        },
+        {
+          "input": 1717,
+          "cached": 1627,
+          "written": 87,
+          "output": 28
+        }
+      ],
+      [
+        {
+          "input": 1378,
+          "cached": 0,
+          "written": 1375,
+          "output": 32
+        },
+        {
+          "input": 1508,
+          "cached": 1375,
+          "written": 130,
+          "output": 55
+        },
+        {
+          "input": 1592,
+          "cached": 1505,
+          "written": 84,
+          "output": 38
+        }
+      ]
+    ]
+  }
+}
