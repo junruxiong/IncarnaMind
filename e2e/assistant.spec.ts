@@ -149,15 +149,15 @@ test("a new window's assistant is docked on the right, outside the groups, the c
   );
   await expect(window.getByTestId("assistant-more")).toHaveAccessibleName("More for the assistant");
   await expect(window.getByTestId("assistant-fold")).toHaveAccessibleName("Fold the assistant");
-  await expect(window.getByTestId("assistant-reads")).toHaveText(
-    "Reads “Tides” · searches All Documents",
+  await expect(window.getByTestId("assistant-asked-from")).toHaveText(
+    "Asked from “Tides” · searches All Documents",
   );
   // The composer is the assistant's, the one in the window.
   await expect(window.getByTestId("composer")).toHaveCount(1);
   await expect(assistant.getByTestId("composer-input")).toBeVisible();
   await screenshot(window, "assistant-right");
 
-  // A second and a third group: still one assistant, and it reads the Mind the User is in.
+  // A second and a third group: still one assistant, and it is asked from the Mind the User is in.
   await window.keyboard.press("ControlOrMeta+Alt+Backslash");
   await mindWithText(window, "Moon");
   await window.keyboard.press("ControlOrMeta+Alt+Backslash");
@@ -165,12 +165,12 @@ test("a new window's assistant is docked on the right, outside the groups, the c
   await expect(assistant).toHaveCount(1);
   await expect(window.getByTestId("composer")).toHaveCount(1);
   await window.getByTestId("tab-group").nth(0).getByTestId("mind-editor").click();
-  await expect(window.getByTestId("assistant-reads")).toHaveText(
-    "Reads “Tides” · searches All Documents",
+  await expect(window.getByTestId("assistant-asked-from")).toHaveText(
+    "Asked from “Tides” · searches All Documents",
   );
   await window.getByTestId("tab-group").nth(1).getByTestId("mind-editor").click();
-  await expect(window.getByTestId("assistant-reads")).toHaveText(
-    "Reads “Moon” · searches All Documents",
+  await expect(window.getByTestId("assistant-asked-from")).toHaveText(
+    "Asked from “Moon” · searches All Documents",
   );
   box = await boxOf(assistant);
   const groups = await boxOf(window.getByTestId("tab-groups"));
@@ -392,7 +392,7 @@ test("its ⋯ menu and the keyboard dock, float and fold it; ⌘J unfolds it int
     await window.getByTestId("assistant-fold").click();
     await expect(assistant).toHaveAttribute("data-folded", "true");
     await expect(window.getByTestId("assistant-header")).toBeVisible();
-    await expect(window.getByTestId("assistant-reads")).toBeHidden();
+    await expect(window.getByTestId("assistant-asked-from")).toBeHidden();
     expect((await boxOf(assistant)).height).toBeLessThan(40);
     await screenshot(window, `assistant-folded-${place}`);
     await window.getByTestId("mind-editor").click();
@@ -571,7 +571,9 @@ test("in Chinese: the header, the line, the menu and the zones", async () => {
   await expect(assistantOf(window)).toHaveAccessibleName("助手");
   await expect(window.getByTestId("assistant-history")).toHaveAccessibleName("历史对话");
   await expect(window.getByTestId("assistant-fold")).toHaveAccessibleName("收起助手");
-  await expect(window.getByTestId("assistant-reads")).toHaveText("正在读“Tides” · 搜索全部文档");
+  await expect(window.getByTestId("assistant-asked-from")).toHaveText(
+    "从“Tides”提问 · 搜索全部文档",
+  );
   await window.getByTestId("assistant-more").click();
   await expect(window.getByTestId("assistant-menu").getByRole("menuitemradio")).toHaveText([
     "停靠在右侧",
