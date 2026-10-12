@@ -8,6 +8,7 @@ import { startSkillFromMind } from "../makeSkill";
 import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
 import { assistantCommands } from "./assistant";
+import { bibliographyCommands } from "./bibliography";
 import { editCommands } from "./edit";
 import { evidenceCommands } from "./evidence";
 import { footnoteCommands } from "./footnotes";
@@ -202,6 +203,7 @@ const appCommands: readonly Command[] = [
     },
   },
   ...footnoteCommands,
+  ...bibliographyCommands,
   ...tableCommands,
   ...proposalCommands,
 ];

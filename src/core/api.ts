@@ -4313,6 +4313,11 @@ export interface CitedWork {
   /** The Document's name when it was cited, which still names a Document deleted since. */
   documentName: string | null;
   location: CitationLocation | null;
+  /**
+   * The version quoted (`CitationAttributes.contentHash`): a web page's tells the day that
+   * version was fetched, which styles print as "accessed". Left out, a web page has no such day.
+   */
+  contentHash?: string | null;
 }
 
 /**
