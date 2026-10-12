@@ -4,7 +4,7 @@ import type { MessageKey } from "../../../shared/i18n";
 import type { ScopeKind } from "../../../shared/searchScope";
 import { DocumentLineIcon, FolderLineIcon, TagLineIcon } from "../components/lineIcons";
 import { useT } from "../i18n";
-import { type ScopeChip, scopeChips } from "../scope";
+import { DELETED_NAMES, type ScopeChip, scopeChips } from "../scope";
 import { useAppStore } from "../store";
 import { RemoveIcon } from "./icons";
 
@@ -12,12 +12,6 @@ const CHIP_TITLES: Record<ScopeKind, MessageKey> = {
   folder: "scope.chip.folder",
   tag: "scope.chip.tag",
   document: "scope.chip.document",
-};
-
-const DELETED_NAMES: Record<ScopeKind, MessageKey> = {
-  folder: "scope.chip.deleted.folder",
-  tag: "scope.chip.deleted.tag",
-  document: "scope.chip.deleted.document",
 };
 
 /** A chip's icon: the sidebar's line icon of its kind, in its muted ink. */

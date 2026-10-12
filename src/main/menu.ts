@@ -31,10 +31,10 @@ export function installAppMenu(language: Language, { developer }: { developer: b
 let installed: { language: Language; developer: boolean } | null = null;
 let sidebarHidden = false;
 
-/** Until the window says where its focus is, Undo and Redo are a field's own, as the system's are. */
+/** Until the window says where its focus is, Undo and Redo show as a field's: enabled, naming nothing. */
 let editMenu: EditMenuState = { text: "field", undo: null, redo: null };
 
-/** Where Undo and Redo go in the window in front, and the change each names (see `EditMenuState`). */
+/** Where the focus is in the window in front, and the change Undo and Redo name (see `EditMenuState`). */
 export function setEditMenu(state: EditMenuState): void {
   if (state.text === editMenu.text && state.undo === editMenu.undo && state.redo === editMenu.redo)
     return;
@@ -75,9 +75,9 @@ function buildMenu(): void {
   });
   const settings = command("settings.open");
   /**
-   * Undo and Redo: a field's own undo, done here as the system's Edit menu does it;
-   * otherwise the window's, which goes to the note's own undo or to the app's
-   * changes, and then names the change ("Undo Move 3 Documents").
+   * Undo and Redo: the window decides where they go from its focus when they are
+   * chosen, as a reported focus may be behind (#516): a field's own undo, the
+   * note's own, or the app's changes, which the menu then names ("Undo Move 3 Documents").
    */
   const edit = (step: "undo" | "redo"): MenuItemConstructorOptions => {
     const id = step === "undo" ? "edit.undo" : "edit.redo";
@@ -94,10 +94,7 @@ function buildMenu(): void {
         step === "redo" && process.platform === "win32" ? "Ctrl+Y" : MENU_COMMANDS[id].keys,
       registerAccelerator: false,
       enabled: editMenu.text !== null || action !== null,
-      click: () => {
-        if (editMenu.text === "field") front()?.webContents[step]();
-        else send(id);
-      },
+      click: () => send(id),
     };
   };
 
