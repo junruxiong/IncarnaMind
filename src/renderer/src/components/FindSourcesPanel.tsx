@@ -7,7 +7,7 @@ import type {
   SourceProviderOutcome,
 } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
-import { type AddState, useFindSources } from "../findSources";
+import { type AddState, keyLines, useFindSources } from "../findSources";
 import { useLanguage, useT } from "../i18n";
 import { formatCount } from "../linkedFolders";
 import { useAppStore } from "../store";
@@ -53,6 +53,7 @@ export function FindSourcesPanel() {
     searching,
     result,
     error,
+    keyOpen,
     edit,
     toggleProvider,
     search,
@@ -203,11 +204,9 @@ export function FindSourcesPanel() {
           </select>
         </label>
       </div>
-      {providers
-        .filter((each) => each.key !== "none" && !off.includes(each.id))
-        .map((provider) => (
-          <SourceKeyField key={provider.id} provider={provider} />
-        ))}
+      {keyLines(providers, off, keyOpen, result).map((provider) => (
+        <SourceKeyField key={provider.id} provider={provider} />
+      ))}
       {error && (
         <ProblemLine
           className="mt-3"
@@ -263,13 +262,18 @@ function ProviderProblem({ provider }: { provider: SourceProviderOutcome }) {
   const t = useT();
   const failure = provider.failure;
   if (!failure) return null;
+  const openKey = () => useFindSources.getState().openKey(provider.id);
   const action: ProblemAction =
     failure.reason === "declined"
       ? {
           label: t("sources.privacySettings"),
           onClick: () => useAppStore.getState().openSettings("privacy"),
         }
-      : { label: t("sources.retry"), onClick: () => void useFindSources.getState().search() };
+      : failure.reason === "needs-key"
+        ? { label: t("sources.key.add"), onClick: openKey }
+        : failure.reason === "key-rejected"
+          ? { label: t("sources.key.change"), onClick: openKey }
+          : { label: t("sources.retry"), onClick: () => void useFindSources.getState().search() };
   return (
     <ProblemLine
       testId="find-sources-problem"
@@ -311,6 +315,7 @@ function ResultRow({ work }: { work: FoundSource }) {
     ...(work.citedBy !== null
       ? [t("sources.citedBy", { count: formatCount(work.citedBy, language) })]
       : []),
+    ...(work.unofficial ? [t("sources.unofficial")] : []),
     t("sources.foundBy", {
       providers: work.foundBy.map((each) => each.name).join(language === "zh-CN" ? "、" : ", "),
     }),
@@ -447,6 +452,7 @@ function AddLine({ work, add }: { work: FoundSource; add: AddState | undefined }
   }
   return (
     <AddedLine
+      work={work}
       result={add.result}
       folderId={add.folderId}
       groups={groups}
@@ -456,11 +462,13 @@ function AddLine({ work, add }: { work: FoundSource; add: AddState | undefined }
 }
 
 function AddedLine({
+  work,
   result,
   folderId,
   groups,
   openDocument,
 }: {
+  work: FoundSource;
   result: AddFoundSourceResult;
   /** The Folder it was added to, whatever "Add to" says now. */
   folderId: string | null;
@@ -496,13 +504,25 @@ function AddedLine({
       </ProblemLine>
     );
   }
+  const findSources = useFindSources.getState();
+  // The provider whose key it wanted: the one that found it and takes a key.
+  const keyed = work.foundBy.find((each) =>
+    findSources.providers.some((provider) => provider.id === each.id && provider.key !== "none"),
+  );
   const action =
     result.reason === "declined" || result.reason === "local-mode"
       ? {
           label: t("sources.privacySettings"),
           onClick: () => useAppStore.getState().openSettings("privacy"),
         }
-      : { label: t("sources.search"), onClick: () => void useFindSources.getState().search() };
+      : (result.reason === "needs-key" || result.reason === "key-rejected") && keyed
+        ? {
+            label: t(result.reason === "needs-key" ? "sources.key.add" : "sources.key.change"),
+            onClick: () => findSources.openKey(keyed.id),
+          }
+        : result.reason === "rate-limited"
+          ? { label: t("sources.retry"), onClick: () => void findSources.add(work) }
+          : { label: t("sources.search"), onClick: () => void findSources.search() };
   return (
     <ProblemLine
       className="mt-1"

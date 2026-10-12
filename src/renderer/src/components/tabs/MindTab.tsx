@@ -9,6 +9,7 @@ import { useT } from "../../i18n";
 import { assistantTabOf } from "../../layoutSlice";
 import { useAppStore } from "../../store";
 import { useGroupsMerged } from "../../useWindowWidth";
+import { ExportResultLine } from "../ExportResultLine";
 import { ExampleBanner, useIsExample } from "../GettingStarted";
 import { PlusLineIcon } from "../lineIcons";
 import { MakeSkillCard } from "../MakeSkillCard";
@@ -35,7 +36,7 @@ export function MindTab({ mindId }: { mindId: string }) {
   if (!mind) return null;
 
   return (
-    <div className="flex min-h-0 flex-grow flex-col">
+    <div className="relative flex min-h-0 flex-grow flex-col">
       <div className="mind-scroller min-h-0 flex-grow overflow-auto">
         {/* Every text in it starts at one edge (styles.css, `.mind-column`). */}
         <article data-testid="mind-pane" data-mind-id={mind.id} className="mind-column">
@@ -59,6 +60,7 @@ export function MindTab({ mindId }: { mindId: string }) {
       </div>
       {/* The Compare Documents sheet docks here, in the column's measure, below the note. */}
       <div ref={setSheetSlot} className="compare-sheet-dock" />
+      <ExportResultLine mindId={mind.id} />
     </div>
   );
 }

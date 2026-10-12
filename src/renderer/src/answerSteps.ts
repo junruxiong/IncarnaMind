@@ -4,6 +4,7 @@ import type {
   AskedFrom,
   ConversationAnswer,
   MarkedCitation,
+  MindRead,
 } from "../../core/api";
 
 /**
@@ -21,11 +22,11 @@ export const CALCULATE = "calculate";
 
 /** What the steps are read from. */
 export interface StepsInput {
-  answer: Pick<ConversationAnswer, "text" | "citations" | "toolCalls" | "model" | "steps">;
+  answer: Pick<ConversationAnswer, "text" | "citations" | "toolCalls" | "model" | "steps" | "read">;
   /**
-   * The Mind in focus when the Question was asked; null when none was. Nothing
-   * of it goes to the model: a conversation's Question context is its earlier
-   * Questions and Answers (CONTEXT.md).
+   * The Mind in focus when the Question was asked; null when none was. Its
+   * Answer read it (`answer.read`), unless it couldn't: say, an Answer written
+   * before #544.
    */
   askedFrom: AskedFrom | null;
   /** It was asked while its Mind's meeting was recording: the assistant listened to the live transcript. */
@@ -40,6 +41,9 @@ export type StepRow =
   | { kind: "reasoning"; model: string; summary: string; seconds: number }
   /** A model that gave no reasoning summary, and how long the Answer took when that is known. */
   | { kind: "answered"; model: string; seconds: number | null }
+  /** The Mind the Answer read, all of it or part of it. */
+  | { kind: "read"; mind: MindRead }
+  /** The Mind it was asked from, which it didn't read. */
   | { kind: "asked"; mind: AskedFrom }
   /** One search, or several in a row, with the sources their Citations point to. */
   | {
@@ -62,7 +66,9 @@ export type StepRow =
 
 export type FoldedLine =
   | { kind: "searched"; sources: number; extraScopes: number }
+  | { kind: "searched-web"; sources: number }
   | { kind: "listened"; sources: number }
+  | { kind: "read"; mind: MindRead }
   | { kind: "asked"; mind: AskedFrom }
   | { kind: "answered"; model: string };
 
@@ -70,6 +76,7 @@ export type LiveStep =
   | { kind: "waiting" }
   | { kind: "consent" }
   | { kind: "loading" }
+  | { kind: "reading"; mind: AskedFrom }
   | { kind: "searching" }
   | { kind: "call"; call: AnswerToolCall }
   | { kind: "writing" }
@@ -117,18 +124,29 @@ function modelRow(answer: StepsInput["answer"]): StepRow | null {
 const placeOf = (citation: MarkedCitation) =>
   `${citation.documentId}\n${citation.pageFrom}-${citation.pageTo}\n${JSON.stringify(citation.location)}`;
 
+/** The Mind the Answer read, or the one it was asked from and didn't read. */
+const mindRow = ({ answer, askedFrom }: StepsInput) =>
+  answer.read
+    ? ({ kind: "read", mind: answer.read } as const)
+    : askedFrom
+      ? ({ kind: "asked", mind: askedFrom } as const)
+      : null;
+
 /**
  * The rows of the unfolded timeline, in order: the model's reasoning (or
- * who answered), the Mind read, the searches and other calls in the order
- * they started (searches in a row as one, a failed one where it happened),
- * the figures calculated, and the check of the Citations last. A call still waiting for the User has
- * no row: its approval card shows instead.
+ * who answered), the Mind read, unless the folded line already says so, the
+ * searches and other calls in the order they started (searches in a row as
+ * one, a failed one where it happened), the figures calculated, and the check
+ * of the Citations last. A call still waiting for the User has no row: its
+ * approval card shows instead.
  */
-export function stepRows({ answer, askedFrom }: StepsInput): StepRow[] {
+export function stepRows(input: StepsInput): StepRow[] {
+  const { answer } = input;
   const rows: StepRow[] = [];
   const first = modelRow(answer);
   if (first) rows.push(first);
-  if (askedFrom) rows.push({ kind: "asked", mind: askedFrom });
+  const mind = mindRow(input);
+  if (mind && foldedLine(input)?.kind !== mind.kind) rows.push(mind);
 
   const searches: Extract<StepRow, { kind: "search" }>[] = [];
   const skills = new Map<string, Extract<StepRow, { kind: "skill" }>>();
@@ -208,7 +226,7 @@ const sourceCount = (citations: readonly MarkedCitation[]) =>
 
 /**
  * Further scopes the Answer searched beside its Question's: each Connector
- * whose Tools it called, and Find sources.
+ * whose Tools it called, Find sources, and the web.
  */
 function extraScopes(calls: readonly AnswerToolCall[]): number {
   const ran = calls.filter((call) => call.status === "done" && !call.signInRequired);
@@ -217,22 +235,30 @@ function extraScopes(calls: readonly AnswerToolCall[]): number {
       call.source === "connector" && call.connector ? [call.connector.id] : [],
     ),
   );
-  return connectors.size + (ran.some((call) => call.source === "sources") ? 1 : 0);
+  const also = (source: AnswerToolCall["source"]) =>
+    ran.some((call) => call.source === source) ? 1 : 0;
+  return connectors.size + also("sources") + also("web");
 }
 
 /**
- * The folded line: what was searched and how many Documents the Answer
- * cites; with no search, the Mind it was asked from, or the model that
- * answered. Null for an Answer no model wrote, asked from no Mind.
+ * The folded line: what was searched (the Documents, or else the web) and
+ * how many Documents the Answer cites; with no search, the Mind it read (or
+ * was asked from), or the model that answered. Null for an Answer no model
+ * wrote, asked from no Mind.
  */
-export function foldedLine({ answer, askedFrom, meeting }: StepsInput): FoldedLine | null {
+export function foldedLine(input: StepsInput): FoldedLine | null {
+  const { answer, meeting } = input;
   const sources = sourceCount(answer.citations);
   if (meeting) return { kind: "listened", sources };
   if (answer.toolCalls.some((call) => isSearch(call) && call.status === "done")) {
     return { kind: "searched", sources, extraScopes: extraScopes(answer.toolCalls) };
   }
-  if (askedFrom) return { kind: "asked", mind: askedFrom };
-  return answer.model ? { kind: "answered", model: answer.model.modelId } : null;
+  if (answer.toolCalls.some((call) => call.source === "web" && call.status === "done")) {
+    return { kind: "searched-web", sources };
+  }
+  return (
+    mindRow(input) ?? (answer.model ? { kind: "answered", model: answer.model.modelId } : null)
+  );
 }
 
 /**
@@ -240,7 +266,7 @@ export function foldedLine({ answer, askedFrom, meeting }: StepsInput): FoldedLi
  * text and its Citations: waiting for the User first; then loading,
  * checking quotes or figures, searching or another call running; then writing, which
  * becomes checking once every marker in the text has its Citation; before
- * any text, searching: nothing of the Mind is read, so the steps start there.
+ * any text, searching once it has searched, else reading the Mind it reads.
  */
 export function liveStep({
   answer,
@@ -268,6 +294,8 @@ export function liveStep({
       ? { kind: "checking", count: markers.length }
       : { kind: "writing" };
   }
+  if (answer.read && !answer.toolCalls.some(isSearch))
+    return { kind: "reading", mind: answer.read };
   return { kind: "searching" };
 }
 

@@ -31,7 +31,7 @@ What is generated in response to exactly one Question, right after it: a Block i
 _Avoid_: output, response, reply
 
 **Question context**:
-What an Answer is generated from: in a Mind, every Block above its Question, except Notes the User has excluded; in a Conversation, its earlier Questions and Answers. Plus Passages from the Documents in the Question's Search scope.
+What an Answer is generated from: in a Mind, every Block above its Question, except Notes the User has excluded; in a Conversation, its earlier Questions and Answers, and the Mind in focus when the Question was asked. Plus Passages from the Documents in the Question's Search scope.
 _Avoid_: prompt, history
 
 **Search scope**:
@@ -55,7 +55,7 @@ A file the User keeps, in a Linked folder or added on its own, that IncarnaMind 
 _Avoid_: file, doc, source
 
 **Web page**:
-A Document saved from a web address: a snapshot of the page's readable text, fetched from the User's computer when it is added, and again only when the User asks. Its Citations point at the snapshot, never at the live page, so they can always be checked.
+A Document saved from a web address: a snapshot of the page's readable text, fetched from the User's computer when it is added (by the User, or by an Answer that read it in a web search), and again only when the User asks. Its Citations point at the snapshot, never at the live page, so they can always be checked.
 _Avoid_: link, bookmark, clipping
 
 **Missing Document**:
@@ -111,7 +111,7 @@ Every Document a Mind cites, once each, in its citation style: the References at
 _Avoid_: works cited (except as a style's own heading), sources list
 
 **Source provider**:
-A public service that Find sources searches for works to add to the Library: OpenAlex, arXiv and PubMed (Crossref looks a DOI up); openFDA and DailyMed for drug labels and ClinicalTrials.gov for trials, which are asked only when the User chooses them; later, services for laws, regulations and filings. A work with an open-access copy is added as a Document, which keeps the provider it came from and the date of the version it holds; any other work, as its Reference record alone. Each Source provider is asked once for consent before anything is sent to it.
+A public service that Find sources searches for works to add to the Library: OpenAlex, arXiv and PubMed (Crossref looks a DOI up); openFDA and DailyMed for drug labels, ClinicalTrials.gov for trials and the eCFR for US federal regulations, which are asked only when the User chooses them; GovInfo looks up the US Code and the CFR's official edition by citation, on the User's own key; later, services for other countries' laws and for company filings. A work with an open-access copy is added as a Document, which keeps the provider it came from and the date of the version it holds; any other work, as its Reference record alone. Each Source provider is asked once for consent before anything is sent to it.
 _Avoid_: source (a Document is not one), database, provider on its own (an AI model's provider)
 
 **Location**:
@@ -167,6 +167,10 @@ _Avoid_: external content, untrusted content (which also covers the User's own D
 An external service the User has connected, through which Answers can look things up or make changes.
 _Avoid_: MCP server, plugin, integration, connection
 
+**Web search**:
+Searching the web from an Answer, through the provider of the model it is asked with, when the User has turned it on and the Question asks for the web. Each page the Answer reads is saved as a Web page and cited like any Document; a page it didn't read is never cited.
+_Avoid_: browsing, grounding, online mode
+
 **Skill**:
 A packaged description of how to do a particular task, optionally with reference files and scripts, that an Answer can follow.
 _Avoid_: plugin, command
@@ -188,6 +192,10 @@ _Avoid_: default Skill, system Skill
 **Proposal**:
 A change to a Mind, made by the AI or brought in from another person's Word file, that waits for the User to accept or reject it. Until it is accepted it does not count as part of the Mind, and it is out of date once the text it changes has changed. Each Proposal is one change in one place (the words it removes and those it adds there, or a whole Block), accepted or rejected on its own; one request, such as an Edit with AI, can make several. The interface calls them changes: "3 changes from the assistant".
 _Avoid_: suggestion, edit, draft, diff
+
+**AI text**:
+The words the AI wrote into a Mind that the User hasn't made their own: in Answers, Answers added to a note, accepted changes and accepted suggestions. They are drawn a step softer than the User's writing. What the User types, even inside AI text, is theirs, and "Mark as mine" makes selected AI text theirs. Exports and Question context read it as any other text.
+_Avoid_: AI content, machine text
 
 **Checkpoint**:
 A saved copy of a Mind as it was just before an AI change, which the User can compare with another Checkpoint or restore from. Restoring one comes back as a Proposal, not as an overwrite.

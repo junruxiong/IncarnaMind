@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { AnswerToolCall, AskedFrom, MarkedCitation } from "../../src/core/api";
+import type { AnswerToolCall, AskedFrom, MarkedCitation, MindRead } from "../../src/core/api";
 import {
   foldedLine,
   liveStep,
@@ -9,10 +9,11 @@ import {
 
 /*
  * An Answer's steps (#391): the folded line, the timeline's rows and the live
- * step, from what an Answer in a conversation keeps.
+ * step, from what an Answer in a conversation keeps, the Mind it read (#544) too.
  */
 
 const MIND: AskedFrom = { mindId: "m1", name: "Lit review", deleted: false };
+const READ: MindRead = { ...MIND, version: "v1", partial: false };
 const MODEL = { providerId: "p1", modelId: "claude-sonnet-5-5" };
 
 const search = (
@@ -74,6 +75,7 @@ function input(
         phases: [{ phase: "writing", at: "2026-10-12T09:00:00.500Z" }],
         reasoning: null,
       },
+      read: null,
       ...answer,
     },
     askedFrom: null,
@@ -114,6 +116,44 @@ describe("an Answer's steps", () => {
     ]);
     expect(row?.kind === "search" && row.sources.map((source) => source.marker)).toEqual([1, 2, 4]);
     expect(foldedLine(steps)).toEqual({ kind: "searched", sources: 3, extraScopes: 0 });
+  });
+
+  // protects=an Answer that searched only the web folds to that, its calls each a row in order, and a web search beside a Document search counts as one more scope; fails_when=it folds to the Mind it was asked from, groups the web calls with searches, or drops one; no_claim=how the rows are worded.
+  test("an Answer that searched the web folds to that, each search and page read a row of its own", () => {
+    const searched: AnswerToolCall = {
+      id: "w1",
+      tool: "search_web",
+      source: "web",
+      input: { query: "park cooling" },
+      status: "done",
+      resultCount: 6,
+    };
+    const read: AnswerToolCall = {
+      id: "w2",
+      tool: "read_web_page",
+      source: "web",
+      input: { url: "https://news.example/parks" },
+      status: "done",
+      resultCount: 3,
+      webPage: { address: "https://news.example/parks", documentId: "d9", name: "Parks" },
+    };
+    const steps = input(
+      { toolCalls: [searched, read], citations: [citation(1, "p", "d9", 1)] },
+      { askedFrom: MIND },
+    );
+    expect(stepRows(steps).map((row) => (row.kind === "call" ? row.call.id : row.kind))).toEqual([
+      "answered",
+      "asked",
+      "w1",
+      "w2",
+      "check",
+    ]);
+    expect(foldedLine(steps)).toEqual({ kind: "searched-web", sources: 1 });
+    expect(foldedLine(input({ toolCalls: [search("s1", "parks"), searched, read] }))).toEqual({
+      kind: "searched",
+      sources: 0,
+      extraScopes: 1,
+    });
   });
 
   // protects=a failed search is its own row where it happened, never grouped; fails_when=it joins a search row or moves; no_claim=none beyond protects.
@@ -162,12 +202,38 @@ describe("an Answer's steps", () => {
     expect(foldedLine(older)).toEqual({ kind: "searched", sources: 0, extraScopes: 0 });
   });
 
-  // protects=a Question asked from a Mind deleted since says so, in the row and the folded line; fails_when=its old name shows as if it were there; no_claim=none beyond protects.
-  test("asked from a Mind deleted since", () => {
+  // protects=an Answer that read its Mind says so, whole or in part, and a Mind deleted since reads as deleted; fails_when=it says "Asked from", hides the cut, or shows a deleted Mind's name; no_claim=what the Answer read is the core's (tests/core/assistantReadsMind.test.ts).
+  test("an Answer that read its Mind: Read {Mind}, part of it, or a deleted Mind", () => {
+    const steps = input({ read: READ, toolCalls: [search("s1", "tides")] }, { askedFrom: MIND });
+    expect(stepRows(steps)[1]).toEqual({ kind: "read", mind: READ });
+    const part = { ...READ, partial: true };
+    expect(foldedLine(input({ read: part }, { askedFrom: MIND }))).toEqual({
+      kind: "read",
+      mind: part,
+    });
+    const gone = { ...READ, deleted: true };
+    expect(foldedLine(input({ read: gone }, { askedFrom: { ...MIND, deleted: true } }))).toEqual({
+      kind: "read",
+      mind: gone,
+    });
+  });
+
+  // protects=when the folded line is the Mind step (no search), the timeline doesn't say it again and starts with the next step; fails_when=the Mind's row repeats under the line, or another row goes; no_claim=the line's link to the Mind is the component's, tested end to end.
+  test("folded to the Mind it read, or asked from, the timeline leaves that step out", () => {
+    const read = input({ read: READ, toolCalls: [connectorCall] }, { askedFrom: MIND });
+    expect(foldedLine(read)).toEqual({ kind: "read", mind: READ });
+    expect(stepRows(read).map((row) => row.kind)).toEqual(["answered", "call"]);
+    const asked = input({}, { askedFrom: MIND });
+    expect(foldedLine(asked)).toEqual({ kind: "asked", mind: MIND });
+    expect(stepRows(asked).map((row) => row.kind)).toEqual(["answered"]);
+  });
+
+  // protects=a Question asked from a Mind its Answer didn't read (deleted since, or an Answer written before #544) says where it was asked from; fails_when=it claims a read, or shows a deleted Mind's old name; no_claim=none beyond protects.
+  test("asked from a Mind it didn't read, deleted since", () => {
     const deleted = { ...MIND, deleted: true };
-    const steps = input({}, { askedFrom: deleted });
-    expect(stepRows(steps)[1]).toEqual({ kind: "asked", mind: deleted });
-    expect(foldedLine(steps)).toEqual({ kind: "asked", mind: deleted });
+    const searched = input({ toolCalls: [search("s1", "tides")] }, { askedFrom: deleted });
+    expect(stepRows(searched)[1]).toEqual({ kind: "asked", mind: deleted });
+    expect(foldedLine(input({}, { askedFrom: deleted }))).toEqual({ kind: "asked", mind: deleted });
   });
 
   // protects=an Answer asked during a meeting folds to "Listened to the live transcript"; fails_when=it says Searched; no_claim=whether it was asked during the recording is the caller's.
@@ -179,8 +245,12 @@ describe("an Answer's steps", () => {
     expect(foldedLine(steps)).toEqual({ kind: "listened", sources: 1 });
   });
 
-  // protects=with no search the line says the Mind it was asked from, or the model with no Mind; fails_when=it says Searched; no_claim=none beyond protects.
-  test("no search: asked from the Mind in focus, or answered by the model with none", () => {
+  // protects=with no search the line says the Mind read, else the one it was asked from, or the model with no Mind; fails_when=it says Searched; no_claim=none beyond protects.
+  test("no search: read the Mind in focus, asked from it, or answered by the model with none", () => {
+    expect(foldedLine(input({ read: READ }, { askedFrom: MIND }))).toEqual({
+      kind: "read",
+      mind: READ,
+    });
     expect(foldedLine(input({}, { askedFrom: MIND }))).toEqual({ kind: "asked", mind: MIND });
     expect(foldedLine(input())).toEqual({ kind: "answered", model: "claude-sonnet-5-5" });
     expect(foldedLine(input({ model: null }))).toBeNull();
@@ -194,7 +264,7 @@ describe("an Answer's steps", () => {
     );
   });
 
-  // protects=the rows' order: reasoning, the Mind it was asked from, the calls as they started, the check last; fails_when=any row is out of order or a call waiting for approval shows; no_claim=none beyond protects.
+  // protects=the rows' order: reasoning, the Mind read, the calls as they started, the check last; fails_when=any row is out of order or a call waiting for approval shows; no_claim=none beyond protects.
   test("the order of the rows, and the check last with what wasn't found", () => {
     const skillUse: AnswerToolCall = {
       id: "k1",
@@ -224,13 +294,14 @@ describe("an Answer's steps", () => {
             citation(1, "a", "d1", 4),
             { ...citation(2, "a", "d1", 5), check: "not-found" },
           ],
+          read: READ,
         },
         { askedFrom: MIND },
       ),
     );
     expect(rows.map((row) => row.kind)).toEqual([
       "reasoning",
-      "asked",
+      "read",
       "skill",
       "search",
       "call",
@@ -262,6 +333,36 @@ describe("an Answer's steps", () => {
       "check",
     ]);
     expect(rows.find((row) => row.kind === "calculated")).toEqual({ kind: "calculated", count: 2 });
+    // Asked beside a Mind it read, searching the Documents and the web: the Mind's row comes
+    // before the searches, the figures after them.
+    const web: AnswerToolCall = {
+      id: "w1",
+      tool: "search_web",
+      source: "web",
+      input: { query: "heat" },
+      status: "done",
+      resultCount: 4,
+    };
+    const page: AnswerToolCall = { ...web, id: "w2", tool: "read_web_page", resultCount: 2 };
+    const beside = stepRows(
+      input(
+        {
+          read: READ,
+          toolCalls: [search("s1", "heat", { passages: ["a"] }), web, page, calculated],
+          citations: [citation(1, "a", "d1", 4)],
+        },
+        { askedFrom: MIND },
+      ),
+    );
+    expect(beside.map((row) => (row.kind === "call" ? row.call.id : row.kind))).toEqual([
+      "answered",
+      "read",
+      "search",
+      "w1",
+      "w2",
+      "calculated",
+      "check",
+    ]);
     expect(
       stepRows(input({ toolCalls: [{ ...calculated, resultCount: 0, uncalculated: 1 }] })).map(
         (row) => row.kind,
@@ -282,8 +383,14 @@ describe("the live step", () => {
       ...extra,
     });
 
-  // protects=the live line starts at Searching, as nothing of the Mind is read, then moves to Writing and Checking from the Answer's state, and waiting for approval wins; fails_when=a step comes out of order, a reading step appears, or approval is hidden; no_claim=the 1-second hold is the component's, tested end to end.
-  test("searching, writing, checking; waiting for approval first", () => {
+  // protects=the live line moves Reading → Searching → Writing → Checking from the Answer's state, starts at Searching when it reads no Mind, and waiting for approval wins; fails_when=a step comes out of order, reading shows without a Mind read, or approval is hidden; no_claim=the 1-second hold is the component's, tested end to end.
+  test("reading, searching, writing, checking; waiting for approval first", () => {
+    expect(live({ read: READ })).toEqual({ kind: "reading", mind: READ });
+    expect(live({ read: READ }, { phase: "writing" })).toEqual({ kind: "reading", mind: READ });
+    expect(live({ read: READ }, { phase: "searching" })).toEqual({ kind: "searching" });
+    expect(live({ read: READ, toolCalls: [search("s1", "heat")] }, { phase: "writing" })).toEqual({
+      kind: "searching",
+    });
     expect(live({})).toEqual({ kind: "searching" });
     expect(live({}, { phase: "writing" })).toEqual({ kind: "searching" });
     expect(live({ toolCalls: [search("s1", "heat")] }, { phase: "writing" })).toEqual({

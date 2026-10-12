@@ -43,6 +43,7 @@ import {
   type CitedWork,
   COMPARISON_ROW_NODE,
   COMPARISON_TABLE_NODE,
+  DOCUMENT_CHIP_NODE,
   FOOTNOTE_NODE,
   PROPOSAL_ATTRIBUTE,
   PROPOSAL_INSERT_MARK,
@@ -67,6 +68,8 @@ export interface Footnote {
   source: string;
   /** The quote wasn't found, or can't be checked: the footnote gets the "[unverified]" marker. */
   unverified: boolean;
+  /** A web page's address, which `source` names: a format with links makes it one. */
+  link?: string;
 }
 
 export interface Image {
@@ -293,6 +296,7 @@ const INLINE_TYPES: ReadonlySet<string> = new Set([
   "image",
   CITATION_NODE,
   FOOTNOTE_NODE,
+  DOCUMENT_CHIP_NODE,
 ]);
 
 const hasBlockChildren = (element: Y.XmlElement) =>
@@ -314,7 +318,9 @@ function readBlockElement(element: Y.XmlElement, options: ReadOptions): Block[] 
       ];
     case "blockMath":
       return [{ kind: "math", latex: stringAttribute(element, "latex") }];
+    // A checklist reads as a bulleted list: its ticks are for the User, not for what reads the text.
     case "bulletList":
+    case "taskList":
     case "orderedList": {
       const ordered = element.nodeName === "orderedList";
       const start = ordered
@@ -579,6 +585,12 @@ function readInline(
           content.push({ kind: "footnote", content: readInline(child.toArray(), options, true) });
           break;
         }
+        case DOCUMENT_CHIP_NODE: {
+          // A Document the User named: its name, as text.
+          const name = stringAttribute(child, "name");
+          if (name) content.push({ kind: "text", text: name, marks: NO_MARKS });
+          break;
+        }
         default: {
           // Inline content this version doesn't know: its text.
           const text = plainText(child);
@@ -631,6 +643,8 @@ export function plainText(element: Y.XmlElement | Y.XmlText, footnotes = false):
       .join("");
   }
   if (!footnotes && element.nodeName === FOOTNOTE_NODE) return "";
+  // A Document chip is the User's words for a Document: its name is part of the line.
+  if (element.nodeName === DOCUMENT_CHIP_NODE) return stringAttribute(element, "name");
   return element
     .toArray()
     .map((child) =>

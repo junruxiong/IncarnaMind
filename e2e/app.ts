@@ -85,6 +85,12 @@ export interface LaunchOptions {
   /** What a Meeting's fake speech-to-text engine does: slow, failing to read stretches, failing over. */
   transcriber?: FakeTranscriberOptions;
   /**
+   * The port of a local server standing in for the web (#128): web search's
+   * fetcher connects there for every host, its guard still deciding. A test
+   * build honours it.
+   */
+  web?: number;
+  /**
    * What the fake text recognition model reads on each scanned page (#397):
    * a JSON file of a `FakeScanScript`. Without, it reads nothing on them.
    */
@@ -133,6 +139,7 @@ export async function launchApp(
     computerSound = "allowed",
     transcriber,
     scans,
+    web,
   }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
@@ -151,6 +158,7 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_CHATGPT;
   delete env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS;
   delete env.INCARNAMIND_TEST_SCANS;
+  delete env.INCARNAMIND_TEST_WEB;
   // A test never uses the ChatGPT sign-in an agent's shell may point at for checks by hand.
   delete env.INCARNAMIND_CHATGPT_PROFILE;
   env.INCARNAMIND_TEST_AUDIO = "fake";
@@ -167,6 +175,7 @@ export async function launchApp(
   if (sources) env.INCARNAMIND_TEST_SOURCES = sources;
   if (chatGpt) env.INCARNAMIND_TEST_CHATGPT = chatGpt;
   if (scans) env.INCARNAMIND_TEST_SCANS = scans;
+  if (web) env.INCARNAMIND_TEST_WEB = String(web);
   env.INCARNAMIND_DATA_DIR = dataDir;
   env.INCARNAMIND_TEST_HOOKS = "1";
   if (fakeChat) env.INCARNAMIND_FAKE_CHAT = "1";
@@ -661,6 +670,17 @@ async function resizeContent(
   }
 }
 
+/** Switches the interface's language, as Settings does. */
+export function setLanguage(window: Page, language: "en" | "zh-CN"): Promise<unknown> {
+  return window.evaluate(
+    (value) =>
+      (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+        user: { language: value },
+      }),
+    language,
+  );
+}
+
 /** How many animations are running (src/renderer/src/motion.ts), leaving copies included. */
 export function motionRunning(window: Page): Promise<number> {
   return window.evaluate(
@@ -919,20 +939,39 @@ export async function dragBlock(window: Page, block: Locator, target: Locator): 
   await window.mouse.up();
 }
 
-/** Where `words` are drawn in a line of text: their left and right edges, and their middle line. */
+/**
+ * Where `words` are drawn in a line of text: their left and right edges, and
+ * their middle line. They may run across marks (AI text and the User's, bold).
+ */
 async function wordsBox(line: Locator, words: string) {
   const box = await line.evaluate((element, wanted) => {
     const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      const at = node.textContent?.indexOf(wanted) ?? -1;
-      if (at < 0) continue;
-      const range = element.ownerDocument.createRange();
-      range.setStart(node, at);
-      range.setEnd(node, at + wanted.length);
-      const rect = range.getBoundingClientRect();
-      return { left: rect.left, right: rect.right, y: rect.top + rect.height / 2 };
-    }
-    return null;
+    const texts: Text[] = [];
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) texts.push(node as Text);
+    const at = texts
+      .map((text) => text.data)
+      .join("")
+      .indexOf(wanted);
+    if (at < 0) return null;
+    /** The text and offset `offset` characters in; an end falls at the end of a text, a start at the next. */
+    const place = (offset: number, end: boolean) => {
+      let start = 0;
+      for (const text of texts) {
+        if (offset < start + text.length || (end && offset === start + text.length)) {
+          return { text, offset: offset - start };
+        }
+        start += text.length;
+      }
+      return null;
+    };
+    const from = place(at, false);
+    const to = place(at + wanted.length, true);
+    if (!from || !to) return null;
+    const range = element.ownerDocument.createRange();
+    range.setStart(from.text, from.offset);
+    range.setEnd(to.text, to.offset);
+    const rect = range.getBoundingClientRect();
+    return { left: rect.left, right: rect.right, y: rect.top + rect.height / 2 };
   }, words);
   if (!box) throw new Error(`"${words}" isn't in the line.`);
   return box;

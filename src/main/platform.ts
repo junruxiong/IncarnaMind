@@ -3,6 +3,7 @@
  * turns Electron APIs into capabilities the core can use.
  */
 import { mkdirSync } from "node:fs";
+import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { app, safeStorage, shell } from "electron";
@@ -25,6 +26,7 @@ import { createSentryCrashReporter } from "./crashReports";
 import { createUtilityProcessEmbedder } from "./embedder";
 import { createElectronAudioCapture } from "./meetings/capture";
 import { createElectronPictures } from "./pictures";
+import { createElectronPrinter } from "./printPdf";
 import { createLoginShellProcesses } from "./processes";
 import { createUtilityProcessCrossEncoder } from "./reranker";
 import { loadOsSandbox } from "./sandbox";
@@ -302,12 +304,38 @@ const referenceLookupUrl =
 
 /**
  * Test-only launch flag: where Find sources asks its providers (#296), a
- * local server standing in for each provider (OpenAlex, arXiv, PubMed, Crossref, openFDA, DailyMed and ClinicalTrials.gov), each
+ * local server standing in for each provider (OpenAlex, arXiv, PubMed, Crossref, openFDA, DailyMed, ClinicalTrials.gov, the eCFR and GovInfo), each
  * under its own path, so the smoke tests reach none of them. Only a test
  * build honours it.
  */
 const sourceProvidersUrl =
   import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_SOURCES : undefined;
+
+/**
+ * Test-only launch flag: the port of a local server standing in for the web
+ * (#128). Web search's fetcher resolves every host to a public address and
+ * connects there, its guard still deciding which hosts it reaches, so the
+ * smoke tests reach no site. Only a test build honours it.
+ */
+function webStandIn(): CoreAdapters["web"] {
+  const port =
+    import.meta.env.MODE === "test" ? Number(process.env.INCARNAMIND_TEST_WEB) : Number.NaN;
+  if (!Number.isInteger(port) || port <= 0) return undefined;
+  return {
+    resolve: async () => [{ address: "93.184.215.14", family: 4 }],
+    connector: (lookup) => (options, callback) => {
+      lookup(options.hostname, {}, (error) => {
+        if (error) {
+          callback(error, null);
+          return;
+        }
+        const socket = connect(port, "127.0.0.1");
+        socket.once("connect", () => callback(null, socket));
+        socket.once("error", (failure) => callback(failure, null));
+      });
+    },
+  };
+}
 
 /**
  * Test-only launch flag: a local server standing in for OpenAI (#122), at
@@ -376,9 +404,11 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
   const usageData = createUsageDataSender();
   const chatGptStore = chatGptTestProfile(log);
   const chatGptPlan = chatGptStandIn();
+  const web = webStandIn();
   return {
     ...(chatGptStore && { chatGptStore }),
     ...(chatGptPlan && { chatGptPlan }),
+    ...(web && { web }),
     ...(crashReporter && { crashReporter }),
     ...(usageData && { usageData }),
     ...(referenceLookupUrl && {
@@ -393,6 +423,8 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
         openfda: `${sourceProvidersUrl}/openfda`,
         dailymed: `${sourceProvidersUrl}/dailymed`,
         clinicaltrials: `${sourceProvidersUrl}/clinicaltrials`,
+        ecfr: `${sourceProvidersUrl}/ecfr`,
+        govinfo: `${sourceProvidersUrl}/govinfo`,
       },
     }),
     log,
@@ -405,9 +437,11 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
       documents: documentsFolder(dataDir),
     },
     systemLanguages: () => app.getPreferredSystemLanguages(),
+    systemRegion: () => app.getLocaleCountryCode(),
     keychain: createSafeStorageKeychain(dataDir),
     browser: systemBrowser,
     shell: fileShell,
+    printer: createElectronPrinter({ log, rendererUrl: process.env.ELECTRON_RENDERER_URL }),
     pictures: createElectronPictures(log),
     processes: loginShellProcesses,
     // JavaScript Skill scripts run on Electron's own Node, as plain Node: nothing to install.
