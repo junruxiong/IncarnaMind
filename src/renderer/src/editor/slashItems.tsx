@@ -89,6 +89,51 @@ export const noteSlashItems: readonly SlashItem[] = [
     run: turnInto("heading", { level: 3 }),
   },
   {
+    id: "bulleted-list",
+    label: "editor.slash.bulletList",
+    keywords: ["bullet", "ul", "unordered", "list"],
+    icon: "•",
+    run: (editor, range) => editor.chain().focus().deleteRange(range).toggleBulletList().run(),
+  },
+  {
+    id: "numbered-list",
+    label: "editor.slash.numberedList",
+    keywords: ["number", "ol", "ordered", "list"],
+    icon: "1.",
+    run: (editor, range) => editor.chain().focus().deleteRange(range).toggleOrderedList().run(),
+  },
+  {
+    id: "checklist",
+    label: "editor.slash.checklist",
+    keywords: ["todo", "task", "checkbox", "check"],
+    icon: "☑",
+    run: (editor, range) => editor.chain().focus().deleteRange(range).toggleTaskList().run(),
+  },
+  {
+    id: "quote",
+    label: "editor.slash.quote",
+    keywords: ["blockquote", "citation"],
+    icon: "❝",
+    run: (editor, range) => editor.chain().focus().deleteRange(range).toggleBlockquote().run(),
+  },
+  {
+    id: "divider",
+    label: "editor.slash.divider",
+    keywords: ["rule", "line", "hr", "separator"],
+    icon: "—",
+    run(editor, range) {
+      const pos = insertBlock(editor, range, { type: "horizontalRule" });
+      // The cursor goes on to the line after it.
+      if (pos !== null) {
+        editor
+          .chain()
+          .focus()
+          .setTextSelection(TextSelection.near(editor.state.doc.resolve(pos + 1), 1).from)
+          .run();
+      }
+    },
+  },
+  {
     id: "table",
     label: "editor.slash.table",
     keywords: ["grid", "columns", "rows"],

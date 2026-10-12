@@ -199,3 +199,23 @@ export function asOwnUndoStep<T>(editor: Editor, run: () => T): T {
   undo?.stopCapturing();
   return result;
 }
+
+/**
+ * Sets the link of the selected text, or of the whole link the cursor is in, to
+ * the address typed; an empty address takes the link off. One Undo step.
+ */
+export function applyLink(editor: Editor, typed: string): void {
+  asOwnUndoStep(editor, () => {
+    const chain = editor.chain().focus();
+    if (typed.trim() === "") return chain.extendMarkRange("link").unsetLink().run();
+    // Editing a link changes all of it, not just the part selected.
+    if (editor.isActive("link")) chain.extendMarkRange("link");
+    return chain.setLink({ href: linkTarget(typed) }).run();
+  });
+}
+
+/** What the editor's element is told when ⌘K asks to edit the link at the selection. */
+export const LINK_EDIT = "link-edit";
+
+export const requestLinkEdit = (editor: Editor): boolean =>
+  editor.view.dom.dispatchEvent(new CustomEvent(LINK_EDIT));
