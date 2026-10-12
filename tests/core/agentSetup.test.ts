@@ -418,9 +418,28 @@ describe("the Skill that installs with an agent's connection", () => {
     expect(result.skill).toBe(SKILL_MARKDOWN);
     expect(result.text).not.toContain("SKILL.md");
     expect((await core.copyAgentSetup(pairing.id)).skill).toBe(SKILL_MARKDOWN);
-    // Where it is installed, there is none to hand over.
+    // Also for an agent it installs it for, whose copy the User may have changed or removed.
     const code = await core.setUpAgent({ client: "claude-code", folderIds: [coast.id] });
-    expect((await core.copyAgentSetup(code.pairing.id)).skill).toBeNull();
+    expect((await core.copyAgentSetup(code.pairing.id)).skill).toBe(SKILL_MARKDOWN);
+  });
+
+  it("is removed on a failed connection only if that attempt wrote it", async () => {
+    const { core, home, links, coast } = await started();
+    links.push = () => {
+      throw new Error("No app can open this link.");
+    };
+    const mine = join(home, ".cursor", "skills", "incarnamind", "SKILL.md");
+    await expect(core.setUpAgent({ client: "cursor", folderIds: [coast.id] })).rejects.toThrow(
+      /No app/,
+    );
+    await expect(readFile(mine, "utf8")).rejects.toThrow(/ENOENT/);
+    // One already there, even word for word the same, was not this attempt's to remove.
+    await mkdir(join(mine, ".."), { recursive: true });
+    await writeFile(mine, SKILL_MARKDOWN);
+    await expect(core.setUpAgent({ client: "cursor", folderIds: [coast.id] })).rejects.toThrow(
+      /No app/,
+    );
+    expect(await readFile(mine, "utf8")).toBe(SKILL_MARKDOWN);
   });
 
   it("teaches the workflow in English and Chinese, and the server's instructions lead with search", () => {

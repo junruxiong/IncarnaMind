@@ -4450,10 +4450,10 @@ export type AgentSetupResult =
       path?: string;
       /**
        * The Skill (SKILL.md) for the User to add to the agent's own skills
-       * folder, when IncarnaMind can't install it there. Apart from `text`,
-       * which is pasted into a settings field that takes only the settings.
+       * folder, by hand, where IncarnaMind couldn't install it. Apart from
+       * `text`, which is pasted into a settings field that takes only the settings.
        */
-      skill: string | null;
+      skill: string;
     };
 
 export interface SetUpAgentInput {

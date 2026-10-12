@@ -180,18 +180,17 @@ export function createAgentSetup(options: AgentSetupOptions) {
     }
   };
 
-  /** The Skill to hand over for an agent IncarnaMind can't install it for. */
-  const skillToAdd = (client: ClientDefinition | null) => (client?.skills ? null : SKILL_MARKDOWN);
-
   /**
    * The Agent Skill in the agent's skills folder, unless a file is already
    * there: one the User changed or wrote is theirs, and is left as it is.
+   * Whether it wrote the file.
    */
-  const addSkill = async (client: ClientDefinition) => {
+  const addSkill = async (client: ClientDefinition): Promise<boolean> => {
     const path = skillPathFor(options.home, client.id);
-    if (path === null || (await readText(path)) !== null) return;
+    if (path === null || (await readText(path)) !== null) return false;
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, SKILL_MARKDOWN);
+    return true;
   };
 
   /**
@@ -214,14 +213,13 @@ export function createAgentSetup(options: AgentSetupOptions) {
     how: "command" | "settings",
     text: string,
     token: string,
-    skill: string | null,
     path?: string,
   ): Extract<AgentSetupResult, { kind: "copy" }> => ({
     kind: "copy",
     how,
     text,
     shown: hideToken(text, token),
-    skill,
+    skill: SKILL_MARKDOWN,
     ...(path && { path }),
   });
 
@@ -276,7 +274,7 @@ export function createAgentSetup(options: AgentSetupOptions) {
         planned.push({ path, before, after: changed(file, before, launch) });
       } catch {
         // Nothing is written until every file can be.
-        return copy("settings", changeShown(file, launch), token, skillToAdd(client), path);
+        return copy("settings", changeShown(file, launch), token, path);
       }
     }
     for (const each of planned) {
@@ -305,14 +303,9 @@ export function createAgentSetup(options: AgentSetupOptions) {
       case "file":
         return writeSettings(client, pairingId, launch);
       case "command":
-        return copy(
-          "command",
-          claudeCodeCommand(launch, options.platform),
-          token,
-          skillToAdd(client),
-        );
+        return copy("command", claudeCodeCommand(launch, options.platform), token);
       case "manual":
-        return copy("settings", mcpServersSnippet(launch), token, skillToAdd(client));
+        return copy("settings", mcpServersSnippet(launch), token);
     }
   };
 
@@ -351,7 +344,10 @@ export function createAgentSetup(options: AgentSetupOptions) {
       }
       // Before pairing, so the settings the pairing announces already show it.
       // The agent still works without it, from the server's instructions.
-      await addSkill(client).catch(options.reportError);
+      const addedSkill = await addSkill(client).catch((error: unknown) => {
+        options.reportError(error);
+        return false;
+      });
       const { pairing, launch } = await options.agents
         .connect({
           name: nameFor(client, input.name),
@@ -359,14 +355,14 @@ export function createAgentSetup(options: AgentSetupOptions) {
           client: client.id,
         })
         .catch(async (error: unknown) => {
-          await removeSkill(client.id, "").catch(options.reportError);
+          if (addedSkill) await removeSkill(client.id, "").catch(options.reportError);
           throw error;
         });
       try {
         return { pairing, result: await install(client, pairing.id, launch) };
       } catch (error) {
         // Nothing half made: the pairing goes with the setup that failed.
-        await removeSkill(client.id, pairing.id).catch(options.reportError);
+        if (addedSkill) await removeSkill(client.id, pairing.id).catch(options.reportError);
         await options.agents.disconnect(pairing.id).catch(options.reportError);
         throw error;
       }
@@ -396,19 +392,9 @@ export function createAgentSetup(options: AgentSetupOptions) {
       const launch = await options.agents.launch(pairing.id);
       const token = launch.env[AGENT_TOKEN_ENV] ?? "";
       if (pairing.client === "claude-code") {
-        return copy(
-          "command",
-          claudeCodeCommand(launch, options.platform),
-          token,
-          skillToAdd(clientDefinition(pairing.client)),
-        );
+        return copy("command", claudeCodeCommand(launch, options.platform), token);
       }
-      return copy(
-        "settings",
-        mcpServersSnippet(launch),
-        token,
-        skillToAdd(clientDefinition(pairing.client)),
-      );
+      return copy("settings", mcpServersSnippet(launch), token);
     },
 
     /**
