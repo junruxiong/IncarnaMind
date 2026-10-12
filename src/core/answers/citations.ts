@@ -291,10 +291,11 @@ export function checkCitation(input: {
 export interface AnswerDocuments {
   /** How many live Documents have Passages to search. */
   searchableCount(): number;
-  /** The document-search Tool. */
+  /** The document-search Tool; `within`: only these Documents, not the Answer's. */
   search(
     query: string,
     signal?: AbortSignal,
+    within?: readonly string[],
     options?: AnswerSearchOptions,
   ): Promise<WindowedPassage[]>;
   /** A Passage and its Document, deleted or not; null if unknown. */
@@ -562,6 +563,21 @@ type Taken =
   | { ok: true; record: Accepted; source: CitationSource; passageUnits: PageText[] }
   | { ok: false; rejected: RejectedRecord; problem: string };
 
+/** A quote that isn't for a marker: where an input of a calculated figure reads its number (./calculations). */
+export type QuoteInput = Omit<CitationRecordInput, "marker">;
+
+/** A quote the core took, as a Citation of the Answer's: what a calculated figure's input reads. */
+export interface Quoted {
+  /** The Passage's id, as the model was given it: "P3". */
+  passage: string;
+  /** Its Citation, "checking". */
+  citation: Citation;
+  /** The stored text of the Units it cites, of the version it quotes. */
+  units: PageText[];
+  /** The Citation check, with the Document as it is now. */
+  check(): CheckResult;
+}
+
 const toCitation = (record: Accepted, result: CheckResult | null): Citation => ({
   passageId: record.source.passageId,
   documentId: record.source.documentId,
@@ -721,6 +737,22 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
         problem: `A record needs a marker number (1, 2, …) that is in the Answer as [^n].`,
       };
     }
+    const taken = takeQuote(input, marker, options);
+    return taken.ok
+      ? taken
+      : {
+          ok: false,
+          rejected: { marker, passage: given, reason: "passage" },
+          problem: `[^${marker}]: ${taken.problem}`,
+        };
+  }
+
+  /** `take`, for a quote with or without a marker (0 for none). */
+  function takeQuote(
+    input: QuoteInput,
+    marker: number,
+    options: CiteOptions,
+  ): Extract<Taken, { ok: true }> | { ok: false; problem: string } {
     const quote = cleanQuote(typeof input.quote === "string" ? input.quote : "");
     const named = typeof input.passage === "string" ? input.passage : "";
     // Structured output can't be told it named no Passage (see `CiteOptions`): its id read loosely,
@@ -734,8 +766,7 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
     if (!found || !source) {
       return {
         ok: false,
-        rejected: { marker, passage: given, reason: "passage" },
-        problem: `[^${marker}]: there is no Passage "${String(input.passage)}" in your search results; use a Passage's id, such as P1.`,
+        problem: `there is no Passage "${String(input.passage)}" in your search results; use a Passage's id, such as P1.`,
       };
     }
     const passageUnits = documents.pageTexts(
@@ -786,30 +817,13 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
         continue;
       }
       const { record, source, passageUnits } = taken;
-      const { marker, handle } = record;
-      const label = `[^${marker}]`;
+      const { marker } = record;
       records.set(marker, record);
       recorded.push(marker);
       events.onRecord(marker, toCitation(record, null));
-
       // Tell the model now what the check will find, so it can fix the record.
-      const problem = pageRangeProblem(record.range, source, record.unresolved);
-      const where = passageUnits.length > 0 ? passageLocation(passageUnits) : null;
-      if (problem) {
-        problems.push(
-          where
-            ? `${label}: give a location inside ${handle} (${where}), naming one place, or two in a row.`
-            : `${label}: cite one page, or two consecutive pages, within ${handle}'s pages (${pagesLabel(source)}).`,
-        );
-      } else if (!record.quote) {
-        problems.push(`${label}: the quote is empty; copy a short quote from ${handle}.`);
-      } else if (check(record).check === "not-found") {
-        problems.push(
-          where
-            ? `${label}: the quote isn't word for word at ${cutLocation(record) ?? where} in ${handle}; copy it exactly, and check where it is.`
-            : `${label}: the quote isn't word for word${record.range.pageFrom === null ? "" : ` on p. ${pagesLabel(record.range)}`} in ${handle}; copy it exactly, and check its page.`,
-        );
-      }
+      const problem = recordProblem(record, source, passageUnits);
+      if (problem) problems.push(`[^${marker}]: ${problem}`);
     }
     const done = recorded.length
       ? `Recorded ${recorded.map((marker) => `[^${marker}]`).join(", ")}.`
@@ -819,6 +833,34 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       : " Write the Answer now if you haven't yet; don't repeat it.";
     return `${done}${fix}`;
   }
+
+  /** What the check will find wrong with a record, for the model to fix; null when nothing. */
+  function recordProblem(
+    record: Accepted,
+    source: CitationSource,
+    passageUnits: readonly PageText[],
+  ): string | null {
+    const { handle } = record;
+    const where = passageUnits.length > 0 ? passageLocation(passageUnits) : null;
+    if (pageRangeProblem(record.range, source, record.unresolved)) {
+      return where
+        ? `give a location inside ${handle} (${where}), naming one place, or two in a row.`
+        : `cite one page, or two consecutive pages, within ${handle}'s pages (${pagesLabel(source)}).`;
+    }
+    if (!record.quote) return `the quote is empty; copy a short quote from ${handle}.`;
+    if (check(record).check !== "not-found") return null;
+    return where
+      ? `the quote isn't word for word at ${cutLocation(record) ?? where} in ${handle}; copy it exactly, and check where it is.`
+      : `the quote isn't word for word${record.range.pageFrom === null ? "" : ` on p. ${pagesLabel(record.range)}`} in ${handle}; copy it exactly, and check its page.`;
+  }
+
+  /** A record as a calculated figure's input reads it. */
+  const quotedOf = (record: Accepted): Quoted => ({
+    passage: record.handle,
+    citation: toCitation(record, null),
+    units: citedText(record),
+    check: () => check(record),
+  });
 
   /** The English label of a record's cited Units, as a whole: "slide 4", "§ 2.1 Sensitivity". */
   const cutLocation = (record: Accepted): string | null => {
@@ -833,6 +875,56 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
     const location = locationOf(units, null);
     return location ? englishLocation(location) : null;
   };
+
+  /** Searches, and gives the model what it found: each Passage under the id it cites it by. */
+  async function search(
+    query: string,
+    signal: AbortSignal | undefined,
+    within?: readonly string[],
+    options?: AnswerSearchOptions,
+  ): Promise<SearchResultForModel> {
+    const found = await documents.search(query, signal, within, options);
+    if (found.length === 0) {
+      return { text: "No Passages in the User's Documents match this search.", passageCount: 0 };
+    }
+    const formatted = found.map((passage): ShownPassage => {
+      const range = { pageFrom: passage.pageFrom, pageTo: passage.pageTo };
+      const units =
+        passage.pageFrom !== null && passage.pageTo !== null
+          ? documents.pageTexts(
+              passage.documentId,
+              passage.contentHash,
+              passage.pageFrom,
+              passage.pageTo,
+            )
+          : [];
+      const marked =
+        units.length > 1 || units.some((unit) => innerMarks(unit).length > 0)
+          ? withUnitMarks(passage.text, units)
+          : passage.text;
+      const id = handleFor(passage.passageId);
+      // A browser-made PDF's "⼤" for "大": every other reader of the text folds it (ADR-0009).
+      const text = foldRadicals(withCueMarks(marked, units));
+      shownTexts.set(id, text);
+      return {
+        id,
+        documentName: passage.documentName,
+        range,
+        location: passageLocation(units),
+        text,
+      };
+    });
+    return {
+      text: formatPassages(formatted),
+      passageCount: found.length,
+      passageIds: found.map((passage) => passage.passageId),
+      ranks: found.map((passage, index) => passage.rank ?? index),
+      // Someone else wrote a saved web page: reading it makes the Run third-party (#78).
+      ...(found.some((passage) => passage.documentKind === "web") && {
+        thirdParty: ["web-page"] as const,
+      }),
+    };
+  }
 
   const tools: AnswerTools = {
     get documentCount() {
@@ -851,47 +943,7 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
           passageCount: 0,
         };
       }
-      const found = await documents.search(query, signal, options);
-      if (found.length === 0) {
-        return { text: "No Passages in the User's Documents match this search.", passageCount: 0 };
-      }
-      const formatted = found.map((passage): ShownPassage => {
-        const range = { pageFrom: passage.pageFrom, pageTo: passage.pageTo };
-        const units =
-          passage.pageFrom !== null && passage.pageTo !== null
-            ? documents.pageTexts(
-                passage.documentId,
-                passage.contentHash,
-                passage.pageFrom,
-                passage.pageTo,
-              )
-            : [];
-        const marked =
-          units.length > 1 || units.some((unit) => innerMarks(unit).length > 0)
-            ? withUnitMarks(passage.text, units)
-            : passage.text;
-        const id = handleFor(passage.passageId);
-        // A browser-made PDF's "⼤" for "大": every other reader of the text folds it (ADR-0009).
-        const text = foldRadicals(withCueMarks(marked, units));
-        shownTexts.set(id, text);
-        return {
-          id,
-          documentName: passage.documentName,
-          range,
-          location: passageLocation(units),
-          text,
-        };
-      });
-      return {
-        text: formatPassages(formatted),
-        passageCount: found.length,
-        passageIds: found.map((passage) => passage.passageId),
-        ranks: found.map((passage, index) => passage.rank ?? index),
-        // Someone else wrote a saved web page: reading it makes the Run third-party (#78).
-        ...(found.some((passage) => passage.documentKind === "web") && {
-          thirdParty: ["web-page"] as const,
-        }),
-      };
+      return search(query, signal, undefined, options);
     },
 
     cite,
@@ -954,8 +1006,52 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
     return record ? toCitation(record, record.result) : null;
   };
 
+  /** Quotes for calculated figures' inputs (./calculations). */
+  const quotes = {
+    /**
+     * The quote of the record taken for a marker; null when none was. A quote
+     * that isn't where the record says is read where it is in its Passage, as
+     * structured output's records are (see `CiteOptions`): the record itself
+     * stays as it was.
+     */
+    recorded(marker: number): Quoted | null {
+      const record = records.get(marker);
+      if (!record) return null;
+      if (check(record).check === "not-found") {
+        const placed = takeQuote(
+          { passage: record.handle, ...record.given, quote: record.quote },
+          0,
+          { structured: true },
+        );
+        if (placed.ok && check(placed.record).check === "found") return quotedOf(placed.record);
+      }
+      return quotedOf(record);
+    },
+
+    /** A quote outside the markers, read as a record is; or what the check would find wrong with it. */
+    quote(input: QuoteInput, options: CiteOptions = {}): Quoted | { problem: string } {
+      const taken = takeQuote(input, 0, options);
+      if (!taken.ok) return { problem: taken.problem };
+      const problem = recordProblem(taken.record, taken.source, taken.passageUnits);
+      return problem ? { problem } : quotedOf(taken.record);
+    },
+
+    /** A Passage's text, as the model was given it, by its id ("P3"); "" for one it wasn't. */
+    passageText: (passage: string): string => shownTexts.get(passage) ?? "",
+  };
+
   return {
     tools,
+
+    /**
+     * Searches one Document, whatever the Answer's Search scope: a web page
+     * web search just saved (#128). Its Passages can be cited as a search's
+     * are, and it doesn't count as one of the Answer's searches.
+     */
+    searchDocument: (documentId: string, query: string, signal?: AbortSignal) =>
+      search(query, signal, [documentId]),
+
+    quotes,
 
     streamingCitation,
 

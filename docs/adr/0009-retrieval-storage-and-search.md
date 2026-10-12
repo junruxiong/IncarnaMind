@@ -67,6 +67,17 @@ Status: accepted by the User on 2026-10-10: simplified and traditional folding, 
 
 The "Nothing else is forgiven" above has two more exceptions, set out in ADR-0011's amendment of the same date: a pipe that breaks a table's cells reads as a space, so a row is found with its pipes or without them, and a slide's quote not found as it is is looked for again with number formatting normalised, as a sheet's rows are. Normalisation for indexing and embeddings is unchanged.
 
+## Amendment: the built-in reranking model runs on the GPU where it can (2026-10-12, #270)
+
+Reranking keyword search's top 60 on the CPU takes about 3 s a search on an Apple M2 Max, with several cores busy, before every Answer starts. Where onnxruntime-node's WebGPU execution provider finds a GPU adapter (1.30.0 bundles it for macOS arm64, Windows x64 and arm64, and Linux x64, labelled experimental), the same model now runs on the GPU:
+
+- **Its fp16 file**, `onnx/model_O4.onnx` from the same pinned revision (235 MB, size and SHA-256 recorded like the int8 file's), in batches of 8 Passages sorted by length. WebGPU has no kernels for the int8 file's quantised operators. In fp16 the attention mask hides a batch's padding, so a score doesn't depend on the other Passages in its batch.
+- **Downloaded only where it can run.** The first load asks onnxruntime for an adapter (with a one-node model), and only then downloads the fp16 file, into a folder of its own; the next load runs on the GPU. The int8 file always downloads and stays: it is the fallback.
+- **Checked before it reranks.** Each time it loads, the GPU scores a fixed query against three texts of different lengths, as one padded batch, and must come within 0.1 logits of the fp32 model's scores (fp16 is within about 0.02). Reranking runs on the CPU, and the log says why, when no adapter is found, the GPU session fails (as it opens, or later in the run) or the check is off: onnxruntime has open wrong-output bugs on some GPUs (microsoft/onnxruntime#32938, #32134, #24442).
+- **The CPU path is unchanged:** the int8 file, one pair at a time. Batching it changes scores, because its dynamic quantisation takes one scale over the whole batch.
+- **Measured** on an Apple M2 Max, the two paths alternating search by search over the gating set's 75 searches, twice, while other work loaded the machine (load average 13, rising to 45): the GPU took 0.98 s a search at the median (p95 1.6 s) against 3.7 s (p95 14 s) on the CPU, 3.9 times faster at the median, and 6 ms of CPU time per Passage against 335 ms. `npm run eval:dump` on each path: gating 36 of 40 (16 English, 20 Chinese) on the GPU against 37 (17, 20) on the CPU; hard tier 122 of 180 against 124, at the top 10 146 against 143. The two files disagree on 10 hard-tier Questions (4 found only on the GPU, 6 only on the CPU), as quantisation alone moves them.
+- Settings → Search says where the built-in model runs: "On this computer · GPU" or "· CPU". The evaluation runs on the GPU where it can, as the app does, and on the CPU with `INCARNAMIND_EVAL_RERANK_CPU=1`.
+
 ## Amendment: a model's searches in the Tool loop skip the reranker (2026-10-12, #542)
 
 Decided with the User on 2026-10-12. "Reranking by default" above now holds for one-search Answers, Suggest as I write, and checks and comparison tables, not for the searches a model makes itself in the Tool loop (ADR-0007): those hand the model keyword search's own order, grouped into windows as before.

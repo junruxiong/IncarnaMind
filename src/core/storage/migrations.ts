@@ -1334,6 +1334,36 @@ export const migrations: readonly Migration[] = [
       ALTER TABLE conversation_messages ADD COLUMN steps TEXT;
     `,
   },
+  {
+    version: 67,
+    description: "Answers in conversations keep their calculated figures (#438)",
+    sql: `
+      -- An Answer's calculated figures (src/core/answers/calculations.ts, ADR-0021), as a JSON
+      -- list: each figure's marker ("[=1]" in the text), label, formula, inputs (each with the
+      -- Citation it reads its number from, the number as written and where, and the cell or the
+      -- unit line it came with), result, shown text, and the evaluator version it was worked out
+      -- by. '[]' for a Question, and for an Answer with none.
+      ALTER TABLE conversation_messages ADD COLUMN figures TEXT NOT NULL DEFAULT '[]';
+    `,
+  },
+  {
+    version: 68,
+    description:
+      "A Document's file is known on this computer's disk, so moved and edited it stays the same Document (#389)",
+    sql: `
+      -- Which file a Document's is on this computer's disks, from stat: its device, file number
+      -- and creation time in nanoseconds, as decimal text (src/core/documents/files.ts). A file
+      -- moved and edited on the same disk while IncarnaMind didn't see it keeps all three. Like
+      -- path, file_mtime_ms and file_status, they are this computer's (ADR-0020): seen here,
+      -- different on another computer, and never synced. NULL until the file is next seen;
+      -- file_number and file_created_ns stay NULL where the file system gives none.
+      ALTER TABLE documents ADD COLUMN file_device TEXT;
+      ALTER TABLE documents ADD COLUMN file_number TEXT;
+      ALTER TABLE documents ADD COLUMN file_created_ns TEXT;
+      CREATE INDEX documents_by_file_number ON documents (file_number)
+        WHERE deleted_at IS NULL AND file_number IS NOT NULL;
+    `,
+  },
 ];
 
 /**

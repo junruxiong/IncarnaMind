@@ -31,6 +31,7 @@ export type {
  * the renderer import it.
  */
 import type { CitationForm, CitationStyleId } from "../shared/citationStyles";
+import type { FormulaInput, FormulaLiteral, ResultUnit, ShowAs } from "../shared/formula";
 import type { TagColour } from "../shared/tagColours";
 import type { Anchor, UnitKind, UnitLabel } from "../shared/units";
 import type { Language, LanguagePreference } from "./language";
@@ -383,6 +384,14 @@ export type ThirdPartyReason =
 export const MIND_TEXT_ORIGINS_FIELD = "textOrigins";
 
 /**
+ * The name of the Y.Map, beside a Mind's Blocks, that says when in its Meeting
+ * each line was written (#139): the Meeting's time in ms, by Block id. A map
+ * rather than a Block attribute, for the reason `MIND_TEXT_ORIGINS_FIELD` is
+ * (see `src/shared/blockTimes.ts`), so the content schema version stays as it is.
+ */
+export const MIND_BLOCK_TIMES_FIELD = "blockTimes";
+
+/**
  * A Question's Search scope (CONTEXT.md): the Folders, Tags and individual
  * Documents its Document search is limited to. It covers every Document in
  * one of the Folders or their sub-Folders (at any depth), every Document with
@@ -475,9 +484,10 @@ export interface AnswerToolCall {
    * Where the Tool comes from: "documents" is IncarnaMind's own document
    * search; "skill", the Skill Tools; "connector", one of the User's
    * Connectors (see `connector`); "sources", Find sources (`find_sources`,
-   * `{ query, from_year?, to_year?, open_access_only? }`).
+   * `{ query, from_year?, to_year?, open_access_only? }`); "web", web search
+   * (`search_web`, `{ query }`, and `read_web_page`, `{ url, query }`; #128).
    */
-  source: "documents" | "skill" | "connector" | "sources";
+  source: "documents" | "skill" | "connector" | "sources" | "web";
   /** A Connector's Tool: which Connector, with its name when the call was made. */
   connector?: { id: string; name: string };
   /** What the model asked, e.g. `{ query }` for a search, or the arguments sent to a Connector. */
@@ -521,7 +531,23 @@ export interface AnswerToolCall {
    * script couldn't run. Absent while it runs, and when it never did (denied).
    */
   script?: SkillScriptRun;
+  /**
+   * "read_web_page" only, once it ended: the page saved as a Document, or
+   * why it couldn't be ("Couldn't save <url>: <reason>").
+   */
+  webPage?: WebPageCall;
+  /**
+   * "calculate" only, one call for all of an Answer's figures: `resultCount`
+   * is how many it shows; this, how many of its figure markers had none, and
+   * were left out of its text. Absent: none.
+   */
+  uncalculated?: number;
 }
+
+/** What a call of `read_web_page` came to (see `AnswerToolCall.webPage`). */
+export type WebPageCall =
+  | { address: string; documentId: string; name: string }
+  | { address: string; failure: WebPageFailureReason };
 
 /** Where the User's approval of a Tool call stands (see `AnswerToolCall.approval`). */
 export type ToolCallApproval = "waiting" | "allowed" | "denied";
@@ -737,6 +763,103 @@ export interface Citation {
   checkReason: CitationCheckReason | null;
 }
 
+/**
+ * A number an Answer worked out from numbers in Passages (ADR-0021): the model
+ * named each input's number in a quote and a formula over them, and
+ * IncarnaMind read the numbers, checked the quotes and did the arithmetic
+ * (src/shared/formula.ts). The Answer shows it where its marker ("[=1]") is.
+ */
+export interface CalculatedFigure {
+  /** What it is, as the model labelled it: "Revenue growth 2025". */
+  label: string;
+  /** In Excel's formula syntax, over the inputs' names: "rev2025 / rev2024 - 1". */
+  formula: string;
+  inputs: FigureInput[];
+  /** As worked out, a double, as Excel computes it; true or false for a comparison. */
+  value: number | boolean;
+  unit: ResultUnit;
+  /** Worked out from an approximate input, so approximate too. */
+  approximate: boolean;
+  /** As the Answer writes it, in its language: "20.4%", "2.3个百分点". */
+  shown: string;
+  /** How it was shown, so it can be shown again the same way and compared. */
+  show: FigureShowOptions;
+  /** Numbers written in the formula itself, which no quote backs: the 4 in "^ (1 / 4)". */
+  literals: FormulaLiteral[];
+  /** The rules it was worked out and shown by (`FORMULA_VERSION`): a check runs the same ones. */
+  engine: number;
+  /**
+   * What the Answer wrote right before its marker when that isn't this figure:
+   * "26%" where IncarnaMind calculated 25.0%. Null when it wrote nothing
+   * there, or the same figure, which the text then shows once.
+   */
+  written: string | null;
+}
+
+/** How a calculated figure's result was shown (see `showResult` in src/shared/formula.ts). */
+export interface FigureShowOptions {
+  language: Language;
+  as: ShowAs | null;
+  decimals: number | null;
+  /** A scale word in `language`: "million", "亿". */
+  scale: string | null;
+}
+
+/** A calculated figure of an Answer: where it goes is its marker ("[=2]") in the text. */
+export interface MarkedFigure extends CalculatedFigure {
+  marker: number;
+}
+
+/** A number a calculated figure is worked out from: one read from a Citation's quote. */
+export interface FigureInput {
+  /** The formula's name for it: "rev2024". */
+  name: string;
+  /** What it is, with its period, as the model labelled it: "Revenue 2024". */
+  label: string;
+  /** The Citation it reads the number from, with its own check. */
+  citation: Citation;
+  number: InputNumber;
+  /**
+   * In a workbook's rows: the cell the number is in, and the number the cell
+   * stores when its shown text isn't that number written plainly (#435),
+   * which is the one the formula used. Null for other kinds.
+   */
+  cell: { sheet: string | null; ref: string; stored: number | null } | null;
+  /**
+   * The line of the same Passage that states the number's scale or currency
+   * ("单位：万元"), given as `unitQuote` when the number has none of its own;
+   * null when none was needed.
+   */
+  unitStatement: {
+    citation: Citation;
+    scale: number;
+    scaleWord: string | null;
+    currency: string | null;
+  } | null;
+}
+
+/** A number as an input read it from its quote (see `Figure` in src/shared/figures.ts). */
+export interface InputNumber {
+  /** As written in the quote: "1.2亿", "(1,250)", "$1,482.6 million". */
+  chars: string;
+  /** Its UTF-16 offset in the quote: a check reads it there again. */
+  at: number;
+  /** What the formula used: its scale applied, and the cell's stored number where there is one. */
+  value: number;
+  scale: number;
+  scaleWord: string | null;
+  unit: FormulaInput["unit"];
+  /** Digits written after its decimal mark. */
+  decimals: number;
+  approximate: boolean;
+  /**
+   * The reading the model chose, from 1, when the reader could read the
+   * number more than one way (its separator or sign, a range's end, points);
+   * null when there was one.
+   */
+  reading: number | null;
+}
+
 /** A Mind opened for editing. */
 export interface OpenedMind {
   mind: Mind;
@@ -773,8 +896,15 @@ export interface UserSettings {
    * everywhere. Copies of the document being checked are left out either way.
    */
   leaveOutOwnFiles: boolean;
+  /** How Export and ⇧⌘E export a Mind: the choices last saved in Export options (#100). */
+  exportOptions: ExportPreferences;
   /** The monthly cap on models billed per token: off (null) by default. */
   monthlyCap: MonthlyCap | null;
+  /**
+   * Answers may search the web through their model's provider, saving the
+   * pages they use as Documents (#128): off until the User turns it on.
+   */
+  webSearch: boolean;
 }
 
 /**
@@ -1404,6 +1534,11 @@ export interface SaveWebPageInput {
  * - "not-a-page": the address is a file (a PDF, an image), not a web page.
  * - "video": the page is a video, with little text to read.
  * - "not-text": the page has too little text to read, such as an app.
+ * - "not-public": web search's fetcher refused it: the address is on this
+ *   computer or a local network, or redirects there (#128).
+ * - "too-many-redirects": it redirected more than web search's fetcher follows.
+ * - "not-from-search": web search fetches only the pages its search returned
+ *   in the same Answer, and this wasn't one.
  */
 export type WebPageFailureReason =
   | "invalid-address"
@@ -1415,7 +1550,10 @@ export type WebPageFailureReason =
   | "site-error"
   | "not-a-page"
   | "video"
-  | "not-text";
+  | "not-text"
+  | "not-public"
+  | "too-many-redirects"
+  | "not-from-search";
 
 export interface WebPageFailure {
   reason: WebPageFailureReason;
@@ -2295,6 +2433,11 @@ export interface RerankSettings {
    * keeps its own order.
    */
   model: RerankingModelStatus;
+  /**
+   * Where the built-in model runs on this computer: on the GPU, or on the CPU
+   * where no GPU can run it. Null until it has run since IncarnaMind started.
+   */
+  runsOn: "gpu" | "cpu" | null;
 }
 
 export interface SaveRerankSettingsInput {
@@ -2794,14 +2937,17 @@ export interface AnswerDelta extends AnswerPlace {
  * is loading the local model; "searching", the User's Documents are being
  * searched; "writing", the model is at work; "checking-quotes", a local model
  * that answered with structured output is asked once more for the quotes of
- * its Citations that the check didn't find (ADR-0007).
+ * its Citations that the check didn't find (ADR-0007); "checking-figures", it
+ * is asked once more for the calculated figures it gave that couldn't be
+ * worked out (ADR-0021).
  */
 export type AnswerPhase =
   | "waiting-for-consent"
   | "loading"
   | "searching"
   | "writing"
-  | "checking-quotes";
+  | "checking-quotes"
+  | "checking-figures";
 
 /** An Answer being written moved to another phase. */
 export interface AnswerPhaseEvent extends AnswerPlace {
@@ -2890,6 +3036,15 @@ export interface AnswerFinished extends AnswerPlace {
    * was made. The evaluation counts these.
    */
   quoteRetry: QuoteRetry | null;
+  /** Its calculated figures (ADR-0021), in the order of their markers in the text, each once. */
+  figures: MarkedFigure[];
+  /** Figure markers in its text that had no figure: left out, so their numbers are missing. */
+  uncalculated: number;
+  /**
+   * The one request a local model in structured output gets to fix the
+   * figures it gave that couldn't be worked out; null when none was made.
+   */
+  figureRetry: FigureRetry | null;
   /** The tokens its model calls counted (#343). */
   usage: AnswerUsage;
 }
@@ -2917,6 +3072,16 @@ export interface QuoteRetry {
   /** Those whose new quote the check found on the pages it cites: it replaced theirs. */
   recovered: number;
   /** How long it took, in milliseconds, from the request to the records taken. */
+  durationMs: number;
+}
+
+/** What an Answer's one request to fix its figures did (see `AnswerFinished.figureRetry`). */
+export interface FigureRetry {
+  /** The figures it asked about. */
+  figures: number;
+  /** Those it then worked out. */
+  recovered: number;
+  /** How long it took, in milliseconds. */
   durationMs: number;
 }
 
@@ -2985,9 +3150,10 @@ export interface MarkedCitation extends Citation {
 
 /**
  * An Answer in a conversation: the Markdown the model wrote, with a Citation
- * marker ("[^2]") where each Citation goes, and the Citations by marker
- * (ADR-0017). A marker with no Citation is left out when it is shown. It is
- * written as it streams.
+ * marker ("[^2]") where each Citation goes and a figure marker ("[=1]") where
+ * each calculated figure goes, and the Citations and figures by marker
+ * (ADR-0017, ADR-0021). A marker with neither is left out when it is shown.
+ * It is written as it streams.
  */
 export interface ConversationAnswer {
   kind: "answer";
@@ -2997,6 +3163,8 @@ export interface ConversationAnswer {
   text: string;
   /** In the order of their markers in the text, each once. */
   citations: MarkedCitation[];
+  /** Its calculated figures (ADR-0021), in the order of their markers ("[=1]") in the text, each once. */
+  figures: MarkedFigure[];
   /** The model that wrote it; null for one that says its Search scope has no Documents. */
   model: ChatModelChoice | null;
   status: AnswerStatus;
@@ -3458,6 +3626,7 @@ export const dataKinds = [
   "scoped-passages",
   "scoped-minds",
   "answers",
+  "web-searches",
 ] as const;
 
 export type DataKind = (typeof dataKinds)[number];
@@ -3494,6 +3663,9 @@ export type DataKind = (typeof dataKinds)[number];
  *   per pairing ("agent:<id>"), named as the User named the agent. Passages
  *   of the Documents in its Folders, those Folders' Minds, and the Answers it
  *   asks for. None in local mode.
+ * - "web-search": what an Answer searches the web for, written by the model
+ *   from the Question, to the provider of the model it is asked with, whose
+ *   own web search runs it (#128). None in local mode.
  */
 export const dataFlowIds = [
   "chat",
@@ -3507,6 +3679,7 @@ export const dataFlowIds = [
   "find-sources",
   "edits",
   "agents",
+  "web-search",
 ] as const;
 
 export type DataFlowId = (typeof dataFlowIds)[number];
@@ -4256,15 +4429,29 @@ export interface TagMerge {
 // ---------------------------------------------------------------------------
 // Export
 
-/** What a Mind exports to: Markdown, for an archive, or Word (.docx), for the deliverable. */
-export type ExportFormat = "markdown" | "docx";
+/**
+ * What a Mind exports to: Markdown, for an archive, or Word (.docx) or PDF, for the
+ * deliverable. Formats are listed in the order the options sheet offers them.
+ */
+export const EXPORT_FORMATS = ["docx", "pdf", "markdown"] as const;
+export type ExportFormat = (typeof EXPORT_FORMATS)[number];
+
+/**
+ * The User's export choices (`UserSettings.exportOptions`): the format Export uses, and each
+ * format's own options. Markdown, the archive, always keeps the Questions.
+ */
+export interface ExportPreferences {
+  format: ExportFormat;
+  docx: { includeQuestions: boolean };
+  pdf: { includeQuestions: boolean };
+}
 
 export interface ExportMindOptions {
   format: ExportFormat;
   /**
    * Whether Questions are exported, marked as Questions. Defaults to true for
-   * Markdown, an archive of everything, and to false for .docx: the deliverable
-   * leaves the working material out.
+   * Markdown, an archive of everything, and to false for .docx and PDF: the
+   * deliverable leaves the working material out.
    */
   includeQuestions?: boolean;
 }
@@ -4291,12 +4478,18 @@ export interface MindExportPreview {
 
 /** A Mind exported as a file, for the host to save where the User chooses. */
 export interface MindExport extends MindExportPreview {
-  /** The file's contents: UTF-8 text for Markdown, a ZIP package for .docx. */
+  /** The file's contents: UTF-8 text for Markdown, a ZIP package for .docx, a PDF for PDF. */
   data: Uint8Array;
 }
 
 /** What `saveMindExport` did. */
 export type SavedMindExport =
+  /** Saved, with what it holds, so the result line can say how many quotes weren't found. */
+  | ({ status: "saved"; file: SavedFile } & Omit<MindExportPreview, "fileName">)
+  | Exclude<SavedExport, { status: "saved" }>;
+
+/** What saving an export did: a Skill's zip (`saveSkillExport`), and the base of a Mind's. */
+export type SavedExport =
   | { status: "saved"; file: SavedFile }
   /** The User didn't choose where new files go, so nothing was saved. */
   | { status: "cancelled" }
@@ -4326,6 +4519,11 @@ export interface CitedWork {
   /** The Document's name when it was cited, which still names a Document deleted since. */
   documentName: string | null;
   location: CitationLocation | null;
+  /**
+   * The version quoted (`CitationAttributes.contentHash`): a web page's tells the day that
+   * version was fetched, which styles print as "accessed". Left out, a web page has no such day.
+   */
+  contentHash?: string | null;
 }
 
 /**
@@ -5800,7 +5998,7 @@ export interface CoreApi {
    * (as `saveMindExport` does, asking where the first time). The zip imports
    * again with the same preview.
    */
-  saveSkillExport(skillId: string): Promise<SavedMindExport>;
+  saveSkillExport(skillId: string): Promise<SavedExport>;
   /**
    * The chat model drafts a Skill from what the User just did in a Mind: its
    * Notes, Questions and Answers, the latest weighing most. Sends on the
@@ -5833,8 +6031,12 @@ export interface CoreApi {
    * included, its Questions, in order. Its Citations are in the Mind's
    * citation style (#289): in the text, or as notes, with the Bibliography at
    * the end; in Numbered, each is its own footnote naming its Document and
-   * Location, e.g. "Tides, p. 12–13" or "Deck, slide 4". A Citation is marked
-   * "[unverified]" unless its quote was found. Math stays LaTeX.
+   * Location, e.g. "Tides, p. 12–13" or "Deck, slide 4"; a web page's also
+   * names its site, its address and the day the quoted version was fetched.
+   * A Citation is marked "[unverified]" unless its quote was found. Math stays
+   * LaTeX in Markdown, becomes Word equations in a .docx, and is typeset in a
+   * PDF, which the `printer` adapter prints with each footnote on the page of
+   * its marker.
    */
   exportMind(mindId: string, options: ExportMindOptions): Promise<MindExport>;
   /**
