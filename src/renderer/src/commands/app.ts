@@ -8,9 +8,13 @@ import { startSkillFromMind } from "../makeSkill";
 import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
 import { assistantCommands } from "./assistant";
+import { bibliographyCommands } from "./bibliography";
 import { chartCommands } from "./charts";
+import { deletedCommands } from "./deleted";
 import { editCommands } from "./edit";
 import { evidenceCommands } from "./evidence";
+import { exportCommands } from "./exports";
+import { fileCommands } from "./fileInfo";
 import { footnoteCommands } from "./footnotes";
 import { citationHandle, sidebarHandle } from "./handles";
 import { meetingCommands } from "./meetings";
@@ -61,12 +65,15 @@ const appCommands: readonly Command[] = [
   ...folderCommands,
   ...tagCommands,
   ...linkedFolderCommands,
+  ...deletedCommands,
   ...answerCommands,
   ...citationCommands,
   ...tabCommands,
   ...meetingCommands,
   ...webPageCommands,
+  ...fileCommands,
   ...evidenceCommands,
+  ...exportCommands,
   {
     ...fromMenu("settings.open"),
     group: "open",
@@ -203,6 +210,7 @@ const appCommands: readonly Command[] = [
     },
   },
   ...footnoteCommands,
+  ...bibliographyCommands,
   ...tableCommands,
   ...chartCommands,
   ...proposalCommands,

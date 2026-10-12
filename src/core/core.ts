@@ -4,12 +4,14 @@ import { join } from "node:path";
 import * as Y from "yjs";
 import { isCitationStyleId } from "../shared/citationStyles";
 import { translate } from "../shared/i18n";
+import { bibliographyShown } from "../shared/mindBibliography";
 import {
   chosenCitationStyle,
   citationStyleIn,
   setCitationStyle,
 } from "../shared/mindCitationStyle";
 import { mindModelOf } from "../shared/mindModel";
+import { paperFor } from "../shared/printDocument";
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
 import { agentSocketPath, createAgents } from "./agents";
@@ -39,7 +41,7 @@ import type {
   MindCitationStyle,
   OwnFileKind,
   ProviderError,
-  SavedMindExport,
+  SavedExport,
   SearchScope,
   Unsubscribe,
 } from "./api";
@@ -84,6 +86,7 @@ import { renderMarkdown } from "./exports/markdown";
 import { createFileLock } from "./fileLock";
 import { safeFileName, writeNewFile } from "./fileNames";
 import { createFolders } from "./folders";
+import { systemRegion } from "./language";
 import { createLayouts } from "./layout";
 import { CLASSIFICATION_FLOW_SENDS, createLibrary } from "./library";
 import { automaticGroupClassifier } from "./library/automatic";
@@ -123,7 +126,7 @@ import {
 import { isCloudModelName } from "./providers/ollamaCloud";
 import { createOllamaModels } from "./providers/ollamaModels";
 import { createAiSdkRerankingModel, createRerank } from "./providers/rerank";
-import { createRecentlyDeleted, purgeExpired } from "./recentlyDeleted";
+import { createRecentlyDeleted } from "./recentlyDeleted";
 import {
   createReferenceImport,
   createReferences,
@@ -148,6 +151,7 @@ import { createTags } from "./tags";
 import { chatClassifier } from "./tags/classify";
 import { createJevTagging } from "./tags/jev";
 import { createTagger, TAGGING_FLOW_SENDS } from "./tags/tagger";
+import { createWebSearch, WEB_SEARCH_SENDS } from "./tools/web";
 import {
   createTranscriptionModel,
   QWEN3_ASR_0_6B,
@@ -205,6 +209,11 @@ export interface Core extends CoreApi, CoreEventSource {
    */
   showSavedFile(path: string): Promise<void>;
   /**
+   * Opens a file IncarnaMind saved since it started in the default app for its
+   * type, through the `shell` adapter. Throws NotFoundError for any other path.
+   */
+  openSavedFile(path: string): Promise<void>;
+  /**
    * Reconciles every Linked folder and single file with the disk now, and
    * resolves once that, and any change already reported, has been taken in.
    */
@@ -258,7 +267,6 @@ export function createCore(adapters: CoreAdapters): Core {
 
   const now = () => (adapters.now?.() ?? new Date()).toISOString();
   try {
-    purgeExpired(db, now());
     ensureWorkspace(db, now);
   } catch (error) {
     db.close();
@@ -827,6 +835,34 @@ export function createCore(adapters: CoreAdapters): Core {
       documents.searchTool(query, { ...options, rerank: adapters.reranker ?? rerank.active() }),
   });
 
+  // Web search through the Answer's model's provider (#128): asked for once per provider, as
+  // Find sources' are, so the Privacy page lists each one the User has decided on.
+  consent.registry.register({
+    id: "web-search",
+    sends: WEB_SEARCH_SENDS,
+    services: async () => [],
+  });
+  const webSearch = createWebSearch({
+    enabled: () => settings.get().user.webSearch && !embedding.localOnly(),
+    readiness: (model) => chat.readiness(model),
+    prepare: (model) => chat.prepareModel(model, "web-search", "off"),
+    savePage: (address, fetch) => webPages.save({ address }, undefined, fetch),
+    folderOf: (place) => {
+      try {
+        if (place.mindId !== null) return minds.get(place.mindId).folderId;
+        return place.conversationId ? conversations.get(place.conversationId).folderId : null;
+      } catch (error) {
+        // Deleted while the Answer was written: the page stays in no Folder.
+        if (error instanceof NotFoundError) return null;
+        throw error;
+      }
+    },
+    file: (documentId, folderId) => library.assign(documentId, folderId),
+    document: (id) => documents.get(id),
+    onStatus: (listener) => events.on("document.status", listener),
+    ...(adapters.web && { fetch: adapters.web }),
+  });
+
   const answers = createAnswers({
     content,
     events,
@@ -858,6 +894,7 @@ export function createCore(adapters: CoreAdapters): Core {
       { kind: "sources", tools: async () => sources.tools() },
     ],
     connectorsNeedingSignIn: () => connectors.needingSignIn(),
+    web: webSearch,
     approvals: {
       decide: (call) => approvals.decide(call),
       request: (call, signal) => approvals.request(call, signal),
@@ -983,7 +1020,10 @@ export function createCore(adapters: CoreAdapters): Core {
     keptCitationTexts: () => documents.keptCitationTexts(),
     language: () => settings.get().language,
     citationStyle: (mindId) => mindCitationStyle(mindId).style,
+    bibliography: (mindId) => content.readSettings(mindId, bibliographyShown),
     formatCitations: (request) => citationStyles.format(request),
+    printer: adapters.printer ?? null,
+    paper: () => paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages())),
     ...(adapters.pictures && { pictures: adapters.pictures }),
     log: adapters.log ?? silentLogger,
     now,
@@ -1034,7 +1074,7 @@ export function createCore(adapters: CoreAdapters): Core {
     name: string,
     data: Uint8Array,
     after: () => void = () => undefined,
-  ): Promise<SavedMindExport> => {
+  ): Promise<SavedExport> => {
     try {
       const file = await outputs.save({ name, data, ownFile: "export" });
       after();
@@ -1235,6 +1275,17 @@ export function createCore(adapters: CoreAdapters): Core {
   const recentlyDeleted = createRecentlyDeleted({
     db,
     now,
+    // A Mind still waiting in Recently deleted comes back with its Citations, so they count too.
+    documentText: (documentIds) => {
+      const wanted = new Set(documentIds);
+      const cited: CitedUnits[] = [];
+      for (const { id } of db.all<{ id: string }>("SELECT id FROM minds WHERE purged_at IS NULL")) {
+        content.peek(id, (fragment) => addCitedUnits(fragment, wanted, cited));
+      }
+      conversations.addCitedUnits(wanted, cited);
+      retention.addRetainedUnits(wanted, cited);
+      documents.purgeText(documentIds, cited);
+    },
     say: (key, params) => translate(settings.get().language, key, params),
     minds,
     content,
@@ -1247,6 +1298,12 @@ export function createCore(adapters: CoreAdapters): Core {
     tagsChanged,
     tagged: announceTagged,
   });
+  try {
+    recentlyDeleted.expire();
+  } catch (error) {
+    // The app still opens; what is due goes at the next start.
+    console.error("Deleting what waited 30 days in Recently deleted failed.", error);
+  }
 
   /** Jev was set up, changed or removed: say so, and Documents waiting may go on. */
   const jevChanged = async () => {
@@ -2246,8 +2303,9 @@ export function createCore(adapters: CoreAdapters): Core {
       return exported;
     },
     saveMindExport: async (mindId, options) => {
-      const { fileName, data } = await mindExports.export(mindId, options);
-      return saveExport(fileName, data, () => recordExport(options));
+      const { fileName, data, ...counts } = await mindExports.export(mindId, options);
+      const saved = await saveExport(fileName, data, () => recordExport(options));
+      return saved.status === "saved" ? { ...saved, ...counts } : saved;
     },
     saveSkillExport: async (skillId) => {
       const { fileName, data } = await skills.exportZip(skillId);
@@ -2316,6 +2374,13 @@ export function createCore(adapters: CoreAdapters): Core {
       if (!adapters.shell) throw new Error("This copy of IncarnaMind can't show files.");
       adapters.shell.showItemInFolder(path);
     },
+    openSavedFile: async (path) => {
+      if (!outputs.saved(path))
+        throw new NotFoundError("Only a file IncarnaMind saved can be opened.");
+      if (!adapters.shell)
+        throw new Error("This copy of IncarnaMind can't open files in other apps.");
+      await adapters.shell.openPath(path);
+    },
     getAgents: async () => agents.settings(),
     setAgentsEnabled: (enabled) => agents.setEnabled(enabled),
     connectAgent: (input) => agents.connect(input),
@@ -2354,6 +2419,7 @@ export function createCore(adapters: CoreAdapters): Core {
       // Answers being written keep what they have, marked "stopped"; Tool calls waiting for
       // the User's approval are denied, and Skill scripts running are stopped.
       answers.stopAll();
+      void webSearch.close().catch((error: unknown) => console.error(error));
       suggestions.stop();
       edits.stopAll();
       skillDrafts.stopAll();

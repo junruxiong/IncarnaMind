@@ -108,6 +108,12 @@ A scanned PDF had no text, so it couldn't be searched, asked about or cited. Its
 - **Versions (ADR-0010).** When how pages are read improves, a PDF's scanned pages are read again (`SCAN_CURRENT_SINCE`, processing version 9 for the first reading), except the pages a Citation quotes or a feature retains: those are kept as they were read, so the Citation stays found. They keep the older reader in their label, so a later reading reads them once nothing quotes them. Processed again into the same Passages, a PDF keeps its Passages and their vectors.
 - **Progress and failures:** the Document's status says "Reading 12 scanned pages…" while it is read, one page after another, newest Documents first. Pausing its Linked folder stops it between pages, and resuming goes on without reading again the pages already read. A page that can't be read (the model couldn't be downloaded, or failed on it) is named, "Scanned pages 3 and 7 couldn't be read", with Retry, which reads only those pages; the pages that were read are searched meanwhile. Once the model downloads after a failure, they are read by themselves.
 
+## Amendment: pages web search reads (2026-10-12, #128)
+
+- **Saved through #261's path,** as Web page Documents with the same snapshot, Location ("§ History, ¶ 3") and check. A page already saved is used as it is, not fetched again, once its address passes the same check as a fetch (so a page the User saved from their own network isn't read by web search). A new one is filed in the Folder of the Mind or conversation the Question was asked in.
+- **A fetcher for the public internet only.** Web search fetches with its own fetcher, which keeps #261's limits (20 seconds, 10 MB, no cookies, the page alone) and adds: an undici `Agent` whose connect-time lookup gives only public unicast addresses (ipaddr.js's special-purpose ranges, IPv6 in 2000::/3, no IPv4-mapped address), so DNS rebinding finds nothing to connect to; a host written as an IP address checked before each request; at most 5 redirects, each checked again; no proxy. A page it refuses says so ("it's on this computer or a local network"). Pages a User adds by address keep #261's fetcher, which reaches local addresses.
+- **Read soon.** A web page's processing goes ahead of other Documents', and of a recording's hold (#135), as an Answer waits to read it.
+
 ## Amendment: a provision's Location, "§ 240.10b-5(b)" (2026-10-12, #304)
 
 Find sources adds regulations and statutes (the eCFR, GovInfo) as Markdown, one section per provision and per paragraph it numbers (ADR-0018).

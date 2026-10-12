@@ -60,6 +60,7 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Reference record | 引用信息 | The "Cite as" panel's title too. Its fields: 类型、标题、作者、日期、期刊（出处）、卷、期、页码、出版者、DOI、网址、语言. |
 | Needs details (a reference record) | 信息待补充 | |
 | Look up (a reference record) | 查询 | "按 DOI 从 Crossref 补全空白字段". |
+| Web search | 联网搜索 | Searching the web from an Answer: "允许回答联网搜索", "已联网搜索“…”". As Kimi, Doubao, Yuanbao and DeepSeek show it. |
 | Find sources | 查找资料 | "查找资料…". 资料 matches 资料库 (Library): what is found is added to it. |
 | Source provider | 资料来源 | "资料来源：OpenAlex arXiv PubMed". Not 提供商, which is an AI model's provider. |
 | Open access | 开放获取 | As CNKI and publishers say it. "仅开放获取", "无开放全文". |
@@ -115,6 +116,14 @@ A figure in an Answer is written as reports write it, with no space between the 
 
 | English | Chinese | Notes |
 |---|---|---|
+| figure (a number in an Answer) | 数字 | Counted with 个: "计算了 2 个数字", "1 个数字未能计算". |
+| Calculated figure | 计算结果 | Its label word is 计算得出 ("计算得出 · 20.4%"), as "Calculated" is in English. |
+| Input (of a calculation) | 所用数据 | "所用数据均已找到". |
+| Calculation check | 核对计算 | The verb is 核对, as for a Citation: "正在核对数字…". |
+| Unchecked figure | 未核对的数字 | |
+| Analysis | 数据分析 | |
+| Recalculate | 重新计算 | |
+| Run again | 重新运行 | |
 | percentage points | 个百分点 | A difference of two percents: "2.3个百分点", never "2.3%". |
 | about (an approximate figure) | 约 | "约1.2亿元". |
 | times (a multiple) | 倍 | "4.00倍". |
