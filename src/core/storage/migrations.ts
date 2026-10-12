@@ -1269,6 +1269,17 @@ export const migrations: readonly Migration[] = [
         WHERE status = 'reserved' AND deleted_at IS NULL;
     `,
   },
+  {
+    version: 57,
+    description: "Answers in conversations keep how they were reached: their steps (#391)",
+    sql: `
+      -- An Answer's steps (src/core/answers, AnswerSteps), as JSON: when its Question went to the
+      -- model and when it ended, its phases and when each began (ISO 8601, UTC), and its model's
+      -- reasoning summary and how long it thought, from a provider that summarizes reasoning
+      -- (raw chain of thought is never stored). NULL: an Answer written before, and Questions.
+      ALTER TABLE conversation_messages ADD COLUMN steps TEXT;
+    `,
+  },
 ];
 
 /**

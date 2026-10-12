@@ -229,6 +229,8 @@ export type GeneratedReply = { text: string } | { error: { status: number; messa
 /** What a scripted model replies to one request. */
 export type ScriptedReply =
   | {
+      /** What the model reasons before it replies, as its provider streams it. */
+      reasoning?: string;
       text?: string;
       calls?: { tool: string; input: unknown }[];
       /** Stops streaming once `after` characters of the text are out, until `until` resolves. */
@@ -331,6 +333,17 @@ export function scriptedModel(
       const reply = script(call);
       if ("error" in reply) throw providerError(reply.error);
       const parts: StreamPart[] = [{ type: "stream-start", warnings: [] }];
+      if (reply.reasoning) {
+        parts.push({ type: "reasoning-start", id: "thinking" });
+        for (let at = 0; at < reply.reasoning.length; at += chunkSize) {
+          parts.push({
+            type: "reasoning-delta",
+            id: "thinking",
+            delta: reply.reasoning.slice(at, at + chunkSize),
+          });
+        }
+        parts.push({ type: "reasoning-end", id: "thinking" });
+      }
       const text = reply.text ?? "";
       if (text) {
         parts.push({ type: "text-start", id: "answer" });
