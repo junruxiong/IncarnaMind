@@ -4,7 +4,7 @@
  * `CoreApi.formatCitations`, and the exports format with the same function, so the two agree.
  */
 import { type CitationStyle, citationStyle } from "../../shared/citationStyles";
-import { displayName } from "../../shared/documentNames";
+import { displayName, titleWithoutSite } from "../../shared/documentNames";
 import { translate } from "../../shared/i18n";
 import { missingDetails } from "../../shared/references";
 import type {
@@ -82,9 +82,16 @@ function referenceOf(work: CitedWork, document: Document | undefined): Reference
     };
   }
   const fields = document.reference?.fields;
-  const item = fields ? cslItemOf(document.id, fields) : nameOnlyItem(document.id, name);
+  const fetched = webVersionOf(work, document)?.fetchedAt;
+  const id = fetched ? versionKey(document.id, work) : document.id;
+  const item = fields ? cslItemOf(id, fields) : nameOnlyItem(id, name);
   // A work with no title is cited by its Document's name rather than by nothing.
   if (!item.title) item.title = name;
+  // A web page's site is its own field, so its title doesn't name the site again.
+  const site = item["container-title"];
+  if (document.web && typeof site === "string") item.title = titleWithoutSite(item.title, site);
+  // A web page is cited as it read on the day the quoted version was fetched (#100).
+  if (fetched) item.accessed = { "date-parts": [localDay(fetched)] };
   return {
     item,
     documentId: document.id,
@@ -112,6 +119,21 @@ function fallbackRuns(reference: Reference, language: Language): StyledRun[] {
   }).format(new Date(bare.addedAt));
   const kind = translate(language, `library.format.${bare.kind}`);
   return [{ text: translate(language, "references.fallback", { name, kind, date }) }];
+}
+
+/** The version of a web page a Citation quotes, as the page's fetches recorded it. */
+const webVersionOf = (work: CitedWork, document: Document) =>
+  work.contentHash
+    ? document.web?.versions.find((version) => version.contentHash === work.contentHash)
+    : undefined;
+
+/** A web page's versions are works of their own: each was read on its own day. */
+const versionKey = (documentId: string, work: CitedWork) => `${documentId}@${work.contentHash}`;
+
+/** The day of a moment on this computer's calendar, as CSL's date parts. */
+function localDay(at: string): number[] {
+  const date = new Date(at);
+  return [date.getFullYear(), date.getMonth() + 1, date.getDate()];
 }
 
 /**
@@ -217,10 +239,14 @@ export function createCitationStyles(options: CitationStylesOptions) {
     async format(input: unknown): Promise<FormattedCitations> {
       const request = parseRequest(input);
       const style = citationStyle(request.style);
-      const keyOf = (work: CitedWork) =>
-        work.documentId !== null && options.document(work.documentId)
-          ? work.documentId
-          : `name:${work.documentName ?? ""}`;
+      const keyOf = (work: CitedWork) => {
+        const document = work.documentId !== null ? options.document(work.documentId) : undefined;
+        if (!document) return `name:${work.documentName ?? ""}`;
+        // Numbered lists each Document once, by name; a style cites each version of a web page.
+        return style.file !== null && webVersionOf(work, document)
+          ? versionKey(document.id, work)
+          : document.id;
+      };
       const references = new Map<string, Reference>();
       for (const cluster of request.clusters) {
         for (const work of cluster.works) {

@@ -6,6 +6,7 @@
  * imports Electron (ADR-0004, ADR-0006).
  */
 import type { ChildProcess } from "node:child_process";
+import type { PrintDocument } from "../shared/printDocument";
 import type { AgentLauncher } from "./agents";
 import type { AnswerEngine } from "./answers/engine";
 import type {
@@ -16,10 +17,11 @@ import type {
   SecretProtection,
   TranscriptionEngine,
 } from "./api";
+import type { StatIdentity } from "./documents/files";
 import type { Reranker } from "./documents/searchTool";
 import type { AnswerSearchTuning } from "./documents/searchTuning";
 import type { WatchFolder } from "./documents/watcher";
-import type { FetchLimits } from "./documents/web/fetch";
+import type { FetchLimits, PageFetch } from "./documents/web/fetch";
 import type { ChatGptPlanEndpoints } from "./providers/chatgpt/plan";
 import type { EmbeddingModelFactory } from "./providers/embeddings";
 import type { ChatModelFactory } from "./providers/models";
@@ -28,6 +30,7 @@ import type { RerankingModelFactory } from "./providers/rerank";
 import type { RunEngine } from "./runs/engine";
 import type { PaceTimers } from "./sources/pace";
 import type { SourceProviderUrls } from "./sources/providers";
+import type { PublicFetchOptions } from "./tools/web/fetcher";
 import type { UsageEventName, UsageValue } from "./usageEvents";
 
 export interface Paths {
@@ -130,6 +133,15 @@ export interface FileShell {
   showItemInFolder(path: string): void;
 }
 
+/**
+ * Prints a document as a PDF, laid out in pages with each footnote at the foot of the page its
+ * marker is on. The desktop app prints with Chromium in a hidden window that reaches nothing
+ * outside the app (src/main/printPdf.ts).
+ */
+export interface Printer {
+  print(document: PrintDocument): Promise<Uint8Array>;
+}
+
 /** How Linked folders are watched and checked (see ./documents/library). The defaults suit the app. */
 export interface LinkedFolderOptions {
   /** How long a changed path must stay unchanged before it is read, in ms. Defaults to 300. */
@@ -147,6 +159,12 @@ export interface LinkedFolderOptions {
    * tests may pass a fake.
    */
   watch?: WatchFolder;
+  /**
+   * Reads a file's device, file number and creation time, which a file moved
+   * and edited while IncarnaMind didn't see it is recognised by. Defaults to
+   * Node's `stat`; tests may pass one that puts files on other disks.
+   */
+  stat?: StatIdentity;
 }
 
 export interface SpawnOptions {
@@ -618,6 +636,12 @@ export interface CoreAdapters {
   paths: Paths;
   /** The OS's preferred languages, most preferred first, as BCP 47 tags such as "zh-Hans-CN". */
   systemLanguages(): readonly string[];
+  /**
+   * The OS's region, as an ISO 3166 country code such as "GB" ("" when it doesn't say), for what
+   * goes by country rather than by language, such as the paper a PDF is printed on. Absent, or
+   * "": the region of the most preferred system language.
+   */
+  systemRegion?(): string;
   keychain: Keychain;
   browser: Browser;
   /**
@@ -625,6 +649,8 @@ export interface CoreAdapters {
    * Absent (tests that don't need it): both are refused.
    */
   shell?: FileShell;
+  /** Prints PDF exports. Absent (tests that don't export PDFs): a PDF export is refused. */
+  printer?: Printer;
   /**
    * Draws a chart's picture for a Word export. Absent (tests that don't need
    * it): a chart goes into Word as the table of its values instead.
@@ -636,7 +662,13 @@ export interface CoreAdapters {
    * How web pages are fetched (#261). Defaults to Node's fetch, within 20
    * seconds and 10 MB; tests shorten the limits.
    */
-  webPages?: { fetch?: typeof fetch; limits?: FetchLimits };
+  webPages?: { fetch?: PageFetch; limits?: FetchLimits };
+  /**
+   * How web search's fetcher resolves host names and makes its connections
+   * (#128): the system's resolver and undici's by default. Tests stand a
+   * local server in for the web; the fetcher's guard still decides.
+   */
+  web?: PublicFetchOptions;
   processes: ProcessLauncher;
   /**
    * Runs the programs Tools start, such as Skill scripts (see `Executor`).

@@ -17,16 +17,6 @@ import {
   rowInputClass,
   rowPadding,
 } from "./sidebarRows";
-import {
-  buttonClass,
-  dangerButtonClass,
-  dialogActionsClass,
-  dialogBodyClass,
-  dialogClass,
-  dialogTextClass,
-  dialogTitleClass,
-} from "./ui";
-import { useModal } from "./useModal";
 
 /** How many Documents a Folder lists at first; "Show N more Documents" lists more, in place. */
 export const FIRST_DOCUMENTS = 5;
@@ -468,52 +458,5 @@ function RenameFolder({ folder, onDone }: { folder: LibraryGroup; onDone(): void
       onBlur={() => finish(true)}
       className={rowInputClass}
     />
-  );
-}
-
-/**
- * Asks before deleting a Folder, which can't be undone yet: says where its
- * Documents and Minds go. Open while `folder` is set.
- */
-export function DeleteFolderDialog({
-  folder,
-  onClose,
-}: {
-  folder: LibraryGroup | null;
-  onClose(): void;
-}) {
-  const t = useT();
-  const dialog = useModal(folder !== null);
-  return (
-    <dialog
-      ref={dialog}
-      onClose={onClose}
-      data-testid="delete-folder-dialog"
-      aria-labelledby="delete-folder-title"
-      className={`${dialogClass} w-[26rem]`}
-    >
-      <div className={dialogBodyClass}>
-        <h2 id="delete-folder-title" className={dialogTitleClass}>
-          {t("folder.delete.title", { name: folder?.name ?? "" })}
-        </h2>
-        <p className={dialogTextClass}>{t("folder.delete.body")}</p>
-        <div className={dialogActionsClass}>
-          <button type="button" onClick={onClose} className={buttonClass}>
-            {t("folder.delete.cancel")}
-          </button>
-          <button
-            type="button"
-            data-testid="confirm-delete-folder"
-            onClick={() => {
-              if (folder) void useAppStore.getState().deleteFolder(folder.id);
-              onClose();
-            }}
-            className={dangerButtonClass}
-          >
-            {t("folder.delete.confirm")}
-          </button>
-        </div>
-      </div>
-    </dialog>
   );
 }

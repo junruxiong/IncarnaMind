@@ -6,6 +6,7 @@ import { useT } from "../i18n";
 import { canRecordMeetings } from "../meetings";
 import { useAppStore } from "../store";
 import { linksIn, useWebPages } from "../webPages";
+import { CopiedLine } from "./CopiedLine";
 import { DocumentsSection } from "./DocumentsSection";
 import { GetStartedCard } from "./GettingStarted";
 import {
@@ -63,6 +64,7 @@ export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettin
 
       <GetStartedCard />
       <UndoLine />
+      <CopiedLine />
       <footer
         data-testid="sidebar-footer"
         className="flex shrink-0 flex-col border-t border-rule p-2"

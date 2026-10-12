@@ -10,6 +10,7 @@ import type {
 } from "../../../core/api";
 import { displayName } from "../../../shared/documentNames";
 import { missingDetails } from "../../../shared/references";
+import { sourceEntry, sourcesOf } from "../../../shared/sources";
 import { retryFormatting, useMindFormatting } from "../citationFormatting";
 import { styleLabel, useCitationStylePicker } from "../citationStylePicker";
 import { CiteAsPanel } from "../components/CiteAsPanel";
@@ -17,9 +18,10 @@ import { ChevronDownLineIcon } from "../components/lineIcons";
 import { ProblemLine } from "../components/ProblemLine";
 import { errorMessage } from "../errors";
 import { useExportDialog } from "../exportDialog";
-import { useT } from "../i18n";
+import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
-import { citationClusters } from "./citationClusters";
+import { hideBibliography } from "./bibliographyCommands";
+import { countedCitations } from "./countedCitations";
 import { Popover } from "./Popover";
 import { StyledRuns } from "./StyledRuns";
 import { bibliographyClipboard } from "./styledText";
@@ -29,10 +31,12 @@ const COPIED_MS = 1500;
 
 /**
  * The Mind's References (#289, the Bibliography of #102), at its end, kept up to date: every
- * Document it cites, once, in its citation style. Its header holds the style picker, Copy and
- * Export. A Document whose reference record is too thin to cite is listed as the style can, marked
- * "Needs details", which opens its "Cite as" panel (#286) right there. Shown once the Mind has
- * a Citation.
+ * Document it cites, once, in its citation style; in Numbered, the default, by its name with the
+ * Locations cited and, for a web page, its site, address and the day the quoted version was
+ * fetched. A Citation a pending change would add isn't counted. Its header holds the style
+ * picker, Copy and Export. A Document whose reference record is too thin to cite is listed as
+ * the style can, marked "Needs details", which opens its "Cite as" panel (#286) right there. Shown
+ * once the Mind has a Citation; a Numbered Mind shows it once "/" Bibliography has asked.
  */
 export function ReferencesBlock({
   mindId,
@@ -44,11 +48,13 @@ export function ReferencesBlock({
   readOnly: boolean;
 }) {
   const t = useT();
+  const language = useLanguage();
   const headingId = useId();
   const formatting = useMindFormatting(mindId);
-  const cited = useEditorState({
+  const documents = useAppStore((state) => state.documents);
+  const counted = useEditorState({
     editor,
-    selector: ({ editor: current }) => citationClusters(current.state).length > 0,
+    selector: ({ editor: current }) => countedCitations(current.state),
   });
   const [copied, setCopied] = useState(false);
   const [copyProblem, setCopyProblem] = useState<string | null>(null);
@@ -58,10 +64,25 @@ export function ReferencesBlock({
     return () => clearTimeout(timer);
   }, [copied]);
 
-  if (!cited || !formatting) return null;
+  if (counted.length === 0 || !formatting) return null;
   const { style, formatted, pending, problem } = formatting;
+  const numbered = style === "numbered";
+  // A Document only a pending change cites is left out: the formatted list counts every Citation.
+  const live = new Set(counted.map((citation) => citation.documentId));
+  const removed = counted.some(
+    (citation) => !documents.some((each) => each.id === citation.documentId),
+  );
   // While another style is being formatted, the last one stays, dimmed (`data-pending`).
-  const entries = formatted?.bibliography ?? [];
+  const entries: BibliographyEntry[] = numbered
+    ? sourcesOf(counted, { language, documents }).map((source) => ({
+        documentId: source.documentId,
+        label: null,
+        runs: [{ text: sourceEntry(source, language) }],
+        needsDetails: false,
+      }))
+    : (formatted?.bibliography ?? []).filter((entry) =>
+        entry.documentId === null ? removed : live.has(entry.documentId),
+      );
   const hanging = formatted?.hangingIndent ?? false;
   const labelled = entries.some((entry) => entry.label !== null);
 
@@ -92,7 +113,7 @@ export function ReferencesBlock({
     >
       <header className="references-head">
         <h2 id={headingId} className="references-title">
-          {t("references.title")}
+          {t(numbered ? "bibliography.title" : "references.title")}
         </h2>
         <button
           type="button"
@@ -125,6 +146,17 @@ export function ReferencesBlock({
         >
           {t("references.export")}
         </button>
+        {numbered && !readOnly && (
+          <button
+            type="button"
+            data-testid="bibliography-hide"
+            aria-label={t("bibliography.hide.label")}
+            onClick={() => hideBibliography(editor)}
+            className="references-button"
+          >
+            {t("bibliography.hide")}
+          </button>
+        )}
       </header>
       {problem && (
         <ProblemLine

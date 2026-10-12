@@ -63,10 +63,22 @@ import type { Database, SqlValue } from "../storage";
 import { tagsOfDocument } from "../tags";
 import type { StoredTaggingState } from "../tags/tagger";
 import { createEmbeddingQueue } from "./embedding";
-import { DOCUMENT_EXTENSIONS, isInside, openFile, openImageBeside, relativePath } from "./files";
+import {
+  DOCUMENT_EXTENSIONS,
+  isInside,
+  openFile,
+  openImageBeside,
+  relativePath,
+  type StatIdentity,
+} from "./files";
 import { isPackageKind, packageSizeError } from "./formats/zip";
 import { keywordText } from "./keywords";
-import { createLibrary, type LibraryHooks, type LibraryOptions } from "./library";
+import {
+  createLibrary,
+  FORGET_FILE_IDENTITY,
+  type LibraryHooks,
+  type LibraryOptions,
+} from "./library";
 import type { PageText } from "./passages";
 import {
   CURRENT_SINCE,
@@ -385,6 +397,7 @@ export interface DocumentsOptions {
   textRecognition?: TextRecognitionModel;
   linkedFolders: {
     watch: WatchFolder;
+    stat: StatIdentity;
     retryMs: number;
     detectDataless: boolean;
   };
@@ -1042,15 +1055,20 @@ export function createDocuments(options: DocumentsOptions) {
    * `pageTexts` does: of the version each quotes (or every version, if it
    * doesn't say), its Units (or all of them, for a whole file).
    */
-  function unitsToKeep(cited: readonly CitedUnits[]): string[] {
+  function unitsToKeep(cited: readonly CitedUnits[], deletedWith?: string): string[] {
     const ids = new Set<string>();
     const seen = new Set<string>();
     for (const units of cited) {
       const key = JSON.stringify(units);
       if (seen.has(key)) continue;
       seen.add(key);
-      const conditions = ["document_id = ?", "deleted_at IS NULL"];
+      const conditions = ["document_id = ?"];
       const params: SqlValue[] = [units.documentId];
+      if (deletedWith === undefined) conditions.push("deleted_at IS NULL");
+      else {
+        conditions.push("(deleted_at IS NULL OR deleted_at = ?)");
+        params.push(deletedWith);
+      }
       if (units.contentHash !== null) {
         conditions.push("content_hash = ?");
         params.push(units.contentHash);
@@ -1197,6 +1215,7 @@ export function createDocuments(options: DocumentsOptions) {
     say: options.say,
     folders: options.folders,
     watch: options.linkedFolders.watch,
+    stat: options.linkedFolders.stat,
     retryMs: options.linkedFolders.retryMs,
     detectDataless: options.linkedFolders.detectDataless,
     hooks: {
@@ -2000,7 +2019,7 @@ export function createDocuments(options: DocumentsOptions) {
       // Linked folder it is in, if the Output location is inside one.
       db.run(
         `UPDATE documents SET path = ?, source_kind = 'file', relative_path = NULL,
-           file_status = 'available', file_mtime_ms = NULL, updated_at = ?
+           file_status = 'available', file_mtime_ms = NULL, ${FORGET_FILE_IDENTITY}, updated_at = ?
          WHERE id = ? AND deleted_at IS NULL`,
         [path, now(), id],
       );
@@ -2286,6 +2305,37 @@ export function createDocuments(options: DocumentsOptions) {
         }
       });
       return collected;
+    },
+
+    /**
+     * Drops the text of deleted Documents being deleted permanently, except the Units
+     * `keep` says Citations still point to: they stay as the text kept of an unlinked
+     * Document does (`keptCitationTexts`), and go once nothing quotes them.
+     */
+    purgeText(ids: readonly string[], keep: readonly CitedUnits[]): void {
+      const at = now();
+      db.transaction(() => {
+        for (const id of ids) {
+          const row = db.get<{ deleted_at: string | null }>(
+            "SELECT deleted_at FROM documents WHERE id = ?",
+            [id],
+          );
+          if (!row?.deleted_at) continue;
+          const kept = unitsToKeep(
+            keep.filter((units) => units.documentId === id),
+            row.deleted_at,
+          );
+          db.run(
+            `UPDATE document_pages SET deleted_at = NULL, updated_at = ?
+             WHERE id IN (SELECT value FROM json_each(?)) AND deleted_at IS NOT NULL`,
+            [at, JSON.stringify(kept)],
+          );
+          db.run("DELETE FROM document_pages WHERE document_id = ? AND deleted_at IS NOT NULL", [
+            id,
+          ]);
+        }
+      });
+      options.emitKept?.(keptCitationTexts());
     },
 
     /**
