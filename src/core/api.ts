@@ -2319,6 +2319,11 @@ export interface RerankSettings {
    * keeps its own order.
    */
   model: RerankingModelStatus;
+  /**
+   * Where the built-in model runs on this computer: on the GPU, or on the CPU
+   * where no GPU can run it. Null until it has run since IncarnaMind started.
+   */
+  runsOn: "gpu" | "cpu" | null;
 }
 
 export interface SaveRerankSettingsInput {

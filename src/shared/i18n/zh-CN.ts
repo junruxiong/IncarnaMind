@@ -878,6 +878,7 @@ export const zhCN = {
   "rerank.settings.notDownloaded":
     "有可搜索的文档后会下载一次（{total} MB）。在此之前，搜索结果保持原有顺序。",
   "rerank.settings.builtInNote": "所有内容都留在这台电脑上。每次搜索会稍慢一些。",
+  "rerank.settings.runsOn": "在这台电脑上 · {device}",
   "rerank.settings.downloading":
     "正在下载重排序模型：{downloaded} / {total} MB。下载完成前，搜索结果保持原有顺序。",
   "rerank.settings.failed": "重排序模型下载失败：{reason}。",
@@ -1392,7 +1393,7 @@ export const zhCN = {
     "第一次需要识别扫描页时，下载一次内置的文字识别模型。扫描件在这台电脑上识别，不会发送任何内容。",
   "privacy.traffic.reranking-model": "下载重排序模型",
   "privacy.traffic.reranking-model.description":
-    "内置重排序模型只下载一次，在有文档可搜索时下载，除非重新排序已关闭或使用了在线服务。",
+    "内置重排序模型只下载一次，在有文档可搜索时下载，除非重新排序已关闭或使用了在线服务。如果这台电脑的 GPU 可以运行它，还会下载它的 GPU 版本。",
   "privacy.traffic.transcription-model": "下载语音模型",
   "privacy.traffic.transcription-model.description":
     "在本机转写会议的语音模型只下载一次，在第一次转写会议时下载。你说的内容不会发送出去。",
