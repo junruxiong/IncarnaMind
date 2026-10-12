@@ -8,12 +8,14 @@ import StarterKit from "@tiptap/starter-kit";
 import {
   ANSWER_BLOCK,
   BLOCK_ID_ATTRIBUTE,
+  COMPARISON_TABLE_NODE,
   FOOTNOTE_NODE,
   NOTE_BLOCK_TYPES,
   QUESTION_BLOCK,
 } from "../../../core/api";
 import { Citation } from "./citationSchema";
 import { lowlight } from "./codeLanguages";
+import { ComparisonCell, ComparisonRow, ComparisonTable } from "./comparisonSchema";
 import { Footnote } from "./footnoteSchema";
 import { ProposalAttributes, ProposalDelete, ProposalInsert } from "./proposalSchema";
 import { Answer, MindDocument, Question, QuestionContextFlag } from "./questionSchema";
@@ -29,7 +31,12 @@ export { BLOCK_ID_ATTRIBUTE };
  * and Answers get an ID too; only top-level IDs name Blocks. Footnotes get
  * one too, which names them across edits and sync; a pasted copy gets a new one.
  */
-const BLOCK_TYPES: readonly string[] = [...NOTE_BLOCK_TYPES, QUESTION_BLOCK, ANSWER_BLOCK];
+const BLOCK_TYPES: readonly string[] = [
+  ...NOTE_BLOCK_TYPES,
+  QUESTION_BLOCK,
+  ANSWER_BLOCK,
+  COMPARISON_TABLE_NODE,
+];
 
 /** The node types that hold a formula, written in LaTeX. */
 export const MATH_TYPES: readonly string[] = ["blockMath", "inlineMath"];
@@ -47,6 +54,12 @@ export interface NoteSchemaOptions {
   citationView?: NodeViewRenderer;
   /** Draws the markers of the User's footnotes, e.g. as numbers that open their text. */
   footnoteView?: NodeViewRenderer;
+  /** Draw comparison tables (#98): the table with its heading row, each row's Document, each cell's state. */
+  comparisonViews?: {
+    table: NodeViewRenderer;
+    row: NodeViewRenderer;
+    cell: NodeViewRenderer;
+  };
 }
 
 /**
@@ -56,7 +69,8 @@ export interface NoteSchemaOptions {
  * an "include in Question context" flag. Questions and Answers, top-level
  * only. Citations, inline in Answers and in whatever they are copied into,
  * table cells included. Footnotes the User writes, inline, each holding its
- * text. Proposals the AI made, waiting for the User (see `proposalSchema`).
+ * text. Comparison tables, top-level only. Proposals the AI made, waiting for
+ * the User (see `proposalSchema`).
  * Every Block and every footnote has a UUID. The editor adds its interface on
  * top (collaboration, menus, the drag handle, smart typography); tests use
  * this alone.
@@ -68,6 +82,7 @@ export function noteExtensions({
   answerView,
   citationView,
   footnoteView,
+  comparisonViews,
 }: NoteSchemaOptions = {}): Extensions {
   const onClick = onEditMath && ((_node: unknown, pos: number) => onEditMath(pos));
   const CodeBlock = codeBlockView
@@ -102,6 +117,9 @@ export function noteExtensions({
     Answer.configure({ view: answerView ?? null }),
     Citation.configure({ view: citationView ?? null }),
     Footnote.configure({ view: footnoteView ?? null }),
+    ComparisonTable.configure({ view: comparisonViews?.table ?? null }),
+    ComparisonRow.configure({ view: comparisonViews?.row ?? null }),
+    ComparisonCell.configure({ view: comparisonViews?.cell ?? null }),
     QuestionContextFlag,
     // Proposals waiting for the User: words struck and added, and whole Blocks (#93).
     ProposalInsert,

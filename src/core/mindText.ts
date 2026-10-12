@@ -29,6 +29,8 @@
  * yet: what one adds is left out, and what one removes is read as it is.
  */
 import * as Y from "yjs";
+import { cellProblemMessage, comparisonCellOf, comparisonQuestionsOf } from "../shared/comparisons";
+import { type MessageKey, type MessageParams, translate } from "../shared/i18n";
 import { citationLocation } from "../shared/locations";
 import type { TableAlign } from "../shared/markdownTables";
 import { cutTitle } from "../shared/naming";
@@ -36,6 +38,8 @@ import { readProposalAttribute } from "../shared/proposals";
 import {
   ANSWER_BLOCK,
   CITATION_NODE,
+  COMPARISON_ROW_NODE,
+  COMPARISON_TABLE_NODE,
   type CitedWork,
   FOOTNOTE_NODE,
   PROPOSAL_ATTRIBUTE,
@@ -143,6 +147,13 @@ export interface ReadOptions {
    * decides (./exports/citations).
    */
   trimBeforeFootnote?: boolean;
+  /**
+   * A comparison table's own words (#98): its first column's heading, and what a cell
+   * without an Answer says. Absent: in English.
+   */
+  comparisonText?(key: MessageKey, params?: MessageParams): string;
+  /** Whether a Document was deleted: its comparison table row says its source was removed. */
+  documentRemoved?(documentId: string): boolean;
 }
 
 /** A stretch of text with one set of marks, as `Y.XmlText.toDelta()` gives it. */
@@ -181,11 +192,17 @@ function firstText(element: Y.XmlElement): string {
 
 /**
  * What a Mind without a title is called: its first line of text, cut as a title.
- * An Answer's text is not the User's, so it isn't read.
+ * An Answer's text, or a comparison table's, is not the User's, so it isn't read.
  */
 export function firstLineOf(blocks: Y.XmlFragment): string {
   for (const block of blocks.toArray()) {
-    if (!(block instanceof Y.XmlElement) || block.nodeName === ANSWER_BLOCK) continue;
+    if (
+      !(block instanceof Y.XmlElement) ||
+      block.nodeName === ANSWER_BLOCK ||
+      block.nodeName === COMPARISON_TABLE_NODE
+    ) {
+      continue;
+    }
     const title = cutTitle(firstText(block));
     if (title !== "") return title;
   }
@@ -296,6 +313,8 @@ function readBlockElement(element: Y.XmlElement, options: ReadOptions): Block[] 
       return [{ kind: "rule" }];
     case "table":
       return [{ kind: "table", rows: readTable(element, options) }];
+    case COMPARISON_TABLE_NODE:
+      return [{ kind: "table", rows: readComparison(element, options) }];
     case "image":
       return [{ kind: "image", image: readImage(element) }];
     case QUESTION_BLOCK:
@@ -330,6 +349,54 @@ function readTable(table: Y.XmlElement, options: ReadOptions): TableCell[][] {
       });
     }
     if (cells.length > 0) rows.push(cells);
+  }
+  return rows;
+}
+
+/**
+ * A comparison table as a table: a heading row ("Document", then its
+ * Questions), then a row per Document, its name first, each cell its Answer,
+ * or what it says in the Answer's place.
+ */
+function readComparison(table: Y.XmlElement, options: ReadOptions): TableCell[][] {
+  const say = options.comparisonText ?? ((key, params) => translate("en", key, params));
+  const cell = (content: Block[], header = false): TableCell => ({
+    header,
+    colspan: 1,
+    rowspan: 1,
+    align: null,
+    content,
+  });
+  const words = (text: string): Block[] => [
+    { kind: "paragraph", content: [{ kind: "text", text, marks: NO_MARKS }] },
+  ];
+  const questions = comparisonQuestionsOf(table.getAttributes());
+  const rows: TableCell[][] = [
+    [
+      cell(words(say("comparison.document")), true),
+      ...questions.map((question) => cell(words(question.text), true)),
+    ],
+  ];
+  for (const row of table.toArray()) {
+    if (!(row instanceof Y.XmlElement) || row.nodeName !== COMPARISON_ROW_NODE) continue;
+    const name = stringAttribute(row, "documentName");
+    const removed = options.documentRemoved?.(stringAttribute(row, "documentId")) ?? false;
+    const cells = new Map<string, Y.XmlElement>();
+    for (const each of row.toArray()) {
+      if (each instanceof Y.XmlElement) cells.set(stringAttribute(each, "questionId"), each);
+    }
+    rows.push([
+      cell(words(removed ? say("comparison.row.removed", { name }) : name)),
+      ...questions.map((question) => {
+        const element = cells.get(question.id);
+        if (!element) return cell([]);
+        const state = comparisonCellOf(element.getAttributes());
+        if (state.status === "done") return cell(readChildren(element.toArray(), options));
+        if (!state.problem) return cell(words("…"));
+        const { key, params } = cellProblemMessage(state.problem);
+        return cell(words(say(key, params)));
+      }),
+    ]);
   }
   return rows;
 }
