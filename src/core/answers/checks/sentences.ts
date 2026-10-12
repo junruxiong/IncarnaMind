@@ -17,10 +17,8 @@ import {
   PROPOSAL_INSERT_MARK,
   type TextPlace,
 } from "../../api";
+import { layout, textBlocks } from "../../proposals/write";
 
-const TEXT_BLOCKS: ReadonlySet<string> = new Set(["paragraph", "heading"]);
-/** What holds no sentences of the User's: a Question, code and formulas on their own line. */
-const NOT_SENTENCES: ReadonlySet<string> = new Set(["question", "codeBlock", "blockMath"]);
 const BREAK = "hardBreak";
 
 type Attributes = Record<string, unknown>;
@@ -47,38 +45,6 @@ export interface SelectedSentence {
 export type SelectedSentences =
   | { ok: true; sentences: SelectedSentence[] }
   | { ok: false; reason: "nothing" | "has-proposals" };
-
-/** The paragraphs and headings of the Mind, at any depth, with whether an Answer being written holds them. */
-function textBlocks(blocks: Y.XmlFragment): { element: Y.XmlElement; busy: boolean }[] {
-  const found: { element: Y.XmlElement; busy: boolean }[] = [];
-  const visit = (parent: Y.XmlFragment | Y.XmlElement, busy: boolean) => {
-    for (const child of parent.toArray()) {
-      if (!(child instanceof Y.XmlElement) || NOT_SENTENCES.has(child.nodeName)) continue;
-      if (TEXT_BLOCKS.has(child.nodeName)) {
-        found.push({ element: child, busy });
-        continue;
-      }
-      visit(
-        child,
-        busy || (child.nodeName === "answer" && child.getAttribute("status") === "streaming"),
-      );
-    }
-  };
-  visit(blocks, false);
-  return found;
-}
-
-/** A Block's children with where each starts in its text, an inline node counting as one. */
-function layout(element: Y.XmlElement) {
-  let at = 0;
-  return element.toArray().flatMap((node) => {
-    if (!(node instanceof Y.XmlText || node instanceof Y.XmlElement)) return [];
-    const size = node instanceof Y.XmlText ? node.length : 1;
-    const child = { node, start: at, size };
-    at += size;
-    return [child];
-  });
-}
 
 /** A Block's text as checks read it. */
 function textOf(element: Y.XmlElement): string {

@@ -68,31 +68,42 @@ const sentenceOf = (call: ModelCall) => {
   return /<sentence>\n([\s\S]*?)\n<\/sentence>/.exec(text)?.[1] ?? "";
 };
 
-/** A model that checks as its plans say: it searches for the sentence, cites, then gives its verdict. */
-function checkingModel(plans: Record<string, Plan> = PLANS, calls: ModelCall[] = []) {
-  return scriptedModel((call) => {
-    calls.push(call);
-    const plan = plans[sentenceOf(call)] ?? { verdict: "unsupported" };
-    const searches = call.results.filter((result) => result.tool === "search_documents");
-    if (searches.length === 0) {
-      return { calls: [{ tool: "search_documents", input: { query: sentenceOf(call) } }] };
-    }
-    if (plan.reply) return plan.reply;
-    const { quote } = plan;
-    if (quote && !call.results.some((result) => result.tool === "cite")) {
-      const passage =
-        shownPassages(searches.at(-1)?.text ?? "").find((each) => each.text.includes(quote)) ??
-        shownPassages(searches.at(-1)?.text ?? "")[0];
+/**
+ * A model that checks as its plans say: it searches for the sentence, cites,
+ * then gives its verdict. Asked once more for the deciding Passage, it gives
+ * `evidence` (none by default).
+ */
+function checkingModel(
+  plans: Record<string, Plan> = PLANS,
+  calls: ModelCall[] = [],
+  evidence: string = JSON.stringify({ passage: null }),
+) {
+  return scriptedModel(
+    (call) => {
+      calls.push(call);
+      const plan = plans[sentenceOf(call)] ?? { verdict: "unsupported" };
+      const searches = call.results.filter((result) => result.tool === "search_documents");
+      if (searches.length === 0) {
+        return { calls: [{ tool: "search_documents", input: { query: sentenceOf(call) } }] };
+      }
+      if (plan.reply) return plan.reply;
+      const { quote } = plan;
+      if (quote && !call.results.some((result) => result.tool === "cite")) {
+        const passage =
+          shownPassages(searches.at(-1)?.text ?? "").find((each) => each.text.includes(quote)) ??
+          shownPassages(searches.at(-1)?.text ?? "")[0];
+        return {
+          calls: [
+            { tool: "cite", input: { citations: [{ marker: 1, passage: passage?.id, quote }] } },
+          ],
+        };
+      }
       return {
-        calls: [
-          { tool: "cite", input: { citations: [{ marker: 1, passage: passage?.id, quote }] } },
-        ],
+        text: `Verdict: ${plan.verdict}${plan.says ? `\n${plan.says} [^1]` : ""}`,
       };
-    }
-    return {
-      text: `Verdict: ${plan.verdict}${plan.says ? `\n${plan.says} [^1]` : ""}`,
-    };
-  });
+    },
+    { generate: () => ({ text: evidence }) },
+  );
 }
 
 let blocks = 0;
@@ -180,6 +191,19 @@ describe("Find support", () => {
       }),
     ).toEqual({ kind: "checked", sentences: 1, checked: 1 });
     expect((await shownChecks(core, client)).map((each) => each.sentence)).toEqual([UNSUPPORTED]);
+  });
+
+  test.each([
+    "Verdict: unsupported",
+    "**Verdict:** Unsupported",
+    "P1 is about spring tides, not penguins.\n\nVerdict: unsupported",
+    "Unsupported. No Passage mentions penguins.",
+    '{"verdict": "unsupported"}',
+  ])("reads the verdict however the model words it: %j", async (reply) => {
+    const plans = { [UNSUPPORTED]: { reply: { text: reply } } };
+    const { core, client, check } = await mindWith([UNSUPPORTED], checkingModel(plans));
+    await check();
+    expect((await shownChecks(core, client))[0]?.shown).toEqual({ state: "unsupported" });
   });
 
   test("with nothing to check against, nothing is sent", async () => {
@@ -297,6 +321,31 @@ describe("When the model can't check a sentence", () => {
     },
   );
 
+  test("a verdict given without its Passage is asked for once more, and counts once its quote is found", async () => {
+    const plans: Record<string, Plan> = {
+      [SUPPORTED]: { verdict: "supported", says: "Tides says so." },
+    };
+    const model = checkingModel(
+      plans,
+      [],
+      JSON.stringify({ passage: "P1", quote: "Spring tides happen at new moon and at full moon" }),
+    );
+    const { core, client, check } = await mindWith([SUPPORTED], model);
+
+    expect(await check()).toEqual({ kind: "checked", sentences: 1, checked: 1 });
+
+    const [checked] = await shownChecks(core, client);
+    expect(checked?.shown).toEqual({ state: "supported" });
+    expect(checked?.check.evidence).toMatchObject({
+      quote: "Spring tides happen at new moon and at full moon",
+      check: "found",
+    });
+    const asked = model.doGenerateCalls.filter((call) =>
+      JSON.stringify(call.prompt).includes("without recording the Passage"),
+    );
+    expect(asked).toHaveLength(1);
+  });
+
   test("cost cap: nothing is sent, and the sentence says “not checked” with why", async () => {
     const calls: ModelCall[] = [];
     const model = checkingModel(PLANS, calls);
@@ -376,6 +425,22 @@ describe("Needs re-check", () => {
         "SELECT content_hash FROM retained_versions WHERE kind = 'check-result' AND deleted_at IS NULL",
       ),
     ).toEqual([{ content_hash: tides.contentHash }]);
+  });
+
+  test("a Mind deleted permanently lets go of its checks' evidence", async () => {
+    const { core, check, mind, dataDir } = await mindWith([SUPPORTED]);
+    await check();
+    const retained = () =>
+      queryDatabase<{ deleted: number }>(
+        dataDir,
+        "SELECT deleted_at IS NOT NULL AS deleted FROM retained_versions WHERE kind = 'check-result'",
+      );
+    expect(retained()).toEqual([{ deleted: 0 }]);
+
+    await core.deleteMind(mind.id);
+    await core.deletePermanently([{ kind: "mind", id: mind.id }]);
+
+    expect(retained()).toEqual([{ deleted: 1 }]);
   });
 
   test("moving the Mind to another Folder makes its checks need a re-check", async () => {

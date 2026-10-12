@@ -42,6 +42,7 @@ import type { Consent } from "../../consent";
 import type { Evidence } from "../../documents/evidence";
 import { parseCheckedDocument } from "../../documents/evidence";
 import type { RetainVersion, VersionRetention } from "../../documents/retention";
+import { parseModel, parsePlace } from "../../edits";
 import { ChatNotReadyError, ConsentDeclinedError, InvalidInputError, isRecord } from "../../errors";
 import type { MindContent } from "../../mindContent";
 import { parseMindId } from "../../minds";
@@ -90,31 +91,6 @@ interface ParsedCheck {
   action: ClaimCheckAction;
   allDocuments: boolean;
   model: ChatModelChoice | null;
-}
-
-function parsePlace(value: unknown, what: string): TextPlace {
-  if (
-    !isRecord(value) ||
-    typeof value.blockId !== "string" ||
-    value.blockId === "" ||
-    typeof value.offset !== "number" ||
-    !Number.isInteger(value.offset) ||
-    value.offset < 0
-  ) {
-    throw new InvalidInputError(`${what} must be a Block's id and an offset into its text.`);
-  }
-  return { blockId: value.blockId, offset: value.offset };
-}
-
-/** The model a request names: the Mind's own; null for the default chat model. */
-function parseModel(model: unknown): ChatModelChoice | null {
-  return isRecord(model) &&
-    typeof model.providerId === "string" &&
-    model.providerId !== "" &&
-    typeof model.modelId === "string" &&
-    model.modelId !== ""
-    ? { providerId: model.providerId, modelId: model.modelId }
-    : null;
 }
 
 function parseCheck(input: unknown): ParsedCheck {

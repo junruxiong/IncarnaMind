@@ -141,6 +141,3 @@ export function claimCheckShown(check: ClaimCheckAttributes, now: ClaimCheckNow)
     return { state: "not-checked", reason: check.reason ?? "failed" };
   return { state: check.state };
 }
-
-/** The kind of mark a check shows in the margin. */
-export type ClaimMarkKind = ClaimCheckShown["state"];

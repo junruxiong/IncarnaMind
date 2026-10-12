@@ -13,6 +13,7 @@
  * checked. A refusal, a reply with no verdict, an empty one or a provider's
  * failure leaves the claim not checked, with the reason; never supported.
  */
+import { generateText } from "ai";
 import type {
   CheckedVersion,
   Citation,
@@ -26,8 +27,22 @@ import type { Evidence, EvidenceScope } from "../../documents/evidence";
 import { givesStructuredOutput } from "../../providers/capabilities";
 import type { PreparedChatModel } from "../../providers/chat";
 import { type AnswerDocuments, createCitationSession } from "../citations";
-import type { AnswerEngine, AnswerTools, DocumentLanguage } from "../engine";
-import { checkInstructions, claimPrompt, readsAsRefusal, readVerdict } from "./prompt";
+import {
+  type AnswerEngine,
+  type AnswerTools,
+  answerTemperature,
+  type DocumentLanguage,
+} from "../engine";
+import {
+  checkInstructions,
+  claimPrompt,
+  EVIDENCE_INSTRUCTIONS,
+  evidencePrompt,
+  type ReadVerdict,
+  readEvidence,
+  readsAsRefusal,
+  readVerdict,
+} from "./prompt";
 
 export interface ClaimCheckDependencies {
   engine: AnswerEngine;
@@ -159,11 +174,59 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       return { verdict: "unsupported", evidence: null, says: null, ...facts() };
     }
     session.check();
-    const evidence = decidingCitation(session.finalCitation);
+    const evidence =
+      decidingCitation(session.finalCitation) ??
+      (await askForEvidence(request, verdict, session, signal));
+    if (signal.aborted) return notChecked("stopped");
     if (!evidence) return notChecked("no-evidence");
     return { verdict: verdict.verdict, evidence, says: verdict.says, ...facts() };
   };
 }
+
+/**
+ * A model that gave a verdict without a record of the Passage that decides
+ * it, or with a quote the check doesn't find, is asked once more, in one
+ * request, for that record from the Passages it read (Claude Haiku 5.5 left
+ * `cite` out of about one check in four). The record is taken as structured
+ * output's are, and counts only when the check finds its quote.
+ */
+async function askForEvidence(
+  request: ClaimCheckRequest,
+  verdict: ReadVerdict,
+  session: ReturnType<typeof createCitationSession>,
+  signal: AbortSignal,
+): Promise<Citation | null> {
+  const passages = session.shownPassages();
+  if (passages.length === 0) return null;
+  const { model } = request;
+  let reply: string;
+  try {
+    ({ text: reply } = await generateText({
+      model: model.model,
+      instructions: EVIDENCE_INSTRUCTIONS,
+      prompt: evidencePrompt({ claim: request.claim, ...verdict, passages }),
+      temperature: answerTemperature(model.capabilities.facts.temperature),
+      maxOutputTokens: 600,
+      maxRetries: 1,
+      abortSignal: signal,
+    }));
+  } catch (error) {
+    if (!signal.aborted)
+      console.error(`A check's evidence couldn't be asked for again: ${messageOf(error)}`);
+    return null;
+  }
+  const record = readEvidence(reply);
+  if (!record) return null;
+  session.tools.cite([{ marker: EVIDENCE_MARKER, ...record }], { structured: true });
+  session.check();
+  const citation = session.finalCitation(EVIDENCE_MARKER);
+  return citation?.check === "found" ? citation : null;
+}
+
+const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+/** The marker the record asked for once more is given: apart from any the model gave. */
+const EVIDENCE_MARKER = 99;
 
 /** The Citation that decides a claim: marker 1's, or the first other marker's, whose quote the check found. */
 function decidingCitation(finalCitation: (marker: number) => Citation | null): Citation | null {

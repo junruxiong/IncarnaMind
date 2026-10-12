@@ -29,7 +29,7 @@ const TONE: Record<ClaimMarkState, string> = {
 };
 
 /** Whether the sentence already cites the Passage its check found. */
-export function citesEvidence(editor: Editor, claim: ShownClaim): boolean {
+function citesEvidence(editor: Editor, claim: ShownClaim): boolean {
   const evidence = claim.check.evidence;
   if (!evidence) return false;
   let cited = false;
