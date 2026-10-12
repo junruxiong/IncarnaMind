@@ -16,15 +16,16 @@ import {
   resolveLanguage,
   type Settings,
 } from "../core";
+import { DataFromNewerVersionError } from "../core/errors";
 import type { Language } from "../core/language";
 import { channelFor, EVENT_CHANNEL } from "../shared/bridge";
-import { translate } from "../shared/i18n";
 import { registerDocumentScheme, serveDocumentFiles } from "./documentProtocol";
 import { serveFileActions } from "./files";
 import { startLogging } from "./logging";
 import { isCaptureWindow } from "./meetings/capture";
 import { installAppMenu } from "./menu";
 import { chooseExecutor, createElectronAdapters, systemBrowser } from "./platform";
+import { DOWNLOAD_BUTTON, RELEASES_PAGE, startupDialog } from "./startupError";
 import { reportFullScreen, titleBarOptions } from "./titleBar";
 import { registerUpdateCheck, startAutoUpdates } from "./updater";
 import { keepWindowPlace, windowPlace } from "./windowState";
@@ -183,14 +184,20 @@ function installMenuInLanguage(core: Core): void {
   });
 }
 
-function showStartupError(error: unknown): void {
+async function showStartupError(error: unknown): Promise<void> {
   logger.exception("app.startFailed", error);
   const language = resolveLanguage("system", app.getPreferredSystemLanguages());
-  const message = error instanceof Error ? error.message : String(error);
-  dialog.showErrorBox(
-    translate(language, "error.startup.title"),
-    translate(language, "error.startup.body", { message }),
-  );
+  const options = startupDialog(error, language);
+  if (!(error instanceof DataFromNewerVersionError)) {
+    dialog.showErrorBox(options.title, options.detail);
+    return;
+  }
+  const { response } = await dialog.showMessageBox({ type: "error", ...options });
+  if (response === DOWNLOAD_BUTTON) {
+    await systemBrowser.open(RELEASES_PAGE).catch((openError: unknown) => {
+      logger.exception("app.startFailed", openError);
+    });
+  }
 }
 
 app.whenReady().then(async () => {
@@ -206,7 +213,7 @@ app.whenReady().then(async () => {
       ...(createChatModel && { createChatModel }),
     });
   } catch (error) {
-    showStartupError(error);
+    await showStartupError(error);
     app.quit();
     return;
   }
