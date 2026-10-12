@@ -129,7 +129,7 @@ test("a quote on page 1 of a Passage that runs onto page 2 is labelled p. 1, as 
 
   const chip = answer.getByTestId("citation").getByTestId("citation-chip");
   await expect(chip).toHaveAttribute("aria-label", "Citation 1: Tides, p. 1. Quote found on p. 1");
-  await chip.click();
+  await pointAndClick(window, chip);
   await expect(window.getByTestId("citation-badge")).toHaveText("Quote found on p. 1");
   await expect(window.getByTestId("pdf-page-number")).toHaveValue("1");
   await app.close();
