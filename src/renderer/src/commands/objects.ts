@@ -1,7 +1,6 @@
 import type { LinkedFolder } from "../../../core/api";
 import { displayName } from "../../../shared/documentNames";
 import { core, files } from "../core";
-import { useExportDialog } from "../exportDialog";
 import { languageNow } from "../i18n";
 import { bridgeFrom, type LibraryBridge } from "../libraryBridges";
 import { fileStatusLabel, folderName, formatCount, revealLabelKey } from "../linkedFolders";
@@ -73,18 +72,7 @@ export const mindCommands: readonly Command[] = [
     reversible: true,
     run: (ctx) => store().openMind(idsOf(ctx, "mind")[0] ?? "", { side: true }),
   },
-  {
-    id: "mind.export",
-    label: "mind.export",
-    group: "main",
-    appliesTo: ["mind", "tab"],
-    when: ofMind,
-    reversible: true,
-    run(ctx) {
-      const mind = mindOf(ctx);
-      if (mind) useExportDialog.getState().open(mind.id);
-    },
-  },
+  // Exporting (Export as…, Export options…) is in ./exports.
   {
     id: "mind.moveTo",
     label: "mind.moveTo",

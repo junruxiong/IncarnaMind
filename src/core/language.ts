@@ -27,3 +27,22 @@ export function resolveLanguage(
   }
   return "en";
 }
+
+/**
+ * The computer's region, an ISO 3166 code such as "GB": the one the OS gives, else that of its
+ * most preferred language ("en-GB"), or the likeliest one for it ("en" is "US"); "" if neither says.
+ */
+export function systemRegion(
+  given: string | undefined,
+  systemLanguages: readonly string[],
+): string {
+  const region = given?.trim();
+  if (region) return region.toUpperCase();
+  const first = systemLanguages[0];
+  if (!first) return "";
+  try {
+    return new Intl.Locale(first.replace(/_/g, "-")).maximize().region ?? "";
+  } catch {
+    return "";
+  }
+}
