@@ -4,6 +4,7 @@ import type { Language } from "../../src/core/language";
 import {
   badgeMessage,
   citationReference,
+  citationSource,
   citationState,
   citedLocation,
   citedTextKept,
@@ -43,6 +44,26 @@ const words = (
   };
 };
 
+describe("Where a Citation points", () => {
+  const sheetCitation = (documentName: string, sheet: string) => ({
+    ...found,
+    documentName,
+    location: { kind: "rows" as const, sheet, from: 3, to: 3 },
+  });
+
+  test("names the sheet unless it shares the Document's name", () => {
+    expect(citationSource(sheetCitation("利润表", "利润表"), in_("zh-CN")).text).toBe(
+      "利润表，第 3 行",
+    );
+    expect(citationSource(sheetCitation("Budget.xlsx", "Budget"), in_("en")).text).toBe(
+      "Budget.xlsx, row 3",
+    );
+    expect(citationSource(sheetCitation("年报.xlsx", "利润表"), in_("zh-CN")).text).toBe(
+      "年报.xlsx，利润表，第 3 行",
+    );
+  });
+});
+
 describe("A Citation's badge", () => {
   test("says where the quote was found or not found, in words, and never that the sentence is verified", () => {
     expect(words(found)).toEqual({ en: "Quote found on p. 12–13", zh: "已在第 12–13 页找到引文" });
@@ -57,6 +78,37 @@ describe("A Citation's badge", () => {
       en: "Quote found in Tides",
       zh: "已在“Tides”中找到引文",
     });
+    const rows = (sheet: string) => ({
+      ...found,
+      documentName: "年报.xlsx",
+      pageFrom: null,
+      pageTo: null,
+      location: { kind: "rows" as const, sheet, from: 3, to: 3 },
+    });
+    expect(words(rows("利润表"))).toEqual({
+      en: "Quote found in 利润表, row 3",
+      zh: "已在“利润表，第 3 行”中找到引文",
+    });
+    expect(
+      words({
+        ...found,
+        pageFrom: null,
+        pageTo: null,
+        location: { kind: "section", heading: "2025年经营情况" },
+      }),
+    ).toEqual({
+      en: "Quote found in § 2025年经营情况",
+      zh: "已在“§ 2025年经营情况”中找到引文",
+    });
+    expect(
+      words({
+        ...found,
+        check: "not-found",
+        pageFrom: null,
+        pageTo: null,
+        location: { kind: "section", heading: "Tides" },
+      }).zh,
+    ).toBe("未在“§ Tides”中找到引文");
     expect(words({ ...found, check: "checking" }).en).toBe("checking…");
     expect(words({ ...found, check: "cant-check", checkReason: "no-text" }).en).toBe("Can't check");
     for (const check of ["found", "not-found", "cant-check", "checking"] as const) {
@@ -281,7 +333,7 @@ describe("A Citation's Location label (ADR-0011)", () => {
       }),
     ).toEqual({
       en: "Quote not found in § 2.1 Sensitivity",
-      zh: "未在 § 2.1 Sensitivity 中找到引文",
+      zh: "未在“§ 2.1 Sensitivity”中找到引文",
     });
     expect(words(at({ kind: "lines", from: 120, to: 134 })).en).toBe(
       "Quote found on lines 120–134",
@@ -290,7 +342,7 @@ describe("A Citation's Location label (ADR-0011)", () => {
       words(at({ kind: "section", heading: "2 Costs", comment: { author: "Reviewer" } })),
     ).toEqual({
       en: "Quote found in § 2 Costs, comment by Reviewer",
-      zh: "已在 § 2 Costs，Reviewer 的批注 中找到引文",
+      zh: "已在“§ 2 Costs，Reviewer 的批注”中找到引文",
     });
   });
 

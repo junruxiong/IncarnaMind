@@ -11,6 +11,7 @@ import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import type { TextUnit } from "../../shared/units";
+import type { PagePicture, RecognizedLine } from "../adapters";
 import type { DocumentFailureReason, DocumentKind } from "../api";
 import {
   type FileMetadata,
@@ -20,7 +21,7 @@ import {
 } from "../referenceRecords/read";
 import { stripBoilerplate } from "./boilerplate";
 import { creationDate, pdfDate, w3cDate } from "./creationDate";
-import { ExtractionError, extractText, pdfMetadata } from "./extract";
+import { ExtractionError, extractText, type PageReading, pdfMetadata } from "./extract";
 import { officeProperties } from "./formats/coreProperties";
 import { readWebPage } from "./formats/web";
 import { isPackageKind, packageSizeError } from "./formats/zip";
@@ -43,9 +44,10 @@ import { documentTitle } from "./title";
  * Chinese characters as simplified ones; see `HAN_CURRENT_SINCE`). 7: #76
  * (a Word file's comments are read into the section their mark is in). 8:
  * #435 (a workbook's rows Units keep the number of each cell whose shown
- * text isn't that number written plainly).
+ * text isn't that number written plainly). 9: #397 (a PDF's scanned pages
+ * are read from their pictures; see `SCAN_CURRENT_SINCE`).
  */
-export const PROCESSING_VERSION = 8;
+export const PROCESSING_VERSION = 9;
 
 /**
  * Per kind, the oldest version whose Passages and Units are still what this
@@ -53,7 +55,8 @@ export const PROCESSING_VERSION = 8;
  * again at startup. Version 5 changed nothing for PDFs, whose Passages
  * (and embeddings) stay as they are; version 6 changed no Passage or Unit;
  * version 7 changed only Word files', which gain their comments; version 8
- * only Excel workbooks', whose rows Units gain their cells' numbers.
+ * only Excel workbooks', whose rows Units gain their cells' numbers; version 9
+ * only PDFs' scanned pages, which `SCAN_CURRENT_SINCE` reads again.
  */
 export const CURRENT_SINCE: Readonly<Record<DocumentKind, number>> = {
   pdf: 4,
@@ -80,6 +83,18 @@ export const CURRENT_SINCE: Readonly<Record<DocumentKind, number>> = {
 export const HAN_CURRENT_SINCE = 6;
 
 /**
+ * For a PDF with a page that has little or no text (a scan, maybe), or a
+ * page read from its picture, the oldest version that reads such pages as
+ * this one would: since version 9 they are read from their pictures (#397).
+ * Such a PDF processed by an older version is processed again at startup;
+ * its pages of text come out as they were. When how pages are read changes
+ * (`TextRecognitionModelDefinition.reader`), bump this with the processing
+ * version: the pages read before are read again, except those a Citation
+ * quotes, which are kept as they were read (see `ScanJob.keep`).
+ */
+export const SCAN_CURRENT_SINCE = 9;
+
+/**
  * The version of the metadata read: what a Document's creation date is
  * worked out from (see ./creationDate). A Document whose metadata was read
  * by an older version, or not at all (`metadata_version` 0, as every
@@ -100,6 +115,21 @@ export interface ProcessingJob {
   kind: DocumentKind;
   /** The Document's file, where the User keeps it. */
   file: string;
+  /** How a PDF's scanned pages are read; none when they can't be (no model to read them with). */
+  scan?: ScanJob | null;
+}
+
+/** Reading a PDF's scanned pages from their pictures (#397). */
+export interface ScanJob {
+  /** What reads them now (`UnitScan.reader`). */
+  reader: string;
+  /**
+   * Scanned pages of a version read already, used as they are when the file
+   * is still that version: those read by this reader (a retry reads only the
+   * pages that couldn't be read), those a Citation quotes (so it stays
+   * found), and those read before the job was stopped.
+   */
+  keep: { contentHash: string; units: TextUnit[] } | null;
 }
 
 /** Reads only a Document's metadata (its creation date): nothing is extracted or embedded. */
@@ -138,6 +168,8 @@ type Processed =
        * as the Passages were built from it (see ./boilerplate), with its label and anchors.
        */
       pages: TextUnit[];
+      /** Scanned pages that couldn't be read, and why; null when every one was. */
+      unread: { pages: number[]; message: string } | null;
     }
   | { outcome: "no-text"; pageCount: number | null }
   | { outcome: "failed"; reason: DocumentFailureReason; message: string };
@@ -153,6 +185,11 @@ interface FileUnreadable {
 interface Crashed {
   outcome: "crashed";
   message: string;
+}
+
+/** The core stopped the job (its Linked folder was paused): nothing was processed. */
+interface Stopped {
+  outcome: "stopped";
 }
 
 /** What a version's metadata says of it. */
@@ -175,7 +212,8 @@ export type ProcessingResult =
       })
   /** Nothing was processed. */
   | FileUnreadable
-  | Crashed;
+  | Crashed
+  | Stopped;
 
 export type MetadataResult =
   | ({ outcome: "read" } & VersionMetadata)
@@ -186,20 +224,51 @@ export type MetadataResult =
 
 export type WorkerResult = ProcessingResult | MetadataResult;
 
-/** Messages between the core and the worker. `id` pairs a result with its job. */
-export interface WorkerRequest {
-  id: number;
-  job: WorkerJob;
+/**
+ * How a job reads scanned pages: the text recognition model, which the core
+ * runs, asked page by page; where the job is; and its stop signal.
+ */
+export interface ReadingChannel {
+  /** The lines on a page's picture. Rejects with `ReadingUnavailable` when no page can be read now. */
+  read(page: number, picture: PagePicture): Promise<RecognizedLine[]>;
+  /** `read` of `of` scanned pages of version `contentHash` are read; `unit` is the one just read. */
+  progress(contentHash: string, read: number, of: number, unit: TextUnit | null): void;
+  signal: AbortSignal;
 }
 
-export interface WorkerResponse {
-  id: number;
-  result: WorkerResult;
-}
+/**
+ * Messages from the core to the worker. `id` pairs everything with its job:
+ * a job; the order to stop it; the lines read for a page it asked about
+ * (`request` pairs them with the asking), or why they couldn't be.
+ */
+export type WorkerRequest =
+  | { id: number; job: WorkerJob }
+  | { id: number; stop: true }
+  | {
+      id: number;
+      request: number;
+      lines?: RecognizedLine[];
+      error?: { message: string; unavailable: boolean };
+    };
+
+/**
+ * Messages from the worker to the core: a job's result; how far it is in
+ * reading scanned pages, with the page just read; and a page's picture to read.
+ */
+export type WorkerResponse =
+  | { id: number; result: WorkerResult }
+  | {
+      id: number;
+      progress: { contentHash: string; read: number; of: number; unit: TextUnit | null };
+    }
+  | { id: number; request: number; page: number; picture: PagePicture };
 
 /** Runs a job of either kind. Never throws. */
-export function runJob(job: WorkerJob): Promise<WorkerResult> {
-  return job.task === "process" ? processFile(job) : readMetadata(job);
+export function runJob(
+  job: WorkerJob,
+  channel: ReadingChannel | null = null,
+): Promise<WorkerResult> {
+  return job.task === "process" ? processFile(job, channel) : readMetadata(job);
 }
 
 /** Why the file couldn't be read: it is gone, or can't be read now. */
@@ -251,13 +320,31 @@ async function refuseTooLarge(file: string, kind: DocumentKind): Promise<Process
 }
 
 /** Never throws: every problem becomes a "failed" result. */
-export async function processFile(job: ProcessingJob): Promise<ProcessingResult> {
+export async function processFile(
+  job: ProcessingJob,
+  channel: ReadingChannel | null = null,
+): Promise<ProcessingResult> {
   const refused = isPackageKind(job.kind) ? await refuseTooLarge(job.file, job.kind) : null;
   if (refused) return refused;
   const bytes = await readBytes(job.file);
   if (!(bytes instanceof Uint8Array)) return bytes;
   const version = { contentHash: sha256(bytes), size: bytes.byteLength };
-  const { processed, firstPages } = await processBytes(job.kind, bytes);
+  const reading: PageReading | null =
+    job.scan && channel
+      ? {
+          read: channel.read,
+          signal: channel.signal,
+          progress: (read, of, unit) => channel.progress(version.contentHash, read, of, unit),
+          reader: job.scan.reader,
+          keep: new Map(
+            job.scan.keep?.contentHash === version.contentHash
+              ? job.scan.keep.units.map((unit) => [unit.page, unit])
+              : [],
+          ),
+        }
+      : null;
+  const { processed, firstPages } = await processBytes(job.kind, bytes, reading);
+  if (reading?.signal.aborted) return { outcome: "stopped" };
   const firstUnit = processed.outcome === "ready" ? (processed.pages[0]?.text ?? null) : null;
   return {
     ...processed,
@@ -364,18 +451,25 @@ async function readMetadataOf(
 async function processBytes(
   kind: DocumentKind,
   bytes: Uint8Array,
+  reading: PageReading | null,
 ): Promise<{ processed: Processed; firstPages: string[] }> {
   try {
-    const extracted = await extractText(kind, bytes);
+    const extracted = await extractText(kind, bytes, reading);
     const firstPages = extracted.units.slice(0, REFERENCE_PAGES).map((unit) => unit.text);
     const pages = kind === "pdf" ? stripBoilerplate(extracted.units) : extracted.units;
-    const { pageCount } = extracted;
+    const { pageCount, unread } = extracted;
     const passages = buildPassages(pages).map((passage) => ({
       ...passage,
       keywords: keywordText(passage.text),
     }));
-    if (passages.length === 0) return { processed: { outcome: "no-text", pageCount }, firstPages };
-    return { processed: { outcome: "ready", pageCount, passages, pages }, firstPages };
+    if (passages.length === 0) {
+      // A scan none of whose pages could be read: it has text to find, once they can be.
+      const processed: Processed = unread
+        ? { outcome: "failed", reason: "pages-unread", message: unreadMessage(unread) }
+        : { outcome: "no-text", pageCount };
+      return { processed, firstPages };
+    }
+    return { processed: { outcome: "ready", pageCount, passages, pages, unread }, firstPages };
   } catch (error) {
     const processed: Processed =
       error instanceof ExtractionError
@@ -386,3 +480,7 @@ async function processBytes(
 }
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+/** The technical detail of scanned pages that couldn't be read, in English, for logs and tooltips. */
+export const unreadMessage = (unread: { pages: number[]; message: string }) =>
+  `Scanned ${unread.pages.length === 1 ? "page" : "pages"} ${unread.pages.join(", ")} couldn't be read${unread.message ? `: ${unread.message}` : "."}`;

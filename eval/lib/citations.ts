@@ -38,8 +38,10 @@ import { SIMPLIFIED } from "../../src/shared/hanVariants";
 import { normaliseText } from "../../src/shared/text";
 import type { ChatSettings, EvalConfig } from "./config";
 import { type EvalLanguage, type EvalQuestion, isGating } from "./evaluationSet";
+import { type ExpectedCounts, expectedCounts, type HandedSummary, summariseHanded } from "./handed";
 import type { Library } from "./library";
 import type { Log } from "./log";
+import { type AnswerTiming, median, summariseTiming, type TimingSummary, timingOf } from "./timing";
 
 /** The v1 design's targets, per language, over at least `EvalConfig.minCitations` Citations. */
 export const CITATION_TARGETS = {
@@ -123,6 +125,14 @@ export interface AnswerRecord {
   quoteRetry?: QuoteRetry | null;
   /** The tokens the Answer's model calls counted (#343); absent in a result file from before. */
   usage?: AnswerUsage | null;
+  /** Where the Answer's time went; absent without a recording (a result file from before, or no chat model). */
+  timing?: AnswerTiming | null;
+  /**
+   * Of the Passages the Question needs: how many there are, how many a search
+   * handed the model, how many the Answer cites with a found Citation. Null:
+   * it needs none (unanswerable); absent without a recording.
+   */
+  expected?: ExpectedCounts | null;
   /** The Answer's full text, a block to a paragraph, each Citation as its marker ("[^1]"). */
   text: string;
   /**
@@ -167,6 +177,10 @@ export interface GroupSummary {
   quoteRetries: QuoteRetrySummary;
   /** The tokens the group's Answers used and the share of the input the provider's prompt cache served. */
   usage: UsageSummary;
+  /** Where the group's time went; null without recorded Answers (absent in a report from before). */
+  timing?: TimingSummary | null;
+  /** Whether searches handed the model the Passages the Questions need, beside whether the Answers cite them. */
+  handed?: HandedSummary | null;
 }
 
 /** The tokens a group of Answers used (see `AnswerUsage`). */
@@ -550,6 +564,8 @@ async function askOne(
       }),
     ];
   });
+  library.timings?.begin();
+  const askedAt = performance.now();
   const asked = await core.askQuestion({ mindId: mind.id, questionId });
   if (!asked.asked) {
     throw new Error(`${question.id} couldn't be asked: ${JSON.stringify(asked)}`);
@@ -561,6 +577,8 @@ async function askOne(
   }, timeoutMs);
   const ending = await ended;
   clearTimeout(timer);
+  const totalMs = performance.now() - askedAt;
+  const recording = library.timings?.end();
 
   const answer = await readAnswer(core, mind.id, asked.answerId);
   await core.closeMind(mind.id);
@@ -586,6 +604,7 @@ async function askOne(
     }),
   );
   const finished = "finished" in ending ? ending.finished : null;
+  const text = answer ? answerText(answer) : "";
   return {
     questionId: question.id,
     language: question.language,
@@ -602,7 +621,16 @@ async function askOne(
     rejectedRecords: finished?.rejectedRecords ?? [],
     quoteRetry: finished?.quoteRetry ?? null,
     usage: finished?.usage ?? null,
-    text: answer ? answerText(answer) : "",
+    ...(recording && {
+      timing: timingOf(recording, totalMs, text),
+      expected: expectedCounts(
+        question,
+        (key) => library.documents.get(key),
+        recording.handed,
+        citations,
+      ),
+    }),
+    text,
     sentences: sentences.map((sentence) => ({
       text: sentence.text,
       cited: sentence.citations.length > 0,
@@ -618,15 +646,6 @@ const groupOf = (
   answer.crossLingual ? "crossLingual" : answer.paraphrase ? "paraphrase" : answer.language;
 
 const share = (part: number, whole: number) => (whole > 0 ? part / whole : null);
-
-function median(values: readonly number[]): number | null {
-  const sorted = [...values].sort((a, b) => a - b);
-  const middle = Math.floor(sorted.length / 2);
-  if (sorted.length === 0) return null;
-  return sorted.length % 2 === 1
-    ? (sorted[middle] as number)
-    : ((sorted[middle - 1] as number) + (sorted[middle] as number)) / 2;
-}
 
 /** The tokens a group of Answers used, and how much of the input was served from the provider's cache. */
 export function summariseUsage(answers: readonly AnswerRecord[]): UsageSummary {
@@ -698,6 +717,8 @@ export function summariseGroup(answers: readonly AnswerRecord[]): GroupSummary {
     citationSupport,
     quoteRetries: summariseQuoteRetries(answers),
     usage: summariseUsage(answers),
+    timing: summariseTiming(answers),
+    handed: summariseHanded(answers),
   };
 }
 
@@ -767,7 +788,7 @@ export async function runCitations(
   questions: readonly EvalQuestion[],
   chat: ChatSettings,
   config: Pick<EvalConfig, "minCitations" | "maxRounds" | "answerTimeoutMs"> &
-    Partial<Pick<EvalConfig, "questionIds">>,
+    Partial<Pick<EvalConfig, "questionIds" | "rerankDepth" | "maxPassages">>,
   log: Log,
   /** What the set's pages are, in the log: "p." for PDFs, "Unit" for any format. */
   unit: "p." | "Unit" = "p.",
@@ -792,8 +813,16 @@ export async function runCitations(
       ...(chat.baseUrl !== null && { baseUrl: chat.baseUrl }),
     });
     const model = `${chat.kind}/${chat.modelId}`;
-    const gating = provider.service !== null && subset === null;
+    const searchOverrides = [
+      ...(config.rerankDepth != null
+        ? [config.rerankDepth === "off" ? "reranking off" : `rerank depth ${config.rerankDepth}`]
+        : []),
+      ...(config.maxPassages != null ? [`${config.maxPassages} Passages a search`] : []),
+    ];
+    // A run that changes the search Tool is a comparison, not the gate.
+    const gating = provider.service !== null && subset === null && searchOverrides.length === 0;
     const overrides = [
+      ...searchOverrides,
       ...(chat.numCtx !== null ? [`num_ctx ${chat.numCtx}`] : []),
       ...(chat.citing !== null ? [`citing mode "${chat.citing}"`] : []),
     ];

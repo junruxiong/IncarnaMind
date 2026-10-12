@@ -10,9 +10,10 @@ import {
 import type { Document, DocumentFailureReason, DocumentStatus, Tag } from "../../../core/api";
 import { displayName, sourceOf } from "../../../shared/documentNames";
 import type { MessageKey } from "../../../shared/i18n";
-import { useT } from "../i18n";
+import { useLanguage, useT } from "../i18n";
 import { currentTabOf } from "../layoutSlice";
 import { fileStatusLabel } from "../linkedFolders";
+import { scanningStatus, unreadPages } from "../scanStatus";
 import { selectVisibleDocuments, useAppStore } from "../store";
 import { chipsOf, tagIndex } from "../tagEditing";
 import { moveThroughRows, TREE_ROW } from "../treeKeys";
@@ -74,6 +75,8 @@ const failureMessages: Record<DocumentFailureReason, MessageKey> = {
   "too-large": "documents.failure.tooLarge",
   "file-missing": "documents.failure.fileMissing",
   "processing-error": "documents.failure.processingError",
+  // Worded with its pages (see `unreadPages`).
+  "pages-unread": "documents.failure.pagesUnread.all",
 };
 
 /** The ways to browse the Documents, in the switcher's order. */
@@ -380,6 +383,7 @@ const DocumentRow = memo(function DocumentRow({
  */
 function DocumentStatusLabel({ item }: { item: Document }) {
   const t = useT();
+  const language = useLanguage();
   const fileState = fileStatusLabel(item.fileStatus);
   if (fileState) {
     return (
@@ -395,13 +399,20 @@ function DocumentStatusLabel({ item }: { item: Document }) {
     );
   }
   const percent = Math.floor((item.progress ?? 0) * 100);
+  // Its scanned pages being read, or some that couldn't be (#397).
+  const scanning = item.status === "extracting" && item.scan ? scanningStatus(item.scan, t) : null;
+  const unread = item.status === "failed" && item.failure?.reason === "pages-unread";
   const full =
     item.status === "failed"
       ? t("documents.status.failed", {
-          reason: t(failureMessages[item.failure?.reason ?? "processing-error"]),
+          reason:
+            unread && item.failure
+              ? unreadPages(item.failure, t, language, "reason")
+              : t(failureMessages[item.failure?.reason ?? "processing-error"]),
         })
-      : t(statusMessages[item.status], { percent });
-  const short = shortStatusMessages[item.status];
+      : (scanning?.full ?? t(statusMessages[item.status], { percent }));
+  const shortKey = unread ? "documents.statusShort.pagesUnread" : shortStatusMessages[item.status];
+  const short = shortKey && (scanning?.short ?? t(shortKey, { percent }));
   const title = item.failure?.message ? `${full}\n${item.failure.message}` : full;
   if (!short) {
     return (
@@ -415,10 +426,10 @@ function DocumentStatusLabel({ item }: { item: Document }) {
       data-testid="document-status"
       title={title}
       className={`shrink-0 text-label font-semibold ${
-        item.status === "failed" ? "text-danger" : "text-ink-meta"
+        item.status === "failed" && !unread ? "text-danger" : "text-ink-meta"
       }`}
     >
-      <span aria-hidden="true">{t(short, { percent })}</span>
+      <span aria-hidden="true">{short}</span>
       <span className="sr-only">{full}</span>
     </span>
   );

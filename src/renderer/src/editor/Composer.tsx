@@ -1,11 +1,9 @@
 import { type Editor, isMacOS } from "@tiptap/core";
-import { Selection } from "@tiptap/pm/state";
 import {
   type ChangeEvent,
   type ClipboardEvent,
   type KeyboardEvent,
   type Ref,
-  type RefObject,
   useEffect,
   useId,
   useImperativeHandle,
@@ -14,15 +12,15 @@ import {
   useState,
 } from "react";
 import type * as Y from "yjs";
-import type { SearchScope } from "../../../core/api";
+import type { AnswerPlace, SearchScope } from "../../../core/api";
 import { mindModelOf } from "../../../shared/mindModel";
 import { hasSearchScope, type ScopeKind, scopeIds } from "../../../shared/searchScope";
 import { useAnswers } from "../answers";
 import { shortcutLabel } from "../commands/keymap";
-import { SearchIcon } from "../components/icons";
+import { SearchIcon, StopIcon } from "../components/icons";
 import { SparkLineIcon } from "../components/lineIcons";
 import { ProblemLine } from "../components/ProblemLine";
-import { ReadinessLine } from "../components/providers/ChatReadinessNotice";
+import { TypingTextarea } from "../components/TypingTextarea";
 import {
   chosenScope,
   composerKey,
@@ -32,6 +30,13 @@ import {
   type Paste,
   useComposer,
 } from "../composer";
+import {
+  answerBeingWritten,
+  askInAssistant,
+  stopWriting,
+  useAnswerBeingWritten,
+  useConversations,
+} from "../conversations";
 import { core } from "../core";
 import { editFromComposer, stopEditing, useEdits } from "../editWithAi";
 import { useT } from "../i18n";
@@ -39,14 +44,7 @@ import type { ScopeChoice } from "../scope";
 import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
 import { AnswerAnnouncer } from "./AnswerAnnouncer";
-import {
-  cursorBelowAnswer,
-  placeQuestion,
-  type QuestionToAsk,
-  questionPlace,
-  takeBackQuestion,
-  whenAnswerShown,
-} from "./composerAsk";
+import { AskProblem } from "./AskProblem";
 import { EditStatus } from "./EditStatus";
 import { AskArrowIcon, CollapseIcon, ExpandIcon, RemoveIcon } from "./icons";
 import { ModelChip } from "./ModelChip";
@@ -99,13 +97,16 @@ export interface ComposerHandle {
  * The one input, at the foot of the assistant (DESIGN.md, Composer; #253),
  * for the Mind the assistant reads: "Ask, or say what to change…". ⌘J
  * focuses it from anywhere in the window, unfolding the assistant; Enter asks
- * (Shift+Enter breaks the line); Esc closes its picker, or goes back to the
- * note. Asking puts the Question into the note as one grey line, at the cursor
- * (`cursorInMind`) or at the end of the Mind, and its Answer streams in below.
+ * (Shift+Enter breaks the line); Esc closes what it has open, and then is the
+ * assistant's (it folds). Asking asks in the assistant's conversation (#201):
+ * the Question shows there at once and its Answer streams in under it; the
+ * Mind stays as it is unless the User adds the Answer to it.
  *
  * In its row: a Skill chosen with "/", the text, the quiet model chip, the
  * Search scope (a chip for each Folder, Tag or Document, or "All Documents";
- * "@" adds more), and the Ask button (an up arrow). A Mind in a Folder starts
+ * "@" adds more), and the Ask button (an up arrow; Stop while an Answer is
+ * written, which Enter waits for). Sending empties the text at once, and puts
+ * it back if the Question couldn't be asked. A Mind in a Folder starts
  * with the Folder's chip; taking it out searches everything (see
  * `composerScope`). Why a Question couldn't be asked shows on one line above
  * them, with the one thing that fixes it; so does the offer to suggest as the
@@ -115,14 +116,11 @@ export function Composer({
   editor,
   doc,
   mindId,
-  cursorInMind,
   ref,
 }: {
   editor: Editor;
   doc: Y.Doc;
   mindId: string;
-  /** Whether the Mind's cursor is where a Question goes: false sends it to the end. */
-  cursorInMind: RefObject<boolean>;
   ref?: Ref<ComposerHandle>;
 }) {
   const t = useT();
@@ -229,7 +227,6 @@ export function Composer({
   useImperativeHandle(ref, () => ({
     focus(given) {
       if (given) updateScope(given);
-      cursorInMind.current = false;
       useComposer.getState().requestFocus();
     },
   }));
@@ -378,45 +375,33 @@ export function Composer({
       }
       return;
     }
+    // An Answer is being written, or its Question is on its way: Enter waits for it, as in
+    // ChatGPT and Claude, so a second press never asks the Question twice. The button is Stop.
+    if (answerBeingWritten() !== null) return;
     const typed = current.text.trim();
     // What is pasted, in chips, goes with the words typed.
     const text = [typed, ...current.pastes.map((paste) => paste.text.trim())]
       .filter((part) => part !== "")
       .join("\n\n");
-    if (!text || editor.isDestroyed) return;
+    if (!text) return;
     useAnswers.getState().dismiss(composerKey(mindId));
-    const question: QuestionToAsk = {
-      id: crypto.randomUUID(),
-      text,
-      model: mindModelOf(doc),
-      scope: composerScope(current, folderId),
-      skill: current.skill,
-    };
-    const selection = cursorInMind.current ? editor.state.selection : null;
-    const placed = placeQuestion(editor, question, questionPlace(editor.state.doc, selection));
-    if (!placed) return;
     update({ text: "", skill: null, pastes: [] });
     setExpanded(false);
     setViewing(null);
     setPicking(null);
-    const line = editor.view.nodeDOM(placed.pos);
-    if (line instanceof HTMLElement) line.scrollIntoView({ block: "nearest" });
-
-    const result = await useAnswers.getState().askFromComposer(mindId, question.id);
-    if (result?.asked) {
-      // The next Question goes after this Answer; Esc comes back to write there. (Unless
-      // another Mind is shown by then: this one's editor is gone, with its cursor.)
-      const answered = await whenAnswerShown(editor, result.answerId);
-      if (answered && !editor.isDestroyed && cursorBelowAnswer(editor, result.answerId)) {
-        cursorInMind.current = true;
-      }
-      return;
-    }
-    // Not asked: the Question leaves the note, and its words come back here.
-    if (!editor.isDestroyed) takeBackQuestion(editor, placed, text);
+    // In the assistant's conversation: the Mind is read, never written to.
+    const asked = await askInAssistant({
+      mindId,
+      text,
+      scope: composerScope(current, folderId),
+      model: mindModelOf(doc),
+      forcedSkill: current.skill,
+    });
+    if (asked) return;
+    // Not asked: its words come back here, unless the User has typed anew meanwhile.
     const now = useComposer.getState().draft(mindId);
     if (now.text === "" && now.pastes.length === 0) {
-      update({ text: typed, pastes: current.pastes, skill: now.skill ?? question.skill });
+      update({ text: typed, pastes: current.pastes, skill: now.skill ?? current.skill });
     }
   };
 
@@ -442,33 +427,22 @@ export function Composer({
       return;
     }
     if (event.key === "Escape" && expanded) {
-      // The tall editor goes back to its size; the next Esc goes to the note.
+      // The tall editor goes back to its size; the next Esc is the assistant's.
       event.preventDefault();
       setExpanded(false);
       return;
     }
     if (event.key === "Escape" && editing) {
-      // Back to asking; the next Esc goes to the note.
+      // Back to asking; the next Esc is the assistant's.
       event.preventDefault();
       stopEditing(editor, mindId);
-      return;
     }
-    if (event.key === "Escape") {
-      event.preventDefault();
-      // Back to the note, where the cursor was (or at its end), at once: what is typed next
-      // goes there. (Tiptap's `focus` waits a frame, and the first keys would come here.)
-      if (!cursorInMind.current) {
-        editor.commands.command(({ tr }) => {
-          tr.setSelection(Selection.atEnd(tr.doc));
-          return true;
-        });
-      }
-      editor.view.focus();
-      editor.view.dispatch(editor.state.tr.scrollIntoView());
-    }
+    // Any other Esc goes on to the assistant, which folds (`Assistant`).
   };
 
   const canAsk = draft.text.trim() !== "" || draft.pastes.length > 0;
+  /** An Answer is being written in the assistant, or on its way: the button is Stop meanwhile. */
+  const answering = useAnswerBeingWritten() !== null;
   const activeOption = picking && option >= 0 ? `${listId}-${option}` : undefined;
 
   return (
@@ -481,8 +455,14 @@ export function Composer({
       <SuggestionOffer mindId={mindId} doc={doc} editor={editor} />
       <EditStatus mindId={mindId} />
       {problem && (
-        <ComposerProblem
+        <AskProblem
           problem={problem}
+          testIds={{
+            notReady: "composer-not-ready",
+            skillUnavailable: "composer-skill-unavailable",
+            error: "composer-error",
+          }}
+          className="composer-problem"
           onAskWithoutSkill={() => {
             update({ skill: null });
             void ask();
@@ -581,7 +561,7 @@ export function Composer({
             testId="composer-skill"
           />
         )}
-        <textarea
+        <TypingTextarea
           ref={field}
           rows={1}
           data-testid="composer-input"
@@ -629,19 +609,37 @@ export function Composer({
               {t("composer.scope.all")}
             </button>
           )}
-          <button
-            type="button"
-            data-testid="composer-ask"
-            aria-label={editing ? t("composer.edit.send") : t("composer.ask")}
-            title={editing ? t("composer.edit.send") : t("composer.ask")}
-            disabled={!canAsk}
-            // The text keeps the focus.
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => void ask()}
-            className="composer-ask"
-          >
-            <AskArrowIcon className="size-3" />
-          </button>
+          {answering && !editing ? (
+            <button
+              type="button"
+              data-testid="composer-stop"
+              aria-label={t("command.answer.stop")}
+              title={t("command.answer.stop")}
+              // The text keeps the focus.
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={(event) => {
+                // A double click on Ask: its second click lands here, and leaves the Answer be.
+                if (event.detail < 2) stopWriting();
+              }}
+              className="composer-ask"
+            >
+              <StopIcon className="size-3.5" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              data-testid="composer-ask"
+              aria-label={editing ? t("composer.edit.send") : t("composer.ask")}
+              title={editing ? t("composer.edit.send") : t("composer.ask")}
+              disabled={!canAsk}
+              // The text keeps the focus.
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => void ask()}
+              className="composer-ask"
+            >
+              <AskArrowIcon className="size-3" />
+            </button>
+          )}
         </div>
         {showExpand && (
           <button
@@ -687,7 +685,7 @@ export function Composer({
           )}
         </div>
       )}
-      <AnswerAnnouncer mindId={mindId} />
+      <AnswerAnnouncer belongs={(place) => answeredHere(mindId, place)} />
     </div>
   );
 }
@@ -701,45 +699,13 @@ const SCOPE_LISTS: Record<ScopeKind, keyof SearchScope> = {
   document: "documentIds",
 };
 
-type AskProblem = NonNullable<ReturnType<typeof useAnswers.getState>["blocked"][string]>;
-
-/** Why the last Question couldn't be asked: one line with the one thing that fixes it. */
-function ComposerProblem({
-  problem,
-  onAskWithoutSkill,
-}: {
-  problem: AskProblem;
-  onAskWithoutSkill(): void;
-}) {
-  const t = useT();
-  if (problem.kind === "not-ready") {
-    return (
-      <ReadinessLine
-        readiness={problem.readiness}
-        testId="composer-not-ready"
-        className="composer-problem"
-        setUpLabel={t("question.setUp")}
-        refused
-      />
-    );
-  }
-  if (problem.kind === "skill-unavailable") {
-    return (
-      <ProblemLine
-        testId="composer-skill-unavailable"
-        className="composer-problem"
-        action={{ label: t("skills.unavailable.drop"), onClick: onAskWithoutSkill }}
-      >
-        {t(`skills.unavailable.${problem.state}`, { name: problem.skill })}
-      </ProblemLine>
-    );
-  }
-  if (problem.kind === "error") {
-    return (
-      <ProblemLine testId="composer-error" className="composer-problem">
-        {t("error.action", { message: problem.message })}
-      </ProblemLine>
-    );
-  }
-  return null;
+/**
+ * The Answers the composer's Questions get: in the assistant's conversation
+ * (for a new chat, the one its first Question makes), or, regenerated in the
+ * note, in this Mind.
+ */
+function answeredHere(mindId: string, place: AnswerPlace): boolean {
+  if (place.mindId === mindId) return true;
+  const { openId } = useConversations.getState();
+  return place.conversationId !== undefined && (openId === null || openId === place.conversationId);
 }

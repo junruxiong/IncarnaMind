@@ -26,12 +26,16 @@ export type {
   Logger,
   LogValue,
   ModelFile,
+  PagePicture,
   Paths,
   ProcessLauncher,
+  RecognizedLine,
   RerankingModelFiles,
   ScriptRuntimes,
   SpawnOptions,
   SpeechSegment,
+  TextRecognitionFiles,
+  TextRecognizer,
   Transcriber,
   TranscriberListener,
   TranscriptionModelFiles,
@@ -51,6 +55,7 @@ export {
   type VersionRetention,
 } from "./documents/retention";
 export type { Reranker } from "./documents/searchTool";
+export type { AnswerSearchTuning, ObservedSearch } from "./documents/searchTuning";
 export type { FolderWatcher, WatchFolder, WatchListener } from "./documents/watcher";
 export { BUILT_IN_EMBEDDING_MODEL } from "./embedding";
 export {

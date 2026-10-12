@@ -49,6 +49,7 @@ import {
   type Tally,
 } from "./retrieval";
 import type { Aggregation } from "./subChunks";
+import { timingLine, timingSection } from "./timingReport";
 
 export interface EvalReport {
   result: "pass" | "fail";
@@ -651,6 +652,7 @@ function markdownReport(report: EvalReport, reportDir: string, root: string): st
         citations.minCitations,
       ),
       "",
+      ...timingSection(GROUPS.map(([group, label]) => ({ label, ...citations.summary[group] }))),
       ...whyNotFound(citations, "p."),
     );
   }
@@ -855,6 +857,8 @@ export function terminalSummary(report: EvalReport, reportDir: string, root: str
           `  ${"".padEnd(14)} quotes asked again: ${quoteRetryLine(summary.quoteRetries)}`,
         );
       }
+      const timing = timingLine(summary.timing);
+      if (timing) lines.push(`  ${"".padEnd(14)} ${timing}`);
     }
   }
   if (report.formats && "skipped" in report.formats) {
