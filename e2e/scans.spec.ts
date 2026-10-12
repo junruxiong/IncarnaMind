@@ -30,6 +30,7 @@ const CASES = {
     pages: ["en-clean", "en-noisy"],
     unsure: ["convenience"],
     marked: ["convenience"],
+    washed: "Either party may terminate this Agreement for convenience",
     question: "Can either party terminate for convenience?",
     reading: "Reading 2 scanned pages…",
     scan: "Text read from a scan · 1 word may be misread",
@@ -39,6 +40,7 @@ const CASES = {
     unsure: ["租赁"],
     // Each Chinese character is a word of its own.
     marked: ["租", "赁"],
+    washed: "房屋租赁合同",
     question: "押金什么时候退还？",
     reading: "正在识别 2 页扫描件…",
     scan: "从扫描件识别的文字 · 2 处可能识别有误",
@@ -88,47 +90,46 @@ for (const language of ["en", "zh-CN"] as const) {
     const file = join(sources, "Scan.pdf");
     await writeFile(file, buildPdf(chosen.pages.map((id) => ({ scan: picture(id) }))));
     const { app, window } = await launchApp(dataDir, { fakeChat: true, scans: script });
-    try {
-      await dismissChatSetup(window);
-      await window.evaluate(async (chosenLanguage) => {
-        const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-        await bridge.updateSettings({ user: { language: chosenLanguage } });
-      }, language);
-      await useLocalChatModel(window);
+    await dismissChatSetup(window);
+    await window.evaluate(async (chosenLanguage) => {
+      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      await bridge.updateSettings({ user: { language: chosenLanguage } });
+    }, language);
+    await useLocalChatModel(window);
 
-      // Its status says its scanned pages are being read, then it is ready.
-      await window.getByTestId("add-documents-input").setInputFiles([file]);
-      const row = window.getByTestId("document-list-item");
-      await expect(row.getByTestId("document-status")).toContainText(chosen.reading);
-      await expect(row).toHaveAttribute("data-status", "ready", { timeout: 20_000 });
+    // Its status says its scanned pages are being read, then it is ready.
+    await window.getByTestId("add-documents-input").setInputFiles([file]);
+    const row = window.getByTestId("document-list-item");
+    await expect(row.getByTestId("document-status")).toContainText(chosen.reading);
+    await expect(row).toHaveAttribute("data-status", "ready", { timeout: 20_000 });
 
-      const answer = await ask(window, chosen.question);
-      const citation = answer.getByTestId("citation");
-      await expect(citation).toHaveAttribute("data-check", "found");
+    const answer = await ask(window, chosen.question);
+    const citation = answer.getByTestId("citation");
+    await expect(citation).toHaveAttribute("data-check", "found");
 
-      // Its card says the quote was read from a scan, and marks a word that may be misread.
-      await citation.getByTestId("citation-chip").hover();
-      const card = window.getByTestId("citation-card");
-      await expect(card.getByTestId("citation-scan")).toHaveText(chosen.scan);
-      await expect(card.getByTestId("citation-unsure-word")).toHaveText([...chosen.marked]);
+    // Its card says the quote was read from a scan, and marks a word that may be misread.
+    await citation.getByTestId("citation-chip").hover();
+    const card = window.getByTestId("citation-card");
+    await expect(card.getByTestId("citation-scan")).toHaveText(chosen.scan);
+    await expect(card.getByTestId("citation-unsure-word")).toHaveText([...chosen.marked]);
 
-      // Opened, the viewer washes the quote on the page's picture, over the line it was read from.
-      await citation.getByTestId("citation-chip").click();
-      const viewer = window.getByTestId("viewer");
-      const page = viewer.locator('[data-page-number="1"]');
-      const highlights = page.locator("[data-quote-highlight]");
-      await expect(highlights.first()).toBeVisible();
-      await expect(highlights.first()).toBeInViewport();
-      const box = await highlights.first().boundingBox();
-      const pageBox = await page.boundingBox();
-      expect(box && pageBox).toBeTruthy();
-      if (box && pageBox) {
-        expect(box.x).toBeGreaterThanOrEqual(pageBox.x);
-        expect(box.y).toBeGreaterThanOrEqual(pageBox.y);
-        expect(box.x + box.width).toBeLessThanOrEqual(pageBox.x + pageBox.width + 1);
-      }
-    } finally {
-      await app.close();
+    // Opened, the viewer washes the quote on the page's picture, over the line it was read from.
+    await citation.getByTestId("citation-chip").click();
+    const viewer = window.getByTestId("viewer");
+    const page = viewer.locator('[data-page-number="1"]');
+    const highlights = page.locator("[data-quote-highlight]");
+    await expect(highlights.first()).toBeVisible();
+    await expect(highlights.first()).toBeInViewport();
+    const box = await highlights.first().boundingBox();
+    const pageBox = await page.boundingBox();
+    expect(box && pageBox).toBeTruthy();
+    if (box && pageBox) {
+      expect(box.x).toBeGreaterThanOrEqual(pageBox.x);
+      expect(box.y).toBeGreaterThanOrEqual(pageBox.y);
+      expect(box.x + box.width).toBeLessThanOrEqual(pageBox.x + pageBox.width + 1);
     }
+    // It lies over the line read, as the model placed it on the picture.
+    expect((await highlights.allTextContents()).join("")).toContain(chosen.washed);
+    await app.close();
   });
 }
