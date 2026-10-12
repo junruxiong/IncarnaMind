@@ -28,6 +28,21 @@ import { openPackage } from "./zip";
 /** A section longer than this many characters is split into parts at paragraph ends. */
 export const MAX_SECTION_CHARS = 6000;
 
+/**
+ * The heading level a paragraph style gives (from 1; 0 for a Title), by its
+ * name ("heading N"), so localised style ids work, or its outline level; null
+ * for a style that isn't a heading's.
+ */
+export function headingLevelOf(style: XmlElement): number | null {
+  const name = (child(style, "w:name")?.attrs["w:val"] ?? "").toLowerCase();
+  const heading = /^heading (\d)$/.exec(name);
+  const outline = child(child(style, "w:pPr") ?? style, "w:outlineLvl")?.attrs["w:val"];
+  if (heading) return Number(heading[1]);
+  if (name === "title") return 0;
+  if (outline !== undefined && Number(outline) < 9) return Number(outline) + 1;
+  return null;
+}
+
 /** Style id → heading level (from 1), from styles.xml: "heading N", or an outline level. */
 function headingStyles(styles: XmlElement | undefined): Map<string, number> {
   const levels = new Map<string, number>();
@@ -35,13 +50,8 @@ function headingStyles(styles: XmlElement | undefined): Map<string, number> {
   for (const style of elements(styles)) {
     if (style.name !== "w:style" || style.attrs["w:type"] !== "paragraph") continue;
     const id = style.attrs["w:styleId"];
-    if (!id) continue;
-    const name = (child(style, "w:name")?.attrs["w:val"] ?? "").toLowerCase();
-    const heading = /^heading (\d)$/.exec(name);
-    const outline = child(child(style, "w:pPr") ?? style, "w:outlineLvl")?.attrs["w:val"];
-    if (heading) levels.set(id, Number(heading[1]));
-    else if (name === "title") levels.set(id, 0);
-    else if (outline !== undefined && Number(outline) < 9) levels.set(id, Number(outline) + 1);
+    const level = headingLevelOf(style);
+    if (id && level !== null) levels.set(id, level);
   }
   return levels;
 }
@@ -105,6 +115,9 @@ function runText(node: XmlElement, marks: CommentMarks): string {
   }
   return text;
 }
+
+/** The text of some of a document's XML, as it is read: without deleted text or field instructions. */
+export const textIn = (node: XmlElement): string => runText(node, { references: [], starts: [] });
 
 const refersToComments = (marks: CommentMarks) =>
   marks.references.length > 0 || marks.starts.length > 0;
