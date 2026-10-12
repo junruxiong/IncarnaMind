@@ -1,9 +1,11 @@
 import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test, vi } from "vitest";
 import type {
+  CapturePage,
   ConsentRequest,
   Core,
   CoreAdapters,
+  PageCaptureRequest,
   Reranker,
   SuggestionOutcome,
   SuggestionRequest,
@@ -341,6 +343,23 @@ describe("suggestions as the User writes", () => {
     expect(await core.listAiUse(mind.id)).toMatchObject([
       { kind: "suggestion-accepted", outcome: "kept", modelId: "local-model", characters: 42 },
     ]);
+  });
+
+  test("an accepted suggestion's Citation has its cited page saved (#133)", async () => {
+    const asked: PageCaptureRequest[] = [];
+    const capturePage: CapturePage = async (request) => {
+      asked.push(request);
+      return { data: new Uint8Array([1]), type: "image/png", width: 1, height: 1, text: [] };
+    };
+    const { core, mind } = await setUp(suggestingModel(SPRING), [TIDES, BREAD], { capturePage });
+    const shown = suggestionOf(await core.suggestNext(requestFor(mind.id, ABOUT_TIDES)));
+    // Shown isn't made: its Citation is in the Mind once the User accepts it.
+    expect(await core.citedPageImage(shown.citation)).toBeNull();
+
+    await core.acceptSuggestion({ suggestionId: shown.suggestionId, characters: 42 });
+
+    await vi.waitFor(async () => expect(await core.citedPageImage(shown.citation)).not.toBeNull());
+    expect(asked).toMatchObject([{ document: { name: "Tides" }, area: { kind: "section" } }]);
   });
 
   test("turning them off stops the request in flight and sends no more", async () => {
