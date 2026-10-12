@@ -2,6 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import {
+  assistantAnswers,
   closeSettings,
   createDataFolder,
   dismissChatSetup,
@@ -39,7 +40,7 @@ test.afterEach(async () => {
   await removeDataFolder(outputs);
 });
 
-/** A Mind with a note and one asked Question, in the window's one assistant. */
+/** A Mind with a note, and one Question asked from it in the window's one assistant. */
 async function mindWithWork(window: Page) {
   await newMind(window);
   const editor = window.getByTestId("mind-editor");
@@ -48,7 +49,7 @@ async function mindWithWork(window: Page) {
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type("Review the liability cap");
   await window.keyboard.press("Enter");
-  await expect(editor.getByTestId("answer")).toHaveAttribute("data-status", "done", {
+  await expect(assistantAnswers(window).first()).toHaveAttribute("data-status", "done", {
     timeout: 15_000,
   });
   return editor;
@@ -112,7 +113,7 @@ test("Make this a Skill: the model drafts it from the Mind, the User edits it in
   await window.keyboard.type("Check the cap in the Halvard draft");
   await shot(window, "skill-chip");
   await window.keyboard.press("Enter");
-  const answer = editor.getByTestId("answer").nth(1);
+  const answer = assistantAnswers(window).nth(1);
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(answer.getByTestId("answer-skill")).toHaveAttribute(
     "data-skill-name",
