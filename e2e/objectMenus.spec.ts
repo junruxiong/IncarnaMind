@@ -136,7 +136,8 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
   await expect(editor.getByTestId("citation")).toHaveCount(1);
   await newMind(window);
 
-  // A Mind: Open, Open to the side; Export; Move to…; Rename; then Delete after a rule.
+  // A Mind: Open, Open to the side; Export as… (the last format first), Export options…; Move to…;
+  // Rename; then Delete after a rule.
   const mind = window.getByTestId("mind-row").first();
   const mindMenu = await sameFromBothWays(
     window,
@@ -150,6 +151,9 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "mind.openSide",
     "—",
     "mind.export",
+    "mind.exportAs.pdf",
+    "mind.exportAs.markdown",
+    "mind.exportOptions",
     "mind.history",
     "mind.citationStyle",
     "skill.fromMind",
@@ -262,8 +266,11 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
   const tabMenu = tab.getByTestId("tab-actions");
   const byRightClick = await commandsIn(tabMenu);
   // Its Mind's items first, then the tab's own.
-  expect(byRightClick.slice(0, 5)).toEqual([
+  expect(byRightClick.slice(0, 8)).toEqual([
     "mind.export",
+    "mind.exportAs.pdf",
+    "mind.exportAs.markdown",
+    "mind.exportOptions",
     "mind.history",
     "—",
     "mind.delete",
@@ -342,12 +349,11 @@ test("the context-menu key and Shift+F10 open the focused row's menu; arrows mov
     await expect(row).toBeFocused();
   }
 
-  // Enter runs the focused item: Export… opens the export dialog for this Mind.
+  // Enter runs the focused item: Export options… opens the options sheet for this Mind.
   await row.focus();
   await window.keyboard.press("Shift+F10");
-  await window.keyboard.press("ArrowDown");
-  await window.keyboard.press("ArrowDown");
-  await expect(menu.getByTestId("mind.export")).toBeFocused();
+  for (let step = 0; step < 5; step++) await window.keyboard.press("ArrowDown");
+  await expect(menu.getByTestId("mind.exportOptions")).toBeFocused();
   await window.keyboard.press("Enter");
   await expect(window.getByTestId("export-dialog")).toBeVisible();
   await expect(menu).toBeHidden();
@@ -379,7 +385,10 @@ test("each item shows its shortcut as the system writes it, and the labels are i
   await expect(menu.getByRole("menuitem")).toHaveText([
     "打开",
     "在侧边打开",
-    "导出…",
+    /^导出为 Word（\.docx）(⇧⌘E|Ctrl\+Shift\+E)$/,
+    "导出为 PDF",
+    "导出为 Markdown（.md）",
+    "导出选项…",
     "历史版本",
     "引用格式…",
     "做成技能",

@@ -55,7 +55,7 @@ A file the User keeps, in a Linked folder or added on its own, that IncarnaMind 
 _Avoid_: file, doc, source
 
 **Web page**:
-A Document saved from a web address: a snapshot of the page's readable text, fetched from the User's computer when it is added, and again only when the User asks. Its Citations point at the snapshot, never at the live page, so they can always be checked.
+A Document saved from a web address: a snapshot of the page's readable text, fetched from the User's computer when it is added (by the User, or by an Answer that read it in a web search), and again only when the User asks. Its Citations point at the snapshot, never at the live page, so they can always be checked.
 _Avoid_: link, bookmark, clipping
 
 **Missing Document**:
@@ -166,6 +166,10 @@ _Avoid_: external content, untrusted content (which also covers the User's own D
 **Connector**:
 An external service the User has connected, through which Answers can look things up or make changes.
 _Avoid_: MCP server, plugin, integration, connection
+
+**Web search**:
+Searching the web from an Answer, through the provider of the model it is asked with, when the User has turned it on and the Question asks for the web. Each page the Answer reads is saved as a Web page and cited like any Document; a page it didn't read is never cited.
+_Avoid_: browsing, grounding, online mode
 
 **Skill**:
 A packaged description of how to do a particular task, optionally with reference files and scripts, that an Answer can follow.
