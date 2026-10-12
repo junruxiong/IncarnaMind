@@ -112,11 +112,11 @@ export interface CreateMindInput {
  *   (see `GENERATED_MARK`). Older content is version 11 content as it is:
  *   nothing is rewritten, and an Answer without `generatedMarks` is the AI's
  *   as a whole, as it always was.
- * - 13: what a Word import keeps as it is (`WORD_ATOM_NODE`, `WORD_BLOCK_NODE`,
- *   #104) and pictures in the text (`IMAGE_NODE`). Older content is version 13
+ * - 15: what a Word import keeps as it is (`WORD_ATOM_NODE`, `WORD_BLOCK_NODE`,
+ *   #104) and pictures in the text (`IMAGE_NODE`). Older content is version 15
  *   content as it is: nothing is rewritten.
  */
-export const CONTENT_SCHEMA_VERSION = 13;
+export const CONTENT_SCHEMA_VERSION = 15;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
