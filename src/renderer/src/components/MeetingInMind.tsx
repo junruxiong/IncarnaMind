@@ -1,7 +1,7 @@
 import { isMacOS } from "@tiptap/core";
 import { useEffect, useId, useState } from "react";
 import type { Meeting } from "../../../core/api";
-import { useLanguage, useT } from "../i18n";
+import { useGap, useLanguage, useT } from "../i18n";
 import { isLive, useMeetingOf, useMeetings } from "../meetings";
 import { clockTime } from "../meetingTime";
 import { useAppStore } from "../store";
@@ -161,6 +161,7 @@ function MeetingStart({ meeting }: { meeting: Meeting }) {
 function MeetingAudioLine({ meeting, className = "" }: { meeting: Meeting; className?: string }) {
   const t = useT();
   const language = useLanguage();
+  const gap = useGap();
   const { deleteAudio } = useMeetings.getState();
   const [confirming, setConfirming] = useState(false);
   const { audio } = meeting;
@@ -176,7 +177,8 @@ function MeetingAudioLine({ meeting, className = "" }: { meeting: Meeting; class
           setConfirming(false);
         }}
       >
-        {t("meetings.audio.confirm")}{" "}
+        {t("meetings.audio.confirm")}
+        {gap(t("meetings.audio.confirm"), t("meetings.audio.deleteConfirm"))}
         <button
           type="button"
           // biome-ignore lint/a11y/noAutofocus: the User just asked to delete: the choice is here.

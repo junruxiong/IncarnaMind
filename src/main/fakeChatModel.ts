@@ -8,10 +8,13 @@
  * what a Tool-calling model does: it searches for the Question, cites the line
  * of the first Passage that shares a word with the Question (on the page, or
  * at the Location, that line is on), then answers with a marker. A Question
- * with "misquote" in it gets a quote that isn't on the page; one with "each"
+ * with "misquote" in it gets a quote that isn't on the page; one with "no page"
+ * names no page, as a small model often doesn't; one with "each"
  * cites the first Passage of each Document found, with a marker for each; one
  * with "rows" quotes two lines, so a sheet's Citation covers a range of rows; one that
  * asks for it "as a table" gets a Markdown table with its markers in a cell.
+ *
+ * A Question with "blank reply" in it gets a reply with no text at all.
  *
  * With Skills: a Question that names a listed Skill gets it loaded with
  * use_skill first. An Answer that follows a Skill (forced, or loaded) starts
@@ -40,6 +43,9 @@
  * of" as "many", Translate… puts the text in capitals, Explain says what the
  * passage starts with, and an instruction to "replace X with Y" (把 X 换成 Y)
  * does so, or "drop the citations" (去掉引用) leaves their markers out.
+ *
+ * Make this a Skill (`fakeSkillDraft`): a draft whose "when to use it" and first
+ * step quote the Mind's last Question, so a test sees that the Mind was read.
  */
 import { MockLanguageModelV4 } from "ai/test";
 import type { ChatModelFactory } from "../core";
@@ -210,7 +216,7 @@ function recordFor(
   const record = {
     marker,
     passage: passage.id,
-    ...(picked.page !== null
+    ...(picked.page !== null && !/\bno page\b/i.test(question)
       ? { pageFrom: picked.page, pageTo: picked.page }
       : picked.location
         ? { location: picked.location }
@@ -366,6 +372,7 @@ function scriptNamed(
 function nextReply(prompt: Prompt, tools: readonly OfferedTool[]): Reply {
   const names = tools.map((tool) => tool.name);
   const question = lastQuestion(prompt);
+  if (/blank reply/i.test(question)) return { text: "" };
   /** What the calls made first said, in order. */
   const said: string[] = [];
   const run = scriptNamed(prompt, question, names);
@@ -478,6 +485,29 @@ function fakeSuggestion(options: GenerateOptions): string {
   });
 }
 
+/** The scripted Make this a Skill: a draft in the form the instructions ask for (see ../core/skills/draft). */
+function fakeSkillDraft(options: GenerateOptions): string | null {
+  if (!/into a Skill/.test(systemOf(options.prompt))) return null;
+  const request = options.prompt
+    .filter((message) => message.role === "user")
+    .map((message) =>
+      typeof message.content === "string"
+        ? message.content
+        : message.content.map((part) => (part.type === "text" ? part.text : "")).join(""),
+    )
+    .join("\n");
+  const questions = [...request.matchAll(/^\*\*Question:\*\* (.+)$/gm)].map((match) => match[1]);
+  const last = questions.at(-1) ?? "the task";
+  return [
+    "NAME: scripted-review",
+    `WHEN: Use when asked to do the same as "${last}".`,
+    "STEPS:",
+    `1. Do what the Question asks: ${last}`,
+    "2. Read the Documents in scope.",
+    "3. Cite each finding.",
+  ].join("\n");
+}
+
 const FILLER = /(?:\b(?:very|really|truly|quite|actually|basically)\s+|非常|真的|其实|十分)/giu;
 
 /** The scripted Edit with AI (see the top of this file): the passage's new text, or an explanation. */
@@ -570,7 +600,7 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
           text:
             options.responseFormat?.type === "json"
               ? fakeStructuredOutput(options)
-              : (fakeEdit(options) ?? "OK"),
+              : (fakeSkillDraft(options) ?? fakeEdit(options) ?? "OK"),
         },
       ],
       finishReason: { unified: "stop", raw: undefined },

@@ -160,6 +160,7 @@ export function AgentsSettings() {
               <AgentPairingRow
                 key={pairing.id}
                 pairing={pairing}
+                skillInstalled={settings.skills.includes(pairing.id)}
                 folders={folders}
                 justSetUp={justSetUp}
                 onUndone={() => setJustSetUp(null)}

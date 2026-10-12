@@ -7,6 +7,7 @@ import { en } from "./en";
 import type { Dictionary, MessageKey, MessageParams } from "./types";
 import { zhCN } from "./zh-CN";
 
+export { gap } from "./join";
 export type { MessageKey, MessageParams } from "./types";
 
 const dictionaries: { readonly [L in Language]: Dictionary } = {
