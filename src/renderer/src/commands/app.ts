@@ -12,6 +12,7 @@ import { findTab } from "../tabs";
 import { assistantCommands } from "./assistant";
 import { bibliographyCommands } from "./bibliography";
 import { chartCommands } from "./charts";
+import { checkCommands } from "./checks";
 import { deletedCommands } from "./deleted";
 import { editCommands } from "./edit";
 import { evidenceCommands } from "./evidence";
@@ -278,6 +279,7 @@ const appCommands: readonly Command[] = [
   ...tableCommands,
   ...chartCommands,
   ...proposalCommands,
+  ...checkCommands,
 ];
 
 for (const command of appCommands) commands.register(command);

@@ -292,6 +292,30 @@ describe("Files IncarnaMind wrote aren't evidence", () => {
     expect(results).toContain("pull together");
   });
 
+  test("a sentence's check doesn't read IncarnaMind's files, and names the one that matched, for Count it", async () => {
+    const model = scriptedModel((call) =>
+      call.results.length === 0
+        ? { calls: [{ tool: "search_documents", input: { query: "spring tides full moon" } }] }
+        : { text: "Verdict: unsupported" },
+    );
+    const { core, moon } = await setUp({ createChatModel: scriptedModels(model).createChatModel });
+    await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
+    const exported = await exportMind(core, "Tides", NOTE);
+
+    const result = await core.checkClaim({ claim: NOTE });
+
+    expect(result).toMatchObject({
+      verdict: "unsupported",
+      versions: [{ documentId: moon.id, contentHash: moon.contentHash }],
+      excluded: [{ documentId: exported.id, documentName: "Tides", reason: "own-file" }],
+    });
+    // What its search gave the model: the User's note, not the export.
+    const [, checked] = model.doStreamCalls;
+    const read = JSON.stringify(checked?.prompt.filter((message) => message.role === "tool"));
+    expect(read).toContain('document=\\"Moon\\"');
+    expect(read).not.toContain('document=\\"Tides\\"');
+  });
+
   test("files the User added themselves, empty ones and their pasted text included, are never left out", async () => {
     const { core, papers } = await setUp();
     await exportMind(core, "Tides", NOTE);

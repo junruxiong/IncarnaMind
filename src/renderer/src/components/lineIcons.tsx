@@ -266,6 +266,16 @@ export function MineLineIcon(props: IconProps) {
   );
 }
 
+/** A magnifier: Find support. */
+export function SearchLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <circle cx="11" cy="11" r="6" />
+      <path d="m20 20-4.5-4.5" />
+    </LineIcon>
+  );
+}
+
 export function CheckLineIcon(props: IconProps) {
   return (
     <LineIcon strokeWidth={2.25} {...props}>

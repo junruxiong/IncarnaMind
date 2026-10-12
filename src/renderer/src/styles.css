@@ -1088,6 +1088,70 @@
     line-height: 16px;
     color: var(--color-ink-meta);
   }
+  /* The Mind's health under its title (#96): each part moves to its next sentence or Citation. */
+  .mind-health {
+    display: flex;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 4px;
+    margin: -12px 0 16px;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    line-height: 20px;
+    color: var(--color-ink-meta);
+  }
+  .mind-count + .mind-health {
+    margin-top: -14px;
+  }
+  .mind-health-dot {
+    color: var(--color-rule-strong);
+  }
+  .mind-health-part {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 3px;
+    border-radius: 4px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    outline: none;
+
+    &:hover,
+    &:focus-visible {
+      background: var(--color-hover);
+      color: var(--color-ink-secondary);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 1px;
+    }
+  }
+  .mind-health-icon {
+    box-sizing: border-box;
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    padding: 1px;
+    border-radius: 3px;
+  }
+  .mind-health-part[data-part="found"] .mind-health-icon {
+    padding: 0;
+    color: var(--color-success);
+  }
+  .mind-health-part:is([data-part="unsupported"], [data-part="notFound"]) .mind-health-icon {
+    background: var(--color-warning);
+    color: var(--color-sheet);
+  }
+  .mind-health-part[data-part="contradicted"] .mind-health-icon {
+    box-shadow: inset 0 0 0 1.25px var(--color-danger);
+    color: var(--color-danger);
+  }
+  .mind-health-line {
+    margin: -12px 0 16px;
+  }
   .mind-count-button {
     min-width: 0;
     padding: 2px 4px;
@@ -3578,6 +3642,10 @@
     --check-ink: var(--color-ink-secondary);
     --check-wash: var(--color-chip);
   }
+  .margin-check:is([data-check="not-checked"], [data-check="needs-recheck"]) {
+    --check-ink: var(--color-ink-meta);
+    --check-wash: none;
+  }
   .margin-check[data-check="checking"],
   .citation-card--checking {
     --check-ink: var(--color-ink-meta);
@@ -3595,6 +3663,11 @@
       .margin-check-icon {
         color: var(--color-success);
       }
+    }
+    /* A sentence found supported is as quiet as a Citation found: its "+" says the Passage can be cited. */
+    &[data-check="supported"] {
+      --check-wash: none;
+      color: var(--color-success);
     }
     /* Contradicted is outlined, so it reads without its colour. */
     &[data-check="contradicted"] {
@@ -3694,6 +3767,17 @@
     font-size: var(--text-meta);
     line-height: 18px;
     color: var(--check-ink);
+  }
+  /* The wash behind a sentence its check found unsupported or contradicted (#96). */
+  .claim-wash--unsupported {
+    background: var(--color-warning-wash);
+  }
+  .claim-wash--contradicted {
+    background: var(--color-danger-wash);
+  }
+  .claim-card-says {
+    padding-left: 22px;
+    color: var(--color-ink-secondary);
   }
   .citation-card-note {
     padding-left: 22px;
@@ -4386,8 +4470,15 @@
     .mind-editor {
       --editor-gutter: 40px;
     }
+    /* A Citation's check shows in its marker; a sentence check's mark keeps to the 40px gutter. */
     .margin-checks {
+      width: 40px;
+    }
+    .margin-check:not(.claim-mark) {
       display: none;
+    }
+    .claim-mark {
+      left: 8px;
     }
     /* No margin for a link back's mark: hovering the text still shows its card. */
     .conversation-link {
