@@ -148,6 +148,7 @@ import { createTags } from "./tags";
 import { chatClassifier } from "./tags/classify";
 import { createJevTagging } from "./tags/jev";
 import { createTagger, TAGGING_FLOW_SENDS } from "./tags/tagger";
+import { createWebSearch, WEB_SEARCH_SENDS } from "./tools/web";
 import {
   createTranscriptionModel,
   QWEN3_ASR_0_6B,
@@ -825,6 +826,34 @@ export function createCore(adapters: CoreAdapters): Core {
       documents.searchTool(query, { ...options, rerank: adapters.reranker ?? rerank.active() }),
   });
 
+  // Web search through the Answer's model's provider (#128): asked for once per provider, as
+  // Find sources' are, so the Privacy page lists each one the User has decided on.
+  consent.registry.register({
+    id: "web-search",
+    sends: WEB_SEARCH_SENDS,
+    services: async () => [],
+  });
+  const webSearch = createWebSearch({
+    enabled: () => settings.get().user.webSearch && !embedding.localOnly(),
+    readiness: (model) => chat.readiness(model),
+    prepare: (model) => chat.prepareModel(model, "web-search", "off"),
+    savePage: (address, fetch) => webPages.save({ address }, undefined, fetch),
+    folderOf: (place) => {
+      try {
+        if (place.mindId !== null) return minds.get(place.mindId).folderId;
+        return place.conversationId ? conversations.get(place.conversationId).folderId : null;
+      } catch (error) {
+        // Deleted while the Answer was written: the page stays in no Folder.
+        if (error instanceof NotFoundError) return null;
+        throw error;
+      }
+    },
+    file: (documentId, folderId) => library.assign(documentId, folderId),
+    document: (id) => documents.get(id),
+    onStatus: (listener) => events.on("document.status", listener),
+    ...(adapters.web && { fetch: adapters.web }),
+  });
+
   const answers = createAnswers({
     content,
     events,
@@ -856,6 +885,7 @@ export function createCore(adapters: CoreAdapters): Core {
       { kind: "sources", tools: async () => sources.tools() },
     ],
     connectorsNeedingSignIn: () => connectors.needingSignIn(),
+    web: webSearch,
     approvals: {
       decide: (call) => approvals.decide(call),
       request: (call, signal) => approvals.request(call, signal),
@@ -2352,6 +2382,7 @@ export function createCore(adapters: CoreAdapters): Core {
       // Answers being written keep what they have, marked "stopped"; Tool calls waiting for
       // the User's approval are denied, and Skill scripts running are stopped.
       answers.stopAll();
+      void webSearch.close().catch((error: unknown) => console.error(error));
       suggestions.stop();
       edits.stopAll();
       skillDrafts.stopAll();

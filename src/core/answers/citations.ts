@@ -290,8 +290,12 @@ export function checkCitation(input: {
 export interface AnswerDocuments {
   /** How many live Documents have Passages to search. */
   searchableCount(): number;
-  /** The document-search Tool. */
-  search(query: string, signal?: AbortSignal): Promise<WindowedPassage[]>;
+  /** The document-search Tool; `within`: only these Documents, not the Answer's. */
+  search(
+    query: string,
+    signal?: AbortSignal,
+    within?: readonly string[],
+  ): Promise<WindowedPassage[]>;
   /** A Passage and its Document, deleted or not; null if unknown. */
   citationSource(passageId: string): CitationSource | null;
   /** The stored text of one version of a live Document's Units (see `pageTexts` in ../documents). */
@@ -829,6 +833,55 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
     return location ? englishLocation(location) : null;
   };
 
+  /** Searches, and gives the model what it found: each Passage under the id it cites it by. */
+  async function search(
+    query: string,
+    signal: AbortSignal | undefined,
+    within?: readonly string[],
+  ): Promise<SearchResultForModel> {
+    const found = await documents.search(query, signal, within);
+    if (found.length === 0) {
+      return { text: "No Passages in the User's Documents match this search.", passageCount: 0 };
+    }
+    const formatted = found.map((passage): ShownPassage => {
+      const range = { pageFrom: passage.pageFrom, pageTo: passage.pageTo };
+      const units =
+        passage.pageFrom !== null && passage.pageTo !== null
+          ? documents.pageTexts(
+              passage.documentId,
+              passage.contentHash,
+              passage.pageFrom,
+              passage.pageTo,
+            )
+          : [];
+      const marked =
+        units.length > 1 || units.some((unit) => innerMarks(unit).length > 0)
+          ? withUnitMarks(passage.text, units)
+          : passage.text;
+      const id = handleFor(passage.passageId);
+      // A browser-made PDF's "⼤" for "大": every other reader of the text folds it (ADR-0009).
+      const text = foldRadicals(withCueMarks(marked, units));
+      shownTexts.set(id, text);
+      return {
+        id,
+        documentName: passage.documentName,
+        range,
+        location: passageLocation(units),
+        text,
+      };
+    });
+    return {
+      text: formatPassages(formatted),
+      passageCount: found.length,
+      passageIds: found.map((passage) => passage.passageId),
+      ranks: found.map((passage, index) => passage.rank ?? index),
+      // Someone else wrote a saved web page: reading it makes the Run third-party (#78).
+      ...(found.some((passage) => passage.documentKind === "web") && {
+        thirdParty: ["web-page"] as const,
+      }),
+    };
+  }
+
   const tools: AnswerTools = {
     get documentCount() {
       return documents.searchableCount();
@@ -842,47 +895,7 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
           passageCount: 0,
         };
       }
-      const found = await documents.search(query, signal);
-      if (found.length === 0) {
-        return { text: "No Passages in the User's Documents match this search.", passageCount: 0 };
-      }
-      const formatted = found.map((passage): ShownPassage => {
-        const range = { pageFrom: passage.pageFrom, pageTo: passage.pageTo };
-        const units =
-          passage.pageFrom !== null && passage.pageTo !== null
-            ? documents.pageTexts(
-                passage.documentId,
-                passage.contentHash,
-                passage.pageFrom,
-                passage.pageTo,
-              )
-            : [];
-        const marked =
-          units.length > 1 || units.some((unit) => innerMarks(unit).length > 0)
-            ? withUnitMarks(passage.text, units)
-            : passage.text;
-        const id = handleFor(passage.passageId);
-        // A browser-made PDF's "⼤" for "大": every other reader of the text folds it (ADR-0009).
-        const text = foldRadicals(withCueMarks(marked, units));
-        shownTexts.set(id, text);
-        return {
-          id,
-          documentName: passage.documentName,
-          range,
-          location: passageLocation(units),
-          text,
-        };
-      });
-      return {
-        text: formatPassages(formatted),
-        passageCount: found.length,
-        passageIds: found.map((passage) => passage.passageId),
-        ranks: found.map((passage, index) => passage.rank ?? index),
-        // Someone else wrote a saved web page: reading it makes the Run third-party (#78).
-        ...(found.some((passage) => passage.documentKind === "web") && {
-          thirdParty: ["web-page"] as const,
-        }),
-      };
+      return search(query, signal);
     },
 
     cite,
@@ -947,6 +960,14 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
 
   return {
     tools,
+
+    /**
+     * Searches one Document, whatever the Answer's Search scope: a web page
+     * web search just saved (#128). Its Passages can be cited as a search's
+     * are, and it doesn't count as one of the Answer's searches.
+     */
+    searchDocument: (documentId: string, query: string, signal?: AbortSignal) =>
+      search(query, signal, [documentId]),
 
     streamingCitation,
 

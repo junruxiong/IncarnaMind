@@ -73,6 +73,7 @@ import {
   type ThirdPartyReason,
   type ThirdPartySource,
   type ToolCallApproval,
+  type WebPageCall,
 } from "../api";
 import type { CallToDecide, ToolCallToApprove } from "../approvals";
 import type { AnswerWrite, QuestionInput, Turn } from "../conversations";
@@ -87,6 +88,7 @@ import { proposeBlocks } from "../proposals/write";
 import { givesStructuredOutput } from "../providers/capabilities";
 import type { PreparedChatModel } from "../providers/chat";
 import { classifyProviderError } from "../providers/providerErrors";
+import type { WebResult } from "../providers/webSearch";
 import type { GateDecision } from "../runs/engine";
 import type { SkillScript, SkillSession } from "../skills";
 import {
@@ -104,6 +106,8 @@ import {
   type ToolProvider,
   type ToolProviderKind,
 } from "../tools";
+import { asksForWeb } from "../tools/web/intent";
+import { type SavedPage, webTools } from "../tools/web/tools";
 import {
   contentHash,
   createElement,
@@ -137,6 +141,7 @@ import {
   signInNeededInstructions,
   skillInstructions,
   sourcesInstructions,
+  webInstructions,
 } from "./prompt";
 
 export type { AnswerDocuments } from "./citations";
@@ -251,6 +256,8 @@ export interface AnswersOptions {
   toolProviders: readonly ToolProvider[];
   /** The Connectors that are on but wait for the User to sign in: their Tools are skipped. */
   connectorsNeedingSignIn?(): { id: string; name: string }[];
+  /** Searching the web and saving its pages (#128); absent: no web search. */
+  web?: AnswerWeb;
   /** Asking the User before a Connector Tool or a Skill script runs. */
   approvals: AnswerApprovals;
   /** Running Skill scripts. */
@@ -270,6 +277,20 @@ export interface AnswerApprovals {
   decide(call: CallToDecide): "run" | "ask";
   /** Asks and waits: true if allowed, false if denied. Rejects if `signal` aborts first, withdrawing the request. */
   request(call: ToolCallToApprove, signal: AbortSignal): Promise<boolean>;
+}
+
+/** What Answers need of web search (#128, see ../tools/web/tools). */
+export interface AnswerWeb {
+  /**
+   * Where an Answer asked with this model searches the web: its provider's
+   * service, when the User has web search on, Local mode is off and the
+   * provider has a web search of its own. Null otherwise: no web search.
+   */
+  service(model: ChatModelChoice): Promise<ExternalService | null>;
+  /** Searches with the model's provider, asking the User to allow it first. */
+  search(model: ChatModelChoice, query: string, signal: AbortSignal): Promise<WebResult[]>;
+  /** Saves a page into the Folder of the place the Question was asked in; resolves once it can be searched. */
+  save(address: string, place: AnswerPlace, signal: AbortSignal): Promise<SavedPage>;
 }
 
 /** What Answers need to run Skill scripts (see ../skills/scripts). */
@@ -322,6 +343,7 @@ const CARD_SOURCES: Record<ToolProviderKind, AnswerToolCall["source"]> = {
   skills: "skill",
   connector: "connector",
   sources: "sources",
+  web: "web",
 };
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -351,7 +373,7 @@ function inScope(
 ): AnswerDocuments {
   return {
     searchableCount: () => documents.searchableCount(documentIds),
-    search: (query, signal) => documents.search(query, documentIds, signal),
+    search: (query, signal, within) => documents.search(query, within ?? documentIds, signal),
     citationSource: (passageId) => documents.citationSource(passageId),
     pageTexts: (documentId, contentHash, from, to) =>
       documents.pageTexts(documentId, contentHash, from, to),
@@ -672,7 +694,7 @@ export function createAnswers(options: AnswersOptions) {
       id: string,
       ok: boolean,
       resultCount: number | null,
-      found: Pick<AnswerToolCall, "passages" | "error"> = {},
+      found: Pick<AnswerToolCall, "passages" | "error" | "webPage"> = {},
     ) => {
       const call = toolCalls.find((each) => each.id === id);
       if (!call) return;
@@ -682,6 +704,7 @@ export function createAnswers(options: AnswersOptions) {
       call.resultCount = resultCount;
       if (found.passages) call.passages = found.passages;
       if (found.error) call.error = found.error;
+      if (found.webPage) call.webPage = found.webPage;
       announce("answer.toolCallFinished", { ...place, answerId, call: { ...call } });
       writeSoon();
     };
@@ -691,6 +714,8 @@ export function createAnswers(options: AnswersOptions) {
       call.approval = approval;
       writeSoon();
     };
+    /** What each call of `read_web_page` came to, by call, for its card when it finishes. */
+    const webPages = new Map<string, WebPageCall>();
     /** Keeps how a script's run went on its card. */
     const setScriptRun = (id: string, run: SkillScriptRun) => {
       const call = toolCalls.find((each) => each.id === id);
@@ -990,6 +1015,31 @@ export function createAnswers(options: AnswersOptions) {
         });
         callFinished(id, false, null);
       }
+      // Web search's Tools, only for a Question that asks for the web, with a model whose provider
+      // searches it, while the User has it on (#128).
+      const web = outside ? undefined : options.web;
+      let webService: ExternalService | null = null;
+      if (web && asksForWeb(context.question)) {
+        try {
+          webService = await web.service(model);
+        } catch (error) {
+          if (finished) return;
+          options.reportError(error);
+        }
+      }
+      if (finished) return;
+      const fromWeb: Tool[] =
+        web && webService
+          ? webTools({
+              service: webService,
+              question: context.question,
+              search: (query, signal) => web.search(model, query, signal),
+              save: (address, signal) => web.save(address, place, signal),
+              passages: (documentId, query, signal) =>
+                session.searchDocument(documentId, query, signal),
+              read: (toolCallId, call) => webPages.set(toolCallId, call),
+            })
+          : [];
       const documents: AnswerTools = {
         get documentCount() {
           return session.tools.documentCount;
@@ -1049,6 +1099,7 @@ export function createAnswers(options: AnswersOptions) {
             skillTools: withSkillTools = false,
             connectorTools = false,
             sourceTools = false,
+            webTools: withWebTools = false,
           } = {},
         ) =>
           [
@@ -1064,6 +1115,7 @@ export function createAnswers(options: AnswersOptions) {
             skillInstructions(listed, forced, withSkillTools, scripts),
             connectorTools ? connectorInstructions(fromConnectors, mode === "no-documents") : "",
             sourcesInstructions(sourceTools),
+            webInstructions(withWebTools),
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
             language,
           ]
@@ -1073,7 +1125,7 @@ export function createAnswers(options: AnswersOptions) {
         question: context.question,
         model: prepared.model,
         documents,
-        tools: [...provided, ...fromSkills],
+        tools: [...provided, ...fromSkills, ...fromWeb],
         gate,
         thirdParty: contextReasons,
         support: startingSupport(prepared.support, supportByModel.get(learntKey)),
@@ -1149,12 +1201,15 @@ export function createAnswers(options: AnswersOptions) {
             });
             break;
           }
-          case "tool-call-finished":
+          case "tool-call-finished": {
+            const webPage = webPages.get(event.id);
             callFinished(event.id, event.ok, event.resultCount, {
               ...(event.passages && { passages: [...event.passages] }),
               ...(event.error && { error: event.error }),
+              ...(webPage && { webPage }),
             });
             break;
+          }
           case "read-third-party":
             if (textOrigin === null) {
               textOrigin = event.source;

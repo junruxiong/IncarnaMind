@@ -195,6 +195,11 @@ function runningText(t: Translate, call: AnswerToolCall): string {
     return t("connectors.call.running", { connector: call.connector?.name ?? "", tool: call.tool });
   }
   if (call.source === "sources") return t("sources.call.running", { query: field(call, "query") });
+  if (call.source === "web") {
+    return call.tool === "search_web"
+      ? t("web.call.searching", { query: field(call, "query") })
+      : t("web.call.reading", { address: field(call, "url") });
+  }
   if (call.tool === "run_skill_script") {
     return t("scripts.call.running", {
       skill: field(call, "skill"),
@@ -219,6 +224,8 @@ function foldedText(t: Translate, line: FoldedLine, scope: (extra: number) => st
         scope: scope(line.extraScopes),
         sources: sourcesText(t, line.sources),
       });
+    case "searched-web":
+      return t("steps.searchedWeb", { sources: sourcesText(t, line.sources) });
     case "listened":
       return t("steps.listened", { sources: sourcesText(t, line.sources) });
     case "asked":

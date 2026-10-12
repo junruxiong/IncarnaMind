@@ -475,9 +475,10 @@ export interface AnswerToolCall {
    * Where the Tool comes from: "documents" is IncarnaMind's own document
    * search; "skill", the Skill Tools; "connector", one of the User's
    * Connectors (see `connector`); "sources", Find sources (`find_sources`,
-   * `{ query, from_year?, to_year?, open_access_only? }`).
+   * `{ query, from_year?, to_year?, open_access_only? }`); "web", web search
+   * (`search_web`, `{ query }`, and `read_web_page`, `{ url, query }`; #128).
    */
-  source: "documents" | "skill" | "connector" | "sources";
+  source: "documents" | "skill" | "connector" | "sources" | "web";
   /** A Connector's Tool: which Connector, with its name when the call was made. */
   connector?: { id: string; name: string };
   /** What the model asked, e.g. `{ query }` for a search, or the arguments sent to a Connector. */
@@ -521,7 +522,17 @@ export interface AnswerToolCall {
    * script couldn't run. Absent while it runs, and when it never did (denied).
    */
   script?: SkillScriptRun;
+  /**
+   * "read_web_page" only, once it ended: the page saved as a Document, or
+   * why it couldn't be ("Couldn't save <url>: <reason>").
+   */
+  webPage?: WebPageCall;
 }
+
+/** What a call of `read_web_page` came to (see `AnswerToolCall.webPage`). */
+export type WebPageCall =
+  | { address: string; documentId: string; name: string }
+  | { address: string; failure: WebPageFailureReason };
 
 /** Where the User's approval of a Tool call stands (see `AnswerToolCall.approval`). */
 export type ToolCallApproval = "waiting" | "allowed" | "denied";
@@ -775,6 +786,11 @@ export interface UserSettings {
   leaveOutOwnFiles: boolean;
   /** The monthly cap on models billed per token: off (null) by default. */
   monthlyCap: MonthlyCap | null;
+  /**
+   * Answers may search the web through their model's provider, saving the
+   * pages they use as Documents (#128): off until the User turns it on.
+   */
+  webSearch: boolean;
 }
 
 /**
@@ -1404,6 +1420,11 @@ export interface SaveWebPageInput {
  * - "not-a-page": the address is a file (a PDF, an image), not a web page.
  * - "video": the page is a video, with little text to read.
  * - "not-text": the page has too little text to read, such as an app.
+ * - "not-public": web search's fetcher refused it: the address is on this
+ *   computer or a local network, or redirects there (#128).
+ * - "too-many-redirects": it redirected more than web search's fetcher follows.
+ * - "not-from-search": web search fetches only the pages its search returned
+ *   in the same Answer, and this wasn't one.
  */
 export type WebPageFailureReason =
   | "invalid-address"
@@ -1415,7 +1436,10 @@ export type WebPageFailureReason =
   | "site-error"
   | "not-a-page"
   | "video"
-  | "not-text";
+  | "not-text"
+  | "not-public"
+  | "too-many-redirects"
+  | "not-from-search";
 
 export interface WebPageFailure {
   reason: WebPageFailureReason;
@@ -3458,6 +3482,7 @@ export const dataKinds = [
   "scoped-passages",
   "scoped-minds",
   "answers",
+  "web-searches",
 ] as const;
 
 export type DataKind = (typeof dataKinds)[number];
@@ -3494,6 +3519,9 @@ export type DataKind = (typeof dataKinds)[number];
  *   per pairing ("agent:<id>"), named as the User named the agent. Passages
  *   of the Documents in its Folders, those Folders' Minds, and the Answers it
  *   asks for. None in local mode.
+ * - "web-search": what an Answer searches the web for, written by the model
+ *   from the Question, to the provider of the model it is asked with, whose
+ *   own web search runs it (#128). None in local mode.
  */
 export const dataFlowIds = [
   "chat",
@@ -3507,6 +3535,7 @@ export const dataFlowIds = [
   "find-sources",
   "edits",
   "agents",
+  "web-search",
 ] as const;
 
 export type DataFlowId = (typeof dataFlowIds)[number];

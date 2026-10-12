@@ -9,6 +9,7 @@ const settings = (leaveOutOwnFiles: boolean): Pick<Settings, "user"> => ({
     suggestWhileWriting: false,
     leaveOutOwnFiles,
     monthlyCap: null,
+    webSearch: false,
   },
 });
 
