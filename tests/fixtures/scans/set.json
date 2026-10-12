@@ -1,0 +1,179 @@
+{
+  "dpi": 200,
+  "pages": [
+    {
+      "id": "en-clean",
+      "language": "en",
+      "condition": "clean",
+      "kind": "text",
+      "about": "A contract's payment and termination clauses, in Times New Roman",
+      "file": "en-clean.jpg",
+      "lines": [
+        "MASTER SERVICES AGREEMENT",
+        "between Aldermoor Logistics Ltd and Kestrel Data Systems plc",
+        "4. Payment Terms",
+        "4.1 The Customer shall pay each undisputed invoice within thirty (30) days",
+        "of the date of receipt, by bank transfer to the account named in Schedule 2.",
+        "4.2 Any amount not paid when due shall bear interest at two per cent (2%)",
+        "per annum above the base rate of the Bank of England from time to time.",
+        "4.3 The Supplier may suspend the Services on fourteen (14) days' written",
+        "notice if an invoice remains unpaid sixty (60) days after its due date.",
+        "9. Termination",
+        "9.1 Either party may terminate this Agreement for convenience by giving",
+        "not less than ninety (90) days' written notice to the other party.",
+        "9.2 Either party may terminate this Agreement with immediate effect if the",
+        "other party commits a material breach which is not remedied within",
+        "thirty (30) days of receiving notice specifying the breach.",
+        "9.3 On termination the Supplier shall return all Customer Data within",
+        "ten (10) Business Days and certify the deletion of any remaining copies."
+      ]
+    },
+    {
+      "id": "en-noisy",
+      "language": "en",
+      "condition": "noisy",
+      "kind": "text",
+      "about": "A field report, in Georgia, rotated 1.3°, blurred, with noise, uneven light and heavy JPEG",
+      "file": "en-noisy.jpg",
+      "lines": [
+        "Coastal Monitoring Report, Spring 2025",
+        "Survey teams visited eleven stations along the northern estuary between",
+        "3 March and 28 April. Mean water temperature rose to 9.4 degrees Celsius,",
+        "about 1.1 degrees above the ten-year average for the same weeks.",
+        "Sediment samples from stations 4 and 7 contained more fine silt than in",
+        "any earlier survey, which the team links to the dredging works upstream.",
+        "Findings",
+        "Salt marsh cover at station 2 fell by 6 per cent since the autumn count.",
+        "Seagrass beds near the harbour wall recovered after the winter storms.",
+        "Two new colonies of oystercatchers were recorded on the shingle spit.",
+        "The tide gauge at station 9 failed on 17 April and was replaced on 22 April;",
+        "readings for those five days are estimated from stations 8 and 10.",
+        "Recommendations",
+        "Repeat the silt sampling monthly until the dredging contract ends,",
+        "and move the spare tide gauge to station 9 before the autumn survey."
+      ]
+    },
+    {
+      "id": "zh-clean",
+      "language": "zh-Hans",
+      "condition": "clean",
+      "kind": "text",
+      "about": "A lease's rent and deposit clauses, in Songti",
+      "file": "zh-clean.jpg",
+      "lines": [
+        "房屋租赁合同（节选）",
+        "第三条 租金及支付方式",
+        "一、该房屋月租金为人民币捌仟伍佰元整（￥8,500.00），按季度支付。",
+        "二、乙方应于每季度首月的五日前将租金汇入甲方指定的银行账户。",
+        "三、乙方逾期支付租金的，每逾期一日按应付租金的万分之五支付违约金。",
+        "第四条 押金",
+        "一、乙方应于签订本合同之日向甲方支付押金人民币壹万柒仟元整。",
+        "二、租赁期满或合同解除后，甲方应在十五个工作日内无息退还押金，",
+        "但乙方拖欠的租金、水电费及损坏房屋设施的赔偿费用可从押金中扣除。",
+        "第五条 维修责任",
+        "一、房屋主体结构及供水、供电设施的维修由甲方负责。",
+        "二、因乙方使用不当造成的损坏，由乙方负责修复或赔偿。",
+        "三、甲方应在接到乙方维修通知后七日内完成维修。"
+      ]
+    },
+    {
+      "id": "zh-noisy",
+      "language": "zh-Hans",
+      "condition": "noisy",
+      "kind": "text",
+      "about": "A monthly operations report, in Hiragino Sans GB, rotated −1.1°, blurred, with noise and heavy JPEG",
+      "file": "zh-noisy.jpg",
+      "lines": [
+        "三月份运营情况报告",
+        "本月门店总客流量为十二万三千人次，环比增长百分之八点六。",
+        "线上订单占全部订单的百分之三十七，较上月提高四个百分点。",
+        "华东区销售额最高，达到四百六十二万元；西南区增速最快。",
+        "存在的问题",
+        "一是部分门店库存周转天数超过四十五天，占用资金较多。",
+        "二是配送准时率下降至百分之九十一，主要受雨季天气影响。",
+        "三是新员工流失率偏高，培训计划需要进一步完善。",
+        "下月工作安排",
+        "下月将清理滞销商品，并在华南区试行夜间配送。",
+        "人力资源部将于四月十日前提交新的培训方案。"
+      ]
+    },
+    {
+      "id": "table",
+      "language": "en+zh-Hans",
+      "condition": "clean",
+      "kind": "table",
+      "about": "Two ruled tables of figures, one in English (Arial) and one in Chinese (Hiragino Sans GB)",
+      "file": "table.jpg",
+      "lines": [
+        "Table 3. Revenue by product line (USD thousands)",
+        "Product line 2024 2025 Change",
+        "Freight software 4,812 5,330 +10.8%",
+        "Warehouse sensors 2,147 1,985 -7.5%",
+        "Fleet analytics 3,906 4,412 +13.0%",
+        "Support contracts 1,268 1,301 +2.6%",
+        "Total 12,133 13,028 +7.4%",
+        "表 5  2025年分地区收入（万元）",
+        "地区 上半年 下半年",
+        "华东 1,286 1,452",
+        "华南 974 1,031",
+        "西南 512 698",
+        "合计 2,772 3,181"
+      ]
+    },
+    {
+      "id": "zh-hant",
+      "language": "zh-Hant",
+      "condition": "clean",
+      "kind": "text",
+      "about": "A short notice in Traditional Chinese, in Hiragino Sans GB",
+      "file": "zh-hant.jpg",
+      "lines": [
+        "圖書館開放時間調整通知",
+        "自十月一日起，本館週一至週五開放時間調整為上午九時至晚上九時。",
+        "週六及週日開放時間為上午十時至下午六時，國定假日休館。",
+        "讀者如需延長借閱期限，請於到期前透過網站或櫃檯辦理續借。"
+      ]
+    },
+    {
+      "id": "en-small",
+      "language": "en",
+      "condition": "noisy",
+      "kind": "text",
+      "about": "A memo in 9 pt Arial, rotated 0.6°, lightly blurred, with noise",
+      "heldout": true,
+      "file": "en-small.jpg",
+      "lines": [
+        "MEMORANDUM",
+        "To: All project leads    From: Finance office    Date: 14 May 2025",
+        "Subject: Travel claims for the second quarter",
+        "Claims for travel between April and June must reach the finance office by 5 July.",
+        "Attach a receipt for every item over 25 pounds, and the booking confirmation for",
+        "rail and air fares. Claims without receipts will be returned unpaid.",
+        "Mileage is paid at 45 pence a mile for the first 10,000 miles in the tax year,",
+        "and at 25 pence a mile after that. Taxis are paid only where no train or bus",
+        "runs within an hour of the journey, or where the claimant carries equipment.",
+        "Questions about a claim should go to the finance office, room 2.14, extension 4471."
+      ]
+    },
+    {
+      "id": "zh-light",
+      "language": "zh-Hans",
+      "condition": "noisy",
+      "kind": "text",
+      "about": "A meeting notice in 10 pt STHeiti Light, rotated −0.7°, lightly blurred, with noise",
+      "heldout": true,
+      "file": "zh-light.jpg",
+      "lines": [
+        "关于召开年度总结会议的通知",
+        "各部门：",
+        "公司定于十二月二十日下午两点在三楼会议室召开年度总结会议。",
+        "请各部门负责人准备本部门全年工作总结，时间控制在十分钟以内。",
+        "会议材料请于十二月十八日前发送至行政部邮箱，逾期不再安排发言。",
+        "如有特殊情况不能参加，请提前向行政部请假，并指定一名代表出席。",
+        "会后将安排部门之间的交流，请各位预留一个小时的时间。",
+        "行政部",
+        "二〇二五年十二月一日"
+      ]
+    }
+  ]
+}
