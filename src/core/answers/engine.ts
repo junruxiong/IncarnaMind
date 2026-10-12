@@ -74,6 +74,7 @@ import type {
   ReadThirdPartySource,
   ThirdPartyReason,
 } from "../api";
+import { ONE_SEARCH_PARAMETERS, type SearchToolParameters } from "../documents/searchTool";
 import { detectLanguage } from "../documents/textLanguage";
 import type { ChatLanguageModel, ContextWindow } from "../providers/models";
 import { cacheProviderOptions, tokenUsageOf } from "../providers/promptCache";
@@ -150,6 +151,8 @@ export interface CiteOptions {
 export interface AnswerSearchOptions {
   /** False leaves the reranker out (ADR-0009, 2026-10-12). Omitted: as the User set it. */
   rerank?: boolean;
+  /** Counts for this search instead of the Tool's defaults. */
+  parameters?: Partial<SearchToolParameters>;
 }
 
 /** What a search gives the model. */
@@ -1002,7 +1005,9 @@ function createWritingEngine(options: AiSdkAnswerEngineOptions): AnswerEngine {
             input: { query: each },
           };
           try {
-            const result = await request.documents.searchDocuments(each, signal);
+            const result = await request.documents.searchDocuments(each, signal, {
+              parameters: ONE_SEARCH_PARAMETERS,
+            });
             for (const source of result.thirdParty ?? []) {
               if (read.has(source)) continue;
               read.add(source);

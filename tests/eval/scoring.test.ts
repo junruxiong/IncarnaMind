@@ -80,7 +80,7 @@ import {
   rerankMode,
   retrievalFailures,
   runReranked,
-  runSearchTool,
+  scoreHanded,
   scoreRanking,
   summarise,
   TOOL_LABEL,
@@ -520,37 +520,27 @@ describe("The search Tool's score", () => {
     expected: { document: "tides", pages: [1, 1], quote: "Spring tides happen at full moon." },
   };
 
-  test("is a hit when a Passage the Tool handed the model holds the expected one, for the Question or its translation", async () => {
-    const asked: string[] = [];
-    const core = {
-      searchEvidence: async (query: string) => {
-        asked.push(query);
-        return {
-          passages:
-            query === question.translatedQuery
-              ? [found("a", "Neap tides."), found("b", "Spring tides happen at full moon.")]
-              : [found("c", "Nothing about it.")],
-          excluded: [],
-        };
-      },
-    } as unknown as Core;
+  test("is a hit when a Passage the Tool handed the model holds the expected one, for the Question or its translation", () => {
+    const own = scoreHanded([found("c", "Nothing about it.")], question.expected, "doc-1");
+    const translated = scoreHanded(
+      [found("a", "Neap tides."), found("b", "Spring tides happen at full moon.")],
+      question.expected,
+      "doc-1",
+    );
     const results: QuestionResult[] = [
       {
         id: "xl-01",
         language: "zh",
         crossLingual: true,
         question: question.question,
-        modes: {},
-        translated: {},
+        modes: { [TOOL_MODE]: own },
+        translated: { [TOOL_MODE]: translated },
       },
     ];
 
-    await runSearchTool(core, [question], new Map([["tides", "doc-1"]]), results);
-
-    expect(asked).toEqual([question.question, question.translatedQuery]);
-    expect(results[0]?.modes[TOOL_MODE]).toMatchObject({ hit: false, rank: null });
-    expect(results[0]?.translated?.[TOOL_MODE]).toMatchObject({ hit: true, rank: 2 });
-    expect(results[0]?.translated?.[TOOL_MODE]?.top).toHaveLength(2);
+    expect(own).toMatchObject({ hit: false, rank: null });
+    expect(translated).toMatchObject({ hit: true, rank: 2 });
+    expect(translated.top).toHaveLength(2);
     expect(summarise(results)[TOOL_MODE]?.crossLingualTranslated).toEqual({ hits: 1, total: 1 });
   });
 });

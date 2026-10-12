@@ -24,8 +24,10 @@ import { expect, test } from "vitest";
 import {
   BUILT_IN_EMBEDDING_MODEL,
   BUILT_IN_RERANKING_MODEL,
+  DATABASE_FILE,
   type RerankingModelDefinition,
 } from "../src/core";
+import { openDatabase } from "../src/core/storage";
 import {
   type CitationRun,
   checkQuestionIds,
@@ -66,7 +68,6 @@ import {
   retrievalFailures,
   runReranked,
   runRetrieval,
-  runSearchTool,
   SEARCH_DESCRIPTIONS,
   SEARCH_LABELS,
   summarise,
@@ -74,6 +75,7 @@ import {
   TOOL_MODE,
   TOP_K,
 } from "./lib/retrieval";
+import { runSearchTool } from "./lib/searchToolScore";
 import { answerOptionsOf } from "./lib/timing";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -358,7 +360,24 @@ test("retrieval and Citation evaluation", async () => {
     const [gated] = runs;
     if (gated) {
       const ids = new Map([...builtIn.documents].map(([key, document]) => [key, document.id]));
-      await runSearchTool(builtIn.core, set.questions, ids, gated.questions);
+      const db = openDatabase(join(builtIn.dataDir, DATABASE_FILE));
+      const reranker = await openReranker(
+        BUILT_IN_RERANKING_MODEL,
+        config.cacheDir,
+        log,
+        GATING_MODE,
+      );
+      try {
+        await runSearchTool(
+          { core: builtIn.core, db, reranker },
+          set.questions,
+          ids,
+          gated.questions,
+        );
+      } finally {
+        reranker.close();
+        db.close();
+      }
       gated.summary = summarise(gated.questions);
       const tool = gated.summary[TOOL_MODE];
       log(

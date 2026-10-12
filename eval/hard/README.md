@@ -150,7 +150,7 @@ The run scores the same Questions as `npm run eval:hard` scores keyword search a
 | Near-duplicate | 19/24 | 20/24 | 18/24 |
 | **All** | **98/180** | **124/180** | **107/180** |
 
-Keyword + rerank at the top 8 and 10 is 135 and 143 of 180. The search Tool's figure is lower than the reranked top 5 because it hands the model whole windows of three Passages, at most 12 Passages from at most 4 Documents (8 until 2026-10-12), so a Question that needs many Passages (multi-page) can lose some to the limits.
+Keyword + rerank at the top 8 and 10 is 135 and 143 of 180. The search Tool's figure is lower than the reranked top 5 because it hands the model whole windows of three Passages, at most 12 Passages from at most 4 Documents for a one-search Answer (8 until 2026-10-12, and still 8 in the Tool loop), so a Question that needs many Passages (multi-page) can lose some to the limits.
 ## Results
 
 ### 2026-10-10: the first run
