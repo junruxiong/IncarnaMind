@@ -241,7 +241,8 @@ test("Documents: renamed, moved, tagged and deleted, each back with ⌘Z and aga
   await expect.poll(folderOf).toBe(finance);
   await leaveText(window);
   await undo(window);
-  await expect.poll(folderOf).toBeUndefined();
+  // Back to Not in a Folder: with a Folder, Organize keeps an assignment with none while it waits for a model.
+  await expect.poll(folderOf).toBeFalsy();
   await redo(window);
   await expect.poll(folderOf).toBe(finance);
 
