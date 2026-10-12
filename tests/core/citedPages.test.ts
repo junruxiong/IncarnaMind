@@ -14,6 +14,7 @@ import {
   type CitationAttributes,
   type Core,
   type DrawnPage,
+  type LogFields,
   type PageCaptureRequest,
 } from "../../src/core";
 import {
@@ -368,15 +369,23 @@ describe("The cited page, saved when a Citation is made", { timeout: 60_000 }, (
       ],
       answer: "Spring tides come at new and full moon [^1].",
     });
+    const warnings: { event: string; fields?: LogFields }[] = [];
+    const log = {
+      info: () => {},
+      error: () => {},
+      warn: (event: string, fields?: LogFields) => {
+        warnings.push({ event, fields });
+      },
+    };
     const { core, client, mind, dataDir, documents } = await setUpWithDocuments(
       model,
       [{ name: "Notes.md", contents: v1 }],
-      { capturePage: viewer.capturePage },
+      { capturePage: viewer.capturePage, log },
     );
     const [document] = documents;
     if (!document?.path) throw new Error("Nothing was added.");
 
-    // Changed while its page is drawn: not saved.
+    // Changed while its page is drawn: not saved, and the log says why, without the file's path.
     viewer.hold();
     const first = await askAndFinish(core, client, mind.id, "When are spring tides?");
     const [changed] = citationsIn(client, first.answerId);
@@ -387,6 +396,15 @@ describe("The cited page, saved when a Citation is made", { timeout: 60_000 }, (
     await vi.waitFor(() => expect(liveRows(dataDir)).toEqual([]));
     expect(await core.citedPageImage(changed)).toBeNull();
     expect(pictures(dataDir)).toEqual([]);
+    expect(warnings.filter((warning) => warning.event.startsWith("citedPage."))).toEqual([
+      {
+        event: "citedPage.notSaved",
+        fields: {
+          documentId: document.id,
+          reason: "The Document changed while its page was drawn.",
+        },
+      },
+    ]);
 
     // The new version is cited and saved; when the file changes again, its page stays.
     await core.reconcileDocuments();

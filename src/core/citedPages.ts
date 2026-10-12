@@ -171,7 +171,14 @@ const imageType = (stored: string | null): DrawnPage["type"] | null =>
 
 const fileName = (id: string, type: DrawnPage["type"]) => `${id}.${EXTENSIONS[type]}`;
 
-const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
+/**
+ * Why something failed, for the log: a file system error's code, as its message names the
+ * User's file; else the message, which is ours (the Document changed, the page couldn't be drawn).
+ */
+function reasonOf(error: unknown): string {
+  if (isRecord(error) && typeof error.code === "string") return error.code;
+  return error instanceof Error ? error.message : "unknown";
+}
 
 export interface CitedPagesOptions {
   db: Database;
@@ -281,7 +288,7 @@ export function createCitedPages(options: CitedPagesOptions) {
 
   /** A page that can't be drawn isn't: a later Citation of its Location tries again. */
   function notSaved(row: Row, error: unknown): void {
-    log.warn("citedPage.notSaved", { documentId: row.document_id, reason: messageOf(error) });
+    log.warn("citedPage.notSaved", { documentId: row.document_id, reason: reasonOf(error) });
     const at = now();
     db.run(
       "UPDATE cited_pages SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
@@ -313,7 +320,7 @@ export function createCitedPages(options: CitedPagesOptions) {
         try {
           await saveNext(call);
         } catch (error) {
-          if (!lifetime.signal.aborted) log.error("citedPage.failed", { reason: messageOf(error) });
+          if (!lifetime.signal.aborted) log.error("citedPage.failed", { reason: reasonOf(error) });
         } finally {
           // A turn that gave way goes again, first; otherwise the next page takes a new turn.
           if (!call.gaveWay) {
@@ -475,7 +482,7 @@ export function createCitedPages(options: CitedPagesOptions) {
       try {
         names = readdirSync(folder);
       } catch (error) {
-        if (!isGone(error)) log.warn("citedPage.sweep", { reason: messageOf(error) });
+        if (!isGone(error)) log.warn("citedPage.sweep", { reason: reasonOf(error) });
         return;
       }
       const named = new Set<string>();
@@ -490,7 +497,7 @@ export function createCitedPages(options: CitedPagesOptions) {
         try {
           rmSync(join(folder, name), { force: true });
         } catch (error) {
-          log.warn("citedPage.sweep", { reason: messageOf(error) });
+          log.warn("citedPage.sweep", { reason: reasonOf(error) });
         }
       }
     },
