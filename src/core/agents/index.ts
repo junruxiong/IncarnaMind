@@ -91,6 +91,8 @@ export interface AgentsOptions {
   version: string;
   /** What the calls read (see ./access). */
   access: Omit<AgentAccessDeps, "admit" | "record" | "citations" | "clock" | "reportError">;
+  /** Whether this agent has IncarnaMind's Skill installed (see ./setup). */
+  skillInstalled(client: string | null): boolean;
   changed(settings: AgentSettings): void;
   called(activity: AgentActivity): void;
   reportError(error: unknown): void;
@@ -200,11 +202,15 @@ export function createAgents(options: AgentsOptions) {
     return pairing;
   };
 
-  const settings = (): AgentSettings => ({
-    enabled: enabled(),
-    paused: options.localOnly() ? "local-mode" : null,
-    pairings: livePairings(),
-  });
+  const settings = (): AgentSettings => {
+    const pairings = livePairings();
+    return {
+      enabled: enabled(),
+      paused: options.localOnly() ? "local-mode" : null,
+      pairings,
+      skills: pairings.filter((each) => options.skillInstalled(each.client)).map((each) => each.id),
+    };
+  };
 
   const changed = () => options.changed(settings());
 

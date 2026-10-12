@@ -78,13 +78,16 @@ export function CiteAsPanel({
     const before = record;
     try {
       await core.updateReference(document.id, { [field]: value });
-      useUndo.getState().offer({
+      useUndo.getState().push({
         message: t("reference.undo.edit", {
           field: fieldInSentence(language, field, fields.type),
           name,
         }),
         undo: async () => {
           await core.restoreReference(document.id, before, [field]);
+        },
+        redo: async () => {
+          await core.updateReference(document.id, { [field]: value });
         },
       });
     } catch (failure) {
@@ -108,7 +111,7 @@ export function CiteAsPanel({
     setLookUpLine(lookUpResultLine(result));
     if (result.outcome === "filled" && result.filled.length > 0) {
       const filled = result.filled;
-      useUndo.getState().offer({
+      useUndo.getState().push({
         message: t("reference.undo.lookUp", { name, service: result.service.name }),
         undo: async () => {
           await core.restoreReference(document.id, before, filled);
