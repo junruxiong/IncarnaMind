@@ -38,10 +38,16 @@ import {
 import { formatCount } from "../linkedFolders";
 import { missingList } from "../referenceEditing";
 import { useRequests } from "../requests";
+import { DEFAULT_SORT, sorted } from "../sort";
+import { sortOf, useSort } from "../sortChoices";
+import { documentFields } from "../sortFields";
+import { useSortMenu } from "../sortMenu";
 import { useAppStore } from "../store";
+import { useRename } from "../useRename";
 import { AddDocumentsMenu } from "./AddDocumentsMenu";
 import { CiteAsPanel } from "./CiteAsPanel";
 import { FindSourcesPanel } from "./FindSourcesPanel";
+import { InlineName } from "./InlineName";
 import { LibraryFilterBar } from "./LibraryFilterBar";
 import { LibraryMoreMenu } from "./LibraryMoreMenu";
 import { LibrarySelectBox, LibrarySelectionBar } from "./LibrarySelection";
@@ -49,6 +55,7 @@ import { DocumentLineIcon, SettingsLineIcon } from "./lineIcons";
 import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
 import { RecentlyDeleted } from "./RecentlyDeleted";
 import { ReferenceImportPanel } from "./ReferenceImportPanel";
+import { SORT_KEY_LABELS } from "./SortMenu";
 import { rowActionButtonClass } from "./sidebarRows";
 import { DocumentTagChips } from "./TagChips";
 import { useTabPlace } from "./tabs/tabItems";
@@ -152,10 +159,25 @@ function LibrarySheet() {
       );
     });
   }, [documents, assignments, groups, tags, filter, search]);
-  const { shown, options } = useMemo(
+  const { shown: filtered, options } = useMemo(
     () => filterLibrary<Document>(inView, facets, selection),
     [inView, facets, selection],
   );
+  const sortScope = `library:${filter}` as const;
+  const chosenSort = useSort(sortOf(sortScope));
+  const sort = chosenSort ?? DEFAULT_SORT;
+  const shown = useMemo(
+    () => sorted(filtered, chosenSort, documentFields(t), language),
+    [filtered, chosenSort, t, language],
+  );
+  /** A column's header sorts by it, and a second click reverses it. */
+  const sortBy = (key: "name") =>
+    useSort.getState().choose(sortScope, {
+      ...sort,
+      key,
+      direction: sort.key === key && sort.direction === "asc" ? "desc" : "asc",
+    });
+  const sortLabel = `${t(SORT_KEY_LABELS[sort.key])} ${sort.direction === "asc" ? "↑" : "↓"}`;
   const shownIds = useMemo(() => shown.map((doc) => doc.id), [shown]);
   // A row's Shift-click reads the rows in view when clicked, so a change to them redraws no row.
   const shownRef = useRef(shownIds);
@@ -202,6 +224,8 @@ function LibrarySheet() {
       ),
     );
   };
+  const renameFolder = useAppStore((state) => state.renameFolder);
+  const renameHeading = useRename<HTMLButtonElement>("library-heading");
   const heading = selected?.name ?? t(filter === "unsorted" ? "library.unsorted" : "library.all");
   const closeForm = () => {
     setEditing(null);
@@ -242,7 +266,25 @@ function LibrarySheet() {
               title={heading}
               className="line-clamp-2 font-serif text-heading font-semibold [overflow-wrap:break-word]"
             >
-              {heading}
+              {selected && renameHeading.renaming ? (
+                <InlineName
+                  value={selected.name}
+                  label={t("folder.renameLabel", { name: selected.name })}
+                  testId="library-heading-rename"
+                  className="h-9 w-full min-w-0 rounded-sm border border-accent bg-sheet px-1.5 font-serif text-heading font-semibold text-ink outline-1 outline-accent select-text"
+                  {...renameHeading.field((name) => renameFolder(selected.id, name))}
+                />
+              ) : selected ? (
+                <button
+                  {...renameHeading.nameProps}
+                  type="button"
+                  className="cursor-text text-left [overflow-wrap:break-word]"
+                >
+                  {heading}
+                </button>
+              ) : (
+                heading
+              )}
             </h1>
             <p
               title={selected?.description || t("library.intro")}
@@ -371,7 +413,25 @@ function LibrarySheet() {
                             count: shown.length,
                           })}
             </p>
-            <span className="flex flex-wrap items-center gap-x-4">
+            <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <button
+                type="button"
+                data-testid="library-sort"
+                aria-label={t("sort.bar.label", {
+                  by: t(SORT_KEY_LABELS[sort.key]),
+                  direction: t(sort.direction === "asc" ? "sort.ascending" : "sort.descending"),
+                })}
+                className="hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-accent"
+                onClick={(event) =>
+                  useSortMenu.getState().show({
+                    scope: sortScope,
+                    withFolders: false,
+                    anchor: event.currentTarget,
+                  })
+                }
+              >
+                {t("sort.bar", { by: sortLabel })}
+              </button>
               <button
                 type="button"
                 data-testid="library-recently-deleted"
@@ -396,11 +456,18 @@ function LibrarySheet() {
           ) : (
             <>
               <LibrarySelectionBar shownIds={shownIds} />
-              <div
-                aria-hidden="true"
-                className="library-columns library-column-labels border-y border-rule py-2 text-label font-semibold text-ink-meta"
-              >
-                <span>{t("library.document")}</span>
+              <div className="library-columns library-column-labels border-y border-rule py-2 text-label font-semibold text-ink-meta">
+                <button
+                  type="button"
+                  data-testid="library-sort-name"
+                  title={t("sort.header", { by: t("sort.name") })}
+                  aria-label={t("sort.header", { by: t("sort.name") })}
+                  onClick={() => sortBy("name")}
+                  className="w-fit text-left font-semibold hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
+                >
+                  {t("library.document")}
+                  {sort.key === "name" && (sort.direction === "asc" ? " ↑" : " ↓")}
+                </button>
                 <span>{t("library.folder")}</span>
                 <span>{t("tags.title")}</span>
               </div>
@@ -466,6 +533,11 @@ const LibraryRow = memo(function LibraryRow({
   const citeToggle = useRef<HTMLButtonElement>(null);
   const citePanelId = useId();
   const objectMenu = useObjectMenu({ kind: "document", id: doc.id });
+  // A double-click keeps the preview it opened, then renames.
+  const rename = useRename<HTMLButtonElement>(`library-document:${doc.id}`, () =>
+    keepPreviewOf(doc.id),
+  );
+  const renameDocument = useAppStore((state) => state.renameDocument);
   const status =
     item?.status === "classifying" || item?.status === "pending"
       ? "library.working"
@@ -486,32 +558,40 @@ const LibraryRow = memo(function LibraryRow({
       <LibrarySelectBox document={doc} shownIds={shownIds} />
       <div className="library-document-name min-w-0">
         <div className="flex min-w-0 items-center gap-2">
-          <button
-            type="button"
-            data-row-main=""
-            title={name === source ? name : `${name}\n${source}`}
-            className="flex min-w-0 items-center gap-2 text-left hover:underline focus-visible:outline-2 focus-visible:outline-accent"
-            // A preview to the Library's right; ⌘-click (Ctrl-click) opens it here, kept.
-            onClick={(event) =>
-              useAppStore.getState().openDocument(
-                { documentId: doc.id },
-                {
-                  as: event.metaKey || event.ctrlKey ? "here" : "library",
-                  ...(place && { from: place.groupId }),
-                },
-              )
-            }
-            // A double-click keeps the preview it opened.
-            onDoubleClick={() => keepPreviewOf(doc.id)}
-          >
-            <DocumentLineIcon kind={doc.kind} className="size-4 shrink-0 text-ink-meta" />
-            <span data-testid="library-document-name" className="truncate font-semibold">
-              {name}
-            </span>
-          </button>
+          {rename.renaming ? (
+            <InlineName
+              value={doc.name}
+              label={t("documents.renameLabel", { name: doc.name })}
+              {...rename.field((next) => renameDocument(doc.id, next))}
+            />
+          ) : (
+            <button
+              {...rename.nameProps}
+              type="button"
+              data-row-main=""
+              title={name === source ? name : `${name}\n${source}`}
+              className="flex min-w-0 items-center gap-2 text-left hover:underline focus-visible:outline-2 focus-visible:outline-accent"
+              // A preview to the Library's right; ⌘-click (Ctrl-click) opens it here, kept.
+              onClick={(event) =>
+                useAppStore.getState().openDocument(
+                  { documentId: doc.id },
+                  {
+                    as: event.metaKey || event.ctrlKey ? "here" : "library",
+                    ...(place && { from: place.groupId }),
+                  },
+                )
+              }
+            >
+              <DocumentLineIcon kind={doc.kind} className="size-4 shrink-0 text-ink-meta" />
+              <span data-testid="library-document-name" className="truncate font-semibold">
+                {name}
+              </span>
+            </button>
+          )}
           <ObjectMenu
             target={{ kind: "document", id: doc.id }}
             label={t("documents.more", { name: doc.name })}
+            here={{ "document.rename": rename.start }}
             className={`${rowActionButtonClass} opacity-0 group-hover/row:opacity-100 group-has-[:focus-visible]/row:opacity-100 aria-expanded:opacity-100`}
           />
           {doc.reference && (

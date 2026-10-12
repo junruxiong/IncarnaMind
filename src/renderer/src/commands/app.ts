@@ -32,6 +32,7 @@ import {
   tagCommands,
 } from "./objects";
 import { proposalCommands } from "./proposals";
+import { sortCommands } from "./sort";
 import "./objectMenus";
 import { type Command, type CommandContext, commands, fromMenu } from "./registry";
 import { tableCommands } from "./tables";
@@ -93,6 +94,7 @@ const appCommands: readonly Command[] = [
   ...tabCommands,
   ...meetingCommands,
   ...webPageCommands,
+  ...sortCommands,
   ...fileCommands,
   ...evidenceCommands,
   ...exportCommands,

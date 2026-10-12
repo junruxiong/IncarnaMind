@@ -114,6 +114,14 @@ A scanned PDF had no text, so it couldn't be searched, asked about or cited. Its
 - **A fetcher for the public internet only.** Web search fetches with its own fetcher, which keeps #261's limits (20 seconds, 10 MB, no cookies, the page alone) and adds: an undici `Agent` whose connect-time lookup gives only public unicast addresses (ipaddr.js's special-purpose ranges, IPv6 in 2000::/3, no IPv4-mapped address), so DNS rebinding finds nothing to connect to; a host written as an IP address checked before each request; at most 5 redirects, each checked again; no proxy. A page it refuses says so ("it's on this computer or a local network"). Pages a User adds by address keep #261's fetcher, which reaches local addresses.
 - **Read soon.** A web page's processing goes ahead of other Documents', and of a recording's hold (#135), as an Answer waits to read it.
 
+## Amendment: a provision's Location, "§ 240.10b-5(b)" (2026-10-12, #304)
+
+Find sources adds regulations and statutes (the eCFR, GovInfo) as Markdown, one section per provision and per paragraph it numbers (ADR-0018).
+
+- **No second "§".** A provision's heading is written as it is cited, without its own "§": "240.10b-5 Employment of manipulative and deceptive devices", "240.10b-5(b)", "78j(a)(1)". The Location's label adds the "§" as it does for every section, so it reads "§ 240.10b-5(b)" once, in English and Chinese alike. The Document's title names the code ("17 CFR 240.10b-5 …", "42 U.S.C. § 1983 …").
+- **A paragraph's own "(1)".** A model may name a section by a Location such as "§ 243.100(a)(1)". A heading that matches it as written is that section; only when none does is a trailing "(2)" read as the second section of a name. A closing parenthesis that closes one in the label is kept ("§ 240.10b-5(b)"); one that wraps the whole Location is dropped ("(§ Methods)").
+- **Unchanged:** Markdown's Units, Passages and the quote check. No processing version.
+
 ## Amendment: a Word file imported as a Mind, kept to write back into (2026-10-12, #104)
 
 A .docx can also be imported as a Mind, from "Import a Word file…" in the + menu or a Word file dropped on a Mind: its text becomes Notes the User edits, and export writes the edits back into the original (#105). It isn't added to the Library; a file dropped on a Mind can be added as a Document instead.
