@@ -15,7 +15,7 @@ Issues live in GitHub Issues on `junruxiong/IncarnaMind`, managed with the `gh` 
 
 ### Triage labels
 
-The default five labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+The default five labels: `needs-triage`, `needs-info`, `ready-to-build`, `needs-owner`, `wontfix`. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
