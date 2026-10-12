@@ -10,12 +10,12 @@ import type {
   Printer,
   SavedMindExport,
 } from "../../src/core";
-import type { PrintDocument } from "../../src/shared/printDocument";
 import { createTempDataFolder, manualClock, queryDatabase, startCore } from "../helpers/core";
 import { addAndProcess, waitForProcessing, writeSourceFile } from "../helpers/documents";
 import { footnotesOf, part, unzip } from "../helpers/docx";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
 import { heading, question, writeMind } from "../helpers/minds";
+import { fakePrinter } from "../helpers/printer";
 import { zipFingerprint } from "../helpers/zip";
 
 const text = (value: string, ...marks: string[]): JSONContent => ({
@@ -54,18 +54,6 @@ const cell = (type: "tableHeader" | "tableCell", ...content: JSONContent[]): JSO
   attrs: { colspan: 1, rowspan: 1 },
   content: [paragraph(...content)],
 });
-
-/** A printer that keeps what it was asked to print, and gives back a stand-in for the PDF. */
-function fakePrinter() {
-  const printed: PrintDocument[] = [];
-  const printer: Printer = {
-    print: async (document) => {
-      printed.push(document);
-      return new TextEncoder().encode("%PDF-stand-in");
-    },
-  };
-  return { printed, printer };
-}
 
 /** A core with an English and a Chinese Document, and a Mind that cites both. */
 async function setUp({ printer, region }: { printer?: Printer; region?: string } = {}) {
@@ -144,7 +132,7 @@ describe("exporting a Mind to PDF", () => {
     );
     const docx = (await core.exportMind(mind.id, { format: "docx" })).data;
     expect(zipFingerprint(docx)).toBe(
-      "01b5f3d35bcc852f3abf9de8a9f925af43db5f1fb37ff2291106f848d3cbcf5a",
+      "126e3d5b6cfd2188fe17c57936ec429cc8465ceb2dc43d3e97390df1cd2aeda9",
     );
   });
 

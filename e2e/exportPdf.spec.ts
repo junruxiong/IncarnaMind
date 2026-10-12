@@ -3,7 +3,14 @@ import { mkdir, readdir, readFile, realpath, rm, writeFile } from "node:fs/promi
 import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import * as Y from "yjs";
-import type { CoreBridge, Document } from "../src/core/api";
+import {
+  CHART_NODE,
+  type CitationAttributes,
+  type CitationLocation,
+  type CoreBridge,
+  type Document,
+} from "../src/core/api";
+import type { ChartAttributes, ChartValue } from "../src/shared/charts";
 import {
   addDocuments,
   createDataFolder,
@@ -21,7 +28,7 @@ import {
   useOutputLocation,
   WINDOW_SIZE,
 } from "./app";
-import { pdfText } from "./pdfText";
+import { pdfPictures, pdfText } from "./pdfText";
 
 /** Set INCARNAMIND_SCREENSHOTS to a folder to also save screenshots. */
 async function screenshot(target: Page | Locator, name: string): Promise<void> {
@@ -82,13 +89,13 @@ const paragraph = (...children: Child[]) => node("paragraph", { id: randomUUID()
 
 type Cited = Pick<Document, "id" | "name" | "contentHash">;
 
-function citation(
+function citationAttributes(
   document: Cited,
   page: number,
   check: "found" | "not-found",
-  location: object | null = null,
-) {
-  return node("citation", {
+  location: CitationLocation | null = null,
+): CitationAttributes {
+  return {
     passageId: "passage-1",
     documentId: document.id,
     documentName: document.name,
@@ -99,8 +106,11 @@ function citation(
     quote: "Spring tides happen at new moon.",
     check,
     checkReason: check === "found" ? null : "quote-not-on-pages",
-  });
+  };
 }
+
+const citation = (...given: Parameters<typeof citationAttributes>) =>
+  node("citation", { ...citationAttributes(...given) });
 
 const cell = (kind: "tableHeader" | "tableCell", ...children: Child[]) =>
   node(kind, { colspan: 1, rowspan: 1 }, [paragraph(...children)]);
@@ -287,6 +297,86 @@ test("a Mind with English and Chinese Citations, a table and maths prints as a P
     .locator('[data-testid="citation"][data-check="not-found"]')
     .getByTestId("citation-chip");
   await expect(notFound).toBeFocused();
+  await app.close();
+  await removeDataFolder(out);
+});
+
+test("a Mind with one chart prints its picture, drawn at twice its size, its caption, and its sources as footnotes", async () => {
+  const { app, window } = await launchApp(dataDir, { home });
+  await dismissChatSetup(window);
+  const mindId = await setUpMind(window, sources, "Tides 潮汐");
+  await expect
+    .poll(async () => (await bridge(window).documents()).map((each) => each.status))
+    .toEqual(["ready", "ready"]);
+  const tides = await documentNamed(window, "Tides");
+  const chinese = await documentNamed(window, "潮汐");
+  const value = (shown: string, row: number, cited: CitationAttributes | null): ChartValue => ({
+    shown,
+    value: Number(shown),
+    unit: null,
+    citation: cited,
+    from: { kind: "cell", row, column: 1 },
+  });
+  const chart: ChartAttributes = {
+    kind: "bar",
+    title: "Tidal range 潮差",
+    drawn: null,
+    source: { kind: "table", blockId: null },
+    data: {
+      labelHeading: "Tide 潮",
+      series: ["Range 潮差 (m)"],
+      cutFrom: null,
+      rows: [
+        { label: "Spring 大潮", values: [value("4", 1, citationAttributes(tides, 1, "found"))] },
+        { label: "Neap 小潮", values: [value("2", 2, citationAttributes(chinese, 1, "found"))] },
+        { label: "Mean 平均", values: [value("3", 3, null)] },
+      ],
+    },
+  };
+  await bridge(window).write(mindId, updateOf([node(CHART_NODE, { id: randomUUID(), ...chart })]));
+  await expect(window.getByTestId("mind-editor").getByTestId("chart-point")).toHaveCount(3);
+
+  const out = await createDataFolder();
+  await useOutputLocation(window, out);
+  await exportAsPdf(window);
+  const pdf = await readFile(await savedPath(window, "Tides 潮汐.pdf"));
+  const shots = process.env.INCARNAMIND_SCREENSHOTS;
+  if (shots) await writeFile(join(shots, "export-chart.pdf"), pdf);
+
+  // The picture, as Word has it: the app draws it at twice the page's width, for print.
+  const [pictures] = await pdfPictures(pdf);
+  expect(pictures).toEqual([{ width: 1200, height: expect.any(Number) }]);
+  // Under it, its caption, then its sources: each a footnote naming its Document and
+  // Location, numbered with the rest, and the value with no Citation said in words.
+  const golden = [
+    "Tides 潮汐",
+    "Chart: Tidal range 潮差",
+    "Source: 1,2 1 value has no Citation.",
+    "1 Tides, p. 1",
+    "2 潮汐, p. 1",
+    "1",
+  ].join("\n");
+  expect((await pdfText(pdf)).map(unspaced)).toEqual([unspaced(golden)]);
+
+  // In Chinese, the words are Chinese.
+  await bridge(window).language("zh-CN");
+  await pointAndClick(window, window.getByTestId("export-mind"));
+  await expect(window.getByTestId("export-done")).toHaveText("已保存“Tides 潮汐 2.pdf”", {
+    timeout: 30_000,
+  });
+  const chineseText = await pdfText(await readFile(join(out, "Tides 潮汐 2.pdf")));
+  expect(chineseText.map(unspaced)).toEqual([
+    unspaced(
+      [
+        "Tides 潮汐",
+        "图表：Tidal range 潮差",
+        "数据来源：1,2 1 个数值没有引用。",
+        "1 Tides，第 1 页",
+        "2 潮汐，第 1 页",
+        "1",
+      ].join("\n"),
+    ),
+  ]);
   await app.close();
   await removeDataFolder(out);
 });
