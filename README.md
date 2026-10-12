@@ -22,9 +22,11 @@
   <!-- After the first release, add: <a href="https://github.com/junruxiong/IncarnaMind/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/junruxiong/IncarnaMind?color=17191C"></a> -->
 </p>
 
-<p align="center"><img src="docs/images/demo.gif" width="880" alt="Ten screens in turn: a Mind with the assistant beside it, its Answer's citations checked there and the Answer added to the note; pointing at a Citation shows its quote; opening it shows the PDF page with the quote highlighted; all your Documents in every format, with Folders and Tags; asking about selected cells in an Excel sheet; a comparison table across ten contracts; a Word contract with tracked changes and comments; notes beside a live meeting transcript; background Tasks, running and scheduled; and Settings with Claude, GPT, DeepSeek and a local model through Ollama."></p>
+<p align="center"><img src="docs/images/demo.gif" width="880" alt="Eight screens in turn: a Mind with the assistant beside it, its Answer's citations checked; the Answer's steps unfolded, showing what it read and searched; a Citation opened beside the note with the quote highlighted on the PDF page; the assistant's change waiting in a Mind to accept or reject; the Library with every Document, Folders and Tags; three groups of tabs side by side; a meeting written in a Mind while the assistant answers from the live transcript; and the app in Chinese."></p>
 
-<p align="center"><sub>Asking about a selection, comparison tables, Word tracked changes and comments, meetings and background Tasks are <a href="#coming-next">coming next</a>; the rest is in the app today.</sub></p>
+<p align="center"><sub>The Answer's steps unfolded, the assistant changing a Mind for you to accept or reject, and answers from a live meeting transcript are <a href="#coming-next">coming next</a>; the rest is in the app today.</sub></p>
+
+**IncarnaMind** is a free, open-source desktop app for macOS, Windows and Linux where you ask questions about your own documents (PDF, Word, PowerPoint, Excel and more) and write with AI. Every answer cites the exact page, and IncarnaMind checks that each quoted passage is really there. It works with your ChatGPT plan, your own API key or a local model through Ollama.
 
 ## Download
 
@@ -50,13 +52,21 @@ npm install && npm run dev
 
 **Check every answer.** Answers cite where each claim came from and carry the quote, which is checked against that place: a green check if it's there, an amber mark if it isn't, and a click opens the page with the quote highlighted.
 
+**Take notes in a meeting.** Start recording and a live transcript runs beside your Mind, transcribed on this computer. When the call ends, save it as a Document, and your notes can cite what was said.
+
 **Use the files you already have.** Link the folders you already use, even Zotero's storage folder: IncarnaMind reads the PDF, Word (comments included), PowerPoint, Excel, CSV, Markdown and plain-text files in them where they are, never moves or changes them, and keeps up as they change.
 
-**Keep a big library tidy.** Tags are added for you, IncarnaMind can sort Documents into your Folders, and the choices you make yourself are kept.
+**Find and add sources.** Search OpenAlex, arXiv and PubMed and add open-access papers as Documents, save a web page by its address so it can be cited and checked like a file, and import your references from Zotero or any CSL JSON, BibTeX or RIS file.
 
-**Choose your AI.** Use your own key from OpenAI, Anthropic, Google, DeepSeek, Qwen, Kimi, GLM, Mistral, xAI, SiliconFlow or OpenRouter, any OpenAI-compatible server, or a free local model through Ollama, so nothing leaves your computer.
+**Write with AI you can check.** Select text and choose Edit with AI: the changes come back for you to accept or reject. Turn on suggestions as you write, and when you pause, grey text offers how the paragraph could go on, only where your Documents support it and always with a citation; Tab accepts.
 
-**Hand it in.** Export a Mind to Word with its citations as footnotes, or to Markdown. A citation that didn't pass the check is marked "[unverified]".
+**Keep a big library tidy.** Tags are added for you, IncarnaMind suggests a Folder for each Document for you to accept, and the choices you make yourself are kept.
+
+**Choose your AI.** Already pay for ChatGPT Plus or Pro? Continue with ChatGPT and ask on your plan, no key needed. Or use your own key from OpenAI, Anthropic, Google, DeepSeek, Qwen, Kimi, GLM, Mistral, xAI, SiliconFlow or OpenRouter, any OpenAI-compatible server, or a free local model through Ollama, so nothing leaves your computer.
+
+**Ask from the AI agent you already use** (experimental, off by default). Connect Claude, Codex, Cursor and others in **Settings → Agents**, on their own plan: they read only the folders you choose, every quote they get from IncarnaMind is checked, and what they read goes to their AI service under its terms. [How to connect each one](docs/agents.md).
+
+**Hand it in.** Export a Mind to Word or Markdown, with its citations and bibliography in the style you pick: APA, MLA, Chicago, Harvard, IEEE, Vancouver, GB/T 7714 or IncarnaMind's numbered style. A citation that didn't pass the check is marked "[unverified]".
 
 **Connect apps and Skills that ask first.** Add Connectors (MCP servers), or bring over the ones you set up in Claude Desktop or Cursor, and Skills (standard `SKILL.md` folders), three of them built in; a tool that could change something, or a Skill's script, runs only after you say yes.
 
@@ -74,8 +84,10 @@ There's no account and no IncarnaMind server. Your Minds and the search index st
 <summary><b>Questions</b></summary>
 
 - **Is it free?** Yes: it's open source under the Apache 2.0 licence. With a cloud AI model, you pay its provider for what you use; a local model costs nothing.
-- **Do I need an API key?** No. If [Ollama](https://ollama.com) is running, IncarnaMind can download a local model in one click. Or paste a key from OpenAI, Anthropic, Google, DeepSeek, Qwen, Kimi, GLM, Mistral, xAI, SiliconFlow or OpenRouter, or connect any OpenAI-compatible server.
-- **Does it work offline?** Searching your files does: it works on the words in them, and meaning-based search (embeddings) is optional and off by default. Answers need an AI model, so with a local model everything works offline.
+- **Do I need an API key?** No. Continue with ChatGPT on a Plus or Pro plan, or, if [Ollama](https://ollama.com) is running, download a local model in one click. If you pay for Claude, connect the Claude app in **Settings → Agents** (experimental) and ask your Documents there. Or paste a key from OpenAI, Anthropic, Google, DeepSeek, Qwen, Kimi, GLM, Mistral, xAI, SiliconFlow or OpenRouter, or connect any OpenAI-compatible server.
+- **Is it an alternative to NotebookLM (now Gemini Notebook)?** Yes. IncarnaMind runs on your computer and your files stay there, it works with the model you choose (your own key, a ChatGPT plan, or a local model through Ollama), every citation is checked against the page it quotes, and a Mind exports to Word with its citations.
+- **Can I use my ChatGPT plan?** Yes, with ChatGPT Plus or Pro. In **Settings → Models**, choose **Continue with ChatGPT** and sign in in your browser: Questions then go to OpenAI under your account and count against your plan's limits, with no key.
+- **Does it work offline?** Yes, with a local model through Ollama: reading your files, search and the citation check all run on your computer. Cloud models need the internet. Meaning-based search (embeddings) is optional and off by default.
 - **Will it change my files?** No. It reads them where they are, and writes only to its own data folder and the files you export.
 - **What does "Quote found" mean?** That the quoted words are in the place the citation names, not that they prove your sentence, which is why the page is one click away. "Can't check" means there's no text to compare against, as on a scanned page.
 - **How do I back up?** Copy the data folder: it holds your Minds, the search index and your settings.
@@ -84,7 +96,7 @@ There's no account and no IncarnaMind server. Your Minds and the search index st
 
 ## Coming next
 
-Planned, not available yet, with no dates (see the [roadmap](https://github.com/junruxiong/IncarnaMind/issues/74)): meetings with a live transcript that answers can cite; Word files opened and exported back with tracked changes; your drafts, and other people's documents, checked against your files; comparison tables across documents; AI edits you accept or reject; and research Tasks that run in the background.
+Planned, not available yet, with no dates (see the [roadmap](https://github.com/junruxiong/IncarnaMind/issues/74)): the Answer's steps folded under it, showing what the assistant read and searched; asking during a meeting, with answers that cite its live transcript; the assistant editing your Minds, each change waiting for you to accept it; Word files opened and exported back with tracked changes; your drafts, and other people's documents, checked against your files; comparison tables across documents; and research Tasks that run in the background.
 
 ## Contributing
 
