@@ -3,6 +3,7 @@
  * turns Electron APIs into capabilities the core can use.
  */
 import { mkdirSync } from "node:fs";
+import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { app, safeStorage, shell } from "electron";
@@ -311,6 +312,32 @@ const sourceProvidersUrl =
   import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_SOURCES : undefined;
 
 /**
+ * Test-only launch flag: the port of a local server standing in for the web
+ * (#128). Web search's fetcher resolves every host to a public address and
+ * connects there, its guard still deciding which hosts it reaches, so the
+ * smoke tests reach no site. Only a test build honours it.
+ */
+function webStandIn(): CoreAdapters["web"] {
+  const port =
+    import.meta.env.MODE === "test" ? Number(process.env.INCARNAMIND_TEST_WEB) : Number.NaN;
+  if (!Number.isInteger(port) || port <= 0) return undefined;
+  return {
+    resolve: async () => [{ address: "93.184.215.14", family: 4 }],
+    connector: (lookup) => (options, callback) => {
+      lookup(options.hostname, {}, (error) => {
+        if (error) {
+          callback(error, null);
+          return;
+        }
+        const socket = connect(port, "127.0.0.1");
+        socket.once("connect", () => callback(null, socket));
+        socket.once("error", (failure) => callback(failure, null));
+      });
+    },
+  };
+}
+
+/**
  * Test-only launch flag: a local server standing in for OpenAI (#122), at
  * this origin, where the ChatGPT plan signs in and asks, so the smoke tests
  * can sign in and reach neither OpenAI's sign-in nor its API. Only a test
@@ -377,9 +404,11 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
   const usageData = createUsageDataSender();
   const chatGptStore = chatGptTestProfile(log);
   const chatGptPlan = chatGptStandIn();
+  const web = webStandIn();
   return {
     ...(chatGptStore && { chatGptStore }),
     ...(chatGptPlan && { chatGptPlan }),
+    ...(web && { web }),
     ...(crashReporter && { crashReporter }),
     ...(usageData && { usageData }),
     ...(referenceLookupUrl && {
