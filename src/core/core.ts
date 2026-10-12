@@ -172,6 +172,15 @@ export interface Core extends CoreApi, CoreEventSource {
    */
   openDocumentImage(documentId: string, path: string): Promise<DocumentImage>;
   /**
+   * The number a workbook's cell stores when its shown text isn't that
+   * number written plainly (0.04213 for "4.2%"), from the Document's
+   * current version; null when it shows its number plainly, isn't a number,
+   * or isn't there, and for a CSV. `sheet` is the sheet's name (null for a
+   * CSV). For the Tools that calculate over cells, so not on the bridge.
+   * Throws NotFoundError for an unknown or deleted Document.
+   */
+  readCellNumber(documentId: string, sheet: string | null, ref: string): number | null;
+  /**
    * Opens a live Document's file, where it is, in the default app for its
    * type, through the `shell` adapter; a web page opens live, at its
    * address, through the `browser` adapter. Throws NotFoundError as
@@ -2196,6 +2205,7 @@ export function createCore(adapters: CoreAdapters): Core {
 
     openDocumentFile: (documentId) => documents.openFile(documentId),
     openDocumentImage: (documentId, path) => documents.openImage(documentId, path),
+    readCellNumber: (documentId, sheet, ref) => documents.cellNumber(documentId, sheet, ref),
     openDocumentInApp: async (documentId) => {
       const address = documents.get(documentId).web?.address;
       if (address) return adapters.browser.open(address);
