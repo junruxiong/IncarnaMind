@@ -43,10 +43,11 @@ import { documentTitle } from "./title";
  * read). 6: ADR-0009's amendment (the keyword index reads traditional
  * Chinese characters as simplified ones; see `HAN_CURRENT_SINCE`). 7: #76
  * (a Word file's comments are read into the section their mark is in). 8:
- * #397 (a PDF's scanned pages are read from their pictures; see
- * `SCAN_CURRENT_SINCE`).
+ * #435 (a workbook's rows Units keep the number of each cell whose shown
+ * text isn't that number written plainly). 9: #397 (a PDF's scanned pages
+ * are read from their pictures; see `SCAN_CURRENT_SINCE`).
  */
-export const PROCESSING_VERSION = 8;
+export const PROCESSING_VERSION = 9;
 
 /**
  * Per kind, the oldest version whose Passages and Units are still what this
@@ -82,14 +83,14 @@ export const HAN_CURRENT_SINCE = 6;
 /**
  * For a PDF with a page that has little or no text (a scan, maybe), or a
  * page read from its picture, the oldest version that reads such pages as
- * this one would: since version 8 they are read from their pictures (#397).
+ * this one would: since version 9 they are read from their pictures (#397).
  * Such a PDF processed by an older version is processed again at startup;
  * its pages of text come out as they were. When how pages are read changes
  * (`TextRecognitionModelDefinition.reader`), bump this with the processing
  * version: the pages read before are read again, except those a Citation
  * quotes, which are kept as they were read (see `ScanJob.keep`).
  */
-export const SCAN_CURRENT_SINCE = 8;
+export const SCAN_CURRENT_SINCE = 9;
 
 /**
  * The version of the metadata read: what a Document's creation date is

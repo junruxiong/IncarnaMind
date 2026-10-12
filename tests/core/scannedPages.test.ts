@@ -11,6 +11,7 @@ import {
   type RecognizedLine,
   type TextRecognizer,
 } from "../../src/core";
+import { SCAN_CURRENT_SINCE } from "../../src/core/documents/processing";
 import { createFakeTextRecognizer, type FakeScanScript } from "../../src/core/documents/scan/fake";
 import { BUILT_IN_TEXT_RECOGNITION_MODEL } from "../../src/core/documents/scan/model";
 import { openDatabase } from "../../src/core/storage";
@@ -185,7 +186,7 @@ describe("Scanned pages are read on this computer (#397)", { timeout: 60_000 }, 
     before.close();
     const db = openDatabase(join(dataDir, DATABASE_FILE));
     try {
-      db.run("UPDATE documents SET processing_version = 7");
+      db.run("UPDATE documents SET processing_version = ?", [BigInt(SCAN_CURRENT_SINCE - 1)]);
     } finally {
       db.close();
     }
@@ -383,7 +384,10 @@ describe("Scanned pages are read on this computer (#397)", { timeout: 60_000 }, 
          WHERE document_id = ?`,
         [document.id],
       );
-      db.run("UPDATE documents SET processing_version = 7 WHERE id = ?", [document.id]);
+      db.run("UPDATE documents SET processing_version = ? WHERE id = ?", [
+        BigInt(SCAN_CURRENT_SINCE - 1),
+        document.id,
+      ]);
     } finally {
       db.close();
     }
