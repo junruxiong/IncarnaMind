@@ -4,11 +4,13 @@
  * `collectOldVersions` in ../documents), and which of their Units, for the text
  * kept when a Linked folder is unlinked. Citations live in Minds' Yjs documents,
  * anywhere: in Answers, or copied into Notes, at any depth (exports read them
- * the same way, ../mindText); and in the Answers of the assistant's
- * conversations (ADR-0017).
+ * the same way, ../mindText), and with each value of a chart (#436), which
+ * keeps the Citation it was charted with; and in the Answers of the
+ * assistant's conversations (ADR-0017).
  */
 import * as Y from "yjs";
-import { CITATION_NODE } from "../api";
+import { readChartData } from "../../shared/charts";
+import { CHART_NODE, CITATION_NODE } from "../api";
 
 /**
  * What a Citation's check reads: the stored text of one version of a
@@ -48,6 +50,14 @@ export function addCitedUnit(
   });
 }
 
+function chartCitations(chart: Y.XmlElement): CitationFields[] {
+  return readChartData(chart.getAttribute("data")).rows.flatMap((row) =>
+    row.values.flatMap((value) =>
+      value?.citation ? [value.citation as unknown as CitationFields] : [],
+    ),
+  );
+}
+
 /** Adds the Units that the Citations under `fragment` point to in these Documents to `cited`. */
 export function addCitedUnits(
   fragment: Y.XmlFragment | Y.XmlElement,
@@ -57,7 +67,9 @@ export function addCitedUnits(
   for (const child of fragment.toArray()) {
     if (!(child instanceof Y.XmlElement)) continue;
     if (child.nodeName === CITATION_NODE) addCitedUnit(child.getAttributes(), documentIds, cited);
-    else addCitedUnits(child, documentIds, cited);
+    else if (child.nodeName === CHART_NODE) {
+      for (const citation of chartCitations(child)) addCitedUnit(citation, documentIds, cited);
+    } else addCitedUnits(child, documentIds, cited);
   }
 }
 
@@ -80,7 +92,9 @@ export function addCitedVersions(fragment: Y.XmlFragment | Y.XmlElement, cited: 
   for (const child of fragment.toArray()) {
     if (!(child instanceof Y.XmlElement)) continue;
     if (child.nodeName === CITATION_NODE) addCitedVersion(child.getAttributes(), cited);
-    else addCitedVersions(child, cited);
+    else if (child.nodeName === CHART_NODE) {
+      for (const citation of chartCitations(child)) addCitedVersion(citation, cited);
+    } else addCitedVersions(child, cited);
   }
 }
 

@@ -9,13 +9,9 @@
 import type { TableAlign } from "../../shared/markdownTables";
 import type { StyledRun } from "../api";
 import { type Block, type Footnote, type Inline, type Marks, tableLayout } from "../mindText";
+import type { ExportLabels } from "./labels";
 
-export interface MarkdownLabels {
-  /** Marks a Question, e.g. "Question:". */
-  question: string;
-  /** Follows an unverified Citation's source in its footnote, e.g. "[unverified]". */
-  unverified: string;
-}
+export type MarkdownLabels = ExportLabels;
 
 interface Context {
   /** Inside a table cell, where "|" must be escaped and lines can't break. */
@@ -126,6 +122,8 @@ class MarkdownWriter {
         return "---";
       case "table":
         return this.table(block.rows);
+      case "chart":
+        return this.chart(block);
       case "image":
         return image(block.image.src, block.image.alt, context);
       case "bibliography":
@@ -160,6 +158,21 @@ class MarkdownWriter {
           .join("\n");
       })
       .join("\n");
+  }
+
+  private chart(block: Extract<Block, { kind: "chart" }>): string {
+    const parts = [`*${escapeText(this.labels.chart(block.chart.title), false)}*`];
+    const table = this.table(block.table);
+    if (table) parts.push(table);
+    const sources: string[] = [];
+    const cited = this.inline(block.sources, { table: false }).trim();
+    if (cited) sources.push(`${escapeText(this.labels.chartSources, false)}${cited}`);
+    if (block.uncited > 0) sources.push(escapeText(this.labels.chartUncited(block.uncited), false));
+    const { rows, cutFrom } = block.chart.data;
+    if (cutFrom !== null)
+      sources.push(escapeText(this.labels.chartCut(rows.length, cutFrom), false));
+    if (sources.length > 0) parts.push(sources.join(" "));
+    return parts.join("\n\n");
   }
 
   /**
