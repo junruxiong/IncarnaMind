@@ -1,8 +1,9 @@
 /**
  * Writes a set's dump (eval/README.md, "Offline scoring"): for each query of
  * each Question, keyword search's best 150 Passages with their keyword rank and
- * score, the built-in reranking model's score for the first 60 (what the search
- * Tool hands its reranker with embeddings off), the text a reranker reads, and
+ * score, the built-in reranking model's score for the first 60 (the search
+ * Tool reranks its first 20 with embeddings off; the rest is for scoring
+ * deeper reranks), the text a reranker reads, and
  * a hit flag for each Passage the answer needs; and the Passages the search Tool
  * itself hands the model for that query. The format and the scoring are in
  * eval/score.ts.
@@ -32,6 +33,9 @@ import { checkPassage, isHit, KEYWORD_RERANK_DEPTH } from "./retrieval";
 
 /** Keyword candidates kept for each query. */
 export const DUMP_KEYWORD_DEPTH = 150;
+
+/** Keyword candidates the built-in reranking model scores for each query, so deeper reranks can be scored offline. */
+export const DUMP_RERANKED_DEPTH = 60;
 
 const KEYWORD: SearchMode = "keyword";
 
@@ -132,7 +136,7 @@ export async function dumpQuery(
   const { passages, scores } = await keywordCandidates(options, query, DUMP_KEYWORD_DEPTH);
   const reranked = await options.reranker.rerankScored(
     query,
-    passages.slice(0, KEYWORD_RERANK_DEPTH),
+    passages.slice(0, DUMP_RERANKED_DEPTH),
   );
   const rerankScores = new Map(reranked.map((passage) => [passage.passageId, passage.score]));
   const candidates: DumpCandidate[] = passages.map((passage, index) => ({
@@ -180,7 +184,8 @@ export async function buildDump(options: DumpOptions, inputs: readonly DumpInput
     commit: options.commit,
     embeddings: "off",
     keywordDepth: DUMP_KEYWORD_DEPTH,
-    rerankedDepth: KEYWORD_RERANK_DEPTH,
+    rerankedDepth: DUMP_RERANKED_DEPTH,
+    toolDepth: KEYWORD_RERANK_DEPTH,
     reranker: options.rerankerInfo,
     groupBy: options.groupBy,
     questions,
