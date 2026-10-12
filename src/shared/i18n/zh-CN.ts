@@ -1435,6 +1435,10 @@ export const zhCN = {
   "composer.model.loading": "正在查找模型…",
   "composer.model.default": "新 Mind 的默认模型：{model}",
   "composer.model.defaultUnset": "还没有默认模型",
+  "models.other.title": "其他模型",
+  "models.other.note":
+    "提供商列出、但不在模型菜单中的模型：IncarnaMind 还不认识的、已停用的，以及需要其他接口的。加入菜单后即可使用。",
+  "models.other.inMenu": "在菜单中",
   "composer.model.change": "在设置中更改",
   "composer.live.writing": "正在生成回答…",
   "composer.live.done": "回答已生成。",

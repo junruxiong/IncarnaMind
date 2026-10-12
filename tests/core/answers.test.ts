@@ -822,12 +822,16 @@ describe("Choosing the model", () => {
       {
         provider: local,
         models: ["llama3.2:latest", "qwen3:4b"],
+        other: [],
+        added: [],
         unknown: ["qwen3:4b"],
         cloud: [],
       },
       {
         provider: compatible,
         models: ["deepseek-chat", "deepseek-reasoner"],
+        other: [],
+        added: [],
         unknown: ["deepseek-chat", "deepseek-reasoner"],
         cloud: [],
       },
@@ -846,7 +850,7 @@ describe("Choosing the model", () => {
     onTestFinished(() => fetch.mockRestore());
 
     expect(await core.listChatModels()).toEqual([
-      { provider, models: ["gpt-test"], unknown: ["gpt-test"], cloud: [] },
+      { provider, models: ["gpt-test"], other: [], added: [], unknown: ["gpt-test"], cloud: [] },
     ]);
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -860,7 +864,7 @@ describe("Choosing the model", () => {
     });
 
     expect(await core.listChatModels()).toEqual([
-      { provider, models: ["qwen3:4b"], unknown: ["qwen3:4b"], cloud: [] },
+      { provider, models: ["qwen3:4b"], other: [], added: [], unknown: ["qwen3:4b"], cloud: [] },
     ]);
   });
 });

@@ -2528,14 +2528,30 @@ export type ChatReadiness =
       modelId: string;
     };
 
+export interface SetChatModelInMenuInput {
+  providerId: string;
+  modelId: string;
+  inMenu: boolean;
+}
+
 /** A saved chat provider and the models a Question's model picker offers on it. */
 export interface ChatModelGroup {
   provider: ChatProvider;
   /**
-   * Model ids: the models the provider lists, when it can be asked, and always
-   * the default model if it is on this provider. The default comes first.
+   * Model ids in the menu: the default model if it is on this provider, first;
+   * then the provider's role models, then the rest of the catalog's current chat
+   * models it lists (every model a server lists, for Ollama and other servers),
+   * then those the User added.
    */
   models: string[];
+  /**
+   * The ids the provider lists that wait under "Other models" until the User
+   * adds them: ones the catalog doesn't know, deprecated ones, and ones that
+   * need another API than chat.
+   */
+  other: string[];
+  /** The ids in `models` that the User added from `other`; "In the menu" is on for them. */
+  added: string[];
   /**
    * The ids in `models` whose capabilities are unknown: neither the catalog
    * nor the provider says what they can do. They still work; an Answer finds
@@ -5305,6 +5321,11 @@ export interface CoreApi {
    */
   listChatModels(): Promise<ChatModelGroup[]>;
   /**
+   * Puts a model id in a provider's model menu, or takes an id the User added
+   * back out. Any id can be added, listed by the provider or not.
+   */
+  setChatModelInMenu(input: SetChatModelInMenuInput): Promise<void>;
+  /**
    * This month's cost so far, for Settings: what requests billed per token
    * cost, settled and still reserved, and each provider's use. Recorded on
    * this computer only.
@@ -6098,6 +6119,7 @@ const methods: Record<CoreApiMethod, true> = {
   testChatConnection: true,
   getChatReadiness: true,
   listChatModels: true,
+  setChatModelInMenu: true,
   getCostSummary: true,
   estimateRun: true,
   askQuestion: true,

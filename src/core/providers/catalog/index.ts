@@ -97,6 +97,25 @@ export function isNonChatModel(providerId: string | null | undefined, modelId: s
 }
 
 /**
+ * Whether the catalog offers this id in the model menu by default: a chat model
+ * it knows by that id (or a dated snapshot of one, when `listed` doesn't also
+ * have the model itself) that isn't deprecated. A provider the catalog has no
+ * models for (a server the User gives) offers everything it lists.
+ */
+export function inDefaultMenu(
+  providerId: string,
+  modelId: string,
+  listed: ReadonlySet<string>,
+): boolean {
+  const models = MODELS.get(providerId);
+  if (!models) return true;
+  const known = models.get(modelId);
+  const base = withoutDateSuffix(modelId);
+  const model = known ?? (listed.has(base) ? undefined : models.get(base));
+  return model !== undefined && model.status !== "deprecated";
+}
+
+/**
  * The model set a provider kind uses on an endpoint: the kind's own, and
  * OpenAI's for the ChatGPT plan, which serves OpenAI's models. A provider whose
  * regions differ in their models has a set for each region after the first

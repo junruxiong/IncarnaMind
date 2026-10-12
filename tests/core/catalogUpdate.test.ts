@@ -111,3 +111,39 @@ describe("the catalog update's diff", () => {
     expect(text.indexOf("A default changed")).toBeLessThan(text.indexOf("Removed models"));
   });
 });
+
+describe("the catalog's reading of ids that answer by another API", () => {
+  const audio = {
+    ...model("Audio", { input: 2, output: 8 }),
+    modalities: { input: ["text", "audio"], output: ["text", "audio"] },
+  };
+
+  test("a completion model, and a chat model that answers in audio, are in neither list", () => {
+    const { providers } = generateModels(
+      {
+        openai: {
+          models: {
+            "gpt-4.1": model("GPT-4.1", { input: 2, output: 8 }),
+            "gpt-audio": audio,
+            "babbage-002": model("Babbage", { input: 0.4, output: 0.4 }),
+            "whisper-1": { ...model("Whisper", { input: 1, output: 1 }), limit: { context: 0 } },
+          },
+        },
+      },
+      {
+        "gpt-4.1": { litellm_provider: "openai", mode: "chat" },
+        "babbage-002": { litellm_provider: "openai", mode: "completion" },
+        "gpt-audio": {
+          litellm_provider: "openai",
+          mode: "chat",
+          supported_endpoints: ["/v1/chat/completions", "/v1/realtime"],
+          supported_output_modalities: ["text", "audio"],
+        },
+        "gpt-davinci": { litellm_provider: "openai", mode: "completion" },
+        "text-embedding-3-small": { litellm_provider: "openai", mode: "embedding" },
+      },
+    );
+    expect(providers.openai?.models.map((each) => each.id)).toEqual(["gpt-4.1"]);
+    expect(providers.openai?.nonChat).toEqual(["text-embedding-3-small", "whisper-1"]);
+  });
+});

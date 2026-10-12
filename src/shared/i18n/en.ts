@@ -1511,6 +1511,10 @@ export const en = {
   "composer.model.loading": "Looking for models…",
   "composer.model.default": "Default for new Minds: {model}",
   "composer.model.defaultUnset": "No default model yet",
+  "models.other.title": "Other models",
+  "models.other.note":
+    "Models a provider lists that aren’t in the model menu: ones IncarnaMind doesn’t know, old ones, and ones that need another API. Add one to use it in the menu.",
+  "models.other.inMenu": "In the menu",
   "composer.model.change": "Change in Settings",
   "composer.live.writing": "Writing the Answer…",
   "composer.live.done": "The Answer is done.",
