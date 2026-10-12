@@ -14,6 +14,7 @@ const settings = (leaveOutOwnFiles: boolean): Pick<Settings, "user"> => ({
       pdf: { includeQuestions: false },
     },
     monthlyCap: null,
+    webSearch: false,
   },
 });
 
