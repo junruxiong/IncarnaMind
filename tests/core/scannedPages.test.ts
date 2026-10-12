@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { join } from "node:path";
-import { describe, expect, test } from "vitest";
+import { describe, expect, onTestFinished, test } from "vitest";
 import {
   type Core,
   type CoreEvents,
@@ -17,6 +19,8 @@ import { createTempDataFolder, NO_MODEL_FILES, queryDatabase, startCore } from "
 import {
   addAndProcess,
   createSourceFolder,
+  sha256,
+  waitForDocuments,
   waitForProcessing,
   writeSourceFile,
 } from "../helpers/documents";
@@ -303,6 +307,48 @@ describe("Scanned pages are read on this computer (#397)", { timeout: 60_000 }, 
     expect(read).toEqual([]);
     expect(statuses).toEqual(["downloading", "failed"]);
     expect((await core.getTextRecognitionModel()).error?.kind).toBe("network");
+  });
+
+  test("once the model downloads after a failure, the pages that waited for it are read by themselves", async () => {
+    const dataDir = await createTempDataFolder();
+    const { recognizer, read } = countingRecognizer({
+      pages: { 1: { lines: linesOf("en-clean") } },
+    });
+    // A file the model's source serves once it is back: its bytes, size and hash pinned.
+    const bytes = Buffer.from("not really a model");
+    let online = false;
+    const server = createServer((_request, response) => {
+      if (!online) {
+        response.writeHead(503).end();
+        return;
+      }
+      response.writeHead(200, { "content-length": bytes.length }).end(bytes);
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    onTestFinished(() => new Promise<void>((resolve) => server.close(() => resolve())));
+    const { port } = server.address() as AddressInfo;
+    const core = startCore(dataDir, {
+      textRecognizer: recognizer,
+      textRecognitionModelSource: {
+        baseUrl: `http://127.0.0.1:${port}/`,
+        files: [{ path: "model.onnx", size: bytes.length, sha256: sha256(bytes) }],
+      },
+    });
+    const document = await addPdf(
+      core,
+      "Waiting scan.pdf",
+      buildPdf([{ scan: picture("en-clean") }]),
+    );
+    expect(document.failure?.reason).toBe("pages-unread");
+    expect(read).toEqual([]);
+
+    online = true;
+    await core.downloadTextRecognitionModel();
+    const [ready] = await waitForDocuments(core, (documents) =>
+      expect(documents[0]).toMatchObject({ status: "ready", failure: null }),
+    );
+    expect(ready?.id).toBe(document.id);
+    expect(read).toEqual([1]);
   });
 
   test("re-reading after a reader's upgrade keeps the pages a Citation quotes as they were read", async () => {
