@@ -141,6 +141,7 @@ const ERROR_KINDS: Record<ProviderErrorKind, true> = {
   "plan-limit": true,
   blocked: true,
   "too-long": true,
+  "cost-cap": true,
   unknown: true,
 };
 const isErrorKind = (value: string | null): value is ProviderErrorKind =>
