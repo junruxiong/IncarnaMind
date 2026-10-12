@@ -1323,7 +1323,7 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
-    version: 60,
+    version: 65,
     description: "Models the User added to a provider's model menu (#513)",
     sql: `
       -- A model id the catalog does not offer in the menu by default (an unknown, deprecated or
