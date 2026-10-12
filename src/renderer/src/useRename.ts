@@ -117,13 +117,22 @@ export function useRename<E extends HTMLElement>(what: string, settleClick?: () 
   });
 
   const start = useCallback(() => setRenaming(true), []);
+  const refocus = useCallback(() => {
+    requestAnimationFrame(() => {
+      // Unless it has gone elsewhere since. The row is found by what it stands for: a saved name
+      // can move it in its list, drawing it anew.
+      if (document.activeElement !== document.body) return;
+      const row = document.querySelector<HTMLElement>(
+        `[data-renamable-what="${CSS.escape(what)}"]`,
+      );
+      (main.current?.isConnected ? main.current : row)?.focus();
+    });
+  }, [what]);
   const stop = useCallback(() => {
     setRenaming(false);
-    // Back on its row, so the keyboard carries on from there, unless it has gone elsewhere since.
-    requestAnimationFrame(() => {
-      if (document.activeElement === document.body) main.current?.focus();
-    });
-  }, []);
+    // Back on its row, so the keyboard carries on from there.
+    refocus();
+  }, [refocus]);
 
   useEffect(() => {
     const starter = { start, settleClick: () => settle.current?.() };
@@ -162,7 +171,8 @@ export function useRename<E extends HTMLElement>(what: string, settleClick?: () 
     field: (commit: (name: string) => void | Promise<void>) => ({
       onCommit(name: string) {
         stop();
-        return commit(name);
+        // Again once the new name has settled in the list.
+        return Promise.resolve(commit(name)).finally(refocus);
       },
       onCancel: stop,
     }),
