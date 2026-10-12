@@ -5,6 +5,7 @@ import type { CoreBridge } from "../src/core/api";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
+  assistantAnswers,
   createDataFolder,
   dismissChatSetup,
   launchApp,
@@ -280,7 +281,7 @@ test("a long paste becomes a chip that can be viewed, put back, or saved as a Do
   await pointAndClick(window, input);
   await window.keyboard.type("When do spring tides happen?");
   await window.keyboard.press("Enter");
-  const answer = window.getByTestId("mind-editor").getByTestId("answer");
+  const answer = assistantAnswers(window).first();
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 30_000 });
   const citation = answer.getByTestId("citation");
   await expect(citation).toHaveAttribute("data-check", "found");
@@ -306,7 +307,7 @@ test("a pasted chip is asked with: its words go into the Question", async () => 
   await window.keyboard.press("Escape");
   await pointAndClick(window, input);
   await window.keyboard.press("Enter");
-  const question = window.getByTestId("mind-editor").getByTestId("question");
+  const question = window.getByTestId("assistant-question");
   await expect(question).toContainText("Summarise this:");
   await expect(question).toContainText("74. Spring tides");
   await expect(composer.getByTestId("composer-paste")).toHaveCount(0);
