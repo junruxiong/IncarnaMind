@@ -924,6 +924,7 @@ export const en = {
   "rerank.settings.notDownloaded":
     "It downloads once ({total} MB) when there are Documents to search. Until then, search keeps its own order.",
   "rerank.settings.builtInNote": "Nothing leaves this computer. Each search takes a little longer.",
+  "rerank.settings.runsOn": "On this computer · {device}",
   "rerank.settings.downloading":
     "Downloading the reranking model: {downloaded} of {total} MB. Until it's ready, search keeps its own order.",
   "rerank.settings.failed": "The reranking model couldn't be downloaded: {reason}.",
@@ -1467,7 +1468,7 @@ export const en = {
     "The built-in text recognition model is downloaded once, the first time a scanned page needs reading. Scans are read on this computer: nothing of them is sent.",
   "privacy.traffic.reranking-model": "Reranking model download",
   "privacy.traffic.reranking-model.description":
-    "The built-in reranking model is downloaded once, when there are Documents to search, unless reranking is off or uses a service.",
+    "The built-in reranking model is downloaded once, when there are Documents to search, unless reranking is off or uses a service. On a computer with a GPU it can use, its GPU version is downloaded too.",
   "privacy.traffic.transcription-model": "Speech model download",
   "privacy.traffic.transcription-model.description":
     "The speech model that transcribes meetings on this computer is downloaded once, when a meeting is first transcribed. Nothing you say is sent.",
