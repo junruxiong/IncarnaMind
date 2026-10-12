@@ -429,7 +429,6 @@ export const en = {
   "editor.find.close": "Close",
   "command.mind.findNext": "Find Next",
   "command.mind.findPrevious": "Find Previous",
-  "tabs.menu.outline": "Outline",
   "command.link.edit": "Add or Edit Link",
   "command.link.remove": "Remove Link",
   "editor.slash.footnote": "Footnote",

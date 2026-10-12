@@ -407,7 +407,6 @@ export const zhCN = {
   "editor.find.close": "关闭",
   "command.mind.findNext": "查找下一个",
   "command.mind.findPrevious": "查找上一个",
-  "tabs.menu.outline": "大纲",
   "command.link.edit": "添加或编辑链接",
   "command.link.remove": "移除链接",
   "editor.slash.footnote": "脚注",

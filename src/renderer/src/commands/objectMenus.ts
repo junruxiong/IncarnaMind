@@ -6,6 +6,7 @@ import { registerMenu } from "./menus";
 registerMenu("mind", [
   "mind.open",
   "mind.openSide",
+  "mind.outline",
   "mind.export",
   "mind.citationStyle",
   "mind.moveTo",
@@ -52,7 +53,7 @@ registerMenu("linkedFolder", [
 ]);
 
 // A tab's menu is its Mind's, then the tab's own.
-registerMenu("tab", ["mind.export", "mind.moveTo", "mind.delete"], 0);
+registerMenu("tab", ["mind.outline", "mind.export", "mind.moveTo", "mind.delete"], 0);
 registerMenu(
   "tab",
   [
