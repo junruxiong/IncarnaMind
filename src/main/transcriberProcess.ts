@@ -4,18 +4,32 @@
  * protocol in src/core/transcription/channel.ts.
  *
  * Started with --fake by the smoke tests' INCARNAMIND_TEST_TRANSCRIBER=fake
- * flag: it then runs the fake engine, with no model.
+ * flag: it then runs the fake engine, with no model, as
+ * --fake-options=<JSON> asks (slow, failing to read stretches, failing over).
  */
-import type { TranscriberRequest } from "../core/transcription/channel";
+import type { TranscriberPort, TranscriberRequest } from "../core/transcription/channel";
 import { serveTranscriber } from "../core/transcription/channel";
-import { createFakeSpeechEngine } from "../core/transcription/fake";
+import {
+  createFakeSpeechEngine,
+  type FakeTranscriberOptions,
+  failingOver,
+} from "../core/transcription/fake";
 import { createSherpaEngine } from "../core/transcription/sherpa";
 
 const fake = process.argv.includes("--fake");
-const port = process.parentPort;
+const FAKE_OPTIONS = "--fake-options=";
+const fakeOptions: FakeTranscriberOptions = JSON.parse(
+  process.argv.find((each) => each.startsWith(FAKE_OPTIONS))?.slice(FAKE_OPTIONS.length) ?? "{}",
+);
+const parent = process.parentPort;
 
-serveTranscriber(fake ? async () => createFakeSpeechEngine() : createSherpaEngine, {
+const port: TranscriberPort = {
   onRequest: (listener) =>
-    port.on("message", ({ data }: { data: TranscriberRequest }) => listener(data)),
-  respond: (response) => port.postMessage(response),
-});
+    parent.on("message", ({ data }: { data: TranscriberRequest }) => listener(data)),
+  respond: (response) => parent.postMessage(response),
+};
+
+serveTranscriber(
+  fake ? async () => createFakeSpeechEngine(fakeOptions) : createSherpaEngine,
+  fake && fakeOptions.failover ? failingOver(port, fakeOptions.failover) : port,
+);
