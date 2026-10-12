@@ -284,7 +284,7 @@ test("starts a Mind named after the Folder, its composer scoped to the Folder, a
     );
     const answer = assistantAnswers(window).first();
     await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-    await expect(answer.getByTestId("answer-scope")).toHaveText(`“${FOLDER}”`);
+    await expect(answer.getByTestId("answer-steps")).toContainText(`Searched ${FOLDER} ·`);
     await expect(editor.getByTestId("question")).toHaveCount(0);
     await expect(editor.getByTestId("answer")).toHaveCount(0);
   } finally {

@@ -15,6 +15,7 @@ import {
   launchApp,
   newMind,
   openDocumentAt,
+  openSteps,
   pathsShown,
   removeDataFolder,
   useOutputLocation,
@@ -120,8 +121,10 @@ test("a failed Answer says so under itself with one action: the key's page in Se
     await window.keyboard.press("Escape");
     await expect(window.getByTestId("settings")).toBeHidden();
 
-    // The provider has a problem now: Regenerate, and the line offers to try again, which asks again.
+    // The provider has a problem now: Regenerate, at the end of its steps, and the line offers to
+    // try again, which asks again.
     model.state.status = 500;
+    await openSteps(window, answer);
     await answer.getByTestId("answer-regenerate").click();
     await expect(error).toContainText("The provider ran into a problem", { timeout: 60_000 });
     await expect(error.getByTestId("answer-error-action")).toHaveText("Try again");
