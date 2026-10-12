@@ -320,7 +320,20 @@ async function* run(request: RunRequest): AsyncGenerator<RunEvent> {
     tools,
     temperature: request.temperature,
     providerOptions: cacheProviderOptions(request.cacheKey),
-    stopWhen: stepCountIs(maxSteps) as StopCondition<ToolSet>,
+    stopWhen: [
+      stepCountIs(maxSteps) as StopCondition<ToolSet>,
+      ({ steps }) => {
+        const last = steps.at(-1);
+        return (
+          last !== undefined &&
+          (request.endsAfter?.({
+            text: last.text,
+            calls: last.toolCalls.map((call) => ({ id: call.toolCallId, tool: call.toolName })),
+          }) ??
+            false)
+        );
+      },
+    ],
     prepareStep: ({ stepNumber, initialMessages, responseMessages }) => {
       if (stepNumber > 0) {
         for (const message of request.steering?.() ?? []) {
