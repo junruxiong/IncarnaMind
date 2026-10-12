@@ -613,12 +613,14 @@ class Reader {
     });
   }
 
+  /** A paragraph's own outline level wins over its style's; level 9 is body text. */
   private headingLevel(styleId: string | null, pPr: XmlElement | undefined): number | null {
+    const outline = pPr && child(pPr, "w:outlineLvl")?.attrs["w:val"];
+    if (outline !== undefined) return Number(outline) < 9 ? Number(outline) + 1 : null;
     for (const style of styleChain(this.styles, styleId)) {
       if (style.level !== null) return style.level;
     }
-    const outline = pPr && child(pPr, "w:outlineLvl")?.attrs["w:val"];
-    return outline !== undefined && Number(outline) < 9 ? Number(outline) + 1 : null;
+    return null;
   }
 
   /** The list a paragraph is an item of, through its own numbering or its style's; null for none. */
