@@ -1,0 +1,34 @@
+{
+  "ancestors": [
+    {
+      "identifier": "17",
+      "label": "Title 17—Commodity and Securities Exchanges",
+      "label_level": "Title 17",
+      "label_description": "Commodity and Securities Exchanges",
+      "reserved": false,
+      "type": "title",
+      "size": 17313703
+    },
+    {
+      "identifier": "II",
+      "label": " Chapter II—Securities and Exchange Commission",
+      "label_level": " Chapter II",
+      "label_description": "Securities and Exchange Commission",
+      "reserved": false,
+      "type": "chapter",
+      "size": 10995873,
+      "descendant_range": "200 – 399"
+    },
+    {
+      "identifier": "243",
+      "label": "Part 243—Regulation FD",
+      "label_level": "Part 243",
+      "label_description": "Regulation FD",
+      "reserved": false,
+      "type": "part",
+      "volumes": ["4"],
+      "size": 11263,
+      "descendant_range": "243.100 – 243.103"
+    }
+  ]
+}
