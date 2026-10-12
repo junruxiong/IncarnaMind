@@ -47,7 +47,7 @@ _Avoid_: chat (except in "New chat"), thread, session
 ### Documents
 
 **Document**:
-A file on the User's computer, at its path, that IncarnaMind has indexed for Answers to draw on, or a Web page. A file stays where the User keeps it; IncarnaMind keeps the text it read from it. A Web page's snapshot is kept in IncarnaMind's data folder. The same file in two places is two Documents.
+A file the User keeps, in a Linked folder or added on its own, that IncarnaMind has indexed for Answers to draw on, or a Web page. A file stays where the User keeps it; IncarnaMind keeps the text it read from it. A Web page's snapshot is kept in IncarnaMind's data folder. A Document is known by its Linked folder and its path inside it, or as a file of its own, never by where it is on one computer, so it stays the same Document when its Linked folder moves or is on another of the User's computers. Each version of its file is known by its content. The same file in two places is two Documents.
 _Avoid_: file, doc, source
 
 **Web page**:
@@ -67,7 +67,7 @@ A page of a PDF that is a picture of text, such as a scan, with little or no tex
 _Avoid_: image page, OCR page
 
 **Linked folder**:
-A folder on the User's computer that IncarnaMind keeps in sync: every supported file in it, at any depth, is a Document, and new, changed and removed files are picked up. IncarnaMind never changes or deletes a file in it, and adds a new file there only once the User allows it for that folder. Files a cloud drive keeps online only are indexed when the User asks.
+A folder on the User's computer that IncarnaMind keeps in sync: every supported file in it, at any depth, is a Document, and new, changed and removed files are picked up. IncarnaMind never changes or deletes a file in it, and adds a new file there only once the User allows it for that folder. Files a cloud drive keeps online only are indexed when the User asks. Moved, renamed or on another computer, it is located again from its menu and keeps its Documents.
 _Avoid_: workspace, vault, source
 
 **Other Documents**:
@@ -262,6 +262,10 @@ _Avoid_: shared folder, workspace, permission
 **Output location**:
 The folder the User picks for the files IncarnaMind creates, such as exports and Documents a Task saves. IncarnaMind writes nowhere else without asking.
 _Avoid_: export folder, downloads, save path
+
+**Workspace**:
+Everything one data folder holds (Minds, Conversations, the Documents' index and settings), known by one random id with no account behind it. A copy of the data folder is the same workspace, and the User's computers will share one when they sync. Not shown to the User.
+_Avoid_: account, vault, Library (the view of Documents)
 
 ### Privacy
 
