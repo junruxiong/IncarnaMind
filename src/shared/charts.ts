@@ -31,6 +31,8 @@ export interface ChartValue {
   /** The number read from `shown` (./figures); null when it holds none, or none that reads one way: not drawn. */
   value: number | null;
   unit: FigureUnit | null;
+  /** What its scale word multiplies by: 1e6 for "million", 1 with none; null in a chart made before charts kept it. */
+  scale: number | null;
   /** The Citation that was with it, as its node held it; null: it had none. */
   citation: CitationAttributes | null;
   from: ChartValueOrigin;
@@ -104,6 +106,10 @@ function readValue(value: unknown): ChartValue | null {
     unit:
       isRecord(value.unit) && typeof value.unit.kind === "string"
         ? (value.unit as FigureUnit)
+        : null,
+    scale:
+      typeof value.scale === "number" && Number.isFinite(value.scale) && value.scale > 0
+        ? value.scale
         : null,
     citation: isRecord(value.citation) ? (value.citation as unknown as CitationAttributes) : null,
     from,
@@ -245,13 +251,16 @@ export function chartPoints(chart: Pick<ChartAttributes, "kind" | "drawn" | "dat
   const drawn = drawnSeries(chart);
   const { rows } = chart.data;
   const points: ChartPoint[] = [];
+  const unitless = new Map(drawn.map((series) => [series, unitlessRows(chart.data, series)]));
+  const drawable = (value: ChartValue | null | undefined, row: number, series: number) =>
+    value?.value != null && !unitless.get(series)?.has(row);
   if (chart.kind === "scatter") {
     const [across, up] = drawn;
     if (across === undefined || up === undefined) return [];
     rows.forEach((row, index) => {
       const x = row.values[across];
       const y = row.values[up];
-      if (x?.value != null && y?.value != null) {
+      if (drawable(x, index, across) && drawable(y, index, up)) {
         points.push({ row: index, series: up, value: y as ChartPoint["value"] });
       }
     });
@@ -261,11 +270,46 @@ export function chartPoints(chart: Pick<ChartAttributes, "kind" | "drawn" | "dat
     rows.forEach((row, index) => {
       const value = row.values[series];
       // A pie has no room for a share below nothing.
-      if (value?.value == null || (chart.kind === "pie" && value.value <= 0)) return;
+      if (!drawable(value, index, series) || (chart.kind === "pie" && (value?.value ?? 0) <= 0))
+        return;
       points.push({ row: index, series, value: value as ChartPoint["value"] });
     });
   }
   return points;
+}
+
+/** Whether a value says what it counts: a unit ("$", "%", "吨") or a scale ("million", "亿"). */
+function saysUnit(value: ChartValue): boolean {
+  return (value.unit !== null && value.unit.kind !== "plain") || (value.scale ?? 1) !== 1;
+}
+
+/** One key per unit a column's numbers can share: "$" whatever its scale, "%", or a scale alone. */
+function unitKey(value: ChartValue): string {
+  const { unit } = value;
+  if (!unit || unit.kind === "plain") return "scale";
+  if (unit.kind === "currency") return `currency:${unit.code}`;
+  if (unit.kind === "other") return `other:${unit.word}`;
+  return unit.kind;
+}
+
+/**
+ * The rows of a column whose number has no unit or scale ("120.0") while the
+ * column's other numbers share one, at least as many of them ("$331.2
+ * million"; #579). Drawn, the bare number would be read on another scale, and
+ * the chart never guesses its unit, so it isn't drawn. A column with no unit
+ * anywhere, or with different ones, is drawn as it is.
+ */
+export function unitlessRows(data: ChartData, series: number): Set<number> {
+  const numbered = data.rows.flatMap((row, index) => {
+    const value = row.values[series];
+    return value?.value != null ? [{ index, value }] : [];
+  });
+  const withUnit = numbered.filter((each) => saysUnit(each.value));
+  const bare = numbered.filter((each) => !saysUnit(each.value));
+  const units = new Set(withUnit.map((each) => unitKey(each.value)));
+  return bare.length > 0 && units.size === 1 && withUnit.length >= bare.length
+    ? new Set(bare.map((each) => each.index))
+    : new Set();
 }
 
 export interface ChartSourcePlace {
@@ -284,6 +328,8 @@ export interface ChartSources {
   uncitedCells: { row: number; series: number }[];
   /** Cells of the columns chosen that hold words but no number, so aren't drawn. */
   notDrawn: number;
+  /** Cells whose number has no unit where their column's others have one, so aren't drawn (`unitlessRows`). */
+  noUnit: number;
   places: ChartSourcePlace[];
   documents: number;
 }
@@ -306,9 +352,17 @@ export function chartSources(
   let values = 0;
   const uncitedCells: ChartSources["uncitedCells"] = [];
   let notDrawn = 0;
+  let noUnit = 0;
+  const unitless = new Map(
+    chosenSeries(chart).map((series) => [series, unitlessRows(chart.data, series)]),
+  );
   for (const { row, series, value } of chartCells(chart)) {
     if (value.value === null) {
       if (value.shown.trim() !== "") notDrawn++;
+      continue;
+    }
+    if (unitless.get(series)?.has(row)) {
+      noUnit++;
       continue;
     }
     values++;
@@ -331,6 +385,7 @@ export function chartSources(
     uncited: uncitedCells.length,
     uncitedCells,
     notDrawn,
+    noUnit,
     places: [...places.values()],
     documents: documents.size,
   };
@@ -402,6 +457,7 @@ export function chartFromTable(
       shown: cell.text.trim(),
       value: read?.value ?? null,
       unit: read ? read.figure.unit : null,
+      scale: read ? read.figure.scale : null,
       citation: cell.citation,
       from: { kind: "cell", row, column },
     };
@@ -471,6 +527,7 @@ export function chartFromFigures(
           shown: figure.chars,
           value: read.value,
           unit: figure.unit,
+          scale: figure.scale,
           citation: line.citation,
           from: { kind: "text", line: index },
         },

@@ -19,7 +19,8 @@ export function ChartPointCard({
   position: string | null;
   value: string;
   detail: string | null;
-  notDrawn: boolean;
+  /** Why it isn't drawn: it holds no number, or no unit where its column has one; null: it is. */
+  notDrawn: "number" | "unit" | null;
   cut: string | null;
   citation: CitationAttributes | null;
   state: CitationState | null;
@@ -43,7 +44,11 @@ export function ChartPointCard({
         {value}
       </p>
       {detail && <p className="chart-card-detail">{detail}</p>}
-      {notDrawn && <p className="chart-card-detail">{t("chart.point.notDrawn")}</p>}
+      {notDrawn && (
+        <p className="chart-card-detail">
+          {t(notDrawn === "unit" ? "chart.point.noUnit" : "chart.point.notDrawn")}
+        </p>
+      )}
       <div className="chart-card-source" data-testid="chart-card-source">
         {citation && state && badge ? (
           <>

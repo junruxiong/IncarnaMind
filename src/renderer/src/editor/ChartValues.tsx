@@ -5,7 +5,9 @@ import {
   type ChartValue,
   chosenSeries,
   listedRows,
+  unitlessRows,
 } from "../../../shared/charts";
+import { useT } from "../i18n";
 import { ChartCheck } from "./ChartCheck";
 import { type PointEvents, type PointRef, samePoint } from "./ChartPlot";
 
@@ -26,7 +28,9 @@ export function ChartValues({
   /** Null: it has no Citation. */
   checkOf(value: ChartValue): { check: CitationCheck | null; label: string };
 }) {
+  const t = useT();
   const drawn = chosenSeries(chart);
+  const unitless = new Map(drawn.map((series) => [series, unitlessRows(chart.data, series)]));
   // A cut chart lists every row, those it doesn't draw too (#503).
   const rows = listedRows(chart.data);
   const cells: PointRef[] = [];
@@ -88,6 +92,7 @@ export function ChartValues({
                 const key = `${index}:${series}`;
                 const mark = checkOf(value);
                 const position = cells.findIndex((cell) => samePoint(cell, point));
+                const noUnit = unitless.get(series)?.has(index) ?? false;
                 return (
                   <td key={series}>
                     <button
@@ -100,6 +105,7 @@ export function ChartValues({
                       data-testid="chart-value"
                       data-point={key}
                       data-active={samePoint(point, active) || undefined}
+                      data-unitless={noUnit || undefined}
                       tabIndex={position === at ? 0 : -1}
                       aria-label={events.label(point)}
                       aria-haspopup="dialog"
@@ -119,6 +125,11 @@ export function ChartValues({
                     >
                       <span>{value.shown}</span>
                       <ChartCheck check={mark.check} label={mark.label} size="sm" />
+                      {noUnit && (
+                        <span className="chart-value-note" data-testid="chart-value-no-unit">
+                          {t("chart.value.noUnit")}
+                        </span>
+                      )}
                     </button>
                   </td>
                 );

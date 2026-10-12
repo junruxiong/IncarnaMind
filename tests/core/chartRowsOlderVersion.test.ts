@@ -12,15 +12,15 @@ import { createTempDataFolder, startCore } from "../helpers/core";
 
 /*
  * The version before a cut chart kept the rows it doesn't draw (#503): its
- * core is this one with the newest content schema it understands set back to 14.
+ * core is this one with the newest content schema it understands set back to 15.
  */
 vi.mock("../../src/core/api", async (importOriginal) => ({
   ...(await importOriginal<object>()),
-  CONTENT_SCHEMA_VERSION: 14,
+  CONTENT_SCHEMA_VERSION: 15,
 }));
 
 /** The content schema version these rows came with: what a Mind written since records. */
-const CUT_ROWS = 15;
+const CUT_ROWS = 16;
 
 const row = (day: number) => ({
   label: `Day ${day}`,
@@ -63,7 +63,7 @@ const chartData = (doc: Y.Doc) => {
 
 describe("a version from before a cut chart kept its other rows", () => {
   test("opens a Mind whose charts keep them read-only, so its Update can't drop them", async () => {
-    expect(CONTENT_SCHEMA_VERSION).toBe(14);
+    expect(CONTENT_SCHEMA_VERSION).toBe(15);
     const core = startCore(await createTempDataFolder());
     const mind = await core.createMind({ title: "Orders" });
     await core.applyMindUpdate(mind.id, Y.encodeStateAsUpdate(mindWithChart()));
