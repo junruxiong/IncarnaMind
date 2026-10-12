@@ -134,6 +134,13 @@ test("Find support on two sentences: one is supported and its Citation is added,
 
   const citation = line.getByTestId("citation");
   await expect(citation).toHaveAttribute("data-check", "found");
+  await expect(marks(window)).toHaveCount(1);
+  // ⌘Z takes it back in one step: the check's mark returns; ⌘⇧Z adds the Citation again.
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(citation).toHaveCount(0);
+  await expect(supported).toBeVisible();
+  await window.keyboard.press("ControlOrMeta+Shift+z");
+  await expect(citation).toHaveAttribute("data-check", "found");
   await expect(line).toHaveText(`${SUPPORTED.slice(0, -1)} 1. ${UNSUPPORTED}`);
   await expect(marks(window)).toHaveCount(1);
   await expect(health.getByTestId("health-found")).toHaveText("1 Citation found");
