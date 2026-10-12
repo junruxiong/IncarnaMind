@@ -230,6 +230,19 @@ describe("A provider's model list", () => {
     expect(removed?.other).toContain("gpt-audio");
   });
 
+  test("a model OpenAI says shuts down waits under Other models, a null shutdown date doesn't", async () => {
+    const { core } = await startWithCloudModel({ kind: "openai", modelId: "gpt-6.1-sol" });
+    answerFetch("https://api.openai.com/v1/models", {
+      data: [
+        { id: "gpt-6.1-sol", shutdown_date: null },
+        { id: "gpt-6-luna", shutdown_date: "2026-12-11" },
+      ],
+    });
+    const [group] = await core.listChatModels();
+    expect(group?.models).toEqual(["gpt-6.1-sol"]);
+    expect(group?.other).toEqual(["gpt-6-luna"]);
+  });
+
   test("a model the User added stays in the menu when the provider's list no longer has it", async () => {
     const { core, provider } = await startWithCloudModel({
       kind: "openai",
