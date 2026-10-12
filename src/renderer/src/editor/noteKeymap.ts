@@ -1,15 +1,24 @@
 import { type Editor, Extension } from "@tiptap/core";
 import { Plugin, PluginKey, type Selection } from "@tiptap/pm/state";
+import { BLOCK_ID_ATTRIBUTE } from "../../../core/api";
 import { runShortcut } from "../commands/keymap";
 import type { ObjectRef } from "../objects";
 import { findBlock } from "./blockCommands";
-import { BLOCK_ID_ATTRIBUTE } from "./noteSchema";
 
 const openNotes = new Set<Editor>();
 
 export function noteHolding(blockId: string): Editor | null {
   for (const editor of openNotes) {
     if (!editor.isDestroyed && findBlock(editor.state.doc, blockId)) return editor;
+  }
+  return null;
+}
+
+/** The note the element is in, whose own undo ⌘Z reaches there. */
+export function noteAround(element: Element | null): Editor | null {
+  if (!element) return null;
+  for (const editor of openNotes) {
+    if (!editor.isDestroyed && editor.view.dom.contains(element)) return editor;
   }
   return null;
 }
