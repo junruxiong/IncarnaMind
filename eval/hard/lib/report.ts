@@ -19,6 +19,8 @@ import {
   rerankedSearchOf,
   TOP_K,
 } from "../../lib/retrieval";
+import { summariseTiming } from "../../lib/timing";
+import { timingLine, timingSection } from "../../lib/timingReport";
 import type { HardCitations } from "./citations";
 import type { FetchStatus } from "./fetch";
 import type { KeywordTiming, QueryTiming } from "./keywordTiming";
@@ -356,6 +358,10 @@ function citationsSection(report: HardReport): string[] {
       d === "unanswerable" ? ofAnswers(of(d)?.declines ?? 0, d) : "–",
     ),
     "",
+    ...timingSection(
+      columns.map((difficulty) => ({ label: difficulty, ...of(difficulty) })),
+      "###",
+    ),
     ...(unanswerable
       ? [
           "Unanswerable Questions whose Answer declines, by the rule:",
@@ -477,6 +483,8 @@ export function hardSummary(report: HardReport, reportDir: string, root: string)
   const { citations } = report;
   if (!("skipped" in citations)) {
     const unanswerable = citations.byDifficulty.unanswerable;
+    const timing = timingLine(summariseTiming(citations.run.answers));
+    if (timing) lines.push(`  Time (${citations.run.model}): ${timing}`);
     lines.push(
       `  Citations (${citations.run.model}): ${DIFFICULTIES.filter((d) => citations.byDifficulty[d])
         .map((d) => `${d} found ${percent(citations.byDifficulty[d]?.foundShare ?? null)}`)

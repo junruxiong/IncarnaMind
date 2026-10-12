@@ -9,7 +9,12 @@ import {
   type FormattedCluster,
   type StyledRun,
 } from "../../../core/api";
-import { badgeMessage, type CitationState, citationState } from "../../../shared/citations";
+import {
+  badgeMessage,
+  type CitationState,
+  citationSource,
+  citationState,
+} from "../../../shared/citations";
 import {
   citationLocation,
   formatLocation,
@@ -22,7 +27,7 @@ import { citationHandle } from "../commands/handles";
 import { type CommandContext, commands } from "../commands/registry";
 import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
 import { useTabPlace } from "../components/tabs/tabItems";
-import { useLanguage, useT } from "../i18n";
+import { useGap, useLanguage, useT } from "../i18n";
 import { groupsMerged } from "../layoutSlice";
 import type { ObjectRef } from "../objects";
 import { recordUsage, useAppStore } from "../store";
@@ -34,11 +39,13 @@ import {
   memberMarker,
 } from "./citationClusters";
 import { citationNumberOf } from "./citationNumbers";
+import { QuoteWithUnsureWords, ScanLine, useScannedQuote } from "./citationScan";
 import { CheckMarkIcon, CheckStateIcon } from "./icons";
-import { InFootnoteContext, useMindId } from "./mindContext";
+import { InFootnoteContext, MindIdContext, RegenerateAnswerContext } from "./mindContext";
 import { Popover } from "./Popover";
 import { onPeek, peekCitation } from "./peek";
 import { StyledRuns, StyledRunView } from "./StyledRuns";
+import { runsText } from "./styledText";
 
 /** How long a pointer rests on a Citation before its card shows, and how long it may leave before it goes. */
 const SHOW_MS = 120;
@@ -90,7 +97,9 @@ export function CitationView({
   decorations,
 }: ReactNodeViewProps) {
   const t = useT();
-  const mindId = useMindId();
+  // None in the assistant, whose Answers are read only and say how they are written again.
+  const mindId = useContext(MindIdContext);
+  const regenerateHere = useContext(RegenerateAnswerContext);
   const attributes = node.attrs as CitationAttributes;
   const documents = useAppStore((state) =>
     state.status.kind === "ready" ? state.documents : null,
@@ -104,13 +113,10 @@ export function CitationView({
   const where = location ? formatLocation(location, t) : null;
   const badge = badgeMessage(state, attributes, t);
   const badgeText = t(badge.key, badge.params);
-  const documentName = attributes.documentName ?? "";
   const number = citationNumberOf(decorations);
   // In a footnote's text it is part of the footnote: it shows where it points, not a number.
   const inFootnote = useContext(InFootnoteContext);
-  const pointsTo = where
-    ? t("citation.where", { document: documentName, location: where })
-    : documentName;
+  const pointsTo = citationSource(attributes, t).text;
   /** Clicked: the card stays until it is dismissed. */
   const [pinned, setPinned] = useState(false);
   /** Hovered or focused, with the card, the marker or its mark. */
@@ -210,10 +216,13 @@ export function CitationView({
     ...(state.reason !== "document-removed" && {
       "citation.open": () => openFromCardRef.current(),
     }),
-    "citation.remove": () => {
-      dismiss();
-      deleteNode();
-    },
+    // Not where the text can't be changed, such as an Answer in the assistant.
+    ...(editor.isEditable && {
+      "citation.remove": () => {
+        dismiss();
+        deleteNode();
+      },
+    }),
   };
 
   // The number, the Document, where it points and the check: the marker only shows the number.
@@ -340,18 +349,29 @@ export function CitationView({
                 dismiss();
                 if (!groupsMerged()) editor.view.focus();
               }}
-              onRemove={() => {
-                dismiss();
-                deleteNode();
-              }}
+              onRemove={
+                editor.isEditable
+                  ? () => {
+                      dismiss();
+                      deleteNode();
+                    }
+                  : null
+              }
               onRegenerate={() => {
-                const answer = answerAround(editor, getPos());
                 dismiss();
-                if (answer) {
+                if (regenerateHere) {
+                  regenerateHere();
+                  return;
+                }
+                const answer = answerAround(editor, getPos());
+                if (answer && mindId) {
                   void useAnswers.getState().regenerate(mindId, answer.answerId, answer.questionId);
                 }
               }}
-              inAnswer={answerAround(editor, getPos()) !== null}
+              inAnswer={
+                regenerateHere !== null ||
+                (mindId !== null && answerAround(editor, getPos()) !== null)
+              }
               menu={{ target: { kind: "citation", id: menuId }, here }}
               note={noteOf(formatting, inCluster)}
             />
@@ -474,11 +494,13 @@ function CitationCard({
   /** In a note style, the note the Citation is written in, as an export will write it. */
   note: readonly StyledRun[] | null;
   onOpen(withQuote: boolean): void;
-  onRemove(): void;
+  /** Null where the text can't be changed, such as an Answer in the assistant. */
+  onRemove: (() => void) | null;
   onRegenerate(): void;
 }) {
   const t = useT();
   const language = useLanguage();
+  const gap = useGap();
   const web = useAppStore(
     (store) => store.documents.find((each) => each.id === state.documentId)?.web ?? null,
   );
@@ -497,7 +519,7 @@ function CitationCard({
       ? name
       : null
     : where
-      ? t("citation.where", { document: name, location: where })
+      ? citationSource(attributes, t).text
       : name;
   const reason =
     state.check === "checking"
@@ -506,6 +528,7 @@ function CitationCard({
         ? t(`citation.reason.${state.reason}`)
         : null;
   const removed = state.reason === "document-removed";
+  const scanned = useScannedQuote(attributes);
   return (
     <div className={`citation-card citation-card--${state.check}`} contentEditable={false}>
       <div className="citation-card-head">
@@ -514,6 +537,7 @@ function CitationCard({
           <span>{badgeText}</span>
         </p>
         {source && <p className="citation-card-source">{source}</p>}
+        {scanned && <ScanLine scanned={scanned} />}
         {web && fetchedAt && (
           <p data-testid="citation-web-source" className="citation-card-source">
             {web.siteName} · {t("webPages.fetched", { date: pageDate(fetchedAt, language) })}
@@ -524,7 +548,9 @@ function CitationCard({
         <figure className="citation-card-quote">
           <figcaption className="sr-only">{t("citation.quote")}</figcaption>
           <blockquote>
-            <span className="citation-card-wash">{attributes.quote}</span>
+            <span className="citation-card-wash">
+              <QuoteWithUnsureWords quote={attributes.quote} unsure={scanned?.unsure ?? []} />
+            </span>
           </blockquote>
         </figure>
       )}
@@ -535,7 +561,8 @@ function CitationCard({
       )}
       {note && (
         <p data-testid="citation-styled-note" className="citation-card-styled">
-          <span className="citation-card-styled-label">{t("citation.note")}</span>{" "}
+          <span className="citation-card-styled-label">{t("citation.note")}</span>
+          {gap(t("citation.note"), runsText(note))}
           <StyledRuns runs={note} />
         </p>
       )}
@@ -557,14 +584,16 @@ function CitationCard({
             >
               {t(`citation.openAnyway.${opens}`)}
             </button>
-            <button
-              type="button"
-              data-testid="citation-remove"
-              className="citation-card-action"
-              onClick={onRemove}
-            >
-              {t("citation.remove")}
-            </button>
+            {onRemove && (
+              <button
+                type="button"
+                data-testid="citation-remove"
+                className="citation-card-action"
+                onClick={onRemove}
+              >
+                {t("citation.remove")}
+              </button>
+            )}
             {inAnswer && (
               <button
                 type="button"

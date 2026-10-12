@@ -102,6 +102,20 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Granted folder | 授权文件夹 | |
 | Output location | 保存位置 | |
 | Usage data | 使用数据 | |
+| Scanned page, scan | 扫描页、扫描件 | A PDF page that is a picture: counted with 页 ("12 页扫描件"). |
+| Text recognition (OCR) | 文字识别 | Reading a scan: 识别 ("正在识别 12 页扫描件…", "第 3 页扫描件无法识别"). The model is 文字识别模型. |
+| Text read from a scan | 从扫描件识别的文字 | On a Citation's card. A word it may have misread: "可能识别有误". |
+
+### Figures
+
+A figure in an Answer is written as reports write it, with no space between the number and its scale or unit: "3,045.74万元", "2.3个百分点", "约1.2亿元".
+
+| English | Chinese | Notes |
+|---|---|---|
+| percentage points | 个百分点 | A difference of two percents: "2.3个百分点", never "2.3%". |
+| about (an approximate figure) | 约 | "约1.2亿元". |
+| times (a multiple) | 倍 | "4.00倍". |
+| yes / no (what a comparison gives) | 是 / 否 | |
 
 ### Models and settings
 

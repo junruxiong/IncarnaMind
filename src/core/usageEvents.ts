@@ -119,6 +119,7 @@ const ANSWER_ERRORS = [
   "blocked",
   "too-long",
   "cost-cap",
+  "no-answer",
   "unknown",
 ] as const;
 const DOCUMENT_ERRORS = [
@@ -127,6 +128,7 @@ const DOCUMENT_ERRORS = [
   "too-large",
   "file-missing",
   "processing-error",
+  "pages-unread",
 ] as const;
 const CONNECTOR_ERRORS = [
   "missing-command",

@@ -107,9 +107,23 @@ export interface RunRequest {
   window?: RunWindow;
   /** Left out: the provider's default. A refusal comes back as a "refused" event. */
   temperature?: number;
+  /**
+   * Asked after each model call whose Tool calls have returned: true ends the
+   * Run there, with no further model call. Left out, the Run goes on until the
+   * model calls no Tool or `maxSteps` is reached.
+   */
+  endsAfter?(step: RunStep): boolean;
   /** Names the conversation, for providers that route requests to a prompt cache by a key (see ../providers/promptCache). */
   cacheKey?: string;
   signal: AbortSignal;
+}
+
+/** A model call of a Run, once its Tool calls have returned. */
+export interface RunStep {
+  /** The text it wrote. */
+  text: string;
+  /** The Tools it called. */
+  calls: readonly { id: string; tool: string }[];
 }
 
 /**
