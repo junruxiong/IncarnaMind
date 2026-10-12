@@ -12,6 +12,7 @@ import {
   launchApp,
   newMind,
   openSettings,
+  openSteps,
   removeDataFolder,
   useLocalChatModel,
 } from "./app";
@@ -100,7 +101,7 @@ test("a Skill imported from a folder in Settings is forced from the slash menu i
   await expect(composer.getByTestId("composer-input")).toHaveValue("");
 
   // Asked in the assistant, the Question carries the Skill on its bubble, and the Answer
-  // follows it, saying so on a Skill card.
+  // follows it, saying so on a Skill card in its steps.
   await window.keyboard.type("When is high water in Brest?");
   await window.keyboard.press("Enter");
   const questions = window.getByTestId("assistant").getByTestId("assistant-question");
@@ -109,7 +110,7 @@ test("a Skill imported from a folder in Settings is forced from the slash menu i
   await expect(composer.getByTestId("composer-skill")).toHaveCount(0);
   const answer = assistantAnswers(window).last();
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-  const card = answer.getByTestId("answer-skill");
+  const card = (await openSteps(window, answer)).getByTestId("answer-skill");
   await expect(card).toHaveAttribute("data-skill-name", "tide-tables");
   await expect(card).toHaveAttribute("data-forced", "true");
   await expect(card).toContainText("Used the Skill tide-tables · chosen for this Question");
@@ -148,7 +149,7 @@ test("a Skill imported from a folder in Settings is forced from the slash menu i
   await expect(questions.nth(1)).toContainText("And in Calais?");
   await expect(questions.nth(1).getByTestId("assistant-question-skill")).toHaveCount(0);
   await expect(second).not.toContainText("Following the Skill");
-  await expect(second.getByTestId("answer-skill")).toHaveCount(0);
+  await expect((await openSteps(window, second)).getByTestId("answer-skill")).toHaveCount(0);
   // The Mind it was asked beside is as it was.
   await expect(editor.getByTestId("question")).toHaveCount(0);
   await app.close();
@@ -189,30 +190,29 @@ test("a Question can force a Skill and limit its Search scope at once: both chip
   await expect(composer.getByTestId("composer-input")).toHaveValue("When is high water in Brest?");
 
   // Asked: the Question carries both, the Skill on its bubble and the scope on its Answer's
-  // line; the Skill was loaded up front, and the search found only the Document in scope.
+  // steps; the Skill was loaded up front, and the search found only the Document in scope.
   await window.keyboard.press("Enter");
   const question = window.getByTestId("assistant").getByTestId("assistant-question");
   await expect(question.getByTestId("assistant-question-skill")).toHaveText("tide-tables");
   await expect(question).toContainText("When is high water in Brest?");
   const answer = assistantAnswers(window).last();
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-  await expect(answer.getByTestId("answer-scope")).toHaveText("“Harbour”");
-  await expect(answer.getByTestId("answer-skill")).toHaveAttribute("data-forced", "true");
+  await expect(answer.getByTestId("answer-steps")).toContainText("Searched Harbour ·");
+  let steps = await openSteps(window, answer);
+  await expect(steps.getByTestId("answer-skill")).toHaveAttribute("data-forced", "true");
   await expect(answer).toContainText("Following the Skill tide-tables.");
   await expect(answer.getByTestId("citation-chip")).toHaveAttribute("aria-label", /Harbour/);
   // Without the scope, both Documents would match.
-  await answer.getByTestId("answer-tools-toggle").click();
-  await expect(answer.getByTestId("answer-tool-call")).toContainText("1 Passage");
+  await expect(steps.getByTestId("answer-step-found")).toContainText("1 passage found");
 
   // Regenerated: both still apply.
-  await answer.hover();
   await answer.getByTestId("answer-regenerate").click();
   await expect(answer).toHaveAttribute("data-status", "streaming");
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-  await expect(answer.getByTestId("answer-skill")).toHaveAttribute("data-forced", "true");
+  steps = await openSteps(window, answer);
+  await expect(steps.getByTestId("answer-skill")).toHaveAttribute("data-forced", "true");
   await expect(answer).toContainText("Following the Skill tide-tables.");
   await expect(answer.getByTestId("citation-chip")).toHaveAttribute("aria-label", /Harbour/);
-  await answer.getByTestId("answer-tools-toggle").click();
-  await expect(answer.getByTestId("answer-tool-call")).toContainText("1 Passage");
+  await expect(steps.getByTestId("answer-step-found")).toContainText("1 passage found");
   await app.close();
 });

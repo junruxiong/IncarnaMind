@@ -10,6 +10,7 @@ import {
   launchApp,
   newMind,
   openSettings,
+  openSteps,
   removeDataFolder,
   showSettingsPage,
   useLocalChatModel,
@@ -110,7 +111,7 @@ test("a Skill script asks first with an approval card: Allow once runs it, and t
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(answer).toContainText("scripts/hello.js said: Hello, Dover!");
   await expect(answer).toContainText("That is all.");
-  const run = answer.getByTestId("answer-script-call");
+  const run = (await openSteps(window, answer)).getByTestId("answer-script-call");
   await expect(run).toHaveAttribute("data-status", "done");
   await expect(run).toHaveAttribute("data-approval", "allowed");
   await expect(run).toContainText("Ran scripts/hello.js (greeter): exit code 0");
@@ -186,6 +187,6 @@ test("Always run shows a risk warning first; confirmed, the Skill's scripts run 
   const third = assistantAnswers(window).nth(2);
   await expect(third).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(third).not.toContainText("said:");
-  await expect(third.getByTestId("answer-script-call")).toHaveCount(0);
+  await expect((await openSteps(window, third)).getByTestId("answer-script-call")).toHaveCount(0);
   await app.close();
 });

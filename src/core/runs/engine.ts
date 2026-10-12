@@ -144,6 +144,12 @@ export type RunMessage =
 export type RunEvent =
   | { type: "text-delta"; text: string }
   /**
+   * The model's reasoning as its provider streams it, a summary or raw chain
+   * of thought: the caller decides whether to keep it. An empty `text` starts
+   * a block of reasoning. It is never in `messages`.
+   */
+  | { type: "reasoning"; text: string }
+  /**
    * The model asked for a Tool. Its `gate`, then its call, run alongside the
    * stream, so they may begin before this event is read.
    */

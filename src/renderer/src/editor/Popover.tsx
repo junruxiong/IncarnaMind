@@ -2,6 +2,7 @@ import {
   autoUpdate,
   computePosition,
   flip,
+  type Middleware,
   offset,
   type Placement,
   shift,
@@ -20,6 +21,8 @@ interface PopoverProps extends HTMLAttributes<HTMLDivElement> {
   /** What the popover sits next to. It follows it as the Mind scrolls. */
   anchor: Element | VirtualElement;
   placement?: Placement;
+  /** What it stays between, top and bottom (see `besideWithin`): a chart's value card stays off its head and foot. */
+  within?: Element;
   /**
    * Called on Esc, wherever the focus is, or on a press outside both the
    * popover and `anchor`.
@@ -28,6 +31,24 @@ interface PopoverProps extends HTMLAttributes<HTMLDivElement> {
   /** What gets the focus once the popover shows, e.g. a menu's first item, or a text editor. */
   initialFocus?: RefObject<{ focus(): void } | null>;
   children: ReactNode;
+}
+
+/**
+ * Between `within`'s top and bottom (across, the window): above the anchor
+ * when there is room, else beside it with its top just under `within`'s top.
+ */
+function besideWithin(within: Element): Middleware[] {
+  const frame = within.getBoundingClientRect();
+  const boundary = { x: 0, y: frame.top, width: window.innerWidth, height: frame.height };
+  return [
+    offset(({ placement, rects }) =>
+      placement.startsWith("top") || placement.startsWith("bottom")
+        ? 4
+        : { mainAxis: 8, alignmentAxis: frame.top + 4 - rects.reference.y },
+    ),
+    flip({ boundary, fallbackPlacements: ["right-start", "left-start"] }),
+    shift({ boundary, crossAxis: true, padding: 4 }),
+  ];
 }
 
 /** The editor's popovers that are open, in the order they opened. */
@@ -42,6 +63,7 @@ const openPopovers: HTMLElement[] = [];
 export function Popover({
   anchor,
   placement = "bottom-start",
+  within,
   onDismiss,
   initialFocus,
   children,
@@ -68,7 +90,7 @@ export function Popover({
       void computePosition(anchor, element, {
         placement,
         strategy: "fixed",
-        middleware: [offset(4), flip(), shift({ padding: 8 })],
+        middleware: within ? besideWithin(within) : [offset(4), flip(), shift({ padding: 8 })],
       }).then(({ x, y }) => {
         Object.assign(element.style, { left: `${x}px`, top: `${y}px`, visibility: "visible" });
         if (!shown) {
@@ -118,7 +140,7 @@ export function Popover({
       document.removeEventListener("keydown", dismissOnEscape, true);
       if (element.matches(":popover-open")) element.hidePopover();
     };
-  }, [anchor, placement]);
+  }, [anchor, placement, within]);
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: it has a role, a dialog's unless the caller gives another (e.g. menu).

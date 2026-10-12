@@ -7,6 +7,7 @@ import {
   launchApp,
   mindWrittenBefore,
   newMind,
+  openSteps,
   pointAndClick,
   pointAt,
   removeDataFolder,
@@ -51,10 +52,11 @@ test("a Question asked in the assistant gets an Answer that streams in there, an
   await expect(answer.getByTestId("answer-stop")).toHaveCount(0);
   await expect(answer).toContainText("That is all.");
   await expect(answer).toContainText("What is IncarnaMind?");
-  await expect(answer.getByTestId("answer-model")).toContainText("fake-model");
+  // Its steps name the model that wrote it.
+  await expect(await openSteps(window, answer)).toContainText("Answered by fake-model");
   // Rendered as rich text: bold, a list, a formula and code.
   await expect(answer.locator("strong")).toHaveText("scripted");
-  await expect(answer.locator("li")).toHaveCount(2);
+  await expect(answer.getByTestId("assistant-answer-text").locator("li")).toHaveCount(2);
   await expect(answer.locator('[data-type="inline-math"] .katex')).toBeVisible();
   await expect(answer.locator("pre code")).toContainText('console.log("IncarnaMind");');
   // The Mind holds no Question and no Answer: asking never writes into it.

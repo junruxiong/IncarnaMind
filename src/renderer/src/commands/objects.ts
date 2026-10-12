@@ -12,7 +12,7 @@ import { documentsOf, everyDocument, idsOf } from "./targets";
 
 const store = () => useAppStore.getState();
 const reportError = (error: unknown) => store().reportError(error);
-const RENAME_KEYS = { mac: "Enter", other: "F2" } as const;
+const RENAME_KEYS = "F2";
 
 /** The Mind a Mind's row, or the tab showing it, stands for. */
 const mindOf = (ctx: CommandContext) => {
