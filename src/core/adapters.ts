@@ -18,10 +18,11 @@ import type {
   SecretProtection,
   TranscriptionEngine,
 } from "./api";
+import type { StatIdentity } from "./documents/files";
 import type { Reranker } from "./documents/searchTool";
 import type { AnswerSearchTuning } from "./documents/searchTuning";
 import type { WatchFolder } from "./documents/watcher";
-import type { FetchLimits } from "./documents/web/fetch";
+import type { FetchLimits, PageFetch } from "./documents/web/fetch";
 import type { ChatGptPlanEndpoints } from "./providers/chatgpt/plan";
 import type { EmbeddingModelFactory } from "./providers/embeddings";
 import type { ChatModelFactory } from "./providers/models";
@@ -30,6 +31,7 @@ import type { RerankingModelFactory } from "./providers/rerank";
 import type { RunEngine } from "./runs/engine";
 import type { PaceTimers } from "./sources/pace";
 import type { SourceProviderUrls } from "./sources/providers";
+import type { PublicFetchOptions } from "./tools/web/fetcher";
 import type { UsageEventName, UsageValue } from "./usageEvents";
 
 export interface Paths {
@@ -158,6 +160,12 @@ export interface LinkedFolderOptions {
    * tests may pass a fake.
    */
   watch?: WatchFolder;
+  /**
+   * Reads a file's device, file number and creation time, which a file moved
+   * and edited while IncarnaMind didn't see it is recognised by. Defaults to
+   * Node's `stat`; tests may pass one that puts files on other disks.
+   */
+  stat?: StatIdentity;
 }
 
 export interface SpawnOptions {
@@ -662,7 +670,13 @@ export interface CoreAdapters {
    * How web pages are fetched (#261). Defaults to Node's fetch, within 20
    * seconds and 10 MB; tests shorten the limits.
    */
-  webPages?: { fetch?: typeof fetch; limits?: FetchLimits };
+  webPages?: { fetch?: PageFetch; limits?: FetchLimits };
+  /**
+   * How web search's fetcher resolves host names and makes its connections
+   * (#128): the system's resolver and undici's by default. Tests stand a
+   * local server in for the web; the fetcher's guard still decides.
+   */
+  web?: PublicFetchOptions;
   processes: ProcessLauncher;
   /**
    * Runs the programs Tools start, such as Skill scripts (see `Executor`).
