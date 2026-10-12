@@ -619,7 +619,7 @@ export const zhCN = {
   "linkedFolders.state.paused.progress": "索引已暂停：已索引 {indexed} / {files} 个文件",
   "linkedFolders.state.unavailable": "无法访问",
   "linkedFolders.state.unavailable.full":
-    "暂时无法访问这个文件夹，可能是所在的磁盘已断开。其中的文档仍可通过已保存的文字搜索。",
+    "暂时无法访问这个文件夹，可能是所在的磁盘已断开。其中的文档仍可通过已保存的文字搜索。如果文件夹已移动，可在菜单中选择“定位文件夹…”。",
   "linkedFolders.state.downloading": "正在下载…",
   "linkedFolders.state.downloading.full.one": "正在下载 1 个仅在云端的文件，以便建立索引",
   "linkedFolders.state.downloading.full.other": "正在下载 {count} 个仅在云端的文件，以便建立索引",
@@ -640,6 +640,15 @@ export const zhCN = {
   "linkedFolders.reveal.windows": "在文件资源管理器中显示",
   "linkedFolders.reveal.other": "在文件管理器中显示",
   "linkedFolders.reveal.unavailableReason": "暂时无法访问这个文件夹。",
+  "linkedFolders.locateAction": "定位文件夹…",
+  "linkedFolders.locate.pickTitle": "定位“{name}”",
+  "linkedFolders.locate.pickButton": "选择",
+  "linkedFolders.locate.notThis":
+    "这个文件夹中没有“{name}”里的文件。选择现在存放这些文件的文件夹。",
+  "linkedFolders.locate.overlaps":
+    "这个文件夹位于某个同步文件夹中，或包含同步文件夹。选择“{name}”现在所在的文件夹。",
+  "linkedFolders.locate.taken":
+    "这个文件夹中的“{file}”已单独添加到 IncarnaMind。先从 IncarnaMind 中删除它，再定位文件夹。",
   "linkedFolders.unlinkAction": "移除同步文件夹…",
   "linkedFolders.unlink.title": "移除同步文件夹“{name}”？",
   "linkedFolders.unlink.body":
