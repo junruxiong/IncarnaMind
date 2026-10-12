@@ -2,7 +2,12 @@ import type { Editor } from "@tiptap/core";
 import { Fragment, type Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { TextSelection } from "@tiptap/pm/state";
 import { yUndoPluginKey } from "@tiptap/y-tiptap";
-import { NOTE_BLOCK_TYPES } from "../../../core/api";
+import {
+  GENERATED_MARK,
+  NOTE_BLOCK_TYPES,
+  PROPOSAL_DELETE_MARK,
+  PROPOSAL_INSERT_MARK,
+} from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
 
 /** What the selection menu's "Text ›" turns the selected Blocks into. */
@@ -156,6 +161,30 @@ export function selectionToMath(editor: Editor): number | null {
   return inserted ? from : null;
 }
 
+/** Marks that say whose words they are, or what a change does, rather than how the words look. */
+const NOT_FORMATTING: ReadonlySet<string> = new Set([
+  GENERATED_MARK,
+  PROPOSAL_INSERT_MARK,
+  PROPOSAL_DELETE_MARK,
+]);
+
+/** Clear formatting: every mark off the selected text, but those `NOT_FORMATTING`. */
+export function clearFormatting(editor: Editor): boolean {
+  return editor
+    .chain()
+    .focus()
+    .command(({ tr }) => {
+      const formats = Object.values(tr.doc.type.schema.marks).filter(
+        (type) => !NOT_FORMATTING.has(type.name),
+      );
+      for (const { $from, $to } of tr.selection.ranges) {
+        for (const type of formats) tr.removeMark($from.pos, $to.pos, type);
+      }
+      return true;
+    })
+    .run();
+}
+
 /** A typed address as a link target: "example.com" is taken as https. */
 export function linkTarget(typed: string): string {
   const value = typed.trim();
@@ -170,3 +199,23 @@ export function asOwnUndoStep<T>(editor: Editor, run: () => T): T {
   undo?.stopCapturing();
   return result;
 }
+
+/**
+ * Sets the link of the selected text, or of the whole link the cursor is in, to
+ * the address typed; an empty address takes the link off. One Undo step.
+ */
+export function applyLink(editor: Editor, typed: string): void {
+  asOwnUndoStep(editor, () => {
+    const chain = editor.chain().focus();
+    if (typed.trim() === "") return chain.extendMarkRange("link").unsetLink().run();
+    // Editing a link changes all of it, not just the part selected.
+    if (editor.isActive("link")) chain.extendMarkRange("link");
+    return chain.setLink({ href: linkTarget(typed) }).run();
+  });
+}
+
+/** What the editor's element is told when ⌘K asks to edit the link at the selection. */
+export const LINK_EDIT = "link-edit";
+
+export const requestLinkEdit = (editor: Editor): boolean =>
+  editor.view.dom.dispatchEvent(new CustomEvent(LINK_EDIT));

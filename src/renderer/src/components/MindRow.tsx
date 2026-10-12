@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, useRef, useState } from "react";
 import type { Mind } from "../../../core/api";
 import { mindName } from "../../../shared/naming";
 import { useCitationStylePicker } from "../citationStylePicker";
@@ -9,18 +9,13 @@ import { useMindStatus } from "../mindStatus";
 import { selectedOn, useSelectable } from "../selection";
 import { useAppStore } from "../store";
 import { isMoveToKey, TREE_ROW } from "../treeKeys";
+import { useRename } from "../useRename";
 import { ExampleChip, useIsExample } from "./GettingStarted";
+import { InlineName } from "./InlineName";
 import { MindLineIcon } from "./lineIcons";
 import { MoveToPicker } from "./MoveToPicker";
 import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
-import {
-  rowActionsClass,
-  rowButtonClass,
-  rowClass,
-  rowIconClass,
-  rowInputClass,
-  rowPadding,
-} from "./sidebarRows";
+import { rowActionsClass, rowButtonClass, rowClass, rowIconClass, rowPadding } from "./sidebarRows";
 
 /**
  * A Mind in the sidebar's tree, in its Folder (`depth` 1) or Not in a Folder
@@ -38,11 +33,11 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
     return shown?.kind === "mind" && shown.mindId === mind.id;
   });
   const openMind = useAppStore((state) => state.openMind);
+  const renameMind = useAppStore((state) => state.renameMind);
   const waiting = useMindStatus(mind.id) === "waiting-for-approval";
   const isExample = useIsExample(mind.id);
-  const [renaming, setRenaming] = useState(false);
+  const rename = useRename<HTMLButtonElement>(`mind:${mind.id}`);
   const [moving, setMoving] = useState<HTMLElement | null>(null);
-  const button = useRef<HTMLButtonElement>(null);
   const row = useRef<HTMLLIElement>(null);
   const title = mindName(mind) || t("mind.untitled");
   const objectMenu = useObjectMenu({ kind: "mind", id: mind.id });
@@ -54,7 +49,7 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
     return chosen.includes(mind.id) ? chosen : [mind.id];
   };
 
-  if (renaming) {
+  if (rename.renaming) {
     return (
       <li className={rowClass(lit)} data-testid="mind-row" data-mind-id={mind.id}>
         <span
@@ -62,13 +57,12 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
           style={rowPadding(depth)}
         >
           <MindLineIcon className={rowIconClass(lit)} />
-          <RenameMind
-            mind={mind}
-            onDone={() => {
-              setRenaming(false);
-              // Back on its row, so the keyboard carries on from there.
-              requestAnimationFrame(() => button.current?.focus());
-            }}
+          <InlineName
+            value={mind.title}
+            label={t("mind.renameLabel", { title })}
+            placeholder={title}
+            testId="mind-rename"
+            {...rename.field((name) => renameMind(mind.id, name))}
           />
         </span>
       </li>
@@ -76,10 +70,7 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
-    if (event.key === "F2") {
-      event.preventDefault();
-      setRenaming(true);
-    } else if (isMoveToKey(event)) {
+    if (isMoveToKey(event)) {
       event.preventDefault();
       setMoving(event.currentTarget);
     }
@@ -100,7 +91,7 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
       className={rowClass(lit)}
     >
       <button
-        ref={button}
+        {...rename.nameProps}
         type="button"
         {...TREE_ROW}
         data-testid="mind-list-item"
@@ -115,8 +106,10 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
         onAuxClick={(event) => {
           if (event.button === 1) openMind(mind.id, { side: true });
         }}
-        onDoubleClick={() => setRenaming(true)}
-        onKeyDown={onKeyDown}
+        onKeyDown={(event) => {
+          rename.nameProps.onKeyDown(event);
+          onKeyDown(event);
+        }}
         className={rowButtonClass}
         style={rowPadding(depth)}
       >
@@ -143,7 +136,7 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
           target={{ kind: "mind", id: mind.id }}
           label={t("mind.more", { title })}
           here={{
-            "mind.rename": () => setRenaming(true),
+            "mind.rename": rename.start,
             "mind.citationStyle": () =>
               requestAnimationFrame(() =>
                 useCitationStylePicker
@@ -178,49 +171,5 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
         onClose={() => setMoving(null)}
       />
     </li>
-  );
-}
-
-/** A Mind's title typed in its row: Enter or leaving the field saves, Esc cancels. */
-function RenameMind({ mind, onDone }: { mind: Mind; onDone(): void }) {
-  const t = useT();
-  const renameMind = useAppStore((state) => state.renameMind);
-  const [value, setValue] = useState(mind.title);
-  const field = useRef<HTMLInputElement>(null);
-  const finished = useRef(false);
-
-  useEffect(() => {
-    field.current?.focus();
-    field.current?.select();
-  }, []);
-
-  const finish = (save: boolean) => {
-    if (finished.current) return;
-    finished.current = true;
-    // A blank title changes nothing.
-    if (save && value.trim() !== "" && value.trim() !== mind.title) void renameMind(mind.id, value);
-    onDone();
-  };
-
-  return (
-    <input
-      ref={field}
-      value={value}
-      data-testid="mind-rename"
-      aria-label={t("mind.renameLabel", { title: mindName(mind) || t("mind.untitled") })}
-      placeholder={mindName(mind) || t("mind.untitled")}
-      onChange={(event) => setValue(event.target.value)}
-      onKeyDown={(event) => {
-        if (event.nativeEvent.isComposing) return;
-        if (event.key === "Enter" || event.key === "Escape") {
-          event.preventDefault();
-          // Esc cancels here, and closes nothing else.
-          event.stopPropagation();
-          finish(event.key === "Enter");
-        }
-      }}
-      onBlur={() => finish(true)}
-      className={rowInputClass}
-    />
   );
 }

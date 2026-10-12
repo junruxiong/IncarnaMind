@@ -670,6 +670,17 @@ async function resizeContent(
   }
 }
 
+/** Switches the interface's language, as Settings does. */
+export function setLanguage(window: Page, language: "en" | "zh-CN"): Promise<unknown> {
+  return window.evaluate(
+    (value) =>
+      (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+        user: { language: value },
+      }),
+    language,
+  );
+}
+
 /** How many animations are running (src/renderer/src/motion.ts), leaving copies included. */
 export function motionRunning(window: Page): Promise<number> {
   return window.evaluate(
@@ -936,20 +947,39 @@ export async function dragBlock(window: Page, block: Locator, target: Locator): 
   await window.mouse.up();
 }
 
-/** Where `words` are drawn in a line of text: their left and right edges, and their middle line. */
+/**
+ * Where `words` are drawn in a line of text: their left and right edges, and
+ * their middle line. They may run across marks (AI text and the User's, bold).
+ */
 async function wordsBox(line: Locator, words: string) {
   const box = await line.evaluate((element, wanted) => {
     const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      const at = node.textContent?.indexOf(wanted) ?? -1;
-      if (at < 0) continue;
-      const range = element.ownerDocument.createRange();
-      range.setStart(node, at);
-      range.setEnd(node, at + wanted.length);
-      const rect = range.getBoundingClientRect();
-      return { left: rect.left, right: rect.right, y: rect.top + rect.height / 2 };
-    }
-    return null;
+    const texts: Text[] = [];
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) texts.push(node as Text);
+    const at = texts
+      .map((text) => text.data)
+      .join("")
+      .indexOf(wanted);
+    if (at < 0) return null;
+    /** The text and offset `offset` characters in; an end falls at the end of a text, a start at the next. */
+    const place = (offset: number, end: boolean) => {
+      let start = 0;
+      for (const text of texts) {
+        if (offset < start + text.length || (end && offset === start + text.length)) {
+          return { text, offset: offset - start };
+        }
+        start += text.length;
+      }
+      return null;
+    };
+    const from = place(at, false);
+    const to = place(at + wanted.length, true);
+    if (!from || !to) return null;
+    const range = element.ownerDocument.createRange();
+    range.setStart(from.text, from.offset);
+    range.setEnd(to.text, to.offset);
+    const rect = range.getBoundingClientRect();
+    return { left: rect.left, right: rect.right, y: rect.top + rect.height / 2 };
   }, words);
   if (!box) throw new Error(`"${words}" isn't in the line.`);
   return box;

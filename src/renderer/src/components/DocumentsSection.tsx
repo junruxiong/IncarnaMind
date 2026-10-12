@@ -1,29 +1,31 @@
-import {
-  type ChangeEvent,
-  memo,
-  type ReactNode,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type ChangeEvent, memo, type ReactNode, useMemo, useRef, useState } from "react";
 import type { Document, DocumentStatus, Tag } from "../../../core/api";
 import { displayName, sourceOf } from "../../../shared/documentNames";
 import type { MessageKey } from "../../../shared/i18n";
+import { startDocumentDrag } from "../documentDrag";
 import { documentStatusText } from "../documentStatus";
 import { useLanguage, useT } from "../i18n";
 import { currentTabOf } from "../layoutSlice";
 import { fileStatusLabel } from "../linkedFolders";
 import { scanningStatus } from "../scanStatus";
-import { extendThroughRows, rowsIn, useSelectable, useSelectionOrder } from "../selection";
+import {
+  extendThroughRows,
+  rowsIn,
+  selectedOn,
+  useSelectable,
+  useSelectionOrder,
+} from "../selection";
+import { useSortMenu } from "../sortMenu";
 import { selectVisibleDocuments, useAppStore } from "../store";
 import { chipsOf, tagIndex } from "../tagEditing";
 import { moveThroughRows, TREE_ROW } from "../treeKeys";
+import { useRename } from "../useRename";
 import { ActiveTagFilter, DocumentTagMenu, TagFilterMenu } from "./DocumentTags";
 import { FolderTree } from "./FolderTree";
+import { InlineName } from "./InlineName";
 import { LibraryFolders } from "./LibraryFolders";
 import { LinkFolderDialog } from "./LinkFolderDialog";
-import { DocumentLineIcon } from "./lineIcons";
+import { DocumentLineIcon, MoreLineIcon } from "./lineIcons";
 import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
 import { SidebarTags } from "./SidebarTags";
 import {
@@ -32,7 +34,6 @@ import {
   rowButtonClass,
   rowClass,
   rowIconClass,
-  rowInputClass,
   rowPadding,
 } from "./sidebarRows";
 import { TagMarks, TagNamesTip, tagNamesTipListProps } from "./TagMarks";
@@ -183,6 +184,22 @@ export function DocumentsSection() {
           <DocumentLineIcon kind="text" className="size-4 shrink-0" />
           <span className="truncate">{t("library.all")}</span>
         </button>
+        <div className={rowActionsClass}>
+          <button
+            type="button"
+            data-testid="sidebar-sort"
+            aria-label={t("sort.sidebar")}
+            title={t("sort.sidebar")}
+            onClick={(event) =>
+              useSortMenu
+                .getState()
+                .show({ scope: "sidebar", withFolders: true, anchor: event.currentTarget })
+            }
+            className={rowActionButtonClass}
+          >
+            <MoreLineIcon className="size-4" />
+          </button>
+        </div>
       </div>
       {views.length > 1 && (
         <div className="mx-2 my-2 flex items-center gap-2 border-b border-rule pb-1">
@@ -240,6 +257,14 @@ export function DocumentsSection() {
   );
 }
 
+/** The Documents a drag from this row takes: all those selected, if it is one of them. */
+function draggedWith(documentId: string): string[] {
+  const chosen = selectedOn("sidebar").flatMap((each) =>
+    each.kind === "document" ? [each.id] : [],
+  );
+  return chosen.includes(documentId) ? chosen : [documentId];
+}
+
 /**
  * A Document's row: its icon and name, its Tags' colours right after the
  * name (their names in its tooltip and description), and its status at the
@@ -260,8 +285,8 @@ const DocumentRow = memo(function DocumentRow({
   tagsById: ReadonlyMap<string, Tag>;
 }) {
   const t = useT();
-  const [renaming, setRenaming] = useState(false);
-  const button = useRef<HTMLButtonElement>(null);
+  const rename = useRename<HTMLButtonElement>(`sidebar-document:${item.id}`);
+  const renameDocument = useAppStore((state) => state.renameDocument);
   const shownName = displayName(item);
   const source = sourceOf(item);
   const chips = chipsOf(item.tags, tagsById);
@@ -293,28 +318,25 @@ const DocumentRow = memo(function DocumentRow({
       data-tagging={item.tagging}
       role="treeitem"
       {...select.rowProps}
-      {...(renaming ? {} : objectMenu.rowProps)}
+      {...(rename.renaming ? {} : objectMenu.rowProps)}
       className={rowClass(lit, muted ? "muted" : "item")}
     >
-      {renaming ? (
+      {rename.renaming ? (
         <div
           className="flex h-full w-full min-w-0 items-center gap-2 pr-1"
           style={rowPadding(depth)}
         >
           <DocumentLineIcon kind={item.kind} className={rowIconClass(false)} />
-          <RenameInput
-            item={item}
-            onDone={() => {
-              setRenaming(false);
-              // Back on its row, so the keyboard carries on from there.
-              requestAnimationFrame(() => button.current?.focus());
-            }}
+          <InlineName
+            value={item.name}
+            label={t("documents.renameLabel", { name: item.name })}
+            {...rename.field((name) => renameDocument(item.id, name))}
           />
         </div>
       ) : (
         // Opens the Document in the viewer, replacing whatever it showed.
         <button
-          ref={button}
+          {...rename.nameProps}
           type="button"
           {...TREE_ROW}
           data-testid="open-document"
@@ -326,13 +348,8 @@ const DocumentRow = memo(function DocumentRow({
           // A click opens it, in a preview beside the Mind or in the group already showing a Document;
           // ⌘-click and Shift-click select (`useSelectable`).
           onClick={select.onClick}
-          onDoubleClick={() => setRenaming(true)}
-          onKeyDown={(event) => {
-            if (event.key === "F2") {
-              event.preventDefault();
-              setRenaming(true);
-            }
-          }}
+          draggable
+          onDragStart={(event) => startDocumentDrag(event, draggedWith(item.id))}
           className={rowButtonClass}
           style={rowPadding(depth)}
         >
@@ -347,13 +364,13 @@ const DocumentRow = memo(function DocumentRow({
           <DocumentStatusLabel item={item} />
         </button>
       )}
-      {!renaming && (
+      {!rename.renaming && (
         <div className={rowActionsClass}>
           <DocumentTagMenu item={item} buttonClassName={rowActionButtonClass} />
           <ObjectMenu
             target={{ kind: "document", id: item.id }}
             label={t("documents.more", { name: item.name })}
-            here={{ "document.rename": () => setRenaming(true) }}
+            here={{ "document.rename": rename.start }}
           />
         </div>
       )}
@@ -411,45 +428,5 @@ function DocumentStatusLabel({ item }: { item: Document }) {
       <span aria-hidden="true">{short}</span>
       <span className="sr-only">{full}</span>
     </span>
-  );
-}
-
-/** Enter or leaving the field saves; Esc cancels. An empty name changes nothing. */
-function RenameInput({ item, onDone }: { item: Document; onDone(): void }) {
-  const t = useT();
-  const renameDocument = useAppStore((state) => state.renameDocument);
-  const [value, setValue] = useState(item.name);
-  const field = useRef<HTMLInputElement>(null);
-  const finished = useRef(false);
-
-  useEffect(() => {
-    field.current?.focus();
-    field.current?.select();
-  }, []);
-
-  const finish = (save: boolean) => {
-    if (finished.current) return;
-    finished.current = true;
-    const name = value.trim();
-    if (save && name && name !== item.name) void renameDocument(item.id, name);
-    onDone();
-  };
-
-  return (
-    <input
-      ref={field}
-      value={value}
-      aria-label={t("documents.renameLabel", { name: item.name })}
-      onChange={(event) => setValue(event.target.value)}
-      onKeyDown={(event) => {
-        if (event.nativeEvent.isComposing) return;
-        if (event.key === "Enter" || event.key === "Escape") {
-          event.preventDefault();
-          finish(event.key === "Enter");
-        }
-      }}
-      onBlur={() => finish(true)}
-      className={rowInputClass}
-    />
   );
 }

@@ -598,10 +598,11 @@ test("a bulk Organize leaves the Library's counts, filters and sidebar as the co
         .getByTestId("tag-chip")
         .filter({ hasText: "Invoice" }),
     ).toHaveCount(40);
+    // Elsewhere on the row than the first click, which a double-click would be.
     await tagRow("Invoice")
       .locator(":scope > div")
       .getByRole("button", { name: /^Invoice/ })
-      .click();
+      .click({ position: { x: 120, y: 12 } });
     await expect(status).toHaveText("200 Documents");
 
     // Source locations: every Document's row, each done.

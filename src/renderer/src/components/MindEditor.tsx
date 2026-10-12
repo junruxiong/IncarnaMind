@@ -16,6 +16,7 @@ import { shortcutLabel } from "../commands/keymap";
 import { useComposer } from "../composer";
 import { core } from "../core";
 import { AnswerView } from "../editor/AnswerView";
+import { holdsAiText } from "../editor/aiText";
 import { BlockHandle } from "../editor/BlockHandle";
 import { BlockCommands } from "../editor/blockCommands";
 import { BlockOrigins } from "../editor/blockOrigins";
@@ -28,14 +29,20 @@ import { ConversationLinks } from "../editor/ConversationLinks";
 import { CitationClusters } from "../editor/citationClusters";
 import { CitationNumbers, redrawFootnotes, setCitationForm } from "../editor/citationNumbers";
 import { CopyCitations } from "../editor/copyCitations";
+import { DocumentChipView } from "../editor/DocumentChipView";
+import { DocumentChipKeys } from "../editor/documentChipKeys";
 import { EndHint, type HintPlace, type HintText, isEmptyMind } from "../editor/EndHint";
 import { selectionForEdit } from "../editor/editSelection";
+import { FindBar } from "../editor/FindBar";
 import { FootnoteArea } from "../editor/FootnoteArea";
 import { FootnotePopover } from "../editor/FootnotePopover";
 import { type FootnoteLabel, footnoteView } from "../editor/FootnoteView";
+import { FindInMind } from "../editor/findInMind";
 import { FootnoteKeys } from "../editor/footnoteSchema";
+import { LinkBubble } from "../editor/LinkBubble";
 import { MarginChecks } from "../editor/MarginChecks";
 import { MathEditing, MathEditor } from "../editor/MathEditor";
+import { MindOutline } from "../editor/MindOutline";
 import { MeetingNotes } from "../editor/meetingNotes";
 import { ComposerDockContext, CountSlotContext, MindIdContext } from "../editor/mindContext";
 import { NoteKeymap } from "../editor/noteKeymap";
@@ -57,13 +64,15 @@ import { SmartTypography } from "../editor/typography";
 import { WordCount } from "../editor/WordCount";
 import { requestEdit, startEditing, TRANSLATE_LANGUAGES } from "../editWithAi";
 import { translateNow, useT } from "../i18n";
+import { markSelectionAsMine } from "../markAsMine";
 import { useMeetingOf, useMeetings } from "../meetings";
 import { isWritingIn } from "../mindStatus";
+import { useMindTools } from "../mindTools";
 import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
 import { askForSuggestion, describeSuggestion } from "../suggestions";
 import { StartGuide, useGettingStarted, useIsExample } from "./GettingStarted";
-import { SparkLineIcon } from "./lineIcons";
+import { MineLineIcon, SparkLineIcon } from "./lineIcons";
 import { MindNotice } from "./MindNotice";
 
 /** Stands in for the hint's button in its translated words, which are split around it. */
@@ -266,6 +275,7 @@ function MindEditorView({
           answerView: ReactNodeViewRenderer(AnswerView),
           citationView,
           footnoteView: footnoteView(() => footnoteLabel.current),
+          documentChipView: ReactNodeViewRenderer(DocumentChipView, { as: "span" }),
           chartView,
         }),
         // Footnotes are numbered as the Mind's citation style counts its Citations (#289).
@@ -273,6 +283,7 @@ function MindEditorView({
         CitationClusters,
         CopyCitations,
         FootnoteKeys,
+        DocumentChipKeys,
         MeetingNotes.configure({
           mindId,
           doc,
@@ -314,6 +325,7 @@ function MindEditorView({
         ScopePicker,
         MathEditing.configure({ onEdit: setEditingMath }),
         BlockCommands,
+        FindInMind,
         TableKeys,
         NoteKeymap,
         QuestionCommands.configure({
@@ -389,7 +401,7 @@ function MindEditorView({
     };
   }, [reads, editor, mindId, doc]);
 
-  // The selection menu's AI section: each comes back as changes to accept or reject.
+  // The selection menu's AI section: each comes back as changes to accept or reject; Mark as mine acts at once.
   const aiActions = useMemo((): SelectionAction[] => {
     const available = (current: typeof editor) => selectionForEdit(current.state) !== null;
     const run = (action: "improve" | "shorten" | "explain") => (current: typeof editor) =>
@@ -410,6 +422,13 @@ function MindEditorView({
         run: () => undefined,
       },
       { id: "explain", label: "editor.ai.explain", icon: "?", available, run: run("explain") },
+      {
+        id: "mark-as-mine",
+        label: "editor.ai.markAsMine",
+        icon: <MineLineIcon className="size-3.5" />,
+        available: (current) => holdsAiText(current.state),
+        run: (current) => void markSelectionAsMine(current),
+      },
       {
         id: "edit",
         label: "editor.ai.edit",
@@ -475,6 +494,8 @@ function MindEditorView({
     editor,
     selector: ({ editor: current }) => isEmptyMind(current.state.doc),
   });
+  const findShown = useMindTools((state) => state.findMindId === mindId);
+  const outlineShown = useMindTools((state) => state.outlineMindId === mindId);
   const guide = useGettingStarted() !== null && empty && !isExample && !readOnly;
 
   return (
@@ -502,6 +523,11 @@ function MindEditorView({
       {guide && <StartGuide />}
       {!readOnly && <BlockHandle editor={editor} />}
       {!readOnly && <SelectionMenu editor={editor} ai={aiActions} />}
+      {!readOnly && <LinkBubble editor={editor} />}
+      {findShown && <FindBar editor={editor} onClose={() => useMindTools.getState().hideFind()} />}
+      {outlineShown && (
+        <MindOutline editor={editor} onClose={() => useMindTools.getState().hideOutline()} />
+      )}
       <FootnotePopover editor={editor} citationView={citationView} />
       {editingMath !== null && (
         <MathEditor
