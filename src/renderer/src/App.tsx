@@ -10,6 +10,7 @@ import { CitationStylePickerHost } from "./components/CitationStylePicker";
 import { ConsentDialog } from "./components/ConsentDialog";
 import { DropOverlay, useFileDrop } from "./components/FileDrop";
 import { FileWriteDialog } from "./components/FileWriteDialog";
+import { InfoPanel } from "./components/InfoPanel";
 import { MeetingNoticeDialog } from "./components/MeetingNoticeDialog";
 import { ChatGptWelcomeDialog } from "./components/providers/ChatGptSignIn";
 import { ChatSetupDialog } from "./components/providers/ChatSetupDialog";
@@ -257,6 +258,7 @@ function Workspace() {
         <SettingsDialog />
         <TagsDialog />
         <RequestedDialogs />
+        <InfoPanel />
         <AddWebPageDialog />
         <ChatSetupDialog />
         <ChatGptWelcomeDialog />

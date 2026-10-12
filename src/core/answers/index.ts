@@ -43,7 +43,8 @@
 import { randomUUID } from "node:crypto";
 import type * as Y from "yjs";
 import { runsByDefault } from "../../shared/approvalRules";
-import { withCitations } from "../../shared/blockJson";
+import { citationNode, withCitations } from "../../shared/blockJson";
+import { withFigures, withFigureText } from "../../shared/figureMarkers";
 import { recordProposalRequest, resolveProposals } from "../../shared/proposals";
 import { searchScopeOf } from "../../shared/searchScope";
 import { setTextOrigin } from "../../shared/textOrigins";
@@ -66,7 +67,9 @@ import {
   type CoreEvents,
   type Effect,
   type ExternalService,
+  type FigureRetry,
   type MarkedCitation,
+  type MarkedFigure,
   MIND_CONTENT_FIELD,
   type MindFocus,
   type ProviderError,
@@ -89,7 +92,7 @@ import type { MindContent } from "../mindContent";
 import { plainText } from "../mindText";
 import { docOf } from "../proposals/merge";
 import { proposeBlocks } from "../proposals/write";
-import { givesStructuredOutput } from "../providers/capabilities";
+import { givesStructuredOutput, calculates as offersCalculate } from "../providers/capabilities";
 import type { PreparedChatModel } from "../providers/chat";
 import { classifyProviderError } from "../providers/providerErrors";
 import type { GateDecision } from "../runs/engine";
@@ -103,6 +106,7 @@ import {
 import { scriptCallInput, skillTools } from "../skills/tools";
 import { asksForSources } from "../sources/intent";
 import {
+  DOCUMENT_TOOLS,
   SKILL_TOOLS,
   type Tool,
   type ToolCallContext,
@@ -118,6 +122,7 @@ import {
   textAttribute,
   topLevelBlocks,
 } from "./blocks";
+import { answerLanguage, createCalculationSession } from "./calculations";
 import {
   type AnswerDocuments,
   createCitationSession,
@@ -133,7 +138,7 @@ import {
   type RequestMind,
   readMind,
 } from "./context";
-import type { AnswerEngine, AnswerTools, DocumentLanguage, GatedCall } from "./engine";
+import type { AnswerEngine, AnswerTools, CiteOptions, DocumentLanguage, GatedCall } from "./engine";
 import { markdownToBlocks } from "./markdown";
 import {
   answerInstructions,
@@ -186,6 +191,8 @@ interface WrittenAnswer {
   blocks(): NodeJSON[];
   /** Its Citations, in the order of their markers in the text: the final ones once it has ended. */
   citations(): MarkedCitation[];
+  /** Its calculated figures, in the order of their markers in the text, each once. */
+  figures(): MarkedFigure[];
   toolCalls: AnswerToolCall[];
   support: CitationSupport | null;
   /** Where the third-party text its Run had read came from (#78); null: none. */
@@ -237,6 +244,7 @@ export type OutsideAnswer =
   | {
       asked: true;
       status: "done" | "stopped" | "failed";
+      /** With its calculated figures written in as their shown text. */
       markdown: string;
       citations: MarkedCitation[];
       error: ProviderError | null;
@@ -327,6 +335,16 @@ export interface AnswerSkills {
 
 /** The Tool call that shows a forced Skill: loaded by the core, up front. */
 const FORCED_SKILL_CALL = "forced-skill";
+
+/** The one Tool call that sums up an Answer's `calculate` calls: the figures it shows, and those it couldn't. */
+const calculatedCall = (): AnswerToolCall => ({
+  id: "calculated-figures",
+  tool: DOCUMENT_TOOLS.calculate,
+  source: "documents",
+  input: {},
+  status: "running",
+  resultCount: 0,
+});
 
 /** What the model is told when the User denies a call: a Tool result, so the Answer carries on. */
 const deniedResult = (call: ToolCallToApprove) =>
@@ -560,6 +578,8 @@ export function createAnswers(options: AnswersOptions) {
     let placedMarkers = 0;
     /** The one request for exact quotes, if the engine made it (see ./quoteRetry). */
     let quoteRetry: QuoteRetry | null = null;
+    /** The one request to fix figures, if the engine made it (see ./figureRetry). */
+    let figureRetry: FigureRetry | null = null;
     /** What the model calls counted, the cached input tokens too. */
     const usage: AnswerUsage = {
       inputTokens: 0,
@@ -596,10 +616,59 @@ export function createAnswers(options: AnswersOptions) {
       };
     };
     let skills: SkillSession | null = null;
-    const session = createCitationSession(inScope(options.documents, documentIds), {
+    const scoped = inScope(options.documents, documentIds);
+    const session = createCitationSession(scoped, {
       onRecord: (marker, citation) =>
         announce("answer.citationAdded", { ...place, answerId, marker, citation }),
     });
+    /**
+     * Whether its model is offered `calculate` and its steer: a fact of the
+     * model, once prepared (ADR-0021). Off, the Answer is as it was before them.
+     */
+    let calculating = false;
+    /** Its `calculate` calls, as one Tool call (see `calculatedCall`), once a figure is recorded. */
+    let calculated: AnswerToolCall | null = null;
+    const recordedFigures = new Set<number>();
+    const figures = createCalculationSession({
+      documents: scoped,
+      quotes: session.quotes,
+      language: answerLanguage(context.question),
+      onRecord: (marker) => {
+        recordedFigures.add(marker);
+        if (!calculated) {
+          calculated = calculatedCall();
+          toolCalls.push(calculated);
+        }
+        calculated.resultCount = recordedFigures.size;
+        writeSoon();
+      },
+    });
+    /** A Citation marker's node as the text around a figure sees it: none for a marker with no record. */
+    const citedNode = (marker: number) =>
+      session.streamingCitation(marker) ? citationNode(null) : null;
+    /**
+     * The figures its text shows, each once, with what it wrote right before
+     * each marker; and how many figure markers had no figure.
+     */
+    const placedFigures = (text: string, final: boolean) => {
+      const placed: MarkedFigure[] = [];
+      const missing = new Set<number>();
+      if (!calculating) return { figures: placed, missing: 0 };
+      withFigures(
+        withCitations(markdownToBlocks(text, { streaming: !final }), citedNode),
+        (marker) => {
+          const figure = figures.figure(marker);
+          if (!figure) missing.add(marker);
+          return figure;
+        },
+        (figure, marker, written) => {
+          if (!placed.some((each) => each.marker === marker))
+            placed.push({ marker, ...figure, written });
+          return "";
+        },
+      );
+      return { figures: placed, missing: missing.size };
+    };
 
     /** Writes the Answer as it stands into its home; false if it is gone. */
     const write = (outcome?: Outcome): boolean => {
@@ -612,13 +681,22 @@ export function createAnswers(options: AnswersOptions) {
         return home.write(
           {
             markdown: text,
-            blocks: () =>
-              withCitations(
+            // A figure reads as its shown text until a Mind has a node of its own for one (#439).
+            blocks: () => {
+              const blocks = withCitations(
                 markdownToBlocks(text, { streaming: !final }),
                 final
                   ? (marker) => session.finalNode(marker)
                   : (marker) => session.streamingNode(marker),
-              ),
+              );
+              return calculating
+                ? withFigures(
+                    blocks,
+                    (marker) => figures.figure(marker),
+                    (figure) => figure.shown,
+                  )
+                : blocks;
+            },
             citations: () => {
               const found: MarkedCitation[] = [];
               // The markers the Blocks would show, so none in code is taken for one.
@@ -631,6 +709,7 @@ export function createAnswers(options: AnswersOptions) {
               });
               return found;
             },
+            figures: () => placedFigures(text, final).figures,
             toolCalls,
             support,
             textOrigin,
@@ -660,11 +739,23 @@ export function createAnswers(options: AnswersOptions) {
         if (call.status === "running") call.status = "failed";
         if (call.approval === "waiting") call.approval = "denied";
       }
-      // The check runs once, now; its results are stored with each Citation.
+      // The check runs once, now; its results are stored with each Citation, and each figure's input.
       try {
         session.check();
+        figures.check();
       } catch (error) {
         options.reportError(error);
+      }
+      // Its steps say how many figures it shows, and its end how many it couldn't calculate.
+      const placed = placedFigures(withoutFootnoteDefinitions(markdown), true);
+      if (placed.figures.length > 0 || placed.missing > 0) {
+        const call = calculated ?? calculatedCall();
+        if (!calculated) toolCalls.push(call);
+        call.status = "done";
+        call.resultCount = placed.figures.length;
+        if (placed.missing > 0) call.uncalculated = placed.missing;
+      } else if (calculated) {
+        toolCalls.splice(toolCalls.indexOf(calculated), 1);
       }
       const written = write(outcome);
       if (outcome.status === "failed") {
@@ -678,6 +769,9 @@ export function createAnswers(options: AnswersOptions) {
           placedMarkers,
           citationSupport: support,
           quoteRetry,
+          figures: placed.figures,
+          uncalculated: placed.missing,
+          figureRetry,
           usage,
         });
       }
@@ -957,7 +1051,10 @@ export function createAnswers(options: AnswersOptions) {
       // loaded or it starts to answer), writing, or checking quotes (asking a local model once
       // more for the quotes the check didn't find).
       let consenting = input.consentNeeded;
-      let activity: Extract<AnswerPhase, "searching" | "writing" | "checking-quotes"> = "writing";
+      let activity: Extract<
+        AnswerPhase,
+        "searching" | "writing" | "checking-quotes" | "checking-figures"
+      > = "writing";
       let loading = false;
       let responded = false;
       let shown: AnswerPhase | null = null;
@@ -983,6 +1080,7 @@ export function createAnswers(options: AnswersOptions) {
         finish({ status: "failed", error: failureOf(error) });
         return;
       }
+      calculating = offersCalculate(prepared.capabilities);
       // Stopped while waiting, e.g. for consent: send nothing.
       if (finished) return;
       if (consenting) {
@@ -1037,6 +1135,11 @@ export function createAnswers(options: AnswersOptions) {
         hasRecord: (marker) => session.tools.hasRecord?.(marker) ?? false,
         unfoundQuotes: () => session.tools.unfoundQuotes?.() ?? [],
         correctQuote: (marker, quote) => session.tools.correctQuote?.(marker, quote) ?? false,
+        ...(calculating && {
+          calculate: (given: readonly unknown[], calculateOptions?: CiteOptions) =>
+            figures.calculate(given, calculateOptions),
+          figureProblems: () => figures.problems(),
+        }),
       };
       // Scripts can run when a Skill has some, unless the User turned them off.
       const scripts = !outside && opened.hasScripts && options.scripts.enabled();
@@ -1096,6 +1199,7 @@ export function createAnswers(options: AnswersOptions) {
                   options.documents.searchableNames(documentIds, LISTED_DOCUMENTS),
                   passages,
                   documentIds !== null,
+                  calculating,
                 ),
             skillInstructions(listed, forced, withSkillTools, scripts),
             connectorTools ? connectorInstructions(fromConnectors, mode === "no-documents") : "",
@@ -1144,6 +1248,9 @@ export function createAnswers(options: AnswersOptions) {
             break;
           case "quotes-retried":
             quoteRetry = event.retry;
+            break;
+          case "figures-retried":
+            figureRetry = event.retry;
             break;
           case "usage":
             usage.inputTokens += event.usage.inputTokens ?? 0;
@@ -1332,6 +1439,7 @@ export function createAnswers(options: AnswersOptions) {
       options.conversations.writeAnswer(answerId, {
         text: answer.markdown,
         citations: answer.citations(),
+        figures: answer.figures(),
         toolCalls: answer.toolCalls,
         support: answer.support,
         textOrigin: answer.textOrigin,
@@ -1646,10 +1754,11 @@ export function createAnswers(options: AnswersOptions) {
             place: { mindId: null },
             write(answer, outcome) {
               if (outcome) {
+                const shown = new Map(answer.figures().map((figure) => [figure.marker, figure]));
                 resolve({
                   asked: true,
                   status: outcome.status,
-                  markdown: answer.markdown,
+                  markdown: withFigureText(answer.markdown, (marker) => shown.get(marker) ?? null),
                   citations: answer.citations(),
                   error: outcome.status === "failed" ? outcome.error : null,
                   service,
