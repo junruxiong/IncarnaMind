@@ -239,6 +239,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
       /^Citation style…$/,
       /^Make this a Skill$/,
       /^Move to…(⇧⌘M|Ctrl\+Shift\+M)$/,
+      /^New Folder with this Mind(⌃⌘N)?$/,
       /^RenameF2$/,
       /^Delete$/,
     ]);
@@ -346,6 +347,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     await expect(folderActions.getByRole("menuitem")).toHaveText([
       /^Open in the Library$/,
       /^New Mind here$/,
+      /^New Folder(⇧⌘N|Ctrl\+Shift\+N)$/,
       /^Organize this Folder$/,
       /^Edit description…$/,
       /^Sort by…$/,
