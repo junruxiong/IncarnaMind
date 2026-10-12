@@ -80,6 +80,13 @@ export interface EvalConfig {
    * a run that asks only some never gates on Citations. Null: all of them.
    */
   questionIds: string[] | null;
+  /**
+   * How many of keyword search's best the search Tool's reranker sees in
+   * Answers' searches, or "off" for none (INCARNAMIND_EVAL_RERANK_DEPTH). Null: the app's.
+   */
+  rerankDepth: number | "off" | null;
+  /** How many Passages a search hands the model (INCARNAMIND_EVAL_MAX_PASSAGES). Null: the app's. */
+  maxPassages: number | null;
   /** Whether the every-format set runs too (INCARNAMIND_EVAL_FORMATS: on by default). */
   formats: boolean;
   /**
@@ -215,6 +222,18 @@ function questionIds(env: Env): string[] | null {
   return ids;
 }
 
+/** A whole number of at least 1, or "off". */
+function rerankDepth(env: Env): number | "off" | null {
+  const raw = value(env, "RERANK_DEPTH");
+  if (raw === null) return null;
+  if (raw === "off") return "off";
+  return positiveInteger(env, "RERANK_DEPTH", 1);
+}
+
+function maxPassages(env: Env): number | null {
+  return value(env, "MAX_PASSAGES") === null ? null : positiveInteger(env, "MAX_PASSAGES", 1);
+}
+
 /** "on" (the default) or "off". */
 function formatsOn(env: Env): boolean {
   const raw = value(env, "FORMATS");
@@ -264,6 +283,8 @@ export function readConfig(root: string, env: Env = process.env): EvalConfig {
     maxRounds: positiveInteger(env, "MAX_ROUNDS", 3),
     answerTimeoutMs: positiveInteger(env, "ANSWER_TIMEOUT_S", 300) * 1000,
     questionIds: questionIds(env),
+    rerankDepth: rerankDepth(env),
+    maxPassages: maxPassages(env),
     formats: formatsOn(env),
     localQueryModes: localQueryModesOn(env),
     dumpSets: dumpSets(env),

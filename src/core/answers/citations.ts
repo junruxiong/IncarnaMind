@@ -143,11 +143,12 @@ interface Cited {
 /**
  * The Units a record cites, in order. A record names a Location ("slide 4",
  * "Revenue, rows 12–14", "§ 2.1 Sensitivity"), or for a PDF or deck, its
- * pages. One that names none cites the Passage's own Units; when they are
- * more than two, the quote's own Unit (or two) among them, if it is there:
- * a PDF's too, as a small model often names no page, and a Passage of a
- * page with little text runs over three or four (#67: 梯度下降法's covers
- * pp. 1–4). `units` are the Passage's.
+ * pages. One that names none cites the quote's own Unit (or two) among the
+ * Passage's, if it is there, else the Passage's own Units: a small model often
+ * names no page, and a Passage runs onto a second page (#519) or, with little
+ * text on a page, over three or four (#67: 梯度下降法's covers pp. 1–4). Two
+ * pages named, as a model copies a Passage's, narrow to the quote's own the same
+ * way. `units` are the Passage's.
  */
 function citedUnits(
   record: Pick<CitationRecordInput, "pageFrom" | "pageTo" | "location" | "quote">,
@@ -179,18 +180,31 @@ function citedUnits(
   if ((kind === "page" || kind === "slide") && (from !== null || to !== null)) {
     const first = (from ?? to) as number;
     const last = (to ?? from) as number;
-    return {
-      range: { pageFrom: Math.min(first, last), pageTo: Math.max(first, last) },
-      requested: null,
-      unresolved: false,
-    };
+    const named = { pageFrom: Math.min(first, last), pageTo: Math.max(first, last) };
+    // More than two pages named stay so, for the check to reject.
+    const narrowed =
+      named.pageTo - named.pageFrom + 1 <= MAX_CITED_PAGES
+        ? locatedAmong(units, named, record, matching)
+        : null;
+    return { range: narrowed ?? named, requested: null, unresolved: false };
   }
-  if (own.pageTo - own.pageFrom + 1 > MAX_CITED_PAGES) {
-    const quote = cleanQuote(typeof record.quote === "string" ? record.quote : "");
-    const found = locateQuote(units, quote, matching);
-    if (found) return { range: found, requested: null, unresolved: false };
-  }
-  return { range: own, requested: null, unresolved: false };
+  const located = locatedAmong(units, own, record, matching);
+  return { range: located ?? own, requested: null, unresolved: false };
+}
+
+/** Where the record's quote is within these pages of the Passage's Units, when they are more than one. */
+function locatedAmong(
+  units: readonly PageText[],
+  pages: { pageFrom: number; pageTo: number },
+  record: Pick<CitationRecordInput, "quote">,
+  matching: Matching,
+): PageRange | null {
+  if (pages.pageTo === pages.pageFrom) return null;
+  const quote = cleanQuote(typeof record.quote === "string" ? record.quote : "");
+  const among = units.filter(
+    (unit) => unit.page !== null && unit.page >= pages.pageFrom && unit.page <= pages.pageTo,
+  );
+  return locateQuote(among, quote, matching);
 }
 
 /** The first Unit, or two consecutive Units of one run, among `units` whose text holds the quote. */
@@ -862,6 +876,7 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       return {
         text: formatPassages(formatted),
         passageCount: found.length,
+        passageIds: found.map((passage) => passage.passageId),
         ranks: found.map((passage, index) => passage.rank ?? index),
         // Someone else wrote a saved web page: reading it makes the Run third-party (#78).
         ...(found.some((passage) => passage.documentKind === "web") && {

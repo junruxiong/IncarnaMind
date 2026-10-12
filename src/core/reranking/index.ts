@@ -149,8 +149,12 @@ export function createRerankingModel(options: RerankingModelOptions): RerankingM
   const files = createDownloadableModel({
     name: definition.name,
     folder: definition.folder,
-    files: definition.files,
-    maxTokens: definition.maxTokens,
+    runnerFiles: (directory) => ({
+      model: join(directory, definition.files.model),
+      tokenizer: join(directory, definition.files.tokenizer),
+      tokenizerConfig: join(directory, definition.files.tokenizerConfig),
+      maxTokens: definition.maxTokens,
+    }),
     source,
     dataDir: options.dataDir,
     loadRunner: async (paths) =>

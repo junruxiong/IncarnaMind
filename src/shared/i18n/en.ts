@@ -538,6 +538,10 @@ export const en = {
   "documents.status.ready": "Ready",
   "documents.status.failed": "Failed: {reason}",
   "documents.status.noText": "No text found",
+  "documents.status.scanning.one": "Reading 1 scanned page…",
+  "documents.status.scanning.other": "Reading {count} scanned pages… {read} read so far.",
+  "documents.statusShort.scanning": "Reading {read}/{count}",
+  "documents.statusShort.pagesUnread": "Pages unread",
   "documents.statusShort.queued": "Queued",
   "documents.statusShort.extracting": "Reading",
   "documents.statusShort.waiting": "Waiting",
@@ -557,6 +561,12 @@ export const en = {
   "documents.fileShort.missing": "Missing",
   "documents.fileShort.unavailable": "Unavailable",
   "documents.failure.processingError": "something went wrong while processing it",
+  "documents.failure.pagesUnread.one": "scanned page {pages} couldn't be read",
+  "documents.failure.pagesUnread.other": "scanned pages {pages} couldn't be read",
+  "documents.failure.pagesUnread.all": "its scanned pages couldn't be read",
+  "documents.pagesUnread.one": "Scanned page {pages} couldn't be read",
+  "documents.pagesUnread.other": "Scanned pages {pages} couldn't be read",
+  "documents.pagesUnread.all": "The scanned pages couldn't be read",
   "documents.ask": "Ask about this Document",
   "documents.startMind": "Start a Mind from this Document",
   "documents.more": "More actions for {name}",
@@ -650,7 +660,7 @@ export const en = {
   "linkedFolders.state.paused.progress": "Indexing is paused: {indexed} of {files} files indexed",
   "linkedFolders.state.unavailable": "Unavailable",
   "linkedFolders.state.unavailable.full":
-    "The folder can't be reached right now, e.g. its drive is unplugged. Its Documents are still searched from their stored text.",
+    "The folder can't be reached right now, e.g. its drive is unplugged. Its Documents are still searched from their stored text. If it moved, choose Locate folder… in its menu.",
   "linkedFolders.state.downloading": "Downloading…",
   "linkedFolders.state.downloading.full.one": "Downloading 1 online-only file to index it",
   "linkedFolders.state.downloading.full.other":
@@ -674,6 +684,15 @@ export const en = {
   "linkedFolders.reveal.windows": "Show in Explorer",
   "linkedFolders.reveal.other": "Show in file manager",
   "linkedFolders.reveal.unavailableReason": "The folder can't be reached right now.",
+  "linkedFolders.locateAction": "Locate folder…",
+  "linkedFolders.locate.pickTitle": "Locate “{name}”",
+  "linkedFolders.locate.pickButton": "Choose",
+  "linkedFolders.locate.notThis":
+    "None of the files in “{name}” are in that folder. Choose the folder that holds them now.",
+  "linkedFolders.locate.overlaps":
+    "That folder is inside a Linked folder, or holds one. Choose the folder “{name}” is in now.",
+  "linkedFolders.locate.taken":
+    "“{file}” in that folder is in IncarnaMind already, added on its own. Delete it from IncarnaMind, then locate the folder again.",
   "linkedFolders.unlinkAction": "Unlink…",
   "linkedFolders.unlink.title": "Unlink “{name}”?",
   "linkedFolders.unlink.body":
@@ -693,6 +712,8 @@ export const en = {
 
   "status.processing.one": "Processing 1 Document…",
   "status.processing.other": "Processing {count} Documents…",
+  "status.scanning.one": "Reading 1 scanned page…",
+  "status.scanning.other": "Reading {count} scanned pages…",
   "status.tagging.one": "Tagging 1 Document…",
   "status.tagging.other": "Tagging {count} Documents…",
   "status.taggingWaiting": "Tags need a model",
@@ -703,6 +724,14 @@ export const en = {
   "status.rerankDownloading": "Reranking model: {downloaded} of {total} MB",
   "status.rerankDownloadFailed": "Reranking model download failed",
   "status.rerankModelFailed": "Reranking model couldn't start",
+  "status.scanModelDownloading": "Text recognition model: {downloaded} of {total} MB",
+  "status.scanModelDownloadFailed": "Text recognition model download failed",
+  "status.scanModelFailed": "Text recognition model couldn't start",
+  "scan.model.downloading":
+    "Downloading the text recognition model: {downloaded} of {total} MB. Scanned pages are read as soon as it's ready, on this computer.",
+  "scan.model.failed":
+    "The text recognition model couldn't be downloaded: {reason}. Scanned pages can't be read until it is.",
+  "scan.model.loadFailed": "The text recognition model couldn't start on this computer.",
   "status.rebuilding": "Rebuilding search: {done} of {total}",
   "status.searchError": "Search can't use {provider}",
   "status.retry": "Retry",
@@ -1034,6 +1063,12 @@ export const en = {
   "providers.choice.apiKey": "An API key",
   "providers.choice.apiKey.body":
     "OpenAI, Anthropic, Google, DeepSeek, Qwen, Kimi, GLM, Mistral, xAI, OpenRouter, SiliconFlow, or an OpenAI-compatible server. Your Question and the Passages found for it are sent to that service.",
+  "providers.choice.apiKey.firstRun.body":
+    "{providers}. More providers are in Settings. Your Question and the Passages found for it are sent to that service.",
+  "providers.list.separator": ", ",
+  "providers.list.last": "{rest} or {last}",
+  "providers.kind.short.qwen": "Qwen",
+  "providers.kind.short.deepseek": "DeepSeek",
   "providers.choice.chatgpt.body": "Sign in with your ChatGPT Plus or Pro account. No key needed.",
 
   "providers.kind.openai": "OpenAI",
@@ -1085,6 +1120,7 @@ export const en = {
   "providers.test.too-long": "The model's context window is too small for even a short request.",
   "providers.test.cost-cap":
     "Nothing was sent: this month's spending cap is reached. Change it in Settings → General.",
+  "providers.test.no-answer": "The model sent no reply.",
   "providers.test.unknown": "The test didn't work.",
 
   "providers.secrets.plainText.title": "No keyring is running",
@@ -1368,6 +1404,9 @@ export const en = {
   "privacy.traffic.embedding-model": "Search model download",
   "privacy.traffic.embedding-model.description":
     "The built-in search model is downloaded once, the first time a Document needs it.",
+  "privacy.traffic.text-recognition-model": "Text recognition model download",
+  "privacy.traffic.text-recognition-model.description":
+    "The built-in text recognition model is downloaded once, the first time a scanned page needs reading. Scans are read on this computer: nothing of them is sent.",
   "privacy.traffic.reranking-model": "Reranking model download",
   "privacy.traffic.reranking-model.description":
     "The built-in reranking model is downloaded once, when there are Documents to search, unless reranking is off or uses a service. On a computer with a GPU it can use, its GPU version is downloaded too.",
@@ -1531,6 +1570,7 @@ export const en = {
   "answer.error.useLocal": "Use a local model",
   "answer.error.too-long":
     "This Question is too long for the model’s context window, even with nothing before it. Shorten it, or choose another model",
+  "answer.error.no-answer": "The model sent no Answer",
   "answer.error.unknown": "This Answer couldn't be written",
   "answer.error.not-signed-in": "You're not signed in to ChatGPT",
   "answer.error.plan-limit": "Your ChatGPT plan's usage limit is reached",
@@ -1592,6 +1632,10 @@ export const en = {
   "citation.reason.document-removed": "The Document has been deleted.",
   "citation.reason.checking": "The quote is checked when the Answer is finished.",
   "citation.where": "{document}, {location}",
+  "citation.scan": "Text read from a scan",
+  "citation.scan.unsure.one": "Text read from a scan · 1 word may be misread",
+  "citation.scan.unsure.other": "Text read from a scan · {count} words may be misread",
+  "citation.scan.unsureWord": "May be misread: check it on the page",
   "citation.quote": "The quote:",
   "citation.meaning":
     '"Quote found" means these words are where it cites. It doesn\'t mean they support the sentence.',
@@ -1864,6 +1908,11 @@ export const en = {
   "error.dismiss": "Dismiss",
   "error.startup.title": "IncarnaMind couldn't start",
   "error.startup.body": "Your data folder couldn't be opened.\n\n{message}",
+  "error.startup.newer.title": "Update IncarnaMind to open your data",
+  "error.startup.newer.body":
+    "A newer version of IncarnaMind saved this data folder, so this version can't open it. Your data is safe and unchanged.",
+  "error.startup.newer.download": "Download the latest version",
+  "error.startup.newer.quit": "Quit",
 
   // The application menu (src/main/menu.ts).
   "menu.about": "About IncarnaMind",
@@ -2440,18 +2489,48 @@ export const en = {
     "Resize the assistant: ↑ and ↓ move it; a double-click restores its size",
   "assistant.resize.float":
     "Resize the assistant: the arrow keys change its size; a double-click restores it",
-  "assistant.reads.all": "Reads “{mind}” · searches All Documents",
-  "assistant.reads.one": "Reads “{mind}” · searches “{scope}”",
-  "assistant.reads.more": "Reads “{mind}” · searches “{scope}” and {count} more",
+  "assistant.askedFrom.all": "Asked from “{mind}” · searches All Documents",
+  "assistant.askedFrom.one": "Asked from “{mind}” · searches “{scope}”",
+  "assistant.askedFrom.more": "Asked from “{mind}” · searches “{scope}” and {count} more",
   "assistant.searchesAll": "Searches All Documents",
   "assistant.empty":
     "Ask about the Mind you’re in or your Documents. Answers stay here, every Citation checked, until you add one to a note.",
   "assistant.log": "Conversation “{title}”",
   "assistant.youAsked": "You asked:",
   "assistant.cleared": "Cleared “{title}”",
-  "assistant.scope.all": "All Documents",
-  "assistant.scope.one": "“{scope}”",
-  "assistant.scope.more": "“{scope}” and {count} more",
+  // An Answer's steps (#391): the folded line, the live step and the timeline.
+  "steps.searched": "Searched {scope} · {sources}",
+  "steps.listened": "Listened to the live transcript · {sources}",
+  "steps.sources": "{count} sources",
+  "steps.sources.one": "1 source",
+  "steps.sources.none": "no sources",
+  "steps.asked": "Asked from {mind}",
+  "steps.asked.deleted": "Asked from a deleted Mind",
+  "steps.answered": "Answered by {model}",
+  "steps.answered.in": "Answered by {model} in {seconds}s",
+  "steps.thought": "{model} thought for {seconds}s",
+  "steps.showMore": "Show more",
+  "steps.showLess": "Show less",
+  "steps.search": "Searched {scope} for “{query}”",
+  "steps.search.times": "Searched {scope} {count} times",
+  "steps.search.found": "{found} passages found, {used} used",
+  "steps.search.found.one": "1 passage found, {used} used",
+  "steps.sources.more": "+{count} more",
+  "steps.check": "Checked {count} Citations against their sources",
+  "steps.check.one": "Checked 1 Citation against its source",
+  "steps.check.allFound": "all found",
+  "steps.check.found": "found",
+  "steps.check.notFound": "{count} not found",
+  "steps.failed.search": "Couldn’t search {scope}",
+  "steps.failed.search.auth": "Couldn’t search {scope}: the key for a search model was refused",
+  "steps.live.searching": "Searching {scope}…",
+  "steps.live.checking": "Checking {count} Citations…",
+  "steps.live.checking.one": "Checking 1 Citation…",
+  "steps.label": "Steps",
+  "steps.scope.all": "All Documents",
+  "steps.scope.named": "{name}",
+  "steps.scope.files": "{count} files",
+  "steps.scope.more": "{scope} +{count}",
   "answer.actions": "Answer actions",
   "answer.copy": "Copy",
   "answer.copy.label": "Copy the Answer ({shortcut})",
@@ -2476,6 +2555,7 @@ export const en = {
   "answer.addTo.newIn": "In “{folder}”",
   "command.answer.addToNote": "Add the Answer to note",
   "command.answer.copy": "Copy the Answer",
+  "command.answer.regenerate": "Regenerate the Answer",
   "command.answer.stop": "Stop the Answer",
   "command.answer.stop.unavailable": "No Answer is being written",
   "origin.from": "From the conversation “{title}”",
@@ -2553,6 +2633,7 @@ export const en = {
     "Used in the ChatGPT app’s Work and Codex modes; ordinary Chat mode doesn’t use it.",
   "agents.setup.undoChanged": "{path} has changed since, so IncarnaMind left it as it is.",
   "agents.client.other": "Other agent",
+  "agents.client.codex": "ChatGPT app and Codex",
   "agents.pairing.reads": "Reads {folders}",
   "agents.pairing.readsNothing": "Reads no folders yet",
   "agents.pairing.lastUsed": "Last used {when}",
@@ -2569,6 +2650,10 @@ export const en = {
   "agents.pairing.copySkill.hint":
     "Save it as SKILL.md in a folder named incarnamind, inside your agent’s skills folder, so it knows when to use IncarnaMind.",
   "agents.pairing.copied": "Copied",
+  "agents.pairing.copy": "Copy",
+  "agents.pairing.command": "Command",
+  "agents.pairing.args": "Arguments",
+  "agents.pairing.env": "Environment",
   "agents.activity.empty": "No calls yet.",
   "agents.activity.search": "Searched “{text}”",
   "agents.activity.read_passages": "Read Passages",
@@ -2612,7 +2697,7 @@ export const en = {
   "agents.done.command": "Copied. Paste it into a terminal and run it.",
   "agents.done.settings": "Copied. In {agent}, add it as a new server, then restart {agent}.",
   "agents.done.settings.other":
-    "Copied. Paste it where your agent adds a new server, then restart the agent. If it asks for a command, arguments and environment instead, they are in the settings you copied (Details for technical users).",
+    "Copied. Paste it where your agent adds a new server, then restart the agent. If it asks for a command, arguments and environment instead, Details for technical users shows each, ready to copy.",
   "agents.done.unreadable":
     "{agent}’s settings file couldn’t be read, so IncarnaMind left it alone. The settings are copied: paste them into {path}.",
   "agents.done.undo": "Undo",

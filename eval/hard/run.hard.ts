@@ -33,6 +33,7 @@ import {
   type RerankerInfo,
 } from "../lib/rerank";
 import { KEYWORD_RERANK_DEPTH, rerankedLabel, rerankMode, TOP_K } from "../lib/retrieval";
+import { answerOptionsOf } from "../lib/timing";
 import { type HardCitations, runHardCitations } from "./lib/citations";
 import { fetchLibrary } from "./lib/fetch";
 import { embedEveryPassage } from "./lib/indexing";
@@ -106,6 +107,7 @@ test("the hard tier", async () => {
         path: document.path as string,
       })),
       keep: config.keepData,
+      ...answerOptionsOf(config),
       log,
       allowUnprocessed: true,
       embeddings: false,

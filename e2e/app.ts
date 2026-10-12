@@ -81,6 +81,11 @@ export interface LaunchOptions {
    * always a fake that makes a tone: no test opens a device.
    */
   computerSound?: "allowed" | "denied" | "silent";
+  /**
+   * What the fake text recognition model reads on each scanned page (#397):
+   * a JSON file of a `FakeScanScript`. Without, it reads nothing on them.
+   */
+  scans?: string;
 }
 
 /**
@@ -123,6 +128,7 @@ export async function launchApp(
     chatGpt,
     keepWindow = false,
     computerSound = "allowed",
+    scans,
   }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
@@ -139,6 +145,7 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_REFERENCE_LOOKUP;
   delete env.INCARNAMIND_TEST_SOURCES;
   delete env.INCARNAMIND_TEST_CHATGPT;
+  delete env.INCARNAMIND_TEST_SCANS;
   // A test never uses the ChatGPT sign-in an agent's shell may point at for checks by hand.
   delete env.INCARNAMIND_CHATGPT_PROFILE;
   env.INCARNAMIND_TEST_AUDIO = "fake";
@@ -154,6 +161,7 @@ export async function launchApp(
   if (referenceLookup) env.INCARNAMIND_TEST_REFERENCE_LOOKUP = referenceLookup;
   if (sources) env.INCARNAMIND_TEST_SOURCES = sources;
   if (chatGpt) env.INCARNAMIND_TEST_CHATGPT = chatGpt;
+  if (scans) env.INCARNAMIND_TEST_SCANS = scans;
   env.INCARNAMIND_DATA_DIR = dataDir;
   env.INCARNAMIND_TEST_HOOKS = "1";
   if (fakeChat) env.INCARNAMIND_FAKE_CHAT = "1";
@@ -585,8 +593,11 @@ export async function setWindowSize(
  * Asks for the content size and waits until the page has it, asking again
  * while it hasn't. On Linux (Xvfb) a size asked for while the window is still
  * taking the one before it (a launch sets one, then a test its own) is
- * sometimes dropped, and the page stays as it was (#459), so one ask is not
- * enough. The launch also waits for the height; `setWindowSize` only the width.
+ * sometimes dropped, and the page stays as it was (#459). Asking again for the
+ * same size didn't help on CI, probably because Electron skips a size it
+ * already holds as the window's, so every other ask goes one pixel off the
+ * target first, which makes a real change and so a new resize. The launch also
+ * waits for the height; `setWindowSize` only the width.
  */
 async function resizeContent(
   app: ElectronApplication,
@@ -595,27 +606,47 @@ async function resizeContent(
   height: number,
   { message, waitForHeight = false }: { message?: string; waitForHeight?: boolean } = {},
 ): Promise<void> {
-  const ask = () =>
+  const ask = (size: { width: number; height: number }) =>
     app.evaluate(
-      ({ BrowserWindow }, size) =>
-        BrowserWindow.getAllWindows()[0]?.setContentSize(size.width, size.height),
-      { width, height },
+      ({ BrowserWindow }, asked) =>
+        BrowserWindow.getAllWindows()[0]?.setContentSize(asked.width, asked.height),
+      size,
     );
-  await ask();
-  await expect
-    .poll(
-      async () => {
-        const [innerWidth, innerHeight] = await window.evaluate(() => [
-          globalThis.innerWidth,
-          globalThis.innerHeight,
-        ]);
-        const arrived = innerWidth === width && (!waitForHeight || innerHeight === height);
-        if (!arrived) await ask();
-        return [innerWidth, waitForHeight ? innerHeight : height];
-      },
-      { message },
-    )
-    .toEqual([width, height]);
+  const look = async () => {
+    const [innerWidth, innerHeight] = await window.evaluate(() => [
+      globalThis.innerWidth,
+      globalThis.innerHeight,
+    ]);
+    return { innerWidth, innerHeight };
+  };
+  let asks = 0;
+  await ask({ width, height });
+  try {
+    await expect
+      .poll(
+        async () => {
+          const { innerWidth, innerHeight } = await look();
+          const arrived = innerWidth === width && (!waitForHeight || innerHeight === height);
+          if (!arrived) {
+            asks += 1;
+            if (asks % 2 === 1) await ask({ width: width + 1, height: height + 1 });
+            await ask({ width, height });
+          }
+          return [innerWidth, waitForHeight ? innerHeight : height];
+        },
+        { message },
+      )
+      .toEqual([width, height]);
+  } catch (error) {
+    const contentSize = await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0]?.getContentSize(),
+    );
+    const page = await look();
+    throw new Error(
+      `${message ?? "The window did not reach its size"}: asked ${width} × ${height} ${asks} times; the window's content is ${contentSize?.join(" × ")}, the page ${page.innerWidth} × ${page.innerHeight}.`,
+      { cause: error },
+    );
+  }
 }
 
 /** How many animations are running (src/renderer/src/motion.ts), leaving copies included. */
@@ -986,6 +1017,39 @@ export async function askInAssistant(window: Page, question: string): Promise<Lo
   return answer;
 }
 
+/** The tiny MCP server the core tests use: `lookup_tide` is read-only, `book_boat` isn't. */
+const TIDE_SERVER = resolve(__dirname, "../tests/fixtures/mcp-server.mjs");
+
+/** Adds the tiny server as a Connector through the core's bridge, waits until it's ready, and returns its id. */
+export async function addTideConnector(window: Page): Promise<string> {
+  return window.evaluate(
+    async ({ node, server }) => {
+      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      const connector = await bridge.addConnector({ name: "Tides", command: node, args: [server] });
+      for (let tries = 0; tries < 300; tries++) {
+        const found = (await bridge.listConnectors()).find((each) => each.id === connector.id);
+        if (found?.state === "ready") return connector.id;
+        await new Promise((done) => setTimeout(done, 100));
+      }
+      throw new Error("The Connector didn't get ready.");
+    },
+    { node: process.execPath, server: TIDE_SERVER },
+  );
+}
+
+/**
+ * Unfolds an Answer's steps in the assistant (#391) with the mouse, unless
+ * they are open, and returns their timeline: the reasoning, the searches,
+ * the Skills and Connector calls it made, and the check.
+ */
+export async function openSteps(window: Page, answer: Locator): Promise<Locator> {
+  const toggle = answer.getByTestId("answer-steps");
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") await pointAndClick(window, toggle);
+  const timeline = answer.getByTestId("answer-timeline");
+  await expect(timeline).toBeVisible();
+  return timeline;
+}
+
 /**
  * Adds an Answer in the assistant to the Mind in focus, at its cursor (or
  * end), with the mouse, as a person keeps one (#201), and waits until it is in.
@@ -1077,6 +1141,17 @@ export async function stubClipboard(window: Page) {
 /** A fresh, empty data folder. Remove it with `removeDataFolder`. */
 export const createDataFolder = () => mkdtemp(join(tmpdir(), "incarnamind-smoke-"));
 
+/** Closes an app, and kills it if it hasn't quit in 10 s, so one stuck app can't hold up the worker. */
+async function closeOrKill(app: ElectronApplication): Promise<void> {
+  const quit = app.close().catch(() => undefined);
+  let timer: NodeJS.Timeout | undefined;
+  const stuck = new Promise<"stuck">((resolve) => {
+    timer = setTimeout(() => resolve("stuck"), 10_000);
+  });
+  if ((await Promise.race([quit, stuck])) === "stuck") app.process().kill("SIGKILL");
+  clearTimeout(timer);
+}
+
 /**
  * Removes a data folder, after closing an app the test left open on it. If
  * the test failed, a screenshot of that app's window as the test left it is
@@ -1094,7 +1169,7 @@ export async function removeDataFolder(dataDir: string): Promise<void> {
       const shot = await window.screenshot({ path }).catch(() => undefined);
       if (shot) await info.attach("app-window", { path, contentType: "image/png" });
     }
-    await app.close().catch(() => undefined);
+    await closeOrKill(app);
   }
   await rm(dataDir, { recursive: true, force: true, maxRetries: 3 });
 }

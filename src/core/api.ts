@@ -32,7 +32,7 @@ export type {
  */
 import type { CitationForm, CitationStyleId } from "../shared/citationStyles";
 import type { TagColour } from "../shared/tagColours";
-import type { UnitKind, UnitLabel } from "../shared/units";
+import type { Anchor, UnitKind, UnitLabel } from "../shared/units";
 import type { Language, LanguagePreference } from "./language";
 
 export interface Mind {
@@ -493,6 +493,13 @@ export interface AnswerToolCall {
   approval?: ToolCallApproval;
   /** A search: how many Passages it gave the model. Null otherwise, and while running. */
   resultCount: number | null;
+  /**
+   * A search: the Passages it found, by id (`Citation.passageId`), so the
+   * Citations it led to can be told. Absent on searches made before #391.
+   */
+  passages?: string[];
+  /** A search that failed: why, sorted as an Answer's own failure is. Absent otherwise. */
+  error?: ProviderError;
   /**
    * "use_skill" only: the Question forced this Skill, so the core loaded it up
    * front instead of the model calling the Tool. Absent otherwise.
@@ -1109,12 +1116,28 @@ export type DocumentFailureReason =
    */
   | "file-missing"
   /** Anything else, e.g. the processing worker crashed. */
-  | "processing-error";
+  | "processing-error"
+  /**
+   * Scanned pages couldn't be read (#397): the text recognition model
+   * couldn't be downloaded or failed on them. The pages that were read are
+   * searched; Retry reads the others.
+   */
+  | "pages-unread";
 
 export interface DocumentFailure {
   reason: DocumentFailureReason;
   /** Technical detail in English, for logs and tooltips. */
   message: string;
+  /** "pages-unread": the scanned pages that couldn't be read, from 1; empty when none could be. */
+  pages?: number[];
+}
+
+/** Where reading a PDF's scanned pages is (#397), while it is processed. */
+export interface DocumentScanProgress {
+  /** How many of its pages are scans to read. */
+  pages: number;
+  /** How many of them are read so far. */
+  read: number;
 }
 
 /**
@@ -1194,8 +1217,12 @@ export interface Document {
    */
   contentHash: string;
   /**
-   * The file, where the User keeps it: an absolute path. IncarnaMind never
-   * changes it. A web page's is its snapshot, in the data folder.
+   * The file, where the User keeps it on this computer: an absolute path.
+   * IncarnaMind never changes the file. A web page's is its snapshot, in the
+   * data folder. Not what the Document is known by (ADR-0020): that is its
+   * Linked folder and its path inside it, its place in the data folder, or,
+   * for a file added on its own, its id; so it can be elsewhere on another
+   * computer, or after its Linked folder is located somewhere else.
    */
   path: string;
   /** Where the file is: see `DocumentFileStatus`. */
@@ -1209,6 +1236,8 @@ export interface Document {
   status: DocumentStatus;
   /** While `status` is "embedding": the share of its Passages embedded so far, from 0 to 1. Null otherwise. */
   progress: number | null;
+  /** While `status` is "extracting" and its scanned pages are read (#397): how far that is. Null otherwise. */
+  scan: DocumentScanProgress | null;
   /** Set when `status` is "failed": why the latest version read failed. */
   failure: DocumentFailure | null;
   /**
@@ -1791,6 +1820,37 @@ export interface DocumentText {
 }
 
 /**
+ * The scanned pages of a Document's current version (#397): the text read
+ * from each page's picture, and where each of its lines is on the page
+ * (`Anchor.quad`), so the viewer can lay the text over the picture and wash
+ * a quote there.
+ */
+export interface ScannedText {
+  documentId: string;
+  contentHash: string;
+  pages: { page: number; text: string; label: UnitLabel | null; anchors: Anchor[] }[];
+}
+
+/**
+ * Where a Citation's quote was read from a scan (#397), for its card: the
+ * words the text recognition wasn't sure of within it, as the page's text has
+ * them, in order (empty when it was sure of every one).
+ */
+export interface ScannedQuote {
+  unsure: string[];
+}
+
+/** A Citation's quote, as `readScannedQuote` looks it up: its Document, version, Units and quote. */
+export interface ScannedQuoteInput {
+  documentId: string;
+  /** The version it quotes; null for a Citation that doesn't say (the current one is read). */
+  contentHash: string | null;
+  pageFrom: number | null;
+  pageTo: number | null;
+  quote: string;
+}
+
+/**
  * A label with a short description that Documents can carry. IncarnaMind
  * applies Tags automatically, choosing them by their names and descriptions,
  * and the User can add or remove them.
@@ -1901,9 +1961,9 @@ export interface Examples {
  * placeholders (online-only files) aren't read unless the User asks.
  */
 export interface LinkedFolder {
-  /** A random UUID generated on this device. */
+  /** A random UUID generated on this device: the same wherever the folder is (ADR-0020). */
   id: string;
-  /** Absolute, symbolic links resolved. */
+  /** Where it is on this computer: absolute, symbolic links resolved. `locateLinkedFolder` changes it. */
   path: string;
   /** Its own Folder, the root of its Folders. */
   folderId: string;
@@ -2351,6 +2411,8 @@ export type ProviderErrorKind =
   | "too-long"
   /** The request could pass the User's monthly cap (`UserSettings.monthlyCap`): nothing was sent. */
   | "cost-cap"
+  /** The model's reply ended with no text, or none that could be read. */
+  | "no-answer"
   | "unknown";
 
 export interface ProviderError {
@@ -2739,6 +2801,36 @@ export interface AnswerPhaseEvent extends AnswerPlace {
   phase: AnswerPhase;
 }
 
+/**
+ * More of the model's reasoning, as its provider summarized it (#391): only
+ * from a provider whose reasoning is a summary (`AnswerSteps.reasoning`),
+ * never raw chain of thought.
+ */
+export interface AnswerReasoning extends AnswerPlace {
+  answerId: string;
+  text: string;
+}
+
+/**
+ * How an Answer in a conversation was reached, beside its Tool calls and
+ * Citations (#391). Times are ISO 8601, UTC.
+ */
+export interface AnswerSteps {
+  /** When its Question went to the model; null when none did (its Search scope had no Documents). */
+  sentAt: string | null;
+  /** When it ended; null while it is being written. */
+  finishedAt: string | null;
+  /** What it was doing, and from when, oldest first. */
+  phases: { phase: AnswerPhase; at: string }[];
+  /**
+   * The model's reasoning as its provider summarized it (Anthropic's
+   * summarized thinking, the Responses API's reasoning summary), and how long
+   * it thought, in ms: from its first reasoning to the Answer's first text.
+   * Null when the model gave no summary. Raw chain of thought is never kept.
+   */
+  reasoning: { summary: string; ms: number } | null;
+}
+
 /** A Tool call of an Answer started, or finished (see `call.status`). */
 export interface AnswerToolCallEvent extends AnswerPlace {
   answerId: string;
@@ -2912,6 +3004,8 @@ export interface ConversationAnswer {
    * it too, and so does a Mind it is added to. Null: none.
    */
   textOrigin: ThirdPartySource | null;
+  /** How it was reached; null for an Answer written before #391. */
+  steps: AnswerSteps | null;
   /** ISO 8601, UTC. */
   createdAt: string;
   /** ISO 8601, UTC. */
@@ -3461,6 +3555,8 @@ export interface RegisteredDataFlow {
  * - "reranking-model": downloads the built-in reranking model's files, once,
  *   when the first Documents are ready to search, unless reranking is off or
  *   uses a service.
+ * - "text-recognition-model": downloads the built-in text recognition
+ *   model's files (#397), once, when the first scanned page needs reading.
  * - "transcription-model": downloads the speech-to-text model and Silero VAD,
  *   once, when a Meeting is first transcribed on this computer (#136).
  * - "ollama-pull": Ollama downloads a model from its registry, when the User picks local models.
@@ -3478,6 +3574,7 @@ export const networkTrafficIds = [
   "update-check",
   "embedding-model",
   "reranking-model",
+  "text-recognition-model",
   "transcription-model",
   "ollama-pull",
   "chatgpt-sign-in",
@@ -4954,6 +5051,26 @@ export interface CoreApi {
    */
   readDocumentText(documentId: string): Promise<DocumentText>;
   /**
+   * The scanned pages of a Document's current version, with where their
+   * lines are (#397): empty when it has none. Throws NotFoundError for an
+   * unknown or deleted Document.
+   */
+  readScannedText(documentId: string): Promise<ScannedText>;
+  /**
+   * Whether a Citation's quote was read from a scan (#397), and the words in
+   * it the reading wasn't sure of; null when the Units it cites weren't
+   * scanned, or its quote isn't in them.
+   */
+  readScannedQuote(input: ScannedQuoteInput): Promise<ScannedQuote | null>;
+  /** The built-in text recognition model's download state (#397). */
+  getTextRecognitionModel(): Promise<EmbeddingModelStatus>;
+  /**
+   * Downloads the built-in text recognition model, or tries again after a
+   * failure; once it is ready, Documents whose scanned pages couldn't be
+   * read are read again. "textRecognitionModel.status" events report progress.
+   */
+  downloadTextRecognitionModel(): Promise<EmbeddingModelStatus>;
+  /**
    * What linking a folder would take (see `LinkedFolderPreview`), from the
    * files' metadata, without reading or changing anything. Throws for a path
    * that isn't a folder.
@@ -4973,6 +5090,18 @@ export interface CoreApi {
   addLinkedFolder(path: string, options?: AddDocumentsOptions): Promise<AddedLinkedFolder>;
   /** The Linked folders, in path order. */
   listLinkedFolders(): Promise<LinkedFolder[]>;
+  /**
+   * Points a Linked folder at where it is on this computer now, after it was
+   * moved or renamed, or when the data folder is opened on another computer
+   * (ADR-0020). Its Documents are looked for at their paths inside it and
+   * keep their ids, versions, Tags and Citations: a file with the same size
+   * and modified time isn't read, and one with the same content isn't
+   * processed again. Returns at once, "scanning". Throws InvalidInputError,
+   * changing nothing, for a folder inside or around another Linked folder,
+   * one that holds none of its files, or one with a file of it already added
+   * on its own.
+   */
+  locateLinkedFolder(linkedFolderId: string, path: string): Promise<LinkedFolder>;
   /**
    * Stops syncing a Linked folder and removes its Documents and Folders from
    * the index. Nothing on disk is touched. Of their stored text, only the
@@ -5774,6 +5903,8 @@ export interface CoreEvents {
   "document.status": Document;
   /** The built-in embedding model's state changed, or its download made progress. */
   "embeddingModel.status": EmbeddingModelStatus;
+  /** The built-in text recognition model's download state changed (#397). */
+  "textRecognitionModel.status": EmbeddingModelStatus;
   /**
    * The embedding model search uses changed, or local mode, or a rebuild made
    * progress (a Document finished) or finished, or the provider failed or recovered.
@@ -5891,6 +6022,7 @@ export interface CoreEvents {
   "answer.started": AnswerStarted;
   /** The Answer is loading its model, searching, or writing: its meta line says which. */
   "answer.phase": AnswerPhaseEvent;
+  "answer.reasoning": AnswerReasoning;
   "answer.delta": AnswerDelta;
   "answer.toolCallStarted": AnswerToolCallEvent;
   "answer.toolCallFinished": AnswerToolCallEvent;
@@ -5966,9 +6098,14 @@ const methods: Record<CoreApiMethod, true> = {
   deleteDocument: true,
   retryDocument: true,
   readDocumentText: true,
+  readScannedText: true,
+  readScannedQuote: true,
+  getTextRecognitionModel: true,
+  downloadTextRecognitionModel: true,
   previewLinkedFolder: true,
   addLinkedFolder: true,
   listLinkedFolders: true,
+  locateLinkedFolder: true,
   removeLinkedFolder: true,
   listKeptCitationTexts: true,
   updateReference: true,

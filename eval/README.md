@@ -173,6 +173,8 @@ Keys are read from these variables only, never from `OPENAI_API_KEY` and the lik
 | `INCARNAMIND_EVAL_MIN_CITATIONS` | `30` | Citations each language needs for the Citation targets to count. |
 | `INCARNAMIND_EVAL_MAX_ROUNDS` | `3` | Rounds of Questions at most. |
 | `INCARNAMIND_EVAL_ANSWER_TIMEOUT_S` | `300` | An Answer that takes longer is stopped and counted as failed. |
+| `INCARNAMIND_EVAL_RERANK_DEPTH` | the app's (60) | A number, or `off`: how many of keyword search's best the search Tool's reranker sees in Answers' searches, or none. A run that sets it never gates. |
+| `INCARNAMIND_EVAL_MAX_PASSAGES` | the app's (8) | How many Passages one search hands the model in Answers. A run that sets it never gates. |
 | `INCARNAMIND_EVAL_QUESTIONS` | all | Question ids separated by commas, e.g. `en-07,zh-02`, from either set: only these are asked, once each. Retrieval still scores every Question. A run that asks only some never gates on Citations, and its report says so. |
 | `INCARNAMIND_EVAL_LOCAL_QUERY_MODES` | `off` | `on` runs keyword + rewrites and keyword + sub-questions with a local chat model too; off skips them, and the report says so. A cloud model always runs them. |
 | `INCARNAMIND_EVAL_FORMATS` | `on` | `off` skips the every-format set: its Documents, searches and Questions. |
@@ -228,6 +230,7 @@ Each Answer is read back from its Mind, as the editor shows it, and split into s
 |---|---|---|
 | Answers with a Citation | The share of Answers with at least one Citation. | reported |
 | Time per Answer | The median time from asking to the Answer's end. | reported |
+| Where the time went | See "Where an Answer's time goes" below. | reported |
 | Citations | How many Citations the Answers have. | at least 30, for the other targets to count |
 | "Quote found" | The share of Citations whose check found the quote on the cited pages. | at least 90% |
 | False "not found" | The share of Citations the check marked "not found" whose quote is on the cited pages under a looser normalisation. The looser normalisation keeps only letters and digits, ignoring case, accents, punctuation, spacing and hyphens, reads traditional Chinese characters as simplified ones, as the check does, and reads an f-ligature's letters (fi, fl, ff, ffi, ffl) as one "f": some PDFs' text lost the letters after it, so the page shows "finance" where the stored text reads "fnance" (JP Morgan's ESG report, nearly every such word), and a quote of the page as it shows is the check's miss, not the model's (the check forgives it too in such a Document, ADR-0009). It is compared with the stored page text the check read. | at most 5% |
@@ -252,6 +255,19 @@ The run gates on the first three targets for a cloud model. Support is judged by
 3. Count the `y` rows. The target is at least 80% of the rows in each language.
 
 The hard tier's unanswerable Questions have a second check, on whether the Answer declines: it says the Documents don't answer the Question (`eval/hard/README.md`). A phrase rule in English and Chinese (`eval/lib/declines.ts`) decides first. The sheet adds a row, with the Answer's text, for each Answer to an unanswerable Question the rule didn't take as a decline; write `y` in `decline missed by the rule (y/n)` when it does decline.
+
+### Where an Answer's time goes
+
+With a chat model, each Answer is timed from the moment its Question is asked (#488), through the core's own seams, which pass everything on unchanged (a test compares the requests with and without the recording). `report.json` keeps, for each Answer (`timing`), in milliseconds from that moment:
+
+- each model call's start, first byte (the first part after the request was accepted) and end, with the input, cached input and output tokens the provider reported (a call that failed or was cut off has no first byte or end);
+- each search's start and end, the reranker's own time within it (null when it did not rerank), and how many Passages it handed the model;
+- the first text that stays in the Answer (a preamble the engine takes back doesn't count), whether the Answer was written twice (a paragraph said again word for word, Citation markers aside), and the computer's one-minute load average when the Question was asked;
+- `expected`: how many Passages the Question needs, how many a search handed the model, and how many the Answer cites with a found Citation on the right pages. A search can only hand a Passage the model then ignores, or never hand it: the two figures tell them apart.
+
+`report.md` and the terminal summary give, per group of Answers, the median and 95th percentile of the whole Answer, the first text, each model call and its wait for a first byte (call 1, 2, 3 and the later ones apart), each search and the reranker, with how many calls and searches an Answer makes, how many were written twice, and the Answers whose searches handed over, and whose Citations cover, every Passage the Question needs. The reports hold no key, no request and no Passage text. Times move with the computer's load, which each Answer records: compare runs of similar load, or the same Questions asked under each option in turn.
+
+To compare how searches are made on Answers, set `INCARNAMIND_EVAL_RERANK_DEPTH` (a number: how many of keyword search's best the reranker sees; `off`: no reranking) and `INCARNAMIND_EVAL_MAX_PASSAGES` (how many Passages a search hands the model). A run that sets either is a comparison: the report lists it under "Set by the run" and it never gates.
 
 ### Every format
 
@@ -428,6 +444,7 @@ The check now ignores letter case, reads "[^36]" as "[36]", and finds a quote wi
 - **Entry point:**
   - `run.eval.ts`: the run, from start to finish.
   - `dumps/run.dump.ts`: `npm run eval:dump`, with its own `vitest.config.ts`. `score.ts`: `npm run eval:score`, the dump format and the scorer, which Node runs as it is.
+  - `ocr/`: `npm run eval:ocr`, the comparison that chose how scanned pages are read (#397), with its own `vitest.config.ts` and [README](ocr/README.md).
   - `vitest.config.ts`: Vitest compiles the TypeScript and bundles the worker threads, as it does for the unit tests. Its config includes only `*.eval.ts`.
 - **`lib/`:**
   - `config.ts`: the environment variables.
@@ -438,6 +455,7 @@ The check now ignores letter case, reads "[^36]" as "[36]", and finds a quote wi
   - `rerank.ts` and `rerankerWorker.ts`: a reranking candidate on a worker thread, and its download and timings.
   - `retrieval.ts`: the hit rule, searches, reranked modes, the translated second query, and tallies.
   - `citations.ts`: asks Questions, reads Answers, and scores Citations.
+  - `timing.ts`, `timingReport.ts` and `handed.ts`: where an Answer's time went, how the reports show it, and whether searches handed the model what the Question needs.
   - `report.ts`: the reports and the summary.
   - `dumps.ts`: writes a set's dump (see Offline scoring); `commit.ts`: the commit a run was made at.
 - **Evaluation set:**
@@ -448,6 +466,7 @@ The check now ignores letter case, reads "[^36]" as "[36]", and finds a quote wi
 - **Tests of the evaluation itself:** these run with `npm test`, without the model.
   - `tests/eval/scoring.test.ts` checks how the evaluation scores sentences, Citations, hits and the reviewer sheet.
   - `tests/eval/citations.test.ts` runs the Citation part through a core with a scripted model.
+  - `tests/eval/timing.test.ts` checks the timings: the first-text rule, the written-twice check, that recording changes nothing sent to the model, and the search settings.
   - `tests/eval/recordedCitations.test.ts` checks the Citations of the 2026-10-07 run again with today's check.
   - `tests/eval/smallModelCitations.test.ts` shows, without a model, the ways a small model's Citations of the gating set's long PDFs aren't found (#67): records written by hand, through the core's citation session, over the stored text of their pages.
   - `tests/eval/formatSet.test.ts` checks the every-format set against the stored text; `tests/eval/formatScoring.test.ts`, its figures and reports; `tests/eval/formatCitations.test.ts`, the Citation check on every Location kind.

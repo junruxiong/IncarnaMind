@@ -9,7 +9,12 @@ import {
   type FormattedCluster,
   type StyledRun,
 } from "../../../core/api";
-import { badgeMessage, type CitationState, citationState } from "../../../shared/citations";
+import {
+  badgeMessage,
+  type CitationState,
+  citationSource,
+  citationState,
+} from "../../../shared/citations";
 import {
   citationLocation,
   formatLocation,
@@ -22,9 +27,10 @@ import { citationHandle } from "../commands/handles";
 import { type CommandContext, commands } from "../commands/registry";
 import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
 import { useTabPlace } from "../components/tabs/tabItems";
-import { useLanguage, useT } from "../i18n";
+import { useGap, useLanguage, useT } from "../i18n";
 import { groupsMerged } from "../layoutSlice";
 import type { ObjectRef } from "../objects";
+import { openCited as openCitedPlace, quoteSaysSo } from "../openCited";
 import { recordUsage, useAppStore } from "../store";
 import { pageDate } from "../webPages";
 import {
@@ -34,19 +40,17 @@ import {
   memberMarker,
 } from "./citationClusters";
 import { citationNumberOf } from "./citationNumbers";
+import { QuoteWithUnsureWords, ScanLine, useScannedQuote } from "./citationScan";
 import { CheckMarkIcon, CheckStateIcon } from "./icons";
 import { InFootnoteContext, MindIdContext, RegenerateAnswerContext } from "./mindContext";
 import { Popover } from "./Popover";
 import { onPeek, peekCitation } from "./peek";
 import { StyledRuns, StyledRunView } from "./StyledRuns";
+import { runsText } from "./styledText";
 
 /** How long a pointer rests on a Citation before its card shows, and how long it may leave before it goes. */
 const SHOW_MS = 120;
 const HIDE_MS = 200;
-
-/** Whether opening the cited place washes the quote: it is there, unless the check could not find it. */
-const quoteSaysSo = (check: CitationCheck) =>
-  check === "found" || check === "unsupported" || check === "contradicted";
 
 /** The Answer a Citation sits in, if it does (it may have been copied into a Note). */
 function answerAround(
@@ -98,7 +102,6 @@ export function CitationView({
     state.status.kind === "ready" ? state.documents : null,
   );
   const kept = useAppStore((state) => state.keptCitationTexts);
-  const openDocument = useAppStore((state) => state.openDocument);
   /** The Mind's group: the Document opens in the group to its right. */
   const place = useTabPlace();
   const state = citationState(attributes, documents, kept);
@@ -106,13 +109,10 @@ export function CitationView({
   const where = location ? formatLocation(location, t) : null;
   const badge = badgeMessage(state, attributes, t);
   const badgeText = t(badge.key, badge.params);
-  const documentName = attributes.documentName ?? "";
   const number = citationNumberOf(decorations);
   // In a footnote's text it is part of the footnote: it shows where it points, not a number.
   const inFootnote = useContext(InFootnoteContext);
-  const pointsTo = where
-    ? t("citation.where", { document: documentName, location: where })
-    : documentName;
+  const pointsTo = citationSource(attributes, t).text;
   /** Clicked: the card stays until it is dismissed. */
   const [pinned, setPinned] = useState(false);
   /** Hovered or focused, with the card, the marker or its mark. */
@@ -148,31 +148,13 @@ export function CitationView({
     };
   }, [hold]);
 
-  /**
-   * Opens the cited place (a page, slide, section, rows or lines), or the
-   * Document, with the quote to highlight if asked, and the Citation's
-   * check, number and label: the viewer colours the quote by the check
-   * (amber when opened anyway after "not found") and shows the check mark,
-   * with where it points, beside it.
-   */
+  /** Opens the cited place, or the Document; amber when opened anyway after "not found". */
   const openCited = (withQuote: boolean) => {
     const documentId = state.documentId ?? attributes.documentId;
     if (!documentId) return;
-    openDocument(
-      {
-        documentId,
-        // A whole TXT or Markdown file cited before Locations, whose quote wasn't found, opens at the top.
-        pageFrom: attributes.pageFrom ?? undefined,
-        pageTo: attributes.pageTo ?? undefined,
-        quote: withQuote && attributes.quote ? attributes.quote : undefined,
-        citation: {
-          check: state.check,
-          ...(number > 0 ? { number } : {}),
-          ...(where ? { label: where } : {}),
-          ...(attributes.contentHash ? { contentHash: attributes.contentHash } : {}),
-        },
-      },
-      { as: "citation", ...(place && { from: place.groupId }) },
+    openCitedPlace(
+      { ...attributes, documentId },
+      { check: state.check, withQuote, number, label: where, from: place?.groupId },
     );
   };
 
@@ -496,6 +478,7 @@ function CitationCard({
 }) {
   const t = useT();
   const language = useLanguage();
+  const gap = useGap();
   const web = useAppStore(
     (store) => store.documents.find((each) => each.id === state.documentId)?.web ?? null,
   );
@@ -514,7 +497,7 @@ function CitationCard({
       ? name
       : null
     : where
-      ? t("citation.where", { document: name, location: where })
+      ? citationSource(attributes, t).text
       : name;
   const reason =
     state.check === "checking"
@@ -523,6 +506,7 @@ function CitationCard({
         ? t(`citation.reason.${state.reason}`)
         : null;
   const removed = state.reason === "document-removed";
+  const scanned = useScannedQuote(attributes);
   return (
     <div className={`citation-card citation-card--${state.check}`} contentEditable={false}>
       <div className="citation-card-head">
@@ -531,6 +515,7 @@ function CitationCard({
           <span>{badgeText}</span>
         </p>
         {source && <p className="citation-card-source">{source}</p>}
+        {scanned && <ScanLine scanned={scanned} />}
         {web && fetchedAt && (
           <p data-testid="citation-web-source" className="citation-card-source">
             {web.siteName} · {t("webPages.fetched", { date: pageDate(fetchedAt, language) })}
@@ -541,7 +526,9 @@ function CitationCard({
         <figure className="citation-card-quote">
           <figcaption className="sr-only">{t("citation.quote")}</figcaption>
           <blockquote>
-            <span className="citation-card-wash">{attributes.quote}</span>
+            <span className="citation-card-wash">
+              <QuoteWithUnsureWords quote={attributes.quote} unsure={scanned?.unsure ?? []} />
+            </span>
           </blockquote>
         </figure>
       )}
@@ -552,7 +539,8 @@ function CitationCard({
       )}
       {note && (
         <p data-testid="citation-styled-note" className="citation-card-styled">
-          <span className="citation-card-styled-label">{t("citation.note")}</span>{" "}
+          <span className="citation-card-styled-label">{t("citation.note")}</span>
+          {gap(t("citation.note"), runsText(note))}
           <StyledRuns runs={note} />
         </p>
       )}

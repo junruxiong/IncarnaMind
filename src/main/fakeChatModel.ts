@@ -8,10 +8,16 @@
  * what a Tool-calling model does: it searches for the Question, cites the line
  * of the first Passage that shares a word with the Question (on the page, or
  * at the Location, that line is on), then answers with a marker. A Question
- * with "misquote" in it gets a quote that isn't on the page; one with "each"
+ * with "misquote" in it gets a quote that isn't on the page; one with "no page"
+ * names no page, as a small model often doesn't; one with "each"
  * cites the first Passage of each Document found, with a marker for each; one
  * with "rows" quotes two lines, so a sheet's Citation covers a range of rows; one that
  * asks for it "as a table" gets a Markdown table with its markers in a cell.
+ * Before its search it reasons, a line that quotes the Question, as a model
+ * that thinks does. A Question asked "slowly" waits a moment before each step
+ * and writes its Answer word by word, so a test sees each step of the Answer.
+ *
+ * A Question with "blank reply" in it gets a reply with no text at all.
  *
  * With Skills: a Question that names a listed Skill gets it loaded with
  * use_skill first. An Answer that follows a Skill (forced, or loaded) starts
@@ -55,6 +61,13 @@ type GenerateOptions = Parameters<MockLanguageModelV4["doGenerate"]>[0];
 
 /** Time between two streamed words: slow enough for a test to watch the Answer grow. */
 const WORD_DELAY_MS = 60;
+/** For a Question asked "slowly": the wait before each step, and between two words of the Answer. */
+const SLOW_STEP_MS = 1200;
+const SLOW_WORD_MS = 250;
+const SLOWLY = /\bslowly\b/i;
+
+/** What the scripted model reasons before it searches: a line that quotes the Question. */
+const reasoningFor = (question: string) => `Search the Documents for “${question}”.`;
 
 /** The scripted Answer to a Question, when there are no Documents; it says which Skill it follows, if any. */
 function fakeAnswer(question: string, skill: string | null = null): string {
@@ -213,7 +226,7 @@ function recordFor(
   const record = {
     marker,
     passage: passage.id,
-    ...(picked.page !== null
+    ...(picked.page !== null && !/\bno page\b/i.test(question)
       ? { pageFrom: picked.page, pageTo: picked.page }
       : picked.location
         ? { location: picked.location }
@@ -282,7 +295,7 @@ function offeredTags(options: GenerateOptions): string[] {
 }
 
 type OfferedTool = NonNullable<Parameters<MockLanguageModelV4["doStream"]>[0]["tools"]>[number];
-type Reply = { text: string } | { tool: string; input: unknown };
+type Reply = ({ text: string } | { tool: string; input: unknown }) & { reasoning?: string };
 
 /** The last word of a Question, without punctuation: what a scripted call passes on. */
 function lastWordOf(question: string): string {
@@ -369,6 +382,7 @@ function scriptNamed(
 function nextReply(prompt: Prompt, tools: readonly OfferedTool[]): Reply {
   const names = tools.map((tool) => tool.name);
   const question = lastQuestion(prompt);
+  if (/blank reply/i.test(question)) return { text: "" };
   /** What the calls made first said, in order. */
   const said: string[] = [];
   const run = scriptNamed(prompt, question, names);
@@ -411,7 +425,13 @@ function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
   const skill = skillFollowed(prompt);
   if (!tools.includes("search_documents")) return { text: fakeAnswer(question, skill) };
   const searches = toolResults(prompt, "search_documents");
-  if (searches.length === 0) return { tool: "search_documents", input: { query: question } };
+  if (searches.length === 0) {
+    return {
+      tool: "search_documents",
+      input: { query: question },
+      reasoning: reasoningFor(question),
+    };
+  }
   const cites = toolResults(prompt, "cite");
   if (cites.length === 0) {
     const records = recordsFor(searches.at(-1) ?? "", question);
@@ -605,7 +625,17 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
     }),
     doStream: async ({ prompt, tools, abortSignal }) => {
       const reply = nextReply(prompt, tools ?? []);
+      const slow = SLOWLY.test(lastQuestion(prompt));
       const parts: StreamPart[] = [{ type: "stream-start", warnings: [] }];
+      if (reply.reasoning) {
+        parts.push(
+          { type: "reasoning-start", id: "thinking" },
+          ...reply.reasoning
+            .split(/(?<=\s)/)
+            .map((word): StreamPart => ({ type: "reasoning-delta", id: "thinking", delta: word })),
+          { type: "reasoning-end", id: "thinking" },
+        );
+      }
       if ("tool" in reply) {
         parts.push(
           {
@@ -625,6 +655,7 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
           { type: "finish", finishReason: { unified: "stop", raw: undefined }, usage: USAGE },
         );
       }
+      const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
       const stream = new ReadableStream<StreamPart>({
         async pull(controller) {
           const part = parts.shift();
@@ -632,9 +663,9 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
             controller.close();
             return;
           }
-          if (part.type === "text-delta") {
-            await new Promise((resolve) => setTimeout(resolve, WORD_DELAY_MS));
-          }
+          if (slow && part.type === "stream-start") await wait(SLOW_STEP_MS);
+          if (part.type === "text-delta") await wait(slow ? SLOW_WORD_MS : WORD_DELAY_MS);
+          if (slow && part.type === "reasoning-delta") await wait(WORD_DELAY_MS);
           if (abortSignal?.aborted) {
             controller.error(new DOMException("The request was aborted.", "AbortError"));
             return;
