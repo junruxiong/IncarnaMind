@@ -79,6 +79,7 @@ import { type AnyEventListener, createEventHub } from "./events";
 import { createExamples } from "./examples";
 import { createLocalExecutor } from "./execution";
 import { createExports } from "./exports";
+import { exportLabels } from "./exports/labels";
 import { renderMarkdown } from "./exports/markdown";
 import { createFileLock } from "./fileLock";
 import { safeFileName, writeNewFile } from "./fileNames";
@@ -567,6 +568,7 @@ export function createCore(adapters: CoreAdapters): Core {
     dataDir,
     crossEncoder: adapters.crossEncoder,
     emitStatus: () => reportRerank(),
+    log: adapters.log ?? silentLogger,
   });
   // Rerank: the built-in model by default, a Cohere or Voyage key (paused in local mode), or off.
   const rerank = createRerank({
@@ -982,6 +984,8 @@ export function createCore(adapters: CoreAdapters): Core {
     language: () => settings.get().language,
     citationStyle: (mindId) => mindCitationStyle(mindId).style,
     formatCitations: (request) => citationStyles.format(request),
+    ...(adapters.pictures && { pictures: adapters.pictures }),
+    log: adapters.log ?? silentLogger,
     now,
   });
   /** Usage data: which format, and whether Questions went with it. */
@@ -1578,10 +1582,7 @@ export function createCore(adapters: CoreAdapters): Core {
         const blocks = content.peek(mind.id, (fragment) =>
           readBlocks(fragment, { includeQuestions: true, footnote, trimBeforeCitation: true }),
         );
-        return renderMarkdown(mind.title || mind.autoTitle, blocks, {
-          question: translate(language, "export.question"),
-          unverified: translate(language, "export.unverified"),
-        });
+        return renderMarkdown(mind.title || mind.autoTitle, blocks, exportLabels(language));
       },
       answer: (question, documentIds, signal) =>
         answers.answerOutside(question, documentIds, signal),
