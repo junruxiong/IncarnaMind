@@ -259,7 +259,6 @@ describe("Answers use Connector Tools", { timeout: 30_000 }, () => {
     await consent;
 
     expect(model.doStreamCalls[0]?.tools?.map((each) => each.name).sort()).toEqual([
-      "calculate",
       "cite",
       "read_skill_file",
       "search_documents",

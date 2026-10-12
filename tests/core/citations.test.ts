@@ -229,9 +229,8 @@ describe("Answers cite Passages", { timeout: 30_000 }, () => {
       /one unbroken stretch of the Passage: don't leave words out with an ellipsis/,
     );
     expect(system).toMatch(/The User has added 1 Document /);
-    expect(system).toMatch(/Never work out a number yourself.*call calculate/);
     // Short: it is sent with every Question.
-    expect(system.length).toBeLessThan(3000);
+    expect(system.length).toBeLessThan(2500);
   });
 
   test("a marker with no record is removed, and a record naming no Passage is dropped: both are counted", async () => {

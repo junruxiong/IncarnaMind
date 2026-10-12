@@ -12,7 +12,6 @@ import { describe, expect, test } from "vitest";
 import {
   type ConversationAnswer,
   type Core,
-  type CoreEvents,
   DATABASE_FILE,
   type MarkedFigure,
 } from "../../src/core";
@@ -22,13 +21,14 @@ import type { NodeJSON } from "../../src/shared/blockJson";
 import { translate } from "../../src/shared/i18n";
 import {
   answerEnded,
+  citingModel,
   type ShownPassage,
   setUpWithDocuments,
   shownPassages,
 } from "../helpers/citations";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
-import { askAndEnd, isAnswer, messagesOf, QWEN35, setUpLocalModel } from "../helpers/localModels";
+import { askAndEnd, isAnswer, QWEN35, setUpLocalModel } from "../helpers/localModels";
 import { answerIn, question, writeMind } from "../helpers/minds";
 import { promptOf, scriptedModel, scriptedModels } from "../helpers/models";
 import { xlsxPackage } from "../helpers/office";
@@ -130,6 +130,33 @@ async function askAndRead(core: Core, text: string, conversationId?: string) {
   return { answer, finished: ended.payload, conversationId: asked.conversation.id };
 }
 
+/**
+ * A core whose chat model is Claude Haiku 5.5, scripted: a model measured to
+ * use calculate, so its Answers are offered it (ADR-0021). Its service is
+ * allowed, and the files are added as Documents.
+ */
+async function setUpCalculating(
+  model: MockLanguageModelV4,
+  files: readonly { name: string; contents: string | Uint8Array }[],
+  dataDir?: string,
+) {
+  const core = startCore(dataDir ?? (await createTempDataFolder()), {
+    createChatModel: scriptedModels(model).createChatModel,
+  });
+  const saved = await core.saveChatProvider({
+    kind: "anthropic",
+    apiKey: "sk-test",
+    modelId: "claude-haiku-5-5",
+  });
+  if (saved.service) await core.allowDataFlow("chat", saved.service.id);
+  const sources = await createTempDataFolder();
+  await addAndProcess(
+    core,
+    await Promise.all(files.map((file) => writeSourceFile(sources, file.name, file.contents))),
+  );
+  return { core };
+}
+
 /** The `calculate` call that sums up an Answer's figures. */
 const calculateCall = (answer: ConversationAnswer) =>
   answer.toolCalls.find((call) => call.tool === "calculate");
@@ -197,7 +224,7 @@ describe("The calculate Tool", { timeout: 60_000 }, () => {
         "| Gross margin | [=2] |",
       ].join("\n"),
     });
-    const { core } = await setUpWithDocuments(model, [ACME]);
+    const { core } = await setUpCalculating(model, [ACME]);
     const cards: string[] = [];
     core.on("answer.toolCallStarted", ({ call }) => cards.push(call.tool));
 
@@ -206,6 +233,11 @@ describe("The calculate Tool", { timeout: 60_000 }, () => {
       "How much did Acme's revenue grow in 2025, and how did its gross margin change?",
     );
 
+    // It is steered to the Tool, in few words: the instructions go with every Question.
+    const system = promptOf(model)[0]?.text ?? "";
+    expect(system).toMatch(/Never work out a number yourself.*call calculate/);
+    expect(system.length).toBeLessThan(3200);
+    expect(model.doStreamCalls[0]?.tools?.map((tool) => tool.name)).toContain("calculate");
     // The model is told what each came to, with the numbers it read, in one line each.
     expect(told(model, "calculate")).toEqual([
       [
@@ -315,7 +347,7 @@ describe("The calculate Tool", { timeout: 60_000 }, () => {
       ],
       answer: "2025年营业收入同比增长[=1]，比上年增加[=2][^1]。",
     });
-    const { core } = await setUpWithDocuments(model, [REPORT]);
+    const { core } = await setUpCalculating(model, [REPORT]);
 
     const { answer } = await askAndRead(core, "公司2025年营业收入同比增长多少？比上年增加了多少？");
 
@@ -490,7 +522,7 @@ describe("The calculate Tool", { timeout: 60_000 }, () => {
       ],
       answer: "The figures couldn't be worked out.",
     });
-    const { core } = await setUpWithDocuments(model, [
+    const { core } = await setUpCalculating(model, [
       { name: "Notes.md", contents: NOTES },
       { name: "Stock.txt", contents: "Stock 1,234" },
     ]);
@@ -530,7 +562,7 @@ describe("The calculate Tool", { timeout: 60_000 }, () => {
       answer:
         "Revenue grew 20.4% [=1] in 2025, gross margin rose 2.3% [=2], costs fell [=9], and `[=1]` is how it is written.",
     });
-    const { core } = await setUpWithDocuments(model, [ACME]);
+    const { core } = await setUpCalculating(model, [ACME]);
 
     const { answer, finished } = await askAndRead(core, "How did Acme do in 2025?");
 
@@ -590,7 +622,7 @@ describe("The calculate Tool", { timeout: 60_000 }, () => {
       ],
       answer: "Revenue changed by [=1].",
     });
-    const { core } = await setUpWithDocuments(model, [ACME]);
+    const { core } = await setUpCalculating(model, [ACME]);
 
     const { answer } = await askAndRead(core, "How did Acme's revenue change?");
 
@@ -627,7 +659,7 @@ describe("The calculate Tool", { timeout: 60_000 }, () => {
       ],
       answer: "Gross margin rose [=2][^1].",
     });
-    const { core } = await setUpWithDocuments(model, [ACME]);
+    const { core } = await setUpCalculating(model, [ACME]);
 
     const { answer } = await askAndRead(core, "How did Acme's gross margin change?");
 
@@ -657,7 +689,7 @@ describe("The calculate Tool", { timeout: 60_000 }, () => {
       }
       return { text: "" };
     });
-    const { core } = await setUpWithDocuments(model, [ACME]);
+    const { core } = await setUpCalculating(model, [ACME]);
 
     const { answer } = await askAndRead(core, "How much did Acme's revenue grow?");
 
@@ -716,7 +748,7 @@ describe("The calculate Tool", { timeout: 60_000 }, () => {
       ],
       answer: "The West's margin rose [=1].",
     });
-    const { core } = await setUpWithDocuments(model, [{ name: "Margins.xlsx", contents: book }]);
+    const { core } = await setUpCalculating(model, [{ name: "Margins.xlsx", contents: book }]);
 
     const { answer } = await askAndRead(core, "How did the West's margin change?");
 
@@ -740,7 +772,7 @@ describe("The calculate Tool", { timeout: 60_000 }, () => {
       steps: [citeAndCalculate],
       answer: "Revenue grew [=1] in 2025[^1]; gross margin rose [=2][^2].",
     });
-    const { core } = await setUpWithDocuments(model, [ACME]);
+    const { core } = await setUpCalculating(model, [ACME]);
     const { conversationId } = await askAndRead(core, "How did Acme do in 2025?");
 
     await askAndRead(core, "Why?", conversationId);
@@ -784,10 +816,7 @@ describe("Calculated figures with conversations (ADR-0017)", { timeout: 60_000 }
       steps: [citeAndCalculate],
       answer: "Revenue grew [=1][^1]; gross margin rose [=2][^2].",
     });
-    const core = startCore(dataDir, { createChatModel: scriptedModels(model).createChatModel });
-    await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
-    const sources = await createTempDataFolder();
-    await addAndProcess(core, [await writeSourceFile(sources, ACME.name, ACME.contents)]);
+    const { core } = await setUpCalculating(model, [ACME], dataDir);
 
     const old = (await core.getConversation("before")).messages[0];
     expect(old).toMatchObject({ kind: "answer", figures: [] });
@@ -811,97 +840,100 @@ describe("Calculated figures with conversations (ADR-0017)", { timeout: 60_000 }
   });
 });
 
-describe("A small local model in structured output", { timeout: 60_000 }, () => {
-  /** A request to fix figures, rather than an Answer or tagging. */
-  const isFigureRetry = (body: Record<string, unknown>) =>
-    messagesOf(body).some(
-      (message) =>
-        message.role === "system" && message.content.startsWith("You fix the calculated figures"),
+describe("Structured output, for a model offered calculate", { timeout: 60_000 }, () => {
+  test("its figures come in its JSON and are worked out the same way; one in error is dropped, and the Answer says so", async () => {
+    const growth = GROWTH({ revenue: 1, margin: 2 });
+    const badMargin = {
+      ...growth[1],
+      inputs: [
+        { name: "gm2025", label: "Gross margin 2025", citation: 2, number: "42.1%" },
+        { name: "gm2024", label: "Gross margin 2024", citation: 2, number: "38.9%" },
+      ],
+    };
+    // Its provider refuses Tools, so the Answer steps down to structured output.
+    const model = scriptedModel((call) =>
+      call.tools.length > 0
+        ? { error: { status: 400, message: "This model does not support tools" } }
+        : {
+            text: JSON.stringify({
+              answer: "Revenue grew [=1][^1], and gross margin rose [=2][^2].",
+              citations: [
+                { marker: 1, passage: "P1", location: "p. 1", quote: REVENUE },
+                { marker: 2, passage: "P1", location: "p. 2", quote: MARGIN },
+              ],
+              calculations: [growth[0], badMargin],
+            }),
+          },
+    );
+    const { core } = await setUpCalculating(model, [ACME]);
+
+    const { answer, finished } = await askAndRead(
+      core,
+      "How did Acme's revenue and margin change in 2025?",
     );
 
-  async function askSmallModel(answer: object, retry?: object) {
+    expect(finished.citationSupport).toBe("structured-output");
+    expect(promptOf(model, 1)[0]?.text).toContain("- calculations: one for each number");
+    expect(finished.figures).toMatchObject([{ marker: 1, shown: "20.4%" }]);
+    expect(finished.uncalculated).toBe(1);
+    // A cloud model gets no second request, as for quotes.
+    expect(finished.figureRetry).toBeNull();
+    expect(shown(answerBlocks(answer))).toBe("Revenue grew 20.4%, and gross margin rose.");
+    expect(calculateCall(answer)).toMatchObject({ resultCount: 1, uncalculated: 1 });
+    expect(translate("zh-CN", "answer.figures.uncalculated.one")).toBe("1 个数字未能计算");
+  });
+});
+
+describe("A model not measured to use calculate answers as before", { timeout: 60_000 }, () => {
+  test("in the Tool loop: no calculate Tool, no steer, and its Answer is as it was", async () => {
+    const model = citingModel({
+      query: "revenue",
+      records: (passages) => [
+        { marker: 1, passage: passages[0]?.id, location: "p. 1", quote: REVENUE },
+      ],
+      answer: "Revenue grew about 20% [^1].",
+    });
+    // A model in Ollama: the catalog says nothing of its calculating.
+    const { core } = await setUpWithDocuments(model, [ACME]);
+
+    const { answer, finished } = await askAndRead(core, "How much did Acme's revenue grow?");
+
+    for (const call of model.doStreamCalls) {
+      expect(call.tools?.map((tool) => tool.name)).not.toContain("calculate");
+    }
+    const system = promptOf(model)[0]?.text ?? "";
+    expect(system).not.toMatch(/calculate|\[=1\]/);
+    expect(answer.text).toBe("Revenue grew about 20% [^1].");
+    expect(answer.figures).toEqual([]);
+    expect(answer.toolCalls.map((call) => call.tool)).toEqual(["search_documents"]);
+    expect(finished).toMatchObject({ figures: [], uncalculated: 0, figureRetry: null });
+  });
+
+  test("a small local model in structured output: no calculations asked for, and any it gives are left alone", async () => {
     const ollama = await startOllamaServer({
       models: [QWEN35],
       reply: (body): OllamaChatReply =>
         isAnswer(body)
-          ? { content: JSON.stringify(answer) }
-          : isFigureRetry(body)
-            ? { content: retry ? JSON.stringify(retry) : "I can't." }
-            : { content: JSON.stringify({ tags: [] }) },
+          ? {
+              content: JSON.stringify({
+                answer: "Revenue grew 20.4% [^1].",
+                citations: [{ marker: 1, passage: "P1", location: "p. 1", quote: REVENUE }],
+                calculations: [GROWTH({ revenue: 1, margin: 1 })[0]],
+              }),
+            }
+          : { content: JSON.stringify({ tags: [] }) },
     });
     const { core, mind, client } = await setUpLocalModel(ollama, QWEN35.name, {
       documents: [ACME],
     });
-    const phases: CoreEvents["answer.phase"]["phase"][] = [];
-    core.on("answer.phase", ({ phase }) => phases.push(phase));
-    const asked = question("How did Acme's revenue and margin change in 2025?");
+    const asked = question("How much did Acme's revenue grow?");
     writeMind(client, [asked]);
     const { answerId, ended } = await askAndEnd(core, client, mind.id, asked.attrs.id);
     if (ended.event !== "finished") throw new Error(`The Answer failed: ${JSON.stringify(ended)}`);
-    return {
-      finished: ended.payload,
-      text: answerIn(client, answerId).textContent,
-      ollama,
-      phases,
-    };
-  }
 
-  const ANSWER = {
-    answer: "Revenue grew [=1][^1], and gross margin rose [=2][^2].",
-    citations: [
-      { marker: 1, passage: "P1", location: "p. 1", quote: REVENUE },
-      { marker: 2, passage: "P1", location: "p. 2", quote: MARGIN },
-    ],
-  };
-  const growth = GROWTH({ revenue: 1, margin: 2 });
-  const badMargin = {
-    ...growth[1],
-    inputs: [
-      { name: "gm2025", label: "Gross margin 2025", citation: 2, number: "42.1%" },
-      { name: "gm2024", label: "Gross margin 2024", citation: 2, number: "38.9%" },
-    ],
-  };
-
-  test("describes its figures in its JSON, and they are worked out the same way; one still in error is dropped, and the Answer says so", async () => {
-    const { finished, text, ollama, phases } = await askSmallModel({
-      ...ANSWER,
-      calculations: [growth[0], badMargin],
-    });
-
-    expect(finished.figures).toMatchObject([{ marker: 1, shown: "20.4%" }]);
-    expect(finished.uncalculated).toBe(1);
-    expect(finished.figureRetry).toEqual({
-      figures: 1,
-      recovered: 0,
-      durationMs: expect.any(Number),
-    });
-    expect(phases).toContain("checking-figures");
-    expect(text).toBe("Revenue grew 20.4%, and gross margin rose.");
-    const [retry] = ollama.chats.filter((chat) => isFigureRetry(chat.body));
-    const prompt = messagesOf(retry?.body ?? {})
-      .filter((message) => message.role === "user")
-      .map((message) => message.content)
-      .join("\n");
-    expect(prompt).toContain(
-      `Why it couldn't be worked out: [=2] gm2025: the quote has no number "42.1%"; it has 41.2%, 38.9%.`,
-    );
-    expect(prompt).toContain(MARGIN);
-    expect(translate("zh-CN", "answer.figures.uncalculated.one")).toBe("1 个数字未能计算");
-  });
-
-  test("a figure its one request fixes is worked out", async () => {
-    const { finished, text } = await askSmallModel(
-      { ...ANSWER, calculations: [growth[0], badMargin] },
-      // A marker written as the Answer writes it, as small models do.
-      { calculations: [{ ...growth[1], marker: "[=2]" }] },
-    );
-
-    expect(finished.figures.map((figure) => figure.shown)).toEqual([
-      "20.4%",
-      "2.3 percentage points",
-    ]);
-    expect(finished.uncalculated).toBe(0);
-    expect(finished.figureRetry).toMatchObject({ figures: 1, recovered: 1 });
-    expect(text).toBe("Revenue grew 20.4%, and gross margin rose 2.3 percentage points.");
+    const request = ollama.chats.find((chat) => isAnswer(chat.body))?.body ?? {};
+    expect(JSON.stringify(request)).not.toMatch(/calculations|calculate/);
+    expect(ended.payload).toMatchObject({ figures: [], uncalculated: 0, figureRetry: null });
+    expect(answerIn(client, answerId).textContent).toBe("Revenue grew 20.4% .");
   });
 });

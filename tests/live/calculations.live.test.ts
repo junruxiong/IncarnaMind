@@ -265,7 +265,10 @@ describe.each(LIVE)("Calculated figures, live: $name", (live) => {
         );
         expect(answer.status, answer.errorMessage ?? "").toBe("done");
       }
-      expect(calculated).toBeGreaterThan(0);
+      // Only models the catalog offers calculate get it (ADR-0021); the others answer as before.
+      if (live.kind === "anthropic" || live.kind === "openai")
+        expect(calculated).toBeGreaterThan(0);
+      else expect(calculated).toBe(0);
     },
   );
 });
