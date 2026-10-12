@@ -1,10 +1,19 @@
-import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { Document } from "../../../core/api";
 import { decodeText } from "../../../core/documents/decode";
 import { lineUnits, markdownUnits, type SourceUnit } from "../../../core/documents/formats/text";
 import { findQuote, type TextRange } from "../../../shared/quoteMatch";
 import { useT } from "../i18n";
 import type { ViewerTarget } from "../store";
+import { type CitedArea, useCitedArea, useCitedAreaFailure } from "./citedArea";
 import { loadDocumentBytes, MissingDocumentError } from "./documentBytes";
 import { MarkdownBlocks, MarkdownDocumentContext, Slice } from "./MarkdownBlocks";
 import { parseMarkdown } from "./markdown";
@@ -57,6 +66,13 @@ export function TextView({ document, target }: { document: Document; target: Vie
     return () => controller.abort();
   }, [document.id]);
 
+  useCitedAreaFailure(
+    loaded.kind === "missing"
+      ? loaded.kind
+      : loaded.kind === "failed"
+        ? loaded.message || loaded.kind
+        : null,
+  );
   const markdown = document.kind === "markdown";
   const units = useMemo(
     () =>
@@ -203,6 +219,35 @@ function TextContent({
   const mark = quoteMarkOf(target.citation);
   const [markTop, setMarkTop] = useState<number | null>(null);
   const [markRoom, setMarkRoom] = useState(0);
+
+  // A cited page drawn to save it (#133): the cited lines, or the cited sections from the
+  // heading the first is under to the one after the last.
+  const formatted = blocks !== null && !source;
+  const citedArea = useCallback((): CitedArea | null => {
+    const element = column.current;
+    if (!element || !cited || target.pageFrom === undefined) return null;
+    const last = target.pageTo ?? target.pageFrom;
+    if (!formatted) {
+      const spans = [...element.querySelectorAll("[data-unit]")].filter((span) => {
+        const unit = Number(span.getAttribute("data-unit"));
+        return unit >= cited.first.page && unit <= last;
+      });
+      return spans.length > 0 ? spans : null;
+    }
+    const range = element.ownerDocument.createRange();
+    const start =
+      citedHeading !== null && citedHeading >= 0
+        ? element.querySelector(`[data-heading="${citedHeading}"]`)
+        : null;
+    if (start) range.setStartBefore(start);
+    else range.setStart(element, 0);
+    const after = [...sectionStarts].filter(([unit]) => unit > last).sort((a, b) => a[0] - b[0]);
+    const next = after[0] && element.querySelector(`[data-heading="${after[0][1]}"]`);
+    if (next) range.setEndBefore(next);
+    else range.setEnd(element, element.childNodes.length);
+    return range;
+  }, [formatted, cited, citedHeading, sectionStarts, target.pageFrom, target.pageTo]);
+  useCitedArea(true, citedArea);
 
   // The Citation's mark sits beside the quote's first line, wherever the text wraps it.
   const showMark = mark !== null && highlight.length > 0;
