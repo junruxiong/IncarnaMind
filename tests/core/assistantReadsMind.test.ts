@@ -2,7 +2,7 @@ import type { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test } from "vitest";
 import type { AskInConversationInput, ConversationAnswer, Core, MindFocus } from "../../src/core";
 import { answerEnded } from "../helpers/citations";
-import { createTempDataFolder, startCore } from "../helpers/core";
+import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core";
 import { answerChats, GIB, messagesOf, QWEN35, setUpLocalModel } from "../helpers/localModels";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
 import { editMind, heading, note, writeMind } from "../helpers/minds";
@@ -318,5 +318,27 @@ describe("Consent for the Mind read", { timeout: 30_000 }, () => {
       consent: "accepted",
       decidedAt: expect.any(String),
     });
+  });
+});
+
+describe("The migration", () => {
+  // protects=migration 72 gives a Question where the User was and an Answer the Mind it read, and is recorded; fails_when=a column is missing or the version isn't recorded; no_claim=what the columns hold, which the tests above cover.
+  test("72 adds the focus and the Mind read to conversation messages", async () => {
+    const dataDir = await createTempDataFolder();
+    startCore(dataDir).close();
+
+    const columns = queryDatabase<{ name: string }>(
+      dataDir,
+      "SELECT name FROM pragma_table_info('conversation_messages')",
+    ).map((column) => column.name);
+    expect(columns).toEqual(
+      expect.arrayContaining(["focus", "read_mind_id", "read_mind_version", "read_partial"]),
+    );
+    expect(
+      queryDatabase<{ version: number }>(
+        dataDir,
+        "SELECT version FROM schema_migrations WHERE version = 72",
+      ),
+    ).toEqual([{ version: 72 }]);
   });
 });
