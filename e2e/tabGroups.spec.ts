@@ -103,7 +103,7 @@ async function chooseFromTabMenu(window: Page, tab: Locator, item: string): Prom
   const box = await boxOf(tab);
   await window.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 6 });
   await window.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { button: "right" });
-  const menu = tab.getByTestId("tab-menu-items");
+  const menu = tab.getByTestId("tab-actions");
   await expect(menu).toBeVisible();
   await menu.getByRole("menuitem", { name: item, exact: true }).click();
   await expect(menu).toBeHidden();
@@ -472,7 +472,7 @@ test("the groups, their buttons and the tab's menu are in Chinese too", async ()
   const tab = groupAt(window, 1).getByRole("tab");
   const box = await boxOf(tab);
   await window.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { button: "right" });
-  const menu = tab.getByTestId("tab-menu-items");
+  const menu = tab.getByTestId("tab-actions");
   await expect(menu.getByRole("menuitem", { name: "移动到左侧一栏" })).toBeVisible();
   await expect(menu.getByRole("menuitem", { name: "置顶" })).toBeVisible();
   await screenshot(window, "groups-zh");
