@@ -130,6 +130,11 @@ for (const language of ["en", "zh-CN"] as const) {
     }
     // It lies over the line read, as the model placed it on the picture.
     expect((await highlights.allTextContents()).join("")).toContain(chosen.washed);
+    // The text read lies over the picture as a PDF's own text does: it can be selected.
+    await highlights.first().dblclick();
+    const selected = await window.evaluate(() => globalThis.getSelection()?.toString() ?? "");
+    expect(selected.trim().length).toBeGreaterThan(0);
+    expect(chosen.washed).toContain(selected.trim());
     await app.close();
   });
 }
