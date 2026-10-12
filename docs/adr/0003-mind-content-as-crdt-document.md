@@ -6,7 +6,7 @@ Each Mind's content is a single Yjs document that the editor edits directly. It 
 
 Version 1 has no sync, but it follows these rules so sync can be added without migrating data:
 
-- Documents are identified by a hash of their content, so the same file on two devices is recognised as one Document.
+- A Document is known by where its file belongs, its Linked folder and its path inside it, never by a path on one device, and a hash of its content identifies each version (ADR-0020). This replaced identifying a Document by its content hash, which ADR-0010 had already narrowed.
 - Every ID is a random UUID generated on the device, never an auto-increment number, so two devices can't produce the same ID.
 - Deleting something marks it deleted rather than removing the row, so a later sync can tell other devices about the deletion.
 - Secrets (API keys, OAuth tokens) are kept only on the device and never go in data that will be synced.

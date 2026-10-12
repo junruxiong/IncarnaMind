@@ -650,7 +650,7 @@ export const en = {
   "linkedFolders.state.paused.progress": "Indexing is paused: {indexed} of {files} files indexed",
   "linkedFolders.state.unavailable": "Unavailable",
   "linkedFolders.state.unavailable.full":
-    "The folder can't be reached right now, e.g. its drive is unplugged. Its Documents are still searched from their stored text.",
+    "The folder can't be reached right now, e.g. its drive is unplugged. Its Documents are still searched from their stored text. If it moved, choose Locate folder… in its menu.",
   "linkedFolders.state.downloading": "Downloading…",
   "linkedFolders.state.downloading.full.one": "Downloading 1 online-only file to index it",
   "linkedFolders.state.downloading.full.other":
@@ -674,6 +674,15 @@ export const en = {
   "linkedFolders.reveal.windows": "Show in Explorer",
   "linkedFolders.reveal.other": "Show in file manager",
   "linkedFolders.reveal.unavailableReason": "The folder can't be reached right now.",
+  "linkedFolders.locateAction": "Locate folder…",
+  "linkedFolders.locate.pickTitle": "Locate “{name}”",
+  "linkedFolders.locate.pickButton": "Choose",
+  "linkedFolders.locate.notThis":
+    "None of the files in “{name}” are in that folder. Choose the folder that holds them now.",
+  "linkedFolders.locate.overlaps":
+    "That folder is inside a Linked folder, or holds one. Choose the folder “{name}” is in now.",
+  "linkedFolders.locate.taken":
+    "“{file}” in that folder is in IncarnaMind already, added on its own. Delete it from IncarnaMind, then locate the folder again.",
   "linkedFolders.unlinkAction": "Unlink…",
   "linkedFolders.unlink.title": "Unlink “{name}”?",
   "linkedFolders.unlink.body":
@@ -2584,6 +2593,7 @@ export const en = {
     "Used in the ChatGPT app’s Work and Codex modes; ordinary Chat mode doesn’t use it.",
   "agents.setup.undoChanged": "{path} has changed since, so IncarnaMind left it as it is.",
   "agents.client.other": "Other agent",
+  "agents.client.codex": "ChatGPT app and Codex",
   "agents.pairing.reads": "Reads {folders}",
   "agents.pairing.readsNothing": "Reads no folders yet",
   "agents.pairing.lastUsed": "Last used {when}",
@@ -2649,4 +2659,10 @@ export const en = {
   "agents.done.undo": "Undo",
   "agents.bundle.description":
     "Search your IncarnaMind Documents and cite them, with every quote checked.",
+  "figure.points": "{value} percentage points",
+  "figure.times": "{value}x",
+  "figure.rate": "1 {per} = {value} {of}",
+  "figure.about": "about {value}",
+  "figure.yes": "yes",
+  "figure.no": "no",
 } as const satisfies Record<string, string>;
