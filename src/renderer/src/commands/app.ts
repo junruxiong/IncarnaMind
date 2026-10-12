@@ -9,6 +9,7 @@ import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
 import { assistantCommands } from "./assistant";
 import { chartCommands } from "./charts";
+import { comparisonCommands } from "./comparisons";
 import { editCommands } from "./edit";
 import { evidenceCommands } from "./evidence";
 import { footnoteCommands } from "./footnotes";
@@ -67,6 +68,7 @@ const appCommands: readonly Command[] = [
   ...meetingCommands,
   ...webPageCommands,
   ...evidenceCommands,
+  ...comparisonCommands,
   {
     ...fromMenu("settings.open"),
     group: "open",

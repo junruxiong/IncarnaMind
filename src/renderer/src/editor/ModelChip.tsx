@@ -65,7 +65,7 @@ const same = (a: ChatModelChoice | null, b: ChatModelChoice | null) =>
   a !== null && b !== null && a.providerId === b.providerId && a.modelId === b.modelId;
 
 /** The model chosen for the Mind, kept up to date as it changes here or elsewhere. */
-function useMindModel(doc: Y.Doc): ChatModelChoice | null {
+export function useMindModel(doc: Y.Doc): ChatModelChoice | null {
   const [choice, setChoice] = useState(() => mindModelOf(doc));
   useEffect(() => {
     setChoice(mindModelOf(doc));

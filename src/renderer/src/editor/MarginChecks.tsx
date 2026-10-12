@@ -160,7 +160,8 @@ export function MarginChecks({ editor }: { editor: Editor }) {
           const dom = editor.view.nodeDOM(citation.pos);
           const marker =
             dom instanceof HTMLElement ? dom.querySelector<HTMLElement>(".citation-marker") : null;
-          if (!marker) continue;
+          // A comparison table's cells show their checks in their markers, not in the margin.
+          if (!marker || marker.closest("[data-comparison-table]")) continue;
           const rect = marker.getBoundingClientRect();
           if (rect.height === 0) continue;
           place = {
