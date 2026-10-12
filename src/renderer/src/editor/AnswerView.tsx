@@ -139,6 +139,8 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
       />,
     );
   }
+  const { calculated, uncalculated } = figuresOf(toolCalls);
+  if (calculated > 0) meta.push(<FiguresSummary count={calculated} />);
 
   return (
     <NodeViewWrapper
@@ -160,6 +162,8 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
       )}
 
       <NodeViewContent className="answer-content" />
+
+      {!streaming && uncalculated > 0 && <UncalculatedLine count={uncalculated} />}
 
       {searchesOpen && (
         <div contentEditable={false} className="answer-searches-open">
@@ -884,6 +888,40 @@ function SkillRow({ name, use, reads }: SkillUse) {
         </ul>
       )}
     </div>
+  );
+}
+
+/** The name of the Documents' Tool whose figures an Answer shows (ADR-0021). */
+const CALCULATE = "calculate";
+
+/** How many calculated figures an Answer shows, and how many it couldn't, from its one `calculate` call. */
+export function figuresOf(calls: readonly AnswerToolCall[]): {
+  calculated: number;
+  uncalculated: number;
+} {
+  const call = calls.find((each) => each.tool === CALCULATE && each.source === "documents");
+  return { calculated: call?.resultCount ?? 0, uncalculated: call?.uncalculated ?? 0 };
+}
+
+/** "Calculated 2 figures", on an Answer's meta line, as a step of its own beside its searches. */
+export function FiguresSummary({ count }: { count: number }) {
+  const t = useT();
+  return (
+    <span data-testid="answer-figures">
+      {count === 1 ? t("answer.figures.calculated.one") : t("answer.figures.calculated", { count })}
+    </span>
+  );
+}
+
+/** Under an Answer whose figures some couldn't be calculated: their numbers are missing from its text. */
+export function UncalculatedLine({ count }: { count: number }) {
+  const t = useT();
+  return (
+    <p contentEditable={false} data-testid="answer-uncalculated" className="answer-info">
+      {count === 1
+        ? t("answer.figures.uncalculated.one")
+        : t("answer.figures.uncalculated", { count })}
+    </p>
   );
 }
 

@@ -12,8 +12,9 @@
  */
 
 import type * as Y from "yjs";
+import { withFigureText } from "../../shared/figureMarkers";
 import { citationLocation, englishLocation } from "../../shared/locations";
-import type { MarkedCitation } from "../api";
+import type { MarkedCitation, MarkedFigure } from "../api";
 import {
   type Block,
   type Footnote,
@@ -46,12 +47,17 @@ function citationSource(attributes: Record<string, unknown>): Footnote {
 
 /**
  * An Answer of a conversation as Markdown for the model, as an Answer in a Mind
- * reads: each Citation marker a plain reference to its source, a marker with no
- * Citation left out.
+ * reads: each Citation marker a plain reference to its source, each figure
+ * marker its calculated figure's shown text, a marker with neither left out.
  */
-export function answerMarkdown(text: string, citations: readonly MarkedCitation[]): string {
+export function answerMarkdown(
+  text: string,
+  citations: readonly MarkedCitation[],
+  figures: readonly MarkedFigure[] = [],
+): string {
   const byMarker = new Map(citations.map((citation) => [citation.marker, citation]));
-  return text
+  const figureByMarker = new Map(figures.map((figure) => [figure.marker, figure]));
+  return withFigureText(text, (marker) => figureByMarker.get(marker) ?? null)
     .replace(/([ \t]?)\[\^(\d{1,4})\]/g, (_, space: string, marker: string) => {
       const citation = byMarker.get(Number(marker));
       const { source } = citationSource({

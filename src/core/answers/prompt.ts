@@ -82,6 +82,17 @@ const NOT_COVERED =
 const RECORD =
   'the Passage\'s id, where the quote is, and a short quote copied exactly from the Passage, without its marks. Where: the page, slide, section, or rows or lines the quote is in, or two in a row, written as the Passage names them (its pages or location, and marks where each new one starts, like [p. 4], [slide 4], [§ 2.1 Sensitivity], [Revenue, rows 2–41] or [lines 51–100]; name rows or lines more narrowly when you can, e.g. "Revenue, rows 12–14")';
 
+/**
+ * Calculated figures (ADR-0021): a model's own arithmetic looks exactly like a
+ * right answer when it is wrong, so it is steered to `calculate` for every
+ * number it works out, simple ones included.
+ */
+const CALCULATE = [
+  'Never work out a number yourself, not even a simple one: for any number the Answer gives that isn\'t written in a Passage (a difference, sum, average, ratio, share, growth rate, CAGR, change in percentage points, conversion between 万 and 亿 or millions and billions, or which of two is larger), call calculate and write its marker in the number\'s place, with no number or unit beside it: "grew [=1] in 2025", not "grew 20.4% [=1]".',
+  '- Name each input\'s number as it is written in its quote, labelled with what it is and its period; give a table heading\'s unit line ("单位：万元", "in millions") as unitQuote.',
+  "- A number copied as it is from a Passage is cited with [^n]; calculate is only for numbers you work out.",
+].join("\n");
+
 /** The Citation check finds a quote with an ellipsis only part by part (see ../../shared/quoteMatch): best avoided. */
 const UNBROKEN_QUOTE =
   "- Copy each quote as one unbroken stretch of the Passage: don't leave words out with an ellipsis (... or …); quote less instead.";
@@ -153,6 +164,8 @@ export function documentInstructions(
         "- In the Answer, put the marker as [^1] right after each claim it supports, in a table's cell too. Use only markers you recorded, and add no list of sources.",
         "- Write nothing before your Tool calls: only the Answer, after them.",
         NOT_COVERED,
+        "",
+        CALCULATE,
       ].join("\n");
     case "structured-output":
       return [
@@ -163,10 +176,11 @@ export function documentInstructions(
         passages,
         "",
         // The example's location is a placeholder: a small model copied a real-looking one ("p. 3") as its own (#67).
-        'Reply with one JSON object: {"answer": "…", "citations": [{"marker": 1, "passage": "P1", "location": "…", "quote": "…"}]}.',
+        'Reply with one JSON object: {"answer": "…", "citations": [{"marker": 1, "passage": "P1", "location": "…", "quote": "…"}], "calculations": [{"marker": 1, "label": "…", "inputs": [{"name": "a", "label": "…", "citation": 1, "number": "…"}], "formula": "…"}]}.',
         "- answer: the Answer, in Markdown. Cite every claim you draw from a Passage by putting a marker such as [^1] right after it, in a table's cell too. Add no list of sources.",
         `- citations: one record for each marker: ${RECORD}.`,
         UNBROKEN_QUOTE,
+        '- calculations: one for each number the Answer works out from numbers in Passages (a difference, sum, average, ratio, share, growth rate, a change in percentage points, a conversion between 万 and 亿 or millions and billions), with [=1] in the answer where the number goes, never the number itself: its marker; its inputs, each a name for the formula, a label with its year or period, the marker of the Citation whose quote holds the number, and the number as it is written there; and a formula over the names in Excel\'s syntax, such as (b - a) / a, with "as": "percent" for a growth rate or share. When a number\'s unit or scale is only in a table\'s heading ("单位：万元"), give that line as unitQuote.',
         NOT_COVERED,
       ].join("\n");
     case "none":
@@ -223,6 +237,43 @@ export const QUOTE_RETRY_INSTRUCTIONS = [
   "- If the Passage's text has nothing that supports the sentence, give an empty quote.",
   'Reply with one JSON object: {"quotes": [{"marker": 1, "quote": "…"}]}, with an item for each marker.',
 ].join("\n");
+
+/**
+ * For a local model that answered with structured output, once its Answer is
+ * written: the one request to fix the figures that couldn't be worked out
+ * (see ./figureRetry).
+ */
+export const FIGURE_RETRY_INSTRUCTIONS = [
+  "You fix the calculated figures of an Answer. A program reads each input's number from its quote and does the arithmetic, and couldn't for these figures, for the reason given with each.",
+  "- Give each figure again, with its marker, label, inputs and formula, fixed: copy each quote and number character for character from its Passage's text, and give unitQuote or reading where the reason asks for one.",
+  "- If a Passage's text has nothing to work a figure out from, leave that figure out.",
+  'Reply with one JSON object: {"calculations": [{"marker": 1, "label": "…", "inputs": [{"name": "a", "label": "…", "passage": "P1", "quote": "…", "number": "…"}], "formula": "…"}]}.',
+].join("\n");
+
+/** A figure that couldn't be worked out, as the request to fix it shows it. */
+export interface FigureToRetry {
+  marker: number;
+  /** The figure as the model gave it, as JSON. */
+  given: string;
+  problems: readonly string[];
+  /** The Passages its inputs name, each with its text or the part of it nearest the figure. */
+  passages: readonly { id: string; text: string }[];
+}
+
+/** The request to fix figures: each one as given, why it couldn't be worked out, and its Passages. */
+export function figureRetryPrompt(figures: readonly FigureToRetry[]): string {
+  return figures
+    .map((figure) =>
+      [
+        `[=${figure.marker}] as you gave it: ${figure.given}`,
+        `Why it couldn't be worked out: ${figure.problems.join(" ")}`,
+        ...figure.passages.map(
+          (passage) => `<passage id="${attribute(passage.id)}">\n${passage.text}\n</passage>`,
+        ),
+      ].join("\n"),
+    )
+    .join("\n\n");
+}
 
 /** A record whose quote wasn't found, as the request for exact quotes shows it. */
 export interface QuoteToRetry {
