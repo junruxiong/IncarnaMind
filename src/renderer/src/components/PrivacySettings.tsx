@@ -7,7 +7,6 @@ import type {
   RegisteredDataFlow,
 } from "../../../core/api";
 import { core } from "../core";
-import { errorMessage } from "../errors";
 import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
 import { AiUseSettings } from "./AiUseSettings";
@@ -26,8 +25,7 @@ import {
   sectionTitleClass,
 } from "./ui";
 
-const reportError = (failure: unknown) =>
-  useAppStore.setState({ actionError: errorMessage(failure) });
+const reportError = (failure: unknown) => useAppStore.getState().reportError(failure);
 
 /**
  * Settings → Privacy: everything IncarnaMind sends from this computer, in one

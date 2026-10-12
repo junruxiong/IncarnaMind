@@ -9,7 +9,6 @@ import type {
 } from "../../../../core/api";
 import type { MessageKey } from "../../../../shared/i18n";
 import { core } from "../../core";
-import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
 import { PencilLineIcon, TrashLineIcon } from "../lineIcons";
@@ -156,7 +155,7 @@ async function act(action: () => Promise<unknown>) {
   try {
     await action();
   } catch (failure) {
-    useAppStore.setState({ actionError: errorMessage(failure) });
+    useAppStore.getState().reportError(failure);
   }
 }
 
