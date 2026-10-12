@@ -13,7 +13,7 @@ import { mindModelOf } from "../shared/mindModel";
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
 import { agentSocketPath, createAgents } from "./agents";
-import { createAgentSetup } from "./agents/setup";
+import { createAgentSetup, skillInstalled } from "./agents/setup";
 import { createAiUse } from "./aiUse";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
 import { recheckCitation, recheckKept } from "./answers/citations";
@@ -172,6 +172,15 @@ export interface Core extends CoreApi, CoreEventSource {
    * it. Throws NotFoundError for anything else.
    */
   openDocumentImage(documentId: string, path: string): Promise<DocumentImage>;
+  /**
+   * The number a workbook's cell stores when its shown text isn't that
+   * number written plainly (0.04213 for "4.2%"), from the Document's
+   * current version; null when it shows its number plainly, isn't a number,
+   * or isn't there, and for a CSV. `sheet` is the sheet's name (null for a
+   * CSV). For the Tools that calculate over cells, so not on the bridge.
+   * Throws NotFoundError for an unknown or deleted Document.
+   */
+  readCellNumber(documentId: string, sheet: string | null, ref: string): number | null;
   /**
    * Opens a live Document's file, where it is, in the default app for its
    * type, through the `shell` adapter; a web page opens live, at its
@@ -1496,6 +1505,8 @@ export function createCore(adapters: CoreAdapters): Core {
 
   // Outside agents (#351): the User's own agent, paired in Settings, reads its Folders over the
   // socket and gets Citations IncarnaMind minted and checked. Off until the User turns it on.
+  // Where agents keep their settings and skills.
+  const home = adapters.agents?.home ?? homedir();
   const agents = createAgents({
     db,
     now,
@@ -1540,6 +1551,7 @@ export function createCore(adapters: CoreAdapters): Core {
         answers.answerOutside(question, documentIds, signal),
       show: (place) => events.emit("agents.citationShown", place),
     },
+    skillInstalled: (client) => skillInstalled(home, client),
     changed: (value) => events.emit("agents.changed", value),
     called: (activity) => events.emit("agents.activity", activity),
     reportError: (error) => console.error(error),
@@ -1547,7 +1559,6 @@ export function createCore(adapters: CoreAdapters): Core {
   agentsLocalModeChanged = () => agents.localModeChanged();
   agents.start().catch((error: unknown) => console.error(error));
   // Setting IncarnaMind up in the User's agent, from Settings → Agents.
-  const home = adapters.agents?.home ?? homedir();
   const agentSetup = createAgentSetup({
     agents,
     home,
@@ -2244,6 +2255,7 @@ export function createCore(adapters: CoreAdapters): Core {
 
     openDocumentFile: (documentId) => documents.openFile(documentId),
     openDocumentImage: (documentId, path) => documents.openImage(documentId, path),
+    readCellNumber: (documentId, sheet, ref) => documents.cellNumber(documentId, sheet, ref),
     openDocumentInApp: async (documentId) => {
       const address = documents.get(documentId).web?.address;
       if (address) return adapters.browser.open(address);
