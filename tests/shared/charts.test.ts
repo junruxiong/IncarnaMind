@@ -12,6 +12,7 @@ import {
   readChart,
   type SourceCell,
   type SourceGrid,
+  unitlessRows,
 } from "../../src/shared/charts";
 
 const cited = (page: number, quote = `Revenue on page ${page}`): CitationAttributes => ({
@@ -270,5 +271,83 @@ describe("what a chart draws", () => {
     expect(broken.data.rows[0]?.values).toEqual([null, null]);
     expect(broken.data.cutFrom).toBeNull();
     expect(broken.source).toEqual({ kind: "table", blockId: null });
+  });
+});
+
+describe("a number with no unit (#579)", () => {
+  /** Revenue in "$… million", and a fifth quarter typed in by hand without its unit. */
+  const MILLIONS: SourceGrid = [
+    [head("Quarter"), head("2024"), head("2025")],
+    [cell("Q1"), cell("$289.4 million", cited(22)), cell("$341.5 million", cited(22))],
+    [cell("Q2"), cell("$301.2 million", cited(22)), cell("$362.0 million", cited(22))],
+    [cell("Q3"), cell("$309.8 million", cited(23)), cell("$377.9 million", cited(23))],
+    [cell("Q4"), cell("$330.6 million", cited(23)), cell("$401.2 million", cited(23))],
+    [cell("Q5"), cell(""), cell("120.0")],
+  ];
+
+  test("in a column of '$… million', isn't drawn, and the foot counts it apart", () => {
+    const chart = { ...(fromTable(MILLIONS) as ChartAttributes), kind: "pie" as const };
+    expect(chart.data.rows[4]?.values[1]).toMatchObject({
+      value: 120,
+      unit: { kind: "plain" },
+      scale: 1,
+    });
+    expect(chart.data.rows[0]?.values[1]).toMatchObject({ value: 341_500_000, scale: 1e6 });
+    expect([...unitlessRows(chart.data, 1)]).toEqual([4]);
+    const slices = chartPoints(chart);
+    expect(slices.map((point) => point.row)).toEqual([0, 1, 2, 3]);
+    // It has no Citation either, but isn't counted as a value with none: it isn't drawn.
+    expect(chartSources(chart)).toMatchObject({ values: 8, uncited: 0, notDrawn: 0, noUnit: 1 });
+    const bars = chartPoints({ ...chart, kind: "bar" });
+    expect(bars.some((point) => point.row === 4)).toBe(false);
+  });
+
+  test("a column of bare numbers, or one with different units, is drawn as it is", () => {
+    const bare = fromTable(QUARTERS) as ChartAttributes;
+    expect(chartPoints(bare)).toHaveLength(8);
+    expect(chartSources(bare).noUnit).toBe(0);
+    const mixed = fromTable([
+      [head("Item"), head("Value")],
+      [cell("Revenue"), cell("$1.2 million")],
+      [cell("Margin"), cell("41.2%")],
+      [cell("Staff"), cell("120")],
+    ]) as ChartAttributes;
+    expect(chartPoints(mixed)).toHaveLength(3);
+  });
+
+  test("a scale alone counts as a unit: '1.5亿' beside a bare '8000'", () => {
+    const chart = fromTable(
+      [
+        [head("季度"), head("营业收入")],
+        [cell("一季度"), cell("1.5亿")],
+        [cell("二季度"), cell("1.8亿")],
+        [cell("三季度"), cell("8000")],
+      ],
+      "zh-CN",
+    ) as ChartAttributes;
+    expect(chartPoints(chart).map((point) => point.row)).toEqual([0, 1]);
+    expect(chartSources(chart).noUnit).toBe(1);
+  });
+
+  test("a scatter chart leaves out a row whose number across or up has no unit", () => {
+    const chart = { ...(fromTable(MILLIONS) as ChartAttributes), kind: "scatter" as const };
+    const grid = MILLIONS.map((row, index) =>
+      index === 5 ? [cell("Q5"), cell("$310.0 million"), cell("120.0")] : row,
+    );
+    const both = { ...(fromTable(grid) as ChartAttributes), kind: "scatter" as const };
+    expect(chartPoints(chart).map((point) => point.row)).toEqual([0, 1, 2, 3]);
+    expect(chartPoints(both).map((point) => point.row)).toEqual([0, 1, 2, 3]);
+  });
+
+  test("a chart made before values kept their scale still leaves out a bare number beside a currency", () => {
+    const made = fromTable(MILLIONS) as ChartAttributes;
+    const stored = JSON.parse(JSON.stringify(made)) as {
+      data: { rows: { values: ({ scale?: number } | null)[] }[] };
+    };
+    for (const row of stored.data.rows)
+      for (const value of row.values) if (value) delete value.scale;
+    const older = readChart(stored as unknown as Record<string, unknown>);
+    expect(older.data.rows[0]?.values[1]?.scale).toBeNull();
+    expect([...unitlessRows(older.data, 1)]).toEqual([4]);
   });
 });
