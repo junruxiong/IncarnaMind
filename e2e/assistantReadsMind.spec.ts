@@ -121,9 +121,11 @@ test("“Summarise my notes” beside a Mind reads it: the consent says so, the 
   await expect(answer.getByTestId("assistant-answer-text")).toContainText(
     "Read “Tide notes”, which starts: Spring tides come at new and full moon.",
   );
-  await expect(answer.getByTestId("answer-steps")).toHaveText("Read Tide notes");
+  // With no search, the folded line is the step: the timeline doesn't say it again.
+  await expect(answer.getByTestId("answer-steps-line")).toHaveText("Read Tide notes");
   const timeline = await openSteps(window, answer);
-  await expect(timeline.locator('[data-step="read"]')).toHaveText("Read Tide notes");
+  await expect(timeline.getByTestId("answer-step")).not.toHaveCount(0);
+  await expect(timeline.locator('[data-step="read"]')).toHaveCount(0);
   await screenshot(window, "steps-read-en");
 
   // What is selected in the Mind leads the next Question.
@@ -142,8 +144,13 @@ test("“Summarise my notes” beside a Mind reads it: the consent says so, the 
   await longMind(window, "Long notes");
   const long = await ask(window, "Summarise my notes");
   await expect(long).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-  await expect(long.getByTestId("answer-steps")).toHaveText("Read part of Long notes");
+  await expect(long.getByTestId("answer-steps-line")).toHaveText("Read part of Long notes");
   await screenshot(window, "steps-read-part-en");
+
+  // The Mind's name in the folded line goes to that Mind.
+  await expect(window.getByTestId("mind-title")).toHaveValue("Long notes");
+  await pointAndClick(window, second.getByTestId("answer-steps-mind"));
+  await expect(window.getByTestId("mind-title")).toHaveValue("Tide notes");
   await app.close();
 });
 
@@ -161,15 +168,15 @@ test("in Chinese: the consent, the Answer that read the Mind, and the steps", as
   await expect(answer.getByTestId("assistant-answer-text")).toContainText(
     "Read “潮汐笔记”, which starts: 大潮出现在新月和满月。",
   );
-  await expect(answer.getByTestId("answer-steps")).toHaveText("读了“潮汐笔记”");
+  await expect(answer.getByTestId("answer-steps-line")).toHaveText("读了“潮汐笔记”");
   const timeline = await openSteps(window, answer);
-  await expect(timeline.locator('[data-step="read"]')).toHaveText("读了“潮汐笔记”");
+  await expect(timeline.locator('[data-step="read"]')).toHaveCount(0);
   await screenshot(window, "steps-read-zh");
 
   await longMind(window, "长笔记");
   const long = await ask(window, "总结我的笔记");
   await expect(long).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-  await expect(long.getByTestId("answer-steps")).toHaveText("读了“长笔记”的一部分");
+  await expect(long.getByTestId("answer-steps-line")).toHaveText("读了“长笔记”的一部分");
   await screenshot(window, "steps-read-part-zh");
   await app.close();
 });

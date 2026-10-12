@@ -4720,6 +4720,33 @@
     height: 14px;
     flex-shrink: 0;
   }
+  /* A line that names the Mind: its words open and fold the steps, the name goes to the Mind. */
+  .assistant-answer .answer-steps-split {
+    gap: 0;
+
+    &:has(.answer-steps-part:hover) {
+      background: var(--color-hover);
+    }
+    &:has([aria-expanded="true"]) {
+      color: var(--color-ink-secondary);
+    }
+  }
+  .answer-steps-part {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 6px;
+    white-space: pre;
+  }
+  .answer-steps-part--end {
+    padding-left: 6px;
+  }
+  .answer-steps-mind {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
   .answer-steps-text {
     min-width: 0;
     overflow: hidden;

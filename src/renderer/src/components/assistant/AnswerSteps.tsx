@@ -4,7 +4,6 @@ import type {
   AskedFrom,
   ConversationAnswer,
   ConversationQuestion,
-  MindRead,
 } from "../../../../core/api";
 import { citationLocation, formatLocation } from "../../../../shared/locations";
 import {
@@ -210,11 +209,20 @@ function runningText(t: Translate, call: AnswerToolCall): string {
 
 const mindLabel = (t: Translate, mind: AskedFrom) => mind.name || t("mind.untitled");
 
-/** "Read {Mind}", or "Read part of {Mind}" when it was cut to fit. */
-const readText = (t: Translate, mind: MindRead) =>
-  mind.deleted
-    ? t("steps.read.deleted")
-    : t(mind.partial ? "steps.read.part" : "steps.read", { mind: mindLabel(t, mind) });
+/** A step about the Mind: the one read, or the one asked from and not read. */
+type MindStep = Extract<FoldedLine, { kind: "read" | "asked" }>;
+
+/**
+ * "Read {Mind}", "Read part of {Mind}" when it was cut to fit, or "Asked from
+ * {Mind}"; with `name` where the Mind's name goes.
+ */
+function mindStepText(t: Translate, step: MindStep, name = mindLabel(t, step.mind)): string {
+  if (step.kind === "asked") {
+    return step.mind.deleted ? t("steps.asked.deleted") : t("steps.asked", { mind: name });
+  }
+  if (step.mind.deleted) return t("steps.read.deleted");
+  return t(step.mind.partial ? "steps.read.part" : "steps.read", { mind: name });
+}
 
 function sourcesText(t: Translate, count: number): string {
   if (count === 0) return t("steps.sources.none");
@@ -231,17 +239,21 @@ function foldedText(t: Translate, line: FoldedLine, scope: (extra: number) => st
     case "listened":
       return t("steps.listened", { sources: sourcesText(t, line.sources) });
     case "read":
-      return readText(t, line.mind);
     case "asked":
-      return line.mind.deleted
-        ? t("steps.asked.deleted")
-        : t("steps.asked", { mind: mindLabel(t, line.mind) });
+      return mindStepText(t, line);
     case "answered":
       return t("steps.answered", { model: line.model });
   }
 }
 
-/** The folded line: a click, Enter or Space opens and folds it. Its tooltip is the whole line. */
+/** Stands for the Mind's name in a line, to split the line around it. */
+const NAME = "\u0001";
+
+/**
+ * The folded line: a click, Enter or Space opens and folds it. Its tooltip is
+ * the whole line. When it names the Mind read (or asked from), its timeline
+ * leaves that step out, and the name goes to the Mind, as the step's row does.
+ */
 function FoldedToggle({
   line,
   scopeOf,
@@ -255,12 +267,52 @@ function FoldedToggle({
 }) {
   const t = useT();
   const label = foldedText(t, line, scopeOf);
-  const Icon =
-    line.kind === "read" || line.kind === "asked"
-      ? MindLineIcon
-      : line.kind === "answered"
-        ? SparkLineIcon
-        : SearchIcon;
+  const step = line.kind === "read" || line.kind === "asked" ? line : null;
+  const mind = step?.mind;
+  const Icon = mind ? MindLineIcon : line.kind === "answered" ? SparkLineIcon : SearchIcon;
+  const parts = step && !step.mind.deleted ? mindStepText(t, step, NAME).split(NAME) : [];
+  if (mind && parts.length === 2) {
+    const [before, after] = parts;
+    return (
+      <div
+        data-testid="answer-steps-line"
+        title={label}
+        className="answer-steps-line answer-steps-split"
+      >
+        <button
+          type="button"
+          data-testid="answer-steps"
+          data-kind={line.kind}
+          aria-expanded={open}
+          aria-label={label}
+          onClick={onToggle}
+          className="answer-steps-toggle answer-steps-part"
+        >
+          <Icon className="answer-steps-icon" />
+          {before}
+        </button>
+        <button
+          type="button"
+          data-testid="answer-steps-mind"
+          onClick={() => useAppStore.getState().openMind(mind.mindId)}
+          className="answer-steps-mind answer-step-link"
+        >
+          {mindLabel(t, mind)}
+        </button>
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-hidden="true"
+          aria-expanded={open}
+          onClick={onToggle}
+          className={`answer-steps-toggle answer-steps-part ${after ? "" : "answer-steps-part--end"}`}
+        >
+          {after}
+          <ChevronRightLineIcon className="answer-steps-chevron" />
+        </button>
+      </div>
+    );
+  }
   return (
     <button
       type="button"
@@ -336,12 +388,7 @@ function StepItem({
       );
     case "read":
     case "asked": {
-      const label =
-        row.kind === "read"
-          ? readText(t, row.mind)
-          : row.mind.deleted
-            ? t("steps.asked.deleted")
-            : t("steps.asked", { mind: mindLabel(t, row.mind) });
+      const label = mindStepText(t, row);
       return (
         <Step kind={row.kind} icon={<MindLineIcon />}>
           {row.mind.deleted ? (

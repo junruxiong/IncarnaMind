@@ -166,27 +166,36 @@ describe("an Answer's steps", () => {
 
   // protects=an Answer that read its Mind says so, whole or in part, and a Mind deleted since reads as deleted; fails_when=it says "Asked from", hides the cut, or shows a deleted Mind's name; no_claim=what the Answer read is the core's (tests/core/assistantReadsMind.test.ts).
   test("an Answer that read its Mind: Read {Mind}, part of it, or a deleted Mind", () => {
-    const steps = input({ read: READ }, { askedFrom: MIND });
+    const steps = input({ read: READ, toolCalls: [search("s1", "tides")] }, { askedFrom: MIND });
     expect(stepRows(steps)[1]).toEqual({ kind: "read", mind: READ });
-    expect(foldedLine(steps)).toEqual({ kind: "read", mind: READ });
     const part = { ...READ, partial: true };
     expect(foldedLine(input({ read: part }, { askedFrom: MIND }))).toEqual({
       kind: "read",
       mind: part,
     });
     const gone = { ...READ, deleted: true };
-    expect(stepRows(input({ read: gone }, { askedFrom: { ...MIND, deleted: true } }))[1]).toEqual({
+    expect(foldedLine(input({ read: gone }, { askedFrom: { ...MIND, deleted: true } }))).toEqual({
       kind: "read",
       mind: gone,
     });
   });
 
+  // protects=when the folded line is the Mind step (no search), the timeline doesn't say it again and starts with the next step; fails_when=the Mind's row repeats under the line, or another row goes; no_claim=the line's link to the Mind is the component's, tested end to end.
+  test("folded to the Mind it read, or asked from, the timeline leaves that step out", () => {
+    const read = input({ read: READ, toolCalls: [connectorCall] }, { askedFrom: MIND });
+    expect(foldedLine(read)).toEqual({ kind: "read", mind: READ });
+    expect(stepRows(read).map((row) => row.kind)).toEqual(["answered", "call"]);
+    const asked = input({}, { askedFrom: MIND });
+    expect(foldedLine(asked)).toEqual({ kind: "asked", mind: MIND });
+    expect(stepRows(asked).map((row) => row.kind)).toEqual(["answered"]);
+  });
+
   // protects=a Question asked from a Mind its Answer didn't read (deleted since, or an Answer written before #544) says where it was asked from; fails_when=it claims a read, or shows a deleted Mind's old name; no_claim=none beyond protects.
   test("asked from a Mind it didn't read, deleted since", () => {
     const deleted = { ...MIND, deleted: true };
-    const steps = input({}, { askedFrom: deleted });
-    expect(stepRows(steps)[1]).toEqual({ kind: "asked", mind: deleted });
-    expect(foldedLine(steps)).toEqual({ kind: "asked", mind: deleted });
+    const searched = input({ toolCalls: [search("s1", "tides")] }, { askedFrom: deleted });
+    expect(stepRows(searched)[1]).toEqual({ kind: "asked", mind: deleted });
+    expect(foldedLine(input({}, { askedFrom: deleted }))).toEqual({ kind: "asked", mind: deleted });
   });
 
   // protects=an Answer asked during a meeting folds to "Listened to the live transcript"; fails_when=it says Searched; no_claim=whether it was asked during the recording is the caller's.
