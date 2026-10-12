@@ -203,6 +203,8 @@ test("a Task waiting for approval comes back paused after a quit: â€œNeeds youâ€
     await newMind(window);
     await window.keyboard.type("Credit memo");
     await window.keyboard.press("ControlOrMeta+t");
+    // Typed once the new tab's title has the focus, or the first keys land in the last Mind.
+    await expect(window.getByTestId("mind-title").last()).toBeFocused();
     await window.keyboard.type("Notes");
     const memoTab = window.getByTestId("mind-tab").filter({ hasText: "Credit memo" });
     const notesTab = window.getByTestId("mind-tab").filter({ hasText: "Notes" });
