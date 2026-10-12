@@ -69,6 +69,26 @@ async function rightClick(window: Page, target: Locator): Promise<{ x: number; y
   return point;
 }
 
+/**
+ * Whether the item shows the focus ring DESIGN.md gives every control: a solid accent outline, 2px,
+ * drawn inside the item so the menu's scrolling can't clip it.
+ */
+const ringShows = (item: Locator) =>
+  item.evaluate((element) => {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--color-accent)";
+    document.body.append(probe);
+    const accent = getComputedStyle(probe).color;
+    probe.remove();
+    const style = getComputedStyle(element);
+    return (
+      style.outlineStyle === "solid" &&
+      Number.parseFloat(style.outlineWidth) >= 2 &&
+      style.outlineColor === accent &&
+      Number.parseFloat(style.outlineOffset) < 0
+    );
+  });
+
 /** The commands a menu holds, in order, with its rules as "—". */
 async function commandsIn(menu: Locator): Promise<string[]> {
   await expect(menu).toBeVisible();
@@ -338,10 +358,14 @@ test("the context-menu key and Shift+F10 open the focused row's menu; arrows mov
     await row.focus();
     await window.keyboard.press(key);
     await expect(menu).toBeVisible();
-    // The first item has the focus; the arrows move through the items and wrap round.
+    // The first item has the focus; the arrows move through the items and wrap round. The focused
+    // one shows the blue ring, not only a faint fill (#157).
     await expect(menu.getByTestId("mind.open")).toBeFocused();
+    await expect.poll(() => ringShows(menu.getByTestId("mind.open"))).toBe(true);
     await window.keyboard.press("ArrowDown");
     await expect(menu.getByTestId("mind.openSide")).toBeFocused();
+    await expect.poll(() => ringShows(menu.getByTestId("mind.openSide"))).toBe(true);
+    await expect.poll(() => ringShows(menu.getByTestId("mind.open"))).toBe(false);
     await window.keyboard.press("ArrowUp");
     await window.keyboard.press("ArrowUp");
     await expect(menu.getByTestId("mind.delete")).toBeFocused();
