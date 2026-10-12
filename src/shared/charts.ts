@@ -159,10 +159,36 @@ export function readChart(attributes: Readonly<Record<string, unknown>>): ChartA
  * the first two, one across and one up.
  */
 export function drawnSeries(chart: Pick<ChartAttributes, "kind" | "drawn" | "data">): number[] {
-  const chosen = chart.drawn ?? chart.data.series.map((_, index) => index);
+  const chosen = chosenSeries(chart);
   if (chart.kind === "pie") return chosen.slice(-1);
   if (chart.kind === "scatter") return chosen.slice(0, 2);
   return chosen;
+}
+
+/**
+ * The columns chosen, whatever the kind draws of them. The foot, Show as
+ * table and exports count and list their cells, so switching kind changes
+ * only the drawing.
+ */
+export function chosenSeries(chart: Pick<ChartAttributes, "drawn" | "data">): number[] {
+  return chart.drawn ?? chart.data.series.map((_, index) => index);
+}
+
+export interface ChartCell {
+  row: number;
+  series: number;
+  value: ChartValue;
+}
+
+/** Row by row, as a table reads. */
+export function chartCells(chart: Pick<ChartAttributes, "drawn" | "data">): ChartCell[] {
+  const series = chosenSeries(chart);
+  return chart.data.rows.flatMap((row, index) =>
+    series.flatMap((each) => {
+      const value = row.values[each];
+      return value ? [{ row: index, series: each, value }] : [];
+    }),
+  );
 }
 
 /**
@@ -238,7 +264,7 @@ export interface ChartSourcePlace {
 export interface ChartSources {
   values: number;
   uncited: number;
-  /** Cells of the series drawn that hold words but no number, so aren't drawn. */
+  /** Cells of the columns chosen that hold words but no number, so aren't drawn. */
   notDrawn: number;
   places: ChartSourcePlace[];
   documents: number;
@@ -254,14 +280,18 @@ function placeKey(citation: CitationAttributes): string {
 
 const isFound = (check: CitationCheck | undefined) => check === "found";
 
-export function chartSources(
-  chart: Pick<ChartAttributes, "kind" | "drawn" | "data">,
-): ChartSources {
-  const points = chartPoints(chart);
+export function chartSources(chart: Pick<ChartAttributes, "drawn" | "data">): ChartSources {
   const places = new Map<string, ChartSourcePlace>();
   const documents = new Set<string>();
+  let values = 0;
   let uncited = 0;
-  for (const { value } of points) {
+  let notDrawn = 0;
+  for (const { value } of chartCells(chart)) {
+    if (value.value === null) {
+      if (value.shown.trim() !== "") notDrawn++;
+      continue;
+    }
+    values++;
     const { citation } = value;
     if (!citation) {
       uncited++;
@@ -276,21 +306,7 @@ export function chartSources(
       if (isFound(place.citation.check) && !isFound(citation.check)) place.citation = citation;
     }
   }
-  let notDrawn = 0;
-  const drawn = drawnSeries(chart);
-  for (const row of chart.data.rows) {
-    for (const series of drawn) {
-      const value = row.values[series];
-      if (value && value.value === null && value.shown.trim() !== "") notDrawn++;
-    }
-  }
-  return {
-    values: points.length,
-    uncited,
-    notDrawn,
-    places: [...places.values()],
-    documents: documents.size,
-  };
+  return { values, uncited, notDrawn, places: [...places.values()], documents: documents.size };
 }
 
 /** What a figure doesn't settle that changes its value: drawn, it would be a guess. */

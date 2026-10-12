@@ -377,7 +377,7 @@ export const en = {
   "chart.point": "{label}: {value} · {source}",
   "chart.point.title": "{row} · {series}",
   "chart.point.named": "{name}: {value}",
-  "chart.point.share": "{share} of the total",
+  "chart.point.share": "{share} of {series}",
   "chart.point.where": "{document} · {location}",
   "chart.point.open": "Open",
   "chart.point.noCitation": "No Citation",

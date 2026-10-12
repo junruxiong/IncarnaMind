@@ -29,7 +29,7 @@
  * yet: what one adds is left out, and what one removes is read as it is.
  */
 import * as Y from "yjs";
-import { type ChartAttributes, chartSources, drawnSeries, readChart } from "../shared/charts";
+import { type ChartAttributes, chartSources, chosenSeries, readChart } from "../shared/charts";
 import { citationLocation } from "../shared/locations";
 import type { TableAlign } from "../shared/markdownTables";
 import { cutTitle } from "../shared/naming";
@@ -406,7 +406,7 @@ export function tableLayout(rows: readonly (readonly TableCell[])[]): {
 
 function readChartBlock(element: Y.XmlElement, options: ReadOptions): Block {
   const chart = readChart(element.getAttributes() as Record<string, unknown>);
-  const drawn = drawnSeries(chart);
+  const drawn = chosenSeries(chart);
   const cell = (text: string, header: boolean, align: TableAlign): TableCell => ({
     header,
     colspan: 1,

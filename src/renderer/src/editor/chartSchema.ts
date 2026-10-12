@@ -1,6 +1,6 @@
 import { mergeAttributes, Node, type NodeViewRenderer } from "@tiptap/core";
 import { CHART_NODE } from "../../../core/api";
-import { CHART_KINDS, drawnSeries, readChart } from "../../../shared/charts";
+import { CHART_KINDS, chosenSeries, readChart } from "../../../shared/charts";
 import { citationReference } from "../../../shared/citations";
 
 export interface ChartOptions {
@@ -29,7 +29,7 @@ function jsonAttribute(name: string) {
 
 function chartText(attributes: Record<string, unknown>): string {
   const chart = readChart(attributes);
-  const drawn = drawnSeries(chart);
+  const drawn = chosenSeries(chart);
   const lines = [
     chart.title,
     [chart.data.labelHeading, ...drawn.map((series) => chart.data.series[series] ?? "")].join("\t"),
@@ -88,7 +88,7 @@ export const Chart = Node.create<ChartOptions>({
 
   renderHTML({ node, HTMLAttributes }) {
     const chart = readChart(node.attrs);
-    const drawn = drawnSeries(chart);
+    const drawn = chosenSeries(chart);
     const cell = (tag: "th" | "td", text: string) => [tag, {}, text] as const;
     return [
       "div",

@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import type { CitationAttributes } from "../../src/core";
 import {
   type ChartAttributes,
+  chartCells,
   chartFromFigures,
   chartFromTable,
   chartPoints,
@@ -187,6 +188,18 @@ describe("a chart from cited figures", () => {
 describe("what a chart draws", () => {
   const chart = fromTable(QUARTERS) as ChartAttributes;
 
+  test("its cells are the columns chosen, row by row, whatever is drawn of them", () => {
+    const pie: ChartAttributes = { ...chart, kind: "pie" };
+    const cells = chartCells(pie);
+    expect(cells.map((cell) => `${cell.row}:${cell.series}`).slice(0, 4)).toEqual([
+      "0:0",
+      "0:1",
+      "1:0",
+      "1:1",
+    ]);
+    expect(cells).toHaveLength(8);
+  });
+
   test("bars and lines draw the columns chosen, a pie the last, a scatter chart the first two", () => {
     expect(drawnSeries(chart)).toEqual([0, 1]);
     expect(drawnSeries({ ...chart, drawn: [1] })).toEqual([1]);
@@ -206,6 +219,23 @@ describe("what a chart draws", () => {
       [22, 4],
       [23, 3],
     ]);
+  });
+
+  test("its sources count the same cells whatever the kind, a scatter chart's both across and up", () => {
+    const bar = chartSources(chart);
+    const as = (kind: ChartAttributes["kind"], drawn = chart.drawn): ChartAttributes => ({
+      ...chart,
+      kind,
+      drawn,
+    });
+    for (const kind of ["line", "pie", "scatter"] as const) {
+      expect(chartSources(as(kind))).toEqual(bar);
+    }
+    // A scatter point is two cells: Q4 across (2024) is cited, up (2025) has none.
+    const scatter = chartSources(as("scatter"));
+    expect([scatter.values, scatter.uncited]).toEqual([8, 1]);
+    // Columns chosen change it; the kind doesn't.
+    expect(chartSources(as("pie", [1])).values).toBe(4);
   });
 
   test("a place's footnote is its Citation whose quote wasn't found, if any", () => {

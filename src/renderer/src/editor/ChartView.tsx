@@ -9,6 +9,7 @@ import {
   type ChartData,
   type ChartKind,
   type ChartValue,
+  chartCells,
   chartPoints,
   chartSources,
   drawnSeries,
@@ -152,6 +153,7 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
   });
   const [asTable, setAsTable] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  const [frame, setFrame] = useState<HTMLDivElement | null>(null);
   const update = useTableUpdate(editor, node, language);
   const documents = useAppStore((state) =>
     state.status.kind === "ready" ? state.documents : null,
@@ -170,7 +172,9 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
   const drawn = drawnSeries(chart);
   const points = chartPoints(chart);
   const sources = chartSources(chart);
-  const checks = checksOf(points.map((point) => stateOf(point.value)));
+  const checks = checksOf(
+    chartCells(chart).flatMap(({ value }) => (value.value === null ? [] : [stateOf(value)])),
+  );
 
   const change = (
     attributes: Partial<Pick<ChartAttributes, "kind" | "title" | "drawn" | "data">>,
@@ -222,7 +226,11 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
 
   const titleOf = (point: PointRef) => {
     const row = chart.data.rows[point.row]?.label ?? "";
-    if ((chart.kind === "bar" || chart.kind === "line") && drawn.length > 1) {
+    // A pie's slices are one column's: its card says which, as a bar's does among several.
+    if (
+      chart.kind === "pie" ||
+      ((chart.kind === "bar" || chart.kind === "line") && drawn.length > 1)
+    ) {
       return t("chart.point.title", { row, series: seriesName(point.series) });
     }
     return row || seriesName(point.series);
@@ -244,7 +252,11 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
         minimumFractionDigits: 1,
         maximumFractionDigits: 1,
       }).format(value / total);
-      return t("chart.point.share", { share });
+      const name = seriesName(point.series);
+      return t("chart.point.share", {
+        share,
+        series: language === "zh-CN" ? spacedInChinese(name) : name,
+      });
     }
     return null;
   };
@@ -377,7 +389,7 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
           />
         )}
       </div>
-      <div className="chart-body">
+      <div ref={setFrame} className="chart-body" data-testid="chart-body">
         {points.length === 0 && !asTable ? (
           <p className="chart-empty" data-testid="chart-empty">
             {chart.kind === "scatter" && drawn.length < 2
@@ -426,6 +438,8 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
           <Popover
             anchor={card.anchor}
             placement="top"
+            // Between the plot's top and bottom: never over the chart's head (its "Bar ⌄") or its foot.
+            {...(frame && { within: frame })}
             onDismiss={dismiss}
             aria-label={events.label(card.point)}
             data-testid="chart-card"
@@ -460,6 +474,12 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
         )}
     </NodeViewWrapper>
   );
+}
+
+/** Chinese text keeps a space beside Latin letters and numbers (docs/agents/zh-CN.md, rule 2): "占 2025 的", "占营业收入的". */
+function spacedInChinese(name: string): string {
+  const latin = /[A-Za-z0-9]/;
+  return `${latin.test(name.at(0) ?? "") ? " " : ""}${name}${latin.test(name.at(-1) ?? "") ? " " : ""}`;
 }
 
 /** A blank title changes nothing; Enter while an input method composes never cuts it off. */

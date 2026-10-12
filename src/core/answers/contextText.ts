@@ -12,7 +12,7 @@
  */
 
 import type * as Y from "yjs";
-import { drawnSeries } from "../../shared/charts";
+import { chosenSeries } from "../../shared/charts";
 import { citationLocation, englishLocation } from "../../shared/locations";
 import type { MarkedCitation } from "../api";
 import {
@@ -153,7 +153,7 @@ function tableMarkdown(rows: readonly TableCell[][]): string {
 
 function chartMarkdown(block: Extract<Block, { kind: "chart" }>): string {
   const { chart } = block;
-  const drawn = drawnSeries(chart);
+  const drawn = chosenSeries(chart);
   const marks: Marks = {
     bold: false,
     italic: false,

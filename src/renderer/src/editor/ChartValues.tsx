@@ -1,6 +1,6 @@
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import type { CitationCheck } from "../../../core/api";
-import { type ChartAttributes, type ChartValue, drawnSeries } from "../../../shared/charts";
+import { type ChartAttributes, type ChartValue, chosenSeries } from "../../../shared/charts";
 import { ChartCheck } from "./ChartCheck";
 import { type PointEvents, type PointRef, samePoint } from "./ChartPlot";
 
@@ -21,7 +21,7 @@ export function ChartValues({
   /** Null: it has no Citation. */
   checkOf(value: ChartValue): { check: CitationCheck | null; label: string };
 }) {
-  const drawn = drawnSeries(chart);
+  const drawn = chosenSeries(chart);
   const rows = chart.data.rows;
   const cells: PointRef[] = [];
   rows.forEach((row, index) => {
