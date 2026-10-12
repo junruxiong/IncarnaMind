@@ -17,6 +17,7 @@ import { useMeetings } from "../meetings";
 import { durationLabel } from "../meetingTime";
 import type { ViewerTarget } from "../store";
 import { addLineToNote, type LineAdded } from "../transcriptNotes";
+import { useCitedArea } from "./citedArea";
 import { loadDocumentBytes, MissingDocumentError } from "./documentBytes";
 import { markQuote, textNodes, unmarkQuote } from "./domQuote";
 import { FileStates } from "./FileStates";
@@ -158,6 +159,30 @@ function TranscriptContent({
   );
   const units = useMemo(() => transcriptUnits(transcript), [transcript]);
 
+  /** The lines of the cited Units, by the time they start. */
+  const citedLines = useCallback(() => {
+    const cited = units.filter(
+      (unit) =>
+        target.pageFrom !== undefined &&
+        unit.page >= target.pageFrom &&
+        unit.page <= (target.pageTo ?? target.pageFrom),
+    );
+    const from = cited[0]?.label?.from;
+    const to = cited.at(-1)?.label?.to;
+    return [...(list.current?.querySelectorAll<HTMLElement>("[data-start]") ?? [])].filter(
+      (line) => {
+        const start = Number(line.dataset.start);
+        return from !== undefined && to !== undefined && start >= from && start <= to;
+      },
+    );
+  }, [units, target.pageFrom, target.pageTo]);
+  // A cited page drawn to save it (#133): the cited lines.
+  const citedArea = useCallback(() => {
+    const lines = citedLines();
+    return lines.length > 0 ? lines : null;
+  }, [citedLines]);
+  useCitedArea(units.length > 0, citedArea);
+
   const addLine = useCallback(
     async (cue: Cue) => {
       if (!meetingId) return;
@@ -214,18 +239,7 @@ function TranscriptContent({
     if (units.length === 0) return;
     shownRequest.current = request;
     unmarkQuote(body);
-    const cited = units.filter(
-      (unit) =>
-        target.pageFrom !== undefined &&
-        unit.page >= target.pageFrom &&
-        unit.page <= (target.pageTo ?? target.pageFrom),
-    );
-    const from = cited[0]?.label?.from;
-    const to = cited.at(-1)?.label?.to;
-    const lines = [...body.querySelectorAll<HTMLElement>("[data-start]")].filter((line) => {
-      const start = Number(line.dataset.start);
-      return from !== undefined && to !== undefined && start >= from && start <= to;
-    });
+    const lines = citedLines();
     let range: Range | undefined;
     const first = lines[0];
     const last = lines.at(-1);
@@ -247,7 +261,7 @@ function TranscriptContent({
         container.scrollTop;
       container.scrollTop = Math.max(0, top - container.clientHeight / 3);
     }
-  }, [units, target.request, target.quote, target.pageFrom, target.pageTo]);
+  }, [units, citedLines, target.request, target.quote, target.pageFrom, target.pageTo]);
 
   // New lines while live: followed, unless the User has scrolled up to read.
   // biome-ignore lint/correctness/useExhaustiveDependencies: placed again for each line

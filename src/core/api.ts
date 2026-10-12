@@ -3069,6 +3069,8 @@ export interface SuggestionAccepted {
   characters: number;
   /** When, ISO 8601, UTC. */
   acceptedAt: string;
+  /** The suggestion's Citation, now in the Mind. */
+  citation: Citation;
 }
 
 /**

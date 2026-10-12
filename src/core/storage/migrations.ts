@@ -1404,6 +1404,43 @@ export const migrations: readonly Migration[] = [
       ALTER TABLE conversation_messages ADD COLUMN read_partial INTEGER NOT NULL DEFAULT 0;
     `,
   },
+  {
+    version: 73,
+    description: "The cited page, saved when a Citation is made (#133)",
+    sql: `
+      -- How one Location of one version of a Document looked (src/core/citedPages.ts): a
+      -- picture in the data folder's "Cited pages", <id>.png or <id>.jpg, never in the
+      -- database, and never searched. One row per Location and version: page_from and
+      -- page_to are its Units, area what of them is drawn (JSON: a sheet's cited rows, or
+      -- the kind of Location for all of them). image_type is NULL while it waits to be drawn;
+      -- then the picture's type, its size in pixels, and the text drawn on it (JSON: each
+      -- run's text and box, for a quote to be found on it). A row goes (deleted_at) when it
+      -- can't be drawn, or at a start once no Citation or Checkpoint points at it; gone rows
+      -- are forgotten 30 days later. The pictures are this computer's.
+      CREATE TABLE cited_pages (
+        id TEXT PRIMARY KEY NOT NULL,
+        document_id TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        page_from INTEGER NOT NULL,
+        page_to INTEGER NOT NULL,
+        area TEXT NOT NULL,
+        image_type TEXT,
+        width INTEGER,
+        height INTEGER,
+        text TEXT,
+        saved_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX cited_pages_by_place
+        ON cited_pages (document_id, content_hash, page_from, page_to, area)
+        WHERE deleted_at IS NULL;
+      CREATE INDEX cited_pages_waiting ON cited_pages (created_at)
+        WHERE deleted_at IS NULL AND image_type IS NULL;
+      CREATE INDEX cited_pages_gone ON cited_pages (deleted_at) WHERE deleted_at IS NOT NULL;
+    `,
+  },
 ];
 
 /**
