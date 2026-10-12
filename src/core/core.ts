@@ -2072,10 +2072,8 @@ export function createCore(adapters: CoreAdapters): Core {
     },
 
     askQuestion: async (input) => answers.ask(input),
-    regenerateAnswer: async (input) => {
-      if (isRecord(input)) checkpoints.save(input.mindId, "regenerate");
-      return answers.regenerate(input);
-    },
+    regenerateAnswer: async (input) =>
+      answers.regenerate(input, (mindId) => checkpoints.save(mindId, "regenerate")),
     stopAnswer: async (input) => answers.stop(input),
     suggestNext: (request) => suggestions.suggest(request),
     cancelSuggestion: async (requestId) => suggestions.cancel(requestId),
