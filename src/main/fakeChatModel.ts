@@ -12,7 +12,9 @@
  * names no page, as a small model often doesn't; one with "each"
  * cites the first Passage of each Document found, with a marker for each; one
  * with "rows" quotes two lines, so a sheet's Citation covers a range of rows; one that
- * asks for it "as a table" gets a Markdown table with its markers in a cell.
+ * asks for it "as a table" gets a Markdown table with its markers in a cell; one that
+ * asks "by quarter" (按季度) gets a table of quarterly figures, its marker in each cell
+ * but the last, to chart (#436); "分季度" gets the same in Chinese, in 万元.
  * Before its search it reasons, a line that quotes the Question, as a model
  * that thinks does. A Question asked "slowly" waits a moment before each step
  * and writes its Answer word by word, so a test sees each step of the Answer.
@@ -106,6 +108,36 @@ const tableAnswer = (markers: string) =>
 
 /** A Question that asks for its Answer as a table. */
 const AS_A_TABLE = /\bas a table\b/i;
+
+/** The scripted Answer to a Question that asks for figures by quarter: a table of them, each cited but the last. */
+const figuresAnswer = (marker: string) =>
+  [
+    "| Quarter | 2024 | 2025 |",
+    "|:--|--:|--:|",
+    `| Q1 | 289.4 ${marker} | 341.5 ${marker} |`,
+    `| Q2 | 301.2 ${marker} | 362.0 ${marker} |`,
+    `| Q3 | 309.8 ${marker} | 377.9 ${marker} |`,
+    `| Q4 | 330.6 ${marker} | 401.2 |`,
+    "",
+    "That is all.",
+  ].join("\n");
+
+/** The same, in Chinese, in 万元. */
+const chineseFiguresAnswer = (marker: string) =>
+  [
+    "| 季度 | 2024 | 2025 |",
+    "|:--|--:|--:|",
+    `| 一季度 | 28,410.55 ${marker} | 35,120.08 ${marker} |`,
+    `| 二季度 | 29,876.31 ${marker} | 37,005.62 ${marker} |`,
+    `| 三季度 | 30,615.90 ${marker} | 38,770.43 ${marker} |`,
+    `| 四季度 | 32,980.44 ${marker} | 41,444.43 |`,
+    "",
+    "以上。",
+  ].join("\n");
+
+/** A Question that asks for figures by quarter. */
+const BY_QUARTER = /\bby quarter\b|按季度/i;
+const BY_QUARTER_CHINESE = /分季度/;
 
 /** The text of the last user message: the Question, after what it is asked beside. */
 function lastUserText(prompt: Prompt): string {
@@ -471,11 +503,15 @@ function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
   // The markers the last cite call recorded: "Recorded [^1], [^2]." and then any problems.
   const recordedLine = /^Recorded ([^.]*)\./.exec(cites.at(-1) ?? "")?.[1] ?? "";
   const recorded = [...new Set([...recordedLine.matchAll(/\[\^\d+\]/g)].map((match) => match[0]))];
-  const answer = AS_A_TABLE.test(question)
-    ? tableAnswer(recorded.join(" "))
-    : recorded.length > 1
-      ? `Your Documents answer this ${recorded.join(" ")}.\n\nThat is all.`
-      : CITED_ANSWER;
+  const answer = BY_QUARTER_CHINESE.test(question)
+    ? chineseFiguresAnswer(recorded[0] ?? "")
+    : BY_QUARTER.test(question)
+      ? figuresAnswer(recorded[0] ?? "")
+      : AS_A_TABLE.test(question)
+        ? tableAnswer(recorded.join(" "))
+        : recorded.length > 1
+          ? `Your Documents answer this ${recorded.join(" ")}.\n\nThat is all.`
+          : CITED_ANSWER;
   return { text: skill ? `Following the Skill ${skill}.\n\n${answer}` : answer };
 }
 
