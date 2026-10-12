@@ -72,6 +72,13 @@ export interface FilesBridge {
    */
   pickReferenceFile(): Promise<string | null>;
   /**
+   * Shows the system's open dialog for a Word file to import as a Mind (see
+   * `CoreApi.importWordFile`), as a sheet on the window, starting in the folder
+   * last picked from (else Downloads). Resolves with its absolute path, or null
+   * if the User cancelled.
+   */
+  pickWordFile(): Promise<string | null>;
+  /**
    * Shows a Linked folder selected in the system's file manager (Finder,
    * Explorer). Rejects for an unknown Linked folder, or one that can't be
    * reached.
@@ -133,6 +140,7 @@ export const FILES_CHANNELS = {
   pickLinkedFolder: "files:pickLinkedFolder",
   pickDocuments: "files:pickDocuments",
   pickReferenceFile: "files:pickReferenceFile",
+  pickWordFile: "files:pickWordFile",
   showLinkedFolder: "files:showLinkedFolder",
   logError: "files:logError",
   /** From the page: the sidebar is hidden (true) or shown (false), for the View menu's label. */
