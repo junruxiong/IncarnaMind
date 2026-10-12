@@ -15,10 +15,10 @@
  * ones, and ones that need another API than chat. Where a list says what a model can do (Anthropic's capabilities and limits, Ollama's capabilities),
  * that is kept as the server's word on it (see ./capabilities).
  */
-import type { ChatProviderKind } from "../api";
+import type { ChatProviderKind, OtherModel } from "../api";
 import { isRecord } from "../errors";
 import type { ModelFactsLayer } from "./capabilities";
-import { inDefaultMenu, isNonChatModel, type ModelInput, modelsProviderOfKind } from "./catalog";
+import { isNonChatModel, type ModelInput, modelsProviderOfKind, otherModel } from "./catalog";
 import { KNOWN_PLAN_MODELS } from "./chatgpt/planEndpoint";
 import { endpointUrl } from "./kinds";
 import { isCloudModelName, isRemoteEntry } from "./ollamaCloud";
@@ -44,8 +44,8 @@ export interface ListedModel {
   cloud?: boolean;
   /** The provider has announced this model's shutdown (OpenAI's `shutdown_date`). */
   shuttingDown?: true;
-  /** Not in the model menu until the User adds it. */
-  other?: true;
+  /** Why it isn't in the model menu until the User adds it; absent: it is in the menu. */
+  other?: Omit<OtherModel, "id">;
 }
 
 async function getJson(url: string, headers: Record<string, string>): Promise<unknown> {
@@ -261,14 +261,16 @@ export async function listProviderModels(spec: ModelListSpec): Promise<ListedMod
     }
     const ids = new Set(byId.keys());
     const sorted = [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));
-    const inMenu = (model: ListedModel) =>
-      spec.kind === "chatgpt" || (!model.shuttingDown && inDefaultMenu(catalogId, model.id, ids));
+    const classified = sorted.map((model): ListedModel => {
+      const other =
+        spec.kind === "chatgpt"
+          ? undefined
+          : otherModel(catalogId, model.id, ids, model.shuttingDown);
+      return other ? { ...model, other } : model;
+    });
     return [
-      ...sorted.filter(inMenu).slice(0, MAX_MODELS),
-      ...sorted
-        .filter((model) => !inMenu(model))
-        .slice(0, MAX_MODELS)
-        .map((model): ListedModel => ({ ...model, other: true })),
+      ...classified.filter((model) => !model.other).slice(0, MAX_MODELS),
+      ...classified.filter((model) => model.other).slice(0, MAX_MODELS),
     ];
   } catch {
     return [];

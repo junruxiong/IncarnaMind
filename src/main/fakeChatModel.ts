@@ -14,7 +14,8 @@
  * with "rows" quotes two lines, so a sheet's Citation covers a range of rows; one that
  * asks for it "as a table" gets a Markdown table with its markers in a cell.
  *
- * A Question with "blank reply" in it gets a reply with no text at all.
+ * A Question with "blank reply" in it gets a reply with no text at all. A model whose id ends
+ * "-not-found" fails as one its provider doesn't know.
  *
  * With Skills: a Question that names a listed Skill gets it loaded with
  * use_skill first. An Answer that follows a Skill (forced, or loaded) starts
@@ -47,6 +48,7 @@
  * Make this a Skill (`fakeSkillDraft`): a draft whose "when to use it" and first
  * step quote the Mind's last Question, so a test sees that the Mind was read.
  */
+import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import type { ChatModelFactory } from "../core";
 import { EXCERPT_END, EXCERPT_START } from "../core/tags/classify";
@@ -608,6 +610,15 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
       warnings: [],
     }),
     doStream: async ({ prompt, tools, abortSignal }) => {
+      // A model id ending "-not-found" is one its provider doesn't know, for a test of that Problem.
+      if (spec.modelId.endsWith("-not-found")) {
+        throw new APICallError({
+          message: `The model ${spec.modelId} does not exist`,
+          url: "https://fake.invalid/chat",
+          requestBodyValues: {},
+          statusCode: 404,
+        });
+      }
       const reply = nextReply(prompt, tools ?? []);
       const parts: StreamPart[] = [{ type: "stream-start", warnings: [] }];
       if ("tool" in reply) {

@@ -44,6 +44,15 @@ const KIMI = { temperature: false, forcedToolChoice: false } as const;
 const GLM = { structuredOutput: "json_object", forcedToolChoice: false } as const;
 
 export const OVERRIDES: CatalogOverrides = {
+  cannotAnswer: {
+    openai: {
+      // Background research through the Responses API, not a chat: https://platform.openai.com/docs/guides/deep-research
+      "o3-deep-research": "deep-research",
+      "o4-mini-deep-research": "deep-research",
+      // Drives a computer through the Responses API's computer tool: https://platform.openai.com/docs/guides/tools-computer-use
+      "computer-use-preview": "computer-use",
+    },
+  },
   providers: {
     // Google asks for its Gemini 3 models to run at their default temperature: lower makes
     // them loop or reason worse. The 2.5 models retire on 2026-10-20.

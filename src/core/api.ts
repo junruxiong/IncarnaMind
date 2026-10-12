@@ -2530,6 +2530,21 @@ export type ChatReadiness =
       modelId: string;
     };
 
+/**
+ * Why a listed model isn't in the menu by default: "unknown" (the catalog
+ * doesn't know it), "older" (deprecated, or on its way out), or
+ * "cannot-answer" (it needs another API than chat, for `reason`; it can't be
+ * added).
+ */
+export interface OtherModel {
+  id: string;
+  why: "unknown" | "older" | "cannot-answer";
+  reason?: CannotAnswerReason;
+}
+
+/** Which API, other than chat, a model needs. */
+export type CannotAnswerReason = "completion" | "audio" | "deep-research" | "computer-use";
+
 export interface SetChatModelInMenuInput {
   providerId: string;
   modelId: string;
@@ -2547,11 +2562,10 @@ export interface ChatModelGroup {
    */
   models: string[];
   /**
-   * The ids the provider lists that wait under "Other models" until the User
-   * adds them: ones the catalog doesn't know, deprecated ones, and ones that
-   * need another API than chat.
+   * What the provider lists that the menu leaves out (see `OtherModel`), for
+   * Settings → Models → Other models, including ids the User has added.
    */
-  other: string[];
+  other: OtherModel[];
   /** The ids in `models` that the User added from `other`; "In the menu" is on for them. */
   added: string[];
   /**

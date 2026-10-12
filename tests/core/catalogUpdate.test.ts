@@ -145,5 +145,10 @@ describe("the catalog's reading of ids that answer by another API", () => {
     );
     expect(providers.openai?.models.map((each) => each.id)).toEqual(["gpt-4.1"]);
     expect(providers.openai?.nonChat).toEqual(["text-embedding-3-small", "whisper-1"]);
+    expect(providers.openai?.cannotAnswer).toEqual({
+      "babbage-002": "completion",
+      "gpt-audio": "audio",
+      "gpt-davinci": "completion",
+    });
   });
 });
