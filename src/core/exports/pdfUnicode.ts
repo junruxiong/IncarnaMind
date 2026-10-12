@@ -2,22 +2,35 @@
  * Chinese text in a printed PDF that copies and searches as it reads (#100). Chromium writes
  * the text of each glyph (a font's ToUnicode map) as the first code point the font maps to it.
  * CJK fonts draw a Kangxi radical and its ideograph with one glyph, and the radical's code point
- * comes first, so 大, 月, 人 and two hundred others would copy as ⼤, ⽉, ⼈ (U+2F24…). This maps
- * them back to the ideographs, their compatibility equivalents, in those maps only: what the
- * page shows doesn't change. A PDF not laid out as Chromium lays one out (one classic
- * cross-reference table, maps as compressed streams) is left as it is.
+ * comes first, so 大, 月, 人 and two hundred others would copy as ⼤, ⽉, ⼈ (U+2F24…), and 页 as
+ * ⻚ (U+2EDA). This maps them back to the ideographs Unicode gives as equivalent, in those maps
+ * only: what the page shows doesn't change. A PDF not laid out as Chromium lays one out (one
+ * classic cross-reference table, maps as compressed streams) is left as it is.
  */
 import { deflateSync, inflateSync } from "node:zlib";
 
-/** The Kangxi radicals and the CJK radicals with an ideograph as their compatibility form. */
+/** The CJK radicals (supplement) and the Kangxi radicals. */
 const RADICAL = /[⺀-⻿⼀-⿟]/u;
+
+/**
+ * The supplement's radicals and their ideographs, in pairs, from Unicode's
+ * EquivalentUnifiedIdeograph.txt: few have a compatibility form, and Noto CJK (Linux) draws
+ * 页, 见, 长, 门, 车, 马 and others with their radicals' glyphs.
+ */
+const SUPPLEMENT = new Map(
+  [
+    ..."⺁厂⺂乛⺃乚⺄乙⺅亻⺆冂⺇𠘨⺈刀⺉刂⺊卜⺋㔾⺌小⺍小⺎兀⺏尣⺐尢⺑𡯂⺒巳⺓幺⺔彑⺕𫜹⺖忄⺗心⺘扌⺙攵⺛旡⺜日⺝月⺞歺⺟母⺠民⺡氵⺢氺⺣灬⺤爫⺥爫⺦丬⺧牛⺨犭⺩王⺪𤴔⺫目⺬示⺭礻⺮𥫗⺯糹⺰纟⺱罓⺲罒⺳㓁⺴冗⺵𦉫⺶羊⺷𦍌⺸𦍋⺹耂⺺肀⺻聿⺼肉⺽𦥑⺾艹⺿艹⻀艹⻁虎⻂衤⻃覀⻄西⻅见⻆角⻇𧢲⻈讠⻉贝⻊𧾷⻋车⻌辶⻍辶⻎辶⻏邑⻐钅⻑長⻒镸⻓长⻔门⻕𨸏⻖阝⻗雨⻘青⻙韦⻚页⻛风⻜飞⻝食⻞𩙿⻟飠⻠饣⻡𩠐⻢马⻣骨⻤鬼⻥鱼⻦鸟⻧卤⻨麦⻩黄⻪黾⻫斉⻬齐⻭歯⻮齿⻯竜⻰龙⻱龜⻲亀⻳龟",
+  ].flatMap((char, index, chars) =>
+    index % 2 === 0 ? [[char, chars[index + 1] ?? char] as const] : [],
+  ),
+);
 
 /** A code point's ideograph, if it is a radical that stands for one. */
 function ideographOf(text: string): string {
-  return text.replace(new RegExp(RADICAL, "gu"), (radical) => {
-    const unified = radical.normalize("NFKC");
-    return unified !== radical ? unified : radical;
-  });
+  return text.replace(
+    new RegExp(RADICAL, "gu"),
+    (radical) => SUPPLEMENT.get(radical) ?? radical.normalize("NFKC"),
+  );
 }
 
 const hexToText = (hex: string): string => {
