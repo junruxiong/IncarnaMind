@@ -6,6 +6,7 @@ import type { CoreBridge } from "../src/core/api";
 import type { FakeScanScript } from "../src/core/documents/scan/fake";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
+  askInAssistant,
   createDataFolder,
   dismissChatSetup,
   launchApp,
@@ -58,17 +59,11 @@ test.afterEach(async () => {
   await removeDataFolder(sources);
 });
 
-/** Asks a Question in a new Mind and waits for its Answer to finish. */
+/** Asks a Question in the assistant, beside a new Mind, and waits for its Answer to finish. */
 async function ask(window: Page, text: string) {
   await newMind(window);
-  const editor = window.getByTestId("mind-editor");
-  await editor.click();
-  await window.keyboard.press("ControlOrMeta+j");
-  await window.keyboard.type(text);
-  await window.keyboard.press("Enter");
-  const answer = editor.getByTestId("answer");
-  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-  return answer;
+  await window.getByTestId("mind-editor").click();
+  return askInAssistant(window, text);
 }
 
 for (const language of ["en", "zh-CN"] as const) {
