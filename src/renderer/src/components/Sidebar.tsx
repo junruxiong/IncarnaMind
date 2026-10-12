@@ -33,7 +33,7 @@ import { usePopoverMenu } from "./usePopoverMenu";
  * Minds and Documents, and Not in a Folder (see `DocumentsSection`), and a
  * footer with the tagging and processing status above Settings. Every row
  * puts its icon at x 16 and its text at x 40; section labels share the icon
- * column. "Moved … · Undo" floats at the tree's foot (see `UndoLine`).
+ * column. The undo line, "Moved … · Undo", sits above the footer (see `UndoLine`).
  */
 export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettings(): void }) {
   const t = useT();
@@ -59,10 +59,10 @@ export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettin
         >
           <DocumentsSection />
         </div>
-        <UndoLine />
       </div>
 
       <GetStartedCard />
+      <UndoLine />
       <footer
         data-testid="sidebar-footer"
         className="flex shrink-0 flex-col border-t border-rule p-2"
