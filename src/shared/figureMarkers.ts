@@ -8,7 +8,9 @@
  * figure keeps what the Answer wrote (`CalculatedFigure.written`). Words the
  * shown text already has around its number ("about", "$", "percentage
  * points", "万元") aren't shown twice when the model writes them beside the
- * marker too. Code keeps its markers. Pure: the core and the window share it.
+ * marker too. Nor is a scale: one written after the marker is left out, and
+ * kept as what the Answer wrote when it isn't the figure's ("12.03万元 亿元",
+ * #577). Code keeps its markers. Pure: the core and the window share it.
  */
 import type { CalculatedFigure } from "../core/api";
 import {
@@ -78,6 +80,53 @@ function wordsAround(shown: string): { lead: string; unit: string } | null {
   };
 }
 
+const AMOUNT: ReadonlySet<FigureUnit["kind"]> = new Set(["plain", "currency", "other"]);
+
+const unitKey = (unit: FigureUnit) => JSON.stringify(unit);
+
+/**
+ * A scale or unit written right after an amount's marker ("[=1] 亿元"), which
+ * its shown text has its own of: how much of `after` to leave out, and the
+ * words when they say another scale or currency than the figure's. A unit
+ * that is the text's own ("people" after a count) stays, and so do words
+ * after the unit ("以上", "左右").
+ */
+function scaleAfter(
+  after: string,
+  figure: PlacedFigure,
+): { skip: number; written: string | null } | null {
+  const space = /^[ \t]*/.exec(after)?.[0].length ?? 0;
+  const rest = after.slice(space);
+  if (!/^\p{L}/u.test(rest)) return null;
+  const { language } = figure.show;
+  const read = (text: string) => {
+    const found = readFigures(`1${text}`, { language })[0];
+    return found?.start === 0 && found.end > 1 ? found : null;
+  };
+  const shown = readFigures(figure.shown, { language })[0];
+  const wrote = read(rest);
+  if (!shown || !wrote || (wrote.scaleWord === null && wrote.unit.kind === "plain")) return null;
+  if (!AMOUNT.has(shown.unit.kind) || !AMOUNT.has(wrote.unit.kind)) return null;
+  let length = 1;
+  for (; length < wrote.end - 1; length++) {
+    if (/[A-Za-z]/.test(rest[length - 1] ?? "") && /[A-Za-z]/.test(rest[length] ?? "")) continue;
+    const part = read(rest.slice(0, length));
+    if (part?.scale === wrote.scale && unitKey(part.unit) === unitKey(wrote.unit)) break;
+  }
+  const words = rest.slice(0, length);
+  const currencyDiffers =
+    wrote.unit.kind === "currency" &&
+    shown.unit.kind === "currency" &&
+    !sameUnit(wrote.unit, shown.unit);
+  const unitAgrees = wrote.unit.kind === "plain" || sameUnit(wrote.unit, shown.unit);
+  const scaleAt = wrote.scaleWord ? words.indexOf(wrote.scaleWord) : -1;
+  const scaleEnd = scaleAt < 0 ? 0 : scaleAt + (wrote.scaleWord?.length ?? 0);
+  const taken = unitAgrees || currencyDiffers ? words.length : scaleEnd;
+  if (taken <= 0) return null;
+  const differs = currencyDiffers || (wrote.scaleWord !== null && wrote.scale !== shown.scale);
+  return { skip: space + taken, written: differs ? words.slice(0, taken) : null };
+}
+
 /** Where a figure's marker is: what stays before it, what goes in its place, and what the Answer wrote there. */
 function place(
   figure: PlacedFigure | null,
@@ -105,11 +154,12 @@ function place(
     )
       skip = space + around.unit.length;
   }
+  const scale = skip === 0 ? scaleAfter(after, figure) : null;
   return {
     before: kept,
     put: figure.shown,
-    written: found && !found.same ? found.chars : null,
-    skip,
+    written: found && !found.same ? found.chars : (scale?.written ?? null),
+    skip: scale?.skip ?? skip,
   };
 }
 
