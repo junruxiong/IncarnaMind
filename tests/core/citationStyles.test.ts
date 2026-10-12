@@ -18,6 +18,7 @@ import type {
 } from "../../src/core";
 import { FOOTNOTE_NODE } from "../../src/core/api";
 import { locatorOf } from "../../src/core/citationStyles/csl";
+import { CITATION_STYLE_IDS } from "../../src/shared/citationStyles";
 import { CITATION_STYLES, createTempDataFolder, manualClock, startCore } from "../helpers/core";
 import { addAndProcess, waitForProcessing, writeSourceFile } from "../helpers/documents";
 import { footnotesOf, paragraphsOf, part, textOf, unzip } from "../helpers/docx";
@@ -255,6 +256,32 @@ describe("formatting a Mind's Citations", () => {
     ).toBe(false);
   });
 
+  test("a Document with no details gets an entry from its name, kind and the day it was added, in every style", async () => {
+    const { core, prospect, lease } = await setUp();
+    const style = (id: FormattedCitations["style"]) => format(core, id, [work(lease)]);
+    const added = (locale: string) =>
+      new Intl.DateTimeFormat(locale, { dateStyle: "long", timeZone: "UTC" }).format(
+        new Date(lease.createdAt),
+      );
+    for (const id of CITATION_STYLE_IDS.filter((each) => each !== "numbered")) {
+      const { bibliography } = await style(id);
+      const entry = bibliography.find((each) => each.documentId === lease.id);
+      expect(entry?.needsDetails, id).toBe(true);
+      expect(plain(entry?.runs), id).toBe(
+        id.startsWith("gb-t")
+          ? `Lease agreement。纯文本，添加于 ${added("zh-CN")}。`
+          : `Lease agreement. Plain text, added ${added("en-GB")}.`,
+      );
+    }
+    // The style's own number stays.
+    expect(plain((await style("ieee")).bibliography[0]?.label)).toBe("[1]");
+    // A Document with details is written as the style writes it.
+    const kahneman = await format(core, "apa", [work(prospect)]);
+    expect(plain(kahneman.bibliography[0]?.runs)).toMatch(
+      /^Kahneman, D\., & Tversky, A\. \(1979\)\./,
+    );
+  });
+
   test("a web page is cited by its section and paragraph, and listed with its site and address", async () => {
     const { core } = await setUp();
     const html = readFileSync(new URL("../fixtures/web/article.html", import.meta.url), "utf8");
@@ -464,6 +491,22 @@ describe("exporting a Mind in its citation style", () => {
     );
     expect(notes[1]).toMatch(/^钱学森 et al\./);
     expect(textOf(part(files, "word/document.xml"))).toContain("Bibliography");
+  });
+
+  test("a Document with no details is in the Bibliography of Markdown and Word, in every style", async () => {
+    const { core, mind, client, lease } = await setUp();
+    writeMind(client, [paragraph(text("Rent is monthly "), citation(lease, page(2)), text("."))]);
+    await client.settled();
+    for (const id of CITATION_STYLE_IDS.filter((each) => each !== "numbered")) {
+      await core.setMindCitationStyle(mind.id, id);
+      const markdown = new TextDecoder().decode(
+        (await core.exportMind(mind.id, { format: "markdown" })).data,
+      );
+      expect(markdown, id).toMatch(/Lease agreement[.。]/);
+      const files = unzip((await core.exportMind(mind.id, { format: "docx" })).data);
+      const entries = paragraphsOf(part(files, "word/document.xml")).map((each) => each.text);
+      expect(entries.at(-1), id).toMatch(/Lease agreement[.。]/);
+    }
   });
 
   test("to Markdown: in-text, notes and the Bibliography, in the style", async () => {
