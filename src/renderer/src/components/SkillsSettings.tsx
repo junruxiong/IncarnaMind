@@ -3,21 +3,27 @@ import {
   SKILL_LIMITS,
   SKILL_SCRIPT_LIMITS,
   type Skill,
+  type SkillDraft,
   type SkillImportError,
   type SkillImportPreview,
 } from "../../../core/api";
 import type { SkillPickKind } from "../../../shared/bridge";
-import { core } from "../core";
+import { core, files } from "../core";
 import { errorMessage } from "../errors";
 import { useT } from "../i18n";
 import { formatSize, pickSkill, skillDescription } from "../skills";
 import { useAppStore } from "../store";
-import { DuplicateLineIcon, TrashLineIcon } from "./lineIcons";
+import { ExportLineIcon, MoreLineIcon, PlusLineIcon } from "./lineIcons";
+import { ProblemLine } from "./ProblemLine";
+import { SkillEditor } from "./SkillEditor";
 import {
   buttonClass,
   errorTextClass,
   ghostButtonClass,
   iconButtonClass,
+  menuClass,
+  menuItemClass,
+  menuRuleClass,
   noticeClass,
   pageIntroClass,
   primaryButtonClass,
@@ -27,23 +33,39 @@ import {
   ruledListClass,
   ruledRow,
   ruledRowClass,
+  sectionNoteClass,
   sectionTitleClass,
 } from "./ui";
+import { usePopoverMenu } from "./usePopoverMenu";
+
+/** What the editor in Settings is for: a new Skill, or changing one of the User's. */
+type Editing = { kind: "new" } | { kind: "edit"; skill: Skill; draft: SkillDraft };
+
+/** How the last Export as zip went. */
+type Exported =
+  | { kind: "saved"; name: string; path: string }
+  | { kind: "not-allowed"; skill: Skill; linkedFolderId: string; folder: string }
+  | { kind: "failed"; message: string };
+
+const NEW_SKILL: SkillDraft = { name: "", description: "", steps: "" };
 
 /**
- * Settings → Skills: the Skills there are, each turned on or off or removed,
- * and importing one from a folder or a zip, shown first for the User to check.
- * Built-in Skills are labelled, can be duplicated as the User's own, and,
- * once removed, restored.
+ * Settings → Skills: Yours and Built-in, each turned on or off, with a ⋯ menu
+ * (Edit, Export as zip, Remove). New Skill… writes one, in place; Import… reads
+ * one from a folder or a zip, shown first for the User to check. Built-in
+ * Skills can be duplicated as the User's own and, once removed, restored.
  */
 export function SkillsSettings() {
   const t = useT();
   const skills = useAppStore((state) => state.skills);
   const restoreBuiltInSkills = useAppStore((state) => state.restoreBuiltInSkills);
   const removedBuiltIns = useRemovedBuiltIns();
+  const importMenu = usePopoverMenu();
   const [busy, setBusy] = useState<"reading" | "importing" | null>(null);
   const [preview, setPreview] = useState<SkillImportPreview | null>(null);
   const [error, setError] = useState<SkillImportError | string | null>(null);
+  const [editing, setEditing] = useState<Editing | null>(null);
+  const [exported, setExported] = useState<Exported | null>(null);
   // A preview left open when Settings closes is forgotten.
   const pending = useRef<string | null>(null);
   pending.current = preview?.importId ?? null;
@@ -96,50 +118,161 @@ export function SkillsSettings() {
     setPreview(null);
   };
 
+  const edit = async (skill: Skill) => {
+    setError(null);
+    try {
+      setEditing({ kind: "edit", skill, draft: await core.getSkillDraft(skill.id) });
+    } catch (failure) {
+      setError(errorMessage(failure));
+    }
+  };
+
+  const exportZip = async (skill: Skill) => {
+    setExported(null);
+    try {
+      const result = await core.saveSkillExport(skill.id);
+      if (result.status === "saved") {
+        setExported({ kind: "saved", name: result.file.name, path: result.file.path });
+      } else if (result.status === "not-allowed") {
+        setExported({
+          kind: "not-allowed",
+          skill,
+          linkedFolderId: result.linkedFolderId,
+          folder: result.linkedFolderPath.split(/[\\/]/).at(-1) ?? result.linkedFolderPath,
+        });
+      }
+      // "cancelled": the User didn't choose where new files go, so nothing was saved.
+    } catch (failure) {
+      setExported({ kind: "failed", message: errorMessage(failure) });
+    }
+  };
+
+  const yours = skills.filter((skill) => !skill.builtIn);
+  const builtIn = skills.filter((skill) => skill.builtIn);
+  const row = (skill: Skill) =>
+    editing?.kind === "edit" && editing.skill.id === skill.id ? (
+      <li key={skill.id} className="py-3.5">
+        <SkillEditor
+          testId="skill-editor"
+          initial={editing.draft}
+          title={t("skills.edit.edit", { name: skill.name })}
+          save={(draft) => core.updateSkill(skill.id, draft)}
+          onSaved={() => setEditing(null)}
+          onCancel={() => setEditing(null)}
+        />
+      </li>
+    ) : (
+      <SkillRow
+        key={skill.id}
+        skill={skill}
+        onEdit={(each) => void edit(each)}
+        onExport={exportZip}
+      />
+    );
+
   return (
     <section data-testid="skills-settings" className="flex flex-col gap-4">
       <p className={pageIntroClass}>{t("skills.settings.body")}</p>
 
-      {skills.length === 0 ? (
-        <p className={`${rowStatusClass} border-y border-rule py-3.5`}>
-          {t("skills.settings.empty")}
-        </p>
-      ) : (
-        <ul className={ruledListClass}>
-          {skills.map((skill) => (
-            <SkillRow key={skill.id} skill={skill} />
-          ))}
-        </ul>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          data-testid="skill-new"
+          disabled={editing?.kind === "new"}
+          onClick={() => setEditing({ kind: "new" })}
+          className={buttonClass}
+        >
+          <PlusLineIcon className="size-4" />
+          {t("skills.settings.new")}
+        </button>
+        <button
+          {...importMenu.buttonProps}
+          type="button"
+          data-testid="skill-import"
+          disabled={busy !== null || preview !== null}
+          className={buttonClass}
+        >
+          <ExportLineIcon className="size-4" />
+          {t("skills.settings.import")}
+        </button>
+        <div
+          {...importMenu.menuProps}
+          role="menu"
+          aria-label={t("skills.settings.import")}
+          data-testid="skill-import-menu"
+          className={menuClass}
+        >
+          {importMenu.open && (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                data-testid="skill-import-folder"
+                onClick={() => {
+                  importMenu.close();
+                  void choose("folder");
+                }}
+                className={`${menuItemClass} pl-2`}
+              >
+                {t("skills.import.folder")}
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                data-testid="skill-import-zip"
+                onClick={() => {
+                  importMenu.close();
+                  void choose("zip");
+                }}
+                className={`${menuItemClass} pl-2`}
+              >
+                {t("skills.import.zip")}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+      {busy === "reading" && (
+        <p className="text-[13px] leading-5 text-ink-meta">{t("skills.import.reading")}</p>
       )}
-
-      {preview ? (
+      {error && <ImportError error={error} />}
+      {exported && <ExportStatus exported={exported} onExport={exportZip} />}
+      {preview && (
         <SkillPreview
           preview={preview}
           importing={busy === "importing"}
           onImport={() => void confirm(preview.importId)}
           onCancel={() => cancel(preview.importId)}
         />
-      ) : (
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            data-testid="skill-import-folder"
-            disabled={busy !== null}
-            onClick={() => void choose("folder")}
-            className={buttonClass}
-          >
-            {t("skills.import.folder")}
-          </button>
-          <button
-            type="button"
-            data-testid="skill-import-zip"
-            disabled={busy !== null}
-            onClick={() => void choose("zip")}
-            className={buttonClass}
-          >
-            {t("skills.import.zip")}
-          </button>
-          {removedBuiltIns.length > 0 && (
+      )}
+      {editing?.kind === "new" && (
+        <SkillEditor
+          testId="skill-editor"
+          initial={NEW_SKILL}
+          title={t("skills.edit.new")}
+          save={(draft) => core.createSkill(draft)}
+          onSaved={() => setEditing(null)}
+          onCancel={() => setEditing(null)}
+        />
+      )}
+
+      <section data-testid="skills-yours" className="flex flex-col">
+        <h4 className={`mb-2 ${sectionTitleClass}`}>{t("skills.settings.yours")}</h4>
+        {yours.length === 0 ? (
+          <p className={`${rowStatusClass} border-y border-rule py-3.5`}>
+            {t("skills.settings.yours.empty")}
+          </p>
+        ) : (
+          <ul className={ruledListClass}>{yours.map(row)}</ul>
+        )}
+      </section>
+
+      <section data-testid="skills-built-in" className="flex flex-col">
+        <h4 className={sectionTitleClass}>{t("skills.settings.builtIn")}</h4>
+        <p className={sectionNoteClass}>{t("skills.settings.builtIn.hint")}</p>
+        {builtIn.length > 0 && <ul className={ruledListClass}>{builtIn.map(row)}</ul>}
+        {removedBuiltIns.length > 0 && (
+          <div className="mt-3">
             <button
               type="button"
               data-testid="skill-restore-built-ins"
@@ -152,14 +285,62 @@ export function SkillsSettings() {
             >
               {t("skills.settings.restoreBuiltIns")}
             </button>
-          )}
-        </div>
-      )}
-      {busy === "reading" && (
-        <p className="text-[13px] leading-5 text-ink-meta">{t("skills.import.reading")}</p>
-      )}
-      {error && <ImportError error={error} />}
+          </div>
+        )}
+      </section>
     </section>
+  );
+}
+
+/** Where the zip went, with a way to see it there; or why it didn't, with the one thing that helps. */
+function ExportStatus({
+  exported,
+  onExport,
+}: {
+  exported: Exported;
+  onExport(skill: Skill): void;
+}) {
+  const t = useT();
+  if (exported.kind === "saved") {
+    return (
+      <ProblemLine
+        role="status"
+        testId="skill-export-done"
+        title={exported.path}
+        action={{
+          label: navigator.userAgent.includes("Mac")
+            ? t("export.showInFinder")
+            : t("export.showInFolder"),
+          testId: "skill-export-show",
+          onClick: () =>
+            void files.showSavedFile(exported.path).catch(useAppStore.getState().reportError),
+        }}
+      >
+        {t("skills.settings.exported", { name: exported.name })}
+      </ProblemLine>
+    );
+  }
+  if (exported.kind === "not-allowed") {
+    const { linkedFolderId, skill } = exported;
+    return (
+      <ProblemLine
+        testId="skill-export-problem"
+        action={{
+          label: t("skills.settings.exportAllow"),
+          onClick: () =>
+            void core.setLinkedFolderWriting(linkedFolderId, true).then(() => onExport(skill)),
+        }}
+      >
+        {t("skills.settings.exportFailed", {
+          reason: t("skills.settings.exportNotAllowed", { folder: exported.folder }),
+        })}
+      </ProblemLine>
+    );
+  }
+  return (
+    <ProblemLine testId="skill-export-problem">
+      {t("skills.settings.exportFailed", { reason: exported.message })}
+    </ProblemLine>
   );
 }
 
@@ -280,9 +461,22 @@ function useRemovedBuiltIns(): string[] {
   return removed;
 }
 
-/** One Skill: on or off, what it's for, its licence and scripts, and removing it. */
-function SkillRow({ skill }: { skill: Skill }) {
+/**
+ * One Skill: what it's for, its licence and scripts, a ⋯ menu (Edit, Export
+ * as zip, Duplicate a built-in one as your own, Remove) and the switch that
+ * turns it on or off.
+ */
+function SkillRow({
+  skill,
+  onEdit,
+  onExport,
+}: {
+  skill: Skill;
+  onEdit(skill: Skill): void;
+  onExport(skill: Skill): void;
+}) {
   const t = useT();
+  const menu = usePopoverMenu();
   const setSkillEnabled = useAppStore((state) => state.setSkillEnabled);
   const removeSkill = useAppStore((state) => state.removeSkill);
   const duplicateSkill = useAppStore((state) => state.duplicateSkill);
@@ -295,6 +489,22 @@ function SkillRow({ skill }: { skill: Skill }) {
         ? t("skills.settings.scripts", { count: scripts })
         : null,
   ].filter(Boolean);
+  const label = t("skills.settings.actions", { name: skill.name });
+  const choose = (action: () => void) => () => {
+    menu.close();
+    action();
+  };
+  const item = (testId: string, text: string, action: () => void, className = "") => (
+    <button
+      type="button"
+      role="menuitem"
+      data-testid={testId}
+      onClick={choose(action)}
+      className={`${menuItemClass} pl-2 ${className}`}
+    >
+      {text}
+    </button>
+  );
 
   return (
     <li
@@ -305,18 +515,7 @@ function SkillRow({ skill }: { skill: Skill }) {
       className={ruledRowClass}
     >
       <div className={`flex min-w-0 flex-col gap-0.5 ${skill.enabled ? "" : "opacity-60"}`}>
-        <p className="flex min-w-0 items-baseline gap-2">
-          <span className={`truncate ${rowTitleClass}`}>{skill.name}</span>
-          {skill.builtIn && (
-            <span
-              data-testid="skill-built-in"
-              title={t("skills.settings.builtIn.hint")}
-              className="shrink-0 text-label font-semibold text-ink-meta"
-            >
-              {t("skills.settings.builtIn")}
-            </span>
-          )}
-        </p>
+        <p className={`truncate ${rowTitleClass}`}>{skill.name}</p>
         <p className={`line-clamp-2 ${rowTextClass}`} title={skillDescription(skill, t)}>
           {skillDescription(skill, t)}
         </p>
@@ -326,28 +525,43 @@ function SkillRow({ skill }: { skill: Skill }) {
       </div>
       {/* 28px buttons and the switch, centred on the name's 20px line. */}
       <div className="-my-1 flex items-center gap-1">
-        {skill.builtIn && (
-          <button
-            type="button"
-            data-testid="skill-duplicate"
-            aria-label={t("skills.settings.duplicateLabel", { name: skill.name })}
-            title={t("skills.settings.duplicate")}
-            onClick={() => void duplicateSkill(skill.id)}
-            className={iconButtonClass}
-          >
-            <DuplicateLineIcon className="size-4" />
-          </button>
-        )}
         <button
+          {...menu.buttonProps}
           type="button"
-          data-testid="skill-remove"
-          aria-label={t("skills.settings.removeLabel", { name: skill.name })}
-          title={t("skills.settings.remove")}
-          onClick={() => void removeSkill(skill.id)}
+          data-testid="skill-menu"
+          aria-label={label}
+          title={label}
           className={iconButtonClass}
         >
-          <TrashLineIcon className="size-4" />
+          <MoreLineIcon className="size-4" />
         </button>
+        <div
+          {...menu.menuProps}
+          role="menu"
+          aria-label={label}
+          data-testid="skill-actions"
+          className={menuClass}
+        >
+          {menu.open && (
+            <>
+              {!skill.builtIn && item("skill-edit", t("skills.settings.edit"), () => onEdit(skill))}
+              {item("skill-export", t("skills.settings.export"), () => onExport(skill))}
+              {skill.builtIn &&
+                item("skill-duplicate", t("skills.settings.duplicate"), () => {
+                  void duplicateSkill(skill.id);
+                })}
+              <div className={menuRuleClass} />
+              {item(
+                "skill-remove",
+                t("skills.settings.remove"),
+                () => {
+                  void removeSkill(skill.id);
+                },
+                "text-danger",
+              )}
+            </>
+          )}
+        </div>
         <input
           type="checkbox"
           role="switch"
