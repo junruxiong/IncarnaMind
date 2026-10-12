@@ -1,0 +1,318 @@
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { expect, type Locator, type Page, test } from "@playwright/test";
+import type { CoreBridge } from "../src/core/api";
+import {
+  addDocuments,
+  createDataFolder,
+  dismissChatSetup,
+  launchApp,
+  newMind,
+  pointAndClick,
+  removeDataFolder,
+  setWindowSize,
+} from "./app";
+
+/*
+ * One way to select (docs/agents/interaction.md, rule 6): in the sidebar and
+ * in the Library a click opens and selects just that item, ⌘-click or Ctrl-click
+ * adds or removes, Shift-click extends from the anchor, ⌘A selects everything
+ * in view, Esc clears, and Shift+↑ and Shift+↓ extend. The same journey runs
+ * in both places, with the mouse slid onto each row.
+ */
+
+let dataDir: string;
+let sources: string;
+test.beforeEach(async () => {
+  dataDir = await createDataFolder();
+  sources = await createDataFolder();
+});
+test.afterEach(async () => {
+  await removeDataFolder(dataDir);
+  await removeDataFolder(sources);
+});
+
+const NAMES = ["Tides", "Currents", "Waves", "Estuaries", "Reefs"];
+
+async function addFiveDocuments(window: Page): Promise<void> {
+  const paths = [];
+  for (const name of NAMES) {
+    const path = join(sources, `${name}.txt`);
+    await writeFile(path, `${name} are a part of the sea.\n`);
+    paths.push(path);
+  }
+  await addDocuments(window, paths);
+}
+
+const setLanguage = (window: Page, language: "en" | "zh-CN") =>
+  window.evaluate(
+    (value) =>
+      (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+        user: { language: value },
+      }),
+    language,
+  );
+
+/** A place with Documents in rows: how to find its rows, what a click goes on, and what it says is selected. */
+interface Place {
+  name: "sidebar" | "library";
+  rows(window: Page): Locator;
+  target(row: Locator): Locator;
+  /** The row's button, which takes the keys. */
+  main(row: Locator): Locator;
+  /** What a screen reader hears. */
+  announced(window: Page): Locator;
+  said: Record<"en" | "zh-CN", (count: number) => string>;
+}
+
+const PLACES: Place[] = [
+  {
+    name: "sidebar",
+    rows: (window) => window.getByTestId("sidebar").getByTestId("document-list-item"),
+    target: (row) => row.getByTestId("open-document"),
+    main: (row) => row.getByTestId("open-document"),
+    announced: (window) => window.getByTestId("sidebar-selection"),
+    said: { en: (count) => `${count} selected`, "zh-CN": (count) => `已选 ${count} 项` },
+  },
+  {
+    name: "library",
+    rows: (window) => window.getByTestId("library").getByTestId("library-document"),
+    target: (row) => row.getByTestId("library-document-name"),
+    main: (row) => row.locator("[data-row-main]"),
+    announced: (window) => window.getByTestId("library-selection").getByRole("status"),
+    said: { en: (count) => `${count} selected`, "zh-CN": (count) => `已选 ${count} 个` },
+  },
+];
+
+async function expectSelected(rows: Locator, selected: number[]): Promise<void> {
+  const count = await rows.count();
+  for (let index = 0; index < count; index++) {
+    await expect(rows.nth(index), `row ${index}`).toHaveAttribute(
+      "aria-selected",
+      selected.includes(index) ? "true" : "false",
+    );
+  }
+}
+
+const withKey = { modifiers: ["ControlOrMeta"] } as const;
+const withShift = { modifiers: ["Shift"] } as const;
+
+for (const language of ["en", "zh-CN"] as const) {
+  for (const place of PLACES) {
+    test(`in the ${place.name}, a click opens, ⌘-click and Shift-click select, ⌘A selects all, Esc clears and Shift+↓ extends (${language})`, async () => {
+      const { app, window } = await launchApp(dataDir);
+      try {
+        await setWindowSize(app, window, 1400, 800);
+        await dismissChatSetup(window);
+        await addFiveDocuments(window);
+        await setLanguage(window, language);
+        if (place.name === "library") await window.getByTestId("open-library").click();
+        const rows = place.rows(window);
+        await expect(rows).toHaveCount(NAMES.length);
+        const tabs = window.getByTestId("tab-title");
+        await expectSelected(rows, []);
+
+        // A click opens it and selects just that one.
+        await pointAndClick(window, place.target(rows.nth(1)));
+        await expectSelected(rows, [1]);
+        const opened = await tabs.count();
+
+        // ⌘-click adds a row, and opens nothing.
+        await pointAndClick(window, place.target(rows.nth(3)), withKey);
+        await expectSelected(rows, [1, 3]);
+        await expect(tabs).toHaveCount(opened);
+        await expect(place.announced(window)).toContainText(place.said[language](2));
+
+        // ⌘-click on a selected row takes it out.
+        await pointAndClick(window, place.target(rows.nth(1)), withKey);
+        await expectSelected(rows, [3]);
+
+        // Shift-click extends from the last one clicked, and opens nothing.
+        await pointAndClick(window, place.target(rows.nth(3)));
+        await expectSelected(rows, [3]);
+        const tabsNow = await tabs.count();
+        await pointAndClick(window, place.target(rows.nth(0)), withShift);
+        await expectSelected(rows, [0, 1, 2, 3]);
+        await expect(tabs).toHaveCount(tabsNow);
+        await expect(place.announced(window)).toContainText(place.said[language](4));
+
+        // ⌘A, with the focus in the list, selects everything in view.
+        await window.keyboard.press("ControlOrMeta+a");
+        await expectSelected(rows, [0, 1, 2, 3, 4]);
+        await expect(place.announced(window)).toContainText(place.said[language](5));
+
+        // Esc clears.
+        await window.keyboard.press("Escape");
+        await expectSelected(rows, []);
+
+        // A click, then Shift+↓ and Shift+↑ extend, with the focus following.
+        await pointAndClick(window, place.target(rows.nth(1)));
+        await place.main(rows.nth(1)).focus();
+        await window.keyboard.press("Shift+ArrowDown");
+        await expectSelected(rows, [1, 2]);
+        await expect(place.main(rows.nth(2))).toBeFocused();
+        await window.keyboard.press("Shift+ArrowDown");
+        await expectSelected(rows, [1, 2, 3]);
+        await expect(place.announced(window)).toContainText(place.said[language](3));
+        await window.keyboard.press("Shift+ArrowUp");
+        await expectSelected(rows, [1, 2]);
+
+        // A plain arrow moves the focus and leaves the selection.
+        await window.keyboard.press("ArrowDown");
+        await expect(place.main(rows.nth(3))).toBeFocused();
+        await expectSelected(rows, [1, 2]);
+      } finally {
+        await app.close();
+      }
+    });
+  }
+}
+
+test("a selection is one per place: moving to the other clears it", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1400, 800);
+    await dismissChatSetup(window);
+    await addFiveDocuments(window);
+    const [sidebar, library] = PLACES;
+    if (!sidebar || !library) throw new Error("The places are missing.");
+    const inSidebar = sidebar.rows(window);
+    await pointAndClick(window, sidebar.target(inSidebar.nth(0)));
+    await pointAndClick(window, sidebar.target(inSidebar.nth(2)), withKey);
+    await expectSelected(inSidebar, [0, 2]);
+
+    await window.getByTestId("open-library").click();
+    const inLibrary = library.rows(window);
+    await expect(inLibrary).toHaveCount(NAMES.length);
+    // What the sidebar selected isn't the Library's.
+    await expectSelected(inLibrary, []);
+    await pointAndClick(window, library.target(inLibrary.nth(4)), withKey);
+    await expectSelected(inLibrary, [4]);
+    await expectSelected(inSidebar, []);
+    await expect(window.getByTestId("sidebar-selection")).toHaveText("");
+  } finally {
+    await app.close();
+  }
+});
+
+test("the right-click menu and the Library's bar offer the same commands for the selection, each with its count", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1400, 800);
+    await dismissChatSetup(window);
+    await addFiveDocuments(window);
+    await window.getByTestId("open-library").click();
+    const [, library] = PLACES;
+    if (!library) throw new Error("The Library is missing.");
+    const rows = library.rows(window);
+    await expect(rows).toHaveCount(NAMES.length);
+    await pointAndClick(window, library.target(rows.nth(0)));
+    await pointAndClick(window, library.target(rows.nth(1)), withKey);
+    await pointAndClick(window, library.target(rows.nth(3)), withKey);
+    await expect(library.announced(window)).toHaveText("3 selected");
+
+    // The bar names the commands for all three.
+    const bar = window.getByTestId("library-selection");
+    const ask = bar.locator('[data-command="document.ask"]');
+    await expect(ask).toHaveText("Ask about these 3 Documents");
+
+    // The right-click menu on a selected row has them too, and not what opens or renames one.
+    await pointAndClick(window, library.target(rows.nth(1)), { button: "right" });
+    const menu = window.getByTestId("document-file-actions").filter({ visible: true });
+    await expect(menu.getByTestId("document.ask")).toHaveText("Ask about these 3 Documents");
+    await expect(menu.getByTestId("document.startMind")).toHaveText(
+      "Start a Mind from these 3 Documents",
+    );
+    await expect(menu.getByTestId("document.tags")).toBeVisible();
+    await expect(menu.getByTestId("document.open")).toHaveCount(0);
+    await expect(menu.getByTestId("document.rename")).toHaveCount(0);
+
+    // Tags… from the menu opens the picker for all three.
+    await menu.getByTestId("document.tags").click();
+    await expect(
+      window.getByTestId("selection-tags-popover").filter({ visible: true }),
+    ).toHaveAttribute("aria-label", "Tags of 3 Documents");
+    await window.keyboard.press("Escape");
+
+    // A row that isn't selected has its own menu, for itself alone.
+    await pointAndClick(window, library.target(rows.nth(4)), { button: "right" });
+    const own = window.getByTestId("document-file-actions").filter({ visible: true });
+    await expect(own.getByTestId("document.ask")).toHaveText("Ask about this Document");
+    await expect(own.getByTestId("document.open")).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
+test("a Mind and a Document select together in the sidebar", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1400, 800);
+    await dismissChatSetup(window);
+    await addFiveDocuments(window);
+    await newMind(window);
+    await window.getByTestId("mind-title").fill("Shortlist");
+    const sidebar = window.getByTestId("sidebar");
+    const mind = sidebar.getByTestId("mind-row");
+    const documents = sidebar.getByTestId("document-list-item");
+    await pointAndClick(window, mind.getByTestId("mind-list-item"));
+    await pointAndClick(window, documents.nth(2).getByTestId("open-document"), withKey);
+    await expect(mind).toHaveAttribute("aria-selected", "true");
+    await expect(documents.nth(2)).toHaveAttribute("aria-selected", "true");
+    await expect(sidebar.getByTestId("sidebar-selection")).toHaveText("2 selected · Esc clears");
+
+    // ⌘A takes every row of every kind in the tree.
+    await window.keyboard.press("ControlOrMeta+a");
+    await expect(sidebar.getByTestId("sidebar-selection")).toHaveText("6 selected · Esc clears");
+    await window.keyboard.press("Escape");
+    await expect(sidebar.getByTestId("sidebar-selection")).toHaveText("");
+  } finally {
+    await app.close();
+  }
+});
+
+test("with the focus in the note or the composer, ⌘A selects text and not rows", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  try {
+    await setWindowSize(app, window, 1400, 800);
+    await dismissChatSetup(window);
+    await addFiveDocuments(window);
+    await newMind(window);
+    await window.getByTestId("mind-title").fill("Shortlist");
+    const rows = PLACES[0]?.rows(window);
+    if (!rows) throw new Error("The sidebar is missing.");
+    const target = (index: number) => rows.nth(index).getByTestId("open-document");
+    await pointAndClick(window, target(0));
+    await pointAndClick(window, target(1), withKey);
+    await expectSelected(rows, [0, 1]);
+
+    // In the note.
+    const editor = window.getByTestId("mind-editor");
+    await editor.click();
+    await window.keyboard.type("Tides and currents");
+    await window.keyboard.press("ControlOrMeta+a");
+    expect(await window.evaluate(() => globalThis.getSelection()?.toString())).toContain(
+      "Tides and currents",
+    );
+    await expectSelected(rows, [0, 1]);
+
+    // In the composer.
+    const input = window.getByTestId("composer").getByTestId("composer-input");
+    await input.click();
+    await window.keyboard.type("What are tides?");
+    await window.keyboard.press("ControlOrMeta+a");
+    expect(
+      await input.evaluate((field) => {
+        const text = field as HTMLTextAreaElement;
+        return text.value.slice(text.selectionStart ?? 0, text.selectionEnd ?? 0);
+      }),
+    ).toBe("What are tides?");
+    await expectSelected(rows, [0, 1]);
+
+    // And Esc in the composer leaves the rows' selection alone too.
+    await window.keyboard.press("Escape");
+    await expectSelected(rows, [0, 1]);
+  } finally {
+    await app.close();
+  }
+});

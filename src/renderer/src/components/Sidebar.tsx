@@ -4,6 +4,7 @@ import { commands } from "../commands/registry";
 import { useFindSources } from "../findSources";
 import { useT } from "../i18n";
 import { canRecordMeetings } from "../meetings";
+import { usePruneSelection } from "../selection";
 import { useAppStore } from "../store";
 import { linksIn, useWebPages } from "../webPages";
 import { DocumentsSection } from "./DocumentsSection";
@@ -19,6 +20,7 @@ import {
   RecordingLineIcon,
   SettingsLineIcon,
 } from "./lineIcons";
+import { SidebarSelection } from "./SidebarSelection";
 import { SidebarStatus } from "./SidebarStatus";
 import { SidebarToggle } from "./SidebarToggle";
 import { rowButtonClass, rowClass, rowIconClass } from "./sidebarRows";
@@ -37,6 +39,7 @@ import { usePopoverMenu } from "./usePopoverMenu";
  */
 export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettings(): void }) {
   const t = useT();
+  usePruneSelection();
 
   return (
     <aside
@@ -67,6 +70,7 @@ export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettin
         data-testid="sidebar-footer"
         className="flex shrink-0 flex-col border-t border-rule p-2"
       >
+        <SidebarSelection />
         <SidebarStatus />
         <div className={rowClass(false)}>
           <button type="button" onClick={onOpenSettings} className={rowButtonClass}>
