@@ -418,6 +418,7 @@ export const zhCN = {
   "chart.point.where": "{document} · {location}",
   "chart.point.open": "打开",
   "chart.point.noCitation": "没有引用",
+  "chart.point.position": "第 {index} 个，共 {count} 个",
   "chart.point.notDrawn": "不是数字，未绘制",
   "chart.source.place.one": "1 个数值，引自“{document}”{location}",
   "chart.source.place.other": "{count} 个数值，均引自“{document}”{location}",

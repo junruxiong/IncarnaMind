@@ -61,6 +61,9 @@ const WORDS = {
     source: "values, each quoted from Acme",
     uncited: "1 with no Citation",
     noCitation: "No Citation",
+    uncitedSeveral: "3 with no Citation",
+    position: (index: number) => `${index} of 3`,
+    pieValues: "3 values, each quoted from Acme",
   },
   "zh-CN": {
     question: "按季度列出营业收入 revenue quarter",
@@ -76,6 +79,9 @@ const WORDS = {
     source: "个数值，均引自“Acme”",
     uncited: "1 个数值没有引用",
     noCitation: "没有引用",
+    uncitedSeveral: "3 个数值没有引用",
+    position: (index: number) => `第 ${index} 个，共 3 个`,
+    pieValues: "3 个数值，均引自“Acme”",
   },
 } as const;
 
@@ -309,13 +315,14 @@ for (const [language, width] of [
     await window.keyboard.press("ControlOrMeta+z");
     await expect(plot).toHaveAttribute("data-kind", "bar");
 
-    // A pie and a scatter chart: the foot counts the same cells as the bars did. A pie's card
-    // says which column its slices are, and of what its share is.
+    // A pie and a scatter chart: a pie's foot counts its one column's cells (#503), a scatter
+    // chart's the same cells as the bars did. A pie's card says which column its slices are, and
+    // of what its share is.
     const foot = (await chart.getByTestId("chart-source").textContent()) ?? "";
     await pointAndClick(window, chart.getByTestId("chart-kind"));
     await pointAndClick(window, menu.getByTestId("chart-kind-pie"));
     await expect(plot).toHaveAttribute("data-kind", "pie");
-    await expect(chart.getByTestId("chart-source")).toHaveText(foot);
+    await expect(chart.getByTestId("chart-source")).toContainText(words.pieValues);
     await pointAtSlice(window, point(chart, 2, 1));
     await expect(card.getByTestId("chart-card-body")).toContainText("Q3 · 2025");
     await expect(card.getByTestId("chart-card-body")).toContainText(words.share);
@@ -350,6 +357,162 @@ for (const [language, width] of [
     await app.close();
   });
 }
+
+// The foot's "1 with no Citation" finds it (#503): in focus with its card, in every kind and in Show
+// as table; with several, the next each time, the card saying which; a pie covers its one column.
+for (const [language, width] of [
+  ["en", 1600],
+  ["zh-CN", 1100],
+] as const) {
+  test(`the foot finds each value with no Citation, in every kind and in Show as table (${language}, ${width}px)`, async () => {
+    const words = WORDS[language];
+    const { app, window } = await openApp(language, width);
+    await useLocalChatModel(window);
+    const { editor, table } = await askForFigures(window, language);
+    await pointAndClick(window, table.locator("td").filter({ hasText: /^Q2$/ }));
+    await pointAndClick(window, window.getByTestId("table-menu"));
+    await pointAndClick(window, window.getByTestId("table-chart"));
+    const chart = editor.getByTestId("chart");
+    const find = chart.getByTestId("chart-find-uncited");
+    const card = window.getByTestId("chart-card");
+    await expect(find).toHaveText(words.uncited);
+
+    const kind = async (name: "bar" | "line" | "pie" | "scatter") => {
+      if ((await chart.getAttribute("data-kind")) === name) return;
+      await pointAndClick(window, chart.getByTestId("chart-kind"));
+      await pointAndClick(window, window.getByTestId(`chart-kind-${name}`));
+      await expect(chart).toHaveAttribute("data-kind", name);
+    };
+    for (const name of ["bar", "line", "pie", "scatter"] as const) {
+      await kind(name);
+      await window.mouse.move(0, 0);
+      await pointAndClick(window, find);
+      // Q4 2025 has none: in focus, its card says so, off the chart's head.
+      await expect(point(chart, 3, 1)).toBeFocused();
+      await expect(card).toContainText("Q4");
+      await expect(card.getByTestId("chart-card-source")).toHaveText(words.noCitation);
+      await expect(card.getByTestId("chart-card-position")).toHaveCount(0);
+      await expectApart(card, chart.getByTestId("chart-kind"));
+      await expectApart(card, chart.getByTestId("chart-show-table"));
+      if (name === "bar") await screenshot(window, `chart-find-${language}-${width}`);
+      if (name === "pie") {
+        // A pie covers its one column: the foot counts 2025's four cells, and Columns is one choice.
+        await expect(chart.getByTestId("chart-source")).toContainText(words.pieValues);
+        await pointAndClick(window, chart.getByTestId("chart-kind"));
+        const series = window.getByTestId("chart-kind-menu").getByTestId("chart-series");
+        await expect(series).toHaveCount(2);
+        for (const each of await series.all())
+          await expect(each).toHaveAttribute("role", "menuitemradio");
+        await window.keyboard.press("Escape");
+      }
+    }
+
+    // In Show as table, it scrolls to the cell, which shows a quiet ○, and puts it in focus.
+    await kind("bar");
+    await pointAndClick(window, chart.getByTestId("chart-show-table"));
+    await window.mouse.move(0, 0);
+    await pointAndClick(window, find);
+    const values = chart.getByTestId("chart-table").getByTestId("chart-value");
+    const q4 = values.and(chart.locator('[data-point="3:1"]'));
+    await expect(q4).toBeFocused();
+    await expect(q4.locator('[data-check="none"]')).toBeVisible();
+    await expect(card.getByTestId("chart-card-source")).toHaveText(words.noCitation);
+    await pointAndClick(window, chart.getByTestId("chart-show-table"));
+
+    // A fifth quarter with no Citations: three to find, one after another and round again.
+    await pointAndClick(window, table.locator("td").filter({ hasText: /^Q4$/ }));
+    await pointAndClick(window, window.getByTestId("table-menu"));
+    await pointAndClick(window, window.getByTestId("table-actions").getByTestId("table-rowBelow"));
+    await pointAndClick(window, table.locator("tr").last().locator("td").first());
+    await window.keyboard.type("Q5");
+    await window.keyboard.press("Tab");
+    await window.keyboard.type("350.0");
+    await window.keyboard.press("Tab");
+    await window.keyboard.type("420.0");
+    await pointAndClick(window, chart.getByTestId("chart-update"));
+    await expect(find).toHaveText(words.uncitedSeveral);
+    for (const [index, at] of [
+      [1, point(chart, 3, 1)],
+      [2, point(chart, 4, 0)],
+      [3, point(chart, 4, 1)],
+      [1, point(chart, 3, 1)],
+    ] as const) {
+      await pointAndClick(window, find);
+      await expect(at).toBeFocused();
+      await expect(card.getByTestId("chart-card-position")).toHaveText(words.position(index));
+      await expect(card.getByTestId("chart-card-source")).toHaveText(words.noCitation);
+      if (index === 2) await screenshot(window, `chart-find-several-${language}-${width}`);
+    }
+    await app.close();
+  });
+}
+
+test("the foot's button works from the keyboard alone, and Esc goes back to it", async () => {
+  const { app, window } = await openApp("en", 1100);
+  await useLocalChatModel(window);
+  const { editor, table } = await askForFigures(window, "en");
+  await pointAndClick(window, table.locator("td").filter({ hasText: /^Q2$/ }));
+  await pointAndClick(window, window.getByTestId("table-menu"));
+  await pointAndClick(window, window.getByTestId("table-chart"));
+  const chart = editor.getByTestId("chart");
+  const find = chart.getByTestId("chart-find-uncited");
+  const card = window.getByTestId("chart-card");
+  await window.mouse.move(0, 0);
+  // Its place in the Tab order: after the chart's controls and its values.
+  await tabInto(window, chart);
+  await expect(chart.getByTestId("chart-kind")).toBeFocused();
+  for (let press = 0; press < 3; press++) await window.keyboard.press("Tab");
+  await expect(find).toBeFocused();
+  await window.keyboard.press("Enter");
+  await expect(point(chart, 3, 1)).toBeFocused();
+  await expect(card.getByTestId("chart-card-source")).toHaveText(WORDS.en.noCitation);
+  await window.keyboard.press("Escape");
+  await expect(card).toHaveCount(0);
+  await expect(find).toBeFocused();
+  await window.keyboard.press(" ");
+  await expect(point(chart, 3, 1)).toBeFocused();
+  await expect(card).toBeVisible();
+  await app.close();
+});
+
+test("a chart cut at 500 values lists every row of its table in Show as table, and says how many it draws", async () => {
+  const { app, window } = await openApp("en", 1100);
+  await newMind(window);
+  const editor = window.getByTestId("mind-editor");
+  await pointAndClick(window, editor);
+  const rows = Array.from(
+    { length: 260 },
+    (_, index) =>
+      `<tr><td>Day ${index + 1}</td><td>${100 + index}</td><td>${200 + index}</td></tr>`,
+  );
+  await window.evaluate(
+    (html) => {
+      const data = new DataTransfer();
+      data.setData("text/html", html);
+      data.setData("text/plain", "table");
+      const event = new ClipboardEvent("paste", { clipboardData: data, bubbles: true });
+      (document.activeElement ?? document.body).dispatchEvent(event);
+    },
+    `<table><tr><th>Day</th><th>2024</th><th>2025</th></tr>${rows.join("")}</table>`,
+  );
+  const table = editor.locator("table");
+  await expect(table.locator("tr")).toHaveCount(261);
+  await pointAndClick(window, table.locator("td").filter({ hasText: /^Day 2$/ }));
+  await pointAndClick(window, window.getByTestId("table-menu"));
+  await pointAndClick(window, window.getByTestId("table-chart"));
+  const chart = editor.getByTestId("chart");
+  await expect(chart.getByTestId("chart-point")).toHaveCount(500);
+  await expect(chart.getByTestId("chart-cut")).toHaveText(
+    "The first 250 of 260 rows: a chart holds up to 500 values",
+  );
+  await pointAndClick(window, chart.getByTestId("chart-show-table"));
+  const listed = chart.getByTestId("chart-table").locator("tbody tr");
+  await expect(listed).toHaveCount(260);
+  await expect(listed.last()).toContainText("Day 260");
+  await expect(listed.last().getByTestId("chart-value")).toHaveCount(2);
+  await expect(chart.getByTestId("chart-cut")).toBeVisible();
+  await app.close();
+});
 
 /** Presses Tab until the focus is inside `within`, at most `tries` times. */
 async function tabInto(window: Page, within: Locator, tries = 40): Promise<void> {
