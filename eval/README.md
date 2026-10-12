@@ -462,6 +462,7 @@ The check now ignores letter case, reads "[^36]" as "[36]", and finds a quote wi
   - `retrieval/fixtures/`: the Chinese Documents, CC BY-SA 4.0; see `ATTRIBUTION.md` there.
   - `retrieval/formats.json`: the every-format set's Questions.
   - `retrieval/formats/`: its Documents (`files/`), the script that writes them, and `ATTRIBUTION.md`.
+- **The checks evaluation:** `checks/`, with its labels, Documents and README.
 - **Tests of the evaluation itself:** these run with `npm test`, without the model.
   - `tests/eval/scoring.test.ts` checks how the evaluation scores sentences, Citations, hits and the reviewer sheet.
   - `tests/eval/citations.test.ts` runs the Citation part through a core with a scripted model.
@@ -469,6 +470,11 @@ The check now ignores letter case, reads "[^36]" as "[36]", and finds a quote wi
   - `tests/eval/recordedCitations.test.ts` checks the Citations of the 2026-10-07 run again with today's check.
   - `tests/eval/smallModelCitations.test.ts` shows, without a model, the ways a small model's Citations of the gating set's long PDFs aren't found (#67): records written by hand, through the core's citation session, over the stored text of their pages.
   - `tests/eval/formatSet.test.ts` checks the every-format set against the stored text; `tests/eval/formatScoring.test.ts`, its figures and reports; `tests/eval/formatCitations.test.ts`, the Citation check on every Location kind.
+  - `tests/eval/checkSet.test.ts` checks the checks evaluation's labels against the stored text; `tests/eval/checkScoring.test.ts`, its scoring; `tests/eval/checkPipeline.test.ts`, its pipeline through a core with a scripted model.
+
+## The checks evaluation
+
+`npm run eval` also runs the checks evaluation when a chat model is given (`npm run eval -- eval/checks` runs it alone): Find support's 200 labelled sentences and verify's 10 received documents, run end to end against one Folder and scored against the labels, with the bars of #86, #96 and #97 reported until those exist (#86). See `checks/README.md`.
 
 ## The hard tier
 
