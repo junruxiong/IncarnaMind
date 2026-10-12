@@ -27,6 +27,8 @@ interface MeetingsState {
   stop(meetingId: string): Promise<void>;
   discard(meetingId: string): Promise<void>;
   deleteAudio(meetingId: string): Promise<void>;
+  /** Tries the Meeting's Transcript again after a problem: the model's download, its engine, or saving it. */
+  retryTranscript(meetingId: string): Promise<void>;
   openSettings(meetingId: string, source: AudioSource): Promise<void>;
   dismissGaps(meetingId: string): void;
 }
@@ -95,6 +97,7 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
     stop: (meetingId) => attempt(meetingId, () => core.stopMeeting(meetingId)),
     discard: (meetingId) => attempt(meetingId, () => core.discardMeeting(meetingId)),
     deleteAudio: (meetingId) => attempt(meetingId, () => core.deleteMeetingAudio(meetingId)),
+    retryTranscript: (meetingId) => attempt(meetingId, () => core.retryTranscript(meetingId)),
     openSettings: (meetingId, source) => attempt(meetingId, () => core.openAudioSettings(source)),
     dismissGaps(meetingId) {
       const meeting = get().meetings.find((each) => each.id === meetingId);

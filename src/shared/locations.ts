@@ -1,7 +1,8 @@
 /**
  * Citation Locations (ADR-0011): where in a Document a Citation points, in
  * the unit its readers use, and its short label: "p. 4", "slide 4",
- * "Revenue, rows 12–14", "§ 2.1 Sensitivity", "lines 120–134". Pure, shared
+ * "Revenue, rows 12–14", "§ 2.1 Sensitivity", "lines 120–134", and in a
+ * Transcript the time its quote starts, "14:26". Pure, shared
  * by the core (the check, the prompt, exports) and the renderer (the
  * Citation card, the viewer's mark).
  *
@@ -12,15 +13,20 @@
  * by Reviewer", #76).
  */
 import type { CitationAttributes, CitationLocation } from "../core/api";
+import { clockTime, parseClockTime } from "./clock";
 import { type MessageKey, type MessageParams, translate } from "./i18n";
 import { findQuote, type MatchOptions, type TextRange } from "./quoteMatch";
-import { anchorsOf, lineAt, parseCellRef, type UnitText } from "./units";
+import { anchorsOf, lineAt, parseCellRef, parseCueTarget, type UnitText } from "./units";
 
 /** "12" or "12–14". */
 const span = (from: number, to: number) => (to !== from ? `${from}–${to}` : `${from}`);
 
 const isCount = (value: unknown): value is number =>
   typeof value === "number" && Number.isInteger(value) && value >= 1;
+
+/** A time in a Transcript, in ms from its start. */
+const isTime = (value: unknown): value is number =>
+  typeof value === "number" && Number.isInteger(value) && value >= 0;
 
 /** A stored Location, checked; null if it isn't one. */
 export function parseLocation(value: unknown): CitationLocation | null {
@@ -39,6 +45,8 @@ export function parseLocation(value: unknown): CitationLocation | null {
     case "slide":
     case "lines":
       return isCount(from) && isCount(to) && to >= from ? { kind, from, to } : null;
+    case "time":
+      return isTime(from) && isTime(to) && to >= from ? { kind, from, to } : null;
     case "rows":
       if (!isCount(from) || !isCount(to) || to < from) return null;
       return {
@@ -121,6 +129,8 @@ export function formatLocation(location: CitationLocation, t: Translate): string
       return t(location.to !== location.from ? "location.lines.other" : "location.lines.one", {
         range: span(location.from, location.to),
       });
+    case "time":
+      return clockTime(location.from);
     case "section": {
       const section = location.notes
         ? t("location.section.notes")
@@ -152,6 +162,10 @@ export const englishLocation = (location: CitationLocation): string =>
 export const openKind = (location: CitationLocation | null) =>
   location === null ? "document" : location.kind;
 
+/** A Citation of a Transcript, whose Location is a time: checked against the Transcript's text, not a page. */
+export const isTranscriptLocation = (location: CitationLocation | null) =>
+  location?.kind === "time";
+
 /** Whether a label reads "in …" (a section, a range of rows) rather than "on …" (a page, a slide, lines). */
 export const readsIn = (location: CitationLocation) =>
   location.kind === "section" || location.kind === "rows";
@@ -173,6 +187,10 @@ export function unitLocation(unit: UnitText): CitationLocation | null {
     case "lines":
       return isCount(label?.from) && isCount(label?.to)
         ? { kind: "lines", from: label.from, to: label.to }
+        : null;
+    case "cues":
+      return isTime(label?.from) && isTime(label?.to)
+        ? { kind: "time", from: label.from, to: label.to }
         : null;
     case "section":
       return {
@@ -368,6 +386,27 @@ export function locationOf(
         rows.length > 0 ? { from: Math.min(...rows), to: Math.max(...rows) } : clamp(whole);
       return { kind: "rows", sheet: first.label?.sheet ?? null, ...range };
     }
+    case "cues": {
+      const times: { startMs: number; endMs: number }[] = [];
+      for (const part of parts) {
+        for (const anchor of anchorsOf(units[part.unit] as UnitText)) {
+          const cue = parseCueTarget(anchor.target);
+          if (cue && anchor.start < part.end && anchor.end > part.start) times.push(cue);
+        }
+      }
+      const head = times[0];
+      if (head) {
+        return {
+          kind: "time",
+          from: head.startMs,
+          to: Math.max(...times.map((cue) => cue.endMs)),
+        };
+      }
+      const whole = { from: first.label?.from ?? 0, to: last.label?.to ?? first.label?.to ?? 0 };
+      return requested
+        ? { kind: "time", from: requested.from, to: Math.max(requested.from, requested.to) }
+        : { kind: "time", ...whole };
+    }
     case "lines": {
       const whole = { from: first.label?.from ?? 1, to: last.label?.to ?? first.label?.to ?? 1 };
       const head = parts[0];
@@ -388,7 +427,9 @@ export function locationOf(
 export type RequestedLocation =
   | { kind: "page" | "slide" | "lines"; from: number; to: number }
   | { kind: "rows"; sheet: string | null; from: number; to: number }
-  | { kind: "section"; heading: string };
+  | { kind: "section"; heading: string }
+  /** A time in a Transcript, "14:26" or "14:26–15:02", in ms. */
+  | { kind: "time"; from: number; to: number };
 
 /**
  * What a comment's Location adds after its section, as its label words it in
@@ -410,7 +451,7 @@ const range = (from: string | undefined, to: string | undefined) => {
 
 /**
  * Reads a Location written as its label ("slide 4", "Revenue, rows 12–14",
- * "§ 2.1 Sensitivity", "lines 120–134", "p. 4"), or as a cell range
+ * "§ 2.1 Sensitivity", "lines 120–134", "p. 4", "14:26"), or as a cell range
  * ("Revenue!A12:F14"). Null if it can't be read.
  */
 export function parseRequestedLocation(input: string): RequestedLocation | null {
@@ -419,6 +460,15 @@ export function parseRequestedLocation(input: string): RequestedLocation | null 
     .replace(/^[[("'“]+|[\])"'”.]+$/g, "")
     .trim();
   if (!text) return null;
+  const times =
+    /^(?:at\s+)?(\d{1,2}(?::\d{2}){1,2})(?:\s*[-–—]\s*(\d{1,2}(?::\d{2}){1,2}))?$/i.exec(text);
+  if (times) {
+    const from = parseClockTime(times[1] as string);
+    const to = times[2] === undefined ? from : parseClockTime(times[2]);
+    if (from !== null && to !== null) {
+      return { kind: "time", from: Math.min(from, to), to: Math.max(from, to) };
+    }
+  }
   let match = new RegExp(String.raw`^(?:pp?\.?|pages?)\s*${RANGE}$`, "i").exec(text);
   if (match) return { kind: "page", ...range(match[1], match[2]) };
   match = new RegExp(
@@ -470,6 +520,13 @@ export function resolveRequested(
   const named = (unit: UnitText): boolean => {
     if (requested.kind === "section") {
       return unit.kind === "section" && sectionMatches(unit, requested.heading);
+    }
+    if (requested.kind === "time") {
+      if (unit.kind !== "cues") return false;
+      // A time is a moment: the block it falls in, or, between two, the one it starts.
+      return (
+        requested.from <= (unit.label?.to ?? 0) && requested.to >= (unit.label?.from ?? 0) - 1000
+      );
     }
     if (unit.kind !== requested.kind) return false;
     const label = unit.label ?? null;

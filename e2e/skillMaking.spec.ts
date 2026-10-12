@@ -64,7 +64,7 @@ test("Make this a Skill: the model drafts it from the Mind, the User edits it in
   const row = window.getByTestId("mind-row").first();
   await row.hover();
   await row.getByTestId("mind-menu").click();
-  await row.getByTestId("mind-make-skill").click();
+  await row.getByTestId("skill.fromMind").click();
   const card = window.getByTestId("make-skill-editor");
   await expect(card).toBeVisible();
   await expect(card.getByTestId("make-skill-editor-name")).toHaveValue("scripted-review");
@@ -266,7 +266,7 @@ test("in Chinese and in a narrow window: the Skills page, the draft and the pick
   const row = window.getByTestId("mind-row").first();
   await row.hover();
   await row.getByTestId("mind-menu").click();
-  await row.getByTestId("mind-make-skill").click();
+  await row.getByTestId("skill.fromMind").click();
   const card = window.getByTestId("make-skill-editor");
   await expect(card).toBeVisible();
   await expect(card).toContainText("根据这个 Mind 生成的草稿");
