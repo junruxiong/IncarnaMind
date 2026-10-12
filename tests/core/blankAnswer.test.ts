@@ -71,7 +71,7 @@ describe("An Ollama reply with lines the provider can't read", () => {
       models: [QWEN35],
       reply: answering(() => ({
         content: "",
-        unreadable: ['{"error":"the runner stopped"}', "SECRET-DOCUMENT-TEXT"],
+        unreadable: ["SECRET-DOCUMENT-TEXT"],
       })),
     });
     const { core, client, mind } = await setUpLocalModel(ollama, QWEN35.name);
@@ -83,11 +83,34 @@ describe("An Ollama reply with lines the provider can't read", () => {
       payload: { error: { kind: "no-answer" } },
     });
     const logged = warnings.mock.calls.map((call) => call.join(" "));
-    expect(logged).toContainEqual(
-      expect.stringMatching(new RegExp(`provider=ollama model=${QWEN35.name} kind=error-line`)),
-    );
     expect(logged).toContainEqual(expect.stringContaining("kind=not-json"));
     expect(logged.join("\n")).not.toContain("SECRET-DOCUMENT-TEXT");
+  });
+
+  test("an error line mid-stream gives that problem, with Ollama's words, not no-answer", async () => {
+    const warnings = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const ollama = await startOllamaServer({
+      models: [QWEN35],
+      reply: answering(() => ({
+        content: "",
+        unreadable: ['{"error":"you have reached your weekly usage limit"}'],
+      })),
+    });
+    const { core, client, mind } = await setUpLocalModel(ollama, QWEN35.name);
+
+    const answerId = await askNew(core, client, mind.id, "Anything?");
+
+    expect(await answerEnded(core, answerId)).toMatchObject({
+      event: "failed",
+      payload: {
+        error: { kind: "rate-limit", message: expect.stringContaining("weekly usage limit") },
+      },
+    });
+    expect(warnings.mock.calls.map((call) => call.join(" "))).toContainEqual(
+      expect.stringMatching(
+        new RegExp(`provider=ollama model=${QWEN35.name} error=you have reached your weekly`),
+      ),
+    );
   });
 
   test("after some text keeps the text", async () => {
