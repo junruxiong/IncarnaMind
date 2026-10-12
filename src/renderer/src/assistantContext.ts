@@ -2,13 +2,13 @@ import type { Translate } from "./objects";
 import { DELETED_NAMES, type ScopeChip } from "./scope";
 
 /**
- * Where the next Question is asked from and what it searches, which an empty
- * conversation says once (#253, #258, #391). With a Mind: "Asked from
- * “Chapter 3” · searches “Thesis”", naming the first item of the composer's
- * Search scope (its Folder, by default); with none in view: "Searches All
- * Documents". Items deleted since are left out, as the search leaves them out.
+ * What the next Question reads and searches, which an empty conversation
+ * says once (#253, #258, #391, #544). With a Mind: "Reads “Chapter 3” ·
+ * searches “Thesis”", naming the first item of the composer's Search scope
+ * (its Folder, by default); with none in view: "Searches All Documents".
+ * Items deleted since are left out, as the search leaves them out.
  */
-export function askedFromLine(
+export function readsLine(
   t: Translate,
   mindName: string | null,
   scope: readonly ScopeChip[],
@@ -16,9 +16,9 @@ export function askedFromLine(
   if (mindName === null) return t("assistant.searchesAll");
   const named = scope.filter((chip) => !chip.deleted && chip.name);
   const first = named[0]?.name;
-  if (!first) return t("assistant.askedFrom.all", { mind: mindName });
-  if (named.length === 1) return t("assistant.askedFrom.one", { mind: mindName, scope: first });
-  return t("assistant.askedFrom.more", {
+  if (!first) return t("assistant.reads.all", { mind: mindName });
+  if (named.length === 1) return t("assistant.reads.one", { mind: mindName, scope: first });
+  return t("assistant.reads.more", {
     mind: mindName,
     scope: first,
     count: named.length - 1,
