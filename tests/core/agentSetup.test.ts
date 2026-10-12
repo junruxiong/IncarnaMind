@@ -99,6 +99,18 @@ describe("setting an agent up", () => {
     expect(clients.find((each) => each.id === "codex")?.name).toBe("ChatGPT app and Codex");
   });
 
+  it("names a new Codex pairing in the interface language, and keeps the name it had", async () => {
+    const { core, coast } = await started();
+    const english = await core.setUpAgent({ client: "codex", folderIds: [coast.id] });
+    expect(english.pairing.name).toBe("ChatGPT app and Codex");
+    await core.updateSettings({ user: { language: "zh-CN" } });
+    const chinese = await core.setUpAgent({ client: "codex", folderIds: [coast.id] });
+    expect(chinese.pairing.name).toBe("ChatGPT 应用和 Codex");
+    expect((await core.getAgents()).pairings.map((each) => each.name)).toContain(
+      "ChatGPT app and Codex",
+    );
+  });
+
   it("writes Codex's settings as shown, works from them, and takes them back with Undo", async () => {
     const { core, home, coast } = await started();
     const path = join(home, ".codex", "config.toml");

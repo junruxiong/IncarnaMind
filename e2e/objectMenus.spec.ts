@@ -244,6 +244,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "linkedFolder.layout",
     "—",
     "linkedFolder.reveal",
+    "linkedFolder.locate",
     "—",
     "linkedFolder.unlink",
   ]);
