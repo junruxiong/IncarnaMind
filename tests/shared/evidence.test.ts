@@ -8,6 +8,11 @@ const settings = (leaveOutOwnFiles: boolean): Pick<Settings, "user"> => ({
     chatModel: null,
     suggestWhileWriting: false,
     leaveOutOwnFiles,
+    exportOptions: {
+      format: "docx",
+      docx: { includeQuestions: false },
+      pdf: { includeQuestions: false },
+    },
     monthlyCap: null,
   },
 });
