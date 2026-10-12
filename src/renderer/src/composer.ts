@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { SearchScope } from "../../core/api";
+import type { ChatModelChoice, SearchScope } from "../../core/api";
 import { hasSearchScope } from "../../shared/searchScope";
 
 /** What the composer holds for one Mind until it is asked: the text, the Search scope and a Skill. */
@@ -72,6 +72,8 @@ interface ComposerState {
    * it), and says so with `focusTaken`.
    */
   focusWanted: boolean;
+  /** The model chosen in the composer with no Mind in focus; null: the default. Lost on quitting. */
+  modelWithoutMind: ChatModelChoice | null;
   draft(mindId: string): Draft;
   update(mindId: string, change: Partial<Draft>): void;
   requestFocus(): void;
@@ -82,6 +84,7 @@ interface ComposerState {
 export const useComposer = create<ComposerState>()((set, get) => ({
   drafts: {},
   focusWanted: false,
+  modelWithoutMind: null,
   draft: (mindId) => get().drafts[mindId] ?? EMPTY_DRAFT,
   update(mindId, change) {
     set((state) => ({
@@ -95,5 +98,8 @@ export const useComposer = create<ComposerState>()((set, get) => ({
   focusTaken: () => set({ focusWanted: false }),
 }));
 
+/** The draft's key when no Mind is in focus (the Library, Home or a Document): not a Mind's id. */
+export const NO_MIND = "assistant";
+
 /** The key under which a problem asking from a Mind's composer is kept (`useAnswers.blocked`). */
-export const composerKey = (mindId: string) => `composer:${mindId}`;
+export const composerKey = (mindId: string | null) => `composer:${mindId ?? NO_MIND}`;
