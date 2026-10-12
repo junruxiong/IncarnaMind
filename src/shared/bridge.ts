@@ -51,10 +51,11 @@ export interface FilesBridge {
   showDocumentInFolder(documentId: string): Promise<void>;
   /**
    * Shows the system's open dialog for a folder to link (see
-   * `CoreApi.addLinkedFolder`). Resolves with its absolute path, or null if
-   * the User cancelled.
+   * `CoreApi.addLinkedFolder`), or, given a Linked folder's id, for where
+   * that folder is now (see `CoreApi.locateLinkedFolder`). Resolves with its
+   * absolute path, or null if the User cancelled.
    */
-  pickLinkedFolder(): Promise<string | null>;
+  pickLinkedFolder(locating?: string): Promise<string | null>;
   /**
    * Shows the system's open dialog for Documents to add, as a sheet on the
    * window, starting in the folder last picked from (else Downloads).
@@ -95,11 +96,11 @@ export interface FilesBridge {
 export type MenuCommand = MenuCommandId;
 
 /**
- * Where the Edit menu's Undo and Redo go in the window in front: to the field
- * with the focus (the menu does a field's own undo itself), to the note's own
- * undo, or to the app's changes (`text` null). `undo` and `redo` name the change
+ * What the Edit menu's Undo and Redo show for the window in front: whether the
+ * focus is in a field or the note, whose own undo they reach, or neither (`text`
+ * null), where they reach the app's changes. `undo` and `redo` name the change
  * each would reach ("Move 3 Documents"; "" for one without a name), or are null
- * when there is none.
+ * when there is none. The window decides where they go when they are chosen.
  */
 export interface EditMenuState {
   text: "field" | "note" | null;
