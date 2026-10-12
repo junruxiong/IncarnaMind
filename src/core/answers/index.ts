@@ -123,7 +123,13 @@ import {
   type QuestionContext,
   questionContextOf,
 } from "./context";
-import type { AnswerEngine, AnswerTools, DocumentLanguage, GatedCall } from "./engine";
+import type {
+  AnswerEngine,
+  AnswerSearchOptions,
+  AnswerTools,
+  DocumentLanguage,
+  GatedCall,
+} from "./engine";
 import { markdownToBlocks } from "./markdown";
 import {
   answerInstructions,
@@ -338,6 +344,7 @@ export interface DocumentsForAnswers extends Pick<AnswerDocuments, "citationSour
     query: string,
     documentIds: readonly string[] | null,
     signal?: AbortSignal,
+    options?: AnswerSearchOptions,
   ): Promise<WindowedPassage[]>;
 }
 
@@ -348,7 +355,7 @@ function inScope(
 ): AnswerDocuments {
   return {
     searchableCount: () => documents.searchableCount(documentIds),
-    search: (query, signal) => documents.search(query, documentIds, signal),
+    search: (query, signal, options) => documents.search(query, documentIds, signal, options),
     citationSource: (passageId) => documents.citationSource(passageId),
     pageTexts: (documentId, contentHash, from, to) =>
       documents.pageTexts(documentId, contentHash, from, to),
@@ -955,7 +962,8 @@ export function createAnswers(options: AnswersOptions) {
         },
         // So the model can search again in the Documents' language (see the search Tool).
         documentLanguages: options.documents.searchableLanguages(documentIds),
-        searchDocuments: (query, signal) => session.tools.searchDocuments(query, signal),
+        searchDocuments: (query, signal, searchOptions) =>
+          session.tools.searchDocuments(query, signal, searchOptions),
         cite: (records, citeOptions) => session.tools.cite(records, citeOptions),
         hasRecord: (marker) => session.tools.hasRecord?.(marker) ?? false,
         unfoundQuotes: () => session.tools.unfoundQuotes?.() ?? [],

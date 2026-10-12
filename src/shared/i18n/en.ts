@@ -856,7 +856,7 @@ export const en = {
 
   "rerank.settings.title": "Reranking",
   "rerank.settings.body":
-    "Document search reorders its best matches with a reranking model, so the most relevant Passages come first. It is on by default, with the built-in model, which runs on this computer; Cohere and Voyage AI need a key. You can turn it off.",
+    "Document search reorders its best matches with a reranking model, so the most relevant Passages come first. It is on by default, with the built-in model, which runs on this computer; Cohere and Voyage AI need a key. You can turn it off. It applies to an Answer from a model that searches once, to Suggest as I write, and to checks and comparison tables. A model that calls Tools searches without it and searches again when the Passages don't answer.",
   "rerank.settings.inUse": "{service} reranks search results ({model}).",
   "rerank.settings.sends": "Each search and the Passages it found are sent to {service}.",
   "rerank.settings.builtInUse": "The built-in model reranks search results ({model}).",
