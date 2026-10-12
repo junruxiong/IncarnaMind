@@ -1233,6 +1233,42 @@ export const migrations: readonly Migration[] = [
       ALTER TABLE conversation_messages ADD COLUMN text_origin TEXT;
     `,
   },
+  {
+    version: 56,
+    description: "Each cloud model request's tokens and cost, for the monthly cap (#83)",
+    sql: `
+      -- One row per request to a cloud chat model (src/core/cost/meter.ts). A request billed per
+      -- token is first 'reserved' at its most (its prompt and its output limit), then 'settled' at
+      -- what its provider reported, or at the reservation when it reported nothing. A request
+      -- the provider refused before answering is soft-deleted: it cost nothing. A ChatGPT plan
+      -- request has no price: its tokens are recorded, never its cost.
+      -- billing: 'per-token' | 'plan'; status: 'reserved' | 'settled'; flow: the data flow it
+      -- went out on ('chat', 'tagging'…) or 'test'. Amounts are in currency ('USD' | 'CNY'),
+      -- NULL with no known price.
+      CREATE TABLE model_requests (
+        id TEXT PRIMARY KEY NOT NULL,
+        provider_id TEXT NOT NULL,
+        model_id TEXT NOT NULL,
+        flow TEXT NOT NULL,
+        billing TEXT NOT NULL,
+        status TEXT NOT NULL,
+        currency TEXT,
+        reserved REAL,
+        cost REAL,
+        input_tokens INTEGER,
+        cached_input_tokens INTEGER,
+        cache_write_tokens INTEGER,
+        output_tokens INTEGER,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX model_requests_by_created_at ON model_requests (created_at)
+        WHERE deleted_at IS NULL;
+      CREATE INDEX model_requests_reserved ON model_requests (status)
+        WHERE status = 'reserved' AND deleted_at IS NULL;
+    `,
+  },
 ];
 
 /**
