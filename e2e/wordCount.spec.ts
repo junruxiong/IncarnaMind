@@ -140,6 +140,28 @@ test("a target shows progress, is kept for the Mind, and can be removed", async 
   await second.app.close();
 });
 
+test("the target's field keeps the focus when the menu's toggle event comes late, as on a busy computer", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await newMind(window);
+  await window.getByTestId("mind-editor").click();
+  await window.keyboard.type("The tide turns at noon.");
+  await window.getByTestId("mind-count-button").click();
+  const field = window.getByTestId("mind-count-target");
+  await field.fill("8,000");
+  await expect(field).toBeFocused();
+  // The popover's toggle event comes a frame after it shows: here, after the field took the focus.
+  await window
+    .getByTestId("mind-count-menu")
+    .evaluate((menu) =>
+      menu.dispatchEvent(new ToggleEvent("toggle", { oldState: "closed", newState: "open" })),
+    );
+  await expect(field).toBeFocused();
+  await window.keyboard.press("Enter");
+  await expect(window.getByTestId("mind-count-progress")).toBeVisible();
+  await app.close();
+});
+
 for (const language of ["en", "zh-CN"] as const) {
   for (const width of [1440, 900]) {
     test(`the count fits under the title at ${width}px in ${language}`, async () => {
