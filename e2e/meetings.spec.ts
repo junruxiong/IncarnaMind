@@ -447,11 +447,12 @@ test("notes during the call: typed lines get their time, Mark (⌘D) and Add to 
   await window.keyboard.press("ArrowDown");
   await expect(second).toBeFocused();
   await window.keyboard.press("Enter");
+  // It shows for a few seconds: asserted first.
+  await expect(window.getByTestId("transcript-added")).toHaveText("Added to the note");
   const citation = notes.getByTestId("citation");
   await expect(citation).toHaveCount(1);
   await expect(citation).toHaveAttribute("data-check", "found");
   await expect(notes.locator("li", { hasText: quote })).toHaveCount(1);
-  await expect(window.getByTestId("transcript-added")).toHaveText("Added to the note");
   // The cursor stays in the Transcript, where the User is reading.
   await expect(second).toBeFocused();
 
