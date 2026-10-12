@@ -5,6 +5,7 @@ import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge, LinkedFolder } from "../src/core/api";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
+  addToNote,
   askInAssistant,
   clickNow,
   confirmLink,
@@ -527,12 +528,13 @@ test("a Linked folder that moved is located from its menu, and its Document and 
   await expect(linkedFolderRow(first.window, "Library")).toHaveAttribute("data-state", "idle");
   await newMind(first.window);
   await first.window.getByTestId("mind-editor").click();
-  await first.window.keyboard.press("ControlOrMeta+j");
-  await first.window.keyboard.type("When do spring tides happen?");
-  await first.window.keyboard.press("Enter");
-  const answered = first.window.getByTestId("mind-editor").getByTestId("answer");
-  await expect(answered).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-  await expect(answered.getByTestId("citation")).toHaveAttribute("data-check", "found");
+  const answer = await askInAssistant(first.window, "When do spring tides happen?");
+  await expect(answer.getByTestId("citation")).toHaveAttribute("data-check", "found");
+  await addToNote(first.window, answer);
+  await expect(first.window.getByTestId("mind-editor").getByTestId("citation")).toHaveAttribute(
+    "data-check",
+    "found",
+  );
   const before = await first.window.evaluate(async () => {
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     return (await bridge.listDocuments()).map(({ id, contentHash }) => ({ id, contentHash }));
