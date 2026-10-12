@@ -1,4 +1,4 @@
-import { type ComponentType, type ReactNode, type SVGProps, useMemo } from "react";
+import { type ComponentType, type ReactNode, type SVGProps, useCallback, useMemo } from "react";
 import { create } from "zustand";
 import type { Document, LinkedFolder } from "../../../core/api";
 import { buildFolderTree, type FolderNode } from "../folders";
@@ -10,6 +10,9 @@ import {
   rowStateLabel,
 } from "../linkedFolders";
 import type { ObjectRef } from "../objects";
+import { sorted } from "../sort";
+import { useSort } from "../sortChoices";
+import { documentFields, folderFields } from "../sortFields";
 import { selectTagFilterKey, useAppStore } from "../store";
 import { TREE_ROW } from "../treeKeys";
 import { ExampleChip } from "./GettingStarted";
@@ -100,6 +103,13 @@ export function FolderTree({ documents, filtering, renderDocument }: FolderTreeP
   const collapsed = useFolderTree((state) => state.collapsed);
   const filteredFolds = useFolderTree((state) => state.filtered);
   const tree = useMemo(() => buildFolderTree(folders), [folders]);
+  const language = useLanguage();
+  const choices = useSort((state) => state.scopes);
+  const forAll = useSort((state) => state.all);
+  const sortOf = useCallback(
+    (key: string) => choices[`folder:${key}`] ?? forAll,
+    [choices, forAll],
+  );
 
   const linkedById = useMemo(
     () => new Map(linkedFolders.map((linked) => [linked.id, linked])),
@@ -134,12 +144,25 @@ export function FolderTree({ documents, filtering, renderDocument }: FolderTreeP
       list.push(item);
       grouped.set(key, list);
     }
+    // Each in its Folder's order (the Other Documents', under its own key).
+    for (const [key, list] of grouped) {
+      grouped.set(key, [
+        ...sorted(list, sortOf(key ?? OTHER_DOCUMENTS), documentFields(t), language),
+      ]);
+    }
     return grouped;
-  }, [documents, folders, flatRoots]);
+  }, [documents, folders, flatRoots, sortOf, language, t]);
 
   /** A Folder's sub-Folders, none in a Linked folder shown flat. */
   const subfoldersOf = (node: FolderNode) =>
-    flatRoots.has(node.folder.linkedFolderId) ? [] : node.children;
+    flatRoots.has(node.folder.linkedFolderId)
+      ? []
+      : sorted(
+          node.children,
+          sortOf(node.folder.id),
+          (child) => folderFields(child.folder),
+          language,
+        );
 
   /** While filtering: whether a Folder has a shown Document anywhere below it. */
   const hasDocuments = (node: FolderNode): boolean =>
@@ -205,7 +228,9 @@ export function FolderTree({ documents, filtering, renderDocument }: FolderTreeP
   }
   return (
     <ul aria-label={t("folders.label")} data-testid="document-tree">
-      {renderLevel(tree)}
+      {renderLevel(
+        sorted(tree, choices.sidebar ?? forAll, (node) => folderFields(node.folder), language),
+      )}
       {others.length > 0 && (
         <GroupItem
           testId="other-documents"

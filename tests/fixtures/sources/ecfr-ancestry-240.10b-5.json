@@ -1,0 +1,67 @@
+{
+  "ancestors": [
+    {
+      "identifier": "17",
+      "label": "Title 17—Commodity and Securities Exchanges",
+      "label_level": "Title 17",
+      "label_description": "Commodity and Securities Exchanges",
+      "reserved": false,
+      "type": "title",
+      "size": 17313703
+    },
+    {
+      "identifier": "II",
+      "label": " Chapter II—Securities and Exchange Commission",
+      "label_level": " Chapter II",
+      "label_description": "Securities and Exchange Commission",
+      "reserved": false,
+      "type": "chapter",
+      "size": 10995873,
+      "descendant_range": "200 – 399"
+    },
+    {
+      "identifier": "240",
+      "label": "Part 240—General Rules and Regulations, Securities Exchange Act of 1934",
+      "label_level": "Part 240",
+      "label_description": "General Rules and Regulations, Securities Exchange Act of 1934",
+      "reserved": false,
+      "type": "part",
+      "volumes": ["4"],
+      "size": 3791717,
+      "descendant_range": "240.0-1 – 240.36a1-2"
+    },
+    {
+      "identifier": "A",
+      "label": "Subpart A—Rules and Regulations Under the Securities Exchange Act of 1934",
+      "label_level": "Subpart A",
+      "label_description": "Rules and Regulations Under the Securities Exchange Act of 1934",
+      "reserved": false,
+      "type": "subpart",
+      "volumes": ["4"],
+      "size": 541759,
+      "descendant_range": "240.0-1 – 240.12a-11"
+    },
+    {
+      "generated_id": true,
+      "identifier": "ECFRbda83517ce4377f",
+      "label": "Manipulative and Deceptive Devices and Contrivances",
+      "label_level": "Manipulative and Deceptive Devices and Contrivances",
+      "label_description": "Manipulative and Deceptive Devices and Contrivances",
+      "reserved": false,
+      "type": "subject_group",
+      "size": 90643,
+      "descendant_range": "240.9j-1 – 240.10c-1a"
+    },
+    {
+      "identifier": "240.10b-5",
+      "label": "§ 240.10b-5 Employment of manipulative and deceptive devices.",
+      "label_level": "§ 240.10b-5",
+      "label_description": "Employment of manipulative and deceptive devices.",
+      "reserved": false,
+      "type": "section",
+      "volumes": ["4"],
+      "received_on": "2017-01-05T00:00:00-0500",
+      "size": 1129
+    }
+  ]
+}

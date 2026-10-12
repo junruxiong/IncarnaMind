@@ -104,8 +104,11 @@ export interface CreateMindInput {
  *   or from cited figures, each kept with its Citation. Older content is
  *   version 7 content as it is: nothing is rewritten. A version before 7
  *   opens a Mind with a chart read-only, as its editor would drop the chart.
+ * - 8: a Document chip the User writes with "@" (`DOCUMENT_CHIP_NODE`), and
+ *   checklists (`taskList` and `taskItem`, whose items keep `checked`). Older
+ *   content is version 8 content as it is: nothing is rewritten.
  */
-export const CONTENT_SCHEMA_VERSION = 7;
+export const CONTENT_SCHEMA_VERSION = 8;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -331,6 +334,7 @@ export const NOTE_BLOCK_TYPES = [
   "bulletList",
   "orderedList",
   "blockquote",
+  "taskList",
   "horizontalRule",
   "table",
   "chart",
@@ -593,6 +597,14 @@ export const CITATION_NODE = "citation";
  * inside a footnote is part of that footnote's text, with no number of its own.
  */
 export const FOOTNOTE_NODE = "footnote";
+
+/**
+ * The node type of a Document chip, which the User writes with "@" in a Note:
+ * an inline node that names a Document (`documentId`, and its `name` as it was
+ * when the chip was made, shown if the Document is gone) and opens it in the
+ * viewer. It is the User's own text, not a Citation: it checks nothing.
+ */
+export const DOCUMENT_CHIP_NODE = "documentChip";
 
 /**
  * The node type of a chart (#436): a Block with no text of its own, whose
@@ -1409,6 +1421,12 @@ export interface Document {
    */
   creationDate: string | null;
   /**
+   * When the file was last modified, as the file system says, as last seen
+   * when it was indexed or its folder rescanned. ISO 8601, UTC. Null for a
+   * Document with no file of its own, and until a scan has seen it.
+   */
+  modifiedAt: string | null;
+  /**
    * The Document's own title (#213), for when its file name is machine-made
    * (a UUID, "Untitled"): the title in its properties, else its first
    * heading, else its first line. Null if it has none, or until it is read.
@@ -1699,13 +1717,16 @@ export type ReferenceLookupResult =
 /**
  * A Source provider (CONTEXT.md): a public service Find sources searches for
  * works to add, as Documents when their full text is open, else as reference
- * records. OpenAlex, arXiv and PubMed search; Crossref looks a DOI up. Laws,
- * filings and drug labels come later, each one more provider.
+ * records. OpenAlex, arXiv and PubMed search; Crossref looks a DOI up;
+ * openFDA, DailyMed and ClinicalTrials.gov find drug labels and trials; the
+ * eCFR searches US federal regulations, and GovInfo looks up the US Code and
+ * the CFR's official edition by citation.
  */
 export interface SourceProviderInfo {
   /**
-   * "openalex", "arxiv", "pubmed", "crossref". The UI says what each covers
-   * and what its records are licensed under (`sources.provider.<id>.about`).
+   * "openalex", "arxiv", "pubmed", "crossref", "openfda", "dailymed",
+   * "clinicaltrials", "ecfr", "govinfo". The UI says what each covers and what
+   * its records are licensed under (`sources.provider.<id>.about`).
    */
   id: string;
   /** As its operator names it. */
@@ -1722,21 +1743,29 @@ export interface SourceProviderInfo {
   searchedByDefault: boolean;
   /** An optional key of the User's: "none" for a provider that takes none, else whether one is set. The key itself is never given out. */
   key: "none" | "unset" | "set";
+  /** It works only with that key (GovInfo): without one it is off, and `keySignUp` is where to get one. */
+  keyNeeded: boolean;
+  keySignUp: string | null;
 }
 
 /**
  * What an Answer's search can ask for besides papers (`find_sources`' `kind`),
- * and the providers each is looked up in. Drug labels and trials aren't
- * searched with a search for papers.
+ * and the providers each is looked up in. Drug labels, trials and US law
+ * aren't searched with a search for papers.
  */
 export const SOURCE_KIND_PROVIDERS: Readonly<Record<string, readonly string[]>> = {
   drug_labels: ["openfda", "dailymed"],
   clinical_trials: ["clinicaltrials"],
+  us_law: ["ecfr", "govinfo"],
 };
 
 /** What Find sources looks for. */
 export interface FindSourcesInput {
-  /** Words, a title, or an identifier: a DOI, an arXiv ID, a PubMed ID, a label's set id or an NCT number. */
+  /**
+   * Words, a title, or an identifier: a DOI, an arXiv ID, a PubMed ID, a
+   * label's set id, an NCT number, or a citation ("17 CFR 240.10b-5", "42
+   * U.S.C. § 1983").
+   */
   query: string;
   /** Only works published in or after this year. */
   fromYear?: number | null;
@@ -1753,9 +1782,17 @@ export interface FindSourcesInput {
  * - "declined": the User didn't allow sending it searches;
  * - "unreachable": it couldn't be reached, or took too long;
  * - "rate-limited": it asked IncarnaMind to slow down (429), or its free daily allowance is used up;
- * - "service-error": it answered with an error, or with something unreadable.
+ * - "service-error": it answered with an error, or with something unreadable;
+ * - "needs-key": it works only with the User's own key, and none is set: nothing was sent;
+ * - "key-rejected": it didn't accept the User's key.
  */
-export type SourceFailureReason = "declined" | "unreachable" | "rate-limited" | "service-error";
+export type SourceFailureReason =
+  | "declined"
+  | "unreachable"
+  | "rate-limited"
+  | "service-error"
+  | "needs-key"
+  | "key-rejected";
 
 /** How one provider's part of a search went. */
 export interface SourceProviderOutcome {
@@ -1820,6 +1857,8 @@ export interface FoundSource {
   landingUrl: string | null;
   /** What the source says about relying on it, when it says (openFDA's disclaimer); shown with the result. */
   notice: string | null;
+  /** Its text is an unofficial compilation (the eCFR), not the official edition: the result says so. */
+  unofficial: boolean;
   /** Already in the Library: as a Document, or as a reference record without one. */
   inLibrary: { documentId: string | null; recordId: string } | null;
 }
@@ -1862,8 +1901,18 @@ export type AddFoundSourceResult =
     }
   | {
       outcome: "failed";
-      /** "local-mode": nothing may be sent; "declined": the provider isn't allowed; "not-found": search again. */
-      reason: "local-mode" | "declined" | "not-found";
+      /**
+       * "local-mode": nothing may be sent; "declined": the provider isn't allowed; "not-found": search
+       * again; "rate-limited": the provider asked to slow down, try later; "needs-key" and
+       * "key-rejected": the provider works only with the User's own key, and none is set or it was refused.
+       */
+      reason:
+        | "local-mode"
+        | "declined"
+        | "not-found"
+        | "rate-limited"
+        | "needs-key"
+        | "key-rejected";
       /** Technical detail in English, for logs and tooltips. */
       message: string;
     };
@@ -3652,6 +3701,7 @@ export const dataKinds = [
   "identifiers",
   "search-terms",
   "work-ids",
+  "provider-key",
   "selection",
   "scoped-passages",
   "scoped-minds",
@@ -5482,7 +5532,7 @@ export interface CoreApi {
   listSourceProviders(): Promise<SourceProviderInfo[]>;
   /**
    * Sets, or with null removes, the User's own key for a provider that takes
-   * one (openFDA's). It is kept only in the keychain, sent only to that
+   * one (openFDA's, GovInfo's). It is kept only in the keychain, sent only to that
    * provider in a header, and never given back. Throws InvalidInputError for
    * a provider that takes none, and SecretStorageError when it can't be kept.
    */
