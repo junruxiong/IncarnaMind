@@ -1,6 +1,15 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { Tokenizer } from "@huggingface/tokenizers";
-import { describe, expect, test } from "vitest";
-import { BUILT_IN_RERANKING_MODEL, type CrossEncoder, DEFAULT_RERANK_MODELS } from "../../src/core";
+import { describe, expect, test, vi } from "vitest";
+import {
+  BUILT_IN_RERANKING_MODEL,
+  type CrossEncoder,
+  DEFAULT_RERANK_MODELS,
+  type RerankingCheck,
+  type RerankingModelDefinition,
+  type RerankingModelFiles,
+} from "../../src/core";
 import {
   type CrossEncoderChannel,
   type CrossEncoderRequest,
@@ -10,47 +19,55 @@ import {
 } from "../../src/core/reranking/channel";
 import { createFakeCrossEncoder, fakeRelevance } from "../../src/core/reranking/fake";
 import { createRerankingModel, rerankText } from "../../src/core/reranking/index";
-import { pairIds } from "../../src/core/reranking/onnx";
-import { createTempDataFolder, NO_MODEL_FILES } from "../helpers/core";
+import {
+  CHECK_TOLERANCE,
+  createOnnxCrossEncoder,
+  GPU_BATCH_SIZE,
+  type PairSessionFactory,
+  pairIds,
+  type SessionDevice,
+} from "../../src/core/reranking/onnx";
+import { createTempDataFolder, NO_MODEL_FILES, recordingLog } from "../helpers/core";
+import { startModelServer } from "../helpers/embedding";
 
 const FILES = { model: "m.onnx", tokenizer: "t.json", tokenizerConfig: "c.json", maxTokens: 512 };
 
-/** A tiny tokenizer with XLM-RoBERTa's pair template: "<s> A </s></s> B </s>". */
-function tinyTokenizer(): Tokenizer {
-  const vocab: Record<string, number> = { "<s>": 0, "<pad>": 1, "</s>": 2, "<unk>": 3 };
-  for (const word of "what is the capital of france paris lies on seine a b c d e f g h".split(
-    " ",
-  )) {
-    vocab[word] = Object.keys(vocab).length;
-  }
-  const special = (id: number, content: string) => ({
-    id,
-    content,
-    special: true,
-    single_word: false,
-    lstrip: false,
-    rstrip: false,
-    normalized: false,
-  });
-  return new Tokenizer(
-    {
-      version: "1.0",
-      added_tokens: [special(0, "<s>"), special(2, "</s>")],
-      normalizer: null,
-      pre_tokenizer: { type: "Whitespace" },
-      post_processor: {
-        type: "RobertaProcessing",
-        sep: ["</s>", 2],
-        cls: ["<s>", 0],
-        trim_offsets: true,
-        add_prefix_space: false,
-      },
-      decoder: null,
-      model: { type: "WordLevel", vocab, unk_token: "<unk>" },
-    },
-    { model_max_length: 512 },
-  );
+const TINY_VOCAB: Record<string, number> = { "<s>": 0, "<pad>": 1, "</s>": 2, "<unk>": 3 };
+for (const word of "what is the capital of france paris lies on seine a b c d e f g h".split(" ")) {
+  TINY_VOCAB[word] = Object.keys(TINY_VOCAB).length;
 }
+
+const special = (id: number, content: string) => ({
+  id,
+  content,
+  special: true,
+  single_word: false,
+  lstrip: false,
+  rstrip: false,
+  normalized: false,
+});
+
+/** A tiny tokenizer's two files, with XLM-RoBERTa's pair template: "<s> A </s></s> B </s>". */
+const TINY_TOKENIZER = {
+  json: {
+    version: "1.0",
+    added_tokens: [special(0, "<s>"), special(2, "</s>")],
+    normalizer: null,
+    pre_tokenizer: { type: "Whitespace" },
+    post_processor: {
+      type: "RobertaProcessing",
+      sep: ["</s>", 2],
+      cls: ["<s>", 0],
+      trim_offsets: true,
+      add_prefix_space: false,
+    },
+    decoder: null,
+    model: { type: "WordLevel", vocab: TINY_VOCAB, unk_token: "<unk>" },
+  },
+  config: { model_max_length: 512, pad_token: "<pad>" },
+};
+
+const tinyTokenizer = () => new Tokenizer(TINY_TOKENIZER.json, TINY_TOKENIZER.config);
 
 describe("The reranking models", () => {
   test("the built-in model is pinned, has a permissive licence and isn't a service", () => {
@@ -65,6 +82,9 @@ describe("The reranking models", () => {
       ]),
     );
     for (const file of model.source.files) expect(file.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(model.gpu?.file.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(model.gpu?.folder).not.toBe(model.folder);
+    expect(model.gpu?.check.scores).toHaveLength(model.gpu?.check.texts.length ?? -1);
     // The built-in model isn't a service: it has no default model to name.
     expect(Object.keys(DEFAULT_RERANK_MODELS)).toEqual(["cohere", "voyage"]);
   });
@@ -147,7 +167,7 @@ describe("The built-in reranking model", () => {
     const dataDir = await createTempDataFolder();
     const read: string[][] = [];
     const crossEncoder: CrossEncoder = {
-      load: async () => {},
+      load: async () => ({ device: "cpu" }),
       score: async (query, texts) => {
         read.push([query, ...texts]);
         return texts.map(() => 0);
@@ -181,7 +201,7 @@ describe("The built-in reranking model", () => {
       },
       dataDir,
       crossEncoder: {
-        load: async () => {},
+        load: async () => ({ device: "cpu" }),
         score: async (_query, texts) => {
           scored = true;
           return texts.map(() => 0);
@@ -246,7 +266,7 @@ describe("The reranking channel", () => {
 
   test("scores fail before a load, and errors come back as errors", async () => {
     const failing: CrossEncoder = {
-      load: async () => {},
+      load: async () => ({ device: "cpu" }),
       score: async () => {
         throw new Error("The model failed on this text.");
       },
@@ -262,7 +282,7 @@ describe("The reranking channel", () => {
   test("when the process stops, pending requests fail and the next load starts a new one", async () => {
     let release = () => {};
     const slow: CrossEncoder = {
-      load: async () => {},
+      load: async () => ({ device: "cpu" }),
       score: (_query, texts) =>
         new Promise((resolve) => {
           release = () => resolve(texts.map(() => 0));
@@ -281,5 +301,316 @@ describe("The reranking channel", () => {
 
     await crossEncoder.load(FILES);
     expect(link.started).toHaveLength(2);
+  });
+});
+
+interface FakeRun {
+  device: SessionDevice;
+  /** Each row's tokens, by its attention mask. */
+  lengths: number[];
+  width: number;
+  /** The ids under the mask's zeros. */
+  padding: bigint[];
+}
+
+/**
+ * Sessions that keep what they ran and score a row by its number of tokens,
+ * plus `gpuOffset` on the GPU; `adapter: false` finds no GPU adapter,
+ * `gpuFails` fails to open the model on the GPU, and `gpuBreaks` fails on the
+ * GPU after the check.
+ */
+function fakeSessions(
+  options: { adapter?: boolean; gpuFails?: boolean; gpuBreaks?: boolean; gpuOffset?: number } = {},
+) {
+  const { adapter = true, gpuFails = false, gpuBreaks = false, gpuOffset = 0.02 } = options;
+  const opened: string[] = [];
+  const released: string[] = [];
+  const ran: FakeRun[] = [];
+  const createSession: PairSessionFactory = async (model, device) => {
+    const name = `${typeof model === "string" ? model.split(/[/\\]/).at(-1) : "probe"} on ${device}`;
+    if (device === "gpu" && !adapter) throw new Error("Failed to get a WebGPU adapter.");
+    if (device === "gpu" && gpuFails && typeof model === "string") {
+      throw new Error("The WebGPU execution provider can't run this model.");
+    }
+    opened.push(name);
+    let runs = 0;
+    return {
+      async run(ids, mask, rows, width) {
+        if (device === "gpu" && gpuBreaks && runs++ > 0) throw new Error("WebGPU device lost.");
+        const run: FakeRun = { device, lengths: [], width, padding: [] };
+        for (let row = 0; row < rows; row++) {
+          let length = 0;
+          for (let at = row * width; at < (row + 1) * width; at++) {
+            if (mask[at] === 1n) length++;
+            else run.padding.push(ids[at] ?? -1n);
+          }
+          run.lengths.push(length);
+        }
+        ran.push(run);
+        return Float32Array.from(
+          run.lengths,
+          (length) => length + (device === "gpu" ? gpuOffset : 0),
+        );
+      },
+      release: async () => {
+        released.push(name);
+      },
+    };
+  };
+  return { createSession, opened, released, runs: ran };
+}
+
+const pairLength = (query: string, text: string) =>
+  pairIds(tinyTokenizer(), query, text, 512).length;
+
+/** What the fake sessions score on the CPU, which stands in for the model as trained. */
+const CHECK: RerankingCheck = {
+  query: "what is",
+  texts: ["paris lies on seine", "a"],
+  scores: ["paris lies on seine", "a"].map((text) => pairLength("what is", text)),
+};
+
+/** The tiny tokenizer's files in a new folder, and the model's files as a load is given them. */
+async function tinyModelFiles(directory?: string): Promise<RerankingModelFiles> {
+  const folder = directory ?? (await createTempDataFolder());
+  await mkdir(folder, { recursive: true });
+  await writeFile(join(folder, "tokenizer.json"), JSON.stringify(TINY_TOKENIZER.json));
+  await writeFile(join(folder, "tokenizer_config.json"), JSON.stringify(TINY_TOKENIZER.config));
+  return {
+    model: join(folder, "int8.onnx"),
+    tokenizer: join(folder, "tokenizer.json"),
+    tokenizerConfig: join(folder, "tokenizer_config.json"),
+    maxTokens: 512,
+  };
+}
+
+const TEXTS = [
+  "a b c d e f g h",
+  "a",
+  "paris lies on seine",
+  "a b",
+  "a b c",
+  "c d e f g",
+  "c",
+  "d e",
+];
+const MORE_TEXTS = [...TEXTS, "f g h", "e"];
+
+describe("The built-in reranking model on the GPU", () => {
+  test("scores in batches of 8 texts sorted by length, padded with the padding token, and gives the scores in the order given", async () => {
+    const sessions = fakeSessions();
+    const crossEncoder = createOnnxCrossEncoder({ createSession: sessions.createSession });
+
+    const device = await crossEncoder.load({
+      ...(await tinyModelFiles()),
+      gpu: { model: "fp16.onnx", check: CHECK },
+    });
+
+    expect(device).toEqual({ device: "gpu" });
+    expect(sessions.opened).toEqual(["probe on gpu", "fp16.onnx on gpu"]);
+    // The check ran first, as one padded batch.
+    expect(sessions.runs).toEqual([
+      { device: "gpu", lengths: [7, 10], width: 10, padding: [1n, 1n, 1n] },
+    ]);
+
+    sessions.runs.length = 0;
+    const scores = await crossEncoder.score("what is", MORE_TEXTS);
+
+    const lengths = MORE_TEXTS.map((text) => pairLength("what is", text));
+    expect(scores).toEqual(lengths.map((length) => expect.closeTo(length + 0.02, 5)));
+    const sorted = [...lengths].sort((a, b) => a - b);
+    expect(sessions.runs.map((run) => run.lengths)).toEqual([
+      sorted.slice(0, GPU_BATCH_SIZE),
+      sorted.slice(GPU_BATCH_SIZE),
+    ]);
+    expect(sessions.runs.map((run) => run.width)).toEqual([sorted[7], sorted[9]]);
+    expect(new Set(sessions.runs.flatMap((run) => run.padding))).toEqual(new Set([1n]));
+  });
+
+  test("on the CPU, scores one pair at a time, in the order given, as before", async () => {
+    const sessions = fakeSessions();
+    const crossEncoder = createOnnxCrossEncoder({ createSession: sessions.createSession });
+
+    expect(await crossEncoder.load(await tinyModelFiles())).toEqual({ device: "cpu" });
+    const scores = await crossEncoder.score("what is", TEXTS);
+
+    // A model with no GPU file never asks for an adapter.
+    expect(sessions.opened).toEqual(["int8.onnx on cpu"]);
+    const lengths = TEXTS.map((text) => pairLength("what is", text));
+    expect(scores).toEqual(lengths);
+    expect(sessions.runs.map((run) => run.lengths)).toEqual(lengths.map((length) => [length]));
+    expect(sessions.runs.flatMap((run) => run.padding)).toEqual([]);
+  });
+
+  test.each([
+    [
+      "no GPU adapter is found",
+      { adapter: false },
+      { reason: "no-adapter", message: expect.stringMatching(/adapter/) },
+      ["int8.onnx on cpu"],
+    ],
+    [
+      "the GPU file isn't downloaded",
+      {},
+      { reason: "not-downloaded", message: expect.any(String) },
+      ["probe on gpu", "int8.onnx on cpu"],
+    ],
+    [
+      "the model fails on the GPU",
+      { gpuFails: true },
+      { reason: "session", message: expect.stringMatching(/WebGPU/) },
+      ["probe on gpu", "int8.onnx on cpu"],
+    ],
+    [
+      "the GPU's scores for the check are off",
+      { gpuOffset: CHECK_TOLERANCE + 0.4 },
+      { reason: "check", message: expect.stringMatching(/0\.500 logits/) },
+      ["probe on gpu", "fp16.onnx on gpu", "int8.onnx on cpu"],
+    ],
+  ])("runs on the CPU, one pair at a time, when %s", async (_case, options, fallback, opened) => {
+    const sessions = fakeSessions(options);
+    const crossEncoder = createOnnxCrossEncoder({ createSession: sessions.createSession });
+    const downloaded = fallback.reason !== "not-downloaded";
+
+    const device = await crossEncoder.load({
+      ...(await tinyModelFiles()),
+      gpu: { model: downloaded ? "fp16.onnx" : null, check: CHECK },
+    });
+
+    expect(device).toEqual({ device: "cpu", fallback });
+    expect(sessions.opened).toEqual(opened);
+    // A GPU session that didn't pass is let go.
+    expect(sessions.released).toEqual(opened.filter((name) => name.endsWith("on gpu")));
+    sessions.runs.length = 0;
+    expect(await crossEncoder.score("what is", TEXTS)).toEqual(
+      TEXTS.map((text) => pairLength("what is", text)),
+    );
+    expect(sessions.runs.every((run) => run.device === "cpu" && run.lengths.length === 1)).toBe(
+      true,
+    );
+  });
+});
+
+describe("The built-in reranking model's GPU file", () => {
+  const HITS = TEXTS.map((text, index) => ({ id: `${index}`, documentName: "a", text }));
+
+  /** A model whose GPU file `server` serves, with its tokenizer in place, and the log it writes. */
+  async function gpuModel(options: Parameters<typeof fakeSessions>[0]) {
+    const dataDir = await createTempDataFolder();
+    const server = await startModelServer({ "fp16.onnx": 4096 });
+    const [file] = server.source.files;
+    if (!file) throw new Error("The model server serves no GPU file.");
+    const definition: RerankingModelDefinition = {
+      ...BUILT_IN_RERANKING_MODEL,
+      folder: "tiny",
+      files: {
+        model: "int8.onnx",
+        tokenizer: "tokenizer.json",
+        tokenizerConfig: "tokenizer_config.json",
+      },
+      gpu: { folder: "tiny-gpu", file, check: CHECK },
+    };
+    await tinyModelFiles(join(dataDir, "models", "tiny"));
+    const sessions = fakeSessions(options);
+    const { log, entries } = recordingLog();
+    const model = createRerankingModel({
+      definition,
+      source: { baseUrl: server.source.baseUrl, files: [] },
+      dataDir,
+      crossEncoder: createOnnxCrossEncoder({ createSession: sessions.createSession }),
+      emitStatus: () => {},
+      log,
+    });
+    return { model, server, sessions, entries };
+  }
+
+  const downloaded = (entries: { event: string }[]) =>
+    vi.waitFor(() =>
+      expect(entries.map((entry) => entry.event)).toContain("reranking.gpuDownloaded"),
+    );
+
+  test("downloads only once a GPU adapter is found, and reranks on the GPU from the next search", async () => {
+    const { model, server, sessions, entries } = await gpuModel({});
+    expect(model.device()).toBeNull();
+
+    await model.rerank("what is", HITS);
+    expect(model.device()).toBe("cpu");
+    await downloaded(entries);
+    expect(server.requests.map((request) => request.path)).toEqual(["fp16.onnx"]);
+
+    const ranked = await model.rerank("what is", HITS);
+    expect(model.device()).toBe("gpu");
+    expect(sessions.opened.at(-1)).toBe("fp16.onnx on gpu");
+    expect(ranked?.[0]?.text).toBe("a b c d e f g h");
+    expect(entries.filter((entry) => entry.event === "reranking.device")).toEqual([
+      {
+        level: "info",
+        event: "reranking.device",
+        fields: { device: "cpu", reason: "not-downloaded", message: expect.any(String) },
+      },
+      { level: "info", event: "reranking.device", fields: { device: "gpu" } },
+    ]);
+    model.close();
+  });
+
+  test("with no GPU adapter, downloads nothing and logs why it reranks on the CPU", async () => {
+    const { model, server, entries } = await gpuModel({ adapter: false });
+
+    await model.rerank("what is", HITS);
+    await model.rerank("what is", HITS);
+
+    expect(model.device()).toBe("cpu");
+    expect(server.requests).toEqual([]);
+    expect(entries).toEqual([
+      {
+        level: "warn",
+        event: "reranking.device",
+        fields: { device: "cpu", reason: "no-adapter", message: expect.stringMatching(/adapter/) },
+      },
+    ]);
+    model.close();
+  });
+
+  test("when the model fails on the GPU as it reranks, reranks on the CPU from then on, and logs why", async () => {
+    const { model, sessions, entries } = await gpuModel({ gpuBreaks: true });
+    await model.rerank("what is", HITS);
+    await downloaded(entries);
+
+    const ranked = await model.rerank("what is", HITS);
+    await model.rerank("what is", HITS);
+
+    expect(model.device()).toBe("cpu");
+    expect(ranked?.[0]?.text).toBe("a b c d e f g h");
+    expect(sessions.opened.slice(-3)).toEqual([
+      "probe on gpu",
+      "fp16.onnx on gpu",
+      "int8.onnx on cpu",
+    ]);
+    expect(entries.at(-1)).toEqual({
+      level: "warn",
+      event: "reranking.device",
+      fields: { device: "cpu", reason: "session", message: "WebGPU device lost." },
+    });
+    model.close();
+  });
+
+  test.each([
+    ["the model fails on the GPU", { gpuFails: true }, "session"],
+    ["the GPU's scores for the check are off", { gpuOffset: 1 }, "check"],
+  ])("when %s, logs why it reranks on the CPU", async (_case, options, reason) => {
+    const { model, entries } = await gpuModel(options);
+
+    await model.rerank("what is", HITS);
+    await downloaded(entries);
+    const ranked = await model.rerank("what is", HITS);
+
+    expect(model.device()).toBe("cpu");
+    expect(ranked?.[0]?.text).toBe("a b c d e f g h");
+    expect(entries.at(-1)).toEqual({
+      level: "warn",
+      event: "reranking.device",
+      fields: { device: "cpu", reason, message: expect.any(String) },
+    });
+    model.close();
   });
 });

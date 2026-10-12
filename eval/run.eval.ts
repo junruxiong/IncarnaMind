@@ -42,7 +42,12 @@ import { type Library, openLibrary } from "./lib/library";
 import { createLog, type Log } from "./lib/log";
 import { type OtherSearches, openOtherSearches } from "./lib/otherSearches";
 import { type EvalReport, terminalSummary, writeReports } from "./lib/report";
-import { createWorkerCrossEncoder, openReranker, type RerankerInfo } from "./lib/rerank";
+import {
+  createWorkerCrossEncoder,
+  openReranker,
+  prepareGpuFile,
+  type RerankerInfo,
+} from "./lib/rerank";
 import {
   type CandidateSource,
   candidateCounts,
@@ -77,6 +82,7 @@ async function retrieve(
   rerank: {
     candidates: readonly RerankingModelDefinition[];
     cacheDir: string;
+    onCpu: boolean;
     /** The other ways to find candidates, run with the built-in reranking model. */
     others?: OtherSearches;
   } | null = null,
@@ -108,7 +114,13 @@ async function retrieve(
     const mode = rerankMode(candidate, search);
     const label = rerankedLabel(search, candidate.name);
     log(`Reranking ${SEARCH_DESCRIPTIONS[search]} with ${candidate.name}`);
-    const reranker = await openReranker(candidate, rerank?.cacheDir ?? "", log, mode);
+    const reranker = await openReranker(
+      candidate,
+      rerank?.cacheDir ?? "",
+      log,
+      mode,
+      rerank?.onCpu,
+    );
     try {
       const found = await runReranked(
         library.core,
@@ -207,7 +219,7 @@ async function runFormats(config: EvalConfig, log: Log): Promise<FormatsReport> 
     name: "formats",
     embedder: createWorkerEmbedder(),
     modelCache: join(config.cacheDir, "models"),
-    reranker: createWorkerCrossEncoder(),
+    reranker: createWorkerCrossEncoder(config.rerankOnCpu),
     documents: set.documents,
     keep: config.keepData,
     log,
@@ -231,7 +243,11 @@ async function runFormats(config: EvalConfig, log: Log): Promise<FormatsReport> 
       false,
       set.questions,
       log,
-      { candidates: [BUILT_IN_RERANKING_MODEL], cacheDir: config.cacheDir },
+      {
+        candidates: [BUILT_IN_RERANKING_MODEL],
+        cacheDir: config.cacheDir,
+        onCpu: config.rerankOnCpu,
+      },
     );
     const skipped = notAsked(config, set.questions);
     if (config.chat && !skipped) await searchAsByDefault(library, log);
@@ -286,6 +302,7 @@ test("retrieval and Citation evaluation", async () => {
     ]);
   }
   log(`Embedding model cache: ${config.cacheDir}`);
+  await prepareGpuFile(config, log);
 
   // The core reranks Answers' searches with the built-in reranking model, as the app does by
   // default. The library turns embeddings on, for the hybrid and vector modes reported.
@@ -294,7 +311,7 @@ test("retrieval and Citation evaluation", async () => {
     name: "built-in",
     embedder: createWorkerEmbedder(),
     modelCache: join(config.cacheDir, "models"),
-    reranker: createWorkerCrossEncoder(),
+    reranker: createWorkerCrossEncoder(config.rerankOnCpu),
     documents: set.documents,
     ...(ollamaModels && { ollamaModels }),
     keep: config.keepData,
@@ -326,7 +343,7 @@ test("retrieval and Citation evaluation", async () => {
         true,
         set.questions,
         log,
-        { candidates: rerankWith, cacheDir: config.cacheDir, others },
+        { candidates: rerankWith, cacheDir: config.cacheDir, onCpu: config.rerankOnCpu, others },
       ),
     ];
 
