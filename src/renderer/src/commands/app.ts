@@ -13,6 +13,7 @@ import { chartCommands } from "./charts";
 import { deletedCommands } from "./deleted";
 import { editCommands } from "./edit";
 import { evidenceCommands } from "./evidence";
+import { exportCommands } from "./exports";
 import { fileCommands } from "./fileInfo";
 import { footnoteCommands } from "./footnotes";
 import { citationHandle, sidebarHandle } from "./handles";
@@ -72,6 +73,7 @@ const appCommands: readonly Command[] = [
   ...webPageCommands,
   ...fileCommands,
   ...evidenceCommands,
+  ...exportCommands,
   {
     ...fromMenu("settings.open"),
     group: "open",

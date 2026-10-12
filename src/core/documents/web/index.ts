@@ -12,7 +12,7 @@ import { InvalidInputError, isRecord, NotFoundError } from "../../errors";
 import type { Database } from "../../storage";
 import { hashBytes } from "../files";
 import { WebPageError } from "./errors";
-import { type FetchLimits, fetchPage } from "./fetch";
+import { type FetchLimits, fetchPage, type PageFetch } from "./fetch";
 import { type Snapshot, snapshotOf } from "./snapshot";
 import { documentAtAddress, recordVersion, type WebPageVersion, webPageInfo } from "./store";
 
@@ -36,7 +36,7 @@ export interface WebPagesOptions {
   };
   /** Most preferred first, as Accept-Language lists them. */
   languages(): readonly string[];
-  fetch?: typeof fetch;
+  fetch?: PageFetch;
   limits?: FetchLimits;
 }
 
@@ -74,11 +74,15 @@ export function createWebPages(options: WebPagesOptions) {
     throw error;
   };
 
-  async function snapshotFor(address: string, html: string | undefined): Promise<Snapshot> {
+  async function snapshotFor(
+    address: string,
+    html: string | undefined,
+    fetch = options.fetch,
+  ): Promise<Snapshot> {
     const page =
       html === undefined
         ? await fetchPage(address, {
-            fetch: options.fetch,
+            fetch,
             limits: options.limits,
             languages: options.languages(),
           })
@@ -129,8 +133,13 @@ export function createWebPages(options: WebPagesOptions) {
     /**
      * See `CoreApi.saveWebPage`; the caller files it in its Folder. `added`
      * hears a new Document's id as it is stored, before it is processed.
+     * `fetch` fetches the page instead of the usual one: web search's (#128).
      */
-    save(input: unknown, added?: (documentId: string) => void): Promise<WebPageResult> {
+    save(
+      input: unknown,
+      added?: (documentId: string) => void,
+      fetch?: PageFetch,
+    ): Promise<WebPageResult> {
       const { address: typed, html } = parseSaveInput(input);
       const address = normaliseAddress(typed);
       if (!address) {
@@ -147,7 +156,7 @@ export function createWebPages(options: WebPagesOptions) {
       if (known) return Promise.resolve(saved(known));
       return once(address, async () => {
         try {
-          const snapshot = await snapshotFor(address, html);
+          const snapshot = await snapshotFor(address, html, fetch);
           const meanwhile = documentAtAddress(db, address);
           if (meanwhile) return saved(meanwhile);
           const id = randomUUID();
