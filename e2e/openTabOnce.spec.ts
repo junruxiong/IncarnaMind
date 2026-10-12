@@ -11,6 +11,7 @@ import {
   launchApp,
   newMind,
   openDocumentAt,
+  pointAndClick,
   removeDataFolder,
   setWindowSize,
   useLocalChatModel,
@@ -123,6 +124,48 @@ test("a Document previewed in another group, behind that group's other tab, is s
   await expect(right.getByRole("tab", { selected: true })).toContainText("Tides");
   await expect(right.getByRole("tab")).toHaveCount(2);
   await expect(tabsOf(window, "Tides")).not.toHaveAttribute("data-preview");
+  await expect(right.getByTestId("pdf-page-number")).toHaveValue("2");
+  const highlights = right.locator('[data-page-number="2"] [data-quote-highlight]');
+  await expect(highlights).toHaveText([QUOTE]);
+  await expect(highlights.first()).toBeInViewport();
+  await app.close();
+});
+
+test("a Document in a tab behind the Mind, in the Mind's own group, moves to the group beside it, and the Mind stays in view", async () => {
+  await writeFile(join(sources, "Tides.pdf"), TIDES);
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await addDocuments(window, [join(sources, "Tides.pdf")]);
+  await setWindowSize(app, window, 1440, 800);
+  const chip = await askAboutTides(window);
+
+  // Open in a new tab, from the sidebar's menu, puts Tides in the Mind's group; then the Mind is shown again.
+  await pointAndClick(
+    window,
+    window.getByTestId("document-list-item").getByTestId("open-document"),
+    {
+      button: "right",
+    },
+  );
+  const menu = window.getByTestId("document-file-actions");
+  await expect(menu).toBeVisible();
+  await pointAndClick(window, menu.getByTestId("document.openTab"));
+  const groups = window.getByTestId("tab-group");
+  await expect(groups).toHaveCount(1);
+  await expect(tabsOf(window, "Tides")).toHaveCount(1);
+  await pointAndClick(window, groups.first().getByTestId("mind-tab"));
+  await expect(groups.first().getByTestId("mind-tab")).toHaveAttribute("aria-selected", "true");
+
+  await openThePage(window, chip);
+
+  // One tab, in a new group to the right, at its quote; the Mind stays shown where it was.
+  await expect(groups).toHaveCount(2);
+  await expect(tabsOf(window, "Tides")).toHaveCount(1);
+  await expect(groups.first().getByTestId("document-tab")).toHaveCount(0);
+  await expect(groups.first().getByTestId("mind-tab")).toHaveAttribute("aria-selected", "true");
+  const right = groups.nth(1);
+  await expect(right.getByTestId("document-tab")).toHaveAttribute("aria-selected", "true");
   await expect(right.getByTestId("pdf-page-number")).toHaveValue("2");
   const highlights = right.locator('[data-page-number="2"] [data-quote-highlight]');
   await expect(highlights).toHaveText([QUOTE]);
