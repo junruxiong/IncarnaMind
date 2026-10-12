@@ -1,27 +1,15 @@
-import { type ReactNode, useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { ConversationAnswer, ConversationQuestion } from "../../../../core/api";
 import { answerBlocks, hasText } from "../../answerBlocks";
-import { AnswerWriting } from "../../answerPhase";
 import { useAnswers } from "../../answers";
 import { useApprovals, waitingFor } from "../../approvals";
-import { scopeLine } from "../../assistantContext";
-import { NO_SCOPE } from "../../composer";
 import { regenerateAnswer } from "../../conversations";
-import {
-  AnswerError,
-  ApprovalCard,
-  CallRows,
-  figuresOf,
-  SEARCH,
-  SearchesSummary,
-  SearchList,
-  UncalculatedLine,
-} from "../../editor/AnswerView";
+import { AnswerError, ApprovalCard, figuresOf, UncalculatedLine } from "../../editor/AnswerView";
 import { AskProblem } from "../../editor/AskProblem";
 import { useT } from "../../i18n";
-import { scopeChips } from "../../scope";
 import { useAppStore } from "../../store";
 import { AnswerActions } from "./AnswerActions";
+import { AnswerSteps } from "./AnswerSteps";
 import { AnswerText } from "./AnswerText";
 
 /** What adding an Answer needs from the thread around it. */
@@ -34,11 +22,10 @@ export interface AnswerKeeping {
 
 /**
  * An Answer in the assistant (#201): no box, as an Answer in a Mind has none
- * (DESIGN.md, Answer), in the compact reading sizes. The Skills,
- * Connector calls and scripts it used above its text; its text with its
- * Citations and their checks in the margin; what went wrong, and the
- * approvals it waits for, under it; then its actions (`AnswerActions`), with
- * its model, its Question's Search scope and its searches.
+ * (DESIGN.md, Answer), in the assistant's reading sizes. Its steps first
+ * (#391), folded to one line; its text with its Citations and their checks
+ * in the margin; what went wrong, and the approvals it waits for, under it;
+ * then its actions (`AnswerActions`).
  */
 export function AssistantAnswer({
   answer,
@@ -65,39 +52,8 @@ export function AssistantAnswer({
   const approvals = useMemo(() => waitingFor(waiting, answer.id), [waiting, answer.id]);
   const openSettings = useAppStore((state) => state.openSettings);
   const regenerate = () => void regenerateAnswer(answer.id);
-  const scope = useScopeLine(question);
-  const [searchesOpen, setSearchesOpen] = useState(false);
-  const searches = answer.toolCalls.filter((call) => call.tool === SEARCH);
-  // Written again, it starts with its searches closed.
-  if (searchesOpen && searches.length === 0) setSearchesOpen(false);
   const written = hasText(blocks);
-  const { calculated, uncalculated } = figuresOf(answer.toolCalls);
-
-  const meta: ReactNode[] = [];
-  if (status === "stopped") {
-    meta.push(
-      <span data-testid="answer-stopped" className="assistant-answer-status">
-        {t("answer.status.stopped")}
-      </span>,
-    );
-  }
-  if (answer.model) {
-    meta.push(
-      <span data-testid="answer-model" className="answer-model">
-        {answer.model.modelId}
-      </span>,
-    );
-  }
-  meta.push(<span data-testid="answer-scope">{scope}</span>);
-  if (searches.length > 0) {
-    meta.push(
-      <SearchesSummary
-        searches={searches}
-        open={searchesOpen}
-        onToggle={() => setSearchesOpen((open) => !open)}
-      />,
-    );
-  }
+  const { uncalculated } = figuresOf(answer.toolCalls);
 
   return (
     <article
@@ -108,7 +64,13 @@ export function AssistantAnswer({
       aria-label={t("answer.label")}
       className="assistant-answer"
     >
-      <CallRows calls={answer.toolCalls} approvals={approvals} />
+      <AnswerSteps
+        answer={answer}
+        question={question}
+        streaming={streaming}
+        waitingForApproval={approvals.length > 0}
+        onRegenerate={regenerate}
+      />
       {answer.citationSupport === "none" && (
         <p data-testid="answer-no-citations" className="answer-info">
           {t("citation.unsupported")}
@@ -123,11 +85,6 @@ export function AssistantAnswer({
         />
       )}
       {!streaming && uncalculated > 0 && <UncalculatedLine count={uncalculated} />}
-      {searchesOpen && (
-        <div className="answer-searches-open">
-          <SearchList searches={searches} calculated={calculated} />
-        </div>
-      )}
       {!streaming && status === "failed" && (
         <AnswerError
           kind={answer.errorKind ?? "unknown"}
@@ -161,27 +118,10 @@ export function AssistantAnswer({
         answer={answer}
         streaming={streaming}
         canKeep={written}
-        writing={<AnswerWriting answerId={answer.id} waitingForApproval={approvals.length > 0} />}
-        meta={meta}
         focusedMindName={keeping.focusedMindName}
         onAdd={() => keeping.add(answer)}
         onPick={(anchor) => keeping.pick(answer, anchor)}
       />
     </article>
   );
-}
-
-/** What an Answer's Question searched: "“Thesis”", or All Documents. */
-function useScopeLine(question: ConversationQuestion | undefined): string {
-  const t = useT();
-  const folders = useAppStore((state) => state.folders);
-  const groups = useAppStore((state) => state.library?.groups);
-  const deletedGroups = useAppStore((state) => state.library?.deletedGroups);
-  const tags = useAppStore((state) => state.tags);
-  const documents = useAppStore((state) => state.documents);
-  const chips = scopeChips(
-    { folders, groups, deletedGroups, tags, documents },
-    question?.scope ?? NO_SCOPE,
-  );
-  return scopeLine(t, chips);
 }
