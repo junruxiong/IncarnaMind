@@ -112,6 +112,12 @@ export interface CreateMindInput {
  *   (see `GENERATED_MARK`). Older content is version 11 content as it is:
  *   nothing is rewritten, and an Answer without `generatedMarks` is the AI's
  *   as a whole, as it always was.
+ * - 14: a chart value's scale (#579): `scale` beside `unit` on each value in
+ *   a chart's `data`, so a number with no unit or scale isn't drawn among
+ *   "$… million". An older version keeps it while it changes a chart's kind,
+ *   columns or title, but its Update writes the values again without it.
+ *   Older charts are version 14 content as they are: a value with no `scale`
+ *   is one whose scale isn't known, and nothing is rewritten.
  * - 15: what a Word import keeps as it is (`WORD_ATOM_NODE`, `WORD_BLOCK_NODE`,
  *   #104) and pictures in the text (`IMAGE_NODE`). Older content is version 15
  *   content as it is: nothing is rewritten.
