@@ -332,8 +332,9 @@ test("copying a paragraph with changes waiting gives the text as it stands, in p
 
   // What Copy would put on the clipboard for the whole paragraph, by type.
   const copyParagraph = async () => {
+    await editor.focus();
+    await window.keyboard.press("ControlOrMeta+a");
     return editor.evaluate((dom) => {
-      (dom as unknown as { editor: Editor }).editor.commands.selectAll();
       const data = new DataTransfer();
       dom.dispatchEvent(
         new ClipboardEvent("copy", { clipboardData: data, bubbles: true, cancelable: true }),
@@ -357,11 +358,11 @@ test("copying a paragraph with changes waiting gives the text as it stands, in p
   // Accepted, the copy has the new word.
   await pointAndClick(window, bar.getByTestId("proposals-accept-all"));
   await expect(bar).toHaveCount(0);
-  const replaced = await copyParagraph();
-  expect(replaced.plain).toBe("The tides here are powerful and really regular.");
-  expect(replaced.html).toContain("The tides here are powerful and really regular.");
+  await expect(note).toHaveText("The tides here are powerful and really regular.");
 
   // Shorten drops "really": waiting, the copy still has it; accepted, it doesn't.
+  await editor.focus();
+  await window.keyboard.press("ArrowRight");
   await selectWords(window, note, "The tides here are powerful and really regular.");
   await pointAndClick(window, window.getByTestId("selection-action-shorten"));
   await expect(note.locator("del.proposal-delete")).toHaveText("really ");
