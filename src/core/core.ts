@@ -4,6 +4,7 @@ import { join } from "node:path";
 import * as Y from "yjs";
 import { isCitationStyleId } from "../shared/citationStyles";
 import { translate } from "../shared/i18n";
+import { bibliographyShown } from "../shared/mindBibliography";
 import {
   chosenCitationStyle,
   citationStyleIn,
@@ -568,6 +569,7 @@ export function createCore(adapters: CoreAdapters): Core {
     dataDir,
     crossEncoder: adapters.crossEncoder,
     emitStatus: () => reportRerank(),
+    log: adapters.log ?? silentLogger,
   });
   // Rerank: the built-in model by default, a Cohere or Voyage key (paused in local mode), or off.
   const rerank = createRerank({
@@ -981,6 +983,7 @@ export function createCore(adapters: CoreAdapters): Core {
     keptCitationTexts: () => documents.keptCitationTexts(),
     language: () => settings.get().language,
     citationStyle: (mindId) => mindCitationStyle(mindId).style,
+    bibliography: (mindId) => content.readSettings(mindId, bibliographyShown),
     formatCitations: (request) => citationStyles.format(request),
     ...(adapters.pictures && { pictures: adapters.pictures }),
     log: adapters.log ?? silentLogger,

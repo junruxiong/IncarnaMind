@@ -2,7 +2,7 @@
  * Tools (CONTEXT.md) and the Tool providers that hand them out
  * (docs/designs/agent-extensibility.md §4.1, ADR-0013). Every action an
  * Answer can call has this one shape, whichever provider it comes from:
- * Document search and `cite` from the Documents, `use_skill`,
+ * Document search, `cite` and `calculate` from the Documents, `use_skill`,
  * `read_skill_file` and `run_skill_script` from the Skills,
  * `find_sources` from Find sources, and each Connector's own Tools from
  * the Connectors. A later capability (Files, a
@@ -92,7 +92,11 @@ export interface ToolProvider {
 }
 
 /** The names of the Documents' Tools. */
-export const DOCUMENT_TOOLS = { search: "search_documents", cite: "cite" } as const;
+export const DOCUMENT_TOOLS = {
+  search: "search_documents",
+  cite: "cite",
+  calculate: "calculate",
+} as const;
 
 /** The names of the Skills' Tools. */
 export const SKILL_TOOLS = {

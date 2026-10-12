@@ -523,13 +523,14 @@ function readInline(
   return content;
 }
 
-/** What a citation style needs of a Citation: its Document and its Location. */
+/** What a citation style needs of a Citation: its Document, its Location and the version quoted. */
 function citedWork(attributes: Record<string, unknown>): CitedWork {
   const text = (value: unknown) => (typeof value === "string" && value !== "" ? value : null);
   return {
     documentId: text(attributes.documentId),
     documentName: text(attributes.documentName),
     location: citationLocation(attributes),
+    contentHash: text(attributes.contentHash),
   };
 }
 
