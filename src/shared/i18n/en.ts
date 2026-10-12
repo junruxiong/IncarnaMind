@@ -2657,7 +2657,7 @@ export const en = {
   "agents.settings.help": "Step-by-step help",
   "agents.setup.bundle": "One click: Claude opens to install it",
   "agents.setup.link": "One click: {agent} opens to install it",
-  "agents.setup.file": "IncarnaMind adds itself to {agent}’s settings",
+  "agents.setup.file": "IncarnaMind adds itself to the settings of {agent}",
   "agents.setup.command": "Copy one line to run in a terminal",
   "agents.setup.other": "Copy the settings to paste into your agent",
   "agents.note.codex":
@@ -2665,6 +2665,8 @@ export const en = {
   "agents.setup.undoChanged": "{path} has changed since, so IncarnaMind left it as it is.",
   "agents.client.other": "Other agent",
   "agents.client.codex": "ChatGPT app and Codex",
+  "agents.sentence.codex": "the ChatGPT app or Codex",
+  "agents.sentence.other": "your agent",
   "agents.pairing.reads": "Reads {folders}",
   "agents.pairing.readsNothing": "Reads no folders yet",
   "agents.pairing.lastUsed": "Last used {when}",
@@ -2710,8 +2712,9 @@ export const en = {
   "agents.reason.failed": "something went wrong",
   "agents.connect.title": "Let {agent} read your Documents?",
   "agents.connect.body":
-    "{agent} will be able to search and read the Documents in the folders you choose, and your Minds in them. What it reads goes to the AI model {agent} uses, under that service’s terms, not IncarnaMind’s. Some plans may use it to train their models.",
+    "It will be able to search and read the Documents in the folders you choose, and your Minds in them. What it reads goes to the AI model used by {agent}, under that service’s terms, not IncarnaMind’s. Some plans may use it to train their models.",
   "agents.connect.name": "Name",
+  "agents.connect.namePlaceholder": "My agent",
   "agents.connect.folders": "Folders it may read",
   "agents.connect.noFolders":
     "You don’t have any folders yet. Make one in the Library, then come back.",
@@ -2723,14 +2726,15 @@ export const en = {
   "agents.connect.allow": "Allow and connect",
   "agents.connect.cancel": "Cancel",
   "agents.done.bundle": "Claude opened: click Install there to finish.",
-  "agents.done.link": "{agent} opened: click Install there to finish.",
-  "agents.done.wrote": "Added to {agent}’s settings. Start a new {agent} session to use it.",
+  "agents.done.link": "Opened {agent}: click Install there to finish.",
+  "agents.done.wrote":
+    "Added to the settings of {agent}. Start a new session in {agent} to use it.",
   "agents.done.command": "Copied. Paste it into a terminal and run it.",
-  "agents.done.settings": "Copied. In {agent}, add it as a new server, then restart {agent}.",
+  "agents.done.settings": "Copied. In {agent}, add it as a new server, then restart it.",
   "agents.done.settings.other":
     "Copied. Paste it where your agent adds a new server, then restart the agent. If it asks for a command, arguments and environment instead, Details for technical users shows each, ready to copy.",
   "agents.done.unreadable":
-    "{agent}’s settings file couldn’t be read, so IncarnaMind left it alone. The settings are copied: paste them into {path}.",
+    "The settings file of {agent} couldn’t be read, so IncarnaMind left it alone. The settings are copied: paste them into {path}.",
   "agents.done.undo": "Undo",
   "agents.bundle.description":
     "Search your IncarnaMind Documents and cite them, with every quote checked.",
