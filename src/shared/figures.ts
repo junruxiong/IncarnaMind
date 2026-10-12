@@ -58,6 +58,12 @@ export interface Reading {
   /** The scale word as written ("亿", "million", "bn"), kept for showing a result in the same scale. */
   scaleWord: string | null;
   unit: FigureUnit;
+  /**
+   * Digits written after the decimal mark ("$1,231.0 million" has 1), which
+   * the value can't keep: 1231.0 and 1231 are the same double. A result
+   * worked out from the figure is shown with as many.
+   */
+  decimals: number;
 }
 
 /**
@@ -725,7 +731,8 @@ const STATEMENTS: readonly RegExp[] = [
   /[(（]%[)）]|(?<![A-Za-z])in (?:%|per cent|percent)(?![A-Za-z])/dg,
 ];
 
-function scaleExponent(word: string): number {
+/** The power of ten a scale word multiplies by: 8 for "亿", 6 for "million" or "m"; 0 for a word that isn't one. */
+export function scaleExponent(word: string): number {
   const lower = word.toLowerCase().replace(/s$/, "");
   if (CN_SCALES[word] !== undefined) return CN_SCALES[word];
   if (lower === "'000" || lower === "000") return 3;
@@ -807,6 +814,8 @@ interface Digits {
   /** How many of `digits` come before the decimal point. */
   point: number;
 }
+
+const decimalsOf = (number: Digits): number => Math.max(0, number.digits.length - number.point);
 
 /** The double nearest to the digits × 10^exponent, as a spreadsheet reads the same number written out. */
 function decimalValue(number: Digits, exponent: number, negative: boolean): number {
@@ -1579,6 +1588,7 @@ function readingOf(draft: Draft, written?: Written, number: Digits = draft.core.
     scale: 10 ** draft.exponent,
     scaleWord: draft.scaleAt && written ? written(draft.scaleAt) : draft.scaleWord,
     unit,
+    decimals: fraction !== null ? 0 : decimalsOf(number),
   };
 }
 
@@ -1607,6 +1617,7 @@ function statedReadings(draft: Draft, statements: readonly Statement[]): Reading
       scale: 10 ** statement.exponent,
       scaleWord: statement.scaleWord,
       unit,
+      decimals: decimalsOf(draft.core.number),
     });
   }
   return readings;
