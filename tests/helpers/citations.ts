@@ -1,6 +1,13 @@
 import type { MockLanguageModelV4 } from "ai/test";
 import { expect } from "vitest";
-import type { CitationAttributes, Core, CoreAdapters, CoreEvents, Document } from "../../src/core";
+import type {
+  AnswerSearchTuning,
+  CitationAttributes,
+  Core,
+  CoreAdapters,
+  CoreEvents,
+  Document,
+} from "../../src/core";
 import { createTempDataFolder, startCore } from "./core";
 import { addAndProcess, writeSourceFile } from "./documents";
 import { turnOnEmbeddings } from "./embedding";
@@ -17,6 +24,16 @@ export interface ShownPassage {
   /** Every kind but PDF: where the Passage is, e.g. "slides 3–4" or "lines 1–12". */
   location: string | null;
   text: string;
+}
+
+/** For `answerSearch`: each search an Answer makes, as the names of the Documents its Passages came from. */
+export function recordSearches() {
+  const searches: string[][] = [];
+  const answerSearch: AnswerSearchTuning = {
+    observe: ({ passages }) =>
+      searches.push([...new Set(passages.map((passage) => passage.documentName))].sort()),
+  };
+  return { searches, answerSearch };
 }
 
 /** The Passages in a search result (or in instructions), as the model reads them. */
@@ -69,6 +86,9 @@ export function citingModel(plan: CitingPlan): MockLanguageModelV4 {
     return { text: plan.answer, pause: plan.pause };
   });
 }
+
+/** A model for a core under test that is never asked an Answer. */
+export const unaskedModel = () => scriptedModel(() => ({ text: "No Answer was asked." }));
 
 /** What the model was told about its records: the result of its last `cite` call. */
 export function citeFeedback(model: MockLanguageModelV4): string {

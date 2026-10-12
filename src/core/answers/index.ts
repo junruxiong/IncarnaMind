@@ -42,6 +42,7 @@
  */
 import { randomUUID } from "node:crypto";
 import type * as Y from "yjs";
+import { asGenerated } from "../../shared/aiText";
 import { runsByDefault } from "../../shared/approvalRules";
 import { citationNode, withCitations } from "../../shared/blockJson";
 import { withFigures, withFigureText } from "../../shared/figureMarkers";
@@ -142,7 +143,14 @@ import {
   type RequestMind,
   readMind,
 } from "./context";
-import type { AnswerEngine, AnswerTools, CiteOptions, DocumentLanguage, GatedCall } from "./engine";
+import type {
+  AnswerEngine,
+  AnswerSearchOptions,
+  AnswerTools,
+  CiteOptions,
+  DocumentLanguage,
+  GatedCall,
+} from "./engine";
 import { markdownToBlocks } from "./markdown";
 import {
   answerInstructions,
@@ -192,7 +200,7 @@ interface AnswerHome {
 interface WrittenAnswer {
   /** What the model wrote: Markdown, with Citation markers, its footnote definitions left out. */
   markdown: string;
-  /** Its Blocks, each marker a Citation node: the final ones once it has ended. */
+  /** Its Blocks, each marker a Citation node, its words AI text: the final ones once it has ended. */
   blocks(): NodeJSON[];
   /** Its Citations, in the order of their markers in the text: the final ones once it has ended. */
   citations(): MarkedCitation[];
@@ -412,6 +420,7 @@ export interface DocumentsForAnswers extends Pick<AnswerDocuments, "citationSour
     query: string,
     documentIds: readonly string[] | null,
     signal?: AbortSignal,
+    options?: AnswerSearchOptions,
   ): Promise<WindowedPassage[]>;
 }
 
@@ -422,7 +431,8 @@ function inScope(
 ): AnswerDocuments {
   return {
     searchableCount: () => documents.searchableCount(documentIds),
-    search: (query, signal, within) => documents.search(query, within ?? documentIds, signal),
+    search: (query, signal, within, options) =>
+      documents.search(query, within ?? documentIds, signal, options),
     citationSource: (passageId) => documents.citationSource(passageId),
     pageTexts: (documentId, contentHash, from, to) =>
       documents.pageTexts(documentId, contentHash, from, to),
@@ -711,13 +721,15 @@ export function createAnswers(options: AnswersOptions) {
                   ? (marker) => session.finalNode(marker)
                   : (marker) => session.streamingNode(marker),
               );
-              return calculating
-                ? withFigures(
-                    blocks,
-                    (marker) => figures.figure(marker),
-                    (figure) => figure.shown,
-                  )
-                : blocks;
+              return asGenerated(
+                calculating
+                  ? withFigures(
+                      blocks,
+                      (marker) => figures.figure(marker),
+                      (figure) => figure.shown,
+                    )
+                  : blocks,
+              );
             },
             citations: () => {
               const found: MarkedCitation[] = [];
@@ -1180,7 +1192,8 @@ export function createAnswers(options: AnswersOptions) {
         },
         // So the model can search again in the Documents' language (see the search Tool).
         documentLanguages: options.documents.searchableLanguages(documentIds),
-        searchDocuments: (query, signal) => session.tools.searchDocuments(query, signal),
+        searchDocuments: (query, signal, searchOptions) =>
+          session.tools.searchDocuments(query, signal, searchOptions),
         cite: (records, citeOptions) => session.tools.cite(records, citeOptions),
         hasRecord: (marker) => session.tools.hasRecord?.(marker) ?? false,
         unfoundQuotes: () => session.tools.unfoundQuotes?.() ?? [],
@@ -1658,6 +1671,7 @@ export function createAnswers(options: AnswersOptions) {
           errorMessage: null,
           errorResetsAt: null,
           generatedHash: null,
+          generatedMarks: true,
           citationSupport: null,
           toolCalls: null,
         };
