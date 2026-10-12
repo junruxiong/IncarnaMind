@@ -44,7 +44,11 @@ const PAGES = [
   { page: "search", name: "Search", sections: ["embedding-settings", "rerank-settings"] },
   { page: "meetings", name: "Meetings", sections: ["meetings-settings"] },
   { page: "connectors", name: "Connectors", sections: ["connectors-settings"] },
-  { page: "skills", name: "Skills", sections: ["skills-settings", "skill-scripts-settings"] },
+  {
+    page: "skills",
+    name: "Skills",
+    sections: ["skills-settings", "skills-yours", "skills-built-in", "skill-scripts-settings"],
+  },
   { page: "agents", name: "Agents", sections: ["agents-settings"] },
   {
     page: "privacy",

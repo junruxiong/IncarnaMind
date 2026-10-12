@@ -1,5 +1,5 @@
 import { DOCKS, dockCommandId } from "../../commands/assistant";
-import { commands } from "../../commands/registry";
+import { commands, offered } from "../../commands/registry";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
 import {
@@ -33,6 +33,10 @@ export function AssistantMenu() {
     menu.close();
     commands.run(id).catch(useAppStore.getState().reportError);
   };
+  // Offered while there is a Mind to make it from: the one the assistant reads.
+  const make = commands.get("skill.fromMind");
+  const makeSkill =
+    menu.open && make && offered(make, { selection: [], focus: null, surface: "mind" });
   return (
     <>
       <button
@@ -74,6 +78,17 @@ export function AssistantMenu() {
               );
             })}
             <div className={menuRuleClass} />
+            {makeSkill && (
+              <button
+                type="button"
+                role="menuitem"
+                data-testid="assistant-menu-make-skill"
+                onClick={() => run("skill.fromMind")}
+                className={`${menuItemClass} pl-8`}
+              >
+                {t("skills.make.command")}
+              </button>
+            )}
             {/* What acts on the conversation's Answers comes with them (#201): an empty
                 conversation has none, so these wait, saying why. */}
             <ConversationItem
