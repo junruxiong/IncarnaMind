@@ -363,13 +363,15 @@ test("choosing the eCFR finds a regulation marked as an unofficial compilation; 
   try {
     await dismissChatSetup(window);
     await setWindowSize(app, window, 1280, 800);
+    // Linux runners have no keyring: the key is kept in plain text, as the User would accept.
+    await acceptPlainTextKeys(window);
     await window.getByTestId("open-library").click();
     const add = window.getByTestId("library-add-documents");
     await add.hover();
     await add.click();
     await window.getByTestId("library-find-sources").click();
     const panel = window.getByTestId("find-sources");
-    const ecfr = panel.getByTestId("find-sources-provider").filter({ hasText: "eCFR" });
+    const ecfr =panel.getByTestId("find-sources-provider").filter({ hasText: "eCFR" });
     const govinfoKey = panel.locator('[data-provider="govinfo"]');
 
     // GovInfo's key line shows once the eCFR, the provider it is listed with, is chosen.
