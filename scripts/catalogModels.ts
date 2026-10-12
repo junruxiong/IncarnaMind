@@ -10,6 +10,9 @@
  * out, a context window, and not something else by LiteLLM's mode) with
  * their facts, and lists the ids either source knows as something else
  * (embeddings, speech, images, video, realtime), which the app never offers.
+ * An id LiteLLM says answers by another API than chat (a completion model, or
+ * a chat model that answers in audio) is in neither list: the app doesn't
+ * know it as a chat model, so it waits under "Other models".
  * Where LiteLLM disagrees on Tools, images, JSON schema or limits, it prints
  * the difference and changes nothing: ./src/core/providers/catalog/overrides.ts
  * is where a person corrects a fact.
@@ -112,6 +115,8 @@ interface ModelsDevModel {
 interface LiteLlmEntry {
   litellm_provider?: string;
   mode?: string;
+  supported_endpoints?: string[];
+  supported_output_modalities?: string[];
   max_input_tokens?: number;
   max_output_tokens?: number;
   supports_function_calling?: boolean;
@@ -133,6 +138,14 @@ function litellmEntries(all: Record<string, LiteLlmEntry>, provider: string) {
   }
   return entries;
 }
+
+/** Whether LiteLLM says the model answers by another API than chat: by completion, or in audio. */
+const answersElsewhere = (entry: LiteLlmEntry | undefined): boolean =>
+  entry?.mode === "completion" ||
+  (entry !== undefined &&
+    CHAT_MODES.has(entry.mode ?? "") &&
+    entry.supported_endpoints?.includes("/v1/chat/completions") === true &&
+    entry.supported_output_modalities?.includes("audio") === true);
 
 /** Whether models.dev's entry is a chat model: text in, text only out, a context window. */
 function readsAndWritesText(model: ModelsDevModel): boolean {
@@ -214,6 +227,7 @@ export function generateModels(
     const nonChat = new Set<string>();
     for (const [modelId, model] of Object.entries(modelsDev[source.modelsDev]?.models ?? {})) {
       const mode = entries.get(modelId)?.mode;
+      if (answersElsewhere(entries.get(modelId))) continue;
       if (!readsAndWritesText(model) || (mode !== undefined && !CHAT_MODES.has(mode))) {
         nonChat.add(modelId);
         continue;
@@ -225,7 +239,8 @@ export function generateModels(
     }
     const chat = new Set(models.map((model) => model.id));
     for (const [modelId, entry] of entries) {
-      if (entry.mode && !CHAT_MODES.has(entry.mode) && !chat.has(modelId)) nonChat.add(modelId);
+      const other = entry.mode && !CHAT_MODES.has(entry.mode) && !answersElsewhere(entry);
+      if (other && !chat.has(modelId)) nonChat.add(modelId);
     }
     providers[id] = {
       models: models.sort((a, b) => a.id.localeCompare(b.id)),

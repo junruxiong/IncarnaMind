@@ -154,7 +154,7 @@ describe("Models in the app, by the catalog", () => {
 });
 
 describe("A provider's model list", () => {
-  test("leaves out what the catalog knows isn't a chat model, and marks what nothing says anything about", async () => {
+  test("leaves out what the catalog knows isn't a chat model, and puts what nothing says anything about under Other models", async () => {
     const { core } = await startWithCloudModel({ kind: "openai", modelId: "gpt-6.1-sol" });
     answerFetch("https://api.openai.com/v1/models", {
       data: [
@@ -167,9 +167,98 @@ describe("A provider's model list", () => {
     });
     const [listed] = await core.listChatModels();
     expect(listed).toMatchObject({
-      models: ["gpt-6.1-sol", "gpt-6-luna", "gpt-7-preview"],
-      unknown: ["gpt-7-preview"],
+      models: ["gpt-6.1-sol", "gpt-6-luna"],
+      other: ["gpt-7-preview"],
+      unknown: [],
     });
+  });
+
+  test("OpenAI's menu holds the current chat models, the role models first, and the other ids wait", async () => {
+    const { core, provider } = await startWithCloudModel({ kind: "openai", modelId: "gpt-6-sol" });
+    const other = [
+      "babbage-002",
+      "davinci-002",
+      "gpt-3.5-turbo-instruct",
+      "gpt-audio",
+      "gpt-audio-mini",
+      "o3-deep-research",
+      "o4-mini-deep-research",
+      "computer-use-preview",
+      "gpt-4-turbo",
+    ];
+    answerFetch("https://api.openai.com/v1/models", {
+      data: [
+        { id: "babbage-002" },
+        { id: "computer-use-preview" },
+        { id: "davinci-002" },
+        { id: "gpt-3.5-turbo-instruct" },
+        { id: "gpt-4-turbo" },
+        { id: "gpt-6-astra" },
+        { id: "gpt-6-luna" },
+        { id: "gpt-6-sol" },
+        { id: "gpt-6.1-sol" },
+        { id: "gpt-audio" },
+        { id: "gpt-audio-mini" },
+        { id: "gpt-image-1" },
+        { id: "o3-deep-research" },
+        { id: "o4-mini-deep-research" },
+        { id: "text-embedding-3-small" },
+      ],
+    });
+
+    const [group] = await core.listChatModels();
+
+    expect(group?.models).toEqual(["gpt-6-sol", "gpt-6.1-sol", "gpt-6-astra", "gpt-6-luna"]);
+    expect(group?.other.sort()).toEqual([...other].sort());
+    expect(group?.added).toEqual([]);
+
+    await core.setChatModelInMenu({ providerId: provider.id, modelId: "gpt-audio", inMenu: true });
+    const [after] = await core.listChatModels();
+    expect(after?.models).toEqual([
+      "gpt-6-sol",
+      "gpt-6.1-sol",
+      "gpt-6-astra",
+      "gpt-6-luna",
+      "gpt-audio",
+    ]);
+    expect(after?.added).toEqual(["gpt-audio"]);
+    expect(after?.other).not.toContain("gpt-audio");
+
+    await core.setChatModelInMenu({ providerId: provider.id, modelId: "gpt-audio", inMenu: false });
+    const [removed] = await core.listChatModels();
+    expect(removed?.models).not.toContain("gpt-audio");
+    expect(removed?.other).toContain("gpt-audio");
+  });
+
+  test("a model the User added stays in the menu when the provider's list no longer has it", async () => {
+    const { core, provider } = await startWithCloudModel({
+      kind: "openai",
+      modelId: "gpt-6.1-sol",
+    });
+    await core.setChatModelInMenu({
+      providerId: provider.id,
+      modelId: "my-tuned-model",
+      inMenu: true,
+    });
+    answerFetch("https://api.openai.com/v1/models", { data: [{ id: "gpt-6.1-sol" }] });
+    const [group] = await core.listChatModels();
+    expect(group?.models).toEqual(["gpt-6.1-sol", "my-tuned-model"]);
+    expect(group?.added).toEqual(["my-tuned-model"]);
+    expect(group?.other).toEqual([]);
+  });
+
+  test("a dated snapshot of a current model waits, unless the list lacks the model itself", async () => {
+    const { core } = await startWithCloudModel({ kind: "openai", modelId: "gpt-6.1-sol" });
+    answerFetch("https://api.openai.com/v1/models", {
+      data: [
+        { id: "gpt-6.1-sol" },
+        { id: "gpt-6.1-sol-2026-09-01" },
+        { id: "gpt-6-luna-2026-09-01" },
+      ],
+    });
+    const [group] = await core.listChatModels();
+    expect(group?.models).toEqual(["gpt-6.1-sol", "gpt-6-luna-2026-09-01"]);
+    expect(group?.other).toEqual(["gpt-6.1-sol-2026-09-01"]);
   });
 
   test("Anthropic's says what a model can do, which counts before the catalog", async () => {
@@ -209,7 +298,11 @@ describe("A provider's model list", () => {
       ],
     });
     const [group] = await core.listChatModels();
-    expect(group).toMatchObject({ models: ["claude-sonnet-5-5", "claude-next"], unknown: [] });
+    expect(group).toMatchObject({
+      models: ["claude-sonnet-5-5"],
+      other: ["claude-next"],
+      unknown: [],
+    });
     const next = await core.prepareChatModel({ providerId: provider.id, modelId: "claude-next" });
     expect(readsImages(next.capabilities)).toBe(true);
     expect(next.window).toEqual({ tokens: 2_000_000, outputTokens: 128_000 });

@@ -15,6 +15,7 @@ import type {
   ConnectionTestResult,
   DataFlowId,
   ExternalService,
+  SetChatModelInMenuInput,
 } from "../api";
 import type { Consent } from "../consent";
 import type { Meter, MeteredModel } from "../cost/meter";
@@ -278,6 +279,16 @@ export function createChat(options: {
   /** Model lists by provider and server, with when they were fetched. */
   const modelLists = new Map<string, { at: number; models: ListedModel[] }>();
   const listKey = (row: ProviderRow) => `${row.id}\n${row.base_url ?? ""}\n${row.endpoint ?? ""}`;
+
+  /** The ids the User added to a provider's menu, in the order added. */
+  const menuModelsOf = (providerId: string): string[] =>
+    db
+      .all<{ model_id: string }>(
+        `SELECT model_id FROM chat_menu_models
+          WHERE provider_id = ? AND deleted_at IS NULL ORDER BY created_at, id`,
+        [providerId],
+      )
+      .map((each) => each.model_id);
 
   const rowById = (id: string) =>
     db.get<ProviderRow>(
@@ -615,7 +626,22 @@ export function createChat(options: {
             if (listed.length > 0) modelLists.set(cacheKey, { at: Date.now(), models: listed });
           }
           const defaultModel = chatModel?.providerId === row.id ? [chatModel.modelId] : [];
-          const models = [...new Set([...defaultModel, ...listed.map((each) => each.id)])];
+          const inMenu = listed.filter((each) => !each.other).map((each) => each.id);
+          const roles = catalogProviderOfKind(provider.kind)?.roles;
+          const roleModels = [roles?.answers, roles?.strongest, roles?.quickTasks];
+          const addedIds = menuModelsOf(row.id);
+          const other = listed
+            .filter((each) => each.other && !addedIds.includes(each.id))
+            .map((each) => each.id);
+          const added = addedIds.filter((id) => !inMenu.includes(id));
+          const models = [
+            ...new Set([
+              ...defaultModel,
+              ...roleModels.filter((id): id is string => id !== undefined && inMenu.includes(id)),
+              ...inMenu,
+              ...added,
+            ]),
+          ];
           const unknown = models.filter((id) => !capabilitiesOf(row, id).known);
           // Ollama says which of its models run on ollama.com; the default one may not be in the list.
           const cloud = models.filter(
@@ -631,9 +657,33 @@ export function createChat(options: {
           ) {
             cloud.push(chosen);
           }
-          return { provider, models, unknown, cloud };
+          return { provider, models, other, added, unknown, cloud };
         }),
       );
+    },
+
+    setInMenu(input: unknown): void {
+      if (!isRecord(input)) throw new InvalidInputError("setChatModelInMenu expects an object.");
+      const { providerId, inMenu } = input as Partial<SetChatModelInMenuInput>;
+      const modelId = parseModelId(input.modelId);
+      if (typeof providerId !== "string" || !rowById(providerId)) {
+        throw new InvalidInputError("That chat provider isn't saved.");
+      }
+      if (typeof inMenu !== "boolean") throw new InvalidInputError("inMenu must be true or false.");
+      const at = now();
+      if (inMenu) {
+        db.run(
+          `INSERT OR IGNORE INTO chat_menu_models (id, provider_id, model_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?)`,
+          [randomUUID(), providerId, modelId, at, at],
+        );
+      } else {
+        db.run(
+          `UPDATE chat_menu_models SET deleted_at = ?, updated_at = ?
+            WHERE provider_id = ? AND model_id = ? AND deleted_at IS NULL`,
+          [at, at, providerId, modelId],
+        );
+      }
     },
 
     /**
