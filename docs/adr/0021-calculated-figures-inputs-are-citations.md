@@ -13,6 +13,8 @@ So a number an Answer works out from numbers in Passages is a **calculated figur
 - **A figure keeps everything a check needs to run it again**: its inputs with their Citations, the characters and offset of each number, the reading chosen, the cell, the unit line, the formula, the result, its shown text and how it was shown, and the evaluator's version (`FORMULA_VERSION`), so a later version runs the same rules.
 - **The check never says "correct".** Every input is found and still reads the same, and the arithmetic gives the same result: that is all it can show. Whether these were the right numbers to use is shown for the User to judge, from each input's label, period and quote. The words are "Calculated" (计算得出) and "Inputs found · recalculated", never "verified".
 
+- **Only models measured to use it are offered it.** The Tool, its steer and structured output's `calculations` are on for a model whose catalog facts say `calculates` (`src/core/providers/catalog/overrides.ts`): Anthropic's and OpenAI's models (the ChatGPT plan serves OpenAI's), from the by-hand checks of #438. Every other model, Ollama's local and cloud ones included, answers as before until the evaluation (#441) measures it.
+
 ## How it is written and kept
 
 - **Markers.** A marker with no figure is left out, and the Answer's end says how many figures couldn't be calculated. A number the model wrote right before its own marker is left out when it reads as that figure, so the text shows it once. One that differs ("26%" where IncarnaMind calculated 25.0%) stays, and the figure keeps what the Answer wrote there, for its card to show (#439). Markers in code stay as they are.
@@ -30,5 +32,5 @@ So a number an Answer works out from numbers in Passages is a **calculated figur
 
 ## Consequences
 
-- The steer adds about 110 tokens to every Answer's instructions in the Tool loop, and a paragraph to structured output's. The Tool's description carries an example, since some models (gpt-oss on Ollama) are shown a Tool's top-level parameters only. One Answer may call it three times, as it may search five times, so a model that can't get a figure right still answers.
+- For the models offered it, the steer adds about 110 tokens to every Answer's instructions in the Tool loop, and a paragraph to structured output's. The Tool's description carries an example, since some models (gpt-oss on Ollama) are shown a Tool's top-level parameters only. One Answer may call it three times, as it may search five times, so a model that can't get a figure right still answers.
 - The figure's card, its margin marks, Recalculate and the marks for figures worked out without the Tool build on this model (#439, #440, #442). The evaluation measures how many worked-out figures go through the Tool, per model and language (#441).

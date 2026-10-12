@@ -395,7 +395,26 @@ test("a number the Answer works out is calculated: its text shows the figure, an
   const { app, window } = await launchApp(dataDir, { fakeChat: true, home });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
-  await connectLocalChatModel(window);
+  // A model measured to use calculate (ADR-0021): the scripted model answers in its place.
+  await window.evaluate(async () => {
+    const core = (
+      globalThis as unknown as {
+        incarnamind: {
+          saveChatProvider(input: unknown): Promise<{ service: { id: string } | null }>;
+          allowDataFlow(flow: string, serviceId: string): Promise<unknown>;
+        };
+      }
+    ).incarnamind;
+    const provider = await core.saveChatProvider({
+      kind: "anthropic",
+      apiKey: "sk-ant-test",
+      modelId: "claude-haiku-5-5",
+    });
+    if (provider.service) {
+      await core.allowDataFlow("chat", provider.service.id);
+      await core.allowDataFlow("tagging", provider.service.id);
+    }
+  });
   await writeFile(
     join(sources, "Revenue.pdf"),
     buildPdf([{ lines: ["Revenue was 1,482.6 in 2025, compared with 1,231.0 in 2024."] }]),

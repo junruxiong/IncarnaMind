@@ -86,7 +86,7 @@ import type { MindContent } from "../mindContent";
 import { plainText } from "../mindText";
 import { docOf } from "../proposals/merge";
 import { proposeBlocks } from "../proposals/write";
-import { givesStructuredOutput } from "../providers/capabilities";
+import { givesStructuredOutput, calculates as offersCalculate } from "../providers/capabilities";
 import type { PreparedChatModel } from "../providers/chat";
 import { classifyProviderError } from "../providers/providerErrors";
 import type { GateDecision } from "../runs/engine";
@@ -128,7 +128,7 @@ import {
   type QuestionContext,
   questionContextOf,
 } from "./context";
-import type { AnswerEngine, AnswerTools, DocumentLanguage, GatedCall } from "./engine";
+import type { AnswerEngine, AnswerTools, CiteOptions, DocumentLanguage, GatedCall } from "./engine";
 import { markdownToBlocks } from "./markdown";
 import {
   answerInstructions,
@@ -556,6 +556,11 @@ export function createAnswers(options: AnswersOptions) {
       onRecord: (marker, citation) =>
         announce("answer.citationAdded", { ...place, answerId, marker, citation }),
     });
+    /**
+     * Whether its model is offered `calculate` and its steer: a fact of the
+     * model, once prepared (ADR-0021). Off, the Answer is as it was before them.
+     */
+    let calculating = false;
     /** Its `calculate` calls, as one Tool call (see `calculatedCall`), once a figure is recorded. */
     let calculated: AnswerToolCall | null = null;
     const recordedFigures = new Set<number>();
@@ -583,6 +588,7 @@ export function createAnswers(options: AnswersOptions) {
     const placedFigures = (text: string, final: boolean) => {
       const placed: MarkedFigure[] = [];
       const missing = new Set<number>();
+      if (!calculating) return { figures: placed, missing: 0 };
       withFigures(
         withCitations(markdownToBlocks(text, { streaming: !final }), citedNode),
         (marker) => {
@@ -611,17 +617,21 @@ export function createAnswers(options: AnswersOptions) {
           {
             markdown: text,
             // A figure reads as its shown text until a Mind has a node of its own for one (#439).
-            blocks: () =>
-              withFigures(
-                withCitations(
-                  markdownToBlocks(text, { streaming: !final }),
-                  final
-                    ? (marker) => session.finalNode(marker)
-                    : (marker) => session.streamingNode(marker),
-                ),
-                (marker) => figures.figure(marker),
-                (figure) => figure.shown,
-              ),
+            blocks: () => {
+              const blocks = withCitations(
+                markdownToBlocks(text, { streaming: !final }),
+                final
+                  ? (marker) => session.finalNode(marker)
+                  : (marker) => session.streamingNode(marker),
+              );
+              return calculating
+                ? withFigures(
+                    blocks,
+                    (marker) => figures.figure(marker),
+                    (figure) => figure.shown,
+                  )
+                : blocks;
+            },
             citations: () => {
               const found: MarkedCitation[] = [];
               // The markers the Blocks would show, so none in code is taken for one.
@@ -994,6 +1004,7 @@ export function createAnswers(options: AnswersOptions) {
         finish({ status: "failed", error: failureOf(error) });
         return;
       }
+      calculating = offersCalculate(prepared.capabilities);
       // Stopped while waiting, e.g. for consent: send nothing.
       if (finished) return;
       if (consenting) {
@@ -1047,8 +1058,11 @@ export function createAnswers(options: AnswersOptions) {
         hasRecord: (marker) => session.tools.hasRecord?.(marker) ?? false,
         unfoundQuotes: () => session.tools.unfoundQuotes?.() ?? [],
         correctQuote: (marker, quote) => session.tools.correctQuote?.(marker, quote) ?? false,
-        calculate: (given, calculateOptions) => figures.calculate(given, calculateOptions),
-        figureProblems: () => figures.problems(),
+        ...(calculating && {
+          calculate: (given: readonly unknown[], calculateOptions?: CiteOptions) =>
+            figures.calculate(given, calculateOptions),
+          figureProblems: () => figures.problems(),
+        }),
       };
       // Scripts can run when a Skill has some, unless the User turned them off.
       const scripts = !outside && opened.hasScripts && options.scripts.enabled();
@@ -1108,6 +1122,7 @@ export function createAnswers(options: AnswersOptions) {
                   options.documents.searchableNames(documentIds, LISTED_DOCUMENTS),
                   passages,
                   documentIds !== null,
+                  calculating,
                 ),
             skillInstructions(listed, forced, withSkillTools, scripts),
             connectorTools ? connectorInstructions(fromConnectors, mode === "no-documents") : "",
