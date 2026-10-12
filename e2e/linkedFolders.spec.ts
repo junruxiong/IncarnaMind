@@ -214,14 +214,14 @@ test("Add folder… shows what linking would take, then the folder's row shows i
 
   // Its menu offers to download and index them (not done here: it would ask iCloud Drive).
   const menu = await openLinkedFolderMenu(row);
-  await expect(menu.getByTestId("linked-folder-download")).toHaveText(
+  await expect(menu.getByTestId("linkedFolder.download")).toHaveText(
     "Download and index 2 online-only files",
   );
-  await expect(menu.getByTestId("linked-folder-pause")).toHaveText("Pause indexing");
-  await expect(menu.getByTestId("linked-folder-layout")).toHaveText("Show as a flat list");
+  await expect(menu.getByTestId("linkedFolder.pause")).toHaveText("Pause indexing");
+  await expect(menu.getByTestId("linkedFolder.layout")).toHaveText("Show as a flat list");
   await screenshot(window, "row-menu");
   // Show in Finder (Explorer, the file manager) shows the folder itself, never anything else.
-  await menu.getByTestId("linked-folder-reveal").click();
+  await menu.getByTestId("linkedFolder.reveal").click();
   await expect.poll(() => pathsShown(app)).toEqual([library]);
   await app.close();
 });
@@ -244,7 +244,7 @@ test("pausing a Linked folder holds its indexing until it is resumed", async () 
 
   let menu = await openLinkedFolderMenu(row);
   // At once, while the menu still grows in: indexing goes on meanwhile.
-  await clickNow(window, menu.getByTestId("linked-folder-pause"));
+  await clickNow(window, menu.getByTestId("linkedFolder.pause"));
   await expect(row).toHaveAttribute("data-state", "paused");
   await expect(row.getByTestId("folder-status")).toHaveText(/^Paused/);
   const paused = await linkedAt(window, library);
@@ -256,8 +256,8 @@ test("pausing a Linked folder holds its indexing until it is resumed", async () 
   await screenshot(window.getByTestId("sidebar"), "row-paused");
 
   menu = await openLinkedFolderMenu(row);
-  await expect(menu.getByTestId("linked-folder-pause")).toHaveText("Resume indexing");
-  await menu.getByTestId("linked-folder-pause").click();
+  await expect(menu.getByTestId("linkedFolder.pause")).toHaveText("Resume indexing");
+  await menu.getByTestId("linkedFolder.pause").click();
   await expect(row).not.toHaveAttribute("data-state", "paused");
   await expect(row).toHaveAttribute("data-state", "idle", { timeout: 120_000 });
   await expect(row.getByTestId("folder-status")).toHaveCount(0);
@@ -293,7 +293,7 @@ test("a Linked folder shows as Folders or a flat list, chosen when linking and f
 
   // A flat list: every Document right under the folder, no subfolders.
   let menu = await openLinkedFolderMenu(row);
-  await menu.getByTestId("linked-folder-layout").click();
+  await menu.getByTestId("linkedFolder.layout").click();
   await expect(row).toHaveAttribute("data-layout", "flat");
   await expect(subfolders).toHaveCount(0);
   await expect(documents).toHaveCount(20);
@@ -302,8 +302,8 @@ test("a Linked folder shows as Folders or a flat list, chosen when linking and f
 
   // And back.
   menu = await openLinkedFolderMenu(row);
-  await expect(menu.getByTestId("linked-folder-layout")).toHaveText("Show as folders");
-  await menu.getByTestId("linked-folder-layout").click();
+  await expect(menu.getByTestId("linkedFolder.layout")).toHaveText("Show as folders");
+  await menu.getByTestId("linkedFolder.layout").click();
   await expect(row).toHaveAttribute("data-layout", "tree");
   await expect(subfolders).toHaveCount(20);
   await app.close();
@@ -356,20 +356,20 @@ test("a file deleted on disk shows as missing, still opens, and can be removed f
   // Its file can't be opened or shown: the items say why, and do nothing.
   await openDocumentMenu(doomed);
   const actions = doomed.getByTestId("document-file-actions");
-  for (const id of ["document-open-externally", "document-show-in-folder"]) {
+  for (const id of ["document.openExternally", "document.showInFolder"]) {
     const item = actions.getByTestId(id);
     await expect(item).toHaveAttribute("aria-disabled", "true");
     await expect(item).toHaveAttribute("title", "The file is missing from its folder.");
   }
   await screenshot(window, "document-missing-menu");
   // Clicked anyway (Playwright would wait for them to be enabled): nothing happens.
-  await actions.getByTestId("document-open-externally").click({ force: true });
-  await actions.getByTestId("document-show-in-folder").click({ force: true });
+  await actions.getByTestId("document.openExternally").click({ force: true });
+  await actions.getByTestId("document.showInFolder").click({ force: true });
   expect(await pathsOpened(app)).toEqual([]);
   expect(await pathsShown(app)).toEqual([]);
 
   // "Remove from IncarnaMind…" asks first, then the row goes.
-  await actions.getByTestId("remove-document").click();
+  await actions.getByTestId("document.delete").click();
   const confirm = window.getByTestId("delete-document-dialog");
   await expect(confirm.getByRole("heading")).toHaveText("Remove this Document?");
   await screenshot(window, "document-remove-dialog");
@@ -394,7 +394,7 @@ test("unlinking asks first, and leaves the folder on disk exactly as it was", as
 
   // Cancel changes nothing.
   let menu = await openLinkedFolderMenu(row);
-  await menu.getByTestId("unlink-folder").click();
+  await menu.getByTestId("linkedFolder.unlink").click();
   const dialog = window.getByTestId("unlink-folder-dialog");
   await expect(dialog.getByRole("heading")).toHaveText("Unlink “Library”?");
   await expect(dialog).toContainText("The folder and the files in it aren't touched.");
@@ -405,7 +405,7 @@ test("unlinking asks first, and leaves the folder on disk exactly as it was", as
   await expect(items).toHaveCount(3);
 
   menu = await openLinkedFolderMenu(row);
-  await menu.getByTestId("unlink-folder").click();
+  await menu.getByTestId("linkedFolder.unlink").click();
   await dialog.getByTestId("confirm-unlink-folder").click();
   await expect(row).toHaveCount(0);
   await expect(items).toHaveCount(0);
@@ -436,7 +436,7 @@ test("after unlinking, a Citation of a Document in the folder still says its quo
   await expect(citation).toHaveAttribute("data-check", "found");
 
   const menu = await openLinkedFolderMenu(row);
-  await menu.getByTestId("unlink-folder").click();
+  await menu.getByTestId("linkedFolder.unlink").click();
   await window.getByTestId("confirm-unlink-folder").click();
   await expect(row).toHaveCount(0);
   await expect(window.getByTestId("document-list-item")).toHaveCount(0);
@@ -497,15 +497,15 @@ test("a Linked folder that can't be reached shows as unavailable, and so do its 
   await screenshot(window.getByTestId("sidebar"), "row-unavailable");
 
   const menu = await openLinkedFolderMenu(row);
-  await expect(menu.getByTestId("linked-folder-reveal")).toHaveAttribute("aria-disabled", "true");
-  await expect(menu.getByTestId("linked-folder-reveal")).toHaveAttribute(
+  await expect(menu.getByTestId("linkedFolder.reveal")).toHaveAttribute("aria-disabled", "true");
+  await expect(menu.getByTestId("linkedFolder.reveal")).toHaveAttribute(
     "title",
     "The folder can't be reached right now.",
   );
   await window.keyboard.press("Escape");
   await openDocumentMenu(items.first());
   await expect(
-    items.first().getByTestId("document-file-actions").getByTestId("document-open-externally"),
+    items.first().getByTestId("document-file-actions").getByTestId("document.openExternally"),
   ).toHaveAttribute("title", "The file can't be reached right now.");
   await window.keyboard.press("Escape");
   // The viewer says so too, rather than that the Document was deleted.

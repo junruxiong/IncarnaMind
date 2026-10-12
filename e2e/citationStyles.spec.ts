@@ -350,14 +350,14 @@ test("the style chosen for a Mind in a Folder, from its menu, is the one a new M
   const openPicker = async (row: Locator) => {
     await row.hover();
     await pointAndClick(window, row.getByTestId("mind-menu"));
-    await pointAndClick(window, row.getByTestId("mind-citation-style"));
+    await pointAndClick(window, row.getByTestId("mind.citationStyle"));
   };
   await openPicker(folder.getByTestId("mind-row").filter({ hasText: "Chapter 1" }));
   await chooseStyle(window, "ieee", "IEEE");
 
   // "New Mind here", from the Folder's menu: it starts in IEEE, ticked in its picker.
   await pointAndClick(window, folder.getByTestId("folder-row"), { button: "right" });
-  await pointAndClick(window, folder.getByTestId("folder-new-mind-here"));
+  await pointAndClick(window, folder.getByTestId("folder.newMind"));
   const rows = folder.getByTestId("mind-row");
   await expect(rows).toHaveCount(2);
   await openPicker(rows.filter({ hasNotText: "Chapter 1" }));

@@ -10,6 +10,7 @@ import {
   SOURCE_KIND_PROVIDERS,
   type ToolApprovalRequest,
 } from "../../../core/api";
+import { asksAfterThirdParty } from "../../../shared/approvalRules";
 import { AnswerWriting } from "../answerPhase";
 import { useAnswers } from "../answers";
 import { useApprovals, waitingFor } from "../approvals";
@@ -17,6 +18,7 @@ import { signInAgain } from "../chatGptSignIn";
 import { useIsExampleAnswer } from "../components/GettingStarted";
 import { PlugIcon, ScriptIcon, SkillIcon, StopIcon } from "../components/icons";
 import { FindSourcesLineIcon } from "../components/lineIcons";
+import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
 import { ProblemLine } from "../components/ProblemLine";
 import { useFindSources } from "../findSources";
 import { useT } from "../i18n";
@@ -25,6 +27,7 @@ import type { SettingsPage } from "../settingsPages";
 import { useAppStore } from "../store";
 import { ChevronRightSmallIcon, RegenerateSmallIcon } from "./icons";
 import { useMindId } from "./mindContext";
+import { ThirdPartyLine } from "./ThirdPartyLine";
 
 const text = (value: unknown) => (typeof value === "string" ? value : null);
 
@@ -72,7 +75,7 @@ export function Dotted({ items }: { items: ReactNode[] }) {
  * calls and Skill scripts it used; under it, what went wrong and how to fix
  * it, and the approval cards of calls waiting for the User.
  */
-export function AnswerView({ node }: ReactNodeViewProps) {
+export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
   const t = useT();
   const mindId = useMindId();
   const answerId = text(node.attrs[BLOCK_ID_ATTRIBUTE]);
@@ -82,10 +85,7 @@ export function AnswerView({ node }: ReactNodeViewProps) {
   const writing = useAnswers((state) => (answerId ? state.writing.has(answerId) : false));
   // The event says so first; the status says so in windows that opened since.
   const streaming = writing || status === "streaming";
-  const confirming = useAnswers(
-    (state) => questionId !== null && state.blocked[questionId]?.kind === "edited",
-  );
-  const { regenerate, stop, dismiss } = useAnswers.getState();
+  const { regenerate, stop } = useAnswers.getState();
   const openSettings = useAppStore((state) => state.openSettings);
   const toolCalls = toolCallsOf(node.attrs.toolCalls);
   const searches = toolCalls.filter((call) => call.tool === SEARCH);
@@ -96,8 +96,20 @@ export function AnswerView({ node }: ReactNodeViewProps) {
   const approvals = useMemo(() => waitingFor(waiting, answerId), [waiting, answerId]);
   const isExample = useIsExampleAnswer(answerId);
 
-  const writeAgain = (discardEdits = false) => {
-    if (answerId && questionId) void regenerate(mindId, answerId, questionId, discardEdits);
+  // One the User edited comes back as changes over their version: nothing to confirm.
+  const writeAgain = () => {
+    if (answerId && questionId) void regenerate(mindId, answerId, questionId);
+  };
+  const objectMenu = useObjectMenu({ kind: "answer", id: answerId ?? "" });
+  const here = {
+    "answer.copy": () => {
+      navigator.clipboard.writeText(node.textContent).catch(useAppStore.getState().reportError);
+    },
+    ...(!streaming && questionId && { "answer.regenerate": () => writeAgain() }),
+    "block.delete": () => {
+      const pos = getPos();
+      if (pos !== undefined) editor.commands.deleteBlock(pos);
+    },
   };
 
   const meta: ReactNode[] = [];
@@ -133,6 +145,7 @@ export function AnswerView({ node }: ReactNodeViewProps) {
       data-testid="answer"
       data-status={streaming ? "streaming" : status}
       data-answer-id={answerId ?? undefined}
+      {...(answerId ? objectMenu.rowProps : {})}
     >
       <span contentEditable={false} className="sr-only">
         {t("answer.label")}
@@ -143,32 +156,6 @@ export function AnswerView({ node }: ReactNodeViewProps) {
         <p contentEditable={false} data-testid="answer-no-citations" className="answer-info">
           {t("citation.unsupported")}
         </p>
-      )}
-
-      {confirming && questionId && (
-        <div
-          contentEditable={false}
-          role="alertdialog"
-          data-testid="answer-confirm"
-          className="answer-notice"
-        >
-          <span className="answer-notice-text">{t("answer.edited.body")}</span>
-          <button
-            type="button"
-            data-testid="answer-confirm-replace"
-            onClick={() => writeAgain(true)}
-            className="answer-notice-action"
-          >
-            {t("answer.edited.replace")}
-          </button>
-          <button
-            type="button"
-            onClick={() => dismiss(questionId)}
-            className="answer-notice-action"
-          >
-            {t("answer.edited.keep")}
-          </button>
-        </div>
       )}
 
       <NodeViewContent className="answer-content" />
@@ -222,6 +209,14 @@ export function AnswerView({ node }: ReactNodeViewProps) {
             <RegenerateSmallIcon className="size-3" />
             {t("answer.regenerate")}
           </button>
+        )}
+        {answerId && (
+          <ObjectMenu
+            target={{ kind: "answer", id: answerId }}
+            label={t("answer.more")}
+            here={here}
+            className="answer-action"
+          />
         )}
       </div>
     </NodeViewWrapper>
@@ -347,8 +342,10 @@ function TitleWithCode({ title, code }: { title: string; code: string }) {
 /**
  * A Tool call waiting for the User: a ruled block in three sections. Which
  * Tool of which Connector, and whether it may change something or the User
- * asked to approve it every time; the arguments it would send; and three
- * choices. The Answer waits meanwhile.
+ * asked to approve it every time, and why it asks when its Answer had read
+ * third-party text; the arguments it would send; and three choices, or two
+ * when its Answer had read third-party text: "Always allow" wouldn't cover
+ * such a call, so it isn't offered. The Answer waits meanwhile.
  */
 function ToolApprovalCard({ request }: { request: ToolApprovalRequest }) {
   const t = useT();
@@ -356,6 +353,7 @@ function ToolApprovalCard({ request }: { request: ToolApprovalRequest }) {
   const titleId = useId();
   const params = { connector: request.connector.name, tool: request.tool };
   const decide = (decision: Parameters<typeof respond>[1]) => respond(request.requestId, decision);
+  const thirdParty = asksAfterThirdParty(request);
   return (
     <div
       contentEditable={false}
@@ -382,6 +380,7 @@ function ToolApprovalCard({ request }: { request: ToolApprovalRequest }) {
             ? t("approvals.card.readOnly", params)
             : t("approvals.card.changes", params)}
         </p>
+        <ThirdPartyLine request={request} />
       </div>
       <ApprovalArguments input={request.input} />
       <div className="approval-actions">
@@ -393,15 +392,17 @@ function ToolApprovalCard({ request }: { request: ToolApprovalRequest }) {
         >
           {t("approvals.card.allowOnce")}
         </button>
-        <button
-          type="button"
-          data-testid="approval-always-allow"
-          title={t("approvals.card.alwaysAllowHint", params)}
-          onClick={() => decide("always-allow")}
-          className="approval-button"
-        >
-          {t("approvals.card.alwaysAllow")}
-        </button>
+        {!thirdParty && (
+          <button
+            type="button"
+            data-testid="approval-always-allow"
+            title={t("approvals.card.alwaysAllowHint", params)}
+            onClick={() => decide("always-allow")}
+            className="approval-button"
+          >
+            {t("approvals.card.alwaysAllow")}
+          </button>
+        )}
         <button
           type="button"
           data-testid="approval-deny"
@@ -418,9 +419,11 @@ function ToolApprovalCard({ request }: { request: ToolApprovalRequest }) {
 /**
  * A Skill script waiting for the User, in the same three sections: which
  * script of which Skill, and what it can reach (in the OS sandbox, or with
- * no sandbox: `Settings.scriptSandbox`); the Skill, script and arguments it
- * would run with; and three choices. "Always run" first shows a warning in
- * the last section, which must be confirmed. The Answer waits meanwhile.
+ * no sandbox: `Settings.scriptSandbox`), and why it asks when its Answer had
+ * read third-party text; the Skill, script and arguments it would run with;
+ * and three choices, without "Always run" when its Answer had read
+ * third-party text. "Always run" first shows a warning in the last section,
+ * which must be confirmed. The Answer waits meanwhile.
  */
 function ScriptApprovalCard({ request }: { request: SkillScriptApprovalRequest }) {
   const t = useT();
@@ -455,6 +458,7 @@ function ScriptApprovalCard({ request }: { request: SkillScriptApprovalRequest }
         >
           {t(sandboxed ? "scripts.card.sandboxed" : "scripts.card.noSandbox")}
         </p>
+        <ThirdPartyLine request={request} />
       </div>
       <div className="approval-details">
         <p className="approval-label">{t("scripts.card.wouldRun")}</p>
@@ -524,15 +528,17 @@ function ScriptApprovalCard({ request }: { request: SkillScriptApprovalRequest }
           >
             {t("scripts.card.allowOnce")}
           </button>
-          <button
-            type="button"
-            data-testid="approval-always-run"
-            title={t("scripts.card.alwaysRunHint", params)}
-            onClick={() => setWarning(true)}
-            className="approval-button"
-          >
-            {t("scripts.card.alwaysRun")}
-          </button>
+          {!asksAfterThirdParty(request) && (
+            <button
+              type="button"
+              data-testid="approval-always-run"
+              title={t("scripts.card.alwaysRunHint", params)}
+              onClick={() => setWarning(true)}
+              className="approval-button"
+            >
+              {t("scripts.card.alwaysRun")}
+            </button>
+          )}
           <button
             type="button"
             data-testid="approval-deny"

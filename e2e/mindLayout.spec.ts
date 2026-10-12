@@ -53,7 +53,7 @@ test.afterEach(async () => {
 
 /**
  * The Mind as wide as the approved mockups drew it (a 1440px window's card),
- * beside the assistant docked on the right (#253), which takes 368px of it.
+ * beside the assistant docked on the right (#253), which takes 328px of it.
  */
 async function useMockupSize(app: ElectronApplication, window: Page) {
   await setWindowSize(app, window, 1600, 900);
@@ -262,7 +262,7 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
   await window.mouse.click(away.x, away.y);
   await expect(card).toHaveCount(0);
 
-  // Under 900px (here, the viewer open beside it) the margins fold away: the markers show the checks.
+  // Under 760px (here, the viewer open beside it) the margins fold away: the markers show the checks.
   await setGroupBeside(window, true);
   await expect(window.locator(".mind-editor-frame").getByTestId("margin-checks")).toBeHidden();
   await expect(markers.nth(0).locator(".citation-marker-icon")).toBeVisible();
@@ -541,4 +541,87 @@ for (const language of ["en", "zh-CN"] as const) {
       await app.close();
     });
   }
+}
+
+for (const language of ["en", "zh-CN"] as const) {
+  test(`the margins narrow to 40px before they fold at 760px, where the checks move inline and both gutters stay 40px, with the composer under the text (${language})`, async () => {
+    await writeFile(join(sources, "Tides.pdf"), TIDES);
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await dismissChatSetup(window);
+    await useLocalChatModel(window);
+    await window.evaluate(async (chosen) => {
+      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      await bridge.updateSettings({ user: { language: chosen } });
+    }, language);
+    await addDocuments(window, [join(sources, "Tides.pdf")]);
+    await setWindowSize(app, window, 1440, 900);
+    await newMind(window);
+    await window.getByTestId("mind-title").fill("Tides");
+    await enterContent(window);
+    const editor = window.getByTestId("mind-editor");
+    await window.keyboard.type("Spring tides follow the Moon.");
+    await window.keyboard.press("Enter");
+    // Asked in the assistant (#201), the Answer is added to the note with its Citation.
+    await addToNote(
+      window,
+      await askInAssistant(window, "When do spring tides happen, and what makes them stronger?"),
+    );
+    await expect(editor.getByTestId("citation").first()).toBeVisible();
+    // The Mind's checks, not the assistant's.
+    const card = window.getByTestId("card");
+    const column = window.locator(".mind-column");
+    const gutters = async () => {
+      const [text, col] = [await textColumn(editor), await box(column)];
+      return { left: text.x - col.x, right: col.x + col.width - (text.x + text.width) };
+    };
+
+    // A 1,440px window with the assistant docked at its default width: the checks stay in the margin.
+    await expect(window.getByTestId("assistant")).toHaveAttribute("data-dock", "right");
+    expect(await (await box(window.getByTestId("assistant"))).width).toBeCloseTo(320, 0);
+    const marks = card.getByTestId("margin-check");
+    await expect(marks.first()).toBeVisible();
+    expect((await box(column)).width, "the Mind is under the old 900px fold").toBeLessThan(900);
+    const wide = await gutters();
+    expect.soft(wide.left, "the left margin holds the controls").toBeGreaterThanOrEqual(40);
+    expect.soft(wide.right, "the right margin holds the checks").toBeGreaterThanOrEqual(40);
+
+    // Narrowed, not folded, at 760px: both margins 40px, the checks still beside the text.
+    await sizeMind(app, window, 760);
+    await expect(card.getByTestId("margin-checks")).toBeVisible();
+    const at760 = await gutters();
+    expectNear(at760.left, 40, 1, "the left margin at 760px");
+    expectNear(at760.right, 40, 1, "the right margin at 760px");
+    const mark = await box(marks.first());
+    const text = await textColumn(editor);
+    expect.soft(mark.x).toBeGreaterThanOrEqual(text.x + text.width);
+    expect.soft(mark.x + mark.width).toBeLessThanOrEqual(text.x + text.width + 40);
+
+    // Folded under 760px: the checks move inline, both gutters stay 40px, and the text edge doesn't move.
+    await sizeMind(app, window, 650);
+    await expect(card.getByTestId("margin-checks")).toBeHidden();
+    await expect(
+      editor.getByTestId("citation-chip").first().locator(".citation-marker-icon"),
+    ).toBeVisible();
+    const folded = await gutters();
+    expectNear(folded.left, 40, 1, "the left gutter when folded");
+    expectNear(folded.right, 40, 1, "the right gutter when folded");
+    expectNear(folded.left, at760.left, 1, "the text edge across the fold");
+
+    // The composer, drawn at the foot in a window this narrow, lines up with the text.
+    await setWindowSize(app, window, 900, 900);
+    await expect(window.getByTestId("assistant")).toHaveAttribute("data-dock", "bottom");
+    const composer = await box(window.getByTestId("composer"));
+    const edge = await textColumn(editor);
+    const dock = await box(window.getByTestId("assistant"));
+    expectNear(composer.x, edge.x, 1, "the composer's left edge");
+    expectNear(composer.x - dock.x, 40, 1, "the composer's left gutter");
+    expectNear(
+      dock.x + dock.width - (composer.x + composer.width),
+      40,
+      1,
+      "the composer's right gutter",
+    );
+    await screenshot(window, `folded-${language}.png`);
+    await app.close();
+  });
 }

@@ -194,7 +194,8 @@ export const assistantCommands: readonly Command[] = [
     run: addAnswerInFocus,
   },
   {
-    id: "answer.copy",
+    // Not "answer.copy": that is the Copy in the menu of an Answer in a Mind written before.
+    id: "assistant.copyAnswer",
     label: "command.answer.copy",
     shortcut: { keys: "CmdOrCtrl+Shift+C" },
     group: "edit",

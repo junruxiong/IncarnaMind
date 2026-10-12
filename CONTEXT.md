@@ -99,7 +99,7 @@ A public service that Find sources searches for works to add to the Library: Ope
 _Avoid_: source (a Document is not one), database, provider on its own (an AI model's provider)
 
 **Location**:
-Where in a Document a Citation points, in the unit the Document's own readers use: one or two pages of a PDF, one or two slides of a deck (speaker notes count as part of their slide), a sheet and a range of rows of a spreadsheet, the section a quote sits under in a Word file or Markdown (for a quote of a Word comment, the section the comment is anchored in, and that it is a comment by its author), the section and paragraphs of a Web page, or a range of lines in plain text.
+Where in a Document a Citation points, in the unit the Document's own readers use: one or two pages of a PDF, one or two slides of a deck (speaker notes count as part of their slide), a sheet and a range of rows of a spreadsheet, the section a quote sits under in a Word file or Markdown (for a quote of a Word comment, the section the comment is anchored in, and that it is a comment by its author), the section and paragraphs of a Web page, a range of lines in plain text, or a range of time in a Transcript (shown as the time the quote starts, "14:26").
 _Avoid_: page (for anything that isn't a PDF), position, anchor
 
 **Folder**:
@@ -138,6 +138,10 @@ _Avoid_: function, action
 **Effect**:
 What a Tool call can do beyond the conversation it is part of: read data, write (change something), run code on a computer, or send data over the network, and where (some of the User's folders, a web host, a Connector's service, the Documents, a Mind). Whether a call asks the User first depends on its Effects.
 _Avoid_: permission, capability, side effect
+
+**Third-party text**:
+Text someone other than the User wrote that a Run reads: a saved Web page, the document being checked, or text in a Mind or Conversation that came from them (imported from someone else's file, a quote added from a Web page, or an Answer written from such text). Once a Run has read some, a call that writes or sends data asks even where the User chose "always". The User's other Documents don't count, though their text is untrusted too, and neither does text pasted from other apps, which can't be traced.
+_Avoid_: external content, untrusted content (which also covers the User's own Documents)
 
 **Connector**:
 An external service the User has connected, through which Answers can look things up or make changes.

@@ -1,13 +1,18 @@
 import { resolve } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
-import type { CoreBridge } from "../src/core/api";
+import * as Y from "yjs";
+import { type CoreBridge, MIND_CONTENT_FIELD, type ThirdPartySource } from "../src/core/api";
+import { setTextOrigin } from "../src/shared/textOrigins";
 import {
   assistantAnswers,
   createDataFolder,
   dismissChatSetup,
   launchApp,
   newMind,
+  pointAndClick,
+  pointAt,
   removeDataFolder,
+  setWindowSize,
   useLocalChatModel,
 } from "./app";
 
@@ -22,20 +27,63 @@ test.afterEach(async () => {
   await removeDataFolder(dataDir);
 });
 
-/** Adds the tiny server as a Connector through the core's bridge, and waits until it's ready. */
-async function addTideConnector(window: Page): Promise<void> {
-  await window.evaluate(
+/** Adds the tiny server as a Connector through the core's bridge, waits until it's ready, and returns its id. */
+async function addTideConnector(window: Page): Promise<string> {
+  return window.evaluate(
     async ({ node, server }) => {
       const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
       const connector = await bridge.addConnector({ name: "Tides", command: node, args: [server] });
       for (let tries = 0; tries < 300; tries++) {
         const found = (await bridge.listConnectors()).find((each) => each.id === connector.id);
-        if (found?.state === "ready") return;
+        if (found?.state === "ready") return connector.id;
         await new Promise((done) => setTimeout(done, 100));
       }
       throw new Error("The Connector didn't get ready.");
     },
     { node: process.execPath, server: TIDE_SERVER },
+  );
+}
+
+/**
+ * A Mind holding one Note, then a Question about it with its Answer, as Minds
+ * held them before Questions went to the assistant (#201); with `origin`, the
+ * Note is recorded as third-party text, as importing someone else's .docx
+ * records it (#104). Made through the core's bridge, then closed, as a Mind
+ * from before; returns its id.
+ */
+async function mindWithNote(
+  window: Page,
+  title: string,
+  origin: ThirdPartySource | null,
+): Promise<string> {
+  const doc = new Y.Doc();
+  const paragraph = (text: string) => {
+    const element = new Y.XmlElement("paragraph");
+    element.setAttribute("id", crypto.randomUUID());
+    if (text) element.insert(0, [new Y.XmlText(text)]);
+    return element;
+  };
+  const note = paragraph("The landlord's draft: book the survey boat from Dover on Friday.");
+  const questionId = crypto.randomUUID();
+  const question = new Y.XmlElement("question");
+  question.setAttribute("id", questionId);
+  question.insert(0, [new Y.XmlText("Please book_boat from Dover")]);
+  const answer = new Y.XmlElement("answer");
+  answer.setAttribute("id", crypto.randomUUID());
+  answer.setAttribute("questionId", questionId);
+  answer.setAttribute("status", "done");
+  answer.insert(0, [paragraph("Not booked yet.")]);
+  doc.getXmlFragment(MIND_CONTENT_FIELD).push([note, question, answer, paragraph("")]);
+  if (origin) setTextOrigin(doc, [String(note.getAttribute("id"))], origin);
+  return window.evaluate(
+    async ({ title, update }) => {
+      const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      const mind = await core.createMind({ title });
+      await core.applyMindUpdate(mind.id, new Uint8Array(update));
+      await core.closeMind(mind.id);
+      return mind.id;
+    },
+    { title, update: Array.from(Y.encodeStateAsUpdate(doc)) },
   );
 }
 
@@ -100,5 +148,70 @@ test("a Tool that may change something pauses the Answer with an approval card: 
   const denied = second.getByTestId("answer-connector-call");
   await expect(denied).toHaveAttribute("data-approval", "denied");
   await expect(denied).toContainText("Not allowed: Tides: book_boat");
+  await app.close();
+});
+
+test("in a Mind holding imported text, a write the User always allows asks, says why and offers no Always allow; the same Mind without it doesn't ask", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await setWindowSize(app, window, 1280, 860);
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  const connectorId = await addTideConnector(window);
+  await window.evaluate(async (connectorId) => {
+    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    await core.setApprovalPolicy({
+      subject: { kind: "tool", connectorId, tool: "book_boat" },
+      policy: "always",
+    });
+  }, connectorId);
+  await mindWithNote(window, "Imported lease", "imported");
+  await mindWithNote(window, "My own lease notes", null);
+  const editor = window.getByTestId("mind-editor");
+  /** Opens the Mind and writes its Answer again, which asks for the call once more. */
+  const regenerateIn = async (title: string) => {
+    await pointAndClick(window, window.getByTestId("mind-list-item").filter({ hasText: title }));
+    await expect(editor).toContainText("The landlord's draft");
+    const answer = editor.getByTestId("answer").first();
+    await pointAt(window, answer);
+    await pointAndClick(window, answer.getByTestId("answer-regenerate"));
+    return answer;
+  };
+
+  // Someone else's text is in the Question context: written again, the always-allowed write
+  // asks, and says why. (A Question in a Mind is one written there before Questions went to
+  // the assistant, #201: its Answer is still written again there, from the Notes above it.)
+  const answer = await regenerateIn("Imported lease");
+  const card = answer.getByTestId("approval-card");
+  await expect(card).toBeVisible({ timeout: 15_000 });
+  await expect(card).toHaveAttribute("data-tool", "book_boat");
+  const why = card.getByTestId("approval-third-party");
+  await expect(why).toHaveText("This Mind contains imported text, so it asks you first.");
+  await expect(why).toHaveAttribute("data-source", "imported");
+  // "Always allow" wouldn't cover this call, so it isn't offered: Allow once, then Deny.
+  await expect(card.getByTestId("approval-always-allow")).toHaveCount(0);
+  const allow = card.getByTestId("approval-allow-once");
+  const deny = card.getByTestId("approval-deny");
+  await expect(allow).toBeVisible();
+  await expect(deny).toBeVisible();
+  const allowBox = await allow.boundingBox();
+  const denyBox = await deny.boundingBox();
+  expect(allowBox && denyBox && allowBox.x < denyBox.x).toBe(true);
+  await pointAndClick(window, allow);
+  const consent = window.getByTestId("consent-dialog");
+  await expect(consent).toContainText("Send data to Tides?");
+  await pointAndClick(window, consent.getByTestId("consent-allow"));
+  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  await expect(answer).toContainText("book_boat said: Booked a boat trip from Dover.");
+  await expect(answer.getByTestId("answer-connector-call")).toHaveAttribute(
+    "data-approval",
+    "allowed",
+  );
+
+  // The same Note, the User's own: "always" holds, and the call runs without a card.
+  const own = await regenerateIn("My own lease notes");
+  await expect(own).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  await expect(own).toContainText("book_boat said: Booked a boat trip from Dover.");
+  await expect(own.getByTestId("approval-card")).toHaveCount(0);
+  await expect(own.getByTestId("answer-connector-call")).not.toHaveAttribute("data-approval");
   await app.close();
 });

@@ -81,7 +81,8 @@ export const tabCommands: readonly Command[] = [
   },
   {
     ...fromMenu("tab.close"),
-    group: "main",
+    menuLabel: "tabs.menu.close",
+    group: "danger",
     reversible: true,
     when: (ctx) => targetOf(ctx) !== null,
     run(ctx) {
@@ -102,6 +103,7 @@ export const tabCommands: readonly Command[] = [
   },
   {
     ...fromMenu("tab.split"),
+    menuLabel: "tabs.menu.side",
     group: "open",
     reversible: true,
     when: (ctx) => targetOf(ctx) !== null,
@@ -127,6 +129,7 @@ export const tabCommands: readonly Command[] = [
   {
     id: "tab.keep",
     label: "command.tab.keep",
+    menuLabel: "tabs.menu.keep",
     group: "main",
     reversible: true,
     when: (ctx) => targetOf(ctx)?.tab.preview === true,
@@ -137,6 +140,7 @@ export const tabCommands: readonly Command[] = [
   {
     id: "tab.pin",
     label: (ctx, t) => t(targetOf(ctx)?.tab.pinned ? "command.tab.unpin" : "command.tab.pin"),
+    menuLabel: (ctx, t) => t(targetOf(ctx)?.tab.pinned ? "tabs.menu.unpin" : "tabs.menu.pin"),
     group: "main",
     reversible: true,
     when: (ctx) => targetOf(ctx) !== null,
@@ -147,6 +151,7 @@ export const tabCommands: readonly Command[] = [
   {
     id: "tab.moveLeft",
     label: "command.tab.moveLeft",
+    menuLabel: "tabs.menu.moveLeft",
     group: "move",
     reversible: true,
     when: (ctx) => (targetOf(ctx)?.index ?? 0) > 0,
@@ -156,6 +161,8 @@ export const tabCommands: readonly Command[] = [
     id: "tab.moveRight",
     label: (ctx, t) =>
       t(groupOnTheRight(targetOf(ctx)) ? "command.tab.moveRight" : "command.tab.moveNew"),
+    menuLabel: (ctx, t) =>
+      t(groupOnTheRight(targetOf(ctx)) ? "tabs.menu.moveRight" : "tabs.menu.moveNew"),
     group: "move",
     reversible: true,
     when: (ctx) => {
@@ -170,6 +177,7 @@ export const tabCommands: readonly Command[] = [
   {
     id: "tab.rename",
     label: "command.tab.rename",
+    menuLabel: "tabs.menu.rename",
     // A tab list's own key, as F2 renames in any list.
     shortcut: { keys: "F2", list: true },
     group: "edit",
@@ -183,7 +191,8 @@ export const tabCommands: readonly Command[] = [
   {
     id: "tab.closeOthers",
     label: "command.tab.closeOthers",
-    group: "main",
+    menuLabel: "tabs.menu.closeOthers",
+    group: "danger",
     reversible: true,
     when: (ctx) => (targetOf(ctx)?.group.tabs.length ?? 0) > 1,
     run: onTarget(({ tab }) => closeSome({ type: "closeOthers", tabId: tab.id }, tab)),
@@ -191,7 +200,8 @@ export const tabCommands: readonly Command[] = [
   {
     id: "tab.closeToTheRight",
     label: "command.tab.closeRight",
-    group: "main",
+    menuLabel: "tabs.menu.closeRight",
+    group: "danger",
     reversible: true,
     when: (ctx) => {
       const target = targetOf(ctx);

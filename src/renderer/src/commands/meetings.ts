@@ -1,7 +1,8 @@
-import type { Meeting } from "../../../core/api";
+import type { LayoutTab, Meeting } from "../../../core/api";
 import { currentMindIdOf } from "../layoutSlice";
 import { canRecordMeetings, isLive, useMeetings } from "../meetings";
 import { useAppStore } from "../store";
+import { hideTranscript, showTranscript } from "../transcripts";
 import type { Command } from "./registry";
 
 /*
@@ -23,6 +24,19 @@ function liveMeeting(): Meeting | undefined {
 const meetingsOn = () => canRecordMeetings(useAppStore.getState().settings);
 
 const whileLive = () => (liveMeeting() ? true : { reason: "meetings.command.noneLive" as const });
+
+/** The tab a Document shows in, and the group its meeting's Mind is in. */
+function placesOf(meeting: Meeting, documentId: string | null) {
+  let tab: LayoutTab | undefined;
+  let mindGroup: string | undefined;
+  for (const group of useAppStore.getState().layout?.groups ?? []) {
+    for (const each of group.tabs) {
+      if (each.item.kind === "document" && each.item.documentId === documentId) tab = each;
+      if (each.item.kind === "mind" && each.item.mindId === meeting.mindId) mindGroup ??= group.id;
+    }
+  }
+  return { tab, mindGroup };
+}
 
 export const meetingCommands: readonly Command[] = [
   {
@@ -49,6 +63,32 @@ export const meetingCommands: readonly Command[] = [
       if (!meeting) return;
       const { pause, resume } = useMeetings.getState();
       return meeting.status === "recording" ? pause(meeting.id) : resume(meeting.id);
+    },
+  },
+  {
+    id: "meeting.transcript",
+    label: (_ctx, t) => {
+      const meeting = liveMeeting();
+      const documentId = meeting?.transcript?.documentId ?? null;
+      const shown = meeting ? placesOf(meeting, documentId).tab : undefined;
+      return t(shown ? "meetings.bar.hideTranscript" : "meetings.bar.showTranscript");
+    },
+    group: "main",
+    // Pressed again, it undoes itself.
+    reversible: true,
+    when: meetingsOn,
+    enabled: () => {
+      const meeting = liveMeeting();
+      if (!meeting) return { reason: "meetings.command.noneLive" };
+      return meeting.transcript?.documentId ? true : { reason: "meetings.bar.transcriptSoon" };
+    },
+    run() {
+      const meeting = liveMeeting();
+      const documentId = meeting?.transcript?.documentId;
+      if (!meeting || !documentId) return;
+      const { tab, mindGroup } = placesOf(meeting, documentId);
+      if (tab) hideTranscript(tab.id);
+      else showTranscript(documentId, mindGroup);
     },
   },
   {

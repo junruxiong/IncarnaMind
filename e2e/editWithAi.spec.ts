@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import type { Editor } from "@tiptap/core";
 import type { CoreBridge } from "../src/core/api";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
@@ -25,6 +26,9 @@ import {
  * src/main/fakeChatModel.ts) shortens by dropping "very" and "really" (非常),
  * and does what "replace X with Y" (把 X 换成 Y) says. Set
  * INCARNAMIND_SCREENSHOTS to a folder to also save screenshots.
+ *
+ * A change whose words the User edits goes out of date (#94): it can't be
+ * accepted, and Regenerate makes it again from their words.
  */
 
 const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
@@ -222,4 +226,95 @@ test("⌘J with text selected says what to change in the composer, in Chinese; �
   await expect(bar).toHaveCount(0);
   await pointAndClick(window, problem.getByTestId("edit-problem-close"));
   await expect(problem).toHaveCount(0);
+});
+
+test("a double click accepts a change once; a change whose words the User edits is out of date until Regenerate makes it again", async () => {
+  const { window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await newMind(window);
+  const editor = window.getByTestId("mind-editor");
+  await editor.click();
+  await window.keyboard.type("The tides are really very strong. They are very high.");
+  const note = editor.locator(":scope > p").first();
+
+  await selectWords(window, note, "The tides are really very strong. They are very high.");
+  await pointAndClick(window, window.getByTestId("selection-action-shorten"));
+  const bar = window.getByTestId("proposals-bar");
+  const count = bar.getByTestId("proposals-count");
+  await expect(count).toHaveText("2 changes from the assistant");
+  const removed = note.locator("del.proposal-delete");
+  await expect(removed).toHaveText(["really very ", "very "]);
+
+  // Double-clicking Accept applies the change once: one step, which one Undo takes back.
+  await pointAndClick(window, removed.nth(1));
+  const changeBar = window.getByTestId("change-bar");
+  await expect(changeBar).toContainText("Change 2 of 2");
+  const accept = changeBar.getByTestId("change-accept");
+  const box = await accept.boundingBox();
+  if (!box) throw new Error("Accept isn't visible.");
+  await window.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 8 });
+  await window.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2);
+  await expect(count).toHaveText("1 change from the assistant");
+  await expect(removed).toHaveText(["really very "]);
+  await expect(note).toContainText("They are high.");
+  await expect(window.getByTestId("undo-message")).toHaveText("Accepted 1 change");
+  await editor.focus();
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(count).toHaveText("2 changes from the assistant");
+  await expect(removed).toHaveText(["really very ", "very "]);
+
+  // The User writes among the words the first change removes: they are theirs now.
+  await editor.evaluate((dom) => {
+    const { view, commands } = (dom as unknown as { editor: Editor }).editor;
+    let at = -1;
+    view.state.doc.descendants((node, pos) => {
+      if (at < 0 && node.isText && node.text === "really very ") at = pos + "really ".length;
+    });
+    commands.setTextSelection(at);
+  });
+  await window.keyboard.type("quite ");
+  await expect(note).toContainText("really quite very strong");
+  // "Out of date · Regenerate", on a line under its paragraph.
+  const outOfDate = window.getByTestId("change-out-of-date");
+  await expect(outOfDate).toHaveCount(1);
+  await expect(outOfDate).toContainText("Out of date");
+  await expect(outOfDate.getByTestId("change-regenerate")).toHaveText("Regenerate");
+  const lineBox = await outOfDate.boundingBox();
+  const noteBox = await note.boundingBox();
+  expect(lineBox?.y ?? 0).toBeGreaterThanOrEqual((noteBox?.y ?? 0) + (noteBox?.height ?? 0) - 1);
+  // It can't be accepted: its line is its only bar, and ⌘↵ leaves it, saying why.
+  await expect(changeBar).toHaveCount(0);
+  await window.keyboard.press("ControlOrMeta+Enter");
+  await expect(window.getByTestId("proposal-spoken")).toHaveText(
+    "This change is out of date: regenerate it or reject it.",
+  );
+  await expect(count).toHaveText("2 changes from the assistant");
+  await screenshot(window, "edit-out-of-date-en");
+
+  // Accept all takes the other one, and leaves it.
+  await expect(bar.getByTestId("proposals-accept-all")).toHaveAttribute(
+    "title",
+    "Changes out of date are left as they are",
+  );
+  await pointAndClick(window, bar.getByTestId("proposals-accept-all"));
+  await expect(count).toHaveText("1 change from the assistant");
+  await expect(note).toContainText("They are high.");
+
+  // Reject on its line takes it away, and Undo brings it back.
+  await pointAndClick(window, outOfDate.getByTestId("change-reject"));
+  await expect(bar).toHaveCount(0);
+  await expect(note).toHaveText("The tides are really quite very strong. They are high.");
+  await expect(window.getByTestId("undo-message")).toHaveText("Rejected 1 change");
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(outOfDate).toHaveCount(1);
+
+  // Regenerate makes it again from the words as they are now, the User's among them.
+  await pointAndClick(window, outOfDate.getByTestId("change-regenerate"));
+  await expect(outOfDate).toHaveCount(0);
+  await expect(removed).toHaveText(["really quite "]);
+  await expect(count).toHaveText("1 change from the assistant");
+  await pointAndClick(window, bar.getByTestId("proposals-accept-all"));
+  await expect(bar).toHaveCount(0);
+  await expect(note).toHaveText("The tides are very strong. They are high.");
 });

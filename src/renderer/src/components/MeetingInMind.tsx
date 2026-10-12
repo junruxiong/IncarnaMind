@@ -8,6 +8,7 @@ import { useAppStore } from "../store";
 import { CloseLineIcon, RecordingLineIcon } from "./lineIcons";
 import { MeetingBar } from "./MeetingBar";
 import { ProblemLine } from "./ProblemLine";
+import { TranscriptLines } from "./TranscriptLines";
 import { buttonStyle, fieldLabelClass, inputClass } from "./ui";
 
 /**
@@ -26,7 +27,12 @@ export function MeetingInMind({ mindId }: { mindId: string }) {
       </MeetingBar>
     );
   }
-  return <MeetingAudioLine meeting={meeting} className="mb-4" />;
+  return (
+    <div className="mb-4">
+      <TranscriptLines meeting={meeting} className="" />
+      <MeetingAudioLine meeting={meeting} />
+    </div>
+  );
 }
 
 /**

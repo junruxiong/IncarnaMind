@@ -52,7 +52,7 @@ import { TableKeys } from "../editor/tableCommands";
 import { SmartTypography } from "../editor/typography";
 import { WordCount } from "../editor/WordCount";
 import { requestEdit, startEditing, TRANSLATE_LANGUAGES } from "../editWithAi";
-import { useT } from "../i18n";
+import { translateNow, useT } from "../i18n";
 import { useMeetingOf } from "../meetings";
 import { isWritingIn } from "../mindStatus";
 import { skillDescription } from "../skills";
@@ -285,7 +285,7 @@ function MindEditorView({
           onAsk: (current, questionId) => void askInEditor(current, mindId, questionId),
         }),
         QuestionFold.configure({ mindId }),
-        ProposalReview,
+        ProposalReview.configure({ translate: translateNow }),
         Suggestions.configure({
           request: (request) => askForSuggestion(mindId, doc, request),
           cancel: (requestId) =>

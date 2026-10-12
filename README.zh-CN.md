@@ -9,6 +9,8 @@
   写作和提问在同一个地方，回答来自你自己的文件和你选的 AI 模型。免费开源，在你自己的电脑上运行。
 </p>
 
+<p align="center"><a href="https://tally.so/r/rjN2jL?ref=readme-zh"><img src="docs/images/notify-zh.svg" width="187" height="40" alt="alpha 上线时通知我"></a></p>
+
 <p align="center">
   <a href="#下载"><b>下载</b></a> ·
   <a href="#你能用它做什么">你能用它做什么</a> ·
@@ -26,7 +28,7 @@
 
 ## 下载
 
-**IncarnaMind 还没有正式发布。** 发布后，[发布页](https://github.com/junruxiong/IncarnaMind/releases)会提供 macOS（Apple 芯片和 Intel）、Windows 和 Linux 的安装包。想在发布时收到通知，可以点本页右上角的 **Watch → Custom → Releases**。想现在试用，可以用 Node.js 24 或更高版本从源码运行：
+**IncarnaMind 还没有正式发布。** 发布后，[发布页](https://github.com/junruxiong/IncarnaMind/releases)会提供 macOS（Apple 芯片和 Intel）、Windows 和 Linux 的安装包。想在发布时收到通知，可以[留下邮箱](https://tally.so/r/rjN2jL?ref=readme-zh)，或点本页右上角的 **Watch → Custom → Releases**。想现在试用，可以用 Node.js 24 或更高版本从源码运行：
 
 ```shell
 git clone https://github.com/junruxiong/IncarnaMind.git && cd IncarnaMind
