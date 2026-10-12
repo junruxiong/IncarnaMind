@@ -1814,6 +1814,24 @@ export function createDocuments(options: DocumentsOptions) {
     },
 
     /**
+     * A live Document's date, as Answers see it beside its Passages (#548):
+     * the date it states (its reference record's, else its creation date),
+     * else the day its file was last modified, in UTC. ISO 8601 at the
+     * precision known: "2025-05-14", "2024-03" or "2019". Null when nothing
+     * gives one, or the Document was deleted.
+     */
+    documentDate(documentId: string): string | null {
+      const row = find(documentId);
+      if (!row) return null;
+      const issued = referenceOf(db, documentId)?.fields.issued;
+      if (issued) return issued;
+      if (row.creation_date) return row.creation_date.slice(0, 10);
+      return row.file_mtime_ms === null
+        ? null
+        : new Date(row.file_mtime_ms).toISOString().slice(0, 10);
+    },
+
+    /**
      * The live Passages of a Document's current version that cover pages
      * `from` to `to` (any, for a Document without pages), in reading order.
      */

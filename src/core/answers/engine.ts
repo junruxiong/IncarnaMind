@@ -489,7 +489,7 @@ const listed = (items: readonly string[]) =>
  */
 export function searchToolDescription(languages: readonly DocumentLanguage[]): string {
   const base =
-    "Search the User's Documents. Returns the Passages that best match, each with an id, its Document and where it is (pages, slides, sections, rows or lines). The search sees only the query, not the conversation: write it to stand on its own.";
+    "Search the User's Documents. Returns the Passages that best match, each with an id, its Document, the Document's date when known, and where it is (pages, slides, sections, rows or lines). The search sees only the query, not the conversation: write it to stand on its own.";
   if (languages.length === 0) return base;
   const names = languages.map((each) =>
     languages.length > 1 ? `${each.language} (${each.documents})` : each.language,

@@ -93,6 +93,19 @@ export function signInNeededInstructions(connectorNames: readonly string[]): str
 const NOT_COVERED =
   "If the Documents don't cover the Question, say so plainly, then answer from your own knowledge if you can, without markers.";
 
+/**
+ * A premise the Passages don't support, and Passages that disagree (#548):
+ * what a careful reader catches. The examples are in English and Chinese, so
+ * an Answer in either has its model. `cite`: the Answer cites with markers.
+ */
+function readingRules(cite: boolean): string {
+  const marker = (n: number) => (cite ? `[^${n}]` : "");
+  return [
+    `- If the Question takes for granted what the Passages don't say (an approval, a date, a figure, a cause), say so first, in one plain sentence, then answer from what they say: "The Documents don't record a Board approval; the 14 May memo asks for one." / "文档中没有董事会批准的记录；5 月 14 日的备忘录是在申请批准。"`,
+    `- If Passages disagree, lead with the newer Document by its date (a Passage's date is its Document's: the date it states, else when its file last changed)${cite ? " and cite it" : ""}, then name the older one, what it says and its date in one sentence${cite ? ", cited too" : ""}: "Report outages over 4 hours (memo, May 2025)${marker(1)}; the older handbook (2024) says 6${marker(2)}." / "2025 年 5 月的备忘录要求报告超过 4 小时的停电${marker(1)}；较早的 2024 年手册写的是 6 小时${marker(2)}。" Say "probably" (可能) only when neither is dated or newer.`,
+  ].join("\n");
+}
+
 const RECORD =
   'the Passage\'s id, where the quote is, and a short quote copied exactly from the Passage, without its marks. Where: the page, slide, section, or rows or lines the quote is in, or two in a row, written as the Passage names them (its pages or location, and marks where each new one starts, like [p. 4], [slide 4], [§ 2.1 Sensitivity], [Revenue, rows 2–41] or [lines 51–100]; name rows or lines more narrowly when you can, e.g. "Revenue, rows 12–14")';
 
@@ -184,6 +197,7 @@ export function documentInstructions(
         "- In the Answer, put the marker as [^1] right after each claim it supports, in a table's cell too. Use only markers you recorded, and add no list of sources.",
         "- Write nothing before your Tool calls: only the Answer, after them.",
         NOT_COVERED,
+        readingRules(true),
         ...(calculate ? ["", CALCULATE] : []),
       ].join("\n");
     case "structured-output":
@@ -203,6 +217,7 @@ export function documentInstructions(
         UNBROKEN_QUOTE,
         ...(calculate ? [CALCULATIONS] : []),
         NOT_COVERED,
+        readingRules(true),
       ].join("\n");
     case "none":
       return [
@@ -214,6 +229,7 @@ export function documentInstructions(
         "",
         "Use them where they help. Don't write citation markers or a list of sources.",
         "If the Passages don't cover the Question, say so plainly, then answer from your own knowledge if you can.",
+        readingRules(false),
       ].join("\n");
   }
 }

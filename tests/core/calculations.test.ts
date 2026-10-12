@@ -236,7 +236,7 @@ describe("The calculate Tool", { timeout: 60_000 }, () => {
     // It is steered to the Tool, in few words: the instructions go with every Question.
     const system = promptOf(model)[0]?.text ?? "";
     expect(system).toMatch(/Never work out a number yourself.*call calculate/);
-    expect(system.length).toBeLessThan(3200);
+    expect(system.length).toBeLessThan(4000);
     expect(model.doStreamCalls[0]?.tools?.map((tool) => tool.name)).toContain("calculate");
     // The model is told what each came to, with the numbers it read, in one line each.
     expect(told(model, "calculate")).toEqual([
