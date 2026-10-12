@@ -1,0 +1,97 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { descendants, parseXml } from "../../src/core/documents/formats/xml";
+import { openPackage, resolvePart } from "../../src/core/documents/formats/zip";
+import { countFeatures, type Features } from "./features";
+
+export const WORD_DIR = dirname(fileURLToPath(import.meta.url));
+
+export interface CorpusEntry {
+  /** Relative to eval/word/. */
+  file: string;
+  set: "documents" | "tracked-changes" | "saved";
+  origin: "synthetic" | "libreoffice" | "apache-poi" | "word-mac" | "wps" | "google-docs";
+  language: "en" | "zh" | "n/a";
+  licence: string;
+  /** Where the file came from, pinned to a commit; empty for a synthetic file. */
+  source: string;
+  sha256: string;
+  features: Features;
+  /** Why the file is known not to pass a check, when it is. */
+  known?: string;
+}
+
+export function readManifest(): CorpusEntry[] {
+  return JSON.parse(readFileSync(join(WORD_DIR, "manifest.json"), "utf8")) as CorpusEntry[];
+}
+
+export interface PackageReport {
+  features: Features;
+  /** What would make Word offer to repair the file; empty when nothing does. */
+  problems: string[];
+}
+
+/**
+ * Reads a package the way Word's checks go, in the parts that matter: every XML part is
+ * well-formed, every relationship points at a part that exists, and every part has a content type.
+ * LibreOffice repairs silently, so this stands in for Word's "found unreadable content" prompt.
+ */
+export async function inspectPackage(bytes: Uint8Array): Promise<PackageReport> {
+  const problems: string[] = [];
+  const zip = openPackage(bytes);
+  const names = zip.names();
+  const parts = new Map<string, string>();
+  const known = new Set(names);
+
+  for (const name of names) {
+    if (!/\.(?:xml|rels)$/i.test(name)) continue;
+    const text = await zip.readText(name);
+    if (text === undefined) continue;
+    try {
+      const root = parseXml(text);
+      if (name.startsWith("word/") && name.endsWith(".xml")) parts.set(name, text);
+      if (name.endsWith(".rels")) {
+        const ownerDir = name.slice(0, name.lastIndexOf("_rels/"));
+        for (const each of descendants(root, "Relationship")) {
+          const target = each.attrs.Target;
+          if (!target || each.attrs.TargetMode === "External") continue;
+          const resolved = resolvePart(`${ownerDir}owner`, target);
+          if (!known.has(resolved)) problems.push(`${name}: ${target} is not in the package`);
+        }
+      }
+    } catch (error) {
+      problems.push(`${name}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  const types = await zip.readText("[Content_Types].xml");
+  if (types === undefined) {
+    problems.push("[Content_Types].xml is missing");
+  } else {
+    const defaults = new Set<string>();
+    const overrides = new Set<string>();
+    try {
+      const root = parseXml(types);
+      for (const each of descendants(root, "Default")) {
+        if (each.attrs.Extension) defaults.add(each.attrs.Extension.toLowerCase());
+      }
+      for (const each of descendants(root, "Override")) {
+        if (each.attrs.PartName) overrides.add(each.attrs.PartName.slice(1));
+      }
+    } catch {
+      problems.push("[Content_Types].xml is not well-formed");
+    }
+    for (const name of names) {
+      // Word keeps "[trash]/" entries from edits; the packaging rules let them be.
+      if (name === "[Content_Types].xml" || name.endsWith("/") || name.startsWith("[trash]/"))
+        continue;
+      const extension = name.slice(name.lastIndexOf(".") + 1).toLowerCase();
+      if (!overrides.has(name) && !defaults.has(extension)) {
+        problems.push(`${name}: no content type`);
+      }
+    }
+  }
+  if (!known.has("word/document.xml")) problems.push("word/document.xml is missing");
+  return { features: countFeatures(parts, names), problems };
+}

@@ -25,6 +25,7 @@
     "eval:classification": "vitest run --config eval/classification/vitest.config.ts",
     "eval:organize": "vitest run --config eval/organize/vitest.config.ts",
     "eval:hard": "vitest run --config eval/hard/vitest.config.ts",
+    "eval:word": "vitest run --config eval/word/vitest.config.ts",
     "eval:dump": "vitest run --config eval/dumps/vitest.config.ts",
     "eval:ocr": "vitest run --config eval/ocr/vitest.config.ts",
     "eval:transcription": "vitest run --config eval/transcription/vitest.config.ts",
