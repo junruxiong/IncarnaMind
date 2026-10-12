@@ -72,12 +72,29 @@ function place(
 }
 
 /** The checked item, or the first; with `first`, the first whatever is checked. */
-function focusFirst(menu: HTMLElement | null, first = false): void {
+function firstItem(menu: HTMLElement | null, first = false): HTMLElement | undefined {
   const all = itemsOf(menu);
   const checked = first
     ? undefined
     : all.find((each) => each.getAttribute("aria-checked") === "true");
-  (checked ?? all[0])?.focus();
+  return checked ?? all[0];
+}
+
+function focusFirst(menu: HTMLElement | null, first = false): void {
+  firstItem(menu, first)?.focus();
+}
+
+/**
+ * Marks the item the browser focuses as the popover shows. Opened from the
+ * keyboard, the menu renders just before it shows, when nothing in it can take
+ * the focus, and its `toggle` event comes only after a frame: a key pressed in
+ * between went to the button (#584).
+ */
+function autofocusFirst(menu: HTMLElement | null, first = false): void {
+  for (const marked of menu?.querySelectorAll("[autofocus]") ?? []) {
+    marked.removeAttribute("autofocus");
+  }
+  firstItem(menu, first)?.setAttribute("autofocus", "");
 }
 
 /**
@@ -150,8 +167,8 @@ export function usePopoverMenu({
   // Once rendered with its items, and before it is drawn: placed. A click
   // renders it just before the popover shows, so it shows where it belongs;
   // its `toggle` event comes only after a frame is drawn, too late to place it.
-  // It takes the focus once it shows: here if it already does, or else on that
-  // `toggle` event (below), as a popover that hasn't shown can't be focused.
+  // It takes the focus once it shows: here if it already does, or else as the browser shows
+  // it (`autofocusFirst`), as a popover that hasn't shown can't be focused.
   // It grows from the button from that first frame (DESIGN.md, Motion), and is usable at once.
   useLayoutEffect(() => {
     if (!open) {
@@ -165,6 +182,7 @@ export function usePopoverMenu({
     if (menu.current && box && !entered.current) enterFrom(menu.current, sourceOf(anchor), box);
     entered.current = true;
     if (menu.current?.matches(":popover-open")) focusFirst(menu.current, first);
+    else autofocusFirst(menu.current, first);
   }, [open, first]);
 
   // Items that come after it opened, such as models still being listed then: placed again for
