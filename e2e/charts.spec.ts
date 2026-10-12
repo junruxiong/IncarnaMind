@@ -61,6 +61,9 @@ const WORDS = {
     source: "values, each quoted from Acme",
     uncited: "1 with no Citation",
     noCitation: "No Citation",
+    noUnit: "1 cell has no unit, so it isn't drawn",
+    noUnitCard: "No unit, so not drawn",
+    noUnitNote: "no unit",
   },
   "zh-CN": {
     question: "按季度列出营业收入 revenue quarter",
@@ -76,6 +79,9 @@ const WORDS = {
     source: "个数值，均引自“Acme”",
     uncited: "1 个数值没有引用",
     noCitation: "没有引用",
+    noUnit: "1 个单元格没有单位，未绘制",
+    noUnitCard: "没有单位，未绘制",
+    noUnitNote: "无单位",
   },
 } as const;
 
@@ -420,6 +426,66 @@ for (const [language, width] of [
     await window.keyboard.press("ArrowRight");
     await expect(slices.nth(1)).toBeFocused();
     await keep(slices.nth(1));
+    await app.close();
+  });
+}
+
+// A number typed without its unit (#579): in a column of "$… million", it isn't drawn on another
+// scale; the foot and Show as table say why.
+for (const [language, width] of [
+  ["en", 1600],
+  ["zh-CN", 1100],
+] as const) {
+  test(`a number typed without its unit isn't drawn, and the foot and Show as table say so (${language}, ${width}px)`, async () => {
+    const words = WORDS[language];
+    const { app, window } = await openApp(language, width);
+    await useLocalChatModel(window);
+    const { editor, table } = await askForFigures(
+      window,
+      language,
+      `${words.question} in millions`,
+    );
+    await expect(table.locator("td").nth(1)).toContainText("$289.4 million");
+    await pointAndClick(window, table.locator("td").filter({ hasText: /^Q4$/ }));
+    await pointAndClick(window, window.getByTestId("table-menu"));
+    await pointAndClick(window, window.getByTestId("table-chart"));
+    const chart = editor.getByTestId("chart");
+    await pointAndClick(window, chart.getByTestId("chart-kind"));
+    await pointAndClick(window, window.getByTestId("chart-kind-pie"));
+    const slices = chart.getByTestId("chart-point");
+    await expect(slices).toHaveCount(4);
+
+    // A fifth quarter, its 2025 typed in without "$" or "million"; then Update.
+    await pointAndClick(window, table.locator("td").filter({ hasText: /^Q4$/ }));
+    await pointAndClick(window, window.getByTestId("table-menu"));
+    await pointAndClick(window, window.getByTestId("table-actions").getByTestId("table-rowBelow"));
+    await expect(table.locator("tr")).toHaveCount(6);
+    await pointAndClick(window, table.locator("tr").last().locator("td").first());
+    await window.keyboard.type("Q5");
+    await window.keyboard.press("Tab");
+    await window.keyboard.press("Tab");
+    await window.keyboard.type("120.0");
+    await pointAndClick(window, chart.getByTestId("chart-update"));
+    await expect(chart.getByTestId("chart-changed")).toHaveCount(0);
+
+    // Still four slices, as many shares as before; the foot says why Q5 isn't one.
+    await expect(slices).toHaveCount(4);
+    await expect(chart.getByTestId("chart-key")).not.toContainText("Q5");
+    const foot = chart.getByTestId("chart-foot");
+    await expect(foot).toContainText(words.noUnit);
+    await expect(foot).toContainText(words.uncited);
+    await screenshot(window, `chart-no-unit-${language}-${width}`);
+
+    // Show as table lists it, marked, and its card says it isn't drawn.
+    await pointAndClick(window, chart.getByTestId("chart-show-table"));
+    const values = chart.getByTestId("chart-table").getByTestId("chart-value");
+    const bare = values.filter({ hasText: "120.0" });
+    await expect(bare.getByTestId("chart-value-no-unit")).toHaveText(words.noUnitNote);
+    await expect(chart.getByTestId("chart-value-no-unit")).toHaveCount(1);
+    await pointAt(window, bare);
+    await expect(window.getByTestId("chart-card")).toContainText(words.noUnitCard);
+    await expect(window.getByTestId("chart-card")).not.toContainText(words.share);
+    await screenshot(window, `chart-no-unit-table-${language}-${width}`);
     await app.close();
   });
 }
