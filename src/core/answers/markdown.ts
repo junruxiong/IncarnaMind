@@ -15,8 +15,9 @@
  * inline code, a code block), so the Answer grows without flickering between
  * raw Markdown and formatting. A table grows a row at a time.
  */
+
+import type { MarkJSON, NodeJSON } from "../../shared/blockJson";
 import { delimiterRow, type TableAlign, tableCellRanges } from "../../shared/markdownTables";
-import type { MarkJSON, NodeJSON } from "./blocks";
 
 export interface MarkdownOptions {
   /** The text may continue: hold back, or close, what is unfinished at its end. */

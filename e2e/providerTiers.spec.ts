@@ -2,6 +2,7 @@ import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import {
   acceptPlainTextKeys,
+  assistantAnswers,
   createDataFolder,
   dismissChatSetup,
   launchApp,
@@ -117,7 +118,7 @@ for (const { language, more, first, setUp, rest, guide } of LANGUAGES) {
       await expect(settings).toBeHidden();
     }
 
-    // The set-up best-effort provider answers, with the scripted model.
+    // The set-up best-effort provider answers in the assistant, with the scripted model.
     await newMind(window);
     const editor = window.getByTestId("mind-editor");
     await editor.click();
@@ -126,7 +127,7 @@ for (const { language, more, first, setUp, rest, guide } of LANGUAGES) {
     await window.keyboard.press("Enter");
     // Mistral is a cloud service: the first Question asks before sending anything.
     await window.getByTestId("consent-allow").click();
-    await expect(editor.getByTestId("answer")).toHaveAttribute("data-status", "done", {
+    await expect(assistantAnswers(window).first()).toHaveAttribute("data-status", "done", {
       timeout: 15_000,
     });
     await app.close();

@@ -16,24 +16,11 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import * as Y from "yjs";
+import type { MarkJSON, NodeJSON } from "../../shared/blockJson";
 import { BLOCK_ID_ATTRIBUTE, NOTE_BLOCK_TYPES } from "../api";
 import { contentMarkdownOf, elementMarkdown } from "./contextText";
 
-/** A node as ProseMirror (and Tiptap) write it in JSON. */
-export interface NodeJSON {
-  type: string;
-  attrs?: Record<string, unknown>;
-  content?: NodeJSON[];
-  /** Text nodes only. */
-  text?: string;
-  /** Text nodes only. */
-  marks?: MarkJSON[];
-}
-
-export interface MarkJSON {
-  type: string;
-  attrs?: Record<string, unknown>;
-}
+export type { MarkJSON, NodeJSON };
 
 type FormattingAttributes = Record<string, unknown>;
 
