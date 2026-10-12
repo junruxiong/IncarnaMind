@@ -653,23 +653,35 @@ function evaluate(
 
   /** Amounts divided by something other than a number written in the formula: rates per so many of it. */
   const perQuantity = new Set<Node>();
+  /** An amount times powers of ten, by the node that ends the run: what they come to, and the amount. */
+  const scaledBy = new Map<Node, { exponent: number; amount: Value }>();
   /**
-   * Notes a power of ten that multiplies or divides an amount. One that makes
-   * a rate per so many of something isn't a change of scale, and is left: a
+   * Notes a power of ten that multiplies or divides an amount, adding it to
+   * those before it ("rev / 100 / 100" is "rev / 10000"). One that makes a
+   * rate per so many of something isn't a change of scale, and is left: a
    * rate times it (beds / people * 10000), a dividend times it that is then
    * divided by a quantity (rev * 1000 / users), or a quantity divided by it
    * that then divides (rev / (users / 1000)). See `divided`.
    */
   const noteScale = (node: Node, amount: Value, literal: Value, sign: 1 | -1) => {
     const power = powerOfTen(literal);
-    if (!changes || power === null || !SCALE_STEPS.has(Math.abs(power))) return;
-    if (!isAmount(amount.unit) || (sign === 1 && perQuantity.has(amount.node))) return;
-    changes.set(node, {
-      text: source(node),
-      amount: source(amount.node),
-      exponent: sign * power,
-      from: amount.scales[0] ?? null,
-    });
+    if (!changes || !power || !isAmount(amount.unit)) return;
+    if (sign === 1 && perQuantity.has(amount.node)) {
+      perQuantity.add(node);
+      return;
+    }
+    const before = scaledBy.get(amount.node);
+    const exponent = (before?.exponent ?? 0) + sign * power;
+    const base = before?.amount ?? amount;
+    scaledBy.set(node, { exponent, amount: base });
+    changes.delete(amount.node);
+    if (SCALE_STEPS.has(Math.abs(exponent)))
+      changes.set(node, {
+        text: source(node),
+        amount: source(base.node),
+        exponent,
+        from: base.scales[0] ?? null,
+      });
   };
   /** A division by a quantity: what scaled its dividend or its divisor made a rate per so many. */
   const divided = (node: Node, a: Value, b: Value) => {

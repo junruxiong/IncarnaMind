@@ -1014,8 +1014,8 @@ describe("a power of ten that changes an amount's scale (#577)", () => {
       from: from?.word ?? null,
     }));
 
-  // protects=a formula that converts 万 to 亿 or millions to billions itself is found, however the power of ten is written, while its value is worked out as before; fails_when=one of these forms slips through, or the evaluator's result changes; no_claim=the Tool's message, tested through the core.
-  test("dividing or multiplying an amount by 1000, 10000 or the like, however written, is one", () => {
+  // protects=a formula that converts 万 to 亿 or millions to billions itself is found, however the power of ten is written or split ("/ 100 / 100"), while its value is worked out as before; fails_when=one of these forms slips through, or the evaluator's result changes; no_claim=the Tool's message, tested through the core.
+  test("dividing or multiplying an amount by 1000, 10000 or the like, however written or split, is one", () => {
     expect(changes("rev / 10000", [rev])).toEqual([
       { text: "rev / 10000", amount: "rev", exponent: -4, from: "万" },
     ]);
@@ -1024,6 +1024,10 @@ describe("a power of ten that changes an amount's scale (#577)", () => {
         changes(formula, [rev]).map((each) => each.exponent),
         formula,
       ).toEqual([-4]);
+    for (const formula of ["rev / 100 / 100", "rev / 10 / 1000"])
+      expect(changes(formula, [rev]), formula).toEqual([
+        { text: formula, amount: "rev", exponent: -4, from: "万" },
+      ]);
     expect(changes("10000 * rev", [rev])).toEqual([
       { text: "10000 * rev", amount: "rev", exponent: 4, from: "万" },
     ]);
@@ -1040,7 +1044,9 @@ describe("a power of ten that changes an amount's scale (#577)", () => {
   test("a rate per so many, a share, and other numbers aren't", () => {
     for (const formula of [
       "usd / users * 1000",
+      "usd / users * 10 * 1000",
       "usd * 1000 / users",
+      "usd * 100 * 10 / users",
       "usd / (users / 10000)",
       "beds / people * 10000",
       "margin * 10000",
