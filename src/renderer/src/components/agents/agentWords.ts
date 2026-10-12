@@ -11,13 +11,14 @@ import {
   type AgentSetupResult,
 } from "../../../../core/api";
 import type { Language } from "../../../../core/language";
+import { clientTitle } from "../../../../shared/agentNames";
 import type { MessageKey, MessageParams } from "../../../../shared/i18n";
 
 type Translate = (key: MessageKey, params?: MessageParams) => string;
 
 /** An agent's name: its own, or "Other agent". */
 export const clientName = (client: Pick<AgentClient, "id" | "name">, t: Translate) =>
-  client.id === "other" ? t("agents.client.other") : client.name;
+  clientTitle(client, t);
 
 /** How connecting an agent goes, in a line under its name. */
 export function setupWords(client: AgentClient, t: Translate): string {
