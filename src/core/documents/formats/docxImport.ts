@@ -47,7 +47,7 @@ import {
   type WordReview,
 } from "./docxPackage";
 import { dataUrlOf, imageTypeOf } from "./images";
-import { child, descendants, elements, parseXml, type XmlElement } from "./xml";
+import { child, descendants, elements, parseXml, walk, type XmlElement } from "./xml";
 
 /** The largest picture made editable; a larger one is kept as is. */
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -205,27 +205,36 @@ interface Comment {
 /** The text of a part, or of an element in it: its paragraphs, a line each; a table row's cells by tabs. */
 function blockText(container: XmlElement): string {
   const lines: string[] = [];
-  const walk = (node: XmlElement) => {
-    for (const element of elements(node)) {
-      if (element.name === "w:p") lines.push(textIn(element).trim());
-      else if (element.name === "w:tr") {
-        lines.push(
-          descendants(element, "w:tc")
-            .map((cell) => textIn(cell).trim())
-            .join("\t"),
-        );
-      } else if (element.name !== "mc:Fallback") walk(element);
+  /** A cell's paragraphs, read with its row. */
+  const read = new Set<XmlElement>();
+  for (const element of walk(
+    container,
+    (each) => each.name !== "w:p" && each.name !== "mc:Fallback",
+  )) {
+    if (element.name === "w:p" && !read.has(element)) lines.push(textIn(element).trim());
+    else if (element.name === "w:tr") {
+      const cells = elements(element).filter((each) => each.name === "w:tc");
+      const row = cells.map((cell) => {
+        const paragraphs = elements(cell).filter((each) => each.name === "w:p");
+        for (const paragraph of paragraphs) read.add(paragraph);
+        return paragraphs.map((paragraph) => textIn(paragraph).trim()).join(" ");
+      });
+      lines.push(row.join("\t"));
     }
-  };
-  walk(container);
+  }
   return lines.filter(Boolean).join("\n");
 }
 
-/** The text of an equation, as its runs spell it. */
-const mathText = (node: XmlElement) =>
-  descendants(node, "m:t")
-    .map((each) => each.children.filter((part) => typeof part === "string").join(""))
-    .join("");
+/** The text of an equation, as its runs spell it, without what a tracked change deleted. */
+function mathText(node: XmlElement): string {
+  let text = "";
+  for (const element of walk(node, (each) => each.name !== "w:del")) {
+    if (element.name === "m:t") {
+      text += element.children.filter((part) => typeof part === "string").join("");
+    }
+  }
+  return text;
+}
 
 /** Deleted text, which Word keeps in `w:delText`. */
 const deletedText = (node: XmlElement) =>
@@ -470,21 +479,16 @@ class Reader {
   private numberElements(root: XmlElement): void {
     const counts = new Map<string, number>();
     const paraIds = new Set<string>();
-    const walk = (node: XmlElement) => {
-      for (const element of node.children) {
-        if (typeof element === "string") continue;
-        const count = counts.get(element.name) ?? 0;
-        counts.set(element.name, count + 1);
-        this.ordinals.set(element, count);
-        if (element.name === "w:p") {
-          const paraId = element.attrs["w14:paraId"];
-          if (paraId && paraIds.has(paraId)) this.duplicateParaIds.add(paraId);
-          else if (paraId) paraIds.add(paraId);
-        }
-        walk(element);
+    for (const element of walk(root)) {
+      const count = counts.get(element.name) ?? 0;
+      counts.set(element.name, count + 1);
+      this.ordinals.set(element, count);
+      if (element.name === "w:p") {
+        const paraId = element.attrs["w14:paraId"];
+        if (paraId && paraIds.has(paraId)) this.duplicateParaIds.add(paraId);
+        else if (paraId) paraIds.add(paraId);
       }
-    };
-    walk(root);
+    }
   }
 
   private place(element: XmlElement): string {
@@ -951,7 +955,9 @@ class Reader {
     const author = element.attrs["w:author"]?.trim();
     const date = element.attrs["w:date"];
     return this.atom(kind, this.place(element), {
-      label: kind === "insertion" ? textIn(element) : deletedText(element),
+      // A move's old place keeps its text in w:t, a deletion in w:delText.
+      label:
+        kind === "deletion" && element.name === "w:del" ? deletedText(element) : textIn(element),
       info: { ...(author && { author }), ...(date && { date }) },
     });
   }
