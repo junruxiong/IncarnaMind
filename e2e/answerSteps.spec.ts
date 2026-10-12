@@ -24,10 +24,9 @@ import {
  * An Answer's steps in the assistant (#391): while it is written, one line
  * says the step it is on, each held a second; written, the line folds to what
  * it searched and how many sources it cites, and opens, by click, Enter or
- * Space, to a timeline of the reasoning, the Mind it was asked from, the
- * searches with their sources, the calls and the check, with Regenerate at
- * its end. An empty conversation says once where the next Question is asked
- * from and what it searches;
+ * Space, to a timeline of the reasoning, the Mind read (#544), the searches
+ * with their sources, the calls and the check, with Regenerate at its end. An
+ * empty conversation says once what the next Question reads and searches;
  * nothing sits under the header, and only Copy · Add to note under an Answer.
  * The scripted model reasons as a model that summarizes its reasoning does
  * (an Anthropic key, so it is kept). Set INCARNAMIND_SCREENSHOTS to a folder
@@ -172,7 +171,7 @@ const stepsOf = (timeline: Locator) =>
     .getByTestId("answer-step")
     .evaluateAll((rows) => rows.map((row) => row.getAttribute("data-step")));
 
-test("while an Answer is written, its line moves Searching → Writing → Checking, each up a second or more, with no reading step; written, it folds to what it searched and its sources", async () => {
+test("while an Answer is written, its line moves Reading → Searching → Writing → Checking, each up a second or more; written, it folds to what it searched and its sources", async () => {
   const { app, window } = await start();
   await core(window).mind("Lit review: tides");
   const shown = await watchLiveLine(window);
@@ -184,7 +183,7 @@ test("while an Answer is written, its line moves Searching → Writing → Check
   const steps = (await shown())
     .filter((each) => each.step !== "none")
     .filter((each, index, all) => each.step !== all[index - 1]?.step);
-  expect(steps.map((each) => each.step)).toEqual(["searching", "writing", "checking"]);
+  expect(steps.map((each) => each.step)).toEqual(["reading", "searching", "writing", "checking"]);
   // Each is up at least a second before the next replaces it; the last goes as the Answer ends.
   for (let index = 0; index + 1 < steps.length; index++) {
     const step = steps[index];
@@ -199,7 +198,7 @@ test("while an Answer is written, its line moves Searching → Writing → Check
   await app.close();
 });
 
-test("the folded line opens by click, Enter and Space, at once, to the reasoning, the Mind it was asked from, the search and its source, and the check; the source opens beside the Mind", async () => {
+test("the folded line opens by click, Enter and Space, at once, to the reasoning, the Mind read, the search and its source, and the check; the source opens beside the Mind", async () => {
   const { app, window } = await start();
   await core(window).mind("Moon notes");
   await core(window).mind("Lit review: tides");
@@ -212,14 +211,14 @@ test("the folded line opens by click, Enter and Space, at once, to the reasoning
   const timeline = answer.getByTestId("answer-timeline");
   await expect(timeline).toBeVisible();
   expect(await answer.evaluate((node) => node.getAnimations({ subtree: true }).length)).toBe(0);
-  expect(await stepsOf(timeline)).toEqual(["reasoning", "asked", "search", "check"]);
+  expect(await stepsOf(timeline)).toEqual(["reasoning", "read", "search", "check"]);
   const reasoning = timeline.locator('[data-step="reasoning"]');
   await expect(reasoning).toContainText(new RegExp(`^${MODEL} thought for \\d+s`));
   await expect(reasoning.getByTestId("answer-reasoning")).toContainText(
     "When do spring tides happen?",
   );
   await expect(reasoning.getByTestId("answer-reasoning-more")).toHaveCount(0);
-  await expect(timeline.locator('[data-step="asked"]')).toHaveText("Asked from Lit review: tides");
+  await expect(timeline.locator('[data-step="read"]')).toHaveText("Read Lit review: tides");
   const search = timeline.locator('[data-step="search"]');
   await expect(search).toContainText("Searched All Documents for “When do spring tides happen?”");
   await expect(search.getByTestId("answer-step-found")).toContainText(/passages? found, 1 used/);
@@ -253,13 +252,13 @@ test("the folded line opens by click, Enter and Space, at once, to the reasoning
     groups.first().getByTestId("mind-tab").filter({ hasText: "Lit review: tides" }),
   ).toHaveAttribute("aria-selected", "true");
 
-  // The Mind it was asked from: its row goes to that Mind's tab.
+  // Read goes to that Mind's tab.
   await pointAndClick(
     window,
     window.getByTestId("mind-list-item").filter({ hasText: "Moon notes" }),
   );
   await expect(window.getByTestId("mind-title")).toHaveValue("Moon notes");
-  await pointAndClick(window, timeline.getByTestId("answer-step-asked"));
+  await pointAndClick(window, timeline.getByTestId("answer-step-read"));
   await expect(window.getByTestId("mind-title")).toHaveValue("Lit review: tides");
   await app.close();
 });
@@ -279,7 +278,7 @@ test("in Chinese, the line and the timeline; after a restart the steps are still
   await expect(timeline.locator('[data-step="reasoning"]')).toContainText(
     new RegExp(`^${MODEL} 思考了 \\d+ 秒`),
   );
-  await expect(timeline.locator('[data-step="asked"]')).toHaveText("从“Lit review: tides”提问");
+  await expect(timeline.locator('[data-step="read"]')).toHaveText("读了“Lit review: tides”");
   await expect(timeline.locator('[data-step="search"]')).toContainText(
     "在全部文档中搜索“When do spring tides happen?”",
   );
@@ -302,34 +301,34 @@ test("in Chinese, the line and the timeline; after a restart the steps are still
   await expect(line).toHaveText("已搜索全部文档 · 1 个来源");
   await expect(line).toHaveAttribute("aria-expanded", "false");
   timeline = await openSteps(window, answer);
-  expect(await stepsOf(timeline)).toEqual(["reasoning", "asked", "search", "check"]);
+  expect(await stepsOf(timeline)).toEqual(["reasoning", "read", "search", "check"]);
   await expect(timeline.getByTestId("answer-reasoning")).toHaveText(summary ?? "");
   await second.app.close();
 });
 
-test("an empty conversation says once where the Question is asked from and what it searches, following focus; nothing under the header, and only Copy · Add to note under an Answer", async () => {
+test("an empty conversation says once what it reads and searches, following focus; nothing under the header, and only Copy · Add to note under an Answer", async () => {
   const { app, window } = await start();
   const thread = window.getByTestId("assistant-thread");
   await core(window).mind("Alpha");
-  const askedFrom = window.getByTestId("assistant-asked-from");
-  await expect(askedFrom).toHaveText("Asked from “Alpha” · searches All Documents");
+  const reads = window.getByTestId("assistant-reads");
+  await expect(reads).toHaveText("Reads “Alpha” · searches All Documents");
   // In the conversation, above its words: the header has nothing under it.
-  await expect(thread.getByTestId("assistant-asked-from")).toBeVisible();
+  await expect(thread.getByTestId("assistant-reads")).toBeVisible();
   const header = await window.getByTestId("assistant-header").boundingBox();
   const threadBox = await thread.boundingBox();
   expect((threadBox?.y ?? 0) - ((header?.y ?? 0) + (header?.height ?? 0))).toBeLessThan(2);
-  await expect(askedFrom).toHaveCSS("font-size", "14px");
+  await expect(reads).toHaveCSS("font-size", "14px");
   await expect(window.getByTestId("assistant-empty")).toHaveCSS("font-size", "14px");
   await core(window).mind("Beta");
-  await expect(askedFrom).toHaveText("Asked from “Beta” · searches All Documents");
+  await expect(reads).toHaveText("Reads “Beta” · searches All Documents");
   await pointAndClick(window, window.getByTestId("open-library"));
-  await expect(askedFrom).toHaveText("Searches All Documents");
+  await expect(reads).toHaveText("Searches All Documents");
   await screenshot(window, "steps-empty-en");
 
   // Asked: the line goes; under the Answer, only Copy · Add to note.
   await pointAndClick(window, window.getByTestId("mind-list-item").filter({ hasText: "Beta" }));
   const answer = await ask(window, "When do spring tides happen?");
-  await expect(askedFrom).toHaveCount(0);
+  await expect(reads).toHaveCount(0);
   await window.mouse.move(10, 10);
   const actions = answer.getByTestId("answer-actions");
   await expect(actions).toHaveText("CopyAdd to note");
@@ -453,7 +452,7 @@ test("a Connector call waiting for approval: the line says so, its card waits ou
   await pointAndClick(window, consent.getByTestId("consent-allow"));
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   const timeline = await openSteps(window, answer);
-  expect(await stepsOf(timeline)).toEqual(["answered", "asked", "call"]);
+  expect(await stepsOf(timeline)).toEqual(["answered", "read", "call"]);
   await expect(timeline.getByTestId("answer-connector-call")).toHaveAttribute(
     "data-approval",
     "allowed",

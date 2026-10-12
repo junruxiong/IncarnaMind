@@ -21,6 +21,10 @@
  * script's card also keeps how the run ended and what it wrote. Stopping the
  * Answer stops a running script.
  *
+ * A Question in a conversation reads the Mind it was asked from (#544), as
+ * it is when the Answer is written, where the User was in it first (./context,
+ * `readMind`); the Answer records which Mind it read, and its version.
+ *
  * Third-party text (CONTEXT.md, #78): an Answer whose Question context holds
  * text someone else wrote (Blocks, or earlier Answers, with a third-party
  * origin), or whose Run reads a saved web page, asks before a call that writes
@@ -64,6 +68,7 @@ import {
   type ExternalService,
   type MarkedCitation,
   MIND_CONTENT_FIELD,
+  type MindFocus,
   type ProviderError,
   QUESTION_BLOCK,
   type QuoteRetry,
@@ -75,7 +80,7 @@ import {
   type ToolCallApproval,
 } from "../api";
 import type { CallToDecide, ToolCallToApprove } from "../approvals";
-import type { AnswerWrite, QuestionInput, Turn } from "../conversations";
+import type { AnswerRead, AnswerWrite, QuestionInput, Turn } from "../conversations";
 import type { WindowedPassage } from "../documents/search";
 import { ChatNotReadyError, InvalidInputError, isRecord, NotFoundError } from "../errors";
 import type { createEventHub } from "../events";
@@ -121,8 +126,12 @@ import {
 import {
   conversationContext,
   conversationContextOf,
+  type MindReading,
+  type MindSection,
   type QuestionContext,
   questionContextOf,
+  type RequestMind,
+  readMind,
 } from "./context";
 import type { AnswerEngine, AnswerTools, DocumentLanguage, GatedCall } from "./engine";
 import { markdownToBlocks } from "./markdown";
@@ -181,18 +190,35 @@ interface WrittenAnswer {
   support: CitationSupport | null;
   /** Where the third-party text its Run had read came from (#78); null: none. */
   textOrigin: ThirdPartySource | null;
+  /** The Mind it read, for an Answer in a conversation (#544); null: none. */
+  read: AnswerRead | null;
   /** How it was reached: what an Answer in a conversation shows above its text (#391). */
   steps: AnswerSteps;
 }
 
+/** The Mind a Question in a conversation reads, as read when it was asked (or its Answer regenerated). */
+interface MindToRead {
+  mindId: string;
+  reading: MindReading;
+  /** What of it the Question context holds. */
+  section: MindSection;
+}
+
 /** What Answers need of the assistant's conversations (see ../conversations). */
 export interface AnswerConversations {
-  /** Adds a Question, and its conversation with its first one, and its Answer, being written. */
-  add(input: QuestionInput, answerModel: ChatModelChoice | null): Turn;
+  /**
+   * Adds a Question, and its conversation with its first one, and its Answer, being
+   * written, which reads `read`.
+   */
+  add(input: QuestionInput, answerModel: ChatModelChoice | null, read: AnswerRead | null): Turn;
   /** The Question of an Answer, to write the Answer again. */
   questionOf(input: unknown): { answerId: string; question: ConversationQuestion };
-  /** Empties an Answer, where it is, to write it again. */
-  restartAnswer(answerId: string, answerModel: ChatModelChoice | null): Turn;
+  /** Empties an Answer, where it is, to write it again, reading `read`. */
+  restartAnswer(
+    answerId: string,
+    answerModel: ChatModelChoice | null,
+    read: AnswerRead | null,
+  ): Turn;
   /** Writes an Answer as it stands; false when it is gone: its conversation was deleted. */
   writeAnswer(answerId: string, write: AnswerWrite): boolean;
 }
@@ -228,6 +254,11 @@ export interface AnswersOptions {
   /** Throws `NotFoundError` unless the Mind exists; returns its id. */
   requireMind(mindId: unknown): string;
   mindExists(mindId: string): boolean;
+  /**
+   * The name of a Mind a Question in a conversation can read: one that isn't
+   * deleted, of a kind this version knows; null for any other.
+   */
+  readableMindName(mindId: string): string | null;
   providerExists(providerId: string): boolean;
   /** Whether Questions can be asked with this model (the default one when undefined). */
   readiness(choice: ChatModelChoice | undefined): Promise<ChatReadiness>;
@@ -482,8 +513,13 @@ export function createAnswers(options: AnswersOptions) {
     forcedSkill: string | null;
     /** The User has yet to allow the chat flow to the model's service: they are asked first. */
     consentNeeded: boolean;
-    /** Where the third-party text in its Question context came from (#78); empty: none. */
-    contextOrigins: readonly ThirdPartySource[];
+    /** Why its Question context counts as third-party text (#78), from where it came; empty: none. */
+    contextReasons: readonly ThirdPartyReason[];
+    /**
+     * The Mind a Question in a conversation reads (#544): what the Answer records of it,
+     * and what its request holds of it. Absent: none.
+     */
+    mind?: { read: AnswerRead | null; request: RequestMind } | null;
     /**
      * An Answer for an outside agent (#351): no window hears of it (it is in
      * no Mind or conversation), and it uses the Documents and Skills only: no
@@ -505,10 +541,7 @@ export function createAnswers(options: AnswersOptions) {
      * Question context holds some. The Run adds what its Tools read (see the
      * gate's `thirdParty`).
      */
-    const contextReasons: ThirdPartyReason[] = input.contextOrigins.map((source) => ({
-      via: "context",
-      source,
-    }));
+    const contextReasons: ThirdPartyReason[] = [...input.contextReasons];
     /**
      * Where the third-party text the Run had read came from: what its Question
      * context holds, else what it read first. Kept with the Answer, so a later
@@ -517,7 +550,9 @@ export function createAnswers(options: AnswersOptions) {
      */
     let textOrigin: ThirdPartySource | null = input.emptyScope
       ? null
-      : (input.contextOrigins[0] ?? null);
+      : (contextReasons[0]?.source ?? null);
+    /** What the Answer records of the Mind it read: less once the model's window cut it. */
+    let read = input.mind?.read ?? null;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let finished = false;
     let support: CitationSupport | null = null;
@@ -599,6 +634,7 @@ export function createAnswers(options: AnswersOptions) {
             toolCalls,
             support,
             textOrigin,
+            read,
             steps: steps(),
           },
           outcome,
@@ -1070,6 +1106,7 @@ export function createAnswers(options: AnswersOptions) {
             .filter(Boolean)
             .join("\n\n"),
         messages: context.messages,
+        ...(input.mind && { mind: input.mind.request }),
         question: context.question,
         model: prepared.model,
         documents,
@@ -1100,6 +1137,10 @@ export function createAnswers(options: AnswersOptions) {
             break;
           case "markers-placed":
             placedMarkers += event.count;
+            break;
+          case "mind-cut":
+            if (read) read = event.kept === "none" ? null : { ...read, partial: true };
+            writeSoon();
             break;
           case "quotes-retried":
             quoteRetry = event.retry;
@@ -1294,6 +1335,7 @@ export function createAnswers(options: AnswersOptions) {
         toolCalls: answer.toolCalls,
         support: answer.support,
         textOrigin: answer.textOrigin,
+        read: answer.read,
         steps: answer.steps,
         ...(outcome && {
           outcome: {
@@ -1329,24 +1371,57 @@ export function createAnswers(options: AnswersOptions) {
   }
 
   /**
+   * The Mind a Question in a conversation reads (#544): the one it was asked from, as it
+   * is now, where the User was in it first; null when there is none it can read.
+   */
+  function mindToRead(mindId: string | null, focus: MindFocus | null): MindToRead | null {
+    if (mindId === null) return null;
+    const name = options.readableMindName(mindId);
+    if (name === null) return null;
+    const reading = content.peek(mindId, (blocks) => readMind(blocks, name, focus));
+    return { mindId, reading, section: reading.section() };
+  }
+
+  /** What an Answer records of the Mind it reads; null when none of it fits. */
+  const readOf = (mind: MindToRead | null): AnswerRead | null =>
+    mind?.section.text
+      ? { mindId: mind.mindId, version: mind.reading.version, partial: mind.section.partial }
+      : null;
+
+  /**
    * Writes the Answer of a Question in a conversation, added or emptied in `turn`, from
-   * the messages before it and its Search scope as it is now.
+   * the messages before it, the Mind it reads and its Search scope as it is now.
    */
   function startInConversation(
     turn: Turn,
     ready: { model: ChatModelChoice; consentNeeded: boolean },
     documentIds: string[] | null,
     emptyScope: boolean,
+    mind: MindToRead | null,
   ): ConversationAskResult {
     const { conversation, question, answer } = turn;
-    const { context, origins } = conversationContextOf(turn.earlier, question.text);
+    const { context, origins } = conversationContextOf(turn.earlier, question.text, {
+      mind: mind?.section.text,
+    });
     start({
       home: conversationHome(conversation.id, answer.id),
       answerId: answer.id,
       questionId: question.id,
       model: ready.model,
       context,
-      contextOrigins: origins,
+      contextReasons: [
+        ...(mind?.section.origins ?? []).map((source) => ({ via: "mind" as const, source })),
+        ...origins.map((source) => ({ via: "context" as const, source })),
+      ],
+      ...(mind && {
+        mind: {
+          read: readOf(mind),
+          request: {
+            text: mind.section.text,
+            cut: (tokens: number) => mind.reading.section(tokens).text,
+          },
+        },
+      }),
       documentIds,
       emptyScope,
       forcedSkill: question.forcedSkill,
@@ -1396,7 +1471,7 @@ export function createAnswers(options: AnswersOptions) {
     /** What the Answer is written from: its Question context and Search scope, as they are now. */
     type Asked = {
       context: QuestionContext;
-      contextOrigins: ThirdPartySource[];
+      contextReasons: ThirdPartyReason[];
       documentIds: string[] | null;
       emptyScope: boolean;
     };
@@ -1406,7 +1481,10 @@ export function createAnswers(options: AnswersOptions) {
         const question = findBlock(blocks, QUESTION_BLOCK, questionId);
         if (!question) throw new NotFoundError("That Question isn't in this Mind.");
         const { context, origins } = questionContextOf(blocks, question.index);
-        const asked = { ...askedWith(context, question.element), contextOrigins: origins };
+        const asked = {
+          ...askedWith(context, question.element),
+          contextReasons: origins.map((source) => ({ via: "context" as const, source })),
+        };
         const attributes: Partial<AnswerAttributes> = {
           questionId,
           // No model writes an Answer that says the Search scope is empty.
@@ -1498,11 +1576,16 @@ export function createAnswers(options: AnswersOptions) {
     async askInConversation(question: QuestionInput): Promise<ConversationAskResult> {
       const ready = await readyModel(question.model, question.forcedSkill);
       if ("asked" in ready) return ready;
-      // From here on nothing awaits, so the conversation can't change underneath.
+      // From here on nothing awaits, so the conversation and the Mind can't change underneath.
       const { documentIds, emptyScope } = scopeNow(question.scope);
-      // No model writes an Answer that says the Search scope is empty.
-      const turn = options.conversations.add(question, emptyScope ? null : ready.model);
-      return startInConversation(turn, ready, documentIds, emptyScope);
+      // No model writes an Answer that says the Search scope is empty, and it reads nothing.
+      const mind = emptyScope ? null : mindToRead(question.mind?.id ?? null, question.focus);
+      const turn = options.conversations.add(
+        question,
+        emptyScope ? null : ready.model,
+        readOf(mind),
+      );
+      return startInConversation(turn, ready, documentIds, emptyScope, mind);
     },
 
     /** Writes an Answer of a conversation again, in place (see `CoreApi.regenerateConversationAnswer`). */
@@ -1512,8 +1595,15 @@ export function createAnswers(options: AnswersOptions) {
       if ("asked" in ready) return ready;
       active.get(answerId)?.finish({ status: "stopped" });
       const { documentIds, emptyScope } = scopeNow(question.scope);
-      const turn = options.conversations.restartAnswer(answerId, emptyScope ? null : ready.model);
-      return startInConversation(turn, ready, documentIds, emptyScope);
+      const from = question.askedFrom;
+      const mind =
+        emptyScope || !from || from.deleted ? null : mindToRead(from.mindId, question.focus);
+      const turn = options.conversations.restartAnswer(
+        answerId,
+        emptyScope ? null : ready.model,
+        readOf(mind),
+      );
+      return startInConversation(turn, ready, documentIds, emptyScope, mind);
     },
 
     /** Stops an Answer of a conversation being written, keeping what it has. */
@@ -1573,7 +1663,7 @@ export function createAnswers(options: AnswersOptions) {
           model,
           context: conversationContext([], question),
           // The agent's Question is untrusted too, but nothing here can write or send (ADR-0013).
-          contextOrigins: [],
+          contextReasons: [],
           documentIds,
           emptyScope: options.documents.searchableCount(documentIds) === 0,
           forcedSkill: null,

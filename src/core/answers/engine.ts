@@ -90,7 +90,7 @@ import type {
 } from "../runs/engine";
 import { DOCUMENT_TOOLS, offeredTools, type Tool, type ToolProviderInfo } from "../tools";
 import { asksForFixes } from "./citations";
-import { earlierContext } from "./context";
+import { earlierContext, type RequestMind } from "./context";
 import { missingMarkerEvents, textEdits } from "./markerPlacement";
 import {
   SEARCH_QUERY_INSTRUCTIONS,
@@ -260,6 +260,11 @@ export interface AnswerRequest {
   /** The Question context, oldest first; the last message is the User's and ends with the Question. */
   messages: AnswerMessage[];
   /**
+   * The Mind read with a Question in the assistant (#544), right before the
+   * Question in its message: within a window, it is cut by its own rules.
+   */
+  mind?: RequestMind;
+  /**
    * The Question's own text: what a model that can't call Tools searches for,
    * once it has rewritten it into a query that stands on its own.
    */
@@ -328,6 +333,8 @@ export type AnswerEngineEvent =
   | { type: "phase"; phase: Extract<AnswerPhase, "searching" | "writing" | "checking-quotes"> }
   /** The engine put in `count` Citation markers the model left out of its text (see ./markerPlacement). */
   | { type: "markers-placed"; count: number }
+  /** The model's window holds only part of the Mind read with the Question, or none of it. */
+  | { type: "mind-cut"; kept: "part" | "none" }
   /** The model was asked once more for exact quotes (see ./quoteRetry), and what that gave. */
   | { type: "quotes-retried"; retry: QuoteRetry }
   /**
@@ -803,11 +810,13 @@ function createWritingEngine(options: AiSdkAnswerEngineOptions): AnswerEngine {
             instructions,
             messages: request.messages,
             question: request.question,
+            mind: request.mind,
           });
           if (!fit.ok) {
             yield { type: "failed", error: fit.error };
             return;
           }
+          if (fit.mindCut) yield { type: "mind-cut", kept: fit.mindCut };
           const sized = { ...request, messages: fit.messages };
           const window: Sized = {
             estimated: fit.estimated,
@@ -1195,11 +1204,13 @@ async function* toolLoop(
       question: request.question,
       tools: definitions(tools),
       reserve: SEARCH_RESERVE_TOKENS,
+      mind: request.mind,
     });
     if (!fit.ok) {
       yield { type: "failed", error: fit.error };
       return;
     }
+    if (fit.mindCut) yield { type: "mind-cut", kept: fit.mindCut };
     ({ messages, estimated } = fit);
     const account = budget.loop(fit.estimated);
     loop = account;

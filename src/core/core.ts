@@ -836,6 +836,11 @@ export function createCore(adapters: CoreAdapters): Core {
         return false;
       }
     },
+    readableMindName: (mindId) => {
+      const found = minds.locate(mindId);
+      if (!found || found.deletedAt !== null) return null;
+      return isKnownKind(minds.get(mindId).kind) ? found.name : null;
+    },
     providerExists: (providerId) => chat.exists(providerId),
     readiness: (choice) => chat.readiness(choice),
     prepareModel: (choice) => chat.prepareModel(choice),
@@ -871,16 +876,16 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     // Every window hears of each message as it is added or written.
     conversations: {
-      add: (input, answerModel) => {
-        const turn = conversations.add(input, answerModel);
+      add: (input, answerModel, read) => {
+        const turn = conversations.add(input, answerModel, read);
         events.emit("conversation.message", turn.question);
         events.emit("conversation.message", turn.answer);
         conversationsChanged();
         return turn;
       },
       questionOf: (input) => conversations.questionOf(input),
-      restartAnswer: (answerId, answerModel) => {
-        const turn = conversations.restartAnswer(answerId, answerModel);
+      restartAnswer: (answerId, answerModel, read) => {
+        const turn = conversations.restartAnswer(answerId, answerModel, read);
         events.emit("conversation.message", turn.answer);
         return turn;
       },
