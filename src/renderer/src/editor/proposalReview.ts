@@ -1,5 +1,5 @@
 import { type Editor, Extension } from "@tiptap/core";
-import type { MarkType, Node as ProseMirrorNode } from "@tiptap/pm/model";
+import { Fragment, type MarkType, type Node as ProseMirrorNode, Slice } from "@tiptap/pm/model";
 import {
   type EditorState,
   Plugin,
@@ -12,15 +12,22 @@ import { ySyncPluginKey, yUndoPluginKey } from "@tiptap/y-tiptap";
 import type * as Y from "yjs";
 import {
   CITATION_NODE,
+  type CitationAttributes,
+  type KeptCitationText,
   PROPOSAL_ATTRIBUTE,
   PROPOSAL_DELETE_MARK,
   PROPOSAL_INSERT_MARK,
 } from "../../../core/api";
+import { citationState } from "../../../shared/citations";
+import { type MessageKey, type MessageParams, translate } from "../../../shared/i18n";
 import {
+  INLINE_NODES,
+  NODE_CHARACTER,
   type ResolvedProposal,
   readProposalAttribute,
   readProposalRef,
   resolveProposals,
+  targetHash,
 } from "../../../shared/proposals";
 
 /** A Proposal waiting in the Mind, as the editor shows it. */
@@ -42,6 +49,16 @@ export interface PendingProposal {
   block: "insert" | "delete" | null;
   /** Citations it removes and doesn't add back. */
   droppedCitations: number;
+  /** The Citations it adds, to tell whether a Document they cite is gone. */
+  citations: Partial<CitationAttributes>[];
+  /**
+   * The text it changes isn't what it was made for any more
+   * (`outOfDateProposals` in src/shared/proposals.ts, read here from the
+   * editor's own document): it can't be accepted, only rejected or made again.
+   */
+  outOfDate: boolean;
+  /** Where the Block holding its last part ends: its "Out of date" line goes there. */
+  blockEnd: number;
 }
 
 interface ReviewState {
@@ -57,23 +74,41 @@ type Meta = { hovered: string | null } | { target: { from: number; to: number } 
 
 export const proposalReviewKey = new PluginKey<ReviewState>("proposalReview");
 
-/** The text of an inline node, as the editor reads it in a selection. */
-const NODE_CHARACTER = "￼";
-
 /** The key that tells one Citation from another, to know whether a Proposal adds it back. */
 const citationKey = (node: ProseMirrorNode) =>
   `${String(node.attrs.documentId)}\u0000${String(node.attrs.quote)}`;
 
+/** A node's text as a Proposal's target reads it (`targetText` in src/shared/proposals.ts). */
+function targetTextOf(node: ProseMirrorNode): string {
+  if (node.isText) return node.text ?? "";
+  if (INLINE_NODES.has(node.type.name)) return NODE_CHARACTER;
+  let text = "";
+  node.forEach((child) => {
+    text += targetTextOf(child);
+  });
+  return text;
+}
+
+/** The end of the Block a position is in: the textblock around it, or the Block that ends there. */
+function blockEndAt(doc: ProseMirrorNode, pos: number): number {
+  const $pos = doc.resolve(Math.min(pos, doc.content.size));
+  return $pos.parent.isTextblock ? $pos.after() : pos;
+}
+
 /**
  * Every Proposal in the document, in the order they start. A Citation a
  * Proposal removes and doesn't add back counts as dropped; one the same
- * request adds elsewhere (moved) doesn't.
+ * request adds elsewhere (moved) doesn't. One is out of date as the core
+ * reads it: the words or Block it removes aren't what it recorded, or aren't
+ * in one piece any more.
  */
 export function proposalsIn(doc: ProseMirrorNode): PendingProposal[] {
   const found = new Map<string, PendingProposal>();
   const removedCitations = new Map<string, string[]>();
   const addedCitations = new Map<string, Set<string>>();
-  const entry = (ref: { id: string; request: string }) => {
+  /** Per Proposal: the text it records, the text it removes now, and where each removed part is. */
+  const targets = new Map<string, { target: string | null; text: string; parts: number[][] }>();
+  const entry = (ref: { id: string; request: string; target?: string }) => {
     let proposal = found.get(ref.id);
     if (!proposal) {
       proposal = {
@@ -86,10 +121,23 @@ export function proposalsIn(doc: ProseMirrorNode): PendingProposal[] {
         added: "",
         block: null,
         droppedCitations: 0,
+        citations: [],
+        outOfDate: false,
+        blockEnd: 0,
       };
       found.set(ref.id, proposal);
+      targets.set(ref.id, { target: null, text: "", parts: [] });
     }
+    const target = targets.get(ref.id);
+    if (target && target.target === null && ref.target !== undefined) target.target = ref.target;
     return proposal;
+  };
+  /** A part of what it removes, in the order met. */
+  const removes = (id: string, text: string, from: number, to: number) => {
+    const target = targets.get(id);
+    if (!target) return;
+    target.text += text;
+    target.parts.push([from, to]);
   };
   const extend = (
     proposal: PendingProposal,
@@ -119,6 +167,7 @@ export function proposalsIn(doc: ProseMirrorNode): PendingProposal[] {
         const set = addedCitations.get(request) ?? new Set<string>();
         set.add(citationKey(citation));
         addedCitations.set(request, set);
+        found.get(id)?.citations.push(citation.attrs as Partial<CitationAttributes>);
       }
     };
     each(node);
@@ -137,7 +186,11 @@ export function proposalsIn(doc: ProseMirrorNode): PendingProposal[] {
         ? NODE_CHARACTER
         : node.textBetween(0, node.content.size, "\n", NODE_CHARACTER);
       if (attribute.kind === "insert") proposal.added += text;
-      else proposal.removed += text;
+      else {
+        proposal.removed += text;
+        removes(attribute.id, targetTextOf(node), pos, pos + node.nodeSize);
+      }
+      proposal.blockEnd = node.isBlock ? pos + node.nodeSize : blockEndAt(doc, pos);
       if (node.isBlock) proposal.block = attribute.kind;
       noteCitations(node, attribute.request, attribute.kind, attribute.id);
       // A whole Block's words are its own: nothing inside it is another Proposal.
@@ -151,11 +204,22 @@ export function proposalsIn(doc: ProseMirrorNode): PendingProposal[] {
       if (!ref) continue;
       const proposal = entry(ref);
       extend(proposal, pos, pos + node.nodeSize);
+      proposal.blockEnd = blockEndAt(doc, pos);
       if (name === PROPOSAL_INSERT_MARK) proposal.added += node.text ?? "";
-      else proposal.removed += node.text ?? "";
+      else {
+        proposal.removed += node.text ?? "";
+        removes(ref.id, node.text ?? "", pos, pos + node.nodeSize);
+      }
     }
     return false;
   });
+
+  for (const [id, { target, text, parts }] of targets) {
+    if (target === null) continue;
+    const apart = parts.some((part, index) => index > 0 && part[0] !== parts[index - 1]?.[1]);
+    const proposal = found.get(id);
+    if (proposal) proposal.outOfDate = apart || targetHash(text) !== target;
+  }
 
   for (const proposal of found.values()) {
     const added = addedCitations.get(proposal.request);
@@ -181,6 +245,53 @@ export function proposalsAt(
         : range.from < selection.to && selection.from < range.to,
     ),
   );
+}
+
+/**
+ * How many of the Citations a change adds cite a Document deleted since: it
+ * says "Source removed" (the Citations stay, with the quote they keep). None
+ * while the Documents load (`documents` null).
+ */
+export function sourcesRemoved(
+  proposal: Pick<PendingProposal, "citations">,
+  documents: Parameters<typeof citationState>[1],
+  kept: readonly KeptCitationText[] = [],
+): number {
+  return proposal.citations.filter(
+    (citation) => citationState(citation, documents, kept).reason === "document-removed",
+  ).length;
+}
+
+/**
+ * A copied slice as the Mind reads it (#94): words and nodes a Proposal adds
+ * left out, those it removes kept as plain text, so a pending change pastes
+ * as the text it would replace.
+ */
+export function acceptedSlice(slice: Slice): Slice {
+  const added = (node: ProseMirrorNode | null) =>
+    !!node &&
+    (readProposalAttribute(node.attrs[PROPOSAL_ATTRIBUTE])?.kind === "insert" ||
+      node.marks.some((mark) => mark.type.name === PROPOSAL_INSERT_MARK));
+  const strip = (fragment: Fragment): Fragment => {
+    const kept: ProseMirrorNode[] = [];
+    fragment.forEach((node) => {
+      if (added(node)) return;
+      if (node.isText) {
+        kept.push(node.mark(node.marks.filter((mark) => mark.type.name !== PROPOSAL_DELETE_MARK)));
+        return;
+      }
+      const attrs = readProposalAttribute(node.attrs[PROPOSAL_ATTRIBUTE])
+        ? { ...node.attrs, [PROPOSAL_ATTRIBUTE]: null }
+        : node.attrs;
+      kept.push(node.type.create(attrs, strip(node.content), node.marks));
+    });
+    return Fragment.from(kept);
+  };
+  const content = strip(slice.content);
+  // An open end that was left out leaves the next node at the edge: open it as far as it goes.
+  return added(slice.content.firstChild) || added(slice.content.lastChild)
+    ? Slice.maxOpen(content)
+    : new Slice(content, slice.openStart, slice.openEnd);
 }
 
 /** The Proposals waiting in the editor's Mind. */
@@ -233,26 +344,93 @@ function bringsProposals(tr: Transaction): boolean {
 /** A change that came from the Mind's document (the core, another window, Undo), not the User typing here. */
 const fromDocument = (tr: Transaction) => !!tr.getMeta(ySyncPluginKey)?.isChangeOrigin;
 
+/**
+ * The line under a change out of date (DESIGN.md, AI edits): "Out of date ·
+ * Regenerate · Reject", its only bar. Its buttons are handled where the Mind
+ * is known (`ProposalBars`), by `data-proposal-regenerate` and
+ * `data-proposal-reject`.
+ */
+function outOfDateLine(proposal: PendingProposal, index: number, count: number, t: Translate) {
+  return () => {
+    const line = document.createElement("div");
+    line.className = "proposal-stale-line";
+    line.contentEditable = "false";
+    line.dataset.testid = "change-out-of-date";
+    line.dataset.proposalId = proposal.id;
+    line.setAttribute("role", "group");
+    line.setAttribute("aria-label", t("proposal.outOfDate.label", { index, count }));
+    const label = document.createElement("span");
+    label.textContent = t("proposal.outOfDate");
+    label.title = t("proposal.outOfDate.why");
+    const dot = () => {
+      const each = document.createElement("span");
+      each.className = "proposal-dot";
+      each.setAttribute("aria-hidden", "true");
+      each.textContent = "·";
+      return each;
+    };
+    const regenerate = document.createElement("button");
+    regenerate.type = "button";
+    regenerate.className = "proposal-action";
+    regenerate.dataset.testid = "change-regenerate";
+    regenerate.dataset.proposalRegenerate = proposal.id;
+    regenerate.textContent = t("proposal.regenerate");
+    regenerate.setAttribute("aria-label", t("proposal.regenerate.label", { index }));
+    const reject = document.createElement("button");
+    reject.type = "button";
+    reject.className = "proposal-action";
+    reject.dataset.testid = "change-reject";
+    reject.dataset.proposalReject = proposal.id;
+    reject.textContent = t("proposal.reject");
+    reject.setAttribute("aria-label", t("proposal.reject.label", { index }));
+    line.append(label, dot(), regenerate, dot(), reject);
+    return line;
+  };
+}
+
+/** Interface strings, in the window's language (`ProposalReview`'s option). */
+type Translate = (key: MessageKey, params?: MessageParams) => string;
+
 function decorationsFor(
   doc: ProseMirrorNode,
   proposals: readonly PendingProposal[],
   current: string | null,
   target: { from: number; to: number } | null,
+  t: Translate,
 ): DecorationSet {
   const decorations: Decoration[] = [];
-  for (const proposal of proposals) {
+  for (const [index, proposal] of proposals.entries()) {
+    const stale = proposal.outOfDate ? " proposal-stale" : "";
     for (const range of proposal.ranges) {
       // A node a Proposal adds or removes is drawn like its words (node views draw no marks).
       if (range.node) {
         decorations.push(
           Decoration.node(range.from, range.to, {
-            class: `proposal-node proposal-node--${range.node}${proposal.id === current ? " proposal-current" : ""}`,
+            class: `proposal-node proposal-node--${range.node}${stale}${proposal.id === current ? " proposal-current" : ""}`,
             "data-proposal-id": proposal.id,
           }),
         );
-      } else if (proposal.id === current) {
-        decorations.push(Decoration.inline(range.from, range.to, { class: "proposal-current" }));
+      } else if (proposal.id === current || stale) {
+        decorations.push(
+          Decoration.inline(range.from, range.to, {
+            class: `${proposal.id === current ? "proposal-current" : ""}${stale}`.trim(),
+          }),
+        );
       }
+    }
+    if (proposal.outOfDate) {
+      decorations.push(
+        Decoration.widget(
+          proposal.blockEnd,
+          outOfDateLine(proposal, index + 1, proposals.length, t),
+          {
+            key: `stale-${proposal.id}-${index}-${proposals.length}`,
+            side: 1,
+            ignoreSelection: true,
+            stopEvent: () => true,
+          },
+        ),
+      );
     }
   }
   if (target && target.from < target.to) {
@@ -276,10 +454,15 @@ function proposalMarks(state: EditorState): MarkType[] {
  * text Edit with AI is working on marked until its Proposals come back.
  * Words the User types into a Proposal are theirs: they carry no Proposal.
  */
-export const ProposalReview = Extension.create({
+export const ProposalReview = Extension.create<{ translate: Translate }>({
   name: "proposalReview",
 
+  addOptions() {
+    return { translate: (key, params) => translate("en", key, params) };
+  },
+
   addProseMirrorPlugins() {
+    const t: Translate = (key, params) => this.options.translate(key, params);
     return [
       new Plugin<ReviewState>({
         key: proposalReviewKey,
@@ -295,6 +478,7 @@ export const ProposalReview = Extension.create({
                 proposals,
                 proposalsAt(proposals, state.selection)[0]?.id ?? null,
                 null,
+                t,
               ),
             };
           },
@@ -327,7 +511,7 @@ export const ProposalReview = Extension.create({
               target,
               decorations: unchanged
                 ? value.decorations.map(tr.mapping, tr.doc)
-                : decorationsFor(state.doc, proposals, current, target),
+                : decorationsFor(state.doc, proposals, current, target, t),
             };
           },
         },
@@ -368,6 +552,10 @@ export const ProposalReview = Extension.create({
 
         props: {
           decorations: (state) => proposalReviewKey.getState(state)?.decorations ?? null,
+
+          // A pending change isn't the Mind's yet: it is copied as the text it would replace.
+          transformCopied: (slice, view) =>
+            pendingIn(view.state).length > 0 ? acceptedSlice(slice) : slice,
 
           handleDOMEvents: {
             mouseover(view, event) {
