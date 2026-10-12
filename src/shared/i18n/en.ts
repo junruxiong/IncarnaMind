@@ -2531,6 +2531,10 @@ export const en = {
   "agents.pairing.copySkill.hint":
     "Save it as SKILL.md in a folder named incarnamind, inside your agent’s skills folder, so it knows when to use IncarnaMind.",
   "agents.pairing.copied": "Copied",
+  "agents.pairing.copy": "Copy",
+  "agents.pairing.command": "Command",
+  "agents.pairing.args": "Arguments",
+  "agents.pairing.env": "Environment",
   "agents.activity.empty": "No calls yet.",
   "agents.activity.search": "Searched “{text}”",
   "agents.activity.read_passages": "Read Passages",
@@ -2574,7 +2578,7 @@ export const en = {
   "agents.done.command": "Copied. Paste it into a terminal and run it.",
   "agents.done.settings": "Copied. In {agent}, add it as a new server, then restart {agent}.",
   "agents.done.settings.other":
-    "Copied. Paste it where your agent adds a new server, then restart the agent. If it asks for a command, arguments and environment instead, they are in the settings you copied (Details for technical users).",
+    "Copied. Paste it where your agent adds a new server, then restart the agent. If it asks for a command, arguments and environment instead, Details for technical users shows each, ready to copy.",
   "agents.done.unreadable":
     "{agent}’s settings file couldn’t be read, so IncarnaMind left it alone. The settings are copied: paste them into {path}.",
   "agents.done.undo": "Undo",

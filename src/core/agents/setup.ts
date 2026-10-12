@@ -21,7 +21,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readdir, readFile, rm, rmdir, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { deflateRawSync } from "node:zlib";
-import { AGENT_TOKEN_ENV } from "../../shared/agentSocket";
+import { AGENT_TOKEN_ENV, HIDDEN_KEY } from "../../shared/agentSocket";
 import { translate } from "../../shared/i18n";
 import type { MessageKey, MessageParams } from "../../shared/i18n/types";
 import type {
@@ -41,7 +41,6 @@ import {
   clientDefinition,
   codexTable,
   cursorLink,
-  HIDDEN_KEY,
   hideToken,
   isInstalled,
   mcpServersSnippet,

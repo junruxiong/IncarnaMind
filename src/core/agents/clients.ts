@@ -17,6 +17,7 @@
  * are the agents' own documented ones, cited beside each.
  */
 import { join } from "node:path";
+import { HIDDEN_KEY } from "../../shared/agentSocket";
 import type { AgentClientId, AgentLaunch, AgentSetupKind } from "../api";
 import { SKILL_NAME } from "./skill";
 
@@ -270,9 +271,6 @@ export function withMcpServersEntry(before: string | null, entry: object | null)
   else delete next[SERVER_KEY];
   return `${JSON.stringify({ ...settings, mcpServers: next }, null, 2)}\n`;
 }
-
-/** How a pairing's key shows wherever settings are shown rather than copied. */
-export const HIDDEN_KEY = "•••••••";
 
 /** A settings text with the pairing's key hidden. */
 export const hideToken = (text: string, token: string) =>
