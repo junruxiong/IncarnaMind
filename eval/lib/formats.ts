@@ -29,6 +29,7 @@ export const FORMATS = [
   { id: "spreadsheet", label: "Excel and CSV", kinds: ["xlsx", "csv"] },
   { id: "text", label: "Markdown and plain text", kinds: ["markdown", "text"] },
   { id: "pdf", label: "PDF", kinds: ["pdf"] },
+  { id: "transcript", label: "Transcript", kinds: ["transcript"] },
 ] as const satisfies readonly { id: string; label: string; kinds: readonly DocumentKind[] }[];
 
 export type FormatId = (typeof FORMATS)[number]["id"];

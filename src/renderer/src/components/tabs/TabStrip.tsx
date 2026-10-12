@@ -8,7 +8,8 @@ import {
 } from "react";
 import type { LayoutGroup, LayoutTab } from "../../../../core/api";
 import { shortcutLabel } from "../../commands/keymap";
-import { exportMind, FORMAT_LABELS, useExports } from "../../exports";
+import { commands } from "../../commands/registry";
+import { FORMAT_LABELS, useExports } from "../../exports";
 import { useT } from "../../i18n";
 import { focusedGroupOf, groupOfTab } from "../../layoutSlice";
 import { useAppStore } from "../../store";
@@ -19,9 +20,9 @@ import {
   PlusLineIcon,
   SplitLineIcon,
 } from "../lineIcons";
+import { ObjectMenu, useObjectMenu } from "../ObjectMenu";
 import { SidebarToggle } from "../SidebarToggle";
-import { openRowMenu } from "../sidebarRows";
-import { GroupMenu, StripButton, TabMenu } from "./TabMenus";
+import { GroupMenu, StripButton } from "./TabMenus";
 import { focusTab, splitToTheRight } from "./tabActions";
 import { MeetingTabTime, TabIcon, useTabTitle } from "./tabItems";
 import type { TabDrag } from "./useTabDrag";
@@ -173,7 +174,11 @@ function ExportButton({ mindId }: { mindId: string }) {
       aria-label={label}
       aria-busy={saving || undefined}
       title={label}
-      onClick={() => void exportMind(mindId)}
+      onClick={() =>
+        commands
+          .run("mind.export", { focus: { kind: "mind", id: mindId }, surface: "mind" })
+          .catch(useAppStore.getState().reportError)
+      }
       className="tab-export"
     >
       <ExportLineIcon />
@@ -208,6 +213,7 @@ function Tab({ tab, groupId, selected, focusedGroup, divider, dragged, drag }: T
   const renaming = useAppStore((state) => state.renamingTabId === tab.id);
   const { changeLayout, closeTab, renameTab } = useAppStore.getState();
   const isMind = tab.item.kind === "mind";
+  const objectMenu = useObjectMenu({ kind: "tab", id: tab.id });
 
   const show = () => {
     const { layout } = useAppStore.getState();
@@ -259,17 +265,14 @@ function Tab({ tab, groupId, selected, focusedGroup, divider, dragged, drag }: T
         if (tab.preview) void changeLayout({ type: "keep", tabId: tab.id });
         else rename();
       }}
-      onContextMenu={(event) => openRowMenu(event, "tab-menu")}
+      {...objectMenu.rowProps}
       onKeyDown={(event) => {
         if (fromInside(event)) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           if (tab.preview) void changeLayout({ type: "keep", tabId: tab.id });
           show();
-        } else if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
-          event.preventDefault();
-          event.currentTarget.querySelector<HTMLButtonElement>('[data-testid="tab-menu"]')?.click();
-        }
+        } else objectMenu.rowProps.onKeyDown(event);
       }}
       onMouseDown={(event) => {
         if (event.button === 1) event.preventDefault(); // no autoscroll
@@ -334,7 +337,12 @@ function Tab({ tab, groupId, selected, focusedGroup, divider, dragged, drag }: T
         )}
       </span>
       <span aria-hidden="true" data-side="right" className="tab-foot" />
-      <TabMenu tab={tab} title={title} />
+      <ObjectMenu
+        target={{ kind: "tab", id: tab.id }}
+        label={t("tabs.tabMenu", { title })}
+        className="tab-menu-anchor"
+        tabIndex={-1}
+      />
     </div>
   );
 }

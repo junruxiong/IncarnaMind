@@ -440,6 +440,74 @@ export interface AudioCapture {
   openSettings(source: AudioSource): Promise<void>;
 }
 
+/**
+ * A speech-to-text engine's downloaded files, as the core hands them to a
+ * `Transcriber` (#136). Engine-neutral: each engine names its own files.
+ */
+export interface TranscriptionModelFiles {
+  /** Which engine reads them: "qwen3-asr" (sherpa-onnx); a second engine comes with #137. */
+  engine: string;
+  /** The engine's files by what they are ("encoder", "decoder", "tokenizer"…), absolute paths. */
+  files: Readonly<Record<string, string>>;
+  /** Silero VAD, which finds where speech starts and ends: an absolute path. */
+  vad: string;
+  /** How many threads decoding may use. */
+  threads: number;
+}
+
+/**
+ * Speech a `Transcriber` found in a stream and decoded. While the speaker
+ * goes on, the speech so far is decoded again every few seconds (partial);
+ * once they pause, the whole of it is decoded once more (final).
+ */
+export interface SpeechSegment {
+  stream: string;
+  /** From 1 in its stream: a partial and the final text of the same speech share it. */
+  id: number;
+  /** Where it starts and ends, in ms of its stream's audio. */
+  startMs: number;
+  endMs: number;
+  text: string;
+  final: boolean;
+  /** How long decoding it took, in ms: what tells whether this computer keeps up. */
+  decodeMs: number;
+}
+
+/**
+ * Turns speech into text off the core's thread (#136): the desktop app runs
+ * the engine and Silero VAD in an Electron utility process
+ * (src/main/transcriber.ts); tests pass a fake. Audio comes as streams: a
+ * Meeting's live audio while it records, and stretches read back from its
+ * files to catch up. Each stream's audio is decoded in order, one stretch of
+ * speech at a time.
+ */
+export interface Transcriber {
+  /** Starts the engine with these files, if it isn't running them already. Rejects if it can't start. */
+  load(model: TranscriptionModelFiles): Promise<void>;
+  /** Audio for a stream, `MEETING_SAMPLE_RATE` mono, signed 16-bit, in order. */
+  push(stream: string, samples: Int16Array): void;
+  /**
+   * No more audio comes for the stream: the speech it ends with is decoded.
+   * Resolves once its last segment has been reported; rejects if the engine stops first.
+   */
+  finish(stream: string): Promise<void>;
+  /** Forgets a stream, and its audio not yet decoded. */
+  drop(stream: string): void;
+  /** Hears every segment, and how far each stream is done: all its audio up to `doneMs` has given its final text. */
+  listen(listener: TranscriberListener): void;
+  /** Stops the engine and frees its memory. Loading again starts it afresh. */
+  close(): void;
+}
+
+export interface TranscriberListener {
+  segment(segment: SpeechSegment): void;
+  progress(stream: string, doneMs: number): void;
+  /** A stretch of a stream couldn't be decoded: it has no text, and the stream goes on. */
+  failed(stream: string, message: string): void;
+  /** The engine stopped by itself (it crashed, or ran out of memory): its streams are gone. */
+  stopped(reason: string): void;
+}
+
 export interface CoreAdapters {
   paths: Paths;
   /** The OS's preferred languages, most preferred first, as BCP 47 tags such as "zh-Hans-CN". */
@@ -495,7 +563,7 @@ export interface CoreAdapters {
      */
     home?: string;
     applications?: readonly string[];
-    /** Opens an agent's install link (Cursor's, VS Code's) in its app. */
+    /** Opens an agent's install link (Cursor's) in its app. */
     openLink?(url: string): Promise<void>;
   };
   /** Runs the built-in embedding model (see `Embedder`). */
@@ -612,6 +680,17 @@ export interface CoreAdapters {
    * Meetings): Meetings can't start.
    */
   audioCapture?: AudioCapture;
+  /**
+   * Transcribes Meetings on this computer (see `Transcriber`). Absent (tests
+   * that aren't about transcripts): Meetings record without a Transcript.
+   */
+  transcriber?: Transcriber;
+  /**
+   * Where the speech-to-text model and Silero VAD are downloaded from.
+   * Defaults to the pinned Hugging Face revisions; tests give no files for a
+   * fake that needs none.
+   */
+  transcriptionModelSource?: { model: EmbeddingModelSource; vad: EmbeddingModelSource };
   /** Where the core logs what happens (see `Logger`). None by default. */
   log?: Logger;
 }

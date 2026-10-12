@@ -114,6 +114,12 @@ jobs:
               echo "::warning title=macOS build not notarized::The app is signed, but there are no notarization secrets, so Gatekeeper will still block it."
             fi
           fi
+          # npm installed only this runner's speech package (sherpa-onnx-node's, #136): the x64
+          # app needs the x64 one beside it; each app keeps its own (electron-builder.yml).
+          version="$(node -p 'require("sherpa-onnx-node/package.json").version')"
+          npm pack "sherpa-onnx-darwin-x64@$version" --pack-destination "$RUNNER_TEMP"
+          mkdir -p node_modules/sherpa-onnx-darwin-x64
+          tar -xzf "$RUNNER_TEMP/sherpa-onnx-darwin-x64-$version.tgz" -C node_modules/sherpa-onnx-darwin-x64 --strip-components 1
           # $signing is unquoted on purpose: it holds zero or two arguments.
           npx electron-builder --mac --arm64 --x64 --publish always $signing
 

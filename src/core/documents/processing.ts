@@ -61,6 +61,7 @@ export const CURRENT_SINCE: Readonly<Record<DocumentKind, number>> = {
   xlsx: 5,
   csv: 5,
   web: 7,
+  transcript: 7,
 };
 
 /**

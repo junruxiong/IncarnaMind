@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useState } from "react";
 import type { LayoutGroup, TabItem } from "../../../../core/api";
-import { useExportOptions } from "../../exports";
+import { useExportDialog } from "../../exportDialog";
 import { useT } from "../../i18n";
 import { activeTabOf, focusedGroupOf } from "../../layoutSlice";
 import { useAppStore } from "../../store";
@@ -31,8 +31,8 @@ export function TabGroups() {
   const width = useWidth(container);
   /** Widths while a divider is dragged, before the core has them. */
   const [dragging, setDragging] = useState<number[] | null>(null);
-  /** The Mind whose Export options sheet is open. */
-  const exporting = useExportOptions((state) => state.mindId);
+  /** The Mind whose Export options sheet is open (⋯, ⌘K, or its References block's Export…). */
+  const exporting = useExportDialog((state) => state.mindId);
   const exportMind = useAppStore((state) => state.minds.find((mind) => mind.id === exporting));
 
   // A double-click on a divider makes the groups equal, as in VS Code.
@@ -88,7 +88,7 @@ export function TabGroups() {
         ))}
       </div>
       <DragFeedback dragged={drag.dragged} target={drag.target} />
-      <ExportDialog mind={exportMind ?? null} onClose={() => useExportOptions.getState().close()} />
+      <ExportDialog mind={exportMind ?? null} onClose={() => useExportDialog.getState().close()} />
     </>
   );
 }

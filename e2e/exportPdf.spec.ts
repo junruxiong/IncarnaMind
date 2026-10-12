@@ -143,16 +143,23 @@ async function savedPath(window: Page, name: string): Promise<string> {
   return (await done.getAttribute("title")) ?? "";
 }
 
-/** Export as PDF, from the group's ⋯ menu. */
-async function exportAsPdf(window: Page): Promise<void> {
-  await pointAndClick(window, window.getByTestId("group-menu"));
-  await pointAndClick(window, window.getByTestId("tab-menu-export-pdf"));
+/** The menu of the Mind's tab, opened by a right-click on the tab, as a person opens it. */
+async function tabMenu(window: Page): Promise<Locator> {
+  const tab = window.getByRole("tab", { selected: true }).first();
+  await pointAndClick(window, tab, { button: "right" });
+  const menu = tab.getByTestId("tab-actions");
+  await expect(menu).toBeVisible();
+  return menu;
 }
 
-/** Export options…, from the group's ⋯ menu; resolves once the sheet shows `title`. */
+/** Export as PDF, from the tab's menu, while Word is still the last format. */
+async function exportAsPdf(window: Page): Promise<void> {
+  await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.exportAs.pdf"));
+}
+
+/** Export options…, from the tab's menu; resolves once the sheet shows `title`. */
 async function openOptions(window: Page, title: string): Promise<void> {
-  await pointAndClick(window, window.getByTestId("group-menu"));
-  await pointAndClick(window, window.getByTestId("tab-menu-export-options"));
+  await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.exportOptions"));
   await expect(window.getByTestId("export-dialog").getByRole("heading")).toHaveText(title);
 }
 

@@ -3,6 +3,7 @@ import type { Document } from "../../../core/api";
 import { useT } from "../i18n";
 import { isShown } from "../layoutSlice";
 import { documentsByTag, NEEDS_REVIEW } from "../libraryFilters";
+import type { ObjectRef } from "../objects";
 import { useAppStore } from "../store";
 import { BrowseGroup } from "./BrowseGroup";
 import { ReviewRing, TagDot } from "./TagColour";
@@ -38,7 +39,13 @@ export function SidebarTags({
   // Folded at first: a Document with several Tags would be listed several times.
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
 
-  const group = (value: string, name: string, mark: ReactNode, title?: string) => (
+  const group = (
+    value: string,
+    name: string,
+    mark: ReactNode,
+    title?: string,
+    objectOf?: ObjectRef,
+  ) => (
     <BrowseGroup
       key={value}
       testId="sidebar-tag"
@@ -46,6 +53,7 @@ export function SidebarTags({
       icon={markBox(mark)}
       name={name}
       title={title}
+      object={objectOf}
       documents={byTag.get(value) ?? NONE}
       selected={tagFilter.includes(value)}
       selectedAs="pressed"
@@ -84,6 +92,7 @@ export function SidebarTags({
               tag.name,
               <TagDot colour={tag.colour} size="md" />,
               tag.description || tag.name,
+              { kind: "tag", id: tag.id },
             ),
           )}
         </ul>

@@ -4,6 +4,7 @@ import { files } from "../core";
 import { useAppStore } from "../store";
 import { keysLabel, keysOn, pressed } from "./keys";
 import {
+  type Command,
   type CommandContext,
   commands,
   isEnabled,
@@ -103,4 +104,10 @@ export function shortcutLabel(id: CommandId): string {
   const shortcut = commands.get(id)?.shortcut;
   if (!shortcut) throw new Error(`The command ${id} has no shortcut.`);
   return keysLabel(keysOn(shortcut.keys, isMac), isMac);
+}
+
+/** The keys a menu shows beside a command: its shortcut, or the keys its row takes, as this system writes them. */
+export function menuKeysLabel(command: Command): string | null {
+  const keys = command.shortcut?.keys ?? command.rowKeys;
+  return keys ? keysLabel(keysOn(keys, isMac), isMac) : null;
 }
