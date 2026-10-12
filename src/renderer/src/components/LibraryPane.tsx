@@ -43,9 +43,11 @@ import { sortOf, useSort } from "../sortChoices";
 import { documentFields } from "../sortFields";
 import { useSortMenu } from "../sortMenu";
 import { useAppStore } from "../store";
+import { useRename } from "../useRename";
 import { AddDocumentsMenu } from "./AddDocumentsMenu";
 import { CiteAsPanel } from "./CiteAsPanel";
 import { FindSourcesPanel } from "./FindSourcesPanel";
+import { InlineName } from "./InlineName";
 import { LibraryFilterBar } from "./LibraryFilterBar";
 import { LibraryMoreMenu } from "./LibraryMoreMenu";
 import { LibrarySelectBox, LibrarySelectionBar } from "./LibrarySelection";
@@ -222,6 +224,8 @@ function LibrarySheet() {
       ),
     );
   };
+  const renameFolder = useAppStore((state) => state.renameFolder);
+  const renameHeading = useRename<HTMLButtonElement>("library-heading");
   const heading = selected?.name ?? t(filter === "unsorted" ? "library.unsorted" : "library.all");
   const closeForm = () => {
     setEditing(null);
@@ -262,7 +266,25 @@ function LibrarySheet() {
               title={heading}
               className="line-clamp-2 font-serif text-heading font-semibold [overflow-wrap:break-word]"
             >
-              {heading}
+              {selected && renameHeading.renaming ? (
+                <InlineName
+                  value={selected.name}
+                  label={t("folder.renameLabel", { name: selected.name })}
+                  testId="library-heading-rename"
+                  className="h-9 w-full min-w-0 rounded-sm border border-accent bg-sheet px-1.5 font-serif text-heading font-semibold text-ink outline-1 outline-accent select-text"
+                  {...renameHeading.field((name) => renameFolder(selected.id, name))}
+                />
+              ) : selected ? (
+                <button
+                  {...renameHeading.nameProps}
+                  type="button"
+                  className="cursor-text text-left [overflow-wrap:break-word]"
+                >
+                  {heading}
+                </button>
+              ) : (
+                heading
+              )}
             </h1>
             <p
               title={selected?.description || t("library.intro")}
@@ -511,6 +533,11 @@ const LibraryRow = memo(function LibraryRow({
   const citeToggle = useRef<HTMLButtonElement>(null);
   const citePanelId = useId();
   const objectMenu = useObjectMenu({ kind: "document", id: doc.id });
+  // A double-click keeps the preview it opened, then renames.
+  const rename = useRename<HTMLButtonElement>(`library-document:${doc.id}`, () =>
+    keepPreviewOf(doc.id),
+  );
+  const renameDocument = useAppStore((state) => state.renameDocument);
   const status =
     item?.status === "classifying" || item?.status === "pending"
       ? "library.working"
@@ -531,32 +558,40 @@ const LibraryRow = memo(function LibraryRow({
       <LibrarySelectBox document={doc} shownIds={shownIds} />
       <div className="library-document-name min-w-0">
         <div className="flex min-w-0 items-center gap-2">
-          <button
-            type="button"
-            data-row-main=""
-            title={name === source ? name : `${name}\n${source}`}
-            className="flex min-w-0 items-center gap-2 text-left hover:underline focus-visible:outline-2 focus-visible:outline-accent"
-            // A preview to the Library's right; ⌘-click (Ctrl-click) opens it here, kept.
-            onClick={(event) =>
-              useAppStore.getState().openDocument(
-                { documentId: doc.id },
-                {
-                  as: event.metaKey || event.ctrlKey ? "here" : "library",
-                  ...(place && { from: place.groupId }),
-                },
-              )
-            }
-            // A double-click keeps the preview it opened.
-            onDoubleClick={() => keepPreviewOf(doc.id)}
-          >
-            <DocumentLineIcon kind={doc.kind} className="size-4 shrink-0 text-ink-meta" />
-            <span data-testid="library-document-name" className="truncate font-semibold">
-              {name}
-            </span>
-          </button>
+          {rename.renaming ? (
+            <InlineName
+              value={doc.name}
+              label={t("documents.renameLabel", { name: doc.name })}
+              {...rename.field((next) => renameDocument(doc.id, next))}
+            />
+          ) : (
+            <button
+              {...rename.nameProps}
+              type="button"
+              data-row-main=""
+              title={name === source ? name : `${name}\n${source}`}
+              className="flex min-w-0 items-center gap-2 text-left hover:underline focus-visible:outline-2 focus-visible:outline-accent"
+              // A preview to the Library's right; ⌘-click (Ctrl-click) opens it here, kept.
+              onClick={(event) =>
+                useAppStore.getState().openDocument(
+                  { documentId: doc.id },
+                  {
+                    as: event.metaKey || event.ctrlKey ? "here" : "library",
+                    ...(place && { from: place.groupId }),
+                  },
+                )
+              }
+            >
+              <DocumentLineIcon kind={doc.kind} className="size-4 shrink-0 text-ink-meta" />
+              <span data-testid="library-document-name" className="truncate font-semibold">
+                {name}
+              </span>
+            </button>
+          )}
           <ObjectMenu
             target={{ kind: "document", id: doc.id }}
             label={t("documents.more", { name: doc.name })}
+            here={{ "document.rename": rename.start }}
             className={`${rowActionButtonClass} opacity-0 group-hover/row:opacity-100 group-has-[:focus-visible]/row:opacity-100 aria-expanded:opacity-100`}
           />
           {doc.reference && (

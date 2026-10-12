@@ -225,6 +225,11 @@ describe("An Answer as Blocks", () => {
       figures: [],
       status: "done",
     });
-    expect(ended).toEqual([{ type: "paragraph", content: [{ type: "text", text: "Tides." }] }]);
+    expect(ended).toEqual([
+      {
+        type: "paragraph",
+        content: [{ type: "text", text: "Tides.", marks: [{ type: "generated" }] }],
+      },
+    ]);
   });
 });
