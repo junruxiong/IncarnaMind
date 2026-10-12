@@ -353,7 +353,7 @@ test("Linked folder and Document rows stay 28px, on the shared text edge, throug
   await screenshot(window, "linked-folders-indexing", sidebar());
 
   // Paused, here with the bar held where it stopped; in a narrow sidebar too.
-  await (await openLinkedFolderMenu(papers)).getByTestId("linked-folder-pause").click();
+  await (await openLinkedFolderMenu(papers)).getByTestId("linkedFolder.pause").click();
   await expect(papers).toHaveAttribute("data-state", "paused");
   await expectRowsAligned(window);
   await screenshot(window, "linked-folders-paused", sidebar());
@@ -370,7 +370,7 @@ test("Linked folder and Document rows stay 28px, on the shared text edge, throug
   await expect.poll(async () => (await boxOf(sidebar())).width).toBeCloseTo(248, 0);
 
   // Done: "2 online-only" at the end, no bar.
-  await (await openLinkedFolderMenu(papers)).getByTestId("linked-folder-pause").click();
+  await (await openLinkedFolderMenu(papers)).getByTestId("linkedFolder.pause").click();
   await expect(papers).toHaveAttribute("data-state", "online-only", { timeout: 120_000 });
   await expectRowsAligned(window);
   await screenshot(window, "linked-folders-online-only", sidebar());
@@ -383,7 +383,7 @@ test("Linked folder and Document rows stay 28px, on the shared text edge, throug
   await screenshot(window, "linked-folders-missing", sidebar());
 
   // Papers as a flat list: its Documents right under it.
-  await (await openLinkedFolderMenu(papers)).getByTestId("linked-folder-layout").click();
+  await (await openLinkedFolderMenu(papers)).getByTestId("linkedFolder.layout").click();
   await expect(papers).toHaveAttribute("data-layout", "flat");
   await expectRowsAligned(window);
   await screenshot(window, "linked-folders-flat", sidebar());
