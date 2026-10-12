@@ -108,7 +108,7 @@ test("a remote Connector added by URL needs a sign-in, which goes through the br
     await form.getByRole("button", { name: "Add Connector" }).click();
 
     const connector = section.getByTestId("connector");
-    await expect(connector).toHaveAttribute("data-state", "needs-sign-in", { timeout: 30_000 });
+    await expect(connector).toHaveAttribute("data-state", "needs-sign-in", { timeout: 15_000 });
     await expect(connector.getByTestId("connector-state")).toHaveText("Needs sign-in");
     await expect(connector.getByTestId("connector-location")).toHaveText(fake.url);
     await expect(connector.getByTestId("connector-sign-in-notice")).toContainText(
@@ -132,7 +132,13 @@ test("a remote Connector added by URL needs a sign-in, which goes through the br
     expect(authorizeUrl?.startsWith(`${fake.issuer}/authorize?`)).toBe(true);
 
     // The User approves; the browser comes back to the loopback redirect.
-    const page = await fetch(fake.approve(authorizeUrl ?? ""));
+    const page = await fetch(fake.approve(authorizeUrl ?? ""), {
+      signal: AbortSignal.timeout(15_000),
+    }).catch((error: unknown) => {
+      throw new Error("The app's loopback redirect didn't answer the approval within 15 s.", {
+        cause: error,
+      });
+    });
     expect(page.status).toBe(200);
     expect(await page.text()).toContain("Signed in to Wiki");
 
