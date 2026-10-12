@@ -1,4 +1,4 @@
-import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -213,6 +213,37 @@ test("an agent set up by pasting its settings searches, its activity shows each 
     } finally {
       await agent.close();
     }
+  } finally {
+    await app.close();
+  }
+});
+
+test("Disconnect takes away the settings file Connect made, and the agent stays among those not on this computer", async () => {
+  const { app, window } = await launchApp(dataDir, { home });
+  try {
+    await dismissChatSetup(window);
+    await withCoast(window);
+    await acceptPlainTextKeys(window);
+    const page = await openSettings(window, "agents");
+    await page.getByTestId("agents-enabled").click();
+    const list = page.getByTestId("agents-list");
+    const order = () =>
+      list
+        .getByTestId("agent-client")
+        .evaluateAll((rows) => rows.map((row) => row.getAttribute("data-client")));
+    const before = await order();
+    await list.locator('[data-client="workbuddy"]').getByTestId("agent-connect").click();
+    const dialog = window.getByTestId("connect-agent-dialog");
+    await acceptPlainTextKeys(window, dialog);
+    await dialog.getByTestId("connect-agent-folder").check();
+    await dialog.getByTestId("connect-agent-allow").click();
+    await expect(dialog).toBeHidden();
+    expect(await readFile(join(home, ".workbuddy", "mcp.json"), "utf8")).toContain("incarnamind");
+
+    await page.getByTestId("agent-pairing").getByTestId("agent-disconnect").click();
+    await expect(page.getByTestId("agent-pairing")).toHaveCount(0);
+    await expect(stat(join(home, ".workbuddy"))).rejects.toThrow(/ENOENT/);
+    await expect.poll(order).toEqual(before);
   } finally {
     await app.close();
   }
