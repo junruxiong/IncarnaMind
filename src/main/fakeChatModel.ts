@@ -16,6 +16,8 @@
  * asks "by quarter" (按季度) gets a table of quarterly figures, its marker in each cell
  * but the last, to chart (#436); "分季度" gets the same in Chinese, in 万元.
  *
+ * A Question with "blank reply" in it gets a reply with no text at all.
+ *
  * With Skills: a Question that names a listed Skill gets it loaded with
  * use_skill first. An Answer that follows a Skill (forced, or loaded) starts
  * by saying which.
@@ -402,6 +404,7 @@ function scriptNamed(
 function nextReply(prompt: Prompt, tools: readonly OfferedTool[]): Reply {
   const names = tools.map((tool) => tool.name);
   const question = lastQuestion(prompt);
+  if (/blank reply/i.test(question)) return { text: "" };
   /** What the calls made first said, in order. */
   const said: string[] = [];
   const run = scriptNamed(prompt, question, names);
