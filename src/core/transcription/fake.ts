@@ -2,9 +2,11 @@
  * A speech-to-text engine with no model, for the tests and the smoke tests
  * (#136): sound louder than a whisper is speech, cut into stretches of at
  * most two seconds, and each stretch says the next of its lines in turn.
- * Deterministic, and never a real model.
+ * Deterministic, and never a real model. It can be slow, fail to read
+ * stretches, and say it failed over to another engine, for capture health (#161).
  */
 import { MEETING_SAMPLE_RATE } from "../adapters";
+import type { TranscriberPort, TranscriberResponse } from "./channel";
 import type { SpeechEngine, VoiceDetector } from "./speech";
 
 export const FAKE_LINES: readonly string[] = [
@@ -23,6 +25,52 @@ export interface FakeSpeechOptions {
   decodeMs?: number;
   /** The longest stretch, in ms. */
   maxSpeechMs?: number;
+  /** Decoding takes this many times as long as the speech decoded: over 1 is slower than real time. */
+  realTimeFactor?: number;
+  /** The decodes, counted from 1, that fail as a real engine's can: their stretches lose their text. */
+  failing?: readonly number[];
+}
+
+/** A transcriber that says it moved its streams to the cloud, and back, after so many lines each. */
+export interface FakeFailover {
+  /** After this many lines of a stream: this computer fell behind. */
+  toCloudAfter: number;
+  /** After this many lines of it: the cloud dropped. */
+  backAfter?: number;
+}
+
+/** What the smoke tests ask of the fake transcriber (INCARNAMIND_TEST_TRANSCRIBER_OPTIONS). */
+export interface FakeTranscriberOptions extends FakeSpeechOptions {
+  failover?: FakeFailover;
+}
+
+/**
+ * The serving end of a transcriber that fails over (#141, #462), with no
+ * cloud: the same engine goes on, and only the switch is reported.
+ */
+export function failingOver(port: TranscriberPort, failover: FakeFailover): TranscriberPort {
+  const lines = new Map<string, number>();
+  return {
+    onRequest: (listener) => port.onRequest(listener),
+    respond(response: TranscriberResponse) {
+      port.respond(response);
+      if (response.type !== "segment" || !response.segment.final) return;
+      const { stream } = response.segment;
+      const count = (lines.get(stream) ?? 0) + 1;
+      lines.set(stream, count);
+      if (count === failover.toCloudAfter) {
+        port.respond({
+          type: "switched",
+          change: { stream, from: "local", to: "cloud", reason: "behind" },
+        });
+      } else if (count === failover.backAfter) {
+        port.respond({
+          type: "switched",
+          change: { stream, from: "cloud", to: "local", reason: "failed" },
+        });
+      }
+    },
+  };
 }
 
 /** 20 ms frames: one is speech when its level is above a whisper's. */
@@ -82,10 +130,14 @@ export function createFakeSpeechEngine(options: FakeSpeechOptions = {}): SpeechE
   return {
     detector,
     recognizer: {
-      async decode() {
-        if (options.decodeMs) await new Promise((resolve) => setTimeout(resolve, options.decodeMs));
+      async decode(samples) {
+        const ms = options.realTimeFactor
+          ? ((samples.length * 1000) / MEETING_SAMPLE_RATE) * options.realTimeFactor
+          : options.decodeMs;
+        if (ms) await new Promise((resolve) => setTimeout(resolve, ms));
         const line = lines[said % lines.length] ?? "";
         said++;
+        if (options.failing?.includes(said)) throw new Error("The fake engine can't read this.");
         return line;
       },
     },

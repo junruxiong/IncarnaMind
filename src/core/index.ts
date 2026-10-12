@@ -14,6 +14,7 @@ export type {
   Embedder,
   EmbeddingModelFiles,
   EmbeddingModelSource,
+  EngineSwitch,
   ExecAllow,
   ExecFolder,
   ExecRequest,
@@ -28,6 +29,7 @@ export type {
   ModelFile,
   PagePicture,
   Paths,
+  Pictures,
   ProcessLauncher,
   RecognizedLine,
   RerankingModelFiles,
@@ -61,6 +63,7 @@ export { BUILT_IN_EMBEDDING_MODEL } from "./embedding";
 export {
   ChatNotReadyError,
   ConsentDeclinedError,
+  DataFromNewerVersionError,
   EmbeddingModelNotReadyError,
   FileWriteCancelledError,
   InvalidInputError,
