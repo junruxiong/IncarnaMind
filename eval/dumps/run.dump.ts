@@ -36,9 +36,12 @@ import { formatOf } from "../lib/formats";
 import { openLibrary } from "../lib/library";
 import { createLog, type Log } from "../lib/log";
 
-<<<<<<< HEAD
-
-import { createWorkerCrossEncoder, openReranker, type ScoringReranker } from "../lib/rerank";
+import {
+  createWorkerCrossEncoder,
+  openReranker,
+  prepareGpuFile,
+  type ScoringReranker,
+} from "../lib/rerank";
 import {
   GATING_MODE,
   KEYWORD_RERANK_DEPTH,
@@ -47,18 +50,6 @@ import {
   summarise,
   type Tally,
 } from "../lib/retrieval";
-
-=======
-
-import {
-  createWorkerCrossEncoder,
-  openReranker,
-  prepareGpuFile,
-  type ScoringReranker,
-} from "../lib/rerank";
-import { GATING_MODE, runReranked, runRetrieval, summarise, type Tally } from "../lib/retrieval";
-
->>>>>>> feat/542-tool-loop-skips-rerank
 
 import { type Dump, formatScore, type Order, type ScoreOptions, scoreDump } from "../score";
 
