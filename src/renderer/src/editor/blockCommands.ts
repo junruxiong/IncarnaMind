@@ -2,8 +2,7 @@ import { Extension } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { type EditorState, Plugin, PluginKey, Selection } from "@tiptap/pm/state";
 import { yUndoPluginKey } from "@tiptap/y-tiptap";
-import { ANSWER_BLOCK, QUESTION_BLOCK } from "../../../core/api";
-import { BLOCK_ID_ATTRIBUTE } from "./noteSchema";
+import { ANSWER_BLOCK, BLOCK_ID_ATTRIBUTE, QUESTION_BLOCK } from "../../../core/api";
 
 /** Ends the Undo step being gathered, so the next change starts one of its own. */
 const stopUndoCapturing = (state: EditorState) =>
