@@ -26,7 +26,7 @@
 
 <p align="center"><sub>展开回答的过程、助手修改 Mind 等你接受，以及根据会议实时转写回答，都<a href="#即将推出">即将推出</a>，其余功能现在就能用。</sub></p>
 
-**IncarnaMind** 是一款免费开源的桌面应用，支持 macOS、Windows 和 Linux：它根据你自己的 PDF、Word、PowerPoint 和 Excel 文件回答问题，并把每条引用和原文所在页逐一核对。
+**IncarnaMind** 是一款免费开源的桌面应用，支持 macOS、Windows 和 Linux：你可以就自己的文档（PDF、Word、PowerPoint、Excel 等）提问，并借助 AI 写作。每个回答都标明出处的确切页码，IncarnaMind 会核对每段引文确实在那里。它可以使用你自己的 API 密钥、通过 Ollama 运行的本地模型，或你的 ChatGPT 订阅。
 
 ## 下载
 
