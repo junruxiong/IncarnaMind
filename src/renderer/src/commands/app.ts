@@ -11,7 +11,17 @@ import { evidenceCommands } from "./evidence";
 import { footnoteCommands } from "./footnotes";
 import { citationHandle, sidebarHandle } from "./handles";
 import { meetingCommands } from "./meetings";
+import {
+  answerCommands,
+  citationCommands,
+  documentCommands,
+  folderCommands,
+  linkedFolderCommands,
+  mindCommands,
+  tagCommands,
+} from "./objects";
 import { proposalCommands } from "./proposals";
+import "./objectMenus";
 import { type Command, commands, fromMenu } from "./registry";
 import { tableCommands } from "./tables";
 import { tabCommands } from "./tabs";
@@ -36,6 +46,13 @@ const appCommands: readonly Command[] = [
     reversible: true,
     run: () => useAppStore.getState().createMind(),
   },
+  ...mindCommands,
+  ...documentCommands,
+  ...folderCommands,
+  ...tagCommands,
+  ...linkedFolderCommands,
+  ...answerCommands,
+  ...citationCommands,
   ...tabCommands,
   ...meetingCommands,
   ...webPageCommands,
@@ -80,9 +97,9 @@ const appCommands: readonly Command[] = [
     shortcut: { keys: "CmdOrCtrl+Alt+O" },
     group: "open",
     reversible: true,
-    // While a Citation's card shows (hovered, focused or clicked).
-    when: () => citationHandle.current !== null,
-    run: () => citationHandle.current?.open(),
+    // While a Citation's card shows (hovered, focused or clicked), or from its menu.
+    when: (ctx) => ctx.here?.["citation.open"] !== undefined || citationHandle.current !== null,
+    run: (ctx) => (ctx.here?.["citation.open"] ?? citationHandle.current?.open)?.(),
   },
   {
     // The Mind in front's citation style (#289): the same picker as its References' button.
@@ -92,8 +109,10 @@ const appCommands: readonly Command[] = [
     group: "main",
     // The picker's choice is taken back with Undo.
     reversible: true,
-    when: () => mindInFront() !== null,
-    run: () => {
+    // A Mind's row in the sidebar picks for that Mind.
+    when: (ctx) => ctx.here?.["mind.citationStyle"] !== undefined || mindInFront() !== null,
+    run: (ctx) => {
+      if (ctx.here?.["mind.citationStyle"]) return ctx.here["mind.citationStyle"]();
       const mindId = mindInFront();
       if (!mindId) return;
       const button = document.querySelector<HTMLElement>(
@@ -137,10 +156,13 @@ const appCommands: readonly Command[] = [
     label: "editor.block.delete",
     shortcut: { keys: "CmdOrCtrl+Shift+Backspace" },
     group: "danger",
-    appliesTo: ["block"],
+    destructive: true,
+    appliesTo: ["block", "answer"],
     // The note's own undo (⌘Z) brings it back.
     reversible: true,
     run(ctx) {
+      // An Answer's menu deletes that Answer, wherever the cursor is.
+      if (ctx.here?.["block.delete"]) return ctx.here["block.delete"]();
       // The Blocks the note's selection touches, the focused one among them.
       if (ctx.focus) noteHolding(ctx.focus.id)?.commands.deleteBlock();
     },

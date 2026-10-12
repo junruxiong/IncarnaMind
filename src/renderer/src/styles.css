@@ -2746,7 +2746,15 @@
    * quote wasn't found. Its check shows in the margin (`.margin-check`).
    */
   .citation {
+    position: relative;
     display: inline;
+  }
+  /* The Citation's ⋯, out of sight: its menu opens from the marker (see `ObjectMenu`). */
+  .citation-menu-anchor {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    pointer-events: none;
   }
   .citation-marker {
     display: inline-flex;
