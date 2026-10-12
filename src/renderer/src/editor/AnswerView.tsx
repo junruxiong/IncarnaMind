@@ -18,7 +18,7 @@ import { useApprovals, waitingFor } from "../approvals";
 import { signInAgain } from "../chatGptSignIn";
 import { useIsExampleAnswer } from "../components/GettingStarted";
 import { PlugIcon, ScriptIcon, SkillIcon, StopIcon } from "../components/icons";
-import { FindSourcesLineIcon } from "../components/lineIcons";
+import { DocumentLineIcon, FindSourcesLineIcon } from "../components/lineIcons";
 import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
 import { ProblemLine } from "../components/ProblemLine";
 import { core } from "../core";
@@ -28,6 +28,7 @@ import { useLanguage, useT } from "../i18n";
 import { ANSWER_PROBLEMS, answerProblem } from "../problems";
 import type { SettingsPage } from "../settingsPages";
 import { useAppStore } from "../store";
+import { reasonKey } from "../webPages";
 import { ChevronRightSmallIcon, RegenerateSmallIcon } from "./icons";
 import { useMindId } from "./mindContext";
 import { ThirdPartyLine } from "./ThirdPartyLine";
@@ -341,6 +342,7 @@ export function CallRows({
         !waitingIds.has(call.id) &&
         (call.source === "connector" ||
           call.source === "sources" ||
+          call.source === "web" ||
           (call.source === "skill" && call.tool === RUN_SCRIPT)),
     )
     .map((call) => <CallRow key={call.id} call={call} />);
@@ -356,10 +358,11 @@ export function CallRows({
   );
 }
 
-/** The row of a call through a Connector, of Find sources, or of a Skill script. */
+/** The row of a call through a Connector, of Find sources, of web search, or of a Skill script. */
 export function CallRow({ call }: { call: AnswerToolCall }) {
   if (call.source === "connector") return <ConnectorCall call={call} />;
   if (call.source === "sources") return <SourcesCall call={call} />;
+  if (call.source === "web") return <WebCall call={call} />;
   return <ScriptCall call={call} />;
 }
 
@@ -824,6 +827,71 @@ function SourcesCall({ call }: { call: AnswerToolCall }) {
             className="answer-action"
           >
             {t("sources.call.show")}
+          </button>
+        )}
+      </span>
+    </div>
+  );
+}
+
+/** What a call of web search said: running, what it searched for, or the page it saved or why not (#128). */
+function webCallText(t: ReturnType<typeof useT>, call: AnswerToolCall): string {
+  const running = call.status === "running";
+  if (call.tool === "search_web") {
+    const query = field(call, "query");
+    if (running) return t("web.call.searching", { query });
+    return t(call.status === "failed" ? "web.call.searchFailed" : "web.call.searched", { query });
+  }
+  const page = call.webPage;
+  const address = page?.address ?? field(call, "url");
+  if (page && "documentId" in page) return t("web.call.saved", { name: page.name });
+  if (running) return t("web.call.reading", { address });
+  return t("web.call.notSaved", {
+    address,
+    reason: t(reasonKey(page && "failure" in page ? page.failure : "unreachable")),
+  });
+}
+
+/**
+ * A call of web search: a search, with how many pages it found; or a page
+ * read, saved as a Document that opens from here, or why it couldn't be saved.
+ */
+function WebCall({ call }: { call: AnswerToolCall }) {
+  const t = useT();
+  const running = call.status === "running";
+  const page = call.webPage;
+  const saved = page && "documentId" in page ? page : null;
+  const count = call.tool === "search_web" && call.status === "done" ? call.resultCount : null;
+  const text = webCallText(t, call);
+  return (
+    <div
+      contentEditable={false}
+      data-testid="answer-web-call"
+      data-tool={call.tool}
+      data-status={call.status}
+      className="answer-call"
+    >
+      <span className="answer-call-summary answer-call-summary--static">
+        <DocumentLineIcon
+          kind="web"
+          className={`answer-call-icon ${running ? "animate-pulse" : ""}`}
+        />
+        <span className="answer-call-text" title={text}>
+          {text}
+        </span>
+        {count !== null && (
+          <span className="answer-call-note">
+            · {t(count === 1 ? "web.call.pages.one" : "web.call.pages", { count })}
+          </span>
+        )}
+        {saved && (
+          <button
+            type="button"
+            data-testid="answer-web-open"
+            onClick={() => useAppStore.getState().openDocument({ documentId: saved.documentId })}
+            className="answer-action"
+          >
+            {t("web.call.open")}
           </button>
         )}
       </span>

@@ -43,6 +43,11 @@
  * once, for the words after "on" (and the year after "since"), then lists
  * the first three titles it found.
  *
+ * With web search (#128): it searches the web for the Question, reads each
+ * page found, one call each, then cites the first page it could read as it
+ * cites a search's Passages. Asked to search with its provider's own tool,
+ * it finds `FOUND_PAGES`, whatever the query.
+ *
  * For automatic tagging it tags a Document with every Tag whose name is a word in it.
  * As the User writes, it suggests a Passage's line that shares words with their paragraph.
  *
@@ -91,6 +96,15 @@ function fakeAnswer(question: string, skill: string | null = null): string {
     "That is all.",
   ].join("\n");
 }
+
+/**
+ * What the scripted provider's web search finds, whatever the query: pages the
+ * smoke tests' stand-in web serves (INCARNAMIND_TEST_WEB), as any host does there.
+ */
+const FOUND_PAGES = [
+  { url: "http://encyclopedia.test/tea", title: "Tea - The Open Encyclopedia" },
+  { url: "http://news.test/members", title: "Tea's history, for members" },
+];
 
 /** The scripted Answer when it cited something: one sentence with a marker. */
 const CITED_ANSWER = "Your Documents answer this [^1].\n\nThat is all.";
@@ -371,6 +385,24 @@ function connectorToolNamed(
   return null;
 }
 
+/** Every result of a Tool's calls so far, as text, whether they worked or not, oldest first. */
+function allResults(prompt: Prompt, tool: string): string[] {
+  const found: string[] = [];
+  for (const message of prompt) {
+    if (message.role !== "tool") continue;
+    for (const part of message.content) {
+      if (part.type !== "tool-result" || part.toolName !== tool) continue;
+      const output = part.output;
+      found.push(
+        output.type === "text" || output.type === "error-text"
+          ? output.value
+          : JSON.stringify(output),
+      );
+    }
+  }
+  return found;
+}
+
 /** What a Tool call gave back, as text, whether it worked or not; undefined if it hasn't been called. */
 function lastResult(prompt: Prompt, tool: string): string | undefined {
   let found: string | undefined;
@@ -447,8 +479,52 @@ function nextReply(prompt: Prompt, tools: readonly OfferedTool[]): Reply {
           : "I found no papers.",
     };
   }
+  if (names.includes("search_web")) {
+    const searched = lastResult(prompt, "search_web");
+    if (searched === undefined) return { tool: "search_web", input: { query: question } };
+    const found = [...searched.matchAll(/^\d+\. .*?: (https?:\/\/\S+)/gm)].map((match) => match[1]);
+    const reads = allResults(prompt, "read_web_page");
+    const next = found[reads.length];
+    if (next) return { tool: "read_web_page", input: { url: next, query: question } };
+    const read = reads.find((each) => passagesIn(each).length > 0);
+    if (!read) return { text: "I couldn't save any of the pages I found." };
+    if (toolResults(prompt, "cite").length === 0) {
+      return { tool: "cite", input: { citations: recordsFor(read, question) } };
+    }
+    return { text: CITED_ANSWER };
+  }
   const reply = answerReply(prompt, names);
   return "text" in reply && said.length > 0 ? { text: [...said, reply.text].join("\n\n") } : reply;
+}
+
+/** The scripted provider's web search: it searches once and finds `FOUND_PAGES`, as Anthropic reports them. */
+function searchParts(tool: string, query: string): StreamPart[] {
+  return [
+    { type: "stream-start", warnings: [] },
+    {
+      type: "tool-call",
+      toolCallId: "fake-web-search",
+      toolName: tool,
+      input: JSON.stringify({ query }),
+      providerExecuted: true,
+    },
+    {
+      type: "tool-result",
+      toolCallId: "fake-web-search",
+      toolName: tool,
+      result: FOUND_PAGES.map((page) => ({
+        type: "web_search_result",
+        url: page.url,
+        title: page.title,
+        pageAge: null,
+        encryptedContent: "",
+      })),
+    },
+    { type: "text-start", id: "answer" },
+    { type: "text-delta", id: "answer", delta: "done" },
+    { type: "text-end", id: "answer" },
+    { type: "finish", finishReason: { unified: "stop", raw: undefined }, usage: USAGE },
+  ];
 }
 
 /** What the model does next, apart from Connector Tools: call a Tool, or stream its Answer. */
@@ -665,6 +741,43 @@ function fakeStructuredOutput(options: GenerateOptions): string {
   return JSON.stringify({ tags: fakeTags(options.prompt, offeredTags(options)) });
 }
 
+/** The scripted reply to a request, as it streams: its reasoning, then a Tool call or its Answer. */
+function replyParts(prompt: Prompt, tools: readonly OfferedTool[]): StreamPart[] {
+  const reply = nextReply(prompt, tools);
+  const parts: StreamPart[] = [{ type: "stream-start", warnings: [] }];
+  if (reply.reasoning) {
+    parts.push(
+      { type: "reasoning-start", id: "thinking" },
+      ...reply.reasoning
+        .split(/(?<=\s)/)
+        .map((word): StreamPart => ({ type: "reasoning-delta", id: "thinking", delta: word })),
+      { type: "reasoning-end", id: "thinking" },
+    );
+  }
+  if ("tool" in reply) {
+    // Calls of one Tool after its first, such as a second page read, have ids of their own.
+    const earlier = allResults(prompt, reply.tool).length;
+    parts.push(
+      {
+        type: "tool-call",
+        toolCallId: earlier === 0 ? `fake-${reply.tool}` : `fake-${reply.tool}-${earlier + 1}`,
+        toolName: reply.tool,
+        input: JSON.stringify(reply.input),
+      },
+      { type: "finish", finishReason: { unified: "tool-calls", raw: undefined }, usage: USAGE },
+    );
+    return parts;
+  }
+  const words = reply.text.split(/(?<=\s)/);
+  parts.push(
+    { type: "text-start", id: "answer" },
+    ...words.map((word): StreamPart => ({ type: "text-delta", id: "answer", delta: word })),
+    { type: "text-end", id: "answer" },
+    { type: "finish", finishReason: { unified: "stop", raw: undefined }, usage: USAGE },
+  );
+  return parts;
+}
+
 export const createFakeChatModel: ChatModelFactory = (spec) =>
   new MockLanguageModelV4({
     provider: "incarnamind-fake",
@@ -695,37 +808,11 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
           statusCode: 404,
         });
       }
-      const reply = nextReply(prompt, tools ?? []);
-      const slow = SLOWLY.test(lastQuestion(prompt));
-      const parts: StreamPart[] = [{ type: "stream-start", warnings: [] }];
-      if (reply.reasoning) {
-        parts.push(
-          { type: "reasoning-start", id: "thinking" },
-          ...reply.reasoning
-            .split(/(?<=\s)/)
-            .map((word): StreamPart => ({ type: "reasoning-delta", id: "thinking", delta: word })),
-          { type: "reasoning-end", id: "thinking" },
-        );
-      }
-      if ("tool" in reply) {
-        parts.push(
-          {
-            type: "tool-call",
-            toolCallId: `fake-${reply.tool}`,
-            toolName: reply.tool,
-            input: JSON.stringify(reply.input),
-          },
-          { type: "finish", finishReason: { unified: "tool-calls", raw: undefined }, usage: USAGE },
-        );
-      } else {
-        const words = reply.text.split(/(?<=\s)/);
-        parts.push(
-          { type: "text-start", id: "answer" },
-          ...words.map((word): StreamPart => ({ type: "text-delta", id: "answer", delta: word })),
-          { type: "text-end", id: "answer" },
-          { type: "finish", finishReason: { unified: "stop", raw: undefined }, usage: USAGE },
-        );
-      }
+      const search = tools?.find((each) => each.type === "provider");
+      const parts = search
+        ? searchParts(search.name, lastQuestion(prompt))
+        : replyParts(prompt, tools ?? []);
+      const slow = !search && SLOWLY.test(lastQuestion(prompt));
       const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
       const stream = new ReadableStream<StreamPart>({
         async pull(controller) {
