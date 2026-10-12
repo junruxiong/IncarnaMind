@@ -1202,6 +1202,8 @@ export type LayoutChange =
       where?: OpenWhere;
       /** A Document as a preview, replacing the group's preview if it has one. */
       preview?: boolean;
+      /** A Document already open as a preview is kept, as a double-click on its tab does. */
+      keep?: boolean;
       /** Its group becomes the focused one: true unless false. */
       focus?: boolean;
       /** A Document: where in it, e.g. a Citation's quote. */
