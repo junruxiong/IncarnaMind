@@ -1258,7 +1258,8 @@ export const en = {
   "consent.flow.find-sources.purpose": "find papers and other sources, and add the ones you choose",
   "consent.data.search-terms": "What you search for: the words and filters, such as years",
   "consent.data.work-ids":
-    "The DOI, arXiv ID, PubMed ID, label set ID or NCT number of each work you add",
+    "The DOI, arXiv ID, PubMed ID, label set ID, NCT number or citation of each work you add",
+  "consent.data.provider-key": "Your own key for this service, which it needs to answer",
   "consent.flow.edits": "Edit with AI",
   "consent.flow.edits.purpose": "change the text you select as you ask",
   "consent.data.selection": "The text you select, with the paragraphs it is in, each time you ask",
@@ -2365,9 +2366,9 @@ export const en = {
 
   "sources.title": "Find sources",
   "sources.intro":
-    "Search OpenAlex, arXiv and PubMed for papers. Open-access ones are added as Documents, the others as references. Choose openFDA, DailyMed or ClinicalTrials.gov below to find drug labels and clinical trials.",
+    "Search OpenAlex, arXiv and PubMed for papers. Open-access ones are added as Documents, the others as references. Choose openFDA, DailyMed, ClinicalTrials.gov or the eCFR below to find drug labels, clinical trials and US federal regulations, or type a citation such as 17 CFR 240.10b-5 or 42 U.S.C. § 1983.",
   "sources.search.label": "Search for sources",
-  "sources.search.placeholder": "Topic, title, DOI, arXiv ID or NCT number",
+  "sources.search.placeholder": "Topic, title, DOI, arXiv ID, NCT number or citation",
   "sources.search": "Search",
   "sources.searching": "Searching…",
   "sources.close": "Close Find sources",
@@ -2386,6 +2387,8 @@ export const en = {
   "sources.problem.rate-limited":
     "{provider} asked to slow down, or its free searches for today are used up",
   "sources.problem.service-error": "{provider} answered with an error",
+  "sources.problem.needs-key": "{provider} is off: it needs your own free key",
+  "sources.problem.key-rejected": "{provider} didn't accept your key",
   "sources.retry": "Try again",
   "sources.privacySettings": "Privacy settings",
   "sources.authors.more": "{names} et al.",
@@ -2400,6 +2403,7 @@ export const en = {
   "sources.licence.other-oa": "Open licence",
   "sources.licence.publisher-specific-oa": "Publisher's open licence",
   "sources.citedBy": "Cited by {count}",
+  "sources.unofficial": "Unofficial compilation, not the official edition",
   "sources.foundBy": "Found on {providers}",
   "sources.add": "Add",
   "sources.addReference": "Add reference",
@@ -2417,6 +2421,9 @@ export const en = {
   "sources.failed.not-found": "Search again to add it",
   "sources.failed.local-mode":
     "Nothing can be added while “Keep everything on this computer” is on",
+  "sources.failed.rate-limited": "The service asked to slow down: try again later",
+  "sources.failed.needs-key": "It needs your own key: add it above, then try again",
+  "sources.failed.key-rejected": "Your key wasn't accepted: change it above, then try again",
   "sources.failed": "Couldn't add it",
   "sources.provider.openalex.about":
     "Papers in every field, with where they're open and how often they're cited. Its records are CC0.",
@@ -2431,11 +2438,20 @@ export const en = {
     "The full drug labels filed with the FDA, from the National Library of Medicine, with their section numbers. Search by drug name or set id. Asked only when you choose it.",
   "sources.provider.clinicaltrials.about":
     "Clinical trial records: arms, outcomes, eligibility criteria and posted results. Search by condition or drug, or type an NCT number. Asked only when you choose it.",
+  "sources.provider.ecfr.about":
+    "US federal regulations as amended to date (the Code of Federal Regulations), paragraph by paragraph: an unofficial compilation by the Office of the Federal Register. Search by words, or type a citation such as 17 CFR 240.10b-5, with “as of 2019-06-30” for an earlier version. Asked only when you choose it.",
+  "sources.provider.govinfo.about":
+    "The United States Code and the official annual edition of the CFR, from the Government Publishing Office. Type a citation such as 42 U.S.C. § 1983. Needs your own free api.data.gov key.",
   "sources.notice": "The source says: {notice}",
   "sources.key.open": "{provider} key…",
   "sources.key.title": "Your own {provider} key",
   "sources.key.hint":
     "Optional. A key gives {provider} a higher daily limit. It is kept in your keychain and sent only to {provider}.",
+  "sources.key.hint.needed":
+    "Needed: {provider} is off without one. It is kept in your keychain and sent only to {provider}.",
+  "sources.key.signUp": "Get a free key",
+  "sources.key.add": "Add key…",
+  "sources.key.change": "Change key…",
   "sources.key.placeholder": "Paste your key",
   "sources.key.save": "Save key",
   "sources.key.remove": "Remove key",

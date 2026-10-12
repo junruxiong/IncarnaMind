@@ -1188,7 +1188,9 @@ export const zhCN = {
   "consent.flow.find-sources": "查找资料",
   "consent.flow.find-sources.purpose": "查找论文等资料，并添加你选中的",
   "consent.data.search-terms": "你搜索的内容：关键词和筛选条件，例如年份",
-  "consent.data.work-ids": "你添加的每项资料的 DOI、arXiv 编号、PubMed 编号、说明书 ID 或 NCT 编号",
+  "consent.data.work-ids":
+    "你添加的每项资料的 DOI、arXiv 编号、PubMed 编号、说明书 ID、NCT 编号或法规引用",
+  "consent.data.provider-key": "你为此服务添加的密钥，它需要密钥才能使用",
   "consent.flow.edits": "用 AI 编辑",
   "consent.flow.edits.purpose": "按你的要求修改选中的文字",
   "consent.data.selection": "你选中的文字及其所在的段落，每次提出要求时发送",
@@ -2235,9 +2237,9 @@ export const zhCN = {
 
   "sources.title": "查找资料",
   "sources.intro":
-    "在 OpenAlex、arXiv 和 PubMed 中搜索论文。开放获取的论文添加为文档，其余添加为引用信息。在下方选用 openFDA、DailyMed 或 ClinicalTrials.gov，可查找药品说明书和临床试验。",
+    "在 OpenAlex、arXiv 和 PubMed 中搜索论文。开放获取的论文添加为文档，其余添加为引用信息。在下方选用 openFDA、DailyMed、ClinicalTrials.gov 或 eCFR，可查找药品说明书、临床试验和美国联邦法规；也可以直接输入法规引用，例如 17 CFR 240.10b-5 或 42 U.S.C. § 1983。",
   "sources.search.label": "搜索资料",
-  "sources.search.placeholder": "主题、标题、DOI、arXiv 编号或 NCT 编号",
+  "sources.search.placeholder": "主题、标题、DOI、arXiv 编号、NCT 编号或法规引用",
   "sources.search": "搜索",
   "sources.searching": "正在搜索…",
   "sources.close": "关闭查找资料",
@@ -2255,6 +2257,8 @@ export const zhCN = {
   "sources.problem.unreachable": "无法连接 {provider}",
   "sources.problem.rate-limited": "{provider} 要求降低请求频率，或今天的免费搜索次数已用完",
   "sources.problem.service-error": "{provider} 返回了错误",
+  "sources.problem.needs-key": "{provider} 未启用：需要你自己的免费密钥",
+  "sources.problem.key-rejected": "{provider} 不接受你的密钥",
   "sources.retry": "重试",
   "sources.privacySettings": "隐私设置",
   "sources.authors.more": "{names} 等",
@@ -2269,6 +2273,7 @@ export const zhCN = {
   "sources.licence.other-oa": "开放许可",
   "sources.licence.publisher-specific-oa": "出版者的开放许可",
   "sources.citedBy": "被引 {count} 次",
+  "sources.unofficial": "非官方汇编，不是官方版本",
   "sources.foundBy": "来自 {providers}",
   "sources.add": "添加",
   "sources.addReference": "添加引用信息",
@@ -2285,6 +2290,9 @@ export const zhCN = {
   "sources.failed.declined": "未允许下载",
   "sources.failed.not-found": "重新搜索后才能添加",
   "sources.failed.local-mode": "开启“所有内容都留在这台电脑上”时无法添加",
+  "sources.failed.rate-limited": "该服务要求降低请求频率，稍后再试",
+  "sources.failed.needs-key": "需要你自己的密钥：在上方添加后重试",
+  "sources.failed.key-rejected": "密钥未被接受：在上方更换后重试",
   "sources.failed": "无法添加",
   "sources.provider.openalex.about":
     "涵盖各学科的论文，标明开放获取情况和被引次数。其记录采用 CC0。",
@@ -2298,11 +2306,20 @@ export const zhCN = {
     "美国国家医学图书馆收录的、向 FDA 提交的完整药品说明书，保留章节编号。可按药品名称或说明书 ID 搜索。仅在你选用时才会搜索。",
   "sources.provider.clinicaltrials.about":
     "临床试验记录：试验组、结局指标、入选标准和已发布的结果。可按疾病或药品搜索，也可输入 NCT 编号。仅在你选用时才会搜索。",
+  "sources.provider.ecfr.about":
+    "截至目前修订的美国联邦法规（《联邦法规汇编》，CFR），按段落拆分；由美国联邦公报办公室编纂的非官方汇编。可按关键词搜索，或输入法规引用，例如 17 CFR 240.10b-5；加上“as of 2019-06-30”可查看较早的版本。仅在你选用时才会搜索。",
+  "sources.provider.govinfo.about":
+    "美国政府出版署发布的《美国法典》和 CFR 官方年度版。输入法规引用即可查找，例如 42 U.S.C. § 1983。需要你自己的免费 api.data.gov 密钥。",
   "sources.notice": "来源声明：{notice}",
   "sources.key.open": "{provider} 密钥…",
   "sources.key.title": "你自己的 {provider} 密钥",
   "sources.key.hint":
     "可选。使用密钥可提高 {provider} 的每日请求上限。密钥加密保存在系统中，只会发送给 {provider}。",
+  "sources.key.hint.needed":
+    "必填：没有密钥时不会使用 {provider}。密钥加密保存在系统中，只会发送给 {provider}。",
+  "sources.key.signUp": "获取免费密钥",
+  "sources.key.add": "添加密钥…",
+  "sources.key.change": "更换密钥…",
   "sources.key.placeholder": "粘贴你的密钥",
   "sources.key.save": "保存密钥",
   "sources.key.remove": "移除密钥",

@@ -301,7 +301,7 @@ const referenceLookupUrl =
 
 /**
  * Test-only launch flag: where Find sources asks its providers (#296), a
- * local server standing in for each provider (OpenAlex, arXiv, PubMed, Crossref, openFDA, DailyMed and ClinicalTrials.gov), each
+ * local server standing in for each provider (OpenAlex, arXiv, PubMed, Crossref, openFDA, DailyMed, ClinicalTrials.gov, the eCFR and GovInfo), each
  * under its own path, so the smoke tests reach none of them. Only a test
  * build honours it.
  */
@@ -392,6 +392,8 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
         openfda: `${sourceProvidersUrl}/openfda`,
         dailymed: `${sourceProvidersUrl}/dailymed`,
         clinicaltrials: `${sourceProvidersUrl}/clinicaltrials`,
+        ecfr: `${sourceProvidersUrl}/ecfr`,
+        govinfo: `${sourceProvidersUrl}/govinfo`,
       },
     }),
     log,
