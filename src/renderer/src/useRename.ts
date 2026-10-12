@@ -34,6 +34,7 @@ function countDoubleClick(event: MouseEvent): void {
   lastClick = key && what ? { key, what, at: now, x: event.clientX, y: event.clientY } : null;
   if (
     !before ||
+    event.detail < 2 ||
     now - before.at > DOUBLE_CLICK_MS ||
     Math.hypot(event.clientX - before.x, event.clientY - before.y) > DOUBLE_CLICK_PX
   ) {

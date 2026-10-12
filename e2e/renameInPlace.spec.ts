@@ -208,7 +208,7 @@ test("a double-click renames the row the first click hit, even when opening move
       .evaluate((list) => {
         (list as HTMLElement).style.transform = "translateY(-28px)";
       });
-    await window.mouse.click(x, y);
+    await window.mouse.click(x, y, { clickCount: 2 });
     const field = rows.getByRole("textbox");
     await expect(field).toBeFocused();
     await expect(field).toHaveValue("Alpha");
