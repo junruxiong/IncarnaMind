@@ -560,7 +560,7 @@ export interface CoreAdapters {
      */
     home?: string;
     applications?: readonly string[];
-    /** Opens an agent's install link (Cursor's, VS Code's) in its app. */
+    /** Opens an agent's install link (Cursor's) in its app. */
     openLink?(url: string): Promise<void>;
   };
   /** Runs the built-in embedding model (see `Embedder`). */

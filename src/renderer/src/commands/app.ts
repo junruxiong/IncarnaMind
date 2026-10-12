@@ -8,6 +8,7 @@ import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
 import { assistantCommands } from "./assistant";
 import { chartCommands } from "./charts";
+import { editCommands } from "./edit";
 import { evidenceCommands } from "./evidence";
 import { footnoteCommands } from "./footnotes";
 import { citationHandle, sidebarHandle } from "./handles";
@@ -47,6 +48,7 @@ const appCommands: readonly Command[] = [
     reversible: true,
     run: () => useAppStore.getState().createMind(),
   },
+  ...editCommands,
   ...mindCommands,
   ...documentCommands,
   ...folderCommands,

@@ -1,4 +1,5 @@
 import type { MessageKey, MessageParams } from "../../shared/i18n";
+import type { Undoable } from "./undo";
 
 /**
  * The kinds of thing the User works with, the same for every gesture: menus, selection,
@@ -24,9 +25,4 @@ export interface ObjectRef {
 
 export type Translate = (key: MessageKey, params?: MessageParams) => string;
 
-/** A change that can be taken back: ⌘Z and the undo line. */
-export interface Undoable {
-  /** What happened, said plainly: "Moved 3 Documents to Finance". */
-  message: string;
-  undo(): Promise<void>;
-}
+export type { Undoable };
