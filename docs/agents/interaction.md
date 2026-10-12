@@ -8,21 +8,21 @@ Read this before building or changing any UI, whether you are a person or a codi
 
 Each rule has a check a reviewer can apply. A UI change that breaks a rule says why in its pull request.
 
-0. **Borrow what people already know.** Where Claude, ChatGPT, Finder, Notion or Granola has a settled way to do something, IncarnaMind does it that way. Chinese Users' apps (Feishu, Yuque, WeChat) count as familiar too. A new gesture needs a reason the familiar one can't serve.
+0. **Borrow what people already know.** Where Claude, ChatGPT, Cursor, VS Code, Finder, Notion or Granola has a settled way to do something, IncarnaMind does it that way. Chinese Users' apps (Feishu, Yuque, WeChat) count as familiar too. A new gesture needs a reason the familiar one can't serve.
    - Check: the issue or pull request names the app whose convention each gesture follows, or says why none fits. The table below lists the ones already chosen.
-1. **Edit in place.** Any name the User sees (a Mind, a Chat, a Document, a Folder, a Tag, a tab) is renamed where it is: double-click it, select it and press F2, or choose Rename from its menu. While renaming, Enter saves, Esc cancels, a blank name changes nothing, and Enter while a Chinese input method is composing never cuts the name off. A double-click renames the item the first click hit, even when that click opened something and moved the list.
+1. **Edit in place.** Any name the User sees (a Mind, a Conversation, a Document, a Folder, a Tag, a tab) is renamed where it is: double-click it, select it and press F2, or choose Rename from its menu. While renaming, Enter saves, Esc cancels, a blank name changes nothing, and Enter while a Chinese input method is composing never cuts the name off. A double-click renames the item the first click hit, even when that click opened something and moved the list.
    - Check: an end-to-end test renames each object by double-click and by F2, and no dialog opens.
 2. **Drag where it makes sense, always with another way.** Documents and Minds drag onto Folders; Documents drag onto Tags and into the composer; files from Finder or Explorer drop onto a Folder, the sidebar or the composer. A target highlights only while it can accept the drop, and the drop says what happened, with Undo. Every drag has a menu item and a key: Move to… (⇧⌘M), Tags….
    - Check: every drag in the change names its menu and keyboard twin.
 3. **Keep the User's place.** Nothing replaces the Mind the User is in. The Library, a Folder or a Tag opens as a tab; a Document opens beside the Mind; Settings opens over it and closes with Esc.
    - Check: no label starts with "Back to". One that does means this rule is broken.
-4. **Undo instead of asking.** Anything the User can take back happens at once and offers Undo: ⌘Z / Ctrl+Z, and one short line such as "Moved 3 Documents to Finance · Undo". Deleting a Mind, Chat, Document, Folder or Tag moves it to Recently deleted, where it waits 30 days, with no question asked. Ask first only before something that can't be taken back, and say what will be lost.
+4. **Undo instead of asking.** Anything the User can take back happens at once and offers Undo: ⌘Z / Ctrl+Z, and one short line such as "Moved 3 Documents to Finance · Undo". Deleting a Mind, Conversation, Document, Folder or Tag moves it to Recently deleted, where it waits 30 days, with no question asked. Ask first only before something that can't be taken back, and say what will be lost.
    - Check: each action in the change is marked reversible (with its undo) or irreversible (with its confirmation text).
 5. **Every object has one right-click menu, in one order.** Open (and Open in new tab), the object's own actions, Move to…, Tags…, Rename, the file's actions (Show in Finder, Copy path), then Delete last, after a separator. The ⋯ button opens the same menu, and each item shows its shortcut.
    - Check: right-click every kind of object the change shows, and compare with this order.
 6. **One way to select.** In every list: a click opens, and so does Enter on the focused item; ⌘-click / Ctrl-click adds or removes; Shift-click extends; ⌘A selects everything in view; Esc clears. An action applies to everything selected and says how many ("Delete 3 Documents"). Dragging one of several selected items drags them all.
    - Check: the same selection test passes in the sidebar and the Library.
-7. **The keyboard reaches everything, and ⌘K finds it.** Every action works without a mouse and is in ⌘K / Ctrl+K, which also finds any Mind, Chat, Document, Folder or Tag by name (Minds by their contents too), matching pinyin for Chinese names. Arrow keys move through the sidebar. Focus is always visible. Esc closes the innermost thing that's open.
+7. **The keyboard reaches everything, and ⌘K finds it.** Every action works without a mouse and is in ⌘K / Ctrl+K, which also finds any Mind, Conversation, Document, Folder or Tag by name (Minds by their contents too), matching pinyin for Chinese names. Arrow keys move through the sidebar. Focus is always visible. Esc closes the innermost thing that's open.
    - Check: every new action has a ⌘K entry and a keyboard path.
 8. **Answer at once.** Every action shows its result within 100 ms of the input (p95, on a Library of 2,000 Documents), updating before the core confirms where that's safe and rolling back with a problem line if the core refuses. Anything that takes over a second shows progress where it happens. Nothing freezes the window.
    - Check: the speed test; by hand, nothing waits on a spinner for an action that should be instant.
@@ -50,9 +50,9 @@ Each rule has a check a reviewer can apply. A UI change that breaks a rule says 
 
 | Task | How IncarnaMind does it | Who does it that way |
 |---|---|---|
-| Start | A new Mind or Chat opens on the composer; its title comes from the first Question and can be renamed in place | Claude, ChatGPT |
-| Ask in a Mind | The composer at the bottom, ⌘J to focus it, scoped by where it was opened | Granola |
-| Find anything | ⌘K searches Minds, Chats, Documents, Folders and Tags, and runs any action | ChatGPT, Claude, Notion, Linear |
+| Start | A new Mind opens with the cursor in its title; New chat (⇧⌘O) starts a Conversation in the assistant's composer, titled from its first Question and renamed in place | Notion, Claude, ChatGPT |
+| Ask | One assistant per window, beside the tabs; ⌘J focuses its composer; it reads the Mind in focus and searches its Folder | Cursor, Notion AI |
+| Find anything | ⌘K searches Minds, Conversations, Documents, Folders and Tags, and runs any action | ChatGPT, Claude, Notion, Linear |
 | Open and rename | Click or Enter opens; double-click or F2 renames | Windows Explorer, Notion, Linear, Obsidian |
 | File into a Folder | Drag onto the Folder, or Move to… (⇧⌘M) | ChatGPT projects, Notion, Granola, Finder |
 | One Folder per Document | A drop on a Folder moves the Document; Tags group Documents across Folders | Finder |

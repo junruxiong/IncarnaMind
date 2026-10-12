@@ -10,7 +10,12 @@ import {
   type StyledRun,
 } from "../../../core/api";
 import { badgeMessage, type CitationState, citationState } from "../../../shared/citations";
-import { citationLocation, formatLocation, openKind } from "../../../shared/locations";
+import {
+  citationLocation,
+  formatLocation,
+  isTranscriptLocation,
+  openKind,
+} from "../../../shared/locations";
 import { useAnswers } from "../answers";
 import { type MindFormatting, useMindFormatting } from "../citationFormatting";
 import { citationHandle } from "../commands/handles";
@@ -295,7 +300,12 @@ export function CitationView({
             )}
           />
         ) : styled.kind === "joined" ? null : (
-          <span>{number || "·"}</span>
+          // A Transcript's Citation shows the time it points at, "14:26", in Numbered (#136).
+          <span data-testid="citation-chip-text">
+            {styled.kind === "numbered" && isTranscriptLocation(location) && where
+              ? where
+              : number || "·"}
+          </span>
         )}
       </button>
       <ObjectMenu

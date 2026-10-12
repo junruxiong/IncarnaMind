@@ -1,17 +1,24 @@
 /**
  * Edit with AI (#93), the window's side: which text a selection is (as the
  * core reads it, `TextPlace`), asking the core for the change, the
- * composer's way of saying what to change, and accepting or rejecting the
- * Proposals that come back, with Undo.
+ * composer's way of saying what to change, accepting or rejecting the
+ * Proposals that come back, with Undo, and making one out of date again
+ * (#94).
  */
 import type { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { yUndoPluginKey } from "@tiptap/y-tiptap";
 import type * as Y from "yjs";
 import { create } from "zustand";
-import type { ChatReadiness, EditAction, EditWithAiResult } from "../../core/api";
+import {
+  ANSWER_BLOCK,
+  type ChatReadiness,
+  type EditAction,
+  type EditWithAiResult,
+} from "../../core/api";
 import { mindModelOf } from "../../shared/mindModel";
-import { aiUseOfAccepted } from "../../shared/proposals";
+import { aiUseOfAccepted, proposalRequestOf } from "../../shared/proposals";
+import { useAnswers } from "./answers";
 import { core } from "./core";
 import { selectionForEdit } from "./editor/editSelection";
 import {
@@ -40,7 +47,15 @@ export const TRANSLATE_LANGUAGES: readonly { id: string; name: string; prompt: s
 
 /** Why an Edit with AI request gave no Proposals, for the line in the composer. */
 export type EditProblem =
-  | { kind: "unchanged" | "changed" | "has-proposals" | "too-long" | "local-mode" }
+  | {
+      kind:
+        | "unchanged"
+        | "changed"
+        | "has-proposals"
+        | "too-long"
+        | "local-mode"
+        | "cant-regenerate";
+    }
   | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
   | { kind: "failed"; message: string; retry: () => void };
 
@@ -123,6 +138,12 @@ function whenShown(editor: Editor, request: string): Promise<PendingProposal | n
   });
 }
 
+/** A request that threw, as the result the composer shows. */
+const failure = (error: unknown): EditWithAiResult => ({
+  kind: "failed",
+  error: { kind: "unknown", message: error instanceof Error ? error.message : String(error) },
+});
+
 /**
  * Asks the core to change the selected text (or `range`) as `action` says.
  * While the AI works the text is marked and the composer says so, with Stop;
@@ -170,11 +191,27 @@ export async function requestEdit(
       model: mindModelOf(doc),
     });
   } catch (error) {
-    result = {
-      kind: "failed",
-      error: { kind: "unknown", message: error instanceof Error ? error.message : String(error) },
-    };
+    result = failure(error);
   }
+  await arrived(editor, mindId, requestId, caret, result, () =>
+    requestEdit(editor, mindId, doc, action, instruction, range ?? selection.range),
+  );
+}
+
+/**
+ * What a request gave, once it is back: the Proposals take the cursor, if it
+ * is still where it was (or at the end of the text worked on), so their bar
+ * shows, and a screen reader hears how many came and how many are out of
+ * date; anything else is one line in the composer, `retry` trying again.
+ */
+async function arrived(
+  editor: Editor,
+  mindId: string,
+  requestId: string,
+  caret: number,
+  result: EditWithAiResult,
+  retry: () => Promise<void>,
+): Promise<void> {
   const edits = useEdits.getState();
   if (edits.pending[mindId]?.requestId !== requestId) {
     // Stopped: nothing waits on the text any more, unless another request or the composer does.
@@ -189,12 +226,17 @@ export async function requestEdit(
 
   if (result.kind === "proposed") {
     const first = await whenShown(editor, result.request);
-    speak(
-      mindId,
+    const count =
       result.proposals === 1
         ? t("proposal.arrived.one")
-        : t("proposal.arrived", { count: result.proposals }),
-    );
+        : t("proposal.arrived", { count: result.proposals });
+    const stale =
+      result.outOfDate === 0
+        ? ""
+        : result.outOfDate === 1
+          ? t("proposal.arrived.outOfDate.one")
+          : t("proposal.arrived.outOfDate", { count: result.outOfDate });
+    speak(mindId, stale ? `${count} ${stale}` : count);
     // Into the first change, unless the User has moved on meanwhile.
     const { selection: at } = editor.state;
     if (first && !editor.isDestroyed && at.empty && (at.head === caret || at.head === target?.to)) {
@@ -212,14 +254,75 @@ export async function requestEdit(
     "problems",
     mindId,
     result.kind === "failed"
-      ? {
-          kind: "failed",
-          message: result.error.message,
-          retry: () =>
-            void requestEdit(editor, mindId, doc, action, instruction, range ?? selection.range),
-        }
+      ? { kind: "failed", message: result.error.message, retry: () => void retry() }
       : result,
   );
+}
+
+/**
+ * Regenerate on a change out of date (#94): a change from Edit with AI is
+ * asked for again, as it was, from its text as it is now, and the new
+ * changes take its place (the text is marked, and the composer says so with
+ * Stop, as for any request); one from an Answer's Regenerate writes that
+ * Answer again, which comes back as changes over the User's version.
+ */
+export async function regenerateChange(
+  editor: Editor,
+  mindId: string,
+  doc: Y.Doc,
+  proposal: PendingProposal,
+): Promise<void> {
+  if (editor.isDestroyed || useEdits.getState().pending[mindId]) return;
+  const made = proposalRequestOf(doc, proposal.request);
+  if (made?.source === "answer") {
+    const questionId = questionOfAnswer(editor, made.answerId);
+    if (questionId) await useAnswers.getState().regenerate(mindId, made.answerId, questionId);
+    else set("problems", mindId, { kind: "cant-regenerate" });
+    return;
+  }
+  if (!made?.action) {
+    set("problems", mindId, { kind: "cant-regenerate" });
+    return;
+  }
+  const { action } = made;
+  const requestId = crypto.randomUUID();
+  set("problems", mindId, null);
+  set("pending", mindId, {
+    requestId,
+    action,
+    language: action === "translate" ? (made.instruction ?? null) : null,
+  });
+  setEditTarget(editor, { from: proposal.from, to: proposal.to });
+  const caret = editor.state.selection.head;
+  let result: EditWithAiResult;
+  try {
+    result = await core.regenerateProposal({
+      requestId,
+      mindId,
+      proposalId: proposal.id,
+      model: mindModelOf(doc),
+    });
+  } catch (error) {
+    result = failure(error);
+  }
+  await arrived(editor, mindId, requestId, caret, result, async () => {
+    const still = pendingIn(editor.state).find((each) => each.id === proposal.id);
+    if (still) await regenerateChange(editor, mindId, doc, still);
+  });
+}
+
+/** The Question an Answer in the note answers, by the Answer's id. */
+function questionOfAnswer(editor: Editor, answerId: string): string | null {
+  let questionId: string | null = null;
+  editor.state.doc.descendants((node) => {
+    if (questionId !== null) return false;
+    if (node.type.name === ANSWER_BLOCK && node.attrs.id === answerId) {
+      questionId = typeof node.attrs.questionId === "string" ? node.attrs.questionId : null;
+      return false;
+    }
+    return node.isBlock;
+  });
+  return questionId;
 }
 
 /** Stops the request the AI is working on in a Mind; the text stays as it was. */
@@ -282,7 +385,11 @@ export function resolveProposalsIn(
 ): void {
   if (editor.isDestroyed || ids.length === 0) return;
   const resolved = resolveInEditor(editor, new Set(ids), outcome);
-  if (resolved.length === 0) return;
+  if (resolved.length === 0) {
+    // Only changes out of date were picked: they can't be accepted, and the User hears why.
+    if (outcome === "accept") speak(mindId, t("proposal.cantAccept"));
+    return;
+  }
   const doc = editorDoc(editor);
   if (outcome === "accept" && doc) {
     const entries = aiUseOfAccepted(doc, mindId, resolved, new Date().toISOString());

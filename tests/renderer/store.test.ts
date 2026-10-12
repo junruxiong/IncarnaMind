@@ -4,6 +4,7 @@ import type {
   CoreEvents,
   Document,
   DocumentGroupAssignment,
+  Folder,
   LibrarySnapshot,
 } from "../../src/core/api";
 
@@ -364,5 +365,47 @@ describe("changes the User can take back", () => {
     await useAppStore.getState().deleteMind("m");
     expect(top()?.message).toBe("已删除“Plan”");
     expect(top()?.name).toBe("删除“Plan”");
+  });
+});
+
+describe("loading keeps a list the core pushed after reading it", () => {
+  const folder = (id: string) => ({ id, name: id }) as unknown as Folder;
+  const folderIds = () => useAppStore.getState().folders.map((each) => each.id);
+  const later = <T>() => {
+    let reply: (value: T) => void = () => undefined;
+    const promise = new Promise<T>((resolve) => {
+      reply = resolve;
+    });
+    return { promise, reply: (value: T) => reply(value) };
+  };
+
+  test("a Folder pushed while loading still waits stays", async () => {
+    const connectors = later<never[]>();
+    method("listConnectors").mockReturnValue(connectors.promise);
+    method("listFolders").mockResolvedValue([folder("mine")]);
+
+    const loading = useAppStore.getState().load();
+    await settle();
+    await settle();
+    // The example Linked folder's first scan makes its Folder after the list was read.
+    emit("folders.changed", [folder("mine"), folder("examples")]);
+    connectors.reply([]);
+    await loading;
+
+    expect(folderIds()).toEqual(["mine", "examples"]);
+  });
+
+  test("a list pushed before it was read gives way to the read, which is newer", async () => {
+    const folders = later<Folder[]>();
+    method("listConnectors").mockResolvedValue([]);
+    method("listFolders").mockReturnValue(folders.promise);
+
+    const loading = useAppStore.getState().load();
+    await settle();
+    emit("folders.changed", [folder("mine")]);
+    folders.reply([folder("mine"), folder("examples")]);
+    await loading;
+
+    expect(folderIds()).toEqual(["mine", "examples"]);
   });
 });
