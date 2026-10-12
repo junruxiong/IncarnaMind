@@ -10,9 +10,11 @@ import {
   ANSWER_BLOCK,
   BLOCK_ID_ATTRIBUTE,
   FOOTNOTE_NODE,
+  GENERATED_MARK,
   NOTE_BLOCK_TYPES,
   QUESTION_BLOCK,
 } from "../../../core/api";
+import { Generated } from "./aiText";
 import { Chart } from "./chartSchema";
 import { Citation } from "./citationSchema";
 import { lowlight } from "./codeLanguages";
@@ -72,6 +74,7 @@ export interface NoteSchemaOptions {
  * text. Charts, drawn from a table or from cited figures, each value with its
  * Citation (#436). What a Word import kept as it is, and its inline pictures
  * (#104, see `wordSchema`). Proposals the AI made, waiting for the User (see `proposalSchema`).
+ * AI text, the words the AI wrote that the User hasn't made their own (see `aiText`).
  * Every Block and every footnote has a UUID. The editor adds its interface on
  * top (collaboration, menus, the drag handle, smart typography); tests use
  * this alone.
@@ -90,9 +93,11 @@ export function noteExtensions({
   onSectionBreakDelete,
 }: NoteSchemaOptions = {}): Extensions {
   const onClick = onEditMath && ((_node: unknown, pos: number) => onEditMath(pos));
-  const CodeBlock = codeBlockView
-    ? CodeBlockLowlight.extend({ addNodeView: () => codeBlockView })
-    : CodeBlockLowlight;
+  const CodeBlock = CodeBlockLowlight.extend({
+    // No formatting in code, but code the AI wrote is AI text all the same.
+    marks: GENERATED_MARK,
+    ...(codeBlockView && { addNodeView: () => codeBlockView }),
+  });
 
   return [
     StarterKit.configure({
@@ -140,6 +145,7 @@ export function noteExtensions({
     ProposalInsert,
     ProposalDelete,
     ProposalAttributes,
+    Generated,
     UniqueID.configure({
       attributeName: BLOCK_ID_ATTRIBUTE,
       types: [...BLOCK_TYPES, FOOTNOTE_NODE],
