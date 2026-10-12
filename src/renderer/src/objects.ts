@@ -12,6 +12,7 @@ export type ObjectKind =
   | "folder"
   | "tag"
   | "linkedFolder"
+  | "deleted"
   | "citation"
   | "answer"
   | "block"
