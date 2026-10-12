@@ -9,14 +9,13 @@ import {
   revealUnverified,
   useExports,
 } from "../exports";
+import { showFileLabelKey } from "../fileInfo";
 import { useT } from "../i18n";
 import { enter } from "../motion";
 import { chooseOutputLocation } from "../outputFiles";
 import { saveFailureReason } from "../problems";
 import { CloseLineIcon, ExportLineIcon } from "./lineIcons";
 import { type ProblemAction, ProblemLine } from "./ProblemLine";
-
-const isMac = navigator.userAgent.includes("Mac");
 
 /** How long a plain "Saved …" stays, unless the pointer or the focus is on it. */
 const SAVED_SHOWN_MS = 10_000;
@@ -173,7 +172,7 @@ function ResultBody({
                   onClick={() => run(() => files.showSavedFile(result.path), "export.failed.show")}
                   className="h-7 rounded-md px-2.5 text-[13px] leading-5 font-semibold text-ink-secondary hover:bg-hover hover:text-ink"
                 >
-                  {t(isMac ? "export.showInFinder" : "export.showInFolder")}
+                  {t(showFileLabelKey(navigator.platform))}
                 </button>
               </span>
             </div>
