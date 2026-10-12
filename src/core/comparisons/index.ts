@@ -57,7 +57,7 @@ import type { MindContent } from "../mindContent";
 import { plainText } from "../mindText";
 import { classifyProviderError } from "../providers/providerErrors";
 import { type ItemOutcome, RunItemError, runItems } from "../runs/stop";
-import { cellContext, saysNotFound } from "./prompt";
+import { cellContext, isNotFoundReply, saysNotFound } from "./prompt";
 
 /** Cells written at once on a model off this computer. */
 export const CLOUD_CELLS_AT_ONCE = 4;
@@ -339,7 +339,8 @@ export function createComparisons(options: ComparisonsOptions) {
     if (answer.status === "stopped") throw new DOMException("Stopped.", "AbortError");
     if (answer.status === "failed" && answer.error) throw new RunItemError(answer.error);
     if (saysNotFound(answer.markdown, answer.citations)) {
-      const said = answer.markdown.trim();
+      // What the model said instead, if anything but NOT_FOUND, for the cell's tooltip.
+      const said = isNotFoundReply(answer.markdown) ? "" : answer.markdown.trim();
       return { kind: "problem", problem: "not-found", ...(said && { message: said }) };
     }
     return { kind: "answer", blocks: answer.blocks };
