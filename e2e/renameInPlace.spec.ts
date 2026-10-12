@@ -171,6 +171,10 @@ test("a Folder renames in the Library's heading, and a Tag in the sidebar: a nam
     expect(names).toContain("Moons");
     expect(names).not.toContain("Tides");
 
+    // Each rename is one step of Undo.
+    await window.getByTestId("undo-line").getByTestId("undo-action").click();
+    await expect(tags.getByTestId("row-text").filter({ hasText: /^Tides$/ })).toHaveCount(1);
+
     // Its menu's Rename.
     const moons = tags.filter({ hasText: "Moons" });
     await moons.getByTestId("row-text").click({ button: "right" });

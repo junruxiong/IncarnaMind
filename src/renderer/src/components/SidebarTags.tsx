@@ -1,11 +1,11 @@
 import { type ReactNode, useMemo, useState } from "react";
 import type { Document } from "../../../core/api";
-import { core } from "../core";
 import { useT } from "../i18n";
 import { isShown } from "../layoutSlice";
 import { documentsByTag, NEEDS_REVIEW } from "../libraryFilters";
 import type { ObjectRef } from "../objects";
 import { useAppStore } from "../store";
+import { editTag } from "../tagChanges";
 import { BrowseGroup } from "./BrowseGroup";
 import { ReviewRing, TagDot } from "./TagColour";
 
@@ -98,9 +98,7 @@ export function SidebarTags({
               { kind: "tag", id: tag.id },
               {
                 label: t("tag.renameLabel", { name: tag.name }),
-                commit: async (next) => {
-                  await core.updateTag(tag.id, { name: next });
-                },
+                commit: (next) => editTag(tag.id, { name: next }),
               },
             ),
           )}
