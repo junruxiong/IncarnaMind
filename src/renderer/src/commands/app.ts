@@ -6,6 +6,7 @@ import { useFindSources } from "../findSources";
 import { useHistory } from "../history";
 import { currentTabOf } from "../layoutSlice";
 import { startSkillFromMind } from "../makeSkill";
+import { useMindTools } from "../mindTools";
 import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
 import { findTab } from "../tabs";
@@ -18,7 +19,8 @@ import { evidenceCommands } from "./evidence";
 import { exportCommands } from "./exports";
 import { fileCommands } from "./fileInfo";
 import { footnoteCommands } from "./footnotes";
-import { citationHandle, sidebarHandle } from "./handles";
+import { citationHandle, findHandle, sidebarHandle } from "./handles";
+import { linkCommands } from "./links";
 import { meetingCommands } from "./meetings";
 import {
   answerCommands,
@@ -48,16 +50,21 @@ function mindInFront(): string | null {
   return item?.kind === "mind" ? item.mindId : null;
 }
 
-/**
- * The Mind a command acts on: the one a menu names (its row, or the tab showing it), else the
- * one in front (⌘K, the assistant).
- */
+/** The Mind a menu or the keyboard names: the Mind's row, the Mind a tab shows, else the one in front. */
+function mindShown(ctx: CommandContext): string | null {
+  const target = ctx.selection[0] ?? ctx.focus;
+  if (target?.kind === "mind") return target.id;
+  if (target?.kind === "tab") {
+    const item = findTab(useAppStore.getState().layout, target.id)?.item;
+    return item?.kind === "mind" ? item.mindId : null;
+  }
+  return mindInFront();
+}
+
+/** The Mind a command acts on: the one a menu names, else the one in front (⌘K, the assistant). */
 function mindOf(ctx: CommandContext): string | null {
   const targets = ctx.selection.length > 0 ? ctx.selection : ctx.focus ? [ctx.focus] : [];
-  const named = targets.find((each) => each.kind === "mind")?.id;
-  const tab = targets.find((each) => each.kind === "tab");
-  const shown = tab ? findTab(useAppStore.getState().layout, tab.id)?.item : undefined;
-  return named ?? (shown?.kind === "mind" ? shown.mindId : null) ?? mindInFront();
+  return targets.find((each) => each.kind === "mind")?.id ?? mindInFront();
 }
 
 const appCommands: readonly Command[] = [
@@ -155,9 +162,9 @@ const appCommands: readonly Command[] = [
     group: "main",
     // Opening it changes nothing; its Restore is taken back with Undo.
     reversible: true,
-    when: (ctx) => mindOf(ctx) !== null,
+    when: (ctx) => mindShown(ctx) !== null,
     run: (ctx) => {
-      const mindId = mindOf(ctx);
+      const mindId = mindShown(ctx);
       if (mindId) useHistory.getState().open(mindId);
     },
   },
@@ -232,7 +239,55 @@ const appCommands: readonly Command[] = [
       if (ctx.focus?.kind === "block") blockMenuFor(ctx.focus.id)?.(ctx.focus.id);
     },
   },
+  {
+    id: "mind.outline",
+    label: "editor.outline.title",
+    keywords: ["editor.slash.heading1"],
+    shortcut: { keys: "CmdOrCtrl+Alt+L" },
+    group: "main",
+    // Opening it changes nothing.
+    reversible: true,
+    when: (ctx) => mindShown(ctx) !== null,
+    run: (ctx) => {
+      const mindId = mindShown(ctx);
+      if (!mindId) return;
+      // A Mind's row in the sidebar opens the Mind, which then shows its outline.
+      if (mindId !== mindInFront()) useAppStore.getState().openMind(mindId);
+      useMindTools.getState().showOutline(mindId);
+    },
+  },
+  {
+    id: "mind.find",
+    label: "editor.find.label",
+    shortcut: { keys: "CmdOrCtrl+F" },
+    group: "main",
+    reversible: true,
+    when: () => mindInFront() !== null,
+    run: () => {
+      const mindId = mindInFront();
+      if (mindId) useMindTools.getState().showFind(mindId);
+    },
+  },
+  {
+    id: "mind.findNext",
+    label: "command.mind.findNext",
+    shortcut: { keys: "CmdOrCtrl+G" },
+    group: "main",
+    reversible: true,
+    when: () => findHandle.current !== null,
+    run: () => findHandle.current?.next(),
+  },
+  {
+    id: "mind.findPrevious",
+    label: "command.mind.findPrevious",
+    shortcut: { keys: "CmdOrCtrl+Shift+G" },
+    group: "main",
+    reversible: true,
+    when: () => findHandle.current !== null,
+    run: () => findHandle.current?.previous(),
+  },
   ...footnoteCommands,
+  ...linkCommands,
   ...bibliographyCommands,
   ...tableCommands,
   ...chartCommands,

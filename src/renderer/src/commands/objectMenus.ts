@@ -14,6 +14,7 @@ const EXPORTS = [
 registerMenu("mind", [
   "mind.open",
   "mind.openSide",
+  "mind.outline",
   ...EXPORTS,
   "mind.history",
   "mind.citationStyle",
@@ -69,7 +70,7 @@ registerMenu("linkedFolder", [
 registerMenu("deleted", ["deleted.restore", "deleted.deletePermanently"]);
 
 // A tab's menu is its Mind's, then the tab's own.
-registerMenu("tab", [...EXPORTS, "mind.history", "mind.moveTo", "mind.delete"], 0);
+registerMenu("tab", ["mind.outline", ...EXPORTS, "mind.history", "mind.moveTo", "mind.delete"], 0);
 registerMenu(
   "tab",
   [
