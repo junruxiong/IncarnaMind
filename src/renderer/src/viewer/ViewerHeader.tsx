@@ -2,6 +2,7 @@ import { createContext, type ReactNode, useContext, useState } from "react";
 import type { Document } from "../../../core/api";
 import { displayName, sourceOf } from "../../../shared/documentNames";
 import { CountItLine } from "../components/CountItLine";
+import { InlineName } from "../components/InlineName";
 import { DocumentLineIcon, PinLineIcon } from "../components/lineIcons";
 import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
 import { ProblemLine } from "../components/ProblemLine";
@@ -10,6 +11,8 @@ import { files } from "../core";
 import { errorMessage } from "../errors";
 import { useLeftOutOfEvidence } from "../evidence";
 import { useLanguage, useT } from "../i18n";
+import { useAppStore } from "../store";
+import { useRename } from "../useRename";
 import { pageDate } from "../webPages";
 import { OpenExternallyIcon } from "./icons";
 
@@ -61,6 +64,8 @@ export function ViewerHeader({
   const [problem, setProblem] = useState<string | null>(null);
   const leftOut = useLeftOutOfEvidence(document);
   const objectMenu = useObjectMenu({ kind: "document", id: document?.id ?? "" });
+  const rename = useRename<HTMLButtonElement>(`viewer:${document?.id}`);
+  const renameDocument = useAppStore((state) => state.renameDocument);
 
   // A copy named after the Document opens, as from the sidebar's file menu.
   const openExternally = () => {
@@ -87,8 +92,21 @@ export function ViewerHeader({
             className={`viewer-kind ${leading ? "ml-1" : "ml-1.5"}`}
           />
         )}
-        {document ? (
-          <span
+        {document && rename.renaming ? (
+          <span className="ml-1 min-w-12 max-w-md flex-1">
+            <InlineName
+              value={document.name}
+              label={t("documents.renameLabel", { name: document.name })}
+              testId="viewer-title-rename"
+              {...rename.field((name) => renameDocument(document.id, name))}
+            />
+          </span>
+        ) : document ? (
+          <button
+            {...rename.nameProps}
+            type="button"
+            // Out of the toolbar's tab order: a click focuses it for F2, and its menu has Rename.
+            tabIndex={-1}
             data-testid="viewer-title"
             title={
               displayName(document) === sourceOf(document)
@@ -96,10 +114,10 @@ export function ViewerHeader({
                 : `${displayName(document)}
 ${sourceOf(document)}`
             }
-            className="viewer-title"
+            className="viewer-title cursor-default text-left"
           >
             {displayName(document)}
-          </span>
+          </button>
         ) : null}
         {document && <DocumentTagChips document={document} variant="header" />}
         <span className="flex-1" />
@@ -137,6 +155,7 @@ ${sourceOf(document)}`
           <ObjectMenu
             target={{ kind: "document", id: document.id }}
             label={t("documents.more", { name: displayName(document) })}
+            here={{ "document.rename": rename.start }}
             className="viewer-icon-button"
           />
         )}

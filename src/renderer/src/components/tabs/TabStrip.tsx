@@ -1,17 +1,11 @@
-import {
-  type KeyboardEvent,
-  type RefObject,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { type KeyboardEvent, type RefObject, useEffect, useRef, useState } from "react";
 import type { LayoutGroup, LayoutTab } from "../../../../core/api";
 import { shortcutLabel } from "../../commands/keymap";
 import { commands } from "../../commands/registry";
 import { useT } from "../../i18n";
 import { focusedGroupOf, groupOfTab } from "../../layoutSlice";
 import { useAppStore } from "../../store";
+import { InlineName } from "../InlineName";
 import {
   CloseLineIcon,
   ExportLineIcon,
@@ -335,47 +329,21 @@ function Tab({ tab, groupId, selected, focusedGroup, divider, dragged, drag }: T
   );
 }
 
-/**
- * A Mind's title typed in its tab: Enter or leaving the field saves, Esc
- * cancels, a blank title changes nothing, and Enter while an input method is
- * composing doesn't cut the title off.
- */
+/** A Mind's title typed in its tab. */
 function RenameTab({ mindId, title, onDone }: { mindId: string; title: string; onDone(): void }) {
   const t = useT();
   const renameMind = useAppStore((state) => state.renameMind);
-  const [value, setValue] = useState(title);
-  const field = useRef<HTMLInputElement>(null);
-  const finished = useRef(false);
-
-  useLayoutEffect(() => {
-    field.current?.focus();
-    field.current?.select();
-  }, []);
-
-  const finish = (save: boolean) => {
-    if (finished.current) return;
-    finished.current = true;
-    if (save && value.trim() !== "" && value.trim() !== title) void renameMind(mindId, value);
-    onDone();
-  };
-
   return (
-    <input
-      ref={field}
-      value={value}
-      data-testid="tab-rename"
-      aria-label={t("mind.renameLabel", { title })}
-      onChange={(event) => setValue(event.target.value)}
-      onKeyDown={(event) => {
-        if (event.nativeEvent.isComposing) return;
-        if (event.key === "Enter" || event.key === "Escape") {
-          event.preventDefault();
-          event.stopPropagation();
-          finish(event.key === "Enter");
-        }
-      }}
-      onBlur={() => finish(true)}
+    <InlineName
+      value={title}
+      label={t("mind.renameLabel", { title })}
+      testId="tab-rename"
       className="tab-rename"
+      onCommit={(name) => {
+        onDone();
+        return renameMind(mindId, name);
+      }}
+      onCancel={onDone}
     />
   );
 }

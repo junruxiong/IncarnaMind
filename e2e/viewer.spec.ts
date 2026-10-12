@@ -813,7 +813,10 @@ test("a Document's tab has one 36px toolbar under its group's strip, holding eve
     "document-file-menu",
   ]);
   await expect(window.getByTestId("viewer-title")).toHaveText("Guide");
-  for (const control of await header.locator("button:not([data-testid='viewer-keep'])").all()) {
+  const icons = header.locator(
+    "button:not([data-testid='viewer-keep']):not([data-testid='viewer-title'])",
+  );
+  for (const control of await icons.all()) {
     await expect(control).toHaveAttribute("aria-label", /.+/);
     expect((await boxOf(control)).height).toBe(28);
   }
