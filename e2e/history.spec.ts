@@ -66,6 +66,16 @@ async function shortenAndAccept(window: Page, line: string, shortened: string): 
   return note;
 }
 
+/** Opens the tab's menu by the keyboard and arrows down from Outline, past the exports, to History. */
+async function openHistoryFromTabMenu(window: Page, tab: Locator): Promise<void> {
+  const menu = tab.getByTestId("tab-actions");
+  await tab.focus();
+  await window.keyboard.press("Shift+F10");
+  await expect(menu.getByTestId("mind.outline")).toBeFocused();
+  for (let step = 0; step < 5; step++) await window.keyboard.press("ArrowDown");
+  await expect(menu.getByTestId("mind.history")).toBeFocused();
+}
+
 test("accepting changes saves a version; History compares it with now, Restore brings it back, ⌘Z takes it back", async () => {
   const { window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
@@ -151,11 +161,9 @@ test("in Chinese, at a narrow window: an empty History, then by the keyboard fro
   // A new Mind has no versions yet.
   await newMind(window);
   const tab = window.getByRole("tab", { selected: true }).first();
-  await tab.focus();
-  await window.keyboard.press("Shift+F10");
   const tabMenu = tab.getByTestId("tab-actions");
+  await openHistoryFromTabMenu(window, tab);
   await expect(tabMenu.getByTestId("mind.history")).toHaveText("历史版本");
-  await tabMenu.getByTestId("mind.history").focus();
   await window.keyboard.press("Enter");
   await expect(history).toBeVisible();
   await expect(history.getByTestId("history-empty")).toContainText("还没有历史版本");
@@ -164,10 +172,7 @@ test("in Chinese, at a narrow window: an empty History, then by the keyboard fro
   await expect(history).toBeHidden();
 
   await shortenAndAccept(window, "潮水每天非常规律地涨落两次。", "潮水每天规律地涨落两次。");
-  const shown = window.getByRole("tab", { selected: true }).first();
-  await shown.focus();
-  await window.keyboard.press("Shift+F10");
-  await tabMenu.getByTestId("mind.history").focus();
+  await openHistoryFromTabMenu(window, window.getByRole("tab", { selected: true }).first());
   await window.keyboard.press("Enter");
   await expect(history).toBeVisible();
   await expect(history.getByTestId("history-picker-left")).toContainText("接受修订前");
