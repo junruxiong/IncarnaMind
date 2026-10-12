@@ -321,7 +321,7 @@ export function LibraryPane() {
                   className={buttonStyle("danger")}
                   onClick={() =>
                     void act(async () => {
-                      await core.deleteLibraryGroup(selected.id);
+                      await useAppStore.getState().deleteFolder(selected.id);
                       useAppStore.getState().openLibrary();
                     })
                   }
@@ -563,7 +563,11 @@ const LibraryRow = memo(function LibraryRow({
         value={item?.groupId ?? ""}
         className={`${inputClass} mt-0 min-w-0`}
         onChange={(event) =>
-          void act(() => core.assignDocumentGroup(doc.id, event.target.value || null))
+          void act(() =>
+            useAppStore
+              .getState()
+              .moveToFolder({ documentIds: [doc.id] }, event.target.value || null),
+          )
         }
       >
         <option value="">{t("library.unsorted")}</option>
@@ -730,7 +734,7 @@ function GroupForm({
         void act(async () => {
           const input = { name, description, countsOwnFiles };
           if (group === "new") await core.createLibraryGroup(input);
-          else await core.updateLibraryGroup(group.id, input);
+          else await useAppStore.getState().editFolder(group.id, input);
           close();
         });
       }}
