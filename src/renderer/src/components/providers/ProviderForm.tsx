@@ -1,16 +1,21 @@
 import { type FormEvent, useEffect, useId, useState } from "react";
-import {
-  type ChatProvider,
-  type ChatProviderKind,
-  type ConnectionTestResult,
-  chatProviderKinds,
-  type SecretStorageStatus,
-  type TestChatConnectionInput,
+import type {
+  ChatProvider,
+  ChatProviderKind,
+  ConnectionTestResult,
+  SecretStorageStatus,
+  TestChatConnectionInput,
 } from "../../../../core/api";
-import { catalogProviderOfKind, endpointOf } from "../../../../core/providers/catalog/providers";
+import {
+  catalogProviderOfKind,
+  endpointOf,
+  KEY_PROVIDER_KINDS,
+  keyProviderGroups,
+} from "../../../../core/providers/catalog/providers";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useLanguage, useT } from "../../i18n";
+import { ChevronDownLineIcon } from "../lineIcons";
 import {
   buttonClass,
   choiceListClass,
@@ -26,15 +31,6 @@ import {
 } from "../ui";
 import { testErrorKey, useProviderKey } from "./shared";
 
-/**
- * Providers set up with a key or a server URL: every hosted provider in the
- * catalog, then a server the User gives. Ollama has its own one-click card.
- */
-const formKinds: readonly ChatProviderKind[] = [
-  ...chatProviderKinds.filter((kind) => (catalogProviderOfKind(kind)?.endpoints.length ?? 0) > 0),
-  "openai-compatible",
-];
-
 type FormKind = ChatProviderKind;
 
 /**
@@ -43,7 +39,8 @@ type FormKind = ChatProviderKind;
  */
 const suggestedModel = (kind: FormKind): string => catalogProviderOfKind(kind)?.roles.answers ?? "";
 
-const isSuggestion = (model: string) => formKinds.some((kind) => suggestedModel(kind) === model);
+const isSuggestion = (model: string) =>
+  KEY_PROVIDER_KINDS.some((kind) => suggestedModel(kind) === model);
 
 const sameServer = (provider: ChatProvider, kind: FormKind, endpoint: string, baseUrl: string) =>
   provider.kind === kind &&
@@ -58,15 +55,19 @@ const sameServer = (provider: ChatProvider, kind: FormKind, endpoint: string, ba
 export function ProviderForm({
   providers,
   onSaved,
+  withMoreProviders = false,
 }: {
   /** Saved providers, to tell the User when a key is already stored. */
   providers: readonly ChatProvider[];
   onSaved(provider: ChatProvider): void;
+  /** Settings lists the best-effort providers too, under "More providers"; first run only the first-class ones. */
+  withMoreProviders?: boolean;
 }) {
   const t = useT();
   const id = useId();
   const language = useLanguage();
   const [kind, setKind] = useState<FormKind | null>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
   /** The region of a provider that has several; its first otherwise. */
   const [endpointId, setEndpointId] = useState("");
   const key = useProviderKey();
@@ -82,6 +83,9 @@ export function ProviderForm({
     core.getSecretStorage().then(setSecretStorage, () => undefined);
   }, []);
 
+  const { main, more } = keyProviderGroups(
+    withMoreProviders ? providers.map((each) => each.kind) : [],
+  );
   const catalog = kind ? catalogProviderOfKind(kind) : undefined;
   const endpoint = catalog ? endpointOf(catalog, endpointId) : undefined;
   const saved = kind
@@ -96,10 +100,25 @@ export function ProviderForm({
     (kind !== "openai-compatible" || baseUrl.trim() !== "") &&
     (!keyRequired || hasKey);
 
+  const radio = (option: FormKind) => (
+    <label key={option} className={compactChoiceRowClass}>
+      <input
+        type="radio"
+        name={`${id}-kind`}
+        value={option}
+        checked={kind === option}
+        onChange={() => choose(option)}
+        className={compactChoiceRadioClass}
+      />
+      {t(`providers.kind.${option}`)}
+    </label>
+  );
+
   const choose = (next: FormKind) => {
     // A key typed for one provider is never sent to another.
     if (next !== kind) key.clear();
     setKind(next);
+    if (more.includes(next)) setMoreOpen(true);
     setEndpointId("");
     setModelId((current) =>
       current === "" || isSuggestion(current) ? suggestedModel(next) : current,
@@ -158,19 +177,29 @@ export function ProviderForm({
       <fieldset>
         <legend className={`mb-1.5 ${fieldLabelClass}`}>{t("providers.form.label")}</legend>
         <div className={`${choiceListClass} bg-sheet`}>
-          {formKinds.map((option) => (
-            <label key={option} className={compactChoiceRowClass}>
-              <input
-                type="radio"
-                name={`${id}-kind`}
-                value={option}
-                checked={kind === option}
-                onChange={() => choose(option)}
-                className={compactChoiceRadioClass}
-              />
-              {t(`providers.kind.${option}`)}
-            </label>
-          ))}
+          {main.map(radio)}
+          {withMoreProviders && more.length > 0 && (
+            <>
+              <button
+                type="button"
+                data-testid="provider-more-toggle"
+                aria-expanded={moreOpen}
+                aria-controls={`${id}-more`}
+                onClick={() => setMoreOpen((open) => !open)}
+                className={`${compactChoiceRowClass} w-full justify-between text-left font-semibold`}
+              >
+                {t("providers.form.more")}
+                <ChevronDownLineIcon
+                  className={`size-3 shrink-0 text-ink-meta ${moreOpen ? "rotate-180" : ""}`}
+                />
+              </button>
+              {moreOpen && (
+                <div id={`${id}-more`} data-testid="provider-more">
+                  {more.map(radio)}
+                </div>
+              )}
+            </>
+          )}
         </div>
       </fieldset>
 
@@ -254,6 +283,20 @@ export function ProviderForm({
               </a>
             )}
           </label>
+
+          {catalog?.keyGuide && (
+            // First-class providers only (ADR-0019): a few steps, the provider's own page has the screens.
+            <details data-testid="provider-key-guide" className="-mt-2 text-ui text-ink-secondary">
+              <summary className="cursor-pointer font-semibold text-ink">
+                {t("providers.form.keyGuide")}
+              </summary>
+              <ol className="mt-1.5 list-decimal pl-5">
+                {catalog.keyGuide.map((step) => (
+                  <li key={step.en}>{step[language === "zh-CN" ? "zh" : "en"]}</li>
+                ))}
+              </ol>
+            </details>
+          )}
 
           {catalog?.planCredits && (
             // Which of the provider's own plans pay for a key, in its words (#122).

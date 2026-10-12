@@ -4,6 +4,7 @@ import { describe, expect, onTestFinished, test, vi } from "vitest";
 import type * as Y from "yjs";
 import type { Core, CoreEvents } from "../../src/core";
 import { ANSWER_TEMPERATURE, answerTemperature } from "../../src/core/answers/engine";
+import { pendingProposals, proposalRequestOf } from "../../src/shared/proposals";
 import { askAndFinish, setUpWithDocuments } from "../helpers/citations";
 import { createTempDataFolder, nextEvent, startCore } from "../helpers/core";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
@@ -16,6 +17,8 @@ import {
   outline,
   question,
   readMind,
+  resolveChanges,
+  shownWithChanges,
   writeMind,
 } from "../helpers/minds";
 import {
@@ -234,6 +237,36 @@ describe("Question context", () => {
       { role: "user", text: "# Tides\n\nThe Moon matters.\n\nWhy are there tides?" },
       { role: "assistant", text: "The Moon's gravity pulls the oceans." },
       { role: "user", text: "Spring tides are the big ones.\n\nWhen are spring tides?" },
+    ]);
+  });
+
+  test("reads a change still waiting as the text it would replace: its new words aren't the Mind's yet", async () => {
+    const model = streamingModel("Answered.");
+    const { core, mind, writer } = await setUp(model);
+    const change = { id: "change-1", request: "request-1", target: "x" };
+    const asked = question("How strong are the tides?");
+    writeMind(writer, [
+      {
+        type: "paragraph",
+        attrs: { id: "note-1" },
+        content: [
+          { type: "text", text: "The tides are " },
+          { type: "text", text: "very", marks: [{ type: "proposalDelete", attrs: change }] },
+          { type: "text", text: "a bit", marks: [{ type: "proposalInsert", attrs: change }] },
+          { type: "text", text: " strong." },
+        ],
+      },
+      {
+        type: "paragraph",
+        attrs: { id: "note-2", proposal: { ...change, id: "change-2", kind: "insert" } },
+        content: [{ type: "text", text: "A paragraph the AI would add." }],
+      },
+      asked,
+    ]);
+    await askAndWait(core, writer, mind.id, asked.attrs.id);
+
+    expect(promptOf(model).slice(1)).toEqual([
+      { role: "user", text: "The tides are very strong.\n\nHow strong are the tides?" },
     ]);
   });
 
@@ -511,11 +544,17 @@ describe("Stopping and regenerating", () => {
     expect(promptOf(model, 1)).toEqual(promptOf(model, 0));
   });
 
-  test("an Answer the User has edited is replaced only once they agree", async () => {
-    const model = streamingModel(["Generated text.", "Regenerated text."]);
+  test("regenerating an Answer the User has edited gives changes over their version, which stays until they accept one", async () => {
+    const model = streamingModel([
+      "Generated text.",
+      "Regenerated text.",
+      "Written again.",
+      "Once more.",
+      "Replaced in place.",
+    ]);
     const { core, mind, writer, reader } = await setUp(model);
     const asked = question("Write something.");
-    writeMind(writer, [asked]);
+    writeMind(writer, [asked, note("A Note after the Answer.")]);
     const answerId = await askAndWait(core, writer, mind.id, asked.attrs.id);
 
     // Answers are ordinary text: the User edits this one.
@@ -525,25 +564,59 @@ describe("Stopping and regenerating", () => {
     await writer.settled();
     expect(answerText(reader, answerId)).toBe("Generated text. My own words.");
 
-    // Regenerating, or asking the Question again, sends nothing and says it has edits.
+    // Regenerating sends the Question again, and the new Answer comes as changes over theirs.
     expect(await core.regenerateAnswer({ mindId: mind.id, answerId })).toEqual({
-      asked: false,
-      reason: "edited",
+      asked: true,
       answerId,
     });
-    expect(await core.askQuestion({ mindId: mind.id, questionId: asked.attrs.id })).toEqual({
-      asked: false,
-      reason: "edited",
+    expect(await answerEnded(core, answerId)).toMatchObject({ event: "finished" });
+    expect(model.doStreamCalls).toHaveLength(2);
+    expect(shownWithChanges(reader).slice(1, 2)).toEqual([
+      "[-Generated text. My own words.-]{+Regenerated text.+}",
+    ]);
+    expect(answerIn(reader, answerId).attrs).toMatchObject({ status: "done" });
+    const [change] = pendingProposals(reader.blocks);
+    expect(proposalRequestOf(reader.doc, change?.request ?? "")).toMatchObject({
+      source: "answer",
       answerId,
+      modelId: "local-model",
     });
-    expect(model.doStreamCalls).toHaveLength(1);
-    expect(answerText(reader, answerId)).toBe("Generated text. My own words.");
+    // Until a change is accepted, the Answer is what the User wrote, for the model and for exports.
+    const exported = new TextDecoder().decode(
+      (await core.exportMind(mind.id, { format: "markdown" })).data,
+    );
+    expect(exported).toContain("Generated text. My own words.");
+    expect(exported).not.toContain("Regenerated");
+    // The rest of the Mind is as it was.
+    expect(readMind(reader).child(2).textContent).toBe("A Note after the Answer.");
 
-    // Once the User agrees, it is replaced.
-    const result = await core.regenerateAnswer({ mindId: mind.id, answerId, discardEdits: true });
-    expect(result).toEqual({ asked: true, answerId });
+    // Asking again while changes wait replaces them with the new Answer's.
+    expect(await core.askQuestion({ mindId: mind.id, questionId: asked.attrs.id })).toEqual({
+      asked: true,
+      answerId,
+    });
     await answerEnded(core, answerId);
-    expect(answerText(reader, answerId)).toBe("Regenerated text.");
+    expect(shownWithChanges(reader).slice(1, 2)).toEqual([
+      "[-Generated text. My own words-]{+Written again+}.",
+    ]);
+    expect(pendingProposals(reader.blocks)).toHaveLength(1);
+
+    // Rejecting them keeps the User's words, and the Answer is still theirs.
+    await resolveChanges(writer, "reject");
+    expect(answerText(reader, answerId)).toBe("Generated text. My own words.");
+    await core.regenerateAnswer({ mindId: mind.id, answerId });
+    await answerEnded(core, answerId);
+    expect(shownWithChanges(reader).slice(1, 2)).toEqual([
+      "[-Generated text. My own words-]{+Once more+}.",
+    ]);
+
+    // Accepting them all makes it the model's Answer again: the next Regenerate replaces it in place.
+    await resolveChanges(writer, "accept");
+    expect(answerText(reader, answerId)).toBe("Once more.");
+    await core.regenerateAnswer({ mindId: mind.id, answerId });
+    await answerEnded(core, answerId);
+    expect(answerText(reader, answerId)).toBe("Replaced in place.");
+    expect(pendingProposals(reader.blocks)).toEqual([]);
   });
 
   test("an Answer cut off by quitting is kept, marked stopped, after a restart", async () => {
