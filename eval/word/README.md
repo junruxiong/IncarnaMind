@@ -60,7 +60,8 @@ INCARNAMIND_WORD_SET=all npm run eval:word # both
 For each file it runs these steps, and prints one line per file:
 
 1. **package**: reads the file with the app's own ZIP and XML readers, and checks the things Word's repair prompt is about, since LibreOffice repairs silently and tells you nothing: every XML part is well-formed, every relationship points at a part that is there, every part has a content type, and the feature counts match the list.
-2. **opens in LibreOffice**: converts the file to PDF with `soffice --headless`, using a profile in a temporary folder. If it writes a PDF, the file opened. "Opens" here means LibreOffice loads it; it is not a promise that Word does, which is why a person re-saves some files in Word and Google Docs.
+2. **imports as a Mind** (#104, `imports.ts`): imports the file as the app does, and checks that every node is one the editor's schema takes and that nothing is dropped without a word: the text of every paragraph of the body, as the Document reader reads it, is kept in the Mind (its text, or what an atom kept as is shows or holds; another person's deleted or moved-away text struck), and the line says what became editable and what was kept as is, by count. A file of a kind #104 refuses on purpose (Strict Open XML, macros, a password) passes as refused. `npm test` runs the same check on the core set (`tests/core/wordCorpus.test.ts`).
+3. **opens in LibreOffice**: converts the file to PDF with `soffice --headless`, using a profile in a temporary folder. If it writes a PDF, the file opened. "Opens" here means LibreOffice loads it; it is not a promise that Word does, which is why a person re-saves some files in Word and Google Docs.
 
 LibreOffice is found as `INCARNAMIND_SOFFICE`, then `soffice`, then `libreoffice` on the PATH. When it isn't there the second step is skipped and says so, unless `INCARNAMIND_WORD_REQUIRE_LIBREOFFICE=1`, which CI sets: then a missing LibreOffice fails the run.
 
