@@ -52,6 +52,7 @@ import type { PageText } from "../documents/passages";
 import type { WindowedPassage } from "../documents/search";
 import { withCueMarks } from "./cueMarks";
 import type {
+  AnswerSearchOptions,
   AnswerTools,
   CitationRecordInput,
   CiteOptions,
@@ -291,7 +292,11 @@ export interface AnswerDocuments {
   /** How many live Documents have Passages to search. */
   searchableCount(): number;
   /** The document-search Tool. */
-  search(query: string, signal?: AbortSignal): Promise<WindowedPassage[]>;
+  search(
+    query: string,
+    signal?: AbortSignal,
+    options?: AnswerSearchOptions,
+  ): Promise<WindowedPassage[]>;
   /** A Passage and its Document, deleted or not; null if unknown. */
   citationSource(passageId: string): CitationSource | null;
   /** The stored text of one version of a live Document's Units (see `pageTexts` in ../documents). */
@@ -834,7 +839,11 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       return documents.searchableCount();
     },
 
-    async searchDocuments(query: string, signal?: AbortSignal): Promise<SearchResultForModel> {
+    async searchDocuments(
+      query: string,
+      signal?: AbortSignal,
+      options?: AnswerSearchOptions,
+    ): Promise<SearchResultForModel> {
       searches++;
       if (searches > MAX_SEARCHES_PER_ANSWER) {
         return {
@@ -842,7 +851,7 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
           passageCount: 0,
         };
       }
-      const found = await documents.search(query, signal);
+      const found = await documents.search(query, signal, options);
       if (found.length === 0) {
         return { text: "No Passages in the User's Documents match this search.", passageCount: 0 };
       }
