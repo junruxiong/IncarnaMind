@@ -230,6 +230,11 @@ function PdfPages({ document, pdfjs, pdf, firstPage, target }: PdfPagesProps) {
   const placed = useRef<{ page: number; scrollTop: number } | null>(null);
   /** The open request whose highlight the view should move to once it is drawn. */
   const pendingHighlight = useRef<number | null>(null);
+  /**
+   * The open request the view last moved to the quote for: finding the quote
+   * again (a scanned page's text arriving) washes it, but leaves the view where it is.
+   */
+  const shownHighlight = useRef<number | null>(null);
   const frame = useRef(0);
   /** The zoom shown, or about to be: a zoom by wheel or pinch goes on from it. */
   const shownZoom = useRef(1);
@@ -470,7 +475,7 @@ function PdfPages({ document, pdfjs, pdf, firstPage, target }: PdfPagesProps) {
         list.push({ item: part.piece, start: part.start, end: part.end });
         byPage.set(page, list);
       }
-      pendingHighlight.current = target.request;
+      if (shownHighlight.current !== target.request) pendingHighlight.current = target.request;
       setHighlights(byPage);
     })().catch((error: unknown) => {
       if (!cancelled) console.error(error);
@@ -534,6 +539,7 @@ function PdfPages({ document, pdfjs, pdf, firstPage, target }: PdfPagesProps) {
       if (!container || page !== firstHighlightPage) return;
       if (pendingHighlight.current !== target.request) return;
       pendingHighlight.current = null;
+      shownHighlight.current = target.request;
       const box = container.getBoundingClientRect();
       const rect = element.getBoundingClientRect();
       if (rect.top >= box.top && rect.bottom <= box.bottom) return; // already in view
