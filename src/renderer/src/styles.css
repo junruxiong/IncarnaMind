@@ -5942,10 +5942,13 @@
     > .comparison-cell-stopped,
   .comparison-cell[data-status="failed"] > .comparison-cell-problem {
     display: inline-flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 6px;
   }
+  /* On the reason's first line, however many it takes. */
   .comparison-cell-mark {
+    flex: none;
+    margin-top: 4px;
     display: inline-flex;
     align-items: center;
     justify-content: center;

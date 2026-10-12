@@ -650,6 +650,56 @@ describe("Compare Documents", () => {
     expect(chinese).toContain("| Lumeric（来源已删除） | 30 days[^5] | 未找到 |");
   });
 
+  test("quitting halfway: nothing is lost or doubled, the cells left wait, and filling again writes them", async () => {
+    const held = new Promise<void>(() => {});
+    let first = true;
+    const model = cellModel((call, asked) => {
+      // The first cell is still being written when the app quits.
+      if (call.results.length > 0 || !first) return null;
+      first = false;
+      return {
+        calls: [{ tool: "search_documents", input: { query: asked.question } }],
+        pause: { after: 0, until: held },
+      };
+    });
+    const { core, mind, documents, dataDir } = await setUpWithDocuments(model, SUPPLIERS);
+    const result = await core.compareDocuments({
+      mindId: mind.id,
+      documentIds: documents.map((document) => document.id),
+      questions: QUESTIONS,
+    });
+    if (!result.started) throw new Error("The table wasn't made.");
+    await vi.waitFor(() => expect(model.doStreamCalls.length).toBe(1));
+    core.close();
+
+    const reopened = startCore(dataDir, {
+      createChatModel: scriptedModels(cellModel()).createChatModel,
+    });
+    const again = await connectToMind(reopened, mind.id);
+    expect(await reopened.listFillingComparisons()).toEqual([]);
+    expect(tableIn(again).rows.flatMap((row) => row.cells.map((cell) => cell.status))).toEqual([
+      "writing",
+      "waiting",
+      "waiting",
+      "waiting",
+      "waiting",
+      "waiting",
+    ]);
+    const filled = await reopened.fillComparisonTable({ mindId: mind.id, tableId: result.tableId });
+    expect(filled.started).toBe(true);
+    await fillEnded(reopened, result.tableId);
+    await again.settled();
+    expect(tableIn(again).rows.map((row) => row.cells.map((cell) => cell.text))).toEqual([
+      ["90 days", "12 months of fees"],
+      ["6 months", "twice the annual fees"],
+      ["30 days", ""],
+    ]);
+    // Each cell has its one Citation, none written twice.
+    expect(
+      tableIn(again).rows.flatMap((row) => row.cells.map((cell) => cell.citations.length)),
+    ).toEqual([1, 1, 1, 1, 1, 0]);
+  });
+
   test("the table survives sync and a restart: another device sees its cells, and they're there after reopening", async () => {
     const { core, client, mind, documents, dataDir } = await setUpWithDocuments(
       cellModel(),
