@@ -229,6 +229,7 @@ export async function drawPdfPages(
           page.cleanup();
         }
       }
+      if (drawn.length === 0) throw new Error("No cited pages to draw.");
       const sheet = factory.create(width, height);
       try {
         const context = sheet.canvas.getContext("2d");
