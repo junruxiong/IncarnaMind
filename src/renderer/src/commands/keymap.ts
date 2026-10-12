@@ -1,9 +1,11 @@
 import { useEffect } from "react";
 import type { CommandId } from "../../../shared/commands";
 import { files } from "../core";
+import type { ObjectRef } from "../objects";
 import { useAppStore } from "../store";
 import { typesText } from "../undo";
 import { keysLabel, keysOn, pressed } from "./keys";
+import { menuKinds } from "./menus";
 import {
   type Command,
   type CommandContext,
@@ -20,8 +22,23 @@ const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 const SELECTABLE_LIST =
   '[role="listbox"], [role="tree"], [role="treegrid"], [role="grid"], [role="tablist"]';
 
+/** A row of an object (a Document, a Folder) counts as a list's, the sidebar's and the Library's having no roles. */
+const ROW = "[data-object-row]";
+
 const inList = (target: EventTarget | null) =>
-  target instanceof Element && !typesText(target) && target.closest(SELECTABLE_LIST) !== null;
+  target instanceof Element &&
+  !typesText(target) &&
+  target.closest(`${SELECTABLE_LIST}, ${ROW}`) !== null;
+
+/** The object whose row holds the focus: the one its ⋯ button names. */
+function objectAt(target: EventTarget | null): ObjectRef | null {
+  if (!inList(target) || !(target instanceof Element)) return null;
+  const named = target.closest(ROW)?.querySelector<HTMLElement>("[data-object-menu]")
+    ?.dataset.objectMenu;
+  const colon = named?.indexOf(":") ?? -1;
+  const kind = menuKinds().find((each) => each === named?.slice(0, colon));
+  return named && kind ? { kind, id: named.slice(colon + 1) } : null;
+}
 
 const isSurface = (value: string | undefined): value is Surface =>
   (SURFACES as readonly (string | undefined)[]).includes(value);
@@ -69,9 +86,11 @@ export function runShortcut(
     if (shortcut.outsideText && typesText(event.target)) continue;
     // Only now, for keys that are a shortcut: the search goes through the whole page.
     if (dialogOpen()) return false;
-    if (!offered(command, ctx) || !isEnabled(command, ctx)) continue;
+    // A list's own keys act on the row the focus is in.
+    const here = shortcut.list ? { ...ctx, focus: ctx.focus ?? objectAt(event.target) } : ctx;
+    if (!offered(command, here) || !isEnabled(command, here)) continue;
     event.preventDefault();
-    commands.run(command.id, ctx).catch(report);
+    commands.run(command.id, here).catch(report);
     return true;
   }
   return false;

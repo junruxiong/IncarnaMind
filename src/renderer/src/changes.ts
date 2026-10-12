@@ -29,16 +29,24 @@ export function renamed(
   };
 }
 
-/** Sent to Recently deleted: undone by restoring it, done again by deleting it again. */
+/**
+ * Sent to Recently deleted: undone by restoring it, done again by deleting it again.
+ * Several are Documents, and are said by their count; one by its name.
+ */
 export function deleted(
   t: Translate,
   shown: string,
   refs: RestoreRef[],
   remove: () => Promise<unknown>,
 ): Undoable {
+  const count = refs.length;
   return {
-    message: t("object.deleted", { name: shown }),
-    name: t("undo.name.delete", { name: shown }),
+    message:
+      count > 1 ? t("object.deleted.documents", { count }) : t("object.deleted", { name: shown }),
+    name:
+      count > 1
+        ? t("undo.name.delete.documents", { count })
+        : t("undo.name.delete", { name: shown }),
     undo: () => core.restore(refs),
     redo: async () => {
       await remove();

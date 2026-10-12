@@ -29,6 +29,7 @@ import { scopeChips } from "../../scope";
 import { useAppStore } from "../../store";
 import { SearchIcon } from "../icons";
 import {
+  CalculatorLineIcon,
   ChevronRightLineIcon,
   CloseLineIcon,
   DocumentLineIcon,
@@ -180,6 +181,8 @@ function liveText(t: Translate, step: LiveStep, scope: string): string {
       return step.count === 1
         ? t("steps.live.checking.one")
         : t("steps.live.checking", { count: step.count });
+    case "checking-figures":
+      return t("answer.phase.checking-figures");
   }
 }
 
@@ -195,6 +198,11 @@ function runningText(t: Translate, call: AnswerToolCall): string {
     return t("connectors.call.running", { connector: call.connector?.name ?? "", tool: call.tool });
   }
   if (call.source === "sources") return t("sources.call.running", { query: field(call, "query") });
+  if (call.source === "web") {
+    return call.tool === "search_web"
+      ? t("web.call.searching", { query: field(call, "query") })
+      : t("web.call.reading", { address: field(call, "url") });
+  }
   if (call.tool === "run_skill_script") {
     return t("scripts.call.running", {
       skill: field(call, "skill"),
@@ -219,6 +227,8 @@ function foldedText(t: Translate, line: FoldedLine, scope: (extra: number) => st
         scope: scope(line.extraScopes),
         sources: sourcesText(t, line.sources),
       });
+    case "searched-web":
+      return t("steps.searchedWeb", { sources: sourcesText(t, line.sources) });
     case "listened":
       return t("steps.listened", { sources: sourcesText(t, line.sources) });
     case "asked":
@@ -363,6 +373,16 @@ function StepItem({
         >
           <SkillRow name={row.name} use={row.use} reads={row.reads} />
         </li>
+      );
+    case "calculated":
+      return (
+        <Step kind={row.kind} icon={<CalculatorLineIcon />}>
+          <p data-testid="answer-figures" className="answer-step-title">
+            {row.count === 1
+              ? t("answer.figures.calculated.one")
+              : t("answer.figures.calculated", { count: row.count })}
+          </p>
+        </Step>
       );
     case "check":
       return <CheckStep count={row.count} notFound={row.notFound} />;
