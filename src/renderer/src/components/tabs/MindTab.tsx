@@ -11,6 +11,7 @@ import { MakeSkillCard } from "../MakeSkillCard";
 import { MeetingInMind } from "../MeetingInMind";
 import { MindEditor } from "../MindEditor";
 import { ChatReadinessNotice } from "../providers/ChatReadinessNotice";
+import { TypingTextarea } from "../TypingTextarea";
 import { buttonStyle } from "../ui";
 import { useTabPlace } from "./tabItems";
 
@@ -120,7 +121,7 @@ function MindTitle({ mind }: { mind: Mind }) {
   return (
     <h1 className="mind-title">
       {/* A text area, so a long title wraps instead of being cut off; it is still one line of text. */}
-      <textarea
+      <TypingTextarea
         ref={field}
         rows={1}
         data-testid="mind-title"

@@ -327,6 +327,58 @@ describe("Changes out of date", () => {
     expect(marks).toEqual([]);
   });
 
+  describe("copying a selection", () => {
+    const paragraph = (id: string, content: JSONContent[], proposal?: unknown): JSONContent => ({
+      type: "paragraph",
+      attrs: { id, ...(proposal ? { [PROPOSAL_ATTRIBUTE]: proposal } : {}) },
+      content,
+    });
+
+    /** What a copy puts on the clipboard, as the view asks the plugins for it. */
+    function copied(note: ReturnType<typeof noteWith>) {
+      const { state } = note;
+      const view = { state } as never;
+      let slice = state.doc.slice(0, state.doc.content.size);
+      for (const plugin of state.plugins) {
+        const transform = plugin.props.transformCopied;
+        if (transform) slice = transform.call(plugin, slice, view);
+      }
+      let plain = "";
+      for (const plugin of state.plugins) {
+        plain = plugin.props.clipboardTextSerializer?.call(plugin, slice, view) || "";
+        if (plain) break;
+      }
+      return { plain, rich: slice.content.textBetween(0, slice.content.size, "\n\n") };
+    }
+
+    test("leaves out the words and Blocks a pending change adds", () => {
+      const replacement = change("a", "very strong");
+      const note = noteWith([
+        paragraph("p1", [
+          text("The tides are "),
+          text("very strong", [replacement.removed]),
+          text("strong", [replacement.inserted]),
+          text(" and regular"),
+          text(" indeed", [inserted("b")]),
+          text("."),
+        ]),
+        paragraph("p2", [text("A new Block.", [inserted("c")])], {
+          id: "c",
+          request: "r1",
+          kind: "insert",
+        }),
+        paragraph("p3", [text("The end.")]),
+      ]);
+      const accepted = "The tides are very strong and regular.\n\nThe end.";
+      expect(copied(note)).toEqual({ plain: accepted, rich: accepted });
+    });
+
+    test("leaves a selection without a pending change to the editor", () => {
+      const note = noteWith([paragraph("p1", [text("One.")]), paragraph("p2", [text("Two.")])]);
+      expect(copied(note)).toEqual({ plain: "", rich: "One.\n\nTwo." });
+    });
+  });
+
   test("a change citing a Document deleted since says its source is removed", () => {
     const note = noteWith([
       {
