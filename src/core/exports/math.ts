@@ -28,6 +28,24 @@ class Unsupported extends Error {}
  * which the caller puts in an `<m:oMathPara>`. Null if it can't be converted.
  */
 export function latexToOmml(latex: string, display: boolean): string | null {
+  const mathml = latexToMathMl(latex, display);
+  if (mathml === null) return null;
+  try {
+    const math = findElement(parseXml(mathml), "math");
+    if (!math) return null;
+    const content = new Converter().sequence(math.children);
+    return `<m:oMath>${content}</m:oMath>`;
+  } catch {
+    // Unreadable LaTeX, MathML this doesn't know, or anything else: the LaTeX stays as text.
+    return null;
+  }
+}
+
+/**
+ * LaTeX as KaTeX's MathML, inline or (`display`) a display equation, which the PDF export
+ * prints and the .docx export turns into OMML. Null for LaTeX KaTeX can't read or won't do.
+ */
+export function latexToMathMl(latex: string, display: boolean): string | null {
   if (latex.trim() === "") return null;
   try {
     const mathml = katex.renderToString(latex, {
@@ -38,12 +56,8 @@ export function latexToOmml(latex: string, display: boolean): string | null {
       trust: false,
       errorColor: UNSUPPORTED_COLOR,
     });
-    const math = findElement(parseXml(mathml), "math");
-    if (!math) return null;
-    const content = new Converter().sequence(math.children);
-    return `<m:oMath>${content}</m:oMath>`;
+    return mathml.includes(UNSUPPORTED_COLOR) ? null : mathml;
   } catch {
-    // Unreadable LaTeX, MathML this doesn't know, or anything else: the LaTeX stays as text.
     return null;
   }
 }

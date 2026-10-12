@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- The hidden window that prints a PDF export: no network; pictures only from the Mind itself. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src data:; connect-src 'none'"
+    />
+    <title>IncarnaMind print</title>
+  </head>
+  <body>
+    <script type="module" src="./print/print.ts"></script>
+  </body>
+</html>
