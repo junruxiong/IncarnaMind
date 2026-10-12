@@ -186,7 +186,7 @@ const byOrder =
   (a: string, b: string): number =>
     order.indexOf(a) - order.indexOf(b);
 
-const FORMAT_LABELS: Record<DocumentKind, MessageKey> = {
+export const FORMAT_LABELS: Record<DocumentKind, MessageKey> = {
   pdf: "library.format.pdf",
   docx: "library.format.docx",
   pptx: "library.format.pptx",

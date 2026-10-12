@@ -55,6 +55,7 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Passage | 段落 | |
 | Citation | 引用 | The numbered reference in an Answer, as Kimi, Doubao, Qwen, Cherry Studio and Open WebUI show it. |
 | quote (of a Citation) | 引文 | "已在第 3 页找到引文", "未找到引文". |
+| Quote (block) | 引述 | The "/" menu's block for quoted text; not a Citation (引用) or its quote (引文). |
 | Location | 位置 | "第 3 页", "第 2 张幻灯片", "第 4–6 行", "§ 标题", a web page's "§ 历史，第 3 段". |
 | Footnote | 脚注 | As Word, WPS and Feishu. "插入脚注", "脚注 3". |
 | Reference record | 引用信息 | The "Cite as" panel's title too. Its fields: 类型、标题、作者、日期、期刊（出处）、卷、期、页码、出版者、DOI、网址、语言. |
@@ -85,6 +86,7 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Built-in Skill | 内置技能 | |
 | Outside agent | 智能体 | The User's own AI agent: "连接智能体", "设置 → 智能体". As Kimi, Doubao, Yuanbao and Coze call an agent. |
 | Proposal | 修订 | Accept: 接受; Reject: 拒绝; Accept all: 全部接受; Reject all: 全部拒绝. As WPS and Feishu (接受修订, 拒绝修订). |
+| AI text | AI 生成的文字 | Not shown as a word in the interface yet. "Mark as mine" is 标为我写的, and its undo line 已标为你写的. |
 | Checkpoint | 检查点 | |
 | Citation check | 核对 | "正在核对引文…", "无法核对". |
 | Quote not found | 未找到引文 | |
