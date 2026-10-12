@@ -118,6 +118,7 @@ const ANSWER_ERRORS = [
   "plan-limit",
   "blocked",
   "too-long",
+  "cost-cap",
   "unknown",
 ] as const;
 const DOCUMENT_ERRORS = [

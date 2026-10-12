@@ -9,6 +9,7 @@ import {
   citationStyleIn,
   setCitationStyle,
 } from "../shared/mindCitationStyle";
+import { mindModelOf } from "../shared/mindModel";
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
 import { agentSocketPath, createAgents } from "./agents";
@@ -37,6 +38,7 @@ import type {
   MindCitationStyle,
   OwnFileKind,
   ProviderError,
+  SavedMindExport,
   SearchScope,
   Unsubscribe,
 } from "./api";
@@ -46,6 +48,7 @@ import { createCitationStyles } from "./citationStyles";
 import { createConnectors } from "./connectors";
 import { createConsent, type DataFlowRegistry } from "./consent";
 import { createConversations } from "./conversations";
+import { createMeter } from "./cost/meter";
 import {
   createDocuments,
   type DocumentFile,
@@ -127,6 +130,7 @@ import { parseSearchScope, resolveSearchScope } from "./scope";
 import { createSecrets } from "./secrets";
 import { createSettings, isChatModelChoice } from "./settings";
 import { createSkills } from "./skills";
+import { createSkillDrafts } from "./skills/draft";
 import { createScriptRunner } from "./skills/scripts";
 import { createSources, FIND_SOURCES_SENDS } from "./sources";
 import { createSourceHttp } from "./sources/http";
@@ -597,6 +601,13 @@ export function createCore(adapters: CoreAdapters): Core {
   chatGpt.forgetCodexSignIn().catch((error: unknown) => {
     console.error("The experimental ChatGPT provider's sign-in couldn't be removed.", error);
   });
+  const meter = createMeter({
+    db,
+    now: () => adapters.now?.() ?? new Date(),
+    cap: () => settings.get().user.monthlyCap,
+  });
+  // Nothing is in flight yet: what is still reserved was left by a crash.
+  meter.settleOpen();
   const chat = createChat({
     db,
     now,
@@ -607,6 +618,7 @@ export function createCore(adapters: CoreAdapters): Core {
     chatGpt,
     ollamaModels: adapters.ollamaModels ?? createOllamaModels(),
     localOnly: () => embedding.localOnly(),
+    meter,
   });
 
   /** Set once readiness can be reported: Connectors turned on or off change what chat sends. */
@@ -933,6 +945,17 @@ export function createCore(adapters: CoreAdapters): Core {
             : options.format === "markdown",
       },
     });
+  // Make this a Skill: the chat model drafts it from the Mind, on the chat flow's consent.
+  const skillDrafts = createSkillDrafts({
+    mindMarkdown: async (mindId) =>
+      new TextDecoder().decode(
+        (await mindExports.export(mindId, { format: "markdown", includeQuestions: true })).data,
+      ),
+    modelFor: (mindId) =>
+      content.read(mindId, (blocks) => (blocks.doc ? mindModelOf(blocks.doc) : null)) ??
+      settings.get().user.chatModel,
+    chat,
+  });
   // New files: in the Output location, or inside a Linked folder the User allowed.
   const outputs = createOutputFiles({
     db,
@@ -943,6 +966,28 @@ export function createCore(adapters: CoreAdapters): Core {
     linkedFolders: () => documents.linkedFolders.list(),
     recordOwnFile,
   });
+  /** Saves an export in the Output location, as the window's save: what went wrong is a result, not an error. */
+  const saveExport = async (
+    name: string,
+    data: Uint8Array,
+    after: () => void = () => undefined,
+  ): Promise<SavedMindExport> => {
+    try {
+      const file = await outputs.save({ name, data, ownFile: "export" });
+      after();
+      return { status: "saved", file };
+    } catch (error) {
+      if (error instanceof FileWriteCancelledError) return { status: "cancelled" };
+      if (error instanceof LinkedFolderWritesDeclinedError) {
+        return {
+          status: "not-allowed",
+          linkedFolderId: error.linkedFolderId,
+          linkedFolderPath: error.linkedFolderPath,
+        };
+      }
+      throw error;
+    }
+  };
   const unlinkFolder = (linkedFolderId: string) => {
     documents.linkedFolders.remove(linkedFolderId);
     outputs.forgetLinkedFolder(linkedFolderId);
@@ -1777,6 +1822,20 @@ export function createCore(adapters: CoreAdapters): Core {
     testChatConnection: (input) => loggingTest("chat")(chat.test(input)),
     getChatReadiness: () => chat.readiness(),
     listChatModels: () => chat.listModels(),
+    getCostSummary: async () => meter.summary(),
+    estimateRun: async (input) => {
+      if (!isRecord(input)) throw new InvalidInputError("estimateRun expects an object.");
+      const { items, model } = input;
+      if (typeof items !== "number" || !Number.isInteger(items) || items < 0 || items > 100_000) {
+        throw new InvalidInputError("items must be a whole number from 0 to 100,000.");
+      }
+      if (model !== undefined && !isChatModelChoice(model)) {
+        throw new InvalidInputError("model must be a provider and a model.");
+      }
+      const metered = chat.metered(model);
+      if (!metered) throw new InvalidInputError("There is no model to estimate for.");
+      return meter.estimate(metered, items);
+    },
 
     askQuestion: async (input) => answers.ask(input),
     regenerateAnswer: async (input) => answers.regenerate(input),
@@ -2050,6 +2109,19 @@ export function createCore(adapters: CoreAdapters): Core {
       skillsChanged();
       return skill;
     },
+    getSkillDraft: async (skillId) => skills.draftOf(skillId),
+    createSkill: async (draft) => {
+      const result = await skills.create(draft);
+      if (result.ok) skillsChanged();
+      return result;
+    },
+    updateSkill: async (skillId, draft) => {
+      const result = await skills.update(skillId, draft);
+      if (result.ok) skillsChanged();
+      return result;
+    },
+    draftSkillFromMind: (input) => skillDrafts.draft(input),
+    cancelSkillDraft: async (requestId) => skillDrafts.cancel(requestId),
     listRemovedBuiltInSkills: async () => skills.removedBuiltIns(),
     restoreBuiltInSkills: async () => {
       const restored = await skills.restoreBuiltIns();
@@ -2067,21 +2139,11 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     saveMindExport: async (mindId, options) => {
       const { fileName, data } = await mindExports.export(mindId, options);
-      try {
-        const file = await outputs.save({ name: fileName, data, ownFile: "export" });
-        recordExport(options);
-        return { status: "saved", file };
-      } catch (error) {
-        if (error instanceof FileWriteCancelledError) return { status: "cancelled" };
-        if (error instanceof LinkedFolderWritesDeclinedError) {
-          return {
-            status: "not-allowed",
-            linkedFolderId: error.linkedFolderId,
-            linkedFolderPath: error.linkedFolderPath,
-          };
-        }
-        throw error;
-      }
+      return saveExport(fileName, data, () => recordExport(options));
+    },
+    saveSkillExport: async (skillId) => {
+      const { fileName, data } = await skills.exportZip(skillId);
+      return saveExport(fileName, data);
     },
     formatCitations: (request) => citationStyles.format(request),
     getMindCitationStyle: async (mindId) => mindCitationStyle(minds.get(mindId).id),
@@ -2185,6 +2247,7 @@ export function createCore(adapters: CoreAdapters): Core {
       answers.stopAll();
       suggestions.stop();
       edits.stopAll();
+      skillDrafts.stopAll();
       scriptRunner.close();
       approvals.close();
       connectors.close();
