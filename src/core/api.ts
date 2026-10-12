@@ -1210,8 +1210,12 @@ export interface Document {
    */
   contentHash: string;
   /**
-   * The file, where the User keeps it: an absolute path. IncarnaMind never
-   * changes it. A web page's is its snapshot, in the data folder.
+   * The file, where the User keeps it on this computer: an absolute path.
+   * IncarnaMind never changes the file. A web page's is its snapshot, in the
+   * data folder. Not what the Document is known by (ADR-0020): that is its
+   * Linked folder and its path inside it, its place in the data folder, or,
+   * for a file added on its own, its id; so it can be elsewhere on another
+   * computer, or after its Linked folder is located somewhere else.
    */
   path: string;
   /** Where the file is: see `DocumentFileStatus`. */
@@ -1950,9 +1954,9 @@ export interface Examples {
  * placeholders (online-only files) aren't read unless the User asks.
  */
 export interface LinkedFolder {
-  /** A random UUID generated on this device. */
+  /** A random UUID generated on this device: the same wherever the folder is (ADR-0020). */
   id: string;
-  /** Absolute, symbolic links resolved. */
+  /** Where it is on this computer: absolute, symbolic links resolved. `locateLinkedFolder` changes it. */
   path: string;
   /** Its own Folder, the root of its Folders. */
   folderId: string;
@@ -5041,6 +5045,18 @@ export interface CoreApi {
   /** The Linked folders, in path order. */
   listLinkedFolders(): Promise<LinkedFolder[]>;
   /**
+   * Points a Linked folder at where it is on this computer now, after it was
+   * moved or renamed, or when the data folder is opened on another computer
+   * (ADR-0020). Its Documents are looked for at their paths inside it and
+   * keep their ids, versions, Tags and Citations: a file with the same size
+   * and modified time isn't read, and one with the same content isn't
+   * processed again. Returns at once, "scanning". Throws InvalidInputError,
+   * changing nothing, for a folder inside or around another Linked folder,
+   * one that holds none of its files, or one with a file of it already added
+   * on its own.
+   */
+  locateLinkedFolder(linkedFolderId: string, path: string): Promise<LinkedFolder>;
+  /**
    * Stops syncing a Linked folder and removes its Documents and Folders from
    * the index. Nothing on disk is touched. Of their stored text, only the
    * Units the Citations in Minds point to are kept, so those Citations can
@@ -6042,6 +6058,7 @@ const methods: Record<CoreApiMethod, true> = {
   previewLinkedFolder: true,
   addLinkedFolder: true,
   listLinkedFolders: true,
+  locateLinkedFolder: true,
   removeLinkedFolder: true,
   listKeptCitationTexts: true,
   updateReference: true,
