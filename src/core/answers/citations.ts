@@ -63,6 +63,11 @@ import type {
 /** How many times one Answer may search; later searches are refused, so the model answers. */
 const MAX_SEARCHES_PER_ANSWER = 5;
 
+const FIX_THESE = "Fix these with another cite call:";
+
+/** Whether what `cite` told the model asks it to fix records, which the Tool loop must not end before. */
+export const asksForFixes = (told: string): boolean => told.includes(FIX_THESE);
+
 /** A Citation marker as the model writes it in the text: "[^1]". */
 const CITATION_MARKER = /\[\^(\d{1,4})\]/g;
 
@@ -814,7 +819,7 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       ? `Recorded ${recorded.map((marker) => `[^${marker}]`).join(", ")}.`
       : "Nothing was recorded.";
     const fix = problems.length
-      ? ` Fix these with another cite call:\n- ${problems.join("\n- ")}`
+      ? ` ${FIX_THESE}\n- ${problems.join("\n- ")}`
       : " Write the Answer now if you haven't yet; don't repeat it.";
     return `${done}${fix}`;
   }
