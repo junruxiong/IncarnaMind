@@ -10,6 +10,7 @@ import type { AgentLauncher } from "./agents";
 import type { AnswerEngine } from "./answers/engine";
 import type { AudioSource, ExternalService, SandboxLevel, SecretProtection } from "./api";
 import type { Reranker } from "./documents/searchTool";
+import type { AnswerSearchTuning } from "./documents/searchTuning";
 import type { WatchFolder } from "./documents/watcher";
 import type { FetchLimits } from "./documents/web/fetch";
 import type { ChatGptPlanEndpoints } from "./providers/chatgpt/plan";
@@ -646,6 +647,12 @@ export interface CoreAdapters {
    * Voyage key (an alternative search layer plugs in here). None by default.
    */
   reranker?: Reranker;
+  /**
+   * Tunes and watches the search Tool for Answers' searches (reranking depth,
+   * Passages handed, a callback with each search's timings). Only the
+   * evaluation passes one.
+   */
+  answerSearch?: AnswerSearchTuning;
   /**
    * Sends crash reports once the User opts in (see `CrashReporter`). Absent
    * when this copy can't send any: Settings then doesn't offer them.
