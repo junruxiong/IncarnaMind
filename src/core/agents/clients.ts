@@ -1,24 +1,34 @@
 /**
- * The agents IncarnaMind can be set up in (#351), and how each takes it, so
- * that connecting one is one click wherever the agent allows it:
+ * The agents IncarnaMind is set up in (#351, ADR-0019): a few get first-class
+ * setup, tried before each release, and every other agent connects as "Other
+ * agent", with settings to copy. Moving one between the two is a change here.
+ * A setup is one of:
  *
  * - "bundle": Claude's desktop app installs an `.mcpb` bundle opened with it
  *   (the shim inside, run on the app's own Node);
- * - "link": Cursor and VS Code install a server from a link of their own;
+ * - "link": Cursor installs a server from a link of its own;
  * - "file": IncarnaMind adds itself to the agent's settings file (Codex's
- *   TOML, or the `mcpServers` JSON most agents keep), shown first, with Undo;
+ *   TOML, or the `mcpServers` JSON), shown first, with Undo;
  * - "command": Claude Code takes one line pasted into a terminal;
- * - "manual": the rest take the same settings pasted into their own screen.
+ * - "manual": the settings to copy, for the agent's own screen.
  *
  * Whether an agent is on this computer is a guess from its app or the folder
  * it keeps its settings in, used only to list it first. The settings files
- * and folders are the agents' own documented ones.
+ * are the agents' own documented ones, cited beside each.
  */
 import { join } from "node:path";
 import type { AgentClientId, AgentLaunch, AgentSetupKind } from "../api";
 
 /** The name IncarnaMind has in every agent's settings. */
 export const SERVER_KEY = "incarnamind";
+
+export type SettingsFormat = "mcp-servers-json" | "codex-toml";
+
+export interface SettingsFile {
+  /** Under the home folder. */
+  path: readonly string[];
+  format: SettingsFormat;
+}
 
 export interface ClientDefinition {
   id: AgentClientId;
@@ -29,8 +39,11 @@ export interface ClientDefinition {
   home?: readonly (readonly string[])[];
   /** Its app, on macOS. */
   apps?: readonly string[];
-  /** Where its settings file is, under the home folder, and how it is written. */
-  file?: { path: readonly string[]; format: "mcp-servers-json" | "codex-toml" };
+  /**
+   * The settings files a "file" setup writes. A list so that a setup can
+   * write a second file (an Agent Skill, #378) beside the server's entry.
+   */
+  files?: readonly SettingsFile[];
 }
 
 export const AGENT_CLIENT_DEFINITIONS: readonly ClientDefinition[] = [
@@ -52,77 +65,62 @@ export const AGENT_CLIENT_DEFINITIONS: readonly ClientDefinition[] = [
     home: [[".claude.json"], [".claude"]],
   },
   {
+    // One entry for both: the ChatGPT desktop app's Work and Codex modes read Codex's file.
     id: "codex",
-    name: "Codex",
+    name: "ChatGPT app and Codex",
     setup: "file",
     apps: ["Codex.app", "ChatGPT.app"],
     home: [[".codex"]],
-    file: { path: [".codex", "config.toml"], format: "codex-toml" },
+    files: [{ path: [".codex", "config.toml"], format: "codex-toml" }],
   },
   { id: "cursor", name: "Cursor", setup: "link", apps: ["Cursor.app"], home: [[".cursor"]] },
   {
-    id: "vscode",
-    name: "VS Code",
-    setup: "link",
-    apps: ["Visual Studio Code.app"],
-    home: [[".vscode"]],
-  },
-  {
-    id: "gemini-cli",
-    name: "Gemini CLI",
+    // https://www.antigravity.google/docs/mcp/ gives ~/.gemini/config/mcp_config.json.
+    id: "antigravity",
+    name: "Antigravity",
     setup: "file",
-    home: [[".gemini"]],
-    file: { path: [".gemini", "settings.json"], format: "mcp-servers-json" },
+    apps: ["Antigravity.app"],
+    home: [
+      [".gemini", "config"],
+      [".gemini", "antigravity"],
+    ],
+    files: [{ path: [".gemini", "config", "mcp_config.json"], format: "mcp-servers-json" }],
   },
   {
-    id: "kimi-code",
-    name: "Kimi Code CLI",
+    // https://www.codebuddy.cn/docs/workbuddy/From-Beginner-to-Expert-Guide/Function-Description/MCP-Guide
+    // gives ~/.workbuddy/mcp.json for every project.
+    id: "workbuddy",
+    name: "WorkBuddy",
     setup: "file",
-    home: [[".kimi-code"]],
-    file: { path: [".kimi-code", "mcp.json"], format: "mcp-servers-json" },
+    apps: ["WorkBuddy.app"],
+    home: [[".workbuddy"]],
+    files: [{ path: [".workbuddy", "mcp.json"], format: "mcp-servers-json" }],
   },
-  {
-    id: "qwen-code",
-    name: "Qwen Code",
-    setup: "file",
-    home: [[".qwen"]],
-    file: { path: [".qwen", "settings.json"], format: "mcp-servers-json" },
-  },
-  {
-    id: "codebuddy",
-    name: "CodeBuddy",
-    setup: "file",
-    apps: ["CodeBuddy.app", "CodeBuddy CN.app"],
-    home: [[".codebuddy"]],
-    file: { path: [".codebuddy", ".mcp.json"], format: "mcp-servers-json" },
-  },
-  {
-    id: "minimax-code",
-    name: "MiniMax Code",
-    setup: "file",
-    home: [[".minimax"]],
-    file: { path: [".minimax", "mcp.json"], format: "mcp-servers-json" },
-  },
-  { id: "trae", name: "Trae", setup: "manual", apps: ["Trae.app", "Trae CN.app"] },
-  { id: "qoder", name: "Qoder", setup: "manual", apps: ["Qoder.app"], home: [[".qoder"]] },
-  { id: "comate", name: "Comate", setup: "manual", home: [[".comate"]] },
-  { id: "cherry-studio", name: "Cherry Studio", setup: "manual", apps: ["Cherry Studio.app"] },
-  { id: "chatbox", name: "Chatbox", setup: "manual", apps: ["Chatbox.app"] },
-  { id: "deepchat", name: "DeepChat", setup: "manual", apps: ["DeepChat.app"] },
-  {
-    id: "goose",
-    name: "Goose",
-    setup: "manual",
-    apps: ["Goose.app"],
-    home: [[".config", "goose"]],
-  },
-  { id: "opencode", name: "OpenCode", setup: "manual", home: [[".config", "opencode"]] },
-  { id: "cline", name: "Cline", setup: "manual", home: [[".cline"]] },
-  { id: "kilo", name: "Kilo Code", setup: "manual", home: [[".config", "kilo"]] },
-  { id: "openclaw", name: "OpenClaw", setup: "manual", home: [[".openclaw"]] },
-  { id: "pi", name: "pi", setup: "manual", home: [[".pi"]] },
   { id: "other", name: "", setup: "manual" },
 ];
+
+/**
+ * Agents IncarnaMind used to write settings into and no longer lists. A
+ * pairing made then keeps working, and Disconnect still takes out the entry
+ * IncarnaMind wrote, from the file it wrote it to.
+ */
+const RETIRED_SETTINGS_FILES: Readonly<Record<string, readonly SettingsFile[]>> = {
+  "gemini-cli": [{ path: [".gemini", "settings.json"], format: "mcp-servers-json" }],
+  "kimi-code": [{ path: [".kimi-code", "mcp.json"], format: "mcp-servers-json" }],
+  "qwen-code": [{ path: [".qwen", "settings.json"], format: "mcp-servers-json" }],
+  codebuddy: [{ path: [".codebuddy", ".mcp.json"], format: "mcp-servers-json" }],
+  "minimax-code": [{ path: [".minimax", "mcp.json"], format: "mcp-servers-json" }],
+};
+
+/** The settings files IncarnaMind may have written for a pairing's agent, listed or retired. */
+export function settingsFilesFor(client: string | null): readonly SettingsFile[] {
+  if (client === null) return [];
+  return (
+    clientDefinition(client)?.files ??
+    (Object.hasOwn(RETIRED_SETTINGS_FILES, client) ? RETIRED_SETTINGS_FILES[client] : undefined) ??
+    []
+  );
+}
 
 export function clientDefinition(id: unknown): ClientDefinition | null {
   return AGENT_CLIENT_DEFINITIONS.find((each) => each.id === id) ?? null;
@@ -177,12 +175,6 @@ export function claudeCodeCommand(launch: AgentLaunch, platform: NodeJS.Platform
 export function cursorLink(launch: AgentLaunch): string {
   const config = Buffer.from(JSON.stringify(serverEntry(launch))).toString("base64");
   return `cursor://anysphere.cursor-deeplink/mcp/install?name=${SERVER_KEY}&config=${encodeURIComponent(config)}`;
-}
-
-/** VS Code's install link: it shows the server and asks the User to install it. */
-export function vscodeLink(launch: AgentLaunch): string {
-  const config = { name: SERVER_KEY, type: "stdio", ...serverEntry(launch) };
-  return `vscode:mcp/install?${encodeURIComponent(JSON.stringify(config))}`;
 }
 
 /** A TOML basic string: JSON's escapes are TOML's. */

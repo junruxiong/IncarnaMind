@@ -63,7 +63,9 @@
  *
  * Spreadsheets (ADR-0011) are matched with `numbers` on: number formatting is
  * normalised in the quote and the text alike, so a figure matches however it
- * is written, while its digits, decimals and sign must agree:
+ * is written, while its digits, decimals and sign must agree. Which
+ * characters are formatting is the figure reader's to say (`numberFormatting`
+ * in ./figures), so the check and a calculation read a number the same way:
  *
  * - thousands separators go: "4,812", "4 812" and "4812" are the same. In the
  *   text, a separating space must be a real one: a tab, which separates
@@ -82,6 +84,7 @@
  * and so quoted, in its number format ("Jun: 1,560") (#76). A quote found as
  * it is stays found, so a slide's other text is matched as before.
  */
+import { numberFormatting } from "./figures";
 import { SIMPLIFIED } from "./hanVariants";
 import { type NormalisedUnit, normaliseWithOffsets } from "./text";
 
@@ -232,75 +235,21 @@ function unitsWithoutLigatures(units: NormalisedUnit[]): NormalisedUnit[] {
  */
 type GroupSpaces = "text" | "all" | "none";
 
-const SEPARATORS: ReadonlySet<string> = new Set([",", " ", "'"]);
-const CURRENCY = /^\p{Sc}$/u;
 const LETTER_OR_DIGIT_CHAR = /^[\p{L}\p{N}]$/u;
 
 /** Marks the number formatting in `units` (of `text`) `removed`, as the module comment says. */
 function normaliseNumbers(units: NormalisedUnit[], text: string, spaces: GroupSpaces): void {
-  const live = () => units.filter((unit) => !unit.removed);
-  const isDigit = (unit: NormalisedUnit | undefined) => unit !== undefined && DIGIT.test(unit.char);
-
-  // Thousands separators: between a digit and exactly three more.
-  let list = live();
-  list.forEach((unit, at) => {
-    if (!SEPARATORS.has(unit.char)) return;
-    if (unit.char === " ") {
-      if (spaces === "none") return;
-      if (spaces === "text" && /[^     ]/.test(text.slice(unit.start, unit.end))) {
-        return;
-      }
-    }
-    if (!isDigit(list[at + 1]) || !isDigit(list[at + 2]) || !isDigit(list[at + 3])) return;
-    if (isDigit(list[at + 4])) return;
-    // Before it, a group of one to three digits, not a number's decimals.
-    let start = at;
-    while (start > 0 && isDigit(list[start - 1])) start--;
-    if (at - start < 1 || at - start > 3 || list[start - 1]?.char === ".") return;
-    unit.removed = true;
-  });
-
-  // Currency symbols next to a number.
-  list = live();
-  list.forEach((unit, at) => {
-    if (!CURRENCY.test(unit.char)) return;
-    const next = list[at + 1];
-    if (
-      isDigit(list[at - 1]) ||
-      isDigit(next) ||
-      (next && "(-".includes(next.char) && isDigit(list[at + 2]))
-    ) {
-      unit.removed = true;
-    }
-  });
-
-  // Accounting negatives: "(4,812)" or "(12.5)" reads "-4812", "-12.5".
-  list = live();
-  list.forEach((unit, at) => {
-    if (unit.char !== "(") return;
-    let end = at + 1;
-    while (isDigit(list[end]) || list[end]?.char === ".") end++;
-    const close = list[end];
-    if (close?.char !== ")" || end === at + 1 || !isDigit(list[at + 1])) return;
-    const inside = units.slice(units.indexOf(unit) + 1, units.indexOf(close));
-    if (!inside.some((each) => each.removed || each.char === ".")) return;
-    unit.char = "-";
-    close.removed = true;
-  });
-
-  // Trailing zeros after a decimal point, and the point too when nothing is left after it.
-  list = live();
-  list.forEach((unit, at) => {
-    if (unit.char !== "." || !isDigit(list[at - 1]) || !isDigit(list[at + 1])) return;
-    let end = at + 1;
-    while (isDigit(list[end])) end++;
-    let last = end - 1;
-    while (last > at && list[last]?.char === "0") {
-      (list[last] as NormalisedUnit).removed = true;
-      last--;
-    }
-    if (last === at) unit.removed = true;
-  });
+  const live = units.filter((unit) => !unit.removed);
+  const realSpace = (unit: NormalisedUnit) => !/[^     ]/.test(text.slice(unit.start, unit.end));
+  const edits = numberFormatting(
+    live.map((unit) => unit.char),
+    (at) => spaces === "all" || (spaces === "text" && realSpace(live[at] as NormalisedUnit)),
+  );
+  for (const [at, edit] of edits) {
+    const unit = live[at] as NormalisedUnit;
+    if (edit === "-") unit.char = "-";
+    else unit.removed = true;
+  }
 }
 
 /**

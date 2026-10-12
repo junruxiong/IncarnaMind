@@ -1082,6 +1082,8 @@ export const en = {
   "providers.test.consent-declined":
     "Nothing was sent, because you chose not to send data to this service.",
   "providers.test.too-long": "The model's context window is too small for even a short request.",
+  "providers.test.cost-cap":
+    "Nothing was sent: this month's spending cap is reached. Change it in Settings → General.",
   "providers.test.unknown": "The test didn't work.",
 
   "providers.secrets.plainText.title": "No keyring is running",
@@ -1537,6 +1539,32 @@ export const en = {
   "answer.error.signIn": "Sign in again",
   "answer.error.manageUsage": "Manage usage",
   "answer.error.retry": "Try again",
+  "answer.error.cost-cap": "Monthly cap reached",
+  "answer.error.changeCap": "Change cap",
+  "answer.error.plan-limit.ollama": "Your Ollama Cloud usage is used up",
+
+  "run.stopped.cost-cap": "Monthly cap reached",
+  "run.stopped.plan-limit": "Plan limit reached",
+  "run.stopped.tryAfter": "Try again after {time}",
+  "run.notChecked.cost-cap": "not checked: cost cap",
+  "run.notChecked.plan-limit": "not checked: plan limit",
+
+  "cost.and": "{first} and {second}",
+  "cost.estimate": "About {calls} calls, {tokens} tokens, {cost}",
+  "cost.estimate.unpriced": "About {calls} calls, {tokens} tokens",
+  "cost.estimate.month": "{spent} of {cap} used this month",
+  "cost.cap.title": "Monthly spending cap",
+  "cost.cap.switch": "Cap what your keys spend each month",
+  "cost.cap.body":
+    "Answers and other requests to models billed per token stop at the cap, with one line saying so. Plans you sign in with, like ChatGPT, keep their own limits.",
+  "cost.cap.spent": "Spent this month: {spent} on your keys.",
+  "cost.cap.spentOf": "Spent this month: {spent} of {cap} on your keys.",
+  "cost.cap.nothing": "Nothing spent on your keys this month.",
+  "cost.cap.unpriced": "{tokens} tokens went to models with no known price, and aren't counted.",
+  "cost.cap.amount": "Monthly cap",
+  "cost.cap.currency": "Currency",
+  "cost.provider.thisMonth": "This month: {spent}",
+  "cost.provider.unpriced": "This month: {tokens} tokens, price unknown",
 
   "citation.label": "Citation {number}: {document}. {badge}",
   "citation.mark.label": "Citation {number}: {badge}",
@@ -2429,17 +2457,19 @@ export const en = {
   "agents.settings.connected": "Connected agents",
   "agents.settings.connect": "Connect an agent",
   "agents.settings.connect.note": "Agents found on this computer come first.",
-  "agents.settings.more": "More agents",
+  "agents.settings.web":
+    "Chat apps that only work on the internet, such as ChatGPT and Claude on the web, Gemini, Le Chat and Grok, can’t reach IncarnaMind, which serves only this computer.",
   "agents.settings.connectButton": "Connect",
   "agents.settings.help": "Step-by-step help",
   "agents.setup.bundle": "One click: Claude opens to install it",
   "agents.setup.link": "One click: {agent} opens to install it",
   "agents.setup.file": "IncarnaMind adds itself to {agent}’s settings",
   "agents.setup.command": "Copy one line to run in a terminal",
-  "agents.setup.manual": "Copy the settings to paste into {agent}",
-  "agents.setup.installed": "On this computer",
+  "agents.setup.other": "Copy the settings to paste into your agent",
+  "agents.note.codex":
+    "Used in the ChatGPT app’s Work and Codex modes; ordinary Chat mode doesn’t use it.",
   "agents.setup.undoChanged": "{path} has changed since, so IncarnaMind left it as it is.",
-  "agents.client.other": "Another agent",
+  "agents.client.other": "Other agent",
   "agents.pairing.reads": "Reads {folders}",
   "agents.pairing.readsNothing": "Reads no folders yet",
   "agents.pairing.lastUsed": "Last used {when}",
@@ -2478,6 +2508,7 @@ export const en = {
   "agents.connect.title": "Let {agent} read your Documents?",
   "agents.connect.body":
     "{agent} will be able to search and read the Documents in the folders you choose, and your Minds in them. What it reads goes to the AI model {agent} uses, under that service’s terms, not IncarnaMind’s. Some plans may use it to train their models.",
+  "agents.connect.name": "Name",
   "agents.connect.folders": "Folders it may read",
   "agents.connect.noFolders":
     "You don’t have any folders yet. Make one in the Library, then come back.",
@@ -2492,7 +2523,7 @@ export const en = {
   "agents.done.command": "Copied. Paste it into a terminal and run it.",
   "agents.done.settings": "Copied. In {agent}, add it as a new server, then restart {agent}.",
   "agents.done.settings.other":
-    "Copied. Paste it where your agent adds a new server, then restart the agent.",
+    "Copied. Paste it where your agent adds a new server, then restart the agent. If it asks for a command, arguments and environment instead, they are in the settings you copied (Details for technical users).",
   "agents.done.unreadable":
     "{agent}’s settings file couldn’t be read, so IncarnaMind left it alone. The settings are copied: paste them into {path}.",
   "agents.done.undo": "Undo",
