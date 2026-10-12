@@ -26,10 +26,12 @@ import {
 } from "../../../core/documents/formats/sheetLayout";
 import { readWorkbook } from "../../../core/documents/formats/xlsx";
 import type { CellStyle, FontStyle } from "../../../core/documents/formats/xlsxStyles";
+import type { PageArea } from "../../../shared/citedPage";
 import { anchorsCovered, quoteInUnits } from "../../../shared/locations";
 import { columnName, parseCellRef, type TextUnit } from "../../../shared/units";
 import { useT } from "../i18n";
 import type { ViewerTarget } from "../store";
+import { useCitedArea } from "./citedArea";
 import { FileStates } from "./FileStates";
 import { CitationMark, quoteMarkOf, quoteTone } from "./quoteMark";
 import {
@@ -105,6 +107,10 @@ export function SheetView({ document, target }: { document: Document; target: Vi
 
 /** A cell by sheet and reference: "Revenue!B12". */
 const cellKey = (sheet: string, ref: string) => `${sheet}!${ref}`;
+
+/** The first and last row of a block of a sheet. */
+const rowsFrom = (unit: TextUnit) => unit.label?.from ?? 1;
+const rowsTo = (unit: TextUnit) => unit.label?.to ?? rowsFrom(unit);
 
 /** The cells a quote covers, and the sheet they are on; null if it isn't found. */
 function findCells(
@@ -185,10 +191,42 @@ function Sheets({ loaded, name, target }: { loaded: Loaded; name: string; target
     (sheet.cells.length > 0 ||
       (sheet.layout?.drawings.length ?? 0) > 0 ||
       (sheet.layout?.extent.rows ?? 0) > 0);
+
+  // A cited page drawn to save it (#133): the cited rows, or else the cited Units' rows, as far
+  // as their last column with something in it.
+  const box = useRef<HTMLDivElement>(null);
+  const citedArea = useCallback(
+    (asked: PageArea) => {
+      const cited = units.filter((unit) => unit.page >= from && unit.page <= to);
+      const first = asked.kind === "rows" ? asked.from : Math.min(...cited.map(rowsFrom));
+      const last = asked.kind === "rows" ? asked.to : Math.max(...cited.map(rowsTo));
+      const rows = [...(box.current?.querySelectorAll("th[data-row-header]") ?? [])]
+        .filter((header) => {
+          const row = Number(header.getAttribute("data-row-header"));
+          return row >= first && row <= last;
+        })
+        .flatMap((header) => header.closest("tr") ?? []);
+      let used = 0;
+      for (const row of rows) {
+        [...row.children].forEach((cell, index) => {
+          if (cell.textContent?.trim()) used = Math.max(used, index);
+        });
+      }
+      const cells = rows.flatMap((row) => [...row.children].slice(0, used + 1));
+      return cells.length > 0 ? cells : null;
+    },
+    [units, from, to],
+  );
+  useCitedArea(
+    Boolean(hasContent) && (citedSheet === null || sheet?.name === citedSheet),
+    citedArea,
+  );
+
   return (
     <>
       <ViewerHeader />
       <div
+        ref={box}
         data-testid="viewer-sheet"
         data-quote-tone={quoteTone(target.citation)}
         className="viewer-sheet flex min-h-0 flex-1 flex-col"
@@ -794,6 +832,7 @@ function Grid({
           scope="row"
           className={highlightedRows.has(row) ? "viewer-row--cited" : undefined}
           data-row-header={row}
+          data-quote-skip=""
           style={headerCss}
         >
           {row}
