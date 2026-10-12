@@ -1669,8 +1669,11 @@ export function createDocuments(options: DocumentsOptions) {
     async moveFile(id: string, path: string): Promise<void> {
       const row = find(id);
       if (!row) return;
+      // Out of the data folder, it is a file of its own (ADR-0020); the check finds the
+      // Linked folder it is in, if the Output location is inside one.
       db.run(
-        `UPDATE documents SET path = ?, file_status = 'available', file_mtime_ms = NULL, updated_at = ?
+        `UPDATE documents SET path = ?, source_kind = 'file', relative_path = NULL,
+           file_status = 'available', file_mtime_ms = NULL, updated_at = ?
          WHERE id = ? AND deleted_at IS NULL`,
         [path, now(), id],
       );
