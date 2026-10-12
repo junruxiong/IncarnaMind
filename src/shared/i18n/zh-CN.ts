@@ -2419,6 +2419,7 @@ export const zhCN = {
   "agents.note.codex": "在 ChatGPT 应用的“工作”和 Codex 模式中使用；普通对话模式不会用到。",
   "agents.setup.undoChanged": "{path} 之后已有改动，IncarnaMind 未作更改。",
   "agents.client.other": "其他智能体",
+  "agents.client.codex": "ChatGPT 应用和 Codex",
   "agents.pairing.reads": "可读取：{folders}",
   "agents.pairing.readsNothing": "还没有可读取的文件夹",
   "agents.pairing.lastUsed": "上次使用：{when}",
