@@ -63,7 +63,7 @@ jobs:
   # The suite is split into shards that run at once: as one job it took about 20 minutes, and
   # pull requests merge one at a time, each up to date with main, so that time sets the pace.
   smoke-shard:
-    name: Smoke shard ${{ matrix.shard }}/4 (Linux)
+    name: Smoke shard ${{ matrix.shard }}/8 (Linux)
     # A pull request merges only when it is up to date with main and this passed, so the merge
     # commit's tree is the one already tested. Running it again on main tests nothing new.
     if: github.event_name == 'pull_request'
@@ -72,7 +72,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -94,7 +94,7 @@ jobs:
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends fonts-noto-cjk
       # The app needs a display: a virtual one, bigger than the window the specs set
       # (e2e/app.ts), at full colour depth. xvfb-run's own default is 640 × 480 at 8 bits.
-      - run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" npm run test:smoke -- --shard=${{ matrix.shard }}/4
+      - run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" npm run test:smoke -- --shard=${{ matrix.shard }}/8
       - name: Upload Playwright traces
         if: failure()
         uses: actions/upload-artifact@v7

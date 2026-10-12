@@ -9,6 +9,7 @@ import { useMindTools } from "../mindTools";
 import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
 import { findTab } from "../tabs";
+import { useWordImport } from "../wordImport";
 import { assistantCommands } from "./assistant";
 import { bibliographyCommands } from "./bibliography";
 import { chartCommands } from "./charts";
@@ -73,6 +74,13 @@ const appCommands: readonly Command[] = [
     group: "main",
     reversible: true,
     run: () => useAppStore.getState().createMind(),
+  },
+  {
+    id: "word.import",
+    label: "wordImport.command",
+    group: "main",
+    reversible: true,
+    run: () => useWordImport.getState().pick(),
   },
   ...editCommands,
   ...mindCommands,

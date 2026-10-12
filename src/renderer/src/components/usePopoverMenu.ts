@@ -248,9 +248,13 @@ export function usePopoverMenu({
         setOpen(event.newState === "open");
       },
       // Now it shows, where it was placed: it can take the focus, unless the User has moved it
-      // already (the event can come after their first keys).
+      // already (the event can come after their first keys), or something in it has it: the
+      // browser focuses an item as it shows (`autofocusFirst`), and by this event, a frame
+      // later, the focus may have moved on to the menu's field.
       onToggle: (event: ToggleEvent<HTMLDivElement>) => {
-        if (event.newState === "open" && !touched.current) focusFirst(menu.current, first);
+        if (event.newState !== "open" || touched.current) return;
+        if (menu.current?.contains(document.activeElement)) return;
+        focusFirst(menu.current, first);
       },
       onKeyDown,
       onPointerDown: () => {
