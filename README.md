@@ -52,6 +52,8 @@ npm install && npm run dev
 
 **Check every answer.** Answers cite where each claim came from and carry the quote, which is checked against that place: a green check if it's there, an amber mark if it isn't, and a click opens the page with the quote highlighted.
 
+**Take notes in a meeting.** Start recording and a live transcript runs beside your Mind, transcribed on this computer. When the call ends, save it as a Document, and your notes can cite what was said.
+
 **Use the files you already have.** Link the folders you already use, even Zotero's storage folder: IncarnaMind reads the PDF, Word (comments included), PowerPoint, Excel, CSV, Markdown and plain-text files in them where they are, never moves or changes them, and keeps up as they change.
 
 **Find and add sources.** Search OpenAlex, arXiv and PubMed and add open-access papers as Documents, save a web page by its address so it can be cited and checked like a file, and import your references from Zotero or any CSL JSON, BibTeX or RIS file.
@@ -83,7 +85,7 @@ There's no account and no IncarnaMind server. Your Minds and the search index st
 
 - **Is it free?** Yes: it's open source under the Apache 2.0 licence. With a cloud AI model, you pay its provider for what you use; a local model costs nothing.
 - **Do I need an API key?** No. Continue with ChatGPT on a Plus or Pro plan, or, if [Ollama](https://ollama.com) is running, download a local model in one click. If you pay for Claude, connect the Claude app in **Settings → Agents** (experimental) and ask your Documents there. Or paste a key from OpenAI, Anthropic, Google, DeepSeek, Qwen, Kimi, GLM, Mistral, xAI, SiliconFlow or OpenRouter, or connect any OpenAI-compatible server.
-- **Is it a NotebookLM alternative?** Yes. IncarnaMind runs on your computer and your files stay there, it works with the model you choose (your own key, a ChatGPT plan, or a local model through Ollama), every citation is checked against the page it quotes, and a Mind exports to Word with its citations.
+- **Is it an alternative to NotebookLM (now Gemini Notebook)?** Yes. IncarnaMind runs on your computer and your files stay there, it works with the model you choose (your own key, a ChatGPT plan, or a local model through Ollama), every citation is checked against the page it quotes, and a Mind exports to Word with its citations.
 - **Can I use my ChatGPT plan?** Yes, with ChatGPT Plus or Pro. In **Settings → Models**, choose **Continue with ChatGPT** and sign in in your browser: Questions then go to OpenAI under your account and count against your plan's limits, with no key.
 - **Does it work offline?** Yes, with a local model through Ollama: reading your files, search and the citation check all run on your computer. Cloud models need the internet. Meaning-based search (embeddings) is optional and off by default.
 - **Will it change my files?** No. It reads them where they are, and writes only to its own data folder and the files you export.
@@ -94,7 +96,7 @@ There's no account and no IncarnaMind server. Your Minds and the search index st
 
 ## Coming next
 
-Planned, not available yet, with no dates (see the [roadmap](https://github.com/junruxiong/IncarnaMind/issues/74)): the Answer's steps folded under it, showing what the assistant read and searched; live meeting transcripts that answers can cite; the assistant editing your Minds, each change waiting for you to accept it; Word files opened and exported back with tracked changes; your drafts, and other people's documents, checked against your files; comparison tables across documents; and research Tasks that run in the background.
+Planned, not available yet, with no dates (see the [roadmap](https://github.com/junruxiong/IncarnaMind/issues/74)): the Answer's steps folded under it, showing what the assistant read and searched; asking during a meeting, with answers that cite its live transcript; the assistant editing your Minds, each change waiting for you to accept it; Word files opened and exported back with tracked changes; your drafts, and other people's documents, checked against your files; comparison tables across documents; and research Tasks that run in the background.
 
 ## Contributing
 
