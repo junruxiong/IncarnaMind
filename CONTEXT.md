@@ -99,7 +99,7 @@ Every Document a Mind cites, once each, in its citation style: the References at
 _Avoid_: works cited (except as a style's own heading), sources list
 
 **Source provider**:
-A public service that Find sources searches for works to add to the Library: OpenAlex, arXiv and PubMed (Crossref looks a DOI up); openFDA and DailyMed for drug labels and ClinicalTrials.gov for trials, which are asked only when the User chooses them; later, services for laws, regulations and filings. A work with an open-access copy is added as a Document, which keeps the provider it came from and the date of the version it holds; any other work, as its Reference record alone. Each Source provider is asked once for consent before anything is sent to it.
+A public service that Find sources searches for works to add to the Library: OpenAlex, arXiv and PubMed (Crossref looks a DOI up); openFDA and DailyMed for drug labels, ClinicalTrials.gov for trials and the eCFR for US federal regulations, which are asked only when the User chooses them; GovInfo looks up the US Code and the CFR's official edition by citation, on the User's own key; later, services for other countries' laws and for company filings. A work with an open-access copy is added as a Document, which keeps the provider it came from and the date of the version it holds; any other work, as its Reference record alone. Each Source provider is asked once for consent before anything is sent to it.
 _Avoid_: source (a Document is not one), database, provider on its own (an AI model's provider)
 
 **Location**:
