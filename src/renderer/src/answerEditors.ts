@@ -4,7 +4,7 @@
  * Copy, which copies the Answer (or what is selected in it) as the editor
  * does, so it pastes back as Notes with their Citations.
  */
-import { type Editor, getTextBetween, getTextSerializersFromSchema } from "@tiptap/core";
+import type { Editor } from "@tiptap/core";
 import type { Node as ProseMirrorNode, Slice } from "@tiptap/pm/model";
 import { NOTE_BLOCK_TYPES } from "../../core/api";
 import type { NodeJSON } from "../../shared/blockJson";
@@ -64,24 +64,21 @@ export function selectedNotes(answerId: string): NodeJSON[] | null {
 
 /**
  * Copies an Answer, or what is selected in it: HTML that pastes back as Notes
- * with their Citations, and plain text that names each Citation's source
- * ("[Aldermoor MSA, p. 14]"). Resolves to whether it was copied.
+ * with their Citations and into Word as footnotes, and plain text with numbered
+ * markers and a list of Sources (see `CopyCitations`). Resolves to whether it was copied.
  */
 export async function copyAnswer(answerId: string): Promise<boolean> {
   const editor = editors.get(answerId);
   if (!editor || editor.isDestroyed) return false;
   const { doc } = editor.state;
   const range = selectedRange(editor) ?? { from: 0, to: doc.content.size };
-  const { dom } = editor.view.serializeForClipboard(doc.slice(range.from, range.to));
-  const text = getTextBetween(doc, range, {
-    blockSeparator: "\n\n",
-    textSerializers: getTextSerializersFromSchema(editor.schema),
-  }).trim();
+  // The editor's own copy: its Citations as footnotes, and the text with markers and Sources.
+  const { dom, text } = editor.view.serializeForClipboard(doc.slice(range.from, range.to));
   try {
     await navigator.clipboard.write([
       new ClipboardItem({
         "text/html": new Blob([dom.innerHTML], { type: "text/html" }),
-        "text/plain": new Blob([text], { type: "text/plain" }),
+        "text/plain": new Blob([text.trim()], { type: "text/plain" }),
       }),
     ]);
     return true;

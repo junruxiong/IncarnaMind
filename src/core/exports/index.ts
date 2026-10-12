@@ -19,11 +19,11 @@ import { translate } from "../../shared/i18n";
 import type { Translate } from "../../shared/locations";
 import { mindName } from "../../shared/naming";
 import type { PrintPaper } from "../../shared/printDocument";
+import type { SourceDocument } from "../../shared/sources";
 import type { Logger, Pictures, Printer } from "../adapters";
 import type {
   CitationAttributes,
   CitationFormatRequest,
-  Document,
   ExportFormat,
   ExportMindOptions,
   FormattedCitations,
@@ -36,7 +36,7 @@ import { InvalidInputError, isRecord } from "../errors";
 import { safeFileName } from "../fileNames";
 import type { Language } from "../language";
 import { type Block, countQuestions, type Footnote, footnotesIn, readBlocks } from "../mindText";
-import { styleCitations } from "./citations";
+import { addSources, styleCitations } from "./citations";
 import { renderDocx } from "./docx";
 import { exportLabels } from "./labels";
 import { renderMarkdown } from "./markdown";
@@ -44,7 +44,7 @@ import { unifyIdeographs } from "./pdfUnicode";
 import { renderPrintHtml } from "./printHtml";
 
 /** What a footnote needs of a live Document: a web page's site, address and fetch dates. */
-type LiveDocument = Pick<Document, "id" | "contentHash" | "web">;
+type LiveDocument = SourceDocument;
 
 export interface ExportsDependencies {
   /** The Mind; throws if it doesn't exist or was deleted. */
@@ -52,13 +52,15 @@ export interface ExportsDependencies {
   /** Reads the Mind's Blocks (see `MindContent.read`). */
   read<T>(mindId: string, look: (blocks: Y.XmlFragment) => T): T;
   /** The live Documents: a Citation whose Document was deleted can't be checked. */
-  liveDocuments(): LiveDocument[];
+  liveDocuments(): SourceDocument[];
   /** The text kept of Documents unlinked with their Linked folder: Citations quoting it still check. */
   keptCitationTexts(): KeptCitationText[];
   /** The interface language, which the export's own words are in. */
   language(): Language;
   /** The Mind's citation style (#289). */
   citationStyle(mindId: string): CitationStyleId;
+  /** Whether the Mind shows its Bibliography without a citation style (#102). */
+  bibliography(mindId: string): boolean;
   /** Formats Citations in a style, as the editor does (see `CoreApi.formatCitations`). */
   formatCitations(request: CitationFormatRequest): Promise<FormattedCitations>;
   /** Prints a PDF; null where this copy can't. */
@@ -90,6 +92,8 @@ interface Prepared {
   preview: MindExportPreview;
   language: Language;
   style: CitationStyle;
+  documents: readonly SourceDocument[];
+  bibliography: boolean;
 }
 
 export function createExports(deps: ExportsDependencies) {
@@ -122,7 +126,16 @@ export function createExports(deps: ExportsDependencies) {
       unverifiedCitations: footnotes.filter((each) => each.unverified).length,
       questions,
     };
-    return { format, title: mind.title, blocks, preview, language, style };
+    return {
+      format,
+      title: mind.title,
+      blocks,
+      preview,
+      language,
+      style,
+      documents,
+      bibliography: deps.bibliography(mind.id),
+    };
   };
 
   return {
@@ -132,14 +145,20 @@ export function createExports(deps: ExportsDependencies) {
 
     async export(mindId: unknown, options: unknown): Promise<MindExport> {
       const prepared = prepare(mindId, options);
-      const { title, preview, language, format, style } = prepared;
+      const { title, preview, language, format, style, documents } = prepared;
       if (format === "pdf" && !deps.printer) {
         throw new Error("This copy of IncarnaMind can't make PDFs.");
       }
       const blocks =
-        style.form === "numbered"
-          ? prepared.blocks
-          : await styleCitations(prepared.blocks, style, deps.formatCitations);
+        style.form !== "numbered"
+          ? await styleCitations(prepared.blocks, style, deps.formatCitations)
+          : prepared.bibliography
+            ? addSources(
+                prepared.blocks,
+                { language, documents },
+                translate(language, "bibliography.title"),
+              )
+            : prepared.blocks;
       const labels = exportLabels(language);
       let data: Uint8Array;
       if (format === "markdown") {
