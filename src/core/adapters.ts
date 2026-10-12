@@ -17,6 +17,7 @@ import type {
   SecretProtection,
   TranscriptionEngine,
 } from "./api";
+import type { StatIdentity } from "./documents/files";
 import type { Reranker } from "./documents/searchTool";
 import type { AnswerSearchTuning } from "./documents/searchTuning";
 import type { WatchFolder } from "./documents/watcher";
@@ -158,6 +159,12 @@ export interface LinkedFolderOptions {
    * tests may pass a fake.
    */
   watch?: WatchFolder;
+  /**
+   * Reads a file's device, file number and creation time, which a file moved
+   * and edited while IncarnaMind didn't see it is recognised by. Defaults to
+   * Node's `stat`; tests may pass one that puts files on other disks.
+   */
+  stat?: StatIdentity;
 }
 
 export interface SpawnOptions {
@@ -764,7 +771,7 @@ export interface CoreAdapters {
   referenceLookup?: { crossref?: string; arxiv?: string };
   /**
    * Where Find sources (#296) asks each Source provider, by its id
-   * ("openalex", "arxiv", "pubmed", "crossref", "openfda", "dailymed", "clinicaltrials"). Defaults to the real
+   * ("openalex", "arxiv", "pubmed", "crossref", "openfda", "dailymed", "clinicaltrials", "ecfr", "govinfo"). Defaults to the real
    * services; tests point them at a local stand-in. Consent still treats the
    * requests as going to each provider.
    */

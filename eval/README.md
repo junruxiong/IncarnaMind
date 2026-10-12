@@ -267,7 +267,7 @@ With a chat model, each Answer is timed from the moment its Question is asked (#
 
 `report.md` and the terminal summary give, per group of Answers, the median and 95th percentile of the whole Answer, the first text, each model call and its wait for a first byte (call 1, 2, 3 and the later ones apart), each search and the reranker, with how many calls and searches an Answer makes, how many were written twice, and the Answers whose searches handed over, and whose Citations cover, every Passage the Question needs. The reports hold no key, no request and no Passage text. Times move with the computer's load, which each Answer records: compare runs of similar load, or the same Questions asked under each option in turn.
 
-To compare how searches are made on Answers, set `INCARNAMIND_EVAL_RERANK_DEPTH` (a number: how many of keyword search's best the reranker sees; `off`: no reranking) and `INCARNAMIND_EVAL_MAX_PASSAGES` (how many Passages a search hands the model). A run that sets either is a comparison: the report lists it under "Set by the run" and it never gates.
+To compare how searches are made on Answers, set `INCARNAMIND_EVAL_RERANK_DEPTH` (a number: how many of keyword search's best the reranker sees; `off`: no reranking) and `INCARNAMIND_EVAL_MAX_PASSAGES` (how many Passages a search hands the model). A run that sets either is a comparison: the report lists it under "Set by the run" and it never gates. A model that calls Tools searches without the reranker (ADR-0009, 2026-10-12), so the depth changes only Answers from a model that searches once, such as a small local one.
 
 ### Every format
 

@@ -27,6 +27,7 @@ import {
   isCited,
 } from "./answers/citedVersions";
 import { createCiting } from "./answers/citing";
+import type { AnswerSearchOptions } from "./answers/engine";
 import type {
   AddDocumentsResult,
   ChatModelChoice,
@@ -59,6 +60,7 @@ import {
   parseListOptions,
 } from "./documents";
 import { createEvidence, parseCheckedDocument, passageResult } from "./documents/evidence";
+import { statIdentity } from "./documents/files";
 import { createOwnFiles } from "./documents/ownFiles";
 import { createVersionRetention, type VersionRetention } from "./documents/retention";
 import { BUILT_IN_TEXT_RECOGNITION_MODEL, createTextRecognitionModel } from "./documents/scan";
@@ -467,6 +469,7 @@ export function createCore(adapters: CoreAdapters): Core {
       linkedFolders: {
         watch:
           adapters.linkedFolders?.watch ?? fsWatchFolder(adapters.linkedFolders?.settleMs ?? 300),
+        stat: adapters.linkedFolders?.stat ?? statIdentity,
         retryMs: adapters.linkedFolders?.retryMs ?? 30_000,
         detectDataless: adapters.linkedFolders?.detectDatalessFiles ?? platform === "darwin",
       },
@@ -800,18 +803,20 @@ export function createCore(adapters: CoreAdapters): Core {
   consent.registry.register({
     id: "find-sources",
     sends: FIND_SOURCES_SENDS,
+    sendsTo: (serviceId) => sources.sendsTo(serviceId),
     services: async () => [],
   });
   sources.dropPurged().catch((error: unknown) => console.error(error));
-  /** The User's Documents searched as an Answer searches them: the search Tool, reranked as the User chose. */
+  /** The User's Documents searched as an Answer searches them: the search Tool, reranked as the User chose unless `rerank` is false. */
   const searchDocuments = (
     query: string,
     documentIds: readonly string[] | null,
     signal?: AbortSignal,
+    { rerank: reranking = true }: AnswerSearchOptions = {},
   ) => {
     const options = {
       signal,
-      rerank: adapters.reranker ?? rerank.active(),
+      rerank: reranking ? (adapters.reranker ?? rerank.active()) : undefined,
       documentIds: documentIds ?? undefined,
     };
     const tuning = adapters.answerSearch;
@@ -875,6 +880,11 @@ export function createCore(adapters: CoreAdapters): Core {
         return false;
       }
     },
+    readableMindName: (mindId) => {
+      const found = minds.locate(mindId);
+      if (!found || found.deletedAt !== null) return null;
+      return isKnownKind(minds.get(mindId).kind) ? found.name : null;
+    },
     providerExists: (providerId) => chat.exists(providerId),
     readiness: (choice) => chat.readiness(choice),
     prepareModel: (choice) => chat.prepareModel(choice),
@@ -911,16 +921,16 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     // Every window hears of each message as it is added or written.
     conversations: {
-      add: (input, answerModel) => {
-        const turn = conversations.add(input, answerModel);
+      add: (input, answerModel, read) => {
+        const turn = conversations.add(input, answerModel, read);
         events.emit("conversation.message", turn.question);
         events.emit("conversation.message", turn.answer);
         conversationsChanged();
         return turn;
       },
       questionOf: (input) => conversations.questionOf(input),
-      restartAnswer: (answerId, answerModel) => {
-        const turn = conversations.restartAnswer(answerId, answerModel);
+      restartAnswer: (answerId, answerModel, read) => {
+        const turn = conversations.restartAnswer(answerId, answerModel, read);
         events.emit("conversation.message", turn.answer);
         return turn;
       },
@@ -1624,7 +1634,7 @@ export function createCore(adapters: CoreAdapters): Core {
           ? []
           : (resolveScope({ folderIds: [...folderIds], tagIds: [], documentIds: [] }) ?? []),
       // Without the reranker: it costs about a second a search (ADR-0009), and an agent's
-      // search must answer in well under 100 ms. `ask` reranks, as every Answer does.
+      // search must answer in well under 100 ms.
       search: (query, documentIds, parameters, signal) =>
         documents.searchTool(query, { documentIds, parameters, signal }),
       passage: (passageId) => documents.passage(passageId),

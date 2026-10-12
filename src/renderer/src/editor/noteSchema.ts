@@ -1,6 +1,7 @@
 import type { Extensions, NodeViewRenderer } from "@tiptap/core";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import Highlight from "@tiptap/extension-highlight";
+import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { BlockMath, InlineMath } from "@tiptap/extension-mathematics";
 import { Table, TableCell, TableHeader, TableRow } from "@tiptap/extension-table";
 import UniqueID from "@tiptap/extension-unique-id";
@@ -9,12 +10,15 @@ import {
   ANSWER_BLOCK,
   BLOCK_ID_ATTRIBUTE,
   FOOTNOTE_NODE,
+  GENERATED_MARK,
   NOTE_BLOCK_TYPES,
   QUESTION_BLOCK,
 } from "../../../core/api";
+import { Generated } from "./aiText";
 import { Chart } from "./chartSchema";
 import { Citation } from "./citationSchema";
 import { lowlight } from "./codeLanguages";
+import { DocumentChip } from "./documentChipSchema";
 import { Footnote } from "./footnoteSchema";
 import { ProposalAttributes, ProposalDelete, ProposalInsert } from "./proposalSchema";
 import { Answer, MindDocument, Question, QuestionContextFlag } from "./questionSchema";
@@ -48,6 +52,8 @@ export interface NoteSchemaOptions {
   citationView?: NodeViewRenderer;
   /** Draws the markers of the User's footnotes, e.g. as numbers that open their text. */
   footnoteView?: NodeViewRenderer;
+  /** Draws Document chips, e.g. as names that open the Document. */
+  documentChipView?: NodeViewRenderer;
   /** Draws charts, with their menus and their points' cards. */
   chartView?: NodeViewRenderer;
 }
@@ -57,10 +63,11 @@ export interface NoteSchemaOptions {
  * underline, links, strikethrough, highlight, lists, code blocks highlighted
  * by lowlight, inline and block math rendered by KaTeX, and tables, each with
  * an "include in Question context" flag. Questions and Answers, top-level
- * only. Citations, inline in Answers and in whatever they are copied into,
+ * only. Document chips the User writes with "@". Citations, inline in Answers and in whatever they are copied into,
  * table cells included. Footnotes the User writes, inline, each holding its
  * text. Charts, drawn from a table or from cited figures, each value with its
  * Citation (#436). Proposals the AI made, waiting for the User (see `proposalSchema`).
+ * AI text, the words the AI wrote that the User hasn't made their own (see `aiText`).
  * Every Block and every footnote has a UUID. The editor adds its interface on
  * top (collaboration, menus, the drag handle, smart typography); tests use
  * this alone.
@@ -72,12 +79,15 @@ export function noteExtensions({
   answerView,
   citationView,
   footnoteView,
+  documentChipView,
   chartView,
 }: NoteSchemaOptions = {}): Extensions {
   const onClick = onEditMath && ((_node: unknown, pos: number) => onEditMath(pos));
-  const CodeBlock = codeBlockView
-    ? CodeBlockLowlight.extend({ addNodeView: () => codeBlockView })
-    : CodeBlockLowlight;
+  const CodeBlock = CodeBlockLowlight.extend({
+    // No formatting in code, but code the AI wrote is AI text all the same.
+    marks: GENERATED_MARK,
+    ...(codeBlockView && { addNodeView: () => codeBlockView }),
+  });
 
   return [
     StarterKit.configure({
@@ -88,6 +98,8 @@ export function noteExtensions({
       undoRedo: false,
       // It would add a paragraph to Minds that end in another Block just by opening them.
       trailingNode: false,
+      // A click puts the cursor in a link and shows its address with Open, Edit and Remove (LinkBubble).
+      link: { openOnClick: false },
       // Shows where a dragged Block will land.
       dropcursor: { color: "rgb(14 165 233)", width: 2 },
     }),
@@ -99,6 +111,9 @@ export function noteExtensions({
     InlineMath.configure({ katexOptions: { throwOnError: false }, onClick }),
     // Columns size to their text: dragging their edges would need a way by keyboard too.
     // Tab and Shift-Tab move between cells; Tab in the last cell adds a row.
+    // A checklist: its items hold a box and Blocks, as list items do.
+    TaskList,
+    TaskItem.configure({ nested: true }),
     Table.configure({ resizable: false }),
     TableRow,
     TableHeader,
@@ -107,12 +122,14 @@ export function noteExtensions({
     Answer.configure({ view: answerView ?? null }),
     Citation.configure({ view: citationView ?? null }),
     Footnote.configure({ view: footnoteView ?? null }),
+    DocumentChip.configure({ view: documentChipView ?? null }),
     Chart.configure({ view: chartView ?? null }),
     QuestionContextFlag,
     // Proposals waiting for the User: words struck and added, and whole Blocks (#93).
     ProposalInsert,
     ProposalDelete,
     ProposalAttributes,
+    Generated,
     UniqueID.configure({
       attributeName: BLOCK_ID_ATTRIBUTE,
       types: [...BLOCK_TYPES, FOOTNOTE_NODE],

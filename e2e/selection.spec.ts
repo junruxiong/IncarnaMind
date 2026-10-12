@@ -9,6 +9,7 @@ import {
   launchApp,
   newMind,
   pointAndClick,
+  pointAt,
   removeDataFolder,
   setWindowSize,
 } from "./app";
@@ -316,3 +317,47 @@ test("with the focus in the note or the composer, ⌘A selects text and not rows
     await app.close();
   }
 });
+
+for (const place of PLACES) {
+  test(`in the ${place.name}, a double-click renames the row it hit, and a ⌘-click or Shift-click never renames or opens`, async () => {
+    const { app, window } = await launchApp(dataDir);
+    try {
+      await setWindowSize(app, window, 1400, 800);
+      await dismissChatSetup(window);
+      await addFiveDocuments(window);
+      if (place.name === "library") await window.getByTestId("open-library").click();
+      const rows = place.rows(window);
+      await expect(rows).toHaveCount(NAMES.length);
+      const field = rows.locator("input:not([type=checkbox])");
+      const tabs = window.getByTestId("tab-title");
+      const opened = await tabs.count();
+
+      // Two ⌘-clicks, however close, add the row and take it out again: no field, nothing opened.
+      await pointAt(window, place.target(rows.nth(2)));
+      await place.target(rows.nth(2)).dblclick({ modifiers: ["ControlOrMeta"] });
+      await expectSelected(rows, []);
+      await expect(field).toHaveCount(0);
+      await expect(tabs).toHaveCount(opened);
+
+      // Two Shift-clicks the same.
+      await pointAndClick(window, place.target(rows.nth(0)));
+      await expectSelected(rows, [0]);
+      const tabsNow = await tabs.count();
+      await place.target(rows.nth(2)).dblclick({ modifiers: ["Shift"] });
+      await expectSelected(rows, [0, 1, 2]);
+      await expect(field).toHaveCount(0);
+      await expect(tabs).toHaveCount(tabsNow);
+
+      // A double-click renames the row it hit, and leaves just that one selected.
+      await pointAt(window, place.target(rows.nth(3)));
+      await place.target(rows.nth(3)).dblclick();
+      await expect(field).toHaveCount(1);
+      await expect(field).toBeFocused();
+      await expectSelected(rows, [3]);
+      await window.keyboard.press("Escape");
+      await expect(field).toHaveCount(0);
+    } finally {
+      await app.close();
+    }
+  });
+}
