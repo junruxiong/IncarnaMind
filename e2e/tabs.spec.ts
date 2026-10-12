@@ -163,7 +163,6 @@ test("tabs close, reopen, move and switch by mouse and keyboard; a deleted Mind'
   await gammaRow.hover();
   await gammaRow.getByTestId("mind-menu").click();
   await gammaRow.getByTestId("mind.delete").click();
-  await window.getByTestId("confirm-delete-mind").click();
   await expect(titlesOf(window)).toHaveText(["Alpha"]);
   await expect(activeTab(window)).toContainText("Alpha");
 

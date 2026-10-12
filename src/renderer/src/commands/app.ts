@@ -8,6 +8,7 @@ import { startSkillFromMind } from "../makeSkill";
 import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
 import { assistantCommands } from "./assistant";
+import { deletedCommands } from "./deleted";
 import { editCommands } from "./edit";
 import { evidenceCommands } from "./evidence";
 import { footnoteCommands } from "./footnotes";
@@ -60,6 +61,7 @@ const appCommands: readonly Command[] = [
   ...folderCommands,
   ...tagCommands,
   ...linkedFolderCommands,
+  ...deletedCommands,
   ...answerCommands,
   ...citationCommands,
   ...tabCommands,
