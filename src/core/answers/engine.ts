@@ -793,7 +793,7 @@ async function translatedQuery(
  * The Answer engine: its Tool-calling loop on a Run engine, and the ways of
  * answering without Tools on the model layer (the Vercel AI SDK).
  */
-export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}): AnswerEngine {
+function createWritingEngine(options: AiSdkAnswerEngineOptions): AnswerEngine {
   const maxSteps = options.maxSteps ?? MAX_STEPS;
   const engine = options.runEngine ?? createAiSdkRunEngine();
   /** Models whose provider refused a temperature, by provider and model: they get none. */
@@ -1038,6 +1038,33 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
       }
     },
   };
+}
+
+/**
+ * Passes on an Answer's events, but an Answer that finishes with no text
+ * fails as "no-answer" instead: a reply that ended empty, or whose stream
+ * held nothing the provider could read, would otherwise be a blank Answer.
+ */
+async function* endedBlank(
+  events: AsyncIterable<AnswerEngineEvent>,
+  model: AnswerRequest["model"],
+): AsyncGenerator<AnswerEngineEvent> {
+  let text = "";
+  for await (const event of events) {
+    if (event.type === "text-delta") text += event.text;
+    else if (event.type === "text-retracted") text = text.slice(0, -event.length);
+    if (event.type === "finished" && text.trim() === "") {
+      console.warn(`The model sent no Answer: provider=${model.provider} model=${model.modelId}`);
+      yield { type: "failed", error: { kind: "no-answer", message: "The model sent no Answer." } };
+      return;
+    }
+    yield event;
+  }
+}
+
+export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}): AnswerEngine {
+  const writer = createWritingEngine(options);
+  return { generate: (request) => endedBlank(writer.generate(request), request.model) };
 }
 
 /** What one go of the Tool-calling loop keeps of its calls of the Documents' Tools. */
