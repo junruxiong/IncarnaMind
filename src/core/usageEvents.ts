@@ -127,6 +127,7 @@ const DOCUMENT_ERRORS = [
   "too-large",
   "file-missing",
   "processing-error",
+  "pages-unread",
 ] as const;
 const CONNECTOR_ERRORS = [
   "missing-command",
