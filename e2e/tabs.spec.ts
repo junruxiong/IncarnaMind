@@ -162,7 +162,7 @@ test("tabs close, reopen, move and switch by mouse and keyboard; a deleted Mind'
   const gammaRow = window.getByTestId("mind-row").filter({ hasText: "Gamma" });
   await gammaRow.hover();
   await gammaRow.getByTestId("mind-menu").click();
-  await gammaRow.getByTestId("delete-mind").click();
+  await gammaRow.getByTestId("mind.delete").click();
   await window.getByTestId("confirm-delete-mind").click();
   await expect(titlesOf(window)).toHaveText(["Alpha"]);
   await expect(activeTab(window)).toContainText("Alpha");
@@ -441,7 +441,7 @@ test("a Mind is renamed in place from its sidebar row, and Not in a Folder folds
     .filter({ has: rows.filter({ hasText: "Beta research" }) });
   await beta.hover();
   await beta.getByTestId("mind-menu").click();
-  await beta.getByTestId("rename-mind").click();
+  await beta.getByTestId("mind.rename").click();
   await field.fill("Not this");
   await field.press("Escape");
   await expect(rows.filter({ hasText: "Beta research" })).toHaveCount(1);
