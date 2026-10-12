@@ -21,6 +21,7 @@ import { EmbeddingSettingsSection } from "./providers/EmbeddingSettings";
 import { JevSettingsSection } from "./providers/JevSettings";
 import { RerankSettingsSection } from "./providers/RerankSettings";
 import { SkillScriptsSettings, SkillsSettings } from "./SkillsSettings";
+import { SpendingCapSettings } from "./SpendingCapSettings";
 import { SuggestionSettings } from "./SuggestionSettings";
 import {
   buttonClass,
@@ -156,6 +157,7 @@ function PageContent({ page }: { page: SettingsPage }) {
       return (
         <Page>
           <LanguageSettings />
+          <SpendingCapSettings />
           <MotionSettings />
           <SuggestionSettings />
           <OutputLocationSettings />

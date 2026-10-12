@@ -11,6 +11,8 @@ import type {
   KeptCitationText,
   LayoutChange,
   LayoutTab,
+  LibraryGroup,
+  LibraryGroupInput,
   LibrarySnapshot,
   LinkedFolder,
   LinkedFolderLayout,
@@ -26,8 +28,11 @@ import type {
 } from "../../core/api";
 import { resolveLanguage } from "../../core/language";
 import type { UiUsageEvent } from "../../core/usageEvents";
+import { displayName } from "../../shared/documentNames";
 import type { DocumentLocation } from "../../shared/documentViewer";
 import { type MessageKey, type MessageParams, translate } from "../../shared/i18n";
+import { mindName } from "../../shared/naming";
+import { deleted, renamed, retagged, tagLinks } from "./changes";
 import { core, files } from "./core";
 import { applyAssignments, applyDocumentChanges, createDocumentUpdates } from "./documentUpdates";
 import { errorMessage } from "./errors";
@@ -41,9 +46,17 @@ import {
 } from "./layoutSlice";
 import { type LibraryBridge, mindToAskIn } from "./libraryBridges";
 import { matchesTags, NEEDS_REVIEW } from "./libraryFilters";
-import { itemsOf, type MoveItems, movedLocally, moveMessage, undoMoves } from "./moves";
+import {
+  foldersMovedFrom,
+  itemsOf,
+  type MoveItems,
+  movedLocally,
+  moveMessage,
+  moveName,
+  undoMoves,
+} from "./moves";
 import { resolveSettingsPage, type SettingsPage } from "./settingsPages";
-import { useUndo } from "./undo";
+import { type Undoable, UndoRefused, useUndo } from "./undo";
 
 type Status = { kind: "loading" } | { kind: "ready" } | { kind: "failed"; message: string };
 
@@ -175,7 +188,9 @@ interface AppState extends LayoutSlice {
   moveToFolder(items: MoveItems, folderId: string | null): Promise<void>;
   /** Renames a Folder, keeping its description. */
   renameFolder(folderId: string, name: string): Promise<void>;
-  /** Deletes a Folder: its Documents and Minds go to Not in a Folder. */
+  /** Changes a Folder's name, description or evidence choice, with Undo. Throws what the core throws. */
+  editFolder(folderId: string, input: LibraryGroupInput): Promise<void>;
+  /** Deletes a Folder, with Undo: its Documents and Minds go to Not in a Folder. */
   deleteFolder(folderId: string): Promise<void>;
   /** Called once the new Mind's title has the focus. */
   titleFocused(): void;
@@ -212,7 +227,10 @@ interface AppState extends LayoutSlice {
   closeTab(tabId: string): void;
   /** ⇧⌘T: reopens the tab closed last, where it was. */
   reopenTab(): void;
-  renameMind(id: string, title: string): Promise<void>;
+  /** Renames a Mind, with Undo; `typing`: as the User types its title, which becomes one step once they leave it (`titleLeft`). */
+  renameMind(id: string, title: string, options?: { typing?: boolean }): Promise<void>;
+  /** The User left a Mind's title: what they typed, from `before` to `after`, becomes one step to undo. */
+  titleLeft(id: string, before: string, after: string): void;
   deleteMind(id: string): Promise<void>;
   /** Shows a failure that happened outside a store action, e.g. while saving an edit. */
   reportError(error: unknown): void;
@@ -442,6 +460,59 @@ export const useAppStore = create<AppState>()((set, get) => {
     } catch (error) {
       set({ actionError: errorMessage(error) });
     }
+  };
+  const push = (change: Undoable) => useUndo.getState().push(change);
+
+  /**
+   * Refuses to put something back in a Folder deleted since, as the core would,
+   * offering to restore the Folder first (`names`: theirs when the change was made).
+   */
+  const refuseIfDeleted = (folderIds: readonly string[], names: ReadonlyMap<string, string>) => {
+    const { library } = get();
+    if (!library) return;
+    const gone = folderIds.find((id) => !library.groups.some((group) => group.id === id));
+    if (gone === undefined) return;
+    const name = names.get(gone) ?? "";
+    throw new UndoRefused(t("undo.folderGone", { name }), {
+      label: t("undo.restoreFolder", { name }),
+      run: async () => {
+        await core.restore([{ kind: "folder", id: gone }]);
+        await get().refreshLibrary();
+      },
+    });
+  };
+
+  /** A Mind renamed from `before`, with Undo, if its title changed. */
+  const offerRename = (mind: Mind, before: string) => {
+    if (before === mind.title) return;
+    const shown = mindName(mind) || t("mind.untitled");
+    const rename = (name: string) => core.renameMind(mind.id, name);
+    push(renamed(t, shown, rename, { before, after: mind.title }));
+  };
+
+  /** Puts a Folder's fields back as given. */
+  const folderFields = (id: string, group: LibraryGroupInput) => async () => {
+    await core.updateLibraryGroup(id, group);
+    await get().refreshLibrary();
+  };
+
+  /** Each Document's name, as the undo line says it. */
+  const documentNames = (ids: readonly string[]) =>
+    ids.map((id) => {
+      const document = get().documents.find((each) => each.id === id);
+      return document ? displayName(document) : "";
+    });
+
+  /** Puts a Tag on Documents, or takes it off, with Undo: their links go back as they were. */
+  const retag = async (added: boolean, documentIds: readonly string[], tagId: string) => {
+    const ids = [...documentIds];
+    const before = tagLinks(get().documents, ids, tagId);
+    const names = documentNames(ids);
+    const again = () =>
+      added ? core.addTagToDocuments(ids, tagId) : core.removeTagFromDocuments(ids, tagId);
+    await again();
+    const tag = get().tags.find((each) => each.id === tagId)?.name ?? "";
+    push(retagged(t, { added, tag, names }, before, again));
   };
 
   /** Closes a tab, then says so with Reopen. */
@@ -739,13 +810,20 @@ export const useAppStore = create<AppState>()((set, get) => {
             ? t("library.unsorted")
             : (library?.groups.find((group) => group.id === folderId)?.name ?? "");
         const message = moveMessage(t, moving, folderName, { minds, documents });
-        const done = await move(moving, folderId);
-        useUndo.getState().offer({
+        const names = new Map(library?.groups.map((group) => [group.id, group.name]));
+        let done = await move(moving, folderId);
+        push({
           message,
+          name: moveName(t, moving, { minds, documents }),
           undo: async () => {
+            refuseIfDeleted(foldersMovedFrom(done), names);
             for (const back of undoMoves(done)) await move(back.items, back.folderId);
             for (const document of done.documents)
               await core.restoreAssignment(document.id, document.previous);
+          },
+          redo: async () => {
+            if (folderId !== null) refuseIfDeleted([folderId], names);
+            done = await move(moving, folderId);
           },
         });
       }),
@@ -755,15 +833,41 @@ export const useAppStore = create<AppState>()((set, get) => {
         const folder = get().library?.groups.find((group) => group.id === folderId);
         const trimmed = name.trim();
         if (!folder || !trimmed || trimmed === folder.name) return;
-        await core.updateLibraryGroup(folderId, { name: trimmed, description: folder.description });
-        await get().refreshLibrary();
+        await get().editFolder(folderId, { name: trimmed, description: folder.description });
       }),
+
+    async editFolder(folderId, input) {
+      const folder = get().library?.groups.find((group) => group.id === folderId);
+      const edited = await core.updateLibraryGroup(folderId, input);
+      await get().refreshLibrary();
+      if (!folder) return;
+      const fields = (group: LibraryGroup) => ({
+        name: group.name,
+        description: group.description,
+        countsOwnFiles: group.countsOwnFiles,
+      });
+      const before = fields(folder);
+      const after = fields(edited);
+      if (JSON.stringify(before) === JSON.stringify(after)) return;
+      const rename = before.name !== after.name;
+      push({
+        message: t(rename ? "object.renamed" : "undo.folderEdited", { name: after.name }),
+        name: t(rename ? "undo.name.rename" : "undo.name.editFolder"),
+        undo: folderFields(folderId, before),
+        redo: folderFields(folderId, after),
+      });
+    },
 
     // Its Minds' list follows the core's "minds.changed" event, the Library its "library.changed".
     deleteFolder: (folderId) =>
       attempt(async () => {
-        await core.deleteLibraryGroup(folderId);
-        await get().refreshLibrary();
+        const folder = get().library?.groups.find((group) => group.id === folderId);
+        const remove = async () => {
+          await core.deleteLibraryGroup(folderId);
+          await get().refreshLibrary();
+        };
+        await remove();
+        if (folder) push(deleted(t, folder.name, [{ kind: "folder", id: folderId }], remove));
       }),
 
     openExamples: () =>
@@ -779,7 +883,17 @@ export const useAppStore = create<AppState>()((set, get) => {
     // The core closes the Mind's tab; its Documents go with their Linked folder.
     removeExamples: () =>
       attempt(async () => {
-        await core.removeExamples();
+        const group = get().examples?.group;
+        const remove = () => core.removeExamples(group);
+        await remove();
+        push({
+          message: t("undo.examplesRemoved"),
+          name: t("undo.name.removeExamples"),
+          undo: async () => {
+            await core.createExamples(group);
+          },
+          redo: remove,
+        });
       }),
 
     updateGettingStarted(patch) {
@@ -819,14 +933,26 @@ export const useAppStore = create<AppState>()((set, get) => {
     },
 
     // The list follows the core's "minds.changed" event, which arrives before these calls return.
-    renameMind: (id, title) =>
+    renameMind: (id, title, options) =>
       attempt(async () => {
-        await core.renameMind(id, title);
+        const before = get().minds.find((mind) => mind.id === id)?.title;
+        const mind = await core.renameMind(id, title);
+        if (!options?.typing && before !== undefined) offerRename(mind, before);
       }),
+
+    titleLeft(id, before, after) {
+      const mind = get().minds.find((each) => each.id === id);
+      // Its last letters may still be on their way to the core: the title is what was typed.
+      if (mind) offerRename({ ...mind, title: after.trim() }, before);
+    },
 
     deleteMind: (id) =>
       attempt(async () => {
-        await core.deleteMind(id);
+        const mind = get().minds.find((each) => each.id === id);
+        const remove = () => core.deleteMind(id);
+        await remove();
+        const shown = (mind && mindName(mind)) || t("mind.untitled");
+        push(deleted(t, shown, [{ kind: "mind", id }], remove));
       }),
 
     reportError(error) {
@@ -931,16 +1057,29 @@ export const useAppStore = create<AppState>()((set, get) => {
 
     renameDocument: (id, name) =>
       attempt(async () => {
-        const renamed = await core.renameDocument(id, name);
-        documentUpdates.flush();
-        set((state) => ({ documents: upsert(state.documents, renamed) }));
+        const before = get().documents.find((each) => each.id === id)?.name;
+        const rename = async (to: string) => {
+          const document = await core.renameDocument(id, to);
+          documentUpdates.flush();
+          set((state) => ({ documents: upsert(state.documents, document) }));
+          return document;
+        };
+        const document = await rename(name);
+        if (before === undefined || before === document.name) return;
+        push(renamed(t, displayName(document), rename, { before, after: document.name }));
       }),
 
     deleteDocument: (id) =>
       attempt(async () => {
-        await core.deleteDocument(id);
-        documentUpdates.flush();
-        set((state) => ({ documents: state.documents.filter((each) => each.id !== id) }));
+        const document = get().documents.find((each) => each.id === id);
+        const remove = async () => {
+          await core.deleteDocument(id);
+          documentUpdates.flush();
+          set((state) => ({ documents: state.documents.filter((each) => each.id !== id) }));
+        };
+        await remove();
+        const shown = document ? displayName(document) : "";
+        push(deleted(t, shown, [{ kind: "document", id }], remove));
       }),
 
     // Its status follows the core's "document.status" event too.
@@ -1052,25 +1191,13 @@ export const useAppStore = create<AppState>()((set, get) => {
     },
 
     // The Documents follow the core's "documents.tagged" event, which arrives before these calls return.
-    addDocumentTag: (documentId, tagId) =>
-      attempt(async () => {
-        await core.addDocumentTag(documentId, tagId);
-      }),
+    addDocumentTag: (documentId, tagId) => attempt(() => retag(true, [documentId], tagId)),
 
-    removeDocumentTag: (documentId, tagId) =>
-      attempt(async () => {
-        await core.removeDocumentTag(documentId, tagId);
-      }),
+    removeDocumentTag: (documentId, tagId) => attempt(() => retag(false, [documentId], tagId)),
 
-    addTagToDocuments: (documentIds, tagId) =>
-      attempt(async () => {
-        await core.addTagToDocuments([...documentIds], tagId);
-      }),
+    addTagToDocuments: (documentIds, tagId) => attempt(() => retag(true, documentIds, tagId)),
 
-    removeTagFromDocuments: (documentIds, tagId) =>
-      attempt(async () => {
-        await core.removeTagFromDocuments([...documentIds], tagId);
-      }),
+    removeTagFromDocuments: (documentIds, tagId) => attempt(() => retag(false, documentIds, tagId)),
 
     async createTag(name, description = "") {
       const tag = await core.createTag({ name, description });

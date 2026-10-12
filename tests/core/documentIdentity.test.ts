@@ -413,10 +413,10 @@ describe("The workspace and Minds' content schema version", { timeout: 30_000 },
 });
 
 /**
- * Takes out what migration 55 added, leaving the data folder as the version
+ * Takes out what migration 58 added, leaving the data folder as the version
  * before it left it: the rows the core wrote are what that version wrote too.
  */
-function asBeforeMigration55(dataDir: string): void {
+function asBeforeMigration58(dataDir: string): void {
   const db = openDatabase(join(dataDir, DATABASE_FILE));
   try {
     db.exec(`
@@ -424,14 +424,14 @@ function asBeforeMigration55(dataDir: string): void {
       ALTER TABLE documents DROP COLUMN source_kind;
       ALTER TABLE documents DROP COLUMN relative_path;
       DROP TABLE workspace;
-      DELETE FROM schema_migrations WHERE version = 55;
+      DELETE FROM schema_migrations WHERE version = 58;
     `);
   } finally {
     db.close();
   }
 }
 
-describe("Migration 55: a data folder made by the previous version", { timeout: 60_000 }, () => {
+describe("Migration 58: a data folder made by the previous version", { timeout: 60_000 }, () => {
   test("its Documents are known by their places without being read or processed again, and their Citations stay found", async () => {
     const { core, dataDir, mind, library, tides, rivers, answerId, cited } =
       await citeInLinkedFolder();
@@ -453,7 +453,7 @@ describe("Migration 55: a data folder made by the previous version", { timeout: 
     const passagesBefore = passageIds(dataDir);
     const linked = await linkedFolderOf(core);
     await core.close();
-    asBeforeMigration55(dataDir);
+    asBeforeMigration58(dataDir);
 
     const second = startCore(dataDir);
     await second.reconcileDocuments();
@@ -509,7 +509,7 @@ describe("Migration 55: a data folder made by the previous version", { timeout: 
     try {
       migrate(
         db,
-        migrations.filter((migration) => migration.version < 55),
+        migrations.filter((migration) => migration.version < 58),
       );
       const at = "2026-10-01T09:00:00.000Z";
       const folders = [
