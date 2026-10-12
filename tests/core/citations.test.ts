@@ -205,10 +205,9 @@ describe("Answers cite Passages", { timeout: 30_000 }, () => {
     expect(started.map((event) => event.call)).toEqual([
       { ...call, status: "running", resultCount: null },
     ]);
-    expect(ended.map((event) => event.call)).toEqual([{ ...call, status: "done", resultCount: 1 }]);
-    expect(JSON.parse(answerIn(client, answerId).attrs.toolCalls as string)).toEqual([
-      { ...call, status: "done", resultCount: 1 },
-    ]);
+    const done = { ...call, status: "done", resultCount: 1, passages: [expect.any(String)] };
+    expect(ended.map((event) => event.call)).toEqual([done]);
+    expect(JSON.parse(answerIn(client, answerId).attrs.toolCalls as string)).toEqual([done]);
     // What the model wrote before searching was only a preamble: it isn't in the Answer.
     expect(answerText(client, answerId)).toBe("Neap tides are the small ones.");
   });
