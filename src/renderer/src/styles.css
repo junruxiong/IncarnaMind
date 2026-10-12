@@ -2546,9 +2546,17 @@
   .answer-searches-found {
     color: var(--color-ink-placeholder);
   }
-  /* Its Blocks are inside the node view's content element, one level down. */
+  /*
+   * Its Blocks are inside the node view's content element, one level down. An
+   * Answer written before AI text was marked word by word is all in the
+   * Answer's ink; a newer one is in the User's, its AI text marked.
+   */
   .answer-content {
     color: var(--color-ink-answer);
+
+    &[data-generated-marks] {
+      color: var(--color-ink);
+    }
 
     :where([data-node-view-content-react] > * + *) {
       margin-top: 12px;
@@ -2998,6 +3006,16 @@
     padding: 0;
     overflow: hidden;
     opacity: 0;
+  }
+  /*
+   * AI text (#95; DESIGN.md, Writing and text): the Answer's ink, a step
+   * softer than the User's writing. A quote keeps its own, softer still.
+   */
+  .mind-editor .generated-text {
+    color: var(--color-ink-answer);
+  }
+  .mind-editor blockquote .generated-text {
+    color: inherit;
   }
   /*
    * Proposals waiting for the User (#93; DESIGN.md, AI edits): removed words
@@ -4661,7 +4679,7 @@
     }
   }
   /* What the next Question reads and searches: one line, once, in an empty conversation (#391). */
-  .assistant-asked-from {
+  .assistant-reads {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -4671,12 +4689,12 @@
     line-height: var(--text-ui--line-height);
     color: var(--color-ink-meta);
   }
-  .assistant-asked-from-icon {
+  .assistant-reads-icon {
     width: 14px;
     height: 14px;
     flex-shrink: 0;
   }
-  .assistant-asked-from-text {
+  .assistant-reads-text {
     min-width: 0;
     overflow: hidden;
     white-space: nowrap;
@@ -4919,6 +4937,33 @@
     width: 14px;
     height: 14px;
     flex-shrink: 0;
+  }
+  /* A line that names the Mind: its words open and fold the steps, the name goes to the Mind. */
+  .assistant-answer .answer-steps-split {
+    gap: 0;
+
+    &:has(.answer-steps-part:hover) {
+      background: var(--color-hover);
+    }
+    &:has([aria-expanded="true"]) {
+      color: var(--color-ink-secondary);
+    }
+  }
+  .answer-steps-part {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 6px;
+    white-space: pre;
+  }
+  .answer-steps-part--end {
+    padding-left: 6px;
+  }
+  .answer-steps-mind {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
   .answer-steps-text {
     min-width: 0;
@@ -5827,7 +5872,7 @@
     flex-direction: column;
     gap: 2px;
     box-sizing: border-box;
-    width: 300px;
+    width: var(--chart-card-width, 300px);
     max-width: calc(100vw - 16px);
     padding: 12px 14px;
     border-radius: 10px;
@@ -5871,12 +5916,14 @@
     line-height: 16px;
     color: var(--color-ink-meta);
   }
+  /* Two lines at most, for a card narrowed beside a pie (#578). */
   .chart-card-where {
     flex: 1 1 auto;
     min-width: 0;
+    display: -webkit-box;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
   }
   .chart-card-open {
     flex: none;

@@ -255,6 +255,17 @@ export function CalculatorLineIcon(props: IconProps) {
   );
 }
 
+/** Mark as mine: a person, ticked. */
+export function MineLineIcon(props: IconProps) {
+  return (
+    <LineIcon strokeWidth={2} {...props}>
+      <circle cx="9" cy="8" r="3.5" />
+      <path d="M2.5 20a6.5 6.5 0 0 1 13 0" />
+      <path d="m15.5 11.5 2.5 2.5 4.5-5" />
+    </LineIcon>
+  );
+}
+
 export function CheckLineIcon(props: IconProps) {
   return (
     <LineIcon strokeWidth={2.25} {...props}>
