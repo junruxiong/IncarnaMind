@@ -195,7 +195,7 @@ describe("the menus", () => {
         label: "mind.open",
         group: "danger",
         appliesTo: ["conversation"],
-        reversible: { confirm: "mind.delete.body" },
+        reversible: { confirm: "deleted.confirm.foot" },
         run: () => undefined,
       },
     ];
@@ -247,7 +247,7 @@ describe("the menus", () => {
     ];
     commands.register({
       id: "test.count",
-      label: (ctx, t) => `${t("mind.delete.confirm")} ${ctx.selection.length}`,
+      label: (ctx, t) => `${t("deleted.restore")} ${ctx.selection.length}`,
       group: "danger",
       appliesTo: ["document"],
       reversible: true,
