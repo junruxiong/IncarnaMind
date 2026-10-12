@@ -148,11 +148,11 @@ export const useReferenceImport = create<ReferenceImportState>()((set, get) => {
 /** Starts an import, and offers Undo for it once it is done. */
 export async function importReferences(): Promise<Undoable | undefined> {
   const undoable = await useReferenceImport.getState().start();
-  if (undoable) useUndo.getState().offer(undoable);
+  if (undoable) useUndo.getState().push(undoable);
   return undoable;
 }
 
 export async function importReferenceFile(path: string): Promise<void> {
   const undoable = await useReferenceImport.getState().importPath(path);
-  if (undoable) useUndo.getState().offer(undoable);
+  if (undoable) useUndo.getState().push(undoable);
 }
