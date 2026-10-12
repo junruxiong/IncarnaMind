@@ -104,8 +104,11 @@ export interface CreateMindInput {
  *   or from cited figures, each kept with its Citation. Older content is
  *   version 7 content as it is: nothing is rewritten. A version before 7
  *   opens a Mind with a chart read-only, as its editor would drop the chart.
+ * - 8: a Document chip the User writes with "@" (`DOCUMENT_CHIP_NODE`), and
+ *   checklists (`taskList` and `taskItem`, whose items keep `checked`). Older
+ *   content is version 8 content as it is: nothing is rewritten.
  */
-export const CONTENT_SCHEMA_VERSION = 7;
+export const CONTENT_SCHEMA_VERSION = 8;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -331,6 +334,7 @@ export const NOTE_BLOCK_TYPES = [
   "bulletList",
   "orderedList",
   "blockquote",
+  "taskList",
   "horizontalRule",
   "table",
   "chart",
@@ -592,6 +596,14 @@ export const CITATION_NODE = "citation";
  * inside a footnote is part of that footnote's text, with no number of its own.
  */
 export const FOOTNOTE_NODE = "footnote";
+
+/**
+ * The node type of a Document chip, which the User writes with "@" in a Note:
+ * an inline node that names a Document (`documentId`, and its `name` as it was
+ * when the chip was made, shown if the Document is gone) and opens it in the
+ * viewer. It is the User's own text, not a Citation: it checks nothing.
+ */
+export const DOCUMENT_CHIP_NODE = "documentChip";
 
 /**
  * The node type of a chart (#436): a Block with no text of its own, whose
