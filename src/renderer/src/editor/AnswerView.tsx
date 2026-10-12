@@ -140,7 +140,6 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
     );
   }
   const { calculated, uncalculated } = figuresOf(toolCalls);
-  if (calculated > 0) meta.push(<FiguresSummary count={calculated} />);
 
   return (
     <NodeViewWrapper
@@ -167,7 +166,7 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
 
       {searchesOpen && (
         <div contentEditable={false} className="answer-searches-open">
-          <SearchList searches={searches} />
+          <SearchList searches={searches} calculated={calculated} />
         </div>
       )}
 
@@ -903,16 +902,6 @@ export function figuresOf(calls: readonly AnswerToolCall[]): {
   return { calculated: call?.resultCount ?? 0, uncalculated: call?.uncalculated ?? 0 };
 }
 
-/** "Calculated 2 figures", on an Answer's meta line, as a step of its own beside its searches. */
-export function FiguresSummary({ count }: { count: number }) {
-  const t = useT();
-  return (
-    <span data-testid="answer-figures">
-      {count === 1 ? t("answer.figures.calculated.one") : t("answer.figures.calculated", { count })}
-    </span>
-  );
-}
-
 /** Under an Answer whose figures some couldn't be calculated: their numbers are missing from its text. */
 export function UncalculatedLine({ count }: { count: number }) {
   const t = useT();
@@ -957,8 +946,17 @@ export function SearchesSummary({
   );
 }
 
-/** What each search was for, and what it found. */
-export function SearchList({ searches }: { searches: AnswerToolCall[] }) {
+/**
+ * The Answer's steps: what each search was for and what it found, then how
+ * many figures it calculated (ADR-0021), which have no Tool-call card.
+ */
+export function SearchList({
+  searches,
+  calculated = 0,
+}: {
+  searches: AnswerToolCall[];
+  calculated?: number;
+}) {
   const t = useT();
   const results = (call: AnswerToolCall) =>
     call.status === "failed"
@@ -982,6 +980,13 @@ export function SearchList({ searches }: { searches: AnswerToolCall[] }) {
           </li>
         );
       })}
+      {calculated > 0 && (
+        <li data-testid="answer-figures">
+          {calculated === 1
+            ? t("answer.figures.calculated.one")
+            : t("answer.figures.calculated", { count: calculated })}
+        </li>
+      )}
     </ul>
   );
 }

@@ -12,6 +12,8 @@
  * cites the first Passage of each Document found, with a marker for each; one
  * with "rows" quotes two lines, so a sheet's Citation covers a range of rows; one that
  * asks for it "as a table" gets a Markdown table with its markers in a cell.
+ * One that asks how much something grew (增长) has the growth from the first
+ * two numbers of its quote calculated, and writes it with its marker.
  *
  * With Skills: a Question that names a listed Skill gets it loaded with
  * use_skill first. An Answer that follows a Skill (forced, or loaded) starts
@@ -417,6 +419,28 @@ function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
     const records = recordsFor(searches.at(-1) ?? "", question);
     if (records.length > 0) return { tool: "cite", input: { citations: records } };
     return { text: fakeAnswer(question, skill) };
+  }
+  if (tools.includes("calculate") && /\bgrow|增长/i.test(question)) {
+    const calculated = toolResults(prompt, "calculate");
+    if (calculated.length === 0) {
+      const inputs = [1, 2].map((position) => ({
+        name: `n${position}`,
+        label: position === 1 ? "Later" : "Earlier",
+        citation: 1,
+        position,
+      }));
+      return {
+        tool: "calculate",
+        input: {
+          figures: [{ marker: 1, label: "Growth", inputs, formula: "n1 / n2 - 1", as: "percent" }],
+        },
+      };
+    }
+    if (calculated.at(-1)?.startsWith("Recorded [=1]")) {
+      return {
+        text: /增长/.test(question) ? "增长了[=1][^1]。" : "It grew [=1] [^1].\n\nThat is all.",
+      };
+    }
   }
   // The markers the last cite call recorded: "Recorded [^1], [^2]." and then any problems.
   const recordedLine = /^Recorded ([^.]*)\./.exec(cites.at(-1) ?? "")?.[1] ?? "";
