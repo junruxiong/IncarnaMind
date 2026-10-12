@@ -1270,7 +1270,7 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
-    version: 57,
+    version: 59,
     description:
       "Outside agents remember the settings files and folders IncarnaMind created (#495)",
     sql: `
