@@ -12,9 +12,13 @@
  * left alone: the User gets the settings to paste instead. Disconnecting a
  * pairing takes IncarnaMind out of the file it was written to, if it is
  * still its own entry there.
+ *
+ * Where the agent reads Agent Skills (#378), setting it up also adds the
+ * Skill (./skill) to its skills folder, which tells it when to use
+ * IncarnaMind; Disconnect and Undo take it out again if it is unchanged.
  */
-import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
+import { mkdir, readdir, readFile, rm, rmdir, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { deflateRawSync } from "node:zlib";
 import { AGENT_TOKEN_ENV } from "../../shared/agentSocket";
@@ -45,10 +49,12 @@ import {
   type SettingsFile,
   serverEntry,
   settingsFilesFor,
+  skillPathFor,
   withCodexTable,
   withMcpServersEntry,
   withoutCodexTable,
 } from "./clients";
+import { SKILL_MARKDOWN } from "./skill";
 
 /** How long a bundle waits in the temporary folder for the agent's app to install it. */
 const BUNDLE_KEPT_MS = 15 * 60_000;
@@ -174,6 +180,35 @@ export function createAgentSetup(options: AgentSetupOptions) {
     }
   };
 
+  /**
+   * The Agent Skill in the agent's skills folder, unless a file is already
+   * there: one the User changed or wrote is theirs, and is left as it is.
+   * Whether it wrote the file.
+   */
+  const addSkill = async (client: ClientDefinition): Promise<boolean> => {
+    const path = skillPathFor(options.home, client.id);
+    if (path === null || (await readText(path)) !== null) return false;
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, SKILL_MARKDOWN);
+    return true;
+  };
+
+  /**
+   * Takes the Skill out of the agent's skills folder if it is still as
+   * IncarnaMind wrote it, and no other pairing of the same agent needs it.
+   */
+  const removeSkill = async (client: string | null, leaving: string) => {
+    const path = skillPathFor(options.home, client);
+    if (path === null) return;
+    const others = options.agents
+      .settings()
+      .pairings.some((each) => each.id !== leaving && each.client === client);
+    if ((await readText(path)) !== SKILL_MARKDOWN || others) return;
+    await unlink(path);
+    // Its folder goes too, unless the User keeps something else in it.
+    await rmdir(dirname(path)).catch(() => undefined);
+  };
+
   const copy = (
     how: "command" | "settings",
     text: string,
@@ -184,6 +219,7 @@ export function createAgentSetup(options: AgentSetupOptions) {
     how,
     text,
     shown: hideToken(text, token),
+    skill: SKILL_MARKDOWN,
     ...(path && { path }),
   });
 
@@ -282,6 +318,7 @@ export function createAgentSetup(options: AgentSetupOptions) {
         name: client.name,
         installed: client.id !== "other" && isInstalled(client, where, existsSync),
         setup: client.setup,
+        skillPath: skillPathFor(options.home, client.id),
       }));
       return [...all.filter((each) => each.installed), ...all.filter((each) => !each.installed)];
     },
@@ -305,15 +342,27 @@ export function createAgentSetup(options: AgentSetupOptions) {
       if (!Array.isArray(input.folderIds) || input.folderIds.length === 0) {
         throw new InvalidInputError("Choose at least one Folder for the agent to read.");
       }
-      const { pairing, launch } = await options.agents.connect({
-        name: nameFor(client, input.name),
-        folderIds: input.folderIds,
-        client: client.id,
+      // Before pairing, so the settings the pairing announces already show it.
+      // The agent still works without it, from the server's instructions.
+      const addedSkill = await addSkill(client).catch((error: unknown) => {
+        options.reportError(error);
+        return false;
       });
+      const { pairing, launch } = await options.agents
+        .connect({
+          name: nameFor(client, input.name),
+          folderIds: input.folderIds,
+          client: client.id,
+        })
+        .catch(async (error: unknown) => {
+          if (addedSkill) await removeSkill(client.id, "").catch(options.reportError);
+          throw error;
+        });
       try {
         return { pairing, result: await install(client, pairing.id, launch) };
       } catch (error) {
         // Nothing half made: the pairing goes with the setup that failed.
+        if (addedSkill) await removeSkill(client.id, pairing.id).catch(options.reportError);
         await options.agents.disconnect(pairing.id).catch(options.reportError);
         throw error;
       }
@@ -332,6 +381,8 @@ export function createAgentSetup(options: AgentSetupOptions) {
         else await writeFile(file.path, file.before);
       }
       written.delete(pairingId);
+      const pairing = options.agents.settings().pairings.find((each) => each.id === pairingId);
+      await removeSkill(pairing?.client ?? null, pairingId).catch(options.reportError);
       await options.agents.disconnect(pairingId);
     },
 
@@ -353,8 +404,10 @@ export function createAgentSetup(options: AgentSetupOptions) {
      */
     async removeFromSettings(pairingId: unknown): Promise<void> {
       const pairing = options.agents.settings().pairings.find((each) => each.id === pairingId);
-      const files = settingsFilesFor(pairing?.client ?? null);
-      if (!pairing || files.length === 0) return;
+      if (!pairing) return;
+      await removeSkill(pairing.client, pairing.id).catch(options.reportError);
+      const files = settingsFilesFor(pairing.client);
+      if (files.length === 0) return;
       written.delete(pairing.id);
       const token = (await options.agents.launch(pairing.id)).env[AGENT_TOKEN_ENV] ?? "";
       for (const file of files) {
@@ -373,3 +426,14 @@ export function createAgentSetup(options: AgentSetupOptions) {
 }
 
 export type AgentSetup = ReturnType<typeof createAgentSetup>;
+
+/** Whether the agent's Agent Skill is in its skills folder as IncarnaMind wrote it. */
+export function skillInstalled(home: string, client: string | null): boolean {
+  const path = skillPathFor(home, client);
+  try {
+    return path !== null && readFileSync(path, "utf8") === SKILL_MARKDOWN;
+  } catch {
+    // Not there (or not readable): the row says it isn't installed, which is true.
+    return false;
+  }
+}
