@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { type Language, resolveLanguage } from "../../core/language";
-import { type MessageKey, type MessageParams, translate } from "../../shared/i18n";
+import { gap, type MessageKey, type MessageParams, translate } from "../../shared/i18n";
 import { useAppStore } from "./store";
 
 /** The interface language: from settings once loaded, the OS language before that. */
@@ -18,6 +18,12 @@ export function languageNow(): Language {
 /** A message in the interface language now, outside React: e.g. an Undo line's. */
 export function translateNow(key: MessageKey, params?: MessageParams): string {
   return translate(languageNow(), key, params);
+}
+
+/** The separator between two pieces of text, in the interface language. */
+export function useGap(): (before: string, after: string) => string {
+  const language = useLanguage();
+  return useCallback((before, after) => gap(language, before, after), [language]);
 }
 
 /** Returns `t(key, params)` for the current interface language. */
