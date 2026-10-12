@@ -87,6 +87,22 @@ describe("every command", () => {
     }
   });
 
+  test("never asks before deleting, unless what it does can't be taken back", () => {
+    // Deleting goes to Recently deleted (#228); only these are irreversible.
+    const asking = all
+      .filter((command) => command.reversible !== true)
+      .map((command) => command.id);
+    expect(asking.sort()).toEqual([
+      "deleted.deletePermanently",
+      "deleted.empty",
+      "linkedFolder.unlink",
+      "meeting.stop",
+    ]);
+    for (const id of ["mind.delete", "document.delete", "folder.delete", "tag.delete"] as const) {
+      expect(commands.get(id)?.reversible, id).toBe(true);
+    }
+  });
+
   test("can be found in ⌘K or has a shortcut", () => {
     for (const command of all) {
       expect(command.palette !== false || command.shortcut !== undefined, command.id).toBe(true);
