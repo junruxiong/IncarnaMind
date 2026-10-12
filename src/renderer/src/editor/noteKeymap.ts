@@ -14,6 +14,15 @@ export function noteHolding(blockId: string): Editor | null {
   return null;
 }
 
+/** The note the element is in, whose own undo ⌘Z reaches there. */
+export function noteAround(element: Element | null): Editor | null {
+  if (!element) return null;
+  for (const editor of openNotes) {
+    if (!editor.isDestroyed && editor.view.dom.contains(element)) return editor;
+  }
+  return null;
+}
+
 /** The top-level Block the selection starts in, or right after. */
 function blockAt({ $from }: Selection): ObjectRef | null {
   const node = $from.depth > 0 ? $from.node(1) : $from.nodeAfter;

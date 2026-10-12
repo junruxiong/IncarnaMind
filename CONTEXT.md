@@ -177,6 +177,10 @@ _Avoid_: snapshot, version, backup, undo
 Where a deleted Mind, Conversation, Document, Folder or Tag waits for 30 days, from where it can be restored or deleted permanently. Deleting never touches the User's files.
 _Avoid_: trash, bin, archive
 
+**Undo line**:
+The one short line that says what the User just changed, with Undo, shown after any change that can be taken back: "Moved 3 Documents to Finance · Undo". Its Undo does what ⌘Z does.
+_Avoid_: toast, snackbar, notification
+
 ### Checks
 
 **Citation check**:

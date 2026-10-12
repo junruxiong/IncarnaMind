@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import type { CommandId } from "../../../shared/commands";
 import { files } from "../core";
 import { useAppStore } from "../store";
+import { typesText } from "../undo";
 import { keysLabel, keysOn, pressed } from "./keys";
 import {
   type Command,
@@ -18,14 +19,6 @@ const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 /** Lists whose items can be selected, where a list's own keys act. */
 const SELECTABLE_LIST =
   '[role="listbox"], [role="tree"], [role="treegrid"], [role="grid"], [role="tablist"]';
-
-function typesText(target: EventTarget | null): boolean {
-  return (
-    target instanceof HTMLInputElement ||
-    target instanceof HTMLTextAreaElement ||
-    (target instanceof HTMLElement && target.isContentEditable)
-  );
-}
 
 const inList = (target: EventTarget | null) =>
   target instanceof Element && !typesText(target) && target.closest(SELECTABLE_LIST) !== null;
@@ -67,8 +60,13 @@ export function runShortcut(
   for (const command of commands.all()) {
     const shortcut = command.shortcut;
     if (!shortcut || (objectsOnly && !command.appliesTo)) continue;
-    if (!pressed(keysOn(shortcut.keys, isMac), event, isMac)) continue;
+    const keys = [
+      keysOn(shortcut.keys, isMac),
+      ...(!isMac && shortcut.alsoOther ? [shortcut.alsoOther] : []),
+    ];
+    if (!keys.some((each) => pressed(each, event, isMac))) continue;
     if (shortcut.list && !inList(event.target)) continue;
+    if (shortcut.outsideText && typesText(event.target)) continue;
     // Only now, for keys that are a shortcut: the search goes through the whole page.
     if (dialogOpen()) return false;
     if (!offered(command, ctx) || !isEnabled(command, ctx)) continue;
