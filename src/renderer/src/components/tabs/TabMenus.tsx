@@ -1,15 +1,13 @@
 import type { ReactNode } from "react";
-import { type LayoutTab, MAX_TAB_GROUPS } from "../../../../core/api";
+import { MAX_TAB_GROUPS } from "../../../../core/api";
 import type { CommandId } from "../../../../shared/commands";
 import { shortcutLabel } from "../../commands/keymap";
 import { type CommandContext, commands, isEnabled, offered } from "../../commands/registry";
 import { useT } from "../../i18n";
-import { groupOfTab } from "../../layoutSlice";
 import { useAppStore } from "../../store";
 import { MoreLineIcon } from "../lineIcons";
 import { menuClass, menuItemClass, menuRuleClass } from "../ui";
 import { usePopoverMenu } from "../usePopoverMenu";
-import { focusTab } from "./tabActions";
 
 /** One item of a tab's or group's menu, which runs a command, or a rule between them. */
 type Item =
@@ -66,82 +64,6 @@ function MenuItems({
       </button>
     );
   });
-}
-
-/**
- * A tab's menu: its right-click menu, and what Shift+F10 or the context-menu
- * key open on it. Its button is out of sight in the tab, so the menu opens under the tab.
- */
-export function TabMenu({ tab, title }: { tab: LayoutTab; title: string }) {
-  const t = useT();
-  const menu = usePopoverMenu();
-  const layout = useAppStore((state) => state.layout);
-  const at = groupOfTab(layout, tab.id);
-  const groups = layout?.groups.length ?? 1;
-  const index = at?.index ?? 0;
-  const moveRight = index < groups - 1;
-  const items: (Item | false)[] = menu.open
-    ? [
-        tab.preview && { id: "keep", command: "tab.keep", label: t("tabs.menu.keep") },
-        {
-          id: tab.pinned ? "unpin" : "pin",
-          command: "tab.pin",
-          label: t(tab.pinned ? "tabs.menu.unpin" : "tabs.menu.pin"),
-        },
-        "rule",
-        // At three groups ⌥⌘\ says why nothing happens; here the item is off.
-        {
-          id: "side",
-          command: "tab.split",
-          label: t("tabs.menu.side"),
-          disabled: groups >= MAX_TAB_GROUPS,
-        },
-        index > 0 && { id: "move-left", command: "tab.moveLeft", label: t("tabs.menu.moveLeft") },
-        {
-          id: moveRight ? "move-right" : "move-new",
-          command: "tab.moveRight",
-          label: t(moveRight ? "tabs.menu.moveRight" : "tabs.menu.moveNew"),
-        },
-        tab.item.kind === "mind" && "rule",
-        tab.item.kind === "mind" && {
-          id: "rename",
-          command: "tab.rename",
-          label: t("tabs.menu.rename"),
-        },
-        "rule",
-        { id: "close", command: "tab.close", label: t("tabs.menu.close") },
-        { id: "close-others", command: "tab.closeOthers", label: t("tabs.menu.closeOthers") },
-        { id: "close-right", command: "tab.closeToTheRight", label: t("tabs.menu.closeRight") },
-      ]
-    : [];
-  return (
-    <>
-      <button
-        {...menu.buttonProps}
-        type="button"
-        tabIndex={-1}
-        data-testid="tab-menu"
-        aria-label={t("tabs.tabMenu", { title })}
-        className="tab-menu-anchor"
-      />
-      <div
-        {...menu.menuProps}
-        role="menu"
-        aria-label={t("tabs.tabMenu", { title })}
-        data-testid="tab-menu-items"
-        // Not the tab's tooltip over its menu: the menu sits in the tab.
-        title=""
-        className={menuClass}
-        onKeyDown={(event) => {
-          menu.menuProps.onKeyDown(event);
-          // Esc gives the focus back to the tab, not to the button out of sight.
-          if (event.key === "Escape") focusTab(tab.id);
-        }}
-      >
-        <MenuItems items={items} ctx={onTab(tab.id)} close={menu.close} />
-      </div>
-    </>
-  );
 }
 
 /** The ⋯ at a group strip's end: what applies to the group and its shown tab. */

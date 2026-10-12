@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { create } from "zustand";
 import type { ExportFormat, Mind, MindCitationStyle, MindExportPreview } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
 import { styleLabel, useCitationStylePicker } from "../citationStylePicker";
@@ -34,17 +33,6 @@ const FORMATS: readonly { value: ExportFormat; label: MessageKey; hint: MessageK
   { value: "docx", label: "export.format.docx", hint: "export.format.docx.hint" },
   { value: "markdown", label: "export.format.markdown", hint: "export.format.markdown.hint" },
 ];
-
-/** The Mind whose export dialog is open, wherever Export was pressed: its tab strip, its References. */
-export const useExportDialog = create<{
-  mindId: string | null;
-  open(mindId: string): void;
-  close(): void;
-}>()((set) => ({
-  mindId: null,
-  open: (mindId) => set({ mindId }),
-  close: () => set({ mindId: null }),
-}));
 
 /**
  * The Mind's citation style (#289), which its export is written in, with the button that

@@ -1,4 +1,4 @@
-import { type ComponentType, type ReactNode, type SVGProps, useMemo, useState } from "react";
+import { type ComponentType, type ReactNode, type SVGProps, useMemo } from "react";
 import { create } from "zustand";
 import type { Document, LinkedFolder } from "../../../core/api";
 import { buildFolderTree, type FolderNode } from "../folders";
@@ -9,20 +9,19 @@ import {
   linkedFolderRowState,
   rowStateLabel,
 } from "../linkedFolders";
+import type { ObjectRef } from "../objects";
 import { selectTagFilterKey, useAppStore } from "../store";
 import { TREE_ROW } from "../treeKeys";
 import { ExampleChip } from "./GettingStarted";
-import { LinkedFolderMenu, UnlinkFolderDialog } from "./LinkedFolderMenu";
 import {
   ChevronDownLineIcon,
   ChevronRightLineIcon,
   FolderLineIcon,
   LooseDocumentsLineIcon,
 } from "./lineIcons";
+import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
 import {
   INDENT_PX,
-  openRowMenu,
-  rowActionButtonClass,
   rowActionsClass,
   rowButtonClass,
   rowClass,
@@ -91,7 +90,7 @@ interface FolderTreeProps {
  *
  * A Linked folder's own row says how it is (indexing, paused, unavailable,
  * online-only files skipped, nothing in it) at its end, on its one line, and
- * offers its menu (see `LinkedFolderMenu`).
+ * offers its menu (see `ObjectMenu`).
  */
 export function FolderTree({ documents, filtering, renderDocument }: FolderTreeProps) {
   const t = useT();
@@ -101,7 +100,6 @@ export function FolderTree({ documents, filtering, renderDocument }: FolderTreeP
   const collapsed = useFolderTree((state) => state.collapsed);
   const filteredFolds = useFolderTree((state) => state.filtered);
   const tree = useMemo(() => buildFolderTree(folders), [folders]);
-  const [unlinking, setUnlinking] = useState<{ linked: LinkedFolder; name: string } | null>(null);
 
   const linkedById = useMemo(
     () => new Map(linkedFolders.map((linked) => [linked.id, linked])),
@@ -176,7 +174,6 @@ export function FolderTree({ documents, filtering, renderDocument }: FolderTreeP
             depth={depth}
             hasContents={hasContents}
             expanded={isExpanded(folder.id)}
-            onUnlink={() => setUnlinking({ linked, name: folder.name })}
           >
             {contents}
           </LinkedFolderItem>
@@ -207,25 +204,22 @@ export function FolderTree({ documents, filtering, renderDocument }: FolderTreeP
     );
   }
   return (
-    <>
-      <ul aria-label={t("folders.label")} data-testid="document-tree">
-        {renderLevel(tree)}
-        {others.length > 0 && (
-          <GroupItem
-            testId="other-documents"
-            groupKey={OTHER_DOCUMENTS}
-            name={t("documents.other")}
-            icon={LooseDocumentsLineIcon}
-            depth={0}
-            expanded={isExpanded(OTHER_DOCUMENTS)}
-            expandable
-          >
-            {others.map((item) => renderDocument(item, 1))}
-          </GroupItem>
-        )}
-      </ul>
-      <UnlinkFolderDialog target={unlinking} onClose={() => setUnlinking(null)} />
-    </>
+    <ul aria-label={t("folders.label")} data-testid="document-tree">
+      {renderLevel(tree)}
+      {others.length > 0 && (
+        <GroupItem
+          testId="other-documents"
+          groupKey={OTHER_DOCUMENTS}
+          name={t("documents.other")}
+          icon={LooseDocumentsLineIcon}
+          depth={0}
+          expanded={isExpanded(OTHER_DOCUMENTS)}
+          expandable
+        >
+          {others.map((item) => renderDocument(item, 1))}
+        </GroupItem>
+      )}
+    </ul>
   );
 }
 
@@ -241,7 +235,6 @@ function LinkedFolderItem({
   depth,
   hasContents,
   expanded,
-  onUnlink,
   children,
 }: {
   linked: LinkedFolder;
@@ -250,7 +243,6 @@ function LinkedFolderItem({
   depth: number;
   hasContents: boolean;
   expanded: boolean;
-  onUnlink(): void;
   children: ReactNode;
 }) {
   const t = useT();
@@ -273,12 +265,11 @@ function LinkedFolderItem({
       progress={indexingShare(state)}
       paused={state.kind === "paused"}
       chip={isExample && <ExampleChip />}
+      object={{ kind: "linkedFolder", id: linked.id }}
       actions={
-        <LinkedFolderMenu
-          linked={linked}
-          name={name}
-          buttonClassName={rowActionButtonClass}
-          onUnlink={onUnlink}
+        <ObjectMenu
+          target={{ kind: "linkedFolder", id: linked.id }}
+          label={t("linkedFolders.more", { name })}
         />
       }
       data={{
@@ -322,6 +313,8 @@ interface GroupItemProps {
   paused?: boolean;
   /** Its actions, over its right end while pointed at (see `rowActionsClass`). */
   actions?: ReactNode;
+  /** The object its `actions` menu is of, so a right-click on the row opens it. */
+  object?: ObjectRef;
   /** After its name, unless a status takes the room: the examples' Linked folder says "Example". */
   chip?: ReactNode;
   data?: Record<`data-${string}`, string>;
@@ -336,10 +329,12 @@ interface GroupItemProps {
  */
 function GroupItem(props: GroupItemProps) {
   const { testId, groupKey, name, title, icon: Icon, depth, expanded, expandable } = props;
-  const { muted = false, status, progress = null, paused = false, actions, chip, data } = props;
+  const { muted = false, status, progress = null, paused = false, actions, object, chip } = props;
+  const { data } = props;
   const children = props.children;
   const toggle = useFolderTree((state) => state.toggle);
   const tagFilter = useAppStore(selectTagFilterKey);
+  const objectMenu = useObjectMenu(object ?? { kind: "folder", id: groupKey });
   const open = expandable && expanded;
   const Chevron = open ? ChevronDownLineIcon : ChevronRightLineIcon;
   const inner = (
@@ -376,7 +371,7 @@ function GroupItem(props: GroupItemProps) {
         data-testid={testId}
         data-depth={depth}
         {...data}
-        onContextMenu={actions ? (event) => openRowMenu(event, "linked-folder-menu") : undefined}
+        {...(actions ? objectMenu.rowProps : {})}
         className={`${rowClass(false, muted ? "muted" : "item")} @container`}
       >
         {expandable ? (
