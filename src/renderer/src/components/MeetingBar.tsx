@@ -7,6 +7,7 @@ import { useT } from "../i18n";
 import { useMeetings, useMeetingTime } from "../meetings";
 import { clockTime, durationLabel } from "../meetingTime";
 import { hideTranscript, showTranscript, useDocumentTab } from "../transcripts";
+import { CaptureDetailsToggle } from "./CaptureDetails";
 import { DocumentLineIcon, PauseLineIcon, ResumeLineIcon, StopLineIcon } from "./lineIcons";
 import { type ProblemAction, ProblemLine } from "./ProblemLine";
 import { TranscriptLines } from "./TranscriptLines";
@@ -91,6 +92,7 @@ function MeetingControls({ meeting }: { meeting: Meeting }) {
         {t("meetings.bar.stop")}
       </button>
       <TranscriptToggle meeting={meeting} />
+      <CaptureDetailsToggle meeting={meeting} />
     </div>
   );
 }
