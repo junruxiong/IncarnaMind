@@ -206,6 +206,35 @@ describe("Web search in an Answer", { timeout: 30_000 }, () => {
     expect(textOriginOf(client.doc, answerId)).toBe("web-page");
   });
 
+  test("a page read for words it doesn't have gives the Passages that match its title", async () => {
+    const answering = scriptedModel((call: ModelCall): ScriptedReply => {
+      if (!call.results.some((result) => result.tool === "search_web")) {
+        return { calls: [{ tool: "search_web", input: { query: "茶的历史" } }] };
+      }
+      if (!call.results.some((result) => result.tool === "read_web_page")) {
+        return {
+          calls: [{ tool: "read_web_page", input: { url: TEA, query: "茶是怎么传到欧洲的" } }],
+        };
+      }
+      return { text: "读到了。" };
+    });
+    const { model } = webSearchingModel(answering, FOUND);
+    const { core, client, mind } = await setUp(model);
+
+    await askAndFinish(core, client, mind.id, "联网搜索：茶是怎么传到欧洲的？");
+
+    const read = answering.doStreamCalls
+      .flatMap((call) => call.prompt)
+      .flatMap((message) => (message.role === "tool" ? message.content : []))
+      .find((part) => part.type === "tool-result" && part.toolName === "read_web_page");
+    const text =
+      read?.type === "tool-result" && read.output.type === "text" ? read.output.value : "";
+    expect(text).toMatch(
+      /^Saved "Tea - The Open Encyclopedia" .*\n\nNothing on the page matched "茶是怎么传到欧洲的"/,
+    );
+    expect(shownPassages(text).length).toBeGreaterThan(0);
+  });
+
   test("isn't offered while the switch is off, in Local mode, for a Question that doesn't ask for the web, or with a provider that has no web search", async () => {
     const off = webSearchingModel(researcher(), FOUND);
     const first = await setUp(off.model, { webSearch: false });
