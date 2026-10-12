@@ -459,6 +459,25 @@ test("notes during the call: typed lines get their time, Mark (⌘D) and Add to 
   await expect(citation).toHaveCount(1);
   await expect(citation).toHaveAttribute("data-check", "found");
 
+  // In a pause no time is taken, and Mark is off.
+  await window.keyboard.press("ControlOrMeta+Shift+KeyP");
+  await expect(bar).toHaveAttribute("data-status", "paused");
+  await expect(window.getByTestId("meeting-mark")).toBeDisabled();
+  await typed.click();
+  await expect(notes).toBeFocused();
+  await window.keyboard.press("End");
+  await window.keyboard.press("Enter");
+  await window.keyboard.type("Typed in the pause");
+  await expect(notes.locator("p", { hasText: "Typed in the pause" })).not.toHaveAttribute(
+    "data-meeting-time",
+  );
+  const timed = await notes.locator("[data-meeting-time]").count();
+  await window.keyboard.press("ControlOrMeta+KeyD");
+  await expect(notes.locator("[data-meeting-time]")).toHaveCount(timed);
+
+  // Resumed, it times lines again.
+  await window.keyboard.press("ControlOrMeta+Shift+KeyP");
+  await expect(bar).toHaveAttribute("data-status", "recording");
   // Chinese and a narrow window hold the same controls.
   const setLanguage = (language: "en" | "zh-CN") =>
     window.evaluate(
@@ -493,24 +512,7 @@ test("notes during the call: typed lines get their time, Mark (⌘D) and Add to 
   await setWindowSize(app, window, 1440, 900);
   await expect(third).toBeVisible();
 
-  // In a pause no time is taken, and Mark is off.
-  await window.keyboard.press("ControlOrMeta+Shift+KeyP");
-  await expect(bar).toHaveAttribute("data-status", "paused");
-  await expect(window.getByTestId("meeting-mark")).toBeDisabled();
-  await typed.click();
-  await window.keyboard.press("End");
-  await window.keyboard.press("Enter");
-  await window.keyboard.type("Typed in the pause");
-  await expect(notes.locator("p", { hasText: "Typed in the pause" })).not.toHaveAttribute(
-    "data-meeting-time",
-  );
-  const timed = await notes.locator("[data-meeting-time]").count();
-  await window.keyboard.press("ControlOrMeta+KeyD");
-  await expect(notes.locator("[data-meeting-time]")).toHaveCount(timed);
-
-  // The times are kept: the Mind reopened shows them.
-  await window.keyboard.press("ControlOrMeta+Shift+KeyP");
-  await expect(bar).toHaveAttribute("data-status", "recording");
+  // The times are kept once the meeting is stopped.
   await bar.getByTestId("meeting-stop").click();
   await expect(bar).toBeHidden();
   await expect(typed).toHaveAttribute("data-meeting-time", /^\d+:\d{2}$/);

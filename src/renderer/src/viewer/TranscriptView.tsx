@@ -342,7 +342,11 @@ function TranscriptContent({
                       data-testid="transcript-line"
                       data-start={row.cue.startMs}
                       tabIndex={
-                        meetingId ? ((active ?? firstStart) === row.cue.startMs ? 0 : -1) : undefined
+                        meetingId
+                          ? (active ?? firstStart) === row.cue.startMs
+                            ? 0
+                            : -1
+                          : undefined
                       }
                       aria-describedby={meetingId ? hintId : undefined}
                       onFocus={() => {
