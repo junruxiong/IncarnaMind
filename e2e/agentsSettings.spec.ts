@@ -12,6 +12,7 @@ import {
   launchApp,
   openSettings,
   removeDataFolder,
+  setLanguage,
   setWindowSize,
   showSettingsPage,
 } from "./app";
@@ -142,6 +143,63 @@ test("off by default; Connect asks once, writes Codex's settings as shown, and U
     await expect(page.getByTestId("agent-pairing")).toHaveCount(0);
     expect(await readFile(codexSettings, "utf8")).toBe(CODEX_SETTINGS);
     await expect(readFile(skillFile, "utf8")).rejects.toThrow(/ENOENT/);
+  } finally {
+    await app.close();
+  }
+});
+
+test("in the connect dialog a long path breaks at its slashes and no word breaks, in English and Chinese", async () => {
+  // A deep home folder, so both paths are longer than the dialog's line.
+  const deepHome = join(home, "projects-with-a-long-name", "second-level-folder-name");
+  await mkdir(deepHome, { recursive: true });
+  const { app, window } = await launchApp(dataDir, { home: deepHome });
+  try {
+    await dismissChatSetup(window);
+    await withCoast(window);
+    const page = await openSettings(window, "agents");
+    await page.getByTestId("agents-enabled").click();
+    await page.locator('[data-client="codex"]').getByTestId("agent-connect").click();
+    const dialog = window.getByTestId("connect-agent-dialog");
+    await expect(dialog.getByTestId("connect-agent-skill")).toBeVisible();
+
+    for (const language of ["en", "zh-CN"] as const) {
+      await setLanguage(window, language);
+      const paragraphs = [
+        dialog.getByTestId("connect-agent-change").locator("p"),
+        dialog.getByTestId("connect-agent-skill"),
+      ];
+      for (const paragraph of paragraphs) {
+        await expect(paragraph.locator("code")).toBeVisible();
+        const lines = await paragraph.evaluate((element) => {
+          const linesOf = (range: Range) =>
+            new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+          const path = element.querySelector("code");
+          const inPath = new Range();
+          if (path) inPath.selectNodeContents(path);
+          // The prose's Latin words and each piece of the path (one name and its slash).
+          const split: string[] = [];
+          const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+          for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            const text = node.textContent ?? "";
+            const spans = path?.contains(node)
+              ? [{ start: 0, end: text.length }]
+              : [...text.matchAll(/[A-Za-z][A-Za-z’']*/g)].map((word) => ({
+                  start: word.index,
+                  end: word.index + word[0].length,
+                }));
+            for (const span of spans) {
+              const range = new Range();
+              range.setStart(node, span.start);
+              range.setEnd(node, span.end);
+              if (linesOf(range) > 1) split.push(text.slice(span.start, span.end));
+            }
+          }
+          return { path: linesOf(inPath), split };
+        });
+        expect(lines.path, `${language}: the path wraps`).toBeGreaterThan(1);
+        expect(lines.split, `${language}: a word or a name split`).toEqual([]);
+      }
+    }
   } finally {
     await app.close();
   }
