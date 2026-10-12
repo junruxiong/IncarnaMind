@@ -141,6 +141,27 @@ async function pointAt(window: Page, value: Locator): Promise<void> {
   await value.hover();
 }
 
+/** Points inside a pie's slice, as a person does: the middle of its box can lie in a neighbour. */
+async function pointAtSlice(window: Page, slice: Locator): Promise<void> {
+  await window.mouse.move(0, 0);
+  await expect(window.getByTestId("chart-card")).toHaveCount(0);
+  const at = await slice.evaluate((element) => {
+    const path = element as SVGPathElement;
+    // The slice is drawn from the centre, out along a radius, round its arc and back.
+    const centre = path.getPointAtLength(0);
+    const arc = path.getPointAtLength(path.getTotalLength() / 2);
+    const screen = path.getScreenCTM();
+    if (!screen) return null;
+    const inside = new DOMPoint(
+      centre.x + (arc.x - centre.x) * 0.6,
+      centre.y + (arc.y - centre.y) * 0.6,
+    ).matrixTransform(screen);
+    return { x: inside.x, y: inside.y };
+  });
+  if (!at) throw new Error("The slice isn't drawn.");
+  await window.mouse.move(at.x, at.y, { steps: 5 });
+}
+
 /** Waits until the two boxes don't overlap: a card that grows in place settles first. */
 async function expectApart(a: Locator, b: Locator): Promise<void> {
   await expect
@@ -295,7 +316,7 @@ for (const [language, width] of [
     await pointAndClick(window, menu.getByTestId("chart-kind-pie"));
     await expect(plot).toHaveAttribute("data-kind", "pie");
     await expect(chart.getByTestId("chart-source")).toHaveText(foot);
-    await pointAt(window, point(chart, 2, 1));
+    await pointAtSlice(window, point(chart, 2, 1));
     await expect(card.getByTestId("chart-card-body")).toContainText("Q3 · 2025");
     await expect(card.getByTestId("chart-card-body")).toContainText(words.share);
     await expectApart(card, chart.getByTestId("chart-kind"));
