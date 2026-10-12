@@ -110,6 +110,6 @@ A scanned PDF had no text, so it couldn't be searched, asked about or cited. Its
 
 ## Amendment: pages web search reads (2026-10-12, #128)
 
-- **Saved through #261's path,** as Web page Documents with the same snapshot, Location ("§ History, ¶ 3") and check. A page already saved is used as it is, not fetched again. A new one is filed in the Folder of the Mind or conversation the Question was asked in.
+- **Saved through #261's path,** as Web page Documents with the same snapshot, Location ("§ History, ¶ 3") and check. A page already saved is used as it is, not fetched again, once its address passes the same check as a fetch (so a page the User saved from their own network isn't read by web search). A new one is filed in the Folder of the Mind or conversation the Question was asked in.
 - **A fetcher for the public internet only.** Web search fetches with its own fetcher, which keeps #261's limits (20 seconds, 10 MB, no cookies, the page alone) and adds: an undici `Agent` whose connect-time lookup gives only public unicast addresses (ipaddr.js's special-purpose ranges, IPv6 in 2000::/3, no IPv4-mapped address), so DNS rebinding finds nothing to connect to; a host written as an IP address checked before each request; at most 5 redirects, each checked again; no proxy. A page it refuses says so ("it's on this computer or a local network"). Pages a User adds by address keep #261's fetcher, which reaches local addresses.
 - **Read soon.** A web page's processing goes ahead of other Documents', and of a recording's hold (#135), as an Answer waits to read it.

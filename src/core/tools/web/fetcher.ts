@@ -41,6 +41,12 @@ export interface PublicFetchOptions {
 
 export interface PublicFetch {
   fetch: PageFetch;
+  /**
+   * Refuses, as `fetch` would before any request, an address that isn't
+   * http or https or is written as an address that isn't public: for a page
+   * saved already, which is used without fetching it.
+   */
+  check(address: string): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -105,6 +111,9 @@ export function createPublicFetch(options: PublicFetchOptions = {}): PublicFetch
 
   return {
     fetch: publicFetch,
+    check: async (address) => {
+      await checked(address, resolve);
+    },
     close: () => agent.close(),
   };
 }
