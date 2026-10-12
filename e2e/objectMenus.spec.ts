@@ -216,6 +216,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "folder.newMind",
     "folder.organize",
     "folder.editDescription",
+    "folder.sort",
     "—",
     "folder.rename",
     "—",
@@ -249,6 +250,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
   expect(linkedMenu).toEqual([
     "linkedFolder.pause",
     "linkedFolder.layout",
+    "folder.sort",
     "—",
     "linkedFolder.reveal",
     "file.copyPath",
@@ -480,11 +482,12 @@ test("a Document's Tags…, a Folder's Edit description and a Tag's Rename and D
   const tag = window.getByTestId("sidebar-tag").filter({ hasText: "Tides" });
   await rightClick(window, tag.getByTestId("row-text"));
   await tag.getByTestId("tag.rename").click();
+  // In its row, with no dialog.
   const dialog = window.getByTestId("tags-dialog");
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByTestId("tag-row").getByRole("textbox").first()).toHaveValue("Tides");
-  await window.keyboard.press("Escape");
+  await expect(window.getByTestId("sidebar-tag").getByRole("textbox")).toHaveValue("Tides");
   await expect(dialog).toBeHidden();
+  await window.keyboard.press("Escape");
+  await expect(window.getByTestId("sidebar-tag").getByRole("textbox")).toHaveCount(0);
   await rightClick(window, tag.getByTestId("row-text"));
   await tag.getByTestId("tag.delete").click();
   await expect(window.getByTestId("undo-message")).toHaveText("Moved “Tides” to Recently deleted");
