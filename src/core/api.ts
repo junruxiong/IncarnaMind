@@ -3082,6 +3082,54 @@ export type SkillImportCheck =
   | { ok: true; preview: SkillImportPreview }
   | { ok: false; error: SkillImportError };
 
+/** What a Skill says in words: its name, when to use it, and its steps (SKILL.md's instructions). */
+export interface SkillDraft {
+  /** As typed: it is written in the format's characters (lowercase letters, digits, hyphens) when saved. */
+  name: string;
+  /** When to use the Skill: what Answers read to choose it. At most 1,024 characters. */
+  description: string;
+  /** What to do, in Markdown, as typed. */
+  steps: string;
+}
+
+/**
+ * Why a Skill wasn't saved, for the field to say.
+ * - "invalid-name": nothing of the name is left in the format's characters.
+ * - "name-taken": another Skill, built-in or the User's, has that name.
+ * - "no-description" and "description-too-long": when to use it is empty, or over 1,024 characters.
+ * - "no-steps": there are no steps.
+ * - "too-large": the steps are over `SKILL_LIMITS.maxInstructionsBytes`.
+ */
+export type SkillSaveProblem =
+  | "invalid-name"
+  | "name-taken"
+  | "no-description"
+  | "description-too-long"
+  | "no-steps"
+  | "too-large";
+
+export type SkillSaveResult = { ok: true; skill: Skill } | { ok: false; problem: SkillSaveProblem };
+
+export interface DraftSkillInput {
+  /** Chosen by the caller, so it can stop the request (`cancelSkillDraft`). */
+  requestId: string;
+  /** The Mind the User just worked in. Its own chat model drafts the Skill, else the default. */
+  mindId: string;
+}
+
+/** What drafting a Skill from a Mind did. */
+export type DraftSkillResult =
+  /** The model's draft, for the User to edit before it is saved. */
+  | { kind: "drafted"; draft: SkillDraft }
+  /** Nothing was sent: the Mind has no Notes, Questions or Answers to learn from. */
+  | { kind: "empty" }
+  /** Nothing was sent: the model can't be used now (local mode included), and `readiness` says why. */
+  | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
+  /** The User stopped it (`cancelSkillDraft`), or declined to send the Mind's text. */
+  | { kind: "cancelled" }
+  /** The model failed, or gave a draft that couldn't be read. */
+  | { kind: "failed"; error: ProviderError };
+
 /** How Skill scripts run. */
 export const SKILL_SCRIPT_LIMITS = {
   /** How long a script may run when the User hasn't chosen (`DeviceSettings.skillScriptTimeoutSeconds`). */
@@ -5447,6 +5495,35 @@ export interface CoreApi {
    * on), turned on, not built-in. Returns the copy.
    */
   duplicateSkill(skillId: string): Promise<Skill>;
+  /** A Skill as its editor shows it: its name, its "when to use" and its steps (SKILL.md's instructions). */
+  getSkillDraft(skillId: string): Promise<SkillDraft>;
+  /**
+   * Saves a new Skill the User wrote or edited from a draft, turned on. A name
+   * another Skill has is refused (`name-taken`), never replaced.
+   */
+  createSkill(draft: SkillDraft): Promise<SkillSaveResult>;
+  /**
+   * Saves what the User changed in a Skill that isn't built-in, keeping its
+   * other files and whether it's on. Only the name, the description and the
+   * instructions of its SKILL.md change; every other frontmatter field stays as
+   * written. Throws for a built-in Skill: duplicate it.
+   */
+  updateSkill(skillId: string, draft: SkillDraft): Promise<SkillSaveResult>;
+  /**
+   * Saves a Skill as a zip in the Output location, under the next free name
+   * (as `saveMindExport` does, asking where the first time). The zip imports
+   * again with the same preview.
+   */
+  saveSkillExport(skillId: string): Promise<SavedMindExport>;
+  /**
+   * The chat model drafts a Skill from what the User just did in a Mind: its
+   * Notes, Questions and Answers, the latest weighing most. Sends on the
+   * "chat" flow once the User allows it to the model's service, and in local
+   * mode only a model on this computer is used. Nothing is saved.
+   */
+  draftSkillFromMind(input: DraftSkillInput): Promise<DraftSkillResult>;
+  /** Stops a `draftSkillFromMind` request. Stopping one that is gone does nothing. */
+  cancelSkillDraft(requestId: string): Promise<void>;
   /**
    * The names of the built-in Skills the User removed, which
    * `restoreBuiltInSkills` would install again. Empty when they are all there.
@@ -5944,6 +6021,12 @@ const methods: Record<CoreApiMethod, true> = {
   setSkillEnabled: true,
   removeSkill: true,
   duplicateSkill: true,
+  getSkillDraft: true,
+  createSkill: true,
+  updateSkill: true,
+  saveSkillExport: true,
+  draftSkillFromMind: true,
+  cancelSkillDraft: true,
   listRemovedBuiltInSkills: true,
   restoreBuiltInSkills: true,
   previewMindExport: true,
