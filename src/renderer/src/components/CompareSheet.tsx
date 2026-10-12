@@ -115,7 +115,7 @@ export function CompareSheet({
     editor.commands.focus();
   };
   const make = async () => {
-    if (checked.length === 0 || asked.length === 0) return;
+    if (empty !== null) return;
     const made = await makeComparisonTable(
       mindId,
       checked.map((document) => document.id),
@@ -170,14 +170,17 @@ export function CompareSheet({
       ? t("comparison.sheet.allDocuments")
       : (library?.groups.find((group) => group.id === source)?.name ??
         t("comparison.sheet.allDocuments"));
+  /** Why the table can't be made yet, said where the estimate goes. */
   const empty =
     documents.length === 0
       ? "comparison.sheet.noDocuments"
       : checked.length === 0
         ? "comparison.sheet.noneChecked"
-        : asked.length === 0
-          ? "comparison.sheet.noQuestions"
-          : null;
+        : checked.length > MAX_COMPARISON_DOCUMENTS
+          ? "comparison.sheet.tooMany"
+          : asked.length === 0
+            ? "comparison.sheet.noQuestions"
+            : null;
 
   return (
     <section
@@ -321,7 +324,7 @@ export function CompareSheet({
           className="compare-sheet-note"
           title={estimate ?? undefined}
         >
-          {empty ? t(empty) : estimate}
+          {empty ? t(empty, { max: MAX_COMPARISON_DOCUMENTS }) : estimate}
         </span>
         <ModelChip doc={doc} onChosen={() => region.current?.focus()} />
         <button

@@ -1689,6 +1689,7 @@ export const en = {
   "comparison.sheet.make": "Make the table",
   "comparison.sheet.noDocuments": "No Documents here yet.",
   "comparison.sheet.noneChecked": "Tick the Documents to compare.",
+  "comparison.sheet.tooMany": "A comparison table holds up to {max} Documents.",
   "comparison.sheet.noQuestions": "Add a Question for each column.",
   "command.compareDocuments": "Compare Documents…",
   "command.compareDocuments.keywords": "comparison table compare",

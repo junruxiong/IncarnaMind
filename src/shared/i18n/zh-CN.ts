@@ -1612,6 +1612,7 @@ export const zhCN = {
   "comparison.sheet.make": "生成表格",
   "comparison.sheet.noDocuments": "这里还没有文档。",
   "comparison.sheet.noneChecked": "勾选要对比的文档。",
+  "comparison.sheet.tooMany": "一个对比表最多包含 {max} 个文档。",
   "comparison.sheet.noQuestions": "每列一个问题，先添加一个。",
   "command.compareDocuments": "对比文档…",
   "command.compareDocuments.keywords": "对比表 对比 比较 表格",
