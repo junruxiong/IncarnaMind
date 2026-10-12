@@ -1119,6 +1119,7 @@ export const en = {
   "providers.test.too-long": "The model's context window is too small for even a short request.",
   "providers.test.cost-cap":
     "Nothing was sent: this month's spending cap is reached. Change it in Settings → General.",
+  "providers.test.no-answer": "The model sent no reply.",
   "providers.test.unknown": "The test didn't work.",
 
   "providers.secrets.plainText.title": "No keyring is running",
@@ -1568,6 +1569,7 @@ export const en = {
   "answer.error.useLocal": "Use a local model",
   "answer.error.too-long":
     "This Question is too long for the model’s context window, even with nothing before it. Shorten it, or choose another model",
+  "answer.error.no-answer": "The model sent no Answer",
   "answer.error.unknown": "This Answer couldn't be written",
   "answer.error.not-signed-in": "You're not signed in to ChatGPT",
   "answer.error.plan-limit": "Your ChatGPT plan's usage limit is reached",
@@ -2611,6 +2613,10 @@ export const en = {
   "agents.pairing.copySkill.hint":
     "Save it as SKILL.md in a folder named incarnamind, inside your agent’s skills folder, so it knows when to use IncarnaMind.",
   "agents.pairing.copied": "Copied",
+  "agents.pairing.copy": "Copy",
+  "agents.pairing.command": "Command",
+  "agents.pairing.args": "Arguments",
+  "agents.pairing.env": "Environment",
   "agents.activity.empty": "No calls yet.",
   "agents.activity.search": "Searched “{text}”",
   "agents.activity.read_passages": "Read Passages",
@@ -2654,7 +2660,7 @@ export const en = {
   "agents.done.command": "Copied. Paste it into a terminal and run it.",
   "agents.done.settings": "Copied. In {agent}, add it as a new server, then restart {agent}.",
   "agents.done.settings.other":
-    "Copied. Paste it where your agent adds a new server, then restart the agent. If it asks for a command, arguments and environment instead, they are in the settings you copied (Details for technical users).",
+    "Copied. Paste it where your agent adds a new server, then restart the agent. If it asks for a command, arguments and environment instead, Details for technical users shows each, ready to copy.",
   "agents.done.unreadable":
     "{agent}’s settings file couldn’t be read, so IncarnaMind left it alone. The settings are copied: paste them into {path}.",
   "agents.done.undo": "Undo",
