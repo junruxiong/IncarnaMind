@@ -4,6 +4,7 @@ import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { Editor } from "@tiptap/core";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
+  acceptPlainTextKeys,
   addDocuments,
   askInAssistant,
   assistantAnswers,
@@ -154,8 +155,8 @@ test("an Answer streams into the assistant and leaves the Mind as it was; Add to
   await expect(second).toContainText("That is all.");
   expect(await noteJSON(editor)).toBe(before);
 
-  // Copy takes the Answer with its Citation: as HTML that pastes back as a Citation, and as
-  // text that names its source.
+  // Copy takes the Answer with its Citation: as HTML that pastes back as a Citation and into
+  // Word as a footnote, and as text with a marker and the source in a Sources list.
   const copied = await stubClipboard(window);
   await pointAt(window, answer.getByTestId("assistant-answer-text"));
   await pointAndClick(window, answer.getByTestId("answer-copy"));
@@ -163,7 +164,8 @@ test("an Answer streams into the assistant and leaves the Mind as it was; Add to
   const clipboard = await copied();
   expect(clipboard["text/html"]).toContain('data-type="citation"');
   expect(clipboard["text/plain"]).toContain("Your Documents answer this");
-  expect(clipboard["text/plain"]).toContain("[Tides, p. 2]");
+  expect(clipboard["text/html"]).toContain("mso-footnote-id:ftn1");
+  expect(clipboard["text/plain"]).toContain("Sources\n[1] Tides, p. 2");
 
   // Add to note: at the note's cursor, named in its tooltip; the Citation is found there too.
   await pointAt(window, answer.getByTestId("assistant-answer-text"));
@@ -363,7 +365,7 @@ test("the keyboard reaches it all: ⌘J, Tab through an Answer's actions, ⌘⇧
   // as a keyboard reports them with Shift held: "C" and "A" (Linux's editor reads a lowercase
   // letter with Shift as the same letter without it, and Ctrl+A selects all).
   await window.keyboard.press("ControlOrMeta+Shift+C");
-  await expect.poll(async () => (await copied())["text/plain"] ?? "").toContain("[Tides, p. 2]");
+  await expect.poll(async () => (await copied())["text/plain"] ?? "").toContain("[1] Tides, p. 2");
   await pointAndClick(window, editor.locator(":scope > p").nth(1));
   await window.keyboard.press("ControlOrMeta+Shift+A");
   await expect
@@ -390,6 +392,64 @@ test("the keyboard reaches it all: ⌘J, Tab through an Answer's actions, ⌘⇧
   await window.keyboard.press("ControlOrMeta+j");
   await expect(assistant).not.toHaveAttribute("data-folded");
   await expect(window.getByTestId("composer-input")).toBeFocused();
+  await app.close();
+});
+
+test("a number the Answer works out is calculated: its text shows the figure, and its steps say so; in Chinese too", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true, home });
+  await setWindowSize(app, window, 1440, 900);
+  await dismissChatSetup(window);
+  // A model measured to use calculate (ADR-0021): the scripted model answers in its place.
+  await acceptPlainTextKeys(window);
+  await window.evaluate(async () => {
+    const core = (
+      globalThis as unknown as {
+        incarnamind: {
+          saveChatProvider(input: unknown): Promise<{ service: { id: string } | null }>;
+          allowDataFlow(flow: string, serviceId: string): Promise<unknown>;
+        };
+      }
+    ).incarnamind;
+    const provider = await core.saveChatProvider({
+      kind: "anthropic",
+      apiKey: "sk-ant-test",
+      modelId: "claude-haiku-5-5",
+    });
+    if (provider.service) {
+      await core.allowDataFlow("chat", provider.service.id);
+      await core.allowDataFlow("tagging", provider.service.id);
+    }
+  });
+  await writeFile(
+    join(sources, "Revenue.pdf"),
+    buildPdf([{ lines: ["Revenue was 1,482.6 in 2025, compared with 1,231.0 in 2024."] }]),
+  );
+  await addDocuments(window, [join(sources, "Revenue.pdf")]);
+  await mindWithNotes(window, "Reading notes: revenue");
+
+  const answer = await askInAssistant(window, "How much did revenue grow?");
+  await expect(answer.getByTestId("assistant-answer-text")).toContainText("It grew 20.4%");
+  await expect(answer.getByTestId("assistant-answer-text")).not.toContainText("[=1]");
+  await expect(answer.getByTestId("citation-chip")).toHaveAttribute("data-check", "found");
+  // Its steps say so, after the search and before the check, with no Tool-call card.
+  await pointAndClick(window, answer.getByTestId("answer-steps"));
+  const timeline = answer.getByTestId("answer-timeline");
+  await expect(timeline.locator('[data-step="calculated"]')).toHaveText("Calculated 1 figure");
+  const steps = await timeline
+    .getByTestId("answer-step")
+    .evaluateAll((rows) => rows.map((row) => row.getAttribute("data-step")));
+  expect(steps.slice(-3)).toEqual(["search", "calculated", "check"]);
+  await expect(answer.getByTestId("answer-uncalculated")).toHaveCount(0);
+  await screenshot(window, "assistant-answer-calculated");
+
+  await window.evaluate(async () => {
+    const bridge = (
+      globalThis as unknown as { incarnamind: { updateSettings(patch: unknown): Promise<unknown> } }
+    ).incarnamind;
+    await bridge.updateSettings({ user: { language: "zh-CN" } });
+  });
+  await expect(timeline.locator('[data-step="calculated"]')).toHaveText("计算了 1 个数字");
+  await screenshot(window, "assistant-answer-calculated-zh");
   await app.close();
 });
 
