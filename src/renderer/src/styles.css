@@ -658,9 +658,9 @@
     &[data-divider]::after {
       content: "";
       position: absolute;
-      top: 9px;
+      top: 8px;
       right: 0;
-      bottom: 9px;
+      bottom: 10px;
       width: 1px;
       background: var(--color-tab-divider);
     }
@@ -672,8 +672,10 @@
     }
   }
   /*
-   * The content of a tab: inset 4px at the sides and 3px from the bottom on
-   * the tabs not shown (a 28px shape with radius 8), the whole tab on the shown one.
+   * The content of a tab: inset 4px at the sides and from the bottom on the
+   * tabs not shown (a 28px shape with radius 8, 2px under the slot's top), the
+   * whole tab on the shown one, which keeps the same 4px under its content.
+   * Both centre on the band's line, y 26, as every header's contents do (#615).
    */
   .tab-inner {
     display: flex;
@@ -682,7 +684,7 @@
     gap: 8px;
     min-width: 0;
     height: 28px;
-    margin: 0 4px 3px;
+    margin: 2px 4px 4px;
     padding: 0 4px 0 8px;
     border-radius: 8px;
   }
@@ -690,7 +692,7 @@
     align-self: stretch;
     height: auto;
     margin: 0;
-    padding: 0 8px 0 12px;
+    padding: 0 8px 4px 12px;
     border-radius: 10px 10px 0 0;
   }
   /* The tab is the keyboard stop; its shape shows the focus. */
@@ -869,7 +871,7 @@
   /* 6px from the last tab: the list's 10px end padding (room for a foot) less 4px. */
   .tab-new {
     width: 28px;
-    margin: 0 0 3px -4px;
+    margin: 0 0 4px -4px;
     border-radius: 9999px;
   }
   .tab-strip-spacer {
@@ -4592,6 +4594,10 @@
   }
   .assistant[data-folded] .assistant-header {
     border-bottom: 0;
+  }
+  /* Its rule takes the band's last pixel; this one keeps the contents on the band's line, y 26 (#615). */
+  .assistant:not([data-folded]) .assistant-header {
+    padding-top: 1px;
   }
   .assistant-grip {
     flex: none;
