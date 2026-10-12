@@ -9,7 +9,12 @@ import {
   type FormattedCluster,
   type StyledRun,
 } from "../../../core/api";
-import { badgeMessage, type CitationState, citationState } from "../../../shared/citations";
+import {
+  badgeMessage,
+  type CitationState,
+  citationSource,
+  citationState,
+} from "../../../shared/citations";
 import {
   citationLocation,
   formatLocation,
@@ -104,13 +109,10 @@ export function CitationView({
   const where = location ? formatLocation(location, t) : null;
   const badge = badgeMessage(state, attributes, t);
   const badgeText = t(badge.key, badge.params);
-  const documentName = attributes.documentName ?? "";
   const number = citationNumberOf(decorations);
   // In a footnote's text it is part of the footnote: it shows where it points, not a number.
   const inFootnote = useContext(InFootnoteContext);
-  const pointsTo = where
-    ? t("citation.where", { document: documentName, location: where })
-    : documentName;
+  const pointsTo = citationSource(attributes, t).text;
   /** Clicked: the card stays until it is dismissed. */
   const [pinned, setPinned] = useState(false);
   /** Hovered or focused, with the card, the marker or its mark. */
@@ -497,7 +499,7 @@ function CitationCard({
       ? name
       : null
     : where
-      ? t("citation.where", { document: name, location: where })
+      ? citationSource(attributes, t).text
       : name;
   const reason =
     state.check === "checking"
