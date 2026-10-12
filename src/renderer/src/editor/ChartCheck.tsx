@@ -1,12 +1,6 @@
 import type { CitationCheck } from "../../../core/api";
 import { CheckMarkIcon } from "./icons";
 
-/**
- * A chart value's check, as a small filled mark (#436): found in `success`,
- * a quote not found in `warning` on its wash, contradicted outlined in
- * `error`, can't check on `chip`. With no Citation, a quiet grey ring. Its
- * meaning is in `label`, for the tooltip and a screen reader.
- */
 export function ChartCheck({
   check,
   label,
@@ -15,7 +9,6 @@ export function ChartCheck({
   /** Null: the value has no Citation. */
   check: CitationCheck | null;
   label: string;
-  /** "sm" in a table cell, "md" under the chart, "lg" on a value's card. */
   size?: "sm" | "md" | "lg";
 }) {
   return (

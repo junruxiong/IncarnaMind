@@ -14,6 +14,7 @@ import {
   drawnSeries,
   kindFits,
   MAX_CHART_VALUES,
+  seriesName as nameOfSeries,
   readChart,
 } from "../../../shared/charts";
 import { badgeMessage, type CitationState, citationState } from "../../../shared/citations";
@@ -31,23 +32,16 @@ import { type ChartHandle, chartHandles } from "./chartHandles";
 import { quoteSaysSo, useOpenCited } from "./openCited";
 import { Popover } from "./Popover";
 
-/** How long a pointer rests on a value before its card shows, and how long it may leave before it goes. */
+/** As a Citation's card: the pointer rests a moment before it shows, and may leave a moment before it goes. */
 const SHOW_MS = 120;
 const HIDE_MS = 200;
 
 interface Card {
   point: PointRef;
   anchor: Element;
-  /** Clicked, or opened with Enter: it stays until dismissed. */
   pinned: boolean;
 }
 
-/**
- * The card of the value pointed at or focused, as a Citation's: it shows a
- * moment after the pointer rests on the value (at once for the focus), stays
- * while the pointer is on it, and goes a moment after both leave; a click
- * pins it until Esc or a click elsewhere.
- */
 function usePointCard() {
   const [card, setCard] = useState<Card | null>(null);
   const askers = useRef(new Set<string>());
@@ -102,11 +96,7 @@ function usePointCard() {
   };
 }
 
-/**
- * What a chart's table would give now, when it differs from what the chart
- * draws; worked out again only when the table or the chart changes, not on
- * every keystroke elsewhere in the Mind.
- */
+/** Worked out again only when the table or the chart changes, not on every keystroke elsewhere in the Mind. */
 function useTableUpdate(
   editor: ReactNodeViewProps["editor"],
   node: ProseMirrorNode,
@@ -130,7 +120,6 @@ function useTableUpdate(
   });
 }
 
-/** The worst check of the values drawn, and how many quotes weren't found. */
 function checksOf(states: readonly (CitationState | null)[]): {
   check: CitationCheck | null;
   notFound: number;
@@ -150,16 +139,7 @@ function checksOf(states: readonly (CitationState | null)[]): {
   return { check: order.find((check) => checks.includes(check)) ?? null, notFound };
 }
 
-/**
- * A chart in a Mind (#436), as on the design canvas's Chart boards: "Chart ·
- * {title}" with its kind (and its columns) and "Show as table" on its title
- * line; the chart, drawn at the column's width; and under it the key to its
- * colours and where its values were quoted from. Hovering or focusing a
- * value shows its card, with its Citation and Open; a click or Enter opens
- * the cited page. The title is renamed in place (double-click or F2), and
- * the right-click menu (or ⇧F10) holds every action. Each change is an Undo
- * step; a Mind opened read-only shows it and its cards, and changes nothing.
- */
+/** A chart in a Mind (#436), as on the design canvas's Chart boards. */
 export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewProps) {
   const t = useT();
   const language = useLanguage();
@@ -185,20 +165,7 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
       value?.citation ? citationState(value.citation, documents, kept) : null,
     [documents, kept],
   );
-  /** A column's name, or "Column 3" (or "Value", for figures from text) when its heading is empty. */
-  const seriesName = useCallback(
-    (index: number) => {
-      const name = chart.data.series[index];
-      if (name) return name;
-      if (chart.source.kind === "figures") return t("chart.series.value");
-      const cell = chart.data.rows
-        .map((row) => row.values[index]?.from)
-        .find((from) => from?.kind === "cell");
-      const column = cell?.kind === "cell" ? cell.column + 1 : index + 2;
-      return t("chart.series.unnamed", { number: column });
-    },
-    [chart, t],
-  );
+  const seriesName = useCallback((index: number) => nameOfSeries(chart, index, t), [chart, t]);
   const labelHeading = chart.data.labelHeading;
   const drawn = drawnSeries(chart);
   const points = chartPoints(chart);
@@ -226,7 +193,6 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
     change({ data: update, ...(same ? {} : { drawn: null }) });
   };
 
-  // What its menu and its commands reach (./chartHandles), by its Block's id.
   const latest = useRef({ chart, asTable, update, editable, setKind, toggleTable, applyUpdate });
   latest.current = { chart, asTable, update, editable, setKind, toggleTable, applyUpdate };
   useEffect(() => {
@@ -254,7 +220,6 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
     };
   }, [blockId, deleteNode]);
 
-  /** A value's title on its card: its row, and its column when several are drawn. */
   const titleOf = (point: PointRef) => {
     const row = chart.data.rows[point.row]?.label ?? "";
     if ((chart.kind === "bar" || chart.kind === "line") && drawn.length > 1) {
@@ -262,7 +227,6 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
     }
     return row || seriesName(point.series);
   };
-  /** A scatter chart's value across, beside the one up; a pie slice's share. */
   const detailOf = (point: PointRef): string | null => {
     if (chart.kind === "scatter") {
       const across = drawn[0];
@@ -303,7 +267,6 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
     return `${where}. ${t(badge.key, badge.params)}`;
   };
 
-  /** Opens a value's cited place, its quote washed where the check found it, as a Citation's Open does. */
   const openValue = (point: PointRef) => {
     const value = chart.data.rows[point.row]?.values[point.series];
     const state = stateOf(value);
@@ -356,10 +319,7 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
       data-kind={chart.kind}
       data-chart-id={blockId || undefined}
       contentEditable={false}
-      {...(editable && {
-        "data-object-row": objectMenu.rowProps["data-object-row"],
-        onContextMenu: objectMenu.rowProps.onContextMenu,
-      })}
+      {...(editable && objectMenu.rowProps)}
       onKeyDown={onKeyDown}
     >
       <div className="chart-head" data-chart-ui="">
@@ -372,7 +332,6 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
             }}
           />
         ) : (
-          // Renamed by a double-click, as names are everywhere; F2 and the menu's Rename from the keyboard.
           <button
             type="button"
             tabIndex={-1}
@@ -503,19 +462,8 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
   );
 }
 
-/**
- * The title, renamed in place: Enter saves, Esc cancels, leaving it saves,
- * and a blank title changes nothing. Enter while an input method is still
- * composing never cuts it off.
- */
-function ChartTitleField({
-  title,
-  onDone,
-}: {
-  title: string;
-  /** The new title, or null to leave it as it was. */
-  onDone(title: string | null): void;
-}) {
+/** A blank title changes nothing; Enter while an input method composes never cuts it off. */
+function ChartTitleField({ title, onDone }: { title: string; onDone(title: string | null): void }) {
   const t = useT();
   const [value, setValue] = useState(title);
   const field = useRef<HTMLInputElement>(null);

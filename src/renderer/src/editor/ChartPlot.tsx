@@ -2,7 +2,6 @@ import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { type ChartLayout, type LaidOutPoint, layoutChart } from "../../../shared/chartLayout";
 import type { ChartAttributes } from "../../../shared/charts";
 
-/** A value of a chart: its row, and its series by its place in the chart's data. */
 export interface PointRef {
   row: number;
   series: number;
@@ -11,15 +10,12 @@ export interface PointRef {
 export const samePoint = (a: PointRef | null, b: PointRef | null) =>
   a !== null && b !== null && a.row === b.row && a.series === b.series;
 
-/** What a value's mark tells the chart: the pointer over it or off, the focus on it or off, and Enter or a click. */
 export interface PointEvents {
   peek(point: PointRef, anchor: Element, source: "pointer" | "focus", on: boolean): void;
   activate(point: PointRef, anchor: Element): void;
-  /** Its accessible name: "Q3 · 2025: 377.9 · Acme Annual Report 2025, p. 22. Quote found on p. 22". */
   label(point: PointRef): string;
 }
 
-/** The system's font at 12 px, as the chart's labels are drawn in, for measuring them. */
 let canvas: CanvasRenderingContext2D | null | undefined;
 function measureText(text: string): number {
   if (canvas === undefined) {
@@ -32,7 +28,8 @@ function measureText(text: string): number {
   return canvas ? canvas.measureText(text).width : text.length * 7.2;
 }
 
-/** The next value along `step`: across the rows of a series, or up and down its series at a row. */
+const MOVES = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"]);
+
 function nextPoint(
   points: readonly LaidOutPoint[],
   from: number,
@@ -40,7 +37,7 @@ function nextPoint(
   byRow: boolean,
 ): number | null {
   const here = points[from];
-  if (!here) return null;
+  if (!here || !MOVES.has(key)) return null;
   if (key === "Home") return 0;
   if (key === "End") return points.length - 1;
   const forward = key === "ArrowRight" || key === "ArrowDown";
@@ -71,12 +68,8 @@ function nextPoint(
 const fillClass = (point: LaidOutPoint) => `chart-fill-${point.ink}`;
 
 /**
- * A chart drawn in SVG at the width its column has (#436), so its labels
- * stay 12 px: the layout (src/shared/chartLayout.ts) with its colours as
- * DESIGN.md's tokens. Tab reaches its values as one stop, the arrow keys
- * move between them (along a series, and up and down its series), Home and
- * End go to the ends; each value has an accessible name, and hovering or
- * focusing it shows its card.
+ * Drawn at the width its column has, so its labels stay 12 px. Its values
+ * are one Tab stop: the arrows move along a series and across series.
  */
 export function ChartPlot({
   chart,
@@ -89,10 +82,8 @@ export function ChartPlot({
   chart: ChartAttributes;
   language: string;
   seriesName(index: number): string;
-  /** The value whose card shows: drawn in the accent. */
   active: PointRef | null;
   events: PointEvents;
-  /** What the chart is, for a screen reader. */
   label: string;
 }) {
   const box = useRef<HTMLElement>(null);
@@ -114,7 +105,6 @@ export function ChartPlot({
   );
   const points = layout?.points ?? [];
 
-  /** The value that takes the focus when Tab reaches the chart. */
   const [current, setCurrent] = useState(0);
   const at = Math.min(current, Math.max(0, points.length - 1));
   const marks = useRef(new Map<string, SVGElement>());
@@ -142,7 +132,7 @@ export function ChartPlot({
     setCurrent(next);
   };
 
-  // A pie's slice with its card is ringed in the accent over its neighbours, drawn after them all.
+  // Drawn after every slice, so its neighbours don't cover the ring.
   const ringed = points.find((point) => samePoint(point, active))?.mark;
 
   const size = layout && {

@@ -4,14 +4,10 @@ import { CHART_KINDS, drawnSeries, readChart } from "../../../shared/charts";
 import { citationReference } from "../../../shared/citations";
 
 export interface ChartOptions {
-  /** Draws the chart, with its menus, its points' cards and "Show as table". */
   view: NodeViewRenderer | null;
 }
 
-/**
- * An attribute kept in the HTML as JSON in `data-<name>`, so a chart copied
- * and pasted (into a Note, or another Mind) keeps everything it holds.
- */
+/** Kept in the HTML, so a chart copied into a Note or another Mind keeps everything it holds. */
 function jsonAttribute(name: string) {
   return {
     default: null,
@@ -31,7 +27,6 @@ function jsonAttribute(name: string) {
   };
 }
 
-/** A chart's values as text, a row a line, each value with its source: what copying it as text gives. */
 function chartText(attributes: Record<string, unknown>): string {
   const chart = readChart(attributes);
   const drawn = drawnSeries(chart);
@@ -53,13 +48,7 @@ function chartText(attributes: Record<string, unknown>): string {
   return lines.filter((line) => line.trim() !== "").join("\n");
 }
 
-/**
- * A chart (#436): a Block with no text of its own, drawn from the values it
- * holds (see `ChartAttributes` in src/shared/charts.ts), each kept with the
- * cell or line it came from and the Citation that was there. It moves and is
- * deleted as one Block. Copied, it keeps everything; as HTML for another
- * app, it is its title and a table of its values.
- */
+/** A chart (#436); as HTML for another app, its title and a table of its values. */
 export const Chart = Node.create<ChartOptions>({
   name: CHART_NODE,
   group: "block",

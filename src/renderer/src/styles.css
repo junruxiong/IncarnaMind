@@ -94,7 +94,7 @@
   --color-tag-gray-dot: #9aa0a8;
   --color-tag-gray-edge: #818993;
   /*
-   * Charts (DESIGN.md, D166): an earlier series in this light grey, the later
+   * Charts (DESIGN.md, Colors): an earlier series in this light grey, the later
    * in `ink-secondary`, the value in focus in `accent`, a pie's slices (and
    * three series or more) in the Tag hues teal, purple, orange and yellow.
    */
@@ -4472,12 +4472,7 @@
     color: var(--color-ink-meta);
   }
 
-  /*
-   * A chart (#436), as on the canvas's Chart boards: a quiet title line with
-   * its kind and "Show as table", the chart in a ruled box on the sheet, and
-   * under it the key to its colours and where its values were quoted from,
-   * in the meta ink. Its colours are tokens, so it follows the theme.
-   */
+  /* A chart (#436): its colours are tokens only, so it follows the theme. */
   .chart-block {
     position: relative;
     margin: 4px 0 24px;
@@ -4714,7 +4709,6 @@
     color: var(--color-ink-meta);
   }
 
-  /* "Show as table": the values right-aligned in tabular figures, ruled in `rule`, with their checks. */
   .chart-values {
     overflow-x: auto;
 
@@ -4770,7 +4764,6 @@
     }
   }
 
-  /* A value's check: filled in its state's colours; with no Citation, a quiet grey ring. */
   .chart-check {
     display: inline-flex;
     flex: none;
@@ -4880,7 +4873,6 @@
     }
   }
 
-  /* A value's card: what it is, as written, and its source with its check and Open. */
   .chart-card {
     display: flex;
     flex-direction: column;

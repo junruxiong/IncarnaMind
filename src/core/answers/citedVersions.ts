@@ -50,7 +50,6 @@ export function addCitedUnit(
   });
 }
 
-/** The Citations a chart's values were charted with. */
 function chartCitations(chart: Y.XmlElement): CitationFields[] {
   return readChartData(chart.getAttribute("data")).rows.flatMap((row) =>
     row.values.flatMap((value) =>

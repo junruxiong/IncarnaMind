@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import type { CitationAttributes, CitationCheck } from "../../../core/api";
-import { type CitationState, citationState } from "../../../shared/citations";
+import type { CitationState } from "../../../shared/citations";
 import { citationLocation, formatLocation } from "../../../shared/locations";
 import { useTabPlace } from "../components/tabs/tabItems";
 import { useT } from "../i18n";
@@ -10,22 +10,10 @@ import { useAppStore } from "../store";
 export const quoteSaysSo = (check: CitationCheck) =>
   check === "found" || check === "unsupported" || check === "contradicted";
 
-/** A Citation's state now, as its badge shows it: with the User's live Documents and the text kept of others. */
-export function useCitationState(attributes: CitationAttributes | null): CitationState | null {
-  const documents = useAppStore((state) =>
-    state.status.kind === "ready" ? state.documents : null,
-  );
-  const kept = useAppStore((state) => state.keptCitationTexts);
-  return attributes ? citationState(attributes, documents, kept) : null;
-}
-
 /**
- * Opens a Citation's cited place (a page, slide, section, rows or lines), or
- * its Document, beside the Mind, with the quote to highlight if asked, and
- * the Citation's check, number and label: the viewer colours the quote by
- * the check (amber when opened anyway after "not found") and shows the check
- * mark, with where it points, beside it. A Citation in the text and a
- * chart's value (#436) open the same way.
+ * The viewer colours the quote by the check (amber when opened anyway after
+ * "not found") and marks it with the Citation's number and label. A
+ * Citation in the text and a chart's value (#436) open the same way.
  */
 export function useOpenCited(): (
   attributes: CitationAttributes,

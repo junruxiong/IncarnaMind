@@ -343,7 +343,7 @@ export const zhCN = {
   "chart.source.documents": "{count} 个数值，引自 {documents} 个文档",
   "chart.source.none.one": "1 个数值，没有引用",
   "chart.source.none.other": "{count} 个数值，均没有引用",
-  "chart.source.uncited": "{count} 个没有引用",
+  "chart.source.uncited": "{count} 个数值没有引用",
   "chart.source.notFound.one": "1 处未找到引文",
   "chart.source.notFound.other": "{count} 处未找到引文",
   "chart.source.notDrawn.one": "1 个单元格没有数字，未绘制",

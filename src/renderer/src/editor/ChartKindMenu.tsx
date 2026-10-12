@@ -16,12 +16,7 @@ import { usePopoverMenu } from "../components/usePopoverMenu";
 import { useT } from "../i18n";
 import { ChevronDownSmallIcon } from "./icons";
 
-/**
- * The chart's "Bar ⌄" button and its menu (#436): the four kinds, then the
- * columns it draws, each turned on and off in place. A pie draws one column,
- * so choosing one draws it alone; a scatter chart draws two, one across and
- * one up. Each change is an Undo step.
- */
+/** The kinds, then the columns drawn, turned on and off in place (#436). */
 export function ChartKindMenu({
   chart,
   seriesName,
@@ -44,7 +39,6 @@ export function ChartKindMenu({
     menu.close();
     run();
   };
-  /** Which way a scatter chart's column goes: across, up, or (chosen but past two) not drawn. */
   const axisOf = (series: number) => {
     if (chart.kind !== "scatter") return "";
     const place = drawn.indexOf(series);
@@ -118,7 +112,6 @@ export function ChartKindMenu({
                     onClick: () => choose(() => onSeries(series)),
                     className: `${menuItemClass} pl-2`,
                   };
-                  // A pie draws one column: a choice of one. Otherwise each is on or off.
                   return chart.kind === "pie" ? (
                     // biome-ignore lint/suspicious/noArrayIndexKey: a column is its place in the table.
                     <button key={series} role="menuitemradio" aria-checked={on} {...props}>

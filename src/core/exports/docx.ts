@@ -274,11 +274,7 @@ class DocxWriter {
     }
   }
 
-  /**
-   * A chart (#436): its picture, or the table of its values when there is
-   * none, then its caption and the places its values were quoted from, as
-   * footnotes in the Mind's citation style.
-   */
+  /** With no picture (a host that can't draw one), the table of its values instead. */
   private chart(block: Extract<Block, { kind: "chart" }>, context: Context): string {
     const { indent } = context;
     const { labels } = this.options;
@@ -588,7 +584,6 @@ const isWebLink = (href: string) => /^(https?:|mailto:)/i.test(href);
 
 interface ParagraphProperties {
   style?: string | null;
-  /** Keep it on the page with the next paragraph: a chart with its caption. */
   keepNext?: boolean;
   numbering?: { id: number; level: number };
   bottomBorder?: boolean;

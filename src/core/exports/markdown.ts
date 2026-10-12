@@ -160,10 +160,6 @@ class MarkdownWriter {
       .join("\n");
   }
 
-  /**
-   * A chart (#436) as its caption, the table of its values, and the places
-   * they were quoted from, as footnotes in the Mind's citation style.
-   */
   private chart(block: Extract<Block, { kind: "chart" }>): string {
     const parts = [`*${escapeText(this.labels.chart(block.chart.title), false)}*`];
     const table = this.table(block.table);

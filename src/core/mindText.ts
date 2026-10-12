@@ -136,7 +136,6 @@ export type Block =
       chart: ChartAttributes;
       table: TableCell[][];
       sources: Inline[];
-      /** How many of the values drawn have no Citation. */
       uncited: number;
       picture?: Image;
     }
@@ -405,7 +404,6 @@ export function tableLayout(rows: readonly (readonly TableCell[])[]): {
   return { rows: laidOut, columns };
 }
 
-/** A chart, as its values in a table and the places they were quoted from (see `Block`). */
 function readChartBlock(element: Y.XmlElement, options: ReadOptions): Block {
   const chart = readChart(element.getAttributes() as Record<string, unknown>);
   const drawn = drawnSeries(chart);

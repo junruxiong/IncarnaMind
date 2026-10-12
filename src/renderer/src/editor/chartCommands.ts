@@ -1,9 +1,3 @@
-/**
- * Making and changing charts in the editor (#436): a chart from the table the
- * cursor is in, or from the cited figures in the selected lines, inserted
- * after the Block they are in; and its kind, its columns, its title and an
- * update from its table. Each is an Undo step of its own.
- */
 import type { Editor } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { type EditorState, NodeSelection } from "@tiptap/pm/state";
@@ -32,7 +26,7 @@ import {
 import { readProposalAttribute } from "../../../shared/proposals";
 import { asOwnUndoStep } from "./selectionCommands";
 
-/** The keys a Citation keeps (`CitationAttributes`): a chart keeps a copy of each value's. */
+/** A copy of a Citation without the editor's own attributes (`proposal`). */
 const CITATION_KEYS: readonly (keyof CitationAttributes)[] = [
   "passageId",
   "documentId",
@@ -56,12 +50,10 @@ function citationOf(node: ProseMirrorNode): CitationAttributes {
   return copy as unknown as CitationAttributes;
 }
 
-/** Added by a Proposal still waiting: not the Mind's text yet. */
 const proposed = (node: ProseMirrorNode) =>
   readProposalAttribute(node.attrs[PROPOSAL_ATTRIBUTE])?.kind === "insert" ||
   node.marks.some((mark) => mark.type.name === PROPOSAL_INSERT_MARK);
 
-/** The text of a cell or a line, without its Citations' markers or its footnotes, and its first Citation. */
 function readText(node: ProseMirrorNode): SourceLine {
   let text = "";
   let citation: CitationAttributes | null = null;
@@ -79,7 +71,6 @@ function readText(node: ProseMirrorNode): SourceLine {
   return { text: text.replace(/\s+/g, " ").trim(), citation };
 }
 
-/** A table laid out on its grid, as a chart reads it: a cell spanning rows or columns is in each of its slots. */
 export function tableGrid(table: ProseMirrorNode): SourceGrid {
   const map = TableMap.get(table);
   const seen = new Set<number>();
@@ -105,7 +96,6 @@ export function tableGrid(table: ProseMirrorNode): SourceGrid {
   return grid;
 }
 
-/** The table the selection is in, and where it starts. */
 export function tableAround(state: EditorState): { node: ProseMirrorNode; pos: number } | null {
   const { $from } = state.selection;
   for (let depth = $from.depth; depth > 0; depth--) {
@@ -115,7 +105,6 @@ export function tableAround(state: EditorState): { node: ProseMirrorNode; pos: n
   return null;
 }
 
-/** The text of the heading nearest above a top-level Block: the chart's title until the User names it. */
 function headingAbove(doc: ProseMirrorNode, topLevel: number): string {
   let title = "";
   doc.forEach((node, _offset, index) => {
@@ -124,7 +113,6 @@ function headingAbove(doc: ProseMirrorNode, topLevel: number): string {
   return title;
 }
 
-/** The chart the table the cursor is in makes, or null when no column of it holds a number. */
 export function chartOfTable(state: EditorState, language: string): ChartAttributes | null {
   const table = tableAround(state);
   if (!table) return null;
@@ -136,7 +124,6 @@ export function chartOfTable(state: EditorState, language: string): ChartAttribu
   });
 }
 
-/** The lines of text the selection touches: each paragraph and heading, a list item's text included. */
 function selectedLines(state: EditorState): SourceLine[] {
   const { from, to } = state.selection;
   const lines: SourceLine[] = [];
@@ -149,7 +136,6 @@ function selectedLines(state: EditorState): SourceLine[] {
   return lines;
 }
 
-/** The chart the cited figures in the selected lines make, or null when none of them holds a figure. */
 export function chartOfSelection(state: EditorState, language: string): ChartAttributes | null {
   const { selection } = state;
   if (selection.empty || tableAround(state)) return null;
@@ -160,7 +146,6 @@ export function chartOfSelection(state: EditorState, language: string): ChartAtt
   });
 }
 
-/** The chart as the node's attributes. */
 const attributesOf = (chart: ChartAttributes) => ({
   kind: chart.kind,
   title: chart.title,
@@ -169,10 +154,7 @@ const attributesOf = (chart: ChartAttributes) => ({
   source: chart.source,
 });
 
-/**
- * Inserts a chart after the top-level Block the selection ends in (a table in
- * an Answer: after the Answer), selects it and brings it into view.
- */
+/** After the top-level Block: a table in an Answer gets its chart after the Answer, not inside it. */
 export function insertChart(editor: Editor, chart: ChartAttributes): boolean {
   if (editor.view.composing) return false;
   const { state } = editor;
@@ -190,7 +172,6 @@ export function insertChart(editor: Editor, chart: ChartAttributes): boolean {
   });
 }
 
-/** Changes a chart's attributes in one step: its kind, the columns drawn, its title, or its data. */
 export function changeChart(
   editor: Editor,
   pos: number,
@@ -206,11 +187,7 @@ export function changeChart(
   });
 }
 
-/**
- * The columns drawn once `series` is turned on or off, keeping the others in
- * the table's order: a pie draws only the one chosen, a scatter chart two at
- * most, the first kept with the one chosen.
- */
+/** A pie draws only the one chosen, a scatter chart two at most: the first kept, with the one chosen. */
 export function toggledSeries(chart: ChartAttributes, series: number): number[] {
   const all = chart.data.series.map((_, index) => index);
   if (chart.kind === "pie") return [series];
@@ -220,7 +197,6 @@ export function toggledSeries(chart: ChartAttributes, series: number): number[] 
   return all.filter((each) => each === series || kept.includes(each));
 }
 
-/** The kind a chart switches to, and the columns it then draws: a scatter chart needs two. */
 export function withKind(
   chart: ChartAttributes,
   kind: ChartKind,
@@ -233,7 +209,6 @@ export function withKind(
   return { kind, drawn: chart.drawn };
 }
 
-/** The table a chart was made from, where it is now in the Mind, if it is still there. */
 export function chartTable(
   doc: ProseMirrorNode,
   chart: Pick<ChartAttributes, "source">,
@@ -252,11 +227,7 @@ export function chartTable(
   return found;
 }
 
-/**
- * What the chart's table would give now, when it differs from what the chart
- * draws: the data to update it with. Null when the table is gone, unchanged,
- * or no longer has a column of numbers.
- */
+/** Null when the table is gone, unchanged, or no longer has a column of numbers. */
 export function tableUpdate(
   doc: ProseMirrorNode,
   attributes: Readonly<Record<string, unknown>>,

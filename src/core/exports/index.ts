@@ -6,6 +6,7 @@
 import type * as Y from "yjs";
 import { layoutChart } from "../../shared/chartLayout";
 import { chartSvg } from "../../shared/chartSvg";
+import { seriesName } from "../../shared/charts";
 import {
   type CitationStyle,
   type CitationStyleId,
@@ -57,9 +58,9 @@ export interface ExportsDependencies {
   now(): string;
 }
 
-/** A chart's width in a Word export, in CSS pixels: the text's width on A4 and on Letter, so it is never scaled. */
+/** The text's width on A4 and on Letter, in CSS pixels, so Word never scales the picture. */
 const PICTURE_WIDTH = 600;
-/** Drawn at twice that, so it stays sharp when printed or zoomed. */
+/** Sharp when printed or zoomed. */
 const PICTURE_SCALE = 2;
 
 const EXTENSIONS: Readonly<Record<ExportFormat, string>> = { markdown: "md", docx: "docx" };
@@ -135,10 +136,7 @@ export function createExports(deps: ExportsDependencies) {
   };
 }
 
-/**
- * The Blocks with each chart's picture drawn (#436), for Word. A chart whose
- * picture can't be drawn goes in as its table, and the log says why.
- */
+/** A picture that can't be drawn leaves the chart's table, and the log says why. */
 async function withPictures(
   blocks: readonly Block[],
   language: Language,
@@ -153,8 +151,7 @@ async function withPictures(
       language,
       legendInside: true,
       seriesName: (index) =>
-        chart.data.series[index] ||
-        translate(language, "chart.series.unnamed", { number: index + 1 }),
+        seriesName(chart, index, (key, params) => translate(language, key, params)),
     });
     if (layout.points.length === 0) return block;
     try {
@@ -178,7 +175,7 @@ async function withPictures(
       return block;
     }
   };
-  // One at a time: each picture is drawn in a window of its own.
+  // One at a time: each picture opens a window of its own.
   const inOrder = async <T, U>(items: readonly T[], each: (item: T) => Promise<U>) => {
     const done: U[] = [];
     for (const item of items) done.push(await each(item));

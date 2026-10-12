@@ -4,12 +4,7 @@ import { type ChartAttributes, type ChartValue, drawnSeries } from "../../../sha
 import { ChartCheck } from "./ChartCheck";
 import { type PointEvents, type PointRef, samePoint } from "./ChartPlot";
 
-/**
- * "Show as table" (#436): every value the chart draws, with its check, as a
- * table, the way to read the chart without a pointer. It is one Tab stop:
- * the arrow keys move between values, each of which shows its card (its
- * source, and Open) on focus, as the chart's points do.
- */
+/** "Show as table": the way to read every value and its source without a pointer, one Tab stop as the chart's points are. */
 export function ChartValues({
   chart,
   seriesName,
@@ -23,12 +18,11 @@ export function ChartValues({
   labelHeading: string;
   active: PointRef | null;
   events: PointEvents;
-  /** A value's check (null: it has no Citation), and what it means, for its mark. */
+  /** Null: it has no Citation. */
   checkOf(value: ChartValue): { check: CitationCheck | null; label: string };
 }) {
   const drawn = drawnSeries(chart);
   const rows = chart.data.rows;
-  /** Each value shown, in reading order: what the arrow keys move between. */
   const cells: PointRef[] = [];
   rows.forEach((row, index) => {
     for (const series of drawn) if (row.values[series]) cells.push({ row: index, series });

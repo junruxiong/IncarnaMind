@@ -5,12 +5,6 @@ import { citationLocation, formatLocation } from "../../../shared/locations";
 import { useT } from "../i18n";
 import { ChartCheck } from "./ChartCheck";
 
-/**
- * Under a chart (#436): the key to its series' colours, where its values
- * were quoted from, with one check for them all, and what was left out: a
- * table cut to fit, and cells with no number. When its table changed since,
- * a quiet line offers to draw it as it is now.
- */
 export function ChartFoot({
   legend,
   sources,
@@ -22,13 +16,12 @@ export function ChartFoot({
 }: {
   legend: { ink: ChartInk; name: string }[];
   sources: ChartSources;
-  /** The check of all the values cited, the worst first; null when none is. */
+  /** The worst of the values' checks; null when none is cited. */
   check: CitationCheck | null;
-  /** Values whose quote wasn't found. */
   notFound: number;
   rows: number;
   cutFrom: number | null;
-  /** Its table changed since: draws it as it is now. Null when it hasn't, or can't be. */
+  /** Null when its table hasn't changed, or can't be charted now. */
   onUpdate: (() => void) | null;
 }) {
   const t = useT();
