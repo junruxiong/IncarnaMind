@@ -114,8 +114,10 @@ describe("The Tools a Run offers", () => {
       "cite",
       "find_sources",
       "read_skill_file",
+      "read_web_page",
       "run_skill_script",
       "search_documents",
+      "search_web",
       "use_skill",
     ]);
     const impostors = [...RESERVED_TOOL_NAMES].map((name) => connectorTool(name));
