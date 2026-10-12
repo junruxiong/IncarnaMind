@@ -494,6 +494,13 @@ export interface AnswerToolCall {
   /** A search: how many Passages it gave the model. Null otherwise, and while running. */
   resultCount: number | null;
   /**
+   * A search: the Passages it found, by id (`Citation.passageId`), so the
+   * Citations it led to can be told. Absent on searches made before #391.
+   */
+  passages?: string[];
+  /** A search that failed: why, sorted as an Answer's own failure is. Absent otherwise. */
+  error?: ProviderError;
+  /**
    * "use_skill" only: the Question forced this Skill, so the core loaded it up
    * front instead of the model calling the Tool. Absent otherwise.
    */
@@ -2791,6 +2798,36 @@ export interface AnswerPhaseEvent extends AnswerPlace {
   phase: AnswerPhase;
 }
 
+/**
+ * More of the model's reasoning, as its provider summarized it (#391): only
+ * from a provider whose reasoning is a summary (`AnswerSteps.reasoning`),
+ * never raw chain of thought.
+ */
+export interface AnswerReasoning extends AnswerPlace {
+  answerId: string;
+  text: string;
+}
+
+/**
+ * How an Answer in a conversation was reached, beside its Tool calls and
+ * Citations (#391). Times are ISO 8601, UTC.
+ */
+export interface AnswerSteps {
+  /** When its Question went to the model; null when none did (its Search scope had no Documents). */
+  sentAt: string | null;
+  /** When it ended; null while it is being written. */
+  finishedAt: string | null;
+  /** What it was doing, and from when, oldest first. */
+  phases: { phase: AnswerPhase; at: string }[];
+  /**
+   * The model's reasoning as its provider summarized it (Anthropic's
+   * summarized thinking, the Responses API's reasoning summary), and how long
+   * it thought, in ms: from its first reasoning to the Answer's first text.
+   * Null when the model gave no summary. Raw chain of thought is never kept.
+   */
+  reasoning: { summary: string; ms: number } | null;
+}
+
 /** A Tool call of an Answer started, or finished (see `call.status`). */
 export interface AnswerToolCallEvent extends AnswerPlace {
   answerId: string;
@@ -2964,6 +3001,8 @@ export interface ConversationAnswer {
    * it too, and so does a Mind it is added to. Null: none.
    */
   textOrigin: ThirdPartySource | null;
+  /** How it was reached; null for an Answer written before #391. */
+  steps: AnswerSteps | null;
   /** ISO 8601, UTC. */
   createdAt: string;
   /** ISO 8601, UTC. */
@@ -5980,6 +6019,7 @@ export interface CoreEvents {
   "answer.started": AnswerStarted;
   /** The Answer is loading its model, searching, or writing: its meta line says which. */
   "answer.phase": AnswerPhaseEvent;
+  "answer.reasoning": AnswerReasoning;
   "answer.delta": AnswerDelta;
   "answer.toolCallStarted": AnswerToolCallEvent;
   "answer.toolCallFinished": AnswerToolCallEvent;
