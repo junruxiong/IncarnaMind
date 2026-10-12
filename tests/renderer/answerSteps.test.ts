@@ -276,6 +276,36 @@ describe("an Answer's steps", () => {
     ]);
     expect(rows.at(-1)).toEqual({ kind: "check", count: 2, notFound: 1 });
   });
+
+  test("the figures it calculated, after the searches and before the check, with no call row", () => {
+    const calculated: AnswerToolCall = {
+      id: "calculated-figures",
+      tool: "calculate",
+      source: "documents",
+      input: {},
+      status: "done",
+      resultCount: 2,
+    };
+    const rows = stepRows(
+      input({
+        toolCalls: [search("s1", "heat", { passages: ["a"] }), calculated, connectorCall],
+        citations: [citation(1, "a", "d1", 4)],
+      }),
+    );
+    expect(rows.map((row) => row.kind)).toEqual([
+      "answered",
+      "search",
+      "call",
+      "calculated",
+      "check",
+    ]);
+    expect(rows.find((row) => row.kind === "calculated")).toEqual({ kind: "calculated", count: 2 });
+    expect(
+      stepRows(input({ toolCalls: [{ ...calculated, resultCount: 0, uncalculated: 1 }] })).map(
+        (row) => row.kind,
+      ),
+    ).toEqual(["answered"]);
+  });
 });
 
 describe("the live step", () => {
@@ -305,5 +335,20 @@ describe("the live step", () => {
     ).toEqual({ kind: "checking", count: 1 });
     expect(live({}, { phase: "checking-quotes" })).toEqual({ kind: "checking", count: 0 });
     expect(live({}, { phase: "searching", waitingForApproval: true })).toEqual({ kind: "waiting" });
+  });
+
+  test("figures being recorded are no running call; their retry is checking figures", () => {
+    const calculating: AnswerToolCall = {
+      id: "calculated-figures",
+      tool: "calculate",
+      source: "documents",
+      input: {},
+      status: "running",
+      resultCount: 1,
+    };
+    expect(live({ text: "It grew [=1]", toolCalls: [search("s1", "heat"), calculating] })).toEqual({
+      kind: "writing",
+    });
+    expect(live({}, { phase: "checking-figures" })).toEqual({ kind: "checking-figures" });
   });
 });
