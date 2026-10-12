@@ -10,6 +10,7 @@ import { useAppStore } from "../../store";
 import { answerUndoPlace, useUndo } from "../../undo";
 import { StopIcon } from "../icons";
 import { CheckLineIcon, ChevronDownLineIcon, CopyLineIcon, PlusLineIcon } from "../lineIcons";
+import { useGoesBy } from "../UndoLine";
 
 /** How long "Copied" says so. */
 const COPIED_MS = 1500;
@@ -48,9 +49,11 @@ export function AnswerActions({
   const pick = useRef<HTMLButtonElement>(null);
   const undoButton = useRef<HTMLButtonElement>(null);
   const [copied, setCopied] = useState(false);
-  const added = useUndo((state) =>
-    state.last?.shownAt === answerUndoPlace(answer.id) ? state.last : null,
+  const addedLine = useUndo((state) =>
+    state.line?.change?.shownAt === answerUndoPlace(answer.id) ? state.line : null,
   );
+  const added = addedLine?.change ?? null;
+  useGoesBy(addedLine?.id ?? null);
   // Added from its own buttons (which are gone now): the focus goes to its Undo, so the keyboard
   // can take it back at once. Added from elsewhere (⌘⇧A in the note), the focus stays there.
   useEffect(() => {

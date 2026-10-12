@@ -9,6 +9,8 @@
  * is kept as its raw text, which is fine for fields the format doesn't define.
  */
 
+import { MAX_SKILL_NAME_LENGTH } from "../../shared/skillName";
+
 /** The fields IncarnaMind uses, validated. Unknown fields are allowed and ignored. */
 export interface SkillFrontmatter {
   name: string;
@@ -23,7 +25,7 @@ export type ParsedSkillMd =
   | { ok: false; field: string | null; message: string };
 
 /** The format's limits. */
-export const MAX_NAME_LENGTH = 64;
+export const MAX_NAME_LENGTH = MAX_SKILL_NAME_LENGTH;
 const MAX_DESCRIPTION_LENGTH = 1024;
 const MAX_COMPATIBILITY_LENGTH = 500;
 /** Lowercase letters and digits, in runs joined by single hyphens. */
@@ -378,4 +380,66 @@ export function renameSkillMd(text: string, name: string): string | null {
     return parsed.ok && parsed.frontmatter.name === name ? renamed : null;
   }
   return null;
+}
+
+/** The line range of a top-level frontmatter entry: its key line and the lines that continue it. */
+function entryRange(lines: readonly string[], key: string, end: number): [number, number] | null {
+  const start = lines.findIndex(
+    (line, index) => index > 0 && index < end && new RegExp(`^["']?${key}["']?\\s*:`).test(line),
+  );
+  if (start < 0) return null;
+  let last = start;
+  for (let index = start + 1; index < end; index++) {
+    const line = lines[index] as string;
+    if (line.trim() === "") continue;
+    if (!/^[ \t]/.test(line)) break;
+    last = index;
+  }
+  return [start, last];
+}
+
+/**
+ * SKILL.md's text with `name` and `description` set to the given values and
+ * the instructions replaced by `steps`; every other frontmatter field stays as
+ * written, in its place, and so do a name or description that didn't change.
+ * Null if the file's structure can't be edited that way, or the result
+ * wouldn't read back as asked: the caller then writes the file afresh.
+ */
+export function editSkillMd(
+  text: string,
+  draft: { name: string; description: string; steps: string },
+): string | null {
+  const before = parseSkillMd(text);
+  if (!before.ok) return null;
+  const lines = text.replace(/^\ufeff/, "").split(/(?<=\n)/);
+  if (!FENCE.test((lines[0] ?? "").trimEnd())) return null;
+  const end = lines.findIndex((line, index) => index > 0 && END.test(line.trimEnd()));
+  if (end < 0) return null;
+
+  const changes: [string, string, string][] = [
+    ["name", before.frontmatter.name, draft.name],
+    ["description", before.frontmatter.description, draft.description],
+  ];
+  const ranges = changes
+    .filter(([, was, now]) => was !== now)
+    .map(([key, , now]) => ({ range: entryRange(lines, key, end), key, now }));
+  if (ranges.some((each) => each.range === null)) return null;
+  // From the last line up, so the ranges found stay where they are.
+  ranges.sort((a, b) => (b.range as [number, number])[0] - (a.range as [number, number])[0]);
+  for (const { range, key, now } of ranges) {
+    const [from, to] = range as [number, number];
+    lines.splice(from, to - from + 1, `${key}: ${key === "name" ? now : JSON.stringify(now)}\n`);
+  }
+
+  const closing = lines.findIndex((line, index) => index > 0 && END.test(line.trimEnd()));
+  const head = lines.slice(0, closing + 1);
+  if (!(head.at(-1) ?? "").endsWith("\n")) head[head.length - 1] += "\n";
+  const edited = `${head.join("")}\n${draft.steps.trim()}\n`;
+  const after = parseSkillMd(edited);
+  return after.ok &&
+    after.frontmatter.name === draft.name &&
+    after.frontmatter.description === draft.description &&
+    after.body === draft.steps.trim()
+    ? edited
+    : null;
 }

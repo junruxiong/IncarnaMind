@@ -57,6 +57,7 @@ test("a Skill imported from a folder in Settings is forced from the slash menu i
   await expect(section.getByTestId("skill-item")).toHaveCount(3);
   await expect(item).toHaveCount(0);
   await interceptSkillPicker(window, folder);
+  await section.getByTestId("skill-import").click();
   await section.getByTestId("skill-import-folder").click();
   const preview = section.getByTestId("skill-preview");
   await expect(preview.getByTestId("skill-preview-name")).toHaveText("tide-tables");
@@ -73,7 +74,7 @@ test("a Skill imported from a folder in Settings is forced from the slash menu i
 
   await expect(section.getByTestId("skill-item")).toHaveCount(4);
   await expect(item).toHaveAttribute("data-built-in", "false");
-  await expect(item.getByTestId("skill-built-in")).toHaveCount(0);
+  await expect(section.getByTestId("skills-yours").getByTestId("skill-item")).toHaveCount(1);
   await expect(item.getByTestId("skill-enabled")).toBeChecked();
   await expect(item).toContainText(DESCRIPTION);
   await expect(item).toContainText("Licence: MIT · 1 script");

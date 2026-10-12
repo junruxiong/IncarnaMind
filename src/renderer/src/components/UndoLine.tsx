@@ -1,83 +1,94 @@
-import { isMacOS } from "@tiptap/core";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { shortcutLabel } from "../commands/keymap";
 import { useT } from "../i18n";
+import { useFade } from "../motion";
 import { useAppStore } from "../store";
-import { typesText, UNDO_SHOWN_MS, useUndo } from "../undo";
-import { CloseLineIcon } from "./lineIcons";
+import { UNDO_SHOWN_MS, type UndoLineState, useUndo } from "../undo";
+
+const lineClass =
+  "mx-2 flex min-w-0 shrink-0 items-end gap-1 pt-0.5 pb-1 pl-2 text-[12px] leading-4 text-ink-secondary";
+const actionClass =
+  "h-6 shrink-0 rounded-md px-1 text-[12px] leading-5 font-semibold text-ink-secondary hover:bg-hover hover:text-ink";
 
 /**
- * The last action that can be taken back, as one short line floating at the
- * foot of the sidebar's tree, so nothing under it moves: what happened, then
- * "Undo" (also ⌘Z / Ctrl+Z, outside a text field) and a × to dismiss it. It
- * goes by itself after a few seconds, and is read out politely.
+ * The undo line (CONTEXT.md) at the foot of the sidebar, above Settings: what
+ * the User just changed, then Undo, which does what ⌘Z does. One at a time; it
+ * goes after a few seconds or with the next change, while ⌘Z still reaches
+ * the change. An undo the core refuses shows here as one problem line with one
+ * action. Read out politely.
  */
 export function UndoLine() {
-  const t = useT();
-  const last = useUndo((state) => state.last);
-
-  const undo = () =>
-    useUndo
-      .getState()
-      .undo()
-      .catch((error: unknown) => useAppStore.getState().reportError(error));
-
-  // Goes by itself, unless a newer action replaced it meanwhile.
-  useEffect(() => {
-    if (!last) return;
-    const timer = setTimeout(() => {
-      if (useUndo.getState().last?.id === last.id) useUndo.getState().dismiss();
-    }, UNDO_SHOWN_MS);
-    return () => clearTimeout(timer);
-  }, [last]);
-
-  // ⌘Z / Ctrl+Z while the line shows, unless the key goes to text (the note's own undo).
-  useEffect(() => {
-    if (!last) return;
-    const onKey = (event: KeyboardEvent) => {
-      const command = isMacOS() ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
-      if (event.defaultPrevented || !command || event.shiftKey || event.altKey) return;
-      if (event.code !== "KeyZ" || typesText(event.target)) return;
-      if (document.querySelector("dialog[open]")) return;
-      event.preventDefault();
-      void undo();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  });
-
+  const line = useUndo((state) => state.line);
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      data-testid="undo-line"
-      className="pointer-events-none absolute inset-x-2 bottom-2 z-10"
-    >
-      {/* One shown where the User acted (under an Answer in the assistant) isn't shown twice. */}
-      {last && !last.shownAt && (
-        <div className="pointer-events-auto flex min-h-8 items-center gap-2 rounded-lg bg-sheet py-1 pr-1 pl-3 text-[13px] leading-5 text-ink-secondary shadow-popover">
-          <span data-testid="undo-message" className="min-w-0 flex-1 break-words">
-            {last.message}
-          </span>
-          <button
-            type="button"
-            data-testid="undo-action"
-            aria-label={t("move.undoLabel", { message: last.message })}
-            onClick={() => void undo()}
-            className="shrink-0 rounded-sm px-1 font-semibold text-accent hover:underline"
-          >
-            {t("move.undo")}
-          </button>
-          <button
-            type="button"
-            aria-label={t("move.dismiss")}
-            title={t("move.dismiss")}
-            onClick={() => useUndo.getState().dismiss()}
-            className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-ink-meta hover:bg-hover hover:text-ink"
-          >
-            <CloseLineIcon className="size-3.5" />
-          </button>
-        </div>
-      )}
+    <div role="status" aria-live="polite" data-testid="undo-line" className="flex flex-col">
+      {/* A change shown where the User made it, under an Answer in the assistant, isn't shown twice. */}
+      {line && !line.change?.shownAt && <Line key={line.id} line={line} />}
     </div>
   );
+}
+
+const report = (error: unknown) => useAppStore.getState().reportError(error);
+
+function Line({ line }: { line: UndoLineState }) {
+  const t = useT();
+  const shown = useRef<HTMLDivElement>(null);
+  useFade(shown);
+
+  useGoesBy(line.change ? line.id : null);
+
+  if (line.problem) {
+    const { step, reason, fix } = line.problem;
+    return (
+      <div ref={shown} role="alert" data-testid="undo-problem" className={lineClass}>
+        <span aria-hidden="true" className="mb-[9px] size-1.5 shrink-0 rounded-full bg-attention" />
+        <span className="line-clamp-2 min-w-0 mb-1 break-words">
+          {t(step === "undo" ? "undo.refused" : "redo.refused", { reason })}
+        </span>
+        <span aria-hidden="true" className="mb-1">
+          ·
+        </span>
+        <button
+          type="button"
+          data-testid="undo-fix"
+          onClick={() => (fix ? void fix.run().catch(report) : useUndo.getState().dismiss())}
+          className={actionClass}
+        >
+          {fix ? fix.label : t("move.dismiss")}
+        </button>
+      </div>
+    );
+  }
+
+  const { message } = line.change;
+  return (
+    <div ref={shown} className={lineClass}>
+      <span data-testid="undo-message" className="line-clamp-2 min-w-0 mb-1 break-words">
+        {message}
+      </span>
+      <span aria-hidden="true" className="mb-1">
+        ·
+      </span>
+      <button
+        type="button"
+        data-testid="undo-action"
+        aria-label={t("move.undoLabel", { message })}
+        title={t("undo.title", { shortcut: shortcutLabel("edit.undo") })}
+        onClick={() => void useUndo.getState().undo()}
+        className={actionClass}
+      >
+        {t("move.undo")}
+      </button>
+    </div>
+  );
+}
+
+/** A change's line goes after a few seconds, unless a newer line took its place; ⌘Z still reaches it. */
+export function useGoesBy(lineId: number | null): void {
+  useEffect(() => {
+    if (lineId === null) return;
+    const timer = setTimeout(() => {
+      if (useUndo.getState().line?.id === lineId) useUndo.getState().dismiss();
+    }, UNDO_SHOWN_MS);
+    return () => clearTimeout(timer);
+  }, [lineId]);
 }

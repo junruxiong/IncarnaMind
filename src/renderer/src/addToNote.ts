@@ -135,7 +135,7 @@ async function addToOtherMind(added: AddedAnswer, mindId: string): Promise<void>
     origin: originOf(added),
     model: added.answer.model,
   });
-  useUndo.getState().offer({
+  useUndo.getState().push({
     message: t("answer.added", { mind: nameOfMind(mindId) }),
     undo: () => core.undoAddToNote({ mindId, blockIds }),
     shownAt: answerUndoPlace(added.answer.id),
@@ -165,7 +165,7 @@ async function addToNewMind(added: AddedAnswer): Promise<void> {
     item: { kind: "mind", mindId: mind.id },
     where: { in: "group" },
   });
-  useUndo.getState().offer({
+  useUndo.getState().push({
     message: t("answer.addedToNew", { mind: mindName(mind) || title }),
     undo: () => core.deleteMind(mind.id),
     shownAt: answerUndoPlace(added.answer.id),

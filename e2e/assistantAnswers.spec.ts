@@ -268,6 +268,8 @@ test("an Answer goes to another Mind through the ▾, and to a new Mind as chang
   // ▾ → New Mind: named as the conversation, in a new tab, its content as changes to accept.
   const shown = assistantAnswers(window).first();
   await pointAt(window, shown.getByTestId("assistant-answer-text"));
+  // "Added to …" under it goes after a few seconds, and its actions come back.
+  await expect(shown.getByTestId("answer-add-to")).toBeVisible({ timeout: 15_000 });
   await pointAndClick(window, shown.getByTestId("answer-add-to"));
   await pointAndClick(window, window.getByTestId("add-to-option").last());
   await expect(shown.getByTestId("answer-added")).toContainText(

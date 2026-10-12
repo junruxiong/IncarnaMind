@@ -1144,6 +1144,7 @@ export function createAnswers(options: AnswersOptions) {
             status: outcome.status,
             errorKind: outcome.status === "failed" ? outcome.error.kind : null,
             errorMessage: outcome.status === "failed" ? outcome.error.message : null,
+            errorResetsAt: (outcome.status === "failed" && outcome.error.resetsAt) || null,
             generatedHash: contentHash(element),
           });
         }
@@ -1357,6 +1358,7 @@ export function createAnswers(options: AnswersOptions) {
           status: "streaming",
           errorKind: null,
           errorMessage: null,
+          errorResetsAt: null,
           generatedHash: null,
           citationSupport: null,
           toolCalls: null,

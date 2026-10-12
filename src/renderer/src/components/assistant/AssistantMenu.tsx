@@ -1,5 +1,5 @@
 import { DOCKS, dockCommandId } from "../../commands/assistant";
-import { commands, labelOf } from "../../commands/registry";
+import { commands, labelOf, offered } from "../../commands/registry";
 import { useConversations } from "../../conversations";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
@@ -34,6 +34,10 @@ export function AssistantMenu() {
     menu.close();
     commands.run(id).catch(useAppStore.getState().reportError);
   };
+  // Offered while there is a Mind to make it from: the one the assistant reads.
+  const make = commands.get("skill.fromMind");
+  const makeSkill =
+    menu.open && make && offered(make, { selection: [], focus: null, surface: "mind" });
   return (
     <>
       <button
@@ -75,7 +79,17 @@ export function AssistantMenu() {
               );
             })}
             <div className={menuRuleClass} />
-            {/* What acts on the conversation: unavailable while it has nothing to act on. */}
+            {makeSkill && (
+              <button
+                type="button"
+                role="menuitem"
+                data-testid="assistant-menu-make-skill"
+                onClick={() => run("skill.fromMind")}
+                className={`${menuItemClass} pl-8`}
+              >
+                {t("skills.make.command")}
+              </button>
+            )}
             <ConversationItem
               id="assistant.lastToNewMind"
               testId="assistant-menu-last-to-new-mind"

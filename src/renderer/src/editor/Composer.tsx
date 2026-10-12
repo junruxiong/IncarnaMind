@@ -678,6 +678,7 @@ export function Composer({
               describe={(each) => skillDescription(each, t)}
               query={picking.query}
               onChoose={chooseSkill}
+              onManage={() => useAppStore.getState().openSettings("skills")}
               onSelect={setOption}
             />
           )}

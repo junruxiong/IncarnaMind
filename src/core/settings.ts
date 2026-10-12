@@ -4,6 +4,7 @@ import {
   type DeviceSettings,
   type GettingStarted,
   MOTION_PREFERENCES,
+  type MonthlyCap,
   type MotionPreference,
   type SandboxLevel,
   type Settings,
@@ -40,6 +41,16 @@ export const isChatModelChoice = (value: unknown): value is ChatModelChoice =>
   isNonBlankText(value.providerId) &&
   isNonBlankText(value.modelId);
 
+/** A cap of up to a million a month, in dollars or yuan. */
+const isMonthlyCap = (value: unknown): value is MonthlyCap =>
+  isRecord(value) &&
+  Object.keys(value).length === 2 &&
+  typeof value.amount === "number" &&
+  Number.isFinite(value.amount) &&
+  value.amount >= 0 &&
+  value.amount <= 1_000_000 &&
+  (value.currency === "USD" || value.currency === "CNY");
+
 const userScope: Scope<UserSettings> = {
   name: "user",
   table: "user_settings",
@@ -48,6 +59,7 @@ const userScope: Scope<UserSettings> = {
     chatModel: null,
     suggestWhileWriting: false,
     leaveOutOwnFiles: true,
+    monthlyCap: null,
   },
   validators: {
     language: isLanguagePreference,
@@ -55,6 +67,7 @@ const userScope: Scope<UserSettings> = {
       value === null || isChatModelChoice(value),
     suggestWhileWriting: isBoolean,
     leaveOutOwnFiles: isBoolean,
+    monthlyCap: (value): value is MonthlyCap | null => value === null || isMonthlyCap(value),
   },
 };
 
