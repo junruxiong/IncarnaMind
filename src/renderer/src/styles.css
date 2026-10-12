@@ -1568,6 +1568,10 @@
       color: var(--color-ink);
     }
   }
+  .meeting-button:disabled {
+    color: var(--color-ink-placeholder);
+    background: none;
+  }
   .meeting-button--icon {
     justify-content: center;
     width: 24px;
@@ -1761,6 +1765,38 @@
       text-decoration: underline;
       text-underline-offset: 2px;
     }
+  }
+
+  /*
+   * A line written while a meeting records shows its time after its words when
+   * pointed at (#139); an empty one, a Mark, shows it before the cursor.
+   */
+  .mind-editor [data-meeting-time]::after {
+    content: attr(data-meeting-time);
+    margin-left: 12px;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-ink-meta);
+    opacity: 0;
+    user-select: none;
+    pointer-events: none;
+  }
+  .mind-editor [data-meeting-time]:hover::after {
+    opacity: 1;
+  }
+  .mind-editor [data-meeting-time]:has(> br:only-child)::after {
+    content: none;
+  }
+  .mind-editor [data-meeting-time]:has(> br:only-child)::before {
+    content: attr(data-meeting-time) " ·";
+    margin-right: 8px;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-ink-meta);
+    user-select: none;
+    pointer-events: none;
   }
 
   /* The Mind editor's content (Tiptap): your writing in Source Serif 4, 17/28. */
@@ -5924,6 +5960,37 @@
     grid-column: 1 / -1;
   }
   .library-column-labels {
+    display: none;
+  }
+}
+
+/* Recently deleted: name, where it was, when, days left, then its actions; narrow, the details go under the name. */
+.deleted-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(100px, 170px) 130px 64px 250px;
+  gap: 16px;
+  align-items: center;
+}
+.deleted-columns > .deleted-meta {
+  display: contents;
+}
+.deleted-columns > .deleted-actions {
+  min-width: 2rem;
+}
+@container (max-width: 820px) {
+  .deleted-columns {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 2px 12px;
+  }
+  .deleted-columns > .deleted-meta {
+    display: flex;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    flex-wrap: wrap;
+    gap: 0 12px;
+    font-size: 12px;
+  }
+  .deleted-column-labels {
     display: none;
   }
 }

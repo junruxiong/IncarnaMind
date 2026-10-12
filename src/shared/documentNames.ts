@@ -53,6 +53,27 @@ export function displayName(document: { name: string; title?: string | null }): 
   return title && looksMachineMade(document.name) ? title : document.name;
 }
 
+/** What sites put between a page's title and their own name: "Tea - The Open Encyclopedia". */
+const SITE_SEPARATORS = [" - ", " | ", " – ", " · "];
+
+/**
+ * A web page's title without its site's name at the end, as a citation names the site on its
+ * own: "Tea - The Open Encyclopedia" from The Open Encyclopedia is "Tea". Any other title, or
+ * one that would be left empty, stays as it is.
+ */
+export function titleWithoutSite(title: string, site: string): string {
+  const name = site.trim();
+  if (name === "") return title;
+  for (const separator of SITE_SEPARATORS) {
+    const suffix = `${separator}${name}`;
+    if (title.toLowerCase().endsWith(suffix.toLowerCase())) {
+      const rest = title.slice(0, -suffix.length).trim();
+      if (rest !== "") return rest;
+    }
+  }
+  return title;
+}
+
 /** Where a Document comes from, as its tooltip names it: its file's name, or a web page's address. */
 export function sourceOf(document: { path: string; web?: { address: string } | null }): string {
   return document.web?.address ?? fileNameOf(document.path);

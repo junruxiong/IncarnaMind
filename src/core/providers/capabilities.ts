@@ -71,6 +71,9 @@ export function startingSupport({ facts }: ModelCapabilities): CitationSupport |
   return facts.structuredOutput === "none" ? "none" : "structured-output";
 }
 
+/** Whether an Answer offers the model the `calculate` Tool and its steer: only when a source says so. */
+export const calculates = ({ facts }: ModelCapabilities): boolean => facts.calculates === true;
+
 /** False when the model is known to give no structured output: an Answer then doesn't try it. */
 export const givesStructuredOutput = ({ facts }: ModelCapabilities): boolean | undefined =>
   facts.structuredOutput === undefined ? undefined : facts.structuredOutput !== "none";

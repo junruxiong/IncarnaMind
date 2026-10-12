@@ -47,3 +47,8 @@ export function useHandle<T>(handle: Handle<T>, value: T): void {
     };
   }, [handle, value]);
 }
+
+/** The Transcript in view (#139): the line the User is on, which "Add transcript line to note" adds. */
+export const transcriptHandle: Handle<{ hasLine(): boolean; addLine(): Promise<void> }> = {
+  current: null,
+};

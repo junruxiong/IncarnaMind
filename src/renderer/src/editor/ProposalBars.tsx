@@ -108,12 +108,7 @@ function ProposalsBar({ editor, mindId }: { editor: Editor; mindId: string }) {
   });
   if (ids.length === 0) return null;
   const resolveAll = (outcome: "accept" | "reject") => {
-    resolveProposalsIn(
-      editor,
-      mindId,
-      pendingIn(editor.state).map((each) => each.id),
-      outcome,
-    );
+    resolveProposalsIn(editor, mindId, "all", outcome);
   };
   return (
     // biome-ignore lint/a11y/useSemanticElements: a region of the Mind, not a page landmark.
