@@ -3850,6 +3850,43 @@
       }
     }
   }
+  /* A Document chip: a name in the text that opens the Document. */
+  .document-chip-wrap {
+    display: inline;
+  }
+  .document-chip {
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    gap: 4px;
+    padding: 0 6px;
+    border-radius: 6px;
+    background: var(--color-chip);
+    font-size: 0.9em;
+    line-height: 1.5;
+    color: var(--color-ink);
+    vertical-align: baseline;
+    cursor: pointer;
+
+    &:hover {
+      background: var(--color-hover);
+    }
+    .document-chip-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    &[data-missing="true"] {
+      color: var(--color-ink-meta);
+      cursor: default;
+      .document-chip-name {
+        text-decoration: line-through;
+      }
+    }
+  }
+  .ProseMirror-selectednode .document-chip {
+    outline: 2px solid var(--color-accent);
+  }
   .find-match {
     border-radius: 2px;
     background: rgb(250 204 21 / 0.35);

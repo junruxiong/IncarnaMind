@@ -1,5 +1,9 @@
+import { realpath, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import type { CoreBridge } from "../src/core/api";
 import {
+  addDocuments,
   createDataFolder,
   dismissChatSetup,
   interceptOpenExternal,
@@ -367,4 +371,89 @@ test("find in the Mind keeps counting while an Answer streams in", async () => {
   await window.keyboard.press("Enter");
   await window.keyboard.press("Escape");
   await expect(window.getByTestId("find-bar")).toHaveCount(0);
+});
+
+test('"@" in a Note puts in a Document chip that opens the viewer, by mouse or keyboard, survives a restart, and shows when its Document is deleted', async () => {
+  const sources = await realpath(await createDataFolder());
+  try {
+    await writeFile(join(sources, "Tides.txt"), "Spring tides happen at new moon.");
+    await writeFile(join(sources, "Moons.txt"), "The Moon orbits the Earth.");
+    const first = await launchApp(dataDir);
+    const { app, window } = first;
+    await dismissChatSetup(window);
+    await setWindowSize(app, window, 1280, 700);
+    await addDocuments(window, [join(sources, "Tides.txt"), join(sources, "Moons.txt")]);
+    await newMind(window);
+    const editor = window.getByTestId("mind-editor");
+    await pointAndClick(window, editor);
+
+    // "@" offers Documents only, filtered by what follows it; Enter puts the chip in.
+    await window.keyboard.type("See @");
+    const picker = window.getByTestId("scope-picker");
+    await expect(picker.getByTestId("scope-choice")).toHaveCount(2);
+    await expect(picker.locator('[data-kind="folder"], [data-kind="tag"]')).toHaveCount(0);
+    await window.keyboard.type("tid");
+    await expect(picker.getByTestId("scope-choice")).toHaveCount(1);
+    await window.keyboard.press("Enter");
+    const chips = editor.getByTestId("document-chip");
+    await expect(chips).toHaveCount(1);
+    await expect(chips).toHaveText("Tides");
+    await expect(picker).toHaveCount(0);
+    // Writing goes on after it, and a second one is chosen by mouse.
+    await window.keyboard.type("and @");
+    const moons = window.getByTestId("scope-choice").filter({ hasText: "Moons" });
+    await moons.hover();
+    await moons.click();
+    await expect(chips).toHaveText(["Tides", "Moons"]);
+    await window.keyboard.type("today");
+    await expect(editor.locator("p").first()).toContainText("See Tides and Moons today");
+
+    // By mouse: the chip opens its Document in the viewer.
+    await chips.first().hover();
+    await chips.first().click();
+    await expect(window.getByTestId("viewer-title")).toHaveText("Tides");
+
+    // By keyboard: back in the Mind, an arrow selects the chip and Enter opens its Document.
+    const mindTab = window.getByTestId("mind-tab");
+    await expect(mindTab.getByTestId("tab-title")).toHaveText("See Tides and Moons today");
+    await mindTab.click();
+    await expect(chips).toHaveCount(2);
+    await pointAndClick(window, editor.locator("p").first());
+    await expect(editor).toBeFocused();
+    await window.keyboard.press("End");
+    for (let step = 0; step < 7; step++) {
+      await window.keyboard.press("ArrowLeft");
+      // The editor reads where the caret went on the frame after, before the next key.
+      await window.evaluate(() => new Promise((done) => requestAnimationFrame(() => done(null))));
+    }
+    await expect(editor.locator(".ProseMirror-selectednode")).toHaveText("Moons");
+    await window.keyboard.press("Enter");
+    await expect(window.getByTestId("viewer-title")).toHaveText("Moons");
+    // Enter opened it rather than splitting the line.
+    await mindTab.click();
+    await expect(editor.locator("p")).toHaveCount(1);
+
+    // After a restart the chips are there, and still open.
+    await first.app.close();
+    const second = await launchApp(dataDir);
+    await second.window.getByTestId("mind-list-item").click();
+    const reopened = second.window.getByTestId("mind-editor").getByTestId("document-chip");
+    await expect(reopened).toHaveText(["Tides", "Moons"]);
+    await reopened.nth(1).hover();
+    await reopened.nth(1).click();
+    await expect(second.window.getByTestId("viewer-title")).toHaveText("Moons");
+
+    // A Document deleted leaves its chip, with the name it had, marked.
+    await second.window.evaluate(async () => {
+      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      const gone = (await bridge.listDocuments()).find((each) => each.name === "Moons");
+      if (gone) await bridge.deleteDocument(gone.id);
+    });
+    await second.window.getByTestId("mind-tab").click();
+    const missing = second.window.getByTestId("mind-editor").getByTestId("document-chip").nth(1);
+    await expect(missing).toHaveAttribute("data-missing", "true");
+    await expect(missing).toHaveText("Moons");
+  } finally {
+    await removeDataFolder(sources);
+  }
 });

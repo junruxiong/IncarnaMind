@@ -15,6 +15,7 @@ import {
 } from "../../../core/api";
 import { Citation } from "./citationSchema";
 import { lowlight } from "./codeLanguages";
+import { DocumentChip } from "./documentChipSchema";
 import { Footnote } from "./footnoteSchema";
 import { ProposalAttributes, ProposalDelete, ProposalInsert } from "./proposalSchema";
 import { Answer, MindDocument, Question, QuestionContextFlag } from "./questionSchema";
@@ -48,6 +49,8 @@ export interface NoteSchemaOptions {
   citationView?: NodeViewRenderer;
   /** Draws the markers of the User's footnotes, e.g. as numbers that open their text. */
   footnoteView?: NodeViewRenderer;
+  /** Draws Document chips, e.g. as names that open the Document. */
+  documentChipView?: NodeViewRenderer;
 }
 
 /**
@@ -55,7 +58,7 @@ export interface NoteSchemaOptions {
  * underline, links, strikethrough, highlight, lists, code blocks highlighted
  * by lowlight, inline and block math rendered by KaTeX, and tables, each with
  * an "include in Question context" flag. Questions and Answers, top-level
- * only. Citations, inline in Answers and in whatever they are copied into,
+ * only. Document chips the User writes with "@". Citations, inline in Answers and in whatever they are copied into,
  * table cells included. Footnotes the User writes, inline, each holding its
  * text. Proposals the AI made, waiting for the User (see `proposalSchema`).
  * Every Block and every footnote has a UUID. The editor adds its interface on
@@ -69,6 +72,7 @@ export function noteExtensions({
   answerView,
   citationView,
   footnoteView,
+  documentChipView,
 }: NoteSchemaOptions = {}): Extensions {
   const onClick = onEditMath && ((_node: unknown, pos: number) => onEditMath(pos));
   const CodeBlock = codeBlockView
@@ -108,6 +112,7 @@ export function noteExtensions({
     Answer.configure({ view: answerView ?? null }),
     Citation.configure({ view: citationView ?? null }),
     Footnote.configure({ view: footnoteView ?? null }),
+    DocumentChip.configure({ view: documentChipView ?? null }),
     QuestionContextFlag,
     // Proposals waiting for the User: words struck and added, and whole Blocks (#93).
     ProposalInsert,
