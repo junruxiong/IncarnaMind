@@ -31,7 +31,7 @@ export function TabGroups() {
   const width = useWidth(container);
   /** Widths while a divider is dragged, before the core has them. */
   const [dragging, setDragging] = useState<number[] | null>(null);
-  /** The Mind whose export dialog is open (the tab strip's Export, or the References block's). */
+  /** The Mind whose Export options sheet is open (⋯, ⌘K, or its References block's Export…). */
   const exporting = useExportDialog((state) => state.mindId);
   const exportMind = useAppStore((state) => state.minds.find((mind) => mind.id === exporting));
 

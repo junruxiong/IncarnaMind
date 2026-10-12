@@ -2,10 +2,19 @@ import { registerMenu } from "./menus";
 
 // Later features add their items with registerMenu: Move to… (#229, #212), Add to note (#201), History (#300), Tag colour and merge (#205).
 
+/** Export as… the last format (⇧⌘E), each other format, then the options sheet (#100). */
+const EXPORTS = [
+  "mind.export",
+  "mind.exportAs.docx",
+  "mind.exportAs.pdf",
+  "mind.exportAs.markdown",
+  "mind.exportOptions",
+] as const;
+
 registerMenu("mind", [
   "mind.open",
   "mind.openSide",
-  "mind.export",
+  ...EXPORTS,
   "mind.history",
   "mind.citationStyle",
   "skill.fromMind",
@@ -60,7 +69,7 @@ registerMenu("linkedFolder", [
 registerMenu("deleted", ["deleted.restore", "deleted.deletePermanently"]);
 
 // A tab's menu is its Mind's, then the tab's own.
-registerMenu("tab", ["mind.export", "mind.history", "mind.moveTo", "mind.delete"], 0);
+registerMenu("tab", [...EXPORTS, "mind.history", "mind.moveTo", "mind.delete"], 0);
 registerMenu(
   "tab",
   [
