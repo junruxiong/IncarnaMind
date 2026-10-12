@@ -48,6 +48,7 @@ registerMenu("linkedFolder", [
   "linkedFolder.layout",
   "linkedFolder.download",
   "linkedFolder.reveal",
+  "linkedFolder.locate",
   "linkedFolder.unlink",
 ]);
 
