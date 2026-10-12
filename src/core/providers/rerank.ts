@@ -177,6 +177,7 @@ export function createRerank(options: {
       paused: pausedNow(current),
       byDefault: current?.byDefault === true,
       model: builtIn.status(),
+      runsOn: builtIn.device(),
     };
   };
 
