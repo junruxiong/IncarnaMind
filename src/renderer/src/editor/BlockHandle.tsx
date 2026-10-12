@@ -4,12 +4,20 @@ import { NodeRangeSelection } from "@tiptap/extension-node-range";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { Editor } from "@tiptap/react";
 import { useEffect, useRef, useState } from "react";
-import { INCLUDE_IN_CONTEXT_ATTRIBUTE, NOTE_BLOCK_TYPES, QUESTION_BLOCK } from "../../../core/api";
+import {
+  type BlockOrigin,
+  INCLUDE_IN_CONTEXT_ATTRIBUTE,
+  NOTE_BLOCK_TYPES,
+  QUESTION_BLOCK,
+} from "../../../core/api";
 import { shortcutLabel } from "../commands/keymap";
 import { CheckIcon, GripIcon, TrashIcon } from "../components/icons";
+import { ConversationLineIcon } from "../components/lineIcons";
 import { useT } from "../i18n";
 import { findBlock, questionWithAnswer } from "./blockCommands";
 import { blockMenuOpeners } from "./blockMenuOpeners";
+import { originOf } from "./blockOrigins";
+import { openOrigin } from "./ConversationLinks";
 import { BLOCK_ID_ATTRIBUTE } from "./noteSchema";
 import { Popover } from "./Popover";
 
@@ -230,6 +238,11 @@ export function BlockHandle({ editor }: { editor: Editor }) {
         <BlockMenu
           anchor={menuFor.anchor}
           included={menuFor.included}
+          origin={originOf(editor.state, menuFor.id)}
+          onOpenOrigin={(origin) => {
+            closeMenu(false);
+            openOrigin(origin);
+          }}
           onDelete={deleteBlock}
           onToggleContext={toggleContext}
           onClose={closeMenu}
@@ -242,6 +255,8 @@ export function BlockHandle({ editor }: { editor: Editor }) {
 function BlockMenu({
   anchor,
   included,
+  origin,
+  onOpenOrigin,
   onDelete,
   onToggleContext,
   onClose,
@@ -249,6 +264,9 @@ function BlockMenu({
   anchor: Element | VirtualElement;
   /** The Note's context flag, or null when the Block isn't a Note. */
   included: boolean | null;
+  /** Where the Block came from: an Answer in the assistant (#201), or null. */
+  origin: BlockOrigin | null;
+  onOpenOrigin(origin: BlockOrigin): void;
   onDelete(): void;
   onToggleContext(): void;
   onClose(refocus: boolean): void;
@@ -272,9 +290,24 @@ function BlockMenu({
       }}
       className="editor-menu w-[240px]"
     >
-      {included !== null && (
+      {origin && (
         <button
           ref={first}
+          type="button"
+          role="menuitem"
+          data-testid="block-menu-open-conversation"
+          onClick={() => onOpenOrigin(origin)}
+          className="editor-menu-item"
+        >
+          <span className="editor-menu-icon">
+            <ConversationLineIcon className="size-4" />
+          </span>
+          <span className="flex-1">{t("origin.open")}</span>
+        </button>
+      )}
+      {included !== null && (
+        <button
+          ref={origin ? undefined : first}
           type="button"
           role="menuitemcheckbox"
           aria-checked={included}
@@ -287,7 +320,7 @@ function BlockMenu({
         </button>
       )}
       <button
-        ref={included === null ? first : undefined}
+        ref={included === null && !origin ? first : undefined}
         type="button"
         role="menuitem"
         data-testid="block-menu-delete"
