@@ -140,9 +140,9 @@ test("a web page added from the + menu is a Document named by its title, opened 
   await viewer.getByTestId("viewer-open-externally").click();
   await openDocumentMenu(row);
   const menu = window.getByTestId("document-file-actions");
-  await expect(menu.getByTestId("fetch-web-page-again")).toBeVisible();
-  await expect(menu.getByTestId("document-show-in-folder")).toHaveCount(0);
-  await menu.getByTestId("document-open-externally").click();
+  await expect(menu.getByTestId("document.fetchAgain")).toBeVisible();
+  await expect(menu.getByTestId("document.showInFolder")).toHaveCount(0);
+  await menu.getByTestId("document.openLivePage").click();
   await expect.poll(() => urlsOpened(app)).toEqual([`${site}/tea`, `${site}/tea`]);
   await app.close();
 });
