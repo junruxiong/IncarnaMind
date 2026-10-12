@@ -7,6 +7,7 @@ import { assistantTabOf } from "../../layoutSlice";
 import { useAppStore } from "../../store";
 import { useGroupsMerged } from "../../useWindowWidth";
 import { isWordFile, useWordImport } from "../../wordImport";
+import { ExportResultLine } from "../ExportResultLine";
 import { ExampleBanner, useIsExample } from "../GettingStarted";
 import { PlusLineIcon } from "../lineIcons";
 import { MakeSkillCard } from "../MakeSkillCard";
@@ -33,24 +34,27 @@ export function MindTab({ mindId }: { mindId: string }) {
   if (!mind) return null;
 
   return (
-    <div ref={dropTarget} className="mind-scroller min-h-0 flex-grow overflow-auto">
-      {/* Every text in it starts at one edge (styles.css, `.mind-column`). */}
-      <article data-testid="mind-pane" data-mind-id={mind.id} className="mind-column">
-        <div className="mind-measure">
-          {isExample && <ExampleBanner />}
-          <MindTitle mind={mind} />
-          <div ref={setCountSlot} data-testid="mind-count-slot" />
-          <MeetingInMind mindId={mind.id} />
-          {/* The example works without a chat model: it says so in its Answer instead. */}
-          {!isExample && <ChatReadinessNotice />}
-          <ComposerDockContext.Provider value={read ? assistantSlot : null}>
-            <CountSlotContext.Provider value={countSlot}>
-              <MindEditor mindId={mind.id} />
-            </CountSlotContext.Provider>
-          </ComposerDockContext.Provider>
-          <MakeSkillCard mindId={mind.id} />
-        </div>
-      </article>
+    <div className="relative flex min-h-0 flex-grow flex-col">
+      <div ref={dropTarget} className="mind-scroller min-h-0 flex-grow overflow-auto">
+        {/* Every text in it starts at one edge (styles.css, `.mind-column`). */}
+        <article data-testid="mind-pane" data-mind-id={mind.id} className="mind-column">
+          <div className="mind-measure">
+            {isExample && <ExampleBanner />}
+            <MindTitle mind={mind} />
+            <div ref={setCountSlot} data-testid="mind-count-slot" />
+            <MeetingInMind mindId={mind.id} />
+            {/* The example works without a chat model: it says so in its Answer instead. */}
+            {!isExample && <ChatReadinessNotice />}
+            <ComposerDockContext.Provider value={read ? assistantSlot : null}>
+              <CountSlotContext.Provider value={countSlot}>
+                <MindEditor mindId={mind.id} />
+              </CountSlotContext.Provider>
+            </ComposerDockContext.Provider>
+            <MakeSkillCard mindId={mind.id} />
+          </div>
+        </article>
+      </div>
+      <ExportResultLine mindId={mind.id} />
     </div>
   );
 }

@@ -63,6 +63,7 @@ contextBridge.exposeInMainWorld(BRIDGE_KEY, bridge);
 const files: FilesBridge = {
   pathForFile: (file) => webUtils.getPathForFile(file),
   showSavedFile: (path) => ipcRenderer.invoke(FILES_CHANNELS.showSavedFile, path),
+  openSavedFile: (path) => ipcRenderer.invoke(FILES_CHANNELS.openSavedFile, path),
   pickOutputLocation: () => ipcRenderer.invoke(FILES_CHANNELS.pickOutputLocation),
   openDataFolder: () => ipcRenderer.invoke(FILES_CHANNELS.openDataFolder),
   openLogsFolder: () => ipcRenderer.invoke(FILES_CHANNELS.openLogsFolder),

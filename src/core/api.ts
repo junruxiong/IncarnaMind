@@ -1082,6 +1082,8 @@ export interface UserSettings {
    * everywhere. Copies of the document being checked are left out either way.
    */
   leaveOutOwnFiles: boolean;
+  /** How Export and ⇧⌘E export a Mind: the choices last saved in Export options (#100). */
+  exportOptions: ExportPreferences;
   /** The monthly cap on models billed per token: off (null) by default. */
   monthlyCap: MonthlyCap | null;
 }
@@ -4595,15 +4597,29 @@ export interface TagMerge {
 // ---------------------------------------------------------------------------
 // Export
 
-/** What a Mind exports to: Markdown, for an archive, or Word (.docx), for the deliverable. */
-export type ExportFormat = "markdown" | "docx";
+/**
+ * What a Mind exports to: Markdown, for an archive, or Word (.docx) or PDF, for the
+ * deliverable. Formats are listed in the order the options sheet offers them.
+ */
+export const EXPORT_FORMATS = ["docx", "pdf", "markdown"] as const;
+export type ExportFormat = (typeof EXPORT_FORMATS)[number];
+
+/**
+ * The User's export choices (`UserSettings.exportOptions`): the format Export uses, and each
+ * format's own options. Markdown, the archive, always keeps the Questions.
+ */
+export interface ExportPreferences {
+  format: ExportFormat;
+  docx: { includeQuestions: boolean };
+  pdf: { includeQuestions: boolean };
+}
 
 export interface ExportMindOptions {
   format: ExportFormat;
   /**
    * Whether Questions are exported, marked as Questions. Defaults to true for
-   * Markdown, an archive of everything, and to false for .docx: the deliverable
-   * leaves the working material out.
+   * Markdown, an archive of everything, and to false for .docx and PDF: the
+   * deliverable leaves the working material out.
    */
   includeQuestions?: boolean;
 }
@@ -4630,12 +4646,18 @@ export interface MindExportPreview {
 
 /** A Mind exported as a file, for the host to save where the User chooses. */
 export interface MindExport extends MindExportPreview {
-  /** The file's contents: UTF-8 text for Markdown, a ZIP package for .docx. */
+  /** The file's contents: UTF-8 text for Markdown, a ZIP package for .docx, a PDF for PDF. */
   data: Uint8Array;
 }
 
 /** What `saveMindExport` did. */
 export type SavedMindExport =
+  /** Saved, with what it holds, so the result line can say how many quotes weren't found. */
+  | ({ status: "saved"; file: SavedFile } & Omit<MindExportPreview, "fileName">)
+  | Exclude<SavedExport, { status: "saved" }>;
+
+/** What saving an export did: a Skill's zip (`saveSkillExport`), and the base of a Mind's. */
+export type SavedExport =
   | { status: "saved"; file: SavedFile }
   /** The User didn't choose where new files go, so nothing was saved. */
   | { status: "cancelled" }
@@ -6158,7 +6180,7 @@ export interface CoreApi {
    * (as `saveMindExport` does, asking where the first time). The zip imports
    * again with the same preview.
    */
-  saveSkillExport(skillId: string): Promise<SavedMindExport>;
+  saveSkillExport(skillId: string): Promise<SavedExport>;
   /**
    * The chat model drafts a Skill from what the User just did in a Mind: its
    * Notes, Questions and Answers, the latest weighing most. Sends on the
@@ -6191,8 +6213,12 @@ export interface CoreApi {
    * included, its Questions, in order. Its Citations are in the Mind's
    * citation style (#289): in the text, or as notes, with the Bibliography at
    * the end; in Numbered, each is its own footnote naming its Document and
-   * Location, e.g. "Tides, p. 12–13" or "Deck, slide 4". A Citation is marked
-   * "[unverified]" unless its quote was found. Math stays LaTeX.
+   * Location, e.g. "Tides, p. 12–13" or "Deck, slide 4"; a web page's also
+   * names its site, its address and the day the quoted version was fetched.
+   * A Citation is marked "[unverified]" unless its quote was found. Math stays
+   * LaTeX in Markdown, becomes Word equations in a .docx, and is typeset in a
+   * PDF, which the `printer` adapter prints with each footnote on the page of
+   * its marker.
    */
   exportMind(mindId: string, options: ExportMindOptions): Promise<MindExport>;
   /**
