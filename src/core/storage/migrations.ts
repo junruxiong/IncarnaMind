@@ -1,3 +1,4 @@
+import { DataFromNewerVersionError } from "../errors";
 import type { Database } from "./database";
 
 /**
@@ -1269,6 +1270,70 @@ export const migrations: readonly Migration[] = [
         WHERE status = 'reserved' AND deleted_at IS NULL;
     `,
   },
+  {
+    version: 58,
+    description:
+      "Documents known by where they belong, not by their path on one computer (ADR-0020)",
+    sql: `
+      -- Where a Document's file belongs, the same on every computer. source_kind:
+      -- 'linked-folder' (relative_path is inside its Linked folder), 'data-folder' (a file
+      -- IncarnaMind keeps, such as a web page's snapshot: relative_path is inside the data
+      -- folder) or 'file' (added on its own: nothing but its id; relative_path is NULL),
+      -- checked in code, so a kind a newer version adds is left alone. relative_path has "/"
+      -- between names on every system. path, file_mtime_ms and file_status, and a Linked
+      -- folder's path, are this computer's: derived from these, or seen here, never synced.
+      -- The core marks the files in the data folder at its next start: only it knows where
+      -- that is. Files aren't read: each is found where it was.
+      ALTER TABLE documents ADD COLUMN source_kind TEXT NOT NULL DEFAULT 'file';
+      ALTER TABLE documents ADD COLUMN relative_path TEXT;
+      -- A Linked folder's path has "/" first on macOS and Linux, and "\\" between names on
+      -- Windows, which become "/". A path not inside its Linked folder gets none.
+      UPDATE documents SET source_kind = 'linked-folder', relative_path = (
+        SELECT CASE
+          WHEN substr(l.path, 1, 1) = '/' THEN CASE
+            WHEN substr(documents.path, 1, length(rtrim(l.path, '/')) + 1) = rtrim(l.path, '/') || '/'
+            THEN substr(documents.path, length(rtrim(l.path, '/')) + 2) END
+          ELSE CASE
+            WHEN substr(documents.path, 1, length(rtrim(l.path, '\\')) + 1) = rtrim(l.path, '\\') || '\\'
+            THEN replace(substr(documents.path, length(rtrim(l.path, '\\')) + 2), '\\', '/') END
+        END
+        FROM linked_folders l WHERE l.id = documents.linked_folder_id
+      ) WHERE linked_folder_id IS NOT NULL;
+      CREATE UNIQUE INDEX documents_by_place ON documents (linked_folder_id, relative_path)
+        WHERE deleted_at IS NULL AND linked_folder_id IS NOT NULL;
+
+      -- The workspace: everything this data folder holds. One live row, made by the core at
+      -- its first start; computers that sync a User's Minds will share it. No account.
+      CREATE TABLE workspace (
+        id TEXT PRIMARY KEY NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+    `,
+  },
+  {
+    version: 59,
+    description:
+      "Outside agents remember the settings files and folders IncarnaMind created (#495)",
+    sql: `
+      -- The settings files, and the folders for them, that setting an agent up created because
+      -- they did not exist (a JSON list of absolute paths, shallowest first), so Disconnect can
+      -- take back what IncarnaMind made and nothing the User had. On this device only.
+      ALTER TABLE agent_pairings ADD COLUMN created_paths TEXT NOT NULL DEFAULT '[]';
+    `,
+  },
+  {
+    version: 62,
+    description: "Answers in conversations keep how they were reached: their steps (#391)",
+    sql: `
+      -- An Answer's steps (src/core/answers, AnswerSteps), as JSON: when its Question went to the
+      -- model and when it ended, its phases and when each began (ISO 8601, UTC), and its model's
+      -- reasoning summary and how long it thought, from a provider that summarizes reasoning
+      -- (raw chain of thought is never stored). NULL: an Answer written before, and Questions.
+      ALTER TABLE conversation_messages ADD COLUMN steps TEXT;
+    `,
+  },
 ];
 
 /**
@@ -1291,9 +1356,7 @@ export function migrate(db: Database, list: readonly Migration[] = migrations): 
   const known = new Set(list.map((migration) => migration.version));
   const unknown = [...applied].filter((version) => !known.has(version));
   if (unknown.length > 0) {
-    throw new Error(
-      `The database was written by a newer version of IncarnaMind (it has schema migration ${Math.max(...unknown)}, which this version doesn't know).`,
-    );
+    throw new DataFromNewerVersionError(Math.max(...unknown));
   }
 
   for (const migration of list) {

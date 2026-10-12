@@ -14,7 +14,7 @@ import {
 } from "../../../../core/providers/catalog/providers";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
-import { useLanguage, useT } from "../../i18n";
+import { useGap, useLanguage, useT } from "../../i18n";
 import { ChevronDownLineIcon } from "../lineIcons";
 import {
   buttonClass,
@@ -66,6 +66,7 @@ export function ProviderForm({
   const t = useT();
   const id = useId();
   const language = useLanguage();
+  const gap = useGap();
   const [kind, setKind] = useState<FormKind | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   /** The region of a provider that has several; its first otherwise. */
@@ -87,6 +88,9 @@ export function ProviderForm({
     withMoreProviders ? providers.map((each) => each.kind) : [],
   );
   const catalog = kind ? catalogProviderOfKind(kind) : undefined;
+  const words = language === "zh-CN" ? "zh" : "en";
+  const summary = catalog?.dataUse.summary[words] ?? "";
+  const planCredits = catalog?.planCredits?.[words] ?? "";
   const endpoint = catalog ? endpointOf(catalog, endpointId) : undefined;
   const saved = kind
     ? providers.find((each) => sameServer(each, kind, endpoint?.id ?? "", baseUrl))
@@ -209,8 +213,9 @@ export function ProviderForm({
             <div className="flex flex-col gap-1" data-testid="provider-facts">
               {/* Where the data goes and what the provider does with it, before a key is pasted. */}
               <p className={hintClass}>
-                <span className="font-semibold text-ink">{t("providers.form.dataUse")}</span>{" "}
-                {catalog.dataUse.summary[language === "zh-CN" ? "zh" : "en"]}
+                <span className="font-semibold text-ink">{t("providers.form.dataUse")}</span>
+                {gap(t("providers.form.dataUse"), summary)}
+                {summary}
               </p>
             </div>
           )}
@@ -301,7 +306,8 @@ export function ProviderForm({
           {catalog?.planCredits && (
             // Which of the provider's own plans pay for a key, in its words (#122).
             <p data-testid="provider-plan-credits" className={`-mt-2 ${hintClass}`}>
-              {catalog.planCredits[language === "zh-CN" ? "zh" : "en"]}{" "}
+              {planCredits}
+              {gap(planCredits, t("providers.form.planCredits"))}
               <a
                 href={catalog.planCredits.url}
                 target="_blank"
