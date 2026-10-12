@@ -2,11 +2,11 @@ import type { CitationAttributes, Document } from "../../core/api";
 import type { Cue } from "../../core/documents/formats/vtt";
 import { writingTime } from "../../shared/blockTimes";
 import { core } from "./core";
+import { offerEditorUndo } from "./editor/editorUndo";
 import { addTranscriptLine, noteOf } from "./editor/meetingNotes";
 import { translateNow } from "./i18n";
 import { useMeetings } from "./meetings";
 import { useAppStore } from "./store";
-import { useUndo } from "./undo";
 
 /**
  * "Add to note" on a Transcript line (#139): the line's words as a bullet in
@@ -59,10 +59,7 @@ export async function addLineToNote(input: {
     );
     if (added === "already") return "already";
     if (!added) throw new Error(translateNow("transcript.addToNote.failed"));
-    useUndo.getState().offer({
-      message: translateNow("transcript.addToNote.undo"),
-      undo: async () => added.remove(),
-    });
+    offerEditorUndo(note.editor, translateNow("transcript.addToNote.undo"));
     return "added";
   } catch (error) {
     useAppStore.getState().reportError(error);
