@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { ProviderErrorKind } from "../../src/core/api";
-import { ANSWER_PROBLEMS, saveFailureReason } from "../../src/renderer/src/problems";
+import { ANSWER_PROBLEMS, answerProblem, saveFailureReason } from "../../src/renderer/src/problems";
 import { settingsPages } from "../../src/renderer/src/settingsPages";
 import { type MessageKey, translate } from "../../src/shared/i18n";
 
@@ -16,6 +16,7 @@ const KINDS: ProviderErrorKind[] = [
   "plan-limit",
   "blocked",
   "too-long",
+  "cost-cap",
   "unknown",
 ];
 
@@ -46,6 +47,24 @@ describe("a failed Answer's problem line", () => {
       url: "https://chatgpt.com/settings/usage",
       label: "answer.error.manageUsage",
     });
+  });
+
+  test("the monthly cap says so, and Change cap opens General, where the cap is", () => {
+    expect(ANSWER_PROBLEMS["cost-cap"]).toEqual({
+      line: "answer.error.cost-cap",
+      fix: { kind: "settings", page: "general", label: "answer.error.changeCap" },
+    });
+    expect(translate("en", "answer.error.cost-cap")).toBe("Monthly cap reached");
+    expect(translate("en", "answer.error.changeCap")).toBe("Change cap");
+  });
+
+  test("an Ollama Cloud allowance used up is managed on Ollama's own page", () => {
+    expect(answerProblem("plan-limit", "ollama")).toEqual({
+      line: "answer.error.plan-limit.ollama",
+      fix: { kind: "link", url: "https://ollama.com/settings", label: "answer.error.manageUsage" },
+    });
+    expect(answerProblem("plan-limit", "chatgpt")).toBe(ANSWER_PROBLEMS["plan-limit"]);
+    expect(answerProblem("plan-limit", undefined)).toBe(ANSWER_PROBLEMS["plan-limit"]);
   });
 
   test("what the User can fix in Settings opens the page that fixes it", () => {
