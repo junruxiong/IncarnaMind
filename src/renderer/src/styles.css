@@ -5663,7 +5663,7 @@
     flex-direction: column;
     gap: 2px;
     box-sizing: border-box;
-    width: 300px;
+    width: var(--chart-card-width, 300px);
     max-width: calc(100vw - 16px);
     padding: 12px 14px;
     border-radius: 10px;
@@ -5707,12 +5707,15 @@
     line-height: 16px;
     color: var(--color-ink-meta);
   }
+  /* Two lines at most, for a card narrowed beside a pie (#578). */
   .chart-card-where {
     flex: 1 1 auto;
     min-width: 0;
+    display: -webkit-box;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
   }
   .chart-card-open {
     flex: none;
