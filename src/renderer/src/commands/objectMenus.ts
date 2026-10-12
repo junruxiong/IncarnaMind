@@ -8,6 +8,7 @@ registerMenu("mind", [
   "mind.openSide",
   "mind.export",
   "mind.citationStyle",
+  "skill.fromMind",
   "mind.moveTo",
   "mind.rename",
   "mind.delete",
