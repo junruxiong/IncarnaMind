@@ -152,6 +152,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "—",
     "mind.export",
     "mind.exportAs.pdf",
+    "mind.exportAs.html",
     "mind.exportAs.markdown",
     "mind.exportOptions",
     "mind.citationStyle",
@@ -265,9 +266,10 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
   const tabMenu = tab.getByTestId("tab-actions");
   const byRightClick = await commandsIn(tabMenu);
   // Its Mind's items first, then the tab's own.
-  expect(byRightClick.slice(0, 7)).toEqual([
+  expect(byRightClick.slice(0, 8)).toEqual([
     "mind.export",
     "mind.exportAs.pdf",
+    "mind.exportAs.html",
     "mind.exportAs.markdown",
     "mind.exportOptions",
     "—",
@@ -350,7 +352,7 @@ test("the context-menu key and Shift+F10 open the focused row's menu; arrows mov
   // Enter runs the focused item: Export options… opens the options sheet for this Mind.
   await row.focus();
   await window.keyboard.press("Shift+F10");
-  for (let step = 0; step < 5; step++) await window.keyboard.press("ArrowDown");
+  for (let step = 0; step < 6; step++) await window.keyboard.press("ArrowDown");
   await expect(menu.getByTestId("mind.exportOptions")).toBeFocused();
   await window.keyboard.press("Enter");
   await expect(window.getByTestId("export-dialog")).toBeVisible();
@@ -385,6 +387,7 @@ test("each item shows its shortcut as the system writes it, and the labels are i
     "在侧边打开",
     /^导出为 Word（\.docx）(⇧⌘E|Ctrl\+Shift\+E)$/,
     "导出为 PDF",
+    "导出为 HTML",
     "导出为 Markdown（.md）",
     "导出选项…",
     "引用格式…",
