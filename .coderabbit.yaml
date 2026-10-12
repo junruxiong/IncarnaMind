@@ -33,10 +33,14 @@ reviews:
 knowledge_base:
   code_guidelines:
     filePatterns:
+      - AGENTS.md
       - CONTEXT.md
       - CONTRIBUTING.md
       - docs/development.md
       - docs/adr/*.md
+      - docs/agents/interaction.md
+      - docs/agents/testing.md
+      - docs/agents/zh-CN.md
 
 # Pull requests only: no plans or comments on issues.
 issue_enrichment:
