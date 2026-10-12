@@ -6,6 +6,8 @@ import { footnotesOf, paragraphsOf, part, unzip } from "../tests/helpers/docx";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
+  addToNote,
+  askInAssistant,
   clickEditItem,
   createDataFolder,
   dismissChatSetup,
@@ -112,18 +114,14 @@ async function openApp(language: Language, width: number) {
   return running;
 }
 
-/** A Mind with an Answer that wrote a table of quarterly figures, each cited but the last. */
+/** A Mind holding an Answer's table of quarterly figures, each cited but the last, added from the assistant. */
 async function askForFigures(window: Page, language: Language) {
   await addDocuments(window, [join(sources, "Acme.pdf")]);
   await newMind(window);
   const editor = window.getByTestId("mind-editor");
   await pointAndClick(window, editor);
-  await window.keyboard.press("ControlOrMeta+j");
-  await window.keyboard.type(WORDS[language].question);
-  await window.keyboard.press("Enter");
-  const answer = editor.getByTestId("answer");
-  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-  const table = answer.locator("table");
+  await addToNote(window, await askInAssistant(window, WORDS[language].question));
+  const table = editor.locator("table");
   await expect(table.locator("tr")).toHaveCount(5);
   await expect(table.getByTestId("citation")).toHaveCount(7);
   return { editor, table };
