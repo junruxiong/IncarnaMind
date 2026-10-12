@@ -55,10 +55,15 @@ export function useScannedPages(document: Document): ReadonlyMap<number, Scanned
     core.readScannedText(id).then(
       (scanned) => {
         if (!current) return;
-        setPages(
-          new Map(
-            scanned.pages.map((page) => [page.page, scannedPage(page.text, page.anchors)] as const),
-          ),
+        // A PDF of text has none, and nothing to draw again.
+        setPages((before) =>
+          before.size === 0 && scanned.pages.length === 0
+            ? before
+            : new Map(
+                scanned.pages.map(
+                  (page) => [page.page, scannedPage(page.text, page.anchors)] as const,
+                ),
+              ),
         );
       },
       // Without its scanned text, a page shows its picture, as before it was read.
