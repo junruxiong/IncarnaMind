@@ -892,7 +892,8 @@ describe("A small local model in structured output", { timeout: 60_000 }, () => 
   test("a figure its one request fixes is worked out", async () => {
     const { finished, text } = await askSmallModel(
       { ...ANSWER, calculations: [growth[0], badMargin] },
-      { calculations: [growth[1]] },
+      // A marker written as the Answer writes it, as small models do.
+      { calculations: [{ ...growth[1], marker: "[=2]" }] },
     );
 
     expect(finished.figures.map((figure) => figure.shown)).toEqual([
