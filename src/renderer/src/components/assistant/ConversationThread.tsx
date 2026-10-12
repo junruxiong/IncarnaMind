@@ -4,7 +4,7 @@ import { mindName } from "../../../../shared/naming";
 import { type AddTarget, addAnswer } from "../../addToNote";
 import { answerBlocks } from "../../answerBlocks";
 import { selectedNotes } from "../../answerEditors";
-import { readsLine } from "../../assistantContext";
+import { askedFromLine, stepsScope } from "../../assistantContext";
 import { readMindHandle } from "../../commands/handles";
 import { composerScope, useComposer } from "../../composer";
 import {
@@ -15,7 +15,7 @@ import {
   useOpenConversation,
 } from "../../conversations";
 import { useT } from "../../i18n";
-import { scopeChips } from "../../scope";
+import { type ScopeChip, scopeChips } from "../../scope";
 import { useAppStore } from "../../store";
 import { SearchIcon } from "../icons";
 import { SparkLineIcon } from "../lineIcons";
@@ -36,8 +36,8 @@ const notesOf = (answer: ConversationAnswer) =>
 /**
  * The conversation the assistant shows (#201): the Questions as bubbles at the
  * right, as in Claude and ChatGPT, and the Answers with their steps,
- * Citations, checks and actions (`AssistantAnswer`); empty, what the next
- * Question reads and searches, and what asking here does. A Question shows
+ * Citations, checks and actions (`AssistantAnswer`); empty, where the next
+ * Question is asked from and what it searches, and what asking here does. A Question shows
  * the moment it is sent, with its Answer's first step and Stop under it
  * before the core has checked the model, so asking never looks like nothing
  * happened. It keeps up with an Answer being written while the User is at its
@@ -55,7 +55,8 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
   const focusedMindName = focusedMindId
     ? (focusedMind && mindName(focusedMind)) || t("mind.untitled")
     : null;
-  const reads = useReadsLine(focusedMindId);
+  const nextScope = useNextScope(focusedMindId);
+  const askedFrom = askedFromLine(t, focusedMind ? focusedMindName : null, nextScope);
   const [picking, setPicking] = useState<{
     answer: ConversationAnswer;
     anchor: HTMLElement;
@@ -128,9 +129,9 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
     >
       {messages.length === 0 && asking === null && (
         <>
-          <p data-testid="assistant-reads" title={reads} className="assistant-reads">
-            <SearchIcon aria-hidden="true" className="assistant-reads-icon" />
-            <span className="assistant-reads-text">{reads}</span>
+          <p data-testid="assistant-asked-from" title={askedFrom} className="assistant-asked-from">
+            <SearchIcon aria-hidden="true" className="assistant-asked-from-icon" />
+            <span className="assistant-asked-from-text">{askedFrom}</span>
           </p>
           <p data-testid="assistant-empty" className="assistant-empty">
             {t("assistant.empty")}
@@ -159,15 +160,11 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
           className="assistant-answer"
         >
           <LiveLine
-            step={
-              focusedMind
-                ? {
-                    kind: "reading",
-                    mind: { mindId: focusedMind.id, name: mindName(focusedMind), deleted: false },
-                  }
-                : { kind: "writing" }
-            }
-            question={undefined}
+            step={{ kind: "searching" }}
+            scope={stepsScope(
+              t,
+              nextScope.filter((chip) => !chip.deleted),
+            )}
           />
           {stopWanted ? (
             // Stopped before it started: it says so at once, and stops as it starts.
@@ -228,9 +225,8 @@ function QuestionBubble({ question, text }: { question?: ConversationQuestion; t
   );
 }
 
-/** What the next Question reads and searches, from the Mind in focus and its composer's scope. */
-function useReadsLine(mindId: string | null): string {
-  const t = useT();
+/** What the next Question searches: the Search scope of the composer of the Mind in focus; none with no Mind. */
+function useNextScope(mindId: string | null): ScopeChip[] {
   const mind = useAppStore((state) => state.minds.find((each) => each.id === mindId));
   const draft = useComposer((state) => (mindId ? state.drafts[mindId] : undefined));
   const folders = useAppStore((state) => state.folders);
@@ -238,11 +234,10 @@ function useReadsLine(mindId: string | null): string {
   const deletedGroups = useAppStore((state) => state.library?.deletedGroups);
   const tags = useAppStore((state) => state.tags);
   const documents = useAppStore((state) => state.documents);
-  if (!mind) return readsLine(t, null, []);
+  if (!mind) return [];
   const scope = composerScope(
     draft ?? { text: "", scope: null, skill: null, pastes: [] },
     mind.folderId,
   );
-  const chips = scopeChips({ folders, groups, deletedGroups, tags, documents }, scope);
-  return readsLine(t, mindName(mind) || t("mind.untitled"), chips);
+  return scopeChips({ folders, groups, deletedGroups, tags, documents }, scope);
 }

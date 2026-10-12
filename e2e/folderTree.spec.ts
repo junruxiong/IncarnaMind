@@ -354,11 +354,11 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     await dialog.getByTestId("confirm-delete-folder").click();
 
     // Its Mind is Not in a Folder now: it searches everything; the Answer asked, which had no
-    // Documents to search in the Folder, still says it only read the Mind.
+    // Documents to search in the Folder, still says only the Mind it was asked from.
     await expect(renamed).toHaveCount(0);
     await expect(notInAFolder(window).getByTestId("mind-list-item")).toHaveText("Shortlist");
     await expect(composer.getByTestId("composer-scope-all")).toBeVisible();
-    await expect(answer.getByTestId("answer-steps")).toHaveText("Read Shortlist");
+    await expect(answer.getByTestId("answer-steps")).toHaveText("Asked from Shortlist");
 
     // In Chinese, the same tree.
     await window.evaluate(() =>

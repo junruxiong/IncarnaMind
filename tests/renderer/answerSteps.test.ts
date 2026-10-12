@@ -76,7 +76,7 @@ function input(
       },
       ...answer,
     },
-    readFrom: null,
+    askedFrom: null,
     meeting: false,
     ...extra,
   };
@@ -162,26 +162,26 @@ describe("an Answer's steps", () => {
     expect(foldedLine(older)).toEqual({ kind: "searched", sources: 0, extraScopes: 0 });
   });
 
-  // protects=a deleted Mind reads as deleted, in the row and the folded line; fails_when=its old name shows as if it were there; no_claim=none beyond protects.
-  test("a deleted Mind is read as deleted", () => {
+  // protects=a Question asked from a Mind deleted since says so, in the row and the folded line; fails_when=its old name shows as if it were there; no_claim=none beyond protects.
+  test("asked from a Mind deleted since", () => {
     const deleted = { ...MIND, deleted: true };
-    const steps = input({}, { readFrom: deleted });
-    expect(stepRows(steps)[1]).toEqual({ kind: "read", mind: deleted });
-    expect(foldedLine(steps)).toEqual({ kind: "read", mind: deleted });
+    const steps = input({}, { askedFrom: deleted });
+    expect(stepRows(steps)[1]).toEqual({ kind: "asked", mind: deleted });
+    expect(foldedLine(steps)).toEqual({ kind: "asked", mind: deleted });
   });
 
   // protects=an Answer asked during a meeting folds to "Listened to the live transcript"; fails_when=it says Searched; no_claim=whether it was asked during the recording is the caller's.
   test("a meeting: it listened to the live transcript", () => {
     const steps = input(
       { toolCalls: [search("s1", "budget")], citations: [citation(1, "a", "t1", 1)] },
-      { readFrom: MIND, meeting: true },
+      { askedFrom: MIND, meeting: true },
     );
     expect(foldedLine(steps)).toEqual({ kind: "listened", sources: 1 });
   });
 
-  // protects=with no search the line says the Mind read, or the model with no Mind; fails_when=it says Searched; no_claim=none beyond protects.
-  test("no search: read the Mind in focus, or answered by the model with none", () => {
-    expect(foldedLine(input({}, { readFrom: MIND }))).toEqual({ kind: "read", mind: MIND });
+  // protects=with no search the line says the Mind it was asked from, or the model with no Mind; fails_when=it says Searched; no_claim=none beyond protects.
+  test("no search: asked from the Mind in focus, or answered by the model with none", () => {
+    expect(foldedLine(input({}, { askedFrom: MIND }))).toEqual({ kind: "asked", mind: MIND });
     expect(foldedLine(input())).toEqual({ kind: "answered", model: "claude-sonnet-5-5" });
     expect(foldedLine(input({ model: null }))).toBeNull();
   });
@@ -194,7 +194,7 @@ describe("an Answer's steps", () => {
     );
   });
 
-  // protects=the rows' order: reasoning, Read, the calls as they started, the check last; fails_when=any row is out of order or a call waiting for approval shows; no_claim=none beyond protects.
+  // protects=the rows' order: reasoning, the Mind it was asked from, the calls as they started, the check last; fails_when=any row is out of order or a call waiting for approval shows; no_claim=none beyond protects.
   test("the order of the rows, and the check last with what wasn't found", () => {
     const skillUse: AnswerToolCall = {
       id: "k1",
@@ -225,12 +225,12 @@ describe("an Answer's steps", () => {
             { ...citation(2, "a", "d1", 5), check: "not-found" },
           ],
         },
-        { readFrom: MIND },
+        { askedFrom: MIND },
       ),
     );
     expect(rows.map((row) => row.kind)).toEqual([
       "reasoning",
-      "read",
+      "asked",
       "skill",
       "search",
       "call",
@@ -246,17 +246,16 @@ describe("the live step", () => {
     extra: Partial<Parameters<typeof liveStep>[0]> = {},
   ) =>
     liveStep({
-      ...input(answer),
-      readFrom: MIND,
+      answer: input(answer).answer,
       phase: undefined,
       waitingForApproval: false,
       ...extra,
     });
 
-  // protects=the live line moves Reading → Searching → Writing → Checking from the Answer's state, and waiting for approval wins; fails_when=a step comes out of order or approval is hidden; no_claim=the 1-second hold is the component's, tested end to end.
-  test("reading, searching, writing, checking; waiting for approval first", () => {
-    expect(live({})).toEqual({ kind: "reading", mind: MIND });
-    expect(live({}, { phase: "searching" })).toEqual({ kind: "searching" });
+  // protects=the live line starts at Searching, as nothing of the Mind is read, then moves to Writing and Checking from the Answer's state, and waiting for approval wins; fails_when=a step comes out of order, a reading step appears, or approval is hidden; no_claim=the 1-second hold is the component's, tested end to end.
+  test("searching, writing, checking; waiting for approval first", () => {
+    expect(live({})).toEqual({ kind: "searching" });
+    expect(live({}, { phase: "writing" })).toEqual({ kind: "searching" });
     expect(live({ toolCalls: [search("s1", "heat")] }, { phase: "writing" })).toEqual({
       kind: "searching",
     });
@@ -268,6 +267,5 @@ describe("the live step", () => {
     ).toEqual({ kind: "checking", count: 1 });
     expect(live({}, { phase: "checking-quotes" })).toEqual({ kind: "checking", count: 0 });
     expect(live({}, { phase: "searching", waitingForApproval: true })).toEqual({ kind: "waiting" });
-    expect(live({ text: "" }, { readFrom: null })).toEqual({ kind: "writing" });
   });
 });

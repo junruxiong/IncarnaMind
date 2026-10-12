@@ -20,8 +20,12 @@ export const RUN_SCRIPT = "run_skill_script";
 /** What the steps are read from. */
 export interface StepsInput {
   answer: Pick<ConversationAnswer, "text" | "citations" | "toolCalls" | "model" | "steps">;
-  /** The Mind in focus when the Question was asked; null when none was. */
-  readFrom: AskedFrom | null;
+  /**
+   * The Mind in focus when the Question was asked; null when none was. Nothing
+   * of it goes to the model: a conversation's Question context is its earlier
+   * Questions and Answers (CONTEXT.md).
+   */
+  askedFrom: AskedFrom | null;
   /** It was asked while its Mind's meeting was recording: the assistant listened to the live transcript. */
   meeting: boolean;
 }
@@ -34,7 +38,7 @@ export type StepRow =
   | { kind: "reasoning"; model: string; summary: string; seconds: number }
   /** A model that gave no reasoning summary, and how long the Answer took when that is known. */
   | { kind: "answered"; model: string; seconds: number | null }
-  | { kind: "read"; mind: AskedFrom }
+  | { kind: "asked"; mind: AskedFrom }
   /** One search, or several in a row, with the sources their Citations point to. */
   | {
       kind: "search";
@@ -55,14 +59,13 @@ export type StepRow =
 export type FoldedLine =
   | { kind: "searched"; sources: number; extraScopes: number }
   | { kind: "listened"; sources: number }
-  | { kind: "read"; mind: AskedFrom }
+  | { kind: "asked"; mind: AskedFrom }
   | { kind: "answered"; model: string };
 
 export type LiveStep =
   | { kind: "waiting" }
   | { kind: "consent" }
   | { kind: "loading" }
-  | { kind: "reading"; mind: AskedFrom }
   | { kind: "searching" }
   | { kind: "call"; call: AnswerToolCall }
   | { kind: "writing" }
@@ -114,11 +117,11 @@ const placeOf = (citation: MarkedCitation) =>
  * and the check of the Citations last. A call still waiting for the User has
  * no row: its approval card shows instead.
  */
-export function stepRows({ answer, readFrom }: StepsInput): StepRow[] {
+export function stepRows({ answer, askedFrom }: StepsInput): StepRow[] {
   const rows: StepRow[] = [];
   const first = modelRow(answer);
   if (first) rows.push(first);
-  if (readFrom) rows.push({ kind: "read", mind: readFrom });
+  if (askedFrom) rows.push({ kind: "asked", mind: askedFrom });
 
   const searches: Extract<StepRow, { kind: "search" }>[] = [];
   const skills = new Map<string, Extract<StepRow, { kind: "skill" }>>();
@@ -206,16 +209,16 @@ function extraScopes(calls: readonly AnswerToolCall[]): number {
 
 /**
  * The folded line: what was searched and how many Documents the Answer
- * cites; with no search, the Mind it read, or the model that answered. Null
- * for an Answer no model wrote that read nothing.
+ * cites; with no search, the Mind it was asked from, or the model that
+ * answered. Null for an Answer no model wrote, asked from no Mind.
  */
-export function foldedLine({ answer, readFrom, meeting }: StepsInput): FoldedLine | null {
+export function foldedLine({ answer, askedFrom, meeting }: StepsInput): FoldedLine | null {
   const sources = sourceCount(answer.citations);
   if (meeting) return { kind: "listened", sources };
   if (answer.toolCalls.some((call) => isSearch(call) && call.status === "done")) {
     return { kind: "searched", sources, extraScopes: extraScopes(answer.toolCalls) };
   }
-  if (readFrom) return { kind: "read", mind: readFrom };
+  if (askedFrom) return { kind: "asked", mind: askedFrom };
   return answer.model ? { kind: "answered", model: answer.model.modelId } : null;
 }
 
@@ -224,14 +227,13 @@ export function foldedLine({ answer, readFrom, meeting }: StepsInput): FoldedLin
  * text and its Citations: waiting for the User first; then loading,
  * checking quotes, searching or another call running; then writing, which
  * becomes checking once every marker in the text has its Citation; before
- * any text, searching once it has searched, else reading the Mind in focus.
+ * any text, searching: nothing of the Mind is read, so the steps start there.
  */
 export function liveStep({
   answer,
-  readFrom,
   phase,
   waitingForApproval,
-}: Omit<StepsInput, "meeting"> & {
+}: Pick<StepsInput, "answer"> & {
   phase: AnswerPhase | undefined;
   waitingForApproval: boolean;
 }): LiveStep {
@@ -250,8 +252,7 @@ export function liveStep({
       ? { kind: "checking", count: markers.length }
       : { kind: "writing" };
   }
-  if (answer.toolCalls.some(isSearch)) return { kind: "searching" };
-  return readFrom ? { kind: "reading", mind: readFrom } : { kind: "writing" };
+  return { kind: "searching" };
 }
 
 /** Steps that stand for the same thing: a new count of Citations is the same step. */

@@ -1,11 +1,11 @@
 import { describe, expect, test } from "vitest";
-import { readsLine, stepsScope } from "../../src/renderer/src/assistantContext";
+import { askedFromLine, stepsScope } from "../../src/renderer/src/assistantContext";
 import type { ScopeChip } from "../../src/renderer/src/scope";
 import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
 
 /*
- * What the next Question reads and searches, which an empty conversation
- * says (#253, #258, #391), and what a Question searched, in its Answer's
+ * Where the next Question is asked from and what it searches, which an
+ * empty conversation says (#253, #258, #391), and what a Question searched, in its Answer's
  * steps (#391); in English and Chinese.
  */
 
@@ -20,30 +20,32 @@ const chip = (name: string | null, deleted = false): ScopeChip => ({
   documentKind: null,
 });
 
-describe("what the assistant reads", () => {
+describe("where the next Question is asked from, and what it searches", () => {
   test("with no Mind in view, it searches All Documents", () => {
-    expect(readsLine(en, null, [chip("Thesis")])).toBe("Searches All Documents");
-    expect(readsLine(zh, null, [])).toBe("搜索全部文档");
+    expect(askedFromLine(en, null, [chip("Thesis")])).toBe("Searches All Documents");
+    expect(askedFromLine(zh, null, [])).toBe("搜索全部文档");
   });
 
   test("a Mind and its Folder", () => {
-    expect(readsLine(en, "Chapter 3", [chip("Thesis")])).toBe(
-      "Reads “Chapter 3” · searches “Thesis”",
+    expect(askedFromLine(en, "Chapter 3", [chip("Thesis")])).toBe(
+      "Asked from “Chapter 3” · searches “Thesis”",
     );
-    expect(readsLine(zh, "第三章", [chip("论文")])).toBe("正在读“第三章” · 搜索“论文”");
+    expect(askedFromLine(zh, "第三章", [chip("论文")])).toBe("从“第三章”提问 · 搜索“论文”");
   });
 
   test("a Mind with no scope searches All Documents; deleted items are left out", () => {
-    expect(readsLine(en, "Notes", [])).toBe("Reads “Notes” · searches All Documents");
-    expect(readsLine(en, "Notes", [chip(null, true), chip("Old", true)])).toBe(
-      "Reads “Notes” · searches All Documents",
+    expect(askedFromLine(en, "Notes", [])).toBe("Asked from “Notes” · searches All Documents");
+    expect(askedFromLine(en, "Notes", [chip(null, true), chip("Old", true)])).toBe(
+      "Asked from “Notes” · searches All Documents",
     );
   });
 
   test("a scope of several items names the first and counts the rest", () => {
     const scope = [chip("Thesis"), chip("Leeds data"), chip(null, true), chip("Report.pdf")];
-    expect(readsLine(en, "Notes", scope)).toBe("Reads “Notes” · searches “Thesis” and 2 more");
-    expect(readsLine(zh, "笔记", scope)).toBe("正在读“笔记” · 搜索“Thesis”等 3 项");
+    expect(askedFromLine(en, "Notes", scope)).toBe(
+      "Asked from “Notes” · searches “Thesis” and 2 more",
+    );
+    expect(askedFromLine(zh, "笔记", scope)).toBe("从“笔记”提问 · 搜索“Thesis”等 3 项");
   });
 });
 
