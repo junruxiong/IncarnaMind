@@ -508,15 +508,6 @@ export function createMeetings(options: MeetingsOptions) {
       const parts = listParts(folder);
       const periods = periodsOf(row);
       const last = periods.at(-1);
-      for (const part of unfinished) {
-        health.add(row.id, {
-          kind: "audioLost",
-          source: part.source,
-          cause: "closed",
-          atMs: part.offsetMs,
-          durationMs: part.durationMs,
-        });
-      }
       if (last && last.durationMs === null) {
         const audioEnd = Math.max(
           last.offsetMs,
@@ -537,6 +528,15 @@ export function createMeetings(options: MeetingsOptions) {
             durationMs: last.durationMs ?? 0,
           });
         }
+      }
+      for (const part of unfinished) {
+        health.add(row.id, {
+          kind: "audioLost",
+          source: part.source,
+          cause: "closed",
+          atMs: part.offsetMs,
+          durationMs: part.durationMs,
+        });
       }
       save(row.id, {
         status: "paused",

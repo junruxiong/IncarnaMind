@@ -518,7 +518,8 @@ test("recording details: a slow engine, a fallback and a part that can't be save
   await expect(details).toContainText("No audio was lost");
   await shot(window, "meeting-details-slow-fallback-en");
 
-  // A file stands where the meeting's folder was: the next part can't be saved.
+  // Once the first part is saved, a file stands where the meeting's folder was: the next can't be.
+  await expect.poll(() => partsOf(meetingId, "microphone").length, { timeout: 30_000 }).toBe(1);
   const folder = join(dataDir, "meetings", meetingId);
   await rename(folder, `${folder}-aside`);
   await writeFile(folder, "");

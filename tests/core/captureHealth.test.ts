@@ -126,6 +126,7 @@ describe("A Meeting's capture health", { timeout: 60_000 }, () => {
     const second = await transcribingCore(dataDir, { log });
     const { health } = await meetingOf(second.core, meeting.id);
     expect(health.events).toEqual([
+      { kind: "audioRecovered", at: AT, atMs: 30 * SECOND, parts: 6, durationMs: 30 * SECOND },
       {
         kind: "audioLost",
         at: AT,
@@ -134,7 +135,6 @@ describe("A Meeting's capture health", { timeout: 60_000 }, () => {
         cause: "closed",
         durationMs: 10 * SECOND,
       },
-      { kind: "audioRecovered", at: AT, atMs: 30 * SECOND, parts: 6, durationMs: 30 * SECOND },
     ]);
     expect(fieldsOf(entries, "capture.audioRecovered")).toEqual([
       { meetingId: meeting.id, atMs: 30 * SECOND, parts: 6, durationMs: 30 * SECOND },
