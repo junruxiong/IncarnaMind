@@ -2398,17 +2398,19 @@ export const en = {
   "agents.settings.connected": "Connected agents",
   "agents.settings.connect": "Connect an agent",
   "agents.settings.connect.note": "Agents found on this computer come first.",
-  "agents.settings.more": "More agents",
+  "agents.settings.web":
+    "Chat apps that only work on the internet, such as ChatGPT and Claude on the web, Gemini, Le Chat and Grok, can’t reach IncarnaMind, which serves only this computer.",
   "agents.settings.connectButton": "Connect",
   "agents.settings.help": "Step-by-step help",
   "agents.setup.bundle": "One click: Claude opens to install it",
   "agents.setup.link": "One click: {agent} opens to install it",
   "agents.setup.file": "IncarnaMind adds itself to {agent}’s settings",
   "agents.setup.command": "Copy one line to run in a terminal",
-  "agents.setup.manual": "Copy the settings to paste into {agent}",
-  "agents.setup.installed": "On this computer",
+  "agents.setup.other": "Copy the settings to paste into your agent",
+  "agents.note.codex":
+    "Used in the ChatGPT app’s Work and Codex modes; ordinary Chat mode doesn’t use it.",
   "agents.setup.undoChanged": "{path} has changed since, so IncarnaMind left it as it is.",
-  "agents.client.other": "Another agent",
+  "agents.client.other": "Other agent",
   "agents.pairing.reads": "Reads {folders}",
   "agents.pairing.readsNothing": "Reads no folders yet",
   "agents.pairing.lastUsed": "Last used {when}",
@@ -2447,6 +2449,7 @@ export const en = {
   "agents.connect.title": "Let {agent} read your Documents?",
   "agents.connect.body":
     "{agent} will be able to search and read the Documents in the folders you choose, and your Minds in them. What it reads goes to the AI model {agent} uses, under that service’s terms, not IncarnaMind’s. Some plans may use it to train their models.",
+  "agents.connect.name": "Name",
   "agents.connect.folders": "Folders it may read",
   "agents.connect.noFolders":
     "You don’t have any folders yet. Make one in the Library, then come back.",
@@ -2461,7 +2464,7 @@ export const en = {
   "agents.done.command": "Copied. Paste it into a terminal and run it.",
   "agents.done.settings": "Copied. In {agent}, add it as a new server, then restart {agent}.",
   "agents.done.settings.other":
-    "Copied. Paste it where your agent adds a new server, then restart the agent.",
+    "Copied. Paste it where your agent adds a new server, then restart the agent. If it asks for a command, arguments and environment instead, they are in the settings you copied (Details for technical users).",
   "agents.done.unreadable":
     "{agent}’s settings file couldn’t be read, so IncarnaMind left it alone. The settings are copied: paste them into {path}.",
   "agents.done.undo": "Undo",
