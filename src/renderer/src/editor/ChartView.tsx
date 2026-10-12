@@ -18,8 +18,12 @@ import {
   seriesName as nameOfSeries,
   readChart,
 } from "../../../shared/charts";
-import { badgeMessage, type CitationState, citationState } from "../../../shared/citations";
-import { citationLocation, formatLocation } from "../../../shared/locations";
+import {
+  badgeMessage,
+  type CitationState,
+  citationSource,
+  citationState,
+} from "../../../shared/citations";
 import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
 import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
@@ -270,13 +274,8 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
   const sourceText = (value: ChartValue | null | undefined) => {
     const state = stateOf(value);
     if (!value?.citation || !state) return t("chart.point.noCitation");
-    const location = citationLocation(value.citation);
-    const document = value.citation.documentName ?? "";
     const badge = badgeMessage(state, value.citation, t);
-    const where = location
-      ? t("citation.where", { document, location: formatLocation(location, t) })
-      : document;
-    return `${where}. ${t(badge.key, badge.params)}`;
+    return `${citationSource(value.citation, t).text}. ${t(badge.key, badge.params)}`;
   };
 
   const openValue = (point: PointRef) => {

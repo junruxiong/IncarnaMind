@@ -1,7 +1,7 @@
 import type { CitationCheck } from "../../../core/api";
 import type { ChartInk } from "../../../shared/chartLayout";
 import { type ChartSources, MAX_CHART_VALUES } from "../../../shared/charts";
-import { citationLocation, formatLocation } from "../../../shared/locations";
+import { citationSource } from "../../../shared/citations";
 import { useT } from "../i18n";
 import { ChartCheck } from "./ChartCheck";
 
@@ -27,18 +27,18 @@ export function ChartFoot({
   const t = useT();
   const cited = sources.values - sources.uncited;
   const place = sources.places[0]?.citation;
-  const location = place ? citationLocation(place) : null;
-  const document = place?.documentName ?? "";
+  const source = place ? citationSource(place, t) : null;
+  const document = source?.name ?? "";
   const plural = (count: number) => (count === 1 ? "one" : "other");
 
   let said: string | null = null;
   if (sources.values > 0 && cited === 0) {
     said = t(`chart.source.none.${plural(sources.values)}`, { count: sources.values });
-  } else if (cited > 0 && sources.places.length === 1 && location) {
+  } else if (cited > 0 && sources.places.length === 1 && source?.where) {
     said = t(`chart.source.place.${plural(cited)}`, {
       count: cited,
       document,
-      location: formatLocation(location, t),
+      location: source.where,
     });
   } else if (cited > 0 && sources.documents === 1) {
     said = t(`chart.source.document.${plural(cited)}`, { count: cited, document });
