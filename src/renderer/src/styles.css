@@ -1444,7 +1444,6 @@
     overflow: auto;
     font: inherit;
     white-space: pre-wrap;
-    overflow-wrap: anywhere;
     color: var(--color-ink);
   }
   .composer-controls {
@@ -2628,7 +2627,6 @@
     line-height: 18px;
     color: var(--color-ink-secondary);
     white-space: pre-wrap;
-    overflow-wrap: anywhere;
     user-select: text;
   }
   .answer-call-detail-label {
@@ -2702,7 +2700,6 @@
   }
   .approval-title-text {
     min-width: 0;
-    overflow-wrap: anywhere;
   }
   .approval-dot {
     width: 8px;
@@ -2750,7 +2747,6 @@
       margin: 0;
       color: var(--color-ink);
       white-space: pre-wrap;
-      overflow-wrap: anywhere;
     }
     pre {
       font-family: var(--font-mono);
@@ -3259,7 +3255,6 @@
     line-height: 22px;
     color: var(--color-ink-secondary);
     white-space: pre-wrap;
-    overflow-wrap: anywhere;
     cursor: default;
     user-select: none;
 
@@ -5828,7 +5823,6 @@
     line-height: 22px;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
-    overflow-wrap: anywhere;
   }
   .chart-card-detail {
     font-size: 12px;
