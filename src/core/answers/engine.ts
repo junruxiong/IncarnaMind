@@ -146,6 +146,12 @@ export interface CiteOptions {
   structured?: boolean;
 }
 
+/** How one search of the Documents is made. */
+export interface AnswerSearchOptions {
+  /** False leaves the reranker out (ADR-0009, 2026-10-12). Omitted: as the User set it. */
+  rerank?: boolean;
+}
+
 /** What a search gives the model. */
 export interface SearchResultForModel {
   /** The Passages, formatted for the model, or a sentence saying there are none. */
@@ -187,7 +193,11 @@ export interface AnswerTools {
    */
   readonly documentLanguages?: readonly DocumentLanguage[];
   /** The document-search Tool. */
-  searchDocuments(query: string, signal?: AbortSignal): Promise<SearchResultForModel>;
+  searchDocuments(
+    query: string,
+    signal?: AbortSignal,
+    options?: AnswerSearchOptions,
+  ): Promise<SearchResultForModel>;
   /** Takes Citation records; returns what to tell the model about them. */
   cite(records: readonly CitationRecordInput[], options?: CiteOptions): string;
   /** Whether a valid record was taken for this marker: the engine places its marker if the model left it out. */
@@ -1155,7 +1165,7 @@ export function documentTools(
       async call({ query }, { toolCallId, signal, readThirdParty }) {
         let found: SearchResultForModel;
         try {
-          found = await documents.searchDocuments(String(query ?? ""), signal);
+          found = await documents.searchDocuments(String(query ?? ""), signal, { rerank: false });
         } catch (error) {
           // A failed search is the app's problem, so it is logged; the model is told it failed.
           if (!signal.aborted) {

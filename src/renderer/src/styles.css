@@ -2546,9 +2546,17 @@
   .answer-searches-found {
     color: var(--color-ink-placeholder);
   }
-  /* Its Blocks are inside the node view's content element, one level down. */
+  /*
+   * Its Blocks are inside the node view's content element, one level down. An
+   * Answer written before AI text was marked word by word is all in the
+   * Answer's ink; a newer one is in the User's, its AI text marked.
+   */
   .answer-content {
     color: var(--color-ink-answer);
+
+    &[data-generated-marks] {
+      color: var(--color-ink);
+    }
 
     :where([data-node-view-content-react] > * + *) {
       margin-top: 12px;
@@ -2998,6 +3006,16 @@
     padding: 0;
     overflow: hidden;
     opacity: 0;
+  }
+  /*
+   * AI text (#95; DESIGN.md, Writing and text): the Answer's ink, a step
+   * softer than the User's writing. A quote keeps its own, softer still.
+   */
+  .mind-editor .generated-text {
+    color: var(--color-ink-answer);
+  }
+  .mind-editor blockquote .generated-text {
+    color: inherit;
   }
   /*
    * Proposals waiting for the User (#93; DESIGN.md, AI edits): removed words
@@ -5854,7 +5872,7 @@
     flex-direction: column;
     gap: 2px;
     box-sizing: border-box;
-    width: 300px;
+    width: var(--chart-card-width, 300px);
     max-width: calc(100vw - 16px);
     padding: 12px 14px;
     border-radius: 10px;
@@ -5898,12 +5916,14 @@
     line-height: 16px;
     color: var(--color-ink-meta);
   }
+  /* Two lines at most, for a card narrowed beside a pie (#578). */
   .chart-card-where {
     flex: 1 1 auto;
     min-width: 0;
+    display: -webkit-box;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
   }
   .chart-card-open {
     flex: none;

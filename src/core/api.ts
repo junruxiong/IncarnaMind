@@ -107,8 +107,13 @@ export interface CreateMindInput {
  * - 8: a Document chip the User writes with "@" (`DOCUMENT_CHIP_NODE`), and
  *   checklists (`taskList` and `taskItem`, whose items keep `checked`). Older
  *   content is version 8 content as it is: nothing is rewritten.
+ * - 11: AI text (#95): the `generated` mark on the words the AI wrote, in
+ *   code blocks too, and `generatedMarks` on Answers whose words carry it
+ *   (see `GENERATED_MARK`). Older content is version 11 content as it is:
+ *   nothing is rewritten, and an Answer without `generatedMarks` is the AI's
+ *   as a whole, as it always was.
  */
-export const CONTENT_SCHEMA_VERSION = 8;
+export const CONTENT_SCHEMA_VERSION = 11;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -261,6 +266,18 @@ export const BLOCK_ID_ATTRIBUTE = "id";
 export const PROPOSAL_INSERT_MARK = "proposalInsert";
 export const PROPOSAL_DELETE_MARK = "proposalDelete";
 export const PROPOSAL_ATTRIBUTE = "proposal";
+
+/**
+ * AI text (CONTEXT.md): the words the AI wrote into a Mind that the User
+ * hasn't made their own, under this mark, with no attributes. Answers,
+ * Answers added to a note, the words a Proposal adds (kept once it is
+ * accepted) and accepted suggestions carry it; Citations, formulas, charts
+ * and inline code can't. It isn't inclusive, and what the User types is never
+ * under it, even inside AI text; "Mark as mine" takes it off. An Answer
+ * carries it only when `AnswerAttributes.generatedMarks` says so: an older
+ * Answer is AI text as a whole. Readers and exports treat it as no mark.
+ */
+export const GENERATED_MARK = "generated";
 
 /** Which Proposal a mark or attribute belongs to. */
 export interface ProposalRef {
@@ -463,6 +480,12 @@ export interface AnswerAttributes {
   errorResetsAt: string | null;
   /** A fingerprint of the content as it was generated: it differs once the User edits the Answer. */
   generatedHash: string | null;
+  /**
+   * True on an Answer written since content schema version 11: its AI text
+   * carries `GENERATED_MARK`, and the rest is the User's. Null on an older
+   * Answer, which is AI text as a whole.
+   */
+  generatedMarks: boolean | null;
   /**
    * How the model could give Citations (see `CitationSupport`). Null until the
    * model has answered, when there were no Documents to search, and on Answers

@@ -15,6 +15,7 @@ import {
   citingModel,
   type ShownPassage,
   setUpWithDocuments,
+  unaskedModel,
 } from "../helpers/citations";
 
 /** A hit on the Passage at `position`, whose window range is the window of 3 ending at it. */
@@ -186,7 +187,6 @@ describe("The document-search Tool", { timeout: 30_000 }, () => {
   });
 
   test("a reranker plugged into the core reorders the hits before they are grouped", async () => {
-    let shown: ShownPassage[] = [];
     const reranked: string[] = [];
     const reranker: Reranker = async (query, candidates) => {
       reranked.push(query);
@@ -198,16 +198,8 @@ describe("The document-search Tool", { timeout: 30_000 }, () => {
         }))
         .sort((a, b) => b.score - a.score);
     };
-    const model = citingModel({
-      query: "lighthouse",
-      records: (passages) => {
-        shown = passages;
-        return [];
-      },
-      answer: "There is a lighthouse.",
-    });
-    const { core, client, mind } = await setUpWithDocuments(
-      model,
+    const { core } = await setUpWithDocuments(
+      unaskedModel(),
       [
         { name: "Coast.md", contents: sections(24, 12, "red") },
         { name: "Weather.md", contents: sections(6, 0, "") },
@@ -217,10 +209,10 @@ describe("The document-search Tool", { timeout: 30_000 }, () => {
       { embeddings: true },
     );
 
-    await askAndFinish(core, client, mind.id, "Where is the lighthouse?");
+    const found = await core.searchEvidence("lighthouse");
 
     expect(reranked).toEqual(["lighthouse"]);
-    expect(shown[0]?.document).toBe("Weather");
+    expect(found.passages[0]?.documentName).toBe("Weather");
   });
 
   test("with a reranker, it sees keyword search's top 10 and vector search's top 10, not the fused list", async () => {
@@ -348,18 +340,14 @@ describe("The search Tool's ranks", () => {
 
 describe("The candidates a reranker sees, through the core", { timeout: 30_000 }, () => {
   /** Two Documents, and a reranker that records what it was handed, in the order given. */
-  async function setUp(
-    query: string,
-    options: { embeddings?: boolean; coastSections?: number } = {},
-  ) {
+  async function setUp(options: { embeddings?: boolean; coastSections?: number } = {}) {
     const seen: { passageId: string; score: number }[][] = [];
     const reranker: Reranker = async (_query, candidates) => {
       seen.push(candidates.map(({ passageId, score }) => ({ passageId, score })));
       return [...candidates];
     };
-    const model = citingModel({ query, records: () => [], answer: "There is a lighthouse." });
     const setup = await setUpWithDocuments(
-      model,
+      unaskedModel(),
       [
         { name: "Coast.md", contents: sections(options.coastSections ?? 24, 12, "red") },
         { name: "Weather.md", contents: sections(6, 0, "") },
@@ -373,9 +361,9 @@ describe("The candidates a reranker sees, through the core", { timeout: 30_000 }
   test("with embeddings off, the default, are keyword search's top 60, in its order", async () => {
     const query = "ordinary coastal weather lighthouse";
     // Enough Passages for more than 60 to match.
-    const { core, client, mind, seen } = await setUp(query, { coastSections: 70 });
+    const { core, seen } = await setUp({ coastSections: 70 });
 
-    await askAndFinish(core, client, mind.id, "Where is the lighthouse?");
+    await core.searchEvidence(query);
 
     const keyword = await core.searchPassages(query, { mode: "keyword", limit: 60 });
     expect(keyword).toHaveLength(60);
@@ -393,9 +381,9 @@ describe("The candidates a reranker sees, through the core", { timeout: 30_000 }
 
   test("with embeddings on, are keyword search's top 10 and vector search's top 10, as searchPassages gives them, in fused order", async () => {
     const query = "ordinary coastal weather lighthouse";
-    const { core, client, mind, seen } = await setUp(query, { embeddings: true });
+    const { core, seen } = await setUp({ embeddings: true });
 
-    await askAndFinish(core, client, mind.id, "Where is the lighthouse?");
+    await core.searchEvidence(query);
 
     const keyword = await core.searchPassages(query, { mode: "keyword", limit: 10 });
     const vector = await core.searchPassages(query, { mode: "vector", limit: 10 });
