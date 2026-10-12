@@ -1,5 +1,5 @@
 import { NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react";
-import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   ANSWER_BLOCK,
@@ -10,14 +10,21 @@ import {
   type StyledRun,
 } from "../../../core/api";
 import { badgeMessage, type CitationState, citationState } from "../../../shared/citations";
-import { citationLocation, formatLocation, openKind } from "../../../shared/locations";
+import {
+  citationLocation,
+  formatLocation,
+  isTranscriptLocation,
+  openKind,
+} from "../../../shared/locations";
 import { useAnswers } from "../answers";
 import { type MindFormatting, useMindFormatting } from "../citationFormatting";
 import { citationHandle } from "../commands/handles";
-import { commands } from "../commands/registry";
+import { type CommandContext, commands } from "../commands/registry";
+import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
 import { useTabPlace } from "../components/tabs/tabItems";
 import { useLanguage, useT } from "../i18n";
 import { groupsMerged } from "../layoutSlice";
+import type { ObjectRef } from "../objects";
 import { recordUsage, useAppStore } from "../store";
 import { pageDate } from "../webPages";
 import {
@@ -198,6 +205,18 @@ export function CitationView({
     };
   }, [open]);
 
+  const menuId = useId();
+  const objectMenu = useObjectMenu({ kind: "citation", id: menuId });
+  const here = {
+    ...(state.reason !== "document-removed" && {
+      "citation.open": () => openFromCardRef.current(),
+    }),
+    "citation.remove": () => {
+      dismiss();
+      deleteNode();
+    },
+  };
+
   // The number, the Document, where it points and the check: the marker only shows the number.
   const label = inFootnote
     ? t("citation.inFootnote.label", { document: pointsTo, badge: badgeText })
@@ -235,6 +254,7 @@ export function CitationView({
       data-number={number || undefined}
       data-styled={styled.kind === "numbered" ? undefined : styled.kind}
       contentEditable={false}
+      {...objectMenu.rowProps}
     >
       <button
         ref={marker}
@@ -281,9 +301,21 @@ export function CitationView({
             )}
           />
         ) : styled.kind === "joined" ? null : (
-          <span>{number || "·"}</span>
+          // A Transcript's Citation shows the time it points at, "14:26", in Numbered (#136).
+          <span data-testid="citation-chip-text">
+            {styled.kind === "numbered" && isTranscriptLocation(location) && where
+              ? where
+              : number || "·"}
+          </span>
         )}
       </button>
+      <ObjectMenu
+        target={{ kind: "citation", id: menuId }}
+        label={t("citation.more")}
+        here={here}
+        className="citation-menu-anchor"
+        tabIndex={-1}
+      />
       {open &&
         marker.current &&
         // In the body, not the editor: ProseMirror must not see the card's events.
@@ -321,6 +353,7 @@ export function CitationView({
                 }
               }}
               inAnswer={answerAround(editor, getPos()) !== null}
+              menu={{ target: { kind: "citation", id: menuId }, here }}
               note={noteOf(formatting, inCluster)}
             />
           </Popover>,
@@ -431,7 +464,10 @@ function CitationCard({
   onOpen,
   onRemove,
   onRegenerate,
+  menu,
 }: {
+  /** The ⋯ at the card's end: the same menu as the right-click on the marker. */
+  menu: { target: ObjectRef; here: CommandContext["here"] };
   state: CitationState;
   attributes: CitationAttributes;
   badgeText: string;
@@ -557,6 +593,12 @@ function CitationCard({
             </button>
           )
         )}
+        <ObjectMenu
+          target={menu.target}
+          label={t("citation.more")}
+          here={menu.here}
+          className="citation-card-action ml-auto"
+        />
         {web && state.documentId && (
           <button
             type="button"

@@ -9,15 +9,20 @@
  *
  *   INCARNAMIND_LIVE_ANTHROPIC_KEY   Claude (INCARNAMIND_LIVE_ANTHROPIC_MODEL, Haiku by default)
  *   INCARNAMIND_LIVE_OPENAI_KEY      OpenAI (INCARNAMIND_LIVE_OPENAI_MODEL, its quick-tasks model by default)
- *   INCARNAMIND_LIVE_OLLAMA_MODEL    a model in Ollama on this computer, e.g. qwen3.5:4b, in local mode
+ *   INCARNAMIND_LIVE_OLLAMA_MODEL    a model in Ollama on this computer, e.g. qwen3.5:4b, in local
+ *                                    mode; or an Ollama cloud model (gpt-oss:20b-cloud), outside it
  *
  * Names of their own, so a key a shell has for other tools never starts paid requests here.
+ *
+ * A second test (#94) puts a change out of date by editing its words, and
+ * has Regenerate make it again from them, then regenerates an Answer the
+ * User edited, which comes back as changes over their version.
  *
  * Set INCARNAMIND_LIVE_REPORT to a file to keep what each model gave back.
  */
 import { appendFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
-import type * as Y from "yjs";
+import * as Y from "yjs";
 import {
   type ChatProviderKind,
   CITATION_NODE,
@@ -31,11 +36,12 @@ import {
 } from "../../src/core";
 import { catalogProvider } from "../../src/core/providers/catalog/providers";
 import { createAiSdkChatModel } from "../../src/core/providers/models";
-import { pendingProposals, resolveProposals } from "../../src/shared/proposals";
-import { createTempDataFolder, startCore } from "../helpers/core";
+import { isCloudModelName } from "../../src/core/providers/ollamaCloud";
+import { outOfDateProposals, pendingProposals, resolveProposals } from "../../src/shared/proposals";
+import { createTempDataFolder, nextEvent, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
-import { readMind, writeMind } from "../helpers/minds";
+import { answerText, question, readMind, writeMind } from "../helpers/minds";
 
 const TIDES = {
   name: "Tides.md",
@@ -82,7 +88,7 @@ const LIVE: Live[] = [
     kind: "ollama",
     apiKey: process.env.INCARNAMIND_LIVE_OLLAMA_MODEL ? "" : undefined,
     model: process.env.INCARNAMIND_LIVE_OLLAMA_MODEL ?? "",
-    local: true,
+    local: !isCloudModelName(process.env.INCARNAMIND_LIVE_OLLAMA_MODEL ?? ""),
   },
 ];
 
@@ -288,6 +294,129 @@ describe.each(LIVE)("Edit with AI, live: $name", (live) => {
           expect(kept[0]?.check).toBe("found");
         }
       }
+      if (process.env.INCARNAMIND_LIVE_REPORT) {
+        await appendFile(process.env.INCARNAMIND_LIVE_REPORT, `${report.join("\n")}\n\n`);
+      }
+    },
+  );
+});
+
+/** A core on the live model, with the Tides Document added and processed, and a Mind. */
+async function liveCore(live: Live) {
+  const dataDir = await createTempDataFolder();
+  const sources = await createTempDataFolder();
+  const core = startCore(dataDir, { createChatModel: createAiSdkChatModel });
+  core.on("consent.requested", (asked) => void core.respondToConsent(asked.requestId, true));
+  await core.saveChatProvider({
+    kind: live.kind,
+    ...(live.apiKey && { apiKey: live.apiKey }),
+    modelId: live.model,
+  });
+  if (live.local) await core.setLocalOnly(true);
+  const [tides] = await addAndProcess(core, [
+    await writeSourceFile(sources, TIDES.name, TIDES.contents),
+  ]);
+  const mind = await core.createMind({ title: "Tides" });
+  const client = await connectToMind(core, mind.id);
+  return { core, client, mind, tides: tides as Document };
+}
+
+describe.each(LIVE)("Changes out of date, live: $name", (live) => {
+  test.skipIf(live.apiKey === undefined)(
+    `${live.name}: a change whose words the User edits is made again from them, and an edited Answer regenerated comes back as changes`,
+    { timeout: 600_000 },
+    async () => {
+      const { core, client, mind, tides } = await liveCore(live);
+      const report: string[] = [`## ${live.name} · ${live.model} (#94)`];
+      const blockId = "english";
+      writeMind(client, [
+        {
+          type: "paragraph",
+          attrs: { id: blockId },
+          content: [
+            {
+              type: "text",
+              text: "the spring tides they happens at a new moon and also when the moon is full ",
+            },
+            citationOf(tides, "Spring tides happen at new moon and at full moon"),
+            { type: "text", text: ", because sun and moon is pulling together." },
+          ],
+        },
+      ]);
+      await client.settled();
+      const { result } = await edit(core, client, mind.id, blockId, "improve");
+      report.push(`- improve: ${result.kind}\n  ${shown(client, blockId)}`);
+      expect(result.kind).toBe("proposed");
+
+      // The User writes among the words the first change that removes any would remove.
+      const paragraph = client.blocks.get(0) as Y.XmlElement;
+      const words = paragraph.toArray().find((child) => "toDelta" in child) as Y.XmlText;
+      let at = 0;
+      let typed = false;
+      for (const run of words.toDelta() as { insert: unknown; attributes?: object }[]) {
+        const length = typeof run.insert === "string" ? run.insert.length : 1;
+        if (!typed && run.attributes && PROPOSAL_DELETE_MARK in run.attributes && length > 1) {
+          words.insert(at + 1, "X");
+          typed = true;
+        }
+        at += length;
+      }
+      expect(typed).toBe(true);
+      await client.settled();
+      const [stale] = [...outOfDateProposals(client.blocks)];
+      expect(stale).toBeDefined();
+
+      // Regenerate makes it again from the words as they are now.
+      const started = Date.now();
+      const again = await core.regenerateProposal({
+        requestId: crypto.randomUUID(),
+        mindId: mind.id,
+        proposalId: stale ?? "",
+      });
+      await client.settled();
+      report.push(
+        `- regenerate: ${again.kind}, ${((Date.now() - started) / 1000).toFixed(1)} s\n  ${shown(client, blockId)}`,
+      );
+      expect(["proposed", "unchanged"]).toContain(again.kind);
+      expect(outOfDateProposals(client.blocks).size).toBe(0);
+      client.doc.transact(() => {
+        resolveProposals(client.blocks as Y.XmlFragment, () => true, "accept");
+      }, "editor");
+      await client.settled();
+      report.push(`  accepted: ${shown(client, blockId)}`);
+      expect(citationsOf(client, blockId).map((citation) => citation.check)).toContain("found");
+
+      // An Answer the User edited, regenerated: changes over their version, which stays until accepted.
+      const asked = question("When do spring tides happen?");
+      writeMind(client, [asked]);
+      await client.settled();
+      const answered = nextEvent(core, "answer.finished");
+      const first = await core.askQuestion({ mindId: mind.id, questionId: asked.attrs.id });
+      if (!first.asked) throw new Error(`Not asked: ${JSON.stringify(first)}`);
+      const answerId = first.answerId;
+      await answered;
+      const answer = client.blocks.get(1) as Y.XmlElement;
+      const own = new Y.XmlElement("paragraph");
+      own.insert(0, [new Y.XmlText("My own note on this Answer.")]);
+      answer.push([own]);
+      await client.settled();
+      const regenerated = nextEvent(core, "answer.finished");
+      await core.regenerateAnswer({ mindId: mind.id, answerId });
+      await regenerated;
+      await client.settled();
+      const waiting = pendingProposals(client.blocks).length;
+      report.push(`- Answer regenerated over the User's edit: ${waiting} changes`);
+      expect(waiting).toBeGreaterThan(0);
+      const exported = new TextDecoder().decode(
+        (await core.exportMind(mind.id, { format: "markdown" })).data,
+      );
+      expect(exported).toContain("My own note on this Answer.");
+      client.doc.transact(() => {
+        resolveProposals(client.blocks as Y.XmlFragment, () => true, "accept");
+      }, "editor");
+      await client.settled();
+      report.push(`  accepted: ${answerText(client, answerId).slice(0, 300)}`);
+      expect(answerText(client, answerId)).not.toContain("My own note on this Answer.");
       if (process.env.INCARNAMIND_LIVE_REPORT) {
         await appendFile(process.env.INCARNAMIND_LIVE_REPORT, `${report.join("\n")}\n\n`);
       }

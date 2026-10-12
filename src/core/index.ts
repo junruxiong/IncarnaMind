@@ -33,8 +33,12 @@ export type {
   RerankingModelFiles,
   ScriptRuntimes,
   SpawnOptions,
+  SpeechSegment,
   TextRecognitionFiles,
   TextRecognizer,
+  Transcriber,
+  TranscriberListener,
+  TranscriptionModelFiles,
   UsageDataSender,
   UsageEventMessage,
 } from "./adapters";

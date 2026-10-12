@@ -17,15 +17,14 @@ import { scanningStatus, unreadPages } from "../scanStatus";
 import { selectVisibleDocuments, useAppStore } from "../store";
 import { chipsOf, tagIndex } from "../tagEditing";
 import { moveThroughRows, TREE_ROW } from "../treeKeys";
-import { DocumentFileMenu } from "./DocumentFileMenu";
 import { ActiveTagFilter, DocumentTagMenu, TagFilterMenu } from "./DocumentTags";
 import { FolderTree } from "./FolderTree";
 import { LibraryFolders } from "./LibraryFolders";
 import { LinkFolderDialog } from "./LinkFolderDialog";
 import { DocumentLineIcon } from "./lineIcons";
+import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
 import { SidebarTags } from "./SidebarTags";
 import {
-  openRowMenu,
   rowActionButtonClass,
   rowActionsClass,
   rowButtonClass,
@@ -131,7 +130,6 @@ export function DocumentsSection() {
   );
   const addDocuments = useAppStore((state) => state.addDocuments);
   const picker = useRef<HTMLInputElement>(null);
-  const [deleting, setDeleting] = useState<Document | null>(null);
   const tags = useAppStore((state) => state.tags);
   // Built once per change to the Tags, so each row only looks its own up.
   const tagsById = useMemo(() => tagIndex(tags), [tags]);
@@ -161,15 +159,7 @@ export function DocumentsSection() {
       }
       let row = atDepth.get(depth);
       if (row === undefined) {
-        row = (
-          <DocumentRow
-            key={item.id}
-            item={item}
-            depth={depth}
-            tagsById={tagsById}
-            onDelete={setDeleting}
-          />
-        );
+        row = <DocumentRow key={item.id} item={item} depth={depth} tagsById={tagsById} />;
         atDepth.set(depth, row);
       }
       return row;
@@ -265,7 +255,6 @@ export function DocumentsSection() {
             {t("documents.none")}
           </p>
         ))}
-      <DeleteDocumentDialog target={deleting} onClose={() => setDeleting(null)} />
       <LinkFolderDialog />
       <TagNamesTip />
     </div>
@@ -286,13 +275,10 @@ const DocumentRow = memo(function DocumentRow({
   item,
   depth,
   tagsById,
-  onDelete,
 }: {
   item: Document;
   depth: number;
   tagsById: ReadonlyMap<string, Tag>;
-  /** Asks before deleting this Document. */
-  onDelete(item: Document): void;
 }) {
   const t = useT();
   const [renaming, setRenaming] = useState(false);
@@ -309,6 +295,7 @@ const DocumentRow = memo(function DocumentRow({
     return shown?.kind === "document" && shown.documentId === item.id;
   });
   const muted = !isOpen && (isProcessing(item.status) || item.fileStatus !== "available");
+  const objectMenu = useObjectMenu({ kind: "document", id: item.id });
 
   return (
     <li
@@ -319,7 +306,7 @@ const DocumentRow = memo(function DocumentRow({
       data-status={item.status}
       data-file-status={item.fileStatus}
       data-tagging={item.tagging}
-      onContextMenu={renaming ? undefined : (event) => openRowMenu(event, "document-file-menu")}
+      {...(renaming ? {} : objectMenu.rowProps)}
       className={rowClass(isOpen, muted ? "muted" : "item")}
     >
       {renaming ? (
@@ -360,11 +347,10 @@ const DocumentRow = memo(function DocumentRow({
       {!renaming && (
         <div className={rowActionsClass}>
           <DocumentTagMenu item={item} buttonClassName={rowActionButtonClass} />
-          <DocumentFileMenu
-            item={item}
-            buttonClassName={rowActionButtonClass}
-            onRename={() => setRenaming(true)}
-            onDelete={() => onDelete(item)}
+          <ObjectMenu
+            target={{ kind: "document", id: item.id }}
+            label={t("documents.more", { name: item.name })}
+            here={{ "document.rename": () => setRenaming(true) }}
           />
         </div>
       )}
@@ -473,7 +459,13 @@ function RenameInput({ item, onDone }: { item: Document; onDone(): void }) {
 }
 
 /** Asks before deleting a Document, or removing a missing one. */
-function DeleteDocumentDialog({ target, onClose }: { target: Document | null; onClose(): void }) {
+export function DeleteDocumentDialog({
+  target,
+  onClose,
+}: {
+  target: Document | null;
+  onClose(): void;
+}) {
   const t = useT();
   const dialog = useModal(target !== null);
   const deleteDocument = useAppStore((state) => state.deleteDocument);

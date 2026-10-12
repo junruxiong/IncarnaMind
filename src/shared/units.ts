@@ -3,7 +3,8 @@
  * order, and what a Citation's Location points at. A Unit is a PDF's page, a
  * deck's slide (its speaker notes included), a heading section of a Word or
  * Markdown file or a saved web page, a block of rows of one sheet of a
- * spreadsheet or CSV, or a block of lines of a plain-text file. Each is one
+ * spreadsheet or CSV, a block of lines of a plain-text file, or a block of
+ * a Transcript's cues. Each is one
  * `document_pages` row of a version: `page` is the Unit's number, from 1,
  * which for a PDF is its page and for a deck its slide.
  *
@@ -26,10 +27,11 @@
  *   heading.
  * - "rows": a block of rows of one sheet (a CSV has one sheet).
  * - "lines": a block of lines of a plain-text file.
+ * - "cues": a block of a Transcript's cues, one line each, in time order.
  * - "text": a whole TXT or Markdown file, as text was stored before Units
  *   (migration 22); kept only for the old versions Citations quote.
  */
-export type UnitKind = "page" | "slide" | "section" | "rows" | "lines" | "text";
+export type UnitKind = "page" | "slide" | "section" | "rows" | "lines" | "cues" | "text";
 
 /**
  * What a Unit's Location label is made of, by kind; stored as JSON beside
@@ -58,9 +60,14 @@ export interface UnitLabel {
   hidden?: boolean;
   /** rows: the sheet's name; none for a CSV. */
   sheet?: string;
-  /** rows and lines: the first and last row (or line) number, from 1, as the file numbers them. */
+  /**
+   * rows and lines: the first and last row (or line) number, from 1, as the file numbers them.
+   * cues: where the first cue starts and the last one ends, in ms from the Transcript's start.
+   */
   from?: number;
   to?: number;
+  /** cues: who said each cue, in order, where any is known (null for one not known). */
+  speakers?: (string | null)[];
   /** rows: the row number of each line of the Unit's text, in order. */
   rows?: number[];
   /** rows: the sheet's first column (from 0): each line lists the cells from it, tab-separated. */
@@ -106,6 +113,7 @@ export interface Anchor {
    * slide: "title", "shape2", "table1.row3", "chart1", "image1" or "notes";
    * section: "p12" (the 12th paragraph read; in a web page's, the 12th from
    * its heading), or "comment3" (a Word comment, by its id); rows: a cell, "B12";
+   * cues: a cue's times in ms, "t754000-761500";
    * a scanned page: "line3", the third line read, in reading order.
    */
   target: string;
@@ -228,6 +236,16 @@ export function lineAt(text: string, label: UnitLabel | null, offset: number): n
   let line = label?.from ?? 1;
   for (let at = text.indexOf("\n"); at >= 0 && at < offset; at = text.indexOf("\n", at + 1)) line++;
   return line;
+}
+
+/** A cue's anchor target: its start and end in ms, "t754000-761500". */
+export const cueTarget = (startMs: number, endMs: number) =>
+  `t${Math.round(startMs)}-${Math.round(endMs)}`;
+
+/** A cue's times from its anchor target; null if it isn't one. */
+export function parseCueTarget(target: string): { startMs: number; endMs: number } | null {
+  const match = /^t(\d+)-(\d+)$/.exec(target);
+  return match ? { startMs: Number(match[1]), endMs: Number(match[2]) } : null;
 }
 
 /** Whether two Units can be cited together: the same kind, and for rows, the same sheet. */
