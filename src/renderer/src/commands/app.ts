@@ -7,6 +7,7 @@ import { currentTabOf } from "../layoutSlice";
 import { startSkillFromMind } from "../makeSkill";
 import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
+import { useWordImport } from "../wordImport";
 import { assistantCommands } from "./assistant";
 import { chartCommands } from "./charts";
 import { editCommands } from "./edit";
@@ -54,6 +55,13 @@ const appCommands: readonly Command[] = [
     group: "main",
     reversible: true,
     run: () => useAppStore.getState().createMind(),
+  },
+  {
+    id: "word.import",
+    label: "wordImport.command",
+    group: "main",
+    reversible: true,
+    run: () => useWordImport.getState().pick(),
   },
   ...editCommands,
   ...mindCommands,

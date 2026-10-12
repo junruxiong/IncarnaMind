@@ -208,6 +208,25 @@ export function serveFileActions(
     return picked;
   });
 
+  // The core reads the file and keeps a copy for the Mind; this is only the User choosing it (#104).
+  ipcMain.handle(FILES_CHANNELS.pickWordFile, async (event): Promise<string | null> => {
+    refuseUnknown(event);
+    const { language } = await core.getSettings();
+    const openOptions: OpenDialogOptions = {
+      title: translate(language, "wordImport.pick.title"),
+      properties: ["openFile"],
+      filters: [{ name: translate(language, "wordImport.pick.filter"), extensions: ["docx"] }],
+      defaultPath: startFolder(dataDir, "documents", app.getPath("downloads")),
+    };
+    const window = BrowserWindow.fromWebContents(event.sender);
+    const { canceled, filePaths } = window
+      ? await dialog.showOpenDialog(window, openOptions)
+      : await dialog.showOpenDialog(openOptions);
+    const picked = canceled ? null : (filePaths[0] ?? null);
+    if (picked) rememberPick(dataDir, "documents", picked);
+    return picked;
+  });
+
   // Only a folder the User linked: its path comes from the core's list, never from the page.
   ipcMain.handle(FILES_CHANNELS.showLinkedFolder, async (event, linkedFolderId: unknown) => {
     refuseUnknown(event);

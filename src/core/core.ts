@@ -155,6 +155,7 @@ import {
 } from "./transcription/model";
 import { createUsageData } from "./usageData";
 import { addedCounts, trackUsage } from "./usageTracking";
+import { createWordImports } from "./wordImports";
 import { ensureWorkspace } from "./workspace";
 
 export const DATABASE_FILE = "incarnamind.db";
@@ -1230,6 +1231,19 @@ export function createCore(adapters: CoreAdapters): Core {
     services: async () => [],
   });
 
+  const wordImports = createWordImports({
+    db,
+    dataDir,
+    content,
+    minds,
+    requireFolder: (folderId) => void library.folder(folderId),
+    mindsChanged,
+    now,
+    log: adapters.log ?? silentLogger,
+  });
+  wordImports.resume();
+  wordImports.dropPurged().catch((error: unknown) => console.error(error));
+
   const recentlyDeleted = createRecentlyDeleted({
     db,
     now,
@@ -1635,6 +1649,8 @@ export function createCore(adapters: CoreAdapters): Core {
       usageData.record({ event: "mind_created", fields: {} });
       return mind;
     },
+    checkWordFile: async (path) => wordImports.check(path),
+    importWordFile: async (input) => wordImports.import(input),
     listMinds: async () => minds.list(),
     renameMind: async (mindId, title) => {
       const mind = minds.rename(mindId, title);
@@ -2071,7 +2087,7 @@ export function createCore(adapters: CoreAdapters): Core {
     listDeleted: async () => recentlyDeleted.list(),
     deletePermanently: async (refs) => {
       recentlyDeleted.deletePermanently(refs);
-      await Promise.all([webPages.dropPurged(), sources.dropPurged()]);
+      await Promise.all([webPages.dropPurged(), sources.dropPurged(), wordImports.dropPurged()]);
     },
     acceptAssignments: async (ids) => library.accept(ids),
     rejectAssignments: async (ids) => library.reject(ids),
@@ -2348,6 +2364,8 @@ export function createCore(adapters: CoreAdapters): Core {
       void agents.close().catch((error: unknown) => console.error(error));
       // First, so stopping the Answers below starts no background work.
       background.close();
+      // An import goes on from where it got to at the next start.
+      wordImports.close();
       void chatGpt.cancelSignIn();
       // Answers being written keep what they have, marked "stopped"; Tool calls waiting for
       // the User's approval are denied, and Skill scripts running are stopped.

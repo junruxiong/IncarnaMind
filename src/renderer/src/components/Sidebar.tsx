@@ -126,8 +126,8 @@ function pasteLinks(event: ClipboardEvent<HTMLElement>) {
 }
 
 /**
- * The one "+" menu, the one place to add: New Mind, Record a meeting (once
- * Meetings are turned on), New Folder…, Add Documents…, Add a web page…,
+ * The one "+" menu, the one place to add: New Mind, Import a Word file…,
+ * Record a meeting (once Meetings are turned on), New Folder…, Add Documents…, Add a web page…,
  * Find sources… and Link a folder…. Opened by keyboard or mouse, its items
  * are menu items reached with the arrow keys.
  */
@@ -176,6 +176,16 @@ function PlusMenu() {
           <MindLineIcon className="size-4 shrink-0 text-ink-meta" />
           <span className="flex-1">{t("sidebar.newMind")}</span>
           <span className="pl-4 text-[13px] text-ink-meta">{shortcutLabel("tab.new")}</span>
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          data-testid="plus-import-word"
+          onClick={choose(() => void commands.run("word.import").catch(reportError))}
+          className={`${menuItemClass} pl-2`}
+        >
+          <DocumentLineIcon kind="docx" className="size-4 shrink-0 text-ink-meta" />
+          <span className="flex-1">{t("wordImport.command")}</span>
         </button>
         {meetingsOn && (
           <button
