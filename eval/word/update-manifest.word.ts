@@ -159,6 +159,7 @@ function replaceBlock(path: string, name: string, block: string): void {
   const from = text.indexOf(start);
   const to = text.indexOf(end);
   expect(from, `${path} needs ${start}`).toBeGreaterThan(-1);
+  expect(to, `${path} needs ${end} after it`).toBeGreaterThan(from);
   writeFileSync(path, `${text.slice(0, from + start.length)}\n\n${block}\n\n${text.slice(to)}`);
 }
 
