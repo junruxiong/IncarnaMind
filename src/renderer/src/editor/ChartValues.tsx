@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, useRef, useState } from "react";
 import type { CitationCheck } from "../../../core/api";
 import { type ChartAttributes, type ChartValue, chosenSeries } from "../../../shared/charts";
 import { ChartCheck } from "./ChartCheck";
@@ -30,13 +30,6 @@ export function ChartValues({
   const [current, setCurrent] = useState(0);
   const at = Math.min(current, Math.max(0, cells.length - 1));
   const buttons = useRef(new Map<string, HTMLButtonElement>());
-  const moved = useRef(false);
-  useEffect(() => {
-    if (!moved.current) return;
-    moved.current = false;
-    const cell = cells[at];
-    if (cell) buttons.current.get(`${cell.row}:${cell.series}`)?.focus();
-  });
 
   const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>, point: PointRef) => {
     const index = cells.findIndex((cell) => samePoint(cell, point));
@@ -58,7 +51,9 @@ export function ChartValues({
     }
     if (next === null) return;
     event.preventDefault();
-    moved.current = true;
+    // At once, not after the next render: a second key pressed before it goes from here.
+    const target = cells[next];
+    if (target) buttons.current.get(`${target.row}:${target.series}`)?.focus();
     setCurrent(next);
   };
 
