@@ -4,6 +4,8 @@
  * with the system save dialog), so nothing here touches the file system.
  */
 import type * as Y from "yjs";
+import { layoutChart } from "../../shared/chartLayout";
+import { chartSvg } from "../../shared/chartSvg";
 import {
   type CitationStyle,
   type CitationStyleId,
@@ -12,6 +14,7 @@ import {
 import { citationState, citedLocation } from "../../shared/citations";
 import { translate } from "../../shared/i18n";
 import { mindName } from "../../shared/naming";
+import type { Logger, Pictures } from "../adapters";
 import type {
   CitationAttributes,
   CitationFormatRequest,
@@ -30,6 +33,7 @@ import type { Language } from "../language";
 import { type Block, countQuestions, type Footnote, footnotesIn, readBlocks } from "../mindText";
 import { styleCitations } from "./citations";
 import { renderDocx } from "./docx";
+import { exportLabels } from "./labels";
 import { renderMarkdown } from "./markdown";
 
 export interface ExportsDependencies {
@@ -47,8 +51,16 @@ export interface ExportsDependencies {
   citationStyle(mindId: string): CitationStyleId;
   /** Formats Citations in a style, as the editor does (see `CoreApi.formatCitations`). */
   formatCitations(request: CitationFormatRequest): Promise<FormattedCitations>;
+  /** Draws charts' pictures for Word; without it, a chart goes into Word as its table. */
+  pictures?: Pictures;
+  log: Logger;
   now(): string;
 }
+
+/** A chart's width in a Word export, in CSS pixels: the text's width on A4 and on Letter, so it is never scaled. */
+const PICTURE_WIDTH = 600;
+/** Drawn at twice that, so it stays sharp when printed or zoomed. */
+const PICTURE_SCALE = 2;
 
 const EXTENSIONS: Readonly<Record<ExportFormat, string>> = { markdown: "md", docx: "docx" };
 
@@ -107,14 +119,11 @@ export function createExports(deps: ExportsDependencies) {
         style.form === "numbered"
           ? prepared.blocks
           : await styleCitations(prepared.blocks, style, deps.formatCitations);
-      const labels = {
-        question: translate(language, "export.question"),
-        unverified: translate(language, "export.unverified"),
-      };
+      const labels = exportLabels(language);
       const data =
         format === "markdown"
           ? new TextEncoder().encode(renderMarkdown(title, blocks, labels))
-          : renderDocx(blocks, {
+          : renderDocx(await withPictures(blocks, language, deps), {
               title,
               labels,
               language: language === "zh-CN" ? "zh-CN" : "en-US",
@@ -124,6 +133,70 @@ export function createExports(deps: ExportsDependencies) {
       return { ...preview, data };
     },
   };
+}
+
+/**
+ * The Blocks with each chart's picture drawn (#436), for Word. A chart whose
+ * picture can't be drawn goes in as its table, and the log says why.
+ */
+async function withPictures(
+  blocks: readonly Block[],
+  language: Language,
+  deps: Pick<ExportsDependencies, "pictures" | "log">,
+): Promise<Block[]> {
+  const { pictures } = deps;
+  if (!pictures) return [...blocks];
+  const draw = async (block: Extract<Block, { kind: "chart" }>): Promise<Block> => {
+    const { chart } = block;
+    const layout = layoutChart(chart, {
+      width: PICTURE_WIDTH,
+      language,
+      legendInside: true,
+      seriesName: (index) =>
+        chart.data.series[index] ||
+        translate(language, "chart.series.unnamed", { number: index + 1 }),
+    });
+    if (layout.points.length === 0) return block;
+    try {
+      const png = await pictures.png(chartSvg(layout, PICTURE_SCALE));
+      const kind = translate(language, `chart.kindName.${chart.kind}`);
+      return {
+        ...block,
+        picture: {
+          src: `data:image/png;base64,${Buffer.from(png).toString("base64")}`,
+          alt: chart.title
+            ? translate(language, "export.chart.picture", { kind, title: chart.title })
+            : kind,
+        },
+      };
+    } catch (error) {
+      deps.log.warn("export.chartPicture", {
+        kind: chart.kind,
+        points: layout.points.length,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return block;
+    }
+  };
+  // One at a time: each picture is drawn in a window of its own.
+  const inOrder = async <T, U>(items: readonly T[], each: (item: T) => Promise<U>) => {
+    const done: U[] = [];
+    for (const item of items) done.push(await each(item));
+    return done;
+  };
+  const visit = async (block: Block): Promise<Block> => {
+    switch (block.kind) {
+      case "chart":
+        return draw(block);
+      case "list":
+        return { ...block, items: await inOrder(block.items, (item) => inOrder(item, visit)) };
+      case "quote":
+        return { ...block, content: await inOrder(block.content, visit) };
+      default:
+        return block;
+    }
+  };
+  return inOrder(blocks, visit);
 }
 
 function parseExportOptions(input: unknown): Required<ExportMindOptions> {

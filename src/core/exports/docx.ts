@@ -27,6 +27,7 @@ import {
   type TableCell,
   tableLayout,
 } from "../mindText";
+import type { ExportLabels } from "./labels";
 import { latexToOmml, MATH_NAMESPACE } from "./math";
 import {
   escapeXml,
@@ -44,12 +45,7 @@ import {
 export interface DocxOptions {
   /** The Mind's title, as the document's title. Empty: none. */
   title: string;
-  labels: {
-    /** Marks a Question, e.g. "Question:". */
-    question: string;
-    /** Follows an unverified Citation's source in its footnote, e.g. "[unverified]". */
-    unverified: string;
-  };
+  labels: ExportLabels;
   /** The language Word checks the text in, e.g. "en-US". */
   language: string;
   paper: "letter" | "a4";
@@ -271,9 +267,41 @@ class DocxWriter {
         return this.table(block.rows, context);
       case "image":
         return paragraph({ style: context.style, indent }, this.image(block.image, context));
+      case "chart":
+        return this.chart(block, context);
       case "bibliography":
         return this.bibliography(block);
     }
+  }
+
+  /**
+   * A chart (#436): its picture, or the table of its values when there is
+   * none, then its caption and the places its values were quoted from, as
+   * footnotes in the Mind's citation style.
+   */
+  private chart(block: Extract<Block, { kind: "chart" }>, context: Context): string {
+    const { indent } = context;
+    const { labels } = this.options;
+    const shown = block.picture
+      ? paragraph({ indent, keepNext: true }, this.image(block.picture, context))
+      : this.table(block.table, context);
+    let sources = "";
+    const cited = this.inline(block.sources, context);
+    if (cited) sources += run(labels.chartSources) + cited;
+    if (block.uncited > 0) {
+      sources += run(`${sources ? " " : ""}${labels.chartUncited(block.uncited)}`);
+    }
+    const { rows, cutFrom } = block.chart.data;
+    if (cutFrom !== null)
+      sources += run(`${sources ? " " : ""}${labels.chartCut(rows.length, cutFrom)}`);
+    return (
+      shown +
+      paragraph(
+        { style: "Caption", indent, keepNext: sources !== "" },
+        run(labels.chart(block.chart.title)),
+      ) +
+      (sources ? paragraph({ style: "Caption", indent }, sources) : "")
+    );
   }
 
   /**
@@ -560,6 +588,8 @@ const isWebLink = (href: string) => /^(https?:|mailto:)/i.test(href);
 
 interface ParagraphProperties {
   style?: string | null;
+  /** Keep it on the page with the next paragraph: a chart with its caption. */
+  keepNext?: boolean;
   numbering?: { id: number; level: number };
   bottomBorder?: boolean;
   spacingAfter?: number;
@@ -571,10 +601,12 @@ interface ParagraphProperties {
 }
 
 function paragraph(properties: ParagraphProperties, content: string): string {
-  const { style, numbering, bottomBorder, spacingAfter, indent, hanging, align } = properties;
+  const { style, keepNext, numbering, bottomBorder, spacingAfter, indent, hanging, align } =
+    properties;
   // In the order the schema requires.
   const pPr = [
     style ? `<w:pStyle w:val="${style}"/>` : "",
+    keepNext ? "<w:keepNext/>" : "",
     numbering
       ? `<w:numPr><w:ilvl w:val="${numbering.level}"/><w:numId w:val="${numbering.id}"/></w:numPr>`
       : "",
@@ -771,6 +803,11 @@ function styles(language: string): string {
       rPr: `${CODE_FONT}<w:sz w:val="20"/><w:szCs w:val="20"/>`,
     }) +
     paragraphStyle("Math", "Math", { pPr: '<w:jc w:val="center"/>' }) +
+    // Word's own "caption" style, so its captions list picks a chart's up.
+    paragraphStyle("Caption", "caption", {
+      pPr: '<w:spacing w:after="160"/>',
+      rPr: '<w:i/><w:color w:val="4A4F57"/><w:sz w:val="18"/><w:szCs w:val="18"/>',
+    }) +
     '<w:style w:type="paragraph" w:styleId="FootnoteText"><w:name w:val="footnote text"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:rPr><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr></w:style>' +
     '<w:style w:type="character" w:styleId="FootnoteReference"><w:name w:val="footnote reference"/><w:basedOn w:val="DefaultParagraphFont"/><w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:rPr><w:vertAlign w:val="superscript"/></w:rPr></w:style>' +
     '<w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:basedOn w:val="DefaultParagraphFont"/><w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:rPr><w:color w:val="0563C1"/><w:u w:val="single"/></w:rPr></w:style>' +

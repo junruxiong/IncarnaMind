@@ -99,8 +99,12 @@ export interface CreateMindInput {
  *   and its `proposal` attributes (see `ProposalRef`), so it goes out of date
  *   once that text changes. Version 4 Proposals have none and never go out
  *   of date: nothing is rewritten.
+ * - 7: charts (`CHART_NODE`, #436): a Block that draws values from a table
+ *   or from cited figures, each kept with its Citation. Older content is
+ *   version 7 content as it is: nothing is rewritten. A version before 7
+ *   opens a Mind with a chart read-only, as its editor would drop the chart.
  */
-export const CONTENT_SCHEMA_VERSION = 5;
+export const CONTENT_SCHEMA_VERSION = 7;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -309,6 +313,7 @@ export const NOTE_BLOCK_TYPES = [
   "blockquote",
   "horizontalRule",
   "table",
+  "chart",
 ] as const;
 
 /** The node type of a Question Block. Its content is the User's text (inline). */
@@ -533,6 +538,14 @@ export const CITATION_NODE = "citation";
  * inside a footnote is part of that footnote's text, with no number of its own.
  */
 export const FOOTNOTE_NODE = "footnote";
+
+/**
+ * The node type of a chart (#436): a Block with no text of its own, whose
+ * attributes hold what it draws (see `ChartAttributes` in
+ * src/shared/charts.ts): its kind, its title, the series drawn, and its
+ * values, each with where it came from and the Citation that was there.
+ */
+export const CHART_NODE = "chart";
 
 /**
  * Where a Citation's check stands. The check compares the model's quote with
