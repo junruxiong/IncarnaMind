@@ -1704,7 +1704,7 @@
     padding: 5px 8px;
     border-radius: 6px;
     text-align: left;
-    outline: none;
+    outline-offset: -2px;
 
     &:hover,
     &:focus-visible {
@@ -1758,7 +1758,6 @@
     border-radius: 2px;
     font-weight: 600;
     color: var(--color-accent);
-    outline: none;
 
     &:hover,
     &:focus-visible {

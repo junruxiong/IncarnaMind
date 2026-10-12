@@ -1,6 +1,13 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
-import { createDataFolder, launchApp, removeDataFolder } from "./app";
+import {
+  createDataFolder,
+  launchApp,
+  motionSettled,
+  removeDataFolder,
+  setLanguage,
+  setWindowSize,
+} from "./app";
 
 let dataDir: string;
 test.beforeEach(async () => {
@@ -10,7 +17,7 @@ test.afterEach(async () => {
   await removeDataFolder(dataDir);
 });
 
-/** A Tab stop: what it is, where it is, and whether its focus shows. */
+/** A keyboard stop: what it is, where it is, and whether its focus shows. */
 interface Stop {
   what: string;
   where: "sidebar" | "mind" | "settings" | "other";
@@ -18,14 +25,13 @@ interface Stop {
 }
 
 /**
- * Presses Tab, as a person does, and reads where the focus went. It shows when
+ * Reads where the focus went. It shows when
  * the control has DESIGN.md's focus ring (a solid accent outline, 2px; 1px
  * around a text field, whose edge turns blue too), or, in the Mind's text and
  * title, the caret. A pane divider turns blue instead, and the gap before the
  * card shows the ring's line.
  */
-async function pressTab(window: Page): Promise<Stop | null> {
-  await window.keyboard.press("Tab");
+async function readFocus(window: Page): Promise<Stop | null> {
   return window.evaluate(async () => {
     const element = document.activeElement as HTMLElement | null;
     if (!element || element === document.body) return null;
@@ -95,7 +101,8 @@ async function tabRound(window: Page, max: number): Promise<Stop[]> {
   await window.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   const stops: Stop[] = [];
   for (let step = 0; step < max; step++) {
-    const stop = await pressTab(window);
+    await window.keyboard.press("Tab");
+    const stop = await readFocus(window);
     if (!stop) continue;
     if (stops.length > 0 && stop.what === stops[0]?.what) break;
     stops.push(stop);
@@ -143,3 +150,50 @@ test("every Tab stop in a Mind, the sidebar and Settings shows the blue focus ri
   expect(settingsStops.filter((stop) => !stop.shows).map((stop) => stop.what)).toEqual([]);
   await app.close();
 });
+
+for (const { language, width } of [
+  { language: "en", width: 1600 },
+  { language: "zh-CN", width: 900 },
+] as const) {
+  test(`keyboard menu focus stays visible in ${language} at ${width}px`, async () => {
+    const { app, window } = await launchApp(dataDir, { examples: true });
+    await setWindowSize(app, window, width, 800);
+    await setLanguage(window, language);
+    await window.evaluate(async () => {
+      await (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.saveChatProvider({
+        kind: "ollama",
+        modelId: "a-model",
+        baseUrl: "http://127.0.0.1:9",
+      });
+    });
+
+    for (const triggerId of ["plus-menu", "composer-model"]) {
+      const trigger = window.getByTestId(triggerId);
+      await expect(trigger).toBeVisible();
+      await trigger.focus();
+      await window.keyboard.press("Enter");
+      const menu = window.getByRole("menu");
+      await expect(menu).toBeVisible();
+      let previousStop: Stop | null = null;
+      for (const step of ["opened", "next"]) {
+        if (step === "next") await window.keyboard.press("ArrowDown");
+        await expect(menu.locator(":focus-visible")).toHaveCount(1);
+        await motionSettled(window);
+        const stop = await readFocus(window);
+        if (previousStop) expect(stop?.what).not.toBe(previousStop.what);
+        previousStop = stop;
+        expect.soft(stop?.shows, stop?.what).toBe(true);
+        const path = test.info().outputPath(`${triggerId}-${step}.png`);
+        await window.screenshot({ path });
+        await test.info().attach(`${triggerId}-${step}`, {
+          path,
+          contentType: "image/png",
+        });
+      }
+      await window.keyboard.press("Escape");
+      await expect(menu).toBeHidden();
+      await expect(trigger).toBeFocused();
+    }
+    await app.close();
+  });
+}
