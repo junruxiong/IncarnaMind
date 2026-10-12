@@ -147,6 +147,8 @@ test("Shorten comes back as changes with their own bars: one accepted by mouse, 
   // Undo brings the rejected change back; Accept all takes it.
   await window.keyboard.press("ControlOrMeta+z");
   await expect(removed).toHaveText(["really "]);
+  await expect(bar.getByTestId("proposals-count")).toHaveText("1 change from the assistant");
+  await expect(changeBar).toContainText("Change 1 of 1");
   await pointAndClick(window, bar.getByTestId("proposals-accept-all"));
   await expect(bar).toHaveCount(0);
   await expect(note).toContainText("The tides here are strong and regular");
