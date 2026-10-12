@@ -5,18 +5,11 @@ import { useFolderDrop } from "../folderDrag";
 import { useT } from "../i18n";
 import { currentMindIdOf, currentTabOf } from "../layoutSlice";
 import { useAppStore } from "../store";
-import { RENAME_SHORTCUT, TREE_ROW } from "../treeKeys";
-import { DeleteMindDialog } from "./DeleteMindDialog";
-import {
-  ChevronDownLineIcon,
-  ChevronRightLineIcon,
-  FolderLineIcon,
-  MoreLineIcon,
-} from "./lineIcons";
+import { TREE_ROW } from "../treeKeys";
+import { ChevronDownLineIcon, ChevronRightLineIcon, FolderLineIcon } from "./lineIcons";
 import { MindRow } from "./MindRow";
+import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
 import {
-  openRowMenu,
-  rowActionButtonClass,
   rowActionsClass,
   rowButtonClass,
   rowClass,
@@ -32,12 +25,8 @@ import {
   dialogClass,
   dialogTextClass,
   dialogTitleClass,
-  menuClass,
-  menuItemClass,
-  menuRuleClass,
 } from "./ui";
 import { useModal } from "./useModal";
-import { usePopoverMenu } from "./usePopoverMenu";
 
 /** How many Documents a Folder lists at first; "Show N more Documents" lists more, in place. */
 export const FIRST_DOCUMENTS = 5;
@@ -150,8 +139,6 @@ export function LibraryFolders({
       state.minds.find((mind) => mind.id === currentMindIdOf(state.layout))?.folderId ?? null,
   );
   const openMindId = useAppStore((state) => currentMindIdOf(state.layout));
-  const [deletingMind, setDeletingMind] = useState<Mind | null>(null);
-  const [deletingFolder, setDeletingFolder] = useState<LibraryGroup | null>(null);
 
   // The open Mind's Folder opens, so its row is in sight: when it opens, or moves there.
   // biome-ignore lint/correctness/useExhaustiveDependencies: another Mind of the same Folder opened reveals it again.
@@ -200,8 +187,6 @@ export function LibraryFolders({
               minds={mindsByFolder.get(folder.id) ?? NO_MINDS}
               documents={documentsByFolder.get(folder.id) ?? NO_DOCUMENTS}
               renderDocument={renderDocument}
-              onDeleteMind={setDeletingMind}
-              onDelete={() => setDeletingFolder(folder)}
             />
           ))}
         </ul>
@@ -211,11 +196,8 @@ export function LibraryFolders({
           minds={looseMinds}
           documents={looseDocuments}
           renderDocument={renderDocument}
-          onDeleteMind={setDeletingMind}
         />
       )}
-      <DeleteMindDialog mind={deletingMind} onClose={() => setDeletingMind(null)} />
-      <DeleteFolderDialog folder={deletingFolder} onClose={() => setDeletingFolder(null)} />
     </nav>
   );
 }
@@ -227,14 +209,12 @@ function Contents({
   minds,
   documents,
   renderDocument,
-  onDeleteMind,
 }: {
   listKey: string;
   depth: number;
   minds: readonly Mind[];
   documents: readonly Document[];
   renderDocument(document: Document, depth: number): ReactNode;
-  onDeleteMind(mind: Mind): void;
 }) {
   const t = useT();
   const extra = useFolds((state) => state.shown[listKey] ?? 0);
@@ -244,7 +224,7 @@ function Contents({
   return (
     <ul>
       {minds.map((mind) => (
-        <MindRow key={mind.id} mind={mind} depth={depth} onDelete={onDeleteMind} />
+        <MindRow key={mind.id} mind={mind} depth={depth} />
       ))}
       {documents.slice(0, listed).map((doc) => renderDocument(doc, depth))}
       {more > 0 && (
@@ -278,15 +258,11 @@ function FolderGroup({
   minds,
   documents,
   renderDocument,
-  onDeleteMind,
-  onDelete,
 }: {
   folder: LibraryGroup;
   minds: readonly Mind[];
   documents: readonly Document[];
   renderDocument(document: Document, depth: number): ReactNode;
-  onDeleteMind(mind: Mind): void;
-  onDelete(): void;
 }) {
   const expanded = useFolds((state) => state.open.has(folder.id));
   const selected = useAppStore(
@@ -297,6 +273,8 @@ function FolderGroup({
   const [renaming, setRenaming] = useState(false);
   const button = useRef<HTMLButtonElement>(null);
   const count = documents.length;
+  const t = useT();
+  const objectMenu = useObjectMenu({ kind: "folder", id: folder.id });
 
   const onKeyDown = (event: KeyboardEvent) => {
     // Enter or F2 renames, as in Finder; a click, Space or the arrows open and close it.
@@ -325,10 +303,7 @@ function FolderGroup({
       className={`rounded-md ${drop.active ? dropLit : ""}`}
     >
       {/* biome-ignore lint/a11y/noStaticElementInteractions: a right-click shortcut to the row's menu, whose ⋯ button is the way in by keyboard. */}
-      <div
-        onContextMenu={renaming ? undefined : (event) => openRowMenu(event, "folder-menu")}
-        className={rowClass(selected)}
-      >
+      <div {...(renaming ? {} : objectMenu.rowProps)} className={rowClass(selected)}>
         {renaming ? (
           <span className="flex h-full w-full min-w-0 items-center gap-2 pr-1 pl-2">
             <FolderLineIcon className={rowIconClass(selected)} />
@@ -372,7 +347,11 @@ function FolderGroup({
         )}
         {!renaming && (
           <div className={rowActionsClass}>
-            <FolderMenu folder={folder} onRename={() => setRenaming(true)} onDelete={onDelete} />
+            <ObjectMenu
+              target={{ kind: "folder", id: folder.id }}
+              label={t("folder.more", { name: folder.name })}
+              here={{ "folder.rename": () => setRenaming(true) }}
+            />
           </div>
         )}
       </div>
@@ -383,7 +362,6 @@ function FolderGroup({
           minds={minds}
           documents={documents}
           renderDocument={renderDocument}
-          onDeleteMind={onDeleteMind}
         />
       )}
     </li>
@@ -399,12 +377,10 @@ function NotInAFolder({
   minds,
   documents,
   renderDocument,
-  onDeleteMind,
 }: {
   minds: readonly Mind[];
   documents: readonly Document[];
   renderDocument(document: Document, depth: number): ReactNode;
-  onDeleteMind(mind: Mind): void;
 }) {
   const t = useT();
   const folded = useFolds((state) => state.looseFolded);
@@ -449,96 +425,9 @@ function NotInAFolder({
           minds={minds}
           documents={documents}
           renderDocument={renderDocument}
-          onDeleteMind={onDeleteMind}
         />
       )}
     </section>
-  );
-}
-
-/**
- * A Folder's menu, from its ⋯ or a right-click, in the shared order: Open in
- * the Library, New Mind here; Rename; Delete….
- */
-function FolderMenu({
-  folder,
-  onRename,
-  onDelete,
-}: {
-  folder: LibraryGroup;
-  onRename(): void;
-  onDelete(): void;
-}) {
-  const t = useT();
-  const menu = usePopoverMenu();
-  const label = t("folder.more", { name: folder.name });
-
-  /** Closes the menu, then does it. */
-  const choose = (action: () => void) => () => {
-    menu.close();
-    action();
-  };
-
-  return (
-    <>
-      <button
-        {...menu.buttonProps}
-        type="button"
-        data-testid="folder-menu"
-        aria-label={label}
-        title={label}
-        className={rowActionButtonClass}
-      >
-        <MoreLineIcon className="size-4" />
-      </button>
-      <div
-        {...menu.menuProps}
-        role="menu"
-        aria-label={label}
-        data-testid="folder-actions"
-        className={menuClass}
-      >
-        <button
-          type="button"
-          role="menuitem"
-          data-testid="folder-open"
-          onClick={choose(() => useAppStore.getState().openLibrary(folder.id))}
-          className={`${menuItemClass} pl-2`}
-        >
-          {t("folder.open")}
-        </button>
-        <button
-          type="button"
-          role="menuitem"
-          data-testid="folder-new-mind-here"
-          onClick={choose(() => void useAppStore.getState().createMind({ folderId: folder.id }))}
-          className={`${menuItemClass} pl-2`}
-        >
-          {t("folder.newMindHere")}
-        </button>
-        <div className={menuRuleClass} />
-        <button
-          type="button"
-          role="menuitem"
-          data-testid="folder-rename"
-          onClick={choose(onRename)}
-          className={`${menuItemClass} pl-2`}
-        >
-          <span className="flex-1">{t("folder.rename")}</span>
-          <span className="pl-4 text-[13px] text-ink-meta">{RENAME_SHORTCUT}</span>
-        </button>
-        <div className={menuRuleClass} />
-        <button
-          type="button"
-          role="menuitem"
-          data-testid="folder-delete"
-          onClick={choose(onDelete)}
-          className={`${menuItemClass} pl-2 text-danger`}
-        >
-          {t("folder.delete")}
-        </button>
-      </div>
-    </>
   );
 }
 
@@ -586,7 +475,13 @@ function RenameFolder({ folder, onDone }: { folder: LibraryGroup; onDone(): void
  * Asks before deleting a Folder, which can't be undone yet: says where its
  * Documents and Minds go. Open while `folder` is set.
  */
-function DeleteFolderDialog({ folder, onClose }: { folder: LibraryGroup | null; onClose(): void }) {
+export function DeleteFolderDialog({
+  folder,
+  onClose,
+}: {
+  folder: LibraryGroup | null;
+  onClose(): void;
+}) {
   const t = useT();
   const dialog = useModal(folder !== null);
   return (

@@ -217,6 +217,47 @@
     @apply mt-2 font-sans text-[13px] leading-5 text-ink-meta;
   }
 
+  /*
+   * A meeting's Transcript (#136): each line its time in a column of its own,
+   * its speaker over its words, ruled off from the next; a gap in the meta tone;
+   * the speech being transcribed now, greyed, at the end.
+   */
+  .transcript-lines {
+    @apply m-0 list-none p-0 font-sans;
+  }
+  .transcript-line,
+  .transcript-gap {
+    @apply grid grid-cols-[3.5rem_minmax(0,1fr)] gap-x-3 border-b border-rule py-3;
+  }
+  .transcript-line:last-child,
+  .transcript-gap:last-child {
+    @apply border-b-0;
+  }
+  .transcript-time {
+    @apply pt-0.5 text-[13px] leading-5 text-ink-meta tabular-nums;
+  }
+  .transcript-speaker {
+    @apply m-0 text-[13px] leading-5 font-semibold text-ink;
+  }
+  .transcript-text {
+    @apply m-0 text-[15px] leading-6 break-words text-ink;
+  }
+  .transcript-line--partial .transcript-text {
+    @apply text-ink-placeholder;
+  }
+  .transcript-gap {
+    @apply text-[13px] leading-5 text-ink-meta;
+  }
+  .transcript-empty {
+    @apply m-0 font-sans text-[14px] leading-5 text-ink-meta;
+  }
+  .transcript-live {
+    @apply inline-flex shrink-0 items-center gap-1.5 px-1 text-[12px] leading-5 whitespace-nowrap text-ink-secondary;
+  }
+  .transcript-follow {
+    @apply absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full border border-rule bg-sheet px-3 py-1 font-sans text-[12px] leading-5 font-semibold text-ink-secondary shadow-sm hover:bg-hover hover:text-ink;
+  }
+
   .document-plain {
     @apply m-0 font-serif text-body break-words whitespace-pre-wrap text-ink;
   }

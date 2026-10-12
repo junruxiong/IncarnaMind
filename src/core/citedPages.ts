@@ -101,7 +101,13 @@ function parseArea(stored: string): PageArea {
     ) {
       return { kind, sheet, from, to };
     }
-    if (kind === "page" || kind === "slide" || kind === "section" || kind === "lines") {
+    if (
+      kind === "page" ||
+      kind === "slide" ||
+      kind === "section" ||
+      kind === "lines" ||
+      kind === "time"
+    ) {
       return { kind };
     }
   }

@@ -16,7 +16,8 @@ const KEEP_AFTER_SCROLL_PX = 120;
  * there is something new to show, so the view reads the file again: a new
  * version, once it is indexed (its `contentHash`), or the file back after it
  * went missing or out of reach. A file that goes while it is shown leaves
- * what was read of it on screen.
+ * what was read of it on screen. A Transcript reads its file again itself as
+ * lines arrive, so a new version doesn't start it afresh (#136).
  */
 function useFileKey(document: Document | undefined): string {
   const id = document?.id;
@@ -28,7 +29,8 @@ function useFileKey(document: Document | undefined): string {
     if (before.id === id && available && !before.available) setReturns((count) => count + 1);
     last.current = { id, available };
   }, [id, available]);
-  return `${id}:${document?.contentHash}:${returns}`;
+  const version = document?.kind === "transcript" ? "" : document?.contentHash;
+  return `${id}:${version}:${returns}`;
 }
 
 /** Keeps a view's place for the open request, while its file is read again (see `PlaceMemory`). */
