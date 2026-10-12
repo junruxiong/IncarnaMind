@@ -1,5 +1,4 @@
 import type { JSONContent } from "@tiptap/core";
-import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test } from "vitest";
@@ -14,6 +13,7 @@ import {
 } from "../../src/core";
 import {
   aiUseOfAccepted,
+  outOfDateProposals,
   pendingProposals,
   proposalRequestOf,
   resolveProposals,
@@ -21,7 +21,7 @@ import {
 import { setUpWithDocuments } from "../helpers/citations";
 import { createTempDataFolder, nextEvent, startCore } from "../helpers/core";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
-import { readMind, writeMind } from "../helpers/minds";
+import { readMind, resolveChanges, shownWithChanges, writeMind } from "../helpers/minds";
 import { scriptedModels } from "../helpers/models";
 
 const TIDES = {
@@ -124,35 +124,6 @@ function citation(tides: Document, check: "found" | "not-found" = "found"): JSON
   };
 }
 
-/**
- * The Mind's text, Proposals shown: removed words as [-…-], added words as
- * {+…+}, a Citation as ⟨its check⟩, Blocks a Proposal adds or removes after
- * "+ " or "- ", one line per paragraph.
- */
-function shown(client: MindClient): string[] {
-  const lines: string[] = [];
-  readMind(client).descendants((node: ProseMirrorNode) => {
-    if (!node.isTextblock) return true;
-    let line = "";
-    node.forEach((child) => {
-      const kind = (child.attrs[PROPOSAL_ATTRIBUTE] as { kind?: string } | null)?.kind;
-      const inline = child.isText
-        ? (child.text ?? "")
-        : child.type.name === "citation"
-          ? `⟨${child.attrs.check}⟩`
-          : "￼";
-      const marks = child.marks.map((mark) => mark.type.name);
-      if (marks.includes("proposalDelete") || kind === "delete") line += `[-${inline}-]`;
-      else if (marks.includes("proposalInsert") || kind === "insert") line += `{+${inline}+}`;
-      else line += inline;
-    });
-    const block = (node.attrs[PROPOSAL_ATTRIBUTE] as { kind?: string } | null)?.kind;
-    lines.push(`${block === "insert" ? "+ " : block === "delete" ? "- " : ""}${line}`);
-    return false;
-  });
-  return lines.map((line) => line.replace(/-\]\[-|\+\}\{\+/g, ""));
-}
-
 /** The editor's reading of a paragraph's text (an inline node as U+FFFC), for `EditWithAiInput.text`. */
 function plainOf(client: MindClient, blockId: string): string {
   let found = "";
@@ -184,25 +155,6 @@ function wholeParagraph(
   };
 }
 
-/** Accepts or rejects Proposals in the client's copy, as the editor does, and sends it to the core. */
-async function resolve(
-  client: MindClient,
-  outcome: "accept" | "reject",
-  which: (id: string, index: number) => boolean = () => true,
-) {
-  const order = pendingProposals(client.blocks).map((proposal) => proposal.id);
-  let resolved: ReturnType<typeof resolveProposals> = [];
-  client.doc.transact(() => {
-    resolved = resolveProposals(
-      client.blocks,
-      (proposal) => which(proposal.id, order.indexOf(proposal.id)),
-      outcome,
-    );
-  }, "editor");
-  await client.settled();
-  return resolved;
-}
-
 async function setUp(model: MockLanguageModelV4) {
   const set = await setUpWithDocuments(model, [TIDES]);
   return { ...set, tides: set.documents[0] as Document };
@@ -226,7 +178,9 @@ describe("Edit with AI", () => {
     const result = await core.editWithAi(wholeParagraph(client, mind.id, note.attrs.id, "shorten"));
 
     expect(result).toMatchObject({ kind: "proposed", proposals: 2, droppedCitations: 0 });
-    expect(shown(client)).toEqual(["The tides here are [-very -]strong and [-really -]regular."]);
+    expect(shownWithChanges(client)).toEqual([
+      "The tides here are [-very -]strong and [-really -]regular.",
+    ]);
     expect(calls).toHaveLength(1);
     expect(calls[0]?.action).toBe("shorten");
     expect(calls[0]?.passage).toBe("The tides here are very strong and really regular.");
@@ -242,10 +196,10 @@ describe("Edit with AI", () => {
     });
 
     // Accept one, reject the other.
-    await resolve(client, "accept", (_id, index) => index === 0);
-    expect(shown(client)).toEqual(["The tides here are strong and [-really -]regular."]);
-    await resolve(client, "reject");
-    expect(shown(client)).toEqual(["The tides here are strong and really regular."]);
+    await resolveChanges(client, "accept", (_id, index) => index === 0);
+    expect(shownWithChanges(client)).toEqual(["The tides here are strong and [-really -]regular."]);
+    await resolveChanges(client, "reject");
+    expect(shownWithChanges(client)).toEqual(["The tides here are strong and really regular."]);
     expect(await exported(core, mind.id)).toContain(
       "The tides here are strong and really regular.",
     );
@@ -261,7 +215,9 @@ describe("Edit with AI", () => {
 
     await core.editWithAi(wholeParagraph(client, mind.id, note.attrs.id, "improve"));
 
-    expect(shown(client)).toEqual(["Spring tides [-happen-]{+come+} twice [-a-]{+each+} month."]);
+    expect(shownWithChanges(client)).toEqual([
+      "Spring tides [-happen-]{+come+} twice [-a-]{+each+} month.",
+    ]);
     const added = readMind(client).firstChild?.content.content.filter((node) =>
       node.marks.some((mark) => mark.type.name === "proposalInsert"),
     );
@@ -270,9 +226,9 @@ describe("Edit with AI", () => {
     const before = await exported(core, mind.id);
     expect(before).toContain("Spring tides **happen twice a month**.");
     expect(before).not.toContain("come");
-    await resolve(client, "accept");
+    await resolveChanges(client, "accept");
     expect(await exported(core, mind.id)).toContain("Spring tides **come twice each month**.");
-    expect(shown(client)).toEqual(["Spring tides come twice each month."]);
+    expect(shownWithChanges(client)).toEqual(["Spring tides come twice each month."]);
     expect(readMind(client).firstChild?.toJSON().content).toEqual([
       text("Spring tides "),
       text("come twice each month", "bold"),
@@ -280,9 +236,12 @@ describe("Edit with AI", () => {
     ]);
   });
 
-  test("a selection inside a paragraph changes only what was selected", async () => {
-    const { core, mind, client } = await setUp(editingModel(() => "Moon"));
-    const note = paragraph(text("The moon pulls the sea, and the moon sets the tides."));
+  test("a selection inside a paragraph changes only what was selected, and the model sees the words around it", async () => {
+    const calls: EditCall[] = [];
+    const { core, mind, client } = await setUp(editingModel(() => "Moon", calls));
+    const long =
+      "Long before anyone kept tide tables, sailors watched how the water rose and fell. ";
+    const note = paragraph(text(`${long}The moon pulls the sea, and the moon sets the tides.`));
     writeMind(client, [note]);
     await client.settled();
     const plain = plainOf(client, note.attrs.id);
@@ -298,9 +257,14 @@ describe("Edit with AI", () => {
       instruction: "Capitalise it",
     });
 
-    expect(shown(client)).toEqual([
-      "The moon pulls the sea, and the [-moon-]{+Moon+} sets the tides.",
+    expect(shownWithChanges(client)).toEqual([
+      `${long}The moon pulls the sea, and the [-moon-]{+Moon+} sets the tides.`,
     ]);
+    // About 80 characters before it, no word cut in two, and what follows it.
+    expect(calls[0]?.prompt).toContain(
+      "<before>\nsailors watched how the water rose and fell. The moon pulls the sea, and the\n</before>",
+    );
+    expect(calls[0]?.prompt).toContain("<after>\nsets the tides.\n</after>");
   });
 
   test("a Citation the new text keeps stays, and is checked again; one it drops is shown for review", async () => {
@@ -323,12 +287,12 @@ describe("Edit with AI", () => {
     const result = await core.editWithAi(wholeParagraph(client, mind.id, note.attrs.id, "shorten"));
 
     expect(result).toMatchObject({ kind: "proposed", droppedCitations: 1 });
-    expect(shown(client)).toEqual([
+    expect(shownWithChanges(client)).toEqual([
       "Spring tides [-happen-]{+come+} at new [-moon and at -]{+and +}full moon [-⟨not-found⟩, and they are the highest ⟨found⟩-]{+⟨found⟩+}.",
     ]);
 
-    await resolve(client, "accept");
-    expect(shown(client)).toEqual(["Spring tides come at new and full moon ⟨found⟩."]);
+    await resolveChanges(client, "accept");
+    expect(shownWithChanges(client)).toEqual(["Spring tides come at new and full moon ⟨found⟩."]);
     const kept: Record<string, unknown>[] = [];
     readMind(client).descendants((node) => {
       if (node.type.name === "citation") kept.push(node.attrs);
@@ -368,7 +332,7 @@ describe("Edit with AI", () => {
     expect(calls[0]?.prompt).toContain("<context>\nThe force is $F = ma$ for spring tides [·].");
     expect(calls[0]?.prompt).toContain("Translate it into 简体中文");
     expect(calls[0]?.system).toContain("Keep every Citation marker");
-    expect(shown(client)).toEqual(["The force is ￼ for spring tides ⟨found⟩."]);
+    expect(shownWithChanges(client)).toEqual(["The force is ￼ for spring tides ⟨found⟩."]);
   });
 
   test("a footnote the User wrote stays where the model keeps its marker, moves with its text, or is struck when left out", async () => {
@@ -421,14 +385,14 @@ describe("Edit with AI", () => {
     });
     expect(calls[0]?.passage).toBe("Spring tides are very strong[^1] and regular.");
     expect(calls[0]?.system).toContain("footnote marker, such as [^1]");
-    expect(shown(client)).toEqual([
+    expect(shownWithChanges(client)).toEqual([
       "Neap tides￼ are weak. Spring tides are [-very -]strong￼ and regular.",
     ]);
-    await resolve(client, "reject");
+    await resolveChanges(client, "reject");
 
     // Moved: struck where it was, and copied with its text where the model put it.
     await edit("edit-moved", "Spring tides are very strong and regular[^1].");
-    expect(shown(client)).toEqual([
+    expect(shownWithChanges(client)).toEqual([
       "Neap tides￼ are weak. Spring tides are very strong[-￼-] and regular{+￼+}.",
     ]);
     const [, moved, copy] = footnotes();
@@ -436,9 +400,9 @@ describe("Edit with AI", () => {
     expect(copy).toMatchObject({ text: "Twice a month.", proposal: "insert" });
     expect(copy?.id).not.toBe("fn-in");
     // A footnote's text was the User's: accepting its move writes nothing into the record of AI use.
-    const accepted = await resolve(client, "accept");
+    const accepted = await resolveChanges(client, "accept");
     expect(accepted.map((each) => each.characters)).toEqual([0, 0]);
-    expect(shown(client)).toEqual([
+    expect(shownWithChanges(client)).toEqual([
       "Neap tides￼ are weak. Spring tides are very strong and regular￼.",
     ]);
     expect(footnotes().map((each) => each.text)).toEqual([
@@ -458,7 +422,7 @@ describe("Edit with AI", () => {
       text: after,
       action: "shorten",
     });
-    expect(shown(client)).toEqual([
+    expect(shownWithChanges(client)).toEqual([
       "Neap tides￼ are weak. Spring tides are [-very -]strong and regular[-￼-].",
     ]);
   });
@@ -471,7 +435,7 @@ describe("Edit with AI", () => {
 
     await core.editWithAi(wholeParagraph(client, mind.id, note.attrs.id, "improve"));
 
-    expect(shown(client)).toEqual(["潮水每天[-非常-]{+很+}规律地涨落两次。"]);
+    expect(shownWithChanges(client)).toEqual(["潮水每天[-非常-]{+很+}规律地涨落两次。"]);
   });
 
   test("Explain adds a new paragraph under the selection, as a Proposal of its own", async () => {
@@ -490,14 +454,17 @@ describe("Edit with AI", () => {
     );
 
     expect(result).toMatchObject({ kind: "proposed", proposals: 1 });
-    expect(shown(client)).toEqual([
+    expect(shownWithChanges(client)).toEqual([
       "The Moon raises two bulges of water.",
       "+ It says the Moon lifts the sea twice a day.",
       "A closing line.",
     ]);
     expect(await exported(core, mind.id)).not.toContain("It says");
-    await resolve(client, "reject");
-    expect(shown(client)).toEqual(["The Moon raises two bulges of water.", "A closing line."]);
+    await resolveChanges(client, "reject");
+    expect(shownWithChanges(client)).toEqual([
+      "The Moon raises two bulges of water.",
+      "A closing line.",
+    ]);
   });
 
   test("paragraphs the new text drops are Proposals on their whole Blocks, and those it adds are new Blocks", async () => {
@@ -522,14 +489,18 @@ describe("Edit with AI", () => {
     });
     await core.editWithAi(wholeParagraph(client, mind.id, third.attrs.id, "instruction", "Split"));
 
-    expect(shown(client)).toEqual([
+    expect(shownWithChanges(client)).toEqual([
       "First [-paragraph-]{+and second, together+}.",
       "- Second paragraph.",
       "[-Single-]{+One+} line.",
       "+ Another line.",
     ]);
-    await resolve(client, "accept");
-    expect(shown(client)).toEqual(["First and second, together.", "One line.", "Another line."]);
+    await resolveChanges(client, "accept");
+    expect(shownWithChanges(client)).toEqual([
+      "First and second, together.",
+      "One line.",
+      "Another line.",
+    ]);
   });
 
   test("an empty paragraph in the selection stays out of the pairing: each paragraph gets its own new text", async () => {
@@ -554,14 +525,14 @@ describe("Edit with AI", () => {
 
     expect(calls[0]?.passage).toBe("First paragraph.\n\nThird paragraph.");
     expect(result).toMatchObject({ kind: "proposed", proposals: 2 });
-    expect(shown(client)).toEqual([
+    expect(shownWithChanges(client)).toEqual([
       "First [-paragraph-]{+line+}.",
       "",
       "Third [-paragraph-]{+line+}.",
     ]);
   });
 
-  test("nothing is proposed over text that changed or holds Proposals, nor when the model gives it back as it was", async () => {
+  test("nothing is proposed over text that is gone or holds Proposals, nor when the model gives it back as it was", async () => {
     let release = () => {};
     const waiting = new Promise<void>((resolve) => {
       release = resolve;
@@ -588,15 +559,18 @@ describe("Edit with AI", () => {
     ).toEqual({ kind: "changed" });
     expect(calls).toBe(0);
 
-    // The User edits the paragraph while the model works.
-    const editing = core.editWithAi(wholeParagraph(client, mind.id, slow.attrs.id, "improve"));
+    // The User deletes the paragraph while the model works: there is nothing to change.
+    const gone = paragraph(text("Slow and gone."));
+    writeMind(client, [slow, gone, same]);
+    await client.settled();
+    const editing = core.editWithAi(wholeParagraph(client, mind.id, gone.attrs.id, "improve"));
     await expect.poll(() => calls).toBe(1);
-    const content = (client.blocks.get(0) as Y.XmlElement).get(0) as Y.XmlText;
-    content.insert(0, "Very ");
+    client.blocks.delete(1, 1);
     await client.settled();
     release();
     expect(await editing).toEqual({ kind: "changed" });
-    expect(shown(client)).toEqual(["Very Slow paragraph.", "Same paragraph."]);
+    expect(shownWithChanges(client)).toEqual(["Slow paragraph.", "Same paragraph."]);
+    expect(pendingProposals(client.blocks)).toEqual([]);
 
     expect(
       await core.editWithAi(wholeParagraph(client, mind.id, same.attrs.id, "improve")),
@@ -604,7 +578,7 @@ describe("Edit with AI", () => {
 
     // Proposals waiting in the selection: accept or reject them first.
     await core.editWithAi(wholeParagraph(client, mind.id, slow.attrs.id, "improve"));
-    expect(shown(client)[0]).toBe("Very Slow paragraph.{+ Indeed.+}");
+    expect(shownWithChanges(client)[0]).toBe("Slow paragraph.{+ Indeed.+}");
     expect(
       await core.editWithAi(wholeParagraph(client, mind.id, slow.attrs.id, "improve")),
     ).toEqual({ kind: "has-proposals" });
@@ -635,7 +609,7 @@ describe("Edit with AI", () => {
     await waiting;
     await core.cancelEdit(input.requestId);
     expect(await editing).toEqual({ kind: "cancelled" });
-    expect(shown(client)).toEqual(["A paragraph to improve."]);
+    expect(shownWithChanges(client)).toEqual(["A paragraph to improve."]);
 
     // Quitting halfway: the request stops, and nothing is left half written.
     const again = new Promise<void>((resolve) => {
@@ -669,7 +643,7 @@ describe("Edit with AI", () => {
     expect(
       await core.editWithAi(wholeParagraph(client, mind.id, note.attrs.id, "improve")),
     ).toEqual({ kind: "failed", error: expect.objectContaining({ kind: "rate-limit" }) });
-    expect(shown(client)).toEqual(["A paragraph to improve."]);
+    expect(shownWithChanges(client)).toEqual(["A paragraph to improve."]);
   });
 
   test("Proposals survive sync to another client and a restart, and resolve the same there", async () => {
@@ -693,7 +667,7 @@ describe("Edit with AI", () => {
       warnings: [],
     });
     await core.editWithAi(wholeParagraph(first, mind.id, extra.attrs.id, "explain"));
-    const pending = shown(first);
+    const pending = shownWithChanges(first);
     expect(pending).toEqual([
       "The tides are [-very -]strong and [-really -]regular.",
       "Moon.",
@@ -702,13 +676,13 @@ describe("Edit with AI", () => {
 
     // Another client has them as they are.
     const second = await connectToMind(core, mind.id);
-    expect(shown(second)).toEqual(pending);
+    expect(shownWithChanges(second)).toEqual(pending);
 
     // So does the Mind after a restart, from what was stored.
     core.close();
     core = startCore(dataDir, { createChatModel: models.createChatModel });
     const reloaded = await connectToMind(core, mind.id);
-    expect(shown(reloaded)).toEqual(pending);
+    expect(shownWithChanges(reloaded)).toEqual(pending);
     expect(pendingProposals(reloaded.blocks)).toHaveLength(3);
     expect(reloaded.doc.getMap(MIND_PROPOSAL_REQUESTS_FIELD).size).toBe(2);
 
@@ -730,9 +704,9 @@ describe("Edit with AI", () => {
       "Moon.",
       "The Moon pulls the sea.",
     ];
-    expect(shown(reloaded)).toEqual(expected);
+    expect(shownWithChanges(reloaded)).toEqual(expected);
     const again = await connectToMind(core, mind.id);
-    expect(shown(again)).toEqual(expected);
+    expect(shownWithChanges(again)).toEqual(expected);
     expect(
       copy
         .getXmlFragment("blocks")
@@ -754,12 +728,14 @@ describe("Edit with AI", () => {
     writeMind(client, [note]);
     await client.settled();
     await core.editWithAi(wholeParagraph(client, mind.id, note.attrs.id, "improve"));
-    expect(shown(client)).toEqual(["The tides are [-very -]strong and {+quite +}regular."]);
+    expect(shownWithChanges(client)).toEqual([
+      "The tides are [-very -]strong and {+quite +}regular.",
+    ]);
 
     // As the editor does: accept, send the change, then record what was accepted.
     const [removing, adding] = pendingProposals(client.blocks).map((proposal) => proposal.id);
-    const accepted = await resolve(client, "accept", (id) => id === adding);
-    await resolve(client, "reject", (id) => id === removing);
+    const accepted = await resolveChanges(client, "accept", (id) => id === adding);
+    await resolveChanges(client, "reject", (id) => id === removing);
     const entries = aiUseOfAccepted(client.doc, mind.id, accepted, "2026-10-11T09:00:00.000Z");
     await core.recordAiUse(entries);
 
@@ -788,14 +764,207 @@ describe("Edit with AI", () => {
     await core.editWithAi(wholeParagraph(client, mind.id, note.attrs.id, "shorten"));
     const undo = new Y.UndoManager(client.blocks, { trackedOrigins: new Set(["editor"]) });
 
-    await resolve(client, "accept");
-    expect(shown(client)).toEqual(["The tides are strong and regular."]);
+    await resolveChanges(client, "accept");
+    expect(shownWithChanges(client)).toEqual(["The tides are strong and regular."]);
     undo.undo();
     await client.settled();
-    expect(shown(client)).toEqual(["The tides are [-very -]strong and [-really -]regular."]);
+    expect(shownWithChanges(client)).toEqual([
+      "The tides are [-very -]strong and [-really -]regular.",
+    ]);
     expect(pendingProposals(client.blocks)).toHaveLength(2);
     undo.redo();
-    expect(shown(client)).toEqual(["The tides are strong and regular."]);
+    expect(shownWithChanges(client)).toEqual(["The tides are strong and regular."]);
+  });
+});
+
+describe("Changes out of date", () => {
+  test("a paragraph edited while the model works keeps the User's edits, and the change to words they edited is out of date until it is made again", async () => {
+    let release = () => {};
+    const waiting = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const calls: EditCall[] = [];
+    const { core, mind, client } = await setUp(
+      editingModel(async ({ passage }) => {
+        if (passage === "really") return "truly";
+        await waiting;
+        return "The tides are strong and truly regular.";
+      }, calls),
+    );
+    const note = paragraph(text("The tides are very strong and realy regular."));
+    writeMind(client, [note]);
+    await client.settled();
+
+    // The model is paused; meanwhile the User fixes a typo in words it is about to replace.
+    const editing = core.editWithAi(wholeParagraph(client, mind.id, note.attrs.id, "improve"));
+    await expect.poll(() => calls.length).toBe(1);
+    const words = (client.blocks.get(0) as Y.XmlElement).get(0) as Y.XmlText;
+    words.insert("The tides are very strong and rea".length, "l");
+    await client.settled();
+    release();
+
+    expect(await editing).toMatchObject({ kind: "proposed", proposals: 2, outOfDate: 1 });
+    // The fix stays; the change to the words fixed is out of date, the other isn't.
+    expect(shownWithChanges(client)).toEqual([
+      "The tides are [-very -]strong and [-really-]{+truly+} regular.",
+    ]);
+    const [fresh, stale] = pendingProposals(client.blocks).map((proposal) => proposal.id);
+    expect([...outOfDateProposals(client.blocks)]).toEqual([stale]);
+    // Neither counts until it is accepted: the Mind reads as the User has it.
+    expect(await exported(core, mind.id)).toContain(
+      "The tides are very strong and really regular.",
+    );
+
+    // Accepting all leaves the one out of date as it is: it can't be accepted.
+    const accepted = await resolveChanges(client, "accept");
+    expect(accepted.map((proposal) => proposal.id)).toEqual([fresh]);
+    expect(shownWithChanges(client)).toEqual([
+      "The tides are strong and [-really-]{+truly+} regular.",
+    ]);
+
+    // Regenerate makes it again, as it was asked, from the words as they are now.
+    expect(
+      await core.regenerateProposal({
+        requestId: "again",
+        mindId: mind.id,
+        proposalId: stale ?? "",
+      }),
+    ).toMatchObject({ kind: "proposed", proposals: 1, outOfDate: 0 });
+    expect(calls.at(-1)).toMatchObject({ passage: "really", action: "improve" });
+    // A few words in a sentence: the model sees the words around them, to fit between and not repeat.
+    expect(calls.at(-1)?.prompt).toContain(
+      "<before>\nThe tides are strong and\n</before>\n\n<passage>\nreally\n</passage>\n\n<after>\nregular.\n</after>",
+    );
+    expect(calls.at(-1)?.system).toContain(
+      "The new text must fit between the words before and after it. Never repeat those words in it.",
+    );
+    // A whole paragraph has no words around it.
+    expect(calls[0]?.prompt).not.toContain("<before>");
+    expect(calls[0]?.prompt).not.toContain("<after>");
+    expect(shownWithChanges(client)).toEqual([
+      "The tides are strong and [-really-]{+truly+} regular.",
+    ]);
+    expect(pendingProposals(client.blocks).map((proposal) => proposal.id)).not.toContain(stale);
+    expect(outOfDateProposals(client.blocks).size).toBe(0);
+    await resolveChanges(client, "accept");
+    expect(shownWithChanges(client)).toEqual(["The tides are strong and truly regular."]);
+  });
+
+  test("a change out of date can be rejected; Regenerate keeps it when the model fails, and takes it away when there is nothing to change", async () => {
+    let reply: (passage: string) => string = () => "The tides are strong.";
+    const { core, mind, client } = await setUp(editingModel(({ passage }) => reply(passage)));
+    const note = paragraph(text("The tides are very strong."));
+    writeMind(client, [note]);
+    await client.settled();
+    const again = (proposalId: string) =>
+      core.regenerateProposal({ requestId: `again-${++ids}`, mindId: mind.id, proposalId });
+
+    await core.editWithAi(wholeParagraph(client, mind.id, note.attrs.id, "shorten"));
+    expect(shownWithChanges(client)).toEqual(["The tides are [-very -]strong."]);
+    // The User changes the words the change removes.
+    const words = (client.blocks.get(0) as Y.XmlElement).get(0) as Y.XmlText;
+    words.insert("The tides are v".length, "e");
+    await client.settled();
+    const [stale] = pendingProposals(client.blocks).map((proposal) => proposal.id);
+    expect([...outOfDateProposals(client.blocks)]).toEqual([stale]);
+
+    // The model fails: the change stays as it was.
+    reply = () => {
+      throw new Error("The model is down.");
+    };
+    expect(await again(stale ?? "")).toMatchObject({ kind: "failed" });
+    expect(shownWithChanges(client)).toEqual(["The tides are [-veery -]strong."]);
+
+    // The model gives the words back as they are: there is no change to make, so it goes.
+    reply = (passage) => passage;
+    expect(await again(stale ?? "")).toEqual({ kind: "unchanged" });
+    expect(shownWithChanges(client)).toEqual(["The tides are veery strong."]);
+    expect(await again(stale ?? "")).toEqual({ kind: "changed" });
+
+    // Rejecting one out of date works as for any change.
+    reply = () => "The tides are strong.";
+    await core.editWithAi(wholeParagraph(client, mind.id, note.attrs.id, "shorten"));
+    words.insert("The tides are v".length, "e");
+    await client.settled();
+    expect(outOfDateProposals(client.blocks).size).toBe(1);
+    expect(await resolveChanges(client, "accept")).toEqual([]);
+    expect(await resolveChanges(client, "reject")).toHaveLength(1);
+    expect(shownWithChanges(client)).toEqual(["The tides are veeery strong."]);
+  });
+
+  test("a change goes out of date when the words it removes are edited, not when the User writes in what it adds or elsewhere", async () => {
+    const { core, mind, client } = await setUp(
+      editingModel(() => "The tides are strong and truly regular. Moon."),
+    );
+    const note = paragraph(text("The tides are very strong and really regular. Moon."));
+    writeMind(client, [note]);
+    await client.settled();
+    await core.editWithAi(wholeParagraph(client, mind.id, note.attrs.id, "improve"));
+    expect(shownWithChanges(client)).toEqual([
+      "The tides are [-very -]strong and [-really-]{+truly+} regular. Moon.",
+    ]);
+    const words = (client.blocks.get(0) as Y.XmlElement).get(0) as Y.XmlText;
+
+    // Words written elsewhere in the paragraph, or in what a change adds, leave both as they are.
+    words.insert(words.length, " Sun.");
+    words.insert("The tides are very strong and reallytru".length, "u");
+    await client.settled();
+    expect(shownWithChanges(client)).toEqual([
+      "The tides are [-very -]strong and [-really-]{+truuly+} regular. Moon. Sun.",
+    ]);
+    expect(outOfDateProposals(client.blocks).size).toBe(0);
+
+    // Deleting some of the words a change removes puts it out of date.
+    words.delete("The tides are ".length, "ve".length);
+    await client.settled();
+    const [first] = pendingProposals(client.blocks).map((proposal) => proposal.id);
+    expect([...outOfDateProposals(client.blocks)]).toEqual([first]);
+  });
+
+  test("Proposals made before changes recorded their text are never out of date", async () => {
+    const { core, mind, client } = await setUp(editingModel(() => "The tides are strong."));
+    const note = paragraph(text("The tides are very strong."));
+    writeMind(client, [note]);
+    await client.settled();
+    await core.editWithAi(wholeParagraph(client, mind.id, note.attrs.id, "shorten"));
+    // As version 4 wrote it: the change names its id and request only.
+    const words = (client.blocks.get(0) as Y.XmlElement).get(0) as Y.XmlText;
+    const [change] = pendingProposals(client.blocks);
+    const removed = "The tides are ".length;
+    client.doc.transact(() => {
+      words.format(removed, "very ".length, {
+        proposalDelete: { id: change?.id, request: change?.request },
+      });
+    });
+    words.insert(removed + 1, "e");
+    await client.settled();
+    expect(shownWithChanges(client)).toEqual(["The tides are [-veery -]strong."]);
+    expect(outOfDateProposals(client.blocks).size).toBe(0);
+    expect(await resolveChanges(client, "accept")).toHaveLength(1);
+    expect(shownWithChanges(client)).toEqual(["The tides are strong."]);
+  });
+
+  test("deleting a Document a waiting change cites leaves the change, with its Citation, for the User", async () => {
+    const { core, mind, client, tides } = await setUp(
+      editingModel(() => "Spring tides come at new and full moon [1]."),
+    );
+    const note = paragraph(
+      text("Spring tides happen at new moon and at full moon"),
+      citation(tides),
+      text("."),
+    );
+    writeMind(client, [note]);
+    await client.settled();
+    await core.editWithAi(wholeParagraph(client, mind.id, note.attrs.id, "improve"));
+    const waiting = pendingProposals(client.blocks);
+    expect(waiting.length).toBeGreaterThan(0);
+
+    await core.deleteDocument(tides.id);
+    await client.settled();
+
+    // Nothing is dropped: the change and the Citation it keeps are still there, to show "Source removed".
+    expect(pendingProposals(client.blocks)).toEqual(waiting);
+    expect(shownWithChanges(client).join("")).toContain("⟨");
   });
 });
 
@@ -832,7 +1001,7 @@ describe("Edit with AI and the model's service", () => {
     ).toMatchObject({ kind: "proposed" });
     expect(calls).toHaveLength(1);
     expect(models.specs.at(-1)).toMatchObject({ kind: "openai", thinking: "off" });
-    await resolve(client, "reject");
+    await resolveChanges(client, "reject");
 
     // Local mode: a cloud model isn't used.
     await core.setLocalOnly(true);
@@ -854,6 +1023,6 @@ describe("Edit with AI and the model's service", () => {
     expect(
       await core.editWithAi(wholeParagraph(client, mind.id, note.attrs.id, "improve")),
     ).toEqual({ kind: "not-ready", readiness: { ready: false, reason: "no-provider" } });
-    expect(shown(client)).toEqual(["A paragraph."]);
+    expect(shownWithChanges(client)).toEqual(["A paragraph."]);
   });
 });

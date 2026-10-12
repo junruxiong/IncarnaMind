@@ -99,7 +99,7 @@ A public service that Find sources searches for works to add to the Library: Ope
 _Avoid_: source (a Document is not one), database, provider on its own (an AI model's provider)
 
 **Location**:
-Where in a Document a Citation points, in the unit the Document's own readers use: one or two pages of a PDF, one or two slides of a deck (speaker notes count as part of their slide), a sheet and a range of rows of a spreadsheet, the section a quote sits under in a Word file or Markdown (for a quote of a Word comment, the section the comment is anchored in, and that it is a comment by its author), the section and paragraphs of a Web page, or a range of lines in plain text.
+Where in a Document a Citation points, in the unit the Document's own readers use: one or two pages of a PDF, one or two slides of a deck (speaker notes count as part of their slide), a sheet and a range of rows of a spreadsheet, the section a quote sits under in a Word file or Markdown (for a quote of a Word comment, the section the comment is anchored in, and that it is a comment by its author), the section and paragraphs of a Web page, a range of lines in plain text, or a range of time in a Transcript (shown as the time the quote starts, "14:26").
 _Avoid_: page (for anything that isn't a PDF), position, anchor
 
 **Folder**:
@@ -220,6 +220,16 @@ _Avoid_: grid, spreadsheet
 **Memory**:
 What IncarnaMind has been asked to remember about the User, kept only when the User says so and open to read, change and delete.
 _Avoid_: history, profile, learned preferences
+
+### Cost
+
+**Monthly cap**:
+The most IncarnaMind may spend in a calendar month on the models the User pays for by the token, on their own keys; off until the User sets it. A request that could pass it isn't sent, and a run it stops says so.
+_Avoid_: budget, quota, spending limit
+
+**Plan**:
+A subscription the User signs in with, such as ChatGPT Plus, whose own limits apply instead of a price. A plan's limit stops a run as the monthly cap does.
+_Avoid_: subscription key, membership
 
 ### Meetings
 

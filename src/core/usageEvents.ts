@@ -118,6 +118,7 @@ const ANSWER_ERRORS = [
   "plan-limit",
   "blocked",
   "too-long",
+  "cost-cap",
   "unknown",
 ] as const;
 const DOCUMENT_ERRORS = [
@@ -149,6 +150,7 @@ export const DOCUMENT_FORMATS = [
   "markdown",
   "text",
   "web",
+  "transcript",
 ] as const satisfies readonly DocumentKind[];
 
 // The lists above follow their types: a new kind fails the type-check until it is listed.
@@ -215,6 +217,7 @@ export const USAGE_EVENTS = {
     markdown: count,
     text: count,
     web: count,
+    transcript: count,
   },
   /** The User linked a folder. */
   folder_linked: {},

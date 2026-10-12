@@ -1,5 +1,5 @@
 import { NodeViewContent, NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react";
-import { Fragment, type ReactNode, useId, useMemo, useState } from "react";
+import { Fragment, type ReactNode, useEffect, useId, useMemo, useState } from "react";
 import {
   type AnswerToolCall,
   type ApprovalRequest,
@@ -18,10 +18,12 @@ import { signInAgain } from "../chatGptSignIn";
 import { useIsExampleAnswer } from "../components/GettingStarted";
 import { PlugIcon, ScriptIcon, SkillIcon, StopIcon } from "../components/icons";
 import { FindSourcesLineIcon } from "../components/lineIcons";
+import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
 import { ProblemLine } from "../components/ProblemLine";
+import { formatResetTime } from "../cost";
 import { useFindSources } from "../findSources";
-import { useT } from "../i18n";
-import { ANSWER_PROBLEMS } from "../problems";
+import { useLanguage, useT } from "../i18n";
+import { ANSWER_PROBLEMS, answerProblem } from "../problems";
 import type { SettingsPage } from "../settingsPages";
 import { useAppStore } from "../store";
 import { ChevronRightSmallIcon, RegenerateSmallIcon } from "./icons";
@@ -73,7 +75,7 @@ function Dotted({ items }: { items: ReactNode[] }) {
  * calls and Skill scripts it used; under it, what went wrong and how to fix
  * it, and the approval cards of calls waiting for the User.
  */
-export function AnswerView({ node }: ReactNodeViewProps) {
+export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
   const t = useT();
   const mindId = useMindId();
   const answerId = text(node.attrs[BLOCK_ID_ATTRIBUTE]);
@@ -83,10 +85,7 @@ export function AnswerView({ node }: ReactNodeViewProps) {
   const writing = useAnswers((state) => (answerId ? state.writing.has(answerId) : false));
   // The event says so first; the status says so in windows that opened since.
   const streaming = writing || status === "streaming";
-  const confirming = useAnswers(
-    (state) => questionId !== null && state.blocked[questionId]?.kind === "edited",
-  );
-  const { regenerate, stop, dismiss } = useAnswers.getState();
+  const { regenerate, stop } = useAnswers.getState();
   const openSettings = useAppStore((state) => state.openSettings);
   const toolCalls = toolCallsOf(node.attrs.toolCalls);
   const searches = toolCalls.filter((call) => call.tool === SEARCH);
@@ -97,8 +96,20 @@ export function AnswerView({ node }: ReactNodeViewProps) {
   const approvals = useMemo(() => waitingFor(waiting, answerId), [waiting, answerId]);
   const isExample = useIsExampleAnswer(answerId);
 
-  const writeAgain = (discardEdits = false) => {
-    if (answerId && questionId) void regenerate(mindId, answerId, questionId, discardEdits);
+  // One the User edited comes back as changes over their version: nothing to confirm.
+  const writeAgain = () => {
+    if (answerId && questionId) void regenerate(mindId, answerId, questionId);
+  };
+  const objectMenu = useObjectMenu({ kind: "answer", id: answerId ?? "" });
+  const here = {
+    "answer.copy": () => {
+      navigator.clipboard.writeText(node.textContent).catch(useAppStore.getState().reportError);
+    },
+    ...(!streaming && questionId && { "answer.regenerate": () => writeAgain() }),
+    "block.delete": () => {
+      const pos = getPos();
+      if (pos !== undefined) editor.commands.deleteBlock(pos);
+    },
   };
 
   const meta: ReactNode[] = [];
@@ -134,6 +145,7 @@ export function AnswerView({ node }: ReactNodeViewProps) {
       data-testid="answer"
       data-status={streaming ? "streaming" : status}
       data-answer-id={answerId ?? undefined}
+      {...(answerId ? objectMenu.rowProps : {})}
     >
       <span contentEditable={false} className="sr-only">
         {t("answer.label")}
@@ -144,32 +156,6 @@ export function AnswerView({ node }: ReactNodeViewProps) {
         <p contentEditable={false} data-testid="answer-no-citations" className="answer-info">
           {t("citation.unsupported")}
         </p>
-      )}
-
-      {confirming && questionId && (
-        <div
-          contentEditable={false}
-          role="alertdialog"
-          data-testid="answer-confirm"
-          className="answer-notice"
-        >
-          <span className="answer-notice-text">{t("answer.edited.body")}</span>
-          <button
-            type="button"
-            data-testid="answer-confirm-replace"
-            onClick={() => writeAgain(true)}
-            className="answer-notice-action"
-          >
-            {t("answer.edited.replace")}
-          </button>
-          <button
-            type="button"
-            onClick={() => dismiss(questionId)}
-            className="answer-notice-action"
-          >
-            {t("answer.edited.keep")}
-          </button>
-        </div>
       )}
 
       <NodeViewContent className="answer-content" />
@@ -184,6 +170,8 @@ export function AnswerView({ node }: ReactNodeViewProps) {
         <AnswerError
           kind={isErrorKind(node.attrs.errorKind) ? node.attrs.errorKind : "unknown"}
           modelId={modelId}
+          providerId={text(node.attrs.providerId)}
+          resetsAt={text(node.attrs.errorResetsAt)}
           details={text(node.attrs.errorMessage)}
           onRetry={questionId ? () => writeAgain() : undefined}
           onOpenSettings={openSettings}
@@ -224,6 +212,14 @@ export function AnswerView({ node }: ReactNodeViewProps) {
             {t("answer.regenerate")}
           </button>
         )}
+        {answerId && (
+          <ObjectMenu
+            target={{ kind: "answer", id: answerId }}
+            label={t("answer.more")}
+            here={here}
+            className="answer-action"
+          />
+        )}
       </div>
     </NodeViewWrapper>
   );
@@ -233,18 +229,31 @@ export function AnswerView({ node }: ReactNodeViewProps) {
 function AnswerError({
   kind,
   modelId,
+  providerId,
+  resetsAt,
   details,
   onRetry,
   onOpenSettings,
 }: {
   kind: ProviderErrorKind;
   modelId: string | null;
+  providerId: string | null;
+  /** When the plan's limit resets, when its provider said. */
+  resetsAt: string | null;
   details: string | null;
   onRetry?: (() => void) | undefined;
   onOpenSettings(page: SettingsPage): void;
 }) {
   const t = useT();
-  const { line, fix } = ANSWER_PROBLEMS[kind];
+  const language = useLanguage();
+  const provider = useAnswers(
+    (state) => state.models?.find((group) => group.provider.id === providerId)?.provider.kind,
+  );
+  // Whose plan it was decides where its usage is managed.
+  useEffect(() => {
+    if (kind === "plan-limit") useAnswers.getState().loadModels();
+  }, [kind]);
+  const { line, fix } = answerProblem(kind, provider);
   const action =
     fix.kind === "settings"
       ? { label: t(fix.label), onClick: () => onOpenSettings(fix.page) }
@@ -274,6 +283,12 @@ function AnswerError({
         className="mt-1 select-none"
       >
         {t(line, { model: modelId ?? t("answer.error.thisModel") })}
+        {kind === "plan-limit" && resetsAt && (
+          <>
+            <span aria-hidden="true"> · </span>
+            {t("run.stopped.tryAfter", { time: formatResetTime(resetsAt, language) })}
+          </>
+        )}
       </ProblemLine>
     </div>
   );
