@@ -5,6 +5,7 @@ import { isShown } from "../layoutSlice";
 import { documentsByTag, NEEDS_REVIEW } from "../libraryFilters";
 import type { ObjectRef } from "../objects";
 import { useAppStore } from "../store";
+import { editTag } from "../tagChanges";
 import { BrowseGroup } from "./BrowseGroup";
 import { ReviewRing, TagDot } from "./TagColour";
 
@@ -45,6 +46,7 @@ export function SidebarTags({
     mark: ReactNode,
     title?: string,
     objectOf?: ObjectRef,
+    rename?: { label: string; commit(name: string): void | Promise<void> },
   ) => (
     <BrowseGroup
       key={value}
@@ -74,6 +76,7 @@ export function SidebarTags({
           return next;
         })
       }
+      rename={rename}
       renderDocument={renderDocument}
     />
   );
@@ -93,6 +96,10 @@ export function SidebarTags({
               <TagDot colour={tag.colour} size="md" />,
               tag.description || tag.name,
               { kind: "tag", id: tag.id },
+              {
+                label: t("tag.renameLabel", { name: tag.name }),
+                commit: (next) => editTag(tag.id, { name: next }),
+              },
             ),
           )}
         </ul>

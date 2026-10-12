@@ -7,6 +7,7 @@ import {
   type AiUseEntry,
   BLOCK_ID_ATTRIBUTE,
   DATABASE_FILE,
+  GENERATED_MARK,
   InvalidInputError,
   NotFoundError,
   type RecordAiUseInput,
@@ -138,6 +139,22 @@ describe("The record of AI use", () => {
     text.delete(0, "Roughly: ".length);
     await client.settled();
     expect((await core.listAiUse())[0]?.outcome).toBe("kept");
+  });
+
+  test("Mark as mine changes no word: the entry stays kept (#95)", async () => {
+    const { core, mind, client } = await setUp();
+    const id = addBlock(client, "Spring tides happen at new moon.");
+    const text = blockOf(client, id).get(0);
+    if (!(text instanceof Y.XmlText)) throw new Error("Expected text.");
+    text.format(0, text.length, { [GENERATED_MARK]: {} });
+    await client.settled();
+    await core.recordAiUse([
+      { mindId: mind.id, kind: "answer-added", characters: text.length, blockIds: [id] },
+    ]);
+
+    text.format(0, "Spring tides".length, { [GENERATED_MARK]: null });
+    await client.settled();
+    expect(outcomes(await core.listAiUse())).toEqual(["kept"]);
   });
 
   test("an insertion of several Blocks is edited when only some are gone", async () => {

@@ -455,10 +455,18 @@ const range = (from: string | undefined, to: string | undefined) => {
  * ("Revenue!A12:F14"). Null if it can't be read.
  */
 export function parseRequestedLocation(input: string): RequestedLocation | null {
-  const text = input
+  let text = input
     .trim()
-    .replace(/^[[("'“]+|[\])"'”.]+$/g, "")
+    .replace(/^[[("'“]+|[\]"'”.]+$/g, "")
     .trim();
+  // A closing parenthesis that closes one inside is the label's own: "§ 240.10b-5(b)".
+  const count = (mark: string) => text.split(mark).length - 1;
+  while (text.endsWith(")") && count(")") > count("(")) {
+    text = text
+      .slice(0, -1)
+      .replace(/[\]"'”.]+$/, "")
+      .trim();
+  }
   if (!text) return null;
   const times =
     /^(?:at\s+)?(\d{1,2}(?::\d{2}){1,2})(?:\s*[-–—]\s*(\d{1,2}(?::\d{2}){1,2}))?$/i.exec(text);
@@ -491,9 +499,14 @@ export function parseRequestedLocation(input: string): RequestedLocation | null 
 const simplify = (text: string) =>
   text.toLowerCase().replace(/[§›>]/g, " ").replace(/\s+/g, " ").trim();
 
-/** Whether a section Unit is the one a heading names: its heading, its path, or its number ("2.1"). */
-function sectionMatches(unit: UnitText, heading: string): boolean {
-  const wanted = simplify(heading).replace(/\s*\(\d+\)$/, "");
+/**
+ * Whether a section Unit is the one a heading names: its heading, its path, or
+ * its number ("2.1"). `loose` reads a trailing "(2)" as a second section of
+ * that name rather than as part of the heading.
+ */
+function sectionMatches(unit: UnitText, heading: string, loose = true): boolean {
+  const named = simplify(heading);
+  const wanted = loose ? named.replace(/\s*\(\d+\)$/, "") : named;
   const path = unit.label?.path ?? [];
   if (unit.label?.notes) return /^(notes|footnotes|endnotes)$/.test(wanted);
   if (path.length === 0) return /^(start|beginning|introduction)$/.test(wanted);
@@ -517,9 +530,13 @@ export function resolveRequested(
     // A deck's "page 4" is its slide 4; pages mean nothing in the other kinds.
     return kind === "page" || kind === "slide" ? { from: requested.from, to: requested.to } : null;
   }
+  // A provision's heading ends in its own "(1)": "§ 243.100(a)(1)" is that paragraph, not "243.100(a)".
+  const exactly =
+    requested.kind === "section" &&
+    units.some((unit) => unit.kind === "section" && sectionMatches(unit, requested.heading, false));
   const named = (unit: UnitText): boolean => {
     if (requested.kind === "section") {
-      return unit.kind === "section" && sectionMatches(unit, requested.heading);
+      return unit.kind === "section" && sectionMatches(unit, requested.heading, !exactly);
     }
     if (requested.kind === "time") {
       if (unit.kind !== "cues") return false;
