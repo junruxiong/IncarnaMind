@@ -18,6 +18,35 @@ export class LocalModelError extends Error {
   }
 }
 
+/** A request could pass the User's monthly cap, so it wasn't sent (see ../cost/meter). */
+export class CostCapError extends Error {
+  override name = "CostCapError";
+  constructor() {
+    super("The monthly cap would be passed, so nothing was sent.");
+  }
+}
+
+/**
+ * A plan's own allowance stopped a request: an Ollama Cloud account's usage is
+ * used up. (The ChatGPT plan's limit is `ChatGptPlanError`.)
+ */
+export class PlanLimitError extends Error {
+  override name = "PlanLimitError";
+  constructor(
+    message: string,
+    /** When the limit resets (epoch milliseconds), when the provider says. */
+    readonly resetsAt: number | null = null,
+  ) {
+    super(message);
+  }
+}
+
+/** When a reached limit resets, as ISO 8601, from an error that says (epoch milliseconds). */
+function resetsAtOf(error: Error): { resetsAt?: string } {
+  const at = "resetsAt" in error && typeof error.resetsAt === "number" ? error.resetsAt : null;
+  return at === null ? {} : { resetsAt: new Date(at).toISOString() };
+}
+
 /**
  * Ollama's refusal of a request longer than the model's context window (sent
  * with `truncate: false`): "request (6029 tokens) exceeds the available
@@ -78,15 +107,19 @@ export function refusesFeature(
  * Sorts a failed provider request into a kind the UI can explain: a bad key,
  * an unknown model, rate limiting, no connection, or the provider's own error.
  * For the ChatGPT plan, also a missing or expired sign-in, a reached plan
- * limit, or OpenAI refusing the sign-in. Jev's errors come sorted already.
+ * limit, or OpenAI refusing the sign-in; for an Ollama Cloud model, its
+ * used-up allowance; for any priced model, the monthly cap. Jev's errors come sorted already.
  * For a local model, a request too long for its context window.
  * Answers (#29) reuse it for errors shown inside an Answer.
  */
 export function classifyProviderError(error: unknown): ProviderError {
   const retried = RetryError.isInstance(error) ? error.lastError : error;
-  // A ChatGPT plan refusal that ends a stream arrives wrapped in the AI SDK's own error.
+  // A plan's refusal that ends a stream arrives wrapped in the AI SDK's own error.
   const cause =
-    retried instanceof Error && retried.cause instanceof ChatGptPlanError ? retried.cause : retried;
+    retried instanceof Error &&
+    (retried.cause instanceof ChatGptPlanError || retried.cause instanceof PlanLimitError)
+      ? retried.cause
+      : retried;
   const message = messageOf(cause);
 
   if (cause instanceof ConsentDeclinedError) return { kind: "consent-declined", message };
@@ -94,7 +127,9 @@ export function classifyProviderError(error: unknown): ProviderError {
   if (contextOverflow(cause)) return { kind: "too-long", message };
   if (cause instanceof JevRequestError) return { kind: cause.kind, message };
   if (cause instanceof ChatGptSignInRequiredError) return { kind: "not-signed-in", message };
-  if (cause instanceof ChatGptPlanError) return { kind: cause.kind, message };
+  if (cause instanceof ChatGptPlanError) return { kind: cause.kind, message, ...resetsAtOf(cause) };
+  if (cause instanceof PlanLimitError) return { kind: "plan-limit", message, ...resetsAtOf(cause) };
+  if (cause instanceof CostCapError) return { kind: "cost-cap", message };
   // The ChatGPT sign-in couldn't be refreshed for a passing reason (e.g. OpenAI's server failed).
   if (cause instanceof OAuthTokenError) return { kind: "provider", message };
 

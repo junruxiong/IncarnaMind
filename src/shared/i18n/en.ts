@@ -1072,6 +1072,8 @@ export const en = {
   "providers.test.consent-declined":
     "Nothing was sent, because you chose not to send data to this service.",
   "providers.test.too-long": "The model's context window is too small for even a short request.",
+  "providers.test.cost-cap":
+    "Nothing was sent: this month's spending cap is reached. Change it in Settings → General.",
   "providers.test.unknown": "The test didn't work.",
 
   "providers.secrets.plainText.title": "No keyring is running",
@@ -1530,6 +1532,32 @@ export const en = {
   "answer.error.signIn": "Sign in again",
   "answer.error.manageUsage": "Manage usage",
   "answer.error.retry": "Try again",
+  "answer.error.cost-cap": "Monthly cap reached",
+  "answer.error.changeCap": "Change cap",
+  "answer.error.plan-limit.ollama": "Your Ollama Cloud usage is used up",
+
+  "run.stopped.cost-cap": "Monthly cap reached",
+  "run.stopped.plan-limit": "Plan limit reached",
+  "run.stopped.tryAfter": "Try again after {time}",
+  "run.notChecked.cost-cap": "not checked: cost cap",
+  "run.notChecked.plan-limit": "not checked: plan limit",
+
+  "cost.and": "{first} and {second}",
+  "cost.estimate": "About {calls} calls, {tokens} tokens, {cost}",
+  "cost.estimate.unpriced": "About {calls} calls, {tokens} tokens",
+  "cost.estimate.month": "{spent} of {cap} used this month",
+  "cost.cap.title": "Monthly spending cap",
+  "cost.cap.switch": "Cap what your keys spend each month",
+  "cost.cap.body":
+    "Answers and other requests to models billed per token stop at the cap, with one line saying so. Plans you sign in with, like ChatGPT, keep their own limits.",
+  "cost.cap.spent": "Spent this month: {spent} on your keys.",
+  "cost.cap.spentOf": "Spent this month: {spent} of {cap} on your keys.",
+  "cost.cap.nothing": "Nothing spent on your keys this month.",
+  "cost.cap.unpriced": "{tokens} tokens went to models with no known price, and aren't counted.",
+  "cost.cap.amount": "Monthly cap",
+  "cost.cap.currency": "Currency",
+  "cost.provider.thisMonth": "This month: {spent}",
+  "cost.provider.unpriced": "This month: {tokens} tokens, price unknown",
 
   "citation.label": "Citation {number}: {document}. {badge}",
   "citation.mark.label": "Citation {number}: {badge}",
