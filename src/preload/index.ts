@@ -20,6 +20,12 @@ import {
   type FilesBridge,
   type MenuCommand,
 } from "../shared/bridge";
+import {
+  CITED_PAGE_ARGUMENT,
+  CITED_PAGE_BRIDGE_KEY,
+  CITED_PAGE_CHANNELS,
+  type CitedPageBridge,
+} from "../shared/citedPage";
 import { titleBarOf } from "../shared/titleBar";
 
 const methods = Object.fromEntries(
@@ -95,4 +101,16 @@ const files: FilesBridge = {
   },
 };
 
-contextBridge.exposeInMainWorld(FILES_BRIDGE_KEY, files);
+// The hidden window that draws a cited page (#133) shows the viewer's views, which need the core,
+// and says to the main process where it drew the page; it needs none of the file helpers.
+if (process.argv.includes(CITED_PAGE_ARGUMENT)) {
+  const citedPage: CitedPageBridge = {
+    request: () => ipcRenderer.invoke(CITED_PAGE_CHANNELS.request),
+    resize: (height) => ipcRenderer.invoke(CITED_PAGE_CHANNELS.resize, height),
+    drawn: (layout) => ipcRenderer.send(CITED_PAGE_CHANNELS.drawn, layout),
+    failed: (reason) => ipcRenderer.send(CITED_PAGE_CHANNELS.failed, reason),
+  };
+  contextBridge.exposeInMainWorld(CITED_PAGE_BRIDGE_KEY, citedPage);
+} else {
+  contextBridge.exposeInMainWorld(FILES_BRIDGE_KEY, files);
+}

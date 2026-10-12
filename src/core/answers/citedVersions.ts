@@ -84,6 +84,18 @@ export function addCitedVersions(fragment: Y.XmlFragment | Y.XmlElement, cited: 
   }
 }
 
+/** Calls `visit` with each Citation's attributes under `fragment`, at any depth. */
+export function eachCitation(
+  fragment: Y.XmlFragment | Y.XmlElement,
+  visit: (citation: CitationFields) => void,
+): void {
+  for (const child of fragment.toArray()) {
+    if (!(child instanceof Y.XmlElement)) continue;
+    if (child.nodeName === CITATION_NODE) visit(child.getAttributes());
+    else eachCitation(child, visit);
+  }
+}
+
 /** Whether a Citation in `cited` quotes this version of this Document. */
 export function isCited(cited: CitedVersions, documentId: string, contentHash: string): boolean {
   const versions = cited.get(documentId);

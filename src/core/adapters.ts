@@ -6,6 +6,7 @@
  * imports Electron (ADR-0004, ADR-0006).
  */
 import type { ChildProcess } from "node:child_process";
+import type { DrawnPage, PageCaptureRequest } from "../shared/citedPage";
 import type { AgentLauncher } from "./agents";
 import type { AnswerEngine } from "./answers/engine";
 import type { AudioSource, ExternalService, SandboxLevel, SecretProtection } from "./api";
@@ -430,6 +431,13 @@ export interface AudioCapture {
   openSettings(source: AudioSource): Promise<void>;
 }
 
+/**
+ * Draws a cited page with the Document viewer's view for its kind, off
+ * screen, so it can be saved (#133): every kind but PDF, whose pages the core
+ * draws itself. Rejects when the page can't be drawn, and when `signal` aborts.
+ */
+export type CapturePage = (request: PageCaptureRequest, signal: AbortSignal) => Promise<DrawnPage>;
+
 export interface CoreAdapters {
   paths: Paths;
   /** The OS's preferred languages, most preferred first, as BCP 47 tags such as "zh-Hans-CN". */
@@ -594,6 +602,12 @@ export interface CoreAdapters {
    * Meetings): Meetings can't start.
    */
   audioCapture?: AudioCapture;
+  /**
+   * Draws cited pages other than PDFs' (see `CapturePage`). The desktop app
+   * draws them in a hidden window (src/main/citedPageCapture.ts). Absent
+   * (tests that aren't about them): only PDFs' cited pages are saved.
+   */
+  capturePage?: CapturePage;
   /** Where the core logs what happens (see `Logger`). None by default. */
   log?: Logger;
 }

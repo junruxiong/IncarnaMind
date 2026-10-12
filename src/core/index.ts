@@ -2,10 +2,19 @@
  * The IncarnaMind core: all app logic, with no Electron imports (ADR-0004, ADR-0006).
  * Hosts construct it with `createCore`, passing platform capabilities as adapters.
  */
+
+export type {
+  DrawnPage,
+  PageArea,
+  PageBox,
+  PageCaptureRequest,
+  PageText,
+} from "../shared/citedPage";
 export type {
   AudioCapture,
   AudioSink,
   Browser,
+  CapturePage,
   CaptureSession,
   CaptureState,
   CoreAdapters,
@@ -36,6 +45,7 @@ export type {
 } from "./adapters";
 export { MEETING_SAMPLE_RATE } from "./adapters";
 export * from "./api";
+export { CITED_PAGES_FOLDER, type CitedPlace } from "./citedPages";
 export { type Core, createCore, DATABASE_FILE } from "./core";
 export type { DocumentFile, DocumentImage } from "./documents";
 export { ExtractionError } from "./documents/formats/errors";
