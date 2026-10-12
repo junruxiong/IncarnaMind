@@ -1,0 +1,34 @@
+# Calculated figures: inputs are Citations, a program does the arithmetic, and the check never says "correct"
+
+When an Answer says "revenue grew 25%", the 25% used to be the model's own arithmetic. Neither the User nor IncarnaMind could see how it was worked out, and a wrong input or a slip in the sum looked exactly like a right one. Models are least reliable exactly there: percentages, changes in percentage points, and scales such as 万, 亿, millions and billions.
+
+So a number an Answer works out from numbers in Passages is a **calculated figure** (CONTEXT.md), and the model never writes it itself (#438). It calls a Tool, `calculate`, which comes from the Documents, as `search_documents` and `cite` do, and is reserved like them. For each figure it gives a marker, its inputs and a formula. IncarnaMind gives back the result, and the model writes the marker (`[=1]`) where the number goes, beside its Citation markers (`[^1]`).
+
+## The model of a calculated figure
+
+- **An input is a Citation plus a number read from its exact characters.** The model names a Citation it recorded with `cite`, or a Passage, Location and quote, and the number as it is written in the quote ("1.2亿") or by its position. It never types a value. IncarnaMind checks the quote as the Citation check does, and reads the number with the one number reader (`src/shared/figures.ts`). A quote that is in the Passage named but not at the Location given is read where it is, as structured output's records are (ADR-0007): only the number matters, and the check still reads it there.
+- **What the text doesn't settle is never guessed.** The model is told in one line, and it fixes the input. This covers a number the quote doesn't have or has twice, and a separator, sign, range or kind of points the reader can read two ways (the model picks one of the readings it is offered). It covers a "¥" that could be yuan or yen, which the model must settle with a quote that names the currency. And it covers a number with no scale of its own on a page that states one ("单位：万元"), when the result depends on it: the model must quote that heading line as `unitQuote`, which is a Citation too. When the scale cancels out, as in a growth rate, it isn't asked for.
+- **In a workbook, an input uses the number the cell stores** (#435), not the one it shows rounded.
+- **The arithmetic is done by a program**, our own evaluator of a small part of Excel's formula language (`src/shared/formula.ts`). Its units travel with the values, so a combination that can't be right is refused, not computed. A difference of two percents is percentage points, never a percent.
+- **A figure keeps everything a check needs to run it again**: its inputs with their Citations, the characters and offset of each number, the reading chosen, the cell, the unit line, the formula, the result, its shown text and how it was shown, and the evaluator's version (`FORMULA_VERSION`), so a later version runs the same rules.
+- **The check never says "correct".** Every input is found and still reads the same, and the arithmetic gives the same result: that is all it can show. Whether these were the right numbers to use is shown for the User to judge, from each input's label, period and quote. The words are "Calculated" (计算得出) and "Inputs found · recalculated", never "verified".
+
+## How it is written and kept
+
+- **Markers.** A marker with no figure is left out, and the Answer's end says how many figures couldn't be calculated. A number the model wrote right before its own marker is left out when it reads as that figure, so the text shows it once. One that differs ("26%" where IncarnaMind calculated 25.0%) stays, and the figure keeps what the Answer wrote there, for its card to show (#439). Markers in code stay as they are.
+- **Conversations (ADR-0017)** keep a `figures` list on each Answer beside its Citations (migration 60). Reopening a conversation, Add to note, search and Question context all read the same figures, and the last two read each as its shown text. The old versions of Documents that a figure's inputs quote are kept as a Citation's are.
+- **In a Mind**, a figure reads as its shown text, until a Mind has a node of its own for it (#439, with the next content schema version).
+- **Small local models in structured output** can't call Tools. They give their figures in their JSON, which is read in the same way. One request to fix the figures in error follows, as the second chance at quotes does (ADR-0007). A figure still in error is dropped, and its marker left out.
+- **The Answer's steps** say "Calculated 2 figures" (计算了 2 个数字), with no Tool-call card, as for `cite`.
+
+## Considered options
+
+- **Let the model write the number and check it afterwards.** Rejected. A check after the fact can only say whether a number appears in a quote, not how it was worked out. It would also flag every figure that was worked out correctly.
+- **A general code interpreter for every figure.** Rejected for a figure in a sentence. A formula over cited inputs works with every model, small local ones included, runs at once and offline, and a User reads it without reading code. Analysis over whole sheets is a separate capability.
+- **A formula library** (`mathjs`, `expr-eval`). Rejected in #437: both have had code-execution advisories, and neither carries units or rounds as Excel does.
+- **Guessing a scale from the table it is likely in.** Rejected. A wrong scale is off by four orders of magnitude and looks plausible, so the heading has to be quoted.
+
+## Consequences
+
+- The steer adds about 110 tokens to every Answer's instructions in the Tool loop, and a paragraph to structured output's. The Tool's description carries an example, since some models (gpt-oss on Ollama) are shown a Tool's top-level parameters only. One Answer may call it three times, as it may search five times, so a model that can't get a figure right still answers.
+- The figure's card, its margin marks, Recalculate and the marks for figures worked out without the Tool build on this model (#439, #440, #442). The evaluation measures how many worked-out figures go through the Tool, per model and language (#441).

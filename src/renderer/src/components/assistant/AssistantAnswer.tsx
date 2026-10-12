@@ -11,9 +11,12 @@ import {
   AnswerError,
   ApprovalCard,
   CallRows,
+  FiguresSummary,
+  figuresOf,
   SEARCH,
   SearchesSummary,
   SearchList,
+  UncalculatedLine,
 } from "../../editor/AnswerView";
 import { AskProblem } from "../../editor/AskProblem";
 import { useT } from "../../i18n";
@@ -51,10 +54,10 @@ export function AssistantAnswer({
   keeping: AnswerKeeping;
 }) {
   const t = useT();
-  const { text, citations, status } = answer;
+  const { text, citations, figures, status } = answer;
   const blocks = useMemo(
-    () => answerBlocks({ text, citations, status }),
-    [text, citations, status],
+    () => answerBlocks({ text, citations, figures, status }),
+    [text, citations, figures, status],
   );
   const writing = useAnswers((state) => state.writing.has(answer.id));
   const streaming = writing || status === "streaming";
@@ -69,6 +72,7 @@ export function AssistantAnswer({
   // Written again, it starts with its searches closed.
   if (searchesOpen && searches.length === 0) setSearchesOpen(false);
   const written = hasText(blocks);
+  const { calculated, uncalculated } = figuresOf(answer.toolCalls);
 
   const meta: ReactNode[] = [];
   if (status === "stopped") {
@@ -95,6 +99,7 @@ export function AssistantAnswer({
       />,
     );
   }
+  if (calculated > 0) meta.push(<FiguresSummary count={calculated} />);
 
   return (
     <article
@@ -119,6 +124,7 @@ export function AssistantAnswer({
           regenerate={regenerate}
         />
       )}
+      {!streaming && uncalculated > 0 && <UncalculatedLine count={uncalculated} />}
       {searchesOpen && (
         <div className="answer-searches-open">
           <SearchList searches={searches} />
