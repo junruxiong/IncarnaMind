@@ -26,7 +26,7 @@
 
 <p align="center"><sub>The Answer's steps unfolded, the assistant changing a Mind for you to accept or reject, and answers from a live meeting transcript are <a href="#coming-next">coming next</a>; the rest is in the app today.</sub></p>
 
-**IncarnaMind** is a free, open-source desktop app for macOS, Windows and Linux: a notebook that answers questions from your own PDFs, Word, PowerPoint and Excel files, and checks every citation against the page it quotes.
+**IncarnaMind** is a free, open-source desktop app for macOS, Windows and Linux where you ask questions about your own documents (PDF, Word, PowerPoint, Excel and more) and write with AI. Every answer cites the exact page, and IncarnaMind checks that each quoted passage is really there. It works with your ChatGPT plan, your own API key or a local model through Ollama.
 
 ## Download
 
