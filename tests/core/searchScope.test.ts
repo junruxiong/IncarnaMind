@@ -2,12 +2,13 @@ import { rename, rm, utimes } from "node:fs/promises";
 import { join } from "node:path";
 import type { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test, vi } from "vitest";
-import type { Core, CoreAdapters, Document, Folder, Reranker, SearchScope } from "../../src/core";
+import type { Core, CoreAdapters, Document, Folder, SearchScope } from "../../src/core";
 import { translate } from "../../src/shared/i18n";
 import {
   answerEnded,
   askAndFinish,
   citingModel,
+  recordSearches,
   setUpWithDocuments,
   shownPassages,
 } from "../helpers/citations";
@@ -54,6 +55,12 @@ const SINGLES = [
 
 const ALL = ["Almanac", "Delta", "Estuary", "Harbour", "Moon", "Recipes"];
 
+/** A search hands Passages from at most 4 Documents, so an unscoped one shows 4 of ALL. */
+const someOfAll = (names: readonly string[]) => {
+  expect(names).toHaveLength(4);
+  expect(ALL).toEqual(expect.arrayContaining([...names]));
+};
+
 /**
  * A model that calls Tools: it searches once for tides, then answers without
  * citing. `generate` answers what isn't streamed, such as Organize.
@@ -71,17 +78,10 @@ function searchingModel(generate?: (call: GenerateCall) => GeneratedReply): Mock
   );
 }
 
-/**
- * The library in a core whose searches are recorded: the Documents of the
- * Passages hybrid search hands on (to the reranker), for each search, by name.
- */
+/** The library in a core whose searches are recorded: the Documents of the Passages each hands the model, by name. */
 async function setUpLibrary(model: MockLanguageModelV4 = searchingModel()) {
-  const searches: string[][] = [];
-  const reranker: Reranker = async (_query, candidates) => {
-    searches.push([...new Set(candidates.map((candidate) => candidate.documentName))].sort());
-    return [...candidates];
-  };
-  const setup = await setUpWithDocuments(model, SINGLES, { reranker });
+  const { searches, answerSearch } = recordSearches();
+  const setup = await setUpWithDocuments(model, SINGLES, { answerSearch });
   const { core } = setup;
   const library = await createSourceFolder();
   // Each file a minute newer than the one before, so which is newest doesn't depend on how
@@ -106,7 +106,7 @@ async function setUpLibrary(model: MockLanguageModelV4 = searchingModel()) {
   return {
     ...setup,
     searches,
-    reranker,
+    answerSearch,
     id,
     library,
     path: (name: string) => (documents[name] as Document).path,
@@ -166,7 +166,8 @@ describe("Resolving a Search scope", { timeout: 30_000 }, () => {
 
     await askScoped(core, client, mind.id, {});
 
-    expect(searches).toEqual([ALL]);
+    expect(searches).toHaveLength(1);
+    someOfAll(searches[0] ?? []);
   });
 
   test("an in-app folder scopes by assignment, including files from different source locations", async () => {
@@ -398,7 +399,7 @@ describe("Searching within a Search scope", { timeout: 30_000 }, () => {
 describe("A Question's Search scope", { timeout: 30_000 }, () => {
   test("is kept on the Question across a restart, and regenerating uses the scope as it is now", async () => {
     const model = searchingModel();
-    const { core, client, mind, dataDir, folders, tags, reranker, searches, models } =
+    const { core, client, mind, dataDir, folders, tags, answerSearch, searches, models } =
       await setUpLibrary(model);
     const { questionId, answerId } = await askScoped(core, client, mind.id, {
       folderIds: [folders.rivers.id],
@@ -406,7 +407,10 @@ describe("A Question's Search scope", { timeout: 30_000 }, () => {
     });
     core.close();
 
-    const adapters: Partial<CoreAdapters> = { createChatModel: models.createChatModel, reranker };
+    const adapters: Partial<CoreAdapters> = {
+      createChatModel: models.createChatModel,
+      answerSearch,
+    };
     const restarted = startCore(dataDir, adapters);
     const reader = await connectToMind(restarted, mind.id);
     let stored: Record<string, unknown> | null = null;
@@ -448,7 +452,9 @@ describe("A Question's Search scope", { timeout: 30_000 }, () => {
     await askScoped(core, client, mind.id, { folderIds: [folders.deltas.id] });
     await askAndFinish(core, client, mind.id, "And everything else?");
 
-    expect(searches).toEqual([["Delta"], ALL]);
+    expect(searches[0]).toEqual(["Delta"]);
+    expect(searches).toHaveLength(2);
+    someOfAll(searches[1] ?? []);
   });
 });
 

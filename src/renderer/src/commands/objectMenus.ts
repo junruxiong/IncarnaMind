@@ -50,6 +50,7 @@ registerMenu("folder", [
   "folder.ask",
   "folder.organize",
   "folder.editDescription",
+  "folder.sort",
   "folder.rename",
   "folder.delete",
 ]);
@@ -59,6 +60,7 @@ registerMenu("tag", ["tag.open", "tag.manage", "tag.rename", "tag.delete"]);
 registerMenu("linkedFolder", [
   "linkedFolder.pause",
   "linkedFolder.layout",
+  "folder.sort",
   "linkedFolder.download",
   "linkedFolder.reveal",
   "file.copyPath",
