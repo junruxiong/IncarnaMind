@@ -307,6 +307,8 @@ export interface AnswerDocuments {
     from: number | null,
     to: number | null,
   ): PageText[];
+  /** A live Document's date, shown with its Passages (see `documentDate` in ../documents); null if none is known. */
+  documentDate(documentId: string): string | null;
 }
 
 /** What re-checking a Citation against the current version needs from Documents. */
@@ -517,27 +519,30 @@ function withUnitMarks(text: string, units: readonly PageText[]): string {
 
 const attribute = (value: string) => value.replace(/"/g, "'").replace(/\s+/g, " ");
 
-/** A Passage as the model sees it: its short id, Document, where it is, and its text. */
+/** A Passage as the model sees it: its short id, Document and its date, where it is, and its text. */
 interface ShownPassage {
   id: string;
   documentName: string;
+  /** Its Document's date, when known: what tells the newer of two Documents that disagree (#548). */
+  date: string | null;
   range: PageRange;
   /** For every kind but PDF: the label of the Units it covers, e.g. "slides 3–4". */
   location: string | null;
   text: string;
 }
 
-/** Passages as the model sees them, each with its short id, Document and pages or Location. */
+/** Passages as the model sees them, each with its short id, Document, its date, and pages or Location. */
 function formatPassages(passages: readonly ShownPassage[]): string {
   return passages
-    .map(({ id, documentName, range, location, text }) => {
+    .map(({ id, documentName, date, range, location, text }) => {
       const pages = pagesLabel(range);
       const where = location
         ? ` location="${attribute(location)}"`
         : pages
           ? ` pages="${pages}"`
           : "";
-      return `<passage id="${id}" document="${attribute(documentName)}"${where}>\n${text}\n</passage>`;
+      const dated = date ? ` date="${attribute(date)}"` : "";
+      return `<passage id="${id}" document="${attribute(documentName)}"${dated}${where}>\n${text}\n</passage>`;
     })
     .join("\n\n");
 }
@@ -887,6 +892,11 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
     if (found.length === 0) {
       return { text: "No Passages in the User's Documents match this search.", passageCount: 0 };
     }
+    const dates = new Map<string, string | null>();
+    const dateOf = (documentId: string) => {
+      if (!dates.has(documentId)) dates.set(documentId, documents.documentDate(documentId));
+      return dates.get(documentId) ?? null;
+    };
     const formatted = found.map((passage): ShownPassage => {
       const range = { pageFrom: passage.pageFrom, pageTo: passage.pageTo };
       const units =
@@ -909,6 +919,7 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       return {
         id,
         documentName: passage.documentName,
+        date: dateOf(passage.documentId),
         range,
         location: passageLocation(units),
         text,

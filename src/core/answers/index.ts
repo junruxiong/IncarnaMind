@@ -410,7 +410,8 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
  * listing and searching only the Documents of a Search scope when given their
  * ids (null: every Document).
  */
-export interface DocumentsForAnswers extends Pick<AnswerDocuments, "citationSource" | "pageTexts"> {
+export interface DocumentsForAnswers
+  extends Pick<AnswerDocuments, "citationSource" | "pageTexts" | "documentDate"> {
   searchableCount(documentIds: readonly string[] | null): number;
   /** How many Documents there are to search, and the names of the `limit` most recently added, newest first. */
   searchableNames(documentIds: readonly string[] | null, limit: number): ListedDocuments;
@@ -436,6 +437,7 @@ function inScope(
     citationSource: (passageId) => documents.citationSource(passageId),
     pageTexts: (documentId, contentHash, from, to) =>
       documents.pageTexts(documentId, contentHash, from, to),
+    documentDate: (documentId) => documents.documentDate(documentId),
   };
 }
 
