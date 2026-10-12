@@ -3,6 +3,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import * as Y from "yjs";
 import { isCitationStyleId } from "../shared/citationStyles";
+import type { DrawnPage } from "../shared/citedPage";
 import { translate } from "../shared/i18n";
 import { bibliographyShown } from "../shared/mindBibliography";
 import {
@@ -25,6 +26,7 @@ import {
   addCitedVersions,
   type CitedUnits,
   type CitedVersions,
+  eachCitation,
   isCited,
 } from "./answers/citedVersions";
 import { createCiting } from "./answers/citing";
@@ -50,6 +52,7 @@ import type {
 import { createApprovals } from "./approvals";
 import { createBackgroundQueue } from "./backgroundQueue";
 import { createCitationStyles } from "./citationStyles";
+import { type CitedPages, type CitedPlace, createCitedPages } from "./citedPages";
 import { createConnectors } from "./connectors";
 import { createConsent, type DataFlowRegistry } from "./consent";
 import { createConversations } from "./conversations";
@@ -95,7 +98,7 @@ import { CLASSIFICATION_FLOW_SENDS, createLibrary } from "./library";
 import { automaticGroupClassifier } from "./library/automatic";
 import { createBatches } from "./library/batches";
 import { chatGroupClassifier, decisionGroupClassifier } from "./library/classifier";
-import { documentPageImages } from "./library/pageImages";
+import { documentCitedPages, documentPageImages } from "./library/pageImages";
 import { createMeetings } from "./meetings";
 import { listParts, meetingFolder } from "./meetings/audioFiles";
 import { createCaptureHealth } from "./meetings/health";
@@ -243,6 +246,14 @@ export interface Core extends CoreApi, CoreEventSource {
    * Citation quotes it, it goes at the next start.
    */
   readonly retention: VersionRetention;
+  /**
+   * A Citation's cited page, saved when the Citation was made (#133): how its
+   * Location looked in the version it quotes, with the text drawn on it, for
+   * exports such as the source pack (#134). It is there after the file
+   * changed or went. Null when none is saved: the Citation was made before
+   * pages were saved, its page couldn't be drawn, or it waits to be.
+   */
+  citedPageImage(citation: CitedPlace): Promise<DrawnPage | null>;
   /**
    * For Answers (#29): the default chat model (or the one given), once Questions
    * can be asked and the User has accepted its data flow. Throws otherwise.
@@ -411,7 +422,11 @@ export function createCore(adapters: CoreAdapters): Core {
   const privacyChanged = () => events.emit("privacy.changed", privacy.status());
   const platform = process.platform;
   const retention = createVersionRetention(db, now);
+  // Background work (automatic tagging, Organize's classification, saving cited pages): one
+  // job at a time, giving way to Answers.
+  const background = createBackgroundQueue({ reportError: (error) => console.error(error) });
   let documents: ReturnType<typeof createDocuments>;
+  let citedPages: CitedPages;
   /** Set once created, so a failure after it can close it. */
   let createdDocuments: ReturnType<typeof createDocuments> | undefined;
   try {
@@ -476,23 +491,49 @@ export function createCore(adapters: CoreAdapters): Core {
       },
       say: (key, params) => translate(settings.get().language, key, params),
     });
-    // Old versions' text, and the text kept of unlinked Documents, that no
-    // Citation quotes and no feature retains any more goes, at startup only:
-    // nothing is being written or undone then, so no Citation is in flight.
-    // The retained versions are one query, whatever their kind.
-    if (documents.hasOldVersions() || documents.keptCitationTexts().length > 0) {
+    citedPages = createCitedPages({
+      db,
+      dataDir,
+      now,
+      retention,
+      background,
+      document: (id) => documents.getMany([id])[0] ?? null,
+      filePath: (id) => documents.filePath(id),
+      drawPdf: documentCitedPages,
+      capturePage: adapters.capturePage,
+      log: adapters.log ?? silentLogger,
+    });
+    // Old versions' text, the text kept of unlinked Documents, and the cited pages, that no
+    // Citation quotes and no feature retains any more go, at startup only: nothing is being
+    // written or undone then, so no Citation is in flight. The retained versions are one
+    // query, whatever their kind, and one walk over the Minds serves both.
+    const collectVersions = documents.hasOldVersions() || documents.keptCitationTexts().length > 0;
+    const pagesCited = citedPages.collector();
+    if (collectVersions || pagesCited) {
       const cited: CitedVersions = new Map();
       for (const mind of minds.list()) {
-        content.peek(mind.id, (fragment) => addCitedVersions(fragment, cited));
+        content.peek(mind.id, (fragment) => {
+          if (collectVersions) addCitedVersions(fragment, cited);
+          if (pagesCited) eachCitation(fragment, pagesCited.cite);
+        });
       }
-      conversations.addCitedVersions(cited);
-      retention.addRetainedVersions(cited);
-      const quoted = (documentId: string, contentHash: string) =>
-        isCited(cited, documentId, contentHash);
-      documents.collectOldVersions(quoted);
-      documents.releaseKeptText(quoted);
+      // First, so a version only a page that went retained goes now too.
+      if (pagesCited) {
+        conversations.eachCitation(pagesCited.cite);
+        pagesCited.collect();
+      }
+      if (collectVersions) {
+        conversations.addCitedVersions(cited);
+        retention.addRetainedVersions(cited);
+        const quoted = (documentId: string, contentHash: string) =>
+          isCited(cited, documentId, contentHash);
+        documents.collectOldVersions(quoted);
+        documents.releaseKeptText(quoted);
+      }
     }
+    citedPages.sweep();
     retention.forgetReleased();
+    citedPages.forgetGone();
   } catch (error) {
     lifetime.abort();
     // Created, but collecting old versions failed.
@@ -511,6 +552,11 @@ export function createCore(adapters: CoreAdapters): Core {
     ...adapters.webPages,
   });
   webPages.dropPurged().catch((error: unknown) => console.error(error));
+  // A Citation was made, in an Answer (in a Mind or a conversation) or with a suggestion the
+  // User accepted: its page is saved in the background.
+  events.on("answer.finished", (finished) => citedPages.citationsMade(finished.citations));
+  events.on("suggestion.accepted", (accepted) => citedPages.citationsMade([accepted.citation]));
+  citedPages.start();
   let skills: ReturnType<typeof createSkills>;
   try {
     skills = createSkills({
@@ -752,10 +798,6 @@ export function createCore(adapters: CoreAdapters): Core {
       skills: () => new Map(skills.list().map((each) => [each.id, each.name])),
     },
   });
-
-  // Background model work (automatic tagging, and Organize's classification): one call at a
-  // time, giving way to Answers.
-  const background = createBackgroundQueue({ reportError: (error) => console.error(error) });
 
   // Requests to one service kept apart, as its operator asks: Look up and Find sources share them.
   const paceTimers = adapters.paceTimers ?? realTimers;
@@ -2445,6 +2487,7 @@ export function createCore(adapters: CoreAdapters): Core {
     dataFlows: consent.registry,
     networkTraffic: privacy.traffic,
     retention,
+    citedPageImage: (citation) => citedPages.image(citation),
     prepareChatModel: (choice) => chat.prepareModel(choice),
     close: () => {
       if (lifetime.signal.aborted) return;
@@ -2455,6 +2498,7 @@ export function createCore(adapters: CoreAdapters): Core {
       // Outside agents can't reach the core while it closes.
       void agents.close().catch((error: unknown) => console.error(error));
       // First, so stopping the Answers below starts no background work.
+      citedPages.close();
       background.close();
       void chatGpt.cancelSignIn();
       // Answers being written keep what they have, marked "stopped"; Tool calls waiting for
