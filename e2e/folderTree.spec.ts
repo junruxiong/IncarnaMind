@@ -344,6 +344,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
       /^New Mind here$/,
       /^Organize this Folder$/,
       /^Edit description…$/,
+      /^Sort by…$/,
       /^RenameF2$/,
       /^Delete…$/,
     ]);

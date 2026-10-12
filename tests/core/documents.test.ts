@@ -1,5 +1,5 @@
 import { existsSync, realpathSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { type Document, InvalidInputError, NotFoundError } from "../../src/core";
@@ -104,6 +104,7 @@ describe("Documents", { timeout: 30_000 }, () => {
         taggingError: null,
         // Read while it's processed.
         creationDate: null,
+        modifiedAt: (await stat(path)).mtime.toISOString(),
         title: null,
         web: null,
         reference: null,

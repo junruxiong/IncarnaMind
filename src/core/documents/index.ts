@@ -148,6 +148,7 @@ interface DocumentRow {
   own_file: string | null;
   counted_as_evidence: number;
   processing_version: number;
+  file_mtime_ms: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -182,7 +183,7 @@ const toUnitText = (row: UnitRow): PageText => ({
 const COLUMNS = `id, content_hash, name, kind, size, page_count, status,
   failure_reason, failure_message, folder_id, tagging_status, tagging_error_kind,
   tagging_error_message, embedding_model, path, linked_folder_id, file_status,
-  creation_date, title, own_file, counted_as_evidence, processing_version, created_at, updated_at`;
+  creation_date, title, own_file, counted_as_evidence, processing_version, file_mtime_ms, created_at, updated_at`;
 
 /** What IncarnaMind wrote the file as (#80), from its stored kind; a kind a newer version wrote counts as an export. */
 const ownFileOf = (row: Pick<DocumentRow, "own_file" | "counted_as_evidence">): OwnFile | null =>
@@ -494,6 +495,7 @@ export function createDocuments(options: DocumentsOptions) {
             }
           : null,
       creationDate: row.creation_date,
+      modifiedAt: row.file_mtime_ms === null ? null : new Date(row.file_mtime_ms).toISOString(),
       title: row.title,
       web: row.kind === "web" ? webPageInfo(db, row.id) : null,
       reference: referenceOf(db, row.id),
