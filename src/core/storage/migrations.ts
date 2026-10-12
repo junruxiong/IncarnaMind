@@ -1335,7 +1335,19 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
-    version: 63,
+    version: 67,
+    description: "Answers in conversations keep their calculated figures (#438)",
+    sql: `
+      -- An Answer's calculated figures (src/core/answers/calculations.ts, ADR-0021), as a JSON
+      -- list: each figure's marker ("[=1]" in the text), label, formula, inputs (each with the
+      -- Citation it reads its number from, the number as written and where, and the cell or the
+      -- unit line it came with), result, shown text, and the evaluator version it was worked out
+      -- by. '[]' for a Question, and for an Answer with none.
+      ALTER TABLE conversation_messages ADD COLUMN figures TEXT NOT NULL DEFAULT '[]';
+    `,
+  },
+  {
+    version: 71,
     description: "The cited page, saved when a Citation is made (#133)",
     sql: `
       -- How one Location of one version of a Document looked (src/core/citedPages.ts): a

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { create } from "zustand";
 import type { AudioSource, Meeting, Settings } from "../../core/api";
+import { meetingTimeAt } from "../../shared/blockTimes";
 import { core } from "./core";
 import { errorMessage } from "./errors";
 import { useAppStore } from "./store";
@@ -13,6 +14,8 @@ interface MeetingsState {
   noticeFor: { meetingId: string; systemAudio: boolean } | null;
   /** The gaps the User has dismissed, by Meeting: how many of its gaps they have seen. */
   gapsSeen: Readonly<Record<string, number>>;
+  /** The Meetings whose recording details are shown (#161). */
+  detailsShown: Readonly<Record<string, boolean>>;
   /** Lists the Meetings, at startup; the core's events keep the list after that. */
   load(): Promise<void>;
   /** "Record a meeting": a new Mind, in a tab of its own, with the start block. */
@@ -31,6 +34,8 @@ interface MeetingsState {
   retryTranscript(meetingId: string): Promise<void>;
   openSettings(meetingId: string, source: AudioSource): Promise<void>;
   dismissGaps(meetingId: string): void;
+  /** Shows or hides a Meeting's recording details; with no `shown`, the other way from now. */
+  showDetails(meetingId: string, shown?: boolean): void;
 }
 
 /** Meetings (#135), as the core lists them, and what the UI does with them. */
@@ -50,6 +55,7 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
     problems: {},
     noticeFor: null,
     gapsSeen: {},
+    detailsShown: {},
 
     async load() {
       try {
@@ -105,6 +111,14 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
         gapsSeen: { ...state.gapsSeen, [meetingId]: meeting?.gaps.length ?? 0 },
       }));
     },
+    showDetails(meetingId, shown) {
+      set((state) => ({
+        detailsShown: {
+          ...state.detailsShown,
+          [meetingId]: shown ?? !state.detailsShown[meetingId],
+        },
+      }));
+    },
   };
 });
 
@@ -141,5 +155,5 @@ export function useMeetingTime(meeting: Meeting): number {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [since]);
-  return meeting.recordedMs + (since === null ? 0 : Math.max(0, now - Date.parse(since)));
+  return meetingTimeAt(meeting, now);
 }

@@ -16,6 +16,8 @@ import type {
 /** The Tool an Answer searches the Documents with. */
 export const SEARCH = "search_documents";
 export const RUN_SCRIPT = "run_skill_script";
+/** The Documents' Tool whose figures an Answer shows: one call sums up all of them (ADR-0021). */
+export const CALCULATE = "calculate";
 
 /** What the steps are read from. */
 export interface StepsInput {
@@ -53,6 +55,8 @@ export type StepRow =
   | { kind: "call"; call: AnswerToolCall }
   /** A Skill, loaded by the model or chosen for the Question, with the files it read. */
   | { kind: "skill"; name: string; use: AnswerToolCall | null; reads: AnswerToolCall[] }
+  /** The figures the Answer shows, each calculated from its cited inputs. */
+  | { kind: "calculated"; count: number }
   /** The Citations checked against their sources, and how many weren't found. */
   | { kind: "check"; count: number; notFound: number };
 
@@ -69,9 +73,12 @@ export type LiveStep =
   | { kind: "searching" }
   | { kind: "call"; call: AnswerToolCall }
   | { kind: "writing" }
-  | { kind: "checking"; count: number };
+  | { kind: "checking"; count: number }
+  | { kind: "checking-figures" };
 
 const isSearch = (call: AnswerToolCall) => call.source === "documents" && call.tool === SEARCH;
+export const isCalculated = (call: AnswerToolCall) =>
+  call.source === "documents" && call.tool === CALCULATE;
 
 /** Whole seconds, at least 1. */
 const seconds = (ms: number) => Math.max(1, Math.round(ms / 1000));
@@ -114,7 +121,7 @@ const placeOf = (citation: MarkedCitation) =>
  * The rows of the unfolded timeline, in order: the model's reasoning (or
  * who answered), the Mind read, the searches and other calls in the order
  * they started (searches in a row as one, a failed one where it happened),
- * and the check of the Citations last. A call still waiting for the User has
+ * the figures calculated, and the check of the Citations last. A call still waiting for the User has
  * no row: its approval card shows instead.
  */
 export function stepRows({ answer, askedFrom }: StepsInput): StepRow[] {
@@ -126,8 +133,13 @@ export function stepRows({ answer, askedFrom }: StepsInput): StepRow[] {
   const searches: Extract<StepRow, { kind: "search" }>[] = [];
   const skills = new Map<string, Extract<StepRow, { kind: "skill" }>>();
   let joining: Extract<StepRow, { kind: "search" }> | null = null;
+  let calculated = 0;
   for (const call of answer.toolCalls) {
     if (call.approval === "waiting") continue;
+    if (isCalculated(call)) {
+      calculated = call.resultCount ?? 0;
+      continue;
+    }
     if (isSearch(call)) {
       if (call.status === "failed") {
         rows.push({ kind: "failed-search", call });
@@ -179,6 +191,7 @@ export function stepRows({ answer, askedFrom }: StepsInput): StepRow[] {
   }
   for (const [search, passages] of used) search.used = passages.size;
 
+  if (calculated > 0) rows.push({ kind: "calculated", count: calculated });
   if (answer.citations.length > 0) {
     rows.push({
       kind: "check",
@@ -225,7 +238,7 @@ export function foldedLine({ answer, askedFrom, meeting }: StepsInput): FoldedLi
 /**
  * The step an Answer being written is on, from its phase, its calls, its
  * text and its Citations: waiting for the User first; then loading,
- * checking quotes, searching or another call running; then writing, which
+ * checking quotes or figures, searching or another call running; then writing, which
  * becomes checking once every marker in the text has its Citation; before
  * any text, searching: nothing of the Mind is read, so the steps start there.
  */
@@ -241,7 +254,10 @@ export function liveStep({
   if (phase === "waiting-for-consent") return { kind: "consent" };
   if (phase === "loading") return { kind: "loading" };
   if (phase === "checking-quotes") return { kind: "checking", count: answer.citations.length };
-  const running = answer.toolCalls.filter((call) => call.status === "running");
+  if (phase === "checking-figures") return { kind: "checking-figures" };
+  const running = answer.toolCalls.filter(
+    (call) => call.status === "running" && !isCalculated(call),
+  );
   if (phase === "searching" || running.some(isSearch)) return { kind: "searching" };
   const call = running.find((each) => !isSearch(each));
   if (call) return { kind: "call", call };

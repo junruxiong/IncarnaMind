@@ -51,41 +51,80 @@ export function citationNode(citation: Citation | null): NodeJSON {
 /**
  * Turns the markers in an Answer's text into Citation nodes: `node` gives a
  * marker's node, or null to remove the marker (with the space before it, so
- * "a claim [^3]." reads "a claim."). Text marked as code keeps its markers.
+ * "a claim [^3]." reads "a claim."). Code keeps its markers.
  */
 export function withCitations(
   blocks: readonly NodeJSON[],
   node: (marker: number) => NodeJSON | null,
 ): NodeJSON[] {
-  return blocks.map((block) => replaceMarkers(block, node));
+  return replaceMarkers(blocks, CITATION_MARKER, (match, before, after) => {
+    const citation = node(Number(match[1]));
+    if (citation) return { before, put: citation };
+    return { before: withoutSpaceBeforeRemoved(before, after), put: null };
+  });
 }
 
-function replaceMarkers(block: NodeJSON, node: (marker: number) => NodeJSON | null): NodeJSON {
-  if (!block.content) return block;
+/** The text before a marker that is removed: without the space before it, unless a word follows. */
+export const withoutSpaceBeforeRemoved = (before: string, after: string): string =>
+  /^\p{L}/u.test(after) ? before : before.replace(/[ \t]+$/, "");
+
+/** What goes where a marker was (see `replaceMarkers`). */
+export interface MarkerReplacement {
+  /** The text before it, since the last marker in its text node, as it is to stay. */
+  before: string;
+  /** In its place: a node, text with the marks of the text around it, or nothing. */
+  put: NodeJSON | string | null;
+  /** How many characters of the text after it to leave out too. */
+  skip?: number;
+}
+
+/**
+ * Replaces each match of `pattern` (a global RegExp) in the text of `blocks`
+ * with what `replace` gives for it, from the match, the text before it in its
+ * text node (since the last match) and the text after it. Inline code and
+ * code blocks keep their markers.
+ */
+export function replaceMarkers(
+  blocks: readonly NodeJSON[],
+  pattern: RegExp,
+  replace: (match: RegExpMatchArray, before: string, after: string) => MarkerReplacement,
+): NodeJSON[] {
+  return blocks.map((block) => replaceIn(block, pattern, replace));
+}
+
+function replaceIn(
+  block: NodeJSON,
+  pattern: RegExp,
+  replace: (match: RegExpMatchArray, before: string, after: string) => MarkerReplacement,
+): NodeJSON {
+  if (!block.content || block.type === "codeBlock") return block;
   const content: NodeJSON[] = [];
   for (const child of block.content) {
     const isCode = child.marks?.some((mark) => mark.type === "code") ?? false;
     if (child.type !== "text" || !child.text || isCode) {
-      content.push(replaceMarkers(child, node));
+      content.push(replaceIn(child, pattern, replace));
       continue;
     }
     let last = 0;
-    for (const match of child.text.matchAll(CITATION_MARKER)) {
-      let before = child.text.slice(last, match.index);
-      const citation = node(Number(match[1]));
-      // A removed marker takes the space before it, unless a word follows.
-      if (!citation) {
-        const after = child.text.slice(match.index + match[0].length);
-        if (!/^\p{L}/u.test(after)) before = before.replace(/[ \t]+$/, "");
-      }
+    for (const match of child.text.matchAll(pattern)) {
+      const end = match.index + match[0].length;
+      const {
+        before,
+        put,
+        skip = 0,
+      } = replace(match, child.text.slice(last, match.index), child.text.slice(end));
       if (before) content.push({ ...child, text: before });
-      if (citation) content.push(citation);
-      last = match.index + match[0].length;
+      if (typeof put === "string") {
+        if (put) content.push({ ...child, text: put });
+      } else if (put) {
+        content.push(put);
+      }
+      last = end + skip;
     }
     const rest = child.text.slice(last);
     if (rest) content.push(last === 0 ? child : { ...child, text: rest });
   }
-  // Two text nodes with the same marks that a removed marker left side by side become one.
+  // Two text nodes with the same marks that a replaced marker left side by side become one.
   const merged: NodeJSON[] = [];
   for (const child of content) {
     const previous = merged.at(-1);

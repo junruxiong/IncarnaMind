@@ -4,6 +4,9 @@
  * with the system save dialog), so nothing here touches the file system.
  */
 import type * as Y from "yjs";
+import { layoutChart } from "../../shared/chartLayout";
+import { chartSvg } from "../../shared/chartSvg";
+import { seriesName } from "../../shared/charts";
 import {
   type CitationStyle,
   type CitationStyleId,
@@ -12,6 +15,8 @@ import {
 import { citationState, citedLocation } from "../../shared/citations";
 import { translate } from "../../shared/i18n";
 import { mindName } from "../../shared/naming";
+import type { SourceDocument } from "../../shared/sources";
+import type { Logger, Pictures } from "../adapters";
 import type {
   CitationAttributes,
   CitationFormatRequest,
@@ -28,8 +33,9 @@ import { InvalidInputError, isRecord } from "../errors";
 import { safeFileName } from "../fileNames";
 import type { Language } from "../language";
 import { type Block, countQuestions, type Footnote, footnotesIn, readBlocks } from "../mindText";
-import { styleCitations } from "./citations";
+import { addSources, styleCitations } from "./citations";
 import { renderDocx } from "./docx";
+import { exportLabels } from "./labels";
 import { renderMarkdown } from "./markdown";
 
 export interface ExportsDependencies {
@@ -38,17 +44,27 @@ export interface ExportsDependencies {
   /** Reads the Mind's Blocks (see `MindContent.read`). */
   read<T>(mindId: string, look: (blocks: Y.XmlFragment) => T): T;
   /** The live Documents: a Citation whose Document was deleted can't be checked. */
-  liveDocuments(): Pick<Document, "id" | "contentHash">[];
+  liveDocuments(): SourceDocument[];
   /** The text kept of Documents unlinked with their Linked folder: Citations quoting it still check. */
   keptCitationTexts(): KeptCitationText[];
   /** The interface language, which the export's own words are in. */
   language(): Language;
   /** The Mind's citation style (#289). */
   citationStyle(mindId: string): CitationStyleId;
+  /** Whether the Mind shows its Bibliography without a citation style (#102). */
+  bibliography(mindId: string): boolean;
   /** Formats Citations in a style, as the editor does (see `CoreApi.formatCitations`). */
   formatCitations(request: CitationFormatRequest): Promise<FormattedCitations>;
+  /** Draws charts' pictures for Word; without it, a chart goes into Word as its table. */
+  pictures?: Pictures;
+  log: Logger;
   now(): string;
 }
+
+/** The text's width on A4 and on Letter, in CSS pixels, so Word never scales the picture. */
+const PICTURE_WIDTH = 600;
+/** Sharp when printed or zoomed. */
+const PICTURE_SCALE = 2;
 
 const EXTENSIONS: Readonly<Record<ExportFormat, string>> = { markdown: "md", docx: "docx" };
 
@@ -60,6 +76,8 @@ interface Prepared {
   preview: MindExportPreview;
   language: Language;
   style: CitationStyle;
+  documents: readonly SourceDocument[];
+  bibliography: boolean;
 }
 
 export function createExports(deps: ExportsDependencies) {
@@ -92,7 +110,16 @@ export function createExports(deps: ExportsDependencies) {
       unverifiedCitations: footnotes.filter((each) => each.unverified).length,
       questions,
     };
-    return { format, title: mind.title, blocks, preview, language, style };
+    return {
+      format,
+      title: mind.title,
+      blocks,
+      preview,
+      language,
+      style,
+      documents,
+      bibliography: deps.bibliography(mind.id),
+    };
   };
 
   return {
@@ -102,19 +129,22 @@ export function createExports(deps: ExportsDependencies) {
 
     async export(mindId: unknown, options: unknown): Promise<MindExport> {
       const prepared = prepare(mindId, options);
-      const { title, preview, language, format, style } = prepared;
+      const { title, preview, language, format, style, documents } = prepared;
       const blocks =
-        style.form === "numbered"
-          ? prepared.blocks
-          : await styleCitations(prepared.blocks, style, deps.formatCitations);
-      const labels = {
-        question: translate(language, "export.question"),
-        unverified: translate(language, "export.unverified"),
-      };
+        style.form !== "numbered"
+          ? await styleCitations(prepared.blocks, style, deps.formatCitations)
+          : prepared.bibliography
+            ? addSources(
+                prepared.blocks,
+                { language, documents },
+                translate(language, "bibliography.title"),
+              )
+            : prepared.blocks;
+      const labels = exportLabels(language);
       const data =
         format === "markdown"
           ? new TextEncoder().encode(renderMarkdown(title, blocks, labels))
-          : renderDocx(blocks, {
+          : renderDocx(await withPictures(blocks, language, deps), {
               title,
               labels,
               language: language === "zh-CN" ? "zh-CN" : "en-US",
@@ -124,6 +154,66 @@ export function createExports(deps: ExportsDependencies) {
       return { ...preview, data };
     },
   };
+}
+
+/** A picture that can't be drawn leaves the chart's table, and the log says why. */
+async function withPictures(
+  blocks: readonly Block[],
+  language: Language,
+  deps: Pick<ExportsDependencies, "pictures" | "log">,
+): Promise<Block[]> {
+  const { pictures } = deps;
+  if (!pictures) return [...blocks];
+  const draw = async (block: Extract<Block, { kind: "chart" }>): Promise<Block> => {
+    const { chart } = block;
+    const layout = layoutChart(chart, {
+      width: PICTURE_WIDTH,
+      language,
+      legendInside: true,
+      seriesName: (index) =>
+        seriesName(chart, index, (key, params) => translate(language, key, params)),
+    });
+    if (layout.points.length === 0) return block;
+    try {
+      const png = await pictures.png(chartSvg(layout, PICTURE_SCALE));
+      const kind = translate(language, `chart.kindName.${chart.kind}`);
+      return {
+        ...block,
+        picture: {
+          src: `data:image/png;base64,${Buffer.from(png).toString("base64")}`,
+          alt: chart.title
+            ? translate(language, "export.chart.picture", { kind, title: chart.title })
+            : kind,
+        },
+      };
+    } catch (error) {
+      deps.log.warn("export.chartPicture", {
+        kind: chart.kind,
+        points: layout.points.length,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return block;
+    }
+  };
+  // One at a time: each picture opens a window of its own.
+  const inOrder = async <T, U>(items: readonly T[], each: (item: T) => Promise<U>) => {
+    const done: U[] = [];
+    for (const item of items) done.push(await each(item));
+    return done;
+  };
+  const visit = async (block: Block): Promise<Block> => {
+    switch (block.kind) {
+      case "chart":
+        return draw(block);
+      case "list":
+        return { ...block, items: await inOrder(block.items, (item) => inOrder(item, visit)) };
+      case "quote":
+        return { ...block, content: await inOrder(block.content, visit) };
+      default:
+        return block;
+    }
+  };
+  return inOrder(blocks, visit);
 }
 
 function parseExportOptions(input: unknown): Required<ExportMindOptions> {

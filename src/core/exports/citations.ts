@@ -5,6 +5,7 @@
  * and is never passed through here.
  */
 import type { CitationStyle } from "../../shared/citationStyles";
+import { type SourceContext, sourceEntry, sourcesOf } from "../../shared/sources";
 import type { CitationFormatRequest, CitedWork, FormattedCitations, StyledRun } from "../api";
 import { type Block, type Inline, trimTrailingSpace } from "../mindText";
 
@@ -27,6 +28,9 @@ function mapInlines(blocks: readonly Block[], map: (content: Inline[]) => Inline
             row.map((cell) => ({ ...cell, content: cell.content.map(visit) })),
           ),
         };
+      // A chart's sources, side by side, are one cluster: "Source: (Acme, 2025, p. 4; …)".
+      case "chart":
+        return { ...block, sources: map(block.sources) };
       default:
         return block;
     }
@@ -147,6 +151,39 @@ export async function styleCitations(
       heading: style.heading,
       items: formatted.bibliography.map((entry) => ({ label: entry.label, runs: entry.runs })),
       hangingIndent: formatted.hangingIndent,
+    },
+  ];
+}
+
+/**
+ * The Blocks with a Bibliography at the end (#102), for a Numbered Mind that shows one: each
+ * Document its Citations cite, once, with the Locations cited. A Citation a pending change
+ * adds isn't in the Blocks, so it isn't counted. Blocks with no Citation come back as they were.
+ */
+export function addSources(
+  blocks: readonly Block[],
+  context: SourceContext,
+  heading: string,
+): Block[] {
+  const cited: Parameters<typeof sourcesOf>[0][number][] = [];
+  mapInlines(blocks, (content) => {
+    for (const inline of content) {
+      if (inline.kind === "citation") cited.push(inline.work);
+    }
+    return content;
+  });
+  const sources = sourcesOf(cited, context);
+  if (sources.length === 0) return [...blocks];
+  return [
+    ...blocks,
+    {
+      kind: "bibliography",
+      heading,
+      items: sources.map((source) => ({
+        label: null,
+        runs: [{ text: sourceEntry(source, context.language) }],
+      })),
+      hangingIndent: false,
     },
   ];
 }

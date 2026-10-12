@@ -7,13 +7,14 @@ import {
   useRef,
   useState,
 } from "react";
-import type { Document, DocumentFailureReason, DocumentStatus, Tag } from "../../../core/api";
+import type { Document, DocumentStatus, Tag } from "../../../core/api";
 import { displayName, sourceOf } from "../../../shared/documentNames";
 import type { MessageKey } from "../../../shared/i18n";
+import { documentStatusText } from "../documentStatus";
 import { useLanguage, useT } from "../i18n";
 import { currentTabOf } from "../layoutSlice";
 import { fileStatusLabel } from "../linkedFolders";
-import { scanningStatus, unreadPages } from "../scanStatus";
+import { scanningStatus } from "../scanStatus";
 import { selectVisibleDocuments, useAppStore } from "../store";
 import { chipsOf, tagIndex } from "../tagEditing";
 import { moveThroughRows, TREE_ROW } from "../treeKeys";
@@ -34,29 +35,9 @@ import {
   rowPadding,
 } from "./sidebarRows";
 import { TagMarks, TagNamesTip, tagNamesTipListProps } from "./TagMarks";
-import {
-  buttonClass,
-  dangerButtonClass,
-  dialogActionsClass,
-  dialogBodyClass,
-  dialogClass,
-  dialogTextClass,
-  dialogTitleClass,
-} from "./ui";
-import { useModal } from "./useModal";
 
 /** What the file picker offers. The core decides what it takes. */
 const ACCEPTED_FILES = ".pdf,.docx,.pptx,.xlsx,.csv,.txt,.md,.markdown";
-
-/** A Document's status in full: for its tooltip and for screen readers. */
-const statusMessages: Record<Exclude<DocumentStatus, "failed">, MessageKey> = {
-  queued: "documents.status.queued",
-  extracting: "documents.status.extracting",
-  "waiting-for-model": "embedding.status.waiting",
-  embedding: "embedding.status.embedding",
-  ready: "documents.status.ready",
-  "no-text": "documents.status.noText",
-};
 
 /** A Document's status as its row's end shows it: nothing once it's ready. */
 const shortStatusMessages: Record<DocumentStatus, MessageKey | null> = {
@@ -67,16 +48,6 @@ const shortStatusMessages: Record<DocumentStatus, MessageKey | null> = {
   ready: null,
   failed: "documents.statusShort.failed",
   "no-text": "documents.statusShort.noText",
-};
-
-const failureMessages: Record<DocumentFailureReason, MessageKey> = {
-  unreadable: "documents.failure.unreadable",
-  "password-protected": "documents.failure.passwordProtected",
-  "too-large": "documents.failure.tooLarge",
-  "file-missing": "documents.failure.fileMissing",
-  "processing-error": "documents.failure.processingError",
-  // Worded with its pages (see `unreadPages`).
-  "pages-unread": "documents.failure.pagesUnread.all",
 };
 
 /** The ways to browse the Documents, in the switcher's order. */
@@ -282,6 +253,7 @@ const DocumentRow = memo(function DocumentRow({
 }) {
   const t = useT();
   const [renaming, setRenaming] = useState(false);
+  const button = useRef<HTMLButtonElement>(null);
   const shownName = displayName(item);
   const source = sourceOf(item);
   const chips = chipsOf(item.tags, tagsById);
@@ -315,11 +287,19 @@ const DocumentRow = memo(function DocumentRow({
           style={rowPadding(depth)}
         >
           <DocumentLineIcon kind={item.kind} className={rowIconClass(false)} />
-          <RenameInput item={item} onDone={() => setRenaming(false)} />
+          <RenameInput
+            item={item}
+            onDone={() => {
+              setRenaming(false);
+              // Back on its row, so the keyboard carries on from there.
+              requestAnimationFrame(() => button.current?.focus());
+            }}
+          />
         </div>
       ) : (
         // Opens the Document in the viewer, replacing whatever it showed.
         <button
+          ref={button}
           type="button"
           {...TREE_ROW}
           data-testid="open-document"
@@ -330,6 +310,13 @@ const DocumentRow = memo(function DocumentRow({
             .join("\n")}
           // A preview beside the Mind, or in the group already showing a Document.
           onClick={() => openDocument({ documentId: item.id })}
+          onDoubleClick={() => setRenaming(true)}
+          onKeyDown={(event) => {
+            if (event.key === "F2") {
+              event.preventDefault();
+              setRenaming(true);
+            }
+          }}
           className={rowButtonClass}
           style={rowPadding(depth)}
         >
@@ -382,19 +369,11 @@ function DocumentStatusLabel({ item }: { item: Document }) {
       </span>
     );
   }
-  const percent = Math.floor((item.progress ?? 0) * 100);
   // Its scanned pages being read, or some that couldn't be (#397).
   const scanning = item.status === "extracting" && item.scan ? scanningStatus(item.scan, t) : null;
   const unread = item.status === "failed" && item.failure?.reason === "pages-unread";
-  const full =
-    item.status === "failed"
-      ? t("documents.status.failed", {
-          reason:
-            unread && item.failure
-              ? unreadPages(item.failure, t, language, "reason")
-              : t(failureMessages[item.failure?.reason ?? "processing-error"]),
-        })
-      : (scanning?.full ?? t(statusMessages[item.status], { percent }));
+  const full = documentStatusText(item, t, language, scanning?.full ?? null);
+  const percent = Math.floor((item.progress ?? 0) * 100);
   const shortKey = unread ? "documents.statusShort.pagesUnread" : shortStatusMessages[item.status];
   const short = shortKey && (scanning?.short ?? t(shortKey, { percent }));
   const title = item.failure?.message ? `${full}\n${item.failure.message}` : full;
@@ -447,6 +426,7 @@ function RenameInput({ item, onDone }: { item: Document; onDone(): void }) {
       aria-label={t("documents.renameLabel", { name: item.name })}
       onChange={(event) => setValue(event.target.value)}
       onKeyDown={(event) => {
+        if (event.nativeEvent.isComposing) return;
         if (event.key === "Enter" || event.key === "Escape") {
           event.preventDefault();
           finish(event.key === "Enter");
@@ -455,60 +435,5 @@ function RenameInput({ item, onDone }: { item: Document; onDone(): void }) {
       onBlur={() => finish(true)}
       className={rowInputClass}
     />
-  );
-}
-
-/** Asks before deleting a Document, or removing a missing one. */
-export function DeleteDocumentDialog({
-  target,
-  onClose,
-}: {
-  target: Document | null;
-  onClose(): void;
-}) {
-  const t = useT();
-  const dialog = useModal(target !== null);
-  const deleteDocument = useAppStore((state) => state.deleteDocument);
-
-  // A missing Document's file is gone already: removing it drops what IncarnaMind kept of it.
-  const missing = target?.fileStatus === "missing";
-
-  const confirm = () => {
-    if (target) void deleteDocument(target.id);
-    onClose();
-  };
-
-  return (
-    <dialog
-      ref={dialog}
-      onClose={onClose}
-      data-testid="delete-document-dialog"
-      aria-labelledby="delete-document-title"
-      className={`${dialogClass} w-[26rem]`}
-    >
-      <div className={dialogBodyClass}>
-        <h2 id="delete-document-title" className={dialogTitleClass}>
-          {t(missing ? "documents.remove.title" : "documents.delete.title")}
-        </h2>
-        <p className={dialogTextClass}>
-          {t(missing ? "documents.remove.body" : "documents.delete.body", {
-            name: target?.name ?? "",
-          })}
-        </p>
-        <div className={dialogActionsClass}>
-          <button type="button" onClick={onClose} className={buttonClass}>
-            {t("documents.delete.cancel")}
-          </button>
-          <button
-            type="button"
-            data-testid="confirm-delete-document"
-            onClick={confirm}
-            className={dangerButtonClass}
-          >
-            {t(missing ? "documents.remove.confirm" : "documents.delete.confirm")}
-          </button>
-        </div>
-      </div>
-    </dialog>
   );
 }

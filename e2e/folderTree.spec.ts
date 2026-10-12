@@ -235,8 +235,8 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
       /^Citation style…$/,
       /^Make this a Skill$/,
       /^Move to…(⇧⌘M|Ctrl\+Shift\+M)$/,
-      /^Rename(↩|F2)$/,
-      /^Delete…$/,
+      /^RenameF2$/,
+      /^Delete$/,
     ]);
     await actions.getByTestId("mind.moveTo").click();
     const picker = window.getByTestId("move-to-picker");
@@ -309,7 +309,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     const answer = assistantAnswers(window).first();
     await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
 
-    // A Folder renames in place, as in Finder: a double-click, Enter saves; Enter or F2 on its
+    // A Folder renames in place, as in Finder: a double-click, Enter saves; F2 on its
     // row, Esc changes nothing.
     await research.getByTestId("folder-row").dblclick();
     // (While it is typed, the row has no name to find it by.)
@@ -324,7 +324,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     // Open as before the double-click.
     await expect(renamed).toHaveAttribute("data-expanded", "true");
     await expect(composer.getByTestId("scope-chip")).toHaveText("Research notes");
-    for (const key of ["Enter", "F2"]) {
+    for (const key of ["F2"]) {
       await renamed.getByTestId("folder-row").focus();
       await window.keyboard.press(key);
       await expect(window.getByTestId("folder-rename-field")).toBeFocused();
@@ -336,7 +336,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
       await expect(renamed.getByTestId("folder-row")).toBeFocused();
     }
 
-    // Its menu, in the shared order; Delete asks first, as it can't be undone.
+    // Its menu, in the shared order; Delete asks nothing: the Folder goes to Recently deleted.
     await renamed.getByTestId("folder-row").click({ button: "right" });
     const folderActions = renamed.getByTestId("folder-actions");
     await expect(folderActions.getByRole("menuitem")).toHaveText([
@@ -344,14 +344,13 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
       /^New Mind here$/,
       /^Organize this Folder$/,
       /^Edit description…$/,
-      /^Rename(↩|F2)$/,
-      /^Delete…$/,
+      /^RenameF2$/,
+      /^Delete$/,
     ]);
     await folderActions.getByTestId("folder.delete").click();
-    const dialog = window.getByTestId("delete-folder-dialog");
-    await expect(dialog).toContainText("Delete the Folder “Research notes”?");
-    await expect(dialog).toContainText("move to Not in a Folder");
-    await dialog.getByTestId("confirm-delete-folder").click();
+    await expect(window.getByTestId("undo-message")).toHaveText(
+      "Moved “Research notes” to Recently deleted",
+    );
 
     // Its Mind is Not in a Folder now: it searches everything; the Answer asked, which had no
     // Documents to search in the Folder, still says only the Mind it was asked from.

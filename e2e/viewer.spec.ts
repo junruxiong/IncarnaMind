@@ -636,7 +636,6 @@ test("a Document deleted while it is open, or already deleted, shows Document re
 
   await openDocumentMenu(item);
   await item.getByTestId("document.delete").click();
-  await window.getByTestId("confirm-delete-document").click();
   await expect(item).toHaveCount(0);
   await expect(window.getByTestId("viewer-removed")).toContainText(
     "has been deleted from IncarnaMind",
