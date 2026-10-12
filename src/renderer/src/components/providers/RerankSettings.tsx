@@ -91,6 +91,13 @@ export function RerankSettingsSection() {
                       { model: rerank.modelId ?? "" },
                     )}
                   </p>
+                  {rerank.runsOn && (
+                    <p data-testid="rerank-runs-on" className={rowTextClass}>
+                      {t("rerank.settings.runsOn", {
+                        device: rerank.runsOn === "gpu" ? "GPU" : "CPU",
+                      })}
+                    </p>
+                  )}
                   <p className={rowTextClass}>{t("rerank.settings.builtInNote")}</p>
                   <BuiltInModelState model={rerank.model} />
                 </>
