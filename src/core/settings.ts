@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import {
   type ChatModelChoice,
   type DeviceSettings,
+  EXPORT_FORMATS,
+  type ExportPreferences,
   type GettingStarted,
   MOTION_PREFERENCES,
   type MonthlyCap,
@@ -41,6 +43,19 @@ export const isChatModelChoice = (value: unknown): value is ChatModelChoice =>
   isNonBlankText(value.providerId) &&
   isNonBlankText(value.modelId);
 
+const hasOnly = (value: unknown, keys: readonly string[]): value is Record<string, unknown> =>
+  isRecord(value) &&
+  Object.keys(value).length === keys.length &&
+  keys.every((key) => Object.hasOwn(value, key));
+
+const isQuestionsOption = (value: unknown) =>
+  hasOnly(value, ["includeQuestions"]) && isBoolean(value.includeQuestions);
+
+const isExportPreferences = (value: unknown): value is ExportPreferences =>
+  hasOnly(value, ["format", "docx", "pdf"]) &&
+  EXPORT_FORMATS.some((format) => format === value.format) &&
+  isQuestionsOption(value.docx) &&
+  isQuestionsOption(value.pdf);
 /** A cap of up to a million a month, in dollars or yuan. */
 const isMonthlyCap = (value: unknown): value is MonthlyCap =>
   isRecord(value) &&
@@ -59,6 +74,12 @@ const userScope: Scope<UserSettings> = {
     chatModel: null,
     suggestWhileWriting: false,
     leaveOutOwnFiles: true,
+    // Word is the deliverable most asked for; the deliverables leave the Questions out.
+    exportOptions: {
+      format: "docx",
+      docx: { includeQuestions: false },
+      pdf: { includeQuestions: false },
+    },
     monthlyCap: null,
   },
   validators: {
@@ -67,6 +88,7 @@ const userScope: Scope<UserSettings> = {
       value === null || isChatModelChoice(value),
     suggestWhileWriting: isBoolean,
     leaveOutOwnFiles: isBoolean,
+    exportOptions: isExportPreferences,
     monthlyCap: (value): value is MonthlyCap | null => value === null || isMonthlyCap(value),
   },
 };
