@@ -6,6 +6,7 @@
  * imports Electron (ADR-0004, ADR-0006).
  */
 import type { ChildProcess } from "node:child_process";
+import type { DrawnPage, PageCaptureRequest } from "../shared/citedPage";
 import type { PrintDocument } from "../shared/printDocument";
 import type { AgentLauncher } from "./agents";
 import type { AnswerEngine } from "./answers/engine";
@@ -544,6 +545,13 @@ export interface AudioCapture {
 }
 
 /**
+ * Draws a cited page with the Document viewer's view for its kind, off
+ * screen, so it can be saved (#133): every kind but PDF, whose pages the core
+ * draws itself. Rejects when the page can't be drawn, and when `signal` aborts.
+ */
+export type CapturePage = (request: PageCaptureRequest, signal: AbortSignal) => Promise<DrawnPage>;
+
+/**
  * A speech-to-text engine's downloaded files, as the core hands them to a
  * `Transcriber` (#136). Engine-neutral: each engine names its own files.
  */
@@ -771,7 +779,7 @@ export interface CoreAdapters {
   referenceLookup?: { crossref?: string; arxiv?: string };
   /**
    * Where Find sources (#296) asks each Source provider, by its id
-   * ("openalex", "arxiv", "pubmed", "crossref", "openfda", "dailymed", "clinicaltrials"). Defaults to the real
+   * ("openalex", "arxiv", "pubmed", "crossref", "openfda", "dailymed", "clinicaltrials", "ecfr", "govinfo"). Defaults to the real
    * services; tests point them at a local stand-in. Consent still treats the
    * requests as going to each provider.
    */
@@ -832,6 +840,12 @@ export interface CoreAdapters {
    * Meetings): Meetings can't start.
    */
   audioCapture?: AudioCapture;
+  /**
+   * Draws cited pages other than PDFs' (see `CapturePage`). The desktop app
+   * draws them in a hidden window (src/main/citedPageCapture.ts). Absent
+   * (tests that aren't about them): only PDFs' cited pages are saved.
+   */
+  capturePage?: CapturePage;
   /**
    * Transcribes Meetings on this computer (see `Transcriber`). Absent (tests
    * that aren't about transcripts): Meetings record without a Transcript.

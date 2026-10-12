@@ -9,7 +9,7 @@ import {
 } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import { ySyncPluginKey, yUndoPluginKey } from "@tiptap/y-tiptap";
-import { CITATION_NODE, type Suggestion } from "../../../core/api";
+import { CITATION_NODE, GENERATED_MARK, type Suggestion } from "../../../core/api";
 import {
   citationNumberAt,
   joinerFor,
@@ -87,12 +87,14 @@ function separateUndo(state: EditorState): void {
 /** A change that came from the Mind's document (another window, an Answer streaming, Undo), not typing here. */
 const fromDocument = (tr: Transaction) => !!tr.getMeta(ySyncPluginKey)?.isChangeOrigin;
 
-/** Takes the next word (⌥→), or all of the rest (Tab); the last of it brings its Citation. */
+/** Takes the next word (⌥→), or all of the rest (Tab), as AI text; the last of it brings its Citation. */
 function accept(view: EditorView, ghost: Ghost, all: boolean): void {
   const taken = all ? ghost.rest : nextWord(ghost.rest);
   const rest = ghost.rest.slice(taken.length);
   const tr = view.state.tr.insertText(taken, ghost.pos);
   const end = ghost.pos + taken.length;
+  const generated = view.state.schema.marks[GENERATED_MARK];
+  if (generated) tr.addMark(ghost.pos, end, generated.create());
   if (rest.trim() === "") {
     tr.insert(end, citationNode(view.state, ghost.suggestion));
     tr.setSelection(TextSelection.create(tr.doc, end + 1));

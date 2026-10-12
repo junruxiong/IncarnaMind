@@ -21,6 +21,8 @@ const RECORD_ORDER = [
   "dailymed",
   "openfda",
   "clinicaltrials",
+  "govinfo",
+  "ecfr",
 ];
 
 /** Which open copy is tried first: the published version, then one whose version isn't known, then a manuscript. */
@@ -43,6 +45,8 @@ export interface MergedWork {
   fullText: FullTextLocation[];
   landingUrl: string | null;
   notice: string | null;
+  /** Its text is an unofficial compilation (the eCFR's), not the official edition. */
+  unofficial: boolean;
   score: number;
 }
 
@@ -53,7 +57,17 @@ interface Found {
   work: ProviderWork;
 }
 
-const ID_KINDS = ["doi", "arxiv", "pmid", "pmcid", "openalex", "setid", "nct"] as const;
+const ID_KINDS = [
+  "doi",
+  "arxiv",
+  "pmid",
+  "pmcid",
+  "openalex",
+  "setid",
+  "nct",
+  "cfr",
+  "govinfo",
+] as const;
 
 const shares = (a: WorkIds, b: WorkIds) =>
   ID_KINDS.some((kind) => a[kind] !== undefined && a[kind] === b[kind]);
@@ -66,6 +80,8 @@ export function workKey(ids: WorkIds, title: string): string {
   if (ids.openalex) return `openalex:${ids.openalex}`;
   if (ids.setid) return `setid:${ids.setid}`;
   if (ids.nct) return `nct:${ids.nct}`;
+  if (ids.cfr) return `cfr:${ids.cfr}`;
+  if (ids.govinfo) return `govinfo:${ids.govinfo}`;
   return `title:${title.toLowerCase().replace(/\s+/g, " ").trim()}`;
 }
 
@@ -132,6 +148,7 @@ function mergeGroup(group: readonly Found[]): MergedWork {
     fullText: copies,
     landingUrl: byRecord.find((each) => each.work.landingUrl)?.work.landingUrl ?? null,
     notice: byRecord.find((each) => each.work.notice)?.work.notice ?? null,
+    unofficial: byRecord.some((each) => each.work.unofficial === true),
     score: group.reduce((sum, each) => sum + 1 / (K + each.rank), 0),
   };
 }
