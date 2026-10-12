@@ -1817,6 +1817,11 @@ export const zhCN = {
   "error.dismiss": "关闭",
   "error.startup.title": "IncarnaMind 无法启动",
   "error.startup.body": "无法打开你的数据文件夹。\n\n{message}",
+  "error.startup.newer.title": "更新 IncarnaMind 才能打开你的数据",
+  "error.startup.newer.body":
+    "较新版本的 IncarnaMind 保存了这个数据文件夹，当前版本无法打开。你的数据完好无损，没有任何改动。",
+  "error.startup.newer.download": "下载最新版本",
+  "error.startup.newer.quit": "退出",
 
   // The application menu (src/main/menu.ts).
   "menu.about": "关于 IncarnaMind",
