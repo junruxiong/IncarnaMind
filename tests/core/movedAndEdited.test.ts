@@ -167,12 +167,21 @@ describe("A file moved and edited where IncarnaMind didn't see it", { timeout: 6
     );
   });
 
-  test("while the app runs, in a Linked folder and as a file added on its own", async () => {
+  test("while the app runs, in a Linked folder and as a file added on its own, its new path reported before its old one", async () => {
     const library = await createSourceFolder();
     const downloads = await createSourceFolder();
     const desk = await createSourceFolder();
     const notesPath = await writeSourceFile(library, "A/notes.md", NOTES);
-    const core = startCore(await createTempDataFolder());
+    // Reports what the test says changed, as a watcher does once a path has settled.
+    const listeners = new Map<string, WatchListener>();
+    const core = startCore(await createTempDataFolder(), {
+      linkedFolders: {
+        watch: (root, listener) => {
+          listeners.set(root, listener);
+          return { close: () => {} };
+        },
+      },
+    });
     const [notes] = await linkAndProcess(core, library);
     const [paper] = await addAndProcess(core, [
       await writeSourceFile(downloads, "paper.md", PAPER),
@@ -189,8 +198,11 @@ describe("A file moved and edited where IncarnaMind didn't see it", { timeout: 6
     const movedPaper = join(desk, "paper.md");
     await rename(join(downloads, "paper.md"), movedPaper);
     await writeFile(movedPaper, `${PAPER}${EDIT}`);
+    // Nothing has said yet that the old files are gone.
+    listeners.get(library)?.onChange([join(library, "B"), movedNotes]);
+    listeners.get(desk)?.onChange([movedPaper]);
 
-    const documents = await waitForDocuments(core, (current) => {
+    await waitForDocuments(core, (current) => {
       expect(byId(current, notes?.id)).toMatchObject({
         path: movedNotes,
         contentHash: sha256(`${NOTES}${EDIT}`),
@@ -202,6 +214,11 @@ describe("A file moved and edited where IncarnaMind didn't see it", { timeout: 6
         status: "ready",
       });
     });
+    // Their old paths, reported late, and a reconcile change nothing.
+    listeners.get(library)?.onChange([notesPath]);
+    listeners.get(downloads)?.onChange([join(downloads, "paper.md")]);
+    await core.reconcileDocuments();
+    const documents = await core.listDocuments();
     expect(documents).toHaveLength(3);
     expect(documents.map((each) => each.fileStatus)).toEqual([
       "available",
