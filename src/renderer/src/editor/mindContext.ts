@@ -4,6 +4,13 @@ import { createContext, useContext } from "react";
 export const MindIdContext = createContext<string | null>(null);
 
 /**
+ * Writes the Answer an editor shows again: an Answer in the assistant (#201),
+ * whose Citations offer it when a quote isn't found. Null in a Mind, whose
+ * Answers are Blocks the Citation finds around it.
+ */
+export const RegenerateAnswerContext = createContext<(() => void) | null>(null);
+
+/**
  * Where a Mind's composer is drawn: the assistant's composer slot, given only
  * to the Mind the assistant reads (see `MindTab`, `assistantTabOf`). Null for
  * every other Mind on screen, and until the slot is there.

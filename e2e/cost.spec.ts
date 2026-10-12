@@ -5,6 +5,7 @@ import type { CoreBridge } from "../src/core/api";
 import { createFakeOpenAI, signInAt } from "../tests/helpers/fakeOpenAI";
 import {
   acceptPlainTextKeys,
+  assistantAnswers,
   closeSettings,
   createDataFolder,
   dismissChatSetup,
@@ -108,13 +109,14 @@ test("an Answer stopped by the monthly cap says so in place, and Change cap open
     await expect.poll(() => bridge(window).cap()).toEqual({ amount: 0, currency: "USD" });
     await closeSettings(window);
 
-    // Asked, the Answer is stopped before anything is sent, with one line and one action.
+    // Asked in the assistant, the Answer is stopped before anything is sent, with one line and
+    // one action.
     await newMind(window);
     await window.getByTestId("mind-editor").click();
     await window.keyboard.press("ControlOrMeta+j");
     await window.keyboard.type("What is in my Documents?");
     await window.keyboard.press("Enter");
-    const answer = window.getByTestId("answer");
+    const answer = assistantAnswers(window).first();
     await expect(answer).toHaveAttribute("data-status", "failed");
     const error = answer.getByTestId("answer-error");
     await expect(error).toHaveAttribute("data-error-kind", "cost-cap");
@@ -171,7 +173,7 @@ test("Settings → Models shows what a key spent this month, and the ChatGPT pla
     await window.keyboard.press("ControlOrMeta+j");
     await window.keyboard.type("What is in my Documents?");
     await window.keyboard.press("Enter");
-    await expect(window.getByTestId("answer")).toHaveAttribute("data-status", "done");
+    await expect(assistantAnswers(window).first()).toHaveAttribute("data-status", "done");
     const settings = await openSettings(window, "models");
     const cost = settings.getByTestId("chat-provider-cost");
     await expect(cost).toHaveText("This month: $0");
