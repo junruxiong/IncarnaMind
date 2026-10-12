@@ -10,6 +10,7 @@ import {
 import type { Document, DocumentFailureReason, DocumentStatus, Tag } from "../../../core/api";
 import { displayName, sourceOf } from "../../../shared/documentNames";
 import type { MessageKey } from "../../../shared/i18n";
+import { startDocumentDrag } from "../documentDrag";
 import { useLanguage, useT } from "../i18n";
 import { currentTabOf } from "../layoutSlice";
 import { fileStatusLabel } from "../linkedFolders";
@@ -330,6 +331,8 @@ const DocumentRow = memo(function DocumentRow({
             .join("\n")}
           // A preview beside the Mind, or in the group already showing a Document.
           onClick={() => openDocument({ documentId: item.id })}
+          draggable
+          onDragStart={(event) => startDocumentDrag(event, item.id)}
           className={rowButtonClass}
           style={rowPadding(depth)}
         >

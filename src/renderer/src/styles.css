@@ -1226,6 +1226,11 @@
     color: var(--color-ink);
     transition: border-color 80ms ease-out;
 
+    /* A Document dragged over it, to join the Search scope. */
+    &[data-dropping] {
+      border-color: var(--color-accent);
+      background: var(--color-hover);
+    }
     &:has(> .composer-row > .composer-input:focus) {
       border-color: var(--color-accent);
     }

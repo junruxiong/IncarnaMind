@@ -4,6 +4,7 @@ import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import {
   addDocuments,
+  assistantAnswers,
   createDataFolder,
   dismissChatSetup,
   interceptOpenExternal,
@@ -359,7 +360,7 @@ test("find in the Mind: a count, next and previous by keyboard and mouse, Chines
   await expect(bar).toHaveCount(0);
 });
 
-test("find in the Mind keeps counting while an Answer streams in", async () => {
+test("find in the Mind works while an Answer streams into the assistant, and counts the text written meanwhile", async () => {
   const running = await launchApp(dataDir, { fakeChat: true });
   const { window } = running;
   await dismissChatSetup(window);
@@ -368,20 +369,29 @@ test("find in the Mind keeps counting while an Answer streams in", async () => {
   await newMind(window);
   const editor = window.getByTestId("mind-editor");
   await editor.click();
+  await window.keyboard.type("Tides follow the Moon, and tides are strongest at new moon.");
   await window.keyboard.press("ControlOrMeta+J");
-  await window.keyboard.type("Tides tides");
+  await window.keyboard.type("What are tides?");
   await window.keyboard.press("Enter");
-  const answer = editor.getByTestId("answer");
+  const answer = assistantAnswers(window).first();
   await expect(answer).toHaveAttribute("data-status", "streaming");
 
   await window.keyboard.press("ControlOrMeta+F");
   await window.keyboard.type("tides");
-  // The Question's two, then the Answer's two once it has written them.
-  await expect(window.getByTestId("find-count")).toHaveText(/ of 4$/);
+  const count = window.getByTestId("find-count");
+  await expect(count).toHaveText("1 of 2");
+  // Writing in the Mind meanwhile is counted as it is written.
+  await window.keyboard.press("Escape");
+  await editor.press("End");
+  await window.keyboard.type(" Tides again.");
+  await window.keyboard.press("ControlOrMeta+F");
+  await window.keyboard.type("tides");
+  await expect(count).toHaveText("1 of 3");
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-  // The current match stayed the first while the text grew after it.
-  await expect(window.getByTestId("find-count")).toHaveText("1 of 4");
+  // The Answer finishing changes nothing in the Mind, and the current match stays.
+  await expect(count).toHaveText("1 of 3");
   await window.keyboard.press("Enter");
+  await expect(count).toHaveText("2 of 3");
   await window.keyboard.press("Escape");
   await expect(window.getByTestId("find-bar")).toHaveCount(0);
 });
@@ -472,6 +482,46 @@ test('"@" in a Note puts in a Document chip that opens the viewer, by mouse or k
     const missing = second.window.getByTestId("mind-editor").getByTestId("document-chip").nth(1);
     await expect(missing).toHaveAttribute("data-missing", "true");
     await expect(missing).toHaveText("Moons");
+  } finally {
+    await removeDataFolder(sources);
+  }
+});
+
+test("a Document dragged from the sidebar onto the composer joins the Question's scope, once", async () => {
+  const sources = await realpath(await createDataFolder());
+  try {
+    await writeFile(join(sources, "Tides.txt"), "Spring tides happen at new moon.");
+    await writeFile(join(sources, "Moons.txt"), "The Moon orbits the Earth.");
+    const { app, window } = await launchApp(dataDir);
+    await dismissChatSetup(window);
+    await setWindowSize(app, window, 1280, 760);
+    await addDocuments(window, [join(sources, "Tides.txt"), join(sources, "Moons.txt")]);
+    await newMind(window);
+    const composer = window.getByTestId("composer");
+    const chips = composer.getByTestId("scope-chip");
+    const before = await chips.count();
+    const row = window.getByTestId("open-document").filter({ hasText: "Tides" });
+    const drag = async () => {
+      const from = await row.boundingBox();
+      const to = await composer.boundingBox();
+      if (!from || !to) throw new Error("Not laid out.");
+      await window.mouse.move(from.x + 20, from.y + from.height / 2, { steps: 6 });
+      await window.mouse.down();
+      // A few pixels first, so the browser starts the drag, then across to the composer.
+      await window.mouse.move(from.x + 30, from.y + from.height / 2 + 6, { steps: 3 });
+      await window.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 20 });
+      await window.mouse.move(to.x + to.width / 2 + 4, to.y + to.height / 2 + 2, { steps: 3 });
+      // The composer shows it takes it while the Document is over it.
+      await expect(composer).toHaveAttribute("data-dropping", "true");
+      await window.mouse.up();
+      await expect(composer).not.toHaveAttribute("data-dropping", "true");
+    };
+    await drag();
+    await expect(chips).toHaveCount(before + 1);
+    await expect(chips.filter({ hasText: "Tides" })).toHaveCount(1);
+    // The same Document again adds nothing.
+    await drag();
+    await expect(chips).toHaveCount(before + 1);
   } finally {
     await removeDataFolder(sources);
   }
