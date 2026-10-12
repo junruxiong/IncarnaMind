@@ -1,8 +1,9 @@
 import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test, vi } from "vitest";
-import { createTempDataFolder, recordingLog, startCore } from "../helpers/core";
+import { createTempDataFolder, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
+import { recordingLog } from "../helpers/log";
 import { connectToMind } from "../helpers/mindClient";
 import { note, question, writeMind } from "../helpers/minds";
 import { scriptedModels } from "../helpers/models";

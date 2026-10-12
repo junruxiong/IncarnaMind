@@ -38,6 +38,13 @@ function placesOf(meeting: Meeting, documentId: string | null) {
   return { tab, mindGroup };
 }
 
+/** The Mind in view's Meeting, once it has started: the one whose recording details there are. */
+function startedMeetingInView(): Meeting | undefined {
+  const mindId = currentMindIdOf(useAppStore.getState().layout);
+  const meeting = useMeetings.getState().meetings.find((each) => each.mindId === mindId);
+  return meeting && meeting.status !== "ready" ? meeting : undefined;
+}
+
 export const meetingCommands: readonly Command[] = [
   {
     id: "meeting.record",
@@ -102,6 +109,23 @@ export const meetingCommands: readonly Command[] = [
     run() {
       const meeting = liveMeeting();
       if (meeting) return useMeetings.getState().stop(meeting.id);
+    },
+  },
+  {
+    id: "meeting.details",
+    label: (_ctx, t) => {
+      const meeting = startedMeetingInView();
+      const shown = meeting && useMeetings.getState().detailsShown[meeting.id];
+      return t(shown ? "meetings.health.hide" : "meetings.health.show");
+    },
+    group: "main",
+    // Pressed again, it undoes itself.
+    reversible: true,
+    when: () => meetingsOn() || startedMeetingInView() !== undefined,
+    enabled: () => (startedMeetingInView() ? true : { reason: "meetings.health.none" }),
+    run() {
+      const meeting = startedMeetingInView();
+      if (meeting) useMeetings.getState().showDetails(meeting.id);
     },
   },
 ];

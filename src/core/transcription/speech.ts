@@ -176,10 +176,12 @@ export function createSpeechHost(engine: SpeechEngine, report: SpeechReport) {
     decoding = true;
     const started = Date.now();
     let text = "";
+    let failed = false;
     try {
       text = (await engine.recognizer.decode(job.samples)).trim();
     } catch (error) {
       // A stretch the engine can't read loses its text, not the rest of the stream.
+      failed = true;
       report.failed(job.stream, error instanceof Error ? error.message : String(error));
     }
     decoding = false;
@@ -195,6 +197,7 @@ export function createSpeechHost(engine: SpeechEngine, report: SpeechReport) {
           text,
           final: job.final,
           decodeMs: Date.now() - started,
+          ...(failed && { failed: true }),
         });
       }
       if (job.final) {
