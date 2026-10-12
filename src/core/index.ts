@@ -15,6 +15,7 @@ export type {
   Embedder,
   EmbeddingModelFiles,
   EmbeddingModelSource,
+  EngineSwitch,
   ExecAllow,
   ExecFolder,
   ExecRequest,

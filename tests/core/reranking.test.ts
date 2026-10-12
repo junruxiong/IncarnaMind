@@ -27,8 +27,9 @@ import {
   pairIds,
   type SessionDevice,
 } from "../../src/core/reranking/onnx";
-import { createTempDataFolder, NO_MODEL_FILES, recordingLog } from "../helpers/core";
+import { createTempDataFolder, NO_MODEL_FILES } from "../helpers/core";
 import { startModelServer } from "../helpers/embedding";
+import { recordingLog } from "../helpers/log";
 
 const FILES = { model: "m.onnx", tokenizer: "t.json", tokenizerConfig: "c.json", maxTokens: 512 };
 
