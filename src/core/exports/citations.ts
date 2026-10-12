@@ -27,6 +27,9 @@ function mapInlines(blocks: readonly Block[], map: (content: Inline[]) => Inline
             row.map((cell) => ({ ...cell, content: cell.content.map(visit) })),
           ),
         };
+      // A chart's sources, side by side, are one cluster: "Source: (Acme, 2025, p. 4; …)".
+      case "chart":
+        return { ...block, sources: map(block.sources) };
       default:
         return block;
     }
