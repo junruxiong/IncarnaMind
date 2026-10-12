@@ -6,6 +6,8 @@ import type { CoreBridge } from "../src/core/api";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
+  addToNote,
+  askInAssistant,
   createDataFolder,
   dismissChatSetup,
   launchApp,
@@ -77,29 +79,24 @@ test("Shorten comes back as changes with their own bars: one accepted by mouse, 
   const editor = window.getByTestId("mind-editor");
   await editor.click();
 
-  // An Answer with a checked Citation, whose sentence is copied into a Note.
-  await window.keyboard.press("ControlOrMeta+j");
-  await window.keyboard.type("When do spring tides happen?");
+  // An Answer with a checked Citation, added to the note under a line of the User's.
+  await window.keyboard.type("Tides at the harbour.");
   await window.keyboard.press("Enter");
-  const answer = editor.getByTestId("answer");
-  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-  await editor.evaluate((dom) => {
-    const { view, commands } = (dom as unknown as { editor: Editor }).editor;
-    let at = -1;
-    view.state.doc.descendants((node, pos) => {
-      if (at < 0 && node.type.name === "citation") at = pos;
-    });
-    const sentence = view.state.doc.resolve(at);
-    commands.setTextSelection({ from: sentence.start(), to: sentence.end() });
-    const { dom: copied } = view.serializeForClipboard(view.state.selection.content());
-    commands.setTextSelection(view.state.doc.content.size - 1);
-    view.pasteHTML(copied.innerHTML);
-  });
-  const note = editor.locator(":scope > p").last();
+  const answer = await askInAssistant(window, "When do spring tides happen?");
+  await addToNote(window, answer);
+  const note = editor.locator(":scope > p").nth(1);
   await expect(note.getByTestId("citation")).toHaveAttribute("data-check", "found");
   await slideSelect(window, note, "Your Documents answer this");
   await window.keyboard.type("The tides here are very strong and really regular");
   await expect(note).toContainText("The tides here are very strong and really regular");
+
+  // The Answer's last line, under it, taken out as a person would: then nothing follows the line.
+  const last = editor.locator(":scope > p").last();
+  await expect(last).toHaveText("That is all.");
+  await slideSelect(window, last, "That is all.");
+  await window.keyboard.press("Backspace");
+  await window.keyboard.press("Backspace");
+  await expect(editor.locator(":scope > p")).toHaveCount(2);
 
   // Selected, the menu offers the AI's actions; Shorten comes back as two changes.
   // The words, then the space, the Citation and the full stop after them.

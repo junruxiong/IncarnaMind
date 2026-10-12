@@ -1,23 +1,253 @@
 import { create } from "zustand";
-import type { Conversation } from "../../core/api";
+import type {
+  AskInConversationInput,
+  Conversation,
+  ConversationAnswer,
+  ConversationMessage,
+  ConversationQuestion,
+} from "../../core/api";
+import { conversationName } from "../../shared/naming";
+import { settleAsk, useAnswers } from "./answers";
+import { composerKey } from "./composer";
 import { core } from "./core";
+import { translateNow } from "./i18n";
 import { useAppStore } from "./store";
+import { useUndo } from "./undo";
 
 /**
- * The assistant's conversations, as History lists them (ADR-0017): every one that
- * isn't deleted, newest first, kept as the core has them by its "conversations.changed".
+ * The assistant's conversations (ADR-0017), in this window: every one that
+ * isn't deleted, newest first, as History lists them; and the one the
+ * assistant shows (#201), with its Questions and Answers as the core writes
+ * them ("conversation.message"). A new chat is no conversation yet: its first
+ * Question makes one.
  */
-export const useConversations = create<{ list: readonly Conversation[] }>()(() => ({ list: [] }));
+interface ConversationsState {
+  list: readonly Conversation[];
+  /** The conversation the assistant shows; null for a new chat, until it is asked in. */
+  openId: string | null;
+  /** Its messages, in order. */
+  messages: readonly ConversationMessage[];
+  /** A Question on its way to the core, shown at once until the core has it. */
+  asking: string | null;
+  /** Stop was pressed while that Question was on its way: its Answer stops as it starts. */
+  stopWanted: boolean;
+  /** An Answer to bring into view and flash once it shows: a link back from a Note leads there. */
+  sought: string | null;
+}
 
-const load = () =>
-  core.listConversations().then(
-    (list) => useConversations.setState({ list }),
-    (error: unknown) => useAppStore.getState().reportError(error),
-  );
+export const useConversations = create<ConversationsState>()(() => ({
+  list: [],
+  openId: null,
+  messages: [],
+  asking: null,
+  stopWanted: false,
+  sought: null,
+}));
+
+const report = (error: unknown) => useAppStore.getState().reportError(error);
+
+async function load(): Promise<void> {
+  try {
+    const list = await core.listConversations();
+    const { openId } = useConversations.getState();
+    // The open one was deleted, here or in another window: the assistant starts a new chat.
+    const gone = openId !== null && !list.some((each) => each.id === openId);
+    useConversations.setState(gone ? { list, openId: null, messages: [], sought: null } : { list });
+  } catch (error) {
+    report(error);
+  }
+}
 
 core.on("conversations.changed", () => void load());
 void load();
 
+// Each Question asked and each write of an Answer, in every window: the open conversation's
+// take their place, or come at its end.
+core.on("conversation.message", (message) => {
+  const { openId, messages } = useConversations.getState();
+  if (message.conversationId !== openId) return;
+  const at = messages.findIndex((each) => each.id === message.id);
+  useConversations.setState({
+    messages:
+      at === -1 ? [...messages, message] : messages.map((each, i) => (i === at ? message : each)),
+    // The Question is shown as the core has it now.
+    ...(message.kind === "question" && { asking: null }),
+  });
+});
+
 /** A conversation by id, as last listed; undefined when it isn't (deleted, or not loaded yet). */
 export const conversationById = (id: string): Conversation | undefined =>
   useConversations.getState().list.find((each) => each.id === id);
+
+/** The conversation the assistant shows, as last listed; undefined for a new chat. */
+export const useOpenConversation = (): Conversation | undefined =>
+  useConversations((state) => state.list.find((each) => each.id === state.openId));
+
+/** What a conversation is called, "New chat" while it has no name. */
+export const conversationLabel = (conversation: Conversation | undefined): string =>
+  (conversation && conversationName(conversation)) || translateNow("conversation.untitled");
+
+/** The Question an Answer answers, in the open conversation. */
+export function questionOf(answer: ConversationAnswer): ConversationQuestion | undefined {
+  const found = useConversations
+    .getState()
+    .messages.find((each) => each.kind === "question" && each.id === answer.questionId);
+  return found?.kind === "question" ? found : undefined;
+}
+
+/** The open conversation's newest Answer that has finished, if any. */
+export function lastAnswer(): ConversationAnswer | undefined {
+  const found = useConversations
+    .getState()
+    .messages.findLast((each) => each.kind === "answer" && each.status !== "streaming");
+  return found?.kind === "answer" ? found : undefined;
+}
+
+/** Unfolds the assistant, for what it is asked to show. */
+function unfold(): void {
+  if (useAppStore.getState().layout?.assistant.folded) {
+    void useAppStore.getState().placeAssistant({ folded: false });
+  }
+}
+
+/** A new chat: the assistant shows an empty conversation, which its first Question makes. */
+export function startNewChat(): void {
+  useConversations.setState({ openId: null, messages: [], asking: null, sought: null });
+}
+
+/** Shows a conversation in the assistant, at one of its Answers (flashed) if given. */
+export async function openConversation(conversationId: string, answerId?: string): Promise<void> {
+  try {
+    const { messages } = await core.getConversation(conversationId);
+    useConversations.setState({
+      openId: conversationId,
+      messages,
+      asking: null,
+      sought: answerId ?? null,
+    });
+    unfold();
+  } catch (error) {
+    report(error);
+  }
+}
+
+/**
+ * Asks a Question from a Mind's composer in the assistant's conversation (a
+ * new one for a new chat): it shows at once, and its Answer streams in there.
+ * Why it couldn't be asked is kept for the composer (`composerKey`). Resolves
+ * to whether it was asked.
+ */
+export async function askInAssistant(
+  input: Omit<AskInConversationInput, "conversationId"> & { mindId: string },
+): Promise<boolean> {
+  const key = composerKey(input.mindId);
+  useConversations.setState({ asking: input.text, stopWanted: false, sought: null });
+  try {
+    const result = await core.askInConversation({
+      ...input,
+      conversationId: useConversations.getState().openId,
+    });
+    settleAsk(key, result);
+    if (!result.asked) return false;
+    const id = result.conversation.id;
+    if (useConversations.getState().stopWanted) {
+      core.stopConversationAnswer({ conversationId: id, answerId: result.answerId }).catch(report);
+    }
+    if (useConversations.getState().openId !== id) {
+      // A new conversation: its messages as they are now; each write after this comes as an event.
+      useConversations.setState({ openId: id, messages: [] });
+      const { messages } = await core.getConversation(id);
+      if (useConversations.getState().openId === id) useConversations.setState({ messages });
+    }
+    return true;
+  } catch (error) {
+    settleAsk(key, null, error);
+    return false;
+  } finally {
+    useConversations.setState({ asking: null, stopWanted: false });
+  }
+}
+
+/** Writes an Answer of the open conversation again; why it couldn't be is kept under its id. */
+export async function regenerateAnswer(answerId: string): Promise<void> {
+  const conversationId = useConversations.getState().openId;
+  if (!conversationId) return;
+  settleAsk(answerId, null);
+  try {
+    settleAsk(answerId, await core.regenerateConversationAnswer({ conversationId, answerId }));
+  } catch (error) {
+    settleAsk(answerId, null, error);
+  }
+}
+
+/** Stops an Answer of the open conversation being written, keeping what it has. */
+export function stopAnswer(answerId: string): void {
+  const conversationId = useConversations.getState().openId;
+  if (conversationId) core.stopConversationAnswer({ conversationId, answerId }).catch(report);
+}
+
+/**
+ * A Question has been asked and its Answer isn't here yet: until the core has
+ * the Question, and between its two events (the Question, then its Answer),
+ * which can be drawn apart.
+ */
+const answerOnItsWay = (state: ConversationsState): boolean =>
+  state.asking !== null || state.messages.at(-1)?.kind === "question";
+
+/** Whether an Answer is on its way (see `answerOnItsWay`), as it changes. */
+export const useAnswerOnItsWay = (): boolean => useConversations(answerOnItsWay);
+
+/**
+ * What the composer waits on before it asks again: the open conversation's
+ * Answer being written, by id, or "" while a Question is on its way and its
+ * Answer not here yet; null when it can ask. Meanwhile its send button is
+ * Stop, as in ChatGPT and Claude, so a Question is never sent twice by a
+ * second press.
+ */
+function writingIn(state: ConversationsState, writing: ReadonlySet<string>): string | null {
+  const answer = state.messages.find(
+    (each) => each.kind === "answer" && (each.status === "streaming" || writing.has(each.id)),
+  );
+  if (answer) return answer.id;
+  return answerOnItsWay(state) ? "" : null;
+}
+
+/** What the composer waits on now (see `writingIn`). */
+export const answerBeingWritten = (): string | null =>
+  writingIn(useConversations.getState(), useAnswers.getState().writing);
+
+/** What the composer waits on, as it changes (see `writingIn`). */
+export function useAnswerBeingWritten(): string | null {
+  const writing = useAnswers((state) => state.writing);
+  return useConversations((state) => writingIn(state, writing));
+}
+
+/**
+ * Stop, in the composer and on the Answer on its way: stops the open
+ * conversation's Answer being written, keeping what it has; one whose
+ * Question is still on its way stops as soon as it starts.
+ */
+export function stopWriting(): void {
+  const answerId = answerBeingWritten();
+  if (answerId) stopAnswer(answerId);
+  else if (answerId === "") useConversations.setState({ stopWanted: true });
+}
+
+/**
+ * "Clear this conversation": it goes to Recently deleted, and the assistant
+ * starts a new chat; Undo (on the line, or ⌘Z) brings it back and shows it.
+ */
+export async function clearConversation(): Promise<void> {
+  const { openId } = useConversations.getState();
+  if (!openId) return;
+  const name = conversationLabel(conversationById(openId));
+  await core.deleteConversation(openId);
+  startNewChat();
+  useUndo.getState().push({
+    message: translateNow("assistant.cleared", { title: name }),
+    undo: async () => {
+      await core.restore([{ kind: "conversation", id: openId }]);
+      await openConversation(openId);
+    },
+  });
+}

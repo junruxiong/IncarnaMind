@@ -39,6 +39,7 @@
 import { randomUUID } from "node:crypto";
 import type * as Y from "yjs";
 import { runsByDefault } from "../../shared/approvalRules";
+import { withCitations } from "../../shared/blockJson";
 import { recordProposalRequest, resolveProposals } from "../../shared/proposals";
 import { searchScopeOf } from "../../shared/searchScope";
 import { setTextOrigin } from "../../shared/textOrigins";
@@ -114,7 +115,6 @@ import {
 import {
   type AnswerDocuments,
   createCitationSession,
-  withCitations,
   withoutFootnoteDefinitions,
 } from "./citations";
 import {
