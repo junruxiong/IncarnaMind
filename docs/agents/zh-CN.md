@@ -115,6 +115,14 @@ A figure in an Answer is written as reports write it, with no space between the 
 
 | English | Chinese | Notes |
 |---|---|---|
+| figure (a number in an Answer) | 数字 | Counted with 个: "计算了 2 个数字", "1 个数字未能计算". |
+| Calculated figure | 计算结果 | Its label word is 计算得出 ("计算得出 · 20.4%"), as "Calculated" is in English. |
+| Input (of a calculation) | 所用数据 | "所用数据均已找到". |
+| Calculation check | 核对计算 | The verb is 核对, as for a Citation: "正在核对数字…". |
+| Unchecked figure | 未核对的数字 | |
+| Analysis | 数据分析 | |
+| Recalculate | 重新计算 | |
+| Run again | 重新运行 | |
 | percentage points | 个百分点 | A difference of two percents: "2.3个百分点", never "2.3%". |
 | about (an approximate figure) | 约 | "约1.2亿元". |
 | times (a multiple) | 倍 | "4.00倍". |

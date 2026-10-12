@@ -27,6 +27,7 @@ import { Composer, type ComposerHandle } from "../editor/Composer";
 import { ConversationLinks } from "../editor/ConversationLinks";
 import { CitationClusters } from "../editor/citationClusters";
 import { CitationNumbers, redrawFootnotes, setCitationForm } from "../editor/citationNumbers";
+import { CopyCitations } from "../editor/copyCitations";
 import { EndHint, type HintPlace, type HintText, isEmptyMind } from "../editor/EndHint";
 import { selectionForEdit } from "../editor/editSelection";
 import { FootnoteArea } from "../editor/FootnoteArea";
@@ -270,6 +271,7 @@ function MindEditorView({
         // Footnotes are numbered as the Mind's citation style counts its Citations (#289).
         CitationNumbers.configure({ form: () => citationStyle(styleRef.current).form }),
         CitationClusters,
+        CopyCitations,
         FootnoteKeys,
         MeetingNotes.configure({
           mindId,
@@ -487,7 +489,7 @@ function MindEditorView({
         <ConversationLinks editor={editor} />
         {!readOnly && <TableMenu editor={editor} />}
         <FootnoteArea editor={editor} citationView={citationView} />
-        {style !== "numbered" && (
+        {(style !== "numbered" || styleChoice.bibliography) && (
           <ReferencesBlock mindId={mindId} editor={editor} readOnly={readOnly} />
         )}
         {!readOnly && !styleChoice.chosen && !styleChoice.promptDismissed && (

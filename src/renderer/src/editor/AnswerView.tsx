@@ -12,7 +12,7 @@ import {
 } from "../../../core/api";
 import { asksAfterThirdParty } from "../../../shared/approvalRules";
 import { AnswerWriting } from "../answerPhase";
-import { RUN_SCRIPT, SEARCH } from "../answerSteps";
+import { isCalculated, RUN_SCRIPT, SEARCH } from "../answerSteps";
 import { useAnswers } from "../answers";
 import { useApprovals, waitingFor } from "../approvals";
 import { signInAgain } from "../chatGptSignIn";
@@ -136,6 +136,7 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
       />,
     );
   }
+  const { calculated, uncalculated } = figuresOf(toolCalls);
 
   return (
     <NodeViewWrapper
@@ -158,9 +159,11 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
 
       <NodeViewContent className="answer-content" />
 
+      {!streaming && uncalculated > 0 && <UncalculatedLine count={uncalculated} />}
+
       {searchesOpen && (
         <div contentEditable={false} className="answer-searches-open">
-          <SearchList searches={searches} />
+          <SearchList searches={searches} calculated={calculated} />
         </div>
       )}
 
@@ -883,6 +886,27 @@ export function SkillRow({ name, use, reads }: SkillUse) {
   );
 }
 
+/** How many calculated figures an Answer shows, and how many it couldn't, from its one `calculate` call. */
+export function figuresOf(calls: readonly AnswerToolCall[]): {
+  calculated: number;
+  uncalculated: number;
+} {
+  const call = calls.find(isCalculated);
+  return { calculated: call?.resultCount ?? 0, uncalculated: call?.uncalculated ?? 0 };
+}
+
+/** Under an Answer whose figures some couldn't be calculated: their numbers are missing from its text. */
+export function UncalculatedLine({ count }: { count: number }) {
+  const t = useT();
+  return (
+    <p contentEditable={false} data-testid="answer-uncalculated" className="answer-info">
+      {count === 1
+        ? t("answer.figures.uncalculated.one")
+        : t("answer.figures.uncalculated", { count })}
+    </p>
+  );
+}
+
 /** The searches an Answer ran, summed up on its meta line; it opens the list. */
 function SearchesSummary({
   searches,
@@ -915,8 +939,17 @@ function SearchesSummary({
   );
 }
 
-/** What each search was for, and what it found. */
-function SearchList({ searches }: { searches: AnswerToolCall[] }) {
+/**
+ * What each search was for and what it found, then how many figures the
+ * Answer calculated (ADR-0021), which have no Tool-call card.
+ */
+function SearchList({
+  searches,
+  calculated = 0,
+}: {
+  searches: AnswerToolCall[];
+  calculated?: number;
+}) {
   const t = useT();
   const results = (call: AnswerToolCall) =>
     call.status === "failed"
@@ -940,6 +973,13 @@ function SearchList({ searches }: { searches: AnswerToolCall[] }) {
           </li>
         );
       })}
+      {calculated > 0 && (
+        <li data-testid="answer-figures">
+          {calculated === 1
+            ? t("answer.figures.calculated.one")
+            : t("answer.figures.calculated", { count: calculated })}
+        </li>
+      )}
     </ul>
   );
 }
