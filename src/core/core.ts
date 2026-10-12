@@ -124,7 +124,7 @@ import {
 import { isCloudModelName } from "./providers/ollamaCloud";
 import { createOllamaModels } from "./providers/ollamaModels";
 import { createAiSdkRerankingModel, createRerank } from "./providers/rerank";
-import { createRecentlyDeleted, purgeExpired } from "./recentlyDeleted";
+import { createRecentlyDeleted } from "./recentlyDeleted";
 import {
   createReferenceImport,
   createReferences,
@@ -259,7 +259,6 @@ export function createCore(adapters: CoreAdapters): Core {
 
   const now = () => (adapters.now?.() ?? new Date()).toISOString();
   try {
-    purgeExpired(db, now());
     ensureWorkspace(db, now);
   } catch (error) {
     db.close();
@@ -1236,6 +1235,17 @@ export function createCore(adapters: CoreAdapters): Core {
   const recentlyDeleted = createRecentlyDeleted({
     db,
     now,
+    // A Mind still waiting in Recently deleted comes back with its Citations, so they count too.
+    documentText: (documentIds) => {
+      const wanted = new Set(documentIds);
+      const cited: CitedUnits[] = [];
+      for (const { id } of db.all<{ id: string }>("SELECT id FROM minds WHERE purged_at IS NULL")) {
+        content.peek(id, (fragment) => addCitedUnits(fragment, wanted, cited));
+      }
+      conversations.addCitedUnits(wanted, cited);
+      retention.addRetainedUnits(wanted, cited);
+      documents.purgeText(documentIds, cited);
+    },
     say: (key, params) => translate(settings.get().language, key, params),
     minds,
     content,
@@ -1248,6 +1258,12 @@ export function createCore(adapters: CoreAdapters): Core {
     tagsChanged,
     tagged: announceTagged,
   });
+  try {
+    recentlyDeleted.expire();
+  } catch (error) {
+    // The app still opens; what is due goes at the next start.
+    console.error("Deleting what waited 30 days in Recently deleted failed.", error);
+  }
 
   /** Jev was set up, changed or removed: say so, and Documents waiting may go on. */
   const jevChanged = async () => {

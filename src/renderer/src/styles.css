@@ -5800,6 +5800,37 @@
   }
 }
 
+/* Recently deleted: name, where it was, when, days left, then its actions; narrow, the details go under the name. */
+.deleted-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(100px, 170px) 130px 64px 250px;
+  gap: 16px;
+  align-items: center;
+}
+.deleted-columns > .deleted-meta {
+  display: contents;
+}
+.deleted-columns > .deleted-actions {
+  min-width: 2rem;
+}
+@container (max-width: 820px) {
+  .deleted-columns {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 2px 12px;
+  }
+  .deleted-columns > .deleted-meta {
+    display: flex;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    flex-wrap: wrap;
+    gap: 0 12px;
+    font-size: 12px;
+  }
+  .deleted-column-labels {
+    display: none;
+  }
+}
+
 /* macOS's traffic lights take the app mark's place in the sidebar's header (see "The title bar"). */
 :root[data-title-bar="inset"]:not([data-full-screen]) .app-mark {
   display: none;

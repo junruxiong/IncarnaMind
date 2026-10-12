@@ -285,14 +285,26 @@ describe("changes the User can take back", () => {
     expect(method("renameMind")).toHaveBeenLastCalledWith("m", "Budget");
   });
 
-  test("a delete says so, is undone by restoring it and done again", async () => {
-    await useAppStore.getState().deleteDocument("a");
-    expect(top()?.message).toBe("Deleted “a v0”");
+  test("a delete asks nothing, says it went to Recently deleted, is undone by restoring it and done again", async () => {
+    await useAppStore.getState().deleteDocuments(["a"]);
+    expect(top()?.message).toBe("Moved “a v0” to Recently deleted");
     expect(useAppStore.getState().documents.map((each) => each.id)).toEqual(["b", "c"]);
     await useUndo.getState().undo();
     expect(method("restore")).toHaveBeenCalledWith([{ kind: "document", id: "a" }]);
     await useUndo.getState().redo();
     expect(method("deleteDocument")).toHaveBeenCalledTimes(2);
+  });
+
+  test("several Documents deleted together are one change, said by their count", async () => {
+    await useAppStore.getState().deleteDocuments(["a", "b"]);
+    expect(top()?.message).toBe("Moved 2 Documents to Recently deleted");
+    expect(top()?.name).toBe("Delete 2 Documents");
+    expect(useAppStore.getState().documents.map((each) => each.id)).toEqual(["c"]);
+    await useUndo.getState().undo();
+    expect(method("restore")).toHaveBeenCalledWith([
+      { kind: "document", id: "a" },
+      { kind: "document", id: "b" },
+    ]);
   });
 
   test("a Tag added is undone by putting each link back as it was, with who chose it", async () => {
@@ -363,7 +375,7 @@ describe("changes the User can take back", () => {
     expect(top()?.message).toBe("已将 2 个文档移动到“Research”");
     expect(top()?.name).toBe("移动 2 个文档");
     await useAppStore.getState().deleteMind("m");
-    expect(top()?.message).toBe("已删除“Plan”");
+    expect(top()?.message).toBe("已将“Plan”移到回收站");
     expect(top()?.name).toBe("删除“Plan”");
   });
 });
