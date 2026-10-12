@@ -99,6 +99,7 @@ import {
   parseMindId,
 } from "./minds";
 import { firstLineOf, readBlocks } from "./mindText";
+import { createNoteAdding } from "./noteAdding";
 import { createOutputFiles } from "./outputFiles";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
 import { readsImages } from "./providers/capabilities";
@@ -924,6 +925,15 @@ export function createCore(adapters: CoreAdapters): Core {
     now: () => adapters.now?.() ?? new Date(),
   });
 
+  // "Add to note" into a Mind that isn't open (#201), with its Citations checked where they land.
+  const noteAdding = createNoteAdding({
+    content,
+    requireMind: (mindId) => writableMind(mindId).id,
+    recheck: (input) => recheckCitation(documents, input),
+    recordAiUse: (inputs) => void aiUse.record(inputs),
+    now: () => adapters.now?.() ?? new Date(),
+  });
+
   // The fingerprints of the files IncarnaMind writes (#80). A Document already indexed with
   // the same bytes is marked at once, and every window hears of it.
   const ownFiles = createOwnFiles(db, now);
@@ -956,10 +966,17 @@ export function createCore(adapters: CoreAdapters): Core {
     });
   // Make this a Skill: the chat model drafts it from the Mind, on the chat flow's consent.
   const skillDrafts = createSkillDrafts({
-    mindMarkdown: async (mindId) =>
-      new TextDecoder().decode(
+    mindMarkdown: async (mindId) => {
+      const mind = new TextDecoder().decode(
         (await mindExports.export(mindId, { format: "markdown", includeQuestions: true })).data,
-      ),
+      );
+      // Questions are asked in the assistant (#201): those asked from this Mind are its work too.
+      const label = translate(settings.get().language, "export.question");
+      const asked = conversations
+        .askedFromMind(mindId)
+        .map(({ question, answer }) => [`**${label}** ${question}`, answer].filter(Boolean));
+      return [mind, ...asked.flat()].join("\n\n");
+    },
     modelFor: (mindId) =>
       content.read(mindId, (blocks) => (blocks.doc ? mindModelOf(blocks.doc) : null)) ??
       settings.get().user.chatModel,
@@ -1630,6 +1647,8 @@ export function createCore(adapters: CoreAdapters): Core {
         ? { status: "available", reference, name: found.name }
         : { status: "deleted", reference, name: found.name, deletedAt: found.deletedAt };
     },
+    addToNote: (input) => noteAdding.add(input),
+    undoAddToNote: async (input) => noteAdding.undo(input),
     getSettings: async () => settings.get(),
     getLayout: async (windowId) => layouts.get(windowId),
     changeLayout: async (windowId, change) => layouts.change(windowId, change),
