@@ -11,6 +11,7 @@ import {
   setCitationStyle,
 } from "../shared/mindCitationStyle";
 import { mindModelOf } from "../shared/mindModel";
+import { paperFor } from "../shared/printDocument";
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
 import { agentSocketPath, createAgents } from "./agents";
@@ -40,7 +41,7 @@ import type {
   MindCitationStyle,
   OwnFileKind,
   ProviderError,
-  SavedMindExport,
+  SavedExport,
   SearchScope,
   Unsubscribe,
 } from "./api";
@@ -85,6 +86,7 @@ import { renderMarkdown } from "./exports/markdown";
 import { createFileLock } from "./fileLock";
 import { safeFileName, writeNewFile } from "./fileNames";
 import { createFolders } from "./folders";
+import { systemRegion } from "./language";
 import { createLayouts } from "./layout";
 import { CLASSIFICATION_FLOW_SENDS, createLibrary } from "./library";
 import { automaticGroupClassifier } from "./library/automatic";
@@ -206,6 +208,11 @@ export interface Core extends CoreApi, CoreEventSource {
    * `shell` adapter. Throws NotFoundError for any other path.
    */
   showSavedFile(path: string): Promise<void>;
+  /**
+   * Opens a file IncarnaMind saved since it started in the default app for its
+   * type, through the `shell` adapter. Throws NotFoundError for any other path.
+   */
+  openSavedFile(path: string): Promise<void>;
   /**
    * Reconciles every Linked folder and single file with the disk now, and
    * resolves once that, and any change already reported, has been taken in.
@@ -985,6 +992,8 @@ export function createCore(adapters: CoreAdapters): Core {
     citationStyle: (mindId) => mindCitationStyle(mindId).style,
     bibliography: (mindId) => content.readSettings(mindId, bibliographyShown),
     formatCitations: (request) => citationStyles.format(request),
+    printer: adapters.printer ?? null,
+    paper: () => paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages())),
     ...(adapters.pictures && { pictures: adapters.pictures }),
     log: adapters.log ?? silentLogger,
     now,
@@ -1035,7 +1044,7 @@ export function createCore(adapters: CoreAdapters): Core {
     name: string,
     data: Uint8Array,
     after: () => void = () => undefined,
-  ): Promise<SavedMindExport> => {
+  ): Promise<SavedExport> => {
     try {
       const file = await outputs.save({ name, data, ownFile: "export" });
       after();
@@ -2279,8 +2288,9 @@ export function createCore(adapters: CoreAdapters): Core {
       return exported;
     },
     saveMindExport: async (mindId, options) => {
-      const { fileName, data } = await mindExports.export(mindId, options);
-      return saveExport(fileName, data, () => recordExport(options));
+      const { fileName, data, ...counts } = await mindExports.export(mindId, options);
+      const saved = await saveExport(fileName, data, () => recordExport(options));
+      return saved.status === "saved" ? { ...saved, ...counts } : saved;
     },
     saveSkillExport: async (skillId) => {
       const { fileName, data } = await skills.exportZip(skillId);
@@ -2348,6 +2358,13 @@ export function createCore(adapters: CoreAdapters): Core {
         throw new NotFoundError("Only a file IncarnaMind saved can be shown.");
       if (!adapters.shell) throw new Error("This copy of IncarnaMind can't show files.");
       adapters.shell.showItemInFolder(path);
+    },
+    openSavedFile: async (path) => {
+      if (!outputs.saved(path))
+        throw new NotFoundError("Only a file IncarnaMind saved can be opened.");
+      if (!adapters.shell)
+        throw new Error("This copy of IncarnaMind can't open files in other apps.");
+      await adapters.shell.openPath(path);
     },
     getAgents: async () => agents.settings(),
     setAgentsEnabled: (enabled) => agents.setEnabled(enabled),

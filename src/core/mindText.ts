@@ -69,6 +69,8 @@ export interface Footnote {
   source: string;
   /** The quote wasn't found, or can't be checked: the footnote gets the "[unverified]" marker. */
   unverified: boolean;
+  /** A web page's address, which `source` names: a format with links makes it one. */
+  link?: string;
 }
 
 export interface Image {
