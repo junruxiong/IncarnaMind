@@ -904,18 +904,26 @@ describe("what an ambiguous figure could be", () => {
 
   test("a header's scale gives the reading with it, and the one without", () => {
     const [plain, stated] = readings("152,340.56", { ...ZH, header: "单位：万元" }, "scale") ?? [];
-    expect(plain).toEqual({ value: 152340.56, scale: 1, scaleWord: null, unit: { kind: "plain" } });
+    expect(plain).toEqual({
+      value: 152340.56,
+      scale: 1,
+      scaleWord: null,
+      unit: { kind: "plain" },
+      decimals: 2,
+    });
     expect(stated).toEqual({
       value: 1523405600,
       scale: 10000,
       scaleWord: "万",
       unit: { kind: "currency", code: "CNY" },
+      decimals: 2,
     });
     expect(readings("41.2", { ...ZH, header: "单位：%" }, "scale")?.at(-1)).toEqual({
       value: 0.412,
       scale: 1,
       scaleWord: null,
       unit: { kind: "percent" },
+      decimals: 1,
     });
     expect(
       readings("1,482.6", { ...EN, header: "(in millions of U.S. dollars)" }, "scale")?.at(-1),
@@ -924,6 +932,7 @@ describe("what an ambiguous figure could be", () => {
       scale: 1000000,
       scaleWord: "millions",
       unit: { kind: "currency", code: "USD" },
+      decimals: 1,
     });
   });
 
@@ -941,9 +950,22 @@ describe("what an ambiguous figure could be", () => {
 
   test("points may be percentage points or an index's", () => {
     expect(readings("3 points", EN, "points")).toEqual([
-      { value: 3, scale: 1, scaleWord: null, unit: { kind: "other", word: "points" } },
-      { value: 0.03, scale: 1, scaleWord: null, unit: { kind: "points" } },
+      { value: 3, scale: 1, scaleWord: null, unit: { kind: "other", word: "points" }, decimals: 0 },
+      { value: 0.03, scale: 1, scaleWord: null, unit: { kind: "points" }, decimals: 0 },
     ]);
+  });
+});
+
+describe("decimals as written", () => {
+  test("are counted from the digits, trailing zeros included", () => {
+    const decimals = (text: string, context: FigureContext = EN) =>
+      readFigures(text, context).map((figure) => figure.decimals);
+    expect(decimals("$1,231.0 million")).toEqual([1]);
+    expect(decimals("41.25%")).toEqual([2]);
+    expect(decimals("3,500万元 1.2亿元 三点五", ZH)).toEqual([0, 1, 1]);
+    expect(
+      readFigures("1,234")[0]?.ambiguous[0]?.readings.map((reading) => reading.decimals),
+    ).toEqual([0, 3]);
   });
 });
 
