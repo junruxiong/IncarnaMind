@@ -87,6 +87,16 @@ Asked for in #76: the every-format evaluation's three false "not found", and Wor
 - **Where it is:** while its Meeting records, in the data folder's `Transcripts/`, indexed again as lines come (every 20 seconds at first, every two minutes once it is long, as each indexing keeps a version until the next start unless a Citation quotes it), even while other Documents wait for the recording (#135); at Stop, finished and saved as `Transcript · {meeting}.vtt` (`转写稿 · {meeting}`) in the Output location (#124), and the Document follows the file there, keeping its id, Folder and Citations. A Meeting with nothing transcribed saves none. A Transcript is a source IncarnaMind saved, as a web page is: checks count it as evidence.
 - **Processing:** a new kind, so nothing else is processed again (`CURRENT_SINCE.transcript` is 7, the current version).
 
+## Amendment: A workbook's cells keep their number beside how they show (2026-10-12, #435)
+
+A calculation over a cell should use what Excel computes with, 0.04213, not the 0.042 that "4.2%" shows. The shown text is still what is stored, searched and checked; the number is kept beside it.
+
+- **Where:** a workbook's rows Unit label gains `values`, the number stored in each cell whose shown text isn't that number written plainly (Excel's General rendering), by cell reference: `{ "C12": 0.04213 }`. It is sparse, so a sheet of plain numbers adds nothing; a date stays its ISO text and keeps no number. It is part of the Unit's label (JSON in `document_pages.label`), so no migration. A block lists only the cells of its own rows, not of a repeated header row.
+- **A CSV** keeps none: its cells are their text.
+- **Unchanged:** the Unit's text, its anchors and Passages, so the Citation check reads the shown text as before, and the viewer, which reads the file.
+- **Asking:** `cellNumber(label, ref)` (`src/shared/units.ts`) gives a cell's number from a Unit's label, and the core's `readCellNumber(documentId, sheet, ref)` from a Document's current version, for the Tools that calculate over cells. It is not on the bridge.
+- **Processing version 8** processes Excel workbooks again at startup (`CURRENT_SINCE.xlsx`), to gain the numbers; other kinds are left as they are.
+
 ## Amendment: scanned pages are read on this computer (2026-10-12, #397)
 
 A scanned PDF had no text, so it couldn't be searched, asked about or cited. Its pages are now read with text recognition (OCR), on this computer. Photos and image files as Documents stay out, as does a cloud model for pages local OCR reads badly.

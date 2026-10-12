@@ -76,6 +76,12 @@ export interface UnitLabel {
   header?: boolean;
   /** page: a scanned page, whose text was read from its picture (#397), not taken from the PDF. */
   scan?: UnitScan;
+  /**
+   * rows of a workbook: the number stored in each cell whose shown text isn't
+   * that number written plainly, by cell ("C12": 0.04213 for a cell showing
+   * "4.2%"). Sparse; none for a CSV, whose cells are their text. See `cellNumber`.
+   */
+  values?: Record<string, number>;
 }
 
 /**
@@ -177,6 +183,18 @@ export function columnName(index: number): string {
     name = String.fromCharCode(65 + ((n - 1) % 26)) + name;
   }
   return name;
+}
+
+/**
+ * The number stored in a cell of a workbook's rows Unit, or null when the
+ * cell shows its number plainly (or is not a number), when the Unit isn't a
+ * workbook's, or when the cell is not in it. `ref` is "C12", any case.
+ */
+export function cellNumber(label: UnitLabel | null | undefined, ref: string): number | null {
+  const cell = parseCellRef(ref);
+  if (!cell || !label?.values) return null;
+  const value = label.values[`${columnName(cell.column)}${cell.row}`];
+  return typeof value === "number" ? value : null;
 }
 
 /** "C12" → { column: 2, row: 12 }; null if it isn't a cell reference. */

@@ -112,6 +112,8 @@ test("off by default; Connect asks once, writes Codex's settings as shown, and U
     await expect(dialog).toContainText("Let ChatGPT app and Codex read your Documents?");
     await expect(dialog).toContainText("Some plans may use it to train their models.");
     await expect(dialog.getByTestId("connect-agent-change")).toContainText(codexSettings);
+    const skillFile = join(home, ".agents", "skills", "incarnamind", "SKILL.md");
+    await expect(dialog.getByTestId("connect-agent-skill")).toContainText(skillFile);
     const allow = dialog.getByTestId("connect-agent-allow");
     await expect(allow).toBeDisabled();
     // Linux with no keyring running (CI): the dialog asks to keep the key as plain text first.
@@ -129,6 +131,8 @@ test("off by default; Connect asks once, writes Codex's settings as shown, and U
       "Added to ChatGPT app and Codex’s settings.",
     );
     await expect(connected.getByTestId("agent-pairing-reads")).toHaveText("Reads Coast");
+    await expect(connected.getByTestId("agent-pairing-skill")).toContainText("Skill installed");
+    expect(await readFile(skillFile, "utf8")).toContain("name: incarnamind");
     await shot(window, "agents-connected");
     const written = await readFile(codexSettings, "utf8");
     expect(written).toContain("[mcp_servers.incarnamind]");
@@ -137,6 +141,7 @@ test("off by default; Connect asks once, writes Codex's settings as shown, and U
     await connected.getByTestId("agent-setup-undo").click();
     await expect(page.getByTestId("agent-pairing")).toHaveCount(0);
     expect(await readFile(codexSettings, "utf8")).toBe(CODEX_SETTINGS);
+    await expect(readFile(skillFile, "utf8")).rejects.toThrow(/ENOENT/);
   } finally {
     await app.close();
   }

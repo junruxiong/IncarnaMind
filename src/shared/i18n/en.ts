@@ -2552,7 +2552,11 @@ export const en = {
   "agents.pairing.activity": "Activity",
   "agents.pairing.disconnect": "Disconnect",
   "agents.pairing.details": "Details for technical users",
+  "agents.pairing.skill": "Skill installed: {agent} knows when to use IncarnaMind",
   "agents.pairing.copySettings": "Copy settings",
+  "agents.pairing.copySkill": "Copy Skill",
+  "agents.pairing.copySkill.hint":
+    "Save it as SKILL.md in a folder named incarnamind, inside your agent’s skills folder, so it knows when to use IncarnaMind.",
   "agents.pairing.copied": "Copied",
   "agents.activity.empty": "No calls yet.",
   "agents.activity.search": "Searched “{text}”",
@@ -2586,6 +2590,8 @@ export const en = {
     "You don’t have any folders yet. Make one in the Library, then come back.",
   "agents.connect.pickOne": "Choose at least one folder.",
   "agents.connect.fileChange": "IncarnaMind adds these lines to {path}:",
+  "agents.connect.skill":
+    "It also adds a short Skill at {path}, which tells {agent} when to use IncarnaMind.",
   "agents.connect.showChange": "Show the lines",
   "agents.connect.allow": "Allow and connect",
   "agents.connect.cancel": "Cancel",

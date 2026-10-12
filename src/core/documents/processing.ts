@@ -54,7 +54,9 @@ export const PROCESSING_VERSION = 9;
  * version would build: a Document processed by an older one is processed
  * again at startup. Version 5 changed nothing for PDFs, whose Passages
  * (and embeddings) stay as they are; version 6 changed no Passage or Unit;
- * version 7 changed only Word files', which gain their comments.
+ * version 7 changed only Word files', which gain their comments; version 8
+ * only Excel workbooks', whose rows Units gain their cells' numbers; version 9
+ * only PDFs' scanned pages, which `SCAN_CURRENT_SINCE` reads again.
  */
 export const CURRENT_SINCE: Readonly<Record<DocumentKind, number>> = {
   pdf: 4,
@@ -62,7 +64,7 @@ export const CURRENT_SINCE: Readonly<Record<DocumentKind, number>> = {
   markdown: 5,
   docx: 7,
   pptx: 5,
-  xlsx: 5,
+  xlsx: 8,
   csv: 5,
   web: 7,
   transcript: 7,
