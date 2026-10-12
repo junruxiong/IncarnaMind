@@ -41,16 +41,19 @@ import { documentTitle } from "./title";
  * section, plain text by blocks of lines; Word, PowerPoint, Excel and CSV
  * read). 6: ADR-0009's amendment (the keyword index reads traditional
  * Chinese characters as simplified ones; see `HAN_CURRENT_SINCE`). 7: #76
- * (a Word file's comments are read into the section their mark is in).
+ * (a Word file's comments are read into the section their mark is in). 8:
+ * #435 (a workbook's rows Units keep the number of each cell whose shown
+ * text isn't that number written plainly).
  */
-export const PROCESSING_VERSION = 7;
+export const PROCESSING_VERSION = 8;
 
 /**
  * Per kind, the oldest version whose Passages and Units are still what this
  * version would build: a Document processed by an older one is processed
  * again at startup. Version 5 changed nothing for PDFs, whose Passages
  * (and embeddings) stay as they are; version 6 changed no Passage or Unit;
- * version 7 changed only Word files', which gain their comments.
+ * version 7 changed only Word files', which gain their comments; version 8
+ * only Excel workbooks', whose rows Units gain their cells' numbers.
  */
 export const CURRENT_SINCE: Readonly<Record<DocumentKind, number>> = {
   pdf: 4,
@@ -58,7 +61,7 @@ export const CURRENT_SINCE: Readonly<Record<DocumentKind, number>> = {
   markdown: 5,
   docx: 7,
   pptx: 5,
-  xlsx: 5,
+  xlsx: 8,
   csv: 5,
   web: 7,
   transcript: 7,

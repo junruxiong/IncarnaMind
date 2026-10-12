@@ -162,6 +162,11 @@ export function ConnectAgentDialog({
             </details>
           </div>
         )}
+        {client?.skillPath && (
+          <p data-testid="connect-agent-skill" className={`${dialogTextClass} break-all`}>
+            {t("agents.connect.skill", { path: client.skillPath, agent })}
+          </p>
+        )}
         {folders.length > 0 && chosen.size === 0 && (
           <p className={hintClass}>{t("agents.connect.pickOne")}</p>
         )}
