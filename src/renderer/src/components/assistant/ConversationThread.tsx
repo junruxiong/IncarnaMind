@@ -4,7 +4,7 @@ import { mindName } from "../../../../shared/naming";
 import { type AddTarget, addAnswer } from "../../addToNote";
 import { answerBlocks } from "../../answerBlocks";
 import { selectedNotes } from "../../answerEditors";
-import { askedFromLine, stepsScope } from "../../assistantContext";
+import { readsLine, stepsScope } from "../../assistantContext";
 import { readMindHandle } from "../../commands/handles";
 import { composerScope, useComposer } from "../../composer";
 import {
@@ -36,8 +36,8 @@ const notesOf = (answer: ConversationAnswer) =>
 /**
  * The conversation the assistant shows (#201): the Questions as bubbles at the
  * right, as in Claude and ChatGPT, and the Answers with their steps,
- * Citations, checks and actions (`AssistantAnswer`); empty, where the next
- * Question is asked from and what it searches, and what asking here does. A Question shows
+ * Citations, checks and actions (`AssistantAnswer`); empty, what the next
+ * Question reads and searches, and what asking here does. A Question shows
  * the moment it is sent, with its Answer's first step and Stop under it
  * before the core has checked the model, so asking never looks like nothing
  * happened. It keeps up with an Answer being written while the User is at its
@@ -56,7 +56,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
     ? (focusedMind && mindName(focusedMind)) || t("mind.untitled")
     : null;
   const nextScope = useNextScope(focusedMindId);
-  const askedFrom = askedFromLine(t, focusedMind ? focusedMindName : null, nextScope);
+  const reads = readsLine(t, focusedMind ? focusedMindName : null, nextScope);
   const [picking, setPicking] = useState<{
     answer: ConversationAnswer;
     anchor: HTMLElement;
@@ -129,9 +129,9 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
     >
       {messages.length === 0 && asking === null && (
         <>
-          <p data-testid="assistant-asked-from" title={askedFrom} className="assistant-asked-from">
-            <SearchIcon aria-hidden="true" className="assistant-asked-from-icon" />
-            <span className="assistant-asked-from-text">{askedFrom}</span>
+          <p data-testid="assistant-reads" title={reads} className="assistant-reads">
+            <SearchIcon aria-hidden="true" className="assistant-reads-icon" />
+            <span className="assistant-reads-text">{reads}</span>
           </p>
           <p data-testid="assistant-empty" className="assistant-empty">
             {t("assistant.empty")}
@@ -160,7 +160,14 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
           className="assistant-answer"
         >
           <LiveLine
-            step={{ kind: "searching" }}
+            step={
+              focusedMind
+                ? {
+                    kind: "reading",
+                    mind: { mindId: focusedMind.id, name: mindName(focusedMind), deleted: false },
+                  }
+                : { kind: "searching" }
+            }
             scope={stepsScope(
               t,
               nextScope.filter((chip) => !chip.deleted),

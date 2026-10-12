@@ -4,6 +4,7 @@ import type {
   AskedFrom,
   ConversationAnswer,
   ConversationQuestion,
+  MindRead,
 } from "../../../../core/api";
 import { citationLocation, formatLocation } from "../../../../shared/locations";
 import {
@@ -170,6 +171,8 @@ function liveText(t: Translate, step: LiveStep, scope: string): string {
       return t("answer.phase.waiting-for-consent");
     case "loading":
       return t("answer.phase.loading");
+    case "reading":
+      return t("steps.live.reading", { mind: mindLabel(t, step.mind) });
     case "searching":
       return t("steps.live.searching", { scope });
     case "call":
@@ -207,6 +210,12 @@ function runningText(t: Translate, call: AnswerToolCall): string {
 
 const mindLabel = (t: Translate, mind: AskedFrom) => mind.name || t("mind.untitled");
 
+/** "Read {Mind}", or "Read part of {Mind}" when it was cut to fit. */
+const readText = (t: Translate, mind: MindRead) =>
+  mind.deleted
+    ? t("steps.read.deleted")
+    : t(mind.partial ? "steps.read.part" : "steps.read", { mind: mindLabel(t, mind) });
+
 function sourcesText(t: Translate, count: number): string {
   if (count === 0) return t("steps.sources.none");
   return count === 1 ? t("steps.sources.one") : t("steps.sources", { count });
@@ -221,6 +230,8 @@ function foldedText(t: Translate, line: FoldedLine, scope: (extra: number) => st
       });
     case "listened":
       return t("steps.listened", { sources: sourcesText(t, line.sources) });
+    case "read":
+      return readText(t, line.mind);
     case "asked":
       return line.mind.deleted
         ? t("steps.asked.deleted")
@@ -245,7 +256,11 @@ function FoldedToggle({
   const t = useT();
   const label = foldedText(t, line, scopeOf);
   const Icon =
-    line.kind === "asked" ? MindLineIcon : line.kind === "answered" ? SparkLineIcon : SearchIcon;
+    line.kind === "read" || line.kind === "asked"
+      ? MindLineIcon
+      : line.kind === "answered"
+        ? SparkLineIcon
+        : SearchIcon;
   return (
     <button
       type="button"
@@ -319,23 +334,31 @@ function StepItem({
           </p>
         </Step>
       );
-    case "asked":
+    case "read":
+    case "asked": {
+      const label =
+        row.kind === "read"
+          ? readText(t, row.mind)
+          : row.mind.deleted
+            ? t("steps.asked.deleted")
+            : t("steps.asked", { mind: mindLabel(t, row.mind) });
       return (
         <Step kind={row.kind} icon={<MindLineIcon />}>
           {row.mind.deleted ? (
-            <p className="answer-step-title">{t("steps.asked.deleted")}</p>
+            <p className="answer-step-title">{label}</p>
           ) : (
             <button
               type="button"
-              data-testid="answer-step-asked"
+              data-testid={`answer-step-${row.kind}`}
               onClick={() => useAppStore.getState().openMind(row.mind.mindId)}
               className="answer-step-title answer-step-link"
             >
-              {t("steps.asked", { mind: mindLabel(t, row.mind) })}
+              {label}
             </button>
           )}
         </Step>
       );
+    }
     case "search":
       return <SearchStep row={row} scope={scope} />;
     case "failed-search":

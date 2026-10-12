@@ -359,12 +359,13 @@ export type ReadThirdPartySource = Exclude<ThirdPartySource, "imported">;
 /**
  * Why a Run counts as having read third-party text: it read some itself, or
  * its Question context holds some (a Block or an Answer with a third-party
- * origin). Such a Run asks before a write or a send that a Tool-level
- * "always" would otherwise let through (see `ApprovalRequest.thirdParty`).
+ * origin), in the Mind a Question in a conversation read ("mind") or
+ * otherwise ("context"). Such a Run asks before a write or a send that a
+ * Tool-level "always" would otherwise let through (see `ApprovalRequest.thirdParty`).
  */
 export type ThirdPartyReason =
   | { via: "read"; source: ReadThirdPartySource }
-  | { via: "context"; source: ThirdPartySource };
+  | { via: "context" | "mind"; source: ThirdPartySource };
 
 /**
  * The name of the Y.Map, beside a Mind's Blocks, that says which Blocks hold
@@ -2925,6 +2926,25 @@ export interface AskedFrom {
   deleted: boolean;
 }
 
+/**
+ * Where the User was in the Mind in focus when they asked (#544): the text
+ * they selected, and the Mind's top-level Blocks it is in, by Block id, in
+ * order; with nothing selected, the Block the cursor is in.
+ */
+export interface MindFocus {
+  /** The selected text as the editor reads it; "" with nothing selected. */
+  selection: string;
+  blockIds: string[];
+}
+
+/** The Mind an Answer in a conversation read (#544), as it was then: what the Answer is based on. */
+export interface MindRead extends AskedFrom {
+  /** Its version as read: a fingerprint of its text, as the model read it before any cut. */
+  version: string;
+  /** It was too long for the model's window, so only part of it was read. */
+  partial: boolean;
+}
+
 /** A conversation, as History lists it. It exists once it has a Question; it is never a Mind. */
 export interface Conversation {
   /** A random UUID generated on this device. */
@@ -2955,6 +2975,8 @@ export interface ConversationQuestion {
   text: string;
   /** The Mind in focus when it was asked; null: none (Home, or no Mind in focus). */
   askedFrom: AskedFrom | null;
+  /** Where the User was in that Mind, which its Answer reads first; null: nowhere known. */
+  focus: MindFocus | null;
   /** Its Search scope; null: none, every Document. */
   scope: SearchScope | null;
   /** The model picked for it; null: the default. */
@@ -2999,6 +3021,12 @@ export interface ConversationAnswer {
    * it too, and so does a Mind it is added to. Null: none.
    */
   textOrigin: ThirdPartySource | null;
+  /**
+   * The Mind its Question was asked from, which it read (#544); null when it
+   * read none: none was in focus, it had been deleted, nothing of it fitted the
+   * model's window, or the Answer was written before.
+   */
+  read: MindRead | null;
   /** How it was reached; null for an Answer written before #391. */
   steps: AnswerSteps | null;
   /** ISO 8601, UTC. */
@@ -3028,10 +3056,12 @@ export interface AskInConversationInput {
   /** What the User asked. */
   text: string;
   /**
-   * The Mind in focus, which the Question records; none or null: none (Home). A
-   * new conversation belongs to its Folder.
+   * The Mind in focus, which the Question records and its Answer reads; none
+   * or null: none (Home). A new conversation belongs to its Folder.
    */
   mindId?: string | null;
+  /** Where the User is in that Mind; ignored with no Mind. */
+  focus?: MindFocus | null;
   /** Its Search scope; none or null: every Document. */
   scope?: SearchScope | null;
   /** The model to answer with; none or null: the default. */
@@ -4910,12 +4940,15 @@ export interface CoreApi {
    * Asks a Question in the assistant (ADR-0017): adds it to the conversation, or starts
    * a conversation with it, and the Answer streams into the conversation ("answer.*"
    * events with its `conversationId`, and each write as "conversation.message"). The
-   * Question records the Mind in focus; a new conversation belongs to that Mind's Folder,
-   * or to none. When the Question can't be asked, nothing is kept: no Question, and no
-   * conversation. "conversations.changed" follows.
+   * Question records the Mind in focus, which its Answer reads, the selection first; a
+   * new conversation belongs to that Mind's Folder, or to none. When the Question can't be
+   * asked, nothing is kept: no Question, and no conversation. "conversations.changed" follows.
    */
   askInConversation(input: AskInConversationInput): Promise<ConversationAskResult>;
-  /** Writes an Answer of a conversation again, in place, for its Question as it was asked. */
+  /**
+   * Writes an Answer of a conversation again, in place, for its Question as it was asked,
+   * reading the Mind it was asked from as that Mind is now.
+   */
   regenerateConversationAnswer(input: ConversationAnswerInput): Promise<ConversationAskResult>;
   /** Stops an Answer of a conversation being written, keeping what it has. */
   stopConversationAnswer(input: ConversationAnswerInput): Promise<void>;
