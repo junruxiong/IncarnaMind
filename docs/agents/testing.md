@@ -54,9 +54,22 @@ The scripted chat model (`fakeChat`) is for automated tests only: CI has no keys
 
 Use at least three of these, including one from Anthropic and one from OpenAI, and say where a model did worse than the others.
 
+**Before a release,** the first-class providers (ADR-0019) are each tried by hand once, with the cheapest model that answers: the ChatGPT plan, Anthropic, OpenAI, Google, OpenRouter, Ollama (a local model and a cloud model), and, for mainland China, DeepSeek, Qwen (Alibaba Cloud Model Studio) and SiliconFlow. Their `support` field in `src/core/providers/catalog/providers.ts` says which they are. Best-effort providers (Mistral, xAI, Kimi, GLM and an OpenAI-compatible server) have no release check. The rule above for an AI feature is unchanged: at least three providers, including Anthropic and OpenAI.
+
 **Keep the bill small.** These keys are paid by the person, not a company. Use the cheapest model that answers the question, run each check once per model rather than many times, use short test Documents, and stop as soon as the result is clear. Large or "pro" models need a reason in the pull request.
 
 Use a temporary data folder and test Documents, never your own files. Say in the pull request which models you used and what you checked with each: that the Answer cites, the quotes are found, the feature reads well in Chinese, and it copes with a slow or failing model.
+
+### Outside agents before a release
+
+Settings → Agents sets IncarnaMind up in a few first-class agents (`src/core/agents/clients.ts`). Before a release, try each by hand with a temporary HOME and a test Folder: connect it, ask it something the Folder answers, and check the answer carries Citations that IncarnaMind finds. Disconnect afterwards.
+
+- the Claude desktop app (one click, a Free plan is enough), and Claude Code;
+- the ChatGPT desktop app (in its Work or Codex mode) and Codex, which share one configuration;
+- Cursor;
+- Antigravity, and in China WorkBuddy.
+
+"Other agent" is tried with any one agent that takes pasted settings. The agents' own configuration formats change under us: when one stops working, fix it here or move it to "Other agent" (ADR-0019).
 
 ### The ChatGPT test profile
 

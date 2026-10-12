@@ -25,6 +25,7 @@ export const DOCUMENT_EXTENSIONS: Readonly<Record<DocumentKind, readonly string[
   csv: ["csv"],
   // Saved by their address, never added as files: a .html file isn't a web page Document.
   web: [],
+  transcript: ["vtt"],
 };
 
 const KINDS: ReadonlyMap<string, DocumentKind> = new Map(
