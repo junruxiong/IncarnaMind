@@ -158,6 +158,12 @@ describe("A Meeting's live Transcript", { timeout: 60_000 }, () => {
     expect(readFileSync(path, "utf8")).toMatch(/^WEBVTT\n\n00:00:00\.000 --> 00:00:02\.000\n/);
     expect(existsSync(join(dataDir, "Transcripts", `${meeting.id}.vtt`))).toBe(false);
     await vi.waitFor(async () => expect((await documentOf(core, documentId)).path).toBe(path));
+    // It stays where it was saved after a restart, not back in the data folder's Transcripts.
+    core.close();
+    expect(await documentOf(startCore(dataDir), documentId)).toMatchObject({
+      path,
+      fileStatus: "available",
+    });
   });
 
   test("the engine's process crashes mid-meeting: it starts again, the gap is marked, and filled from the audio at Stop", async () => {

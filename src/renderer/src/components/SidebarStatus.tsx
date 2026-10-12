@@ -7,6 +7,7 @@ import { useCapturing } from "../meetings";
 import { enterFrom, exitToward } from "../motion";
 import { rerankingModelStatus } from "../rerankStatus";
 import { isOwnDocument, useAppStore } from "../store";
+import { textRecognitionStatus, useTextRecognition } from "../textRecognition";
 import { canTryAgain, outsideDialog, reasonKey, useWebPages } from "../webPages";
 import { CloseLineIcon } from "./lineIcons";
 import { embeddingProviderLabel } from "./providers/EmbeddingSettings";
@@ -200,6 +201,8 @@ function useStatuses(): Status[] {
   const counts = useAppStore(
     useShallow((state) => {
       let processing = 0;
+      // Scanned pages still to read, of the Documents being read (#397).
+      let scannedPages = 0;
       let tagging = 0;
       // Only the User's own Documents: the examples need no model, so they alone don't ask for one.
       let waitingForTagger = 0;
@@ -209,19 +212,27 @@ function useStatuses(): Status[] {
       );
       for (const item of state.documents) {
         if (PROCESSING.has(item.status)) {
-          if (item.linkedFolderId === null || !paused.has(item.linkedFolderId)) processing++;
+          if (item.linkedFolderId === null || !paused.has(item.linkedFolderId)) {
+            processing++;
+            if (item.scan) scannedPages += item.scan.pages - item.scan.read;
+          }
         } else if (item.status === "ready") {
           if (item.tagging === "pending" || item.tagging === "tagging") tagging++;
           else if (item.tagging === "waiting-for-provider" && isOwnDocument(item, state.examples))
             waitingForTagger++;
         }
       }
-      return { processing, tagging, waitingForTagger };
+      return { processing, scannedPages, tagging, waitingForTagger };
     }),
   );
   const retryDownload = useAppStore((state) => state.downloadEmbeddingModel);
   const rerank = useAppStore((state) => state.rerank);
   const retryRerankingDownload = useAppStore((state) => state.downloadRerankingModel);
+  const textRecognition = textRecognitionStatus(
+    useTextRecognition((state) => state.status),
+    t,
+  );
+  const retryTextRecognition = useTextRecognition((state) => state.download);
   const retryEmbedding = useAppStore((state) => state.retryEmbedding);
   const dismissSkipped = useAppStore((state) => state.dismissSkippedFiles);
   const dismissAlreadyAdded = useAppStore((state) => state.dismissAlreadyAdded);
@@ -270,6 +281,17 @@ function useStatuses(): Status[] {
   }
 
   if (reranking?.tone === "error") statuses.push(reranking);
+
+  if (textRecognition?.tone === "error") {
+    statuses.push({
+      ...textRecognition,
+      action: {
+        label: t("status.retry"),
+        testId: "text-recognition-retry",
+        run: () => void retryTextRecognition(),
+      },
+    });
+  }
 
   if (embedding?.error) {
     const provider = embeddingProviderLabel(embedding.provider, t);
@@ -362,6 +384,7 @@ function useStatuses(): Status[] {
   }
 
   if (reranking?.tone === "progress") statuses.push(reranking);
+  if (textRecognition?.tone === "progress") statuses.push(textRecognition);
 
   const rebuild = embedding?.rebuild;
   if (rebuild) {
@@ -396,10 +419,15 @@ function useStatuses(): Status[] {
       full: t("status.readingPaused.full"),
     });
   } else if (counts.processing > 0) {
+    // While scanned pages are read, they are what takes the time: the row says so.
     const text =
-      counts.processing === 1
-        ? t("status.processing.one")
-        : t("status.processing.other", { count: counts.processing });
+      counts.scannedPages > 0
+        ? counts.scannedPages === 1
+          ? t("status.scanning.one")
+          : t("status.scanning.other", { count: counts.scannedPages })
+        : counts.processing === 1
+          ? t("status.processing.one")
+          : t("status.processing.other", { count: counts.processing });
     statuses.push({ testId: "processing-status", tone: "progress", short: text, full: text });
   }
 
