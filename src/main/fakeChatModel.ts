@@ -15,6 +15,8 @@
  * asks for it "as a table" gets a Markdown table with its markers in a cell; one that
  * asks "by quarter" (按季度) gets a table of quarterly figures, its marker in each cell
  * but the last, to chart (#436); "分季度" gets the same in Chinese, in 万元.
+ * One that asks how much something grew (增长) has the growth from the first
+ * two numbers of its quote calculated, and writes it with its marker.
  * Before its search it reasons, a line that quotes the Question, as a model
  * that thinks does. A Question asked "slowly" waits a moment before each step
  * and writes its Answer word by word, so a test sees each step of the Answer.
@@ -469,6 +471,28 @@ function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
     const records = recordsFor(searches.at(-1) ?? "", question);
     if (records.length > 0) return { tool: "cite", input: { citations: records } };
     return { text: fakeAnswer(question, skill) };
+  }
+  if (tools.includes("calculate") && /\bgrow|增长/i.test(question)) {
+    const calculated = toolResults(prompt, "calculate");
+    if (calculated.length === 0) {
+      const inputs = [1, 2].map((position) => ({
+        name: `n${position}`,
+        label: position === 1 ? "Later" : "Earlier",
+        citation: 1,
+        position,
+      }));
+      return {
+        tool: "calculate",
+        input: {
+          figures: [{ marker: 1, label: "Growth", inputs, formula: "n1 / n2 - 1", as: "percent" }],
+        },
+      };
+    }
+    if (calculated.at(-1)?.startsWith("Recorded [=1]")) {
+      return {
+        text: /增长/.test(question) ? "增长了[=1][^1]。" : "It grew [=1] [^1].\n\nThat is all.",
+      };
+    }
   }
   // The markers the last cite call recorded: "Recorded [^1], [^2]." and then any problems.
   const recordedLine = /^Recorded ([^.]*)\./.exec(cites.at(-1) ?? "")?.[1] ?? "";
