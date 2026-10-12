@@ -147,6 +147,7 @@ interface Given {
   mindId: string;
   providerId: string;
   modelId: string;
+  citation: Citation;
 }
 
 export interface SuggestionsOptions {
@@ -359,6 +360,7 @@ export function createSuggestions(options: SuggestionsOptions) {
       mindId: request.mindId,
       providerId: suggestion.providerId,
       modelId: suggestion.modelId,
+      citation,
     });
     const oldest = given.keys().next().value;
     if (given.size > REMEMBERED && oldest !== undefined) given.delete(oldest);
