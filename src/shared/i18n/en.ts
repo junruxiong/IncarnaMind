@@ -474,6 +474,8 @@ export const en = {
   "editor.ai.translate": "Translate…",
   "editor.ai.explain": "Explain",
   "editor.ai.edit": "Edit with AI…",
+  "editor.ai.markAsMine": "Mark as mine",
+  "aiText.markedAsMine": "Marked as yours",
   "edit.pending.improve": "Improving the writing…",
   "edit.pending.shorten": "Shortening…",
   "edit.pending.translate": "Translating into {language}…",

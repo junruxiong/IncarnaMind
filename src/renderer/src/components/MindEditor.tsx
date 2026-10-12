@@ -16,6 +16,7 @@ import { shortcutLabel } from "../commands/keymap";
 import { useComposer } from "../composer";
 import { core } from "../core";
 import { AnswerView } from "../editor/AnswerView";
+import { holdsAiText } from "../editor/aiText";
 import { BlockHandle } from "../editor/BlockHandle";
 import { BlockCommands } from "../editor/blockCommands";
 import { BlockOrigins } from "../editor/blockOrigins";
@@ -63,6 +64,7 @@ import { SmartTypography } from "../editor/typography";
 import { WordCount } from "../editor/WordCount";
 import { requestEdit, startEditing, TRANSLATE_LANGUAGES } from "../editWithAi";
 import { translateNow, useT } from "../i18n";
+import { markSelectionAsMine } from "../markAsMine";
 import { useMeetingOf, useMeetings } from "../meetings";
 import { isWritingIn } from "../mindStatus";
 import { useMindTools } from "../mindTools";
@@ -70,7 +72,7 @@ import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
 import { askForSuggestion, describeSuggestion } from "../suggestions";
 import { StartGuide, useGettingStarted, useIsExample } from "./GettingStarted";
-import { SparkLineIcon } from "./lineIcons";
+import { MineLineIcon, SparkLineIcon } from "./lineIcons";
 import { MindNotice } from "./MindNotice";
 
 /** Stands in for the hint's button in its translated words, which are split around it. */
@@ -399,7 +401,7 @@ function MindEditorView({
     };
   }, [reads, editor, mindId, doc]);
 
-  // The selection menu's AI section: each comes back as changes to accept or reject.
+  // The selection menu's AI section: each comes back as changes to accept or reject; Mark as mine acts at once.
   const aiActions = useMemo((): SelectionAction[] => {
     const available = (current: typeof editor) => selectionForEdit(current.state) !== null;
     const run = (action: "improve" | "shorten" | "explain") => (current: typeof editor) =>
@@ -420,6 +422,13 @@ function MindEditorView({
         run: () => undefined,
       },
       { id: "explain", label: "editor.ai.explain", icon: "?", available, run: run("explain") },
+      {
+        id: "mark-as-mine",
+        label: "editor.ai.markAsMine",
+        icon: <MineLineIcon className="size-3.5" />,
+        available: (current) => holdsAiText(current.state),
+        run: (current) => void markSelectionAsMine(current),
+      },
       {
         id: "edit",
         label: "editor.ai.edit",
