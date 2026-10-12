@@ -64,7 +64,7 @@ Google AI Pro 和 Ultra 订阅用户的接入方式。点击“连接”：Incar
 <a id="other"></a>
 ### 其他智能体
 
-任何能启动本地 MCP 服务器的智能体都可以使用。点击“连接”，也可以给它起个名字：IncarnaMind 会复制它的设置，格式是多数智能体采用的 `mcpServers` 形式（`{ "mcpServers": { "incarnamind": { "command", "args", "env" } } }`）。把它粘贴到你的智能体添加 MCP 服务器的地方，然后重新启动。如果智能体要求分别填写命令、参数和环境变量，可以从同一份设置中取用：已连接智能体的“技术细节”会再次显示。IncarnaMind 不会写入这些智能体的文件。
+任何能启动本地 MCP 服务器的智能体都可以使用。点击“连接”，也可以给它起个名字：IncarnaMind 会复制它的设置，格式是多数智能体采用的 `mcpServers` 形式（`{ "mcpServers": { "incarnamind": { "command", "args", "env" } } }`）。把它粘贴到你的智能体添加 MCP 服务器的地方，然后重新启动。如果智能体要求分别填写命令、参数和环境变量，已连接智能体的“技术细节”会逐项显示，每项都有自己的“复制”（屏幕上密钥是隐藏的，复制时会包含密钥）。IncarnaMind 不会写入这些智能体的文件。
 
 只能在互联网上使用的聊天应用（网页版 ChatGPT 和 Claude、Gemini、Le Chat、Grok、Microsoft 365 Copilot、扣子、元宝）无法连接 IncarnaMind，因为它只服务这台电脑。
 

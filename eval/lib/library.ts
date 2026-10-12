@@ -7,9 +7,11 @@ import { mkdir, mkdtemp, rm, symlink, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  type AnswerSearchTuning,
   type Core,
   type CoreAdapters,
   type CrossEncoder,
+  createAiSdkChatModel,
   createCore,
   DATABASE_FILE,
   type Document,
@@ -26,6 +28,7 @@ import { openDatabase } from "../../src/core/storage";
 import type { CorpusPassage } from "./corpus";
 import type { EvalDocument } from "./evaluationSet";
 import type { Log } from "./log";
+import { answerSearchOf, createTimingRecorder, type TimingRecorder } from "./timing";
 
 export interface LibraryOptions {
   /** For the temporary folder's name and the log. */
@@ -73,10 +76,19 @@ export interface LibraryOptions {
    * embeddings on afterwards. True by default.
    */
   embeddings?: boolean;
+  /**
+   * The search Tool's reranking and Passage count for Answers, instead of the
+   * app's (INCARNAMIND_EVAL_RERANK_DEPTH and INCARNAMIND_EVAL_MAX_PASSAGES).
+   */
+  answerSearch?: Pick<AnswerSearchTuning, "rerankDepth" | "maxPassages">;
+  /** Time each step of the Answers asked (see ./timing); nothing sent to the model changes. */
+  recordTimings?: boolean;
 }
 
 export interface Library {
   core: Core;
+  /** Times the Answers asked through `core`; null unless the library was opened to record. */
+  timings: TimingRecorder | null;
   dataDir: string;
   /** The Document added for each key of the evaluation set. */
   documents: ReadonlyMap<string, Document>;
@@ -240,7 +252,16 @@ export async function openLibrary(options: LibraryOptions): Promise<Library> {
           rerankingModelSource: { baseUrl: "http://127.0.0.1/", files: [] },
         }),
   };
-  const core = createCore(adapters);
+  const timings = options.recordTimings ? createTimingRecorder() : null;
+  const answerSearch = answerSearchOf(options.answerSearch ?? {}, timings);
+  const core = createCore({
+    ...adapters,
+    ...(answerSearch && { answerSearch }),
+    ...(timings && {
+      createChatModel: timings.chatModels(createAiSdkChatModel),
+      answerEngine: timings.engine,
+    }),
+  });
   const close = async () => {
     core.close();
     if (options.keep) {
@@ -316,6 +337,7 @@ export async function openLibrary(options: LibraryOptions): Promise<Library> {
 
     return {
       core,
+      timings,
       dataDir,
       documents,
       processingSeconds,
