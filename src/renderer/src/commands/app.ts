@@ -9,6 +9,7 @@ import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
 import { assistantCommands } from "./assistant";
 import { bibliographyCommands } from "./bibliography";
+import { chartCommands } from "./charts";
 import { editCommands } from "./edit";
 import { evidenceCommands } from "./evidence";
 import { footnoteCommands } from "./footnotes";
@@ -180,11 +181,11 @@ const appCommands: readonly Command[] = [
     shortcut: { keys: "CmdOrCtrl+Shift+Backspace" },
     group: "danger",
     destructive: true,
-    appliesTo: ["block", "answer"],
+    appliesTo: ["block", "answer", "chart"],
     // The note's own undo (⌘Z) brings it back.
     reversible: true,
     run(ctx) {
-      // An Answer's menu deletes that Answer, wherever the cursor is.
+      // An Answer's or a chart's menu deletes it, wherever the cursor is.
       if (ctx.here?.["block.delete"]) return ctx.here["block.delete"]();
       // The Blocks the note's selection touches, the focused one among them.
       if (ctx.focus) noteHolding(ctx.focus.id)?.commands.deleteBlock();
@@ -205,6 +206,7 @@ const appCommands: readonly Command[] = [
   ...footnoteCommands,
   ...bibliographyCommands,
   ...tableCommands,
+  ...chartCommands,
   ...proposalCommands,
 ];
 

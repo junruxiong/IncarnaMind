@@ -570,6 +570,16 @@ export interface EngineSwitch {
   reason: EngineSwitchReason;
 }
 
+/**
+ * Draws an SVG document as a PNG, for a picture in an export (a chart in a
+ * Word file, #436). The desktop app draws it in a hidden window that loads
+ * nothing from the network (src/main/pictures.ts); tests pass a fake.
+ */
+export interface Pictures {
+  /** The SVG drawn at its own size in pixels (its `width` and `height`), as PNG bytes. */
+  png(svg: string): Promise<Uint8Array>;
+}
+
 export interface CoreAdapters {
   paths: Paths;
   /** The OS's preferred languages, most preferred first, as BCP 47 tags such as "zh-Hans-CN". */
@@ -581,6 +591,11 @@ export interface CoreAdapters {
    * Absent (tests that don't need it): both are refused.
    */
   shell?: FileShell;
+  /**
+   * Draws a chart's picture for a Word export. Absent (tests that don't need
+   * it): a chart goes into Word as the table of its values instead.
+   */
+  pictures?: Pictures;
   /** How Linked folders are watched (see `LinkedFolderOptions`). */
   linkedFolders?: LinkedFolderOptions;
   /**
