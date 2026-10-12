@@ -1,6 +1,7 @@
 import type { LayoutTab, TabItem, WindowLayout } from "../../core/api";
 import { displayName } from "../../shared/documentNames";
 import { mindName } from "../../shared/naming";
+import { LIBRARY_DELETED } from "./deletedItems";
 import type { Translate } from "./objects";
 import type { useAppStore } from "./store";
 
@@ -10,6 +11,7 @@ type AppState = ReturnType<typeof useAppStore.getState>;
 export function libraryTitle(state: AppState, t: Translate): string {
   const filter = state.libraryFilter;
   if (filter === "unsorted") return t("library.unsorted");
+  if (filter === LIBRARY_DELETED) return t("deleted.title");
   const folder = state.library?.groups.find((group) => group.id === filter);
   return folder?.name ?? t("library.all");
 }
