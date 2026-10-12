@@ -225,7 +225,7 @@ describe("Recording an Answer", () => {
     expect(timing?.searches[0]?.endMs ?? Infinity).toBeLessThan(timing?.firstTextMs ?? 0);
   });
 
-  test("notices an Answer written twice", async () => {
+  test("finds an Answer a model wrote, cited and wrote again written once, since the engine keeps one copy (#466)", async () => {
     const twice = scriptedModel((call) => {
       if (!call.results.some((result) => result.tool === "search_documents")) {
         return { calls: [{ tool: "search_documents", input: { query: "spring tides" } }] };
@@ -251,8 +251,8 @@ describe("Recording an Answer", () => {
     });
     const { run } = await ask(twice, true);
 
-    expect(run.answers[0]?.timing?.writtenTwice).toBe(true);
-    expect(run.summary.en.timing?.writtenTwice).toBe(1);
+    expect(run.answers[0]?.timing?.writtenTwice).toBe(false);
+    expect(run.summary.en.timing?.writtenTwice).toBe(0);
   });
 
   test("records no model call, nor a timing, without a recorder", async () => {
