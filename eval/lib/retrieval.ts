@@ -5,10 +5,11 @@
  * the expected pages, and (c) contains the expected quote, matched as the
  * Citation check matches quotes (both normalised by the shared normaliser).
  *
- * Keyword top 60 + rerank, the gating mode: keyword search's top 60,
- * reordered by a reranking model (see ./rerank), as the search Tool does by
- * default, with embeddings off (ADR-0009, 2026-10-10). The built-in reranking
- * model's is the gate; the other candidates' are reported only.
+ * The gate is the search Tool's score ("tool"): for each Question, whether the
+ * Passages the Tool hands the model hold the expected one, with embeddings off
+ * (ADR-0009, 2026-10-12). Beside it, reported: keyword top 20 + rerank,
+ * keyword search's top 20 reordered by a reranking model (see ./rerank), the
+ * order the Tool starts from, top 5.
  *
  * Hybrid + rerank: what the search Tool hands a reranker while the User has
  * embeddings on (keyword search's top 10 and vector search's top 10, each
@@ -70,8 +71,11 @@ export const KEYWORD_RANK_DEPTH = 200;
 /** A reranker sees this many of keyword search's best Passages, and of vector search's: the search Tool's. */
 export const RERANK_PER_LIST = SEARCH_TOOL_PARAMETERS.rerankPerList;
 
-/** The gate sees this many of keyword search's best: the search Tool's, with embeddings off. */
+/** The reranker sees this many of keyword search's best: the search Tool's, with embeddings off. */
 export const KEYWORD_RERANK_DEPTH = SEARCH_TOOL_PARAMETERS.keywordRerankCandidates;
+
+/** What the search Tool handed its reranker with embeddings off until 2026-10-12 (ADR-0009). */
+const PREVIOUS_KEYWORD_RERANK_DEPTH = 60;
 
 export const SEARCH_MODES: readonly SearchMode[] = ["hybrid", "keyword", "vector"];
 
@@ -79,12 +83,12 @@ export const SEARCH_MODES: readonly SearchMode[] = ["hybrid", "keyword", "vector
 export const HYBRID: SearchMode = "hybrid";
 
 /**
- * What a reranked mode reranks: keyword search's top 60 alone ("keyword-60"),
+ * What a reranked mode reranks: keyword search's top 20 alone ("keyword"),
  * what the search Tool hands a reranker by default, or keyword search's top
  * 10 and vector search's top 10 ("hybrid"), as it does with embeddings on.
  * The others are other ways to find candidates with embeddings off (see
- * ./searches), reported only: keyword search's top 20 ("keyword", the gate
- * before keyword search's top 60) and top 40 among them.
+ * ./searches), reported only: keyword search's top 60 ("keyword-60", what the
+ * Tool handed its reranker before) and top 40 among them.
  */
 export type RerankedSearch =
   | "hybrid"
@@ -97,10 +101,10 @@ export type RerankedSearch =
   | "small-to-big"
   | "document-first";
 
-/** The gate's search: keyword search's top 60, what the search Tool hands its reranker with embeddings off. */
-export const GATING_SEARCH: RerankedSearch = "keyword-60";
+/** The search the Tool's score starts from: keyword search's top 20, what the Tool hands its reranker with embeddings off. */
+export const GATING_SEARCH: RerankedSearch = "keyword";
 
-/** The reranked searches each reranking model runs, in the order the report lists them: the gate's first. */
+/** The reranked searches each reranking model runs, in the order the report lists them: the Tool's first. */
 export const RERANKED_SEARCHES: readonly RerankedSearch[] = [GATING_SEARCH, "hybrid"];
 
 /**
@@ -108,8 +112,8 @@ export const RERANKED_SEARCHES: readonly RerankedSearch[] = [GATING_SEARCH, "hyb
  * the gating set only, after its two (see ./searches). Never gating.
  */
 export const OTHER_SEARCHES: readonly RerankedSearch[] = [
-  "keyword",
   "keyword-40",
+  "keyword-60",
   "feedback",
   "rewrites",
   "sub-questions",
@@ -119,17 +123,17 @@ export const OTHER_SEARCHES: readonly RerankedSearch[] = [
 
 /** How deep keyword search's candidates go in the modes that are keyword search's alone. */
 export const KEYWORD_DEPTHS: Partial<Record<RerankedSearch, number>> = {
-  keyword: 2 * RERANK_PER_LIST,
+  keyword: KEYWORD_RERANK_DEPTH,
   "keyword-40": 40,
-  "keyword-60": KEYWORD_RERANK_DEPTH,
+  "keyword-60": PREVIOUS_KEYWORD_RERANK_DEPTH,
 };
 
 /** Each reranked search, as its mode's label starts. */
 export const SEARCH_LABELS: Record<RerankedSearch, string> = {
-  keyword: "keyword top 20",
+  keyword: `keyword top ${KEYWORD_RERANK_DEPTH}`,
   hybrid: "hybrid",
   "keyword-40": "keyword top 40",
-  "keyword-60": "keyword top 60",
+  "keyword-60": `keyword top ${PREVIOUS_KEYWORD_RERANK_DEPTH}`,
   feedback: "keyword + feedback terms",
   rewrites: "keyword + rewrites",
   "sub-questions": "keyword + sub-questions",
@@ -139,10 +143,10 @@ export const SEARCH_LABELS: Record<RerankedSearch, string> = {
 
 /** What each reranked search hands a reranker, for the report and the log. */
 export const SEARCH_DESCRIPTIONS: Record<RerankedSearch, string> = {
-  keyword: `keyword search's top ${KEYWORD_DEPTHS.keyword}, no vector search, the gate before keyword search's top ${KEYWORD_RERANK_DEPTH}`,
+  keyword: `keyword search's top ${KEYWORD_DEPTHS.keyword}, no vector search, what the search Tool hands its reranker with embeddings off`,
   hybrid: `keyword search's top ${RERANK_PER_LIST} and vector search's top ${RERANK_PER_LIST}, each Passage once`,
   "keyword-40": "keyword search's top 40, no vector search",
-  "keyword-60": `keyword search's top ${KEYWORD_RERANK_DEPTH}, no vector search`,
+  "keyword-60": `keyword search's top ${PREVIOUS_KEYWORD_RERANK_DEPTH}, no vector search, what the search Tool handed its reranker until 2026-10-12`,
   feedback: `keyword search's top ${CANDIDATES}, fused with a second search for the Question's words and ${FEEDBACK.terms} feedback terms from its top ${FEEDBACK.passages}, the best ${CANDIDATES}`,
   rewrites: `keyword search's top ${CANDIDATES} for the Question and for each of a chat model's ${MOST_QUERIES.rewrites} rephrasings, fused, the best ${CANDIDATES}`,
   "sub-questions": `keyword search's top ${CANDIDATES} for the Question and for each one-hop question a chat model broke it into, if any, fused, the best ${CANDIDATES}`,
@@ -155,7 +159,11 @@ export const SEARCH_DESCRIPTIONS: Record<RerankedSearch, string> = {
  * hybrid search's candidates ("rerank:") or another search's
  * ("keyword-rerank:", "feedback-rerank:" and so on) reranked by a candidate.
  */
-export type RetrievalMode = SearchMode | `rerank:${string}` | `${RerankedSearch}-rerank:${string}`;
+export type RetrievalMode =
+  | SearchMode
+  | typeof TOOL_MODE
+  | `rerank:${string}`
+  | `${RerankedSearch}-rerank:${string}`;
 
 /** The reranked mode of a reranking model, over hybrid search's candidates unless another search is named. */
 export const rerankMode = (
@@ -179,15 +187,22 @@ export const rerankedLabel = (search: RerankedSearch, modelName: string) =>
   `${SEARCH_LABELS[search]} + ${modelName}`;
 
 /**
- * The gating mode: what the search Tool runs by default, keyword search's top
- * 60 reranked by the built-in reranking model, with embeddings off (ADR-0009,
- * 2026-10-10). Before, it was keyword search's top 20, and before that hybrid
- * search reranked (#31).
+ * The order the search Tool starts from, reported beside the Tool's score:
+ * keyword search's top 20 reranked by the built-in reranking model, with
+ * embeddings off. Until 2026-10-12 it was keyword search's top 60 and the
+ * gate (ADR-0009), and before that its top 20 and, before that, hybrid search
+ * reranked (#31).
  */
 export const GATING_MODE: RetrievalMode = rerankMode(BUILT_IN_RERANKING_MODEL, GATING_SEARCH);
 
-/** The gating mode, as people read it. */
+/** The reranked order, as people read it. */
 export const GATING_LABEL = rerankedLabel(GATING_SEARCH, BUILT_IN_RERANKING_MODEL.name);
+
+/** The search Tool's score, the gate: the Passages it hands the model for a Question, with embeddings off. */
+export const TOOL_MODE = "tool";
+
+/** The search Tool's score, as people read it. */
+export const TOOL_LABEL = "search Tool (what the model is handed)";
 
 /** Hybrid + rerank with the built-in reranking model, as with embeddings on: reported next to the gate, never gating. */
 export const HYBRID_RERANK_MODE: RetrievalMode = rerankMode(BUILT_IN_RERANKING_MODEL);
@@ -195,8 +210,12 @@ export const HYBRID_RERANK_MODE: RetrievalMode = rerankMode(BUILT_IN_RERANKING_M
 /** Hybrid + rerank with the built-in reranking model, as people read it. */
 export const HYBRID_RERANK_LABEL = rerankedLabel("hybrid", BUILT_IN_RERANKING_MODEL.name);
 
-/** The v1 design's bar: 80% of the gating Questions overall and in each language (32 of 40, and 16 of 20 per language, with today's set). */
-const RETRIEVAL_TARGET = { share: 0.8 } as const;
+/**
+ * The bar for the search Tool's score on the gating Questions: what 20 reranked
+ * and 12 Passages handed found when it was chosen (#543), 35 of 40 and, per
+ * language, these.
+ */
+const SEARCH_TOOL_TARGET = { en: 15, zh: 20 } as const;
 
 /** One retrieved Passage, against the expected one. */
 export interface RetrievedPassage {
@@ -603,6 +622,43 @@ export function compareAggregations(
   });
 }
 
+/** Scores the Passages the search Tool handed the model, in the order it handed them: a hit if one holds the expected Passage. */
+function scoreHanded(
+  handed: readonly PassageSearchResult[],
+  expected: ExpectedPassage,
+  expectedDocumentId: string,
+): ModeResult {
+  const checked = handed.map((passage) => checkPassage(passage, expected, expectedDocumentId));
+  const index = checked.findIndex(isHit);
+  return { hit: index >= 0, rank: index >= 0 ? index + 1 : null, top: checked };
+}
+
+/**
+ * Adds the search Tool's score to `results`: each Question searched, and its
+ * translated query too, through the core's `searchEvidence`, which runs the
+ * Tool as an Answer does over every Document, reranked as the app is set up.
+ * Embeddings must be off, as by default. The rank is the place of the first
+ * Passage handed that holds the expected one.
+ */
+export async function runSearchTool(
+  core: Core,
+  questions: readonly EvalQuestion[],
+  documentIds: ReadonlyMap<string, string>,
+  results: readonly QuestionResult[],
+): Promise<void> {
+  for (const question of questions) {
+    const result = results.find((each) => each.id === question.id);
+    if (!result) throw new Error(`${question.id}: no results to add the search Tool to.`);
+    const expectedId = expectedIdOf(question, documentIds);
+    const handed = async (query: string) =>
+      scoreHanded((await core.searchEvidence(query)).passages, question.expected, expectedId);
+    result.modes[TOOL_MODE] = await handed(question.question);
+    if (question.translatedQuery && result.translated) {
+      result.translated[TOOL_MODE] = await handed(question.translatedQuery);
+    }
+  }
+}
+
 const tally = (results: readonly QuestionResult[], mode: RetrievalMode): Tally => ({
   hits: results.filter((result) => result.modes[mode]?.hit).length,
   total: results.length,
@@ -660,22 +716,18 @@ export function summarise(
   return summary;
 }
 
-const meets = ({ hits, total }: Tally) =>
-  total > 0 && hits >= Math.ceil(total * RETRIEVAL_TARGET.share);
-
-/** Why the gating mode misses the bar; empty when it passes. */
+/** Why the search Tool's score misses the bar; empty when it passes. */
 export function retrievalFailures(summary: ModeSummary | undefined): string[] {
-  if (!summary) return [`No ${GATING_LABEL} results.`];
+  if (!summary) return [`No ${TOOL_LABEL} results.`];
   const failures: string[] = [];
-  const need = ({ total }: Tally) => Math.ceil(total * RETRIEVAL_TARGET.share);
-  for (const [label, count] of [
-    ["overall", summary.core],
-    ["English", summary.en],
-    ["Chinese", summary.zh],
+  for (const [label, count, need] of [
+    ["overall", summary.core, SEARCH_TOOL_TARGET.en + SEARCH_TOOL_TARGET.zh],
+    ["English", summary.en, SEARCH_TOOL_TARGET.en],
+    ["Chinese", summary.zh, SEARCH_TOOL_TARGET.zh],
   ] as const) {
-    if (!meets(count)) {
+    if (count.hits < need) {
       failures.push(
-        `Retrieval (${GATING_LABEL}, the built-in reranking model), ${label}: ${count.hits} of ${count.total}, needs ${need(count)}.`,
+        `Retrieval (${TOOL_LABEL}), ${label}: ${count.hits} of ${count.total}, needs ${need}.`,
       );
     }
   }

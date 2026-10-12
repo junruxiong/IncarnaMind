@@ -7,6 +7,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { BUILT_IN_RERANKING_MODEL, type SearchMode } from "../../src/core";
+import { SEARCH_TOOL_PARAMETERS } from "../../src/core/documents/searchTool";
 import {
   CITATION_OUTCOMES,
   CITATION_TARGETS,
@@ -47,6 +48,8 @@ import {
   SEARCH_LABELS,
   SEARCH_MODES,
   type Tally,
+  TOOL_LABEL,
+  TOOL_MODE,
 } from "./retrieval";
 import type { Aggregation } from "./subChunks";
 import { timingLine, timingSection } from "./timingReport";
@@ -115,6 +118,7 @@ function modeLabel(run: RetrievalRun, mode: RetrievalMode): string {
   const reranker = run.rerankers?.find((each) => each.mode === mode);
   const search = rerankedSearchOf(mode);
   if (reranker && search) return rerankedLabel(search, reranker.name);
+  if (mode === TOOL_MODE) return TOOL_LABEL;
   if (mode === GATING_MODE) return GATING_LABEL;
   return mode === HYBRID_RERANK_MODE ? HYBRID_RERANK_LABEL : mode;
 }
@@ -132,7 +136,7 @@ function retrievalTable(runs: readonly RetrievalRun[]): string[] {
     for (const mode of modesIn(run)) {
       const summary = run.summary[mode] as ModeSummary | undefined;
       if (!summary) continue;
-      const gating = run.gating && mode === GATING_MODE;
+      const gating = run.gating && mode === TOOL_MODE;
       const label = gating ? `**${modeLabel(run, mode)} (gating)**` : modeLabel(run, mode);
       const translated = summary.crossLingualTranslated;
       const cell = (tally: Tally) => (gating ? `**${fraction(tally)}**` : fraction(tally));
@@ -151,7 +155,7 @@ function retrievalTable(runs: readonly RetrievalRun[]): string[] {
 export const candidatesLine = (counts: CandidateCounts) =>
   `Candidates per ${SEARCH_LABELS[counts.search]} + rerank search (${SEARCH_DESCRIPTIONS[counts.search]}): ${counts.mean.toFixed(1)} on average, from ${counts.min} to ${counts.max}, over ${counts.searches} searches; the expected Passage among them for ${fraction(counts.reached.gating)} gating and ${fraction(counts.reached.paraphrase)} paraphrase Questions.`;
 
-/** A run's candidate counts, the gate's (keyword + rerank) first. */
+/** A run's candidate counts, the Tool's (keyword + rerank) first. */
 const candidateCountsOf = (run: RetrievalRun): CandidateCounts[] => run.candidates ?? [];
 
 const ms = (value: number) => `${value.toFixed(0)} ms`;
@@ -187,7 +191,7 @@ const QUERY_LABELS: Partial<Record<RerankedSearch, string>> = {
 
 /**
  * The other ways to find candidates, with embeddings off, each reranked by
- * the built-in model: their hits next to the gate's, how often their
+ * the built-in model: their hits next to the Tool's reranked order, how often their
  * candidates held the expected Passage, and what a search costs. Never gating.
  */
 function otherSearchesSection(run: RetrievalRun): string[] {
@@ -197,8 +201,7 @@ function otherSearchesSection(run: RetrievalRun): string[] {
   const rows = [GATING_SEARCH, ...OTHER_SEARCHES].map((search) => {
     const mode = rerankMode(model, search);
     const summary = run.summary[mode];
-    const label =
-      search === GATING_SEARCH ? `${GATING_LABEL} (gating)` : rerankedLabel(search, model.name);
+    const label = search === GATING_SEARCH ? GATING_LABEL : rerankedLabel(search, model.name);
     if (!summary) {
       return `| ${label} | skipped: ${report.skipped[search] ?? "it didn't run."} ||||||||||`;
     }
@@ -216,7 +219,7 @@ function otherSearchesSection(run: RetrievalRun): string[] {
   const lines = [
     "### Other ways to find the candidates (reported, not gating)",
     "",
-    `With embeddings off, each search's candidates reranked by ${model.name}, the Questions' own searches only (no translated second query). The gate's row comes first, for comparison. "Reached": the Questions whose candidates held a Passage that meets the hit rule, before reranking: what any reranker could have found. Per search, on average: the time to find the candidates (a chat model's call apart, as measured when it was made), to rerank them, and the two together.`,
+    `With embeddings off, each search's candidates reranked by ${model.name}, the Questions' own searches only (no translated second query). The search Tool's reranked order comes first, for comparison. "Reached": the Questions whose candidates held a Passage that meets the hit rule, before reranking: what any reranker could have found. Per search, on average: the time to find the candidates (a chat model's call apart, as measured when it was made), to rerank them, and the two together.`,
     "",
     ...OTHER_SEARCHES.map(
       (search) => `- **${SEARCH_LABELS[search]}**: ${SEARCH_DESCRIPTIONS[search]}.`,
@@ -304,7 +307,7 @@ function perQuestionTable(runs: readonly RetrievalRun[]): string[] {
 function misses(run: RetrievalRun, unit = "p."): string[] {
   const lines: string[] = [];
   const describe = (question: QuestionResult) =>
-    (question.modes[GATING_MODE]?.top ?? []).map((passage, index) => {
+    (question.modes[TOOL_MODE]?.top ?? []).map((passage, index) => {
       const lacks = [
         passage.rightDocument ? null : "other Document",
         passage.coversPages ? null : `other ${unit === "p." ? "pages" : "Units"}`,
@@ -313,7 +316,7 @@ function misses(run: RetrievalRun, unit = "p."): string[] {
       return `${index + 1}. ${passage.documentName}, ${unit} ${pages(passage.pageFrom, passage.pageTo)}${lacks.length ? ` (${lacks.join(", ")})` : ""}`;
     });
   for (const question of run.questions) {
-    if (question.modes[GATING_MODE]?.hit) continue;
+    if (question.modes[TOOL_MODE]?.hit) continue;
     lines.push(`- **${question.id}** ${question.question}`);
     for (const line of describe(question)) lines.push(`  ${line}`);
     if (question.keywordRank !== undefined) {
@@ -592,7 +595,7 @@ function markdownReport(report: EvalReport, reportDir: string, root: string): st
     "",
     "## Retrieval",
     "",
-    `Top-${retrieval.topK} hit rate through the core's \`searchPassages\`. A Question is a hit when one of the top ${retrieval.topK} Passages belongs to the expected Document, covers the expected pages and contains the expected quote, both normalised (ADR-0009). The gate is what the search Tool does by default, with embeddings off, ${GATING_LABEL}: keyword search, reranked by the built-in reranking model. It must find at least 80% overall and in each language (32 of 40, and 16 of 20 per language, with today's set). The plain search modes, hybrid + rerank, the other reranking candidates, cross-lingual and paraphrase Questions and cloud embedding models are reported only.`,
+    `Top-${retrieval.topK} hit rate through the core's \`searchPassages\`. A Question is a hit when one of the top ${retrieval.topK} Passages belongs to the expected Document, covers the expected pages and contains the expected quote, both normalised (ADR-0009). The gate is the search Tool itself, run as an Answer runs it with embeddings off (keyword search's top ${KEYWORD_RERANK_DEPTH} reranked by the built-in reranking model, grouped into at most ${SEARCH_TOOL_PARAMETERS.maxPassages} Passages), scored by whether the Passages it hands the model hold the expected one: at least 15 of 20 English and 20 of 20 Chinese gating Questions (35 of 40), what it found when it was chosen (ADR-0009, 2026-10-12). Beside it, reported: ${GATING_LABEL}, top ${retrieval.topK} of the reranked order, which the Tool starts from, the plain search modes, hybrid + rerank, the other reranking candidates, cross-lingual and paraphrase Questions and cloud embedding models.`,
     "",
     `- **Keyword + rerank** ("keyword top ${KEYWORD_RERANK_DEPTH} + model"): keyword search's top ${KEYWORD_RERANK_DEPTH}, reordered by a reranking model, as the search Tool hands its reranker by default.`,
     `- **Hybrid + rerank** ("${HYBRID} + model"): what the search Tool hands a reranker with embeddings on, keyword search's top ${RERANK_PER_LIST} and vector search's top ${RERANK_PER_LIST}, each Passage once, reordered by the same reranking models.`,
@@ -600,7 +603,7 @@ function markdownReport(report: EvalReport, reportDir: string, root: string): st
     "- **Paraphrase:** Questions that ask for a fact on one page in words that avoid its passage's own, as a person asks without the text in front of them; hits in both languages, then in English + Chinese. They are out of the gating set's counts and bar.",
     ...(builtIn.otherSearches
       ? [
-          '- **Other ways to find the candidates** ("keyword top 20 + model", the gate before, and the like): with embeddings off, other candidates for the built-in reranking model, to compare with the gate; see below.',
+          '- **Other ways to find the candidates** ("keyword top 60 + model", the gate before, and the like): with embeddings off, other candidates for the built-in reranking model, to compare with the Tool\'s; see below.',
         ]
       : []),
     "",
@@ -629,7 +632,7 @@ function markdownReport(report: EvalReport, reportDir: string, root: string): st
     "",
     ...perQuestionTable(retrieval.runs),
     "",
-    `### Misses of ${GATING_LABEL} (gating)`,
+    `### Misses of the ${TOOL_LABEL} (gating)`,
     "",
     ...(misses(builtIn).length ? misses(builtIn) : ["None."]),
     "",
@@ -803,7 +806,7 @@ export function terminalSummary(report: EvalReport, reportDir: string, root: str
       const summary = run.summary[mode];
       if (!summary) continue;
       const label =
-        run.gating && mode === GATING_MODE
+        run.gating && mode === TOOL_MODE
           ? `${modeLabel(run, mode)} (gating)`
           : modeLabel(run, mode);
       const translated = summary.crossLingualTranslated;
