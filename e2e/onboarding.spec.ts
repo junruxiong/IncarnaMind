@@ -7,9 +7,13 @@ import {
   assistantAnswers,
   createDataFolder,
   dismissChatSetup,
+  interceptOpenDialog,
   launchApp,
   linkedFolderRow,
+  newMind,
   removeDataFolder,
+  setLanguage,
+  setWindowSize,
   showSourceLocations,
   useLocalChatModel,
 } from "./app";
@@ -55,6 +59,33 @@ async function pointAndClick(
 
 /** The "Get started" card's count, e.g. "· 1 of 3". */
 const progress = (window: Page) => window.getByTestId("get-started-count");
+
+/** Words a newcomer shouldn't meet on the first screens: the left column of #763's glossary. */
+const JARGON = [
+  /\bindex(?:es|ed|ing)?\b/i,
+  /\bPassages?\b/,
+  /\bMCP\b/,
+  /\bchat model/i,
+  /\bembedding/i,
+  /\brerank/i,
+  /\bproviders?\b/i,
+  /\blocal mode\b/i,
+  /\bOCR\b/,
+  /\btokens?\b/i,
+  /\bstdio\b/,
+  /\bendpoint/i,
+  /\bOAuth\b/,
+  /\b(?:claude|gpt|qwen|llama|gemini|deepseek)-[\w.:-]+/i,
+  /索引|嵌入|重排序|重新排序|对话模型|提供商|本地模式/,
+];
+
+/** Each region's text, as shown, has none of the glossary's words. */
+async function expectPlainWords(regions: Locator[]): Promise<void> {
+  for (const region of regions) {
+    const text = await region.innerText();
+    for (const word of JARGON) expect(text, `${word} on the first screens`).not.toMatch(word);
+  }
+}
 
 test("a first run opens on the example Mind: its Answer is written in advance, its Citations are checked against its Documents, and the chat setup waits", async () => {
   const { window } = await launchApp(dataDir, { examples: true });
@@ -182,7 +213,7 @@ test("an empty Mind of one's own shows the three steps; Get started ticks itself
   await expect(guide.getByTestId("start-step")).toHaveCount(3);
   await expect(guide).toContainText("Only your Documents get checked Citations.");
 
-  // Adding a file of one's own ticks "Index your Documents or connect apps".
+  // Adding a file of one's own ticks "Add your Documents".
   await window
     .getByTestId("add-documents-input")
     .setInputFiles([join(sources, "Harbour notes.md")]);
@@ -225,6 +256,93 @@ test("an empty Mind of one's own shows the three steps; Get started ticks itself
   await expect(checks.nth(0)).toHaveAttribute("data-check", "found", { timeout: 20_000 });
   await pointAndClick(window, checks.nth(0));
   await expect(window.getByTestId("get-started")).toHaveCount(0);
+});
+
+test('Get started\'s "Add your Documents" opens Add files… and Link a folder… at once, and the first screens and the start guide speak plainly, in English and Chinese (#766)', async () => {
+  const notes = join(sources, "Harbour notes.md");
+  await writeFile(notes, "# Harbour notes\n\nThe harbour master publishes the tide tables.\n");
+  const { app, window } = await launchApp(dataDir, { examples: true });
+  await setWindowSize(app, window, 1440, 900);
+  const pane = window.getByTestId("mind-pane");
+  const checks = pane.getByTestId("margin-check");
+  await expect(checks.nth(0)).toHaveAttribute("data-check", "found", { timeout: 20_000 });
+  const firstScreen = [
+    window.getByTestId("sidebar"),
+    pane.getByTestId("example-banner"),
+    window.getByTestId("assistant"),
+  ];
+  await expectPlainWords(firstScreen);
+
+  // Once the example's Citation is checked, adding Documents is the step to do.
+  await pointAndClick(window, checks.nth(0));
+  await window.keyboard.press("Escape");
+  const step = window.locator('[data-testid="get-started-step"][data-step="documents"] button');
+  await expect(step).toHaveAccessibleName("Add your Documents");
+  await pointAndClick(window, step);
+  const ways = window.getByTestId("get-started-add-items");
+  await expect(ways.getByRole("menuitem")).toHaveText(["Add files…", "Link a folder…"]);
+  await expect(ways.getByRole("menuitem").first()).toBeFocused();
+  // No Mind of its own first, and no model setup over it.
+  await expect(window.getByTestId("mind-title")).toHaveValue("Where tea comes from");
+  await expect(window.getByTestId("chat-setup")).toBeHidden();
+  await window.keyboard.press("Escape");
+  await expect(ways).toBeHidden();
+
+  await setLanguage(window, "zh-CN");
+  await expect(step).toHaveAccessibleName("添加你的文档");
+  await expectPlainWords(firstScreen);
+  await pointAndClick(window, step);
+  await expect(ways.getByRole("menuitem")).toHaveText(["添加文件…", "添加同步文件夹…"]);
+  await interceptOpenDialog(app, notes);
+  await pointAndClick(window, ways.getByRole("menuitem").first());
+  await expect(
+    window.getByTestId("document-list-item").filter({ hasText: "Harbour notes" }),
+  ).toHaveCount(1);
+  await expect(
+    window.locator('[data-testid="get-started-step"][data-step="documents"] [data-done]'),
+  ).toBeVisible();
+
+  // The start guide in a Mind of one's own says where the Answer goes.
+  await newMind(window);
+  await dismissChatSetup(window);
+  const guide = window.getByTestId("start-guide");
+  await expect(guide).toContainText("回答会出现在右侧，一键加入笔记。");
+  await expectPlainWords([guide]);
+  await setLanguage(window, "en");
+  await expect(guide).toContainText(
+    "The Answer appears on the right; add it to your note with one click.",
+  );
+  await expectPlainWords([guide, window.getByTestId("sidebar")]);
+});
+
+test('"Ask your own Question" is ticked by an Answer that arrives, not by one that fails (#766)', async () => {
+  const { app, window } = await launchApp(dataDir, { examples: true, fakeChat: true });
+  await setWindowSize(app, window, 1440, 900);
+  await useLocalChatModel(window);
+  const asked = window.locator(
+    '[data-testid="get-started-step"][data-step="question"] [data-done]',
+  );
+  await expect(progress(window)).toHaveText("· 0 of 3");
+
+  await window.getByTestId("mind-editor").click();
+  await window.keyboard.press("ControlOrMeta+j");
+  await expect(window.getByTestId("composer-input")).toBeFocused();
+  await window.keyboard.type("Send a blank reply");
+  await window.keyboard.press("Enter");
+  await expect(assistantAnswers(window).last()).toHaveAttribute("data-status", "failed", {
+    timeout: 15_000,
+  });
+  await expect(asked).toHaveCount(0);
+  await expect(progress(window)).toHaveText("· 0 of 3");
+
+  await window.getByTestId("composer-input").click();
+  await window.keyboard.type("Where does tea come from?");
+  await window.keyboard.press("Enter");
+  await expect(assistantAnswers(window).last()).toHaveAttribute("data-status", "done", {
+    timeout: 15_000,
+  });
+  await expect(asked).toBeVisible();
+  await expect(progress(window)).toHaveText("· 1 of 3");
 });
 
 test("Get started can be hidden, and stays hidden", async () => {
