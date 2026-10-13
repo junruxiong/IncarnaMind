@@ -3,13 +3,7 @@ import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { chipsOf } from "../tagEditing";
 import { DocumentTagFooter } from "./DocumentTags";
-import {
-  CheckLineIcon,
-  CloseLineIcon,
-  PlusLineIcon,
-  SparkLineIcon,
-  TagLineIcon,
-} from "./lineIcons";
+import { CheckLineIcon, CloseLineIcon, SparkLineIcon, TagLineIcon } from "./lineIcons";
 import { tagChipColour } from "./TagColour";
 import {
   chipClass,
@@ -22,68 +16,53 @@ import {
 } from "./TagPicker";
 import { useFittingChips } from "./useFittingChips";
 
-/** How many chips a row, or the viewer's header, shows before "+N": they stay one line. A peek shows them all. */
-const VISIBLE_CHIPS = { row: 3, header: 2, peek: Number.POSITIVE_INFINITY } as const;
+/** How many chips the viewer's header shows before "+N": they stay one line. */
+const MOST_CHIPS = 2;
 
 /**
- * A Document's Tags on its Library row, on one line: the first few as chips
- * (a spark marks one tagging applied automatically, an amber dot one it
+ * A Document's Tags in the viewer's header, on one line: the chips its room
+ * holds (a spark marks one tagging applied automatically, an amber dot one it
  * wasn't sure of, with ✓ and × to confirm or remove it), then "+N", then the
- * button that opens the Tag picker. Clicking a chip filters the Library by it.
- * In the viewer's header (`variant="header"`) the chips only show, the
- * picker's button always shows, and a narrow viewer keeps only the button.
- * In a peek (`variant="peek"`) the chips only show and wrap, and "+ Add tags" always shows.
+ * button that opens the Tag picker. A narrow viewer keeps only the button.
+ * In a peek (`variant="peek"`) every chip shows, wrapping, and the button says "+ Add tags".
+ * The Library's rows have their own (`RowTags`).
  */
 export function DocumentTagChips({
   document,
-  variant = "row",
+  variant = "header",
 }: {
   document: Document;
-  variant?: "row" | "header" | "peek";
+  variant?: "header" | "peek";
 }) {
-  const header = variant === "header";
+  const peek = variant === "peek";
   const t = useT();
   const tags = useAppStore((state) => state.tags);
-  const tagFilter = useAppStore((state) => state.tagFilter);
   const popover = useTagPopover();
   const chips = chipsOf(document.tags, tags);
-  // The header shows what its room holds, up to the most it lists: the rest fold into "+N".
-  const fitting = useFittingChips(chips.length, VISIBLE_CHIPS.header, header);
-  const listed = chips.slice(0, VISIBLE_CHIPS[variant]);
-  const hidden = chips.slice(header ? fitting.shown : VISIBLE_CHIPS[variant]);
+  const fitting = useFittingChips(chips.length, MOST_CHIPS);
+  const listed = peek ? chips : chips.slice(0, MOST_CHIPS);
+  const hidden = peek ? [] : chips.slice(fitting.shown);
   const label = pickerLabel(t, [document]);
+  const more = t("tags.chip.more", {
+    count: hidden.length,
+    names: hidden.map(({ tag }) => tag.name).join(", "),
+  });
   return (
     <div
       ref={fitting.row}
       data-testid="document-tags"
-      data-variant={variant}
-      className={`flex items-center gap-1 ${
-        header ? "viewer-tags" : variant === "peek" ? "min-w-0 flex-wrap" : "h-8 min-w-0"
-      }`}
+      className={`flex items-center gap-1 ${peek ? "min-w-0 flex-wrap" : "viewer-tags"}`}
     >
       {listed.map(({ tag, link }) => (
-        <TagChip
-          key={tag.id}
-          document={document}
-          tag={tag}
-          link={link}
-          filtered={tagFilter.includes(tag.id)}
-          filters={variant === "row"}
-        />
+        <TagChip key={tag.id} document={document} tag={tag} link={link} />
       ))}
-      {(hidden.length > 0 || (header && chips.length > 0)) && (
+      {!peek && chips.length > 0 && (
         <button
           type="button"
           data-tag-more=""
           data-testid="tag-chip-more"
-          title={t("tags.chip.more", {
-            count: hidden.length,
-            names: hidden.map(({ tag }) => tag.name).join(", "),
-          })}
-          aria-label={t("tags.chip.more", {
-            count: hidden.length,
-            names: hidden.map(({ tag }) => tag.name).join(", "),
-          })}
+          title={more}
+          aria-label={more}
           onClick={() => popover.buttonProps.ref.current?.click()}
           className="h-5 shrink-0 rounded-sm px-1 text-[12px] text-ink-meta hover:bg-hover hover:text-ink"
         >
@@ -97,22 +76,14 @@ export function DocumentTagChips({
         aria-label={t("tags.edit", { name: document.name })}
         title={t("tags.edit", { name: document.name })}
         className={
-          header
-            ? "viewer-icon-button"
-            : variant === "peek"
-              ? `h-6 shrink-0 rounded-sm px-1.5 text-[12px] text-ink-meta hover:bg-hover hover:text-ink ${
-                  chips.length === 0 ? "-ml-1.5" : ""
-                }`
-              : "inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-ink-meta opacity-0 group-hover/row:opacity-60 group-has-[:focus-visible]/row:opacity-60 hover:bg-hover hover:text-ink hover:opacity-100! focus-visible:opacity-100 aria-expanded:opacity-100"
+          peek
+            ? `h-6 shrink-0 rounded-sm px-1.5 text-[12px] text-ink-meta hover:bg-hover hover:text-ink ${
+                chips.length === 0 ? "-ml-1.5" : ""
+              }`
+            : "viewer-icon-button"
         }
       >
-        {header ? (
-          <TagLineIcon className="size-4" />
-        ) : variant === "peek" ? (
-          t("peek.addTags")
-        ) : (
-          <PlusLineIcon className="size-3.5" />
-        )}
+        {peek ? t("peek.addTags") : <TagLineIcon className="size-4" />}
       </button>
       <div
         {...popover.popoverProps}
@@ -134,25 +105,8 @@ export function DocumentTagChips({
   );
 }
 
-/**
- * One Tag on a row. Its name filters the Library by it (again: stops). One
- * awaiting review shows ✓ and × beside it, on hover or focus, to keep or
- * remove it. Without `filters` (the viewer's header) the name only shows, and
- * ✓ and × always do, so the keyboard reaches them.
- */
-function TagChip({
-  document,
-  tag,
-  link,
-  filtered,
-  filters,
-}: {
-  document: Document;
-  tag: Tag;
-  link: DocumentTag;
-  filtered: boolean;
-  filters: boolean;
-}) {
+/** One Tag in the header: its name, and ✓ and × beside one awaiting review, so the keyboard reaches them. */
+function TagChip({ document, tag, link }: { document: Document; tag: Tag; link: DocumentTag }) {
   const t = useT();
   const review = link.needsReview;
   return (
@@ -162,39 +116,19 @@ function TagChip({
       data-tag-id={tag.id}
       data-source={link.source}
       data-needs-review={review ? "true" : undefined}
-      data-filtered={filtered ? "true" : undefined}
       data-colour={tag.colour}
       title={chipTitle(link, tag, t)}
       className={`group/chip ${chipClass} ${tagChipColour(tag.colour)} min-w-0 shrink ${
         review ? "pr-0.5" : ""
-      } ${filtered ? "shadow-[inset_0_0_0_1px_currentColor]" : ""}`}
+      }`}
     >
       {review && <ReviewDot />}
       {link.source === "automatic" && !review && (
         <SparkLineIcon aria-hidden="true" className="size-2.5 shrink-0 opacity-70" />
       )}
-      {filters ? (
-        <button
-          type="button"
-          data-testid="tag-chip-filter"
-          aria-pressed={filtered}
-          aria-label={t(filtered ? "tags.chip.unfilter" : "tags.chip.filter", { tag: tag.name })}
-          onClick={() => useAppStore.getState().toggleTagFilter(tag.id)}
-          className="min-w-0 truncate rounded-sm hover:underline focus-visible:outline-offset-0"
-        >
-          {tag.name}
-        </button>
-      ) : (
-        <span className="min-w-0 truncate">{tag.name}</span>
-      )}
+      <span className="min-w-0 truncate">{tag.name}</span>
       {review && (
-        <span
-          className={`shrink-0 items-center ${
-            filters
-              ? "hidden group-hover/chip:inline-flex group-focus-within/chip:inline-flex"
-              : "inline-flex"
-          }`}
-        >
+        <span className="inline-flex shrink-0 items-center">
           <button
             type="button"
             data-testid="confirm-document-tag"

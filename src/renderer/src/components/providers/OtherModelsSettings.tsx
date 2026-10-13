@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useState } from "react";
 import type { ChatModelGroup, OtherModel } from "../../../../core/api";
 import type { MessageKey } from "../../../../shared/i18n";
+import { modelName } from "../../../../shared/modelName";
 import { useAnswers } from "../../answers";
 import { core } from "../../core";
 import { ChevronDownSmallIcon, ChevronRightSmallIcon } from "../../editor/icons";
@@ -19,11 +20,6 @@ const WHY_TITLES: Record<Why, MessageKey> = {
   unknown: "models.other.group.unknown",
   older: "models.other.group.older",
   "cannot-answer": "models.other.group.cannotAnswer",
-};
-
-const NOTES: Record<Exclude<Why, "cannot-answer">, MessageKey> = {
-  unknown: "models.other.mayNotWork",
-  older: "models.other.older",
 };
 
 const REASONS: Record<NonNullable<OtherModel["reason"]>, MessageKey> = {
@@ -143,6 +139,11 @@ function ProviderRows({
                 <ModelRow
                   key={row.id}
                   row={row}
+                  name={modelName(row.id, {
+                    kind: group.provider.kind,
+                    endpoint: group.provider.endpoint,
+                    names: group.names,
+                  })}
                   checked={group.added.includes(row.id)}
                   onToggle={(inMenu) => onToggle(group.provider.id, row.id, inMenu)}
                 />
@@ -157,10 +158,12 @@ function ProviderRows({
 
 function ModelRow({
   row,
+  name,
   checked,
   onToggle,
 }: {
   row: OtherModel;
+  name: string;
   checked: boolean;
   onToggle(inMenu: boolean): void;
 }) {
@@ -173,7 +176,12 @@ function ModelRow({
         data-unavailable
         className={`${ROW} pl-[26px]`}
       >
-        <span className="min-w-0 break-all text-ui text-ink-secondary">{row.id}</span>
+        <span
+          title={name === row.id ? undefined : row.id}
+          className="min-w-0 break-all text-ui text-ink-secondary"
+        >
+          {name}
+        </span>
         <span className="ml-auto shrink-0 text-[13px] leading-5 text-ink-meta">
           {row.reason ? t(REASONS[row.reason]) : null}
         </span>
@@ -192,10 +200,17 @@ function ModelRow({
         onChange={(event) => onToggle(event.target.checked)}
         className="size-4 shrink-0 accent-ink"
       />
-      <span className="min-w-0 flex-1 break-all text-ui text-ink">{row.id}</span>
-      <span className="ml-auto shrink-0 text-[13px] leading-5 text-ink-meta">
-        {t(NOTES[row.why])}
+      <span
+        title={name === row.id ? undefined : row.id}
+        className="min-w-0 flex-1 break-all text-ui text-ink"
+      >
+        {name}
       </span>
+      {row.why === "unknown" && (
+        <span className="ml-auto shrink-0 text-[13px] leading-5 text-ink-meta">
+          {t("models.other.mayNotWork")}
+        </span>
+      )}
     </label>
   );
 }

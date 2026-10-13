@@ -586,6 +586,8 @@ test("the Folder and the Tags of a peeked Document change in the peek, by keyboa
     const tags = peek.getByTestId("peek-tags");
     await tags.getByTestId("document-tags-menu").click();
     await expect(peek.getByTestId("tag-picker-input")).toBeFocused();
+    // The same picker as everywhere: 360px wide.
+    expect((await peek.getByTestId("document-tags-popover").boundingBox())?.width).toBe(360);
     await window.keyboard.type("Seawater");
     await window.keyboard.press("Enter");
     await window.keyboard.press("Escape");
