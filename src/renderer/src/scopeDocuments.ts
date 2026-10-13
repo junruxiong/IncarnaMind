@@ -12,7 +12,14 @@ export function useScopeEmpty(scope: SearchScope | null): boolean {
   const [empty, setEmpty] = useState(false);
   const wanted = scope ? JSON.stringify(scope) : null;
   const state = useAppStore((store) =>
-    store.documents.map((each) => `${each.id}:${each.status}:${each.fileStatus}`).join("|"),
+    [
+      ...store.documents.map((each) => `${each.id}:${each.status}:${each.fileStatus}`),
+      // A Folder or Tag deleted, or a Document moved into one, changes what the scope holds.
+      ...store.folders.map((each) => each.id),
+      ...(store.library?.groups ?? []).map((each) => each.id),
+      ...store.tags.map((each) => each.id),
+      ...store.documents.map((each) => `${each.id}:${each.tags.length}:${each.folderId}`),
+    ].join("|"),
   );
   // biome-ignore lint/correctness/useExhaustiveDependencies: `state` is when to ask again.
   useEffect(() => {
