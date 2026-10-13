@@ -12,16 +12,19 @@ import {
   launchApp,
   linkFolderFromSidebar,
   newMind,
-  openFolderInLibrary,
+  pointAndClick,
+  pointAt,
   removeDataFolder,
 } from "./app";
 
 /*
- * From the Library into writing (#59): filters by year, format and status,
- * with counts, and "Ask about this Folder" / "Start a Mind from this Folder",
- * which scope the composer's next Question to the Folder, or to exactly the
- * Documents a filter shows. Only one test asks, with the scripted model. Set
- * INCARNAMIND_SCREENSHOTS to a folder to also save screenshots there.
+ * From the Library into writing (#59, #240): + Filter's year, format, status
+ * and Folder filters, with counts, narrow the page; the selection's "Ask about
+ * these N Documents" scopes the composer's next Question to exactly the
+ * Documents chosen, a Folder's "Ask about this Folder" to the Folder, and its
+ * "New Mind here" starts a Mind that searches it. Only one test asks, with the
+ * scripted model. Set INCARNAMIND_SCREENSHOTS to a folder to also save
+ * screenshots there.
  */
 
 const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
@@ -56,31 +59,49 @@ async function screenshot(window: Page, name: string): Promise<void> {
 }
 
 /**
- * Links the fixtures from the sidebar, makes the Folder in the Library and
- * files every Document but the CSV in it, by hand, as the User would.
- * Returns the Library, showing all Documents.
+ * Links the fixtures from the sidebar, makes the Folder and files every
+ * Document but the CSV in it, as the User did before. Returns the Library.
  */
 async function libraryWithFolder(app: Parameters<typeof linkFolderFromSidebar>[0], window: Page) {
   await linkFolderFromSidebar(app, window, sources);
   await expectReadyDocuments(window, 5);
+  await (await coreOf(window)).evaluate(async (core, name) => {
+    const folder = await core.createLibraryGroup({
+      name,
+      description: "Tides, harbours and estuaries",
+    });
+    const documentIds = (await core.listDocuments())
+      .filter((doc) => doc.kind !== "csv")
+      .map((doc) => doc.id);
+    await core.moveToFolder({ documentIds, folderId: folder.id });
+  }, FOLDER);
   await window.getByTestId("open-library").click();
   const library = window.getByTestId("library");
-  await (await coreOf(window)).evaluate(
-    (core, name) => core.createLibraryGroup({ name, description: "Tides, harbours and estuaries" }),
-    FOLDER,
-  );
-  for (const name of ["Tide report", "Harbour notes", "Estuary survey", "Undated memo"]) {
-    const assignment = library.getByRole("combobox", { name: `Folder for ${name}`, exact: true });
-    await assignment.selectOption({ label: FOLDER });
-    await expect(assignment.locator("option:checked")).toHaveText(FOLDER);
-  }
+  await expect(library.getByTestId("library-section")).toHaveCount(2);
   return library;
 }
 
-/** Opens a filter's menu and returns its options, as [value, count, checked]. */
-async function openFilter(library: Locator, facet: string) {
-  await library.locator(`[data-testid="library-filter"][data-facet="${facet}"]`).click();
-  const menu = library.locator(`[data-testid="library-filter-menu"][data-facet="${facet}"]`);
+/** + Filter, then one of the filters: its options, in the same menu. */
+async function addFilter(window: Page, library: Locator, facet: string) {
+  await pointAndClick(window, library.getByTestId("library-add-filter"));
+  await pointAndClick(
+    window,
+    window.locator(`[data-testid="library-filter-kind"][data-facet="${facet}"]`),
+  );
+  const menu = window.getByTestId("library-add-filter-menu");
+  await expect(menu.getByTestId("library-filter-option").first()).toBeVisible();
+  return menu;
+}
+
+/** A chosen filter's chip, opened: its options. */
+async function openChip(window: Page, library: Locator, facet: string) {
+  await pointAndClick(
+    window,
+    library
+      .locator(`[data-testid="library-filter"][data-facet="${facet}"]`)
+      .getByTestId("library-filter-chip"),
+  );
+  const menu = window.locator(`[data-testid="library-filter-menu"][data-facet="${facet}"]`);
   await expect(menu).toBeVisible();
   return menu;
 }
@@ -99,7 +120,7 @@ const optionsOf = (menu: Locator) =>
 /** The open Mind's composer, where the Question is written, its Search scope as chips. */
 const composerOf = (window: Page) => window.getByTestId("composer");
 
-test("filters by year, format and status with counts, and asks about the Documents shown or the Folder", async () => {
+test("filters by year, format, status and Folder with counts, and asks about the Documents chosen or the Folder", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
     await dismissChatSetup(window);
@@ -125,15 +146,22 @@ test("filters by year, format and status with counts, and asks about the Documen
         { timeout: 15_000 },
       )
       .toBe(1);
-
-    await openFolderInLibrary(window, FOLDER);
-    await expect(library.getByRole("heading", { name: FOLDER, exact: true })).toBeVisible();
     const rows = library.getByTestId("library-document");
-    await expect(rows).toHaveCount(4);
-    await expect(library.getByTestId("library-ask")).toHaveText("Ask about this Folder");
+    await expect(rows).toHaveCount(5);
 
-    // Each filter counts its options among the Folder's Documents: newest year first, then no date.
-    let menu = await openFilter(library, "year");
+    // The Folder filter: the Folders, then Not in a Folder, each with its count.
+    let menu = await addFilter(window, library, "folder");
+    expect(await optionsOf(menu)).toEqual([
+      [FOLDER, 4, false],
+      ["Not in a Folder", 1, false],
+    ]);
+    await menu.getByRole("menuitemcheckbox", { name: `${FOLDER}, 4 Documents` }).click();
+    await window.keyboard.press("Escape");
+    await expect(rows).toHaveCount(4);
+    await expect(library.getByTestId("library-section")).toHaveCount(1);
+
+    // Each filter counts its options among what the others keep: newest year first, then no date.
+    menu = await addFilter(window, library, "year");
     expect(await optionsOf(menu)).toEqual([
       ["2023", 2, false],
       ["2021", 1, false],
@@ -142,59 +170,62 @@ test("filters by year, format and status with counts, and asks about the Documen
     await menu.getByRole("menuitemcheckbox", { name: "2023, 2 Documents" }).click();
     await window.keyboard.press("Escape");
     await expect(rows).toHaveCount(2);
-    await expect(library.getByTestId("library-count")).toHaveText("2 of 4 Documents");
     await expect(library.locator('[data-testid="library-filter"][data-facet="year"]')).toHaveText(
       "Year: 2023",
     );
-
-    // Other filters count among what the year keeps; options of one filter add up.
-    menu = await openFilter(library, "format");
+    menu = await addFilter(window, library, "format");
     expect(await optionsOf(menu)).toEqual([
+      ["CSV", 0, false],
       ["Markdown", 1, false],
       ["Plain text", 1, false],
     ]);
     await window.keyboard.press("Escape");
-    menu = await openFilter(library, "status");
+    menu = await addFilter(window, library, "status");
     expect(await optionsOf(menu)).toEqual([
       ["Available", 2, false],
       ["Missing", 0, false],
     ]);
     await window.keyboard.press("Escape");
-    menu = await openFilter(library, "year");
+
+    // Options of one filter add up; the chip says how many more it keeps.
+    menu = await openChip(window, library, "year");
     await menu.getByRole("menuitemcheckbox", { name: "No date, 1 Document" }).click();
     await window.keyboard.press("Escape");
     await expect(rows).toHaveCount(3);
-    menu = await openFilter(library, "status");
+    await expect(library.locator('[data-testid="library-filter"][data-facet="year"]')).toHaveText(
+      "Year: 2023 +1",
+    );
+    menu = await addFilter(window, library, "status");
     await menu.getByRole("menuitemcheckbox", { name: "Missing, 1 Document" }).click();
+    await window.keyboard.press("Escape");
     await expect(rows).toHaveCount(1);
     await expect(rows).toContainText("Undated memo");
     await screenshot(window, "library-filters");
-    await window.keyboard.press("Escape");
 
-    // One click clears them all.
-    await library.getByTestId("library-filters-clear").click();
-    await expect(rows).toHaveCount(4);
-    await expect(library.getByTestId("library-count")).toHaveText("4 Documents");
-    await expect(library.getByTestId("library-filters-clear")).toHaveCount(0);
+    // × drops each, and the page is whole again.
+    const remove = library.getByTestId("library-filter-remove");
+    while ((await remove.count()) > 0) await pointAndClick(window, remove.first());
+    await expect(rows).toHaveCount(5);
 
-    // Filtered, the Question searches exactly the Documents shown, and the button says how many.
-    menu = await openFilter(library, "year");
+    // Chosen, the Question searches exactly those Documents, and the bar says how many.
+    menu = await addFilter(window, library, "year");
     await menu.getByRole("menuitemcheckbox", { name: "2023, 2 Documents" }).click();
     await window.keyboard.press("Escape");
     await expect(rows).toHaveCount(2);
     const shownIds = await rows.evaluateAll((items) =>
       items.map((item) => item.getAttribute("data-document-id")),
     );
-    const ask = library.getByTestId("library-ask");
+    await rows.first().locator("[data-row-main]").focus();
+    await window.keyboard.press("ControlOrMeta+a");
+    const ask = library.getByTestId("library-selection").locator('[data-command="document.ask"]');
     await expect(ask).toHaveText("Ask about these 2 Documents");
-    await expect(ask).toHaveAttribute("data-scope", "documents");
-    await ask.click();
+    await pointAndClick(window, ask);
 
     await expect(window.getByTestId("library")).toHaveCount(0);
     await expect(window.getByTestId("mind-title")).toHaveValue("Tide notes");
     const editor = window.getByTestId("mind-editor");
     await expect(editor).toContainText("Notes on the tides.");
-    // The composer takes the focus, its Search scope the Documents shown.
+    // The composer takes the focus, its Search scope the Documents chosen.
     const composer = composerOf(window);
     const input = composer.getByTestId("composer-input");
     const chips = composer.getByTestId("scope-chip");
@@ -210,16 +241,22 @@ test("filters by year, format and status with counts, and asks about the Documen
     await expect(input).toHaveValue("What was observed in 2023?");
     await screenshot(window, "library-ask-documents");
 
-    // Unfiltered, it searches the Folder itself, in the same Mind, after the first.
-    await openFolderInLibrary(window, FOLDER);
-    await expect(library.getByTestId("library-filters-clear")).toHaveCount(0);
-    await expect(library.getByTestId("library-ask")).toHaveAttribute("data-scope", "folder");
-    await library.getByRole("button", { name: "Ask about this Folder", exact: true }).click();
+    // The Folder's own ⋯ asks about the Folder, in the same Mind, after the first.
+    await window.getByTestId("open-library").click();
+    const head = library
+      .getByTestId("library-section")
+      .filter({ hasText: FOLDER })
+      .getByTestId("library-section-head");
+    await pointAt(window, head);
+    await pointAndClick(window, head.getByTestId("folder-menu"));
+    await pointAndClick(
+      window,
+      window.getByTestId("folder-actions").filter({ visible: true }).getByTestId("folder.ask"),
+    );
     await expect(window.getByTestId("mind-title")).toHaveValue("Tide notes");
-    const folderChip = chips;
-    await expect(folderChip).toHaveCount(1);
-    await expect(folderChip).toHaveText(FOLDER);
-    await expect(folderChip).toHaveAttribute("data-kind", "folder");
+    await expect(chips).toHaveCount(1);
+    await expect(chips).toHaveText(FOLDER);
+    await expect(chips).toHaveAttribute("data-kind", "folder");
     await expect(input).toBeFocused();
     await window.keyboard.type(" Which harbour?");
     await expect(input).toHaveValue("What was observed in 2023? Which harbour?");
@@ -230,55 +267,52 @@ test("filters by year, format and status with counts, and asks about the Documen
   }
 });
 
-test("starts a Mind named after the Folder, its composer scoped to the Folder, and the Question asked goes to the assistant, in English and Chinese", async () => {
+test("a Folder's New Mind here starts a Mind that searches the Folder, and the Question asked goes to the assistant, in English and Chinese", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   try {
     await dismissChatSetup(window);
     const library = await libraryWithFolder(app, window);
-    const folderId = await window.evaluate(
-      async (name) =>
-        (
-          await (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.getLibrary()
-        ).groups.find((group) => group.name === name)?.id,
-      FOLDER,
-    );
-    await openFolderInLibrary(window, FOLDER);
-    // The bridges and filters read in Chinese too.
+    const head = library
+      .getByTestId("library-section")
+      .filter({ hasText: FOLDER })
+      .getByTestId("library-section-head");
+    const menu = window.getByTestId("folder-actions").filter({ visible: true });
+
+    // The Folder's menu and the filters read in Chinese too.
     await window.evaluate(() =>
       (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
         user: { language: "zh-CN" },
       }),
     );
-    await expect(library.getByTestId("library-ask")).toHaveText("就此文件夹提问");
-    await expect(library.getByTestId("library-start-mind")).toHaveText("用此文件夹新建 Mind");
-    await expect(library.locator('[data-testid="library-filter"][data-facet="status"]')).toHaveText(
-      "状态",
-    );
+    await pointAt(window, head);
+    await pointAndClick(window, head.getByTestId("folder-menu"));
+    await expect(menu.getByTestId("folder.ask")).toHaveText("就此文件夹提问");
+    await expect(menu.getByTestId("folder.newMind")).toHaveText("在此新建 Mind");
+    await window.keyboard.press("Escape");
+    await pointAndClick(window, library.getByTestId("library-add-filter"));
+    await expect(
+      window.locator('[data-testid="library-filter-kind"][data-facet="status"]'),
+    ).toHaveText("状态");
+    await window.keyboard.press("Escape");
     await window.evaluate(() =>
       (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
         user: { language: "en" },
       }),
     );
 
-    await library.getByRole("button", { name: "Start a Mind from this Folder" }).click();
+    await pointAt(window, head);
+    await pointAndClick(window, head.getByTestId("folder-menu"));
+    await pointAndClick(window, menu.getByTestId("folder.newMind"));
     await expect(window.getByTestId("library")).toHaveCount(0);
-    await expect(window.getByTestId("mind-title")).toHaveValue(FOLDER);
-    await expect(
-      window.getByTestId("mind-list-item").getByTestId("row-text").getByText(FOLDER),
-    ).toBeVisible();
+    await expect(window.getByTestId("mind-title")).toBeFocused();
+    await window.keyboard.type("Tides");
     const editor = window.getByTestId("mind-editor");
-    // The composer takes the focus, its Search scope the Folder.
-    const composer = composerOf(window);
-    const composerChip = composer.getByTestId("scope-chip");
-    await expect(composerChip).toHaveText(FOLDER);
-    await expect(composerChip).toHaveAttribute("data-kind", "folder");
-    await expect(composerChip).toHaveAttribute("data-id", folderId ?? "");
-    await expect(composer.getByTestId("composer-input")).toBeFocused();
-    await window.keyboard.type("What do these say about tides?");
-    await screenshot(window, "library-start-mind");
+    await screenshot(window, "library-new-mind");
 
-    // Asked, in the assistant, with the Folder as its Search scope; the new Mind stays empty.
+    // Asked, in the assistant, which searches the Folder; the new Mind stays empty.
     await connectLocalChatModel(window);
+    await window.keyboard.press("ControlOrMeta+j");
+    await window.keyboard.type("What do these say about tides?");
     await window.keyboard.press("Enter");
     await expect(window.getByTestId("assistant-question")).toContainText(
       "What do these say about tides?",
@@ -293,7 +327,7 @@ test("starts a Mind named after the Folder, its composer scoped to the Folder, a
   }
 });
 
-test("with no Mind yet, asking about many Documents shown makes one, and their chips fold", async () => {
+test("with no Mind yet, asking about many Documents chosen makes one, and their chips fold", async () => {
   for (let index = 1; index <= 10; index++) {
     await writeFile(join(sources, `Survey ${index}.txt`), `Tide survey number ${index}, 2020.\n`);
   }
@@ -304,13 +338,17 @@ test("with no Mind yet, asking about many Documents shown makes one, and their c
     await expectReadyDocuments(window, 15);
     await window.getByTestId("open-library").click();
     const library = window.getByTestId("library");
-    // All Documents, unfiltered: every Question searches them already, so nothing is offered.
-    await expect(library.getByTestId("library-ask")).toHaveCount(0);
-    const menu = await openFilter(library, "year");
+    const menu = await addFilter(window, library, "year");
     await menu.getByRole("menuitemcheckbox", { name: "2020, 10 Documents" }).click();
     await window.keyboard.press("Escape");
-    await expect(library.getByTestId("library-count")).toHaveText("10 of 15 Documents");
-    await library.getByRole("button", { name: "Ask about these 10 Documents" }).click();
+    const rows = library.getByTestId("library-document");
+    await expect(rows).toHaveCount(10);
+    await rows.first().locator("[data-row-main]").focus();
+    await window.keyboard.press("ControlOrMeta+a");
+    await pointAndClick(
+      window,
+      library.getByRole("button", { name: "Ask about these 10 Documents" }),
+    );
 
     await expect(window.getByTestId("mind-list-item")).toHaveCount(1);
     await expect(window.getByTestId("mind-title")).toHaveValue("");

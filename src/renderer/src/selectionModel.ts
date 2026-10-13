@@ -5,8 +5,8 @@ import type { ObjectRef } from "./objects";
  * rule 6). Pure, so the unit tests import it: no store and no page.
  */
 
-/** The places that keep a selection each: moving to the other clears it, as Finder does per window. */
-export type SelectSurface = "sidebar" | "library";
+/** The places that keep a selection each (Recently deleted at the Library's foot is one): moving to another clears it, as Finder does per window. */
+export type SelectSurface = "sidebar" | "library" | "deleted";
 
 export const refKey = (ref: ObjectRef): string => `${ref.kind}:${ref.id}`;
 
