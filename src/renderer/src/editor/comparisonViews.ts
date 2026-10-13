@@ -67,7 +67,8 @@ export const comparisonRowView: NodeViewRenderer = ({ node: first }) => {
 
 /**
  * A comparison table's cell: its Answer, Citations and all, never typed in;
- * "…" while it waits or is being written; once its fill has ended without
+ * "Waiting…" while it waits or is being written, its Task going or paused
+ * (#126); once its fill has ended without
  * it, "stopped"; or, with no Answer, a "!" and why ("not found", "not
  * checked: cost cap"…), the provider's own words in its tooltip.
  */
@@ -82,7 +83,6 @@ export const comparisonCellView: NodeViewRenderer = ({ node: first }) => {
   contentDOM.contentEditable = "false";
   const running = document.createElement("span");
   running.className = "comparison-cell-running";
-  running.textContent = "…";
   const stopped = document.createElement("span");
   stopped.className = "comparison-cell-stopped";
   const problem = document.createElement("span");
@@ -108,6 +108,7 @@ export const comparisonCellView: NodeViewRenderer = ({ node: first }) => {
         cell.status === "writing" ? "comparison.cell.writing" : "comparison.cell.waiting",
       ),
     );
+    running.textContent = translateNow("comparison.cell.waitingText");
     stopped.textContent = translateNow("comparison.cell.stopped");
     if (cell.problem) {
       const { key, params } = cellProblemMessage(cell.problem);
