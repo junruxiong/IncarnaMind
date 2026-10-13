@@ -24,6 +24,7 @@ import {
   pointAt,
   removeDataFolder,
   sidebarFolder,
+  tabTo,
 } from "./app";
 
 let dataDir: string;
@@ -521,10 +522,22 @@ test("organized folders remain separate from source locations and follow changes
     await row.getByRole("button", { name: "Membrane separation", exact: true }).click();
     await expect(window.getByTestId("viewer")).toBeVisible();
     await pointAt(window, row);
-    await row.getByTestId("document-tags-menu").click();
-    await expect(row.getByTestId("document-tags-popover")).toBeVisible();
+    const tagsMenu = row.getByTestId("document-tags-menu");
+    const picker = row.getByTestId("document-tags-popover");
+    await tagsMenu.click();
+    await expect(picker).toBeVisible();
     await window.keyboard.press("Escape");
-    await expect(row.getByTestId("document-tags-popover")).toBeHidden();
+    await expect(picker).toBeHidden();
+    // Esc closes the picker first, even with the focus back on its button, the row still selected.
+    await expect(row).toHaveAttribute("aria-selected", "true");
+    await tagsMenu.click();
+    await expect(picker.getByTestId("tag-picker-input")).toBeFocused();
+    await tabTo(window, tagsMenu);
+    await window.keyboard.press("Escape");
+    await expect(picker).toBeHidden();
+    await expect(row).toHaveAttribute("aria-selected", "true");
+    await window.keyboard.press("Escape");
+    await expect(row).toHaveAttribute("aria-selected", "false");
   } finally {
     await app.close();
   }

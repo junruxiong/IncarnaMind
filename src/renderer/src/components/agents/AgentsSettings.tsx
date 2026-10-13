@@ -71,7 +71,7 @@ export function AgentsSettings() {
       if (result.kind === "copy")
         await navigator.clipboard.writeText(result.text).catch(reportError);
     } catch (error) {
-      setProblem(errorMessage(error));
+      setProblem(errorMessage(error, t));
     } finally {
       setBusy(false);
     }
