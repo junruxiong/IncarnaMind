@@ -3,9 +3,10 @@ import { DELETED_NAMES, type ScopeChip } from "./scope";
 
 /**
  * What the next Question reads and searches, which an empty conversation
- * says once (#253, #258, #391, #544). With a Mind: "Reads “Chapter 3” ·
+ * says once (#253, #258, #391, #544, #621). With a Mind: "Reads “Chapter 3” ·
  * searches “Thesis”", naming the first item of the composer's Search scope
- * (its Folder, by default); with none in view: "Searches All Documents".
+ * (its Folder, by default); with none in focus: "Searches All Documents",
+ * or the items the User chose in the composer.
  * Items deleted since are left out, as the search leaves them out.
  */
 export function readsLine(
@@ -13,9 +14,17 @@ export function readsLine(
   mindName: string | null,
   scope: readonly ScopeChip[],
 ): string {
-  if (mindName === null) return t("assistant.searchesAll");
   const named = scope.filter((chip) => !chip.deleted && chip.name);
   const first = named[0]?.name;
+  if (mindName === null) {
+    if (!first) return t("assistant.searchesAll");
+    if (named.length === 1) return t("assistant.searches.one", { scope: first });
+    return t("assistant.searches.more", {
+      scope: first,
+      count: named.length - 1,
+      total: named.length,
+    });
+  }
   if (!first) return t("assistant.reads.all", { mind: mindName });
   if (named.length === 1) return t("assistant.reads.one", { mind: mindName, scope: first });
   return t("assistant.reads.more", {

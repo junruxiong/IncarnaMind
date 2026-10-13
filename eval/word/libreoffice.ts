@@ -1,7 +1,7 @@
 import { execFile, execFileSync } from "node:child_process";
-import { mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 const TIMEOUT_MS = 3 * 60_000;
 
@@ -30,9 +30,10 @@ export interface Conversion {
 
 /**
  * Opens a file in LibreOffice headless by converting it to PDF, with a profile of its own in a
- * temporary folder so the User's LibreOffice settings and documents are never touched.
+ * temporary folder so the User's LibreOffice settings and documents are never touched. With
+ * `keep`, the PDF is also copied there, as `keep`'s path says, for a person to look at.
  */
-export function convertToPdf(soffice: string, file: string): Promise<Conversion> {
+export function convertToPdf(soffice: string, file: string, keep?: string): Promise<Conversion> {
   const work = mkdtempSync(join(tmpdir(), "incarnamind-word-"));
   const args = [
     `-env:UserInstallation=file://${join(work, "profile")}`,
@@ -50,6 +51,10 @@ export function convertToPdf(soffice: string, file: string): Promise<Conversion>
       try {
         const pdf = readdirSync(join(work, "out")).find((name) => name.endsWith(".pdf"));
         const pdfBytes = pdf ? statSync(join(work, "out", pdf)).size : 0;
+        if (pdf && pdfBytes > 0 && keep) {
+          mkdirSync(dirname(keep), { recursive: true });
+          copyFileSync(join(work, "out", pdf), keep);
+        }
         result =
           pdfBytes > 0
             ? { opened: true, pdfBytes }

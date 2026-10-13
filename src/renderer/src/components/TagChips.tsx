@@ -6,7 +6,7 @@ import { DocumentTagFooter } from "./DocumentTags";
 import {
   CheckLineIcon,
   CloseLineIcon,
-  PencilLineIcon,
+  PlusLineIcon,
   SparkLineIcon,
   TagLineIcon,
 } from "./lineIcons";
@@ -47,7 +47,6 @@ export function DocumentTagChips({
   const tagFilter = useAppStore((state) => state.tagFilter);
   const popover = useTagPopover();
   const chips = chipsOf(document.tags, tags);
-  const addsInWords = variant === "peek" || (!header && chips.length === 0);
   // The header shows what its room holds, up to the most it lists: the rest fold into "+N".
   const fitting = useFittingChips(chips.length, VISIBLE_CHIPS.header, header);
   const listed = chips.slice(0, VISIBLE_CHIPS[variant]);
@@ -100,19 +99,19 @@ export function DocumentTagChips({
         className={
           header
             ? "viewer-icon-button"
-            : addsInWords
+            : variant === "peek"
               ? `h-6 shrink-0 rounded-sm px-1.5 text-[12px] text-ink-meta hover:bg-hover hover:text-ink ${
-                  variant === "peek" && chips.length === 0 ? "-ml-1.5" : ""
+                  chips.length === 0 ? "-ml-1.5" : ""
                 }`
-              : "inline-flex size-6 shrink-0 items-center justify-center rounded-sm text-ink-meta opacity-0 group-hover/row:opacity-100 hover:bg-hover hover:text-ink focus-visible:opacity-100 aria-expanded:opacity-100"
+              : "inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-ink-meta opacity-0 group-hover/row:opacity-60 group-has-[:focus-visible]/row:opacity-60 hover:bg-hover hover:text-ink hover:opacity-100! focus-visible:opacity-100 aria-expanded:opacity-100"
         }
       >
         {header ? (
           <TagLineIcon className="size-4" />
-        ) : addsInWords ? (
-          t("library.addTags")
+        ) : variant === "peek" ? (
+          t("peek.addTags")
         ) : (
-          <PencilLineIcon className="size-3.5" />
+          <PlusLineIcon className="size-3.5" />
         )}
       </button>
       <div

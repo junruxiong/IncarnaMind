@@ -5,6 +5,9 @@ import { useSelection } from "./selection";
 import { refOfKey, type SelectSurface } from "./selectionModel";
 import { useAppStore } from "./store";
 
+/** The lists whose Documents can be peeked at. */
+export type PeekSurface = Extract<SelectSurface, "sidebar" | "library">;
+
 /*
  * Peek: Space on a Document's row shows a quick look at it beside the list
  * (see `Peek`), without opening the viewer. A row asks for it with
@@ -19,7 +22,7 @@ const documentRows = (scope: ParentNode) =>
 
 export interface PeekTarget {
   documentId: string;
-  surface: SelectSurface;
+  surface: PeekSurface;
   /** The row it is about: it shows beside it, and Open clicks it. */
   row: HTMLElement;
 }
@@ -44,7 +47,7 @@ export function togglePeek(target: PeekTarget): void {
   else show(target);
 }
 
-const rowOfDocument = (documentId: string, surface: SelectSurface) =>
+const rowOfDocument = (documentId: string, surface: PeekSurface) =>
   document.querySelector<HTMLElement>(
     `[data-surface="${surface}"] [data-select-ref="document:${CSS.escape(documentId)}"]`,
   );
@@ -64,7 +67,7 @@ export function peekedRow(target: PeekTarget): HTMLElement | null {
  * Peeks at a Document by its row in the sidebar or the Library, if the row is on
  * the page, with the focus on the row so that the keys of the peek reach it.
  */
-export function peekAt(documentId: string, surface: SelectSurface): void {
+export function peekAt(documentId: string, surface: PeekSurface): void {
   const row = rowOfDocument(documentId, surface);
   if (!row) return;
   togglePeek({ documentId, surface, row });
@@ -72,7 +75,7 @@ export function peekAt(documentId: string, surface: SelectSurface): void {
 }
 
 /** The key handler of a Document's row: Space on its name peeks at the Document. */
-export function peekRowProps(documentId: string, surface: SelectSurface) {
+export function peekRowProps(documentId: string, surface: PeekSurface) {
   return {
     onKeyDownCapture(event: KeyboardEvent<HTMLElement>) {
       if (event.key !== " " || event.altKey || event.ctrlKey || event.metaKey) return;
@@ -89,7 +92,7 @@ export function peekRowProps(documentId: string, surface: SelectSurface) {
  * viewer as a button would. `rowProps` go on the row's own element, the one
  * with `useSelectable`'s props; the other buttons in the row keep Space.
  */
-export function usePeekKey(documentId: string, surface: SelectSurface) {
+export function usePeekKey(documentId: string, surface: PeekSurface) {
   return useMemo(() => ({ rowProps: peekRowProps(documentId, surface) }), [documentId, surface]);
 }
 
