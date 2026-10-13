@@ -5,6 +5,7 @@
  * A PDF keeps its text a line at a time. A paragraph runs on until a line
  * ends a sentence, or a line well short of the page's width, with no closing
  * mark, is followed by one that starts afresh: a heading, a title, a byline.
+ * A numbered heading starts a paragraph, and a short one is one.
  *
  * The model is shown the sentences numbered, in batches, and names those
  * that make claims; the sentences stay exactly as the document has them, so
@@ -20,25 +21,36 @@ export interface DocumentParagraph {
 
 /** A line that ends a sentence, or a clause the next line doesn't go on with. */
 const ENDS = /[.!?。！？…:：;；"”’)）\]】」』]$/u;
-/** A line that starts afresh: a capital, a figure, a CJK character or an opening mark. */
-const STARTS =
-  /^[\p{Lu}\p{N}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}"“‘(（[【「『•·–—-]/u;
-const CJK_END = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}，、]$/u;
-const CJK_START = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
-/** A line this much shorter than a full one of its page ends where it does on purpose. */
+/**
+ * A line that starts afresh: a capital, a figure or an opening mark. CJK text
+ * wraps anywhere, so a CJK line goes on with the one before it unless that
+ * one ends a sentence or the line is a numbered heading.
+ */
+const STARTS = /^[\p{Lu}\p{N}"“‘(（[【「『•·–—-]/u;
+/** A numbered heading, which starts a paragraph of its own: "2 Costs", "3.1 Roof", "二、", "（一）". */
+const HEADING =
+  /^(?:\d+(?:\.\d+)*\.?\s+\p{Lu}|[一二三四五六七八九十]+、|[（(][一二三四五六七八九十\d]+[)）])/u;
+/** A character as wide as two Latin letters: CJK, and full-width marks. */
+const WIDE =
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\u3000-\u303F\uFF00-\uFFEF]/u;
+/** A line this much narrower than a full one of its page ends where it does on purpose. */
 const SHORT = 0.7;
 
 /** Two lines of one paragraph, as one: a word broken at a hyphen is mended, and CJK needs no space. */
 function joinLines(before: string, after: string): string {
   if (/\p{Ll}-$/u.test(before) && /^\p{Ll}/u.test(after)) return before.slice(0, -1) + after;
-  if (CJK_END.test(before) && CJK_START.test(after)) return before + after;
+  if (WIDE.test(before.at(-1) ?? "") || WIDE.test(after[0] ?? "")) return before + after;
   return `${before} ${after}`;
 }
 
-/** How long a full line of the page is: as long as a quarter of its lines, or longer. */
-function fullLength(lines: readonly string[]): number {
-  const lengths = lines.map((line) => line.length).sort((a, b) => b - a);
-  return lengths[Math.floor(lengths.length / 4)] ?? 0;
+/** How wide a line is, in Latin letters. */
+const widthOf = (line: string): number =>
+  [...line].reduce((width, char) => width + (WIDE.test(char) ? 2 : 1), 0);
+
+/** How wide a full line of the page is: as wide as a quarter of its lines, or wider. */
+function fullWidth(lines: readonly string[]): number {
+  const widths = lines.map(widthOf).sort((a, b) => b - a);
+  return widths[Math.floor(widths.length / 4)] ?? 0;
 }
 
 /** The paragraphs of a document's text, in order. */
@@ -49,12 +61,17 @@ export function paragraphsOf(pages: DocumentText["pages"]): DocumentParagraph[] 
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line !== "");
-    const full = fullLength(lines);
+    const full = fullWidth(lines);
     let current = "";
     lines.forEach((line, index) => {
+      if (current && HEADING.test(line)) {
+        paragraphs.push({ page, text: current });
+        current = "";
+      }
       current = current ? joinLines(current, line) : line;
       const next = lines[index + 1];
-      const alone = line.length < full * SHORT && next !== undefined && STARTS.test(next);
+      const short = widthOf(line) < full * SHORT;
+      const alone = short && next !== undefined && (STARTS.test(next) || HEADING.test(line));
       if (next === undefined || ENDS.test(line) || alone) {
         paragraphs.push({ page, text: current });
         current = "";
