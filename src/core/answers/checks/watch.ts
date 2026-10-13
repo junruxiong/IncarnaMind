@@ -33,7 +33,6 @@ import type {
   Document,
   DocumentStatus,
   Money,
-  ProviderError,
   RunStop,
   TextPlace,
 } from "../../api";
@@ -43,7 +42,7 @@ import type { MindContent } from "../../mindContent";
 import type { PreparedChatModel } from "../../providers/chat";
 import { currentTask } from "../../runs/current";
 import { RunItemError, runItems } from "../../runs/stop";
-import type { ClaimCheckRequest } from "./claimCheck";
+import { type ClaimCheckRequest, runFailureOf } from "./claimCheck";
 import {
   everySentence,
   markedSentences,
@@ -128,14 +127,6 @@ interface Claim {
 type Plan =
   | { kind: "ready"; folderId: string; claims: Claim[] }
   | Exclude<ContradictionCheckPlan, { kind: "ready" }>;
-
-/** A failure a check reported as its result that the run's other claims share. */
-function runFailureOf(result: ClaimCheckResult): ProviderError | null {
-  if (result.verdict !== "not-checked") return null;
-  const { reason } = result;
-  if (reason !== "rate-limit" && reason !== "cost-cap" && reason !== "plan-limit") return null;
-  return { kind: reason, message: result.detail ?? reason };
-}
 
 const citedIdsOf = (sentence: SelectedSentence) => [
   ...new Set(sentence.cited.flatMap((each) => (each.documentId ? [each.documentId] : []))),

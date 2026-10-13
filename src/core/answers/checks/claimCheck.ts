@@ -85,6 +85,14 @@ function failureOf(error: ProviderError): { reason: ClaimCheckFailure; detail: s
   }
 }
 
+/** A claim check's failure that the run's other claims share: waited out, or it stops the run. */
+export function runFailureOf(result: ClaimCheckResult): ProviderError | null {
+  if (result.verdict !== "not-checked") return null;
+  const { reason } = result;
+  if (reason !== "rate-limit" && reason !== "cost-cap" && reason !== "plan-limit") return null;
+  return { kind: reason, message: result.detail ?? reason };
+}
+
 export function createClaimCheck(deps: ClaimCheckDependencies) {
   return async function checkClaim(request: ClaimCheckRequest): Promise<ClaimCheckResult> {
     const { scope, signal } = request;

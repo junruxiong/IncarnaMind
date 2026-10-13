@@ -36,7 +36,6 @@ import {
   type FindClaimsResult,
   MIND_SETTINGS_FIELD,
   type Mind,
-  type ProviderError,
   type VerifyClaimsResult,
   type VerifyDocumentResult,
 } from "../../api";
@@ -49,7 +48,7 @@ import { classifyProviderError } from "../../providers/providerErrors";
 import { RunItemError, runItems } from "../../runs/stop";
 import { createElement } from "../blocks";
 import { answerTemperature } from "../engine";
-import type { ClaimCheckRequest } from "./claimCheck";
+import { type ClaimCheckRequest, runFailureOf } from "./claimCheck";
 import {
   CLAIM_BATCH,
   FIND_CLAIMS_INSTRUCTIONS,
@@ -127,14 +126,6 @@ function parseRequest(input: unknown) {
     allDocuments: input.allDocuments === true,
     model: parseModel(input.model),
   };
-}
-
-/** A claim check's failure that the run's other claims share: waited out, or it stops the run. */
-function runFailureOf(result: ClaimCheckResult): ProviderError | null {
-  if (result.verdict !== "not-checked") return null;
-  const { reason } = result;
-  if (reason !== "rate-limit" && reason !== "cost-cap" && reason !== "plan-limit") return null;
-  return { kind: reason, message: result.detail ?? reason };
 }
 
 export function createVerify(options: VerifyOptions) {
