@@ -50,7 +50,7 @@ const language = (window: Page, value: "en" | "zh-CN") =>
 test("first run's local path starts ticked, because nothing in the cloud is set up; choosing the model turns Local mode on, and Undo turns it off; English and Chinese", async () => {
   const { app, window } = await launchApp(dataDir, { ollama: ollamaUrl });
   await setWindowSize(app, window, 900, 700);
-  const setup = window.getByTestId("chat-setup");
+  const setup = await openSettings(window, "models");
   await setup.getByTestId("chat-choice-ollama").click();
 
   const box = setup.getByTestId("keep-local-box");
@@ -67,9 +67,9 @@ test("first run's local path starts ticked, because nothing in the cloud is set 
   await language(window, "en");
 
   await setup.getByTestId("ollama-use").click();
-  await expect(setup).toBeHidden();
+  await expect(setup.getByTestId("chat-provider-current")).toContainText("Ollama");
   expect(await localOnly(window)).toBe(true);
-  const undo = window.getByTestId("undo-line");
+  const undo = setup.getByTestId("undo-line-here");
   await expect(undo.getByTestId("undo-message")).toHaveText(
     "Turned on “Keep everything on this computer”",
   );
@@ -87,7 +87,6 @@ for (const [name, locale] of [
   test(`with a cloud model and an agent set up, the box starts unticked and names what would pause; leaving it unticked keeps Local mode off; ticked, it turns on with Undo (${name})`, async () => {
     const { app, window } = await launchApp(dataDir, { ollama: ollamaUrl });
     await setWindowSize(app, window, 900, 700);
-    await window.getByTestId("chat-setup").getByTestId("chat-setup-later").click();
     await acceptPlainTextKeys(window);
     await window.evaluate(async () => {
       const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;

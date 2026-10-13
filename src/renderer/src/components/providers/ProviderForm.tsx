@@ -56,25 +56,28 @@ export function ProviderForm({
   providers,
   onSaved,
   withMoreProviders = false,
+  initialKind = null,
 }: {
   /** Saved providers, to tell the User when a key is already stored. */
   providers: readonly ChatProvider[];
   onSaved(provider: ChatProvider): void;
   /** Settings lists the best-effort providers too, under "More providers"; first run only the first-class ones. */
   withMoreProviders?: boolean;
+  /** The provider chosen when the form opens (DeepSeek in Chinese, where the first-run setup leads with it). */
+  initialKind?: FormKind | null;
 }) {
   const t = useT();
   const id = useId();
   const language = useLanguage();
   const gap = useGap();
-  const [kind, setKind] = useState<FormKind | null>(null);
+  const [kind, setKind] = useState<FormKind | null>(initialKind);
   const [moreOpen, setMoreOpen] = useState(false);
   /** The region of a provider that has several; its first otherwise. */
   const [endpointId, setEndpointId] = useState("");
   const key = useProviderKey();
   const { apiKey } = key;
   const [baseUrl, setBaseUrl] = useState("");
-  const [modelId, setModelId] = useState("");
+  const [modelId, setModelId] = useState(initialKind ? suggestedModel(initialKind) : "");
   const [busy, setBusy] = useState<"testing" | "saving" | null>(null);
   const [test, setTest] = useState<ConnectionTestResult | null>(null);
   const [error, setError] = useState<string | null>(null);

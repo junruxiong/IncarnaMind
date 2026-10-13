@@ -19,6 +19,7 @@ import { ChatModelSettings } from "./providers/ChatModelSettings";
 import { EmbeddingSettingsSection } from "./providers/EmbeddingSettings";
 import { JevSettingsSection } from "./providers/JevSettings";
 import { OtherModelsSettings } from "./providers/OtherModelsSettings";
+import { PlansSettings } from "./providers/PlansSettings";
 import { RerankSettingsSection } from "./providers/RerankSettings";
 import { SkillScriptsSettings, SkillsSettings } from "./SkillsSettings";
 import { SpendingCapSettings } from "./SpendingCapSettings";
@@ -161,6 +162,7 @@ function PageContent({ page }: { page: SettingsPage }) {
             <ChatModelSettings />
           </Titled>
           <OtherModelsSettings />
+          <PlansSettings />
           <ChatGptPlanSettings />
           <JevSettingsSection />
           <Titled title="library.settingsTitle" testId="organization-settings">
