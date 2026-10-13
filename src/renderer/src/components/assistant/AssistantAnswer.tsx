@@ -8,6 +8,8 @@ import { AnswerError, ApprovalCard, figuresOf, UncalculatedLine } from "../../ed
 import { AskProblem } from "../../editor/AskProblem";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
+import { useUnreadFiles } from "../../unreadFiles";
+import { UnreadFilesLine } from "../UnreadFilesLine";
 import { AnswerActions } from "./AnswerActions";
 import { AnswerSteps } from "./AnswerSteps";
 import { AnswerText } from "./AnswerText";
@@ -54,6 +56,7 @@ export function AssistantAnswer({
   const regenerate = () => void regenerateAnswer(answer.id);
   const written = hasText(blocks);
   const { uncalculated } = figuresOf(answer.toolCalls);
+  const unread = useUnreadFiles(question?.scope ?? null);
 
   return (
     <article
@@ -85,6 +88,7 @@ export function AssistantAnswer({
         />
       )}
       {!streaming && uncalculated > 0 && <UncalculatedLine count={uncalculated} />}
+      {!streaming && status !== "failed" && <UnreadFilesLine files={unread} />}
       {!streaming && status === "failed" && (
         <AnswerError
           kind={answer.errorKind ?? "unknown"}
