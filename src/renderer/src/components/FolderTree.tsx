@@ -24,6 +24,7 @@ import {
 } from "./lineIcons";
 import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
 import {
+  clearsActions,
   INDENT_PX,
   rowActionsClass,
   rowButtonClass,
@@ -362,6 +363,7 @@ function GroupItem(props: GroupItemProps) {
   const objectMenu = useObjectMenu(object ?? { kind: "folder", id: groupKey });
   const open = expandable && expanded;
   const Chevron = open ? ChevronDownLineIcon : ChevronRightLineIcon;
+  const buttonClass = actions ? `${rowButtonClass} ${clearsActions.menu}` : rowButtonClass;
   const inner = (
     <>
       <Icon className={rowIconClass(false)} />
@@ -407,13 +409,13 @@ function GroupItem(props: GroupItemProps) {
             aria-expanded={open}
             title={title ?? name}
             onClick={() => toggle(groupKey, tagFilter)}
-            className={rowButtonClass}
+            className={buttonClass}
             style={rowPadding(depth)}
           >
             {inner}
           </button>
         ) : (
-          <div title={title ?? name} className={rowButtonClass} style={rowPadding(depth)}>
+          <div title={title ?? name} className={buttonClass} style={rowPadding(depth)}>
             {inner}
           </div>
         )}
