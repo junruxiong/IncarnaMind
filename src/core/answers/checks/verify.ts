@@ -386,8 +386,12 @@ export function createVerify(options: VerifyOptions) {
       content.edit(mind.id, (blocks) => {
         const doc = blocks.doc;
         if (!doc) return;
-        const elements = paragraphs.map((paragraph) =>
-          createElement({ type: "paragraph", content: [{ type: "text", text: paragraph.text }] }),
+        const elements = paragraphs.map(({ text, heading }) =>
+          createElement({
+            type: heading ? "heading" : "paragraph",
+            ...(heading && { attrs: { level: 2 } }),
+            content: [{ type: "text", text }],
+          }),
         );
         blocks.insert(0, elements);
         const pages: Record<string, number> = {};

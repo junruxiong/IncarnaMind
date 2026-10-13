@@ -38,10 +38,10 @@ const CONTRADICTED = "Harbours publish the times of high water every week.";
 const UNSUPPORTED = "Penguins nest on the cliffs above the harbour.";
 const THANKS = "Thank you for reading this report.";
 
-/** The report someone else wrote: a title, three claims, and thanks. */
+/** The report someone else wrote: a title, three claims under two headings, and thanks. */
 const REPORT = buildPdf([
-  { lines: ["Harbour report", SUPPORTED, CONTRADICTED] },
-  { lines: [UNSUPPORTED, THANKS] },
+  { lines: ["Harbour report", "1 Tides", SUPPORTED, CONTRADICTED] },
+  { lines: ["2 Wildlife", UNSUPPORTED, THANKS] },
 ]);
 
 const PLANS: Record<string, Plan> = {
@@ -99,24 +99,26 @@ async function shownChecks(core: Core, client: MindClient) {
 }
 
 describe("Verify a document", () => {
-  test("its text becomes a Mind, a paragraph to a Block with its page; its claims are found, then checked", async () => {
+  test("its text becomes a Mind, a paragraph or numbered heading to a Block with its page; its claims are found, then checked", async () => {
     const { core, report, tides } = await setUp();
     const { mind, documentId, client } = await verified(core, report);
 
     expect(mind.title).toBe("Harbour report");
     const paragraphs: JSONContent[] = readMind(client).toJSON().content ?? [];
-    expect(paragraphs.map((block) => block.content?.[0]?.text)).toEqual([
-      "Harbour report",
-      SUPPORTED,
-      CONTRADICTED,
-      UNSUPPORTED,
-      THANKS,
+    expect(paragraphs.map((block) => [block.type, block.content?.[0]?.text])).toEqual([
+      ["paragraph", "Harbour report"],
+      ["heading", "1 Tides"],
+      ["paragraph", SUPPORTED],
+      ["paragraph", CONTRADICTED],
+      ["heading", "2 Wildlife"],
+      ["paragraph", UNSUPPORTED],
+      ["paragraph", THANKS],
     ]);
     const ids = paragraphs.map((block) => String(block.attrs?.id));
     expect(verificationOf(client.doc)).toEqual({
       documentId,
       documentName: "Harbour report",
-      pages: Object.fromEntries(ids.map((id, index) => [id, index < 3 ? 1 : 2])),
+      pages: Object.fromEntries(ids.map((id, index) => [id, index < 4 ? 1 : 2])),
       claims: null,
     });
     // Someone else wrote it: a Run that reads it is third-party (#78).
@@ -232,7 +234,7 @@ describe("Verify a document", () => {
     await core.findClaims(request(mind.id));
     await core.verifyClaims(request(mind.id));
 
-    typeInto(client, 1, 0, "Not all ");
+    typeInto(client, 2, 0, "Not all ");
 
     expect((await shownChecks(core, client)).map((each) => each.shown)).toEqual([
       { state: "needs-recheck", why: "edited" },
