@@ -100,7 +100,7 @@ function parseEndpoint(value: unknown): string | null {
 function parseModel(value: unknown): string | null {
   if (value === null || (typeof value === "string" && value.trim() === "")) return null;
   if (typeof value !== "string" || value.length > 200) {
-    throw new InvalidInputError("Enter a model name.");
+    throw new InvalidInputError({ key: "error.provider.modelMissing" });
   }
   return value.trim();
 }
@@ -221,7 +221,10 @@ export function createJevTagging(options: {
             : parseReviewBand(input.reviewBand),
       };
       if (apiKey === undefined && (saved === null || (await secrets.tryGet(KEY_NAME)) === null)) {
-        throw new InvalidInputError("Enter your Jev API key.");
+        throw new InvalidInputError({
+          key: "error.provider.keyMissing",
+          values: { provider: "Jev" },
+        });
       }
       if (apiKey !== undefined) await secrets.set(KEY_NAME, apiKey);
       settings.writeDeviceValue(SETTINGS_KEY, next);
@@ -305,7 +308,11 @@ export function createJevTagging(options: {
         input?.endpoint === undefined ? (saved?.endpoint ?? null) : parseEndpoint(input.endpoint);
       const model = input?.model === undefined ? (saved?.model ?? null) : parseModel(input.model);
       const apiKey = parseApiKey(input?.apiKey) ?? (saved ? await secrets.tryGet(KEY_NAME) : null);
-      if (!apiKey) throw new InvalidInputError("Enter your Jev API key.");
+      if (!apiKey)
+        throw new InvalidInputError({
+          key: "error.provider.keyMissing",
+          values: { provider: "Jev" },
+        });
       try {
         const service = serviceOf(endpoint);
         if (service) await consent.ensure("tagging", service);

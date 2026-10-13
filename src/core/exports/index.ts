@@ -394,7 +394,7 @@ function parseExportOptions(input: unknown): Required<ExportMindOptions> {
   const choice = (name: "trackChanges" | "markAiText" | "commentFailedChecks") => {
     const value = input[name];
     if (value !== undefined && typeof value !== "boolean") {
-      throw new InvalidInputError(`${name} must be true or false.`);
+      throw new InvalidInputError({ key: "error.export.choice", values: { name } });
     }
     return value === true;
   };
