@@ -31,7 +31,7 @@ export function RegistryResults({
         </h4>
         <span
           data-testid="connectors-registry-badge"
-          className="rounded-sm bg-warning-wash px-1.5 text-[11px] leading-[18px] text-warning"
+          className="rounded-sm bg-frame px-1.5 text-[11px] leading-[18px] text-ink-secondary"
         >
           {t("connectors.registry.badge")}
         </span>

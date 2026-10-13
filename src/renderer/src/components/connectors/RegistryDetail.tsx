@@ -65,7 +65,7 @@ export function RegistryDetail({
             <span className="break-all">
               {t("connectors.registry.by", { publisher: server.publisher })}
             </span>
-            <span className="rounded-sm bg-warning-wash px-1.5 text-[11px] leading-[18px] text-warning">
+            <span className="rounded-sm bg-frame px-1.5 text-[11px] leading-[18px] text-ink-secondary">
               {t("connectors.registry.badge")}
             </span>
           </p>
@@ -103,7 +103,7 @@ export function RegistryDetail({
           {server.description}
         </p>
       )}
-      <p className="max-w-[600px] font-mono text-[12px] leading-[18px] break-all text-ink-meta">
+      <p className="max-w-[600px] text-[12px] leading-[18px] break-words text-ink-meta">
         {url
           ? t("connectors.registry.remote", { url })
           : command
