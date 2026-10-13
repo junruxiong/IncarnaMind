@@ -5,18 +5,19 @@
  */
 import { randomUUID } from "node:crypto";
 import { generateText } from "ai";
-import type {
-  ChatModelChoice,
-  ChatModelGroup,
-  ChatProvider,
-  ChatProviderKind,
-  ChatReadiness,
-  CitationSupport,
-  ConnectionTestResult,
-  DataFlowId,
-  ExternalService,
-  OtherModel,
-  SetChatModelInMenuInput,
+import {
+  CHOSEN_PROVIDER_FLOWS,
+  type ChatModelChoice,
+  type ChatModelGroup,
+  type ChatProvider,
+  type ChatProviderKind,
+  type ChatReadiness,
+  type CitationSupport,
+  type ConnectionTestResult,
+  type DataFlowId,
+  type ExternalService,
+  type OtherModel,
+  type SetChatModelInMenuInput,
 } from "../api";
 import type { Consent } from "../consent";
 import type { Meter, MeteredModel } from "../cost/meter";
@@ -484,7 +485,12 @@ export function createChat(options: {
       return Promise.all(knownRows().map(withDefaultModel));
     },
 
-    /** Saves the provider and makes the model on it the default. The key is stored first: if the keychain refuses it, nothing changes. */
+    /**
+     * Saves the provider and makes the model on it the default: choosing a
+     * cloud provider allows the flows that send to it (`CHOSEN_PROVIDER_FLOWS`,
+     * ADR-0022).
+     * The key is stored first: if the keychain refuses it, nothing changes.
+     */
     async save(input: unknown): Promise<ChatProvider> {
       if (!isRecord(input)) throw new InvalidInputError("saveChatProvider expects an object.");
       const server = parseServer(input);
@@ -522,6 +528,13 @@ export function createChat(options: {
 
       const row = rowById(id);
       if (!row) throw new Error("The chat provider wasn't saved.");
+      const { service } = await withDefaultModel(row);
+      // Ollama is chosen for models on this computer, where no line says what goes elsewhere:
+      // a cloud model in it asks once, at its first send. The line doesn't name what a
+      // Connector's Tools return either: with one on, the first Question asks for that.
+      if (service && server.kind !== "ollama") {
+        consent.choose(CHOSEN_PROVIDER_FLOWS, service, ["tool-results"]);
+      }
       return toProvider(row);
     },
 
@@ -601,14 +614,17 @@ export function createChat(options: {
     /**
      * A quick check, with nothing to wait for: false when the default chat
      * model certainly can't be used on `flow` (there is none, or the User
-     * declined the flow to its service). `readiness` checks keys and sign-ins too.
+     * declined the flow to its service, or, for background work, which never
+     * asks, hasn't allowed it). `readiness` checks keys and sign-ins too.
      */
     mightBeReady(flow: DataFlowId): boolean {
       const row = defaultRow();
       if (!row) return false;
       const choice = settings.get().user.chatModel;
       const service = choice ? knownService(row, choice.modelId) : rowService(row);
-      return !service || consent.status(flow, service) !== "declined";
+      if (!service) return true;
+      const decision = consent.status(flow, service);
+      return consent.isBackground(flow) ? decision === "accepted" : decision !== "declined";
     },
 
     /**
@@ -621,7 +637,7 @@ export function createChat(options: {
       return Promise.all(
         knownRows().map(async (row) => {
           const provider = await toProvider(row);
-          // Like the connection test, a cloud service isn't contacted before the User allows the chat flow to it.
+          // A cloud service isn't asked for its list before the User allows the chat flow to it.
           const mayAsk =
             !provider.service || consent.status("chat", provider.service) === "accepted";
           const cacheKey = listKey(row);
@@ -723,7 +739,7 @@ export function createChat(options: {
     /**
      * Sends one tiny prompt with the given settings, which need not be saved.
      * Without a key in the input, the key stored for the same provider is used.
-     * A cloud provider's chat flow must be accepted first: nothing is sent before.
+     * It sends the key and a fixed prompt, nothing of the User's, so it needs no consent.
      */
     async test(input: unknown): Promise<ConnectionTestResult> {
       if (!isRecord(input)) throw new InvalidInputError("testChatConnection expects an object.");
@@ -749,7 +765,6 @@ export function createChat(options: {
 
       try {
         const service = await remoteService(server, modelId);
-        if (service) await consent.ensure("chat", service);
         // A model in Ollama is tested with the settings Answers use, so it stays loaded for them.
         const profile = await profileFor(server.kind, server.baseUrl, modelId);
         checkCanChat(profile, modelId);
