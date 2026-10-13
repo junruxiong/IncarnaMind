@@ -108,30 +108,24 @@ describe("Choosing a service is the consent (ADR-0022)", () => {
     expect(await core.listDataFlows()).toEqual([]);
   });
 
-  test("choosing the provider again keeps a flow the User declined declined", async () => {
-    const { core } = await startWithModel();
+  test("choosing the provider again is a new choice: it replaces an earlier decline, and nothing asks", async () => {
+    const { core, models } = await startWithModel();
     await saveProviderUnasked(core, OPENAI);
     const { result, request } = await askAndWaitForConsent(core);
     await core.respondToConsent(request.requestId, false);
     await expect(result).rejects.toThrow(ConsentDeclinedError);
+    expect(await core.getChatReadiness()).toMatchObject({ reason: "consent-declined" });
+    const requests = countRequests(core);
 
     await core.saveChatProvider(OPENAI);
 
-    expect(await core.getChatReadiness()).toMatchObject({
-      ready: false,
-      reason: "consent-declined",
-    });
-    const flows = await core.listDataFlows();
-    expect(flows).toContainEqual(
+    expect(await core.getChatReadiness()).toMatchObject({ ready: true, consent: "accepted" });
+    await core.prepareChatModel();
+    expect(models.specs).toHaveLength(1);
+    expect(requests).toEqual([]);
+    expect(await core.listDataFlows()).toContainEqual(
       expect.objectContaining({
         flow: expect.objectContaining({ id: "chat" }),
-        consent: "declined",
-        chosen: false,
-      }),
-    );
-    expect(flows).toContainEqual(
-      expect.objectContaining({
-        flow: expect.objectContaining({ id: "edits" }),
         consent: "accepted",
         chosen: true,
       }),

@@ -3,7 +3,6 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import {
-  ConsentDeclinedError,
   type Core,
   type CoreAdapters,
   DATABASE_FILE,
@@ -376,8 +375,8 @@ describe("Consent for cloud embeddings", { timeout: 30_000 }, () => {
     });
   });
 
-  test("a decline made before stays: choosing the provider again changes nothing and sends nothing", async () => {
-    const { core, embeddings, keychain, dataDir } = await setUp();
+  test("choosing the provider again is a new choice: it replaces a decline made before, and nothing asks", async () => {
+    const { core, embeddings, dataDir } = await setUp();
     const db = openDatabase(join(dataDir, DATABASE_FILE));
     try {
       db.run(
@@ -389,27 +388,24 @@ describe("Consent for cloud embeddings", { timeout: 30_000 }, () => {
     } finally {
       db.close();
     }
+    const asked = vi.fn();
+    core.on("consent.requested", asked);
+    const finished = rebuildFinished(core);
 
-    await expect(
-      core.saveEmbeddingProvider({
-        kind: "openai",
-        apiKey: OPENAI_KEY,
-        modelId: "text-embedding-3-small",
-      }),
-    ).rejects.toThrow(ConsentDeclinedError);
+    await core.saveEmbeddingProvider({
+      kind: "openai",
+      apiKey: OPENAI_KEY,
+      modelId: "text-embedding-3-small",
+    });
+    await finished;
 
-    expect((await core.getEmbeddingSettings()).provider.kind).toBe("built-in");
-    expect(keychain.secrets.size).toBe(0);
-    expect((await core.listDocuments()).map((each) => each.status)).toEqual(["ready", "ready"]);
-    expect(recordedModels(dataDir).map((row) => row.embedding_model)).toEqual([
-      BUILT_IN_ID,
-      BUILT_IN_ID,
-    ]);
-    expect(embeddings.calls).toEqual([]);
+    expect(asked).not.toHaveBeenCalled();
+    expect(embeddings.passages()).toHaveLength(2);
     expect(await core.listDataFlows()).toContainEqual(
       expect.objectContaining({
         flow: expect.objectContaining({ id: "embeddings", service: OPENAI }),
-        consent: "declined",
+        consent: "accepted",
+        chosen: true,
       }),
     );
   });

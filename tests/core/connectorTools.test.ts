@@ -133,6 +133,25 @@ describe("Answers use Connector Tools", { timeout: 30_000 }, () => {
     expect(finished).toMatchObject({ status: "done", citations: [], citationSupport: null });
   });
 
+  test("connecting it tells the Privacy page at once", async () => {
+    const dataDir = await createTempDataFolder();
+    const core = startCore(dataDir, { processes: testProcesses() });
+    const changed = nextEvent(core, "dataFlows.changed");
+
+    const connector = await core.addConnector(tideServer(logFileIn(dataDir)));
+
+    const connectors = (await changed).find((flow) => flow.id === "connectors");
+    expect(connectors?.services).toEqual([
+      expect.objectContaining({
+        flow: expect.objectContaining({
+          service: { id: `connector:${connector.id}`, name: "Tides" },
+        }),
+        consent: "accepted",
+        chosen: true,
+      }),
+    ]);
+  });
+
   test("connected before, it asks once: later calls through the Connector don't ask again", async () => {
     const { core, logFile, mind, client } = await setUp(tideModel(), { unasked: true });
     const requests: string[] = [];

@@ -547,7 +547,7 @@ describe("Consent for automatic tagging (ADR-0022)", { timeout: 30_000 }, () => 
     ]);
   });
 
-  test("a declined tagging flow sends nothing, and choosing the provider again keeps it declined", async () => {
+  test("a declined tagging flow sends nothing, until choosing the provider again replaces the decline", async () => {
     const dataDir = await createTempDataFolder();
     const { core, tagging } = await startTagging(["Paper"], dataDir);
     await core.saveChatProvider(OPENAI);
@@ -564,16 +564,20 @@ describe("Consent for automatic tagging (ADR-0022)", { timeout: 30_000 }, () => 
     } finally {
       db.close();
     }
-    await core.saveChatProvider(OPENAI);
 
     const document = await addDocument(core, "Attention.md", PAPER_TEXT);
-
     expect(document.tagging).toBe("waiting-for-provider");
     expect(tagging.requests).toEqual([]);
+
+    // "Use this provider" again: a new choice, where the line names Document text for Tags.
+    await core.saveChatProvider(OPENAI);
+    await waitForTagging(core, [document.id]);
+    expect(tagging.requests).toHaveLength(1);
     expect(await core.listDataFlows()).toContainEqual(
       expect.objectContaining({
         flow: expect.objectContaining({ id: "tagging" }),
-        consent: "declined",
+        consent: "accepted",
+        chosen: true,
       }),
     );
   });

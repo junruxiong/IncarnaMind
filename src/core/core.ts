@@ -2454,12 +2454,16 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     addLibraryStarterGroups: async (keys) => library.addStarters(keys),
     saveLibrarySettings: async (input) => {
+      const before = JSON.stringify(library.settings().classifier);
       const saved = library.saveSettings(input);
-      // Choosing the model that organizes Documents, where Settings says what goes, allows it (ADR-0022).
-      for (const service of await classificationServices()) {
-        consent.choose(["classification"], service);
+      // Choosing the model that organizes Documents, where Settings says what goes, allows it
+      // (ADR-0022). Saving the same one again, for another setting, isn't a new choice.
+      if (JSON.stringify(library.settings().classifier) !== before) {
+        for (const service of await classificationServices()) {
+          consent.choose(["classification"], service);
+        }
+        await dataFlowsChanged();
       }
-      await dataFlowsChanged();
       return saved;
     },
     classifyDocuments: async (ids) => {
@@ -2580,7 +2584,11 @@ export function createCore(adapters: CoreAdapters): Core {
     testJevConnection: (input) => loggingTest("jev")(jev.test(input)),
 
     listConnectors: async () => connectors.list(),
-    addConnector: (input) => connectors.add(input),
+    addConnector: async (input) => {
+      const connector = await connectors.add(input);
+      await dataFlowsChanged();
+      return connector;
+    },
     editConnector: (connectorId, input) => connectors.edit(connectorId, input),
     setConnectorEnabled: async (connectorId, enabled) =>
       connectors.setEnabled(connectorId, enabled),
@@ -2598,11 +2606,17 @@ export function createCore(adapters: CoreAdapters): Core {
     addConnectorFromDirectory: async (entryId, client) => {
       const entry = directory.find((each) => each.id === entryId);
       if (!entry) throw new NotFoundError({ key: "error.connector.notInDirectory" });
-      return connectors.addFromDirectory(entry, client);
+      const connector = await connectors.addFromDirectory(entry, client);
+      await dataFlowsChanged();
+      return connector;
     },
     searchConnectorRegistry: (query) => registry.search(query),
     previewConnectorImport: async (json) => connectors.previewImport(json),
-    importConnectors: (json) => connectors.import(json),
+    importConnectors: async (json) => {
+      const imported = await connectors.import(json);
+      await dataFlowsChanged();
+      return imported;
+    },
 
     listApprovalPolicies: async () => approvals.list(),
     setApprovalPolicy: async (input) => approvals.set(input),
