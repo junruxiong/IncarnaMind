@@ -73,7 +73,7 @@ export function ViewerHeader({
     setProblem(null);
     files.openDocumentExternally(document.id).catch((failure: unknown) => {
       setProblem(
-        t("viewer.file.openFailed", { name: document.name, reason: errorMessage(failure) }),
+        t("viewer.file.openFailed", { name: document.name, reason: errorMessage(failure, t) }),
       );
     });
   };
@@ -120,7 +120,7 @@ ${sourceOf(document)}`
               {displayName(document)}
             </button>
           ) : null}
-          {document && <DocumentTagChips document={document} variant="header" />}
+          {document && <DocumentTagChips document={document} />}
         </div>
         {children}
         {preview && (

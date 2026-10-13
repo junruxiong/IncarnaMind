@@ -13,6 +13,7 @@ import {
   launchApp,
   linkedFolderRow,
   linkFolderFromSidebar,
+  menuCommands,
   mindWrittenBefore,
   motionSettled,
   newMind,
@@ -89,18 +90,6 @@ const ringShows = (item: Locator) =>
     );
   });
 
-/** The commands a menu holds, in order, with its rules as "—". */
-async function commandsIn(menu: Locator): Promise<string[]> {
-  await expect(menu).toBeVisible();
-  // Its items draw a moment after the popover shows.
-  await expect(menu.getByRole("menuitem").first()).toBeVisible();
-  return menu.evaluate((element) =>
-    Array.from(element.children).map((child) =>
-      child.getAttribute("role") === "menuitem" ? (child.getAttribute("data-testid") ?? "") : "—",
-    ),
-  );
-}
-
 /**
  * Right-clicks an object, reads its menu, closes it, then opens the ⋯ button of the
  * same object and reads that: they are one menu. Returns the commands.
@@ -113,13 +102,13 @@ async function sameFromBothWays(
   menu: Locator,
 ): Promise<string[]> {
   await rightClick(window, hit);
-  const byRightClick = await commandsIn(menu);
+  const byRightClick = await menuCommands(menu);
   await window.keyboard.press("Escape");
   await expect(menu).toBeHidden();
   await slideTo(window, hit);
   await row.hover();
   await button.click();
-  const byButton = await commandsIn(menu);
+  const byButton = await menuCommands(menu);
   expect(byButton).toEqual(byRightClick);
   await window.keyboard.press("Escape");
   await expect(menu).toBeHidden();
@@ -173,6 +162,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "mind.outline",
     "mind.export",
     "mind.exportAs.pdf",
+    "mind.exportAs.source-pack",
     "mind.exportAs.html",
     "mind.exportAs.markdown",
     "mind.exportOptions",
@@ -188,7 +178,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "mind.delete",
   ]);
   await rightClick(window, mind.getByTestId("mind-list-item"));
-  await commandsIn(mind.getByTestId("mind-actions"));
+  await menuCommands(mind.getByTestId("mind-actions"));
   await screenshot(window, "menu-mind");
   await window.keyboard.press("Escape");
 
@@ -222,7 +212,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "document.delete",
   ]);
   await rightClick(window, document.getByTestId("open-document"));
-  await commandsIn(document.getByTestId("document-file-actions"));
+  await menuCommands(document.getByTestId("document-file-actions"));
   await screenshot(window, "menu-document");
   await window.keyboard.press("Escape");
 
@@ -292,12 +282,13 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
   const tab = window.getByRole("tab", { selected: true }).first();
   await rightClick(window, tab);
   const tabMenu = tab.getByTestId("tab-actions");
-  const byRightClick = await commandsIn(tabMenu);
+  const byRightClick = await menuCommands(tabMenu);
   // Its Mind's items first, then the tab's own.
-  expect(byRightClick.slice(0, 10)).toEqual([
+  expect(byRightClick.slice(0, 11)).toEqual([
     "mind.outline",
     "mind.export",
     "mind.exportAs.pdf",
+    "mind.exportAs.source-pack",
     "mind.exportAs.html",
     "mind.exportAs.markdown",
     "mind.exportOptions",
@@ -314,7 +305,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
   await expect(tabMenu).toBeHidden();
   await tab.focus();
   await window.keyboard.press("Shift+F10");
-  expect(await commandsIn(tabMenu)).toEqual(byRightClick);
+  expect(await menuCommands(tabMenu)).toEqual(byRightClick);
   await window.keyboard.press("Escape");
   await expect(tab).toBeFocused();
 
@@ -324,12 +315,12 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
   await expect(written).toBeVisible();
   const answerMenu = written.getByTestId("answer-actions");
   await rightClick(window, written.locator(".answer-content p").first());
-  const answerByRightClick = await commandsIn(answerMenu);
+  const answerByRightClick = await menuCommands(answerMenu);
   expect(answerByRightClick).toEqual(["answer.copy", "answer.regenerate", "—", "block.delete"]);
   await window.keyboard.press("Escape");
   await slideTo(window, written);
   await written.getByTestId("answer-menu").click();
-  expect(await commandsIn(answerMenu)).toEqual(answerByRightClick);
+  expect(await menuCommands(answerMenu)).toEqual(answerByRightClick);
   await window.keyboard.press("Escape");
 
   // A Citation: Open, then Remove; its card's ⋯ opens the same.
@@ -337,14 +328,14 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
   const citation = window.getByTestId("mind-editor").getByTestId("citation");
   const citationMenu = citation.getByTestId("citation-actions");
   await rightClick(window, citation.getByTestId("citation-chip"));
-  expect(await commandsIn(citationMenu)).toEqual(["citation.open", "—", "citation.remove"]);
+  expect(await menuCommands(citationMenu)).toEqual(["citation.open", "—", "citation.remove"]);
   await screenshot(window, "menu-citation");
   await window.keyboard.press("Escape");
   await citation.getByTestId("citation-chip").hover();
   const card = window.getByTestId("citation-card");
   await expect(card).toBeVisible();
   await card.getByTestId("citation-menu").click();
-  expect(await commandsIn(card.getByTestId("citation-actions"))).toEqual([
+  expect(await menuCommands(card.getByTestId("citation-actions"))).toEqual([
     "citation.open",
     "—",
     "citation.remove",
@@ -386,7 +377,7 @@ test("the context-menu key and Shift+F10 open the focused row's menu; arrows mov
   // Enter runs the focused item: Export options… opens the options sheet for this Mind.
   await row.focus();
   await window.keyboard.press("Shift+F10");
-  for (let step = 0; step < 7; step++) await window.keyboard.press("ArrowDown");
+  for (let step = 0; step < 8; step++) await window.keyboard.press("ArrowDown");
   await expect(menu.getByTestId("mind.exportOptions")).toBeFocused();
   await window.keyboard.press("Enter");
   await expect(window.getByTestId("export-dialog")).toBeVisible();
@@ -422,6 +413,7 @@ test("each item shows its shortcut as the system writes it, and the labels are i
     /^大纲(⌥⌘L|Ctrl\+Alt\+L)$/,
     /^导出为 Word（\.docx）(⇧⌘E|Ctrl\+Shift\+E)$/,
     "导出为 PDF",
+    "导出为 PDF 引用页面合集",
     "导出为 HTML",
     "导出为 Markdown（.md）",
     "导出选项…",
