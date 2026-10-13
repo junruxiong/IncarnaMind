@@ -5154,6 +5154,13 @@ export interface ConnectorDirectoryEntry {
   /** Its MCP endpoint, an https URL. A Connector at this URL is this entry, connected. */
   url: string;
   signIn: ConnectorDirectorySignIn;
+  /**
+   * Its Tools as IncarnaMind reviewed them, shown before the User connects
+   * it: each one's name and whether it may change things. Absent when the
+   * service lists them only once signed in; its page then says they appear
+   * once it's connected.
+   */
+  tools?: { title: LocalizedText; changes: boolean }[];
   /** Listed only in these interface languages, e.g. a service for Chinese Users. Absent: in every language. */
   languages?: Language[];
 }
@@ -5217,11 +5224,12 @@ export type ApprovalSubjectKind = ApprovalSubject["kind"];
  * What the User chose for a subject, replacing the default:
  * - "always": it runs without asking ("always allow" a Tool; "always run" a Skill's scripts).
  * - "ask": it asks every time, even a Tool its Connector says only reads.
+ * - "off": a Connector's Tool only: Answers aren't offered it, so it never runs.
  *
  * Without a policy, a Tool asks first unless its Connector says it only reads
  * (`ConnectorTool.readOnly`), and a Skill script always asks.
  */
-export type ApprovalPolicyValue = "always" | "ask";
+export type ApprovalPolicyValue = "always" | "ask" | "off";
 
 /** One of the User's approval policies, as the approvals page lists it. */
 export interface ApprovalPolicy {

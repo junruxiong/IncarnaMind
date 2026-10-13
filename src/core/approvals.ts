@@ -121,7 +121,7 @@ function subjectOf(row: Pick<PolicyRow, "subject_kind" | "subject_id">): Approva
 }
 
 const isPolicy = (value: unknown): value is ApprovalPolicyValue =>
-  value === "always" || value === "ask";
+  value === "always" || value === "ask" || value === "off";
 
 const sameSubject = (a: ApprovalSubject, b: ApprovalSubject) => {
   const [x, y] = [keyOf(a), keyOf(b)];
@@ -225,7 +225,8 @@ export function createApprovals(options: ApprovalsOptions) {
    */
   const decide = (call: CallToDecide): "run" | "ask" => {
     const policy = policyOf(call.subject);
-    if (policy === "ask") return "ask";
+    // A Tool turned off isn't offered; one called all the same, e.g. as it was turned off, asks.
+    if (policy === "ask" || policy === "off") return "ask";
     if (call.effects.every(runsByDefault)) return "run";
     if (asksAfterThirdParty(call)) return "ask";
     return policy === "always" ? "run" : "ask";
@@ -305,6 +306,9 @@ export function createApprovals(options: ApprovalsOptions) {
 
     decide,
 
+    /** The User turned this Connector Tool off: Answers aren't offered it. */
+    turnedOff: (subject: ApprovalSubject): boolean => policyOf(subject) === "off",
+
     /**
      * Asks the User about a call, and waits: resolves true if they allow it,
      * false if they deny it (or the core closed). If `signal` aborts first,
@@ -368,7 +372,7 @@ export function createApprovals(options: ApprovalsOptions) {
       const subject = parseSubject(input.subject);
       const { policy } = input;
       if (policy !== null && !isPolicy(policy)) {
-        throw new InvalidInputError('policy must be "always", "ask" or null.');
+        throw new InvalidInputError('policy must be "always", "ask", "off" or null.');
       }
       if (subject.kind === "tool" && !owners.connectors().has(subject.connectorId)) {
         throw new NotFoundError({ key: "error.connector.notFound" });
@@ -376,7 +380,7 @@ export function createApprovals(options: ApprovalsOptions) {
       if (subject.kind === "skill-script") {
         if (!owners.skills().has(subject.skillId))
           throw new NotFoundError("That Skill doesn't exist.");
-        if (policy === "ask") {
+        if (policy === "ask" || policy === "off") {
           throw new InvalidInputError('A Skill\'s scripts always ask unless set to "always".');
         }
         if (policy === "always" && !riskAccepted(input)) {
