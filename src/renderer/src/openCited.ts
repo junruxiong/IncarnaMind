@@ -10,7 +10,8 @@ export const quoteSaysSo = (check: CitationCheck) =>
  * beside the Mind, with the quote to wash if asked, and the Citation's check,
  * number and label: the viewer colours the quote by the check and shows the
  * check mark, with where it points, beside it. `from`: the group the Mind is
- * in, which the Document opens to the right of.
+ * in, which the Document opens to the right of. `keep`: a preview of the
+ * Document already open is kept.
  */
 export function openCited(
   citation: Pick<CitationAttributes, "pageFrom" | "pageTo" | "quote" | "contentHash"> & {
@@ -22,6 +23,7 @@ export function openCited(
     number?: number;
     label?: string | null;
     from?: string;
+    keep?: boolean;
   },
 ): void {
   useAppStore.getState().openDocument(
@@ -38,6 +40,6 @@ export function openCited(
         ...(citation.contentHash ? { contentHash: citation.contentHash } : {}),
       },
     },
-    { as: "citation", ...(how.from && { from: how.from }) },
+    { as: "citation", ...(how.from && { from: how.from }), ...(how.keep && { keep: true }) },
   );
 }
