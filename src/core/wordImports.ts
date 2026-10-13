@@ -350,10 +350,19 @@ export function createWordImports(options: WordImportsOptions) {
       }
     },
 
-    /** The package a Mind was imported from, for export to write into (#105). */
-    async packageOf(sha256: string): Promise<Uint8Array> {
+    /**
+     * The package a Mind was imported from, for export to write into (#105):
+     * found by the Mind in the database, never by what its document says,
+     * which another client could have written.
+     */
+    async packageOf(mindId: string): Promise<Uint8Array> {
+      const row = db.get<{ sha256: string }>(
+        "SELECT sha256 FROM word_packages WHERE mind_id = ? AND deleted_at IS NULL",
+        [mindId],
+      );
       try {
-        return await readFile(packagePath(sha256));
+        if (!row || !/^[0-9a-f]{64}$/.test(row.sha256)) throw new Error("No package.");
+        return await readFile(packagePath(row.sha256));
       } catch (error) {
         log.error("word.export.packageMissing", {
           code: (error as NodeJS.ErrnoException).code ?? "unknown",
