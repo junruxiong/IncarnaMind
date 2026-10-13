@@ -11,9 +11,11 @@ import { buttonStyle } from "./ui";
 export function SelectionTags({
   documents,
   testId,
+  className = buttonStyle("secondary", "sm"),
 }: {
   documents: readonly Document[];
   testId: string;
+  className?: string;
 }) {
   const t = useT();
   const popover = useTagPopover();
@@ -25,7 +27,7 @@ export function SelectionTags({
         type="button"
         data-testid={testId}
         data-selection-tags=""
-        className={buttonStyle("secondary", "sm")}
+        className={className}
       >
         <TagLineIcon className="size-3.5" />
         {t("library.selected.tags")}

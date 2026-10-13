@@ -1064,6 +1064,10 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
 
     quotes,
 
+    /** The Passages the model was given, by the id it cites them by, as it read them. */
+    shownPassages: (): { id: string; text: string }[] =>
+      [...shownTexts].map(([id, text]) => ({ id, text })),
+
     streamingCitation,
 
     /** A marker's node while the Answer streams: its record's details, if given yet, "checking". */

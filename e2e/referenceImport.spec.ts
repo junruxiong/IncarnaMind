@@ -73,7 +73,7 @@ test("Import references: matched to Documents, the rest kept, Add the PDF, and U
 
     // The Library's More menu, then the file picker (answered with the export).
     await interceptOpenDialog(app, join(sources, "library.bib"));
-    await window.getByTestId("library-more").click();
+    await window.getByTestId("library-add-documents").click();
     await expect(window.getByTestId("import-references")).toHaveText("Import references…");
     await window.getByTestId("import-references").click();
 
@@ -130,10 +130,10 @@ test("Import references: matched to Documents, the rest kept, Add the PDF, and U
 
     // Importing again, and once more: the second changes nothing.
     await interceptOpenDialog(app, join(sources, "library.bib"));
-    await window.getByTestId("library-more").click();
+    await window.getByTestId("library-add-documents").click();
     await window.getByTestId("import-references").click();
     await expect(window.getByTestId("import-summary")).toHaveText("Imported from “library.bib”");
-    await window.getByTestId("library-more").click();
+    await window.getByTestId("library-add-documents").click();
     await window.getByTestId("import-references").click();
     await expect(window.getByTestId("import-summary")).toHaveText(
       "Nothing new: “library.bib” is already imported.",
@@ -153,7 +153,7 @@ test("Import references speaks Chinese, and says why a file can't be imported", 
     await window.getByTestId("open-library").click();
     await setWindowSize(app, window, 900, 700);
 
-    await window.getByTestId("library-more").click();
+    await window.getByTestId("library-add-documents").click();
     await expect(window.getByTestId("import-references")).toHaveText("导入引用信息…");
     await interceptOpenDialog(app, join(sources, "library.ris"));
     await window.getByTestId("import-references").click();
@@ -176,7 +176,7 @@ test("Import references speaks Chinese, and says why a file can't be imported", 
 
     // A file that isn't references says so, with the one thing to do next.
     await interceptOpenDialog(app, join(sources, "notes.txt"));
-    await window.getByTestId("library-more").click();
+    await window.getByTestId("library-add-documents").click();
     await window.getByTestId("import-references").click();
     await expect(window.getByTestId("import-failed")).toHaveText(
       "“notes.txt”不是 CSL JSON、BibTeX 或 RIS 文件。 · 选择其他文件…",
