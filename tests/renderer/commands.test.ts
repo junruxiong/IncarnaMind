@@ -462,6 +462,20 @@ describe("the registry", () => {
     }
   });
 
+  test("a row's own action that hands back a frame's handle puts nothing on the undo line", async () => {
+    const stop = commands.register({
+      ...base,
+      id: "test.here",
+      // As `requestAnimationFrame` hands back: a number.
+      run: () => 42 as unknown as undefined,
+    });
+    try {
+      expect(await commands.run("test.here")).toBeUndefined();
+    } finally {
+      stop();
+    }
+  });
+
   test("refuses two commands with one ID", () => {
     expect(() => commands.register({ ...base, id: "mind.new", run: () => undefined })).toThrow();
   });
