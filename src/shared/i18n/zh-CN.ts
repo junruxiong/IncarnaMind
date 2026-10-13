@@ -1376,6 +1376,13 @@ export const zhCN = {
   "localMode.useLocal": "改用本地模型",
   "localMode.turnOff": "关闭本地模式",
   "localMode.turnedOff": "已关闭“所有内容都留在这台电脑上”",
+  "localMode.turnedOn": "已开启“所有内容都留在这台电脑上”",
+  "localMode.keep.label": "同时让所有内容都留在这台电脑上",
+  "localMode.keep.nothing": "目前没有设置任何云端服务。",
+  "localMode.keep.pauses": "会暂停 {services}，直到你关闭它。",
+  "localMode.keep.list.last": "{rest} 和 {last}",
+  "localMode.keep.agents.one": "1 个已连接的智能体",
+  "localMode.keep.agents": "{count} 个已连接的智能体",
 
   "providers.settings.title": "对话模型",
   "providers.settings.none": "尚未设置对话模型。",

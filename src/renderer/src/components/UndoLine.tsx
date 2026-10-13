@@ -28,6 +28,16 @@ export function UndoLine() {
   );
 }
 
+/** The line of a change made in a place of its own, shown there instead of the sidebar's foot (`Undoable.shownAt`). */
+export function UndoLineAt({ place }: { place: string }) {
+  const line = useUndo((state) => (state.line?.change?.shownAt === place ? state.line : null));
+  return (
+    <div role="status" aria-live="polite" data-testid="undo-line-here">
+      {line && <Line key={line.id} line={line} />}
+    </div>
+  );
+}
+
 const report = (error: unknown) => useAppStore.getState().reportError(error);
 
 function Line({ line }: { line: UndoLineState }) {
