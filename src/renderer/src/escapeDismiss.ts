@@ -21,6 +21,13 @@ export function dismissNewest(): boolean {
   return true;
 }
 
+/**
+ * Whether a dialog, menu or picker is open, which closes by its own Esc before anything behind
+ * it uses the key: not the copy of a closed menu still fading out, which is inert.
+ */
+export const dialogOrMenuOpen = (): boolean =>
+  document.querySelector("dialog[open], :popover-open:not([inert])") !== null;
+
 /** Lets Esc close this notice while it `active`ly shows: an error, a confirmation, a line about what was done. */
 export function useDismissOnEscape(active: boolean, dismiss: () => void): void {
   const latest = useRef(dismiss);
@@ -40,8 +47,7 @@ export function useEscapeToDismiss(): void {
     let covered = false;
     const before = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      // Not the copy of a closed menu still fading out, which is inert.
-      covered = document.querySelector("dialog[open], :popover-open:not([inert])") !== null;
+      covered = dialogOrMenuOpen();
     };
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.isComposing) return;
