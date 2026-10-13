@@ -7,11 +7,15 @@ import {
   chartFromTable,
   chartPoints,
   chartSources,
+  chosenSeries,
   drawnSeries,
+  listedRows,
   MAX_CHART_VALUES,
   readChart,
+  readChartData,
   type SourceCell,
   type SourceGrid,
+  unitlessRows,
 } from "../../src/shared/charts";
 
 const cited = (page: number, quote = `Revenue on page ${page}`): CitationAttributes => ({
@@ -145,6 +149,21 @@ describe("a chart from a table", () => {
     expect(chart.data.rows).toHaveLength(MAX_CHART_VALUES / 2);
     expect(chart.data.cutFrom).toBe(300);
     expect(chartPoints(chart).length).toBeLessThanOrEqual(MAX_CHART_VALUES);
+    // The rest are kept to list, each with its cell and Citation, though never drawn (#503).
+    expect(chart.data.cutRows).toHaveLength(50);
+    expect(listedRows(chart.data)).toHaveLength(300);
+    expect(listedRows(chart.data).at(-1)?.values[0]?.from).toEqual({
+      kind: "cell",
+      row: 300,
+      column: 1,
+    });
+    expect(chartSources(chart).values).toBe(MAX_CHART_VALUES);
+    // Stored and read back, they stay; with no cut, any are dropped.
+    const stored = JSON.parse(JSON.stringify(chart)) as Record<string, unknown>;
+    expect(readChart(stored).data.cutRows).toHaveLength(50);
+    expect(
+      readChartData({ ...chart.data, cutFrom: null, cutRows: chart.data.cutRows }).cutRows,
+    ).toEqual([]);
   });
 });
 
@@ -189,8 +208,8 @@ describe("what a chart draws", () => {
   const chart = fromTable(QUARTERS) as ChartAttributes;
 
   test("its cells are the columns chosen, row by row, whatever is drawn of them", () => {
-    const pie: ChartAttributes = { ...chart, kind: "pie" };
-    const cells = chartCells(pie);
+    const scatter: ChartAttributes = { ...chart, kind: "scatter" };
+    const cells = chartCells(scatter);
     expect(cells.map((cell) => `${cell.row}:${cell.series}`).slice(0, 4)).toEqual([
       "0:0",
       "0:1",
@@ -198,6 +217,20 @@ describe("what a chart draws", () => {
       "1:1",
     ]);
     expect(cells).toHaveLength(8);
+  });
+
+  test("a pie's are its one column's, the last chosen (#503)", () => {
+    const pie: ChartAttributes = { ...chart, kind: "pie" };
+    expect(chosenSeries(pie)).toEqual([1]);
+    expect(chosenSeries({ ...pie, drawn: [0] })).toEqual([0]);
+    expect(chartCells(pie).map((cell) => `${cell.row}:${cell.series}`)).toEqual([
+      "0:1",
+      "1:1",
+      "2:1",
+      "3:1",
+    ]);
+    // Back to bars, both columns are still chosen.
+    expect(chosenSeries({ ...pie, kind: "bar" })).toEqual([0, 1]);
   });
 
   test("bars and lines draw the columns chosen, a pie the last, a scatter chart the first two", () => {
@@ -221,21 +254,40 @@ describe("what a chart draws", () => {
     ]);
   });
 
-  test("its sources count the same cells whatever the kind, a scatter chart's both across and up", () => {
+  test("its sources count every chosen cell for bars, lines and scatter, and a pie's one column", () => {
     const bar = chartSources(chart);
     const as = (kind: ChartAttributes["kind"], drawn = chart.drawn): ChartAttributes => ({
       ...chart,
       kind,
       drawn,
     });
-    for (const kind of ["line", "pie", "scatter"] as const) {
+    for (const kind of ["line", "scatter"] as const) {
       expect(chartSources(as(kind))).toEqual(bar);
     }
     // A scatter point is two cells: Q4 across (2024) is cited, up (2025) has none.
     const scatter = chartSources(as("scatter"));
     expect([scatter.values, scatter.uncited]).toEqual([8, 1]);
-    // Columns chosen change it; the kind doesn't.
-    expect(chartSources(as("pie", [1])).values).toBe(4);
+    // A pie of 2025 counts its four slices' cells, not 2024's (#503).
+    const pie = chartSources(as("pie"));
+    expect([pie.values, pie.uncited]).toEqual([4, 1]);
+    expect(pie.places.map((place) => place.count)).toEqual([2, 1]);
+    expect(chartSources(as("pie", [0])).uncited).toBe(0);
+  });
+
+  test("the values with no Citation, row by row, for the foot to find (#503)", () => {
+    expect(chartSources(chart).uncitedCells).toEqual([{ row: 3, series: 1 }]);
+    const none = fromTable([
+      [head("Quarter"), head("2024"), head("2025")],
+      [cell("Q1"), cell("289.4", cited(22)), cell("341.5")],
+      [cell("Q2"), cell("301.2"), cell("362.0", cited(22))],
+      [cell("Q3"), cell("309.8"), cell("377.9")],
+    ]) as ChartAttributes;
+    expect(chartSources(none).uncitedCells).toEqual([
+      { row: 0, series: 1 },
+      { row: 1, series: 0 },
+      { row: 2, series: 0 },
+      { row: 2, series: 1 },
+    ]);
   });
 
   test("a place's footnote is its Citation whose quote wasn't found, if any", () => {
@@ -270,5 +322,84 @@ describe("what a chart draws", () => {
     expect(broken.data.rows[0]?.values).toEqual([null, null]);
     expect(broken.data.cutFrom).toBeNull();
     expect(broken.source).toEqual({ kind: "table", blockId: null });
+  });
+});
+
+describe("a number with no unit (#579)", () => {
+  /** Revenue in "$… million", and a fifth quarter typed in by hand without its unit. */
+  const MILLIONS: SourceGrid = [
+    [head("Quarter"), head("2024"), head("2025")],
+    [cell("Q1"), cell("$289.4 million", cited(22)), cell("$341.5 million", cited(22))],
+    [cell("Q2"), cell("$301.2 million", cited(22)), cell("$362.0 million", cited(22))],
+    [cell("Q3"), cell("$309.8 million", cited(23)), cell("$377.9 million", cited(23))],
+    [cell("Q4"), cell("$330.6 million", cited(23)), cell("$401.2 million", cited(23))],
+    [cell("Q5"), cell(""), cell("120.0")],
+  ];
+
+  test("in a column of '$… million', isn't drawn, and the foot counts it apart", () => {
+    const chart = { ...(fromTable(MILLIONS) as ChartAttributes), kind: "pie" as const };
+    expect(chart.data.rows[4]?.values[1]).toMatchObject({
+      value: 120,
+      unit: { kind: "plain" },
+      scale: 1,
+    });
+    expect(chart.data.rows[0]?.values[1]).toMatchObject({ value: 341_500_000, scale: 1e6 });
+    expect([...unitlessRows(chart.data, 1)]).toEqual([4]);
+    const slices = chartPoints(chart);
+    expect(slices.map((point) => point.row)).toEqual([0, 1, 2, 3]);
+    // It has no Citation either, but isn't counted as a value with none: it isn't drawn. The pie's
+    // count is its column's four values (#503).
+    expect(chartSources(chart)).toMatchObject({ values: 4, uncited: 0, notDrawn: 0, noUnit: 1 });
+    const bars = chartPoints({ ...chart, kind: "bar" });
+    expect(bars.some((point) => point.row === 4)).toBe(false);
+  });
+
+  test("a column of bare numbers, or one with different units, is drawn as it is", () => {
+    const bare = fromTable(QUARTERS) as ChartAttributes;
+    expect(chartPoints(bare)).toHaveLength(8);
+    expect(chartSources(bare).noUnit).toBe(0);
+    const mixed = fromTable([
+      [head("Item"), head("Value")],
+      [cell("Revenue"), cell("$1.2 million")],
+      [cell("Margin"), cell("41.2%")],
+      [cell("Staff"), cell("120")],
+    ]) as ChartAttributes;
+    expect(chartPoints(mixed)).toHaveLength(3);
+  });
+
+  test("a scale alone counts as a unit: '1.5亿' beside a bare '8000'", () => {
+    const chart = fromTable(
+      [
+        [head("季度"), head("营业收入")],
+        [cell("一季度"), cell("1.5亿")],
+        [cell("二季度"), cell("1.8亿")],
+        [cell("三季度"), cell("8000")],
+      ],
+      "zh-CN",
+    ) as ChartAttributes;
+    expect(chartPoints(chart).map((point) => point.row)).toEqual([0, 1]);
+    expect(chartSources(chart).noUnit).toBe(1);
+  });
+
+  test("a scatter chart leaves out a row whose number across or up has no unit", () => {
+    const chart = { ...(fromTable(MILLIONS) as ChartAttributes), kind: "scatter" as const };
+    const grid = MILLIONS.map((row, index) =>
+      index === 5 ? [cell("Q5"), cell("$310.0 million"), cell("120.0")] : row,
+    );
+    const both = { ...(fromTable(grid) as ChartAttributes), kind: "scatter" as const };
+    expect(chartPoints(chart).map((point) => point.row)).toEqual([0, 1, 2, 3]);
+    expect(chartPoints(both).map((point) => point.row)).toEqual([0, 1, 2, 3]);
+  });
+
+  test("a chart made before values kept their scale still leaves out a bare number beside a currency", () => {
+    const made = fromTable(MILLIONS) as ChartAttributes;
+    const stored = JSON.parse(JSON.stringify(made)) as {
+      data: { rows: { values: ({ scale?: number } | null)[] }[] };
+    };
+    for (const row of stored.data.rows)
+      for (const value of row.values) if (value) delete value.scale;
+    const older = readChart(stored as unknown as Record<string, unknown>);
+    expect(older.data.rows[0]?.values[1]?.scale).toBeNull();
+    expect([...unitlessRows(older.data, 1)]).toEqual([4]);
   });
 });
