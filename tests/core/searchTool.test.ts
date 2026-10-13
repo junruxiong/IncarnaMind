@@ -4,7 +4,9 @@ import {
   centroidWindows,
   clusterByOverlap,
   documentWindows,
+  ONE_SEARCH_PARAMETERS,
   SEARCH_TOOL_PARAMETERS,
+  type SearchToolParameters,
   type SearchToolSources,
   searchDocumentsTool,
   topsOfEach,
@@ -253,12 +255,70 @@ describe("The document-search Tool", { timeout: 30_000 }, () => {
     await searchDocumentsTool(sources, "lighthouse", { rerank: reranker });
 
     expect(SEARCH_TOOL_PARAMETERS.rerankPerList).toBe(10);
-    expect(SEARCH_TOOL_PARAMETERS.keywordRerankCandidates).toBe(60);
+    expect(SEARCH_TOOL_PARAMETERS.keywordRerankCandidates).toBe(20);
     expect(asked).toEqual([
       `fused ${SEARCH_TOOL_PARAMETERS.candidates}`,
-      "each list's 10, or keyword search's 60 alone",
+      "each list's 10, or keyword search's 20 alone",
     ]);
     expect(reranked).toEqual([["p3", "p7", "p40"]]);
+  });
+
+  test("hands the model at most 8 Passages, and a one-search Answer 12, from up to 4 Documents, in windows of 3", async () => {
+    const passage = (documentId: string, position: number, score = 0) => ({
+      seq: position,
+      passageId: `${documentId}-${position}`,
+      documentId,
+      documentName: documentId,
+      documentKind: "markdown" as const,
+      contentHash: "hash",
+      pageFrom: 1,
+      pageTo: 1,
+      position,
+      windowFrom: position,
+      windowTo: position,
+      text: `Passage ${position}`,
+      score,
+    });
+    const documents = ["d1", "d2", "d3", "d4", "d5"];
+    const sources = (hitsPerDocument: number[]): SearchToolSources => ({
+      candidates: async () => [],
+      rerankCandidates: async () =>
+        documents.flatMap((documentId, document) =>
+          hitsPerDocument.map((position, hit) =>
+            passage(documentId, position, 1 - document * 0.1 - hit * 0.01),
+          ),
+        ),
+      window: (documentId, window) =>
+        [window, window + 1, window + 2].map((position) => passage(documentId, position)),
+    });
+    const handed = async (hitsPerDocument: number[], parameters?: Partial<SearchToolParameters>) =>
+      searchDocumentsTool(sources(hitsPerDocument), "lighthouse", {
+        rerank: async (_query, candidates) => [...candidates],
+        parameters,
+      });
+    const perDocument = (found: Awaited<ReturnType<typeof handed>>) =>
+      Object.entries(Object.groupBy(found, (each) => each.documentId)).map(
+        ([documentId, passages]) => [documentId, passages?.length],
+      );
+
+    expect(SEARCH_TOOL_PARAMETERS).toMatchObject({
+      keywordRerankCandidates: 20,
+      maxPassages: 8,
+      maxWindowsPerDocument: 2,
+      maxDocuments: 4,
+    });
+    expect(ONE_SEARCH_PARAMETERS).toEqual({ maxPassages: 12, maxWindowsPerDocument: 3 });
+    expect(perDocument(await handed([0, 10, 20, 30]))).toEqual([
+      ["d1", 6],
+      ["d2", 2],
+    ]);
+    expect(perDocument(await handed([0, 10, 20, 30], ONE_SEARCH_PARAMETERS))).toEqual([
+      ["d1", 9],
+      ["d2", 3],
+    ]);
+    const one = await handed([0], ONE_SEARCH_PARAMETERS);
+    expect(new Set(one.map((each) => each.documentId))).toEqual(new Set(["d1", "d2", "d3", "d4"]));
+    expect(one).toHaveLength(12);
   });
 
   test("says how relevant the reranker found each hit, and nothing when it kept search's own scores", async () => {
@@ -358,22 +418,22 @@ describe("The candidates a reranker sees, through the core", { timeout: 30_000 }
     return { ...setup, seen };
   }
 
-  test("with embeddings off, the default, are keyword search's top 60, in its order", async () => {
+  test("with embeddings off, the default, are keyword search's top 20, in its order", async () => {
     const query = "ordinary coastal weather lighthouse";
-    // Enough Passages for more than 60 to match.
+    // Enough Passages for more than 20 to match.
     const { core, seen } = await setUp({ coastSections: 70 });
 
     await core.searchEvidence(query);
 
-    const keyword = await core.searchPassages(query, { mode: "keyword", limit: 60 });
-    expect(keyword).toHaveLength(60);
-    expect(await core.searchPassages(query, { mode: "keyword", limit: 61 })).toHaveLength(61);
+    const keyword = await core.searchPassages(query, { mode: "keyword", limit: 20 });
+    expect(keyword).toHaveLength(20);
+    expect(await core.searchPassages(query, { mode: "keyword", limit: 21 })).toHaveLength(21);
     expect(seen).toHaveLength(1);
     expect((seen[0] ?? []).map((each) => each.passageId)).toEqual(
       keyword.map((passage) => passage.passageId),
     );
     // Hybrid search is keyword search, and vector search is refused: nothing is embedded.
-    expect(await core.searchPassages(query, { limit: 20 })).toEqual(keyword.slice(0, 20));
+    expect(await core.searchPassages(query, { limit: 20 })).toEqual(keyword);
     await expect(core.searchPassages(query, { mode: "vector" })).rejects.toThrow(
       /embeddings, which are off/,
     );

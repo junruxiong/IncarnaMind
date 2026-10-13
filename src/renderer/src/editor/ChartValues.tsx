@@ -4,6 +4,7 @@ import {
   type ChartAttributes,
   type ChartValue,
   chosenSeries,
+  listedRows,
   unitlessRows,
 } from "../../../shared/charts";
 import { useT } from "../i18n";
@@ -30,7 +31,8 @@ export function ChartValues({
   const t = useT();
   const drawn = chosenSeries(chart);
   const unitless = new Map(drawn.map((series) => [series, unitlessRows(chart.data, series)]));
-  const rows = chart.data.rows;
+  // A cut chart lists every row, those it doesn't draw too (#503).
+  const rows = listedRows(chart.data);
   const cells: PointRef[] = [];
   rows.forEach((row, index) => {
     for (const series of drawn) if (row.values[series]) cells.push({ row: index, series });
