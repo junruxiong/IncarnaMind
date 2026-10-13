@@ -198,6 +198,10 @@ function ResultBody({
             )}
             {error && <ProblemLine testId="export-problem">{error}</ProblemLine>}
           </>
+        ) : result.state === "empty" ? (
+          <ProblemLine testId="export-problem" className="py-1">
+            {t("export.pack.empty")}
+          </ProblemLine>
         ) : (
           <ProblemLine testId="export-problem" action={fix()} className="py-1">
             {t("export.failed.save", {
