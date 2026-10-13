@@ -3041,6 +3041,7 @@ export const en = {
   "steps.sources.none": "no sources",
   "steps.read": "Read “{mind}”",
   "steps.read.part": "Read part of “{mind}”",
+  "steps.read.share": "About {percent}% of it",
   "steps.read.deleted": "Read a deleted Mind",
   "steps.asked": "Asked from {mind}",
   "steps.asked.deleted": "Asked from a deleted Mind",

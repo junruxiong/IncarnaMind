@@ -14,9 +14,10 @@ import { classifyProviderError } from "../../src/core/providers/providerErrors";
 import { runItems } from "../../src/core/runs/stop";
 import { openDatabase } from "../../src/core/storage";
 import { createFakeBrowser, startFakeOpenAI } from "../helpers/chatgpt";
+import { answerEnded } from "../helpers/citations";
 import { createTempDataFolder, manualClock, queryDatabase, startCore } from "../helpers/core";
 import { connectToMind } from "../helpers/mindClient";
-import { answerIn, question, writeMind } from "../helpers/minds";
+import { answerIn, note, question, writeMind } from "../helpers/minds";
 
 type StreamResult = Awaited<ReturnType<MockLanguageModelV4["doStream"]>>;
 type StreamPart = StreamResult["stream"] extends ReadableStream<infer Part> ? Part : never;
@@ -432,6 +433,31 @@ describe("The monthly cap", () => {
       expect.objectContaining({ status: "settled", cost: open?.reserved }),
     ]);
     expect(await spentUsd(again)).toBeCloseTo(open?.reserved ?? Number.NaN, 12);
+  });
+});
+
+describe("A Question beside a long Mind (#564)", () => {
+  // protects=the reservation made before a request, which the monthly cap is checked against, counts the Mind read with the Question, so a long Mind can't slip past the cap; fails_when=a 40k-token Mind reserves no more than one line does; no_claim=what the provider bills, the hand test's.
+  test("reserves for the Mind's tokens before anything is sent", async () => {
+    const { core, dataDir } = await cloudCore(reportingModel([{ input: 1_000, output: 100 }]));
+    const reservedBeside = async (text: string) => {
+      const mind = await core.createMind({ title: "Tides" });
+      const client = await connectToMind(core, mind.id);
+      writeMind(client, [note(text)]);
+      await client.settled();
+      const asked = await core.askInConversation({ text: "Summarise my notes", mindId: mind.id });
+      if (!asked.asked) throw new Error("Not asked.");
+      await answerEnded(core, asked.answerId);
+      return rows(dataDir).at(-1)?.reserved ?? 0;
+    };
+
+    const short = await reservedBeside("Spring tides come at new and full moon.");
+    // About 40k tokens.
+    const long = await reservedBeside("Spring tides come at new and full moon. ".repeat(4_000));
+
+    const price = catalogFacts("anthropic", HAIKU)?.price;
+    if (!price) throw new Error("No price for Haiku.");
+    expect(long - short).toBeGreaterThanOrEqual((39_000 * price.input) / 1_000_000);
   });
 });
 
