@@ -23,6 +23,7 @@ import { CallRow, SkillRow } from "../../editor/AnswerView";
 import { CheckMarkIcon, RegenerateSmallIcon } from "../../editor/icons";
 import { useT } from "../../i18n";
 import { useMeetings } from "../../meetings";
+import { useModelNames } from "../../modelNames";
 import type { Translate } from "../../objects";
 import { openCited, quoteSaysSo } from "../../openCited";
 import { scopeChips } from "../../scope";
@@ -242,7 +243,12 @@ function sourcesText(t: Translate, count: number): string {
   return count === 1 ? t("steps.sources.one") : t("steps.sources", { count });
 }
 
-function foldedText(t: Translate, line: FoldedLine, scope: (extra: number) => string): string {
+function foldedText(
+  t: Translate,
+  line: FoldedLine,
+  scope: (extra: number) => string,
+  modelOf: (modelId: string) => string,
+): string {
   switch (line.kind) {
     case "searched":
       return t("steps.searched", {
@@ -257,7 +263,7 @@ function foldedText(t: Translate, line: FoldedLine, scope: (extra: number) => st
     case "asked":
       return mindStepText(t, line);
     case "answered":
-      return t("steps.answered", { model: line.model });
+      return t("steps.answered", { model: modelOf(line.model) });
   }
 }
 
@@ -281,7 +287,8 @@ function FoldedToggle({
   onToggle(): void;
 }) {
   const t = useT();
-  const label = foldedText(t, line, scopeOf);
+  const nameOf = useModelNames();
+  const label = foldedText(t, line, scopeOf, (id) => nameOf(id).name);
   const step = line.kind === "read" || line.kind === "asked" ? line : null;
   const mind = step?.mind;
   const Icon = mind ? MindLineIcon : line.kind === "answered" ? SparkLineIcon : SearchIcon;
@@ -334,7 +341,7 @@ function FoldedToggle({
       data-testid="answer-steps"
       data-kind={line.kind}
       aria-expanded={open}
-      title={label}
+      title={line.kind === "answered" ? `${label} · ${line.model}` : label}
       onClick={onToggle}
       className="answer-steps-line answer-steps-toggle"
     >
@@ -381,12 +388,15 @@ function StepItem({
   onRegenerate(): void;
 }) {
   const t = useT();
+  const shown = useModelNames()(
+    row.kind === "reasoning" || row.kind === "answered" ? row.model : "",
+  );
   switch (row.kind) {
     case "reasoning":
       return (
         <Step kind={row.kind} icon={<SparkLineIcon />}>
-          <p className="answer-step-title">
-            {t("steps.thought", { model: row.model, seconds: row.seconds })}
+          <p className="answer-step-title" title={shown.id}>
+            {t("steps.thought", { model: shown.name, seconds: row.seconds })}
           </p>
           <ReasoningSummary summary={row.summary} />
         </Step>
@@ -394,10 +404,10 @@ function StepItem({
     case "answered":
       return (
         <Step kind={row.kind} icon={<SparkLineIcon />}>
-          <p className="answer-step-title">
+          <p className="answer-step-title" title={shown.id}>
             {row.seconds === null
-              ? t("steps.answered", { model: row.model })
-              : t("steps.answered.in", { model: row.model, seconds: row.seconds })}
+              ? t("steps.answered", { model: shown.name })
+              : t("steps.answered.in", { model: shown.name, seconds: row.seconds })}
           </p>
         </Step>
       );
