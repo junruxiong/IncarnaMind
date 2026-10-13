@@ -5,7 +5,7 @@
  * links back as they were. Each says what happened in the words of the undo
  * line, and what it was, for the Edit menu.
  */
-import type { Document, RestoreRef, TagLinkState } from "../../core/api";
+import type { Document, LinkedFolderLayout, RestoreRef, TagLinkState } from "../../core/api";
 import { core } from "./core";
 import type { Translate } from "./objects";
 import type { Undoable } from "./undo";
@@ -50,6 +50,68 @@ export function deleted(
     undo: () => core.restore(refs),
     redo: async () => {
       await remove();
+    },
+  };
+}
+
+/**
+ * A Mind made: undone by sending it to Recently deleted, as deleting it does, done again by
+ * bringing it back as it is, with what was written in it since. One with a title is said by its name.
+ */
+export function mindMade(
+  t: Translate,
+  shown: string,
+  remove: () => Promise<unknown>,
+  bringBack: () => Promise<unknown>,
+): Undoable {
+  return {
+    message: shown ? t("undo.mindStarted", { name: shown }) : t("undo.mindMade"),
+    name: t("menu.newMind"),
+    undo: async () => {
+      await remove();
+    },
+    redo: async () => {
+      await bringBack();
+    },
+  };
+}
+
+/** A Linked folder paused or resumed: undone and done again by setting it as it was and as it is. */
+export function linkedFolderPaused(
+  t: Translate,
+  shown: string,
+  paused: boolean,
+  setPaused: (paused: boolean) => Promise<unknown>,
+): Undoable {
+  return {
+    message: t(paused ? "undo.linkedFolderPaused" : "undo.linkedFolderResumed", { name: shown }),
+    name: t(paused ? "linkedFolders.pause" : "linkedFolders.resume"),
+    undo: async () => {
+      await setPaused(!paused);
+    },
+    redo: async () => {
+      await setPaused(paused);
+    },
+  };
+}
+
+/** A Linked folder shown as Folders or as a flat list: undone by the layout it had, done again by the new one. */
+export function linkedFolderShown(
+  t: Translate,
+  shown: string,
+  layouts: { before: LinkedFolderLayout; after: LinkedFolderLayout },
+  setLayout: (layout: LinkedFolderLayout) => Promise<unknown>,
+): Undoable {
+  const { before, after } = layouts;
+  const flat = after === "flat";
+  return {
+    message: t(flat ? "undo.linkedFolderFlat" : "undo.linkedFolderTree", { name: shown }),
+    name: t(flat ? "linkedFolders.layout.flat" : "linkedFolders.layout.tree"),
+    undo: async () => {
+      await setLayout(before);
+    },
+    redo: async () => {
+      await setLayout(after);
     },
   };
 }

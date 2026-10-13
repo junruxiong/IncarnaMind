@@ -46,7 +46,8 @@ function outOfDateAt(ctx: CommandContext) {
   const editor = noteOnProposal(ctx);
   const note = noteHandle.current;
   if (!editor || note?.editor !== editor || useEdits.getState().pending[note.mindId]) return null;
-  const proposal = pendingAtSelection(editor.state).find((each) => each.outOfDate);
+  // Someone's change from a Word file can't be made again.
+  const proposal = pendingAtSelection(editor.state).find((each) => each.outOfDate && !each.theirs);
   return proposal ? { note, proposal } : null;
 }
 

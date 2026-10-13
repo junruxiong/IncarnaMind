@@ -17,12 +17,14 @@ import {
   PROPOSAL_ATTRIBUTE,
   PROPOSAL_DELETE_MARK,
   PROPOSAL_INSERT_MARK,
+  WORD_CHANGE_ID,
 } from "../../../core/api";
 import { citationState } from "../../../shared/citations";
 import { type MessageKey, type MessageParams, translate } from "../../../shared/i18n";
 import {
   INLINE_NODES,
   NODE_CHARACTER,
+  proposalRequestOf,
   type ResolvedProposal,
   readProposalAttribute,
   readProposalRef,
@@ -59,6 +61,8 @@ export interface PendingProposal {
   outOfDate: boolean;
   /** Where the Block holding its last part ends: its "Out of date" line goes there. */
   blockEnd: number;
+  /** It is someone's change from the Word file the Mind was imported from (#108), not the assistant's. */
+  theirs: boolean;
 }
 
 interface ReviewState {
@@ -124,6 +128,7 @@ export function proposalsIn(doc: ProseMirrorNode): PendingProposal[] {
         citations: [],
         outOfDate: false,
         blockEnd: 0,
+        theirs: ref.id.startsWith(WORD_CHANGE_ID),
       };
       found.set(ref.id, proposal);
       targets.set(ref.id, { target: null, text: "", parts: [] });
@@ -361,7 +366,7 @@ function outOfDateLine(proposal: PendingProposal, index: number, count: number, 
     line.setAttribute("aria-label", t("proposal.outOfDate.label", { index, count }));
     const label = document.createElement("span");
     label.textContent = t("proposal.outOfDate");
-    label.title = t("proposal.outOfDate.why");
+    label.title = t(proposal.theirs ? "proposal.outOfDate.why.theirs" : "proposal.outOfDate.why");
     const dot = () => {
       const each = document.createElement("span");
       each.className = "proposal-dot";
@@ -383,7 +388,9 @@ function outOfDateLine(proposal: PendingProposal, index: number, count: number, 
     reject.dataset.proposalReject = proposal.id;
     reject.textContent = t("proposal.reject");
     reject.setAttribute("aria-label", t("proposal.reject.label", { index }));
-    line.append(label, dot(), regenerate, dot(), reject);
+    // Someone's change can't be made again: only rejected, or its text edited by hand.
+    if (proposal.theirs) line.append(label, dot(), reject);
+    else line.append(label, dot(), regenerate, dot(), reject);
     return line;
   };
 }
@@ -404,9 +411,10 @@ function decorationsFor(
     for (const range of proposal.ranges) {
       // A node a Proposal adds or removes is drawn like its words (node views draw no marks).
       if (range.node) {
+        const theirs = proposal.theirs ? " proposal-theirs" : "";
         decorations.push(
           Decoration.node(range.from, range.to, {
-            class: `proposal-node proposal-node--${range.node}${stale}${proposal.id === current ? " proposal-current" : ""}`,
+            class: `proposal-node proposal-node--${range.node}${theirs}${stale}${proposal.id === current ? " proposal-current" : ""}`,
             "data-proposal-id": proposal.id,
           }),
         );
@@ -602,6 +610,16 @@ const bindingOf = (editor: Editor): { doc: Y.Doc; type: Y.XmlFragment } | undefi
 
 /** The editor's copy of the Mind's Yjs document, or null before it is bound. */
 export const editorDoc = (editor: Editor): Y.Doc | null => bindingOf(editor)?.doc ?? null;
+
+/** Who made someone's change from a Word file (#108), and when, as the file says; null for the assistant's. */
+export function theirChange(
+  editor: Editor,
+  proposal: Pick<PendingProposal, "request">,
+): { author: string | null; date: string | null } | null {
+  const doc = editorDoc(editor);
+  const made = doc ? proposalRequestOf(doc, proposal.request) : null;
+  return made?.source === "word-change" ? { author: made.author, date: made.date } : null;
+}
 
 /**
  * Accepts or rejects Proposals in the editor's copy of the Mind, as one step

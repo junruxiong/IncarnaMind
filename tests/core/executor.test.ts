@@ -118,6 +118,8 @@ const writingTo = (folder: string): ExecAllow => ({
 interface Subject {
   executor: Executor;
   tempDir: string;
+  /** The command of every process it started, in order. */
+  started: string[];
 }
 
 /** What an Executor in the contract is built with. */
@@ -137,8 +139,15 @@ function executorContract(name: string, make: (parts: ExecutorParts) => Executor
   const setUp = async (env = smallEnvironment()): Promise<Subject> => {
     const tempDir = await createTempDataFolder();
     const environment = async () => env;
-    const processes = createProcessLauncher(environment);
-    return { executor: make({ tempDir, processes, environment }), tempDir };
+    const launcher = createProcessLauncher(environment);
+    const started: string[] = [];
+    const processes: ProcessLauncher = {
+      spawn: (command, args, options) => {
+        started.push(command);
+        return launcher.spawn(command, args, options);
+      },
+    };
+    return { executor: make({ tempDir, processes, environment }), tempDir, started };
   };
 
   const title = `The Executor contract: ${name}${skip === undefined ? "" : ` (skipped: ${skip})`}`;
@@ -269,7 +278,7 @@ function executorContract(name: string, make: (parts: ExecutorParts) => Executor
     );
 
     test("a signal stopped already: it doesn't run", async () => {
-      const { executor, tempDir } = await setUp();
+      const { executor, tempDir, started } = await setUp();
       const logFolder = await createTempDataFolder();
       const log = join(logFolder, "ran.log");
       const stop = new AbortController();
@@ -284,7 +293,7 @@ function executorContract(name: string, make: (parts: ExecutorParts) => Executor
         ),
       ).rejects.toThrow("Stopped before it started.");
 
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      expect(started).toEqual([]);
       expect(existsSync(log)).toBe(false);
       expect(await readdir(tempDir)).toEqual([]);
     });

@@ -208,6 +208,31 @@ test("a Mind's tab is renamed in place: a double-click or F2, Enter saves, Esc a
   await app.close();
 });
 
+test("F2 on a tab right after a rename ended keeps its field when the frame the tab's focus waits for is late", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await newMind(window, "Alpha notes");
+  const tab = tabsOf(window).first();
+  await tab.getByTestId("tab-title").dblclick();
+  const field = tab.getByTestId("tab-rename");
+  await expect(field).toBeFocused();
+  // As on a busy runner, whatever the app asks of the next frame comes a moment after it.
+  await window.evaluate(() => {
+    const frame = globalThis.requestAnimationFrame.bind(globalThis);
+    globalThis.requestAnimationFrame = (callback) =>
+      frame(() => void setTimeout(() => callback(performance.now()), 300));
+  });
+  await field.press("Escape");
+  await expect(field).toHaveCount(0);
+  await tab.focus();
+  await window.keyboard.press("F2");
+  await expect(field).toBeFocused();
+  // Asked after the app's own, so it comes after it: the field still has the focus.
+  await window.evaluate(() => new Promise((late) => requestAnimationFrame(() => late(null))));
+  await expect(field).toBeFocused();
+  await app.close();
+});
+
 test("open tabs, their order and the shown one come back after a restart", async () => {
   const first = await launchApp(dataDir);
   await dismissChatSetup(first.window);
