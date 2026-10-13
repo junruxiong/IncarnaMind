@@ -233,7 +233,7 @@ export async function exportWordPatch(input: WordPatchInput): Promise<WordPatchR
   }
   if (text !== base.text) writer.set(pkg.part, text);
   footnotes.add(docxWriter.footnotes);
-  await footnotes.flush();
+  await footnotes.flush(text);
   await target.flush();
 
   const report: WordExportReport = {

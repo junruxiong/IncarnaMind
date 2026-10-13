@@ -319,19 +319,49 @@ export class DocumentFootnotes {
     this.added.push(...footnotes);
   }
 
-  /** Writes the footnotes added into the footnotes part, or makes one with Word's separators. */
-  async flush(): Promise<void> {
+  /**
+   * Writes the footnotes added into the footnotes part, or makes one with
+   * Word's separators. Each goes where its mark is in the document, among the
+   * document's own footnotes: Word finds a footnote by its id, but LibreOffice
+   * takes them in the order the part has them.
+   */
+  async flush(document: string): Promise<void> {
     if (this.added.length === 0) return;
-    if (this.part) {
-      const { text, root } = this.part;
-      this.pkg.set(this.name, applySplices(text, [appendInside(text, root, this.added.join(""))]));
+    const marks = [...document.matchAll(FOOTNOTE_MARK)].map((match) => match[1] as string);
+    const at = (id: string) => {
+      const index = marks.indexOf(id);
+      return index < 0 ? marks.length : index;
+    };
+    const added = this.added
+      .map((xml) => ({ xml, id: FOOTNOTE_ID.exec(xml)?.[1] ?? "" }))
+      .sort((a, b) => at(a.id) - at(b.id));
+    if (!this.part) {
+      this.pkg.add(this.name, footnotesPart(added.map((each) => each.xml)));
+      this.relationships.add(RELATIONSHIP_TYPES.footnotes, relativeTo(this.document, this.name));
+      await this.pkg.addContentType(this.name, CONTENT_TYPES.footnotes);
       return;
     }
-    this.pkg.add(this.name, footnotesPart(this.added));
-    this.relationships.add(RELATIONSHIP_TYPES.footnotes, relativeTo(this.document, this.name));
-    await this.pkg.addContentType(this.name, CONTENT_TYPES.footnotes);
+    const { text, root } = this.part;
+    const own = new Map(
+      elements(root)
+        .filter((each) => each.name === "w:footnote" && each.attrs["w:id"] !== undefined)
+        .map((each) => [each.attrs["w:id"] as string, each]),
+    );
+    const splices = added.map(({ xml, id }) => {
+      // Before the document's own footnote whose mark comes next, else at the end.
+      const next = marks.slice(at(id) + 1).find((each) => own.has(each));
+      const before = next ? own.get(next) : undefined;
+      return before
+        ? { from: startOf(before), to: startOf(before), text: xml }
+        : appendInside(text, root, xml);
+    });
+    this.pkg.set(this.name, applySplices(text, splices));
   }
 }
+
+/** A footnote's mark in the text, and its id. */
+const FOOTNOTE_MARK = /<(?:[\w.-]+:)?footnoteReference\b[^>]*?\bw:id="(-?\d+)"/g;
+const FOOTNOTE_ID = /<w:footnote\b[^>]*?\bw:id="(-?\d+)"/;
 
 // ---------------------------------------------------------------------------
 // Drawings
