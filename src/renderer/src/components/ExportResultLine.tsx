@@ -136,7 +136,7 @@ function ResultBody({
   const run = (act: () => Promise<void>, failed: "export.failed.open" | "export.failed.show") => {
     setError(null);
     act().catch((failure: unknown) =>
-      setError(t(failed, { reason: reasonOf(errorMessage(failure), t) })),
+      setError(t(failed, { reason: reasonOf(errorMessage(failure, t), t) })),
     );
   };
 
@@ -216,6 +216,10 @@ function ResultBody({
             )}
             {error && <ProblemLine testId="export-problem">{error}</ProblemLine>}
           </>
+        ) : result.state === "empty" ? (
+          <ProblemLine testId="export-problem" className="py-1">
+            {t("export.pack.empty")}
+          </ProblemLine>
         ) : result.state === "review" ? (
           <WordExportReview result={result} />
         ) : (

@@ -178,7 +178,7 @@ export function createLibrary(options: {
   const group = (id: unknown) => {
     if (typeof id !== "string") throw new InvalidInputError("A group id must be text.");
     const value = groups().find((item) => item.id === id);
-    if (!value) throw new NotFoundError("That group no longer exists.");
+    if (!value) throw new NotFoundError({ key: "error.folder.notFound" });
     return value;
   };
   const document = (id: unknown) => {
@@ -187,7 +187,7 @@ export function createLibrary(options: {
       "SELECT id, name, kind, page_count, content_hash, status FROM documents WHERE id = ? AND deleted_at IS NULL",
       [id],
     );
-    if (!value) throw new NotFoundError("That Document no longer exists.");
+    if (!value) throw new NotFoundError({ key: "error.document.gone" });
     return value;
   };
   const assignment = (id: string) =>
@@ -490,17 +490,15 @@ export function createLibrary(options: {
 
   function parseGroup(input: unknown, exceptId?: string) {
     if (!isRecord(input) || typeof input.name !== "string" || typeof input.description !== "string")
-      throw new InvalidInputError("Enter a folder name and description.");
+      throw new InvalidInputError({ key: "error.folder.nameAndDescription" });
     const name = input.name.trim();
     const description = input.description.trim();
     if (!name || name.length > 100 || description.length > 500)
-      throw new InvalidInputError(
-        "Use a name of 1–100 characters and a description of at most 500 characters.",
-      );
+      throw new InvalidInputError({ key: "error.folder.lengths" });
     if (groups().some((item) => item.id !== exceptId && sameName(item.name, name)))
-      throw new InvalidInputError("A folder with this name already exists.");
+      throw new InvalidInputError({ key: "error.folder.nameTaken" });
     if (!exceptId && groups().length >= 100)
-      throw new InvalidInputError("The Library supports up to 100 folders.");
+      throw new InvalidInputError({ key: "error.folder.limit" });
     const { countsOwnFiles } = input;
     if (countsOwnFiles !== undefined && typeof countsOwnFiles !== "boolean")
       throw new InvalidInputError("countsOwnFiles must be true or false.");
@@ -648,7 +646,7 @@ export function createLibrary(options: {
      */
     restore(id: string): { minds: string[]; conversations: string[] } {
       const row = db.get<{ name: string }>("SELECT name FROM library_groups WHERE id = ?", [id]);
-      if (!row) throw new NotFoundError("That Folder doesn't exist.");
+      if (!row) throw new NotFoundError({ key: "error.folder.notFound" });
       const language = settings.get().language;
       if (groups().some((item) => sameName(item.name, row.name)))
         throw new InvalidInputError(
