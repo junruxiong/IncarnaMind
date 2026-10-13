@@ -516,7 +516,7 @@ test("Tags are edited on the row: a click in the cell opens the picker over it, 
     await invoice.scrollIntoViewIfNeeded();
     await pointAndClick(window, chips.first());
     await expect(picker.getByTestId("tag-picker-keys")).toHaveText(
-      /^↵ 添加或移除 · ⌫ 移除最后一个 · (⌘Z|Ctrl\+Z) 撤销 · Esc 关闭$/,
+      /^Enter 添加或移除 · Backspace 移除最后一个 · (⌘Z|Ctrl\+Z) 撤销 · Esc 关闭$/,
     );
     const narrow = await picker.boundingBox();
     const width = await window.evaluate(() => innerWidth);
