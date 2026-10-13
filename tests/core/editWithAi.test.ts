@@ -802,7 +802,7 @@ function structure(client: MindClient): string[] {
             : "p";
     let line = "";
     node.forEach((child) => {
-      line += child.isText ? (child.text ?? "") : `⟨${child.attrs.check}⟩`;
+      line += child.isText ? (child.text ?? "") : `⟨${child.attrs.check ?? child.type.name}⟩`;
     });
     lines.push(`${kind} ${line}`);
     return false;
@@ -998,6 +998,55 @@ describe("Edit with AI over Blocks of several kinds", () => {
     expect(structure(client)).toEqual([
       "h2 Tides",
       "• Harbours publish the times of high water every year.",
+    ]);
+  });
+
+  test("text typed like a mark is shown escaped, and a restructure that leaves it alone keeps it plain text with its mark", async () => {
+    const calls: EditCall[] = [];
+    const { core, mind, client } = await setUp(
+      editingModel(
+        () =>
+          [
+            "## Next",
+            "- Hire a roaster.",
+            "## Plan",
+            "\\1. Background",
+            "\\• Revenue grew",
+            "Steps:\n\\- check the gauges",
+          ].join("\n\n"),
+        calls,
+      ),
+    );
+    writeMind(client, [
+      heading("Plan"),
+      paragraph(text("1. Background")),
+      paragraph(text("• Revenue grew")),
+      paragraph(text("Steps:"), { type: "hardBreak" }, text("- check the gauges")),
+      heading("Next"),
+      list("bulletList", [text("Hire a roaster.")]),
+    ]);
+    await client.settled();
+
+    await core.editWithAi(whole(client, mind.id));
+    await resolveChanges(client, "accept");
+
+    expect(calls[0]?.passage).toBe(
+      [
+        "## Plan",
+        "\\1. Background",
+        "\\• Revenue grew",
+        "Steps:\n\\- check the gauges",
+        "## Next",
+        "- Hire a roaster.",
+      ].join("\n\n"),
+    );
+    expect(structure(client)).toEqual([
+      "h2 Next",
+      "• Hire a roaster.",
+      "h2 Plan",
+      "p 1. Background",
+      "p • Revenue grew",
+      "p Steps:⟨hardBreak⟩- check the gauges",
     ]);
   });
 });

@@ -148,14 +148,43 @@ function blockMarker(kind: BlockKind): string {
   return kind === "bullet" ? "- " : kind === "numbered" ? "1. " : kind === "quote" ? "> " : "";
 }
 
+/** A Block's marker at a line's start, as the model writes it. */
+const BLOCK_MARKER = String.raw`(?:#{1,6}|[-*•]|\d+[.)]|>)[ \t]`;
+
+/**
+ * Lines whose text starts like a Block's marker (a typed "1. Background", a
+ * pasted "• Revenue grew"), after any backslashes that escape one: from the
+ * paragraph's start, or only after its first line.
+ */
+const LOOKS_MARKED = {
+  start: new RegExp(String.raw`(^|\n)(?=\\*${BLOCK_MARKER})`, "g"),
+  next: new RegExp(String.raw`(\n)(?=\\*${BLOCK_MARKER})`, "g"),
+};
+const ESCAPED_MARKER = {
+  start: new RegExp(String.raw`(^|\n)\\(?=\\*${BLOCK_MARKER})`, "g"),
+  next: new RegExp(String.raw`(\n)\\(?=\\*${BLOCK_MARKER})`, "g"),
+};
+
+/**
+ * A paragraph's text with each line that would read as a Block's marker
+ * escaped the way Markdown does ("\1. Background"), so that it stays text
+ * (#703). The first line has nothing to escape after a marker of its own.
+ */
+const escapeMarkers = (text: string, kind: BlockKind) =>
+  text.replace(LOOKS_MARKED[kind === "paragraph" ? "start" : "next"], "$1\\");
+
+/** One of the model's paragraphs with those escapes taken off: one backslash each. */
+const unescapeMarkers = (paragraph: string, marked: boolean) =>
+  paragraph.replace(ESCAPED_MARKER[marked ? "next" : "start"], "$1");
+
 /** A marker at the start of one of the model's paragraphs: its kind, and how long the marker is. */
 function readBlockMarker(paragraph: string): { kind: BlockKind; length: number } | null {
-  const match = /^(?:(#{1,6})|[-*•]|\d+[.)]|(>))[ \t]+/.exec(paragraph);
-  if (!match) return null;
-  const [marker, hashes, quote] = match;
+  const marker = new RegExp(`^${BLOCK_MARKER}+`).exec(paragraph)?.[0];
+  if (marker === undefined) return null;
+  const hashes = /^#+/.exec(marker)?.[0].length;
   const kind: BlockKind = hashes
-    ? `heading:${hashes.length}`
-    : quote
+    ? `heading:${hashes}`
+    : marker.startsWith(">")
       ? "quote"
       : /^\d/.test(marker)
         ? "numbered"
@@ -175,7 +204,8 @@ export interface Selection {
   /**
    * The selected text as the model reads it: markers for Citations,
    * paragraphs apart, each Block that isn't a plain paragraph with its kind's
-   * marker (`blockMarker`).
+   * marker (`blockMarker`), and then text that looks like one escaped
+   * (`escapeMarkers`).
    */
   text: string;
   /** Some paragraph of `text` has a kind's marker: the model's paragraphs are read with theirs. */
@@ -337,12 +367,13 @@ export function readSelection(blocks: Y.XmlFragment, from: TextPlace, to: TextPl
       kind,
     });
     plain.push(tokens.map((token) => token.text ?? NODE_CHARACTER).join(""));
-    text.push(shownText === "" ? "" : `${blockMarker(kind)}${shownText}`);
+    text.push(shownText);
     context.push(blockText(element));
     characters += shownText.length;
   }
   const firstBlock = chosen[0]?.element;
   const lastBlock = chosen.at(-1)?.element;
+  const marked = segments.some((segment) => segment.shown && segment.kind !== "paragraph");
   return {
     ok: true,
     selection: {
@@ -350,8 +381,16 @@ export function readSelection(blocks: Y.XmlFragment, from: TextPlace, to: TextPl
       citations,
       footnotes,
       plain: plain.join("\n"),
-      text: text.filter((each) => each !== "").join("\n\n"),
-      marked: segments.some((segment) => segment.shown && segment.kind !== "paragraph"),
+      text: text
+        .map((shown, index) => {
+          const kind = segments[index]?.kind ?? "paragraph";
+          return shown === "" || !marked
+            ? shown
+            : `${blockMarker(kind)}${escapeMarkers(shown, kind)}`;
+        })
+        .filter((each) => each !== "")
+        .join("\n\n"),
+      marked,
       context: context.join("\n\n"),
       before: firstBlock ? nearWords(blockText(firstBlock, 0, from.offset), "before") : "",
       after: lastBlock ? nearWords(blockText(lastBlock, to.offset), "after") : "",
@@ -492,7 +531,8 @@ interface NewParagraph {
  * now, and "[^n]" is its footnote n; a marker for none it had is left out.
  * A formula the selection had is kept; another stays text. When the
  * selection was shown with its Blocks' markers, each paragraph's marker is
- * read off as its kind.
+ * read off as its kind, and the escapes of text that looks like one are
+ * taken off.
  */
 function newParagraphs(
   text: string,
@@ -555,15 +595,22 @@ function newParagraphs(
   };
   // A line that starts with a Block's mark starts a paragraph, even after a single line break.
   const apart = selection.marked
-    ? /\n[ \t]*\n+|\n(?=(?:#{1,6}|[-*•]|\d+[.)]|>)[ \t])/
+    ? new RegExp(String.raw`\n[ \t]*\n+|\n(?=${BLOCK_MARKER})`)
     : /\n[ \t]*\n+/;
   const paragraphs = text
     .split(apart)
     .map((paragraph) => paragraph.trim())
     .filter((paragraph) => paragraph !== "")
     .map((written) => {
-      const marker = selection.marked ? readBlockMarker(written) : null;
-      return { marker, paragraph: marker ? written.slice(marker.length) : written };
+      if (!selection.marked) return { marker: null, paragraph: written };
+      const marker = readBlockMarker(written);
+      return {
+        marker,
+        paragraph: unescapeMarkers(
+          marker ? written.slice(marker.length) : written,
+          marker !== null,
+        ),
+      };
     });
   const anyMarker = paragraphs.some(({ marker }) => marker !== null);
   return paragraphs.map(({ marker, paragraph }) => ({
