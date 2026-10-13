@@ -193,7 +193,7 @@ test("the divider in the gap before the card is grabbed with the mouse and moved
   await app.close();
 });
 
-test("the + menu in the sidebar header offers New Mind, Import a Word file…, Compare Documents…, New Folder…, Add Documents…, Add a web page…, Find sources… and Link a folder…, by mouse and by keyboard", async () => {
+test("the + menu in the sidebar header offers New Mind, Import a Word file…, Compare Documents…, New Folder, Add Documents…, Add a web page…, Find sources… and Link a folder…, by mouse and by keyboard", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   const plus = window.getByTestId("plus-menu");
@@ -218,7 +218,7 @@ test("the + menu in the sidebar header offers New Mind, Import a Word file…, C
     /New Mind/,
     /Import a Word file…/,
     /Compare Documents…/,
-    /New Folder…/,
+    /New Folder/,
     /Add Documents…/,
     /Add a web page…/,
     /Find sources…/,
@@ -289,7 +289,7 @@ test("the + menu and the shell speak Chinese too", async () => {
     /新建 Mind/,
     /导入 Word 文件…/,
     /对比文档…/,
-    /新建文件夹…/,
+    /新建文件夹/,
     /添加文档…/,
     /添加网页…/,
     /查找资料…/,

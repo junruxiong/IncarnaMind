@@ -4,11 +4,13 @@ import { useEffect, useRef } from "react";
 import type { NodeJSON } from "../../../../shared/blockJson";
 import { lendAnswerEditor } from "../../answerEditors";
 import { CitationView } from "../../editor/CitationView";
+import { CitationGlue, withCitationGlue } from "../../editor/citationGlue";
 import { CitationNumbers } from "../../editor/citationNumbers";
 import { CopyCitations } from "../../editor/copyCitations";
 import { MarginChecks } from "../../editor/MarginChecks";
 import { RegenerateAnswerContext } from "../../editor/mindContext";
 import { noteExtensions } from "../../editor/noteSchema";
+import { useTableFades } from "./useTableFades";
 
 /** A Citation redraws when it changes, and when its number does (as in a Mind). */
 const citationView = ReactNodeViewRenderer(CitationView, {
@@ -20,7 +22,10 @@ const citationView = ReactNodeViewRenderer(CitationView, {
   },
 });
 
-const docOf = (blocks: readonly NodeJSON[]) => ({ type: "doc", content: [...blocks] });
+const docOf = (blocks: readonly NodeJSON[]) => ({
+  type: "doc",
+  content: withCitationGlue(blocks),
+});
 
 const editorPropsFor = (label: string) => ({
   attributes: {
@@ -56,10 +61,18 @@ export function AnswerText({
       shouldRerenderOnTransaction: false,
       content: docOf(blocks),
       editorProps: editorPropsFor(label),
-      extensions: [...noteExtensions({ citationView }), CitationNumbers, CopyCitations],
+      extensions: [
+        ...noteExtensions({ citationView }),
+        CitationGlue,
+        CitationNumbers,
+        CopyCitations,
+      ],
     },
     [],
   );
+
+  const frame = useRef<HTMLDivElement>(null);
+  useTableFades(frame);
 
   useEffect(() => lendAnswerEditor(answerId, editor), [answerId, editor]);
 
@@ -78,7 +91,7 @@ export function AnswerText({
   return (
     // A quote not found offers to write the Answer again, from its Citation's card.
     <RegenerateAnswerContext.Provider value={regenerate}>
-      <div className="assistant-answer-frame">
+      <div ref={frame} className="assistant-answer-frame">
         <EditorContent editor={editor} />
         <MarginChecks editor={editor} />
       </div>

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { shortcutLabel } from "../commands/keymap";
+import { useDismissOnEscape } from "../escapeDismiss";
 import { useT } from "../i18n";
 import { useFade } from "../motion";
 import { useAppStore } from "../store";
@@ -13,9 +14,9 @@ const actionClass =
 /**
  * The undo line (CONTEXT.md) at the foot of the sidebar, above Settings: what
  * the User just changed, then Undo, which does what ⌘Z does. One at a time; it
- * goes after a few seconds or with the next change, while ⌘Z still reaches
- * the change. An undo the core refuses shows here as one problem line with one
- * action. Read out politely.
+ * goes after a few seconds, with Esc or with the next change, while ⌘Z still
+ * reaches the change. An undo the core refuses shows here as one problem line
+ * with one action, which stays until dismissed. Read out politely.
  */
 export function UndoLine() {
   const line = useUndo((state) => state.line);
@@ -35,6 +36,7 @@ function Line({ line }: { line: UndoLineState }) {
   useFade(shown);
 
   useGoesBy(line.change ? line.id : null);
+  useDismissOnEscape(true, () => useUndo.getState().dismiss());
 
   if (line.problem) {
     const { step, reason, fix } = line.problem;
