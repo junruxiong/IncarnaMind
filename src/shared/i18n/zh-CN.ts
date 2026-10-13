@@ -2009,7 +2009,7 @@ export const zhCN = {
   "skills.settings.builtIn": "内置",
   // The Built-in Skills, as Settings and the slash menu describe them; their SKILL.md, which Answers read, stays as written.
   "skills.builtIn.literature-review":
-    "围绕问题的主题，跨你的文档撰写文献综述：按主题综合，而不是逐篇罗列，写出各文档的一致与分歧以及遗漏之处，每个论断都附引用。",
+    "围绕问题的主题，跨你的文档撰写文献综述：按主题综合，而不是逐篇罗列，写出各文档的一致与分歧以及遗漏之处，每个说法都附引用。",
   "skills.builtIn.mind-to-report":
     "把这个 Mind（问题上方的笔记、问题和回答）整理成结构化的报告草稿，包括标题、摘要、章节和结论，保留其中的引用，不虚构来源。",
   "skills.builtIn.summarise-document":
@@ -2593,7 +2593,7 @@ export const zhCN = {
   "examples.banner.label": "关于这个示例",
   "examples.banner.title": "这是一个示例 Mind。",
   "examples.banner.body":
-    "你可以像在普通文档里一样在这里写作，并就你的文档提问；回答中的每个论断都链接到出处所在的页面。点击勾号查看引文，绿色表示找到了这段引文。",
+    "你可以像在普通文档里一样在这里写作，并就你的文档提问；回答中的每个说法都链接到出处所在的页面。点击勾号查看引文，绿色表示找到了这段引文。",
   "examples.banner.addOwn": "添加你的文档或应用",
   "examples.banner.remove": "移除示例",
   "examples.answer": "预先写好的示例回答，无需模型即可体验",
@@ -2617,9 +2617,9 @@ export const zhCN = {
   "startGuide.ask.body":
     "在 Mind 中任意位置按 {shortcut}，然后输入问题。回答会根据你的文档写在下方。",
   "startGuide.ask.example": "例如：这些报告对第三季度营收是怎么说的？",
-  "startGuide.check.title": "核对每个论断的出处",
+  "startGuide.check.title": "核对每个说法的出处",
   "startGuide.check.body":
-    "每个论断旁的页边都有一个标记：在你的文档中找到引文时显示 {mark}。点击它即可打开那一页。",
+    "每个说法旁的页边都有一个标记：在你的文档中找到引文时显示 {mark}。点击它即可打开那一页。",
   "startGuide.example.lead": "想先看看效果？",
   "startGuide.example.open": "打开示例 Mind",
   "restore.error.unknown": "回收站中没有这一项。",
