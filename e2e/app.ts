@@ -54,7 +54,10 @@ export interface LaunchOptions {
    * on the example Mind with "Get started". Without, a test build ships none.
    */
   examples?: boolean;
-  /** A home folder for the app instead of the User's, so nothing it writes there is theirs. */
+  /**
+   * The app's home folder, for a test that looks at what the app writes there. Without one,
+   * each launch gets its own temporary home, so nothing the app writes there is the User's.
+   */
   home?: string;
   /**
    * Where Look up asks Crossref and arXiv: a local server standing in for
@@ -177,7 +180,8 @@ export async function launchApp(
     env.INCARNAMIND_TEST_POSTHOG_HOST = usageData.host;
     if (usageData.testerBuild) env.INCARNAMIND_TEST_TESTER_BUILD = "1";
   }
-  if (home) env.HOME = home;
+  const appHome = home ?? (await mkdtemp(join(tmpdir(), "incarnamind-home-")));
+  env.HOME = appHome;
   if (referenceLookup) env.INCARNAMIND_TEST_REFERENCE_LOOKUP = referenceLookup;
   if (sources) env.INCARNAMIND_TEST_SOURCES = sources;
   if (chatGpt) env.INCARNAMIND_TEST_CHATGPT = chatGpt;
@@ -193,7 +197,10 @@ export async function launchApp(
 
   const app = await electron.launch({ args: [appDir], env });
   openApps.set(app, dataDir);
-  app.on("close", () => openApps.delete(app));
+  app.on("close", () => {
+    openApps.delete(app);
+    if (!home) void rm(appHome, { recursive: true, force: true, maxRetries: 3 });
+  });
   const window = await app.firstWindow();
   await window.getByTestId("plus-menu").waitFor();
   if (!keepWindow) {
