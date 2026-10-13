@@ -9,7 +9,6 @@ import type { Language } from "../../core/language";
 import type { MessageKey } from "../../shared/i18n";
 import { pastedAddresses } from "../../shared/webAddresses";
 import { core } from "./core";
-import { errorMessage } from "./errors";
 import { useAppStore } from "./store";
 
 export interface WebPageProblem {
@@ -113,8 +112,7 @@ export const useWebPages = create<WebPagesState>()((set, get) => {
     folderId,
     document,
   });
-  const failedAction = (error: unknown) =>
-    useAppStore.setState({ actionError: errorMessage(error) });
+  const failedAction = (error: unknown) => useAppStore.getState().reportError(error);
 
   const save = async (address: string, folderId: string | null) => {
     if (get().fetching.includes(address)) return;

@@ -49,6 +49,7 @@ export type {
   ScriptRuntimes,
   SpawnOptions,
   SpeechSegment,
+  SystemNotifications,
   TextRecognitionFiles,
   TextRecognizer,
   Transcriber,
@@ -105,6 +106,9 @@ export {
 export type { RerankingModelFactory, RerankingModelSpec } from "./providers/rerank";
 export { blockReference, messageReference, parseReference } from "./references";
 export { BUILT_IN_RERANKING_MODEL, type RerankingModelDefinition } from "./reranking";
+export { fileWrite } from "./runs/effects";
+export type { TaskApprovalCall } from "./runs/journal";
+export type { TaskEnd, TaskKind, TaskRun, TaskTurn } from "./runs/tasks";
 export { BUILT_IN_SKILLS_PACKAGED, BUILT_IN_SKILLS_SOURCE } from "./skills/builtIn";
 export {
   COMMON_FIELDS,
