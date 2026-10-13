@@ -2,6 +2,7 @@ import { type RefObject, useEffect, useRef, useState } from "react";
 import { core, files } from "../core";
 import { CheckStateIcon } from "../editor/icons";
 import { errorMessage } from "../errors";
+import { useDismissOnEscape } from "../escapeDismiss";
 import {
   type ExportResult,
   exportMind,
@@ -90,6 +91,7 @@ function ResultBody({
   const [error, setError] = useState<string | null>(null);
   const held = useHeld(line);
   const plain = result.state === "saved" && result.unverified === 0 && error === null;
+  useDismissOnEscape(result.state !== "saving", dismiss);
 
   useEffect(() => {
     if (!plain || held) return;
