@@ -1,5 +1,10 @@
 import { Extension, Mark } from "@tiptap/core";
-import { PROPOSAL_ATTRIBUTE, PROPOSAL_DELETE_MARK, PROPOSAL_INSERT_MARK } from "../../../core/api";
+import {
+  PROPOSAL_ATTRIBUTE,
+  PROPOSAL_DELETE_MARK,
+  PROPOSAL_INSERT_MARK,
+  WORD_CHANGE_ID,
+} from "../../../core/api";
 import { readProposalAttribute, readProposalRef } from "../../../shared/proposals";
 
 /**
@@ -36,6 +41,10 @@ const refAttributes = () => ({
   target: { default: null, parseHTML: () => null, renderHTML: () => ({}) },
 });
 
+/** A change's class, and `proposal-theirs` for someone's from a Word file (#108): their words aren't AI text. */
+const changeClass = (kind: string, id: string | undefined) =>
+  id?.startsWith(WORD_CHANGE_ID) ? `${kind} proposal-theirs` : kind;
+
 /**
  * Words a Proposal adds, drawn as an insertion: underlined, in the Answer's
  * ink. Not inclusive, so what the User types beside it is their own.
@@ -49,7 +58,11 @@ export const ProposalInsert = Mark.create({
   parseHTML: () => [],
   renderHTML({ mark }) {
     const ref = readProposalRef(mark.attrs);
-    return ["ins", { class: "proposal-insert", "data-proposal-id": ref?.id ?? "" }, 0];
+    return [
+      "ins",
+      { class: changeClass("proposal-insert", ref?.id), "data-proposal-id": ref?.id ?? "" },
+      0,
+    ];
   },
 });
 
@@ -62,7 +75,11 @@ export const ProposalDelete = Mark.create({
   parseHTML: () => [],
   renderHTML({ mark }) {
     const ref = readProposalRef(mark.attrs);
-    return ["del", { class: "proposal-delete", "data-proposal-id": ref?.id ?? "" }, 0];
+    return [
+      "del",
+      { class: changeClass("proposal-delete", ref?.id), "data-proposal-id": ref?.id ?? "" },
+      0,
+    ];
   },
 });
 
