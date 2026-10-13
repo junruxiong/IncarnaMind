@@ -175,7 +175,7 @@ The 10 disagreeing Questions, twice each (20 Answers per cell), as above: before
 
 - Luna now names the older Document in about half its Answers that were handed both. The rest still give only the newer figure.
 - Luna's quote not found cites page 9 of the December 2024 China Economic Update for a sentence on page 8.
-- The note can't fix a misread: twice Luna gave CSF 2.0 five Functions, then named CSF 1.1's five as the older figure.
+- Worse with the note: on the NIST question Luna answered six Functions both times before and five both times after, naming CSF 1.1's five as the older figure. CSF 2.0's text speaks of GOVERN and "the other five Functions". Haiku answered six both ways.
 
 ### 2026-10-13: the Answer rules (#548), before and after
 
