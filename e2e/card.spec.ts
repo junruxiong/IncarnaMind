@@ -13,6 +13,7 @@ import {
   placeAssistant,
   previewLink,
   removeDataFolder,
+  setLanguage,
   setWindowSize,
   showSourceLocations,
   widthOf,
@@ -113,6 +114,57 @@ test("the Mind sits in a card 8px from the sidebar and the window's edges, with 
   await app.close();
 });
 
+test("every pane header's contents sit on the band's centre line and their rules level, in English and Chinese", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await newMind(window, "Reading notes");
+  await newMind(window, "Interview plan");
+  await setWindowSize(app, window, 1440, 860);
+
+  const centreOf = async (locator: Locator) => {
+    const box = await boxOf(locator);
+    return box.y + box.height / 2;
+  };
+  const activeTab = window.locator('[role="tab"][aria-selected="true"]');
+  const otherTab = window.locator('[role="tab"][aria-selected="false"]').first();
+
+  for (const language of ["en", "zh-CN"] as const) {
+    await setLanguage(window, language);
+    // The assistant's header is at the window's top docked on either side.
+    for (const dock of ["right", "left"] as const) {
+      await placeAssistant(window, { dock });
+      const strip = await boxOf(window.getByTestId("tab-strip"));
+      const line = strip.y + strip.height / 2;
+
+      const contents = [
+        window.getByTestId("plus-menu"),
+        window.getByTestId("sidebar-toggle"),
+        activeTab.getByTestId("tab-title"),
+        activeTab.getByTestId("tab-close"),
+        otherTab.getByTestId("tab-title"),
+        window.getByTestId("new-tab"),
+        window.getByTestId("export-mind"),
+        window.getByTestId("assistant-title"),
+        ...(await window.getByTestId("assistant-header").getByRole("button").all()),
+      ];
+      for (const item of contents) {
+        expect(Math.abs((await centreOf(item)) - line), `${language} ${dock}`).toBeLessThanOrEqual(
+          1,
+        );
+      }
+
+      // The three rules end on one row: the band's bottom, y 44.
+      const bottom = async (testId: string) => {
+        const box = await boxOf(window.getByTestId(testId));
+        return box.y + box.height;
+      };
+      expect(await bottom("sidebar-header")).toBe(strip.y + strip.height);
+      expect(await bottom("assistant-header")).toBe(strip.y + strip.height);
+    }
+  }
+  await app.close();
+});
+
 test("the divider in the gap before the card is grabbed with the mouse and moved with the arrow keys", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
@@ -141,7 +193,7 @@ test("the divider in the gap before the card is grabbed with the mouse and moved
   await app.close();
 });
 
-test("the + menu in the sidebar header offers New Mind, Import a Word file…, New Folder…, Add Documents…, Add a web page…, Find sources… and Link a folder…, by mouse and by keyboard", async () => {
+test("the + menu in the sidebar header offers New Mind, Import a Word file…, Compare Documents…, New Folder…, Add Documents…, Add a web page…, Find sources… and Link a folder…, by mouse and by keyboard", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   const plus = window.getByTestId("plus-menu");
@@ -155,7 +207,7 @@ test("the + menu in the sidebar header offers New Mind, Import a Word file…, N
   await expect(plus).toHaveAccessibleName("New or add");
   await expect(plus).toHaveAttribute("aria-haspopup", "menu");
 
-  // Opened by the mouse, its seven actions are menu items, and the first has the focus.
+  // Opened by the mouse, its eight actions are menu items, and the first has the focus.
   await window.mouse.move(button.x - 40, button.y + 14);
   await window.mouse.move(button.x + 14, button.y + 14, { steps: 6 });
   await window.mouse.down();
@@ -165,6 +217,7 @@ test("the + menu in the sidebar header offers New Mind, Import a Word file…, N
   await expect(items).toHaveText([
     /New Mind/,
     /Import a Word file…/,
+    /Compare Documents…/,
     /New Folder…/,
     /Add Documents…/,
     /Add a web page…/,
@@ -179,7 +232,7 @@ test("the + menu in the sidebar header offers New Mind, Import a Word file…, N
   await window.keyboard.press("ArrowDown");
   await expect(items.nth(1)).toBeFocused();
   await window.keyboard.press("End");
-  await expect(items.nth(6)).toBeFocused();
+  await expect(items.nth(7)).toBeFocused();
   await window.keyboard.press("ArrowDown");
   await expect(items.first()).toBeFocused();
   await window.keyboard.press("Escape");
@@ -204,9 +257,7 @@ test("the + menu in the sidebar header offers New Mind, Import a Word file…, N
   await plus.focus();
   await window.keyboard.press("Enter");
   await expect(items.first()).toBeFocused();
-  await window.keyboard.press("ArrowDown");
-  await window.keyboard.press("ArrowDown");
-  await window.keyboard.press("ArrowDown");
+  for (let step = 0; step < 4; step++) await window.keyboard.press("ArrowDown");
   await window.keyboard.press("Enter");
   await expect(window.getByTestId("document-list-item")).toHaveCount(1);
 
@@ -217,7 +268,7 @@ test("the + menu in the sidebar header offers New Mind, Import a Word file…, N
   await plus.focus();
   await window.keyboard.press("Enter");
   await expect(items.first()).toBeFocused();
-  const dialog = await previewLink(app, window, folder, items.nth(6));
+  const dialog = await previewLink(app, window, folder, items.nth(7));
   await confirmLink(dialog);
   await showSourceLocations(window);
   await expect(linkedFolderRow(window, "Library")).toHaveCount(1);
@@ -237,6 +288,7 @@ test("the + menu and the shell speak Chinese too", async () => {
   await expect(window.getByRole("menuitem")).toHaveText([
     /新建 Mind/,
     /导入 Word 文件…/,
+    /对比文档…/,
     /新建文件夹…/,
     /添加文档…/,
     /添加网页…/,
