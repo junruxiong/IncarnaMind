@@ -1442,8 +1442,27 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
-    // 76 to 78 are reserved by work in progress.
-    version: 79,
+    // 76 to 79 are reserved by work in progress.
+    version: 80,
+    description: "Models the User added to a provider's model menu (#513)",
+    sql: `
+      -- A model id the catalog does not offer in the menu by default (an unknown, deprecated or
+      -- other-API id), that the User put there from Settings → Models → Other models.
+      CREATE TABLE chat_menu_models (
+        id TEXT PRIMARY KEY NOT NULL,
+        provider_id TEXT NOT NULL,
+        model_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX chat_menu_models_by_model ON chat_menu_models (provider_id, model_id)
+        WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    // 81 is reserved by work in progress.
+    version: 82,
     description: "Checkpoints: a Mind as it was before an AI change, or after a pause (#113)",
     sql: `
       -- One row per Checkpoint (src/core/checkpoints): the Mind's whole Yjs document as one
@@ -1465,24 +1484,6 @@ export const migrations: readonly Migration[] = [
         deleted_at TEXT
       ) STRICT;
       CREATE INDEX mind_checkpoints_by_mind ON mind_checkpoints (mind_id, created_at)
-        WHERE deleted_at IS NULL;
-    `,
-  },
-  {
-    version: 80,
-    description: "Models the User added to a provider's model menu (#513)",
-    sql: `
-      -- A model id the catalog does not offer in the menu by default (an unknown, deprecated or
-      -- other-API id), that the User put there from Settings → Models → Other models.
-      CREATE TABLE chat_menu_models (
-        id TEXT PRIMARY KEY NOT NULL,
-        provider_id TEXT NOT NULL,
-        model_id TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        deleted_at TEXT
-      ) STRICT;
-      CREATE UNIQUE INDEX chat_menu_models_by_model ON chat_menu_models (provider_id, model_id)
         WHERE deleted_at IS NULL;
     `,
   },
