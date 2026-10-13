@@ -1,6 +1,7 @@
 import { type DeletedItem, type DeletedKind, RECENTLY_DELETED_DAYS } from "../../core/api";
 import type { Language } from "../../core/language";
 import type { MessageKey, MessageParams } from "../../shared/i18n";
+import { dayOf } from "./dates";
 
 /**
  * What Recently deleted shows of an item and says before it is lost. Pure, so a
@@ -18,8 +19,6 @@ export function daysLeft(item: Pick<DeletedItem, "deletedAt">, now: Date): numbe
   return Math.max(1, Math.ceil((ends - now.getTime()) / DAY));
 }
 
-const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
-
 /** When it was deleted: "Today, 10:42", "Yesterday", or the date, in the interface language. */
 export function whenDeleted(
   item: Pick<DeletedItem, "deletedAt">,
@@ -27,20 +26,7 @@ export function whenDeleted(
   language: Language,
   say: (key: MessageKey, params?: MessageParams) => string,
 ): string {
-  const at = new Date(item.deletedAt);
-  const days = Math.round((startOfDay(now).getTime() - startOfDay(at).getTime()) / DAY);
-  if (days <= 0) {
-    const time = new Intl.DateTimeFormat(language, { hour: "2-digit", minute: "2-digit" }).format(
-      at,
-    );
-    return say("deleted.today", { time });
-  }
-  if (days === 1) return say("deleted.yesterday");
-  return new Intl.DateTimeFormat(language, {
-    day: "numeric",
-    month: "short",
-    ...(at.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
-  }).format(at);
+  return dayOf(new Date(item.deletedAt), now, language, say);
 }
 
 /** The kinds in the order a confirmation lists what is lost. */
