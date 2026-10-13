@@ -40,6 +40,7 @@ import {
   SparkLineIcon,
 } from "../lineIcons";
 import { ProblemLine } from "../ProblemLine";
+import { mindCallText, namedMind } from "./MindCall";
 
 /** The least time a live step stays up while another replaces it, so the line never flickers. */
 const MIN_STEP_MS = 1000;
@@ -202,6 +203,7 @@ function runningText(t: Translate, call: AnswerToolCall): string {
     return t("connectors.call.running", { connector: call.connector?.name ?? "", tool: call.tool });
   }
   if (call.source === "sources") return t("sources.call.running", { query: field(call, "query") });
+  if (call.source === "minds") return mindCallText(t, call, namedMind(t, call));
   if (call.source === "web") {
     return call.tool === "search_web"
       ? t("web.call.searching", { query: field(call, "query") })

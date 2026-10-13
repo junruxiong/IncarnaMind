@@ -618,6 +618,8 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
   /** Markers in the final text, in order of first appearance, and those that had no record. */
   const finalMarkers: number[] = [];
   let removedMarkers = 0;
+  /** Markers whose Citations went into a Mind rather than the Answer's text (#202). */
+  const placedElsewhere = new Set<number>();
 
   const handleFor = (passageId: string) => {
     let handle = handleOf.get(passageId);
@@ -1085,6 +1087,18 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
 
     finalCitation,
 
+    /**
+     * A marker's node in text the Answer writes into a Mind (#202): its
+     * record, checked now, or null to remove a marker with none.
+     */
+    checkedNode(marker: number): NodeJSON | null {
+      const record = records.get(marker);
+      if (!record) return null;
+      placedElsewhere.add(marker);
+      record.result ??= check(record);
+      return citationNode(toCitation(record, record.result));
+    },
+
     /** A marker's node once the Answer has finished: `finalCitation`'s, or null to remove the marker. */
     finalNode(marker: number): NodeJSON | null {
       const citation = finalCitation(marker);
@@ -1102,7 +1116,9 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
         const record = records.get(marker);
         return record ? [toCitation(record, record.result)] : [];
       });
-      const unused = [...records.keys()].filter((marker) => !finalMarkers.includes(marker)).length;
+      const unused = [...records.keys()].filter(
+        (marker) => !finalMarkers.includes(marker) && !placedElsewhere.has(marker),
+      ).length;
       return {
         citations,
         droppedMarkers: removedMarkers,

@@ -80,6 +80,21 @@ export function webInstructions(offered: boolean): string {
 }
 
 /**
+ * The Minds' Tools, when offered (#202): the User's words decide whether the
+ * Answer answers, changes a Mind or makes one, and once it has changed one,
+ * the reply says what it did, never the new text.
+ */
+export function mindInstructions(offered: boolean): string {
+  if (!offered) return "";
+  return [
+    "You can also change the User's Minds (their notes) and make new ones, with read_mind, edit_mind, add_to_mind and create_mind. What you write into a Mind arrives there as changes the User accepts or rejects.",
+    '- The User\'s words decide. A Question (what, why, how, compare, find, explain…) is answered in your reply and changes no Mind. A request to write or change something in a Mind ("shorten the summary", "add a risks section", "fix the typos", "把这段改短") changes that Mind. A request for a new note ("make notes on these papers", "summarise this into a new Mind", "新建一篇笔记") makes one.',
+    "- The Mind is the one in <mind>, unless the User names another. If they ask to change a Mind but none is in <mind> and they name none, change nothing: say so, and that they can open one or ask for a new Mind.",
+    "- Never write a Mind's new text in your reply. Once the Tools are done, reply in one or two sentences, with no Citation markers (the Mind holds them): which Mind you changed or made, what changed and why, and plainly anything you couldn't do, e.g. \"Shortened the summary in “Q3 review” from 320 to 150 words: dropped the repeated background and the third example; every Citation kept.\"",
+  ].join("\n");
+}
+
+/**
  * Connectors that are on but can't be used until the User signs in to them
  * again: their Tools aren't offered, and the Answer says so if it needed them.
  */
