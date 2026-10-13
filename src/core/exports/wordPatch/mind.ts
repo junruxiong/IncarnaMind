@@ -1,22 +1,16 @@
 /**
  * A Mind imported from a Word file, and the Blocks it was imported as, in one
- * shape (#105): JSON nodes, as the import made them, flattened into the units
+ * shape (#105): JSON nodes, as the import made them, flattened into the counterparts
  * that match the document's XML one for one. A paragraph, a heading or a list
  * item's paragraph is a `w:p`; a table, a `w:tbl`; a kept-as-is Block, the
- * element it names. Lists are flat in Word, so a list's items are units of
+ * element it names. Lists are flat in Word, so a list's items are counterparts of
  * their own, with the list they are in.
  */
 import * as Y from "yjs";
 import type { MarkJSON, NodeJSON } from "../../../shared/blockJson";
 import { readProposalAttribute } from "../../../shared/proposals";
 import { readWordAtom } from "../../../shared/wordFiles";
-import {
-  ANSWER_BLOCK,
-  BLOCK_ID_ATTRIBUTE,
-  PROPOSAL_ATTRIBUTE,
-  PROPOSAL_INSERT_MARK,
-  WORD_BLOCK_NODE,
-} from "../../api";
+import { ANSWER_BLOCK, PROPOSAL_ATTRIBUTE, PROPOSAL_INSERT_MARK, WORD_BLOCK_NODE } from "../../api";
 
 /** The formatting of text the export writes: the editor's marks, and its link. */
 export interface TextMarks {
@@ -106,20 +100,20 @@ export function mindJson(
   return node;
 }
 
-/** A list a unit is an item of: the Mind's list node, whether it is numbered, and how deep. */
+/** A list a counterpart is an item of: the Mind's list node, whether it is numbered, and how deep. */
 export interface ListPlace {
   list: NodeJSON;
   ordered: boolean;
   depth: number;
 }
 
-/** What a unit is, as the export writes it. */
-export type UnitKind = "paragraph" | "table" | "kept" | "other";
+/** What a counterpart is, as the export writes it. */
+export type CounterpartKind = "paragraph" | "table" | "kept" | "other";
 
-/** One unit: a node and, for one imported from the document, the place of its XML. */
-export interface Unit {
+/** One counterpart: a node and, for one imported from the document, the place of its XML. */
+export interface Counterpart {
   node: NodeJSON;
-  kind: UnitKind;
+  kind: CounterpartKind;
   /** The place of its XML ("w:p#12"); null for content the document didn't have. */
   key: string | null;
   list: ListPlace | null;
@@ -128,27 +122,21 @@ export interface Unit {
 const LISTS = new Set(["bulletList", "orderedList", "taskList"]);
 const PARAGRAPHS = new Set(["paragraph", "heading"]);
 
-/** The id a node has as a Block. */
-export const idOf = (node: NodeJSON): string | null => {
-  const id = node.attrs?.[BLOCK_ID_ATTRIBUTE];
-  return typeof id === "string" ? id : null;
-};
-
 /** Whether a kept-as-is Block is a header or a footer: its source names a part, not an element. */
 export const isFurniture = (node: NodeJSON): boolean =>
   node.type === WORD_BLOCK_NODE && !readWordAtom(node.attrs ?? {}).source?.includes("#");
 
 /**
- * The units in some Blocks, in order: list items one by one, an Answer's
+ * The counterparts in some Blocks, in order: list items one by one, an Answer's
  * Blocks as if they weren't in one. `keyOf` says where a node's XML is. A
  * header or footer isn't one: it is a part of the package of its own.
  */
-export function unitsOf(
+export function counterpartsOf(
   blocks: readonly NodeJSON[],
   keyOf: (node: NodeJSON) => string | null,
   list: ListPlace | null = null,
-  into: Unit[] = [],
-): Unit[] {
+  into: Counterpart[] = [],
+): Counterpart[] {
   for (const node of blocks) {
     if (LISTS.has(node.type)) {
       const place = (depth: number): ListPlace => ({
@@ -158,17 +146,17 @@ export function unitsOf(
       });
       const depth = list ? list.depth + 1 : 0;
       for (const item of node.content ?? []) {
-        unitsOf(item.content ?? [], keyOf, place(depth), into);
+        counterpartsOf(item.content ?? [], keyOf, place(depth), into);
       }
     } else if (node.type === ANSWER_BLOCK) {
-      unitsOf(node.content ?? [], keyOf, list, into);
+      counterpartsOf(node.content ?? [], keyOf, list, into);
     } else if (node.type === WORD_BLOCK_NODE) {
       if (isFurniture(node)) continue;
       const source = readWordAtom(node.attrs ?? {}).source;
       into.push({ node, kind: "kept", key: source, list });
     } else {
       const key = keyOf(node);
-      const kind: UnitKind = PARAGRAPHS.has(node.type)
+      const kind: CounterpartKind = PARAGRAPHS.has(node.type)
         ? "paragraph"
         : node.type === "table"
           ? "table"
@@ -177,12 +165,4 @@ export function unitsOf(
     }
   }
   return into;
-}
-
-/** Every node under some nodes, those first, in document order. */
-export function* nodesIn(nodes: readonly NodeJSON[]): Generator<NodeJSON> {
-  for (const node of nodes) {
-    yield node;
-    yield* nodesIn(node.content ?? []);
-  }
 }

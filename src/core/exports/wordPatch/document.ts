@@ -17,7 +17,7 @@ import { type Block, type TableCell, tableLayout } from "../../mindText";
 import { type DocxWriter, WRITER_NAMESPACES } from "../docx";
 import { escapeXml } from "../wordml";
 import type { AtomPlan } from "./atoms";
-import { type ListPlace, NO_MARKS, type Unit, unitsOf } from "./mind";
+import { type Counterpart, counterpartsOf, type ListPlace, NO_MARKS } from "./mind";
 import {
   baseTokens,
   type ParagraphContext,
@@ -65,9 +65,9 @@ export interface DocumentPatchInput {
   bibliography: readonly Block[];
 }
 
-/** A unit as imported, and the element its XML is. */
+/** A counterpart as imported, and the element its XML is. */
 interface Based {
-  unit: Unit;
+  counterpart: Counterpart;
   element: XmlElement;
 }
 
@@ -110,7 +110,7 @@ export class DocumentPatch {
   /** The numId each list of the Mind is written with, once it has one. */
   private readonly lists = new Map<NodeJSON, number>();
   /** Each list of the Mind's items, in order. */
-  private readonly listItems = new Map<NodeJSON, Unit[]>();
+  private readonly listItems = new Map<NodeJSON, Counterpart[]>();
   private readonly context: ParagraphContext;
   /** Paragraphs and tables holding something kept as is that is no longer written there. */
   private readonly forced = new Set<XmlElement>();
@@ -125,17 +125,28 @@ export class DocumentPatch {
       const id = node.attrs?.id;
       return typeof id === "string" ? (ids.get(id) ?? null) : null;
     };
-    this.collect(unitsOf(base.structure.blocks, this.baseKey), this.baseKey, (unit) => {
-      const element = unit.key ? base.places.get(unit.key) : undefined;
-      if (unit.key && element) this.based.set(unit.key, { unit, element });
-    });
-    this.collect(unitsOf(input.current, input.currentKey), input.currentKey, (unit) => {
-      if (!unit.list) return;
-      this.listItems.set(unit.list.list, [...(this.listItems.get(unit.list.list) ?? []), unit]);
-    });
-    for (const { unit, element } of this.based.values()) {
-      if (unit.kind !== "paragraph") continue;
-      const unwritten = (unit.node.content ?? []).some((node) => {
+    this.collect(
+      counterpartsOf(base.structure.blocks, this.baseKey),
+      this.baseKey,
+      (counterpart) => {
+        const element = counterpart.key ? base.places.get(counterpart.key) : undefined;
+        if (counterpart.key && element) this.based.set(counterpart.key, { counterpart, element });
+      },
+    );
+    this.collect(
+      counterpartsOf(input.current, input.currentKey),
+      input.currentKey,
+      (counterpart) => {
+        if (!counterpart.list) return;
+        this.listItems.set(counterpart.list.list, [
+          ...(this.listItems.get(counterpart.list.list) ?? []),
+          counterpart,
+        ]);
+      },
+    );
+    for (const { counterpart, element } of this.based.values()) {
+      if (counterpart.kind !== "paragraph") continue;
+      const unwritten = (counterpart.node.content ?? []).some((node) => {
         const source = sourceOf(node);
         const at = source ? base.places.get(source) : undefined;
         return (
@@ -165,18 +176,18 @@ export class DocumentPatch {
     };
   }
 
-  /** Every unit, those in tables' cells too. */
+  /** Every counterpart, those in tables' cells too. */
   private collect(
-    units: readonly Unit[],
+    counterparts: readonly Counterpart[],
     keyOf: (node: NodeJSON) => string | null,
-    visit: (unit: Unit) => void,
+    visit: (counterpart: Counterpart) => void,
   ): void {
-    for (const unit of units) {
-      visit(unit);
-      if (unit.kind !== "table") continue;
-      for (const row of unit.node.content ?? []) {
+    for (const counterpart of counterparts) {
+      visit(counterpart);
+      if (counterpart.kind !== "table") continue;
+      for (const row of counterpart.node.content ?? []) {
         for (const cell of row.content ?? [])
-          this.collect(unitsOf(cell.content ?? [], keyOf), keyOf, visit);
+          this.collect(counterpartsOf(cell.content ?? [], keyOf), keyOf, visit);
       }
     }
   }
@@ -195,8 +206,8 @@ export class DocumentPatch {
     const splices = this.container({
       element: body,
       contentStart: body.openEnd ?? startOf(body),
-      base: unitsOf(this.input.base.structure.blocks, this.baseKey),
-      current: unitsOf(this.input.current, this.input.currentKey),
+      base: counterpartsOf(this.input.base.structure.blocks, this.baseKey),
+      current: counterpartsOf(this.input.current, this.input.currentKey),
       extra: [],
     });
     if (this.input.bibliography.length > 0) {
@@ -226,28 +237,29 @@ export class DocumentPatch {
   // Containers
 
   /**
-   * The changes to a container's units: the body's, or a cell's. Units in
+   * The changes to a container's counterparts: the body's, or a cell's. Those in
    * `extra` (cells merged into this one) are kept or removed where they are,
    * but nothing new goes into them: they aren't shown.
    */
   private container(spec: {
     element: XmlElement;
     contentStart: number;
-    base: readonly Unit[];
-    current: readonly Unit[];
+    base: readonly Counterpart[];
+    current: readonly Counterpart[];
     extra: readonly XmlElement[];
   }): Splice[] {
     const { element } = spec;
     const scope = scopeOf(element, this.parents);
-    const baseKeys = spec.base.flatMap((unit) =>
-      unit.key && this.based.has(unit.key) ? [unit.key] : [],
+    const baseKeys = spec.base.flatMap((counterpart) =>
+      counterpart.key && this.based.has(counterpart.key) ? [counterpart.key] : [],
     );
     const baseIndex = new Map(baseKeys.map((key, index) => [key, index]));
     const seen = new Set<string>();
-    const matched = spec.current.map((unit) => {
-      if (!unit.key || seen.has(unit.key) || !baseIndex.has(unit.key)) return -1;
-      seen.add(unit.key);
-      return baseIndex.get(unit.key) as number;
+    const matched = spec.current.map((counterpart) => {
+      if (!counterpart.key || seen.has(counterpart.key) || !baseIndex.has(counterpart.key))
+        return -1;
+      seen.add(counterpart.key);
+      return baseIndex.get(counterpart.key) as number;
     });
     const kept = longestIncreasing(matched);
     const keptKeys = new Set([...kept].map((index) => baseKeys[index] as string));
@@ -267,12 +279,13 @@ export class DocumentPatch {
       return false;
     };
     let anchor = spec.contentStart;
-    /** The unit written last: whether it is a table, and its place among the base's if it stayed. */
+    /** The counterpart written last: whether it is a table, and its place among the base's if it stayed. */
     let previous: { table: boolean; index: number | null } | null = null;
-    spec.current.forEach((unit, index) => {
+    spec.current.forEach((counterpart, index) => {
       const keptHere = matched[index] !== -1 && kept.has(matched[index] as number);
-      const based = unit.key ? this.based.get(unit.key) : undefined;
-      const table = unit.kind === "table" || (unit.kind === "kept" && isTable(based?.element));
+      const based = counterpart.key ? this.based.get(counterpart.key) : undefined;
+      const table =
+        counterpart.kind === "table" || (counterpart.kind === "kept" && isTable(based?.element));
       // Two tables next to each other would run together into one.
       const apart =
         table &&
@@ -286,11 +299,15 @@ export class DocumentPatch {
             text: "<w:p/>",
           });
         splices.push(
-          ...this.rewriteInPlace(unit, based, () => this.referenceAround(spec.current, index)),
+          ...this.rewriteInPlace(counterpart, based, () =>
+            this.referenceAround(spec.current, index),
+          ),
         );
         if (inElement(based.element)) anchor = endOf(based.element);
       } else {
-        const xml = this.unitXml(unit, scope, () => this.referenceAround(spec.current, index));
+        const xml = this.counterpartXml(counterpart, scope, () =>
+          this.referenceAround(spec.current, index),
+        );
         splices.push({ from: anchor, to: anchor, text: apart ? `<w:p/>${xml}` : xml });
       }
       previous = { table, index: keptHere ? (matched[index] as number) : null };
@@ -305,94 +322,105 @@ export class DocumentPatch {
       const stillLast =
         lastBased !== undefined &&
         last?.key === baseKeys.at(-1) &&
-        keptKeys.has(lastBased.unit.key ?? "");
+        keptKeys.has(lastBased.counterpart.key ?? "");
       if (endsInTable && !(stillLast && element.name === "w:body")) {
         splices.push({ from: anchor, to: anchor, text: "<w:p/>" });
       }
     }
     // A merged cell whose every paragraph went still needs one.
     for (const cell of spec.extra) {
-      const units = baseKeys.filter(
+      const counterparts = baseKeys.filter(
         (key) => this.parents.get((this.based.get(key) as Based).element) === cell,
       );
-      if (units.length > 0 && units.every((key) => !keptKeys.has(key))) {
+      if (counterparts.length > 0 && counterparts.every((key) => !keptKeys.has(key))) {
         splices.push(appendInside(this.text, cell, "<w:p/>"));
       }
     }
     return splices;
   }
 
-  /** The changes to a unit the Mind kept in its place: none unless it changed. */
-  private rewriteInPlace(unit: Unit, based: Based, references: () => Reference[]): Splice[] {
+  /** The changes to a counterpart the Mind kept in its place: none unless it changed. */
+  private rewriteInPlace(
+    counterpart: Counterpart,
+    based: Based,
+    references: () => Reference[],
+  ): Splice[] {
     const { element } = based;
     const replace = (xml: string): Splice[] =>
       xml === sliceOf(this.text, element)
         ? []
         : [{ from: startOf(element), to: endOf(element), text: xml }];
-    if (unit.kind === "paragraph") {
-      if (!this.needsWriting(unit, based)) return [];
-      return replace(this.paragraphXml(unit, based, scopeOf(element, this.parents), references));
+    if (counterpart.kind === "paragraph") {
+      if (!this.needsWriting(counterpart, based)) return [];
+      return replace(
+        this.paragraphXml(counterpart, based, scopeOf(element, this.parents), references),
+      );
     }
-    if (unit.kind === "table") {
-      if (!this.input.edited(unit.node) && !this.forced.has(element)) return [];
-      return this.table(unit, based, true);
+    if (counterpart.kind === "table") {
+      if (!this.input.edited(counterpart.node) && !this.forced.has(element)) return [];
+      return this.table(counterpart, based, true);
     }
-    if (unit.kind === "kept") {
-      const atom = readWordAtom(unit.node.attrs ?? {});
-      if (atom.source && this.input.plan.writes(atom.source, unit.node, atom.kind)) return [];
-      this.input.plan.copied(unit.node);
-      return replace(this.newXml(this.input.writer.render(textBlocks(unit.node))));
+    if (counterpart.kind === "kept") {
+      const atom = readWordAtom(counterpart.node.attrs ?? {});
+      if (atom.source && this.input.plan.writes(atom.source, counterpart.node, atom.kind))
+        return [];
+      this.input.plan.copied(counterpart.node);
+      return replace(this.newXml(this.input.writer.render(textBlocks(counterpart.node))));
     }
     return [];
   }
 
-  /** A unit's XML, written where it wasn't before. */
-  private unitXml(unit: Unit, scope: Namespaces, references: () => Reference[]): string {
-    const based = unit.key ? this.based.get(unit.key) : undefined;
+  /** A counterpart's XML, written where it wasn't before. */
+  private counterpartXml(
+    counterpart: Counterpart,
+    scope: Namespaces,
+    references: () => Reference[],
+  ): string {
+    const based = counterpart.key ? this.based.get(counterpart.key) : undefined;
     const moved = (element: XmlElement) =>
       rescoped(
         sliceOf(this.text, element),
         scopeOf(this.parents.get(element) ?? element, this.parents),
         scope,
       );
-    if (unit.kind === "paragraph") {
-      if (based && !this.needsWriting(unit, based)) return moved(based.element);
-      return this.paragraphXml(unit, based ?? null, scope, references);
+    if (counterpart.kind === "paragraph") {
+      if (based && !this.needsWriting(counterpart, based)) return moved(based.element);
+      return this.paragraphXml(counterpart, based ?? null, scope, references);
     }
-    if (unit.kind === "table" && based) {
-      if (!this.input.edited(unit.node) && !this.forced.has(based.element))
+    if (counterpart.kind === "table" && based) {
+      if (!this.input.edited(counterpart.node) && !this.forced.has(based.element))
         return moved(based.element);
-      const [splice] = this.table(unit, based, false);
+      const [splice] = this.table(counterpart, based, false);
       const from = scopeOf(this.parents.get(based.element) ?? based.element, this.parents);
       return rescoped(splice?.text ?? "", from, scope);
     }
-    if (unit.kind === "kept" && based) {
-      const atom = readWordAtom(unit.node.attrs ?? {});
-      if (atom.source && this.input.plan.writes(atom.source, unit.node, atom.kind)) {
+    if (counterpart.kind === "kept" && based) {
+      const atom = readWordAtom(counterpart.node.attrs ?? {});
+      if (atom.source && this.input.plan.writes(atom.source, counterpart.node, atom.kind)) {
         return moved(based.element);
       }
-      this.input.plan.copied(unit.node);
-      return this.newXml(this.input.writer.render(textBlocks(unit.node)), scope);
+      this.input.plan.copied(counterpart.node);
+      return this.newXml(this.input.writer.render(textBlocks(counterpart.node)), scope);
     }
-    if (unit.kind === "kept")
-      return this.newXml(this.input.writer.render(textBlocks(unit.node)), scope);
-    return this.newXml(this.input.writer.render(this.input.blocksOf(unit.node)), scope);
+    if (counterpart.kind === "kept")
+      return this.newXml(this.input.writer.render(textBlocks(counterpart.node)), scope);
+    return this.newXml(this.input.writer.render(this.input.blocksOf(counterpart.node)), scope);
   }
 
   /** Whether an imported paragraph must be written again: edited, moved in or out of a list, or holding what goes. */
-  private needsWriting(unit: Unit, based: Based): boolean {
+  private needsWriting(counterpart: Counterpart, based: Based): boolean {
     return (
-      this.input.edited(unit.node) ||
+      this.input.edited(counterpart.node) ||
       this.forced.has(based.element) ||
-      !sameList(unit.list, based.unit.list) ||
-      this.sectionMoved(unit, based)
+      !sameList(counterpart.list, based.counterpart.list) ||
+      this.sectionMoved(counterpart, based)
     );
   }
 
-  private sectionMoved(unit: Unit, based: Based): boolean {
+  private sectionMoved(counterpart: Counterpart, based: Based): boolean {
     const own = child(child(based.element, "w:pPr") ?? based.element, "w:sectPr");
     const ownSource = own ? this.input.base.places.placeOf(own) : null;
-    const now = this.sectionSources(unit);
+    const now = this.sectionSources(counterpart);
     return (
       (ownSource !== null && !now.includes(ownSource)) || now.some((each) => each !== ownSource)
     );
@@ -408,15 +436,15 @@ export class DocumentPatch {
   // Paragraphs
 
   /** The section breaks a paragraph holds now, by source, that it writes. */
-  private sectionSources(unit: Unit): string[] {
+  private sectionSources(counterpart: Counterpart): string[] {
     const sources: string[] = [];
-    for (const node of unit.node.content ?? []) {
+    for (const node of counterpart.node.content ?? []) {
       const source = sourceOf(node);
       const element = source ? this.input.base.places.get(source) : undefined;
       if (
         source &&
         element?.name === "w:sectPr" &&
-        this.input.plan.writes(source, unit.node, "sectionBreak")
+        this.input.plan.writes(source, counterpart.node, "sectionBreak")
       ) {
         sources.push(source);
       }
@@ -425,17 +453,17 @@ export class DocumentPatch {
   }
 
   private paragraphXml(
-    unit: Unit,
+    counterpart: Counterpart,
     based: Based | null,
     scope: Namespaces,
     references: () => Reference[],
   ): string {
     const { plan } = this.input;
-    const tokens = this.input.tokensOf(unit.node).flatMap((token): Token[] => {
+    const tokens = this.input.tokensOf(counterpart.node).flatMap((token): Token[] => {
       if (token.kind !== "atom" || !token.source) return [token];
-      const node = (unit.node.content ?? []).find((each) => sourceOf(each) === token.source);
+      const node = (counterpart.node.content ?? []).find((each) => sourceOf(each) === token.source);
       const kind = node ? readWordAtom(node.attrs ?? {}).kind : ("other" as WordAtomKind);
-      if (plan.writes(token.source, unit.node, node?.type === "image" ? "picture" : kind))
+      if (plan.writes(token.source, counterpart.node, node?.type === "image" ? "picture" : kind))
         return [token];
       if (!node || !plan.written(token.source)) return [];
       plan.copied(node);
@@ -450,13 +478,13 @@ export class DocumentPatch {
       }));
     });
     const basePPr = based ? this.pPrOf(based.element) : "";
-    const { pPr, rPr } = this.paragraphProperties(unit, based, references, basePPr);
+    const { pPr, rPr } = this.paragraphProperties(counterpart, based, references, basePPr);
     const { xml, lost } = writeParagraph(
       {
         base: based
           ? {
               element: based.element,
-              tokens: baseTokens(based.unit.node.content ?? [], this.input.base.origins),
+              tokens: baseTokens(based.counterpart.node.content ?? [], this.input.base.origins),
             }
           : null,
         current: tokens,
@@ -472,9 +500,9 @@ export class DocumentPatch {
       },
     );
     if (lost > 0) {
-      const text = (unit.node.content ?? []).map((each) => each.text ?? "").join("");
+      const text = (counterpart.node.content ?? []).map((each) => each.text ?? "").join("");
       this.losses.push({
-        key: `edit:${unit.key ?? text}`,
+        key: `edit:${counterpart.key ?? text}`,
         kind: "edit",
         author: null,
         text: text.slice(0, 120),
@@ -496,15 +524,15 @@ export class DocumentPatch {
    * as pressing Enter there would make it, or the list item beside it.
    */
   private paragraphProperties(
-    unit: Unit,
+    counterpart: Counterpart,
     based: Based | null,
     references: () => Reference[],
     basePPr: string,
   ): { pPr: string; rPr: string } {
     const { styles } = this.input;
     const level =
-      unit.node.type === "heading"
-        ? Math.min(Math.max(Number(unit.node.attrs?.level) || 1, 1), 6)
+      counterpart.node.type === "heading"
+        ? Math.min(Math.max(Number(counterpart.node.attrs?.level) || 1, 1), 6)
         : null;
     let properties: Properties;
     let rPr = "";
@@ -512,7 +540,9 @@ export class DocumentPatch {
       properties = Properties.paragraph(basePPr);
       rPr = runOfMark(properties.get("w:rPr"));
       const baseLevel =
-        based.unit.node.type === "heading" ? Number(based.unit.node.attrs?.level) || 1 : null;
+        based.counterpart.node.type === "heading"
+          ? Number(based.counterpart.node.attrs?.level) || 1
+          : null;
       if (level !== baseLevel) {
         const direct = properties.has("w:outlineLvl");
         if (level !== null && direct && baseLevel !== null) {
@@ -528,21 +558,22 @@ export class DocumentPatch {
           if (!direct) properties.remove("w:pStyle");
         }
       }
-      if (!sameList(unit.list, based.unit.list)) this.setList(properties, unit.list, based);
+      if (!sameList(counterpart.list, based.counterpart.list))
+        this.setList(properties, counterpart.list, based);
     } else if (level !== null) {
       properties = Properties.paragraph("");
       properties.set(
         "w:pStyle",
         `<w:pStyle w:val="${escapeXml(styles.id(`heading${level}` as "heading1"))}"/>`,
       );
-    } else if (unit.list) {
-      const sibling = this.siblingOf(unit);
+    } else if (counterpart.list) {
+      const sibling = this.siblingOf(counterpart);
       properties = Properties.paragraph(sibling ? cleaned(this.pPrOf(sibling.element)) : "");
       rPr = sibling ? this.lastRunOf(sibling) : "";
       if (!sibling) {
         properties.set("w:pStyle", `<w:pStyle w:val="${escapeXml(styles.id("listParagraph"))}"/>`);
       }
-      this.setList(properties, unit.list, null);
+      this.setList(properties, counterpart.list, null);
     } else {
       const reference = references()[0];
       properties = Properties.paragraph(reference ? reference.pPr : "");
@@ -550,7 +581,7 @@ export class DocumentPatch {
     }
 
     // A section break goes with the paragraph that holds it now.
-    const sections = this.sectionSources(unit);
+    const sections = this.sectionSources(counterpart);
     const sectPr = properties.get("w:sectPr");
     const ownSection = based
       ? child(child(based.element, "w:pPr") ?? based.element, "w:sectPr")
@@ -571,7 +602,7 @@ export class DocumentPatch {
       const own = properties.has("w:numPr");
       properties.remove("w:numPr");
       // Numbered by its style: only a list of none turns that off.
-      if (based?.unit.list && !own) {
+      if (based?.counterpart.list && !own) {
         properties.set("w:numPr", '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="0"/></w:numPr>');
       }
       return;
@@ -589,7 +620,7 @@ export class DocumentPatch {
     if (known !== undefined) return known;
     for (const item of this.listItems.get(list.list) ?? []) {
       const based = item.key ? this.based.get(item.key) : undefined;
-      if (!based?.unit.list || based.unit.list.ordered !== list.ordered) continue;
+      if (!based?.counterpart.list || based.counterpart.list.ordered !== list.ordered) continue;
       const numId = numIdIn(this.pPrOf(based.element));
       if (numId !== null && numId !== "0") {
         this.lists.set(list.list, Number(numId));
@@ -603,10 +634,10 @@ export class DocumentPatch {
   }
 
   /** An imported item of the same list, the nearest before this one, else after: a new item takes its look. */
-  private siblingOf(unit: Unit): Based | null {
-    if (!unit.list) return null;
-    const items = this.listItems.get(unit.list.list) ?? [];
-    const at = items.indexOf(unit);
+  private siblingOf(counterpart: Counterpart): Based | null {
+    if (!counterpart.list) return null;
+    const items = this.listItems.get(counterpart.list.list) ?? [];
+    const at = items.indexOf(counterpart);
     const order = [...items.slice(0, at).reverse(), ...items.slice(at + 1)];
     for (const item of order) {
       const based = item.key ? this.based.get(item.key) : undefined;
@@ -617,7 +648,7 @@ export class DocumentPatch {
 
   /** The run properties of a paragraph's last text: what text typed after it would take. */
   private lastRunOf(based: Based): string {
-    const nodes = based.unit.node.content ?? [];
+    const nodes = based.counterpart.node.content ?? [];
     for (let index = nodes.length - 1; index >= 0; index--) {
       const node = nodes[index] as NodeJSON;
       if (node.type !== "text") continue;
@@ -637,22 +668,22 @@ export class DocumentPatch {
   }
 
   /**
-   * What new paragraphs among a container's units take their look from: the
+   * What new paragraphs among a container's counterparts take their look from: the
    * nearest plain imported paragraph before, else after.
    */
-  private referenceAround(units: readonly Unit[], index: number): Reference[] {
-    const plain = (unit: Unit | undefined) => {
-      const based = unit?.key ? this.based.get(unit.key) : undefined;
+  private referenceAround(counterparts: readonly Counterpart[], index: number): Reference[] {
+    const plain = (counterpart: Counterpart | undefined) => {
+      const based = counterpart?.key ? this.based.get(counterpart.key) : undefined;
       return based &&
-        based.unit.node.type === "paragraph" &&
-        !based.unit.list &&
+        based.counterpart.node.type === "paragraph" &&
+        !based.counterpart.list &&
         based.element.name === "w:p"
         ? based
         : null;
     };
-    for (const order of [units.slice(0, index).reverse(), units.slice(index + 1)]) {
-      for (const unit of order) {
-        const based = plain(unit);
+    for (const order of [counterparts.slice(0, index).reverse(), counterparts.slice(index + 1)]) {
+      for (const counterpart of order) {
+        const based = plain(counterpart);
         if (based) return [{ pPr: cleaned(this.pPrOf(based.element)), rPr: this.lastRunOf(based) }];
       }
     }
@@ -663,10 +694,10 @@ export class DocumentPatch {
   // Tables
 
   /** A table's changes: cell by cell when its shape is the same, else the table written again. */
-  private table(unit: Unit, based: Based, inPlace: boolean): Splice[] {
+  private table(counterpart: Counterpart, based: Based, inPlace: boolean): Splice[] {
     const { element } = based;
-    const baseRows = based.unit.node.content ?? [];
-    const rows = unit.node.content ?? [];
+    const baseRows = based.counterpart.node.content ?? [];
+    const rows = counterpart.node.content ?? [];
     const span = (cell: NodeJSON, name: string) =>
       Math.max(Math.trunc(Number(cell.attrs?.[name])) || 1, 1);
     const sameShape =
@@ -686,7 +717,7 @@ export class DocumentPatch {
         );
       });
     if (!sameShape) {
-      const xml = this.rebuiltTable(unit, based);
+      const xml = this.rebuiltTable(counterpart, based);
       return [{ from: startOf(element), to: endOf(element), text: xml }];
     }
     const splices: Splice[] = [];
@@ -731,8 +762,8 @@ export class DocumentPatch {
     return this.container({
       element: tc,
       contentStart: tcPr ? endOf(tcPr) : (tc.openEnd ?? startOf(tc)),
-      base: unitsOf(baseCell.content ?? [], this.baseKey),
-      current: unitsOf(cell.content ?? [], this.input.currentKey),
+      base: counterpartsOf(baseCell.content ?? [], this.baseKey),
+      current: counterpartsOf(cell.content ?? [], this.input.currentKey),
       extra: this.input.base.merged.get(baseCell) ?? [],
     });
   }
@@ -760,7 +791,7 @@ export class DocumentPatch {
    * one the Mind's came from (properties and content), new ones like those
    * beside them, and merged cells as Word writes them.
    */
-  private rebuiltTable(unit: Unit, based: Based): string {
+  private rebuiltTable(counterpart: Counterpart, based: Based): string {
     const { element } = based;
     const text = this.text;
     const tblPr = child(element, "w:tblPr");
@@ -771,7 +802,7 @@ export class DocumentPatch {
           .map((each) => Number(each.attrs["w:w"]) || 0)
       : [];
 
-    const rows = unit.node.content ?? [];
+    const rows = counterpart.node.content ?? [];
     const shapes: TableCell[][] = rows.map((row) =>
       (row.content ?? []).map((cell) => ({
         header: cell.type === "tableHeader",
@@ -799,18 +830,18 @@ export class DocumentPatch {
 
     // Where each of the Mind's cells came from: the cell whose paragraphs it holds.
     const baseCells = new Map<string, { tc: XmlElement; tr: XmlElement; node: NodeJSON }>();
-    for (const baseRow of based.unit.node.content ?? []) {
+    for (const baseRow of based.counterpart.node.content ?? []) {
       const tr = this.input.base.origins.get(baseRow);
       for (const baseCell of baseRow.content ?? []) {
         const tc = this.input.base.origins.get(baseCell);
         if (!tr || !tc) continue;
-        for (const inner of unitsOf(baseCell.content ?? [], this.baseKey)) {
+        for (const inner of counterpartsOf(baseCell.content ?? [], this.baseKey)) {
           if (inner.key) baseCells.set(inner.key, { tc, tr, node: baseCell });
         }
       }
     }
     const originOf = (cell: NodeJSON) => {
-      for (const inner of unitsOf(cell.content ?? [], this.input.currentKey)) {
+      for (const inner of counterpartsOf(cell.content ?? [], this.input.currentKey)) {
         const found = inner.key ? baseCells.get(inner.key) : undefined;
         if (found) return found;
       }
@@ -901,8 +932,10 @@ export class DocumentPatch {
       const from = (own ? endOf(own) : (tc.openEnd ?? start)) - start;
       content = selfClosing(tc) ? "" : patched.slice(from, patched.length - closeTag(tc).length);
     } else {
-      content = unitsOf(node.content ?? [], this.input.currentKey)
-        .map((unit) => this.unitXml(unit, scopeOf(this.input.base.root, this.parents), () => []))
+      content = counterpartsOf(node.content ?? [], this.input.currentKey)
+        .map((counterpart) =>
+          this.counterpartXml(counterpart, scopeOf(this.input.base.root, this.parents), () => []),
+        )
         .join("");
     }
     if (!content.trimEnd().endsWith("</w:p>") && !content.trimEnd().endsWith("<w:p/>"))
@@ -930,7 +963,12 @@ export class DocumentPatch {
    * unless what holds them is written again anyway.
    */
   private unwrittenOutside(splices: readonly Splice[]): Splice[] {
-    const unitElements = new Set([...this.based.values()].map((each) => each.element));
+    // A table's rows aren't what holds a mark between them: only paragraphs and kept Blocks are.
+    const holders = new Set(
+      [...this.based.values()]
+        .filter((each) => each.counterpart.kind !== "table")
+        .map((each) => each.element),
+    );
     const covered = (element: XmlElement) =>
       splices.some(
         (splice) =>
@@ -938,14 +976,14 @@ export class DocumentPatch {
       );
     const removed: Splice[] = [];
     for (const based of this.based.values()) {
-      if (based.unit.kind !== "paragraph") continue;
-      for (const node of based.unit.node.content ?? []) {
+      if (based.counterpart.kind !== "paragraph") continue;
+      for (const node of based.counterpart.node.content ?? []) {
         const source = sourceOf(node);
         const element = source ? this.input.base.places.get(source) : undefined;
         if (!source || !element || this.input.plan.written(source)) continue;
         let inside = false;
         for (let at = this.parents.get(element); at; at = this.parents.get(at)) {
-          if (unitElements.has(at)) inside = true;
+          if (holders.has(at)) inside = true;
         }
         if (!inside && !covered(element))
           removed.push({ from: startOf(element), to: endOf(element), text: "" });
@@ -1066,21 +1104,7 @@ function textBlocks(node: NodeJSON): Block[] {
     .filter((line) => line.trim() !== "")
     .map((line) => ({
       kind: "paragraph",
-      content: [
-        {
-          kind: "text",
-          text: line,
-          marks: {
-            bold: false,
-            italic: false,
-            strike: false,
-            underline: false,
-            highlight: false,
-            code: false,
-            link: null,
-          },
-        },
-      ],
+      content: [{ kind: "text", text: line, marks: { ...NO_MARKS } }],
     }));
 }
 
