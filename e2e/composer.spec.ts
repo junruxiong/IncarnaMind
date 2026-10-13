@@ -106,6 +106,16 @@ const bridge = (window: Page) => ({
         (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.setLocalOnly(value),
       on,
     ),
+  /** The last Answer the core keeps in the only conversation: its status and its Markdown. */
+  storedAnswer: () =>
+    window.evaluate(async () => {
+      const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      const [conversation] = await core.listConversations();
+      if (!conversation) throw new Error("The core keeps no conversation.");
+      const { messages } = await core.getConversation(conversation.id);
+      const answer = messages.filter((message) => message.kind === "answer").at(-1);
+      return answer?.kind === "answer" ? { status: answer.status, text: answer.text } : null;
+    }),
 });
 
 /** The scripted Answer repeats the Question: a long one keeps it streaming for a few seconds. */
@@ -293,9 +303,12 @@ test("Stop keeps what streamed, and Regenerate writes the Answer again", async (
   await expect(answer.getByTestId("answer-stopped")).toHaveText("Stopped");
   await expect.poll(() => opacityOf(answer.getByTestId("answer-actions"))).toBe(1);
   await expect(composer.getByTestId("composer-live")).toContainText("The Answer was stopped.");
-  // What streamed stays: a moment later it is still all there is.
-  await window.waitForTimeout(800);
+  // What streamed stays, on the screen and in what the core keeps.
   await expect(answer.locator(".assistant-answer-text")).toHaveText(kept ?? "");
+  const stored = await bridge(window).storedAnswer();
+  expect(stored?.status).toBe("stopped");
+  expect(stored?.text).toContain("scripted");
+  expect(stored?.text).not.toContain("That is all.");
   await screenshot(window, "answer-stopped-en");
 
   // Regenerate, at the end of its steps, writes it again in full, in its place.

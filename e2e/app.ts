@@ -247,6 +247,20 @@ export const startScriptedTask = (
   );
 
 /**
+ * Returns once everything the app captured for usage data so far has reached
+ * the server `LaunchOptions.usageData` names, so a test can say nothing else
+ * did without waiting a while for it.
+ */
+export const flushUsageData = (app: ElectronApplication) =>
+  app.evaluate(async () => {
+    const hooks = (globalThis as { incarnamindUsageData?: { flush(): Promise<void> } })
+      .incarnamindUsageData;
+    if (!hooks)
+      throw new Error("Launch with `usageData`: only then has the app a usage data sender.");
+    await hooks.flush();
+  });
+
+/**
  * Stands in for the system's notifications: each one shown is recorded
  * instead (`notificationsShown`). Notifications made before this aren't.
  */
@@ -1073,6 +1087,21 @@ async function wordsBox(line: Locator, words: string) {
   }, words);
   if (!box) throw new Error(`"${words}" isn't in the line.`);
   return box;
+}
+
+/**
+ * Returns once ProseMirror has settled its selection with the page after the editor got the
+ * focus. 20 ms after the focus it puts its own selection back into the page if the page's has
+ * moved since, which undoes a key pressed in those 20 ms (⌘A, End). Called after the focus, a
+ * 21 ms timer runs after the one ProseMirror set then.
+ */
+export const afterEditorFocus = (window: Page) =>
+  window.evaluate(() => new Promise((done) => setTimeout(done, 21)));
+
+/** Gives the editor the focus, and waits as `afterEditorFocus` says. */
+export async function focusEditor(window: Page, editor: Locator): Promise<void> {
+  await editor.focus();
+  await afterEditorFocus(window);
 }
 
 /**

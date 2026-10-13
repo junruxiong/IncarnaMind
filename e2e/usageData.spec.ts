@@ -1,12 +1,13 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { gunzipSync } from "node:zlib";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { COMMON_FIELDS, SENDER_FIELDS, USAGE_EVENTS } from "../src/core/usageEvents";
 import {
   closeSettings,
   createDataFolder,
   dismissChatSetup,
+  flushUsageData,
   launchApp,
   newMind,
   openPrivacySettings,
@@ -70,9 +71,6 @@ test.afterEach(async () => {
   await removeDataFolder(home);
 });
 
-/** Long enough for anything queued to have been sent: the test build sends every half second. */
-const settle = (window: Page) => window.waitForTimeout(1_500);
-
 /** Each event holds exactly its declared fields, the common ones and PostHog's own, and nothing of the User's. */
 function expectOnlyDeclared(events: readonly SentEvent[]) {
   for (const sent of events) {
@@ -108,7 +106,7 @@ test("a release build asks on the first run, sends nothing when declined, and on
   await expect(row).toContainText("PostHog (127.0.0.1)");
   const usageSwitch = row.getByTestId("usage-data-switch");
   await expect(usageSwitch).not.toBeChecked();
-  await settle(window);
+  await flushUsageData(app);
   expect(posthog.requests).toEqual([]);
   await app.close();
 
@@ -116,7 +114,7 @@ test("a release build asks on the first run, sends nothing when declined, and on
   const second = await launchApp(dataDir, { home, usageData: { host: posthog.host } });
   await expect(second.window.getByTestId("mind-list-item")).toHaveCount(1);
   await expect(second.window.getByTestId("usage-data-dialog")).toBeHidden();
-  await settle(second.window);
+  await flushUsageData(second.app);
   expect(posthog.requests).toEqual([]);
 
   // Turned on in Settings → Privacy: events arrive, holding only what is declared.
@@ -144,13 +142,13 @@ test("a release build asks on the first run, sends nothing when declined, and on
 
   // Turned off: nothing more is sent.
   await showSettingsPage(second.window, "privacy");
-  await second.window.getByTestId("usage-data-switch").uncheck();
-  await settle(second.window);
+  await expect.poll(() => posthog.events().at(-1)?.properties).toMatchObject({ page: "privacy" });
   const sent = posthog.events().length;
+  await second.window.getByTestId("usage-data-switch").uncheck();
   await showSettingsPage(second.window, "models");
   await closeSettings(second.window);
   await newMind(second.window);
-  await settle(second.window);
+  await flushUsageData(second.app);
   expect(posthog.events()).toHaveLength(sent);
   await second.app.close();
 });
@@ -175,18 +173,18 @@ test("a test build says so on the first run, with the switch, and stops at once 
   expectOnlyDeclared(posthog.events());
 
   // Turned off in the notice: nothing more is sent.
+  await flushUsageData(app);
+  const sent = posthog.events().length;
   await usageSwitch.uncheck();
   await dialog.getByTestId("usage-data-done").click();
   await expect(dialog).toBeHidden();
-  await settle(window);
-  const sent = posthog.events().length;
   await dismissChatSetup(window);
   await newMind(window);
   const privacy = await openPrivacySettings(window);
   const row = privacy.locator('[data-traffic-id="usage-data"]');
   await expect(row.getByTestId("usage-data-switch")).not.toBeChecked();
   await expect(row).toContainText("this test version");
-  await settle(window);
+  await flushUsageData(app);
   expect(posthog.events()).toHaveLength(sent);
   await app.close();
 });
