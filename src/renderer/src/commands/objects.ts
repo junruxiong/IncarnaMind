@@ -1,15 +1,16 @@
 import type { LinkedFolder } from "../../../core/api";
 import { displayName } from "../../../shared/documentNames";
 import { core, files } from "../core";
-import { languageNow } from "../i18n";
+import { showFileLabelKey } from "../fileInfo";
+import { languageNow, translateNow } from "../i18n";
 import { bridgeFrom, type LibraryBridge } from "../libraryBridges";
-import { fileStatusLabel, folderName, formatCount, revealLabelKey } from "../linkedFolders";
+import { fileStatusLabel, folderName, formatCount } from "../linkedFolders";
 import { useRequests } from "../requests";
 import { useAppStore } from "../store";
 import { findTab } from "../tabs";
 import { deleteTag } from "../tagChanges";
 import { type Command, type CommandContext, needsHere } from "./registry";
-import { documentsOf, everyDocument, idsOf } from "./targets";
+import { documentsOf, everyDocument, idsOf, onlyOne } from "./targets";
 
 const store = () => useAppStore.getState();
 const reportError = (error: unknown) => store().reportError(error);
@@ -33,14 +34,24 @@ const linkedOf = (ctx: CommandContext): LinkedFolder | undefined => {
   return store().linkedFolders.find((each) => each.id === id);
 };
 
+/** How many Documents a selection holds, or 0 for one: its commands then say "these 3". */
+const many = (ctx: CommandContext): number => {
+  const count = documentsOf(ctx).length;
+  return count > 1 ? count : 0;
+};
+
 function bridgeOf(ctx: CommandContext): LibraryBridge | null {
-  const [document] = documentsOf(ctx);
-  if (!document) return null;
+  const documents = documentsOf(ctx);
+  const [first] = documents;
+  if (!first) return null;
   return {
     kind: "documents",
-    title: displayName(document),
-    count: 1,
-    scope: { folderIds: [], tagIds: [], documentIds: [document.id] },
+    title:
+      documents.length === 1
+        ? displayName(first)
+        : translateNow("library.count", { count: documents.length }),
+    count: documents.length,
+    scope: { folderIds: [], tagIds: [], documentIds: documents.map((each) => each.id) },
   };
 }
 
@@ -61,6 +72,7 @@ export const mindCommands: readonly Command[] = [
     label: "mind.open",
     group: "open",
     appliesTo: ["mind"],
+    when: onlyOne,
     reversible: true,
     run: (ctx) => store().openMind(idsOf(ctx, "mind")[0] ?? ""),
   },
@@ -69,6 +81,7 @@ export const mindCommands: readonly Command[] = [
     label: "mind.openSide",
     group: "open",
     appliesTo: ["mind"],
+    when: onlyOne,
     reversible: true,
     run: (ctx) => store().openMind(idsOf(ctx, "mind")[0] ?? "", { side: true }),
   },
@@ -91,6 +104,7 @@ export const mindCommands: readonly Command[] = [
     appliesTo: ["mind"],
     reversible: true,
     ...needsHere("mind.rename"),
+    when: (ctx) => onlyOne(ctx) && ctx.here?.["mind.rename"] !== undefined,
   },
   {
     id: "mind.delete",
@@ -98,7 +112,7 @@ export const mindCommands: readonly Command[] = [
     group: "danger",
     destructive: true,
     appliesTo: ["mind", "tab"],
-    when: ofMind,
+    when: (ctx) => onlyOne(ctx) && ofMind(ctx),
     reversible: true,
     async run(ctx) {
       const mind = mindOf(ctx);
@@ -113,6 +127,7 @@ export const documentCommands: readonly Command[] = [
     label: "mind.open",
     group: "open",
     appliesTo: ["document"],
+    when: onlyOne,
     reversible: true,
     run: (ctx) => store().openDocument({ documentId: idsOf(ctx, "document")[0] ?? "" }),
   },
@@ -121,17 +136,18 @@ export const documentCommands: readonly Command[] = [
     label: "document.openTab",
     group: "open",
     appliesTo: ["document"],
+    when: onlyOne,
     reversible: true,
     run: (ctx) =>
       store().openDocument({ documentId: idsOf(ctx, "document")[0] ?? "" }, { as: "here" }),
   },
   {
     id: "document.ask",
-    label: "documents.ask",
+    label: (ctx, t) =>
+      many(ctx) ? t("library.ask.documents", { count: many(ctx) }) : t("documents.ask"),
     group: "main",
     appliesTo: ["document"],
-    // One Document, until a selection can be asked about (#225).
-    when: (ctx) => documentsOf(ctx).length === 1,
+    when: (ctx) => documentsOf(ctx).length >= 1,
     reversible: true,
     run(ctx) {
       const bridge = bridgeOf(ctx);
@@ -140,10 +156,11 @@ export const documentCommands: readonly Command[] = [
   },
   {
     id: "document.startMind",
-    label: "documents.startMind",
+    label: (ctx, t) =>
+      many(ctx) ? t("documents.startMind.many", { count: many(ctx) }) : t("documents.startMind"),
     group: "main",
     appliesTo: ["document"],
-    when: (ctx) => documentsOf(ctx).length === 1,
+    when: (ctx) => documentsOf(ctx).length >= 1,
     reversible: true,
     run(ctx) {
       const bridge = bridgeOf(ctx);
@@ -152,7 +169,10 @@ export const documentCommands: readonly Command[] = [
   },
   {
     id: "document.retry",
-    label: "documents.retryAction",
+    label: (ctx, t) =>
+      many(ctx)
+        ? t("documents.retryAction.many", { count: many(ctx) })
+        : t("documents.retryAction"),
     group: "main",
     appliesTo: ["document"],
     // Only a failed one whose file is there to be read again.
@@ -182,13 +202,14 @@ export const documentCommands: readonly Command[] = [
     appliesTo: ["document"],
     reversible: true,
     ...needsHere("document.rename"),
+    when: (ctx) => onlyOne(ctx) && ctx.here?.["document.rename"] !== undefined,
   },
   {
     id: "document.openExternally",
     label: "documents.copy.open",
     group: "file",
     appliesTo: ["document"],
-    when: onFiles,
+    when: (ctx) => onlyOne(ctx) && onFiles(ctx),
     // Its file isn't where it was: the item says why.
     enabled: fileReason,
     reversible: true,
@@ -198,10 +219,10 @@ export const documentCommands: readonly Command[] = [
   },
   {
     id: "document.showInFolder",
-    label: "documents.copy.showInFolder",
+    label: (_ctx, t) => t(showFileLabelKey(navigator.platform)),
     group: "file",
     appliesTo: ["document"],
-    when: onFiles,
+    when: (ctx) => onlyOne(ctx) && onFiles(ctx),
     enabled: fileReason,
     reversible: true,
     run(ctx) {
@@ -211,11 +232,13 @@ export const documentCommands: readonly Command[] = [
   {
     id: "document.delete",
     label: (ctx, t) =>
-      t(
-        documentsOf(ctx).every((document) => document.fileStatus === "missing")
-          ? "documents.removeAction"
-          : "documents.deleteAction",
-      ),
+      many(ctx)
+        ? t("documents.deleteAction.many", { count: many(ctx) })
+        : t(
+            documentsOf(ctx).every((document) => document.fileStatus === "missing")
+              ? "documents.removeAction"
+              : "documents.deleteAction",
+          ),
     group: "danger",
     destructive: true,
     appliesTo: ["document"],
@@ -371,7 +394,7 @@ const folderBridge = (ctx: CommandContext): LibraryBridge | null => {
     : null;
 };
 
-const REVEAL = revealLabelKey(navigator.platform);
+const REVEAL = showFileLabelKey(navigator.platform);
 
 export const linkedFolderCommands: readonly Command[] = [
   {

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { fileDate, infoLabelKey } from "../../src/renderer/src/fileInfo";
+import { fileDate, infoLabelKey, showFileLabelKey } from "../../src/renderer/src/fileInfo";
+import { translate } from "../../src/shared/i18n";
 
 describe("a file's own date", () => {
   test("is shown at the precision the file gave", () => {
@@ -17,6 +18,17 @@ describe("a file's own date", () => {
   test("is left as it is when it isn't a date", () => {
     expect(fileDate("sometime", "en")).toBe("sometime");
   });
+});
+
+test("every action that shows a file says Finder on macOS and folder on Windows and Linux, in both languages", () => {
+  const says = (platform: string, language: "en" | "zh-CN") =>
+    translate(language, showFileLabelKey(platform));
+  expect(says("MacIntel", "en")).toBe("Show in Finder");
+  expect(says("MacIntel", "zh-CN")).toBe("在访达中显示");
+  for (const platform of ["Win32", "Linux x86_64"]) {
+    expect(says(platform, "en")).toBe("Show in folder");
+    expect(says(platform, "zh-CN")).toBe("在文件夹中显示");
+  }
 });
 
 test("Get info is Properties in Chinese on Windows and Linux only", () => {
