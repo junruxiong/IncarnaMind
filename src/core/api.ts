@@ -1230,7 +1230,7 @@ export type CitationLocation =
 export interface CitationAttributes {
   passageId: string | null;
   documentId: string | null;
-  /** The Document's display name when the Citation was made. */
+  /** The Document's name when the Citation was made: shown only when the Document can't be found (see `shownDocumentName`). */
   documentName: string | null;
   /**
    * The version of the Document the Citation quotes: the SHA-256 of its file
@@ -3282,6 +3282,21 @@ export interface TaskProgress {
   total: number;
 }
 
+/** What the User can ask of a Task from its progress in the thread, as its kind allows (D189). */
+export type TaskAction = "plan" | "tell" | "pause" | "stop";
+
+/**
+ * A step of a Task, as its progress shows it: what it does, in the Task's own
+ * words ("Corvane Agreement · Termination notice"), and how it went. "failed":
+ * it ended without its result (a cell with no Answer); "skipped": the User
+ * chose to go on without it.
+ */
+export interface TaskStep {
+  key: string;
+  text: string;
+  status: "running" | "done" | "failed" | "skipped";
+}
+
 /**
  * A Task (CONTEXT.md): a Run that goes on in the background and keeps its
  * place when IncarnaMind is quit. Its journal (`runs`, `run_steps`) records
@@ -3305,6 +3320,12 @@ export interface Task {
   problem: string | null;
   /** What its model requests have cost, settled and reserved; null with none billed. */
   cost: Money | null;
+  /** What its kind lets the User ask of it, whatever it is doing now. */
+  actions: TaskAction[];
+  /** Its latest steps, oldest first (`listTaskSteps` has them all). */
+  steps: TaskStep[];
+  /** How many steps it has started in all. */
+  stepCount: number;
   startedAt: string;
   finishedAt: string | null;
   updatedAt: string;
@@ -3313,7 +3334,7 @@ export interface Task {
 /** What answering a Task's "unknown-outcome" ask does: the step again, or on without it. */
 export type TaskAskAnswer = "redo" | "skip";
 
-/** Open a Task's place: its Mind, with its row in the tray (`showTask`, a notification's click). */
+/** Open a Task's place: its Mind, with its progress in the thread (`showTask`, a notification's click). */
 export interface TaskShown {
   taskId: string;
   mindId: string | null;
@@ -3780,6 +3801,55 @@ export type CheckSentencesResult =
   | { kind: "has-proposals" }
   /** The User stopped it (`cancelCheck`): the sentences not checked yet say "stopped". */
   | { kind: "cancelled" };
+
+/** A document someone else wrote, to verify claim by claim (#97): the window offers PDFs. */
+export interface VerifyDocumentInput {
+  /** The file's absolute path: any file the Library reads. */
+  path: string;
+  /** The Folder the Mind goes in, and the PDF too if it is new to the Library; none, or null, for none. */
+  folderId?: string | null;
+}
+
+/** What `verifyDocument` did. */
+export type VerifyDocumentResult =
+  /** The Mind holds the document's text, a paragraph to a Block: its claims can be found. */
+  | { ok: true; mind: Mind; documentId: string }
+  /** No Mind was made: the file can't be read, or holds no text (a scan nothing could read). */
+  | { ok: false; reason: "unreadable" | "no-text" };
+
+/** Finding, or checking, the claims of a Mind made by `verifyDocument`. */
+export interface VerifyClaimsInput {
+  /** Chosen by the caller, so it can stop the request (`cancelCheck`). */
+  requestId: string;
+  mindId: string;
+  /** Check against every Document, not the Mind's Folder. */
+  allDocuments?: boolean;
+  /** The model to use: the Mind's own; none, or null, the default chat model. */
+  model?: ChatModelChoice | null;
+}
+
+/** Why finding or checking a document's claims sent nothing. */
+type VerifyRefusal =
+  | Exclude<CheckSentencesResult, { kind: "checked" } | { kind: "has-proposals" }>
+  /** Another document's claims are being found or checked, in that Mind: one run at a time. */
+  | { kind: "busy"; mindId: string };
+
+/** What `findClaims` did. */
+export type FindClaimsResult =
+  /** The Mind records which of its sentences make claims: `claims` of them. */
+  | { kind: "found"; claims: number }
+  /** The model failed, or its reply named no sentences that could be read. */
+  | { kind: "failed"; error: ProviderError }
+  | VerifyRefusal;
+
+/** What `verifyClaims` did. */
+export type VerifyClaimsResult =
+  /**
+   * Each claim has its mark: `checked` of them with a verdict, the rest not
+   * checked. `stop`: the monthly cap or a plan's limit stopped the run, and the
+   * claims after it say so.
+   */
+  { kind: "checked"; claims: number; checked: number; stop: RunStop | null } | VerifyRefusal;
 
 /** What asking a Question (or regenerating its Answer) did. */
 export type AskResult =
@@ -4587,6 +4657,7 @@ export const dataKinds = [
   "scoped-minds",
   "answers",
   "web-searches",
+  "verified-document",
 ] as const;
 
 export type DataKind = (typeof dataKinds)[number];
@@ -4620,8 +4691,9 @@ export type DataKind = (typeof dataKinds)[number];
  *   and the paragraphs it is in, to the chat model's provider. None in local mode.
  * - "checks": when the User asks Find support or Check against Documents
  *   (#96), each sentence they selected, with its paragraph and what it cites,
- *   and the Passages the check's searches find, to the chat model's provider.
- *   None in local mode.
+ *   and the Passages the check's searches find, to the chat model's provider;
+ *   when they verify a document (#97), its sentences, to find its claims, then
+ *   each claim with its paragraph and the Passages found. None in local mode.
  * - "agents": what an outside agent reads (#351), to that agent, which sends
  *   it on to the AI model it uses, out of IncarnaMind's sight: one service
  *   per pairing ("agent:<id>"), named as the User named the agent. Passages
@@ -5155,6 +5227,61 @@ export interface ConnectorImportResult {
   added: Connector[];
   /** The servers that weren't added, with why. */
   skipped: ConnectorImportEntry[];
+}
+
+/** Words in each interface language, for data shipped beside the code, such as the Connectors directory. */
+export type LocalizedText = Record<Language, string>;
+
+/**
+ * The directory's groups, by use, in the order Settings › Connectors shows
+ * them: where the User's files are, financial data, legal research, medicine
+ * and research, and work.
+ */
+export const connectorDirectoryGroups = [
+  "files",
+  "financial-data",
+  "legal-research",
+  "medicine-and-research",
+  "work",
+] as const;
+export type ConnectorDirectoryGroup = (typeof connectorDirectoryGroups)[number];
+
+/**
+ * How a Connector in the directory signs in:
+ * - "browser": in the User's browser, IncarnaMind registering itself with the service;
+ * - "own-app": in the browser too, but the service registers only the apps it
+ *   knows: the User registers an OAuth app with it and enters its client ID
+ *   (`ConnectorClientInput`) before signing in;
+ * - "none": it needs no sign-in.
+ */
+export type ConnectorDirectorySignIn = "browser" | "own-app" | "none";
+
+/**
+ * A remote Connector IncarnaMind has reviewed, listed in Settings ›
+ * Connectors before the User connects it. The list ships with the app as
+ * data (src/core/connectors/directory.json).
+ */
+export interface ConnectorDirectoryEntry {
+  /** Stable across versions of the list, e.g. "factset". */
+  id: string;
+  /** The service's name, which the Connector takes when it is added, e.g. "FactSet". */
+  name: string;
+  /** Who runs the server, e.g. "FactSet". */
+  publisher: string;
+  group: ConnectorDirectoryGroup;
+  /** One line on what it reads. */
+  summary: LocalizedText;
+  /**
+   * What the User needs from the service: their own subscription to a
+   * product (`{ product: "FactSet" }`), nothing ("free"), or null when that
+   * depends on their account, e.g. a free tier.
+   */
+  subscription: { product: string } | "free" | null;
+  /** Its MCP endpoint, an https URL. A Connector at this URL is this entry, connected. */
+  url: string;
+  signIn: ConnectorDirectorySignIn;
+  /** Listed only in these interface languages, e.g. a service for Chinese Users. Absent: in every language. */
+  languages?: Language[];
 }
 
 // ---------------------------------------------------------------------------
@@ -6282,11 +6409,12 @@ export interface CoreApi {
    */
   searchMinds(query: string): Promise<MindTextMatch[]>;
   /**
-   * ⌘K's "In your Documents": live Documents whose Passages hold every word of `query`, as
-   * `searchMinds` reads it, best match first, one Passage each, at most 20. Keyword search over
-   * the Passage index, whatever the embedding settings.
+   * ⌘K's "In your Documents" and the Library's search: live Documents whose Passages hold every
+   * word of `query`, as `searchMinds` reads it, best match first, one Passage each, at most
+   * `limit` (20 unless asked; InvalidInputError outside 1 to 200). Keyword search over the
+   * Passage index, whatever the embedding settings.
    */
-  searchDocumentText(query: string): Promise<DocumentTextMatch[]>;
+  searchDocumentText(query: string, options?: { limit?: number }): Promise<DocumentTextMatch[]>;
   /**
    * Gives a conversation the title the User typed (trimmed; empty goes back to its own
    * name) and returns it. A name the conversation gives itself never replaces it.
@@ -6758,6 +6886,8 @@ export interface CoreApi {
   stopTask(taskId: string): Promise<Task>;
   /** Answers a Task's "unknown-outcome" ask: do the step again, or go on without it. */
   answerTaskAsk(taskId: string, answer: TaskAskAnswer): Promise<Task>;
+  /** Every step of a Task, in the order each first started. */
+  listTaskSteps(taskId: string): Promise<TaskStep[]>;
 
   /**
    * Asks a Question: its Answer is written into the Mind right after it, as the
@@ -6839,6 +6969,27 @@ export interface CoreApi {
    * Sends on the "checks" flow, as `checkSentences` does.
    */
   checkClaim(input: CheckClaimInput): Promise<ClaimCheckResult>;
+  /**
+   * Verify (#97): adds a document someone else wrote (a PDF) to the Library,
+   * or finds it there, waits until its text is read, and makes a Mind of that
+   * text, a paragraph to a Block, each Block's page recorded. Its text is the
+   * document being checked: third-party (#78), and never its own evidence.
+   */
+  verifyDocument(input: VerifyDocumentInput): Promise<VerifyDocumentResult>;
+  /**
+   * Has the model name the sentences of a `verifyDocument` Mind that make
+   * claims, and records them in the Mind. Sends the document's sentences on
+   * the "checks" flow, as `checkSentences` does. One verify run at a time.
+   */
+  findClaims(input: VerifyClaimsInput): Promise<FindClaimsResult>;
+  /**
+   * Checks the claims `findClaims` found, as Check against Documents does,
+   * against the Mind's Folder (or every Document), the PDF, its earlier
+   * versions and its copies left out. A cloud model checks a few at once.
+   * Each gets its mark at once, then its result; the monthly cap or a plan's
+   * limit stops the run. `cancelCheck` stops it. One verify run at a time.
+   */
+  verifyClaims(input: VerifyClaimsInput): Promise<VerifyClaimsResult>;
 
   getSecretStorage(): Promise<SecretStorageStatus>;
   /** The User accepts storing keys without keyring protection on this device. */
@@ -7058,6 +7209,15 @@ export interface CoreApi {
   previewConnectorImport(json: string): Promise<ConnectorImportEntry[]>;
   /** Adds every server of an `mcpServers` configuration that the preview marks "add". */
   importConnectors(json: string): Promise<ConnectorImportResult>;
+  /** The reviewed Connectors of Settings › Connectors' Browse, in the directory's order. Reads nothing from the network. */
+  listConnectorDirectory(): Promise<ConnectorDirectoryEntry[]>;
+  /**
+   * Adds a directory entry as a remote Connector named as the service, and
+   * starts it, as `addConnector` does, with the User's OAuth app for an
+   * "own-app" entry. A Connector already at the entry's URL is returned
+   * instead, turned on.
+   */
+  addConnectorFromDirectory(entryId: string, client?: ConnectorClientInput): Promise<Connector>;
 
   /**
    * The User's approval policies, for the approvals page: every Tool always
@@ -7592,6 +7752,7 @@ const methods: Record<CoreApiMethod, true> = {
   resumeTask: true,
   stopTask: true,
   answerTaskAsk: true,
+  listTaskSteps: true,
   askQuestion: true,
   regenerateAnswer: true,
   stopAnswer: true,
@@ -7605,6 +7766,9 @@ const methods: Record<CoreApiMethod, true> = {
   checkSentences: true,
   cancelCheck: true,
   checkClaim: true,
+  verifyDocument: true,
+  findClaims: true,
+  verifyClaims: true,
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,
   detectOllama: true,
@@ -7676,6 +7840,8 @@ const methods: Record<CoreApiMethod, true> = {
   setConnectorClient: true,
   previewConnectorImport: true,
   importConnectors: true,
+  listConnectorDirectory: true,
+  addConnectorFromDirectory: true,
   listApprovalPolicies: true,
   setApprovalPolicy: true,
   revokeApprovalPolicy: true,

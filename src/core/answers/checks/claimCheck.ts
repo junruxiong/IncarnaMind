@@ -34,12 +34,15 @@ import {
   type DocumentLanguage,
 } from "../engine";
 import {
+  CONFIRM_INSTRUCTIONS,
   checkInstructions,
   claimPrompt,
+  confirmPrompt,
   EVIDENCE_INSTRUCTIONS,
   evidencePrompt,
   type ReadVerdict,
   readEvidence,
+  readJudgement,
   readsAsRefusal,
   readVerdict,
 } from "./prompt";
@@ -180,6 +183,14 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       (await askForEvidence(request, verdict, session, signal));
     if (signal.aborted) return notChecked("stopped");
     if (!evidence) return notChecked("no-evidence");
+    if (verdict.verdict === "contradicted") {
+      const judged = await confirmContradiction(request, evidence, session, signal);
+      if (signal.aborted) return notChecked("stopped");
+      if (judged === "neither") {
+        return { verdict: "unsupported", evidence: null, says: null, ...facts() };
+      }
+      if (judged === "same") return { verdict: "supported", evidence, says: null, ...facts() };
+    }
     return { verdict: verdict.verdict, evidence, says: verdict.says, ...facts() };
   };
 }
@@ -222,6 +233,43 @@ async function askForEvidence(
   session.check();
   const citation = session.finalCitation(EVIDENCE_MARKER);
   return citation?.check === "found" ? citation : null;
+}
+
+/**
+ * A contradiction counts only once the sentence and the quote it rests on,
+ * judged alone, conflict. In a whole check a model leant to "contradicted"
+ * for near misses: a figure for a related thing, another site in a parallel
+ * Document (#97). A reply that can't be read, or a failed request, leaves
+ * the verdict as it was.
+ */
+async function confirmContradiction(
+  request: ClaimCheckRequest,
+  evidence: Citation,
+  session: ReturnType<typeof createCitationSession>,
+  signal: AbortSignal,
+): Promise<"conflict" | "same" | "neither" | null> {
+  const passage = session.shownPassages().find((each) => each.passageId === evidence.passageId);
+  const { model } = request;
+  try {
+    const { text } = await generateText({
+      model: model.model,
+      instructions: CONFIRM_INSTRUCTIONS,
+      prompt: confirmPrompt({
+        claim: request.claim,
+        quote: evidence.quote,
+        passage: passage?.text ?? evidence.quote,
+      }),
+      temperature: answerTemperature(model.capabilities.facts.temperature),
+      maxOutputTokens: 200,
+      maxRetries: 1,
+      abortSignal: signal,
+    });
+    return readJudgement(text);
+  } catch (error) {
+    if (!signal.aborted)
+      console.error(`A contradiction couldn't be confirmed: ${messageOf(error)}`);
+    return null;
+  }
 }
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
