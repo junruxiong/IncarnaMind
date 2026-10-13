@@ -17,6 +17,10 @@
  * audio is captured no job starts, and a local call in flight gives way, so
  * the computer's attention stays on the live capture. Jobs go on once the
  * recording pauses or stops.
+ *
+ * Tasks come first too (#126): while a Task's step runs, no job starts, and a
+ * local call in flight gives way. Tasks themselves give way to Answers and
+ * recordings (see ./runs/tasks).
  */
 
 /** One piece of background work: as a rule, one model call. */
@@ -58,6 +62,8 @@ export interface BackgroundQueue {
   setAnswering(answering: boolean): void;
   /** Whether a Meeting's audio is being captured, each time that changes: held back in the same way. */
   setRecording(recording: boolean): void;
+  /** Whether a Task's step is running, each time that changes: held back in the same way. */
+  setTasksRunning(running: boolean): void;
   /** Stops for good: the job in flight is aborted, and those waiting are dropped. */
   close(): void;
 }
@@ -77,8 +83,9 @@ export function createBackgroundQueue(options: {
   let running: Running | null = null;
   let answering = false;
   let recording = false;
+  let tasksRunning = false;
   let closed = false;
-  const held = () => answering || recording;
+  const held = () => answering || recording || tasksRunning;
 
   const giveWay = (run: Running) => {
     if (run.gaveWay) return;
@@ -147,6 +154,12 @@ export function createBackgroundQueue(options: {
     setRecording(value) {
       if (closed || value === recording) return;
       recording = value;
+      changedHold();
+    },
+
+    setTasksRunning(value) {
+      if (closed || value === tasksRunning) return;
+      tasksRunning = value;
       changedHold();
     },
 

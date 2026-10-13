@@ -221,7 +221,7 @@ const mindLabel = (t: Translate, mind: AskedFrom) => mind.name || t("mind.untitl
 type MindStep = Extract<FoldedLine, { kind: "read" | "asked" }>;
 
 /**
- * "Read {Mind}", "Read part of {Mind}" when it was cut to fit, or "Asked from
+ * "Read “{Mind}”", "Read part of “{Mind}”" when it was cut to fit, or "Asked from
  * {Mind}"; with `name` where the Mind's name goes.
  */
 function mindStepText(t: Translate, step: MindStep, name = mindLabel(t, step.mind)): string {
