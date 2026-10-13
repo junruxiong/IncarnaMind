@@ -3097,14 +3097,44 @@ export type ChatReadiness =
       modelId: string;
     };
 
+/**
+ * Why a listed model isn't in the menu by default: "unknown" (the catalog
+ * doesn't know it), "older" (deprecated, or on its way out), or
+ * "cannot-answer" (it needs another API than chat, for `reason`; it can't be
+ * added).
+ */
+export interface OtherModel {
+  id: string;
+  why: "unknown" | "older" | "cannot-answer";
+  reason?: CannotAnswerReason;
+}
+
+/** Which API, other than chat, a model needs. */
+export type CannotAnswerReason = "completion" | "audio" | "deep-research" | "computer-use";
+
+export interface SetChatModelInMenuInput {
+  providerId: string;
+  modelId: string;
+  inMenu: boolean;
+}
+
 /** A saved chat provider and the models a Question's model picker offers on it. */
 export interface ChatModelGroup {
   provider: ChatProvider;
   /**
-   * Model ids: the models the provider lists, when it can be asked, and always
-   * the default model if it is on this provider. The default comes first.
+   * Model ids in the menu: the default model if it is on this provider, first;
+   * then the provider's role models, then the rest of the catalog's current chat
+   * models it lists (every model a server lists, for Ollama and other servers),
+   * then those the User added.
    */
   models: string[];
+  /**
+   * What the provider lists that the menu leaves out (see `OtherModel`), for
+   * Settings → Models → Other models, including ids the User has added.
+   */
+  other: OtherModel[];
+  /** The ids in `models` that the User added from `other`; "In the menu" is on for them. */
+  added: string[];
   /**
    * The ids in `models` whose capabilities are unknown: neither the catalog
    * nor the provider says what they can do. They still work; an Answer finds
@@ -6082,6 +6112,11 @@ export interface CoreApi {
    */
   listChatModels(): Promise<ChatModelGroup[]>;
   /**
+   * Puts a model id in a provider's model menu, or takes an id the User added
+   * back out. Any id can be added, listed by the provider or not.
+   */
+  setChatModelInMenu(input: SetChatModelInMenuInput): Promise<void>;
+  /**
    * This month's cost so far, for Settings: what requests billed per token
    * cost, settled and still reserved, and each provider's use. Recorded on
    * this computer only.
@@ -6905,6 +6940,7 @@ const methods: Record<CoreApiMethod, true> = {
   testChatConnection: true,
   getChatReadiness: true,
   listChatModels: true,
+  setChatModelInMenu: true,
   getCostSummary: true,
   estimateRun: true,
   compareDocuments: true,
