@@ -72,6 +72,7 @@ import { Suggestions } from "../editor/suggestions";
 import { TableMenu } from "../editor/TableMenu";
 import { TableKeys } from "../editor/tableCommands";
 import { SmartTypography } from "../editor/typography";
+import { useVerification, VerifyLine } from "../editor/VerifyLine";
 import { wordAtomView, wordBlockView } from "../editor/WordAtomView";
 import { WordCount } from "../editor/WordCount";
 import { useWordFile, WordOrigin } from "../editor/WordOrigin";
@@ -596,6 +597,7 @@ function MindEditorView({
   const findShown = useMindTools((state) => state.findMindId === mindId);
   const outlineShown = useMindTools((state) => state.outlineMindId === mindId);
   const guide = useGettingStarted() !== null && empty && !isExample && !readOnly;
+  const verification = useVerification(doc);
 
   return (
     <MindIdContext.Provider value={mindId}>
@@ -603,9 +605,13 @@ function MindEditorView({
         createPortal(
           <>
             <WordOrigin doc={doc} />
-            <WordCount editor={editor} doc={doc}>
-              <NoteHealth editor={editor} mindId={mindId} />
-            </WordCount>
+            {verification ? (
+              <VerifyLine editor={editor} doc={doc} mindId={mindId} verification={verification} />
+            ) : (
+              <WordCount editor={editor} doc={doc}>
+                <NoteHealth editor={editor} mindId={mindId} />
+              </WordCount>
+            )}
           </>,
           countSlot,
         )}

@@ -74,3 +74,10 @@ export function writeVerification(settings: Y.Map<unknown>, verification: Verifi
     claims: verification.claims ? verification.claims.map((each) => ({ ...each })) : null,
   });
 }
+
+/** Calls `listener` whenever what the Mind verifies may have changed. Returns how to stop. */
+export function observeVerification(doc: Y.Doc, listener: () => void): () => void {
+  const settings = doc.getMap(MIND_SETTINGS_FIELD);
+  settings.observe(listener);
+  return () => settings.unobserve(listener);
+}
