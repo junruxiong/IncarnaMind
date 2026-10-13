@@ -98,6 +98,7 @@ describe("every command", () => {
       "deleted.deletePermanently",
       "deleted.empty",
       "linkedFolder.unlink",
+      "meeting.deleteAudio",
       "meeting.stop",
     ]);
     for (const id of ["mind.delete", "document.delete", "folder.delete", "tag.delete"] as const) {
