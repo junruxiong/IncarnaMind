@@ -3606,6 +3606,8 @@ export const en = {
   "wordImport.from": "From {name}",
   "wordImport.keepsStyles": "Export keeps its styles",
   "wordImport.from.open": "Open {name} beside it",
+  "wordImport.notAdded": "“{name}” couldn’t be added to the Library, so Answers can’t cite it.",
+  "wordImport.addToLibrary": "Add to Library",
   "wordImport.from.tooltip":
     "Opened from a Word file. Export writes your changes back into it and keeps its styles, numbering, headers and footers.",
   "wordImport.progress": "Importing “{name}” · {percent}%",

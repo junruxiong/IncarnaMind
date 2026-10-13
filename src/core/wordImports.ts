@@ -31,6 +31,7 @@ import * as Y from "yjs";
 import { recordProposalRequest } from "../shared/proposals";
 import { setTextOrigin } from "../shared/textOrigins";
 import {
+  linkWordFileDocument,
   recordWordImportProgress,
   setWordSource,
   startWordImport,
@@ -82,8 +83,8 @@ export interface WordImportsOptions {
   minds: ReturnType<typeof createMinds>;
   /** Throws unless the Folder exists. */
   requireFolder(folderId: string): void;
-  /** Adds the file to the Library, a new one filed in the Folder: its Document, or null when it wasn't added. */
-  addOriginal(path: string, folderId: string | null): Promise<string | null>;
+  /** Adds the file to the Library, a new one filed in the Folder, and returns its Document; throws when it can't. */
+  addOriginal(path: string, folderId: string | null): Promise<string>;
   /** Makes the file a new version of a Document added on its own; false when it can't take it. */
   newVersion(documentId: string, path: string): Promise<boolean>;
   /** A Document's link to its Mind changed: windows hear of it. */
@@ -290,7 +291,8 @@ export function createWordImports(options: WordImportsOptions) {
       return await options.addOriginal(path, folderId);
     } catch (error) {
       log.error("word.import.originalNotAdded", {
-        error: error instanceof Error ? error.name : "unknown",
+        file: basename(path),
+        error: error instanceof Error ? error.message : String(error),
       });
       return null;
     }
@@ -400,7 +402,33 @@ export function createWordImports(options: WordImportsOptions) {
       start(mind.id, structure, origin, 0);
       options.mindsChanged();
       if (documentId !== null) options.documentChanged(documentId);
-      return { ok: true, mind };
+      return {
+        ok: true,
+        mind,
+        ...(input.addOriginal === true && { originalAdded: documentId !== null }),
+      };
+    },
+
+    /** See `CoreApi.addWordOriginal`. */
+    async addOriginal(mindId: string, input: unknown): Promise<boolean> {
+      const path = parsePath(input);
+      const row = db.get<{ id: string }>(
+        "SELECT id FROM word_packages WHERE mind_id = ? AND deleted_at IS NULL",
+        [mindId],
+      );
+      if (!row) throw new InvalidInputError("This Mind wasn't imported from a Word file.");
+      const documentId = await addOriginal(path, minds.get(mindId).folderId, null);
+      if (documentId === null) return false;
+      db.run("UPDATE word_packages SET document_id = ?, updated_at = ? WHERE id = ?", [
+        documentId,
+        options.now(),
+        row.id,
+      ]);
+      content.edit(mindId, (blocks) => {
+        if (blocks.doc) linkWordFileDocument(blocks.doc, documentId);
+      });
+      options.documentChanged(documentId);
+      return true;
     },
 
     /**

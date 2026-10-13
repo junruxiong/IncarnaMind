@@ -1529,7 +1529,9 @@ export function createCore(adapters: CoreAdapters): Core {
     requireFolder: (folderId) => void library.folder(folderId),
     async addOriginal(path, folderId) {
       const added = await addDocuments([path], folderId === null ? {} : { groupId: folderId });
-      return added.documents[0]?.id ?? null;
+      const [document] = added.documents;
+      if (!document) throw new Error(`The Library skipped it: ${added.skipped[0]?.reason}.`);
+      return document.id;
     },
     newVersion: (documentId, path) => documents.newVersionFrom(documentId, path),
     documentChanged: (documentId) => events.emit("document.status", documents.get(documentId)),
@@ -1974,6 +1976,10 @@ export function createCore(adapters: CoreAdapters): Core {
     createMind: async (input) => makeMind(parseCreateMindInput(input)),
     checkWordFile: async (path, folderId) => wordImports.check(path, folderId),
     importWordFile: async (input) => wordImports.import(input),
+    addWordOriginal: async (mindId, path) => {
+      const mind = writableMind(mindId);
+      return wordImports.addOriginal(mind.id, path);
+    },
     listMinds: async () => minds.list(),
     renameMind: async (mindId, title) => {
       const mind = minds.rename(mindId, title);

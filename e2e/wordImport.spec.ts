@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import { unzip } from "../tests/helpers/docx";
@@ -636,6 +636,37 @@ test("the original is also a Document: an Answer beside the Mind cites its claus
 
   await setLanguage(window, "zh-CN");
   await expect(window.getByTestId("mind-word-original")).toHaveText("来自“Supply agreement.docx”");
+  await app.close();
+});
+
+test("an original the Library can't take is said under the Mind's line, and Add to Library takes it once it can", async () => {
+  test.skip(process.platform === "win32" || process.getuid?.() === 0, "needs file permissions");
+  const path = join(files, "Supply agreement.docx");
+  await writeFile(path, contract());
+  const { app, window } = await launchApp(dataDir, { home });
+  await dismissChatSetup(window);
+  await setWindowSize(app, window, 1200, 800);
+  await interceptOpenDialog(app, path);
+
+  const dialog = await importFromMenu(window);
+  await expect(dialog.getByTestId("word-import-confirm")).toBeEnabled();
+  // Read for the import screen, then not readable: the import goes on from what it read.
+  await chmod(path, 0o000);
+  await dialog.getByTestId("word-import-confirm").click();
+  await expect(dialog).toBeHidden();
+
+  const problem = window.getByTestId("mind-word-not-added");
+  await expect(problem).toHaveText(
+    "“Supply agreement.docx” couldn’t be added to the Library, so Answers can’t cite it. · Add to Library",
+  );
+  await expect(window.getByTestId("mind-word-original")).toHaveCount(0);
+  await motionSettled(window);
+  await screenshot(window.getByTestId("mind-pane"), "word-original-not-added");
+
+  await chmod(path, 0o644);
+  await pointAndClick(window, problem.getByTestId("mind-word-add-original"));
+  await expect(problem).toHaveCount(0);
+  await expect(window.getByTestId("mind-word-original")).toBeVisible();
   await app.close();
 });
 

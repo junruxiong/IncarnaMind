@@ -141,6 +141,13 @@ export function startWordImport(
   map.set("import", { done: 0, total } satisfies WordImportProgress);
 }
 
+/** Names the Document the original became after the import, when adding it then failed (#720). */
+export function linkWordFileDocument(doc: Y.Doc, documentId: string): void {
+  const map = wordMap(doc);
+  const file = map.get("file");
+  if (isRecord(file)) map.set("file", { ...file, documentId });
+}
+
 /** Records how many top-level Blocks have been written. Inside the transaction that wrote them. */
 export function recordWordImportProgress(doc: Y.Doc, done: number, total: number): void {
   wordMap(doc).set("import", { done, total } satisfies WordImportProgress);

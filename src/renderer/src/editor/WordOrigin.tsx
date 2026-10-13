@@ -8,9 +8,11 @@ import {
   wordReportOf,
 } from "../../../shared/wordFiles";
 import { DocumentLineIcon } from "../components/lineIcons";
+import { ProblemLine } from "../components/ProblemLine";
 import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
 import { openDocumentBeside } from "../verify";
+import { useWordImport } from "../wordImport";
 import { wordAtomName } from "./WordAtomView";
 
 /** What the Mind keeps about the Word file it was imported from, kept up to date as the import goes on. */
@@ -124,5 +126,27 @@ export function WordOrigin({ doc }: { doc: Y.Doc }) {
       )}
       <span className="shrink-0">{` · ${t("wordImport.keepsStyles")}`}</span>
     </p>
+  );
+}
+
+/** The original the Library couldn't take at import (#720), said under the Mind's line, with a way to try again. */
+export function OriginalNotAdded({ mindId }: { mindId: string }) {
+  const t = useT();
+  const path = useWordImport((state) => state.notAdded[mindId]);
+  const retrying = useWordImport((state) => state.retrying === mindId);
+  if (path === undefined) return null;
+  return (
+    <ProblemLine
+      testId="mind-word-not-added"
+      className="mind-word-problem"
+      action={{
+        label: t("wordImport.addToLibrary"),
+        testId: "mind-word-add-original",
+        disabled: retrying,
+        onClick: () => void useWordImport.getState().retryOriginal(mindId),
+      }}
+    >
+      {t("wordImport.notAdded", { name: path.split(/[\\/]/).pop() ?? path })}
+    </ProblemLine>
   );
 }

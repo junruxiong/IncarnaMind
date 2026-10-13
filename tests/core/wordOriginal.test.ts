@@ -4,7 +4,7 @@
  * copy. Its own checks never use it as evidence; a newer draft becomes a new
  * version of it; exporting the Mind and deleting either leave the other.
  */
-import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test } from "vitest";
@@ -21,7 +21,7 @@ import {
 } from "../helpers/citations";
 import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core";
 import { addAndProcess, sha256, waitForProcessing, writeSourceFile } from "../helpers/documents";
-import type { MindClient } from "../helpers/mindClient";
+import { connectToMind, type MindClient } from "../helpers/mindClient";
 import { readMind } from "../helpers/minds";
 import { type ModelCall, scriptedModels } from "../helpers/models";
 import { paragraph, wordFile } from "../helpers/word";
@@ -125,11 +125,47 @@ describe("the original as a Document", () => {
     expect(wordFileOf(first.client.doc)?.documentId).toBe(first.document.id);
   });
 
+  test("that the Library can't take is said, and adding it again links it", {
+    skip: process.platform === "win32" || process.getuid?.() === 0,
+  }, async () => {
+    const errors: { event: string; fields: unknown }[] = [];
+    const log = {
+      info: () => undefined,
+      warn: () => undefined,
+      error: (event: string, fields?: unknown) => errors.push({ event, fields }),
+    };
+    const dataDir = await createTempDataFolder();
+    const core = startCore(dataDir, { log });
+    const path = await saveContract(await createTempDataFolder());
+    expect((await core.checkWordFile(path)).refusal).toBeNull();
+    // Read when checked, then not readable: the import goes on from what it read.
+    await chmod(path, 0o000);
+    const result = await core.importWordFile({ path, origin: "own", addOriginal: true });
+    await chmod(path, 0o644);
+
+    expect(result).toMatchObject({ ok: true, originalAdded: false });
+    if (!result.ok) throw new Error("Refused.");
+    expect(await core.listDocuments()).toEqual([]);
+    expect(errors).toContainEqual({
+      event: "word.import.originalNotAdded",
+      fields: { file: "Supply agreement.docx", error: expect.stringMatching(/\S/) },
+    });
+
+    expect(await core.addWordOriginal(result.mind.id, path)).toBe(true);
+    const client = await connectToMind(core, result.mind.id);
+    const [document] = await core.listDocuments();
+    expect(document?.importedAs).toBe(result.mind.id);
+    expect(wordFileOf(client.doc)?.documentId).toBe(document?.id);
+  });
+
   test("left unticked, the Mind is imported alone", async () => {
     const { core, sources } = await setUp();
     const path = await saveContract(sources);
 
-    const { client } = await importWordMind(core, { path, origin: "own" });
+    const result = await core.importWordFile({ path, origin: "own" });
+    expect(result).not.toHaveProperty("originalAdded");
+    if (!result.ok) throw new Error("Refused.");
+    const client = await connectToMind(core, result.mind.id);
 
     expect(await core.listDocuments()).toEqual([]);
     expect(wordFileOf(client.doc)?.documentId).toBeNull();
