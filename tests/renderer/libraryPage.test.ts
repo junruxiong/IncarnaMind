@@ -1,19 +1,27 @@
 import { describe, expect, test } from "vitest";
-import type { Document, DocumentGroupAssignment, LibraryGroup } from "../../src/core/api";
+import type {
+  Document,
+  DocumentGroupAssignment,
+  DocumentTextMatch,
+  LibraryGroup,
+} from "../../src/core/api";
 import {
   addedLabel,
   folderFacet,
-  matchesSearch,
+  foundLine,
   NOT_IN_A_FOLDER,
+  nameMatchOf,
   organizeModel,
   organizeState,
   problemOf,
   problemText,
   RECENTLY_DELETED,
-  searchWords,
+  searchMatches,
   sectionShows,
   sectionsOf,
 } from "../../src/renderer/src/libraryPage";
+import { queryWords } from "../../src/renderer/src/matcher";
+import { displayName } from "../../src/shared/documentNames";
 import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
 
 const en = (key: MessageKey, params?: MessageParams) => translate("en", key, params);
@@ -105,18 +113,90 @@ describe("search", () => {
     tags: [{ tagId: "t1" } as Document["tags"][number]],
   });
 
-  test("every word must be found, in the name, the title or a Tag, whatever the case", () => {
-    expect(searchWords("  Rotterdam   CONTRACT ")).toEqual(["rotterdam", "contract"]);
-    expect(matchesSearch(lease, searchWords("rotterdam contract"), tagNames)).toBe(true);
-    expect(matchesSearch(lease, searchWords("lease_2026"), tagNames)).toBe(true);
-    expect(matchesSearch(lease, searchWords("rotterdam invoice"), tagNames)).toBe(false);
-    expect(matchesSearch(lease, [], tagNames)).toBe(true);
+  const minutes = doc({ name: "会议纪要 0402" });
+  const found = (...names: string[]) => names.join(" ");
+
+  test("every word must be found, in the name, the file name, the title or a Tag, whatever the case and accents", () => {
+    expect(nameMatchOf(lease, queryWords("  Rotterdam   CONTRACT "), tagNames)).not.toBeNull();
+    expect(nameMatchOf(lease, queryWords("lease_2026"), tagNames)).not.toBeNull();
+    expect(nameMatchOf(lease, queryWords("rotterdam invoice"), tagNames)).toBeNull();
+    expect(nameMatchOf(doc({ name: "Café menu" }), queryWords("cafe"), tagNames)).not.toBeNull();
   });
 
-  test("Chinese names are found by their characters", () => {
-    const minutes = doc({ name: "会议纪要 0402" });
-    expect(matchesSearch(minutes, searchWords("纪要"), tagNames)).toBe(true);
-    expect(matchesSearch(minutes, searchWords("财务"), tagNames)).toBe(false);
+  test("the words in the shown name are marked; those found only elsewhere mark nothing", () => {
+    const named = doc({ name: "Lease: Rotterdam warehouse", tags: lease.tags });
+    const name = displayName(named);
+    const ranges = nameMatchOf(named, queryWords("rotter ware contract"), tagNames) ?? [];
+    expect(found(...ranges.map((range) => name.slice(range.start, range.end)))).toBe("Rotter ware");
+  });
+
+  test("Chinese names are found by their characters, traditional ones as simplified", () => {
+    expect(nameMatchOf(minutes, queryWords("纪要"), tagNames)).not.toBeNull();
+    expect(nameMatchOf(minutes, queryWords("會議"), tagNames)).not.toBeNull();
+    expect(nameMatchOf(minutes, queryWords("财务"), tagNames)).toBeNull();
+  });
+
+  test("as in ⌘K, a Chinese name is found by its pinyin and initials, and a long word with one typo", () => {
+    const name = displayName(minutes);
+    const marked = (query: string) =>
+      (nameMatchOf(minutes, queryWords(query), tagNames) ?? []).map((range) =>
+        name.slice(range.start, range.end),
+      );
+    expect(marked("huiyi")).toEqual(["会议"]);
+    expect(marked("hyjy")).toEqual(["会议纪要"]);
+    expect(nameMatchOf(lease, queryWords("rotterdma"), tagNames)).not.toBeNull();
+    expect(nameMatchOf(lease, queryWords("contarct"), tagNames)).not.toBeNull();
+  });
+
+  test("the line found starts a little before its first word found, at a word, so a narrow row shows it", () => {
+    const mark = (line: { text: string; ranges: { start: number; end: number }[] }) =>
+      line.ranges.map((range) => line.text.slice(range.start, range.end));
+    const english =
+      "…of the Rotterdam lease, the tenant and the landlord agreed the ledger figures.";
+    const at = english.indexOf("ledger");
+    const line = foundLine({ excerpt: english, highlights: [{ start: at, end: at + 6 }] });
+    expect(line.text).toBe("…agreed the ledger figures.");
+    expect(mark(line)).toEqual(["ledger"]);
+    const chinese = "客户访谈记录 客户访谈记录：本季度的数据已核对，详见附表。";
+    const near = chinese.indexOf("核对");
+    expect(
+      foundLine({ excerpt: chinese, highlights: [{ start: near, end: near + 2 }] }, 6).text,
+    ).toBe("…季度的数据已核对，详见附表。");
+    // Near the start already: as it is.
+    expect(foundLine({ excerpt: "The ledger", highlights: [{ start: 4, end: 10 }] }).text).toBe(
+      "The ledger",
+    );
+  });
+
+  test("a search finds Documents by their names and Tags, and those the words were found inside, with the Passage", () => {
+    const passage: DocumentTextMatch = {
+      documentId: minutes.id,
+      passageId: "p1",
+      pageFrom: 2,
+      pageTo: 2,
+      excerpt: "…the Rotterdam lease was signed…",
+      highlights: [{ start: 5, end: 14 }],
+    };
+    const other = doc({ name: "Invoice 4471" });
+    const named = doc({ name: "Rotterdam lease" });
+    const matches = searchMatches(
+      [lease, minutes, other, named],
+      queryWords("rotterdam"),
+      tagNames,
+      new Map([
+        [minutes.id, passage],
+        [named.id, { ...passage, documentId: named.id }],
+      ]),
+    );
+    expect([...(matches?.keys() ?? [])]).toEqual([lease.id, minutes.id, named.id]);
+    expect(matches?.get(minutes.id)).toEqual({ ranges: [], text: passage });
+    // A name that holds the words says enough: no Passage under it.
+    expect(matches?.get(named.id)).toEqual({ ranges: [{ start: 0, end: 9 }], text: null });
+    // Until the core answers, names alone.
+    expect([
+      ...(searchMatches([lease, minutes], queryWords("rotterdam"), tagNames, null)?.keys() ?? []),
+    ]).toEqual([lease.id]);
+    expect(searchMatches([lease], [], tagNames, null)).toBeNull();
   });
 });
 
