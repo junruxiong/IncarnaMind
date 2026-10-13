@@ -1192,7 +1192,7 @@ export type CitationLocation =
 export interface CitationAttributes {
   passageId: string | null;
   documentId: string | null;
-  /** The Document's display name when the Citation was made. */
+  /** The Document's name when the Citation was made: shown only when the Document can't be found (see `shownDocumentName`). */
   documentName: string | null;
   /**
    * The version of the Document the Citation quotes: the SHA-256 of its file
