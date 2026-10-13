@@ -5118,6 +5118,18 @@
       border-radius: 4px;
       background: var(--color-rule-strong) padding-box;
     }
+
+    /* The last 12px above the composer fade to the sheet, so text never meets its edge. */
+    &::after {
+      content: "";
+      position: sticky;
+      bottom: 0;
+      display: block;
+      height: 12px;
+      margin-top: -12px;
+      background: linear-gradient(to bottom, transparent, var(--color-sheet));
+      pointer-events: none;
+    }
   }
   .assistant-empty {
     margin: 0;
