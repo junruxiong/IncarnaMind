@@ -72,7 +72,8 @@ const rowOf = (scope: Locator, name: string) =>
 
 /** Chooses a Folder in a row's Move to…, from its ⋯. */
 async function moveRow(window: Page, row: Locator, folder: string) {
-  await pointAt(window, row);
+  // Hovered once it holds still: Organize may still be moving rows between sections.
+  await row.hover();
   await pointAndClick(window, row.getByTestId("document-file-menu"));
   await pointAndClick(
     window,
