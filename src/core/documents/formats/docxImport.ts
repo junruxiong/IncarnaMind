@@ -25,13 +25,21 @@
  * the XML parser's refusal of a DOCTYPE apply (./zip, ./xml).
  */
 import type { MarkJSON, NodeJSON } from "../../../shared/blockJson";
+import { NODE_CHARACTER, targetHash } from "../../../shared/proposals";
 import {
   BLOCK_ID_ATTRIBUTE,
   IMAGE_NODE,
+  type KeptChangeKind,
+  PROPOSAL_ATTRIBUTE,
+  PROPOSAL_DELETE_MARK,
+  PROPOSAL_INSERT_MARK,
+  type ProposalRef,
   WORD_ATOM_NODE,
   WORD_BLOCK_NODE,
+  WORD_CHANGE_ID,
   type WordAtomInfo,
   type WordAtomKind,
+  type WordChangeRequest,
   type WordImportReport,
   type WordLayout,
   type WordSource,
@@ -65,6 +73,8 @@ export interface WordStructure {
   /** Where each node mapped from the document came from, by its id (fingerprints aren't known yet). */
   sources: Map<string, Omit<WordSource, "f">>;
   report: WordImportReport;
+  /** Someone's tracked changes read as Proposals (#108), by their request: who made each, and when. */
+  changes: Map<string, WordChangeRequest>;
 }
 
 /** Reads a Word package's main document as Blocks. Throws `WordRefusedError` for one that can't be read. */
@@ -271,6 +281,71 @@ function mathText(node: XmlElement): string {
   return text;
 }
 
+/** What a run of someone's change may hold for it to be accepted or rejected here: text, tabs, line breaks. */
+const CHANGE_TEXT = new Set([
+  "w:rPr",
+  "w:t",
+  "w:delText",
+  "w:tab",
+  "w:ptab",
+  "w:noBreakHyphen",
+  "w:softHyphen",
+  "w:cr",
+  "w:br",
+]);
+
+/**
+ * Whether someone's insertion or deletion can be a change to accept or reject
+ * here (#108): runs of text, tabs and line breaks. One holding a field, a
+ * picture, a footnote's mark or another change is kept as is.
+ */
+function readableChange(element: XmlElement): boolean {
+  const runs = elements(element);
+  return (
+    runs.length > 0 &&
+    runs.every(
+      (run) =>
+        run.name === "w:r" &&
+        elements(run).every(
+          (each) =>
+            CHANGE_TEXT.has(each.name) &&
+            !(each.name === "w:br" && /^(page|column)$/.test(each.attrs["w:type"] ?? "")),
+        ),
+    )
+  );
+}
+
+/** A change's text as a Proposal's target reads it: a line break as `NODE_CHARACTER`. */
+function changeText(element: XmlElement): string {
+  let text = "";
+  for (const run of elements(element)) {
+    for (const each of elements(run)) {
+      if (each.name === "w:t" || each.name === "w:delText") {
+        text += each.children.filter((part) => typeof part === "string").join("");
+      } else if (each.name === "w:tab" || each.name === "w:ptab") text += "\t";
+      else if (each.name === "w:noBreakHyphen") text += "‑";
+      else if (each.name === "w:softHyphen") text += "­";
+      else if (each.name === "w:cr" || each.name === "w:br") text += NODE_CHARACTER;
+    }
+  }
+  return text;
+}
+
+/** Kinds of tracked change kept as is, by the element that makes them. */
+const KEPT_CHANGES: Readonly<Record<string, KeptChangeKind>> = {
+  "w:rPrChange": "format",
+  "w:pPrChange": "format",
+  "w:tblPrChange": "format",
+  "w:trPrChange": "format",
+  "w:tcPrChange": "format",
+  "w:sectPrChange": "format",
+  "w:tblGridChange": "format",
+  "w:numberingChange": "format",
+  "w:cellIns": "cell",
+  "w:cellDel": "cell",
+  "w:cellMerge": "cell",
+};
+
 /** Deleted text, which Word keeps in `w:delText`. */
 const deletedText = (node: XmlElement) =>
   descendants(node, "w:delText")
@@ -386,6 +461,21 @@ interface Item {
 
 const newId = () => crypto.randomUUID();
 
+/** Who made a change, and when, as the file says. */
+const changeRequestOf = (element: XmlElement): WordChangeRequest => ({
+  source: "word-change",
+  author: element.attrs["w:author"]?.trim() || null,
+  date: element.attrs["w:date"] || null,
+});
+
+/** A Block's text as a Proposal's target reads it: an inline node as `NODE_CHARACTER`. */
+const nodeText = (node: NodeJSON): string =>
+  node.type === "text"
+    ? (node.text ?? "")
+    : node.type === "hardBreak"
+      ? NODE_CHARACTER
+      : (node.content ?? []).map(nodeText).join("");
+
 const paragraphNode = (type: "paragraph" | "heading", attrs: Record<string, unknown>) => ({
   type,
   attrs: { [BLOCK_ID_ATTRIBUTE]: newId(), ...attrs },
@@ -488,6 +578,17 @@ class Reader {
   /** abstractNumId → the number each level has reached; numIds seen, for their start overrides. */
   private readonly counters = new Map<string, number[]>();
   private readonly numIdsSeen = new Set<string>();
+  /** Someone's changes read as Proposals, by request (#108). */
+  private readonly changes = new Map<string, WordChangeRequest>();
+  /**
+   * Paragraphs someone added or removed whole, with the change their mark
+   * holds: made a change of the whole Block once lists are grouped.
+   */
+  private readonly whole = new Map<NodeJSON, { mark: XmlElement; kind: "insert" | "delete" }>();
+  /** Paragraph marks whose change became their Block's. */
+  private readonly absorbed = new Set<XmlElement>();
+  /** Someone's changes kept as is, by kind. */
+  private readonly kept: Partial<Record<KeptChangeKind, number>> = {};
 
   private constructor(
     private readonly documentText: string,
@@ -685,13 +786,183 @@ class Reader {
       else blocks.push({ ...paragraphNode("paragraph", {}), content: this.pending });
       this.pending = [];
     }
+    this.wholeChanges(blocks);
+    this.countKeptChanges();
     const { header, footer } = this.pageFurniture(body);
     this.report.layout = layoutOf(this.document);
     return {
       blocks: [...header, ...blocks, ...footer],
       sources: this.sources,
       report: this.report,
+      changes: this.changes,
     };
+  }
+
+  // -------------------------------------------------------------------------
+  // Someone's tracked changes (#108)
+
+  /**
+   * Someone's insertion or deletion of text, as a Proposal's words: each its
+   * own change, but a deletion and the insertion right after it by the same
+   * author one, as a replacement (`joined`). Returns the change it is part of.
+   */
+  private trackedChange(
+    element: XmlElement,
+    marks: MarkJSON[],
+    out: NodeJSON[],
+    joined: ProposalRef | null,
+  ): ProposalRef {
+    const deletion = element.name === "w:del";
+    let ref = joined;
+    if (!ref) {
+      const id = `${WORD_CHANGE_ID}${this.place(element)}`;
+      ref = { id, request: id, target: targetHash(deletion ? changeText(element) : "") };
+      this.changes.set(id, changeRequestOf(element));
+    }
+    const mark: MarkJSON = {
+      type: deletion ? PROPOSAL_DELETE_MARK : PROPOSAL_INSERT_MARK,
+      attrs: { ...ref },
+    };
+    const kind = deletion ? "delete" : "insert";
+    for (const run of elements(element)) {
+      this.currentRun = run;
+      const own = [...marks, ...runMarks(child(run, "w:rPr")), mark];
+      for (const each of elements(run)) {
+        switch (each.name) {
+          case "w:t":
+          case "w:delText":
+            this.text(each.children.filter((part) => typeof part === "string").join(""), own, out);
+            break;
+          case "w:tab":
+          case "w:ptab":
+            this.text("\t", own, out);
+            break;
+          case "w:noBreakHyphen":
+            this.text("‑", own, out);
+            break;
+          case "w:softHyphen":
+            this.text("­", own, out);
+            break;
+          case "w:cr":
+          case "w:br":
+            this.fromRun(
+              { type: "hardBreak", attrs: { [PROPOSAL_ATTRIBUTE]: { ...ref, kind } } },
+              out,
+            );
+            break;
+        }
+      }
+    }
+    return ref;
+  }
+
+  /**
+   * A paragraph whose mark someone added or removed, with all its words: one
+   * change of the whole Block, made so once lists are grouped (`wholeChanges`).
+   */
+  private noteWhole(node: NodeJSON, pPr: XmlElement | undefined, inCell: boolean): void {
+    const markRPr = pPr && child(pPr, "w:rPr");
+    const mark =
+      markRPr && elements(markRPr).find((each) => each.name === "w:ins" || each.name === "w:del");
+    if (!mark || inCell) return;
+    const kind = mark.name === "w:ins" ? "insert" : "delete";
+    const author = mark.attrs["w:author"]?.trim() || null;
+    const content = node.content ?? [];
+    const changed = (each: NodeJSON) => {
+      const ref =
+        each.type === "text"
+          ? each.marks?.find(
+              (one) =>
+                one.type === (kind === "insert" ? PROPOSAL_INSERT_MARK : PROPOSAL_DELETE_MARK),
+            )?.attrs
+          : each.type === "hardBreak"
+            ? (each.attrs?.[PROPOSAL_ATTRIBUTE] as Record<string, unknown> | undefined)
+            : undefined;
+      const request = typeof ref?.request === "string" ? this.changes.get(ref.request) : undefined;
+      return request !== undefined && request.author === author;
+    };
+    if (content.length > 0 && content.every(changed)) this.whole.set(node, { mark, kind });
+  }
+
+  /**
+   * Paragraphs someone added or removed whole become changes of their Block:
+   * at the top of the body, or a list's item while the list keeps an item
+   * that isn't, so accepting or rejecting never leaves an empty list. Others
+   * stay changes of their words, their paragraph mark kept as is.
+   */
+  private wholeChanges(blocks: NodeJSON[]): void {
+    const make = (holder: NodeJSON, paragraph: NodeJSON) => {
+      const found = this.whole.get(paragraph);
+      if (!found) return;
+      const id = `${WORD_CHANGE_ID}${this.place(found.mark)}`;
+      const target = targetHash(found.kind === "delete" ? nodeText(paragraph) : "");
+      this.changes.set(id, changeRequestOf(found.mark));
+      for (const each of paragraph.content ?? []) {
+        const ref =
+          each.type === "text"
+            ? each.marks?.find(
+                (one) => one.type === PROPOSAL_INSERT_MARK || one.type === PROPOSAL_DELETE_MARK,
+              )?.attrs
+            : (each.attrs?.[PROPOSAL_ATTRIBUTE] as Record<string, unknown> | undefined);
+        if (typeof ref?.request === "string") this.changes.delete(ref.request);
+        if (each.type === "text") {
+          const rest = (each.marks ?? []).filter(
+            (one) => one.type !== PROPOSAL_INSERT_MARK && one.type !== PROPOSAL_DELETE_MARK,
+          );
+          if (rest.length > 0) each.marks = rest;
+          else delete each.marks;
+        } else if (each.attrs) {
+          delete each.attrs[PROPOSAL_ATTRIBUTE];
+        }
+      }
+      holder.attrs = {
+        ...holder.attrs,
+        [PROPOSAL_ATTRIBUTE]: { id, request: id, target, kind: found.kind },
+      };
+      this.absorbed.add(found.mark);
+    };
+    const visit = (nodes: readonly NodeJSON[]) => {
+      for (const node of nodes) {
+        if (node.type === "paragraph" || node.type === "heading") make(node, node);
+        else if (node.type === "bulletList" || node.type === "orderedList") {
+          const items = node.content ?? [];
+          const unchanged = items.some((item) => !this.whole.has(item.content?.[0] as NodeJSON));
+          for (const item of items) {
+            const [first, ...rest] = item.content ?? [];
+            if (unchanged && first && rest.length === 0) make(item, first);
+            visit(rest);
+          }
+        }
+      }
+    };
+    visit(blocks);
+  }
+
+  private keep(kind: KeptChangeKind): void {
+    this.kept[kind] = (this.kept[kind] ?? 0) + 1;
+  }
+
+  /** Counts what is kept as is of someone's changes that aren't a change of words or Blocks here. */
+  private countKeptChanges(): void {
+    const add = (kind: KeptChangeKind) => this.keep(kind);
+    for (const element of walk(this.document)) {
+      const kind = KEPT_CHANGES[element.name];
+      if (kind) add(kind);
+      else if (element.name === "w:trPr") {
+        if (elements(element).some((each) => each.name === "w:ins" || each.name === "w:del"))
+          add("row");
+      } else if (element.name === "w:pPr") {
+        const markRPr = child(element, "w:rPr");
+        const marks = markRPr ? elements(markRPr) : [];
+        if (
+          marks.some(
+            (each) => (each.name === "w:ins" || each.name === "w:del") && !this.absorbed.has(each),
+          )
+        )
+          add("paragraphMark");
+      }
+    }
+    if (Object.keys(this.kept).length > 0) this.report.keptChanges = this.kept;
   }
 
   // -------------------------------------------------------------------------
@@ -708,7 +979,7 @@ class Reader {
     for (const element of elements(container)) {
       switch (element.name) {
         case "w:p":
-          items.push(this.paragraph(element));
+          items.push(this.paragraph(element, inCell));
           break;
         case "w:tbl":
           items.push({ node: this.table(element, inCell), list: null });
@@ -815,7 +1086,7 @@ class Reader {
     };
   }
 
-  private paragraph(p: XmlElement): Item {
+  private paragraph(p: XmlElement, inCell: boolean): Item {
     const startDepth = this.carry;
     const endDepth = fieldBalance(p, startDepth);
     this.carry = endDepth;
@@ -849,6 +1120,7 @@ class Reader {
         }),
       );
     }
+    this.noteWhole(node, pPr, inCell);
     const sectPr = pPr && child(pPr, "w:sectPr");
     if (sectPr) {
       this.report.sections++;
@@ -1007,11 +1279,22 @@ class Reader {
 
   /** Reads inline content (a paragraph's, a hyperlink's) into `out`, each text with `marks`. */
   private inline(container: XmlElement, marks: MarkJSON[], out: NodeJSON[]): void {
+    /** Someone's deletion just read, which an insertion right after it by them replaces. */
+    let deleted: { ref: ProposalRef; author: string | null } | null = null;
     for (const element of elements(container)) {
       if (this.field) {
+        deleted = null;
         this.inField(element, out);
         continue;
       }
+      if ((element.name === "w:ins" || element.name === "w:del") && readableChange(element)) {
+        const author = element.attrs["w:author"]?.trim() || null;
+        const joined = element.name === "w:ins" && deleted?.author === author ? deleted.ref : null;
+        const ref = this.trackedChange(element, marks, out, joined);
+        deleted = element.name === "w:del" ? { ref, author } : null;
+        continue;
+      }
+      deleted = null;
       switch (element.name) {
         case "w:pPr":
           break;
@@ -1103,6 +1386,8 @@ class Reader {
   }
 
   private change(kind: "insertion" | "deletion", element: XmlElement): NodeJSON {
+    if (element.name === "w:moveFrom") this.keep("move");
+    else if (element.name !== "w:moveTo") this.keep("content");
     const author = element.attrs["w:author"]?.trim();
     const date = element.attrs["w:date"];
     return this.atom(kind, this.place(element), {
