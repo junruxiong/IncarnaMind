@@ -167,6 +167,17 @@ export const rowTextClass = "text-[13px] leading-5 text-ink-secondary";
 /** A row's status, on the right. */
 export const rowStatusClass = "text-[13px] leading-5 text-ink-meta";
 
+/**
+ * A few choices side by side, one chosen (radio buttons that look like a
+ * segmented control): `segmentedClass` on the group, `segmentClass` on each
+ * `<label>`, whose radio input is visually hidden (`sr-only`).
+ */
+export const segmentedClass =
+  "inline-flex shrink-0 overflow-hidden rounded-md shadow-[inset_0_0_0_1px_var(--color-rule-strong)]";
+
+export const segmentClass =
+  "h-[26px] cursor-default px-2 text-[12px] leading-[26px] whitespace-nowrap text-ink-secondary hover:text-ink has-[:checked]:bg-frame has-[:checked]:font-semibold has-[:checked]:text-ink has-[:focus-visible]:outline-2 has-[:focus-visible]:-outline-offset-2 has-[:focus-visible]:outline-accent";
+
 // Menus ----------------------------------------------------------------------
 
 /** A popover menu's element. */

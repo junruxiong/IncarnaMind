@@ -119,6 +119,8 @@ export interface PreparedChatModel {
    * more (see ../answers/quoteRetry); never a cloud model's.
    */
   retryQuotes?: boolean;
+  /** How many parameters a model on this computer has, when its runtime says; never a cloud model's (#680). */
+  parameters?: number;
   /** Which build of the model this is (Ollama's digest), when known: what was learnt about it holds for this build. */
   revision?: string;
   /**
@@ -843,6 +845,9 @@ export function createChat(options: {
         ...prepared,
         window: { tokens: numCtx, outputTokens },
         retryQuotes: true,
+        ...(profile.parameters !== null &&
+          !profile.remote &&
+          !isCloudModelName(modelId) && { parameters: profile.parameters }),
         ...(profile.digest && { revision: profile.digest }),
         loaded: () => ollamaModels.loaded(baseUrl, modelId, numCtx),
       };

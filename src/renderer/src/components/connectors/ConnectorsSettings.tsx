@@ -1,100 +1,66 @@
-import { useEffect, useRef, useState } from "react";
-import type {
-  ApprovalPolicy,
-  ApprovalPolicyValue,
-  Connector,
-  ConnectorError,
-  ConnectorState,
-  ConnectorTool,
-} from "../../../../core/api";
-import type { MessageKey } from "../../../../shared/i18n";
-import { core } from "../../core";
-import { useT } from "../../i18n";
-import { useAppStore } from "../../store";
-import { PencilLineIcon, TrashLineIcon } from "../lineIcons";
-import { ProblemMark } from "../ProblemLine";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
-  buttonClass,
-  buttonStyle,
-  iconButtonClass,
-  pageIntroClass,
-  rowStatusClass,
-  rowTitleClass,
-  ruledListClass,
-} from "../ui";
-import { ConnectorForm } from "./ConnectorForm";
-import { ConnectorImport } from "./ConnectorImport";
-import { commandLine } from "./commandLine";
-import { RemoteSignIn } from "./RemoteSignIn";
+  type ApprovalPolicy,
+  type Connector,
+  type ConnectorDirectoryEntry,
+  connectorDirectoryGroups,
+} from "../../../../core/api";
+import type { Language } from "../../../../core/language";
+import { core } from "../../core";
+import { useLanguage, useT } from "../../i18n";
+import { PlusLineIcon, SearchLineIcon } from "../lineIcons";
+import { buttonClass, pageIntroClass, ruledListClass } from "../ui";
+import { AddCustomConnector } from "./AddCustomConnector";
+import { ConnectorDetail, stateKey } from "./ConnectorDetail";
+import { ConnectorTile } from "./ConnectorTile";
 
-/** A state's dot: working (blue), or waiting for the User (amber). Green and red are for checks only. */
-const stateDot: Record<ConnectorState, string | null> = {
-  off: null,
-  connecting: "bg-accent",
-  "signing-in": "bg-accent",
-  "needs-sign-in": "bg-attention",
-  ready: null,
-  error: "bg-attention",
+/** Which page of Settings › Connectors shows: the list, a Connector's page, or adding one. */
+type View =
+  | { page: "list" }
+  | { page: "entry"; entryId: string; signIn?: boolean }
+  | { page: "connector"; connectorId: string; signIn?: boolean }
+  | { page: "custom" };
+
+const headClass = "text-[13px] leading-5 font-semibold text-ink";
+
+/** The directory entry a Connector is: the one at its server's URL. */
+const entryOf = (directory: readonly ConnectorDirectoryEntry[], connector: Connector) =>
+  connector.transport === "http"
+    ? directory.find((entry) => entry.url === connector.url)
+    : undefined;
+
+const matches = (query: string, ...texts: string[]) => {
+  const words = query.trim().toLocaleLowerCase();
+  return words === "" || texts.some((text) => text.toLocaleLowerCase().includes(words));
 };
 
-/** A state's name: remote Connectors' own states are under `remoteConnectors.`. */
-function stateKey(state: ConnectorState): MessageKey {
-  return state === "signing-in" || state === "needs-sign-in"
-    ? `remoteConnectors.state.${state}`
-    : `connectors.state.${state}`;
-}
-
-/** Where a Connector is: its command line, or its server's URL. */
-const locationOf = (connector: Connector) =>
-  connector.transport === "http" ? connector.url : commandLine(connector.command, connector.args);
-
-/** A Connector's Tools and what each claims, to notice when they change. */
-const toolsSignature = (tools: readonly ConnectorTool[]) =>
-  tools.map((tool) => `${tool.name}:${tool.readOnly}`).join("\n");
+const shownIn = (entry: ConnectorDirectoryEntry, language: Language) =>
+  !entry.languages || entry.languages.includes(language);
 
 /**
- * Settings → Connectors: each Connector with its state, a switch to turn it
- * on or off, and its Tools, each with what it claims (read-only or not) and
- * whether Answers ask before calling it; adding one by its command, or
- * importing Claude Desktop's or Cursor's configuration. The Tools of a
- * Connector added, or whose Tools changed, while Settings is open are shown
- * unfolded, so the User sees which claim to be read-only.
+ * Settings › Connectors (#148): a search field; the Connectors the User has,
+ * each with its state; then Browse, the reviewed directory grouped by use; and
+ * Add custom connector…. A card or a row opens the Connector's page, where it
+ * is connected and managed.
  */
 export function ConnectorsSettings() {
   const t = useT();
+  const language = useLanguage();
   const [connectors, setConnectors] = useState<Connector[] | null>(null);
   const [policies, setPolicies] = useState<ApprovalPolicy[]>([]);
-  const [mode, setMode] = useState<"list" | "add" | "import">("list");
-  /** Connectors whose Tools to show unfolded. */
-  const [unfolded, setUnfolded] = useState<ReadonlySet<string>>(new Set());
-  /** The Connectors there when Settings opened, and each one's Tools as last seen. */
-  const seen = useRef<{ initial: ReadonlySet<string>; tools: Map<string, string> } | null>(null);
+  const [directory, setDirectory] = useState<ConnectorDirectoryEntry[]>([]);
+  const [view, setView] = useState<View>({ page: "list" });
+  const [query, setQuery] = useState("");
+  const section = useRef<HTMLElement>(null);
+  /** What opened the page now showing, to give the focus back to on the way back. */
+  const opener = useRef<string | null>(null);
 
   useEffect(() => {
-    const update = (list: Connector[]) => {
-      setConnectors(list);
-      const first = seen.current === null;
-      const known = seen.current ?? {
-        initial: new Set(list.map((each) => each.id)),
-        tools: new Map<string, string>(),
-      };
-      seen.current = known;
-      const open: string[] = [];
-      for (const connector of list) {
-        if (!connector.tools) continue;
-        const signature = toolsSignature(connector.tools);
-        const previous = known.tools.get(connector.id);
-        const added = !first && !known.initial.has(connector.id) && previous === undefined;
-        const changed = previous !== undefined && previous !== signature;
-        if (added || changed) open.push(connector.id);
-        known.tools.set(connector.id, signature);
-      }
-      if (open.length > 0) setUnfolded((current) => new Set([...current, ...open]));
-    };
-    core.listConnectors().then(update, () => undefined);
+    core.listConnectors().then(setConnectors, () => undefined);
     core.listApprovalPolicies().then(setPolicies, () => undefined);
+    core.listConnectorDirectory().then(setDirectory, () => undefined);
     const stops = [
-      core.on("connectors.changed", update),
+      core.on("connectors.changed", setConnectors),
       core.on("approvals.changed", setPolicies),
     ];
     return () => {
@@ -102,308 +68,288 @@ export function ConnectorsSettings() {
     };
   }, []);
 
+  // Each page starts at its top; back on the list, the focus is where it was.
+  useLayoutEffect(() => {
+    section.current?.closest("[data-testid^='settings-page-']")?.scrollTo({ top: 0 });
+    if (view.page === "list" && opener.current) {
+      section.current
+        ?.querySelector<HTMLElement>(`[data-opens="${CSS.escape(opener.current)}"]`)
+        ?.focus();
+    }
+  }, [view.page]);
+
   if (!connectors) return null;
+
+  const open = (next: View, from: string) => {
+    opener.current = from;
+    setView(next);
+  };
+  const back = () => setView({ page: "list" });
+
+  if (view.page === "entry") {
+    const entry = directory.find((each) => each.id === view.entryId);
+    if (entry) {
+      return (
+        <section ref={section}>
+          <ConnectorDetail
+            key={entry.id}
+            entry={entry}
+            connector={connectors.find((each) => entryOf(directory, each) === entry)}
+            policies={policies}
+            signInOnOpen={view.signIn}
+            onBack={back}
+          />
+        </section>
+      );
+    }
+  }
+  if (view.page === "connector") {
+    const connector = connectors.find((each) => each.id === view.connectorId);
+    if (connector) {
+      return (
+        <section ref={section}>
+          <ConnectorDetail
+            key={connector.id}
+            connector={connector}
+            policies={policies}
+            signInOnOpen={view.signIn}
+            onBack={back}
+          />
+        </section>
+      );
+    }
+  }
+  if (view.page === "custom") {
+    return (
+      <section ref={section}>
+        <AddCustomConnector
+          onBack={back}
+          onAdded={(connector) => {
+            const entry = entryOf(directory, connector);
+            setView(
+              entry
+                ? { page: "entry", entryId: entry.id }
+                : { page: "connector", connectorId: connector.id },
+            );
+          }}
+        />
+      </section>
+    );
+  }
+
+  const pageOf = (connector: Connector, signIn = false): View => {
+    const entry = entryOf(directory, connector);
+    return entry
+      ? { page: "entry", entryId: entry.id, signIn }
+      : { page: "connector", connectorId: connector.id, signIn };
+  };
+  const connected = connectors.filter((connector) =>
+    matches(query, connector.name, connector.transport === "http" ? connector.url : ""),
+  );
+  const browsed = directory.filter(
+    (entry) =>
+      shownIn(entry, language) &&
+      matches(query, entry.name, entry.publisher, entry.summary[language]),
+  );
+  const searching = query.trim() !== "";
+
   return (
-    <section data-testid="connectors-settings" className="flex flex-col gap-4">
-      <p className={pageIntroClass}>{t("connectors.settings.body")}</p>
+    <section
+      ref={section}
+      data-testid="connectors-settings"
+      className="@container flex flex-col gap-4"
+    >
+      <p className={pageIntroClass}>{t("connectors.directory.intro")}</p>
+      <label className="flex h-[34px] items-center gap-2 rounded-lg px-2.5 text-ink-meta shadow-[inset_0_0_0_1px_var(--color-rule-strong)] focus-within:shadow-[inset_0_0_0_1px_var(--color-accent)]">
+        <SearchLineIcon className="size-3.5 shrink-0" />
+        <input
+          type="search"
+          data-testid="connectors-search"
+          value={query}
+          placeholder={t("connectors.directory.search")}
+          aria-label={t("connectors.directory.search")}
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            // Esc empties the field first; with it empty, Esc closes Settings.
+            if (event.key === "Escape" && query !== "") {
+              event.preventDefault();
+              setQuery("");
+            }
+          }}
+          className="h-full min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-placeholder"
+        />
+      </label>
 
-      {connectors.length === 0 && mode === "list" && (
-        <p className={`${rowStatusClass} border-y border-rule py-3.5`}>
-          {t("connectors.settings.empty")}
-        </p>
-      )}
-      {connectors.length > 0 && (
-        <ul className={ruledListClass}>
-          {connectors.map((connector) => (
-            <ConnectorRow
-              key={connector.id}
-              connector={connector}
-              policies={policies}
-              unfolded={unfolded.has(connector.id)}
-            />
-          ))}
-        </ul>
-      )}
-
-      {mode === "list" && (
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            data-testid="connector-add"
-            onClick={() => setMode("add")}
-            className={buttonClass}
-          >
-            {t("connectors.settings.add")}
-          </button>
-          <button
-            type="button"
-            data-testid="connector-import"
-            onClick={() => setMode("import")}
-            className={buttonClass}
-          >
-            {t("connectors.settings.import")}
-          </button>
+      {connected.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <h4 className={headClass}>{t("connectors.directory.connected")}</h4>
+          <ul data-testid="connectors-connected" className={ruledListClass}>
+            {connected.map((connector) => (
+              <ConnectedRow
+                key={connector.id}
+                connector={connector}
+                onOpen={(signIn) => open(pageOf(connector, signIn), `connector:${connector.id}`)}
+              />
+            ))}
+          </ul>
         </div>
       )}
-      {mode === "add" && <ConnectorForm onDone={() => setMode("list")} />}
-      {mode === "import" && <ConnectorImport onDone={() => setMode("list")} />}
+
+      <div className="flex flex-col gap-3">
+        <h4 className={headClass}>{t("connectors.directory.browse")}</h4>
+        {browsed.length === 0 && searching && (
+          <p className="text-[13px] leading-5 text-ink-meta">
+            {t("connectors.directory.noMatch", { query: query.trim() })}
+          </p>
+        )}
+        {searching ? (
+          <EntryGrid
+            entries={browsed}
+            language={language}
+            onOpen={(entry) => open({ page: "entry", entryId: entry.id }, `entry:${entry.id}`)}
+          />
+        ) : (
+          connectorDirectoryGroups.map((group) => {
+            const entries = browsed.filter((entry) => entry.group === group);
+            if (entries.length === 0) return null;
+            return (
+              <div
+                key={group}
+                data-testid="connectors-group"
+                data-group={group}
+                className="flex flex-col gap-2"
+              >
+                <h5 className={headClass}>{t(`connectors.directory.group.${group}`)}</h5>
+                <EntryGrid
+                  entries={entries}
+                  language={language}
+                  onOpen={(entry) =>
+                    open({ page: "entry", entryId: entry.id }, `entry:${entry.id}`)
+                  }
+                />
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      <div>
+        <button
+          type="button"
+          data-testid="connector-add-custom"
+          data-opens="custom"
+          onClick={() => open({ page: "custom" }, "custom")}
+          className={`${buttonClass} gap-1.5`}
+        >
+          <PlusLineIcon className="size-3.5" />
+          {t("connectors.directory.addCustom")}
+        </button>
+      </div>
     </section>
   );
 }
 
-/** Runs an action on a Connector; a failure shows in the app's error banner. */
-async function act(action: () => Promise<unknown>) {
-  try {
-    await action();
-  } catch (failure) {
-    useAppStore.getState().reportError(failure);
-  }
-}
-
-function ConnectorRow({
+/** A Connector the User has: its tile, name and state, then Manage, or Sign in again once its sign-in expired. */
+function ConnectedRow({
   connector,
-  policies,
-  unfolded,
+  onOpen,
 }: {
   connector: Connector;
-  policies: ApprovalPolicy[];
-  unfolded: boolean;
+  onOpen(signIn: boolean): void;
 }) {
   const t = useT();
-  const { id, name } = connector;
-  const dot = stateDot[connector.state];
-  const [editing, setEditing] = useState(false);
+  const expired =
+    connector.transport === "http" &&
+    connector.state === "needs-sign-in" &&
+    connector.signIn.expired;
+  const tools = connector.tools ?? [];
+  const status = expired
+    ? t("connectors.directory.status.expired")
+    : connector.state === "ready"
+      ? tools.length > 0 && tools.every((tool) => tool.readOnly)
+        ? t("connectors.directory.status.readsOnly")
+        : t("connectors.directory.status.ready")
+      : t(stateKey(connector.state));
+  const warning = expired || connector.state === "error" || connector.state === "needs-sign-in";
   return (
     <li
-      data-testid="connector"
-      data-connector-id={id}
+      data-testid="connected-connector"
+      data-connector-id={connector.id}
       data-state={connector.state}
-      className="flex flex-col gap-1 py-3.5"
+      className="flex items-center gap-2.5 py-2.5"
     >
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6">
-        <span className={`min-w-0 truncate ${rowTitleClass}`}>{name}</span>
-        <span className="flex items-center gap-3">
-          <span className="flex items-center gap-1.5 text-[13px] leading-5 text-ink-meta">
-            {dot && <span aria-hidden="true" className={`size-1.5 rounded-full ${dot}`} />}
-            <span data-testid="connector-state">{t(stateKey(connector.state))}</span>
-          </span>
-          <input
-            type="checkbox"
-            role="switch"
-            aria-checked={connector.enabled}
-            data-testid="connector-toggle"
-            aria-label={t("connectors.toggle", { name })}
-            checked={connector.enabled}
-            onChange={(event) => void act(() => core.setConnectorEnabled(id, event.target.checked))}
-            className="switch"
-          />
-          {connector.transport === "stdio" && (
-            <button
-              type="button"
-              data-testid="connector-edit"
-              aria-label={t("connectors.edit", { name })}
-              title={t("connectors.edit", { name })}
-              aria-expanded={editing}
-              onClick={() => setEditing((open) => !open)}
-              className={iconButtonClass}
-            >
-              <PencilLineIcon className="size-4" />
-            </button>
-          )}
-          <button
-            type="button"
-            aria-label={t("connectors.remove", { name })}
-            title={t("connectors.remove", { name })}
-            onClick={() => void act(() => core.deleteConnector(id))}
-            className={iconButtonClass}
-          >
-            <TrashLineIcon className="size-4" />
-          </button>
+      <ConnectorTile name={connector.name} />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span
+          className="truncate text-[13px] leading-[18px] font-semibold text-ink"
+          title={connector.name}
+        >
+          {connector.name}
         </span>
-      </div>
-      <p
-        data-testid="connector-location"
-        className="truncate font-mono text-[12px] leading-[18px] text-ink-meta"
-        title={locationOf(connector)}
+        <span
+          data-testid="connected-connector-state"
+          className={`text-[12px] leading-[17px] ${warning ? "text-warning" : "text-ink-meta"}`}
+        >
+          {status}
+        </span>
+      </span>
+      <button
+        type="button"
+        data-testid={expired ? "connector-sign-in-again" : "connector-manage"}
+        data-opens={`connector:${connector.id}`}
+        onClick={() => onOpen(expired)}
+        className={`${buttonClass} shrink-0`}
       >
-        {locationOf(connector)}
-      </p>
-      {editing && connector.transport === "stdio" && (
-        <ConnectorForm editing={connector} onDone={() => setEditing(false)} />
-      )}
-      {connector.state === "error" && connector.error && (
-        <ErrorNotice
-          error={connector.error}
-          onRetry={() => void act(() => core.restartConnector(id))}
-        />
-      )}
-      {connector.transport === "http" && connector.enabled && (
-        <RemoteSignIn connector={connector} />
-      )}
-      {connector.state === "ready" && connector.tools && (
-        <Tools
-          // A new set of Tools unfolds afresh.
-          key={toolsSignature(connector.tools)}
-          connectorId={id}
-          tools={connector.tools}
-          policies={policies}
-          unfolded={unfolded}
-        />
-      )}
+        {expired ? t("remoteConnectors.signInAgain") : t("connectors.directory.manage")}
+      </button>
     </li>
   );
 }
 
-/** What went wrong, in plain words, and what the User can do. */
-function ErrorNotice({ error, onRetry }: { error: ConnectorError; onRetry(): void }) {
-  const t = useT();
-  const message =
-    error.kind === "missing-command"
-      ? error.install
-        ? t("connectors.error.missing-command.install", {
-            command: error.command ?? "",
-            install: error.install,
-          })
-        : t("connectors.error.missing-command", { command: error.command ?? "" })
-      : error.kind === "unreachable"
-        ? t("remoteConnectors.error.unreachable")
-        : t(`connectors.error.${error.kind}`);
-  return (
-    <div
-      role="alert"
-      data-testid="connector-error"
-      data-error-kind={error.kind}
-      className="mt-1 flex flex-col gap-1.5 text-[13px] leading-5 text-ink"
-    >
-      <p className="break-words">
-        <ProblemMark />
-        {message}
-      </p>
-      <div className="flex flex-wrap items-center gap-2 text-[12px]">
-        {error.retrying ? (
-          <span className="text-ink-meta">{t("connectors.restarting")}</span>
-        ) : (
-          <button type="button" onClick={onRetry} className={buttonStyle("secondary", "sm")}>
-            {t("connectors.retry")}
-          </button>
-        )}
-        {error.kind !== "missing-command" && error.message && (
-          <details className="min-w-0 text-ink-meta">
-            <summary className="cursor-pointer">{t("connectors.details")}</summary>
-            <pre className="mt-1 max-h-32 overflow-auto font-mono whitespace-pre-wrap break-words">
-              {error.message}
-            </pre>
-          </details>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/**
- * Whether Answers ask before calling a Tool: the User's policy, or else the
- * default for what its Connector claims (a Tool that says it only reads doesn't ask).
- */
-function asksFirst(tool: ConnectorTool, policy: ApprovalPolicyValue | undefined): boolean {
-  return policy === "ask" || (policy !== "always" && !tool.readOnly);
-}
-
-/**
- * The Connector's Tools, folded: what each claims to do (read-only or not,
- * as the Connector says), and whether Answers ask before calling it, which
- * the User can change for any Tool.
- */
-function Tools({
-  connectorId,
-  tools,
-  policies,
-  unfolded,
+/** Directory entries as cards, two to a row where there's room. */
+function EntryGrid({
+  entries,
+  language,
+  onOpen,
 }: {
-  connectorId: string;
-  tools: ConnectorTool[];
-  policies: ApprovalPolicy[];
-  unfolded: boolean;
+  entries: ConnectorDirectoryEntry[];
+  language: Language;
+  onOpen(entry: ConnectorDirectoryEntry): void;
 }) {
   const t = useT();
-  const count =
-    tools.length === 0
-      ? t("connectors.tools.none")
-      : tools.length === 1
-        ? t("connectors.tools.count.one")
-        : t("connectors.tools.count", { count: tools.length });
-  if (tools.length === 0) {
-    return <p className="text-[12px] leading-[18px] text-ink-meta">{count}</p>;
-  }
-  const readOnly = tools.filter((tool) => tool.readOnly).length;
-  const claims =
-    readOnly === 0
-      ? t("approvals.tools.readOnly.none")
-      : readOnly === 1
-        ? t("approvals.tools.readOnly.one")
-        : t("approvals.tools.readOnly.count", { count: readOnly });
-  const policyOf = (tool: ConnectorTool) =>
-    policies.find(
-      (policy) =>
-        policy.subject.kind === "tool" &&
-        policy.subject.connectorId === connectorId &&
-        policy.subject.tool === tool.name,
-    )?.policy;
-  const choose = (tool: ConnectorTool, ask: boolean) => {
-    // The default for what the Tool claims needs no policy.
-    const policy: ApprovalPolicyValue | null =
-      ask === !tool.readOnly ? null : ask ? "ask" : "always";
-    void act(() =>
-      core.setApprovalPolicy({
-        subject: { kind: "tool", connectorId, tool: tool.name },
-        policy,
-      }),
-    );
-  };
   return (
-    <details
-      open={unfolded}
-      data-testid="connector-tools"
-      className="text-[12px] leading-5 text-ink-secondary"
-    >
-      <summary className="cursor-pointer select-none hover:text-ink">
-        {count} · {claims}
-      </summary>
-      <ul className="mt-1 flex flex-col gap-1 border-l border-rule pl-3">
-        {tools.map((tool) => {
-          const ask = asksFirst(tool, policyOf(tool));
-          return (
-            <li
-              key={tool.name}
-              data-testid="connector-tool"
-              data-tool={tool.name}
-              data-read-only={tool.readOnly}
-              data-asks={ask}
-              className="flex items-center gap-2"
-            >
-              <span className="min-w-0 flex-1 truncate" title={tool.description}>
-                <span data-testid="connector-tool-name" className="font-mono">
-                  {tool.name}
-                </span>
-                <span data-testid="connector-tool-claim" className="text-ink-meta">
-                  {" · "}
-                  {tool.readOnly ? t("connectors.tools.readOnly") : t("connectors.tools.changes")}
-                </span>
+    <div className="grid grid-cols-1 gap-2 @[30rem]:grid-cols-2">
+      {entries.map((entry) => {
+        const { subscription } = entry;
+        return (
+          <button
+            key={entry.id}
+            type="button"
+            data-testid="connector-entry"
+            data-entry-id={entry.id}
+            data-opens={`entry:${entry.id}`}
+            onClick={() => onOpen(entry)}
+            className="flex min-w-0 items-start gap-2.5 rounded-lg p-2.5 text-left shadow-[inset_0_0_0_1px_var(--color-rule)] hover:bg-frame hover:shadow-[inset_0_0_0_1px_var(--color-rule-strong)]"
+          >
+            <ConnectorTile name={entry.name} />
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate text-[13px] leading-[18px] font-semibold text-ink">
+                {entry.name}
               </span>
-              <select
-                data-testid="connector-tool-approval"
-                aria-label={t("approvals.tools.select", { tool: tool.name })}
-                value={ask ? "ask" : "always"}
-                onChange={(event) => choose(tool, event.target.value === "ask")}
-                className="h-7 shrink-0 rounded-sm border border-rule-strong bg-sheet px-1.5 text-[12px] text-ink focus:border-accent focus:outline-1 focus:outline-offset-0 focus:outline-accent"
-              >
-                <option value="ask">{t("approvals.tools.ask")}</option>
-                <option value="always">{t("approvals.tools.always")}</option>
-              </select>
-            </li>
-          );
-        })}
-      </ul>
-      <p className="mt-1 text-ink-meta">{t("connectors.tools.note")}</p>
-    </details>
+              <span className="text-[12px] leading-[17px] text-ink-meta">
+                {entry.summary[language]}
+              </span>
+              {subscription && (
+                <span className="mt-1 self-start rounded-sm bg-frame px-1.5 text-[11px] leading-[18px] text-ink-secondary">
+                  {subscription === "free"
+                    ? t("connectors.directory.free")
+                    : t("connectors.directory.subscription", { product: subscription.product })}
+                </span>
+              )}
+            </span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
