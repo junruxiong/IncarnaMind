@@ -953,7 +953,10 @@ describe("Temperature", () => {
     expect(model.doStreamCalls[0]?.temperature).toBe(ANSWER_TEMPERATURE);
   });
 
-  test("a model the catalog says takes no temperature is sent none; one it says takes one, or doesn't know, gets the Answer's", async () => {
+  // Six Answers, each from a core of its own: over 5 seconds on a slow runner.
+  test("a model the catalog says takes no temperature is sent none; one it says takes one, or doesn't know, gets the Answer's", {
+    timeout: 30_000,
+  }, async () => {
     const temperatureFor = async (provider: CloudProvider) => {
       const model = streamingModel("Twice a day.");
       const { core, mind, writer, reader } = await setUpCloud(model, provider);
