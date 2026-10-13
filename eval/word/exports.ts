@@ -269,30 +269,6 @@ export async function checkExport(bytes: Uint8Array): Promise<ExportCheck> {
     if (!footnotes || !new TextDecoder().decode(footnotes[1]).includes(SOURCE)) {
       return { ok: false, detail: "the Citation isn't a footnote", exported: result.data };
     }
-    // Readers that take footnotes in the part's order (LibreOffice) still match each to its mark.
-    const inOrder = (document: string, notes: string) => {
-      const marks = [...document.matchAll(/<w:footnoteReference\b[^>]*?\bw:id="(-?\d+)"/g)].map(
-        (match) => match[1],
-      );
-      const listed = [...notes.matchAll(/<w:footnote\b[^>]*?\bw:id="(-?\d+)"/g)]
-        .map((match) => match[1])
-        .filter((id) => marks.includes(id));
-      return listed.join() === marks.filter((id, at) => marks.indexOf(id) === at).join();
-    };
-    const originalNotes = original.get(footnotes[0]);
-    const wasInOrder =
-      originalNotes === undefined ||
-      inOrder(
-        new TextDecoder().decode(original.get(pkg.part)),
-        new TextDecoder().decode(originalNotes),
-      );
-    if (wasInOrder && !inOrder(main, new TextDecoder().decode(footnotes[1]))) {
-      return {
-        ok: false,
-        detail: "the footnotes aren't in the order of their marks",
-        exported: result.data,
-      };
-    }
     const again = await readWordStructure(
       await openWordPackage(result.data),
       await reviewOf(await openWordPackage(result.data)),

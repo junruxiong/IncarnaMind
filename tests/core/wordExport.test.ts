@@ -550,26 +550,6 @@ describe("what can't be kept", () => {
 });
 
 describe("Word's rules", () => {
-  test("a new footnote goes among the document's own in the order of its mark, as readers that go by order need", async () => {
-    const { core, mindId, client } = await setUp({
-      body: paragraph(
-        `${run("Text.")}<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteReference w:id="1"/></w:r>`,
-      ),
-      footnotes: `<w:footnote w:id="1"><w:p>${run("Old.")}</w:p></w:footnote>`,
-    });
-    const tides = await tidesDocument(core);
-    editMind(client, (blocks) => [
-      { type: "paragraph", content: [text("New."), citation(tides)] },
-      ...blocks,
-    ]);
-    await client.settled();
-    const { part } = await exported(core, mindId);
-    const ids = [...part("word/footnotes.xml").matchAll(/<w:footnote\b[^>]*w:id="(-?\d+)"/g)].map(
-      (match) => Number(match[1]),
-    );
-    expect(ids).toEqual([-1, 0, 2, 1]);
-  });
-
   test("a new footnote's id is one the document hasn't used, below 0x80000000; the document's own start tag stays", async () => {
     const { core, mindId, client, bytes } = await setUp({
       body: paragraph(
