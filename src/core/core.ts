@@ -51,6 +51,7 @@ import type {
 } from "./api";
 import { createApprovals } from "./approvals";
 import { createBackgroundQueue } from "./backgroundQueue";
+import { createCheckpoints } from "./checkpoints";
 import { createCitationStyles } from "./citationStyles";
 import { type CitedPages, type CitedPlace, createCitedPages } from "./citedPages";
 import { COMPARISON_TASK, createComparisons } from "./comparisons";
@@ -106,6 +107,7 @@ import { createCaptureHealth } from "./meetings/health";
 import { createTranscripts } from "./meetings/transcript";
 import { accessFor, isKnownKind } from "./mindAccess";
 import { createMindContent } from "./mindContent";
+import { createMindIndex } from "./mindIndex";
 import {
   createMinds,
   parseCreateMindInput,
@@ -332,9 +334,17 @@ export function createCore(adapters: CoreAdapters): Core {
     events.emit("mind.update", { mindId, update });
     // Only notes the change; what became of AI text is worked out once the Mind is quiet.
     aiUse.contentStored(mindId);
+    checkpoints.edited(mindId);
+    mindIndex.contentStored(mindId);
     comparisons.mindChanged(mindId);
     const renamed = minds.setAutoTitle(mindId, content.peek(mindId, firstLineOf));
     if (minds.markEdited(mindId) || renamed) mindsChanged();
+  });
+  const mindIndex = createMindIndex({
+    db,
+    now,
+    content,
+    reportError: (error) => console.error(error),
   });
   // The record of AI use stays on this computer: it takes nothing from the network or the usage-data catalog.
   const aiUse = createAiUse({
@@ -439,6 +449,18 @@ export function createCore(adapters: CoreAdapters): Core {
   const privacyChanged = () => events.emit("privacy.changed", privacy.status());
   const platform = process.platform;
   const retention = createVersionRetention(db, now);
+  const checkpoints = createCheckpoints({
+    db,
+    now,
+    content,
+    retention,
+    requireMind: (mindId) => writableMind(mindId).id,
+    changed: (mindId) => events.emit("checkpoints.changed", { mindId }),
+    stopAnswer: (mindId, answerId) => answers.stop({ mindId, answerId }),
+    settleAnswers: (mindId) => answers.settleOrphans(mindId),
+    say: (key) => translate(settings.get().language, key),
+    reportError: (error) => console.error(error),
+  });
   // Background work (automatic tagging, Organize's classification, saving cited pages): one
   // job at a time, giving way to Answers.
   const background = createBackgroundQueue({ reportError: (error) => console.error(error) });
@@ -1020,6 +1042,7 @@ export function createCore(adapters: CoreAdapters): Core {
       searchableCount: (ids) => documents.searchableCount(ids),
     },
     evidence: (ids) => evidence.scope(ids).documentIds ?? [...ids],
+    checkpoint: (mindId) => checkpoints.save(mindId, "compare"),
     tasks: {
       start: (kind, mindId, input) => tasks.start(kind, mindId, input),
       unfinished: () => tasks.unfinished(),
@@ -1856,6 +1879,7 @@ export function createCore(adapters: CoreAdapters): Core {
     usageData.record({ event: "documents_added", fields: addedCounts(result, since) });
     return { ...result, batchId };
   };
+  mindIndex.start();
 
   // Everything a Task needs is up: those a quit or a crash left go on, or wait for the User.
   tasks.settleOrphans();
@@ -1912,6 +1936,10 @@ export function createCore(adapters: CoreAdapters): Core {
     closeMind: async (mindId) => {
       content.close(parseMindId(mindId));
     },
+    saveCheckpoint: async (mindId, reason) => checkpoints.save(mindId, reason),
+    listCheckpoints: async (mindId) => checkpoints.list(mindId),
+    compareCheckpoints: async (input) => checkpoints.compare(input),
+    restoreCheckpoint: async (mindId, checkpointId) => checkpoints.restore(mindId, checkpointId),
     askInConversation: async (input) =>
       answers.askInConversation(conversations.parseQuestion(input)),
     regenerateConversationAnswer: async (input) => answers.regenerateInConversation(input),
@@ -1919,6 +1947,8 @@ export function createCore(adapters: CoreAdapters): Core {
     listConversations: async (options) => conversations.list(options),
     getConversation: async (conversationId) => conversations.content(conversationId),
     searchConversations: async (query) => conversations.search(query),
+    searchMinds: async (query) => mindIndex.search(query),
+    searchDocumentText: async (query) => documents.searchText(query),
     renameConversation: async (conversationId, title) => {
       const conversation = conversations.rename(conversationId, title);
       conversationsChanged();
@@ -2196,7 +2226,8 @@ export function createCore(adapters: CoreAdapters): Core {
     answerTaskAsk: (taskId, answer) => tasks.answer(taskId, answer),
 
     askQuestion: async (input) => answers.ask(input),
-    regenerateAnswer: async (input) => answers.regenerate(input),
+    regenerateAnswer: async (input) =>
+      answers.regenerate(input, (mindId) => checkpoints.save(mindId, "regenerate")),
     stopAnswer: async (input) => answers.stop(input),
     suggestNext: (request) => suggestions.suggest(request),
     cancelSuggestion: async (requestId) => suggestions.cancel(requestId),
@@ -2645,7 +2676,9 @@ export function createCore(adapters: CoreAdapters): Core {
       rerankingModel.close();
       textRecognitionModel?.close();
       activity.stop();
+      checkpoints.close();
       aiUse.close();
+      mindIndex.close();
       events.clear();
       content.closeAll();
       db.close();

@@ -32,6 +32,16 @@ export function PlusLineIcon(props: IconProps) {
   );
 }
 
+/** Search: a magnifier. */
+export function SearchLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="m20 20-4.35-4.35" />
+    </LineIcon>
+  );
+}
+
 /** A Mind: a notebook. */
 export function MindLineIcon(props: IconProps) {
   return (
@@ -421,6 +431,16 @@ export function HistoryLineIcon(props: IconProps) {
       <path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3" />
       <path d="M4.5 4.5V9H9" />
       <path d="M12 8.5V12l2.5 1.5" />
+    </LineIcon>
+  );
+}
+
+/** Restore: an arrow coming round to where it started. */
+export function RestoreLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M4 12a8 8 0 1 0 2.3-5.6" />
+      <path d="M4 4v4h4" />
     </LineIcon>
   );
 }

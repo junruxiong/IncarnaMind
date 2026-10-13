@@ -23,6 +23,7 @@ import type { createDocuments } from "./documents";
 import { InvalidInputError, isRecord, NotFoundError } from "./errors";
 import type { createLibrary } from "./library";
 import type { createMindContent } from "./mindContent";
+import { forgetMindBlocks } from "./mindIndex";
 import type { createMinds } from "./minds";
 import type { Database } from "./storage";
 import { parseTagLinkStates, sameName, type TagsStore } from "./tags";
@@ -71,11 +72,20 @@ function purge(
   const IN = "IN (SELECT value FROM json_each(?))";
   if (kind === "mind") {
     db.run(`DELETE FROM mind_updates WHERE mind_id ${IN}`, [list]);
+    // Its Checkpoints hold its content too, and no longer keep the Document versions they quote.
+    db.run(
+      `UPDATE retained_versions SET deleted_at = ?, updated_at = ?
+       WHERE kind = 'checkpoint' AND deleted_at IS NULL
+         AND owner_id IN (SELECT id FROM mind_checkpoints WHERE mind_id ${IN})`,
+      [at, at, list],
+    );
+    db.run(`DELETE FROM mind_checkpoints WHERE mind_id ${IN}`, [list]);
     // The Word package it was imported from goes once no other Mind keeps it (`sweepWordPackages`).
     db.run(
       `UPDATE word_packages SET deleted_at = ?, updated_at = ? WHERE mind_id ${IN} AND deleted_at IS NULL`,
       [at, at, list],
     );
+    forgetMindBlocks(db, ids, at);
   }
   if (kind === "conversation") {
     // Its messages, their index and its titles: everything the User asked or was answered.
