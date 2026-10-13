@@ -53,6 +53,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
   const t = useT();
   const messages = useConversations((state) => state.messages);
   const asking = useConversations((state) => state.asking);
+  const askingQuote = useConversations((state) => state.askingQuote);
   const onItsWay = useAnswerOnItsWay();
   const stopWanted = useConversations((state) => state.stopWanted);
   const sought = useConversations((state) => state.sought);
@@ -175,7 +176,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
           />
         );
       })}
-      {asking !== null && <QuestionBubble text={asking} />}
+      {asking !== null && <QuestionBubble text={asking} quote={askingQuote} />}
       {plan && (
         <>
           <QuestionBubble text={plan.topic} research />
@@ -257,14 +258,17 @@ const asked = (task: Task) => task.question !== null;
 function QuestionBubble({
   question,
   text,
+  quote,
   research = false,
 }: {
   question?: ConversationQuestion;
   text?: string;
+  quote?: string;
   research?: boolean;
 }) {
   const t = useT();
   const skill = question?.forcedSkill ?? null;
+  const about = (question ? question.focus?.selection : quote) ?? "";
   return (
     <div
       data-testid="assistant-question"
@@ -273,6 +277,15 @@ function QuestionBubble({
     >
       <p className="assistant-question-bubble">
         <span className="sr-only">{t("assistant.youAsked")}</span>
+        {about.trim() !== "" && (
+          <span
+            data-testid="assistant-question-quote"
+            title={about}
+            className="assistant-question-quote"
+          >
+            <span className="sr-only">{t("assistant.question.quote")}</span>“{about.trim()}”
+          </span>
+        )}
         {skill && (
           <span data-testid="assistant-question-skill" className="assistant-question-skill">
             <SparkLineIcon aria-hidden="true" className="size-3" />

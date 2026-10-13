@@ -362,7 +362,7 @@ export function createTagger(options: TaggerOptions) {
           : [...new Set(input as string[])];
       const rows = ids.map((id) => {
         const row = rowOf(id);
-        if (!row) throw new NotFoundError("There is no such Document.");
+        if (!row) throw new NotFoundError({ key: "error.document.notFound" });
         return { id, row };
       });
       const changed: string[] = [];
