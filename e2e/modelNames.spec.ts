@@ -59,12 +59,11 @@ test("the chip, its menu, Settings → Models and the steps show a model's name 
     }, LISTED);
     await window.evaluate(async () => {
       const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-      const provider = await bridge.saveChatProvider({
+      await bridge.saveChatProvider({
         kind: "openai",
         modelId: "gpt-6-luna",
         apiKey: "key-not-real",
       });
-      if (provider.service) await bridge.allowDataFlow("chat", provider.service.id);
     });
     await newMind(window);
 
