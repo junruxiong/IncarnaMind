@@ -24,6 +24,7 @@ import {
   motionSettled,
   removeDataFolder,
   setLanguage,
+  setWindowSize,
   useOutputLocation,
 } from "./app";
 
@@ -332,6 +333,14 @@ test("Export writes back into the Word file: what it can't keep is said first, E
   expect(await readdir(output)).toEqual([]);
   await motionSettled(window);
   await screenshot(window, "word-export-review");
+  // A narrow window: the line and its list wrap by word, inside the tab.
+  await setWindowSize(app, window, 900, 660);
+  await motionSettled(window);
+  const line = await result.boundingBox();
+  const pane = await window.getByTestId("mind-pane").boundingBox();
+  expect(line && pane && line.x >= pane.x && line.x + line.width <= pane.x + pane.width).toBe(true);
+  await screenshot(window, "word-export-review-narrow");
+  await setWindowSize(app, window, 1600, 660);
   await setLanguage(window, "zh-CN");
   await expect(result.getByTestId("export-review")).toContainText("Word 文件中有 1 处无法保留");
   await expect(result.getByTestId("export-anyway")).toHaveText("仍然导出");
