@@ -8,7 +8,7 @@
  */
 
 import { markdownToBlocks } from "../../core/answers/markdown";
-import type { ConversationAnswer } from "../../core/api";
+import { CITATION_NODE, type ConversationAnswer } from "../../core/api";
 import { asGenerated } from "../../shared/aiText";
 import { citationNode, type NodeJSON, withCitations } from "../../shared/blockJson";
 import { withFigures } from "../../shared/figureMarkers";
@@ -31,12 +31,43 @@ export function answerBlocks(
     return streaming ? citationNode(null) : null;
   });
   return asGenerated(
-    withFigures(
-      blocks,
-      (marker) => figures.get(marker) ?? null,
-      (figure) => figure.shown,
+    closeUpCitations(
+      withFigures(
+        blocks,
+        (marker) => figures.get(marker) ?? null,
+        (figure) => figure.shown,
+      ),
     ),
   );
+}
+
+/** A space between two Citations, or between a Citation and the punctuation after it, is not kept (#612). */
+const PUNCTUATION_AFTER = /^[ \t]+(?=[.,;:!?)\]。，、；：！？）])/u;
+
+/**
+ * Citations side by side stand together and punctuation touches the Citation
+ * before it, whatever spaces the model wrote around the markers.
+ */
+function closeUpCitations(blocks: readonly NodeJSON[]): NodeJSON[] {
+  return blocks.map((block) => {
+    if (!block.content || block.type === "codeBlock") return block;
+    const siblings = block.content;
+    const content: NodeJSON[] = [];
+    siblings.forEach((child, index) => {
+      if (child.type !== "text" || !child.text) {
+        content.push(...closeUpCitations([child]));
+        return;
+      }
+      if (content.at(-1)?.type !== CITATION_NODE) {
+        content.push(child);
+        return;
+      }
+      const text = child.text.replace(PUNCTUATION_AFTER, "");
+      const betweenCitations = text.trim() === "" && siblings[index + 1]?.type === CITATION_NODE;
+      if (!betweenCitations) content.push({ ...child, text });
+    });
+    return { ...block, content };
+  });
 }
 
 /** Whether Blocks hold any words: an Answer that failed before writing any has nothing to keep. */

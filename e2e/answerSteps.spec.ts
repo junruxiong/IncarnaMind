@@ -218,7 +218,7 @@ test("the folded line opens by click, Enter and Space, at once, to the reasoning
     "When do spring tides happen?",
   );
   await expect(reasoning.getByTestId("answer-reasoning-more")).toHaveCount(0);
-  await expect(timeline.locator('[data-step="read"]')).toHaveText("Read Lit review: tides");
+  await expect(timeline.locator('[data-step="read"]')).toHaveText("Read “Lit review: tides”");
   const search = timeline.locator('[data-step="search"]');
   await expect(search).toContainText("Searched All Documents for “When do spring tides happen?”");
   await expect(search.getByTestId("answer-step-found")).toContainText(/passages? found, 1 used/);

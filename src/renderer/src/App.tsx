@@ -8,6 +8,7 @@ import { AppShell, useRememberSidebarWidth } from "./components/AppShell";
 import { Workbench } from "./components/assistant/Workbench";
 import { CitationStylePickerHost } from "./components/CitationStylePicker";
 import { ConsentDialog } from "./components/ConsentDialog";
+import { ErrorNotices } from "./components/ErrorNotices";
 import { DropOverlay, useFileDrop } from "./components/FileDrop";
 import { FileWriteDialog } from "./components/FileWriteDialog";
 import { HistoryView } from "./components/history/HistoryView";
@@ -24,9 +25,9 @@ import { SortMenu } from "./components/SortMenu";
 import { TagsDialog } from "./components/TagsDialog";
 import { TabNoticeLine } from "./components/tabs/TabNoticeLine";
 import { UsageDataDialog } from "./components/UsageDataDialog";
-import { buttonStyle } from "./components/ui";
 import { WordImportDialog } from "./components/WordImportDialog";
 import { files } from "./core";
+import { useEscapeToDismiss } from "./escapeDismiss";
 import { useLanguage, useT } from "./i18n";
 import { useMeetings } from "./meetings";
 import { setMotionPreference } from "./motion";
@@ -184,6 +185,7 @@ function Workspace() {
   const openSettings = useAppStore((state) => state.openSettings);
   useKeymap();
   useEditMenu();
+  useEscapeToDismiss();
   useRememberSidebarWidth(device?.sidebarWidth);
   const sidebar = useSidebarControl(device?.sidebarHidden ?? false);
   const peek = useSidebarPeek(sidebar.hidden);
@@ -274,30 +276,12 @@ function Workspace() {
         <ConsentDialog />
         <MeetingNoticeDialog />
         <FileWriteDialog />
-        <ActionError />
+        <ErrorNotices />
         {fileDrop.active && !fileDrop.links && <DropOverlay />}
         <p role="status" data-testid="sidebar-announcement" className="sr-only">
           {announcement}
         </p>
       </div>
     </SidebarControlContext.Provider>
-  );
-}
-
-function ActionError() {
-  const t = useT();
-  const message = useAppStore((state) => state.actionError);
-  const dismiss = useAppStore((state) => state.dismissActionError);
-  if (!message) return null;
-  return (
-    <div
-      role="alert"
-      className="fixed right-4 bottom-4 z-20 flex max-w-sm items-start gap-3 rounded-lg bg-sheet py-2.5 pr-2.5 pl-4 text-[13px] leading-5 text-danger shadow-popover"
-    >
-      <p className="min-w-0 flex-1 py-1 break-words">{t("error.action", { message })}</p>
-      <button type="button" onClick={dismiss} className={buttonStyle("ghost", "sm")}>
-        {t("error.dismiss")}
-      </button>
-    </div>
   );
 }

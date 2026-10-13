@@ -63,7 +63,7 @@ export function FileWriteDialog() {
     try {
       await core.respondToFileWrite(request.requestId, accept);
     } catch (failure) {
-      useAppStore.setState({ actionError: errorMessage(failure) });
+      useAppStore.getState().reportError(failure);
     }
   };
 
