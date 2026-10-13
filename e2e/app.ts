@@ -232,6 +232,20 @@ export const startScriptedTask = (
   );
 
 /**
+ * Returns once everything the app captured for usage data so far has reached
+ * the server `LaunchOptions.usageData` names, so a test can say nothing else
+ * did without waiting a while for it.
+ */
+export const flushUsageData = (app: ElectronApplication) =>
+  app.evaluate(async () => {
+    const hooks = (globalThis as { incarnamindUsageData?: { flush(): Promise<void> } })
+      .incarnamindUsageData;
+    if (!hooks)
+      throw new Error("Launch with `usageData`: only then has the app a usage data sender.");
+    await hooks.flush();
+  });
+
+/**
  * Stands in for the system's notifications: each one shown is recorded
  * instead (`notificationsShown`). Notifications made before this aren't.
  */
