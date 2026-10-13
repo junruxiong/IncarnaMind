@@ -1054,8 +1054,11 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
     quotes,
 
     /** The Passages the model was given, by the id it cites them by, as it read them. */
-    shownPassages: (): { id: string; text: string }[] =>
-      [...shownTexts].map(([id, text]) => ({ id, text })),
+    shownPassages: (): { id: string; passageId: string; text: string }[] =>
+      [...handleOf].flatMap(([passageId, id]) => {
+        const text = shownTexts.get(id);
+        return text === undefined ? [] : [{ id, passageId, text }];
+      }),
 
     streamingCitation,
 
