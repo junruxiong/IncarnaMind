@@ -9,7 +9,6 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import type { TextRange } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
 import { assistantHandle } from "../commands/handles";
 import { keysHere, pressesShortcut } from "../commands/keymap";
@@ -46,6 +45,7 @@ import {
   SearchLineIcon,
   SparkLineIcon,
 } from "./lineIcons";
+import { Marked } from "./Marked";
 
 /** How long typing pauses before the words inside are searched for. */
 const WORDS_DELAY_MS = 120;
@@ -369,24 +369,6 @@ function Key({ children }: { children: ReactNode }) {
       {children}
     </kbd>
   );
-}
-
-/** Text with the words found in it in bold. */
-function Marked({ text, ranges }: { text: string; ranges: readonly TextRange[] }) {
-  const parts: ReactNode[] = [];
-  let at = 0;
-  for (const range of ranges) {
-    if (range.start < at) continue;
-    if (range.start > at) parts.push(text.slice(at, range.start));
-    parts.push(
-      <b key={range.start} className="font-semibold text-ink">
-        {text.slice(range.start, range.end)}
-      </b>,
-    );
-    at = range.end;
-  }
-  parts.push(text.slice(at));
-  return <>{parts}</>;
 }
 
 function ItemIcon({ item }: { item: PaletteItem }) {

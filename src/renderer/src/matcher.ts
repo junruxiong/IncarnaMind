@@ -179,7 +179,8 @@ function find(folded: Folded, word: string): Found | null {
   return spelled ?? exact ?? findWithTypo(folded, word);
 }
 
-function joined(ranges: TextRange[]): TextRange[] {
+/** Ranges in order, those that touch or overlap made one. */
+export function joinRanges(ranges: TextRange[]): TextRange[] {
   ranges.sort((a, b) => a.start - b.start || a.end - b.end);
   const out: TextRange[] = [];
   for (const range of ranges) {
@@ -219,5 +220,5 @@ export function matchName(words: readonly string[], name: string): NameMatch | n
     end: folded.to[end - 1] ?? name.length,
   }));
   // Of names that match alike, the shorter is the closer match.
-  return { score: kind * 1000 - Math.min(folded.text.length, 999), ranges: joined(ranges) };
+  return { score: kind * 1000 - Math.min(folded.text.length, 999), ranges: joinRanges(ranges) };
 }
