@@ -886,6 +886,33 @@
   .tab-strip-spacer {
     flex: 1 1 auto;
   }
+  /* The Tasks chip (#126; DESIGN.md, Finding Tasks): a pill in the band while a Task runs or needs the User. */
+  .tasks-chip {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    margin: 0 4px 6px;
+    padding: 0 10px 0 8px;
+    border-radius: 9999px;
+    background: var(--color-sheet);
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--color-ink);
+    outline: none;
+
+    &:hover,
+    &[aria-expanded="true"] {
+      background: var(--color-frame);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 1px;
+    }
+  }
   .tab-export {
     gap: 6px;
     margin: 0 2px 4px;
@@ -5511,7 +5538,7 @@
     font-size: 13px;
     color: var(--color-ink-meta);
   }
-  /* The composer of the Mind it reads is drawn here, the panel's width. */
+  /* The composer is drawn here, the panel's width: the Mind's it reads, or the one with none in focus. */
   .assistant-composer {
     flex: none;
     padding: 0 10px 10px;
@@ -5581,6 +5608,34 @@
   .task-dot--idle {
     background: var(--color-ink-placeholder);
     animation: none;
+  }
+  .tasks-popover {
+    width: 320px;
+    max-width: calc(100vw - 16px);
+
+    .model-menu-item {
+      align-items: start;
+    }
+    .task-dot {
+      margin: 7px 0 0 5px;
+    }
+  }
+  .tasks-popover-title,
+  .tasks-popover-line {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .tasks-popover-title {
+    font-size: 13px;
+    line-height: 18px;
+    font-weight: 600;
+  }
+  .tasks-popover-done {
+    width: 14px;
+    height: 14px;
+    margin-top: 2px;
+    color: var(--color-success);
   }
   .task-done-icon {
     width: 14px;
@@ -5722,11 +5777,6 @@
       max-width: 812px;
       margin-inline: auto;
     }
-    .assistant-no-mind {
-      width: auto;
-      max-width: 812px;
-      margin: 0 max(40px, calc((100% - 812px) / 2)) 10px;
-    }
   }
 
   /* A floating box's edges and corners resize it; its bottom-right corner also takes the keys. */
@@ -5849,6 +5899,300 @@
     font-size: 13px;
     line-height: 20px;
     color: var(--color-ink-meta);
+  }
+
+  /*
+   * History (#113, the canvas board Final-02-History): the whole window, the
+   * frame around one card of two columns with a rule between, the earlier
+   * version left and the later right. Its marks are grey, as nothing in it
+   * can be changed: removed words struck in ink-meta, added words on a
+   * tab-strip wash with an ink-placeholder underline. At 900px and under the
+   * columns stack: a row that changed shows both, one that didn't shows once.
+   */
+  .history {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    max-width: none;
+    height: 100vh;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    flex-direction: column;
+    background: var(--color-frame);
+    color: var(--color-ink);
+    container: history / inline-size;
+
+    &[open] {
+      display: flex;
+    }
+    &::backdrop {
+      background: transparent;
+    }
+  }
+  .history-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    color: var(--color-ink-meta);
+  }
+  .history-meta {
+    color: var(--color-ink-meta);
+  }
+  .history-bar {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    flex-shrink: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: center;
+    height: 44px;
+    padding: 0 max(8px, var(--window-buttons-right)) 0 8px;
+  }
+  .history-bar-half {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+    padding-left: max(8px, calc(var(--window-buttons-left) - 8px));
+
+    &[data-side="right"] {
+      padding-left: 56px;
+    }
+  }
+  .history-title {
+    display: flex;
+    flex: 0 1 auto;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+    margin: 0 4px 0 0;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 20px;
+    color: var(--color-ink-secondary);
+
+    > .history-icon {
+      width: 16px;
+      height: 16px;
+    }
+  }
+  .history-picker {
+    display: inline-flex;
+    flex: 0 1 auto;
+    min-width: 0;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 6px 0 8px;
+    border: 1px solid var(--color-rule-strong);
+    border-radius: 6px;
+    background: var(--color-sheet);
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink);
+    white-space: nowrap;
+
+    /* Only the left one waits for versions to choose from. */
+    &[data-side="left"]:enabled:hover {
+      background: var(--color-frame);
+    }
+    &[data-side="left"]:disabled {
+      opacity: 0.5;
+    }
+    /* The Mind now, or another version: quiet, a label until it is pointed at. */
+    &[data-side="right"] {
+      border-color: transparent;
+      background: transparent;
+      font-weight: 600;
+      color: var(--color-ink-secondary);
+    }
+    &[data-side="right"]:hover {
+      background: var(--color-chip);
+    }
+  }
+  .history-menu {
+    width: 300px;
+    max-width: calc(100vw - 16px);
+    font-size: 13px;
+    line-height: 20px;
+  }
+  .history-time {
+    font-variant-numeric: tabular-nums;
+  }
+  .history-option {
+    color: var(--color-ink-secondary);
+
+    &[aria-checked="true"] {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+    &[aria-checked="true"] > .history-time {
+      font-weight: 600;
+    }
+  }
+  .history-card {
+    position: relative;
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    margin: 0 8px 8px;
+    overflow: hidden;
+    border: 1px solid var(--color-rule);
+    border-radius: 10px;
+    background: var(--color-sheet);
+  }
+  .history-note {
+    margin: 16px 56px 0;
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink-meta);
+  }
+  .history-scroller {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    /* The rule between the columns, the scroller's whole height. */
+    background: linear-gradient(var(--color-rule), var(--color-rule)) no-repeat center / 1px 100%;
+    background-attachment: local;
+  }
+  .history-rows {
+    padding: 40px 0 48px;
+    font-family: var(--font-serif);
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+    color: var(--color-ink);
+    overflow-wrap: break-word;
+  }
+  .history-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .history-cell {
+    min-width: 0;
+    padding: 0 48px 16px 56px;
+  }
+  .history-block {
+    margin: 0;
+  }
+  .history-heading {
+    margin-top: 16px;
+    font-size: var(--text-heading);
+    font-weight: 600;
+    line-height: var(--text-heading--line-height);
+
+    &[data-level="2"] {
+      font-size: 19px;
+      line-height: 28px;
+    }
+    &:is([data-level="3"], [data-level="4"], [data-level="5"], [data-level="6"]) {
+      font-size: var(--text-body);
+      line-height: var(--text-body--line-height);
+    }
+  }
+  .history-question {
+    font-family: var(--font-sans);
+    font-size: var(--text-question);
+    font-weight: 500;
+    line-height: var(--text-question--line-height);
+    color: var(--color-ink-secondary);
+  }
+  /* A list item's bullet or number hangs in the 24px its indent keeps for it. */
+  .history-marker {
+    display: inline-block;
+    width: 24px;
+    margin-left: -24px;
+    font-variant-numeric: tabular-nums;
+  }
+  .history-quote {
+    padding-left: 16px;
+    border-left: 2px solid var(--color-rule-strong);
+    color: var(--color-ink-secondary);
+  }
+  .history-code {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 20px;
+    white-space: pre-wrap;
+  }
+  .history-lines {
+    font-family: var(--font-sans);
+    font-size: var(--text-ui);
+    line-height: 22px;
+    white-space: pre-line;
+  }
+  .history-label {
+    font-weight: 600;
+    color: var(--color-ink-meta);
+  }
+  .history-rule {
+    height: 0;
+    margin: 12px 0;
+    border: 0;
+    border-top: 1px solid var(--color-rule-strong);
+  }
+  .history-citation {
+    display: inline-flex;
+    min-width: 18px;
+    height: 18px;
+    align-items: center;
+    justify-content: center;
+    margin: 0 1px 0 4px;
+    padding: 0 4px;
+    border-radius: 4px;
+    background: var(--color-chip);
+    font-family: var(--font-sans);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 18px;
+    color: var(--color-ink-secondary);
+    vertical-align: 2px;
+  }
+  .history-rows del {
+    color: var(--color-ink-meta);
+    text-decoration: line-through 1px var(--color-ink-meta);
+  }
+  .history-rows ins {
+    padding: 2px 0;
+    border-radius: 2px;
+    background: var(--color-tab-strip);
+    color: var(--color-ink-answer);
+    text-decoration: underline 1px var(--color-ink-placeholder);
+    text-underline-offset: 4px;
+    box-decoration-break: clone;
+  }
+  @container history (width <= 900px) {
+    .history-bar {
+      grid-template-columns: minmax(0, 1fr);
+      row-gap: 8px;
+      height: auto;
+      padding-top: 8px;
+      padding-bottom: 8px;
+    }
+    .history-bar-half[data-side="right"] {
+      padding-left: 8px;
+    }
+    .history-scroller {
+      background: none;
+    }
+    .history-row {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .history-row:not([data-changed]) > [data-side="left"],
+    .history-cell:empty {
+      display: none;
+    }
+    .history-cell {
+      padding-right: 24px;
+      padding-left: 24px;
+    }
+    .history-note {
+      margin-right: 24px;
+      margin-left: 24px;
+    }
   }
 
   /* A chart (#436): its colours are tokens only, so it follows the theme. */
@@ -6950,59 +7294,6 @@
   animation: none;
   background: var(--color-frame);
   box-shadow: 0 0 0 6px var(--color-frame);
-}
-
-/* Folder contents stay readable beside an open document viewer. */
-.library-pane {
-  container-type: inline-size;
-}
-.library-columns {
-  display: grid;
-  grid-template-columns: minmax(160px, 1.7fr) minmax(130px, 1fr) minmax(120px, 1.2fr);
-  gap: 12px;
-  align-items: start;
-}
-@container (max-width: 540px) {
-  .library-columns {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
-  .library-document-name {
-    grid-column: 1 / -1;
-  }
-  .library-column-labels {
-    display: none;
-  }
-}
-
-/* Recently deleted: name, where it was, when, days left, then its actions; narrow, the details go under the name. */
-.deleted-columns {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(100px, 170px) 130px 64px 250px;
-  gap: 16px;
-  align-items: center;
-}
-.deleted-columns > .deleted-meta {
-  display: contents;
-}
-.deleted-columns > .deleted-actions {
-  min-width: 2rem;
-}
-@container (max-width: 820px) {
-  .deleted-columns {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 2px 12px;
-  }
-  .deleted-columns > .deleted-meta {
-    display: flex;
-    grid-column: 1 / -1;
-    grid-row: 2;
-    flex-wrap: wrap;
-    gap: 0 12px;
-    font-size: 12px;
-  }
-  .deleted-column-labels {
-    display: none;
-  }
 }
 
 /* macOS's traffic lights take the app mark's place in the sidebar's header (see "The title bar"). */
