@@ -19,7 +19,7 @@ import {
   resolveProposals,
 } from "../../src/shared/proposals";
 import { setUpWithDocuments } from "../helpers/citations";
-import { createTempDataFolder, nextEvent, startCore } from "../helpers/core";
+import { createTempDataFolder, nextEvent, saveProviderUnasked, startCore } from "../helpers/core";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
 import { readMind, resolveChanges, shownWithChanges, writeMind } from "../helpers/minds";
 import { scriptedModels } from "../helpers/models";
@@ -984,7 +984,7 @@ describe("Edit with AI and the model's service", () => {
     const dataDir = await createTempDataFolder();
     const models = scriptedModels(model);
     const core = startCore(dataDir, { createChatModel: models.createChatModel });
-    await core.saveChatProvider({ kind: "openai", apiKey: "sk-test", modelId: "gpt-test" });
+    await saveProviderUnasked(core, { kind: "openai", apiKey: "sk-test", modelId: "gpt-test" });
     const mind = await core.createMind({ title: "Cloud" });
     const client = await connectToMind(core, mind.id);
     const note = paragraph(text("A paragraph."));

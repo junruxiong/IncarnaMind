@@ -304,22 +304,25 @@ describe("Signing in", { timeout: 30_000 }, () => {
     });
   });
 
-  test("Tools are listed and called through the Connector with the token, once the User allows sending to the server", async () => {
+  test("Tools are listed and called through the Connector with the token, which connecting it allowed", async () => {
     const { core, fake, id, model } = await signedIn();
-    const consent = nextEvent(core, "consent.requested");
+    const requests: string[] = [];
+    core.on("consent.requested", (request) => requests.push(request.flow.id));
 
-    const asking = ask(core);
-    const request = await consent;
-    // Consent is for the server's origin.
-    expect(request.flow).toEqual({
-      id: "connectors",
-      service: { id: fake.mcpOrigin, name: new URL(fake.mcpOrigin).host },
-      sends: ["tool-arguments"],
-    });
-    expect(fake.toolCalls).toEqual([]);
-    await core.respondToConsent(request.requestId, true);
-
-    expect(await asking).toBe('The wiki says: Wiki results for "tides": Tide tables.');
+    expect(await ask(core)).toBe('The wiki says: Wiki results for "tides": Tide tables.');
+    // Connecting it allowed sending to the server's origin (ADR-0022): nothing asked.
+    expect(requests).toEqual([]);
+    expect(await core.listDataFlows()).toContainEqual(
+      expect.objectContaining({
+        flow: {
+          id: "connectors",
+          service: { id: fake.mcpOrigin, name: new URL(fake.mcpOrigin).host },
+          sends: ["tool-arguments"],
+        },
+        consent: "accepted",
+        chosen: true,
+      }),
+    );
     // Both Tools were offered; the one that claims to only read ran without asking.
     expect(model.doStreamCalls[0]?.tools?.map((tool) => tool.name)).toEqual([SEARCH, EDIT]);
     expect(fake.toolCalls).toEqual([
@@ -664,6 +667,8 @@ describe("Tokens", { timeout: 30_000 }, () => {
 describe("Consent and removal", { timeout: 30_000 }, () => {
   test("declining the server's consent means nothing is sent to it", async () => {
     const { core, fake } = await signedIn();
+    // As a Connector connected before ADR-0022 left it: the first call asks.
+    await core.revokeConsent("connectors", fake.mcpOrigin);
     answerConsentAlways(core, false);
 
     expect(await ask(core)).toContain("didn't allow sending data");

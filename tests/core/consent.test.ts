@@ -1,15 +1,25 @@
+import { randomUUID } from "node:crypto";
+import { join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import {
   ChatNotReadyError,
   ConsentDeclinedError,
   type Core,
+  DATABASE_FILE,
   type DataFlowId,
   InvalidInputError,
   NotFoundError,
   type SaveChatProviderInput,
   type TestChatConnectionInput,
 } from "../../src/core";
-import { createMemoryKeychain, createTempDataFolder, nextEvent, startCore } from "../helpers/core";
+import { openDatabase } from "../../src/core/storage";
+import {
+  createMemoryKeychain,
+  createTempDataFolder,
+  nextEvent,
+  saveProviderUnasked,
+  startCore,
+} from "../helpers/core";
 import { replyingModel, scriptedModels } from "../helpers/models";
 
 /** Works both for saving a provider and for testing it. */
@@ -21,6 +31,13 @@ const OPENAI: ProviderInput = {
   modelId: "gpt-5.4-mini",
 };
 const OPENAI_SERVICE = { id: "https://api.openai.com", name: "OpenAI" };
+const ANTHROPIC: ProviderInput = {
+  kind: "anthropic",
+  apiKey: "sk-ant-test",
+  modelId: "claude-sonnet-4-6",
+};
+const ANTHROPIC_SERVICE = { id: "https://api.anthropic.com", name: "Anthropic" };
+const AT = "2026-09-01T09:00:00.000Z";
 
 async function startWithModel(dataDir?: string, keychain = createMemoryKeychain()) {
   const models = scriptedModels(replyingModel());
@@ -31,19 +48,181 @@ async function startWithModel(dataDir?: string, keychain = createMemoryKeychain(
   return { core, models };
 }
 
-/** Starts a connection test and returns it with the consent request it raised. */
-async function testAndWaitForConsent(core: Core, input: ProviderInput = OPENAI) {
+/** Asks for the chat model as an Answer does, and returns that with the consent request it raised. */
+async function askAndWaitForConsent(core: Core) {
   const requested = nextEvent(core, "consent.requested");
-  const result = core.testChatConnection(input);
+  const result = core.prepareChatModel();
+  // Handled here so a decline isn't reported as unhandled before the test awaits it.
+  result.catch(() => undefined);
   return { result, request: await requested };
 }
+
+/** Counts the consent requests from now on. */
+function countRequests(core: Core) {
+  const requests: string[] = [];
+  core.on("consent.requested", (request) => requests.push(request.flow.id));
+  return requests;
+}
+
+describe("Choosing a service is the consent (ADR-0022)", () => {
+  test("choosing the chat model's provider allows every flow that sends to it: nothing asks", async () => {
+    const { core, models } = await startWithModel();
+    const requests = countRequests(core);
+    const changed = nextEvent(core, "dataFlows.changed");
+
+    await core.saveChatProvider(OPENAI);
+
+    expect(await core.getChatReadiness()).toMatchObject({ ready: true, consent: "accepted" });
+    await core.prepareChatModel();
+    expect(models.specs).toHaveLength(1);
+    expect(requests).toEqual([]);
+    const allowed = (id: DataFlowId, sends: string[]) => ({
+      flow: { id, service: OPENAI_SERVICE, sends },
+      consent: "accepted",
+      decidedAt: expect.any(String),
+      chosen: true,
+    });
+    expect(await core.listDataFlows()).toEqual([
+      allowed("chat", ["blocks", "passages"]),
+      allowed("suggestions", ["writing", "writing-passages"]),
+      allowed("edits", ["selection"]),
+      allowed("checks", ["selection", "passages", "verified-document"]),
+      allowed("tagging", ["tags", "document-excerpts"]),
+      allowed("classification", ["groups", "tags", "document-excerpts", "page-images"]),
+    ]);
+    // The Privacy page hears of it at once.
+    expect((await changed).find((flow) => flow.id === "chat")?.services).toEqual([
+      allowed("chat", ["blocks", "passages"]),
+    ]);
+  });
+
+  test("a connection test sends only the key and a fixed prompt, so it asks nothing", async () => {
+    const { core, models } = await startWithModel();
+    const requests = countRequests(core);
+
+    expect(await core.testChatConnection(OPENAI)).toEqual({ ok: true });
+
+    expect(requests).toEqual([]);
+    expect(models.model.doGenerateCalls).toHaveLength(1);
+    // Testing isn't choosing: nothing is allowed.
+    expect(await core.listDataFlows()).toEqual([]);
+  });
+
+  test("choosing the provider again keeps a flow the User declined declined", async () => {
+    const { core } = await startWithModel();
+    await saveProviderUnasked(core, OPENAI);
+    const { result, request } = await askAndWaitForConsent(core);
+    await core.respondToConsent(request.requestId, false);
+    await expect(result).rejects.toThrow(ConsentDeclinedError);
+
+    await core.saveChatProvider(OPENAI);
+
+    expect(await core.getChatReadiness()).toMatchObject({
+      ready: false,
+      reason: "consent-declined",
+    });
+    const flows = await core.listDataFlows();
+    expect(flows).toContainEqual(
+      expect.objectContaining({
+        flow: expect.objectContaining({ id: "chat" }),
+        consent: "declined",
+        chosen: false,
+      }),
+    );
+    expect(flows).toContainEqual(
+      expect.objectContaining({
+        flow: expect.objectContaining({ id: "edits" }),
+        consent: "accepted",
+        chosen: true,
+      }),
+    );
+  });
+});
+
+describe("Decisions made before choosing was the consent", () => {
+  test("stay as they were: a declined flow stays declined, and one never asked asks once", async () => {
+    const dataDir = await createTempDataFolder();
+    const keychain = createMemoryKeychain();
+    const first = await startWithModel(dataDir, keychain);
+    await first.core.saveChatProvider(OPENAI);
+    first.core.close();
+    // The data folder as it was before migration 87: decisions made in dialogs, and Questions never asked.
+    const db = openDatabase(join(dataDir, DATABASE_FILE));
+    try {
+      db.exec("DELETE FROM data_flow_consents");
+      db.exec("ALTER TABLE data_flow_consents DROP COLUMN chosen");
+      db.run("DELETE FROM schema_migrations WHERE version = 87");
+      const decided = (flow: DataFlowId, decision: string, kinds: string[]) =>
+        db.run(
+          `INSERT INTO data_flow_consents
+             (id, flow, service_id, service_name, decision, data_kinds, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            randomUUID(),
+            flow,
+            OPENAI_SERVICE.id,
+            OPENAI_SERVICE.name,
+            decision,
+            JSON.stringify(kinds),
+            AT,
+            AT,
+          ],
+        );
+      decided("checks", "accepted", ["selection", "passages", "verified-document"]);
+      decided("edits", "declined", []);
+    } finally {
+      db.close();
+    }
+
+    const { core, models } = await startWithModel(dataDir, keychain);
+    const status = async (id: DataFlowId) =>
+      (await core.listDataFlows()).find((each) => each.flow.id === id);
+    expect(await status("checks")).toEqual({
+      flow: {
+        id: "checks",
+        service: OPENAI_SERVICE,
+        sends: ["selection", "passages", "verified-document"],
+      },
+      consent: "accepted",
+      decidedAt: AT,
+      chosen: false,
+    });
+    expect(await status("edits")).toMatchObject({
+      consent: "declined",
+      decidedAt: AT,
+      chosen: false,
+    });
+    expect(await status("chat")).toMatchObject({
+      consent: "not-asked",
+      decidedAt: null,
+      chosen: false,
+    });
+
+    // Nothing is widened silently: the first Question asks, once.
+    const requests = countRequests(core);
+    const { result, request } = await askAndWaitForConsent(core);
+    expect(request.flow).toEqual({
+      id: "chat",
+      service: OPENAI_SERVICE,
+      sends: ["blocks", "passages"],
+    });
+    expect(models.specs).toEqual([]);
+    await core.respondToConsent(request.requestId, true);
+    await result;
+    await core.prepareChatModel();
+    expect(requests).toEqual(["chat"]);
+    expect(models.specs).toHaveLength(2);
+    expect(await status("chat")).toMatchObject({ consent: "accepted", chosen: false });
+    expect(await status("edits")).toMatchObject({ consent: "declined" });
+  });
+});
 
 describe("Data-flow consent", () => {
   test("nothing is sent until the User accepts, and the dialog says what goes where", async () => {
     const { core, models } = await startWithModel();
-    await core.saveChatProvider(OPENAI);
+    await saveProviderUnasked(core, OPENAI);
 
-    const { result, request } = await testAndWaitForConsent(core);
+    const { result, request } = await askAndWaitForConsent(core);
 
     expect(request).toEqual({
       requestId: expect.any(String),
@@ -52,14 +231,13 @@ describe("Data-flow consent", () => {
     });
     expect(await core.listConsentRequests()).toEqual([request]);
     expect(models.specs).toEqual([]);
-    expect(models.model.doGenerateCalls).toEqual([]);
 
     const resolved = nextEvent(core, "consent.resolved");
     await core.respondToConsent(request.requestId, true);
 
-    expect(await result).toEqual({ ok: true });
+    expect(await result).toMatchObject({ modelId: "gpt-5.4-mini" });
     expect(await resolved).toEqual({ requestId: request.requestId, accepted: true });
-    expect(models.model.doGenerateCalls).toHaveLength(1);
+    expect(models.specs).toHaveLength(1);
     expect(await core.listConsentRequests()).toEqual([]);
   });
 
@@ -67,73 +245,50 @@ describe("Data-flow consent", () => {
     const dataDir = await createTempDataFolder();
     const keychain = createMemoryKeychain();
     const first = await startWithModel(dataDir, keychain);
-    await first.core.saveChatProvider(OPENAI);
-    const { result, request } = await testAndWaitForConsent(first.core);
+    await saveProviderUnasked(first.core, OPENAI);
+    const { result, request } = await askAndWaitForConsent(first.core);
     await first.core.respondToConsent(request.requestId, true);
     await result;
     first.core.close();
 
     const { core, models } = await startWithModel(dataDir, keychain);
-    let asked = false;
-    core.on("consent.requested", () => {
-      asked = true;
-    });
+    const requests = countRequests(core);
 
-    expect(await core.testChatConnection(OPENAI)).toEqual({ ok: true });
-    expect(asked).toBe(false);
-    expect(models.model.doGenerateCalls).toHaveLength(1);
+    await core.prepareChatModel();
+    expect(requests).toEqual([]);
+    expect(models.specs).toHaveLength(1);
     expect(await core.getChatReadiness()).toMatchObject({ ready: true, consent: "accepted" });
+    const notAsked = (id: DataFlowId, sends: string[]) => ({
+      flow: { id, service: OPENAI_SERVICE, sends },
+      consent: "not-asked",
+      decidedAt: null,
+      chosen: false,
+    });
     expect(await core.listDataFlows()).toEqual([
       {
         flow: { id: "chat", service: OPENAI_SERVICE, sends: ["blocks", "passages"] },
         consent: "accepted",
         decidedAt: expect.any(String),
+        chosen: false,
       },
-      // Suggestions as the User writes go there too, once they are turned on, and ask for themselves.
-      {
-        flow: {
-          id: "suggestions",
-          service: OPENAI_SERVICE,
-          sends: ["writing", "writing-passages"],
-        },
-        consent: "not-asked",
-        decidedAt: null,
-      },
-      // Edit with AI goes there too, and asks for itself the first time it is used.
-      {
-        flow: { id: "edits", service: OPENAI_SERVICE, sends: ["selection"] },
-        consent: "not-asked",
-        decidedAt: null,
-      },
-      // So do Find support and Check against Documents (#96), and verify (#97), which ask for themselves too.
-      {
-        flow: {
-          id: "checks",
-          service: OPENAI_SERVICE,
-          sends: ["selection", "passages", "verified-document"],
-        },
-        consent: "not-asked",
-        decidedAt: null,
-      },
-      // Automatic tagging also goes to the default model's service, and asks for itself.
-      {
-        flow: { id: "tagging", service: OPENAI_SERVICE, sends: ["tags", "document-excerpts"] },
-        consent: "not-asked",
-        decidedAt: null,
-      },
+      // Suggestions, Edit with AI, the checks (#96, #97) and tagging go there too.
+      notAsked("suggestions", ["writing", "writing-passages"]),
+      notAsked("edits", ["selection"]),
+      notAsked("checks", ["selection", "passages", "verified-document"]),
+      notAsked("tagging", ["tags", "document-excerpts"]),
     ]);
   });
 
   test("declining sends nothing and keeps Questions disabled until another provider is chosen", async () => {
     const { core, models } = await startWithModel();
-    await core.saveChatProvider(OPENAI);
+    await saveProviderUnasked(core, OPENAI);
     expect(await core.getChatReadiness()).toMatchObject({ ready: true, consent: "needed" });
 
-    const { result, request } = await testAndWaitForConsent(core);
+    const { result, request } = await askAndWaitForConsent(core);
     await core.respondToConsent(request.requestId, false);
 
-    expect(await result).toMatchObject({ ok: false, error: { kind: "consent-declined" } });
-    expect(models.model.doGenerateCalls).toEqual([]);
+    await expect(result).rejects.toThrow(ConsentDeclinedError);
+    expect(models.specs).toEqual([]);
     expect(await core.getChatReadiness()).toMatchObject({
       ready: false,
       reason: "consent-declined",
@@ -141,16 +296,10 @@ describe("Data-flow consent", () => {
     });
 
     // The service stays unused: asking again doesn't raise another dialog or send anything.
-    let askedAgain = false;
-    core.on("consent.requested", () => {
-      askedAgain = true;
-    });
-    expect(await core.testChatConnection(OPENAI)).toMatchObject({
-      ok: false,
-      error: { kind: "consent-declined" },
-    });
-    expect(askedAgain).toBe(false);
-    expect(models.model.doGenerateCalls).toEqual([]);
+    const requests = countRequests(core);
+    await expect(core.prepareChatModel()).rejects.toThrow(ChatNotReadyError);
+    expect(requests).toEqual([]);
+    expect(models.specs).toEqual([]);
 
     // A local model makes Questions available again.
     await core.saveChatProvider({
@@ -160,70 +309,48 @@ describe("Data-flow consent", () => {
     });
     expect(await core.getChatReadiness()).toMatchObject({ ready: true, consent: "not-required" });
 
-    // So does another cloud provider, which asks for its own consent.
-    await core.saveChatProvider({ kind: "anthropic", apiKey: "k", modelId: "claude-sonnet-4-6" });
-    expect(await core.getChatReadiness()).toMatchObject({ ready: true, consent: "needed" });
+    // So does another cloud provider: choosing it allows its flows.
+    await core.saveChatProvider(ANTHROPIC);
+    expect(await core.getChatReadiness()).toMatchObject({ ready: true, consent: "accepted" });
   });
 
   test("consent is recorded per service", async () => {
     const { core } = await startWithModel();
-    await core.saveChatProvider(OPENAI);
-    const openai = await testAndWaitForConsent(core);
+    await saveProviderUnasked(core, OPENAI);
+    const openai = await askAndWaitForConsent(core);
     await core.respondToConsent(openai.request.requestId, true);
     await openai.result;
 
-    const anthropicInput: ProviderInput = {
-      kind: "anthropic",
-      apiKey: "sk-ant-test",
-      modelId: "claude-sonnet-4-6",
-    };
-    await core.saveChatProvider(anthropicInput);
-    const anthropic = await testAndWaitForConsent(core, anthropicInput);
+    await saveProviderUnasked(core, ANTHROPIC);
+    const anthropic = await askAndWaitForConsent(core);
 
-    expect(anthropic.request.flow.service).toEqual({
-      id: "https://api.anthropic.com",
-      name: "Anthropic",
-    });
+    expect(anthropic.request.flow.service).toEqual(ANTHROPIC_SERVICE);
     await core.respondToConsent(anthropic.request.requestId, false);
-    await anthropic.result;
+    await anthropic.result.catch(() => undefined);
     expect(await core.listDataFlows()).toEqual([
       expect.objectContaining({
         flow: expect.objectContaining({ service: OPENAI_SERVICE }),
         consent: "accepted",
       }),
       expect.objectContaining({
-        flow: expect.objectContaining({
-          service: { id: "https://api.anthropic.com", name: "Anthropic" },
-        }),
+        flow: expect.objectContaining({ service: ANTHROPIC_SERVICE }),
         consent: "declined",
       }),
       // Edit with AI, checks, suggestions and tagging go to the default model's service only: Anthropic, saved last.
       expect.objectContaining({
-        flow: expect.objectContaining({
-          id: "suggestions",
-          service: { id: "https://api.anthropic.com", name: "Anthropic" },
-        }),
+        flow: expect.objectContaining({ id: "suggestions", service: ANTHROPIC_SERVICE }),
         consent: "not-asked",
       }),
       expect.objectContaining({
-        flow: expect.objectContaining({
-          id: "edits",
-          service: { id: "https://api.anthropic.com", name: "Anthropic" },
-        }),
+        flow: expect.objectContaining({ id: "edits", service: ANTHROPIC_SERVICE }),
         consent: "not-asked",
       }),
       expect.objectContaining({
-        flow: expect.objectContaining({
-          id: "checks",
-          service: { id: "https://api.anthropic.com", name: "Anthropic" },
-        }),
+        flow: expect.objectContaining({ id: "checks", service: ANTHROPIC_SERVICE }),
         consent: "not-asked",
       }),
       expect.objectContaining({
-        flow: expect.objectContaining({
-          id: "tagging",
-          service: { id: "https://api.anthropic.com", name: "Anthropic" },
-        }),
+        flow: expect.objectContaining({ id: "tagging", service: ANTHROPIC_SERVICE }),
         consent: "not-asked",
       }),
     ]);
@@ -232,9 +359,6 @@ describe("Data-flow consent", () => {
   test("revoking forgets the decision: the next request asks again", async () => {
     const { core, models } = await startWithModel();
     await core.saveChatProvider(OPENAI);
-    const first = await testAndWaitForConsent(core);
-    await core.respondToConsent(first.request.requestId, true);
-    await first.result;
 
     const readinessChanged = nextEvent(core, "chatReadiness.changed");
     await core.revokeConsent("chat", OPENAI_SERVICE.id);
@@ -246,41 +370,62 @@ describe("Data-flow consent", () => {
         consent: "not-asked",
         decidedAt: null,
       }),
-      expect.objectContaining({ flow: expect.objectContaining({ id: "suggestions" }) }),
-      expect.objectContaining({ flow: expect.objectContaining({ id: "edits" }) }),
-      expect.objectContaining({ flow: expect.objectContaining({ id: "checks" }) }),
-      expect.objectContaining({ flow: expect.objectContaining({ id: "tagging" }) }),
+      // Revoking one flow leaves the others allowed.
+      expect.objectContaining({
+        flow: expect.objectContaining({ id: "suggestions" }),
+        consent: "accepted",
+      }),
+      expect.objectContaining({
+        flow: expect.objectContaining({ id: "edits" }),
+        consent: "accepted",
+      }),
+      expect.objectContaining({
+        flow: expect.objectContaining({ id: "checks" }),
+        consent: "accepted",
+      }),
+      expect.objectContaining({
+        flow: expect.objectContaining({ id: "tagging" }),
+        consent: "accepted",
+      }),
+      expect.objectContaining({
+        flow: expect.objectContaining({ id: "classification" }),
+        consent: "accepted",
+      }),
     ]);
-    const second = await testAndWaitForConsent(core);
-    expect(models.model.doGenerateCalls).toHaveLength(1);
+    const second = await askAndWaitForConsent(core);
+    expect(models.specs).toEqual([]);
     await core.respondToConsent(second.request.requestId, true);
-    expect(await second.result).toEqual({ ok: true });
+    expect(await second.result).toMatchObject({ modelId: "gpt-5.4-mini" });
   });
 
   test("revoking a decline lets the User change their mind", async () => {
     const { core } = await startWithModel();
-    await core.saveChatProvider(OPENAI);
-    const declined = await testAndWaitForConsent(core);
+    await saveProviderUnasked(core, OPENAI);
+    const declined = await askAndWaitForConsent(core);
     await core.respondToConsent(declined.request.requestId, false);
-    await declined.result;
+    await declined.result.catch(() => undefined);
 
     await core.revokeConsent("chat", OPENAI_SERVICE.id);
 
     expect(await core.getChatReadiness()).toMatchObject({ ready: true, consent: "needed" });
   });
 
-  test("a decision on a provider that was only tested is listed, so it can be revoked", async () => {
+  test("a decision on a provider no longer saved is listed, so it can be revoked", async () => {
     const { core } = await startWithModel();
-    const declined = await testAndWaitForConsent(core);
+    await saveProviderUnasked(core, OPENAI);
+    const declined = await askAndWaitForConsent(core);
     await core.respondToConsent(declined.request.requestId, false);
-    await declined.result;
-    expect(await core.listChatProviders()).toEqual([]);
+    await declined.result.catch(() => undefined);
+    const [provider] = await core.listChatProviders();
+    if (!provider) throw new Error("The provider wasn't saved.");
+    await core.deleteChatProvider(provider.id);
 
     expect(await core.listDataFlows()).toEqual([
       {
         flow: { id: "chat", service: OPENAI_SERVICE, sends: ["blocks", "passages"] },
         consent: "declined",
         decidedAt: expect.any(String),
+        chosen: false,
       },
     ]);
     await core.revokeConsent("chat", OPENAI_SERVICE.id);
@@ -290,11 +435,8 @@ describe("Data-flow consent", () => {
   test("a flow that starts sending a new kind of data asks again, for the new kind", async () => {
     const { core, models } = await startWithModel();
     await core.saveChatProvider(OPENAI);
-    const first = await testAndWaitForConsent(core);
-    await core.respondToConsent(first.request.requestId, true);
-    await first.result;
 
-    // E.g. once Connectors exist, Answers also send Tool results.
+    // E.g. once Connectors exist, Answers also send Tool results: the line the User chose by didn't name them.
     const chat = core.dataFlows.get("chat");
     if (!chat) throw new Error("The chat flow isn't registered.");
     core.dataFlows.register({ ...chat, sends: [...chat.sends, "tool-results"] });
@@ -304,42 +446,37 @@ describe("Data-flow consent", () => {
     expect(await core.listDataFlows()).toContainEqual(
       expect.objectContaining({ consent: "not-asked", decidedAt: expect.any(String) }),
     );
-    const second = await testAndWaitForConsent(core);
+    const second = await askAndWaitForConsent(core);
     expect(second.request.flow.sends).toEqual(["blocks", "passages", "tool-results"]);
     expect(second.request.newKinds).toEqual(["tool-results"]);
-    expect(models.model.doGenerateCalls).toHaveLength(1);
+    expect(models.specs).toEqual([]);
 
     await core.respondToConsent(second.request.requestId, true);
-    expect(await second.result).toEqual({ ok: true });
-    expect(await core.listDataFlows()).toEqual([
-      expect.objectContaining({ consent: "accepted" }),
-      expect.objectContaining({ flow: expect.objectContaining({ id: "suggestions" }) }),
-      expect.objectContaining({ flow: expect.objectContaining({ id: "edits" }) }),
-      expect.objectContaining({ flow: expect.objectContaining({ id: "checks" }) }),
-      expect.objectContaining({ flow: expect.objectContaining({ id: "tagging" }) }),
-    ]);
+    expect(await second.result).toMatchObject({ modelId: "gpt-5.4-mini" });
+    expect((await core.listDataFlows())[0]).toMatchObject({ consent: "accepted" });
   });
 
   test("requests made while a dialog is open wait for the same answer", async () => {
     const { core, models } = await startWithModel();
-    await core.saveChatProvider(OPENAI);
-    const requests: string[] = [];
-    core.on("consent.requested", (request) => requests.push(request.requestId));
+    await saveProviderUnasked(core, OPENAI);
+    const requests = countRequests(core);
 
-    const first = core.testChatConnection(OPENAI);
-    const second = core.testChatConnection(OPENAI);
+    const first = core.prepareChatModel();
+    const second = core.prepareChatModel();
     await vi.waitFor(() => expect(requests).toHaveLength(1));
-    await core.respondToConsent(requests[0] as string, true);
+    const [request] = await core.listConsentRequests();
+    if (!request) throw new Error("Nothing asked.");
+    await core.respondToConsent(request.requestId, true);
 
-    expect(await Promise.all([first, second])).toEqual([{ ok: true }, { ok: true }]);
+    await Promise.all([first, second]);
     expect(requests).toHaveLength(1);
-    expect(models.model.doGenerateCalls).toHaveLength(2);
+    expect(models.specs).toHaveLength(2);
   });
 
   test("answering a request twice, or one that doesn't exist, changes nothing", async () => {
     const { core } = await startWithModel();
-    await core.saveChatProvider(OPENAI);
-    const { result, request } = await testAndWaitForConsent(core);
+    await saveProviderUnasked(core, OPENAI);
+    const { result, request } = await askAndWaitForConsent(core);
     await core.respondToConsent(request.requestId, true);
     await result;
 
@@ -352,16 +489,14 @@ describe("Data-flow consent", () => {
   test("Answers get a model only once the User has accepted its flow", async () => {
     const { core, models } = await startWithModel();
     await expect(core.prepareChatModel()).rejects.toThrow(ChatNotReadyError);
-    await core.saveChatProvider(OPENAI);
+    await saveProviderUnasked(core, OPENAI);
 
-    const requested = nextEvent(core, "consent.requested");
-    const prepared = core.prepareChatModel();
-    const request = await requested;
+    const { result, request } = await askAndWaitForConsent(core);
     expect(models.specs).toEqual([]);
     await core.respondToConsent(request.requestId, true);
 
     // The provider's model, counted by the meter on its way out.
-    expect(await prepared).toMatchObject({
+    expect(await result).toMatchObject({
       model: { provider: models.model.provider, modelId: models.model.modelId },
       modelId: "gpt-5.4-mini",
     });
@@ -378,12 +513,11 @@ describe("Data-flow consent", () => {
 
   test("Answers get no model after the User declined", async () => {
     const { core, models } = await startWithModel();
-    await core.saveChatProvider(OPENAI);
-    const requested = nextEvent(core, "consent.requested");
-    const prepared = core.prepareChatModel();
-    await core.respondToConsent((await requested).requestId, false);
+    await saveProviderUnasked(core, OPENAI);
+    const { result, request } = await askAndWaitForConsent(core);
+    await core.respondToConsent(request.requestId, false);
 
-    await expect(prepared).rejects.toThrow(ConsentDeclinedError);
+    await expect(result).rejects.toThrow(ConsentDeclinedError);
     await expect(core.prepareChatModel()).rejects.toThrow(ChatNotReadyError);
     expect(models.specs).toEqual([]);
   });
@@ -413,8 +547,9 @@ describe("Data flows on the Privacy page", () => {
       services: [
         {
           flow: { id: "chat", service: OPENAI_SERVICE, sends: ["blocks", "passages"] },
-          consent: "not-asked",
-          decidedAt: null,
+          consent: "accepted",
+          decidedAt: expect.any(String),
+          chosen: true,
         },
       ],
     });
@@ -441,6 +576,7 @@ describe("Data flows on the Privacy page", () => {
           flow: { id: later, service, sends: ["tool-results"] },
           consent: "not-asked",
           decidedAt: null,
+          chosen: false,
         },
       ],
     });
@@ -451,10 +587,10 @@ describe("Data flows on the Privacy page", () => {
 
   test("a declined flow can be allowed again in Settings: nothing asks, and it is sent", async () => {
     const { core, models } = await startWithModel();
-    await core.saveChatProvider(OPENAI);
-    const declined = await testAndWaitForConsent(core);
+    await saveProviderUnasked(core, OPENAI);
+    const declined = await askAndWaitForConsent(core);
     await core.respondToConsent(declined.request.requestId, false);
-    await declined.result;
+    await declined.result.catch(() => undefined);
 
     const changed = nextEvent(core, "dataFlows.changed");
     const readiness = nextEvent(core, "chatReadiness.changed");
@@ -462,21 +598,23 @@ describe("Data flows on the Privacy page", () => {
 
     const chat = (await changed).find((flow) => flow.id === "chat");
     expect(chat?.services).toEqual([
-      expect.objectContaining({ consent: "accepted", decidedAt: expect.any(String) }),
+      // Allowed here, not by choosing the provider.
+      expect.objectContaining({
+        consent: "accepted",
+        decidedAt: expect.any(String),
+        chosen: false,
+      }),
     ]);
     expect(await readiness).toMatchObject({ ready: true, consent: "accepted" });
-    let asked = false;
-    core.on("consent.requested", () => {
-      asked = true;
-    });
-    expect(await core.testChatConnection(OPENAI)).toEqual({ ok: true });
-    expect(asked).toBe(false);
-    expect(models.model.doGenerateCalls).toHaveLength(1);
+    const requests = countRequests(core);
+    await core.prepareChatModel();
+    expect(requests).toEqual([]);
+    expect(models.specs).toHaveLength(1);
   });
 
   test("revoke and allow again: after revoking the next request asks, after allowing it doesn't", async () => {
     const { core } = await startWithModel();
-    await core.saveChatProvider(OPENAI);
+    await saveProviderUnasked(core, OPENAI);
     const chatStatus = async () =>
       (await core.listRegisteredDataFlows()).find((flow) => flow.id === "chat")?.services[0];
 
@@ -495,21 +633,20 @@ describe("Data flows on the Privacy page", () => {
 
   test("allowing a flow while its dialog is open answers the dialog", async () => {
     const { core } = await startWithModel();
-    await core.saveChatProvider(OPENAI);
-    const { result, request } = await testAndWaitForConsent(core);
+    await saveProviderUnasked(core, OPENAI);
+    const { result, request } = await askAndWaitForConsent(core);
 
     const resolved = nextEvent(core, "consent.resolved");
     await core.allowDataFlow("chat", OPENAI_SERVICE.id);
 
     expect(await resolved).toEqual({ requestId: request.requestId, accepted: true });
-    expect(await result).toEqual({ ok: true });
+    expect(await result).toMatchObject({ modelId: "gpt-5.4-mini" });
     expect(await core.listConsentRequests()).toEqual([]);
   });
 
   test("allowing also accepts the kinds of data a flow started sending since", async () => {
     const { core } = await startWithModel();
     await core.saveChatProvider(OPENAI);
-    await core.allowDataFlow("chat", OPENAI_SERVICE.id);
     const chat = core.dataFlows.get("chat");
     if (!chat) throw new Error("The chat flow isn't registered.");
     core.dataFlows.register({ ...chat, sends: [...chat.sends, "tool-results"] });
@@ -522,7 +659,7 @@ describe("Data flows on the Privacy page", () => {
 
   test("only a service the flow goes to, or was decided on, can be allowed", async () => {
     const { core } = await startWithModel();
-    await core.saveChatProvider(OPENAI);
+    await saveProviderUnasked(core, OPENAI);
 
     await expect(core.allowDataFlow("chat", "https://api.anthropic.com")).rejects.toThrow(
       NotFoundError,

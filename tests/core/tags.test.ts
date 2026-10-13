@@ -5,6 +5,7 @@ import { describe, expect, test } from "vitest";
 import {
   type Core,
   type CoreAdapters,
+  DATABASE_FILE,
   type Document,
   InvalidInputError,
   NotFoundError,
@@ -12,6 +13,7 @@ import {
   type TestChatConnectionInput,
 } from "../../src/core";
 import { approximateTokens } from "../../src/core/documents/passages";
+import { openDatabase } from "../../src/core/storage";
 import {
   EXCERPT_END,
   EXCERPT_START,
@@ -52,6 +54,7 @@ const OPENAI: SaveChatProviderInput & TestChatConnectionInput = {
   modelId: "gpt-5.4-mini",
 };
 const OPENAI_SERVICE = { id: "https://api.openai.com", name: "OpenAI" };
+const AT = "2026-09-01T09:00:00.000Z";
 const LOCAL: SaveChatProviderInput = { kind: "ollama", modelId: "local-model" };
 
 const names = (items: readonly { name: string }[]) => items.map((item) => item.name);
@@ -453,67 +456,126 @@ describe("Automatic tagging", { timeout: 30_000 }, () => {
   });
 });
 
-describe("Consent for automatic tagging", { timeout: 30_000 }, () => {
-  test("nothing goes to a cloud model before the User accepts the tagging flow, even with chat accepted", async () => {
-    const { core, tagging, models } = await startTagging(["Paper"]);
+describe("Consent for automatic tagging (ADR-0022)", { timeout: 30_000 }, () => {
+  /** Counts the consent requests from now on: tagging, background work, never makes one. */
+  const countRequests = (core: Core) => {
+    const requests: string[] = [];
+    core.on("consent.requested", (request) => requests.push(request.flow.id));
+    return requests;
+  };
+
+  test("choosing a cloud model's provider allows tagging: Tags start without a dialog", async () => {
+    const { core, tagging } = await startTagging(["Paper"]);
+    const requests = countRequests(core);
     await core.saveChatProvider(OPENAI);
-    const chatConsent = nextEvent(core, "consent.requested");
-    const tested = core.testChatConnection(OPENAI);
-    await core.respondToConsent((await chatConsent).requestId, true);
-    expect(await tested).toEqual({ ok: true });
-    const sentBefore = tagging.requests.length;
-    const specsBefore = models.specs.length;
 
-    const requested = nextEvent(core, "consent.requested");
     const document = await addDocument(core, "Attention.md", PAPER_TEXT);
-    const request = await requested;
-
-    expect(request).toEqual({
-      requestId: expect.any(String),
-      flow: { id: "tagging", service: OPENAI_SERVICE, sends: ["tags", "document-excerpts"] },
-      newKinds: ["tags", "document-excerpts"],
-    });
-    expect(tagging.requests).toHaveLength(sentBefore);
-    expect(models.specs).toHaveLength(specsBefore);
-    expect((await core.listDocuments())[0]).toMatchObject({ status: "ready", tags: [] });
-
-    await core.respondToConsent(request.requestId, true);
     await waitForTagging(core, [document.id]);
-    expect(tagging.requests).toHaveLength(sentBefore + 1);
+
+    expect(requests).toEqual([]);
+    expect(tagging.requests).toHaveLength(1);
     expect(await tagNamesOf(core, document.id)).toEqual(["Paper"]);
     expect(await core.listDataFlows()).toContainEqual({
       flow: { id: "tagging", service: OPENAI_SERVICE, sends: ["tags", "document-excerpts"] },
       consent: "accepted",
       decidedAt: expect.any(String),
+      chosen: true,
     });
   });
 
-  test("declining sends nothing: Documents wait, without asking again, until the User allows it", async () => {
+  test("before any model is chosen, a new Document's tagging waits, and nothing asks", async () => {
     const { core, tagging } = await startTagging(["Paper"]);
-    await core.saveChatProvider(OPENAI);
-    const requested = nextEvent(core, "consent.requested");
-    const first = await addDocument(core, "Attention.md", PAPER_TEXT);
-    await core.respondToConsent((await requested).requestId, false);
-    await waitForTagging(core, [first.id], (each) => each.tagging === "waiting-for-provider");
+    const requests = countRequests(core);
 
-    let askedAgain = false;
-    const stop = core.on("consent.requested", () => {
-      askedAgain = true;
-    });
-    const second = await addDocument(core, "Invoice.txt", "Invoice 42. Amount due: 120 EUR.");
-    expect(second.tagging).toBe("waiting-for-provider");
-    expect(askedAgain).toBe(false);
+    const document = await addDocument(core, "Attention.md", PAPER_TEXT);
+
+    expect(document.tagging).toBe("waiting-for-provider");
+    expect(requests).toEqual([]);
     expect(tagging.requests).toEqual([]);
-    // Questions can still be asked: the chat flow is its own.
-    expect(await core.getChatReadiness()).toMatchObject({ ready: true });
-    stop();
+  });
 
-    // "Ask again" in Settings: tagging asks once more, and both Documents go on once allowed.
-    const again = nextEvent(core, "consent.requested");
+  test("for a provider chosen before, tagging never asks: Documents wait until the User allows it", async () => {
+    const { core, tagging, models } = await startTagging(["Paper"]);
+    await core.saveChatProvider(OPENAI);
+    // As choosing the provider left it before ADR-0022: tagging never asked.
     await core.revokeConsent("tagging", OPENAI_SERVICE.id);
-    await core.respondToConsent((await again).requestId, true);
+    const requests = countRequests(core);
+    const specsBefore = models.specs.length;
+
+    const first = await addDocument(core, "Attention.md", PAPER_TEXT);
+    const second = await addDocument(core, "Invoice.txt", "Invoice 42. Amount due: 120 EUR.");
+
+    expect([first.tagging, second.tagging]).toEqual([
+      "waiting-for-provider",
+      "waiting-for-provider",
+    ]);
+    expect(requests).toEqual([]);
+    expect(tagging.requests).toEqual([]);
+    expect(models.specs).toHaveLength(specsBefore);
+    // Questions can still be asked: the chat flow is its own.
+    expect(await core.getChatReadiness()).toMatchObject({ ready: true, consent: "accepted" });
+
+    // Allowed in Settings › Privacy: both Documents go on.
+    await core.allowDataFlow("tagging", OPENAI_SERVICE.id);
     await waitForTagging(core, [first.id, second.id]);
     expect(tagging.requests).toHaveLength(2);
+    expect(requests).toEqual([]);
+  });
+
+  test("revoking Tags stops tagging alone", async () => {
+    const { core, tagging } = await startTagging(["Paper"]);
+    await core.saveChatProvider(OPENAI);
+    const first = await addDocument(core, "Attention.md", PAPER_TEXT);
+    await waitForTagging(core, [first.id]);
+    const requests = countRequests(core);
+
+    await core.revokeConsent("tagging", OPENAI_SERVICE.id);
+    const second = await addDocument(core, "Invoice.txt", "Invoice 42. Amount due: 120 EUR.");
+
+    expect(second.tagging).toBe("waiting-for-provider");
+    expect(tagging.requests).toHaveLength(1);
+    expect(requests).toEqual([]);
+    // Every other flow to the provider stays allowed.
+    expect(await core.getChatReadiness()).toMatchObject({ ready: true, consent: "accepted" });
+    const others = (await core.listDataFlows()).filter((each) => each.flow.id !== "tagging");
+    expect(others.map((each) => [each.flow.id, each.consent])).toEqual([
+      ["chat", "accepted"],
+      ["suggestions", "accepted"],
+      ["edits", "accepted"],
+      ["checks", "accepted"],
+      ["classification", "accepted"],
+    ]);
+  });
+
+  test("a declined tagging flow sends nothing, and choosing the provider again keeps it declined", async () => {
+    const dataDir = await createTempDataFolder();
+    const { core, tagging } = await startTagging(["Paper"], dataDir);
+    await core.saveChatProvider(OPENAI);
+    await core.revokeConsent("tagging", OPENAI_SERVICE.id);
+    // Declined in the dialog tagging asked before ADR-0022.
+    const db = openDatabase(join(dataDir, DATABASE_FILE));
+    try {
+      db.run(
+        `INSERT INTO data_flow_consents
+           (id, flow, service_id, service_name, decision, data_kinds, created_at, updated_at)
+         VALUES (?, 'tagging', ?, ?, 'declined', '[]', ?, ?)`,
+        [randomUUID(), OPENAI_SERVICE.id, OPENAI_SERVICE.name, AT, AT],
+      );
+    } finally {
+      db.close();
+    }
+    await core.saveChatProvider(OPENAI);
+
+    const document = await addDocument(core, "Attention.md", PAPER_TEXT);
+
+    expect(document.tagging).toBe("waiting-for-provider");
+    expect(tagging.requests).toEqual([]);
+    expect(await core.listDataFlows()).toContainEqual(
+      expect.objectContaining({
+        flow: expect.objectContaining({ id: "tagging" }),
+        consent: "declined",
+      }),
+    );
   });
 });
 

@@ -2,6 +2,7 @@ import { type ReactNode, type ToggleEvent, useId, useRef, useState } from "react
 import { useShallow } from "zustand/react/shallow";
 import type { DocumentStatus, EmbeddingModelError } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
+import { core } from "../core";
 import { useT } from "../i18n";
 import { useCapturing } from "../meetings";
 import { downloadProgress } from "../modelDownload";
@@ -14,6 +15,7 @@ import { CloseLineIcon } from "./lineIcons";
 import { embeddingProviderLabel } from "./providers/EmbeddingSettings";
 import { testErrorKey } from "./providers/shared";
 import { rowActionButtonClass } from "./sidebarRows";
+import { useTaggingPermission } from "./useTaggingPermission";
 
 /** The status row's button: a small ghost one, inside the 28px row. */
 const statusActionClass =
@@ -244,6 +246,8 @@ function useStatuses(): Status[] {
   const dismissSkipped = useAppStore((state) => state.dismissSkippedFiles);
   const dismissAlreadyAdded = useAppStore((state) => state.dismissAlreadyAdded);
   const openSettings = useAppStore((state) => state.openSettings);
+  const taggingWaits = !organizing && counts.waitingForTagger > 0;
+  const taggingNeedsOk = useTaggingPermission(taggingWaits);
   // The dialog shows how the pages typed in it go; the rest are said here.
   const fetchingPages = useWebPages(
     (state) => state.fetching.filter((key) => outsideDialog(state, key)).length,
@@ -366,7 +370,22 @@ function useStatuses(): Status[] {
     });
   }
 
-  if (!organizing && counts.waitingForTagger > 0) {
+  if (taggingWaits && taggingNeedsOk) {
+    statuses.push({
+      testId: "tagging-waiting",
+      tone: "waiting",
+      short: t("status.taggingPermission"),
+      full: t("jev.waiting.permission", { service: taggingNeedsOk.name }),
+      action: {
+        label: t("privacy.flows.allow"),
+        testId: "tagging-waiting-allow",
+        run: () =>
+          void core
+            .allowDataFlow("tagging", taggingNeedsOk.id)
+            .catch((error: unknown) => useAppStore.getState().reportError(error)),
+      },
+    });
+  } else if (taggingWaits) {
     statuses.push({
       testId: "tagging-waiting",
       tone: "waiting",

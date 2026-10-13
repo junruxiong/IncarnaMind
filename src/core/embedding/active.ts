@@ -509,8 +509,8 @@ export function createActiveEmbedding(options: {
     },
 
     /**
-     * Switches to the provider in `input`, after consent for a cloud one, or
-     * turns embeddings off ("off", which deletes any key). Turning them on,
+     * Switches to the provider in `input` (choosing a cloud one allows the
+     * embeddings flow to it, ADR-0022), or turns embeddings off ("off", which deletes any key). Turning them on,
      * or a different model, makes Documents without its vectors embed; the
      * same model only takes the new key, and tries again after an error.
      */
@@ -540,8 +540,11 @@ export function createActiveEmbedding(options: {
           values: { provider: embeddingProviderName(choice) },
         });
       }
-      // Nothing changes unless the User accepts sending their Documents' text there.
-      if (service) await consent.ensure("embeddings", service);
+      if (service) {
+        // Choosing it, where the dialog says what goes, allows it (ADR-0022); a decline stays.
+        consent.choose(["embeddings"], service);
+        await consent.ensure("embeddings", service);
+      }
 
       const saved = stored();
       const sameModel =
@@ -562,7 +565,7 @@ export function createActiveEmbedding(options: {
       switchTo(apiProvider(choice), "provider-changed");
     },
 
-    /** Embeds a fixed text with the given settings, after consent for a cloud provider. */
+    /** Embeds a fixed text with the given settings: it sends nothing of the User's, so it needs no consent. */
     async test(input: unknown): Promise<EmbeddingConnectionTestResult> {
       const parsed = parseEmbeddingInput(input);
       if (parsed.kind === "off") {
@@ -596,7 +599,6 @@ export function createActiveEmbedding(options: {
         });
       }
       try {
-        if (service) await consent.ensure("embeddings", service);
         const { embedding } = await embed({
           model: createModel({ ...choice, apiKey }),
           value: TEST_TEXT,

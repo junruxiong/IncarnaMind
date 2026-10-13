@@ -398,25 +398,19 @@ test("a number the Answer works out is calculated: its text shows the figure, an
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
   // A model measured to use calculate (ADR-0021): the scripted model answers in its place.
+  // Choosing it allows Questions and tagging (ADR-0022).
   await acceptPlainTextKeys(window);
   await window.evaluate(async () => {
     const core = (
       globalThis as unknown as {
-        incarnamind: {
-          saveChatProvider(input: unknown): Promise<{ service: { id: string } | null }>;
-          allowDataFlow(flow: string, serviceId: string): Promise<unknown>;
-        };
+        incarnamind: { saveChatProvider(input: unknown): Promise<unknown> };
       }
     ).incarnamind;
-    const provider = await core.saveChatProvider({
+    await core.saveChatProvider({
       kind: "anthropic",
       apiKey: "sk-ant-test",
       modelId: "claude-haiku-5-5",
     });
-    if (provider.service) {
-      await core.allowDataFlow("chat", provider.service.id);
-      await core.allowDataFlow("tagging", provider.service.id);
-    }
   });
   await writeFile(
     join(sources, "Revenue.pdf"),

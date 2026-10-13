@@ -22,7 +22,7 @@ test.afterEach(async () => {
 test("the Privacy page lists the data flows and the update check, and offers no crash reports without a DSN", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
-  // A chat model on a server elsewhere: the chat flow goes to it. Saving sends nothing.
+  // A chat model on a server elsewhere: the chat flow goes to it. Choosing it allows that, and sends nothing.
   await window.evaluate(async () => {
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     await bridge.saveChatProvider({
@@ -46,14 +46,17 @@ test("the Privacy page lists the data flows and the update check, and offers no 
   await expect(privacy.locator('[data-flow-id="tagging"]')).toContainText("Automatic Tags");
   const service = chat.getByTestId("data-flow-service");
   await expect(service).toContainText("to llm.example.com");
-  await expect(service).toHaveAttribute("data-consent", "not-asked");
+  await expect(service).toHaveAttribute("data-consent", "accepted");
+  await expect(service.getByTestId("data-flow-decision")).toContainText(
+    "Allowed when you chose llm.example.com, ",
+  );
 
-  // Allowed from here, with the date; revoked, it asks again next time.
+  // Revoked, it asks again next time; allowed from here, with the date.
+  await service.getByTestId("data-flow-revoke").click();
+  await expect(service).toHaveAttribute("data-consent", "not-asked");
   await service.getByTestId("data-flow-allow").click();
   await expect(service).toHaveAttribute("data-consent", "accepted");
   await expect(service.getByTestId("data-flow-decision")).toContainText("Allowed on");
-  await service.getByTestId("data-flow-revoke").click();
-  await expect(service).toHaveAttribute("data-consent", "not-asked");
 
   // Traffic without the User's content: the update check, on by default, can be turned off.
   const updates = privacy.locator(

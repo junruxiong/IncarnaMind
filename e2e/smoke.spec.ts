@@ -314,27 +314,6 @@ test("in Chinese, the provider form has no space after full-width punctuation wh
   await app.close();
 });
 
-test('after "Don\'t allow", a connection test offers to ask again, and asks before sending anything', async () => {
-  const { app, window } = await launchApp(dataDir);
-  const form = window.getByTestId("chat-setup").getByTestId("provider-form");
-  await window.getByTestId("chat-choice-api-key").check();
-  await form.getByRole("radio", { name: "OpenAI", exact: true }).check();
-  await form.getByLabel(/^API key/).fill("sk-not-a-real-key");
-  const consent = window.getByTestId("consent-dialog");
-
-  await form.getByRole("button", { name: "Test connection" }).click();
-  await consent.getByTestId("consent-decline").click();
-  const result = form.getByTestId("connection-test");
-  await expect(result).toContainText("Nothing was sent");
-
-  // Asking again forgets the "Don't allow": the test asks first, again.
-  await result.getByTestId("connection-test-ask-again").click();
-  await expect(consent).toBeVisible();
-  await consent.getByTestId("consent-decline").click();
-  await expect(result).toContainText("Nothing was sent");
-  await app.close();
-});
-
 test("first run fits a small window; the not-ready notice and a long title keep the Mind's text edge", async () => {
   const { app, window } = await launchApp(dataDir);
   await setWindowSize(app, window, 1000, 600);

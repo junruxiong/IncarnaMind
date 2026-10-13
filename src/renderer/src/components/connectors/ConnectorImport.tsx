@@ -9,6 +9,7 @@ import {
   errorTextClass,
   fieldLabelClass,
   ghostButtonClass,
+  hintClass,
   inputClass,
   primaryButtonClass,
   rowTitleClass,
@@ -165,7 +166,10 @@ export function ConnectorImport({ onDone }: { onDone(): void }) {
               {t("connectors.import.nothing")}
             </p>
           ) : (
-            <div>
+            <div className="flex flex-col items-start gap-2">
+              <p data-testid="connector-import-sends" className={hintClass}>
+                {t("connectors.import.sends")}
+              </p>
               <button
                 type="button"
                 data-testid="connector-import-confirm"

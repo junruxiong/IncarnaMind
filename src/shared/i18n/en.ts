@@ -84,7 +84,7 @@ export const en = {
     "Start with the folders you need. Rename them or add your own at any time.",
   "library.addSelected": "Add selected folders",
   "library.modelHint":
-    "Choose the model that assigns folders and tags. This can be different from your chat model. Cloud models ask before receiving your document text, folder names and tag definitions, and, if they can read images, the first pages of scanned PDFs.",
+    "Choose the model that assigns folders and tags. This can be different from your chat model. A cloud model receives your document text, folder names and tag definitions, and, if it can read images, the first pages of scanned PDFs.",
   "library.connection": "Connection",
   "library.manualOnly": "Organize manually",
   "library.jev": "Jev · saved connection",
@@ -1025,6 +1025,7 @@ export const en = {
   "status.tagging.one": "Tagging 1 Document…",
   "status.tagging.other": "Tagging {count} Documents…",
   "status.taggingWaiting": "Tags need a model",
+  "status.taggingPermission": "Tags need your OK",
   "status.setUp": "Set up",
   "status.downloading": "Search model",
   "status.downloadFailed": "Search model download failed",
@@ -1291,8 +1292,8 @@ export const en = {
   "tags.dialog.retag.started": "Re-tagging has started.",
   "tags.dialog.done": "Done",
 
-  "jev.waiting.notice":
-    "Automatic tagging is waiting for a model. Your Documents are tagged as soon as one is set up.",
+  "jev.waiting.notice": "Tags wait until you choose a model.",
+  "jev.waiting.permission": "Tags wait until you allow Document text to go to {service}.",
   "jev.chip.needsReview": "needs review",
   "jev.chip.likely": "{tag}: added automatically, {percent}% likely",
   "jev.chip.review":
@@ -1320,6 +1321,7 @@ export const en = {
   "jev.form.reviewHint":
     "Below the first number a Tag isn't applied; from the second it is applied without a mark.",
   "jev.form.save": "Use Jev for tagging",
+  "jev.form.sends": "Document text for Tags goes to Jev when it tags your Documents.",
 
   "settings.title": "Settings",
   "settings.pages.models": "Models",
@@ -1417,6 +1419,8 @@ export const en = {
   "providers.form.test": "Test connection",
   "providers.form.testing": "Testing…",
   "providers.form.save": "Use this provider",
+  "providers.sends":
+    "Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to {provider} when you use it.",
   "providers.form.saving": "Saving…",
 
   "providers.test.ok": "Connected: the provider answered.",
@@ -1707,12 +1711,13 @@ export const en = {
   "privacy.intro":
     "IncarnaMind collects no usage data. This page lists everything it sends from this computer, and lets you change it.",
   "privacy.flows.intro":
-    "These send your content to a service outside this computer. Nothing is sent on one until you allow it, and nothing at all while “Keep everything on this computer” is on. Where a provider offers the choice, IncarnaMind asks it not to store your requests.",
+    "These send your content to a service outside this computer. Choosing a service, where IncarnaMind says what goes to it, allows these; nothing is sent on one you haven't allowed, and nothing at all while “Keep everything on this computer” is on. Where a provider offers the choice, IncarnaMind asks it not to store your requests.",
   "privacy.flows.service": "to {service}",
   "privacy.flows.local": "Stays on this computer",
   "privacy.flows.sends": "Sends:",
   "privacy.flows.notInUse": "Not in use: everything stays on this computer.",
   "privacy.flows.decided": "{status} on {date}",
+  "privacy.flows.chosen": "Allowed when you chose {service}, {date}",
   "privacy.flows.allow": "Allow",
   "privacy.traffic.title": "Other network traffic",
   "privacy.traffic.intro":
@@ -2475,6 +2480,7 @@ export const en = {
     "No keyring is running, so API keys would be stored in plain text. Start GNOME Keyring or KWallet, or accept plain-text storage in Settings.",
   "error.secrets.unencrypted": "This system can't encrypt API keys, so they can't be saved.",
   "error.consent.declined": "You declined sending data to {service}, so nothing was sent.",
+  "error.consent.needed": "Waiting until you allow sending data to {service}. Nothing was sent.",
   "error.connector.notFound": "That Connector doesn't exist.",
   "error.connector.nameEmpty": "A Connector's name can't be empty.",
   "error.connector.nameTooLong": "A Connector's name can't be longer than {max} characters.",
@@ -2619,6 +2625,8 @@ export const en = {
     "For API keys and the like. The values are kept in your keychain, never in IncarnaMind's database.",
   "connectors.form.envInvalid": "Write each environment variable as NAME=value.",
   "connectors.form.add": "Add Connector",
+  "connectors.form.sends":
+    "What Answers ask this Connector's Tools goes to it, and it may send that over the internet.",
   "connectors.form.adding": "Adding…",
   "connectors.form.cancel": "Cancel",
   "connectors.form.save": "Save and restart",
@@ -2637,6 +2645,8 @@ export const en = {
   "connectors.import.env": "Environment: {names} (kept in your keychain)",
   "connectors.import.confirm": "Add {count} Connectors",
   "connectors.import.confirm.one": "Add 1 Connector",
+  "connectors.import.sends":
+    "What Answers ask these Connectors' Tools goes to them, and they may send that over the internet.",
   "connectors.import.nothing": "Nothing here can be added.",
   "connectors.import.adding": "Adding…",
   "connectors.consent.note":

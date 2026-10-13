@@ -14,6 +14,7 @@ import type { BackgroundQueue } from "../backgroundQueue";
 import {
   ChatNotReadyError,
   ConsentDeclinedError,
+  ConsentNeededError,
   InvalidInputError,
   isRecord,
   NotFoundError,
@@ -433,6 +434,7 @@ export function createLibrary(options: {
             const waiting =
               error instanceof ChatNotReadyError ||
               error instanceof ConsentDeclinedError ||
+              error instanceof ConsentNeededError ||
               error instanceof TaggingNotReadyError;
             state(id, waiting ? "waiting" : "failed", classifyProviderError(error));
           }

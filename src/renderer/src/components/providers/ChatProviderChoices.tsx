@@ -1,6 +1,7 @@
 import { type ReactNode, useId } from "react";
 import type { ChatProvider, ChatProviderKind } from "../../../../core/api";
 import { keyProviderGroups } from "../../../../core/providers/catalog/providers";
+import { CHATGPT_SERVICE } from "../../../../core/providers/chatgpt/service";
 import { useT } from "../../i18n";
 import { OnThisComputer } from "../OnThisComputer";
 import {
@@ -20,7 +21,7 @@ import {
 } from "./ChatGptSignIn";
 import { KeepLocalChoice } from "./KeepLocalChoice";
 import { type Ollama, OllamaProgress, ollamaDescription } from "./OllamaCard";
-import { ProviderForm } from "./ProviderForm";
+import { ProviderForm, ProviderSendsLine } from "./ProviderForm";
 
 const SHORT_NAMES: Partial<
   Record<ChatProviderKind, "providers.kind.short.qwen" | "providers.kind.short.deepseek">
@@ -158,7 +159,10 @@ function ChatGptChoice({ onSaved }: { onSaved(provider: ChatProvider): void }) {
     <div className="flex flex-col items-start gap-2">
       <ChatGptStorageNotice storage={storage} />
       {!sign.waiting && (
-        <ContinueWithChatGptButton onClick={() => void sign.run()} disabled={!storage.canSave} />
+        <>
+          <ProviderSendsLine provider={CHATGPT_SERVICE.name} />
+          <ContinueWithChatGptButton onClick={() => void sign.run()} disabled={!storage.canSave} />
+        </>
       )}
       <ChatGptSignInState sign={sign} />
     </div>
