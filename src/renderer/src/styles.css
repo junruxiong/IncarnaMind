@@ -2903,8 +2903,9 @@
     position: relative;
     display: inline;
   }
-  /* A word joiner keeps a marker on the line of the word before it, and the markers after it with it. */
-  .citation::before {
+  /* Word joiners keep a marker on the line of the word before it, with the markers and the punctuation after it. */
+  .citation::before,
+  .citation::after {
     content: "\2060";
   }
   /* The Citation's ⋯, out of sight: its menu opens from the marker (see `ObjectMenu`). */
