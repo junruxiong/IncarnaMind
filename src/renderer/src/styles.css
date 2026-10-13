@@ -1134,6 +1134,52 @@
     }
   }
 
+  /* A Mind made by "Verify a document…" (#97): where its text came from, then where its verify is. */
+  .mind-verify {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    min-width: 0;
+    margin: -16px 0 16px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink-meta);
+  }
+  .mind-verify-from {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    max-width: 100%;
+    padding: 0 4px;
+    margin-left: -4px;
+    border-radius: 4px;
+    color: var(--color-ink-secondary);
+
+    &:hover {
+      background: var(--color-hover);
+    }
+  }
+  .mind-verify-done {
+    display: contents;
+    font-variant-numeric: tabular-nums;
+  }
+  .mind-verify-link {
+    border-radius: 4px;
+    font-weight: 600;
+    color: var(--color-accent);
+    text-underline-offset: 2px;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+  .mind-verify-problem {
+    margin: -8px 0 16px;
+  }
+
   /* The count under the title: quiet status text, pulled up into the title's margin. */
   .mind-count {
     display: flex;
@@ -1204,6 +1250,10 @@
     content: "·";
     margin-right: 8px;
     color: var(--color-rule-strong);
+  }
+  .mind-health-note {
+    margin: 0;
+    color: var(--color-ink-meta);
   }
   .mind-count-button {
     min-width: 0;
@@ -5300,8 +5350,8 @@
     height: 24px;
     padding: 0 7px 0 6px;
     border-radius: 6px;
-    font-weight: 600;
-    color: var(--color-ink-secondary);
+    font-weight: 400;
+    color: var(--color-ink-meta);
 
     &:hover {
       background: var(--color-hover);

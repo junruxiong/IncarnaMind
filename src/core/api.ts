@@ -2879,7 +2879,7 @@ export interface EmbeddingSettings {
    * "Keep everything on this computer": only embedding providers on this
    * computer can be chosen, and search results aren't reranked by a cloud
    * service. Turned on in Settings, or by choosing local models with one
-   * click (`selectOllama`).
+   * click (`selectOllama`, when the User asks for it).
    */
   localOnly: boolean;
   /** Set while Documents are embedded again after a switch. */
@@ -3122,6 +3122,8 @@ export interface ProviderCost {
   spent: Money[];
   /** Tokens of requests to models with no known price: counted here, not toward the cap. */
   unpricedTokens: number;
+  /** Requests a quit cut short with no usage known: counted as costing nothing (#636). */
+  interrupted: number;
 }
 
 /** Settings' month-to-date cost: recorded on this computer, never sent. */
@@ -3712,8 +3714,12 @@ export interface CheckSentencesInput {
 
 /** What `checkSentences` did. */
 export type CheckSentencesResult =
-  /** Each sentence has its mark: `checked` of them with a verdict, the rest not checked. */
-  | { kind: "checked"; sentences: number; checked: number }
+  /**
+   * Each sentence has its mark: `checked` of them with a verdict, the rest not
+   * checked. `smallModel`: a model on this computer too small to judge
+   * reliably made the verdicts (#680), so they carry a notice.
+   */
+  | { kind: "checked"; sentences: number; checked: number; smallModel: boolean }
   /** Nothing was sent: the model can't be used now, and `readiness` says why. */
   | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
   /** Nothing was sent: local mode is on, and the model isn't on this computer. */
@@ -3726,6 +3732,55 @@ export type CheckSentencesResult =
   | { kind: "has-proposals" }
   /** The User stopped it (`cancelCheck`): the sentences not checked yet say "stopped". */
   | { kind: "cancelled" };
+
+/** A document someone else wrote, to verify claim by claim (#97): the window offers PDFs. */
+export interface VerifyDocumentInput {
+  /** The file's absolute path: any file the Library reads. */
+  path: string;
+  /** The Folder the Mind goes in, and the PDF too if it is new to the Library; none, or null, for none. */
+  folderId?: string | null;
+}
+
+/** What `verifyDocument` did. */
+export type VerifyDocumentResult =
+  /** The Mind holds the document's text, a paragraph to a Block: its claims can be found. */
+  | { ok: true; mind: Mind; documentId: string }
+  /** No Mind was made: the file can't be read, or holds no text (a scan nothing could read). */
+  | { ok: false; reason: "unreadable" | "no-text" };
+
+/** Finding, or checking, the claims of a Mind made by `verifyDocument`. */
+export interface VerifyClaimsInput {
+  /** Chosen by the caller, so it can stop the request (`cancelCheck`). */
+  requestId: string;
+  mindId: string;
+  /** Check against every Document, not the Mind's Folder. */
+  allDocuments?: boolean;
+  /** The model to use: the Mind's own; none, or null, the default chat model. */
+  model?: ChatModelChoice | null;
+}
+
+/** Why finding or checking a document's claims sent nothing. */
+type VerifyRefusal =
+  | Exclude<CheckSentencesResult, { kind: "checked" } | { kind: "has-proposals" }>
+  /** Another document's claims are being found or checked, in that Mind: one run at a time. */
+  | { kind: "busy"; mindId: string };
+
+/** What `findClaims` did. */
+export type FindClaimsResult =
+  /** The Mind records which of its sentences make claims: `claims` of them. */
+  | { kind: "found"; claims: number }
+  /** The model failed, or its reply named no sentences that could be read. */
+  | { kind: "failed"; error: ProviderError }
+  | VerifyRefusal;
+
+/** What `verifyClaims` did. */
+export type VerifyClaimsResult =
+  /**
+   * Each claim has its mark: `checked` of them with a verdict, the rest not
+   * checked. `stop`: the monthly cap or a plan's limit stopped the run, and the
+   * claims after it say so.
+   */
+  { kind: "checked"; claims: number; checked: number; stop: RunStop | null } | VerifyRefusal;
 
 /** What asking a Question (or regenerating its Answer) did. */
 export type AskResult =
@@ -4488,6 +4543,11 @@ export interface SelectOllamaInput {
   baseUrl?: string;
   /** Defaults to the recommended model. */
   model?: string;
+  /**
+   * "Also keep everything on this computer": Local mode is turned on or off
+   * to match. Left out, Local mode stays as it was.
+   */
+  localOnly?: boolean;
 }
 
 export interface OllamaPullProgress {
@@ -4528,6 +4588,7 @@ export const dataKinds = [
   "scoped-minds",
   "answers",
   "web-searches",
+  "verified-document",
 ] as const;
 
 export type DataKind = (typeof dataKinds)[number];
@@ -4561,8 +4622,9 @@ export type DataKind = (typeof dataKinds)[number];
  *   and the paragraphs it is in, to the chat model's provider. None in local mode.
  * - "checks": when the User asks Find support or Check against Documents
  *   (#96), each sentence they selected, with its paragraph and what it cites,
- *   and the Passages the check's searches find, to the chat model's provider.
- *   None in local mode.
+ *   and the Passages the check's searches find, to the chat model's provider;
+ *   when they verify a document (#97), its sentences, to find its claims, then
+ *   each claim with its paragraph and the Passages found. None in local mode.
  * - "agents": what an outside agent reads (#351), to that agent, which sends
  *   it on to the AI model it uses, out of IncarnaMind's sight: one service
  *   per pairing ("agent:<id>"), named as the User named the agent. Passages
@@ -6755,6 +6817,27 @@ export interface CoreApi {
    * Sends on the "checks" flow, as `checkSentences` does.
    */
   checkClaim(input: CheckClaimInput): Promise<ClaimCheckResult>;
+  /**
+   * Verify (#97): adds a document someone else wrote (a PDF) to the Library,
+   * or finds it there, waits until its text is read, and makes a Mind of that
+   * text, a paragraph to a Block, each Block's page recorded. Its text is the
+   * document being checked: third-party (#78), and never its own evidence.
+   */
+  verifyDocument(input: VerifyDocumentInput): Promise<VerifyDocumentResult>;
+  /**
+   * Has the model name the sentences of a `verifyDocument` Mind that make
+   * claims, and records them in the Mind. Sends the document's sentences on
+   * the "checks" flow, as `checkSentences` does. One verify run at a time.
+   */
+  findClaims(input: VerifyClaimsInput): Promise<FindClaimsResult>;
+  /**
+   * Checks the claims `findClaims` found, as Check against Documents does,
+   * against the Mind's Folder (or every Document), the PDF, its earlier
+   * versions and its copies left out. A cloud model checks a few at once.
+   * Each gets its mark at once, then its result; the monthly cap or a plan's
+   * limit stops the run. `cancelCheck` stops it. One verify run at a time.
+   */
+  verifyClaims(input: VerifyClaimsInput): Promise<VerifyClaimsResult>;
 
   getSecretStorage(): Promise<SecretStorageStatus>;
   /** The User accepts storing keys without keyring protection on this device. */
@@ -7521,6 +7604,9 @@ const methods: Record<CoreApiMethod, true> = {
   checkSentences: true,
   cancelCheck: true,
   checkClaim: true,
+  verifyDocument: true,
+  findClaims: true,
+  verifyClaims: true,
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,
   detectOllama: true,

@@ -8,6 +8,7 @@ import { useLanguage, useT } from "../../i18n";
 import { useModelNames } from "../../modelNames";
 import { useAppStore } from "../../store";
 import { useCostSummary } from "../SpendingCapSettings";
+import { UndoLineAt } from "../UndoLine";
 import {
   buttonClass,
   fieldLabelClass,
@@ -25,6 +26,9 @@ import { type ChatProviderChoice, ChatProviderChoices } from "./ChatProviderChoi
 import { ReadinessExplanation } from "./ChatReadinessNotice";
 import { useOllama } from "./OllamaCard";
 import { providerLabel } from "./shared";
+
+/** Where Settings shows the undo line of a change made here: the sidebar's is behind it. */
+const MODELS_UNDO_PLACE = "settings:models";
 
 /**
  * Settings → Models → Chat model: the provider in use and the default model, as rows
@@ -59,7 +63,7 @@ export function ChatModelSettings() {
     setChoice(null);
     refresh();
   };
-  const ollama = useOllama(done);
+  const ollama = useOllama(done, MODELS_UNDO_PLACE);
 
   // Readiness changes whenever a provider is saved or removed.
   useEffect(() => {
@@ -106,6 +110,8 @@ export function ChatModelSettings() {
           <ReadinessExplanation readiness={readiness} />
         </p>
       )}
+
+      <UndoLineAt place={MODELS_UNDO_PLACE} />
 
       {current ? (
         <div className={ruledListClass}>
