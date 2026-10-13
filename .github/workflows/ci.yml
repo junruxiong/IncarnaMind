@@ -37,8 +37,8 @@ jobs:
       - run: npm test
 
   # The Word corpus (eval/word/README.md): every file, its export back into itself after an
-  # edit, and its export for review open in LibreOffice headless, and LibreOffice accepting every
-  # change in a fixture shows the Mind's text. Not a required check; it installs LibreOffice,
+  # edit, its export for review and its export with someone's changes resolved open in LibreOffice
+  # headless, and LibreOffice accepting every change in a fixture shows the Mind's text. Not a required check; it installs LibreOffice,
   # which the other jobs don't need.
   word-corpus:
     name: Word corpus opens in LibreOffice
