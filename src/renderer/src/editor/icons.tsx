@@ -123,6 +123,45 @@ export function CheckStateIcon({ check, ...props }: IconProps & { check: Citatio
   );
 }
 
+/** How a check of the User's own sentence shows (#96): its verdict, or why it doesn't hold now. */
+export type ClaimMarkState =
+  | "checking"
+  | "supported"
+  | "unsupported"
+  | "contradicted"
+  | "not-checked"
+  | "needs-recheck";
+
+/** A grey ring: not checked. */
+const Ring = (props: IconProps) => (
+  <Stroke weight={2.5} {...props}>
+    <circle cx="12" cy="12" r="6.5" />
+  </Stroke>
+);
+
+/** ↻: needs re-check. */
+const Again = (props: IconProps) => (
+  <Stroke weight={2.5} {...props}>
+    <path d="M18.5 12a6.5 6.5 0 1 1-1.9-4.6" />
+    <path d="M17.5 3.5v4h-4" />
+  </Stroke>
+);
+
+const CLAIM_MARKS: Record<ClaimMarkState, (props: IconProps) => JSX.Element> = {
+  checking: MARKS.checking,
+  supported: MARKS.found,
+  unsupported: MARKS.unsupported,
+  contradicted: MARKS.contradicted,
+  "not-checked": Ring,
+  "needs-recheck": Again,
+};
+
+/** A sentence check's mark, as small as a Citation's, for the margin and its card. */
+export function ClaimMarkIcon({ state, ...props }: IconProps & { state: ClaimMarkState }) {
+  const Mark = CLAIM_MARKS[state];
+  return <Mark {...props} />;
+}
+
 /** A ruled grid with a heading row: a table. */
 export const TableIcon = (props: IconProps) => (
   <Stroke weight={2} {...props}>
