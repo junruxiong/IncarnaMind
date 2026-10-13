@@ -38,6 +38,7 @@ export const deletedCommands: readonly Command[] = [
     id: "deleted.deletePermanently",
     label: countLabel("deleted.deletePermanently"),
     group: "danger",
+    destructive: true,
     appliesTo: ["deleted"],
     reversible: { confirm: "deleted.confirm.foot" },
     run(ctx) {
@@ -48,6 +49,7 @@ export const deletedCommands: readonly Command[] = [
     id: "deleted.empty",
     label: "deleted.emptyAction",
     group: "danger",
+    destructive: true,
     reversible: { confirm: "deleted.confirm.foot" },
     async run() {
       await useDeleted.getState().refresh();
