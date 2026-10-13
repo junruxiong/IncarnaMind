@@ -38,6 +38,10 @@ export interface LaunchOptions {
    */
   fakeChat?: boolean;
   /**
+   * Where Ollama is: a local server standing in for it (the app's `OLLAMA_HOST`).
+   */
+  ollama?: string;
+  /**
    * Where crash reports go: a test build offers them only with this, and
    * ignores the DSN a real build is made with. Point it at a local server.
    */
@@ -141,6 +145,7 @@ export async function launchApp(
   dataDir: string,
   {
     fakeChat = false,
+    ollama,
     sentryDsn,
     usageData,
     examples = false,
@@ -162,6 +167,8 @@ export async function launchApp(
     if (value !== undefined) env[name] = value;
   }
   delete env.ELECTRON_RUN_AS_NODE;
+  delete env.OLLAMA_HOST;
+  if (ollama) env.OLLAMA_HOST = ollama;
   delete env.INCARNAMIND_TEST_SENTRY_DSN;
   delete env.INCARNAMIND_TEST_EXAMPLES;
   delete env.INCARNAMIND_TEST_POSTHOG_KEY;
