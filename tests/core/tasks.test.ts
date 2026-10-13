@@ -299,6 +299,53 @@ describe("the Task journal", () => {
     expect(await later.listApprovalRequests()).toEqual([]);
   });
 
+  test("a Task's view says what its kind lets the User do, and its latest steps in its words; every step on asking", async () => {
+    const dataDir = await createTempDataFolder();
+    const steps = ["one", "two", "three", "four", "five", "six"];
+    const counting: TaskKind = {
+      kind: "test-counting",
+      actions: ["plan", "pause", "stop"],
+      describeSteps: (_task, keys) => keys.map((key) => `Step ${key}`),
+      async run(task) {
+        for (const key of steps) {
+          task.started(key);
+          task.settled(key, key === "five" ? "failed" : "completed");
+        }
+        task.started("seven");
+        await never;
+        return { status: "done" };
+      },
+    };
+    const core = startCore(dataDir, { taskKinds: [counting] });
+    const task = core.startTask("test-counting", null, {});
+    const shown = await waitForTask(core, task.id, (each) => each.stepCount === 7);
+    expect(shown.actions).toEqual(["plan", "pause", "stop"]);
+    expect(shown.steps).toEqual([
+      { key: "four", text: "Step four", status: "done" },
+      { key: "five", text: "Step five", status: "failed" },
+      { key: "six", text: "Step six", status: "done" },
+      { key: "seven", text: "Step seven", status: "running" },
+    ]);
+    expect((await core.listTaskSteps(task.id)).map((step) => step.text)).toEqual([
+      "Step one",
+      "Step two",
+      "Step three",
+      "Step four",
+      "Step five",
+      "Step six",
+      "Step seven",
+    ]);
+    // A kind that says nothing of its actions offers Pause and Stop.
+    const folder = await createTempDataFolder();
+    const other = startCore(await createTempDataFolder(), {
+      taskKinds: [filesKind({ performed: [] }, folder)],
+    });
+    const files = other.startTask("test-files", null, {});
+    expect((await waitForTask(other, files.id, finished)).actions).toEqual(["pause", "stop"]);
+    core.close();
+    other.close();
+  });
+
   test("Pause stops it where it is, Resume goes on, Stop ends it and withdraws what it asks", async () => {
     const dataDir = await createTempDataFolder();
     const folder = await createTempDataFolder();

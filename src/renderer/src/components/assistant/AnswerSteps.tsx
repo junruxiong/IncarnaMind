@@ -5,6 +5,7 @@ import type {
   ConversationAnswer,
   ConversationQuestion,
 } from "../../../../core/api";
+import { shownDocumentName } from "../../../../shared/citations";
 import { citationLocation, formatLocation } from "../../../../shared/locations";
 import {
   type FoldedLine,
@@ -16,6 +17,7 @@ import {
   type StepSource,
   stepRows,
 } from "../../answerSteps";
+import { checkedWords, checkingWords } from "../../answerStepWords";
 import { useAnswers } from "../../answers";
 import { stepsScope } from "../../assistantContext";
 import { NO_SCOPE } from "../../composer";
@@ -182,9 +184,7 @@ function liveText(t: Translate, step: LiveStep, scope: string): string {
     case "writing":
       return t("answer.phase.writing");
     case "checking":
-      return step.count === 1
-        ? t("steps.live.checking.one")
-        : t("steps.live.checking", { count: step.count });
+      return checkingWords(t, step.count);
     case "checking-figures":
       return t("answer.phase.checking-figures");
   }
@@ -601,6 +601,9 @@ function SourceRow({ source }: { source: StepSource }) {
   const kind = useAppStore(
     (state) => state.documents.find((document) => document.id === source.documentId)?.kind,
   );
+  const name = useAppStore(
+    (state) => shownDocumentName(source, state.documents) || source.documentName,
+  );
   const location = citationLocation(source);
   const where = location ? formatLocation(location, t) : null;
   return (
@@ -608,11 +611,7 @@ function SourceRow({ source }: { source: StepSource }) {
       type="button"
       data-testid="answer-step-source"
       data-document-id={source.documentId}
-      title={
-        where
-          ? t("citation.where", { document: source.documentName, location: where })
-          : source.documentName
-      }
+      title={where ? t("citation.where", { document: name, location: where }) : name}
       onClick={() =>
         openCited(source, {
           check: source.check,
@@ -623,7 +622,7 @@ function SourceRow({ source }: { source: StepSource }) {
       className="answer-step-source"
     >
       <DocumentLineIcon kind={kind ?? "text"} className="answer-step-source-icon" />
-      <span className="answer-step-source-name">{source.documentName}</span>
+      <span className="answer-step-source-name">{name}</span>
       {where && <span className="answer-step-detail answer-step-source-where">{where}</span>}
     </button>
   );
@@ -679,7 +678,7 @@ function CheckStep({ count, notFound }: { count: number; notFound: number }) {
       }
     >
       <p className="answer-step-title">
-        {t(count === 1 ? "steps.check.one" : "steps.check", { count })}
+        {checkedWords(t, count)}
         <span aria-hidden="true"> · </span>
         {result}
       </p>
