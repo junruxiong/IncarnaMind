@@ -1,26 +1,18 @@
-import { appendFile, copyFile, mkdir, writeFile } from "node:fs/promises";
+import { appendFile, copyFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import {
-  type Core,
-  type CoreAdapters,
-  type Document,
-  type EvidenceSearchResult,
-  type ExportFormat,
-  InvalidInputError,
-} from "../../src/core";
+import { type CoreAdapters, type EvidenceSearchResult, InvalidInputError } from "../../src/core";
 import { askAndFinish } from "../helpers/citations";
 import { createTempDataFolder, nextEvent, queryDatabase, startCore } from "../helpers/core";
 import {
   addAndProcess,
   createSourceFolder,
-  documentAt,
   linkAndProcess,
   sha256,
-  waitForDocuments,
   waitForProcessing,
   writeSourceFile,
 } from "../helpers/documents";
+import { exportMind, indexed, linkWithExports } from "../helpers/evidence";
 import { connectToMind } from "../helpers/mindClient";
 import { note, writeMind } from "../helpers/minds";
 import { scriptedModel, scriptedModels } from "../helpers/models";
@@ -41,40 +33,10 @@ const evidenceFrom = (found: EvidenceSearchResult) => [
 async function setUp(overrides: Partial<CoreAdapters> = {}) {
   const data = await createTempDataFolder();
   const core = startCore(data, overrides);
-  const papers = await createSourceFolder();
-  await writeSourceFile(papers, "Moon.txt", MOON);
-  const [moon] = await linkAndProcess(core, papers);
+  const { papers, documents } = await linkWithExports(core, [{ name: "Moon.txt", contents: MOON }]);
+  const [moon] = documents;
   if (!moon) throw new Error("The Moon note wasn't indexed.");
-  const [linked] = await core.listLinkedFolders();
-  if (!linked) throw new Error("Papers isn't linked.");
-  await core.setLinkedFolderWriting(linked.id, true);
-  await mkdir(join(papers, "Exports"));
-  await core.setOutputLocation(join(papers, "Exports"));
   return { core, data, papers, moon };
-}
-
-/** A Mind holding one Note, exported into the Output location and indexed there as a Document. */
-async function exportMind(
-  core: Core,
-  title: string,
-  text: string,
-  format: ExportFormat = "docx",
-): Promise<Document> {
-  const mind = await core.createMind({ title });
-  const client = await connectToMind(core, mind.id);
-  writeMind(client, [note(text)]);
-  const saved = await core.saveMindExport(mind.id, { format });
-  if (saved.status !== "saved") throw new Error(`The export wasn't saved: ${saved.status}.`);
-  return indexed(core, saved.file.path);
-}
-
-/** The Document at `path` once the Linked folder has picked it up and it is processed. */
-async function indexed(core: Core, path: string): Promise<Document> {
-  await core.reconcileDocuments();
-  const documents = await waitForDocuments(core, (all) => documentAt(all, path));
-  const [document] = await waitForProcessing(core, [documentAt(documents, path).id]);
-  if (!document) throw new Error(`Nothing was indexed at ${path}.`);
-  return document;
 }
 
 describe("Files IncarnaMind wrote aren't evidence", () => {
