@@ -70,16 +70,25 @@ describe("where a peek goes", () => {
 });
 
 describe("which Documents a peek draws", () => {
+  const ready = { status: "ready", failure: null };
+
   test("draws a small file of any kind", () => {
     for (const kind of ["docx", "pptx", "xlsx", "csv", "markdown", "text"]) {
-      expect(peekDraws({ kind, size: 50_000 }), kind).toBe(true);
+      expect(peekDraws({ kind, size: 50_000, ...ready }), kind).toBe(true);
     }
   });
 
   test("shows only the kind of a large file that the viewer would read whole, but draws any PDF", () => {
-    expect(peekDraws({ kind: "docx", size: DRAWN_UP_TO_BYTES + 1 })).toBe(false);
-    expect(peekDraws({ kind: "text", size: 40_000_000 })).toBe(false);
-    expect(peekDraws({ kind: "pdf", size: 400_000_000 })).toBe(true);
+    expect(peekDraws({ kind: "docx", size: DRAWN_UP_TO_BYTES + 1, ...ready })).toBe(false);
+    expect(peekDraws({ kind: "text", size: 40_000_000, ...ready })).toBe(false);
+    expect(peekDraws({ kind: "pdf", size: 400_000_000, ...ready })).toBe(true);
+  });
+
+  test("shows only the kind of a file that couldn't be read, but draws a scan some of whose pages couldn't", () => {
+    const failed = { status: "failed", failure: { reason: "unreadable" } };
+    expect(peekDraws({ kind: "pdf", size: 5_000, ...failed })).toBe(false);
+    const unread = { status: "failed", failure: { reason: "pages-unread" } };
+    expect(peekDraws({ kind: "pdf", size: 5_000, ...unread })).toBe(true);
   });
 });
 

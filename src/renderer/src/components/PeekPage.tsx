@@ -33,7 +33,7 @@ const LAID_OUT_AT: Record<DocumentKind, number> = {
  * for its kind: laid out at its own width, scaled down, with no toolbar and
  * nothing to click. It waits until the peek has settled on this Document, so
  * stepping through a list doesn't draw every one on the way. A Document whose
- * file isn't there says so instead, and a large one shows its kind.
+ * file isn't there says so instead, and one too large, or that failed, shows its kind.
  */
 export function PeekPage({ document, settled }: { document: Document; settled: boolean }) {
   const t = useT();
@@ -41,11 +41,13 @@ export function PeekPage({ document, settled }: { document: Document; settled: b
   const laidOutAt = LAID_OUT_AT[document.kind];
   const scale = PAGE_PX.width / laidOutAt;
   const target = useMemo(() => ({ documentId: document.id, request: 1 }), [document.id]);
-  const large = !peekDraws(document);
+  const kindOnly = !peekDraws(document);
   return (
     <div
       data-testid="peek-page"
-      data-state={fileState ? "unreadable" : large ? "large" : settled ? "drawing" : "waiting"}
+      data-state={
+        fileState ? "unreadable" : kindOnly ? "kind-only" : settled ? "drawing" : "waiting"
+      }
       className="relative overflow-hidden rounded-md bg-chip"
       style={{ width: WELL_PX.width, height: WELL_PX.height }}
     >
@@ -57,7 +59,7 @@ export function PeekPage({ document, settled }: { document: Document; settled: b
         >
           {t(fileState.short)}
         </p>
-      ) : large ? (
+      ) : kindOnly ? (
         <DocumentLineIcon
           kind={document.kind}
           className="absolute top-1/2 left-1/2 size-8 -translate-x-1/2 -translate-y-1/2 text-ink-placeholder"

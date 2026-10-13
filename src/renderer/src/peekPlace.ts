@@ -43,9 +43,18 @@ export function placePeek(
  */
 export const DRAWN_UP_TO_BYTES = 2 * 1024 * 1024;
 
-/** Whether a peek draws this Document's first page, or only shows its kind. */
-export const peekDraws = (document: { kind: string; size: number }): boolean =>
-  document.kind === "pdf" || document.size <= DRAWN_UP_TO_BYTES;
+/**
+ * Whether a peek draws this Document's first page, or only shows its kind: a
+ * large file's, and a file that couldn't be read, whose facts say why.
+ */
+export const peekDraws = (document: {
+  kind: string;
+  size: number;
+  status: string;
+  failure: { reason: string } | null;
+}): boolean =>
+  (document.kind === "pdf" || document.size <= DRAWN_UP_TO_BYTES) &&
+  (document.status !== "failed" || document.failure?.reason === "pages-unread");
 
 /** The row after (`1`) or before (`-1`) this one in a list, if there is one. */
 export function neighbour<T>(rows: readonly T[], from: T, step: 1 | -1): T | undefined {
