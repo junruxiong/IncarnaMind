@@ -33,24 +33,26 @@ import {
 } from "./answers/citedVersions";
 import { createCiting } from "./answers/citing";
 import type { AnswerSearchOptions } from "./answers/engine";
-import type {
-  AddDocumentsResult,
-  ChatModelChoice,
-  CoreApi,
-  CoreEventSource,
-  Document,
-  EmbeddingModelStatus,
-  EmbeddingSettings,
-  ExportMindOptions,
-  Meeting,
-  Mind,
-  MindCitationStyle,
-  OwnFileKind,
-  ProviderError,
-  SavedExport,
-  SearchScope,
-  Task,
-  Unsubscribe,
+import {
+  type AddDocumentsResult,
+  type ChatModelChoice,
+  type CoreApi,
+  type CoreEventSource,
+  type CreateMindInput,
+  DEFAULT_MIND_KIND,
+  type Document,
+  type EmbeddingModelStatus,
+  type EmbeddingSettings,
+  type ExportMindOptions,
+  type Meeting,
+  type Mind,
+  type MindCitationStyle,
+  type OwnFileKind,
+  type ProviderError,
+  type SavedExport,
+  type SearchScope,
+  type Task,
+  type Unsubscribe,
 } from "./api";
 import { createApprovals } from "./approvals";
 import { createBackgroundQueue } from "./backgroundQueue";
@@ -1113,25 +1115,12 @@ export function createCore(adapters: CoreAdapters): Core {
         events.emit("task.shown", { taskId: task.id, mindId: task.mindId, blockId: task.blockId }),
     );
   };
-  /** A new Mind, as New Mind makes it: in its Folder's citation style (#289). */
-  const makeMind = (input: unknown): Mind => {
-    const parsed = parseCreateMindInput(input);
-    if (parsed.folderId !== null) library.folder(parsed.folderId);
-    const mind = minds.create(parsed);
-    const style = parsed.folderId === null ? null : library.citationStyle(parsed.folderId);
-    if (style !== null) {
-      content.editSettings(mind.id, (mindSettings) => setCitationStyle(mindSettings, style));
-    }
-    mindsChanged();
-    usageData.record({ event: "mind_created", fields: {} });
-    return mind;
-  };
   const research = createResearch({
     requireMind: (mindId) => writableMind(mindId).id,
     mindExists,
     mindName: (mindId) => (mindExists(mindId) ? mindName(minds.get(mindId)) || null : null),
     folderOfMind: (mindId) => (mindExists(mindId) ? minds.get(mindId).folderId : null),
-    createMind: (title, folderId) => makeMind({ title, folderId }).id,
+    createMind: (title, folderId) => makeMind({ title, kind: DEFAULT_MIND_KIND, folderId }).id,
     documents: {
       webPagesSince: (ids, since) =>
         documents
@@ -1270,11 +1259,33 @@ export function createCore(adapters: CoreAdapters): Core {
   });
 
   // Find support and Check against Documents (#96): check Runs that can only search and cite.
+  /** A new Mind, in the citation style last chosen for a Mind in its Folder, as its own choice (#289). */
+  const makeMind = (input: Required<CreateMindInput>): Mind => {
+    if (input.folderId !== null) library.folder(input.folderId);
+    const mind = minds.create(input);
+    const style = input.folderId === null ? null : library.citationStyle(input.folderId);
+    if (style !== null) {
+      content.editSettings(mind.id, (mindSettings) => setCitationStyle(mindSettings, style));
+    }
+    mindsChanged();
+    usageData.record({ event: "mind_created", fields: {} });
+    return mind;
+  };
+
   const checks = createChecks({
     content,
     requireMind: (mindId) => {
       writableMind(mindId);
     },
+    requireFolder: (folderId) => void library.folder(folderId),
+    async addFile(path, folderId) {
+      const added = await addDocuments([path], folderId === null ? {} : { groupId: folderId });
+      return added.documents[0] ?? null;
+    },
+    document: (documentId) => documents.get(documentId),
+    onStatus: (listener) => events.on("document.status", listener),
+    readText: (documentId) => documents.readText(documentId),
+    createMind: (title, folderId) => makeMind({ title, kind: DEFAULT_MIND_KIND, folderId }),
     mindFolder: (mindId) => minds.get(mindId).folderId,
     defaultModel: () => settings.get().user.chatModel,
     chat,
@@ -2002,7 +2013,7 @@ export function createCore(adapters: CoreAdapters): Core {
 
   // Async on purpose: the renderer reaches these over IPC, and a future hosted core may be remote.
   return {
-    createMind: async (input) => makeMind(input),
+    createMind: async (input) => makeMind(parseCreateMindInput(input)),
     checkWordFile: async (path) => wordImports.check(path),
     importWordFile: async (input) => wordImports.import(input),
     listMinds: async () => minds.list(),
@@ -2355,6 +2366,9 @@ export function createCore(adapters: CoreAdapters): Core {
     checkSentences: (input) => checks.checkSentences(input),
     cancelCheck: async (requestId) => checks.cancel(requestId),
     checkClaim: (input) => checks.checkClaim(input),
+    verifyDocument: (input) => checks.verifyDocument(input),
+    findClaims: (input) => checks.findClaims(input),
+    verifyClaims: (input) => checks.verifyClaims(input),
 
     getSecretStorage: async () => secrets.status(),
     acceptPlainTextSecretStorage: async () => secrets.acceptPlainText(),
@@ -2383,10 +2397,8 @@ export function createCore(adapters: CoreAdapters): Core {
       const provider = await chat.save({ kind: "ollama", baseUrl, modelId: model });
       settingsChanged();
       await readinessChanged();
-      // Local mode: Document search stays on this computer too. A cloud
-      // embedding provider goes back to the built-in model, and the rebuild
-      // ("embedding.changed", reason "local-mode") tells the User.
-      await setLocalOnly(true);
+      // Local mode is the User's choice here (#545), made in the box under the button.
+      if (typeof input?.localOnly === "boolean") await setLocalOnly(input.localOnly);
       return provider;
     },
 

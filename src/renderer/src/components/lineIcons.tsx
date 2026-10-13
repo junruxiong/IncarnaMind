@@ -303,6 +303,17 @@ export function CheckLineIcon(props: IconProps) {
   );
 }
 
+/** A page with a tick: verifying a document (#97; the board Final-35-Verify-Start). */
+export function VerifyLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+      <path d="M14 3v5h5" />
+      <path d="m9 15 2 2 4-4" />
+    </LineIcon>
+  );
+}
+
 /** The app's mark in the sidebar header: a serif "I" on a 16px ink square. */
 export function AppMark() {
   return (
