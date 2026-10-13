@@ -511,6 +511,49 @@ test("in the sidebar, ↓ passes over the Folders and Minds between two Document
   }
 });
 
+test("in the Library, ↓ steps from one Folder's section into the next, and passes over a folded section", async () => {
+  const paths = await writeTexts(["Alpha", "Bravo", "Charlie", "Delta"]);
+  const { app, window } = await start();
+  try {
+    await addAndShow(window, library, paths);
+    // Alpha and Bravo in one Folder, Charlie in another, Delta in none: three sections.
+    await (await coreOf(window)).evaluate(async (bridge) => {
+      const reef = await bridge.createLibraryGroup({ name: "Reef", description: "" });
+      const tide = await bridge.createLibraryGroup({ name: "Tide", description: "" });
+      const named = new Map((await bridge.listDocuments()).map((each) => [each.name, each.id]));
+      const move = (name: string, folderId: string) =>
+        bridge.moveToFolder({ documentIds: [named.get(name) as string], folderId });
+      await move("Alpha", reef.id);
+      await move("Bravo", reef.id);
+      await move("Charlie", tide.id);
+    });
+    const sections = window.getByTestId("library").getByTestId("library-section");
+    await expect(sections).toHaveCount(3);
+    const walk = async (names: string[]) => {
+      await library.main(library.row(window, names[0] as string)).focus();
+      await window.keyboard.press("Space");
+      const peekName = peekOf(window).getByTestId("peek-name");
+      for (const name of names) {
+        await expect(peekName).toHaveText(name);
+        await window.keyboard.press("ArrowDown");
+      }
+      await expect(peekName).toHaveText(names.at(-1) as string);
+      await window.keyboard.press("Escape");
+    };
+    const all = await library.names(window);
+    expect(all).toHaveLength(4);
+    await walk(all);
+
+    // With a section folded its Documents aren't on the page: the peek goes past it.
+    await sections.nth(1).getByTestId("library-section-toggle").click();
+    const open = await library.names(window);
+    expect(open.length).toBeLessThan(4);
+    await walk(open);
+  } finally {
+    await app.close();
+  }
+});
+
 test("the Folder and the Tags of a peeked Document change in the peek, by keyboard, and Undo puts the Folder back", async () => {
   const [path] = await writeTexts(["Tides"]);
   const { app, window } = await start();
