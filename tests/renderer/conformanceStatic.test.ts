@@ -82,8 +82,12 @@ describe("the right-click", () => {
 
 describe("dragging", () => {
   // Dragging is built once, in the drag layer, so every target says what a drop does, shows
-  // Undo and has a menu twin. TipTap's own handle is the note's.
-  const LAYER = ["src/renderer/src/editor/BlockHandle.tsx"];
+  // Undo and has a menu twin. The note's own dragging stays ProseMirror's, undone by the note's
+  // ⌘Z: its block handle, and the Word blocks and pictures that move inside the text.
+  const LAYER = [
+    "src/renderer/src/editor/BlockHandle.tsx",
+    "src/renderer/src/editor/wordSchema.ts",
+  ];
   const KNOWN: Record<string, string> = {
     "src/renderer/src/components/MindRow.tsx":
       "a Mind drags onto a Folder before the layer, which #233 moves onto it",
@@ -112,10 +116,14 @@ describe("dragging", () => {
 });
 
 describe("a label that says Back to", () => {
-  // Nothing replaces the Mind the User is in, so nothing says how to go back to it. The
-  // comparison table's Expand is a table filling its own card, and says so by design
-  // (DESIGN.md, Comparison table): Back to note (Esc).
-  const ALLOWED = ["comparison.back"];
+  // Nothing replaces the Mind the User is in, so nothing says how to go back to it.
+  const ALLOWED: Record<string, string> = {
+    // Expand lays one table over its own card, the note held still behind it, and Esc returns:
+    // the owner's design (DESIGN.md, Comparison table).
+    "comparison.back": "the comparison table's Expand",
+    // A link in an exported HTML file, from a footnote back to its text: the file has no Mind.
+    "export.html.back": "a footnote's link back in an exported file",
+  };
   const BACK_TO = { en: /^[←<\s]*Back to\b/i, "zh-CN": /^[←<\s]*返回(?!$)/u } as const;
 
   function backLabels(
@@ -130,7 +138,11 @@ describe("a label that says Back to", () => {
   }
 
   test("is nowhere in the interface, in English or Chinese", () => {
-    expect(backLabels({ en, "zh-CN": zhCN }, ALLOWED)).toEqual([]);
+    expect(backLabels({ en, "zh-CN": zhCN }, Object.keys(ALLOWED))).toEqual([]);
+  });
+
+  test("is allowed only for labels that are still there", () => {
+    expect(Object.keys(ALLOWED).filter((key) => !(key in en))).toEqual([]);
   });
 
   test("is nowhere in the code either", () => {
@@ -161,6 +173,8 @@ describe("a question about deleting", () => {
   const KNOWN: Record<string, string> = {
     "meetings.audio.confirm":
       "deleting a Meeting's audio asks, but it is no command: no ⌘K entry, not in the registry (#609)",
+    "wordImport.sectionBreak.title":
+      "deleting a Word section break asks, though the note's ⌘Z takes it back (#637)",
   };
   const ASKS = /^(Delete|Remove|Unlink|Empty|Erase)\b[^?]*\?/;
 
