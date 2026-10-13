@@ -5708,7 +5708,8 @@
     flex: 1 1 auto;
     flex-direction: column;
     min-height: 0;
-    padding: 8px 8px 10px;
+    /* Narrow enough for the buttons to stay on one row at the 320px assistant, inside its 16px edge. */
+    padding: 8px 6px 10px;
     border-top: 1px solid var(--color-rule);
 
     .approval-card {
@@ -5734,7 +5735,7 @@
       position: sticky;
       bottom: 0;
       gap: 4px;
-      padding: 8px 10px;
+      padding: 8px;
       border-radius: 0 0 8px 8px;
       background: var(--color-sheet);
     }
