@@ -27,7 +27,8 @@ const ESCAPES: Readonly<Record<string, string>> = {
   "'": "&#39;",
 };
 
-const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (char) => ESCAPES[char] ?? char);
+export const escapeHtml = (text: string) =>
+  text.replace(/[&<>"']/g, (char) => ESCAPES[char] ?? char);
 
 /** Only links a PDF reader can follow without running anything. */
 const safeLink = (href: string | null | undefined): href is string =>
