@@ -111,6 +111,20 @@ describe("the original as a Document", () => {
     expect(wordFileOf(client.doc)?.documentId).toBe(document.id);
   });
 
+  test("imported twice, the file is one Document, which both Minds name", async () => {
+    const { core, sources } = await setUp();
+    const path = await saveContract(sources);
+
+    const first = await importWithOriginal(core, path);
+    const second = await importWithOriginal(core, path);
+
+    expect(second.document.id).toBe(first.document.id);
+    expect((await core.listDocuments()).map((each) => [each.id, each.importedAs])).toEqual([
+      [first.document.id, second.mindId],
+    ]);
+    expect(wordFileOf(first.client.doc)?.documentId).toBe(first.document.id);
+  });
+
   test("left unticked, the Mind is imported alone", async () => {
     const { core, sources } = await setUp();
     const path = await saveContract(sources);

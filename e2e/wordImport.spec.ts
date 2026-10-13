@@ -158,6 +158,8 @@ test("Import a Word file… asks whose it is, then opens the Mind with what is k
   const box = editor.locator('[data-testid="word-atom"][data-kind="textBox"]');
   await expect(box).toContainText("At a glance");
   const label = box.locator(".word-atom-label");
+  // Away from where the import screen's Import button was, which may be over the box now.
+  await window.getByTestId("mind-title").hover();
   await expect(label).toHaveCSS("opacity", "0");
   await box.hover();
   await expect(label).toHaveText("Text box · kept as is");
