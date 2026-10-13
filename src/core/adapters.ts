@@ -669,6 +669,12 @@ export interface CoreAdapters {
    * "": the region of the most preferred system language.
    */
   systemRegion?(): string;
+  /**
+   * The name the computer knows the User by, which their edits go under as
+   * tracked changes in a Word file until they choose another (#107): their
+   * full name where the OS keeps one. Absent: the account's name.
+   */
+  systemUserName?(): string;
   keychain: Keychain;
   browser: Browser;
   /**
