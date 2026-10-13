@@ -83,13 +83,20 @@ const noQuestion = (window: Page) => expect(window.locator("dialog[open]")).toHa
 const rows = (window: Page) => window.getByTestId("deleted-item");
 const row = (window: Page, name: string) => rows(window).filter({ hasText: name });
 
+/** Recently deleted, at the foot of the Library page: its section, opened if it was folded. */
 async function openDeleted(window: Page): Promise<Locator> {
   await pointAndClick(window, window.getByTestId("open-library"));
-  await pointAndClick(window, window.getByTestId("library-recently-deleted"));
-  const view = window.getByTestId("recently-deleted");
-  await expect(view).toBeVisible();
-  return view;
+  const head = window.getByTestId("deleted-section-head");
+  if ((await head.getAttribute("data-open")) === "false") {
+    await pointAndClick(window, head.getByTestId("deleted-heading"));
+  }
+  await expect(head).toHaveAttribute("data-open", "true");
+  return window.getByTestId("recently-deleted");
 }
+
+/** Gone from the page once nothing waits in it. */
+const nothingDeleted = (window: Page) =>
+  expect(window.getByTestId("recently-deleted")).toHaveCount(0);
 
 test("deleting a Mind, a Document, a Folder and a Tag asks nothing and lands in Recently deleted; Restore puts each back exactly", async () => {
   test.setTimeout(120_000);
@@ -128,18 +135,9 @@ test("deleting a Mind, a Document, a Folder and a Tag asks nothing and lands in 
   await screenshot(undoLine(window), "undo-line-en");
   await noQuestion(window);
 
-  // A Document, from its menu.
-  const document = window.getByTestId("document-list-item").filter({ hasText: "Invoice 4471" });
-  await openDocumentMenu(document);
-  await document.getByTestId("document-file-actions").getByTestId("document.delete").click();
-  await expect(undoLine(window).getByTestId("undo-message")).toHaveText(
-    "Moved “Invoice 4471” to Recently deleted",
-  );
-  await noQuestion(window);
-
-  // A Tag, in Manage tags.
-  await pointAndClick(window, window.getByTestId("open-library"));
-  await pointAndClick(window, window.getByRole("button", { name: "Manage tags" }));
+  // A Tag, in Manage Tags, from the sidebar's Tags menu.
+  await pointAndClick(window, window.getByTestId("tag-filter-menu"));
+  await pointAndClick(window, window.getByTestId("manage-tags"));
   const slides = window.locator('[data-testid="tag-row"]', { hasText: "Vendor" });
   await pointAndClick(window, slides.getByTestId("delete-tag"));
   await expect(slides).toHaveCount(0);
@@ -148,6 +146,15 @@ test("deleting a Mind, a Document, a Folder and a Tag asks nothing and lands in 
   await expect(undoLine(window).getByTestId("undo-message")).toHaveText(
     "Moved “Vendor” to Recently deleted",
   );
+
+  // A Document, from its menu.
+  const document = window.getByTestId("document-list-item").filter({ hasText: "Invoice 4471" });
+  await openDocumentMenu(document);
+  await document.getByTestId("document-file-actions").getByTestId("document.delete").click();
+  await expect(undoLine(window).getByTestId("undo-message")).toHaveText(
+    "Moved “Invoice 4471” to Recently deleted",
+  );
+  await noQuestion(window);
 
   // A Folder, from its menu.
   const folder = sidebarFolder(window, "Finance");
@@ -160,14 +167,14 @@ test("deleting a Mind, a Document, a Folder and a Tag asks nothing and lands in 
   await noQuestion(window);
   await expect
     .poll(() => deletedNames(window))
-    .toEqual(["Finance", "Vendor", "Invoice 4471", "Shortlist"]);
+    .toEqual(["Finance", "Invoice 4471", "Vendor", "Shortlist"]);
 
-  // The view lists them newest first, each with where it was and its 30 days.
+  // The section lists them newest first, each with where it was and its 30 days.
   const view = await openDeleted(window);
   await expect(rows(window).getByTestId("deleted-name")).toHaveText([
     "Finance",
-    "Vendor",
     "Invoice 4471",
+    "Vendor",
     "Shortlist",
   ]);
   await expect(row(window, "Shortlist").getByTestId("deleted-was-in")).toHaveText(
@@ -190,7 +197,7 @@ test("deleting a Mind, a Document, a Folder and a Tag asks nothing and lands in 
   await expect(window.getByTestId("deleted-selection")).toContainText("4 selected");
   await window.getByTestId("deleted-restore-selected").click();
   await expect(undoLine(window).getByTestId("undo-message")).toHaveText("Restored 4 items");
-  await expect(window.getByTestId("deleted-nothing")).toBeVisible();
+  await nothingDeleted(window);
   expect(await stateOf(window)).toEqual(before);
 
   // Undo deletes them again; one more Undo... is the stack's: Restore is one change.
@@ -244,7 +251,7 @@ test("Delete Permanently asks once and says what is lost; the Document's file st
 
   await row(window, "Tides").getByTestId("deleted-delete").click();
   await dialog.getByTestId("confirm-delete-permanently").click();
-  await expect(window.getByTestId("deleted-nothing")).toBeVisible();
+  await nothingDeleted(window);
   await access(file);
   const refused = await read(
     window,
@@ -275,9 +282,7 @@ test("emptying Recently deleted with many items asks once, counting what is lost
   await expect(dialog.getByRole("heading")).toHaveText("Empty Recently deleted?");
   await expect(dialog).toContainText("The notes in 12 Minds are gone.");
   await dialog.getByTestId("confirm-delete-permanently").click();
-  await expect(window.getByTestId("deleted-nothing")).toHaveText(
-    "Nothing was deleted in the last 30 days.",
-  );
+  await nothingDeleted(window);
   expect(await deletedNames(window)).toEqual([]);
   await screenshot(window, "recently-deleted-empty-en");
 });
@@ -302,9 +307,8 @@ test("the view holds at a narrow window and in Chinese, with a very long name", 
   await openDeleted(window);
   await expect(window.getByTestId("deleted-heading")).toHaveText("回收站");
   await expect(rows(window)).toHaveCount(2);
-  const list = window.getByTestId("recently-deleted");
-  const overflow = await list.evaluate((element) => {
-    const scroller = element.querySelector<HTMLElement>(".overflow-y-auto");
+  const overflow = await window.getByTestId("library").evaluate((element) => {
+    const scroller = element.querySelector<HTMLElement>(":scope > div");
     return (scroller?.scrollWidth ?? 0) - (scroller?.clientWidth ?? 0);
   });
   expect(overflow).toBeLessThanOrEqual(0);
