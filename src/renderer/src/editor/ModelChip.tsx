@@ -1,5 +1,5 @@
 import { isMacOS } from "@tiptap/core";
-import { Children, type ReactNode, useEffect, useState } from "react";
+import { Children, type ReactNode, useEffect, useRef, useState } from "react";
 import type * as Y from "yjs";
 import type { ChatGptPlanStatus, ChatModelChoice, ChatProvider } from "../../../core/api";
 import { isCloudModelName } from "../../../core/providers/ollamaCloud";
@@ -18,6 +18,7 @@ import { usePopoverMenu } from "../components/usePopoverMenu";
 import { useComposer } from "../composer";
 import { core } from "../core";
 import { useT } from "../i18n";
+import { useModelNames } from "../modelNames";
 import { useAppStore } from "../store";
 import { ChevronDownSmallIcon } from "./icons";
 
@@ -105,6 +106,9 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc | null; onChosen(): vo
   const openSettings = useAppStore((state) => state.openSettings);
   const groups = useAnswers((state) => state.models);
   const loadModels = useAnswers((state) => state.loadModels);
+  const nameOf = useModelNames();
+  const [query, setQuery] = useState("");
+  const search = useRef<HTMLInputElement>(null);
   // Over the composer, not on it.
   const menu = usePopoverMenu({ around: (chip) => chip.closest<HTMLElement>(".composer") });
   const [plan, setPlan] = useState<ChatGptPlanStatus | null>(null);
@@ -120,7 +124,10 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc | null; onChosen(): vo
 
   // The menu lists what each provider offers: asked for when it is about to open.
   useEffect(() => {
-    if (!menu.open) return;
+    if (!menu.open) {
+      setQuery("");
+      return;
+    }
     loadModels();
     core.getChatGptPlan().then(setPlan, () => undefined);
   }, [menu.open, loadModels]);
@@ -142,10 +149,12 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc | null; onChosen(): vo
       : isCloudModelName(modelId) || (provider?.kind === "ollama" && provider.service !== null);
   };
   const via = provider ? t(VIA[groupOf(provider, isCloud(provider.id, current.modelId))]) : null;
-  const title = via ? `${current.modelId} · ${via}` : current.modelId;
+  const shown = nameOf(current.modelId, current.providerId);
+  const named = shown.id ? `${shown.name} · ${shown.id}` : shown.name;
+  const title = via ? `${named} · ${via}` : named;
   const label = via
-    ? t("composer.model.label", { model: current.modelId, via })
-    : t("composer.model.labelPlain", { model: current.modelId });
+    ? t("composer.model.label", { model: shown.name, via })
+    : t("composer.model.labelPlain", { model: shown.name });
 
   const choose = (choice: ChatModelChoice) => {
     chooseModel(doc, choice);
@@ -168,6 +177,12 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc | null; onChosen(): vo
         : group.models,
   }));
 
+  const wanted = query.trim().toLowerCase();
+  const matches = (providerId: string, modelId: string) =>
+    wanted === "" ||
+    modelId.toLowerCase().includes(wanted) ||
+    nameOf(modelId, providerId).name.toLowerCase().includes(wanted);
+
   return (
     <span className="composer-model-anchor">
       <button
@@ -180,7 +195,7 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc | null; onChosen(): vo
         onFocus={loadModels}
         className="composer-chip composer-model"
       >
-        <span className="truncate">{current.modelId}</span>
+        <span className="truncate">{shown.name}</span>
         <ChevronDownSmallIcon className="composer-model-chevron" />
       </button>
       <div
@@ -192,15 +207,43 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc | null; onChosen(): vo
       >
         {menu.open && (
           <>
-            <div className="model-menu-list">
+            <div
+              className="model-menu-list"
+              onKeyDownCapture={(event) => {
+                // Typing on an item searches, as in a Finder list.
+                if (
+                  event.key.length === 1 &&
+                  !event.metaKey &&
+                  !event.ctrlKey &&
+                  !event.altKey &&
+                  event.target !== search.current
+                ) {
+                  search.current?.focus();
+                }
+              }}
+            >
               <p className="model-menu-intro">{t("composer.model.intro")}</p>
+              <input
+                ref={search}
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={t("composer.model.search")}
+                aria-label={t("composer.model.search")}
+                data-testid="composer-model-search"
+                spellCheck={false}
+                autoComplete="off"
+                className="model-menu-search"
+              />
               {GROUPS.map((group) => {
                 // A provider can sit in two groups: Ollama's local models and its cloud ones.
                 const inGroup = offered
                   .map((each) => ({
                     ...each,
                     models: each.models.filter(
-                      (modelId) => groupOf(each.provider, each.cloud.includes(modelId)) === group,
+                      (modelId) =>
+                        groupOf(each.provider, each.cloud.includes(modelId)) === group &&
+                        matches(each.provider.id, modelId),
                     ),
                   }))
                   .filter((each) => each.models.length > 0);
@@ -255,12 +298,19 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc | null; onChosen(): vo
               })}
               {groups === null || groups.length === 0 ? (
                 <p className="model-menu-intro">{t("composer.model.loading")}</p>
+              ) : wanted !== "" &&
+                !offered.some((each) => each.models.some((id) => matches(each.provider.id, id))) ? (
+                <p data-testid="composer-model-none" className="model-menu-intro">
+                  {t("composer.model.noMatch")}
+                </p>
               ) : null}
             </div>
             <div className="model-menu-foot">
               <span>
                 {defaultModel
-                  ? t("composer.model.default", { model: defaultModel.modelId })
+                  ? t("composer.model.default", {
+                      model: nameOf(defaultModel.modelId, defaultModel.providerId).name,
+                    })
                   : t("composer.model.defaultUnset")}
               </span>
               <span aria-hidden="true"> · </span>
@@ -285,7 +335,7 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc | null; onChosen(): vo
 }
 
 /**
- * One model in the menu: its id, a hint, and who runs it. `unavailable`: listed
+ * One model in the menu: its name (its id on hover), a hint, and who runs it. `unavailable`: listed
  * but not chosen, with the reason as its hint (a cloud model in local mode).
  */
 function ModelItem({
@@ -307,6 +357,7 @@ function ModelItem({
   onChoose(choice: ChatModelChoice): void;
 }) {
   const t = useT();
+  const shown = useModelNames()(modelId, provider.id);
   return (
     <button
       type="button"
@@ -314,6 +365,7 @@ function ModelItem({
       aria-checked={checked}
       aria-disabled={unavailable || undefined}
       data-testid="composer-model-option"
+      title={shown.id}
       data-model={modelId}
       data-provider={provider.id}
       data-unavailable={unavailable || undefined}
@@ -327,7 +379,7 @@ function ModelItem({
         style={{ visibility: checked ? "visible" : "hidden" }}
       />
       <span className="model-menu-name">
-        <span className="truncate">{modelId}</span>
+        <span className="truncate">{shown.name}</span>
         <span className="model-menu-hint">
           {unavailable ? (
             t("composer.model.localModeOff")
