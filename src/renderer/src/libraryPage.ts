@@ -7,6 +7,7 @@ import type { Document, DocumentGroupAssignment, LibraryGroup } from "../../core
 import type { Language } from "../../core/language";
 import { displayName } from "../../shared/documentNames";
 import type { MessageKey, MessageParams } from "../../shared/i18n";
+import { modelName } from "../../shared/modelName";
 import { type LibraryFacet, type LibraryStatus, libraryStatus } from "./libraryFilters";
 
 type Translate = (key: MessageKey, params?: MessageParams) => string;
@@ -25,6 +26,30 @@ export interface LibrarySection {
   key: string;
   folder: LibraryGroup | null;
   documents: Document[];
+}
+
+/**
+ * Whether a section asked for is on the page once nothing narrows it: a
+ * Folder that exists, Not in a Folder while it holds a Document, and
+ * Recently deleted unless it is known to be empty (`deletedCount` null: not
+ * read yet).
+ */
+export function sectionShows(
+  key: string,
+  documents: readonly Pick<Document, "id">[],
+  folders: readonly Pick<LibraryGroup, "id">[],
+  assignments: readonly Pick<DocumentGroupAssignment, "documentId" | "groupId">[],
+  deletedCount: number | null,
+): boolean {
+  if (key === RECENTLY_DELETED) return deletedCount !== 0;
+  const ids = new Set(folders.map((folder) => folder.id));
+  if (key !== NOT_IN_A_FOLDER) return ids.has(key);
+  const filed = new Set(
+    assignments.flatMap((each) =>
+      each.groupId !== null && ids.has(each.groupId) ? [each.documentId] : [],
+    ),
+  );
+  return documents.some((doc) => !filed.has(doc.id));
 }
 
 /**
@@ -165,7 +190,11 @@ export function organizeModel(
         : model.reason === "unavailable"
           ? "library.route.unavailable"
           : null;
-  return [model.id, t(model.images ? "library.usedPages" : "library.usedText"), route && t(route)]
+  return [
+    modelName(model.id),
+    t(model.images ? "library.usedPages" : "library.usedText"),
+    route && t(route),
+  ]
     .filter(Boolean)
     .join(" · ");
 }

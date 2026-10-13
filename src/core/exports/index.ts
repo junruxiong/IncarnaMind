@@ -1,7 +1,7 @@
 /**
- * Exporting a Mind to Markdown, .docx, PDF or HTML (see `CoreApi.exportMind`). The core
- * makes the file's bytes; the host decides where they go (the desktop app asks
- * with the system save dialog), so nothing here touches the file system. A PDF
+ * Exporting a Mind to Markdown, .docx, PDF or HTML, or its cited pages to a source pack (see
+ * `CoreApi.exportMind`). The core makes the file's bytes; the host decides where they go (the
+ * desktop app asks with the system save dialog), so nothing here touches the file system. A PDF
  * is printed by the host's `Printer`, from the HTML made here; an HTML file is that same
  * HTML, whole.
  */
@@ -15,6 +15,7 @@ import {
   citationStyle,
 } from "../../shared/citationStyles";
 import { citationState, citedLocation } from "../../shared/citations";
+import type { DrawnPage } from "../../shared/citedPage";
 import { titleWithoutSite } from "../../shared/documentNames";
 import { translate } from "../../shared/i18n";
 import type { Translate } from "../../shared/locations";
@@ -54,6 +55,7 @@ import { exportLabels } from "./labels";
 import { renderMarkdown } from "./markdown";
 import { unifyIdeographs } from "./pdfUnicode";
 import { renderPrintHtml } from "./printHtml";
+import { isUnverified, numberCitations, packPages, renderSourcePack } from "./sourcePack";
 import { exportWordPatch } from "./wordPatch";
 
 /** What a footnote needs of a live Document: a web page's site, address and fetch dates. */
@@ -76,6 +78,8 @@ export interface ExportsDependencies {
   bibliography(mindId: string): boolean;
   /** Formats Citations in a style, as the editor does (see `CoreApi.formatCitations`). */
   formatCitations(request: CitationFormatRequest): Promise<FormattedCitations>;
+  /** A Citation's saved page (#133); null if none is saved. */
+  citedPage(citation: Readonly<Record<string, unknown>>): Promise<DrawnPage | null>;
   /** Prints a PDF; null where this copy can't. */
   printer: Printer | null;
   /** The paper a PDF is printed on, which goes by the computer's region (`paperFor`). */
@@ -97,6 +101,7 @@ const EXTENSIONS: Readonly<Record<ExportFormat, string>> = {
   markdown: "md",
   docx: "docx",
   pdf: "pdf",
+  "source-pack": "pdf",
   html: "html",
 };
 
@@ -114,6 +119,8 @@ interface Prepared {
   style: CitationStyle;
   documents: readonly SourceDocument[];
   bibliography: boolean;
+  /** Each Citation's footnote with the attributes it was made from, for the source pack. */
+  attributesOf: ReadonlyMap<Footnote, Partial<CitationAttributes>>;
 }
 
 export function createExports(deps: ExportsDependencies) {
@@ -124,8 +131,12 @@ export function createExports(deps: ExportsDependencies) {
     const style = citationStyle(deps.citationStyle(mind.id));
     const documents = deps.liveDocuments();
     const kept = deps.keptCitationTexts();
-    const footnote = (attributes: Record<string, unknown>): Footnote =>
-      footnoteOf(attributes as Partial<CitationAttributes>, documents, kept, language);
+    const attributesOf = new Map<Footnote, Partial<CitationAttributes>>();
+    const footnote = (attributes: Record<string, unknown>): Footnote => {
+      const note = footnoteOf(attributes as Partial<CitationAttributes>, documents, kept, language);
+      attributesOf.set(note, attributes as Partial<CitationAttributes>);
+      return note;
+    };
     // Footnotes go right after the word, and so do Numbered's Citations; a style decides for
     // its own (./citations).
     const trimBeforeCitation = style.form === "numbered";
@@ -147,9 +158,14 @@ export function createExports(deps: ExportsDependencies) {
         word: doc && wordFileOf(doc) ? { importing: wordImportProgressOf(doc) !== null } : null,
       };
     });
-    const footnotes = footnotesIn(blocks);
+    // A source pack holds the Citations the Mind numbers; the others, every footnote.
+    const footnotes =
+      format === "source-pack"
+        ? numberCitations(blocks, style.form, attributesOf).map((each) => each.footnote)
+        : footnotesIn(blocks);
+    const name = safeFileName(mindName(mind) || translate(language, "mind.untitled"), "Mind");
     const preview: MindExportPreview = {
-      fileName: `${safeFileName(mindName(mind) || translate(language, "mind.untitled"), "Mind")}.${EXTENSIONS[format]}`,
+      fileName: `${format === "source-pack" ? translate(language, "export.pack.fileName", { name }) : name}.${EXTENSIONS[format]}`,
       citations: footnotes.length,
       unverifiedCitations: footnotes.filter((each) => each.unverified).length,
       questions,
@@ -166,6 +182,28 @@ export function createExports(deps: ExportsDependencies) {
       style,
       documents,
       bibliography: deps.bibliography(mind.id),
+      attributesOf,
+    };
+  };
+
+  /** The source pack's PDF: the Mind's cited pages, as saved, with their quotes marked. */
+  const sourcePack = async (prepared: Prepared): Promise<MindExport> => {
+    const { title, blocks, style, language, attributesOf, preview } = prepared;
+    const citations = numberCitations(blocks, style.form, attributesOf);
+    if (citations.length === 0) throw new Error(translate(language, "export.pack.empty"));
+    const pages = await packPages(citations, deps.citedPage);
+    const printed = await (deps.printer as Printer).print({
+      language,
+      paper: deps.paper(),
+      title: preview.fileName.slice(0, -".pdf".length),
+      body: renderSourcePack(title, pages, language),
+      notes: [],
+    });
+    return {
+      ...preview,
+      unverifiedCitations: pages.flatMap((page) => page.entries).filter(isUnverified).length,
+      data: unifyIdeographs(printed),
+      word: null,
     };
   };
 
@@ -177,9 +215,10 @@ export function createExports(deps: ExportsDependencies) {
     async export(mindId: unknown, options: unknown): Promise<MindExport> {
       const prepared = prepare(mindId, options);
       const { title, preview, language, format, style, documents } = prepared;
-      if (format === "pdf" && !deps.printer) {
+      if ((format === "pdf" || format === "source-pack") && !deps.printer) {
         throw new Error("This copy of IncarnaMind can't make PDFs.");
       }
+      if (format === "source-pack") return sourcePack(prepared);
       if (format === "docx" && prepared.word) return exportIntoWord(prepared, prepared.word);
       const blocks =
         style.form !== "numbered"
@@ -329,7 +368,9 @@ function parseExportOptions(input: unknown): Required<ExportMindOptions> {
   if (!isRecord(input)) throw new InvalidInputError("Export options must be an object.");
   const { format, includeQuestions, accept } = input;
   if (!EXPORT_FORMATS.some((each) => each === format)) {
-    throw new InvalidInputError('The export format must be "markdown", "docx", "pdf" or "html".');
+    throw new InvalidInputError(
+      'The export format must be "markdown", "docx", "pdf", "source-pack" or "html".',
+    );
   }
   if (includeQuestions !== undefined && typeof includeQuestions !== "boolean") {
     throw new InvalidInputError("includeQuestions must be true or false.");
