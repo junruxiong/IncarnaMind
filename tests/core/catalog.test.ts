@@ -494,6 +494,23 @@ describe("Support tiers (ADR-0019)", () => {
     }
   });
 
+  test("a key guide's steps say what to do; what a plan includes is said once, in the note under them, in both languages", () => {
+    const withNote = CATALOG_PROVIDERS.filter((each) => each.planCredits && each.keyGuide);
+    expect(withNote.map((each) => each.id)).toEqual(
+      expect.arrayContaining(["anthropic", "openai"]),
+    );
+    for (const each of withNote) {
+      for (const step of each.keyGuide ?? []) {
+        expect(step.en, each.id).not.toMatch(/include|doesn't/i);
+        expect(step.zh, each.id).not.toMatch(/不含|不包含|附带/);
+      }
+    }
+    // The Anthropic note says where the plan is linked, which its step no longer does.
+    const note = catalogProvider("anthropic")?.planCredits;
+    expect(note?.en).toContain("claude.ai's Billing");
+    expect(note?.zh).toContain("claude.ai");
+  });
+
   test("a best-effort provider keeps its link to the provider's key page", () => {
     for (const id of BEST_EFFORT) {
       expect(catalogProvider(id)?.keyUrl, id).toMatch(/^https:\/\//);

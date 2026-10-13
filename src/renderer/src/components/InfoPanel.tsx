@@ -4,7 +4,7 @@ import { displayName } from "../../../shared/documentNames";
 import { copyText } from "../copied";
 import { core, files } from "../core";
 import { documentStatusText } from "../documentStatus";
-import { addedDate, fileDate, KIND_LABELS } from "../fileInfo";
+import { addedDate, fileDate, KIND_LABELS, showFileLabelKey } from "../fileInfo";
 import { useLanguage, useT } from "../i18n";
 import { useInfo } from "../info";
 import {
@@ -13,7 +13,6 @@ import {
   formatBytes,
   formatCount,
   linkedFolderRowState,
-  revealLabelKey,
   rowStateLabel,
 } from "../linkedFolders";
 import { type Box, enterFrom, useExitToward } from "../motion";
@@ -326,7 +325,7 @@ function DocumentInfo({ document }: { document: Document }) {
         <Actions
           path={document.path}
           canShow={document.fileStatus === "available"}
-          showLabel={t("documents.copy.showInFolder")}
+          showLabel={t(showFileLabelKey(navigator.platform))}
           onShow={() =>
             void files
               .showDocumentInFolder(document.id)
@@ -383,7 +382,7 @@ function LinkedFolderInfo({ linked }: { linked: LinkedFolder }) {
       <Actions
         path={linked.path}
         canShow={linked.status !== "unavailable"}
-        showLabel={t(revealLabelKey(navigator.platform))}
+        showLabel={t(showFileLabelKey(navigator.platform))}
         onShow={() => void useAppStore.getState().showLinkedFolder(linked.id)}
       />
     </>

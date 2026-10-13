@@ -314,6 +314,7 @@ test("a Mind with one chart prints its picture, drawn at twice its size, its cap
     shown,
     value: Number(shown),
     unit: null,
+    scale: null,
     citation: cited,
     from: { kind: "cell", row, column: 1 },
   });
@@ -326,6 +327,7 @@ test("a Mind with one chart prints its picture, drawn at twice its size, its cap
       labelHeading: "Tide 潮",
       series: ["Range 潮差 (m)"],
       cutFrom: null,
+      cutRows: [],
       rows: [
         { label: "Spring 大潮", values: [value("4", 1, citationAttributes(tides, 1, "found"))] },
         { label: "Neap 小潮", values: [value("2", 2, citationAttributes(chinese, 1, "found"))] },
@@ -550,6 +552,47 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
     timeout: 30_000,
   });
   await screenshot(window, "export-result-zh-narrow");
+  await app.close();
+  await removeDataFolder(out);
+});
+
+test("Export as HTML saves one .html file whose footnotes link both ways, and the sheet offers the format", async () => {
+  const { app, window } = await launchApp(dataDir, { home });
+  await dismissChatSetup(window);
+  const mindId = await setUpMind(window, sources, "Tides 潮汐");
+  await expect
+    .poll(async () => (await bridge(window).documents()).map((each) => each.status))
+    .toEqual(["ready", "ready"]);
+  const tides = await documentNamed(window, "Tides");
+  const chinese = await documentNamed(window, "潮汐");
+  await bridge(window).write(
+    mindId,
+    updateOf([
+      paragraph("Spring tides happen at new moon", citation(tides, 1, "found"), "."),
+      paragraph("大潮出现在新月和满月前后", citation(chinese, 1, "not-found"), "。"),
+    ]),
+  );
+  await expect(window.getByTestId("mind-editor").getByTestId("citation")).toHaveCount(2);
+  const out = await createDataFolder();
+  await useOutputLocation(window, out);
+
+  await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.exportAs.html"));
+  const path = await savedPath(window, "Tides 潮汐.html");
+  const html = await readFile(path, "utf8");
+  expect(html.startsWith("<!DOCTYPE html>")).toBe(true);
+  expect(html).toContain('<sup class="note-ref" id="ref-1"><a href="#note-1">1</a></sup>');
+  expect(html).toContain('<li id="note-2">潮汐, p. 1');
+  expect(html).toContain('<a class="backref" href="#ref-2"');
+  expect(html).not.toMatch(/<script|<link|src="http/);
+
+  // Export now makes HTML, and the sheet offers the format with its note.
+  await expect(window.getByTestId("export-mind")).toHaveAttribute("data-format", "html");
+  await openOptions(window, "Export options");
+  const sheet = window.getByTestId("export-dialog");
+  await expect(sheet.getByTestId("export-format")).toHaveValue("html");
+  await expect(sheet.getByTestId("export-format-note")).toHaveText(
+    "One file that opens in any browser. Citations become footnotes linked both ways.",
+  );
   await app.close();
   await removeDataFolder(out);
 });

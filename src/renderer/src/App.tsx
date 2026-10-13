@@ -24,6 +24,7 @@ import { SortMenu } from "./components/SortMenu";
 import { TagsDialog } from "./components/TagsDialog";
 import { TabNoticeLine } from "./components/tabs/TabNoticeLine";
 import { UsageDataDialog } from "./components/UsageDataDialog";
+import { WordImportDialog } from "./components/WordImportDialog";
 import { files } from "./core";
 import { useEscapeToDismiss } from "./escapeDismiss";
 import { useLanguage, useT } from "./i18n";
@@ -264,6 +265,7 @@ function Workspace() {
         <SortMenu />
         <InfoPanel />
         <AddWebPageDialog />
+        <WordImportDialog />
         <ChatSetupDialog />
         <ChatGptWelcomeDialog />
         <UsageDataDialog />

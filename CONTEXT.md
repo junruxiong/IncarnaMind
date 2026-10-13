@@ -312,7 +312,7 @@ _Avoid_: AI log, AI history
 ### Window
 
 **Tab**:
-What a Mind, the Library or a Document is open in. A preview tab, its title in italics, is replaced by the next Document opened in its group until the User keeps it; a pinned tab stays at the left of its group.
+What a Mind, the Library or a Document is open in. A preview tab, its title in italics, is replaced by the next Document opened in its group until the User keeps it; a pinned tab stays at the left of its group. Opening something already open goes to its tab, in any group; only Open in a new tab makes a second one.
 _Avoid_: pane, page, view
 
 **Group**:

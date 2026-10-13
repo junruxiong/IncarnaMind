@@ -11,6 +11,7 @@ import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
 import { AiUseSettings } from "./AiUseSettings";
 import { ApprovalsSettings } from "./ApprovalsSettings";
+import { OnThisComputer } from "./OnThisComputer";
 import { USAGE_DATA_DETAILS_URL } from "./UsageDataDialog";
 import {
   buttonStyle,
@@ -194,7 +195,7 @@ function DataFlowItem({ flow }: { flow: RegisteredDataFlow }) {
             title={t("privacy.flows.notInUse")}
             className={rowStatusClass}
           >
-            {t("privacy.flows.local")}
+            <OnThisComputer>{t("privacy.flows.local")}</OnThisComputer>
           </span>
         </div>
       ) : (
@@ -282,7 +283,7 @@ function ServiceDecision({
         <span
           data-testid="data-flow-decision"
           className={`text-[13px] leading-5 ${
-            consent === "accepted" ? "font-semibold text-success" : "text-ink-meta"
+            consent === "accepted" ? "font-semibold text-ink" : "text-ink-meta"
           }`}
         >
           {decision}
