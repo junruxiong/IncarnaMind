@@ -528,13 +528,11 @@ export function createChat(options: {
 
       const row = rowById(id);
       if (!row) throw new Error("The chat provider wasn't saved.");
-      const { service } = await withDefaultModel(row);
       // Ollama is chosen for models on this computer, where no line says what goes elsewhere:
       // a cloud model in it asks once, at its first send. The line doesn't name what a
       // Connector's Tools return either: with one on, the first Question asks for that.
-      if (service && server.kind !== "ollama") {
-        consent.choose(CHOSEN_PROVIDER_FLOWS, service, ["tool-results"]);
-      }
+      const service = server.kind === "ollama" ? null : rowService(row);
+      if (service) consent.choose(CHOSEN_PROVIDER_FLOWS, service, ["tool-results"]);
       return toProvider(row);
     },
 

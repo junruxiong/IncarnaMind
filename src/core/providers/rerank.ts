@@ -317,11 +317,10 @@ export function createRerank(options: {
           values: { provider: RERANK_SERVICES[kind].name },
         });
       }
-      // Choosing it, where the form says what goes, allows it (ADR-0022); a decline stays.
-      consent.choose(["rerank"], RERANK_SERVICES[kind]);
-      await consent.ensure("rerank", RERANK_SERVICES[kind]);
       if (apiKey !== undefined) await secrets.set(KEY_NAME, apiKey);
       settings.writeDeviceValue(SETTINGS_VALUE, { kind, modelId } satisfies StoredRerank);
+      // Choosing it, where the form says what goes, allows it (ADR-0022).
+      consent.choose(["rerank"], RERANK_SERVICES[kind]);
       // The built-in model, if it ran, isn't needed any more.
       builtIn.unload();
       return status();
