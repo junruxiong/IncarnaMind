@@ -1,14 +1,4 @@
-import {
-  memo,
-  type Ref,
-  useCallback,
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { memo, type Ref, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type {
   Document,
@@ -38,11 +28,13 @@ import {
 import { formatCount } from "../linkedFolders";
 import { missingList } from "../referenceEditing";
 import { useRequests } from "../requests";
+import { extendThroughRows, useSelectable, useSelection, useSelectionOrder } from "../selection";
 import { DEFAULT_SORT, sorted } from "../sort";
 import { sortOf, useSort } from "../sortChoices";
 import { documentFields } from "../sortFields";
 import { useSortMenu } from "../sortMenu";
 import { useAppStore } from "../store";
+import { moveThroughRows, TREE_ROW } from "../treeKeys";
 import { useRename } from "../useRename";
 import { AddDocumentsMenu } from "./AddDocumentsMenu";
 import { CiteAsPanel } from "./CiteAsPanel";
@@ -107,15 +99,18 @@ function LibrarySheet() {
     [facetFilter, tagFilter],
   );
   const [limit, setLimit] = useState(100);
-  const [editing, setEditing] = useState<LibraryGroup | "new" | null>(null);
+  const [editing, setEditing] = useState<LibraryGroup | null>(null);
   const [starters, setStarters] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: each view of the Library starts clean.
   useEffect(() => {
     setLimit(100);
     setSearch("");
     setFacetFilter({});
-    setEditing(filter === "new" ? "new" : null);
+    setEditing(null);
+    // Another Folder: what was selected in this one isn't in view any more.
+    useSelection.getState().clear("library");
   }, [filter]);
   // The same function from one drawing to the next, so the rows needn't be drawn again for it.
   const act: Action = useCallback(async (work) => {
@@ -179,12 +174,15 @@ function LibrarySheet() {
     });
   const sortLabel = `${t(SORT_KEY_LABELS[sort.key])} ${sort.direction === "asc" ? "↑" : "↓"}`;
   const shownIds = useMemo(() => shown.map((doc) => doc.id), [shown]);
-  // A row's Shift-click reads the rows in view when clicked, so a change to them redraws no row.
-  const shownRef = useRef(shownIds);
-  useLayoutEffect(() => {
-    shownRef.current = shownIds;
-  });
-  const shownNow = useCallback(() => shownRef.current, []);
+  // ⌘A and Shift-click reach every row the filters show, drawn or not.
+  useSelectionOrder("library", () => shownIds.map((id) => ({ kind: "document", id })));
+  // What is selected stays in view: a search or filter that hides it, or a deleted Document, drops it.
+  useEffect(() => {
+    const held = useSelection.getState();
+    if (held.surface !== "library") return;
+    const visible = new Set(shownIds);
+    held.keepOnly((ref) => visible.has(ref.id));
+  }, [shownIds]);
   const filtering = isFiltering(selection);
   const view: LibraryView = selected
     ? { kind: "folder", id: selected.id, name: selected.name }
@@ -227,10 +225,6 @@ function LibrarySheet() {
   const renameFolder = useAppStore((state) => state.renameFolder);
   const renameHeading = useRename<HTMLButtonElement>("library-heading");
   const heading = selected?.name ?? t(filter === "unsorted" ? "library.unsorted" : "library.all");
-  const closeForm = () => {
-    setEditing(null);
-    if (filter === "new") useAppStore.getState().openLibrary();
-  };
   return (
     <section
       data-testid="library"
@@ -309,16 +303,6 @@ function LibrarySheet() {
               type="button"
               className={buttonStyle("ghost", "sm")}
               onClick={() => {
-                setEditing("new");
-                setStarters(false);
-              }}
-            >
-              {t("library.newGroup")}
-            </button>
-            <button
-              type="button"
-              className={buttonStyle("ghost", "sm")}
-              onClick={() => {
                 setStarters(!starters);
                 setEditing(null);
               }}
@@ -367,11 +351,11 @@ function LibrarySheet() {
           )}
           {editing && (
             <GroupForm
-              key={editing === "new" ? "new" : editing.id}
+              key={editing.id}
               group={editing}
               busy={busy}
               act={act}
-              close={closeForm}
+              close={() => setEditing(null)}
             />
           )}
           {(starters || groups.length === 0) && !editing && snapshot && (
@@ -471,7 +455,16 @@ function LibrarySheet() {
                 <span>{t("library.folder")}</span>
                 <span>{t("tags.title")}</span>
               </div>
-              <ul>
+              {/* biome-ignore lint/a11y/useSemanticElements: a list of rows laid out as columns, not a table. */}
+              <ul
+                // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: the list is one grid whose rows select (aria-multiselectable).
+                role="grid"
+                aria-multiselectable="true"
+                aria-label={t("library.list")}
+                onKeyDown={(event) => {
+                  if (!moveThroughRows(event)) extendThroughRows(event, "library");
+                }}
+              >
                 {shown.slice(0, limit).map((doc) => (
                   <LibraryRow
                     key={doc.id}
@@ -480,7 +473,6 @@ function LibrarySheet() {
                     groups={groups}
                     busy={busy}
                     act={act}
-                    shownIds={shownNow}
                   />
                 ))}
               </ul>
@@ -513,15 +505,12 @@ const LibraryRow = memo(function LibraryRow({
   groups,
   busy,
   act,
-  shownIds,
 }: {
   doc: Document;
   item: DocumentGroupAssignment | undefined;
   groups: readonly LibraryGroup[];
   busy: boolean;
   act: Action;
-  /** The rows in view, in order, read when a Shift-click selects a range. */
-  shownIds(): readonly string[];
 }) {
   const t = useT();
   const place = useTabPlace();
@@ -533,6 +522,14 @@ const LibraryRow = memo(function LibraryRow({
   const citeToggle = useRef<HTMLButtonElement>(null);
   const citePanelId = useId();
   const objectMenu = useObjectMenu({ kind: "document", id: doc.id });
+  const select = useSelectable({ kind: "document", id: doc.id }, "library", () =>
+    useAppStore
+      .getState()
+      .openDocument(
+        { documentId: doc.id },
+        { as: "library", ...(place && { from: place.groupId }) },
+      ),
+  );
   // A double-click keeps the preview it opened, then renames.
   const rename = useRename<HTMLButtonElement>(`library-document:${doc.id}`, () =>
     keepPreviewOf(doc.id),
@@ -549,13 +546,20 @@ const LibraryRow = memo(function LibraryRow({
             ? "library.saved"
             : "library.notClassified";
   return (
+    // biome-ignore lint/a11y/useSemanticElements: the row is laid out as columns, not as a table row.
+    // biome-ignore lint/a11y/useFocusableInteractive: the name's button takes the focus, and the arrow keys move between them.
     <li
       data-testid="library-document"
       data-document-id={doc.id}
+      // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: a row of the grid, which says whether it is selected.
+      role="row"
+      {...select.rowProps}
       {...objectMenu.rowProps}
-      className="group/row library-columns relative border-b border-rule py-3"
+      className={`group/row library-columns relative border-b border-rule py-3 ${
+        select.selected ? "bg-accent-wash" : ""
+      }`}
     >
-      <LibrarySelectBox document={doc} shownIds={shownIds} />
+      <LibrarySelectBox document={doc} />
       <div className="library-document-name min-w-0">
         <div className="flex min-w-0 items-center gap-2">
           {rename.renaming ? (
@@ -568,19 +572,12 @@ const LibraryRow = memo(function LibraryRow({
             <button
               {...rename.nameProps}
               type="button"
+              {...TREE_ROW}
               data-row-main=""
               title={name === source ? name : `${name}\n${source}`}
               className="flex min-w-0 items-center gap-2 text-left hover:underline focus-visible:outline-2 focus-visible:outline-accent"
-              // A preview to the Library's right; ⌘-click (Ctrl-click) opens it here, kept.
-              onClick={(event) =>
-                useAppStore.getState().openDocument(
-                  { documentId: doc.id },
-                  {
-                    as: event.metaKey || event.ctrlKey ? "here" : "library",
-                    ...(place && { from: place.groupId }),
-                  },
-                )
-              }
+              // A click opens a preview to the Library's right; ⌘-click and Shift-click select (`useSelectable`).
+              onClick={select.onClick}
             >
               <DocumentLineIcon kind={doc.kind} className="size-4 shrink-0 text-ink-meta" />
               <span data-testid="library-document-name" className="truncate font-semibold">
@@ -784,7 +781,7 @@ function GroupForm({
   act,
   close,
 }: {
-  group: LibraryGroup | "new";
+  group: LibraryGroup;
   busy: boolean;
   act: Action;
   close(): void;
@@ -794,11 +791,9 @@ function GroupForm({
   useEffect(() => {
     nameInput.current?.focus();
   }, []);
-  const [name, setName] = useState(group === "new" ? "" : group.name);
-  const [description, setDescription] = useState(group === "new" ? "" : group.description);
-  const [countsOwnFiles, setCountsOwnFiles] = useState(
-    group === "new" ? false : group.countsOwnFiles,
-  );
+  const [name, setName] = useState(group.name);
+  const [description, setDescription] = useState(group.description);
+  const [countsOwnFiles, setCountsOwnFiles] = useState(group.countsOwnFiles);
   // Settings counts IncarnaMind's files everywhere: there's nothing for a folder to switch.
   const leftOut = useAppStore((state) => state.settings?.user.leaveOutOwnFiles ?? true);
   return (
@@ -808,8 +803,7 @@ function GroupForm({
         event.preventDefault();
         void act(async () => {
           const input = { name, description, countsOwnFiles };
-          if (group === "new") await core.createLibraryGroup(input);
-          else await useAppStore.getState().editFolder(group.id, input);
+          await useAppStore.getState().editFolder(group.id, input);
           close();
         });
       }}

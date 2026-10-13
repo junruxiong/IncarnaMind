@@ -10,6 +10,7 @@ import {
 } from "../commands/registry";
 import { useT } from "../i18n";
 import type { ObjectKind, ObjectRef } from "../objects";
+import { useSelection } from "../selection";
 import { useAppStore } from "../store";
 import { MoreLineIcon } from "./lineIcons";
 import { rowActionButtonClass } from "./sidebarRows";
@@ -92,12 +93,23 @@ export function useObjectMenu(target: ObjectRef) {
   };
 }
 
-/** "Tags…" opens the Tag picker the Document's row or header already has, once the menu has closed. */
-function tagsHere(target: ObjectRef, from: HTMLElement | null): CommandContext["here"] {
+/**
+ * "Tags…" opens the Tag picker the Document's row or header already has, once the menu has closed;
+ * for several Documents selected, the one beside the selection (the Library's bar, the sidebar's line).
+ */
+function tagsHere(
+  target: ObjectRef,
+  from: HTMLElement | null,
+  selection: readonly ObjectRef[],
+): CommandContext["here"] {
   const picker =
-    target.kind === "document"
-      ? from?.closest(ROW)?.querySelector<HTMLButtonElement>('[data-testid="document-tags-menu"]')
-      : null;
+    target.kind !== "document"
+      ? null
+      : selection.length > 1
+        ? from?.closest("[data-surface]")?.querySelector<HTMLButtonElement>("[data-selection-tags]")
+        : from
+            ?.closest(ROW)
+            ?.querySelector<HTMLButtonElement>('[data-testid="document-tags-menu"]');
   return picker ? { "document.tags": () => requestAnimationFrame(() => picker.click()) } : {};
 }
 
@@ -132,16 +144,26 @@ export function ObjectMenu({
   const { buttonProps } = useObjectMenu(target);
   const prefix = TEST_ID_PREFIX[target.kind];
   const button = menu.buttonProps.ref;
+  // Selected, the menu is for the whole selection; else for this one alone.
+  const held = useSelection((state) => (state.keys.has(keyOf(target)) ? state : null));
 
-  const ctx: CommandContext = {
-    selection: selection?.some((each) => each.kind === target.kind && each.id === target.id)
-      ? selection
+  const surface = surfaceOf(button.current);
+  const chosen = selection ?? (held && held.surface === surface ? held.items : []);
+  const forSelection: CommandContext = {
+    selection: chosen.some((each) => each.kind === target.kind && each.id === target.id)
+      ? chosen
       : [],
     focus: target,
-    surface: surfaceOf(button.current),
-    here: { ...tagsHere(target, button.current), ...here },
+    surface,
+    here: { ...tagsHere(target, button.current, chosen), ...here },
   };
-  const entries = menu.open ? buildMenu(target.kind, ctx) : [];
+  const selectionEntries = menu.open ? buildMenu(target.kind, forSelection) : [];
+  // Kinds mixed in the selection that share no command: the menu is this row's own.
+  const alone = menu.open && forSelection.selection.length > 0 && selectionEntries.length === 0;
+  const ctx: CommandContext = alone
+    ? { ...forSelection, selection: [], here: { ...tagsHere(target, button.current, []), ...here } }
+    : forSelection;
+  const entries = alone ? buildMenu(target.kind, ctx) : selectionEntries;
 
   const run = (item: MenuItem) => {
     if (item.enabled !== true) return;

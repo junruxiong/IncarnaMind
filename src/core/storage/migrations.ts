@@ -1417,6 +1417,187 @@ export const migrations: readonly Migration[] = [
       CREATE INDEX cited_pages_gone ON cited_pages (deleted_at) WHERE deleted_at IS NOT NULL;
     `,
   },
+  {
+    version: 75,
+    description: "Word files imported as Minds keep their original package (#104)",
+    sql: `
+      -- The .docx a Mind was imported from, kept in the data folder as "Word imports/<sha256>.docx"
+      -- so export can write back into it (#105) after the User's file has moved or gone. Two Minds
+      -- imported from the same file share it. completed_at: when every Block was written; NULL
+      -- while the import runs, so one a quit cut short goes on at the next start. deleted_at: the
+      -- Mind was deleted permanently, and the package goes once no Mind keeps it.
+      CREATE TABLE word_packages (
+        id TEXT PRIMARY KEY NOT NULL,
+        mind_id TEXT NOT NULL REFERENCES minds (id),
+        sha256 TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        size INTEGER NOT NULL,
+        completed_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX word_packages_by_mind ON word_packages (mind_id) WHERE deleted_at IS NULL;
+      CREATE INDEX word_packages_by_sha256 ON word_packages (sha256) WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    // 76 to 79 are reserved by work in progress.
+    version: 80,
+    description: "Models the User added to a provider's model menu (#513)",
+    sql: `
+      -- A model id the catalog does not offer in the menu by default (an unknown, deprecated or
+      -- other-API id), that the User put there from Settings → Models → Other models.
+      CREATE TABLE chat_menu_models (
+        id TEXT PRIMARY KEY NOT NULL,
+        provider_id TEXT NOT NULL,
+        model_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX chat_menu_models_by_model ON chat_menu_models (provider_id, model_id)
+        WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    version: 81,
+    description: "Tasks keep a journal that survives a force-quit, and schedules (#126)",
+    sql: `
+      -- One row per Task: a Run that goes on in the background (src/core/runs/tasks.ts). kind
+      -- names what runs it ('comparison'…), checked in code, so a kind a newer version adds is
+      -- left alone; input is what it runs, its kind's JSON. status: 'running' | 'paused' |
+      -- 'done' | 'stopped' | 'failed'. paused_reason: 'user' | 'closed' | 'cost-cap' |
+      -- 'plan-limit' | 'not-ready'; resets_at: when a plan's limit resets. ask: what it waits
+      -- for the User to answer (JSON), NULL for nothing; asks: how many times it has asked.
+      -- progress: its items settled and in all (JSON). problem: why it failed.
+      -- A Task left 'running' by a quit or a crash is settled at the next start.
+      CREATE TABLE runs (
+        id TEXT PRIMARY KEY NOT NULL,
+        kind TEXT NOT NULL,
+        mind_id TEXT,
+        input TEXT NOT NULL DEFAULT '{}',
+        status TEXT NOT NULL,
+        paused_reason TEXT,
+        resets_at TEXT,
+        ask TEXT,
+        asks INTEGER NOT NULL DEFAULT 0,
+        progress TEXT,
+        problem TEXT,
+        schedule_id TEXT,
+        started_at TEXT NOT NULL,
+        finished_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX runs_unfinished ON runs (status)
+        WHERE deleted_at IS NULL AND finished_at IS NULL;
+      CREATE INDEX runs_by_finished_at ON runs (finished_at)
+        WHERE deleted_at IS NULL AND finished_at IS NOT NULL;
+
+      -- The journal: one row per step of a Task, written as started before the step runs and as
+      -- completed after, each with the database synced to disk (synchronous=FULL). key names the
+      -- step within its Task, the same on every attempt. effect: what the step changes outside
+      -- this database (a file it writes, a Connector's Tool it calls), as JSON, so that after a
+      -- crash its outcome is checked before anything is done again; NULL for none. status:
+      -- 'started' | 'completed' | 'failed' | 'skipped'; result: its kind's JSON. No foreign
+      -- keys: a later sync may bring a step before its Task.
+      CREATE TABLE run_steps (
+        id TEXT PRIMARY KEY NOT NULL,
+        run_id TEXT NOT NULL,
+        key TEXT NOT NULL,
+        effect TEXT,
+        status TEXT NOT NULL,
+        result TEXT,
+        attempts INTEGER NOT NULL DEFAULT 1,
+        started_at TEXT NOT NULL,
+        completed_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX run_steps_by_key ON run_steps (run_id, key) WHERE deleted_at IS NULL;
+
+      -- Tasks that start by themselves (#147): what to run (template: a kind and its input, as
+      -- JSON), when (trigger, JSON), the Mind it writes into, what it has seen so far (cursor),
+      -- and when it runs next. Nothing writes one yet.
+      CREATE TABLE schedules (
+        id TEXT PRIMARY KEY NOT NULL,
+        kind TEXT NOT NULL,
+        template TEXT NOT NULL DEFAULT '{}',
+        trigger TEXT NOT NULL DEFAULT '{}',
+        mind_id TEXT,
+        cursor TEXT,
+        paused_at TEXT,
+        next_run_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+
+      -- The Task a model request was made for, so a Task's cost can be told; NULL for the rest.
+      ALTER TABLE model_requests ADD COLUMN run_id TEXT;
+      CREATE INDEX model_requests_by_run ON model_requests (run_id)
+        WHERE run_id IS NOT NULL AND deleted_at IS NULL;
+    `,
+  },
+  {
+    // 82 is reserved by work in progress.
+    version: 83,
+    description: "The words inside Minds, Block by Block, for ⌘K (#116)",
+    sql: `
+      -- Each top-level Block of each Mind as plain text (src/core/mindIndex.ts): its id, its node
+      -- type ('paragraph', 'heading', 'answer'…), its place among the Mind's Blocks from 0, and
+      -- its text, each paragraph, list item or cell on a line. The core derives the rows from the
+      -- Mind's content as it changes, so a computer that syncs a Mind derives its own. A Block
+      -- taken out of its Mind is marked deleted, its text dropped; the same row comes back with
+      -- the Block. No foreign key: a later sync may bring a Mind's content before its row.
+      CREATE TABLE mind_blocks (
+        seq INTEGER PRIMARY KEY, -- local key for the keyword index only
+        id TEXT NOT NULL UNIQUE,
+        mind_id TEXT NOT NULL,
+        block_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        text TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX mind_blocks_by_block ON mind_blocks (mind_id, block_id);
+
+      -- Keyword index, as for Passages (migration 10): each Block's words, segmented by the
+      -- core; rowid is the row's seq. Only the index is stored.
+      CREATE VIRTUAL TABLE mind_blocks_fts USING fts5 (
+        text,
+        content = '',
+        contentless_delete = 1,
+        tokenize = 'unicode61 remove_diacritics 2'
+      );
+      CREATE TRIGGER mind_blocks_fts_soft_delete AFTER UPDATE OF deleted_at ON mind_blocks
+      WHEN old.deleted_at IS NULL AND new.deleted_at IS NOT NULL BEGIN
+        DELETE FROM mind_blocks_fts WHERE rowid = old.seq;
+      END;
+      CREATE TRIGGER mind_blocks_fts_delete AFTER DELETE ON mind_blocks
+      WHEN old.deleted_at IS NULL BEGIN
+        DELETE FROM mind_blocks_fts WHERE rowid = old.seq;
+      END;
+
+      -- When the core last read each Mind's Blocks into mind_blocks (updated_at). A Mind whose
+      -- content was stored after that, as when the app quit before reading it, or that was never
+      -- read, such as every Mind written before this migration, is read at the next start.
+      CREATE TABLE mind_block_reads (
+        id TEXT PRIMARY KEY NOT NULL,
+        mind_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX mind_block_reads_by_mind ON mind_block_reads (mind_id)
+        WHERE deleted_at IS NULL;
+    `,
+  },
 ];
 
 /**

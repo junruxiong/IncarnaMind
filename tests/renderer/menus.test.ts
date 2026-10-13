@@ -114,7 +114,7 @@ describe("the menus", () => {
     }
   });
 
-  test("a Mind's is Open, Open to the side, Outline, Export as… and Export options…, Make this a Skill, Move to, Rename, then Delete after a rule", () => {
+  test("a Mind's is Open, Open to the side, Outline, Export as… and Export options…, Make this a Skill, Move to and New Folder with this Mind, Rename, then Delete after a rule", () => {
     const here = {
       "mind.citationStyle": () => undefined,
       "mind.moveTo": () => undefined,
@@ -127,12 +127,14 @@ describe("the menus", () => {
       "mind.outline",
       "mind.export",
       "mind.exportAs.pdf",
+      "mind.exportAs.html",
       "mind.exportAs.markdown",
       "mind.exportOptions",
       "mind.citationStyle",
       "skill.fromMind",
       "—",
       "mind.moveTo",
+      "folder.newWith",
       "—",
       "mind.rename",
       "—",
@@ -146,9 +148,12 @@ describe("the menus", () => {
       "mind.outline",
       "mind.export",
       "mind.exportAs.pdf",
+      "mind.exportAs.html",
       "mind.exportAs.markdown",
       "mind.exportOptions",
       "skill.fromMind",
+      "—",
+      "folder.newWith",
       "—",
       "mind.delete",
     ]);

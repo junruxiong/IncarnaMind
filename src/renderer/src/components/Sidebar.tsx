@@ -1,9 +1,11 @@
 import type { ClipboardEvent, ReactNode } from "react";
 import { shortcutLabel } from "../commands/keymap";
 import { commands } from "../commands/registry";
+import { TableIcon } from "../editor/icons";
 import { useFindSources } from "../findSources";
 import { useT } from "../i18n";
 import { canRecordMeetings } from "../meetings";
+import { usePruneSelection } from "../selection";
 import { useAppStore } from "../store";
 import { linksIn, useWebPages } from "../webPages";
 import { CopiedLine } from "./CopiedLine";
@@ -20,6 +22,7 @@ import {
   RecordingLineIcon,
   SettingsLineIcon,
 } from "./lineIcons";
+import { SidebarSelection } from "./SidebarSelection";
 import { SidebarStatus } from "./SidebarStatus";
 import { SidebarToggle } from "./SidebarToggle";
 import { rowButtonClass, rowClass, rowIconClass } from "./sidebarRows";
@@ -38,6 +41,7 @@ import { usePopoverMenu } from "./usePopoverMenu";
  */
 export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettings(): void }) {
   const t = useT();
+  usePruneSelection();
 
   return (
     <aside
@@ -67,8 +71,10 @@ export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettin
       <CopiedLine />
       <footer
         data-testid="sidebar-footer"
-        className="flex shrink-0 flex-col border-t border-rule p-2"
+        // Its rule is inset 8px each side, like the header's.
+        className="relative flex shrink-0 flex-col p-2 before:absolute before:inset-x-2 before:top-0 before:h-px before:bg-rule before:content-['']"
       >
+        <SidebarSelection />
         <SidebarStatus />
         <div className={rowClass(false)}>
           <button type="button" onClick={onOpenSettings} className={rowButtonClass}>
@@ -90,8 +96,9 @@ export function SidebarHeader({ children }: { children?: ReactNode }) {
   return (
     <header
       data-testid="sidebar-header"
-      // Its rule is inset 8px each side, like the rows: it never meets the sidebar's edge.
-      className="title-bar sidebar-header relative flex h-11 shrink-0 items-center pr-2 after:absolute after:inset-x-2 after:bottom-0 after:h-px after:bg-rule after:content-['']"
+      // Its rule is inset 8px each side, like the rows: it never meets the sidebar's edge. The
+      // 8px on top put its buttons on the card's band, y 8 to 44, so every header shares a line.
+      className="title-bar sidebar-header relative flex h-11 shrink-0 items-center pt-2 pr-2 after:absolute after:inset-x-2 after:bottom-0 after:h-px after:bg-rule after:content-['']"
     >
       <AppMark />
       <SidebarToggle place="header" />
@@ -128,8 +135,9 @@ function pasteLinks(event: ClipboardEvent<HTMLElement>) {
 }
 
 /**
- * The one "+" menu, the one place to add: New Mind, Record a meeting (once
- * Meetings are turned on), New Folder…, Add Documents…, Add a web page…,
+ * The one "+" menu, the one place to add: New Mind, Import a Word file…,
+ * Record a meeting (once Meetings are turned on), Compare Documents…, New Folder,
+ * Add Documents…, Add a web page…,
  * Find sources… and Link a folder…. Opened by keyboard or mouse, its items
  * are menu items reached with the arrow keys.
  */
@@ -179,6 +187,16 @@ function PlusMenu() {
           <span className="flex-1">{t("sidebar.newMind")}</span>
           <span className="pl-4 text-[13px] text-ink-meta">{shortcutLabel("tab.new")}</span>
         </button>
+        <button
+          type="button"
+          role="menuitem"
+          data-testid="plus-import-word"
+          onClick={choose(() => void commands.run("word.import").catch(reportError))}
+          className={`${menuItemClass} pl-2`}
+        >
+          <DocumentLineIcon kind="docx" className="size-4 shrink-0 text-ink-meta" />
+          <span className="flex-1">{t("wordImport.command")}</span>
+        </button>
         {meetingsOn && (
           <button
             type="button"
@@ -194,12 +212,23 @@ function PlusMenu() {
         <button
           type="button"
           role="menuitem"
+          data-testid="plus-compare-documents"
+          onClick={choose(() => void commands.run("comparison.start").catch(reportError))}
+          className={`${menuItemClass} pl-2`}
+        >
+          <TableIcon className="size-4 shrink-0 text-ink-meta" />
+          <span className="flex-1">{t("command.compareDocuments")}</span>
+        </button>
+        <button
+          type="button"
+          role="menuitem"
           data-testid="plus-new-folder"
-          onClick={choose(() => useAppStore.getState().openLibrary("new"))}
+          onClick={choose(() => void commands.run("folder.new").catch(reportError))}
           className={`${menuItemClass} pl-2`}
         >
           <FolderLineIcon className="size-4 shrink-0 text-ink-meta" />
-          <span className="flex-1">{t("sidebar.plus.newFolder")}</span>
+          <span className="flex-1">{t("menu.newFolder")}</span>
+          <span className="pl-4 text-[13px] text-ink-meta">{shortcutLabel("folder.new")}</span>
         </button>
         <div className={menuRuleClass} />
         <button

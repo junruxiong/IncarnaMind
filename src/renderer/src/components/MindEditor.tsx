@@ -14,6 +14,7 @@ import { checkSentences } from "../checks";
 import { useCitationFormattingFor, useMindStyleChoice } from "../citationFormatting";
 import { noteHandle, readMindHandle } from "../commands/handles";
 import { shortcutLabel } from "../commands/keymap";
+import { startCompareDocuments, useComparisons } from "../comparisons";
 import { useComposer } from "../composer";
 import { core } from "../core";
 import { AnswerView } from "../editor/AnswerView";
@@ -25,11 +26,13 @@ import { ChartView } from "../editor/ChartView";
 import { CitationStylePrompt } from "../editor/CitationStylePrompt";
 import { CitationView } from "../editor/CitationView";
 import { CodeBlockView } from "../editor/CodeBlockView";
+import { ComparisonTableView } from "../editor/ComparisonTableView";
 import { Composer, type ComposerHandle } from "../editor/Composer";
 import { ConversationLinks } from "../editor/ConversationLinks";
 import { CitationClusters } from "../editor/citationClusters";
 import { CitationNumbers, redrawFootnotes, setCitationForm } from "../editor/citationNumbers";
 import { ClaimChecks, setClaimContext } from "../editor/claimChecks";
+import { comparisonCellView, comparisonRowView } from "../editor/comparisonViews";
 import { CopyCitations } from "../editor/copyCitations";
 import { DocumentChipView } from "../editor/DocumentChipView";
 import { DocumentChipKeys } from "../editor/documentChipKeys";
@@ -46,7 +49,12 @@ import { MarginChecks } from "../editor/MarginChecks";
 import { MathEditing, MathEditor } from "../editor/MathEditor";
 import { MindOutline } from "../editor/MindOutline";
 import { MeetingNotes } from "../editor/meetingNotes";
-import { ComposerDockContext, CountSlotContext, MindIdContext } from "../editor/mindContext";
+import {
+  CompareSheetSlotContext,
+  ComposerDockContext,
+  CountSlotContext,
+  MindIdContext,
+} from "../editor/mindContext";
 import { NoteHealth } from "../editor/NoteHealth";
 import { NoteKeymap } from "../editor/noteKeymap";
 import { noteExtensions } from "../editor/noteSchema";
@@ -57,14 +65,17 @@ import { askInEditor, QuestionCommands } from "../editor/questionCommands";
 import { QuestionFold } from "../editor/questionFold";
 import { ReferencesBlock } from "../editor/ReferencesBlock";
 import { ScopePicker } from "../editor/ScopePicker";
+import { SectionBreakDialog } from "../editor/SectionBreakDialog";
 import { type SelectionAction, SelectionMenu } from "../editor/SelectionMenu";
 import { SlashMenu } from "../editor/SlashMenu";
-import { noteSlashItems, skillSlashItems } from "../editor/slashItems";
+import { compareSlashItem, noteSlashItems, skillSlashItems } from "../editor/slashItems";
 import { Suggestions } from "../editor/suggestions";
 import { TableMenu } from "../editor/TableMenu";
 import { TableKeys } from "../editor/tableCommands";
 import { SmartTypography } from "../editor/typography";
+import { wordAtomView, wordBlockView } from "../editor/WordAtomView";
 import { WordCount } from "../editor/WordCount";
+import { useWordFile, WordOrigin } from "../editor/WordOrigin";
 import { requestEdit, startEditing, TRANSLATE_LANGUAGES } from "../editWithAi";
 import { translateNow, useT } from "../i18n";
 import { markSelectionAsMine } from "../markAsMine";
@@ -74,9 +85,11 @@ import { useMindTools } from "../mindTools";
 import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
 import { askForSuggestion, describeSuggestion } from "../suggestions";
+import { CompareSheet } from "./CompareSheet";
 import { StartGuide, useGettingStarted, useIsExample } from "./GettingStarted";
 import { CheckLineIcon, MineLineIcon, SearchLineIcon, SparkLineIcon } from "./lineIcons";
 import { MindNotice } from "./MindNotice";
+import { TaskTray } from "./TaskTray";
 
 /** Stands in for the hint's button in its translated words, which are split around it. */
 const ASK = "\uE000";
@@ -199,6 +212,29 @@ const chartView = ReactNodeViewRenderer(ChartView, {
 });
 
 /**
+ * A comparison table (#98): its title line, heading row and "+ Question" take
+ * their own pointer and keys, so the editor doesn't select or type over them;
+ * its cells are content the editor draws, never typed in.
+ */
+const comparisonViews = {
+  table: ReactNodeViewRenderer(ComparisonTableView, {
+    stopEvent: ({ event }) => {
+      const target = event.target;
+      if (!(target instanceof Element) || !target.closest("[data-comparison-ui]")) return false;
+      if (event.type.startsWith("drag") || event.type === "drop") return false;
+      const undo =
+        event instanceof KeyboardEvent &&
+        (event.metaKey || event.ctrlKey) &&
+        /^[zy]$/i.test(event.key) &&
+        !(target instanceof HTMLInputElement);
+      return !undo;
+    },
+  }),
+  row: comparisonRowView,
+  cell: comparisonCellView,
+};
+
+/**
  * Notes (see `noteExtensions`), Questions and Answers in the Mind's Yjs
  * document, with the slash menu, the "@" picker of a Question's Search scope,
  * the drag handle, the formatting menu, the table menu, smart typography, the LaTeX field,
@@ -224,6 +260,8 @@ function MindEditorView({
   const isExample = useIsExample(mindId);
   const dock = useContext(ComposerDockContext);
   const countSlot = useContext(CountSlotContext);
+  const sheetSlot = useContext(CompareSheetSlotContext);
+  const comparing = useComparisons((state) => state.sheets[mindId] !== undefined);
   const composer = useRef<ComposerHandle>(null);
   /**
    * Whether the Mind's cursor is where Add to note puts an Answer (#201): since
@@ -259,6 +297,10 @@ function MindEditorView({
       : t("editor.footnote.label", { number });
   /** The position of the formula whose LaTeX is being edited. */
   const [editingMath, setEditingMath] = useState<number | null>(null);
+  /** A change that would delete a Word file's section break, waiting for the User to say (#104). */
+  const [sectionBreakRetry, setSectionBreakRetry] = useState<(() => void) | null>(null);
+  /** A Mind still filling in from a Word file can't be edited until it has (#104). */
+  const importing = useWordFile(doc).progress !== null;
   /** The Mind's citation style, followed as it changes (#289). */
   const styleChoice = useMindStyleChoice(doc);
   const { style } = styleChoice;
@@ -279,7 +321,11 @@ function MindEditorView({
           citationView,
           footnoteView: footnoteView(() => footnoteLabel.current),
           documentChipView: ReactNodeViewRenderer(DocumentChipView, { as: "span" }),
+          comparisonViews,
           chartView,
+          wordAtomView,
+          wordBlockView,
+          onSectionBreakDelete: (retry) => setSectionBreakRetry(() => retry),
         }),
         // Footnotes are numbered as the Mind's citation style counts its Citations (#289).
         CitationNumbers.configure({ form: () => citationStyle(styleRef.current).form }),
@@ -323,7 +369,10 @@ function MindEditorView({
                 useComposer.getState().requestFocus();
               },
             );
-            return place === "question" ? skills : [...noteSlashItems, ...skills];
+            const compare = compareSlashItem(
+              (afterBlockId) => void startCompareDocuments(mindId, afterBlockId),
+            );
+            return place === "question" ? skills : [...noteSlashItems, compare, ...skills];
           },
         }),
         ScopePicker,
@@ -353,6 +402,10 @@ function MindEditorView({
     },
     [doc, readOnly],
   );
+
+  useEffect(() => {
+    if (!editor.isDestroyed) editor.setEditable(!readOnly && !importing);
+  }, [editor, readOnly, importing]);
 
   // A sentence's check needs a re-check once a Document it read changes, or the Mind moves (#96).
   const documents = useAppStore((state) =>
@@ -535,11 +588,15 @@ function MindEditorView({
     <MindIdContext.Provider value={mindId}>
       {countSlot &&
         createPortal(
-          <WordCount editor={editor} doc={doc}>
-            <NoteHealth editor={editor} mindId={mindId} />
-          </WordCount>,
+          <>
+            <WordOrigin doc={doc} />
+            <WordCount editor={editor} doc={doc}>
+              <NoteHealth editor={editor} mindId={mindId} />
+            </WordCount>
+          </>,
           countSlot,
         )}
+      <SectionBreakDialog retry={sectionBreakRetry} onClose={() => setSectionBreakRetry(null)} />
       {readOnly && <MindNotice kind="read-only" />}
       <div className={`mind-editor-frame ${guide ? "mind-editor-frame--guide" : ""}`}>
         {!readOnly && <ProposalBars editor={editor} mindId={mindId} />}
@@ -558,7 +615,17 @@ function MindEditorView({
       </div>
       {dock &&
         !readOnly &&
-        createPortal(<Composer ref={composer} editor={editor} doc={doc} mindId={mindId} />, dock)}
+        createPortal(
+          <>
+            <TaskTray mindId={mindId} />
+            <Composer ref={composer} editor={editor} doc={doc} mindId={mindId} />
+          </>,
+          dock,
+        )}
+      {sheetSlot &&
+        comparing &&
+        !readOnly &&
+        createPortal(<CompareSheet mindId={mindId} doc={doc} editor={editor} />, sheetSlot)}
       {guide && <StartGuide />}
       {!readOnly && <BlockHandle editor={editor} />}
       {!readOnly && <SelectionMenu editor={editor} ai={aiActions} />}

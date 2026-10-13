@@ -287,6 +287,7 @@ test("in Chinese: the offer puts GB/T 7714 first; chosen, raised numbers and 参
 
   // At the narrowest window the header wraps by word and nothing spills out of the column.
   await setWindowSize(app, window, 900, 660);
+  await expect(window.getByTestId("assistant")).toHaveAttribute("data-dock", "bottom");
   const column = await window.getByTestId("mind-pane").boundingBox();
   const head = await references.locator(".references-head").boundingBox();
   if (!column || !head) throw new Error("The References or the Mind aren't on screen.");
