@@ -280,6 +280,17 @@ export function loadManifest(root: string, source = MANIFEST): Manifest {
 }
 
 /** The other Documents of a Document's group: its other versions or translations. */
+/** A Document's key and the keys of its translations, either way round. */
+export function withTranslations(manifest: Pick<Manifest, "documents">, key: string): string[] {
+  const document = manifest.documents.find((each) => each.key === key);
+  return [
+    key,
+    ...manifest.documents
+      .filter((each) => each.translationOf === key || each.key === document?.translationOf)
+      .map((each) => each.key),
+  ];
+}
+
 export function siblingsOf(manifest: Pick<Manifest, "documents">, key: string): HardDocument[] {
   const document = manifest.documents.find((each) => each.key === key);
   if (!document?.group) return [];
