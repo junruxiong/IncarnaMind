@@ -1,7 +1,11 @@
 import { type KeyboardEvent, useContext, useEffect, useRef, useState } from "react";
 import type { Mind } from "../../../../core/api";
 import { files } from "../../core";
-import { ComposerDockContext, CountSlotContext } from "../../editor/mindContext";
+import {
+  CompareSheetSlotContext,
+  ComposerDockContext,
+  CountSlotContext,
+} from "../../editor/mindContext";
 import { useT } from "../../i18n";
 import { assistantTabOf } from "../../layoutSlice";
 import { useAppStore } from "../../store";
@@ -26,6 +30,7 @@ export function MindTab({ mindId }: { mindId: string }) {
   const mind = useAppStore((state) => state.minds.find((each) => each.id === mindId));
   const isExample = useIsExample(mindId);
   const [countSlot, setCountSlot] = useState<HTMLElement | null>(null);
+  const [sheetSlot, setSheetSlot] = useState<HTMLElement | null>(null);
   const assistantSlot = useContext(ComposerDockContext);
   const tabId = useTabPlace()?.tabId;
   const merged = useGroupsMerged();
@@ -47,13 +52,17 @@ export function MindTab({ mindId }: { mindId: string }) {
             {!isExample && <ChatReadinessNotice />}
             <ComposerDockContext.Provider value={read ? assistantSlot : null}>
               <CountSlotContext.Provider value={countSlot}>
-                <MindEditor mindId={mind.id} />
+                <CompareSheetSlotContext.Provider value={sheetSlot}>
+                  <MindEditor mindId={mind.id} />
+                </CompareSheetSlotContext.Provider>
               </CountSlotContext.Provider>
             </ComposerDockContext.Provider>
             <MakeSkillCard mindId={mind.id} />
           </div>
         </article>
       </div>
+      {/* The Compare Documents sheet docks here, in the column's measure, below the note. */}
+      <div ref={setSheetSlot} className="compare-sheet-dock" />
       <ExportResultLine mindId={mind.id} />
     </div>
   );

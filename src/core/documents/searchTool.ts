@@ -8,11 +8,11 @@
  * 2. Rerank, unless the User turned reranking off: with the built-in reranking
  *    model by default, or a Cohere or Voyage key (see ../providers/rerank),
  *    which the retrieval evaluation gates on (#31). With embeddings off, the
- *    reranker sees keyword search's top 60. With them on, it sees keyword
+ *    reranker sees keyword search's top 20. With them on, it sees keyword
  *    search's top 10 and vector search's top 10, each Passage once, instead
  *    of the fused list: fusion can push a hit that only one of them found
  *    below others that both found middlingly (#31: en-03, en-12, en-14 and
- *    zh-03); until vector search finds anything, keyword search's top 60
+ *    zh-03); until vector search finds anything, keyword search's top 20
  *    again. Those are then all the hits.
  * 3. Group the hits by Document.
  * 4. The old backend's sliding-window clustering (its `find_overlaps`), ported:
@@ -62,20 +62,30 @@ export interface SearchToolParameters {
 
 /**
  * 8 Passages of about 500 tokens is about 4,000 tokens a search, so a few
- * searches fit an Answer's context. The reranker's candidates are the
- * evaluation's (#31): with embeddings off, keyword search's top 60 found as
- * many Questions as keyword and vector search's top 10 each with them on,
- * where its top 20 found two fewer, for about 1.6 s a search with the
- * built-in reranking model against 0.8 s (ADR-0009, 2026-10-10). The other
- * counts are untuned starting values.
+ * searches fit an Answer's context. The reranker sees keyword search's top
+ * 20 with embeddings off: against its top 60 it hands the model nearly as
+ * many Questions' Passages for half the built-in reranking model's time,
+ * about 0.8 s a search against 1.6 s (ADR-0009, 2026-10-12). The other counts
+ * are untuned starting values.
  */
 export const SEARCH_TOOL_PARAMETERS: SearchToolParameters = {
   candidates: 30,
   rerankPerList: 10,
-  keywordRerankCandidates: 60,
+  keywordRerankCandidates: 20,
   maxDocuments: 4,
   maxWindowsPerDocument: 2,
   maxPassages: 8,
+};
+
+/**
+ * What an Answer from a model that searches once is handed: 12 Passages find
+ * many more than 8, mostly for Questions whose answer is in two places. A
+ * model in the Tool loop keeps 8: it can search again, and with 12 Claude
+ * Haiku 5.5 stopped citing on a Question it cited with 8 (ADR-0009, 2026-10-12).
+ */
+export const ONE_SEARCH_PARAMETERS: Partial<SearchToolParameters> = {
+  maxWindowsPerDocument: 3,
+  maxPassages: 12,
 };
 
 /** A hit from hybrid search, with its fused score (higher is better). */

@@ -60,7 +60,7 @@ export async function tunedSearch(
   const startedAt = performance.now();
   const passages = await search({
     ...options,
-    parameters: { ...parameters, ...options.parameters },
+    parameters: { ...options.parameters, ...parameters },
     rerank: timed,
   });
   observe?.({ query, startedAt, endedAt: performance.now(), rerankMs, passages });
