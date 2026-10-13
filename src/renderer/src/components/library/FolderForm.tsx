@@ -5,6 +5,7 @@ import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
+import { TypingTextarea } from "../TypingTextarea";
 import { buttonStyle, errorTextClass, fieldLabelClass, inputClass } from "../ui";
 
 /** Runs a change to the Library, then reads it again; says what went wrong, in place. */
@@ -82,7 +83,7 @@ export function FolderForm({
       </label>
       <label className={`${fieldLabelClass} mt-3`}>
         {t("library.description")}
-        <textarea
+        <TypingTextarea
           rows={2}
           maxLength={500}
           value={description}
