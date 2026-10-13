@@ -23,6 +23,7 @@ import { basename, extname, join } from "node:path";
 import * as Y from "yjs";
 import { setTextOrigin } from "../shared/textOrigins";
 import {
+  layoutNotShown,
   recordWordImportProgress,
   setWordSource,
   startWordImport,
@@ -256,11 +257,18 @@ export function createWordImports(options: WordImportsOptions) {
           refusal: read.refusal,
           origin: "own",
           authors: [],
+          layoutNotShown: false,
           changes: 0,
           comments: 0,
         };
       }
-      return { fileName, refusal: null, origin: defaultOrigin(read.review), ...read.review };
+      return {
+        fileName,
+        refusal: null,
+        origin: defaultOrigin(read.review),
+        layoutNotShown: layoutNotShown(read.structure.report.layout),
+        ...read.review,
+      };
     },
 
     /** See `CoreApi.importWordFile`. */

@@ -3354,6 +3354,8 @@ export const zhCN = {
   "wordImport.others": "其中有 {names} 的修订或批注。",
   "wordImport.othersMore": "另外 {count} 人",
   "wordImport.keeps": "IncarnaMind 会保留这个文件的副本，导出时把你的修改写回其中。",
+  "wordImport.layoutNotShown":
+    "这份文件的版式（字体、颜色、底色和对齐）在 Mind 里不显示，会保留，导出 Word 时原样还原。",
   "wordImport.import": "导入",
   "wordImport.importing": "正在导入…",
   "wordImport.cancel": "取消",

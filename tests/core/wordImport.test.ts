@@ -10,6 +10,7 @@ import type { JSONContent } from "@tiptap/core";
 import { updateYFragment } from "@tiptap/y-tiptap";
 import { describe, expect, test } from "vitest";
 import * as Y from "yjs";
+import { WORD_DIR } from "../../eval/word/corpus";
 import {
   type Core,
   MIND_TEXT_ORIGINS_FIELD,
@@ -18,6 +19,7 @@ import {
 } from "../../src/core";
 import { WORD_PACKAGES_FOLDER } from "../../src/core/wordImports";
 import {
+  layoutNotShown,
   wordFileOf,
   wordFingerprint,
   wordImportProgressOf,
@@ -632,6 +634,7 @@ describe("whose document it is", () => {
       refusal: null,
       origin: "own",
       authors: [],
+      layoutNotShown: false,
       changes: 0,
       comments: 0,
     });
@@ -819,5 +822,41 @@ describe("the imported Mind lasts", () => {
     await core.deleteMind(two.mindId);
     await core.deletePermanently([{ kind: "mind", id: two.mindId }]);
     expect(await readdir(folder)).toEqual([]);
+  });
+});
+
+describe("a file whose look the Mind doesn't draw (#735)", () => {
+  const SYNTHETIC = join(WORD_DIR, "documents", "synthetic");
+  const RESUMES = ["en-resume-layout.docx", "zh-resume-layout.docx"];
+
+  test("a résumé laid out with tables that have no borders, shading, tab stops, colours and sizes says its layout is kept; a plain memo doesn't", async () => {
+    const core = startCore(await createTempDataFolder());
+    for (const file of RESUMES) {
+      expect((await core.checkWordFile(join(SYNTHETIC, file))).layoutNotShown, file).toBe(true);
+    }
+    for (const file of ["en-memo-plain.docx", "zh-memo-notice.docx"]) {
+      expect((await core.checkWordFile(join(SYNTHETIC, file))).layoutNotShown, file).toBe(false);
+    }
+  });
+
+  test("none of the corpus's memos, contracts, reports and policies says so", async () => {
+    const core = startCore(await createTempDataFolder());
+    const plain = (await readdir(SYNTHETIC)).filter(
+      (file) => file.endsWith(".docx") && !RESUMES.includes(file),
+    );
+    expect(plain.length).toBeGreaterThanOrEqual(18);
+    for (const file of plain) {
+      expect((await core.checkWordFile(join(SYNTHETIC, file))).layoutNotShown, file).toBe(false);
+    }
+  });
+
+  test("the Mind keeps what its look holds, so the line under its title says the same", async () => {
+    const core = startCore(await createTempDataFolder());
+    const { client } = await importFile(core, join(SYNTHETIC, "zh-resume-layout.docx"));
+    const layout = wordReportOf(client.doc)?.layout;
+    expect(layout).toMatchObject({ layoutTables: 2, tabStops: 4, fonts: 1, sizes: 6 });
+    expect(layoutNotShown(layout)).toBe(true);
+    // A report made before #735 has no counts, and says nothing.
+    expect(layoutNotShown(undefined)).toBe(false);
   });
 });

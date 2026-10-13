@@ -16,6 +16,7 @@ import {
   type WordFileInfo,
   type WordImportProgress,
   type WordImportReport,
+  type WordLayout,
   type WordOrigin,
   type WordSource,
 } from "../core/api";
@@ -85,6 +86,25 @@ export function wordAtomText(atom: Pick<WordAtomAttributes, "kind" | "label" | "
   // A comment and a footnote are notes beside the text, not part of it.
   if (atom.kind === "comment" || atom.kind === "footnote" || atom.kind === "endnote") return "";
   return atom.text || atom.label;
+}
+
+/**
+ * Whether a Word file's look is mostly what a Mind doesn't draw (#735), so the
+ * import screen says it is kept: two kinds of it at least, one of them placing
+ * the text (shading, rules, tab stops, tables with no borders) rather than only
+ * colouring or sizing it. Each bar sits above what the Word corpus's memos,
+ * contracts and reports reach; its résumés and forms pass them.
+ */
+export function layoutNotShown(layout: WordLayout | undefined): boolean {
+  if (!layout) return false;
+  const placing = [
+    layout.shading >= 10,
+    layout.borders >= 2,
+    layout.tabStops >= 4,
+    layout.layoutTables >= 1,
+  ].filter(Boolean).length;
+  const type = [layout.colours >= 2, layout.sizes >= 4].filter(Boolean).length;
+  return placing >= 1 && placing + type >= 2;
 }
 
 const wordMap = (doc: Y.Doc) => doc.getMap<unknown>(MIND_WORD_FIELD);
