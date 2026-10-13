@@ -1,3 +1,4 @@
+import { markdownToBlocks } from "../../core/answers/markdown";
 import type {
   AnswerPhase,
   AnswerToolCall,
@@ -6,6 +7,7 @@ import type {
   MarkedCitation,
   MindRead,
 } from "../../core/api";
+import { withCitations } from "../../shared/blockJson";
 
 /**
  * An Answer's steps in the assistant (#391), from what its row keeps: its
@@ -98,14 +100,20 @@ const field = (call: AnswerToolCall, name: string): string => {
   return typeof value === "string" ? value : "";
 };
 
-/** The Citation markers in an Answer's text, each once, in order. */
+/** The Citation markers an Answer's text shows, in order, one for each place: a marker used twice is two. */
 export function markersIn(text: string): number[] {
   const markers: number[] = [];
-  for (const match of text.matchAll(/\[\^(\d{1,4})\]/g)) {
-    const marker = Number(match[1]);
-    if (!markers.includes(marker)) markers.push(marker);
-  }
+  withCitations(markdownToBlocks(text), (marker) => {
+    markers.push(marker);
+    return null;
+  });
   return markers;
+}
+
+/** The Citations an Answer shows, one for each marker in its text that has one. */
+function shownCitations({ text, citations }: Pick<StepsInput["answer"], "text" | "citations">) {
+  const cited = new Map(citations.map((citation) => [citation.marker, citation]));
+  return markersIn(text).flatMap((marker) => cited.get(marker) ?? []);
 }
 
 /** The first row: the model's reasoning, or the model that answered and how long it took. */
@@ -219,11 +227,12 @@ export function stepRows(input: StepsInput): StepRow[] {
   for (const [search, passages] of used) search.used = passages.size;
 
   if (calculated > 0) rows.push({ kind: "calculated", count: calculated });
-  if (answer.citations.length > 0) {
+  const shown = shownCitations(answer);
+  if (shown.length > 0) {
     rows.push({
       kind: "check",
-      count: answer.citations.length,
-      notFound: answer.citations.filter((citation) => citation.check === "not-found").length,
+      count: shown.length,
+      notFound: shown.filter((citation) => citation.check === "not-found").length,
     });
   }
   return rows;
@@ -288,7 +297,9 @@ export function liveStep({
   if (waitingForApproval) return { kind: "waiting" };
   if (phase === "waiting-for-consent") return { kind: "consent" };
   if (phase === "loading") return { kind: "loading" };
-  if (phase === "checking-quotes") return { kind: "checking", count: answer.citations.length };
+  if (phase === "checking-quotes") {
+    return { kind: "checking", count: shownCitations(answer).length };
+  }
   if (phase === "checking-figures") return { kind: "checking-figures" };
   const running = answer.toolCalls.filter(
     (call) => call.status === "running" && !isCalculated(call),

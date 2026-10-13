@@ -6,11 +6,18 @@ import {
   type StepsInput,
   stepRows,
 } from "../../src/renderer/src/answerSteps";
+import { checkedWords, checkingWords } from "../../src/renderer/src/answerStepWords";
+import { translate } from "../../src/shared/i18n";
 
 /*
  * An Answer's steps (#391): the folded line, the timeline's rows and the live
  * step, from what an Answer in a conversation keeps, the Mind it read (#544) too.
  */
+
+const en = (key: Parameters<typeof translate>[1], params?: Parameters<typeof translate>[2]) =>
+  translate("en", key, params);
+const zh = (key: Parameters<typeof translate>[1], params?: Parameters<typeof translate>[2]) =>
+  translate("zh-CN", key, params);
 
 const MIND: AskedFrom = { mindId: "m1", name: "Lit review", deleted: false };
 const READ: MindRead = { ...MIND, version: "v1", partial: false };
@@ -140,7 +147,11 @@ describe("an Answer's steps", () => {
       webPage: { address: "https://news.example/parks", documentId: "d9", name: "Parks" },
     };
     const steps = input(
-      { toolCalls: [searched, read], citations: [citation(1, "p", "d9", 1)] },
+      {
+        text: "Parks cool the street [^1].",
+        toolCalls: [searched, read],
+        citations: [citation(1, "p", "d9", 1)],
+      },
       { askedFrom: MIND },
     );
     expect(stepRows(steps).map((row) => (row.kind === "call" ? row.call.id : row.kind))).toEqual([
@@ -309,6 +320,7 @@ describe("an Answer's steps", () => {
     const rows = stepRows(
       input(
         {
+          text: "Parks cool the street [^1]. Trees help most [^2].",
           steps: {
             sentAt: null,
             finishedAt: null,
@@ -336,6 +348,39 @@ describe("an Answer's steps", () => {
     expect(rows.at(-1)).toEqual({ kind: "check", count: 2, notFound: 1 });
   });
 
+  // protects=the check counts the Citations the Answer shows, one for each marker in its text, so a quote cited twice, by a marker used twice or by two markers, is said twice, in English and Chinese, and a Citation not found counts for each place it shows; fails_when=a marker used twice or a repeated quote counts once, or a marker in code counts; no_claim=how many quotes are looked up in the Documents, the core's.
+  test("the check says how many Citations the Answer shows, a repeated quote for each", () => {
+    const quoted = (marker: number, quote: string): MarkedCitation => ({
+      ...citation(marker, "a", "d1", 4),
+      quote,
+    });
+    const sameMarkerTwice = input({
+      text: "Spring tides follow the new moon [^1] and the full moon [^2]. They are the highest [^1].",
+      citations: [quoted(1, "Spring tides"), quoted(2, "Full moon")],
+    });
+    const twoMarkersOneQuote = input({
+      text: "Spring tides follow the new moon [^1] and the full moon [^2]. They are the highest [^3].",
+      citations: [quoted(1, "Spring tides"), quoted(2, "Full moon"), quoted(3, "Spring tides")],
+    });
+    for (const steps of [sameMarkerTwice, twoMarkersOneQuote]) {
+      const check = stepRows(steps).at(-1);
+      expect(check).toEqual({ kind: "check", count: 3, notFound: 0 });
+      expect(check?.kind === "check" && checkedWords(en, check.count)).toBe(
+        "Checked 3 Citations against their sources",
+      );
+      expect(check?.kind === "check" && checkedWords(zh, check.count)).toBe(
+        "把 3 处引用和原文逐一核对",
+      );
+    }
+    const lost = input({
+      text: "Spring tides [^1]. Highest at new moon [^2], and at the full moon [^1]. `[^2]`",
+      citations: [{ ...quoted(1, "Spring tides"), check: "not-found" }, quoted(2, "Full moon")],
+    });
+    expect(stepRows(lost).at(-1)).toEqual({ kind: "check", count: 3, notFound: 2 });
+    expect(checkedWords(en, 1)).toBe("Checked 1 Citation against its source");
+    expect(checkedWords(zh, 1)).toBe("把 1 处引用和原文核对");
+  });
+
   test("the figures it calculated, after the searches and before the check, with no call row", () => {
     const calculated: AnswerToolCall = {
       id: "calculated-figures",
@@ -347,6 +392,7 @@ describe("an Answer's steps", () => {
     };
     const rows = stepRows(
       input({
+        text: "Parks cool the street [^1].",
         toolCalls: [search("s1", "heat", { passages: ["a"] }), calculated, connectorCall],
         citations: [citation(1, "a", "d1", 4)],
       }),
@@ -373,6 +419,7 @@ describe("an Answer's steps", () => {
     const beside = stepRows(
       input(
         {
+          text: "Parks cool the street [^1].",
           read: READ,
           toolCalls: [search("s1", "heat", { passages: ["a"] }), web, page, calculated],
           citations: [citation(1, "a", "d1", 4)],
@@ -430,6 +477,23 @@ describe("the live step", () => {
     ).toEqual({ kind: "checking", count: 1 });
     expect(live({}, { phase: "checking-quotes" })).toEqual({ kind: "checking", count: 0 });
     expect(live({}, { phase: "searching", waitingForApproval: true })).toEqual({ kind: "waiting" });
+  });
+
+  // protects=the live line counts the Citations the Answer shows, a marker used twice for each place, while it is written and while the quotes are checked; fails_when=a repeated marker counts once; no_claim=none beyond protects.
+  test("checking says how many Citations the Answer shows, in English and Chinese", () => {
+    const answer = {
+      text: "Spring tides follow the new moon [^1] and the full moon [^2]. They are the highest [^1].",
+      citations: [citation(1, "a", "d1", 4), citation(2, "a", "d1", 5)],
+    };
+    expect(live(answer)).toEqual({ kind: "checking", count: 3 });
+    expect(live(answer, { phase: "checking-quotes" })).toEqual({ kind: "checking", count: 3 });
+    expect(checkingWords(en, 3)).toBe("Checking 3 Citations…");
+    expect(checkingWords(zh, 3)).toBe("正在核对 3 处引用…");
+    expect(checkingWords(en, 1)).toBe("Checking 1 Citation…");
+    expect(checkingWords(zh, 1)).toBe("正在核对 1 处引用…");
+    expect(live({ ...answer, citations: [citation(1, "a", "d1", 4)] })).toEqual({
+      kind: "writing",
+    });
   });
 
   test("figures being recorded are no running call; their retry is checking figures", () => {
