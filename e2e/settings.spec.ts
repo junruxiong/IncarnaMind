@@ -1,10 +1,11 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import { createFakeOpenAI, signInAt } from "../tests/helpers/fakeOpenAI";
 import {
   acceptPlainTextKeys,
+  addDocuments,
   createDataFolder,
   dismissChatSetup,
   interceptOpenExternal,
@@ -124,12 +125,26 @@ test("the list of pages works by keyboard, with a focus ring", async () => {
   }
 });
 
-test("the Library's Organization button opens Models, where Organization is", async () => {
+test("Organize in the Library, with no model chosen yet, opens Models, where Organization is", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
     await dismissChatSetup(window);
+    const sources = await createDataFolder();
+    try {
+      const path = join(sources, "Harbour notes.txt");
+      await writeFile(path, "Notes on the harbour.\n");
+      await addDocuments(window, [path]);
+    } finally {
+      await removeDataFolder(sources);
+    }
+    await window.evaluate(() =>
+      (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.createLibraryGroup({
+        name: "Harbour",
+        description: "",
+      }),
+    );
     await window.getByTestId("open-library").click();
-    await window.getByTestId("library").getByRole("button", { name: "Organization" }).click();
+    await window.getByTestId("library").getByTestId("library-organize").click();
     const settings = window.getByTestId("settings");
     await expect(settings).toHaveAttribute("data-page", "models");
     await expect(settings.getByTestId("organization-settings")).toBeVisible();

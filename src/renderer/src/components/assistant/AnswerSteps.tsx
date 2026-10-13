@@ -232,6 +232,9 @@ function mindStepText(t: Translate, step: MindStep, name = mindLabel(t, step.min
   return t(step.mind.partial ? "steps.read.part" : "steps.read", { mind: name });
 }
 
+/** A share read as a whole percent, at least 1 and at most 99: "about 40%" is part, never none or all. */
+const percentOf = (share: number) => Math.min(99, Math.max(1, Math.round(share * 100)));
+
 function sourcesText(t: Translate, count: number): string {
   if (count === 0) return t("steps.sources.none");
   return count === 1 ? t("steps.sources.one") : t("steps.sources", { count });
@@ -412,6 +415,11 @@ function StepItem({
             >
               {label}
             </button>
+          )}
+          {row.kind === "read" && row.share !== null && (
+            <p data-testid="answer-step-read-share" className="answer-step-detail">
+              {t("steps.read.share", { percent: percentOf(row.share) })}
+            </p>
           )}
         </Step>
       );
