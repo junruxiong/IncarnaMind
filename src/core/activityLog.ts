@@ -9,7 +9,14 @@
  * them, or a key.
  */
 import type { Logger } from "./adapters";
-import type { Connector, CoreEventListener, CoreEventName, Document, Unsubscribe } from "./api";
+import type {
+  Connector,
+  CoreEventListener,
+  CoreEventName,
+  Document,
+  Task,
+  Unsubscribe,
+} from "./api";
 
 /** Logs nothing: the core's log when the host gives none. */
 export const silentLogger: Logger = {
@@ -38,6 +45,7 @@ export function logActivity(events: EventSource, log: Logger): ActivityLog {
   const tagging = new Map<string, string>();
   const connectors = new Map<string, string>();
   const signIns = new Map<string, string>();
+  const tasks = new Map<string, string>();
   let embeddingError: string | null = null;
   let modelState: string | null = null;
 
@@ -104,8 +112,26 @@ export function logActivity(events: EventSource, log: Logger): ActivityLog {
     }
   };
 
+  // A Task's state as it changes (#126): ids, kinds and statuses, never what it works on.
+  const onTask = (task: Task) => {
+    const state = `${task.status}:${task.pausedReason ?? ""}:${task.ask?.kind ?? ""}`;
+    if (!changed(tasks, task.id, state)) return;
+    const fields = {
+      taskId: task.id,
+      kind: task.kind,
+      status: task.status,
+      reason: task.pausedReason ?? undefined,
+      ask: task.ask?.kind,
+      problem: task.problem ?? undefined,
+    };
+    if (task.status === "failed") log.warn("task.failed", fields);
+    else log.info("task.status", fields);
+    if (task.finishedAt) tasks.delete(task.id);
+  };
+
   const stops = [
     events.on("document.status", onDocument),
+    events.on("task.changed", onTask),
     events.on("documents.tagged", onTagged),
     events.on("connectors.changed", onConnectors),
     events.on("answer.failed", ({ answerId, error }) =>
