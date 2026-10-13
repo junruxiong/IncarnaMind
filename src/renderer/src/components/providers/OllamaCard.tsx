@@ -13,6 +13,7 @@ import { useKeepLocal } from "./KeepLocalChoice";
  * default chat model.
  */
 export function useOllama(onSaved: (provider: ChatProvider) => void, undoPlace?: string) {
+  const t = useT();
   const [status, setStatus] = useState<OllamaStatus | null>(null);
   const [pulling, setPulling] = useState(false);
   const [progress, setProgress] = useState<OllamaPullProgress | null>(null);
@@ -47,7 +48,7 @@ export function useOllama(onSaved: (provider: ChatProvider) => void, undoPlace?:
       await localModeChosen(wasOn, undoPlace);
       onSaved(provider);
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     } finally {
       setPulling(false);
     }
