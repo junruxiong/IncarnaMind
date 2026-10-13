@@ -12,6 +12,7 @@ What IncarnaMind sends from your computer, and how to change it. **Settings → 
 - **Crash reports**: off unless you turn them on, and stripped of your content first.
 - **Usage data**: only if you agree, described below.
 - **The AI use record** stays on this computer and is never sent, whatever you choose about usage data. It notes each time the AI wrote into a Mind and what you did with it, as sizes, kinds, the model's name and times, with no text. Clear it in Settings → Privacy.
+- **A Word file you import as a Mind** is read on this computer and sends nothing. A copy of it is kept in your data folder ("Word imports"), so export can write your changes back into it after the file has moved; it is deleted once no Mind made from it is left, Recently deleted included.
 - **The cost record** stays on this computer and is never sent. For each request to a cloud model it notes the model, the tokens its provider reported and what that cost at its price, with no text, for this month's figure and the monthly cap in Settings → General.
 
 ## Usage data
@@ -53,7 +54,7 @@ Every field is a value from a closed list, a whole number, or true/false: there'
 | `documents_added` | `documents`: how many new Documents; `already_added`: files that were in already; `skipped`: files that couldn't be added; `pdf`, `docx`, `pptx`, `xlsx`, `csv`, `markdown`, `text`, `web`, `transcript`: the new Documents by format (`web`: web pages saved by their address; `transcript`: WebVTT Transcripts, a Meeting's or a file's). Never their names or addresses |
 | `folder_linked` | No fields: you linked a folder. Never its name or path |
 | `organize_run` | `documents`: how many Documents; `all`: whether it was all of them; `model`: the kind of model, `chat`, `jev`, `auto` or `ollama` |
-| `mind_exported` | `format`: `markdown`, `docx` or `pdf`; `questions`: whether Questions were included |
+| `mind_exported` | `format`: `markdown`, `docx`, `pdf` or `html`; `questions`: whether Questions were included |
 | `connector_used` | `remote`: whether the Connector is remote. Sent once per Connector and Answer. Never its name: every Connector is one you added |
 | `skill_used` | `skill`: a built-in Skill's name (`literature-review`, `mind-to-report`, `summarise-document`), or `own` for one you added, whatever its name; `forced`: whether the Question asked for it. Sent once per Skill and Answer |
 | `error_occurred` | `area`: `answer`, `document` or `connector`; `kind`: the kind of error, such as `rate-limit`, `password-protected` or `timed-out`. Never its message |
