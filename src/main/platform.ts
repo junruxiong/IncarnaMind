@@ -35,6 +35,7 @@ import { createUtilityProcessTextRecognizer } from "./scanReader";
 import { createFileKeychain, SECRETS_FILE, type SecretCipher } from "./secretsFile";
 import { createUtilityProcessTranscriber } from "./transcriber";
 import { createPostHogSender } from "./usageData";
+import { systemUserName } from "./userName";
 
 /**
  * `safeStorage` encrypts with a key held by the OS secret store: the macOS
@@ -462,6 +463,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     },
     systemLanguages: () => app.getPreferredSystemLanguages(),
     systemRegion: () => app.getLocaleCountryCode(),
+    systemUserName: () => systemUserName(log),
     keychain: createSafeStorageKeychain(dataDir),
     browser: systemBrowser,
     shell: fileShell,

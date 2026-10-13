@@ -37,7 +37,7 @@ const SENTENCES_LEFT: Record<string, number> = {
   "conversations/index.ts": 11,
   "core.ts": 17,
   "documents/evidence.ts": 2,
-  "documents/index.ts": 20,
+  "documents/index.ts": 19,
   "documents/library.ts": 7,
   "documents/retention.ts": 8,
   "documents/web/index.ts": 5,

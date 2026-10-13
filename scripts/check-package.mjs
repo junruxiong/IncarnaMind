@@ -8,7 +8,7 @@
 // Usage: node scripts/check-package.mjs [dist-folder]   (default: dist)
 // Exit code 1 when a check fails.
 import { existsSync, readdirSync, statSync } from "node:fs";
-import { join, resolve, sep } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { listPackage } from "@electron/asar";
 
 const ALLOWED_TOP_LEVEL = new Set(["out", "node_modules", "package.json"]);
@@ -22,6 +22,8 @@ const MAX_INSTALLER_BYTES = 221_000_000;
 
 const distDir = resolve(process.argv[2] ?? "dist");
 const INSTALLER_EXT = /\.(dmg|zip|exe|AppImage)$/;
+/** An installer is at the top of dist/; win-unpacked/IncarnaMind.exe is the app itself. */
+const isInstaller = (file) => dirname(file) === distDir && INSTALLER_EXT.test(file);
 
 /** Every file under dir, except what is inside an app.asar.unpacked folder. */
 function walk(dir) {
@@ -103,7 +105,7 @@ for (const asar of asars) {
 	}
 }
 
-for (const file of files.filter((f) => INSTALLER_EXT.test(f))) {
+for (const file of files.filter(isInstaller)) {
 	const size = statSync(file).size;
 	console.log(`${file}: ${mb(size)}`);
 	if (size > MAX_INSTALLER_BYTES) {

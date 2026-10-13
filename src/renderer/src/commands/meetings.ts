@@ -4,10 +4,11 @@ import { markNow, noteOf } from "../editor/meetingNotes";
 import { translateNow } from "../i18n";
 import { currentMindIdOf } from "../layoutSlice";
 import { canRecordMeetings, isLive, useMeetings } from "../meetings";
+import { useRequests } from "../requests";
 import { useAppStore } from "../store";
 import { hideTranscript, showTranscript } from "../transcripts";
 import { transcriptHandle } from "./handles";
-import type { Command } from "./registry";
+import type { Command, CommandContext } from "./registry";
 
 /*
  * Recording a Meeting (#135), from the keyboard, the menus and ⌘K. ⌘⇧P is a
@@ -64,12 +65,32 @@ function placesOf(meeting: Meeting, documentId: string | null) {
   return { tab, mindGroup };
 }
 
-/** The Mind in view's Meeting, once it has started: the one whose recording details there are. */
-function startedMeetingInView(): Meeting | undefined {
-  const mindId = currentMindIdOf(useAppStore.getState().layout);
+/**
+ * The Mind in view's Meeting, once it has started: the one whose recording details there are.
+ * A command aimed at a Mind, as its own line's button is, takes that Mind's Meeting, which a
+ * second group beside it doesn't change.
+ */
+function startedMeetingInView(ctx?: CommandContext): Meeting | undefined {
+  const mindId =
+    ctx?.focus?.kind === "mind" ? ctx.focus.id : currentMindIdOf(useAppStore.getState().layout);
   const meeting = useMeetings.getState().meetings.find((each) => each.mindId === mindId);
   return meeting && meeting.status !== "ready" ? meeting : undefined;
 }
+
+const whereMeetings = (ctx?: CommandContext) =>
+  meetingsOn() || startedMeetingInView(ctx) !== undefined;
+
+const whileAudioKept = (ctx: CommandContext) => {
+  const meeting = startedMeetingInView(ctx);
+  if (!meeting) return { reason: "meetings.command.noMeetingInView" as const };
+  if (meeting.status === "recording") {
+    return { reason: "meetings.command.audioWhileRecording" as const };
+  }
+  if (meeting.audio.kept) return true;
+  return {
+    reason: meeting.audio.deletedAt ? "meetings.audio.deleted" : "meetings.audio.none",
+  } as const;
+};
 
 export const meetingCommands: readonly Command[] = [
   {
@@ -169,11 +190,24 @@ export const meetingCommands: readonly Command[] = [
     group: "main",
     // Pressed again, it undoes itself.
     reversible: true,
-    when: () => meetingsOn() || startedMeetingInView() !== undefined,
+    when: () => whereMeetings(),
     enabled: () => (startedMeetingInView() ? true : { reason: "meetings.health.none" }),
     run() {
       const meeting = startedMeetingInView();
       if (meeting) useMeetings.getState().showDetails(meeting.id);
+    },
+  },
+  {
+    id: "meeting.deleteAudio",
+    label: "meetings.command.deleteAudio",
+    group: "danger",
+    destructive: true,
+    reversible: { confirm: "meetings.audio.confirm" },
+    when: whereMeetings,
+    enabled: whileAudioKept,
+    run(ctx) {
+      const meeting = startedMeetingInView(ctx);
+      if (meeting) useRequests.getState().ask({ deleteAudio: { meetingId: meeting.id } });
     },
   },
 ];
