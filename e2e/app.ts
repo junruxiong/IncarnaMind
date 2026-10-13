@@ -1077,6 +1077,21 @@ async function wordsBox(line: Locator, words: string) {
 }
 
 /**
+ * Returns once ProseMirror has settled its selection with the page after the editor got the
+ * focus. 20 ms after the focus it puts its own selection back into the page if the page's has
+ * moved since, which undoes a key pressed in those 20 ms (⌘A, End). Called after the focus, a
+ * 21 ms timer runs after the one ProseMirror set then.
+ */
+export const afterEditorFocus = (window: Page) =>
+  window.evaluate(() => new Promise((done) => setTimeout(done, 21)));
+
+/** Gives the editor the focus, and waits as `afterEditorFocus` says. */
+export async function focusEditor(window: Page, editor: Locator): Promise<void> {
+  await editor.focus();
+  await afterEditorFocus(window);
+}
+
+/**
  * Selects `words` in a line of text as a person does with the mouse: slides to
  * the first letter, presses, slides along to the end of them and lets go. With
  * `to`, the drag goes on to the end of other words, in a line further down.
