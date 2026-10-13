@@ -706,7 +706,7 @@ describe("Local mode", { timeout: 30_000 }, () => {
     expect(off).toMatchObject({ localOnly: false, provider: { kind: "built-in" }, rebuild: null });
   });
 
-  test("choosing local models with one click turns it on, switching cloud embeddings back too", async () => {
+  test("choosing local models with the box ticked turns it on, switching cloud embeddings back too", async () => {
     const ollama = await startOllamaStub({ models: [RECOMMENDED_OLLAMA_MODEL] });
     const { core, dataDir } = await withOpenAi();
     const changed = new Promise<EmbeddingSettings>((resolve) => {
@@ -718,7 +718,7 @@ describe("Local mode", { timeout: 30_000 }, () => {
     });
     const finished = rebuildFinished(core);
 
-    await core.selectOllama({ baseUrl: ollama.baseUrl });
+    await core.selectOllama({ baseUrl: ollama.baseUrl, localOnly: true });
 
     expect(await changed).toMatchObject({ localOnly: true, provider: { kind: "built-in" } });
     await finished;
@@ -726,6 +726,24 @@ describe("Local mode", { timeout: 30_000 }, () => {
       BUILT_IN_ID,
       BUILT_IN_ID,
     ]);
+  });
+
+  test("choosing local models without the choice leaves Local mode and the cloud embeddings as they were", async () => {
+    const ollama = await startOllamaStub({ models: [RECOMMENDED_OLLAMA_MODEL] });
+    const { core } = await withOpenAi();
+
+    await core.selectOllama({ baseUrl: ollama.baseUrl });
+    expect(await core.getEmbeddingSettings()).toMatchObject({
+      localOnly: false,
+      provider: { kind: "openai" },
+    });
+
+    await core.setLocalOnly(true);
+    await core.selectOllama({ baseUrl: ollama.baseUrl });
+    expect((await core.getEmbeddingSettings()).localOnly).toBe(true);
+
+    await core.selectOllama({ baseUrl: ollama.baseUrl, localOnly: false });
+    expect((await core.getEmbeddingSettings()).localOnly).toBe(false);
   });
 
   test("an embedding provider on this computer, such as Ollama, is kept", async () => {
