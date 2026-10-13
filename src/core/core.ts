@@ -19,6 +19,7 @@ import { agentSocketPath, createAgents } from "./agents";
 import { createAgentSetup, skillInstalled } from "./agents/setup";
 import { createAiUse } from "./aiUse";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
+import { createChecks } from "./answers/checks";
 import { recheckCitation, recheckKept } from "./answers/citations";
 import {
   addCitedUnits,
@@ -950,10 +951,12 @@ export function createCore(adapters: CoreAdapters): Core {
     ...(adapters.web && { fetch: adapters.web }),
   });
 
+  const answerEngine =
+    adapters.answerEngine ?? createAiSdkAnswerEngine({ runEngine: adapters.runEngine });
   const answers = createAnswers({
     content,
     events,
-    engine: adapters.answerEngine ?? createAiSdkAnswerEngine({ runEngine: adapters.runEngine }),
+    engine: answerEngine,
     requireMind: (mindId) => writableMind(mindId).id,
     mindExists,
     readableMindName: (mindId) => {
@@ -1180,6 +1183,31 @@ export function createCore(adapters: CoreAdapters): Core {
     now: () => adapters.now?.() ?? new Date(),
   });
 
+  // Find support and Check against Documents (#96): check Runs that can only search and cite.
+  const checks = createChecks({
+    content,
+    requireMind: (mindId) => {
+      writableMind(mindId);
+    },
+    mindFolder: (mindId) => minds.get(mindId).folderId,
+    defaultModel: () => settings.get().user.chatModel,
+    chat,
+    consent,
+    localOnly: () => embedding.localOnly(),
+    resolveScope,
+    evidence,
+    documents: {
+      searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
+      searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
+      citationSource: (passageId) => documents.citationSource(passageId),
+      pageTexts: (documentId, contentHash, from, to) =>
+        documents.pageTexts(documentId, contentHash, from, to),
+    },
+    engine: answerEngine,
+    retention,
+    now: () => adapters.now?.() ?? new Date(),
+  });
+
   // "Add to note" into a Mind that isn't open (#201), with its Citations checked where they land.
   const noteAdding = createNoteAdding({
     content,
@@ -1208,6 +1236,7 @@ export function createCore(adapters: CoreAdapters): Core {
     printer: adapters.printer ?? null,
     paper: () => paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages())),
     ...(adapters.pictures && { pictures: adapters.pictures }),
+    wordPackage: (mindId) => wordImports.packageOf(mindId),
     log: adapters.log ?? silentLogger,
     now,
   });
@@ -1924,6 +1953,7 @@ export function createCore(adapters: CoreAdapters): Core {
       const access = accessFor(mind.kind, content.contentVersion(mind.id));
       if (access === "read-only") return { mind, access, state: content.storedState(mind.id) };
       answers.settleOrphans(mind.id);
+      checks.settleStale(mind.id);
       return { mind, access, state: content.state(mind.id) };
     },
     applyMindUpdate: async (mindId, update) => {
@@ -2232,6 +2262,9 @@ export function createCore(adapters: CoreAdapters): Core {
     editWithAi: (input) => edits.editWithAi(input),
     regenerateProposal: (input) => edits.regenerateProposal(input),
     cancelEdit: async (requestId) => edits.cancel(requestId),
+    checkSentences: (input) => checks.checkSentences(input),
+    cancelCheck: async (requestId) => checks.cancel(requestId),
+    checkClaim: (input) => checks.checkClaim(input),
 
     getSecretStorage: async () => secrets.status(),
     acceptPlainTextSecretStorage: async () => secrets.acceptPlainText(),
@@ -2521,9 +2554,12 @@ export function createCore(adapters: CoreAdapters): Core {
       return exported;
     },
     saveMindExport: async (mindId, options) => {
-      const { fileName, data, ...counts } = await mindExports.export(mindId, options);
+      const { fileName, data, word, ...counts } = await mindExports.export(mindId, options);
+      // What a Word file can't keep is said before anything is saved (#105).
+      const accepted = new Set(Array.isArray(options?.accept) ? options.accept : []);
+      if (word?.notKept.some((loss) => !accepted.has(loss.key))) return { status: "review", word };
       const saved = await saveExport(fileName, data, () => recordExport(options));
-      return saved.status === "saved" ? { ...saved, ...counts } : saved;
+      return saved.status === "saved" ? { ...saved, ...counts, word } : saved;
     },
     saveSkillExport: async (skillId) => {
       const { fileName, data } = await skills.exportZip(skillId);
@@ -2646,6 +2682,7 @@ export function createCore(adapters: CoreAdapters): Core {
       void webSearch.close().catch((error: unknown) => console.error(error));
       suggestions.stop();
       edits.stopAll();
+      checks.stopAll();
       skillDrafts.stopAll();
       scriptRunner.close();
       approvals.close();

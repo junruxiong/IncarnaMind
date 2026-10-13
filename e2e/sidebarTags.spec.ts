@@ -351,7 +351,7 @@ test("the Tags tab lists every Tag with its colour and count, lists its Document
     await expect(openTag("Report")).toHaveAttribute("aria-pressed", "true");
     await expect(openTag("Paper")).toHaveAttribute("aria-pressed", "false");
     await window.keyboard.press("Enter");
-    await expect(tagFilter).toHaveText("Tags");
+    await expect(tagFilter).toHaveCount(0);
     await expect(library.getByTestId("library-document")).toHaveCount(4);
     await expect(openTag("Report")).toHaveAttribute("aria-pressed", "false");
     await window.keyboard.press("Enter");
@@ -375,7 +375,7 @@ test("the Tags tab lists every Tag with its colour and count, lists its Document
     await expect(library.getByTestId("library-document")).toHaveCount(1);
     await expect(library.getByTestId("library-document")).toContainText("March invoice");
     // The Library's Tags filter, too: each Tag after its dot, "Needs review" after the ring.
-    await slideAndClick(window, tagFilter);
+    await slideAndClick(window, tagFilter.getByTestId("library-filter-chip"));
     const libraryTagMenu = library.locator('[data-testid="library-filter-menu"][data-facet="tag"]');
     const reviewOption = libraryTagMenu.locator(
       '[data-testid="library-filter-option"][data-value="needs-review"]',
@@ -435,7 +435,7 @@ test("the Tags tab lists every Tag with its colour and count, lists its Document
     await openFilterMenu();
     await screenshot(window, "tag-filter-menu-zh");
     await window.keyboard.press("Escape");
-    await slideAndClick(window, tagFilter);
+    await slideAndClick(window, tagFilter.getByTestId("library-filter-chip"));
     await expect(reviewOption.getByTestId("review-ring")).toHaveCount(1);
     await screenshot(window, "library-filter-menu-zh");
     await window.keyboard.press("Escape");

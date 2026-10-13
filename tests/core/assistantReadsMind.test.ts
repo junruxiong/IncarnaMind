@@ -6,7 +6,7 @@ import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core"
 import { answerChats, GIB, messagesOf, QWEN35, setUpLocalModel } from "../helpers/localModels";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
 import { editMind, heading, note, writeMind } from "../helpers/minds";
-import { promptOf, scriptedModels, streamingModel } from "../helpers/models";
+import { promptOf, scriptedModel, scriptedModels, streamingModel } from "../helpers/models";
 import { startOllamaServer } from "../helpers/ollama";
 
 /**
@@ -47,6 +47,45 @@ const idOf = (block: { attrs?: Record<string, unknown> }) => String(block.attrs?
 /** About 500 tokens of a Note, numbered. */
 const longNote = (index: number) =>
   note(`Note ${String(index).padStart(2, "0")}: ${"lorem ipsum ".repeat(170)}`);
+
+/** A core whose chat model is `model` as Claude Haiku 5.5, a cloud model with a known window, allowed, and a Mind with a client. */
+async function setUpCloud(model: MockLanguageModelV4 = streamingModel("Noted.")) {
+  const core = startCore(await createTempDataFolder(), {
+    createChatModel: scriptedModels(model).createChatModel,
+  });
+  const saved = await core.saveChatProvider({
+    kind: "anthropic",
+    apiKey: "sk-test",
+    modelId: "claude-haiku-5-5",
+  });
+  if (saved.service) await core.allowDataFlow("chat", saved.service.id);
+  const mind = await core.createMind({ title: "Lit review: tides" });
+  const client = await connectToMind(core, mind.id);
+  return { core, model, mind, client };
+}
+
+/** What the model was sent in its first user message, in request `call`. */
+const firstSent = (model: MockLanguageModelV4, call = 0) =>
+  promptOf(model, call).find((message) => message.role === "user")?.text ?? "";
+
+/** The numbers of the long Notes a text holds. */
+const notesIn = (text: string) =>
+  [...text.matchAll(/Note (\d+):/g)].map((match) => Number(match[1]));
+
+/**
+ * A long Mind (#564): a heading, then `count` Notes of about 500 tokens each,
+ * the 12th about barnacles, far from the cursor near the end. Returns the
+ * cursor's Note.
+ */
+function writeLongMind(client: MindClient, count: number) {
+  const notes = Array.from({ length: count }, (_, index) =>
+    index === 11
+      ? note(`Note 12: Barnacles cling to the rocks at low tide. ${"lorem ipsum ".repeat(160)}`)
+      : longNote(index + 1),
+  );
+  writeMind(client, [heading(1, "Chapter one"), ...notes]);
+  return notes[count - 10] ?? note("");
+}
 
 describe("A Question asked beside a Mind reads it", { timeout: 30_000 }, () => {
   // protects=the Mind in focus is part of the Question context, before the Question in its message, as a Question in a Mind read its Blocks; fails_when=the model gets nothing of the Mind, or it isn't right before the Question; no_claim=how a model uses it, which the hand test covers.
@@ -226,6 +265,8 @@ describe("A Question asked beside a Mind reads it", { timeout: 30_000 }, () => {
     expect(sent).not.toContain("Note 15:");
     expect(sent.endsWith("Explain the selection")).toBe(true);
     expect(answer.read).toMatchObject({ mindId: mind.id, partial: true });
+    expect(answer.steps?.readShare).toBeGreaterThan(0);
+    expect(answer.steps?.readShare).toBeLessThan(0.5);
   });
 
   // protects=each Answer records the Mind it read and its version: the same text the same version, an edit a new one, and Regenerate reads the Mind as it is now, with the Question's selection; fails_when=the Mind or version is missing, doesn't change with the text, or Regenerate reads the old text or loses the selection; no_claim=how History or Regenerate show it, which is the renderer's.
@@ -283,6 +324,120 @@ describe("A Question asked beside a Mind reads it", { timeout: 30_000 }, () => {
     if (!without.asked) throw new Error("Not regenerated.");
     await answerEnded(core, first.id);
     expect(lastSent(model)).toBe("Why then?");
+  });
+});
+
+describe("The whole Mind while it fits, the parts that match the Question when it doesn't (#564)", {
+  timeout: 60_000,
+}, () => {
+  // protects=a Mind of up to 50k tokens goes to a cloud model whole, where the old 12k budget cut it; fails_when=it is cut, or recorded as read in part; no_claim=a model's own window, covered below.
+  test("a Mind under the limit is sent whole, and the Answer says it read all of it", async () => {
+    const { core, model, mind, client } = await setUpCloud();
+    // 60 Notes, about 30k tokens: over the old 12k budget, under 50k.
+    writeLongMind(client, 60);
+    await client.settled();
+
+    const answer = await ask(core, { text: "Summarise my notes", mindId: mind.id });
+
+    const sent = firstSent(model);
+    expect(notesIn(sent)).toEqual(Array.from({ length: 60 }, (_, index) => index + 1));
+    expect(sent).not.toContain("[…]");
+    expect(answer.read).toMatchObject({ mindId: mind.id, partial: false });
+    expect(answer.steps?.readShare).toBeUndefined();
+  });
+
+  // protects=over the limit, the selection, the headings and the Blocks around the cursor are kept, then the Blocks that match the Question before older unrelated ones, and the Answer records how much it read; fails_when=the matching Block is left out for newer ones, an older unrelated Block is kept instead, or the share is missing or wrong; no_claim=how the model uses it.
+  test("over the limit, the selection, headings and cursor are kept, matching Blocks come before older unrelated ones, and the share is recorded", async () => {
+    const { core, model, mind, client } = await setUpCloud();
+    // 160 Notes, about 80k tokens: over 50k.
+    const cursor = writeLongMind(client, 160);
+    await client.settled();
+
+    const answer = await ask(core, {
+      text: "What did I write about barnacles?",
+      mindId: mind.id,
+      focus: { selection: "Note 151: lorem", blockIds: [idOf(cursor)] },
+    });
+
+    const sent = firstSent(model);
+    expect(sent.length).toBeLessThanOrEqual(50_000 * 4 + 1_000);
+    expect(sent).toContain("# Chapter one");
+    expect(sent).toContain("Barnacles cling to the rocks at low tide.");
+    const kept = notesIn(sent);
+    expect(kept).toEqual(expect.arrayContaining([12, 150, 151, 152, 160]));
+    expect(kept).not.toContain(2);
+    expect(kept).not.toContain(40);
+    expect(
+      sent.endsWith(
+        "</mind>\n\n<selection>\nNote 151: lorem\n</selection>\n\nWhat did I write about barnacles?",
+      ),
+    ).toBe(true);
+    expect(answer.read).toMatchObject({ mindId: mind.id, partial: true });
+    expect(answer.steps?.readShare).toBeGreaterThan(0.55);
+    expect(answer.steps?.readShare).toBeLessThan(0.7);
+  });
+
+  // protects=with the scripted chat model, a Question about a section far from the cursor in a long Mind gets that section, so the Answer can use it; fails_when=the model isn't sent it and answers without it; no_claim=a real model's Answer, the hand test's.
+  test("a Question about a section far from the cursor gets that section", async () => {
+    const model = scriptedModel((call) => ({
+      text: JSON.stringify(call.options.prompt).includes("Barnacles cling to the rocks")
+        ? "You wrote that barnacles cling to the rocks at low tide."
+        : "Your notes don't mention barnacles.",
+    }));
+    const { core, mind, client } = await setUpCloud(model);
+    const cursor = writeLongMind(client, 160);
+    await client.settled();
+
+    const answer = await ask(core, {
+      text: "What did I write about barnacles?",
+      mindId: mind.id,
+      focus: { selection: "", blockIds: [idOf(cursor)] },
+    });
+
+    expect(answer.text).toBe("You wrote that barnacles cling to the rocks at low tide.");
+  });
+
+  // protects=a follow-up in the same conversation keeps the part of a long Mind its first Question found, so the model still has it and the prompt cache sees the same start; fails_when=the follow-up, with none of its own words in the Mind, loses that part or reads a different cut; no_claim=a follow-up with words of its own, which may change the cut.
+  test("a follow-up keeps the part of a long Mind the first Question found, as the same start", async () => {
+    const { core, model, mind, client } = await setUpCloud(streamingModel(["First.", "Second."]));
+    writeLongMind(client, 160);
+    await client.settled();
+
+    const first = await ask(core, { text: "What did I write about barnacles?", mindId: mind.id });
+    await ask(core, {
+      text: "When was that?",
+      mindId: mind.id,
+      conversationId: first.conversationId,
+    });
+
+    const firstMind = /^<mind [\s\S]*?<\/mind>/.exec(firstSent(model, 0))?.[0] ?? "";
+    expect(firstMind).toContain("Barnacles cling to the rocks");
+    expect(firstSent(model, 1).startsWith(`${firstMind}\n\n`)).toBe(true);
+  });
+
+  // protects=the Mind starts the conversation's first message and is marked as the start the next Question repeats, so a provider's prompt cache keeps it; the next Question's own message holds only the Question; fails_when=the Mind moves to the last message, changes between Questions, or isn't marked; no_claim=a provider's own caching, the hand test's.
+  test("the Mind starts the conversation, the same for the next Question, marked for the prompt cache", async () => {
+    const { core, model, mind, client } = await setUpCloud(streamingModel(["First.", "Second."]));
+    writeLongMind(client, 20);
+    await client.settled();
+
+    const first = await ask(core, { text: "Summarise my notes", mindId: mind.id });
+    await ask(core, {
+      text: "And the last one?",
+      mindId: mind.id,
+      conversationId: first.conversationId,
+    });
+
+    const firstMind = /^<mind [\s\S]*?<\/mind>/.exec(firstSent(model, 0))?.[0] ?? "";
+    expect(firstMind).toContain("Note 20:");
+    expect(firstSent(model, 1).startsWith(`${firstMind}\n\nSummarise my notes`)).toBe(true);
+    expect(lastSent(model)).toBe("And the last one?");
+    for (const call of [0, 1]) {
+      const user = model.doStreamCalls[call]?.prompt.find((message) => message.role === "user");
+      expect(user?.providerOptions).toMatchObject({
+        incarnamind: { stablePrefix: firstMind.length },
+      });
+    }
   });
 });
 

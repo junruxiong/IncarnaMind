@@ -133,7 +133,7 @@ const defaultOrigin = (review: WordReview): WordOrigin =>
   review.changes > 0 || review.comments > 0 ? "someone-else" : "own";
 
 /** Records where each node of a Block came from, with its fingerprint as it now is in the Mind. */
-function recordSources(doc: Y.Doc, element: Y.XmlElement, structure: WordStructure): void {
+export function recordSources(doc: Y.Doc, element: Y.XmlElement, structure: WordStructure): void {
   const id = element.getAttribute(BLOCK_ID_ATTRIBUTE);
   const source = typeof id === "string" ? structure.sources.get(id) : undefined;
   if (typeof id === "string" && source) {
@@ -347,6 +347,29 @@ export function createWordImports(options: WordImportsOptions) {
             error: error instanceof Error ? error.name : "unknown",
           });
         });
+      }
+    },
+
+    /**
+     * The package a Mind was imported from, for export to write into (#105):
+     * found by the Mind in the database, never by what its document says,
+     * which another client could have written.
+     */
+    async packageOf(mindId: string): Promise<Uint8Array> {
+      const row = db.get<{ sha256: string }>(
+        "SELECT sha256 FROM word_packages WHERE mind_id = ? AND deleted_at IS NULL",
+        [mindId],
+      );
+      try {
+        if (!row || !/^[0-9a-f]{64}$/.test(row.sha256)) throw new Error("No package.");
+        return await readFile(packagePath(row.sha256));
+      } catch (error) {
+        log.error("word.export.packageMissing", {
+          code: (error as NodeJS.ErrnoException).code ?? "unknown",
+        });
+        throw new Error(
+          "The Word file this Mind was imported from is missing from IncarnaMind's data folder.",
+        );
       }
     },
 

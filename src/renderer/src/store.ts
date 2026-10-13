@@ -151,12 +151,16 @@ interface AppState extends LayoutSlice {
   tagFilter: readonly string[];
   tagsDialogOpen: boolean;
   library: LibrarySnapshot | null;
-  /** What the Library shows: "all", "unsorted", a Folder's id, or `LIBRARY_DELETED`. */
+  /**
+   * What the Library was asked to show: "all"; a Folder's id, "unsorted" or
+   * `LIBRARY_DELETED`, whose section the page brings into view (then "all"
+   * again); or "starters", the starter Folders at its top.
+   */
   libraryFilter: string;
   refreshLibrary(): Promise<void>;
   /**
-   * Shows the Library (one tab per window) at a Folder: its tab where it is
-   * open, else a new tab in the focused group, or to the side.
+   * Shows the Library (one tab per window), at a Folder's section if given:
+   * its tab where it is open, else a new tab in the focused group, or to the side.
    */
   openLibrary(filter?: string, options?: { side?: boolean }): void;
   /** Every Skill, in name order, on or off. Set once loaded, then follows the core's event. */
@@ -673,9 +677,7 @@ export const useAppStore = create<AppState>()((set, get) => {
       documentUpdates.flush();
       set({
         library,
-        ...(get().libraryFilter !== "all" &&
-        get().libraryFilter !== "unsorted" &&
-        get().libraryFilter !== LIBRARY_DELETED &&
+        ...(!["all", "unsorted", "starters", LIBRARY_DELETED].includes(get().libraryFilter) &&
         !library.groups.some((g) => g.id === get().libraryFilter)
           ? { libraryFilter: "all" }
           : {}),

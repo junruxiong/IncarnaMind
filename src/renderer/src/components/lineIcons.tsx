@@ -209,6 +209,15 @@ export function MoreLineIcon(props: IconProps) {
   );
 }
 
+/** Dropping files in: an arrow down onto a line. */
+export function DropLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />
+    </LineIcon>
+  );
+}
+
 export function TrashLineIcon(props: IconProps) {
   return (
     <LineIcon {...props}>

@@ -26,7 +26,12 @@ import {
   tool,
 } from "ai";
 import Ajv, { type ValidateFunction } from "ajv";
-import { cacheProviderOptions, tokenUsageOf } from "../providers/promptCache";
+import {
+  cacheProviderOptions,
+  stablePrefixOf,
+  stablePrefixOptions,
+  tokenUsageOf,
+} from "../providers/promptCache";
 import {
   classifyProviderError,
   contextOverflow,
@@ -176,7 +181,11 @@ function toModelMessages(messages: readonly RunMessage[]): ModelMessage[] {
   const out: ModelMessage[] = [];
   for (const message of messages) {
     if (message.role === "user") {
-      out.push({ role: "user", content: message.text });
+      out.push({
+        role: "user",
+        content: message.text,
+        ...(message.stablePrefix && { providerOptions: stablePrefixOptions(message.stablePrefix) }),
+      });
     } else if (message.role === "assistant") {
       out.push(
         message.toolCalls.length === 0
@@ -227,7 +236,12 @@ function fromModelMessages(messages: readonly ModelMessage[]): RunMessage[] {
       : content.map((part) => (part.type === "text" ? part.text : "")).join("");
   for (const message of messages) {
     if (message.role === "user") {
-      out.push({ role: "user", text: textOf(message.content) });
+      const stablePrefix = stablePrefixOf(message.providerOptions);
+      out.push({
+        role: "user",
+        text: textOf(message.content),
+        ...(stablePrefix && { stablePrefix }),
+      });
     } else if (message.role === "assistant") {
       const parts = typeof message.content === "string" ? [] : message.content;
       out.push({

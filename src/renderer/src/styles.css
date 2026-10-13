@@ -1135,6 +1135,7 @@
   /* The count under the title: quiet status text, pulled up into the title's margin. */
   .mind-count {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 8px;
     margin: -16px 0 16px;
@@ -1142,6 +1143,65 @@
     font-size: 12px;
     line-height: 16px;
     color: var(--color-ink-meta);
+  }
+  /* The Mind's health under its title (#96), on the count's line: each part moves to its next sentence or Citation. */
+  .mind-health {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 4px;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+  .mind-health-dot {
+    color: var(--color-rule-strong);
+  }
+  .mind-health-part {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 3px;
+    border-radius: 4px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    outline: none;
+
+    &:hover,
+    &:focus-visible {
+      background: var(--color-hover);
+      color: var(--color-ink-secondary);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 1px;
+    }
+  }
+  .mind-health-icon {
+    box-sizing: border-box;
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    padding: 1px;
+    border-radius: 3px;
+  }
+  .mind-health-part[data-part="found"] .mind-health-icon {
+    padding: 0;
+    color: var(--color-success);
+  }
+  .mind-health-part:is([data-part="unsupported"], [data-part="notFound"]) .mind-health-icon {
+    background: var(--color-warning);
+    color: var(--color-sheet);
+  }
+  .mind-health-part[data-part="contradicted"] .mind-health-icon {
+    box-shadow: inset 0 0 0 1.25px var(--color-danger);
+    color: var(--color-danger);
+  }
+  .mind-health-line::before {
+    content: "·";
+    margin-right: 8px;
+    color: var(--color-rule-strong);
   }
   .mind-count-button {
     min-width: 0;
@@ -3773,6 +3833,10 @@
     --check-ink: var(--color-ink-secondary);
     --check-wash: var(--color-chip);
   }
+  .margin-check:is([data-check="not-checked"], [data-check="needs-recheck"]) {
+    --check-ink: var(--color-ink-meta);
+    --check-wash: none;
+  }
   .margin-check[data-check="checking"],
   .citation-card--checking {
     --check-ink: var(--color-ink-meta);
@@ -3790,6 +3854,11 @@
       .margin-check-icon {
         color: var(--color-success);
       }
+    }
+    /* A sentence found supported is as quiet as a Citation found: its "+" says the Passage can be cited. */
+    &[data-check="supported"] {
+      --check-wash: none;
+      color: var(--color-success);
     }
     /* Contradicted is outlined, so it reads without its colour. */
     &[data-check="contradicted"] {
@@ -3889,6 +3958,17 @@
     font-size: var(--text-meta);
     line-height: 18px;
     color: var(--check-ink);
+  }
+  /* The wash behind a sentence its check found unsupported or contradicted (#96). */
+  .claim-wash--unsupported {
+    background: var(--color-warning-wash);
+  }
+  .claim-wash--contradicted {
+    background: var(--color-danger-wash);
+  }
+  .claim-card-says {
+    padding-left: 22px;
+    color: var(--color-ink-secondary);
   }
   .citation-card-note {
     padding-left: 22px;
@@ -4581,8 +4661,16 @@
     .mind-editor {
       --editor-gutter: 40px;
     }
+    /* A Citation's check shows in its marker; a sentence check's mark keeps to the 40px gutter. */
     .margin-checks {
+      width: 40px;
+    }
+    .margin-checks:not(:has(.claim-mark)),
+    .margin-check:not(.claim-mark) {
       display: none;
+    }
+    .claim-mark {
+      left: 8px;
     }
     /* No margin for a link back's mark: hovering the text still shows its card. */
     .conversation-link {
@@ -5538,7 +5626,7 @@
     font-size: 13px;
     color: var(--color-ink-meta);
   }
-  /* The composer of the Mind it reads is drawn here, the panel's width. */
+  /* The composer is drawn here, the panel's width: the Mind's it reads, or the one with none in focus. */
   .assistant-composer {
     flex: none;
     padding: 0 10px 10px;
@@ -5776,11 +5864,6 @@
       width: auto;
       max-width: 812px;
       margin-inline: auto;
-    }
-    .assistant-no-mind {
-      width: auto;
-      max-width: 812px;
-      margin: 0 max(40px, calc((100% - 812px) / 2)) 10px;
     }
   }
 
@@ -7299,59 +7382,6 @@
   animation: none;
   background: var(--color-frame);
   box-shadow: 0 0 0 6px var(--color-frame);
-}
-
-/* Folder contents stay readable beside an open document viewer. */
-.library-pane {
-  container-type: inline-size;
-}
-.library-columns {
-  display: grid;
-  grid-template-columns: minmax(160px, 1.7fr) minmax(130px, 1fr) minmax(120px, 1.2fr);
-  gap: 12px;
-  align-items: start;
-}
-@container (max-width: 540px) {
-  .library-columns {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
-  .library-document-name {
-    grid-column: 1 / -1;
-  }
-  .library-column-labels {
-    display: none;
-  }
-}
-
-/* Recently deleted: name, where it was, when, days left, then its actions; narrow, the details go under the name. */
-.deleted-columns {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(100px, 170px) 130px 64px 250px;
-  gap: 16px;
-  align-items: center;
-}
-.deleted-columns > .deleted-meta {
-  display: contents;
-}
-.deleted-columns > .deleted-actions {
-  min-width: 2rem;
-}
-@container (max-width: 820px) {
-  .deleted-columns {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 2px 12px;
-  }
-  .deleted-columns > .deleted-meta {
-    display: flex;
-    grid-column: 1 / -1;
-    grid-row: 2;
-    flex-wrap: wrap;
-    gap: 0 12px;
-    font-size: 12px;
-  }
-  .deleted-column-labels {
-    display: none;
-  }
 }
 
 /* macOS's traffic lights take the app mark's place in the sidebar's header (see "The title bar"). */
