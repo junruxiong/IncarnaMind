@@ -3260,6 +3260,8 @@ export interface Task {
   mindId: string | null;
   /** The Block in that Mind it works on (a comparison table), if any: where opening it goes. */
   blockId: string | null;
+  /** What the User asked it, in their words (a Research Task's topic): its Question in the thread. */
+  question: string | null;
   status: TaskStatus;
   pausedReason: TaskPausedReason | null;
   /** "plan-limit": when the plan's limit resets (ISO 8601), when the provider says. */
@@ -3283,6 +3285,61 @@ export interface Task {
 
 /** What answering a Task's "unknown-outcome" ask does: the step again, or on without it. */
 export type TaskAskAnswer = "redo" | "skip";
+
+/** Where a Research Task looks (#130): the web, and the Library within the composer's Search scope. */
+export interface ResearchSources {
+  web: boolean;
+  library: boolean;
+}
+
+/** What to plan a Research Task for. */
+export interface PlanResearchInput {
+  /** The Mind the assistant reads, where the Task will be. */
+  mindId: string;
+  topic: string;
+  /** Where it will look, as the plan card's toggles stand. */
+  sources: ResearchSources;
+  /** The composer's model; the default model when left out. */
+  model?: ChatModelChoice | null;
+  /** "Change the plan…": the steps as they stand, and what the User said to change in them. */
+  change?: { steps: string[]; text: string } | null;
+}
+
+/** A Research Task's plan: its topic as a question, and the steps it takes before it writes. */
+export interface ResearchPlan {
+  title: string;
+  steps: string[];
+}
+
+/** What planning did: a plan, or why there is none (nothing was sent unless it failed). */
+export type ResearchPlanResult =
+  | { planned: true; plan: ResearchPlan }
+  | { planned: false; reason: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
+  | { planned: false; reason: "consent-declined" }
+  | { planned: false; reason: "failed"; error: ProviderError };
+
+/** Where a Research Task writes its cited draft: a Mind, or a new one it makes. */
+export type ResearchTarget = { mindId: string } | { newMind: true };
+
+/** A Research Task to start, from its plan card. */
+export interface StartResearchInput {
+  /** The Mind the assistant reads: the Task shows in its thread. */
+  mindId: string;
+  topic: string;
+  plan: ResearchPlan;
+  sources: ResearchSources;
+  writeInto: ResearchTarget;
+  /** What the Library is searched within: the composer's Search scope. */
+  scope: SearchScope;
+  /** The composer's model; the default model when left out. */
+  model?: ChatModelChoice | null;
+}
+
+/** What starting a Research Task did: it runs, or nothing was sent and why. */
+export type ResearchStartResult =
+  | { started: true; task: Task }
+  | { started: false; reason: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
+  | { started: false; reason: "consent-declined" };
 
 /** Open a Task's place: its Mind, with its progress in the thread (`showTask`, a notification's click). */
 export interface TaskShown {
@@ -6697,6 +6754,19 @@ export interface CoreApi {
   answerTaskAsk(taskId: string, answer: TaskAskAnswer): Promise<Task>;
   /** Every step of a Task, in the order each first started. */
   listTaskSteps(taskId: string): Promise<TaskStep[]>;
+  /**
+   * Research (#130): the steps the composer's model proposes for a topic,
+   * before it writes, in the topic's language; or, with `change`, the steps
+   * redone as the User said. Only the topic (and the steps) are sent, once
+   * the User has allowed the chat flow to the model's service.
+   */
+  planResearch(input: PlanResearchInput): Promise<ResearchPlanResult>;
+  /**
+   * Starts a Research Task from its plan: each step searches the Library
+   * and, with Web on, the web, as an Answer does, saving the web pages it
+   * reads as Documents. It shows in the thread of the Mind it started from.
+   */
+  startResearch(input: StartResearchInput): Promise<ResearchStartResult>;
 
   /**
    * Asks a Question: its Answer is written into the Mind right after it, as the
@@ -7532,6 +7602,8 @@ const methods: Record<CoreApiMethod, true> = {
   stopTask: true,
   answerTaskAsk: true,
   listTaskSteps: true,
+  planResearch: true,
+  startResearch: true,
   askQuestion: true,
   regenerateAnswer: true,
   stopAnswer: true,

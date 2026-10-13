@@ -13,6 +13,7 @@ import {
 } from "../shared/mindCitationStyle";
 import { mindModelOf } from "../shared/mindModel";
 import { paperFor } from "../shared/printDocument";
+import { RESEARCH_TASK } from "../shared/research";
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
 import { agentSocketPath, createAgents } from "./agents";
@@ -145,6 +146,7 @@ import {
 } from "./referenceRecords";
 import { parseReference } from "./references";
 import { BUILT_IN_RERANKING_MODEL, createRerankingModel } from "./reranking";
+import { createResearch } from "./research";
 import { createTasks, type TaskKind, type TaskNotice } from "./runs/tasks";
 import { parseSearchScope, resolveSearchScope } from "./scope";
 import { createSecrets } from "./secrets";
@@ -1061,7 +1063,11 @@ export function createCore(adapters: CoreAdapters): Core {
   const taskName = (kind: string) =>
     translate(
       settings.get().language,
-      kind === COMPARISON_TASK ? "task.kind.comparison" : "task.kind.other",
+      kind === COMPARISON_TASK
+        ? "task.kind.comparison"
+        : kind === RESEARCH_TASK
+          ? "task.kind.research"
+          : "task.kind.other",
     );
   /** Whether a Mind is the tab shown in a group of one of these windows. */
   const mindShown = (mindId: string | null, windowIds: readonly string[]) =>
@@ -1105,8 +1111,28 @@ export function createCore(adapters: CoreAdapters): Core {
         events.emit("task.shown", { taskId: task.id, mindId: task.mindId, blockId: task.blockId }),
     );
   };
-  // Tasks (#126): their journal survives a force-quit; comparison tables fill as one.
-  const taskKinds: TaskKind[] = [comparisons.taskKind, ...(adapters.taskKinds ?? [])];
+  const research = createResearch({
+    requireMind: (mindId) => writableMind(mindId).id,
+    chat: {
+      providerExists: (providerId) => chat.exists(providerId),
+      readiness: (choice) => chat.readiness(choice),
+      prepareModel: (choice) => chat.prepareModel(choice),
+      runsLocally: (choice) => chat.metered(choice)?.billing === "free",
+    },
+    answers,
+    resolveScope,
+    tasks: {
+      start: (kind, mindId, input) => tasks.start(kind, mindId, input),
+      steps: (taskId) => tasks.steps(taskId),
+    },
+    say: (key, params) => translate(settings.get().language, key, params),
+  });
+  // Tasks (#126): their journal survives a force-quit; comparison tables fill as one, and Research is one.
+  const taskKinds: TaskKind[] = [
+    comparisons.taskKind,
+    research.taskKind,
+    ...(adapters.taskKinds ?? []),
+  ];
   const tasks = createTasks({
     db,
     now,
@@ -2255,6 +2281,8 @@ export function createCore(adapters: CoreAdapters): Core {
     stopTask: (taskId) => tasks.stop(taskId),
     answerTaskAsk: (taskId, answer) => tasks.answer(taskId, answer),
     listTaskSteps: async (taskId) => tasks.listSteps(taskId),
+    planResearch: (input) => research.plan(input),
+    startResearch: (input) => research.start(input),
 
     askQuestion: async (input) => answers.ask(input),
     regenerateAnswer: async (input) =>

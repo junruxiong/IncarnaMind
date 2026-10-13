@@ -1,6 +1,7 @@
 import { Fragment, type ReactNode, useEffect, useId, useState } from "react";
 import type { Task, TaskStep } from "../../../../core/api";
 import type { Language } from "../../../../core/language";
+import { RESEARCH_TASK } from "../../../../shared/research";
 import { core } from "../../core";
 import { formatMoney } from "../../cost";
 import { useLanguage, useT } from "../../i18n";
@@ -41,10 +42,14 @@ function headLine(task: Task, minutes: number, t: Translate): string {
   if (task.status === "stopped") return t("task.status.stopped");
   const progress = task.progress;
   if (!progress || progress.total === 0) return time;
-  const counted = t(task.kind === "comparison" ? "task.progress.cells" : "task.progress.items", {
-    done: progress.done,
-    total: progress.total,
-  });
+  const counted = t(
+    task.kind === "comparison"
+      ? "task.progress.cells"
+      : task.kind === RESEARCH_TASK
+        ? "task.progress.steps"
+        : "task.progress.items",
+    { done: progress.done, total: progress.total },
+  );
   return `${counted} · ${time}`;
 }
 

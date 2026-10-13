@@ -68,6 +68,9 @@
  * passage starts with, and an instruction to "replace X with Y" (把 X 换成 Y)
  * does so, or "drop the citations" (去掉引用) leaves their markers out.
  *
+ * Research (`fakePlan`): a plan of three steps about the topic; each step is
+ * then answered as a Question that asks for the web is.
+ *
  * Make this a Skill (`fakeSkillDraft`): a draft whose "when to use it" and first
  * step quote the Mind's last Question, so a test sees that the Mind was read.
  *
@@ -808,6 +811,33 @@ function fakeEdit(options: GenerateOptions): string | null {
   }
 }
 
+/** Research's planner (#130, src/core/research/prompt.ts). */
+const PLANNER = /^You plan research for IncarnaMind/m;
+
+/**
+ * A Research plan (#130): three steps about the topic, "slowly" kept in
+ * them so the Task takes its time too; asked to change it, the change
+ * becomes a step after the others.
+ */
+function fakePlan(options: GenerateOptions): string | null {
+  if (!PLANNER.test(systemOf(options.prompt))) return null;
+  const request = userText(options.prompt.find((message) => message.role === "user"));
+  const topic = (/^Topic: (.*)$/m.exec(request)?.[1] ?? "").replace(/^research\s+/i, "");
+  const slowly = SLOWLY.test(topic) ? ", slowly" : "";
+  const subject = topic.replace(/,?\s*slowly\b/i, "").replace(/[?？.。]$/, "");
+  const change = /^Change it as the User asks: (.*)$/m.exec(request)?.[1];
+  const steps = [
+    `Search the web and the Library for ${subject}${slowly}`,
+    `Read what the sources say about ${subject}${slowly}`,
+    `Compare what they found${slowly}`,
+    ...(change ? [change] : []),
+  ];
+  return [
+    `TITLE: What do the sources say about ${subject}?`,
+    ...steps.map((step, index) => `${index + 1}. ${step}`),
+  ].join("\n");
+}
+
 /** Test-only classifier: chooses a group whose name appears in the excerpt. */
 function fakeStructuredOutput(options: GenerateOptions): string {
   const format = options.responseFormat;
@@ -932,7 +962,7 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
           text:
             options.responseFormat?.type === "json"
               ? fakeStructuredOutput(options)
-              : (fakeSkillDraft(options) ?? fakeEdit(options) ?? "OK"),
+              : (fakePlan(options) ?? fakeSkillDraft(options) ?? fakeEdit(options) ?? "OK"),
         },
       ],
       finishReason: { unified: "stop", raw: undefined },

@@ -1,4 +1,6 @@
 import { mkdtemp, rm } from "node:fs/promises";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -321,6 +323,28 @@ export async function dismissChatSetup(window: Page): Promise<void> {
   const setup = window.getByTestId("chat-setup");
   await setup.getByTestId("chat-setup-later").click();
   await setup.waitFor({ state: "hidden" });
+}
+
+/**
+ * An Ollama server that lists models, for the model chip's menu, after
+ * `delayMs` as a slow provider does. It answers nothing else.
+ */
+export async function ollamaListing(models: string[], { delayMs = 0 }: { delayMs?: number } = {}) {
+  const server: Server = createServer((request, response) => {
+    request.resume();
+    if (request.url === "/api/tags") {
+      setTimeout(() => {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify({ models: models.map((name) => ({ name, model: name })) }));
+      }, delayMs);
+      return;
+    }
+    response.writeHead(404);
+    response.end();
+  });
+  await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+  const { port } = server.address() as AddressInfo;
+  return { server, url: `http://127.0.0.1:${port}` };
 }
 
 /**

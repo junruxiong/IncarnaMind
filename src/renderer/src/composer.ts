@@ -15,6 +15,8 @@ export interface Draft {
   scope: SearchScope | null;
   /** The Skill chosen with "/" for the next Question only. */
   skill: string | null;
+  /** "Research…" was chosen: what is typed next is a topic to plan research for (#130). */
+  research?: boolean;
   /** Long pastes, each a chip above the text until it is put back, saved as a Document, or asked with. */
   pastes: Paste[];
 }

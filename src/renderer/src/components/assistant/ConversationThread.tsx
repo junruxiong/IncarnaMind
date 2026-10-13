@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { ConversationAnswer, ConversationQuestion } from "../../../../core/api";
+import type { ConversationAnswer, ConversationQuestion, Task } from "../../../../core/api";
 import { mindName } from "../../../../shared/naming";
 import { type AddTarget, addAnswer } from "../../addToNote";
 import { answerBlocks } from "../../answerBlocks";
@@ -15,12 +15,13 @@ import {
   useOpenConversation,
 } from "../../conversations";
 import { useT } from "../../i18n";
+import { useResearch } from "../../research";
 import { type ScopeChip, scopeChips } from "../../scope";
 import { useAppStore } from "../../store";
 import { interleave, type ThreadStart, threadTasks } from "../../taskGroups";
 import { loadTasks, useTasks } from "../../tasks";
 import { SearchIcon } from "../icons";
-import { SparkLineIcon } from "../lineIcons";
+import { PlanLineIcon, SearchLineIcon, SparkLineIcon } from "../lineIcons";
 import { AddToMindPicker } from "./AddToMindPicker";
 import { WritingLine } from "./AnswerActions";
 import { LiveLine } from "./AnswerSteps";
@@ -61,6 +62,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
   const shownTask = useTasks((state) => state.shown);
   const thread = useThreadStart(conversation ?? null);
   const tasks = threadTasks(Object.values(allTasks), focusedMindId, thread, shownTask);
+  const plan = useResearch((state) => (focusedMindId ? state.plans[focusedMindId] : undefined));
   const focusedMind = useAppStore((state) => state.minds.find((mind) => mind.id === focusedMindId));
   const focusedMindName = focusedMindId
     ? (focusedMind && mindName(focusedMind)) || t("mind.untitled")
@@ -92,7 +94,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
     if (scroller && (atFoot.current || asking) && !sought) {
       scroller.scrollTop = scroller.scrollHeight;
     }
-  }, [messages, asking, sought, allTasks]);
+  }, [messages, asking, sought, allTasks, plan]);
 
   // A link back led here: that Answer comes into view, flashed, once it shows (its conversation's
   // messages may come a moment after it is opened).
@@ -137,7 +139,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
       data-testid="assistant-log"
       className="assistant-log"
     >
-      {messages.length === 0 && asking === null && (
+      {messages.length === 0 && asking === null && !plan && !tasks.some(asked) && (
         <>
           <p data-testid="assistant-reads" title={reads} className="assistant-reads">
             <SearchIcon aria-hidden="true" className="assistant-reads-icon" />
@@ -149,7 +151,17 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
         </>
       )}
       {interleave(messages, tasks).map((entry) => {
-        if (entry.kind === "task") return <TaskProgress key={entry.task.id} task={entry.task} />;
+        if (entry.kind === "task") {
+          const { task } = entry;
+          return task.question ? (
+            <div key={task.id} className="assistant-task">
+              <QuestionBubble text={task.question} research />
+              <TaskProgress task={task} />
+            </div>
+          ) : (
+            <TaskProgress key={task.id} task={task} />
+          );
+        }
         const message = entry.message;
         return message.kind === "question" ? (
           <QuestionBubble key={message.id} question={message} />
@@ -164,6 +176,21 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
         );
       })}
       {asking !== null && <QuestionBubble text={asking} />}
+      {plan && (
+        <>
+          <QuestionBubble text={plan.topic} research />
+          <p data-testid="research-plan-line" className="assistant-reads">
+            {plan.planning ? (
+              <span aria-hidden="true" className="assistant-reads-icon task-dot" />
+            ) : (
+              <PlanLineIcon aria-hidden="true" className="assistant-reads-icon" />
+            )}
+            <span className="assistant-reads-text">
+              {plan.planning ? t("research.thread.planning") : t("research.thread.planBelow")}
+            </span>
+          </p>
+        </>
+      )}
       {onItsWay && (
         // Its line shows at rest, as an Answer's being written does.
         <div
@@ -220,14 +247,28 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
   );
 }
 
-/** A Question the User asked: their words in a bubble at the right, with the Skill forced on it. */
-function QuestionBubble({ question, text }: { question?: ConversationQuestion; text?: string }) {
+/** A Task the User asked in their words: a Research Task, whose topic is its Question. */
+const asked = (task: Task) => task.question !== null;
+
+/**
+ * A Question the User asked: their words in a bubble at the right, with the
+ * Skill forced on it, or the Research it started.
+ */
+function QuestionBubble({
+  question,
+  text,
+  research = false,
+}: {
+  question?: ConversationQuestion;
+  text?: string;
+  research?: boolean;
+}) {
   const t = useT();
   const skill = question?.forcedSkill ?? null;
   return (
     <div
       data-testid="assistant-question"
-      data-pending={question ? undefined : true}
+      data-pending={question || research ? undefined : true}
       className="assistant-question"
     >
       <p className="assistant-question-bubble">
@@ -236,6 +277,12 @@ function QuestionBubble({ question, text }: { question?: ConversationQuestion; t
           <span data-testid="assistant-question-skill" className="assistant-question-skill">
             <SparkLineIcon aria-hidden="true" className="size-3" />
             {skill}
+          </span>
+        )}
+        {research && (
+          <span data-testid="assistant-question-research" className="assistant-question-skill">
+            <SearchLineIcon aria-hidden="true" className="size-3" />
+            {t("research.chip")}
           </span>
         )}
         {question?.text ?? text}
