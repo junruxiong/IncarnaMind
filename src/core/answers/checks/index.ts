@@ -26,6 +26,7 @@ import type * as Y from "yjs";
 import {
   type ChatModelChoice,
   type ChatReadiness,
+  type CheckContradictionsResult,
   type CheckedDocument,
   type CheckSentencesResult,
   type Citation,
@@ -34,7 +35,9 @@ import {
   type ClaimCheckAttributes,
   type ClaimCheckResult,
   type ClaimCheckScope,
+  type ContradictionCheckPlan,
   claimCheckActions,
+  type Document,
   type ExternalService,
   type SearchScope,
   type TextPlace,
@@ -53,6 +56,7 @@ import type { AnswerEngine } from "../engine";
 import { type ClaimCheckDependencies, createClaimCheck } from "./claimCheck";
 import { markedSentences, markSentence, selectedSentences, updateCheck } from "./sentences";
 import { createVerify, type VerifyOptions } from "./verify";
+import { createContradictionWatch, type WatchOptions } from "./watch";
 
 /**
  * What the "checks" flow sends: the sentences checked, with their paragraphs,
@@ -68,7 +72,12 @@ export interface ChecksOptions
     VerifyOptions,
     "requireFolder" | "addFile" | "document" | "onStatus" | "readText" | "createMind"
   > {
-  content: Pick<MindContent, "read" | "edit" | "readSettings">;
+  content: Pick<MindContent, "read" | "edit" | "readSettings" | "editSettings">;
+  /** What contradiction watch needs besides (#112). */
+  watch: Pick<
+    WatchOptions,
+    "minds" | "documentVersions" | "background" | "runCost" | "delayMs" | "log"
+  >;
   /** Throws unless the Mind exists and this version may write to it. */
   requireMind(mindId: string): void;
   /** The Folder the Mind is in; null for none. */
@@ -350,6 +359,47 @@ export function createChecks(options: ChecksOptions) {
     return { kind: "checked", sentences: queued.length, checked };
   }
 
+  const track = (requestId: string, mindId: string) => {
+    const controller = new AbortController();
+    running.set(requestId, { controller, mindId });
+    return { signal: controller.signal, done: () => running.delete(requestId) };
+  };
+
+  /** The model, when it can be used now without asking the User: never in the background. */
+  async function prepareQuietly(choice: ChatModelChoice | null): Promise<PreparedChatModel | null> {
+    const readiness = await chat.readiness(choice ?? undefined, "checks");
+    if (!readiness.ready) return null;
+    const { service } = readiness.provider;
+    if (
+      service &&
+      (options.localOnly() || options.consent.status("checks", service) !== "accepted")
+    ) {
+      return null;
+    }
+    try {
+      return await chat.prepareModel(choice ?? undefined, "checks");
+    } catch (error) {
+      if (error instanceof ChatNotReadyError || error instanceof ConsentDeclinedError) return null;
+      throw error;
+    }
+  }
+
+  const watch = createContradictionWatch({
+    ...options,
+    ...options.watch,
+    folderDocuments: (folderId) =>
+      options.resolveScope({ folderIds: [folderId], tagIds: [], documentIds: [] }) ?? [],
+    evidenceScope: (documentIds, citedIds) =>
+      options.evidence.scope(documentIds, { documentIds: [...citedIds] }),
+    searchableCount: (documentIds) => options.documents.searchableCount(documentIds),
+    prepare,
+    prepareQuietly,
+    claimCheck,
+    withResult,
+    retainEvidence,
+    track,
+  });
+
   const verify = createVerify({
     ...options,
     prepare,
@@ -359,11 +409,7 @@ export function createChecks(options: ChecksOptions) {
     withResult,
     retainEvidence,
     settleStopped,
-    track(requestId, mindId) {
-      const controller = new AbortController();
-      running.set(requestId, { controller, mindId });
-      return { signal: controller.signal, done: () => running.delete(requestId) };
-    },
+    track,
   });
 
   return {
@@ -375,14 +421,41 @@ export function createChecks(options: ChecksOptions) {
       if (running.has(parsed.requestId)) {
         throw new InvalidInputError(`The check ${parsed.requestId} is already running.`);
       }
-      const controller = new AbortController();
-      running.set(parsed.requestId, { controller, mindId: parsed.mindId });
+      const tracked = track(parsed.requestId, parsed.mindId);
       try {
-        return await checkSentences(parsed, controller.signal);
+        return parsed.action === "contradiction-watch"
+          ? await watch.checkSentences(parsed, tracked.signal)
+          : await checkSentences(parsed, tracked.signal);
       } finally {
-        running.delete(parsed.requestId);
+        tracked.done();
       }
     },
+
+    async planContradictionCheck(mindId: unknown): Promise<ContradictionCheckPlan> {
+      return watch.planContradictionCheck(parseMindId(mindId));
+    },
+
+    async checkContradictions(input: unknown): Promise<CheckContradictionsResult> {
+      if (!isRecord(input) || typeof input.requestId !== "string" || input.requestId === "") {
+        throw new InvalidInputError({ key: "error.contradictions.request" });
+      }
+      const mindId = parseMindId(input.mindId);
+      options.requireMind(mindId);
+      if (running.has(input.requestId)) {
+        throw new InvalidInputError({ key: "error.contradictions.request" });
+      }
+      return watch.checkContradictions({
+        requestId: input.requestId,
+        mindId,
+        model: parseModel(input.model),
+      });
+    },
+
+    /** A Document's status changed: a new version has its Folder's Minds checked for contradictions. */
+    documentChanged: (document: Document) => watch.documentChanged(document),
+
+    /** Starts watching for new versions of Documents. */
+    startWatching: () => watch.start(),
 
     async checkClaim(input: unknown): Promise<ClaimCheckResult> {
       const parsed = parseClaim(input);
@@ -442,6 +515,7 @@ export function createChecks(options: ChecksOptions) {
 
     /** Stops every request, as IncarnaMind quits: their sentences not checked yet say "stopped". */
     stopAll(): void {
+      watch.close();
       for (const [requestId, { controller, mindId }] of running) {
         controller.abort();
         try {

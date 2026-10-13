@@ -1,0 +1,457 @@
+/**
+ * Contradiction watch (#112): a Mind's cited sentences, each checked against
+ * the other Documents in its Folder, with the claim-check function.
+ *
+ * - A sentence is checked against the Folder's Documents but those it cites
+ *   (and their versions and copies), and IncarnaMind's own files (#80).
+ * - Only a contradiction is marked: a "contradiction-watch" `claimCheck` mark,
+ *   whose card names the other Document and page. A sentence found otherwise
+ *   loses any such mark; one the model couldn't check keeps its mark, saying
+ *   why, or stays unmarked. Marks go "needs re-check" as #96's do.
+ * - On demand, "Check for contradictions" checks every cited sentence of a
+ *   Mind, and Check again on a mark checks its one sentence.
+ * - A new version of a Document in a Folder starts the same check for each
+ *   of the Folder's Minds, a moment later, in the background queue: Answers
+ *   come first. It sends only once the User has allowed the "checks" flow for
+ *   the model's service, never asks, respects the monthly cap, and records
+ *   what it found and cost in the Mind (src/shared/contradictionWatch.ts).
+ */
+import { randomUUID } from "node:crypto";
+import { writeContradictionWatch } from "../../../shared/contradictionWatch";
+import { mindModelOf } from "../../../shared/mindModel";
+import { comparableSentence, isClaim } from "../../../shared/sentences";
+import type { Logger } from "../../adapters";
+import type {
+  ChatModelChoice,
+  CheckContradictionsResult,
+  CheckSentencesResult,
+  ClaimCheckAttributes,
+  ClaimCheckResult,
+  ContradictionCheckOutcome,
+  ContradictionCheckPlan,
+  Document,
+  DocumentStatus,
+  Money,
+  ProviderError,
+  RunStop,
+  TextPlace,
+} from "../../api";
+import type { BackgroundQueue } from "../../backgroundQueue";
+import type { EvidenceScope } from "../../documents/evidence";
+import type { MindContent } from "../../mindContent";
+import type { PreparedChatModel } from "../../providers/chat";
+import { currentTask } from "../../runs/current";
+import { RunItemError, runItems } from "../../runs/stop";
+import type { ClaimCheckRequest } from "./claimCheck";
+import {
+  everySentence,
+  markedSentences,
+  markSentence,
+  type SelectedSentence,
+  selectedSentences,
+  unmarkSentence,
+  updateCheck,
+} from "./sentences";
+
+const ACTION = "contradiction-watch";
+
+/** A Document whose text is read: a new version of it can be searched. */
+const READ: readonly DocumentStatus[] = ["waiting-for-model", "embedding", "ready"];
+
+/** Claims a cloud model checks at once on demand; in the background, and on this computer, one. */
+const CLOUD_CLAIMS_AT_ONCE = 3;
+
+/** How long after a new version arrives its Folder's Minds are checked: more versions may follow. */
+export const AFTER_NEW_VERSION_MS = 30_000;
+
+type Prepared =
+  | { ok: true; prepared: PreparedChatModel }
+  | {
+      ok: false;
+      result: Extract<CheckSentencesResult, { kind: "not-ready" | "local-mode" | "cancelled" }>;
+    };
+
+export interface WatchOptions {
+  content: Pick<MindContent, "read" | "edit" | "readSettings" | "editSettings">;
+  requireMind(mindId: string): void;
+  /** The Folder the Mind is in; null for none. */
+  mindFolder(mindId: string): string | null;
+  /** The live Minds and their Folders. */
+  minds(): { id: string; folderId: string | null }[];
+  /** The live Documents in a Folder. */
+  folderDocuments(folderId: string): string[];
+  /** The evidence a check of a sentence may use among `documentIds`: the cited ones left out. */
+  evidenceScope(documentIds: readonly string[], citedIds: readonly string[]): EvidenceScope;
+  searchableCount(documentIds: readonly string[] | null): number;
+  /** Every live Document's current version, for telling a new one when it arrives. */
+  documentVersions(): ReadonlyMap<string, string>;
+  defaultModel(): ChatModelChoice | null;
+  /** The model to check with, or why not; the consent dialog shows before anything is sent. */
+  prepare(choice: ChatModelChoice | null): Promise<Prepared>;
+  /** The model, when it can be used now without asking the User anything; null otherwise. */
+  prepareQuietly(choice: ChatModelChoice | null): Promise<PreparedChatModel | null>;
+  claimCheck(request: ClaimCheckRequest): Promise<ClaimCheckResult>;
+  withResult(
+    check: ClaimCheckAttributes,
+    result: ClaimCheckResult,
+    at: string,
+  ): ClaimCheckAttributes;
+  retainEvidence(mindId: string): void;
+  track(requestId: string, mindId: string): { signal: AbortSignal; done(): void };
+  background: Pick<BackgroundQueue, "add">;
+  /** What a run's requests billed per token cost; null when none was priced. */
+  runCost(runId: string): Money | null;
+  /** How long after a new version its Folder's Minds are checked, in ms (`AFTER_NEW_VERSION_MS`). */
+  delayMs: number;
+  log: Logger;
+  now(): Date;
+}
+
+/** A cited sentence to check: where it is, and the Documents it may be checked against. */
+interface Claim {
+  blockId: string;
+  text: string;
+  context: string;
+  scope: EvidenceScope;
+}
+
+type Plan =
+  | { kind: "ready"; folderId: string; claims: Claim[] }
+  | Exclude<ContradictionCheckPlan, { kind: "ready" }>;
+
+/** A failure a check reported as its result that the run's other claims share. */
+function runFailureOf(result: ClaimCheckResult): ProviderError | null {
+  if (result.verdict !== "not-checked") return null;
+  const { reason } = result;
+  if (reason !== "rate-limit" && reason !== "cost-cap" && reason !== "plan-limit") return null;
+  return { kind: reason, message: result.detail ?? reason };
+}
+
+const citedIdsOf = (sentence: SelectedSentence) => [
+  ...new Set(sentence.cited.flatMap((each) => (each.documentId ? [each.documentId] : []))),
+];
+
+export function createContradictionWatch(options: WatchOptions) {
+  const { content } = options;
+
+  /** What a check of the Mind's cited sentences (or those `from`..`to` touches) would check. */
+  function plan(mindId: string, range?: { from: TextPlace; to: TextPlace }): Plan {
+    const folderId = options.mindFolder(mindId);
+    const read = content.read(mindId, (blocks) => {
+      if (!range) return { ok: true as const, sentences: everySentence(blocks) };
+      return selectedSentences(blocks, range.from, range.to);
+    });
+    if (!read.ok) return { kind: read.reason };
+    const cited = read.sentences.filter(
+      (sentence) => sentence.cited.length > 0 && isClaim(sentence.text),
+    );
+    if (cited.length === 0) return { kind: "nothing" };
+    if (folderId === null) return { kind: "no-folder" };
+    const inFolder = options.folderDocuments(folderId);
+    if (options.searchableCount(options.evidenceScope(inFolder, []).documentIds) === 0) {
+      return { kind: "no-documents", folderId };
+    }
+    const claims = cited.flatMap((sentence): Claim[] => {
+      const scope = options.evidenceScope(inFolder, citedIdsOf(sentence));
+      if (options.searchableCount(scope.documentIds) === 0) return [];
+      return [
+        {
+          blockId: sentence.blockId,
+          text: sentence.text,
+          context: sentence.context,
+          scope,
+        },
+      ];
+    });
+    if (claims.length === 0) return { kind: "only-cited", folderId };
+    return { kind: "ready", folderId, claims };
+  }
+
+  /**
+   * Writes a claim's result: a contradiction's mark, in place of any check
+   * there; otherwise any watch mark goes, or, if the model couldn't check it,
+   * says why. False when the sentence has changed or gone meanwhile.
+   */
+  function write(
+    mindId: string,
+    request: string,
+    folderId: string,
+    claim: Claim,
+    result: ClaimCheckResult,
+  ) {
+    const at = options.now().toISOString();
+    const kept = content.edit(mindId, (blocks) => {
+      const sentence = everySentence(blocks).find(
+        (each) => each.blockId === claim.blockId && each.text === claim.text,
+      );
+      if (!sentence) return false;
+      if (result.verdict === "not-checked") {
+        const marked = markedSentences(blocks).find(
+          ({ element, from, to, check }) =>
+            check.action === ACTION &&
+            element === sentence.element &&
+            from < sentence.to &&
+            to > sentence.from,
+        );
+        if (marked)
+          updateCheck(blocks, marked.check.id, (check) => options.withResult(check, result, at));
+        return Boolean(marked);
+      }
+      if (result.verdict !== "contradicted") {
+        unmarkSentence(sentence.element, sentence.from, sentence.to, ACTION);
+        return true;
+      }
+      const check: ClaimCheckAttributes = {
+        id: randomUUID(),
+        request,
+        action: ACTION,
+        state: "checking",
+        reason: null,
+        detail: null,
+        text: sentence.text,
+        evidence: null,
+        says: null,
+        scope: { folderId, widened: false },
+        versions: [],
+        excluded: [],
+        checkedAt: at,
+      };
+      markSentence(
+        sentence.element,
+        sentence.from,
+        sentence.to,
+        options.withResult(check, result, at),
+      );
+      return true;
+    });
+    if (kept) options.retainEvidence(mindId);
+    return kept;
+  }
+
+  /** Checks the claims, writing each result as it comes; `concurrency` at a time. */
+  async function check(
+    mindId: string,
+    request: string,
+    ready: Extract<Plan, { kind: "ready" }>,
+    prepared: PreparedChatModel,
+    signal: AbortSignal,
+  ): Promise<ContradictionCheckOutcome> {
+    const runId = randomUUID();
+    let checked = 0;
+    let contradicted = 0;
+    const { stop } = await runItems(
+      ready.claims,
+      (claim) =>
+        currentTask.run(runId, async () => {
+          const result = await options.claimCheck({
+            claim: comparableSentence(claim.text),
+            context: claim.context,
+            scope: claim.scope,
+            model: prepared,
+            cacheKey: mindId,
+            signal,
+          });
+          const failure = runFailureOf(result);
+          if (failure) throw new RunItemError(failure);
+          return result;
+        }),
+      {
+        concurrency: prepared.provider.service ? CLOUD_CLAIMS_AT_ONCE : 1,
+        signal,
+        onOutcome(claim, outcome) {
+          if (outcome.status !== "done" || signal.aborted) return;
+          const result = outcome.value;
+          if (result.verdict !== "not-checked") checked++;
+          if (result.verdict === "contradicted") contradicted++;
+          write(mindId, request, ready.folderId, claim, result);
+        },
+      },
+    );
+    return {
+      claims: ready.claims.length,
+      checked,
+      contradicted,
+      cost: options.runCost(runId),
+      stop,
+    };
+  }
+
+  /** The Mind's own model, or none. */
+  const modelOf = (mindId: string): ChatModelChoice | null =>
+    content.readSettings(mindId, (settings) => (settings.doc ? mindModelOf(settings.doc) : null));
+
+  // In the background ---------------------------------------------------------------------------
+
+  /** Each live Document's version as last seen: a different one read is a new version. */
+  let versions: Map<string, string> | null = null;
+  /** Minds waiting to be checked after a new version, with the Document that started it. */
+  const waiting = new Map<string, { timer: ReturnType<typeof setTimeout>; documentName: string }>();
+  let closed = false;
+
+  /** Queues each claim of the Mind as a background job, and records the run once all are done. */
+  async function checkInBackground(mindId: string, documentName: string): Promise<void> {
+    if (closed) return;
+    const ready = plan(mindId);
+    if (ready.kind !== "ready") return;
+    const prepared = await options.prepareQuietly(modelOf(mindId) ?? options.defaultModel());
+    if (!prepared || closed) return;
+    const runId = randomUUID();
+    const request = randomUUID();
+    let left = ready.claims.length;
+    let checked = 0;
+    let contradicted = 0;
+    let stop: RunStop | null = null;
+    const finish = () => {
+      if (--left > 0) return;
+      try {
+        options.requireMind(mindId);
+        content.editSettings(mindId, (settings) =>
+          writeContradictionWatch(settings, {
+            at: options.now().toISOString(),
+            documentName,
+            claims: ready.claims.length,
+            checked,
+            contradicted,
+            cost: options.runCost(runId),
+            stop,
+          }),
+        );
+      } catch (error) {
+        options.log.error("contradictions.recordFailed", { error: nameOf(error) });
+      }
+    };
+    for (const claim of ready.claims) {
+      options.background.add({
+        kind: ACTION,
+        async run(call) {
+          let result: ClaimCheckResult | null = null;
+          try {
+            if (stop || closed) return;
+            if (!prepared.provider.service) call.runsLocally();
+            result = await currentTask.run(runId, () =>
+              options.claimCheck({
+                claim: comparableSentence(claim.text),
+                context: claim.context,
+                scope: claim.scope,
+                model: prepared,
+                cacheKey: mindId,
+                signal: call.signal,
+              }),
+            );
+            // Given way to an Answer, it runs again later; closing, it never does.
+            if (call.signal.aborted) return;
+            const failure = runFailureOf(result);
+            if (failure?.kind === "cost-cap") stop = { reason: "cost-cap" };
+            else if (failure?.kind === "plan-limit")
+              stop = { reason: "plan-limit", resetsAt: null };
+            else {
+              if (result.verdict !== "not-checked") checked++;
+              if (result.verdict === "contradicted") contradicted++;
+              options.requireMind(mindId);
+              write(mindId, request, ready.folderId, claim, result);
+            }
+          } finally {
+            if (!call.signal.aborted) finish();
+          }
+        },
+      });
+    }
+  }
+
+  return {
+    /** See `CoreApi.planContradictionCheck`. */
+    planContradictionCheck(mindId: string): ContradictionCheckPlan {
+      options.requireMind(mindId);
+      const ready = plan(mindId);
+      return ready.kind === "ready" ? { kind: "ready", claims: ready.claims.length } : ready;
+    },
+
+    /** See `CoreApi.checkContradictions`. */
+    async checkContradictions(input: {
+      requestId: string;
+      mindId: string;
+      model: ChatModelChoice | null;
+    }): Promise<CheckContradictionsResult> {
+      const { requestId, mindId } = input;
+      const ready = plan(mindId);
+      if (ready.kind !== "ready") return ready;
+      const model = await options.prepare(input.model ?? options.defaultModel());
+      if (!model.ok) return model.result;
+      const tracked = options.track(requestId, mindId);
+      try {
+        const outcome = await check(mindId, requestId, ready, model.prepared, tracked.signal);
+        return tracked.signal.aborted ? { kind: "cancelled" } : { kind: "checked", ...outcome };
+      } finally {
+        tracked.done();
+      }
+    },
+
+    /** Check again on a watch mark: the cited sentences `from`..`to` touches, as `checkSentences` does. */
+    async checkSentences(
+      input: {
+        requestId: string;
+        mindId: string;
+        from: TextPlace;
+        to: TextPlace;
+        model: ChatModelChoice | null;
+      },
+      signal: AbortSignal,
+    ): Promise<CheckSentencesResult> {
+      const ready = plan(input.mindId, input);
+      if (ready.kind !== "ready") return ready;
+      const model = await options.prepare(input.model ?? options.defaultModel());
+      if (!model.ok) return model.result;
+      const outcome = await check(input.mindId, input.requestId, ready, model.prepared, signal);
+      if (signal.aborted) return { kind: "cancelled" };
+      return { kind: "checked", sentences: outcome.claims, checked: outcome.checked };
+    },
+
+    /**
+     * Hears each Document's status: a new version read, of a Document in a
+     * Folder, has that Folder's Minds checked a moment later, in the background.
+     */
+    documentChanged(document: Document): void {
+      if (closed) return;
+      versions ??= new Map(options.documentVersions());
+      if (!READ.includes(document.status)) return;
+      const before = versions.get(document.id);
+      versions.set(document.id, document.contentHash);
+      if (before === undefined || before === document.contentHash) return;
+      const folders = new Map<string, boolean>();
+      const inFolder = (folderId: string) => {
+        const known = folders.get(folderId);
+        if (known !== undefined) return known;
+        const found = options.folderDocuments(folderId).includes(document.id);
+        folders.set(folderId, found);
+        return found;
+      };
+      for (const mind of options.minds()) {
+        if (mind.folderId === null || !inFolder(mind.folderId)) continue;
+        const queued = waiting.get(mind.id);
+        if (queued) clearTimeout(queued.timer);
+        const timer = setTimeout(() => {
+          waiting.delete(mind.id);
+          checkInBackground(mind.id, document.name).catch((error: unknown) => {
+            options.log.error("contradictions.backgroundFailed", { error: nameOf(error) });
+          });
+        }, options.delayMs);
+        // A check waiting doesn't keep IncarnaMind from quitting.
+        timer.unref();
+        waiting.set(mind.id, { timer, documentName: document.name });
+      }
+    },
+
+    /** Seeds the versions known now, so the first change after start-up counts. */
+    start(): void {
+      versions ??= new Map(options.documentVersions());
+    },
+
+    close(): void {
+      closed = true;
+      for (const { timer } of waiting.values()) clearTimeout(timer);
+      waiting.clear();
+    },
+  };
+}
+
+const nameOf = (error: unknown) => (error instanceof Error ? error.name : "unknown");

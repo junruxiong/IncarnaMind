@@ -1,0 +1,355 @@
+/**
+ * Contradiction watch (#112): a Mind's cited claims, checked against the
+ * other Documents in its Folder, on demand and when a new version of one of
+ * them arrives. Only a contradiction is marked, and its marks go "needs
+ * re-check" as #96's do.
+ */
+import { writeFile } from "node:fs/promises";
+import type { JSONContent } from "@tiptap/core";
+import { describe, expect, test, vi } from "vitest";
+import type { Core, Document } from "../../src/core";
+import { claimSpans } from "../../src/renderer/src/editor/claimChecks";
+import { claimCheckShown } from "../../src/shared/claimChecks";
+import { contradictionWatchOf } from "../../src/shared/contradictionWatch";
+import { checkGenerate, checkingModel, checkReply, isCheckRun, type Plan } from "../helpers/checks";
+import { answerEnded, shownPassages } from "../helpers/citations";
+import { createTempDataFolder, manualClock, startCore } from "../helpers/core";
+import { addAndProcess, waitForProcessing, writeSourceFile } from "../helpers/documents";
+import { connectToMind, type MindClient, typeInto } from "../helpers/mindClient";
+import { editMind, question, readMind, writeMind } from "../helpers/minds";
+import { type ModelCall, scriptedModel, scriptedModels } from "../helpers/models";
+
+const TIDES = {
+  name: "Tides.md",
+  contents: "# Tides\n\nHarbours publish the times of high water every year.\n",
+};
+const OFFICE = {
+  name: "Harbour office.md",
+  contents:
+    "# Harbour office\n\nThe harbour office publishes the times of high water every week.\n",
+};
+const QUIET_OFFICE = "# Harbour office\n\nThe harbour office opens at nine in the morning.\n";
+
+const YEARLY = "Harbours publish the times of high water every year.";
+const MOON = "Spring tides come at new and full moon.";
+const UNCITED = "Penguins nest on the cliffs above the harbour.";
+
+const PLANS: Record<string, Plan> = {
+  [YEARLY]: {
+    verdict: "contradicted",
+    quote: "The harbour office publishes the times of high water every week.",
+    says: "The harbour office says it publishes them every week, not every year.",
+  },
+  [MOON]: { verdict: "unsupported" },
+  [UNCITED]: { verdict: "contradicted", quote: "opens at nine" },
+};
+
+const text = (value: string): JSONContent => ({ type: "text", text: value });
+
+/** A Citation of a Document, as an Answer writes one. */
+const citation = (document: Document, quote: string): JSONContent => ({
+  type: "citation",
+  attrs: {
+    passageId: "passage-1",
+    documentId: document.id,
+    documentName: document.name,
+    contentHash: document.contentHash,
+    pageFrom: null,
+    pageTo: null,
+    location: null,
+    quote,
+    check: "found",
+    checkReason: null,
+  },
+});
+
+/** A core with Tides and the harbour office's note in a Folder, and a model on this computer. */
+async function setUp({
+  office = OFFICE.contents,
+  calls = [] as ModelCall[],
+  delayMs = 0,
+}: {
+  office?: string;
+  calls?: ModelCall[];
+  delayMs?: number;
+} = {}) {
+  const model = checkingModel(PLANS, calls);
+  const core = startCore(await createTempDataFolder(), {
+    createChatModel: scriptedModels(model).createChatModel,
+    contradictionWatchDelayMs: delayMs,
+  });
+  await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
+  const sources = await createTempDataFolder();
+  const [tides, harbourOffice] = (await addAndProcess(core, [
+    await writeSourceFile(sources, TIDES.name, TIDES.contents),
+    await writeSourceFile(sources, OFFICE.name, office),
+  ])) as [Document, Document];
+  const folder = await core.createLibraryGroup({ name: "Harbours", description: "" });
+  await core.moveToFolder({ documentIds: [tides.id, harbourOffice.id], folderId: folder.id });
+  return { core, tides, office: harbourOffice, folder, calls };
+}
+
+/** A Mind in the Folder whose first two sentences cite Tides, and a third cites nothing. */
+async function mindCiting(core: Core, tides: Document, folderId: string | null) {
+  const mind = await core.createMind({ title: "Harbour notes", folderId });
+  const client = await connectToMind(core, mind.id);
+  writeMind(client, [
+    {
+      type: "paragraph",
+      attrs: { id: "cited" },
+      content: [
+        text(`${YEARLY} `),
+        citation(tides, "Harbours publish the times of high water every year."),
+        text(` ${MOON} `),
+        citation(tides, "Harbours publish the times of high water every year."),
+      ],
+    },
+    { type: "paragraph", attrs: { id: "uncited" }, content: [text(UNCITED)] },
+  ]);
+  await client.settled();
+  return { mind, client };
+}
+
+/** Each check's mark in the Mind, as the editor shows it now. */
+async function shownChecks(core: Core, client: MindClient, folderId: string) {
+  await client.settled();
+  const versions = new Map((await core.listDocuments()).map((each) => [each.id, each.contentHash]));
+  return claimSpans(readMind(client)).map((span) => ({
+    sentence: span.sentence.text.replace(/￼/gu, "").trim(),
+    check: span.check,
+    shown: claimCheckShown(span.check, { text: span.sentence.text, versions, folderId }),
+  }));
+}
+
+/** The Documents the check Runs' searches showed the model, by name. */
+const searched = (calls: readonly ModelCall[]) =>
+  new Set(
+    calls.flatMap((call) =>
+      call.results
+        .filter((result) => result.tool === "search_documents")
+        .flatMap((result) => shownPassages(result.text).map((passage) => passage.document)),
+    ),
+  );
+
+describe("Check for contradictions", () => {
+  test("each cited claim is checked against the Folder's other Documents: only a contradiction is marked, naming the other Document", async () => {
+    const { core, tides, office, folder, calls } = await setUp();
+    const { mind, client } = await mindCiting(core, tides, folder.id);
+
+    expect(await core.planContradictionCheck(mind.id)).toEqual({ kind: "ready", claims: 2 });
+    const result = await core.checkContradictions({ requestId: "r1", mindId: mind.id });
+    expect(result).toMatchObject({
+      kind: "checked",
+      claims: 2,
+      checked: 2,
+      contradicted: 1,
+      stop: null,
+    });
+
+    const checks = await shownChecks(core, client, folder.id);
+    expect(checks.map((each) => [each.sentence, each.shown])).toEqual([
+      [YEARLY, { state: "contradicted" }],
+    ]);
+    expect(checks[0]?.check).toMatchObject({
+      action: "contradiction-watch",
+      says: "The harbour office says it publishes them every week, not every year.",
+      evidence: { documentId: office.id, documentName: office.name, check: "found" },
+      scope: { folderId: folder.id, widened: false },
+    });
+    // The Document the claims cite is never searched, nor is the uncited sentence checked.
+    expect(searched(calls)).toEqual(new Set([office.name]));
+  });
+
+  test("Check again on its mark checks that sentence again, after a new version of its evidence", async () => {
+    // The new version's own check waits long enough to stay out of the way.
+    const { core, tides, office, folder } = await setUp({ delayMs: 60_000 });
+    const { mind, client } = await mindCiting(core, tides, folder.id);
+    await core.checkContradictions({ requestId: "r1", mindId: mind.id });
+    const [marked] = await shownChecks(core, client, folder.id);
+    expect(marked?.check.action).toBe("contradiction-watch");
+
+    await writeFile(office.path, QUIET_OFFICE);
+    await core.reconcileDocuments();
+    await waitForProcessing(core, [office.id]);
+    expect((await shownChecks(core, client, folder.id))[0]?.shown).toEqual({
+      state: "needs-recheck",
+      why: "new-version",
+    });
+
+    expect(
+      await core.checkSentences({
+        requestId: "again",
+        mindId: mind.id,
+        action: "contradiction-watch",
+        from: { blockId: "cited", offset: 0 },
+        to: { blockId: "cited", offset: 1 },
+      }),
+    ).toEqual({ kind: "checked", sentences: 1, checked: 0 });
+    // The new version says nothing of the times, so the quote isn't there to rest a contradiction on.
+    expect((await shownChecks(core, client, folder.id)).map((each) => each.shown)).toEqual([
+      { state: "not-checked", reason: "no-evidence" },
+    ]);
+  });
+
+  test("an edited claim goes “needs re-check”, as #96's checks do", async () => {
+    const { core, tides, folder } = await setUp();
+    const { mind, client } = await mindCiting(core, tides, folder.id);
+    await core.checkContradictions({ requestId: "r1", mindId: mind.id });
+
+    typeInto(client, 0, 0, "Not all ");
+
+    expect((await shownChecks(core, client, folder.id))[0]?.shown).toEqual({
+      state: "needs-recheck",
+      why: "edited",
+    });
+  });
+
+  test("says why there is nothing to check: no Folder, an empty Folder, only the cited Documents, no cited claims", async () => {
+    const { core, tides, folder } = await setUp();
+    const outside = await mindCiting(core, tides, null);
+    expect(await core.planContradictionCheck(outside.mind.id)).toEqual({ kind: "no-folder" });
+
+    const empty = await core.createLibraryGroup({ name: "Empty", description: "" });
+    const inEmpty = await mindCiting(core, tides, empty.id);
+    expect(await core.planContradictionCheck(inEmpty.mind.id)).toEqual({
+      kind: "no-documents",
+      folderId: empty.id,
+    });
+
+    const onlyTides = await core.createLibraryGroup({ name: "Only Tides", description: "" });
+    await core.moveToFolder({ documentIds: [tides.id], folderId: onlyTides.id });
+    const withTides = await mindCiting(core, tides, onlyTides.id);
+    expect(await core.checkContradictions({ requestId: "r2", mindId: withTides.mind.id })).toEqual({
+      kind: "only-cited",
+      folderId: onlyTides.id,
+    });
+
+    const plain = await core.createMind({ title: "Plain", folderId: folder.id });
+    const plainClient = await connectToMind(core, plain.id);
+    writeMind(plainClient, [{ type: "paragraph", content: [text(UNCITED)] }]);
+    await plainClient.settled();
+    expect(await core.planContradictionCheck(plain.id)).toEqual({ kind: "nothing" });
+  });
+});
+
+describe("A new version of a Document in the Folder", { timeout: 30_000 }, () => {
+  test("has the Folder's Minds with cited claims checked in the background, and records what it found", async () => {
+    const calls: ModelCall[] = [];
+    const { core, tides, office, folder } = await setUp({ office: QUIET_OFFICE, calls });
+    const { client } = await mindCiting(core, tides, folder.id);
+    const elsewhere = await core.createLibraryGroup({ name: "Elsewhere", description: "" });
+    const other = await mindCiting(core, tides, elsewhere.id);
+    expect(calls).toEqual([]);
+
+    await writeFile(office.path, OFFICE.contents);
+    await core.reconcileDocuments();
+    await waitForProcessing(core, [office.id]);
+
+    await vi.waitFor(
+      async () =>
+        expect((await shownChecks(core, client, folder.id)).map((each) => each.shown)).toEqual([
+          { state: "contradicted" },
+        ]),
+      { timeout: 10_000 },
+    );
+    await vi.waitFor(() =>
+      expect(contradictionWatchOf(client.doc)).toMatchObject({
+        documentName: "Harbour office",
+        claims: 2,
+        checked: 2,
+        contradicted: 1,
+        cost: null,
+        stop: null,
+      }),
+    );
+    // A Mind in another Folder isn't checked.
+    expect(await shownChecks(core, other.client, elsewhere.id)).toEqual([]);
+  });
+
+  test("waits, at low priority, while an Answer is being written", async () => {
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const checks: ModelCall[] = [];
+    const model = scriptedModel(
+      (call) => {
+        if (!isCheckRun(call))
+          return { text: "High water comes twice a day.", pause: { after: 0, until: held } };
+        checks.push(call);
+        return checkReply(call, PLANS);
+      },
+      { generate: checkGenerate(PLANS) },
+    );
+    const core = startCore(await createTempDataFolder(), {
+      createChatModel: scriptedModels(model).createChatModel,
+      contradictionWatchDelayMs: 0,
+    });
+    await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
+    const sources = await createTempDataFolder();
+    const [tides, office] = (await addAndProcess(core, [
+      await writeSourceFile(sources, TIDES.name, TIDES.contents),
+      await writeSourceFile(sources, OFFICE.name, QUIET_OFFICE),
+    ])) as [Document, Document];
+    const folder = await core.createLibraryGroup({ name: "Harbours", description: "" });
+    await core.moveToFolder({ documentIds: [tides.id, office.id], folderId: folder.id });
+    const { mind, client } = await mindCiting(core, tides, folder.id);
+    const asked = question("When is high water?");
+    editMind(client, (blocks) => [...blocks, asked]);
+    await client.settled();
+    const answer = await core.askQuestion({ mindId: mind.id, questionId: asked.attrs.id });
+    if (!answer.asked) throw new Error("The Question wasn't asked.");
+
+    await writeFile(office.path, OFFICE.contents);
+    await core.reconcileDocuments();
+    await waitForProcessing(core, [office.id]);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(checks).toEqual([]);
+
+    release();
+    await answerEnded(core, answer.answerId);
+    await vi.waitFor(
+      async () =>
+        expect((await shownChecks(core, client, folder.id)).map((each) => each.shown)).toEqual([
+          { state: "contradicted" },
+        ]),
+      { timeout: 10_000 },
+    );
+  });
+
+  test("sends nothing, and asks nothing, before the User allowed the checks flow for the model's service", async () => {
+    const calls: ModelCall[] = [];
+    const model = checkingModel(PLANS, calls);
+    const core = startCore(await createTempDataFolder(), {
+      createChatModel: () => model,
+      contradictionWatchDelayMs: 0,
+      now: manualClock("2026-10-13T09:00:00.000Z").now,
+    });
+    const asked = vi.fn();
+    core.on("consent.requested", (request) => {
+      if (request.flow.id === "checks") asked(request);
+    });
+    await core.saveChatProvider({
+      kind: "anthropic",
+      modelId: "claude-haiku-5-5",
+      apiKey: "sk-test",
+    });
+    const sources = await createTempDataFolder();
+    const [tides, office] = (await addAndProcess(core, [
+      await writeSourceFile(sources, TIDES.name, TIDES.contents),
+      await writeSourceFile(sources, OFFICE.name, QUIET_OFFICE),
+    ])) as [Document, Document];
+    const folder = await core.createLibraryGroup({ name: "Harbours", description: "" });
+    await core.moveToFolder({ documentIds: [tides.id, office.id], folderId: folder.id });
+    const { client } = await mindCiting(core, tides, folder.id);
+
+    await writeFile(office.path, OFFICE.contents);
+    await core.reconcileDocuments();
+    await waitForProcessing(core, [office.id]);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    expect(asked).not.toHaveBeenCalled();
+    expect(calls).toEqual([]);
+    expect(contradictionWatchOf(client.doc)).toBeNull();
+  });
+});
