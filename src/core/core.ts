@@ -315,7 +315,7 @@ export function createCore(adapters: CoreAdapters): Core {
   const writableMind = (mindId: unknown): Mind => {
     const mind = minds.get(mindId);
     if (!isKnownKind(mind.kind)) {
-      throw new MindReadOnlyError("A newer version of IncarnaMind made this. Update to open it.");
+      throw new MindReadOnlyError({ key: "error.mind.newerVersion" });
     }
     return mind;
   };
@@ -976,6 +976,7 @@ export function createCore(adapters: CoreAdapters): Core {
       citationSource: (passageId) => documents.citationSource(passageId),
       pageTexts: (documentId, contentHash, from, to) =>
         documents.pageTexts(documentId, contentHash, from, to),
+      documentDate: (documentId) => documents.documentDate(documentId),
     },
     toolProviders: [
       { kind: "connector", tools: (signal) => connectors.tools(signal) },
@@ -1202,6 +1203,7 @@ export function createCore(adapters: CoreAdapters): Core {
       citationSource: (passageId) => documents.citationSource(passageId),
       pageTexts: (documentId, contentHash, from, to) =>
         documents.pageTexts(documentId, contentHash, from, to),
+      documentDate: (documentId) => documents.documentDate(documentId),
     },
     engine: answerEngine,
     retention,
@@ -2042,7 +2044,7 @@ export function createCore(adapters: CoreAdapters): Core {
         folderId !== null &&
         !library.snapshot().groups.some((group) => group.id === folderId)
       ) {
-        throw new NotFoundError("There is no such Folder.");
+        throw new NotFoundError({ key: "error.folder.notFound" });
       }
       const since = now();
       const result = await webPages.save(input);
@@ -2279,15 +2281,13 @@ export function createCore(adapters: CoreAdapters): Core {
       const baseUrl = ollamaUrl(input);
       const model = input?.model ?? RECOMMENDED_OLLAMA_MODEL;
       if (typeof model !== "string" || model.trim() === "") {
-        throw new InvalidInputError("Enter a model name.");
+        throw new InvalidInputError({ key: "error.provider.modelMissing" });
       }
       const status = await detectOllama(baseUrl);
       if (!status.running) throw new Error(`Ollama isn't running at ${baseUrl}.`);
       // One click means a model on this computer; a cloud model is chosen from the model menu.
       if (isCloudModelName(model) || hasOllamaModel(status.cloudModels, model)) {
-        throw new InvalidInputError(
-          `${model} runs on ollama.com, not on this computer. Choose a local model, or pick it in the model menu.`,
-        );
+        throw new InvalidInputError({ key: "error.provider.ollamaCloud", values: { model } });
       }
       if (!hasOllamaModel(status.models, model)) {
         await pullOllamaModel(
@@ -2635,14 +2635,12 @@ export function createCore(adapters: CoreAdapters): Core {
       adapters.shell.showItemInFolder(path);
     },
     showSavedFile: async (path) => {
-      if (!outputs.saved(path))
-        throw new NotFoundError("Only a file IncarnaMind saved can be shown.");
+      if (!outputs.saved(path)) throw new NotFoundError({ key: "error.files.notSaved.show" });
       if (!adapters.shell) throw new Error("This copy of IncarnaMind can't show files.");
       adapters.shell.showItemInFolder(path);
     },
     openSavedFile: async (path) => {
-      if (!outputs.saved(path))
-        throw new NotFoundError("Only a file IncarnaMind saved can be opened.");
+      if (!outputs.saved(path)) throw new NotFoundError({ key: "error.files.notSaved.open" });
       if (!adapters.shell)
         throw new Error("This copy of IncarnaMind can't open files in other apps.");
       await adapters.shell.openPath(path);
