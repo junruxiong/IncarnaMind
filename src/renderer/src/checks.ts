@@ -63,6 +63,10 @@ export const setCheckRunning = (
   running: { requestId: string; action: ClaimCheckAction } | null,
 ) => setFor("running", mindId, running);
 
+/** Records whether a Mind's last verdicts came from a model too small to judge reliably (#680). */
+export const setCheckSmallModel = (mindId: string, small: boolean) =>
+  setFor("smallModel", mindId, small ? true : null);
+
 /** Says why a check of a Mind gave no marks, under its title. */
 export const setCheckProblem = (mindId: string, problem: CheckProblem) =>
   setFor("problems", mindId, problem);
