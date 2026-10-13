@@ -61,6 +61,7 @@ export const zhCN = {
   "library.progress": "正在整理 {count} 个文档…",
   "library.waiting": "{count} 个文档暂时无法整理：缺少文字、模型或权限。展开详情查看。",
   "library.count": "{count} 个文档",
+  "library.count.one": "1 个文档",
   "library.empty": "从侧边栏添加文档后，就可以开始整理。",
   "library.manual": "手动选择",
   "library.saved": "已整理",

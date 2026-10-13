@@ -65,6 +65,7 @@ export const en = {
   "library.waiting":
     "{count} Documents need text, a model or permission. Open their details to check.",
   "library.count": "{count} Documents",
+  "library.count.one": "1 Document",
   "library.empty": "Add Documents from the sidebar to start organising them.",
   "library.manual": "Your choice",
   "library.saved": "Organized",
