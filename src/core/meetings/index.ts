@@ -164,7 +164,7 @@ export function createMeetings(options: MeetingsOptions) {
       `SELECT ${COLUMNS} FROM meetings WHERE id = ? AND deleted_at IS NULL`,
       [meetingId],
     );
-    if (!row) throw new NotFoundError("That Meeting doesn't exist or has been discarded.");
+    if (!row) throw new NotFoundError({ key: "error.meeting.notFound" });
     return row;
   };
 
@@ -460,7 +460,7 @@ export function createMeetings(options: MeetingsOptions) {
 
   function assertNoneCapturing(meetingId: string): void {
     if (live && live.meetingId !== meetingId) {
-      throw new InvalidInputError("Another Meeting is being recorded. Stop it first.");
+      throw new InvalidInputError({ key: "error.meeting.otherRecording" });
     }
   }
 
@@ -590,7 +590,7 @@ export function createMeetings(options: MeetingsOptions) {
     list,
 
     create(input: unknown): Meeting {
-      if (!options.enabled()) throw new InvalidInputError("Meetings are turned off in Settings.");
+      if (!options.enabled()) throw new InvalidInputError({ key: "error.meeting.off" });
       if (!capture) throw new InvalidInputError("This copy of IncarnaMind can't record audio.");
       const { mindId } = parseInput(input);
       if (mindId !== undefined && (typeof mindId !== "string" || !options.mindExists(mindId))) {
@@ -619,7 +619,7 @@ export function createMeetings(options: MeetingsOptions) {
     discard(meetingId: unknown): void {
       const row = rowOf(meetingId);
       if (row.status !== "ready") {
-        throw new InvalidInputError("Only a Meeting that hasn't started can be discarded.");
+        throw new InvalidInputError({ key: "error.meeting.cantDiscard" });
       }
       const at = now();
       db.run("UPDATE meetings SET deleted_at = ?, updated_at = ? WHERE id = ?", [at, at, row.id]);
@@ -629,14 +629,15 @@ export function createMeetings(options: MeetingsOptions) {
     start(input: unknown): Meeting {
       const { meetingId, systemAudio } = parseInput(input);
       const row = rowOf(meetingId);
-      if (row.status !== "ready") throw new InvalidInputError("That Meeting has started already.");
+      if (row.status !== "ready")
+        throw new InvalidInputError({ key: "error.meeting.alreadyStarted" });
       if (systemAudio !== undefined && typeof systemAudio !== "boolean") {
         throw new InvalidInputError("systemAudio must be true or false.");
       }
-      if (!options.enabled()) throw new InvalidInputError("Meetings are turned off in Settings.");
+      if (!options.enabled()) throw new InvalidInputError({ key: "error.meeting.off" });
       if (!capture) throw new InvalidInputError("This copy of IncarnaMind can't record audio.");
       if (!options.noticeAccepted()) {
-        throw new InvalidInputError("Read the recording notice before recording a Meeting.");
+        throw new InvalidInputError({ key: "error.meeting.noticeUnread" });
       }
       assertNoneCapturing(row.id);
       const at = now();
@@ -656,7 +657,8 @@ export function createMeetings(options: MeetingsOptions) {
 
     pause(meetingId: unknown): Meeting {
       const row = rowOf(meetingId);
-      if (row.status !== "recording") throw new InvalidInputError("That Meeting isn't recording.");
+      if (row.status !== "recording")
+        throw new InvalidInputError({ key: "error.meeting.notRecording" });
       const periods = closePeriod(row, "pause");
       save(row.id, {
         status: "paused",
@@ -671,7 +673,7 @@ export function createMeetings(options: MeetingsOptions) {
 
     resume(meetingId: unknown): Meeting {
       const row = rowOf(meetingId);
-      if (row.status !== "paused") throw new InvalidInputError("That Meeting isn't paused.");
+      if (row.status !== "paused") throw new InvalidInputError({ key: "error.meeting.notPaused" });
       assertNoneCapturing(row.id);
       const periods = periodsOf(row);
       const period: Period = {
@@ -695,7 +697,7 @@ export function createMeetings(options: MeetingsOptions) {
     stop(meetingId: unknown): Meeting {
       const row = rowOf(meetingId);
       if (row.status !== "recording" && row.status !== "paused") {
-        throw new InvalidInputError("That Meeting isn't being recorded.");
+        throw new InvalidInputError({ key: "error.meeting.notBeingRecorded" });
       }
       const periods = closePeriod(row, "stop");
       save(row.id, {

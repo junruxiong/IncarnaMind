@@ -459,7 +459,6 @@ export function createCore(adapters: CoreAdapters): Core {
     changed: (mindId) => events.emit("checkpoints.changed", { mindId }),
     stopAnswer: (mindId, answerId) => answers.stop({ mindId, answerId }),
     settleAnswers: (mindId) => answers.settleOrphans(mindId),
-    say: (key) => translate(settings.get().language, key),
     reportError: (error) => console.error(error),
   });
   // Background work (automatic tagging, Organize's classification, saving cited pages): one
@@ -529,7 +528,6 @@ export function createCore(adapters: CoreAdapters): Core {
         retryMs: adapters.linkedFolders?.retryMs ?? 30_000,
         detectDataless: adapters.linkedFolders?.detectDatalessFiles ?? platform === "darwin",
       },
-      say: (key, params) => translate(settings.get().language, key, params),
     });
     citedPages = createCitedPages({
       db,
@@ -1401,7 +1399,7 @@ export function createCore(adapters: CoreAdapters): Core {
       }
     },
     async prepare({ classifier }) {
-      if (!classifier) throw new TaggingNotReadyError("Choose a classification model.");
+      if (!classifier) throw new TaggingNotReadyError({ key: "error.tagging.noModel" });
       if (classifier.kind === "auto") {
         let automatic = automaticClassifiers.get(classifier.baseUrl);
         if (!automatic) {
@@ -1420,18 +1418,18 @@ export function createCore(adapters: CoreAdapters): Core {
         });
       if (classifier.kind === "jev") {
         if (embedding.localOnly() && jev.service())
-          throw new TaggingNotReadyError("Cloud classification is paused in local mode.");
+          throw new TaggingNotReadyError({ key: "error.tagging.cloudPaused" });
         const prepared = await jev.prepareGroups();
         if (embedding.localOnly() && !prepared.local)
-          throw new TaggingNotReadyError("Cloud classification is paused in local mode.");
+          throw new TaggingNotReadyError({ key: "error.tagging.cloudPaused" });
         return prepared;
       }
       const ready = await chat.readiness(classifier.choice, "classification");
       if (embedding.localOnly() && "provider" in ready && ready.provider.service)
-        throw new TaggingNotReadyError("Cloud classification is paused in local mode.");
+        throw new TaggingNotReadyError({ key: "error.tagging.cloudPaused" });
       const prepared = await chat.prepareModel(classifier.choice, "classification");
       if (embedding.localOnly() && prepared.provider.service)
-        throw new TaggingNotReadyError("Cloud classification is paused in local mode.");
+        throw new TaggingNotReadyError({ key: "error.tagging.cloudPaused" });
       // prepareModel got consent for everything the classification flow sends, page images included.
       const images = readsImages(prepared.capabilities);
       return {

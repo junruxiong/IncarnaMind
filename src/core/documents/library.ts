@@ -39,7 +39,6 @@ import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { open, realpath, rm } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, sep } from "node:path";
-import type { MessageKey, MessageParams } from "../../shared/i18n";
 import type {
   DocumentKind,
   LinkedFolder,
@@ -247,8 +246,6 @@ export interface LibraryOptions {
    * its `documents/`, until relinked.
    */
   dataDir: string;
-  /** Says something to the User, in their language. */
-  say(key: MessageKey, params?: MessageParams): string;
   folders: Folders;
   hooks: LibraryHooks;
   watch: WatchFolder;
@@ -311,7 +308,7 @@ const insideRange = (prefix: string) => {
 };
 
 export function createLibrary(options: LibraryOptions) {
-  const { db, now, folders, hooks, say } = options;
+  const { db, now, folders, hooks } = options;
   const legacyFolder = join(options.dataDir, "documents");
   const isLegacyCopy = (path: string) => path !== legacyFolder && isInside(legacyFolder, path);
   /** The data folder as given, then with links resolved, as the files added from it are. */
@@ -1582,7 +1579,7 @@ export function createLibrary(options: LibraryOptions) {
       if (path !== row.path) {
         const others = liveFolders().filter((each) => each.id !== row.id);
         if (others.some((each) => isInside(each.path, path) || isInside(path, each.path))) {
-          throw new InvalidInputError(say("linkedFolders.locate.overlaps", { name }));
+          throw new InvalidInputError({ key: "error.linkedFolder.overlaps", values: { name } });
         }
         const placed = db.all<{
           id: string;
@@ -1596,15 +1593,16 @@ export function createLibrary(options: LibraryOptions) {
         );
         const live = placed.filter((each) => each.live === 1);
         if (live.length > 0 && !(await holdsAny(path, live))) {
-          throw new InvalidInputError(say("linkedFolders.locate.notThis", { name }));
+          throw new InvalidInputError({ key: "error.linkedFolder.notThis", values: { name } });
         }
         const taken = live
           .map((each) => documentAt(pathIn(path, each.relative_path)))
           .find((other) => other !== undefined && other.linked_folder_id !== row.id);
         if (taken) {
-          throw new InvalidInputError(
-            say("linkedFolders.locate.taken", { file: basename(taken.path) }),
-          );
+          throw new InvalidInputError({
+            key: "error.linkedFolder.taken",
+            values: { file: basename(taken.path) },
+          });
         }
         db.transaction(() => {
           db.run("UPDATE linked_folders SET path = ? WHERE id = ?", [path, row.id]);

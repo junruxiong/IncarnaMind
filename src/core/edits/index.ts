@@ -149,10 +149,13 @@ function parseInput(input: unknown): ParsedInput {
   }
   const words = typeof instruction === "string" ? instruction.trim() : "";
   if ((action === "translate" || action === "instruction") && words === "") {
-    throw new InvalidInputError("Say what to change, or the language to translate into.");
+    throw new InvalidInputError({ key: "error.edit.noInstruction" });
   }
   if (words.length > MAX_INSTRUCTION_CHARACTERS) {
-    throw new InvalidInputError("What to change is too long.");
+    throw new InvalidInputError({
+      key: "error.edit.instructionTooLong",
+      values: { max: MAX_INSTRUCTION_CHARACTERS },
+    });
   }
   return {
     requestId,

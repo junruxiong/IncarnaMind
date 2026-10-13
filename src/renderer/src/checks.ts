@@ -19,6 +19,8 @@ import { mindModelOf } from "../../shared/mindModel";
 import { core } from "./core";
 import type { ShownClaim } from "./editor/claimChecks";
 import { selectionForEdit } from "./editor/editSelection";
+import { errorMessage } from "./errors";
+import { translateNow } from "./i18n";
 
 /** Why a check gave no marks, for the line under the Mind's title. */
 export type CheckProblem =
@@ -96,7 +98,7 @@ export async function checkSentences(
       model: mindModelOf(doc),
     });
   } catch (error) {
-    result = { kind: "failed", message: error instanceof Error ? error.message : String(error) };
+    result = { kind: "failed", message: errorMessage(error, translateNow) };
   } finally {
     setFor("running", mindId, null);
   }

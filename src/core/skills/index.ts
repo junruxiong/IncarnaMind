@@ -28,6 +28,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
+import { translate } from "../../shared/i18n";
 import { skillNameFrom } from "../../shared/skillName";
 import {
   SKILL_LIMITS,
@@ -275,9 +276,6 @@ function stagedFrom(
   };
 }
 
-const builtInNameMessage = (name: string) =>
-  `"${name}" is the name of a built-in Skill, whose files can't be replaced. Give the Skill another name in its SKILL.md, or duplicate the built-in Skill to make your own.`;
-
 export function createSkills(options: SkillsOptions) {
   const { db, now } = options;
   const directory = join(options.dataDir, "skills");
@@ -308,7 +306,7 @@ export function createSkills(options: SkillsOptions) {
     const row = db.get<SkillRow>(`SELECT ${COLUMNS} FROM skills WHERE id = ? AND ${LIVE}`, [
       parseId(skillId, "A Skill id"),
     ]);
-    if (!row) throw new NotFoundError("That Skill doesn't exist or has been removed.");
+    if (!row) throw new NotFoundError({ key: "error.skill.notFound" });
     return row;
   };
 
@@ -643,7 +641,7 @@ export function createSkills(options: SkillsOptions) {
             kind: "built-in-name",
             path: INSTRUCTIONS_FILE,
             field: "name",
-            message: builtInNameMessage(name),
+            message: translate("en", "error.skill.builtInName", { name }),
           },
         };
       }
@@ -673,14 +671,17 @@ export function createSkills(options: SkillsOptions) {
       return serially(async () => {
         const staged = pending.get(importId);
         if (!staged) {
-          throw new NotFoundError("That Skill preview has expired: choose the Skill again.");
+          throw new NotFoundError({ key: "error.skill.previewExpired" });
         }
         pending.delete(importId);
         const { frontmatter } = staged;
         const existing = rowNamed(frontmatter.name);
         // Restored since it was previewed: the built-in Skill's files stay as they are.
         if (existing && existing.built_in !== 0) {
-          throw new InvalidInputError(builtInNameMessage(frontmatter.name));
+          throw new InvalidInputError({
+            key: "error.skill.builtInName",
+            values: { name: frontmatter.name },
+          });
         }
         return commit(staged, existing);
       });
@@ -792,7 +793,11 @@ export function createSkills(options: SkillsOptions) {
       const draft = parseDraft(input);
       return serially(async () => {
         const row = rowOf(id);
-        if (row.built_in !== 0) throw new InvalidInputError(builtInNameMessage(row.name));
+        if (row.built_in !== 0)
+          throw new InvalidInputError({
+            key: "error.skill.builtInName",
+            values: { name: row.name },
+          });
         const checked = checkDraft(draft, (name) => {
           const other = rowNamed(name);
           return other !== undefined && other.id !== row.id;

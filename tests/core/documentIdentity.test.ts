@@ -9,7 +9,6 @@ import {
   type Core,
   DATABASE_FILE,
   type Document,
-  InvalidInputError,
   MIND_SETTINGS_FIELD,
 } from "../../src/core";
 import { openDatabase } from "../../src/core/storage";
@@ -286,11 +285,11 @@ describe("A Linked folder found somewhere else keeps its Documents", { timeout: 
     await cp(library, copy, { recursive: true });
     const [single] = (await core.addDocuments([join(copy, "tides.md")])).documents;
 
-    await expect(core.locateLinkedFolder(linked, empty)).rejects.toThrow(
-      new InvalidInputError(
+    await expect(core.locateLinkedFolder(linked, empty)).rejects.toMatchObject({
+      message:
         "None of the files in “Library” are in that folder. Choose the folder that holds them now.",
-      ),
-    );
+      wording: { key: "error.linkedFolder.notThis", values: { name: "Library" } },
+    });
     await expect(core.locateLinkedFolder(linked, join(other, "Inside"))).rejects.toThrow(
       /inside a Linked folder, or holds one/,
     );

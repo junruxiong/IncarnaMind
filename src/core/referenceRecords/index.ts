@@ -92,17 +92,17 @@ function parseValue(field: ReferenceField, value: unknown): ReferenceFields[Refe
   }
   const text = (value as string).replace(/\s+/g, " ").trim();
   if (text.length > MAX_LENGTH) {
-    throw new InvalidInputError(`The reference's ${field} can't be longer than ${MAX_LENGTH}.`);
+    throw new InvalidInputError({ key: "error.reference.tooLong", values: { max: MAX_LENGTH } });
   }
   if (text === "") return text;
   if (field === "issued") {
     const issued = parseIssued(text);
-    if (!issued) throw new InvalidInputError(`"${text}" isn't a year or a date.`);
+    if (!issued) throw new InvalidInputError({ key: "error.reference.notYear", values: { text } });
     return issued;
   }
   if (field === "doi") {
     const doi = normalizeDoi(text);
-    if (!doi) throw new InvalidInputError(`"${text}" isn't a DOI.`);
+    if (!doi) throw new InvalidInputError({ key: "error.reference.notDoi", values: { text } });
     return doi;
   }
   // An address typed without its scheme ("arxiv.org/abs/1706.03762").

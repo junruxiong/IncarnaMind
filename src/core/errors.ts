@@ -106,7 +106,7 @@ export class ChatNotReadyError extends Error {
  * Thrown when automatic tagging's model can't be used yet, e.g. Jev is set up
  * but its key can't be read on this device. Documents wait until it can.
  */
-export class TaggingNotReadyError extends Error {
+export class TaggingNotReadyError extends TranslatableError {
   override name = "TaggingNotReadyError";
 }
 

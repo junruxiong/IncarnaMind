@@ -141,11 +141,11 @@ export function parseFindInput(input: unknown): ParsedInput {
     throw new InvalidInputError("findSources expects a query.");
   }
   const query = input.query.replace(/\s+/g, " ").trim().slice(0, MAX_QUERY_LENGTH);
-  if (query === "") throw new InvalidInputError("Type what to search for.");
+  if (query === "") throw new InvalidInputError({ key: "error.sources.nothingToFind" });
   const fromYear = parseYear(input.fromYear, "fromYear");
   const toYear = parseYear(input.toYear, "toYear");
   if (fromYear !== null && toYear !== null && fromYear > toYear) {
-    throw new InvalidInputError("The first year comes after the last.");
+    throw new InvalidInputError({ key: "error.sources.yearsOrder" });
   }
   if (input.openAccessOnly !== undefined && typeof input.openAccessOnly !== "boolean") {
     throw new InvalidInputError("openAccessOnly must be true or false.");
@@ -581,7 +581,7 @@ export function createSources(options: SourcesOptions) {
       if (trimmed === "") return options.secrets.delete(name);
       // A key is one token: anything else is a paste gone wrong, and it isn't echoed back.
       if (trimmed.length > 200 || /\s/.test(trimmed)) {
-        throw new InvalidInputError("That doesn't look like a key.");
+        throw new InvalidInputError({ key: "error.sources.keyLooksWrong" });
       }
       await options.secrets.set(name, trimmed);
     },

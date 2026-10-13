@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import type { CitationAttributes, Core, CoreAdapters, Document } from "../../src/core";
 import { citationState } from "../../src/shared/citations";
+import { translate } from "../../src/shared/i18n";
 import {
   createTempDataFolder,
   manualClock,
@@ -326,7 +327,7 @@ describe("Restoring what was deleted", { timeout: 30_000 }, () => {
     );
   });
 
-  test("restoring is all or none, and says why it can't in plain words, in English and Chinese", async () => {
+  test("restoring is all or none, and says why it can't in plain words, as a wording for either language", async () => {
     const { core, clock } = await start();
     const mind = await core.createMind({ title: "Tides" });
     const paper = await tagNamed(core, "Paper");
@@ -339,17 +340,21 @@ describe("Restoring what was deleted", { timeout: 30_000 }, () => {
       { kind: "mind", id: mind.id },
       { kind: "tag", id: paper.id },
     ] as const;
-    await expect(core.restore([...both])).rejects.toThrow(
-      "There is another Tag named “Paper” now. Rename it, then restore this one.",
-    );
+    const refused = await core.restore([...both]).catch((error: unknown) => error);
+    expect(refused).toMatchObject({
+      message: "There is another Tag named “Paper” now. Rename it, then restore this one.",
+      wording: { key: "error.restore.tagNameTaken", values: { name: "Paper" } },
+    });
     expect(await core.listMinds()).toEqual([]);
     await core.updateSettings({ user: { language: "zh-CN" } });
-    await expect(core.restore([...both])).rejects.toThrow(
+    const wording = (refused as { wording: { key: "error.restore.tagNameTaken" } }).wording;
+    expect(translate("zh-CN", wording.key, { name: "Paper" })).toBe(
       "已有同名标签“Paper”，请先将其重命名，再恢复。",
     );
-    await expect(core.restore([{ kind: "tag", id: "no-such-tag" }])).rejects.toThrow(
-      "回收站中没有这一项。",
-    );
+    await expect(core.restore([{ kind: "tag", id: "no-such-tag" }])).rejects.toMatchObject({
+      message: "That isn't in Recently deleted.",
+      wording: { key: "error.restore.unknown" },
+    });
   });
 });
 
