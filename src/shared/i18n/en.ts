@@ -991,7 +991,7 @@ export const en = {
   "embeddingProviders.form.localOnly":
     "Local mode is on, so only models on this computer can be chosen.",
   "embeddingProviders.form.localOnlyServer":
-    'Local mode is on, and this server isn\'t on this computer: use one at localhost or 127.0.0.1, or turn off "Keep everything on this computer" above.',
+    "Local mode is on, and this server isn’t on this computer: use one at localhost or 127.0.0.1, or turn off “Keep everything on this computer” above.",
   "embeddingProviders.form.builtInHint":
     "multilingual-e5-small: about 135 MB, downloaded once, and runs on this computer. English and Chinese.",
   "embeddingProviders.form.ollamaUrl": "Ollama URL (optional)",
@@ -1871,7 +1871,7 @@ export const en = {
   "citation.scan.unsureWord": "May be misread: check it on the page",
   "citation.quote": "The quote:",
   "citation.meaning":
-    '"Quote found" means these words are where it cites. It doesn\'t mean they support the sentence.',
+    "“Quote found” means these words are where it cites. It doesn’t mean they support the sentence.",
   "citation.open.page": "Open the page",
   "citation.open.slide": "Open the slide",
   "citation.open.section": "Open the section",
