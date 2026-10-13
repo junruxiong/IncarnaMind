@@ -77,6 +77,7 @@ export function runShortcut(
   for (const command of commands.all()) {
     const shortcut = command.shortcut;
     if (!shortcut || (objectsOnly && !command.appliesTo)) continue;
+    if (shortcut.macOnly && !isMac) continue;
     const keys = [
       keysOn(shortcut.keys, isMac),
       ...(!isMac && shortcut.alsoOther ? [shortcut.alsoOther] : []),
@@ -137,6 +138,7 @@ export function shortcutLabel(id: CommandId): string {
 
 /** The keys a menu shows beside a command: its shortcut, or the keys its row takes, as this system writes them. */
 export function menuKeysLabel(command: Command): string | null {
+  if (command.shortcut?.macOnly && !isMac) return null;
   const keys = command.shortcut?.keys ?? command.rowKeys;
   return keys ? keysLabel(keysOn(keys, isMac), isMac) : null;
 }
