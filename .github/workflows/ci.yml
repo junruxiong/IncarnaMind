@@ -1,10 +1,12 @@
 name: CI
 
 on:
-  # Pull requests run once, through pull_request; a push runs CI only on main.
+  # Pull requests run once, through pull_request; a push runs CI only on main. The merge queue
+  # runs it again on each queued group, through merge_group, before anything reaches main.
   push:
     branches: [main]
   pull_request:
+  merge_group:
 
 permissions:
   contents: read
@@ -36,9 +38,10 @@ jobs:
       - run: npm run lint
       - run: npm test
 
-  # The Word corpus (eval/word/README.md): every file, and its export back into itself after an
-  # edit, opens in LibreOffice headless. Not a required check; it installs LibreOffice, which the
-  # other jobs don't need.
+  # The Word corpus (eval/word/README.md): every file, its export back into itself after an
+  # edit, and its export for review open in LibreOffice headless, and LibreOffice accepting every
+  # change in a fixture shows the Mind's text. Not a required check; it installs LibreOffice,
+  # which the other jobs don't need.
   word-corpus:
     name: Word corpus opens in LibreOffice
     runs-on: ubuntu-latest
@@ -77,7 +80,7 @@ jobs:
     name: Smoke shard ${{ matrix.shard }}/8 (Linux)
     # A pull request merges only when it is up to date with main and this passed, so the merge
     # commit's tree is the one already tested. Running it again on main tests nothing new.
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -117,7 +120,7 @@ jobs:
   # Branch protection requires this name, so the shards can change without touching it.
   smoke:
     name: Electron smoke test (Linux)
-    if: always() && github.event_name == 'pull_request'
+    if: always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
     needs: smoke-shard
     runs-on: ubuntu-latest
     steps:

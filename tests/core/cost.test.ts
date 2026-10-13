@@ -179,6 +179,7 @@ describe("Recording", () => {
         requests: 3,
         spent: [{ currency: "USD", amount: expect.closeTo(expected, 10) }],
         unpricedTokens: 0,
+        interrupted: 0,
       },
     ]);
     expect(rows(dataDir).map((row) => [row.status, row.input_tokens, row.output_tokens])).toEqual(
@@ -414,25 +415,96 @@ describe("The monthly cap", () => {
     expect(model.doStreamCalls).toHaveLength(0);
   });
 
-  test("a crash with open reservations settles them at their reserved amount on the next start", async () => {
-    // A reply that never ends: the app quits while it is open, as a crash would leave it.
-    const hung = new MockLanguageModelV4({
-      doStream: async () => ({
-        stream: new ReadableStream<StreamPart>({ pull: () => new Promise(() => {}) }),
-      }),
+  /** A reply that never ends, after `heard`: the app quits while it is open, as a crash would leave it. */
+  const hangingAfter = (heard: StreamPart[]) =>
+    new MockLanguageModelV4({
+      doStream: async () => {
+        const parts = [...heard];
+        return {
+          stream: new ReadableStream<StreamPart>({
+            pull: (controller) =>
+              parts.length > 0
+                ? controller.enqueue(parts.shift() as StreamPart)
+                : new Promise(() => {}),
+          }),
+        };
+      },
     });
+
+  test("a request a crash cut short with no usage heard settles at nothing, marked interrupted, and the cost line counts it", async () => {
+    const hung = hangingAfter([]);
     const first = await cloudCore(hung);
     void request(first.core, 2_000).catch(() => undefined);
     await expect.poll(() => rows(first.dataDir).map((row) => row.status)).toEqual(["reserved"]);
-    const [open] = rows(first.dataDir);
+    expect(rows(first.dataDir)[0]?.reserved).toBeGreaterThan(0);
     first.core.close();
 
     const again = startCore(first.dataDir, { createChatModel: () => hung });
 
     expect(rows(first.dataDir)).toEqual([
-      expect.objectContaining({ status: "settled", cost: open?.reserved }),
+      expect.objectContaining({ status: "interrupted", cost: 0, input_tokens: null }),
     ]);
-    expect(await spentUsd(again)).toBeCloseTo(open?.reserved ?? Number.NaN, 12);
+    expect(await spentUsd(again)).toBe(0);
+    const summary = await again.getCostSummary();
+    expect(summary.providers).toEqual([
+      expect.objectContaining({
+        requests: 1,
+        interrupted: 1,
+        spent: [{ currency: "USD", amount: 0 }],
+      }),
+    ]);
+  });
+
+  test("a request that heard its usage before the crash settles at that usage, not at its reservation", async () => {
+    const counted = { input: 3_000, output: 200 };
+    const hung = hangingAfter([
+      { type: "stream-start", warnings: [] },
+      { type: "text-start", id: "t" },
+      { type: "text-delta", id: "t", delta: "OK" },
+      // A provider that reports usage as it streams.
+      { type: "response-metadata", id: "r", usage: usageOf(counted) } as unknown as StreamPart,
+    ]);
+    const first = await cloudCore(hung);
+    void request(first.core, 100_000).catch(() => undefined);
+    await expect
+      .poll(() => rows(first.dataDir).map((row) => [row.status, row.output_tokens]))
+      .toEqual([["reserved", counted.output]]);
+    const [open] = rows(first.dataDir);
+    first.core.close();
+
+    const again = startCore(first.dataDir, { createChatModel: () => hung });
+
+    const price = haikuPrice();
+    const expected = (counted.input * price.input + counted.output * price.output) / 1_000_000;
+    expect(rows(first.dataDir)).toEqual([
+      expect.objectContaining({ status: "settled", input_tokens: counted.input }),
+    ]);
+    expect(rows(first.dataDir)[0]?.cost).toBeCloseTo(expected, 12);
+    expect(rows(first.dataDir)[0]?.cost).toBeLessThan((open?.reserved ?? 0) / 10);
+    expect(await spentUsd(again)).toBeCloseTo(expected, 12);
+    expect((await again.getCostSummary()).providers[0]?.interrupted).toBe(0);
+  });
+
+  test("the monthly total and the cap check use what interrupted requests cost, not what they reserved", async () => {
+    const hung = hangingAfter([]);
+    const first = await cloudCore(hung);
+    // Each reserves far more than a cent: four in flight, then a crash.
+    for (let each = 0; each < 4; each++) void request(first.core, 100_000).catch(() => undefined);
+    await expect.poll(() => rows(first.dataDir).length).toBe(4);
+    const reservedTotal = rows(first.dataDir).reduce((sum, row) => sum + (row.reserved ?? 0), 0);
+    first.core.close();
+
+    const model = reportingModel([{ input: 100, output: 10 }]);
+    const { core: again } = await cloudCore(model, undefined, first.dataDir);
+    expect(await spentUsd(again)).toBe(0);
+    expect((await again.getCostSummary()).providers.map((each) => each.interrupted)).toEqual([4]);
+    // A cap below what they had reserved still lets the next request through.
+    await setCap(again, { amount: reservedTotal / 2, currency: "USD" });
+    expect((await again.getCostSummary()).spentTowardCap?.amount).toBe(0);
+    const { model: prepared } = await again.prepareChatModel();
+    await expect(
+      generateText({ model: prepared, prompt: "Hi", maxRetries: 0 }),
+    ).resolves.toBeDefined();
   });
 });
 
@@ -496,7 +568,14 @@ describe("Plans", () => {
     const summary = await core.getCostSummary();
     expect(summary.spent).toEqual([]);
     expect(summary.providers).toEqual([
-      { providerId: provider.id, billing: "plan", requests: 1, spent: [], unpricedTokens: 0 },
+      {
+        providerId: provider.id,
+        billing: "plan",
+        requests: 1,
+        spent: [],
+        unpricedTokens: 0,
+        interrupted: 0,
+      },
     ]);
     expect(await core.estimateRun({ items: 50 })).toEqual({ billing: "plan" });
   });
