@@ -119,7 +119,7 @@ test("Other models: grouped by why, ticked into the model menu, with a wrong tic
     await expect.poll(ids).toEqual(order);
     const group = (name: string) => other.getByRole("group", { name });
     await expect(group("Not known to IncarnaMind")).toContainText("May not work");
-    await expect(group("Older models")).toContainText("gpt-4-turbo");
+    await expect(group("Older models").getByTestId("other-model")).toHaveText("GPT-4 Turbo");
     const cannot = group("Can’t answer Questions here");
     await expect(cannot.getByRole("checkbox")).toHaveCount(0);
     await expect(cannot).toContainText("Completions only");
@@ -131,7 +131,7 @@ test("Other models: grouped by why, ticked into the model menu, with a wrong tic
     await screenshot(window, "other-models-open-en");
 
     // Tick by clicking the row: it goes into the menu and doesn't move.
-    const older = rows.filter({ hasText: "gpt-4-turbo" });
+    const older = rows.filter({ hasText: "GPT-4 Turbo" });
     await pointAndClick(window, older);
     await expect(older.getByRole("checkbox")).toBeChecked();
     await expect.poll(ids).toEqual(order);
@@ -143,8 +143,8 @@ test("Other models: grouped by why, ticked into the model menu, with a wrong tic
     // Untick: it leaves the menu again.
     await openSettings(window, "models");
     await toggle.click();
-    await pointAndClick(window, rows.filter({ hasText: "gpt-4-turbo" }));
-    await expect(rows.filter({ hasText: "gpt-4-turbo" }).getByRole("checkbox")).not.toBeChecked();
+    await pointAndClick(window, rows.filter({ hasText: "GPT-4 Turbo" }));
+    await expect(rows.filter({ hasText: "GPT-4 Turbo" }).getByRole("checkbox")).not.toBeChecked();
     await settings.getByRole("button", { name: "Close Settings" }).click();
     await expect.poll(menuModels).toEqual(["gpt-6.1-sol", "gpt-6-luna", "gpt-9-not-found"]);
 
@@ -161,7 +161,7 @@ test("Other models: grouped by why, ticked into the model menu, with a wrong tic
     await expect(problem.getByTestId("answer-error-action")).toHaveText("Choose another model");
     // The Mind still has it chosen; once another is, the menu no longer lists it.
     await pointAndClick(window, chip);
-    await pointAndClick(window, options.filter({ hasText: "gpt-6-luna" }));
+    await pointAndClick(window, options.filter({ hasText: "GPT-6 Luna" }));
     await expect.poll(menuModels).toEqual(["gpt-6.1-sol", "gpt-6-luna"]);
 
     // In Chinese.
@@ -179,6 +179,9 @@ test("Other models: grouped by why, ticked into the model menu, with a wrong tic
     await expect(otherZh.getByRole("group", { name: "无法在这里回答问题" })).toContainText(
       "仅支持文本补全",
     );
+    await expect(
+      otherZh.getByRole("group", { name: "旧型号" }).getByTestId("other-model"),
+    ).toHaveText("GPT-4 Turbo");
     await screenshot(window, "other-models-open-zh");
     await otherZh.getByTestId("other-models-toggle").click();
     await screenshot(window, "other-models-collapsed-zh");

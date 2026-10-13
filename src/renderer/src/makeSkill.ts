@@ -8,6 +8,7 @@ import { create } from "zustand";
 import type { ChatReadiness, SkillDraft } from "../../core/api";
 import { core } from "./core";
 import { errorMessage } from "./errors";
+import { translateNow } from "./i18n";
 import { useAppStore } from "./store";
 
 export type MakeSkillState =
@@ -59,7 +60,7 @@ export async function startSkillFromMind(mindId: string): Promise<void> {
         break;
     }
   } catch (error) {
-    state = { phase: "failed", message: errorMessage(error) };
+    state = { phase: "failed", message: errorMessage(error, translateNow) };
   }
   const current = useMakeSkill.getState().byMind[mindId];
   // Stopped, or started again, meanwhile: this answer is no longer wanted.
