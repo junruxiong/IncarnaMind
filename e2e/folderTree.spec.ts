@@ -234,6 +234,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
       /^Outline(⌥⌘L|Ctrl\+Alt\+L)$/,
       /^Export as Word \(\.docx\)(⇧⌘E|Ctrl\+Shift\+E)$/,
       /^Export as PDF$/,
+      /^Export as Source pack \(PDF\)$/,
       /^Export as HTML$/,
       /^Export as Markdown \(\.md\)$/,
       /^Export options…$/,
