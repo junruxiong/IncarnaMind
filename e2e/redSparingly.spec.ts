@@ -86,9 +86,10 @@ test("a refused key and a variable with no name read in ink after the amber mark
     await setLanguage(window, "en");
 
     await showSettingsPage(window, "connectors");
-    const section = window.getByTestId("connectors-settings");
-    await section.getByTestId("connector-add").click();
-    const connector = section.getByTestId("connector-form");
+    const page = window.getByTestId("settings-page-connectors");
+    await page.getByTestId("connector-add-custom").click();
+    await page.getByRole("tab", { name: "Command" }).click();
+    const connector = page.getByTestId("connector-form");
     const variables = connector.getByLabel(/^Environment variables/);
     await variables.fill("not a variable");
     await connector.getByLabel("Name", { exact: true }).focus();
