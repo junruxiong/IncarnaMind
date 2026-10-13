@@ -1,7 +1,6 @@
 import { beforeAll, describe, expect, test, vi } from "vitest";
 import { keysForm, keysLabel, keysOn, pressed } from "../../src/renderer/src/commands/keys";
 import {
-  COMMAND_GROUPS,
   type Command,
   type CommandContext,
   commands,
@@ -13,10 +12,10 @@ import { MENU_COMMANDS, type MenuCommandId } from "../../src/shared/commands";
 import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
 
 /*
- * Every command the app has, checked as a reviewer would check rule 4 and
- * rule 7 (docs/agents/interaction.md): named in both languages, placed in a
- * menu group, marked reversible or asking first, reachable by keyboard or
- * ⌘K, and no key bound twice where both commands could act.
+ * Every command the app has: no key bound twice where both commands could act,
+ * and the keys of text kept for text (docs/agents/interaction.md, rule 7), and
+ * what a few commands do. What each command says and is marked as is in
+ * conformance.test.ts.
  */
 
 const LANGUAGES = ["en", "zh-CN"] as const;
@@ -65,63 +64,6 @@ beforeAll(async () => {
   };
   await import("../../src/renderer/src/commands/app");
   all = commands.all();
-});
-
-describe("every command", () => {
-  test("has a label in English and in Chinese", () => {
-    expect(all.length).toBeGreaterThan(0);
-    for (const command of all) {
-      for (const language of LANGUAGES) {
-        const label = labelOf(command, NOWHERE, translator(language));
-        expect(label.trim(), `${command.id} in ${language}`).not.toBe("");
-        expect(label, `${command.id} in ${language}`).not.toMatch(/\{\w+\}/);
-      }
-    }
-  });
-
-  test("has a menu group and says whether it can be undone", () => {
-    for (const command of all) {
-      expect(COMMAND_GROUPS, command.id).toContain(command.group);
-      expect(
-        command.reversible === true || typeof command.reversible.confirm === "string",
-        command.id,
-      ).toBe(true);
-    }
-  });
-
-  test("never asks before deleting, unless what it does can't be taken back", () => {
-    // Deleting goes to Recently deleted (#228); only these are irreversible.
-    const asking = all
-      .filter((command) => command.reversible !== true)
-      .map((command) => command.id);
-    expect(asking.sort()).toEqual([
-      "deleted.deletePermanently",
-      "deleted.empty",
-      "linkedFolder.unlink",
-      "meeting.stop",
-    ]);
-    for (const id of ["mind.delete", "document.delete", "folder.delete", "tag.delete"] as const) {
-      expect(commands.get(id)?.reversible, id).toBe(true);
-    }
-  });
-
-  test("can be found in ⌘K or has a shortcut", () => {
-    for (const command of all) {
-      expect(command.palette !== false || command.shortcut !== undefined, command.id).toBe(true);
-    }
-  });
-
-  test("that asks first names what will be lost, in both languages", () => {
-    for (const command of all) {
-      if (command.reversible === true) continue;
-      for (const language of LANGUAGES) {
-        const t = translator(language);
-        const confirm = t(command.reversible.confirm);
-        expect(confirm.trim(), `${command.id} in ${language}`).not.toBe("");
-        expect(confirm, `${command.id} in ${language}`).not.toBe(labelOf(command, NOWHERE, t));
-      }
-    }
-  });
 });
 
 describe("New Folder with these", () => {
