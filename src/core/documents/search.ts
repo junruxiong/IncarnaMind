@@ -6,8 +6,9 @@
  * embeddings are off (the default), hybrid search is keyword search. The
  * search Tool (#30) and Search scopes (#36) build on these.
  */
-import type { DocumentKind, PassageSearchResult } from "../api";
+import type { DocumentKind, DocumentTextMatch, PassageSearchResult } from "../api";
 import type { Database } from "../storage";
+import { excerptOf, searchTerms, termQuery } from "../wordSearch";
 import { keywordQuery } from "./keywords";
 
 /** Reciprocal rank fusion's k: a Passage at rank r (from 1) in a list scores 1 / (k + r). */
@@ -45,6 +46,54 @@ export function keywordSearch(
       [match, ...scopeParams(documentIds), BigInt(limit)],
     )
     .map((row) => row.seq);
+}
+
+/** The most Passages a text search ranks before it keeps each Document's best. */
+const TEXT_SEARCH_RANKED = 200;
+
+/**
+ * The live Documents whose Passages hold every word of the query, the last
+ * letters of each still to type, best first, each with its best Passage that
+ * holds one of them in its text: a word only in a Document's name, which the
+ * index holds with each Passage, doesn't count. See `CoreApi.searchDocumentText`.
+ */
+export function textSearch(db: Database, query: string, limit: number): DocumentTextMatch[] {
+  const terms = searchTerms(query);
+  if (terms.length === 0) return [];
+  const ranked = db.all<{
+    passage_id: string;
+    document_id: string;
+    page_from: number | null;
+    page_to: number | null;
+    text: string;
+  }>(
+    `SELECT p.id AS passage_id, p.document_id, p.page_from, p.page_to, p.text
+     FROM passages_fts
+     JOIN passages p ON p.seq = passages_fts.rowid
+     JOIN documents d ON d.id = p.document_id
+     WHERE passages_fts MATCH ? AND p.deleted_at IS NULL AND d.deleted_at IS NULL
+     ORDER BY bm25(passages_fts), p.position, p.seq
+     LIMIT ?`,
+    [terms.map(termQuery).join(" AND "), BigInt(TEXT_SEARCH_RANKED)],
+  );
+  const matches: DocumentTextMatch[] = [];
+  const seen = new Set<string>();
+  for (const row of ranked) {
+    if (seen.has(row.document_id)) continue;
+    const { excerpt, highlights } = excerptOf(row.text, terms);
+    if (highlights.length === 0) continue;
+    seen.add(row.document_id);
+    matches.push({
+      documentId: row.document_id,
+      passageId: row.passage_id,
+      pageFrom: row.page_from,
+      pageTo: row.page_to,
+      excerpt,
+      highlights,
+    });
+    if (matches.length === limit) break;
+  }
+  return matches;
 }
 
 /**

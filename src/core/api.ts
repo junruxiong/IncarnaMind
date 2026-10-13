@@ -3756,6 +3756,38 @@ export interface ConversationMatch {
 }
 
 // ---------------------------------------------------------------------------
+// The words inside Minds and Documents (⌘K, #116)
+
+/**
+ * A Mind whose Blocks hold every word searched for (`CoreApi.searchMinds`): its best Block, one
+ * that holds them all if there is one, as a short excerpt with the words found, and the heading
+ * it sits under.
+ */
+export interface MindTextMatch {
+  mindId: string;
+  blockId: string;
+  /** The text of the nearest heading above the Block, "" when there is none. */
+  heading: string;
+  excerpt: string;
+  highlights: TextRange[];
+}
+
+/**
+ * A Document whose Passages hold every word searched for (`CoreApi.searchDocumentText`), at
+ * least one of them in the Passage's text rather than only in the Document's name: its best
+ * Passage, as a short excerpt with the words found.
+ */
+export interface DocumentTextMatch {
+  documentId: string;
+  passageId: string;
+  /** The first Unit the Passage covers, from 1, as in `PassageSearchResult`; null: none. */
+  pageFrom: number | null;
+  pageTo: number | null;
+  excerpt: string;
+  highlights: TextRange[];
+}
+
+// ---------------------------------------------------------------------------
 // Skills (CONTEXT.md: Skill)
 
 /**
@@ -5699,6 +5731,19 @@ export interface CoreApi {
    */
   searchConversations(query: string): Promise<ConversationMatch[]>;
   /**
+   * ⌘K's "In your notes": the Minds, not deleted, whose Blocks hold every word of `query`
+   * (English and Chinese, as Document search reads them; the last letters of each word may be
+   * still to type), best match first, at most 20. Blocks are searched as they are now: words
+   * typed a moment ago are found.
+   */
+  searchMinds(query: string): Promise<MindTextMatch[]>;
+  /**
+   * ⌘K's "In your Documents": live Documents whose Passages hold every word of `query`, as
+   * `searchMinds` reads it, best match first, one Passage each, at most 20. Keyword search over
+   * the Passage index, whatever the embedding settings.
+   */
+  searchDocumentText(query: string): Promise<DocumentTextMatch[]>;
+  /**
    * Gives a conversation the title the User typed (trimmed; empty goes back to its own
    * name) and returns it. A name the conversation gives itself never replaces it.
    */
@@ -6875,6 +6920,8 @@ const methods: Record<CoreApiMethod, true> = {
   listConversations: true,
   getConversation: true,
   searchConversations: true,
+  searchMinds: true,
+  searchDocumentText: true,
   renameConversation: true,
   deleteConversation: true,
   resolveReference: true,

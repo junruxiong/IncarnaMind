@@ -105,6 +105,7 @@ import { createCaptureHealth } from "./meetings/health";
 import { createTranscripts } from "./meetings/transcript";
 import { accessFor, isKnownKind } from "./mindAccess";
 import { createMindContent } from "./mindContent";
+import { createMindIndex } from "./mindIndex";
 import {
   createMinds,
   parseCreateMindInput,
@@ -325,9 +326,16 @@ export function createCore(adapters: CoreAdapters): Core {
     events.emit("mind.update", { mindId, update });
     // Only notes the change; what became of AI text is worked out once the Mind is quiet.
     aiUse.contentStored(mindId);
+    mindIndex.contentStored(mindId);
     comparisons.mindChanged(mindId);
     const renamed = minds.setAutoTitle(mindId, content.peek(mindId, firstLineOf));
     if (minds.markEdited(mindId) || renamed) mindsChanged();
+  });
+  const mindIndex = createMindIndex({
+    db,
+    now,
+    content,
+    reportError: (error) => console.error(error),
   });
   // The record of AI use stays on this computer: it takes nothing from the network or the usage-data catalog.
   const aiUse = createAiUse({
@@ -1768,6 +1776,7 @@ export function createCore(adapters: CoreAdapters): Core {
     usageData.record({ event: "documents_added", fields: addedCounts(result, since) });
     return { ...result, batchId };
   };
+  mindIndex.start();
 
   // Async on purpose: the renderer reaches these over IPC, and a future hosted core may be remote.
   return {
@@ -1828,6 +1837,8 @@ export function createCore(adapters: CoreAdapters): Core {
     listConversations: async (options) => conversations.list(options),
     getConversation: async (conversationId) => conversations.content(conversationId),
     searchConversations: async (query) => conversations.search(query),
+    searchMinds: async (query) => mindIndex.search(query),
+    searchDocumentText: async (query) => documents.searchText(query),
     renameConversation: async (conversationId, title) => {
       const conversation = conversations.rename(conversationId, title);
       conversationsChanged();
@@ -2543,6 +2554,7 @@ export function createCore(adapters: CoreAdapters): Core {
       textRecognitionModel?.close();
       activity.stop();
       aiUse.close();
+      mindIndex.close();
       events.clear();
       content.closeAll();
       db.close();
