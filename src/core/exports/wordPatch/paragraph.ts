@@ -10,17 +10,24 @@
  * set on top. What the import kept as is (a field, a footnote mark, a
  * bookmark…) goes back as its original XML. A new paragraph is written the
  * same way, with nothing to keep.
+ *
+ * For review (#107), what changes still waiting add and remove goes in as
+ * IncarnaMind's tracked changes, and, when the User's edits are tracked,
+ * their words added and removed as theirs, and a format they changed with
+ * what it was (`w:rPrChange`). IncarnaMind's comments on AI text start and
+ * end where its passages do.
  */
 import type { NodeJSON } from "../../../shared/blockJson";
 import { readWordAtom } from "../../../shared/wordFiles";
-import { IMAGE_NODE, WORD_ATOM_NODE } from "../../api";
+import { GENERATED_MARK, IMAGE_NODE, WORD_ATOM_NODE } from "../../api";
 import type { Places } from "../../documents/formats/docxImport";
 import { elements, type XmlElement } from "../../documents/formats/xml";
-import type { Inline } from "../../mindText";
+import type { Inline, Pendings, ReviewReading } from "../../mindText";
 import { diffSteps, splitWords } from "../../proposals/diff";
-import { escapeXml } from "../wordml";
-import { marksOf, NO_MARKS, sameMarks, type TextMarks } from "./mind";
-import { runPropertiesFor } from "./properties";
+import { dateAttribute, escapeXml, type WordIds } from "../wordml";
+import { changeClose, changeTag, type Review, type Tracking, trackInline } from "../wordReview";
+import { marksOf, NO_MARKS, nodePendings, sameMarks, type TextMarks, textPendings } from "./mind";
+import { Properties, runPropertiesFor } from "./properties";
 import {
   closeTag,
   endOf,
@@ -45,6 +52,10 @@ export interface Token {
   source: string | null;
   /** A special's content, for the native writer: a Citation's footnote, maths, a new picture. */
   inline: Inline | null;
+  /** What changes still waiting do to it (#107). */
+  pending: Pendings;
+  /** It is AI text. */
+  ai: boolean;
 }
 
 const BREAK = "\u0001break";
@@ -58,6 +69,8 @@ const char = (value: string, marks: TextMarks, run: XmlElement | null): Token =>
   run,
   source: null,
   inline: null,
+  pending: {},
+  ai: false,
 });
 
 const atom = (source: string): Token => ({
@@ -68,6 +81,8 @@ const atom = (source: string): Token => ({
   run: null,
   source,
   inline: null,
+  pending: {},
+  ai: false,
 });
 
 /** A special: never equal to anything, so it is always written new. */
@@ -79,6 +94,11 @@ export const special = (inline: Inline): Token => ({
   run: null,
   source: null,
   inline,
+  pending: {
+    ...(inline.inserted && { inserted: inline.inserted }),
+    ...(inline.deleted && { deleted: inline.deleted }),
+  },
+  ai: false,
 });
 
 const textTokens = (text: string, marks: TextMarks, run: XmlElement | null) =>
@@ -116,30 +136,102 @@ export function sourceOf(node: NodeJSON): string | null {
 /**
  * A paragraph's text as it is now. `specialOf` reads what the native writer
  * writes (Citations, footnotes, maths, a new picture); other inline nodes
- * read as their text.
+ * read as their text. Read for review (`reading`), what changes still waiting
+ * do to each is marked, and AI text (all of it, `wholeAi`, in an Answer from
+ * before AI text was marked).
  */
 export function currentTokens(
   content: readonly NodeJSON[],
   specialOf: (node: NodeJSON) => Inline[],
   textOf: (node: NodeJSON) => string,
+  reading?: ReviewReading,
+  wholeAi = false,
 ): Token[] {
   const tokens: Token[] = [];
+  const marked = (made: Token[], node: NodeJSON, pending: Pendings): Token[] => {
+    const ai =
+      reading !== undefined &&
+      node.type === "text" &&
+      (wholeAi || (node.marks?.some((mark) => mark.type === GENERATED_MARK) ?? false));
+    if (!ai && !pending.inserted && !pending.deleted) return made;
+    for (const token of made) {
+      token.pending = { ...token.pending, ...pending };
+      token.ai = ai;
+    }
+    return made;
+  };
   for (const node of content) {
     if (node.type === "text") {
-      tokens.push(...textTokens(node.text ?? "", marksOf(node.marks), null));
+      tokens.push(
+        ...marked(
+          textTokens(node.text ?? "", marksOf(node.marks), null),
+          node,
+          textPendings(node, reading),
+        ),
+      );
     } else if (node.type === "hardBreak") {
-      tokens.push({ ...char("\n", NO_MARKS, null), kind: "break", key: BREAK });
+      tokens.push(
+        ...marked(
+          [{ ...char("\n", NO_MARKS, null), kind: "break", key: BREAK }],
+          node,
+          nodePendings(node, reading),
+        ),
+      );
     } else {
+      const pending = nodePendings(node, reading);
       const source = sourceOf(node);
-      if (source) tokens.push(atom(source));
+      if (source) tokens.push(...marked([atom(source)], node, pending));
       else {
         const inlines = specialOf(node);
         if (inlines.length > 0) tokens.push(...inlines.map(special));
-        else tokens.push(...textTokens(textOf(node), NO_MARKS, null));
+        else tokens.push(...marked(textTokens(textOf(node), NO_MARKS, null), node, pending));
       }
     }
   }
   return tokens;
+}
+
+/** One step of a paragraph from its text as imported to its text now, in the order written. */
+export type Aligned =
+  /** A base token kept, as current token `y`. */
+  | { step: "equal"; x: number; y: number }
+  /** A base token the User removed. */
+  | { step: "delete"; x: number }
+  /** A current token the User added. */
+  | { step: "insert"; y: number }
+  /** A current token a change still waiting adds. */
+  | { step: "proposed"; y: number };
+
+/**
+ * A paragraph's text as imported and now, aligned word by word. What changes
+ * still waiting add isn't the Mind's text yet: it is left out of the
+ * comparison, and goes where it is among the rest.
+ */
+export function alignTokens(base: readonly Token[], current: readonly Token[]): Aligned[] {
+  const accepted = current.flatMap((token, index) => (token.pending.inserted ? [] : [index]));
+  const steps = diffTokens(
+    base,
+    accepted.map((index) => current[index] as Token),
+  );
+  const aligned: Aligned[] = [];
+  let x = 0;
+  let next = 0;
+  let written = 0;
+  const proposedBefore = (limit: number) => {
+    for (; written < limit; written++) aligned.push({ step: "proposed", y: written });
+  };
+  for (const step of steps) {
+    if (step === "delete") {
+      aligned.push({ step: "delete", x: x++ });
+      continue;
+    }
+    const y = accepted[next++] as number;
+    proposedBefore(y);
+    written = y + 1;
+    aligned.push(step === "equal" ? { step: "equal", x: x++, y } : { step: "insert", y });
+  }
+  proposedBefore(current.length);
+  return aligned;
 }
 
 /** What writing a paragraph needs of the part it is in. */
@@ -157,6 +249,11 @@ export interface ParagraphContext {
   linkStyle: string | null;
   /** The id of that style, added to the document if it hasn't one: for a new link. */
   addLinkStyle(): string;
+  /** The ids of tracked changes, and IncarnaMind's review (#107). */
+  ids: WordIds;
+  review: Review;
+  /** Whether an atom the User removed from its paragraph is written there, as removed: it isn't written elsewhere. */
+  removedHere(source: string): boolean;
 }
 
 export interface ParagraphInput {
@@ -191,7 +288,7 @@ export function writeParagraph(
   context: ParagraphContext,
 ): { xml: string; lost: number } {
   const { base, current } = input;
-  const { text, parents, places } = context;
+  const { text, parents, places, review } = context;
   const element = base?.element ?? null;
   const children = element ? elements(element).filter((each) => each.name !== "w:pPr") : [];
   const childIndex = new Map(children.map((each, index) => [each, index]));
@@ -257,43 +354,43 @@ export function writeParagraph(
   };
 
   // What changed, word by word, as Proposals compare text.
-  const steps = diffTokens(baseList, current);
+  const aligned = alignTokens(baseList, current);
   /** For each current token, the base token it is (equal), or -1 (new). */
   const baseOf = new Array<number>(current.length).fill(-1);
   /** Each new token's child: that of the base token before it in the comparison, else after. */
   const homeOf = new Array<Piece | null>(current.length).fill(null);
   /** Each character's formatting: its own run's; typed text takes the run of what it replaces, else of the character before it. */
   const formatRun = new Array<XmlElement | null>(current.length).fill(null);
-  let x = 0;
-  let y = 0;
   let lastPiece: Piece | null = null;
   let previousRun: XmlElement | null = null;
   let replacing: XmlElement | null = null;
   const waiting: number[] = [];
   const isText = (token: Token | undefined) => token?.kind === "char" || token?.kind === "break";
-  for (const step of steps) {
-    if (step === "insert") {
+  for (const each of aligned) {
+    if (each.step === "insert" || each.step === "proposed") {
+      const { y } = each;
       homeOf[y] = lastPiece;
       if (!lastPiece) waiting.push(y);
       if (isText(current[y])) {
         formatRun[y] = replacing ?? previousRun;
         previousRun = formatRun[y] ?? previousRun;
       }
-      y++;
       continue;
     }
+    const { x } = each;
     const piece = pieceOfToken(x);
     const was = baseList[x] as Token;
-    if (step === "equal") {
+    if (each.step === "equal") {
+      const { y } = each;
       baseOf[y] = x;
       const now = current[y] as Token;
-      if (piece && isText(was) && !sameMarks(was.marks, now.marks)) piece.dirty = true;
+      if (piece && (now.pending.deleted || (isText(was) && !sameMarks(was.marks, now.marks))))
+        piece.dirty = true;
       if (isText(was)) {
         formatRun[y] = was.run;
         previousRun = was.run ?? previousRun;
       }
       replacing = null;
-      y++;
     } else {
       if (piece) piece.dirty = true;
       if (isText(was) && replacing === null) replacing = was.run;
@@ -303,7 +400,6 @@ export function writeParagraph(
       waiting.length = 0;
       lastPiece = piece;
     }
-    x++;
   }
   for (const [index, home] of homeOf.entries()) {
     if (baseOf[index] !== -1 || !home) continue;
@@ -320,7 +416,7 @@ export function writeParagraph(
   if (
     base &&
     !input.pPrChanged &&
-    steps.every((step) => step === "equal") &&
+    aligned.every((each) => each.step === "equal") &&
     pieces.every((piece) => !piece.dirty)
   ) {
     return { xml: sliceOf(text, base.element), lost: 0 };
@@ -350,17 +446,42 @@ export function writeParagraph(
       if (!piece.written && piece.tokens.length === 0) verbatim(piece);
     }
   };
+  /** The changes still waiting on a token, outermost first; a special's are the native writer's. */
+  const pendingOf = (token: Token, inserted: boolean): Tracking[] =>
+    token.kind === "special"
+      ? []
+      : [
+          ...(inserted && token.pending.inserted
+            ? [review.pending("insert", token.pending.inserted)]
+            : []),
+          ...(token.pending.deleted ? [review.pending("delete", token.pending.deleted)] : []),
+        ];
+  const userInsert = review.user("insert");
+  const userDelete = review.user("delete");
 
-  current.forEach((token, index) => {
+  for (const each of aligned) {
+    if (each.step === "delete") {
+      // The User's removal, written as theirs when their edits are tracked.
+      const token = baseList[each.x] as Token;
+      const piece = pieceOfToken(each.x);
+      if (!userDelete || !piece || piece.frozen) continue;
+      if (token.kind === "atom" && !(token.source && context.removedHere(token.source))) continue;
+      passiveBefore(piece.from);
+      lastVerbatim = -1;
+      writer.add(token, token.run, [userDelete], null);
+      continue;
+    }
+    const index = each.y;
+    const token = current[index] as Token;
     const from = baseOf[index] as number;
     const piece = from >= 0 ? pieceOfToken(from) : homeOf[index];
-    if (from >= 0 && !piece) return; // kept outside the paragraph, where it is
+    if (from >= 0 && !piece) continue; // kept outside the paragraph, where it is
     if (piece && !piece.dirty) {
       if (!piece.written) {
         passiveBefore(piece.from);
         verbatim(piece);
       }
-      return;
+      continue;
     }
     if (piece?.frozen) {
       if (!piece.written) {
@@ -368,12 +489,26 @@ export function writeParagraph(
         verbatim(piece);
       }
       if (from < 0 || !sameMarks((baseList[from] as Token).marks, token.marks)) lost++;
-      return;
+      continue;
     }
     if (piece) passiveBefore(piece.from);
     lastVerbatim = -1;
-    writer.add(token, formatRun[index] ?? null);
-  });
+    if (each.step === "equal") {
+      const was = baseList[from] as Token;
+      const reformatted = isText(was) && !sameMarks(was.marks, token.marks);
+      writer.add(
+        token,
+        formatRun[index] ?? null,
+        pendingOf(token, false),
+        reformatted ? userInsert : null,
+      );
+    } else if (each.step === "insert") {
+      const own = userInsert ? [userInsert] : [];
+      writer.add(token, formatRun[index] ?? null, [...own, ...pendingOf(token, false)], null);
+    } else {
+      writer.add(token, formatRun[index] ?? null, pendingOf(token, true), null);
+    }
+  }
   for (const piece of pieces) {
     if (piece.frozen && piece.dirty && !piece.written) {
       // A field joined to text that was all deleted: the field and its text stay.
@@ -437,10 +572,13 @@ function diffTokens(a: readonly Token[], b: readonly Token[]): ReturnType<typeof
   return steps;
 }
 
-/** A wrapper open around runs: an original element (a hyperlink, a smart tag), or a new link. */
+/**
+ * A wrapper open around runs: an original element (a hyperlink, a smart tag),
+ * a new link, or a tracked change, whose start tag takes an id when opened.
+ */
 interface Wrapper {
-  key: XmlElement | string;
-  open: string;
+  key: XmlElement | Tracking | string;
+  open: string | (() => string);
   close: string;
 }
 
@@ -454,6 +592,7 @@ class RunWriter {
     startTag: string;
     content: string;
     text: string;
+    deleted: boolean;
   } | null = null;
 
   constructor(
@@ -493,6 +632,15 @@ class RunWriter {
     return { key: element, open: openTag(text, element) + properties, close: closeTag(element) };
   }
 
+  /** A tracked change around runs, innermost of the wrappers: Word keeps links outside it. */
+  private change(tracking: Tracking): Wrapper {
+    return {
+      key: tracking,
+      open: () => changeTag(tracking, this.context.ids),
+      close: changeClose(tracking),
+    };
+  }
+
   /** Opens and closes wrappers until exactly `wanted` are open. */
   private enter(wanted: Wrapper[]): void {
     let same = 0;
@@ -505,27 +653,58 @@ class RunWriter {
     if (same === this.open.length && same === wanted.length) return;
     this.endRun();
     for (let at = this.open.length - 1; at >= same; at--) this.out += this.open[at]?.close ?? "";
-    for (const wrapper of wanted.slice(same)) this.out += wrapper.open;
+    for (const wrapper of wanted.slice(same)) {
+      this.out += typeof wrapper.open === "string" ? wrapper.open : wrapper.open();
+    }
     this.open = wanted;
   }
 
   private endRun(): void {
     if (!this.run) return;
-    this.out += `${this.run.startTag}${this.run.rPr}${this.run.content}${textElement(this.run.text)}</w:r>`;
+    const { startTag, rPr, content, text, deleted } = this.run;
+    this.out += `${startTag}${rPr}${content}${textElement(text, deleted)}</w:r>`;
     this.run = null;
   }
 
-  add(token: Token, formatRun: XmlElement | null): void {
-    if (token.kind === "char" || token.kind === "break") this.addText(token, formatRun);
-    else if (token.kind === "atom" && token.source) this.addAtom(token.source);
+  /**
+   * A token, inside the tracked changes `changes` (outermost first); `formatBy`,
+   * when its format changed and the User's edits are tracked, says who changed it.
+   */
+  add(
+    token: Token,
+    formatRun: XmlElement | null,
+    changes: Tracking[],
+    formatBy: Tracking | null,
+  ): void {
+    const { review, ids } = this.context;
+    const before = review.before(token);
+    if (before) {
+      this.endRun();
+      this.out += before;
+    }
+    if (token.kind === "char" || token.kind === "break")
+      this.addText(token, formatRun, changes, formatBy);
+    else if (token.kind === "atom" && token.source) this.addAtom(token.source, changes);
     else if (token.inline) {
       this.enter([]);
       this.endRun();
-      this.out += this.context.special(token.inline);
+      let xml = this.context.special(token.inline);
+      for (const tracking of [...changes].reverse()) xml = trackInline(xml, tracking, ids);
+      this.out += xml;
+    }
+    const after = review.after(token);
+    if (after) {
+      this.endRun();
+      this.out += after;
     }
   }
 
-  private addText(token: Token, formatRun: XmlElement | null): void {
+  private addText(
+    token: Token,
+    formatRun: XmlElement | null,
+    changes: Tracking[],
+    formatBy: Tracking | null,
+  ): void {
     const { text, hrefOf, linkStyle, addLinkStyle, newLink } = this.context;
     const original = this.wrappersOf(formatRun);
     const inheritedLink =
@@ -545,7 +724,7 @@ class RunWriter {
         close: "</w:hyperlink>",
       });
     }
-    this.enter(wanted);
+    this.enter([...wanted, ...changes.map((each) => this.change(each))]);
 
     const rPrElement = formatRun
       ? elements(formatRun).find((each) => each.name === "w:rPr")
@@ -559,22 +738,37 @@ class RunWriter {
     const style = !linkChanged ? null : token.marks.link ? addLinkStyle() : linkStyle;
     const rPr = runPropertiesFor(baseRPr, token.marks, style);
     const startTag = formatRun ? openTag(text, formatRun) : "<w:r>";
-    const key = `${startTag}\u0000${rPr}`;
+    const deleted = changes.some((each) => each.kind === "delete");
+    const key = `${startTag}\u0000${rPr}\u0000${deleted}\u0000${formatBy ? baseRPr : ""}`;
     if (this.run?.key !== key) {
       this.endRun();
-      this.run = { key, rPr, startTag, content: "", text: "" };
+      this.run = {
+        key,
+        rPr: formatBy ? this.formatChanged(rPr, baseRPr, formatBy) : rPr,
+        startTag,
+        content: "",
+        text: "",
+        deleted,
+      };
     }
     const element = elementOf(token);
     if (element === null) {
       this.run.text += token.char;
     } else {
-      this.run.content += textElement(this.run.text) + element;
+      this.run.content += textElement(this.run.text, deleted) + element;
       this.run.text = "";
     }
   }
 
-  private addAtom(source: string): void {
-    const { text, parents, places } = this.context;
+  /** Run properties that say what they were before the User changed them (`w:rPrChange`). */
+  private formatChanged(rPr: string, was: string, by: Tracking): string {
+    const before = Properties.run(was).remove("w:rPrChange").toXml() || "<w:rPr/>";
+    const change = `<w:rPrChange w:id="${this.context.ids.take("annotation")}" w:author="${escapeXml(by.author)}"${dateAttribute(by.date)}>${before}</w:rPrChange>`;
+    return Properties.run(rPr).set("w:rPrChange", change).toXml();
+  }
+
+  private addAtom(source: string, changes: Tracking[]): void {
+    const { text, parents, places, ids } = this.context;
     const [first, last] = source.split("..").map((each) => places.get(each));
     if (!first) return;
     if (first.name === "w:sectPr") return; // A section break is written in the paragraph's properties.
@@ -592,9 +786,11 @@ class RunWriter {
     }
     this.enter(this.wrappersOf(around).map((each) => this.wrapper(each)));
     this.endRun();
-    this.out += this.inside(first)
+    let written = this.inside(first)
       ? xml
       : rescoped(xml, scopeOf(parent ?? first, parents), this.scope);
+    for (const tracking of [...changes].reverse()) written = trackInline(written, tracking, ids);
+    this.out += written;
   }
 
   /** What was written since the last flush, every wrapper closed. */
@@ -607,9 +803,12 @@ class RunWriter {
   }
 }
 
-/** Text as a run's `w:t`; none for no text. */
-const textElement = (text: string) =>
-  text ? `<w:t xml:space="preserve">${escapeXml(text)}</w:t>` : "";
+/** Text as a run's `w:t`, or `w:delText` for deleted text; none for no text. */
+const textElement = (text: string, deleted = false) => {
+  if (!text) return "";
+  const name = deleted ? "w:delText" : "w:t";
+  return `<${name} xml:space="preserve">${escapeXml(text)}</${name}>`;
+};
 
 /** The element a character is written as, if not as text: a tab, a line break, Word's hyphens. */
 function elementOf(token: Token): string | null {

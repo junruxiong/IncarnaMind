@@ -381,6 +381,15 @@ export type SettingsPage =
   | "agents"
   | "privacy";
 
+/** Opens the selected tab's menu, with a right-click. Returns the menu. */
+export async function tabMenu(window: Page): Promise<Locator> {
+  const tab = window.getByRole("tab", { selected: true }).first();
+  await pointAndClick(window, tab, { button: "right" });
+  const menu = tab.getByTestId("tab-actions");
+  await expect(menu).toBeVisible();
+  return menu;
+}
+
 /** Opens Settings from the sidebar, then one of the pages in its list. Returns the dialog. */
 export async function openSettings(window: Page, page: SettingsPage): Promise<Locator> {
   await window.getByRole("button", { name: "Settings" }).click();

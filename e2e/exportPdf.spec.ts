@@ -19,12 +19,14 @@ import {
   interceptOpenPath,
   interceptShowItemInFolder,
   launchApp,
+  motionSettled,
   newMind,
   pathsOpened,
   pathsShown,
   pointAndClick,
   removeDataFolder,
   setWindowSize,
+  tabMenu,
   useOutputLocation,
   WINDOW_SIZE,
 } from "./app";
@@ -151,15 +153,6 @@ async function savedPath(window: Page, name: string): Promise<string> {
   const done = window.getByTestId("export-result").getByTestId("export-done");
   await expect(done).toHaveText(`Saved ${name}`, { timeout: 30_000 });
   return (await done.getAttribute("title")) ?? "";
-}
-
-/** The menu of the Mind's tab, opened by a right-click on the tab, as a person opens it. */
-async function tabMenu(window: Page): Promise<Locator> {
-  const tab = window.getByRole("tab", { selected: true }).first();
-  await pointAndClick(window, tab, { button: "right" });
-  const menu = tab.getByTestId("tab-actions");
-  await expect(menu).toBeVisible();
-  return menu;
 }
 
 /** Export as PDF, from the tab's menu, while Word is still the last format. */
@@ -477,14 +470,22 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
   await expect(sheet.getByTestId("export-format-note")).toHaveText(
     "Citations become Word footnotes, each naming its Document and Location.",
   );
+  // Word's review choices (#107), on to begin with; a Mind made here has no import to track edits since.
+  await expect(sheet.getByTestId("export-pending-note")).toHaveText(
+    "Changes waiting for you go in as tracked changes by IncarnaMind.",
+  );
+  await expect(sheet.getByTestId("export-mark-ai-text")).toBeChecked();
+  await expect(sheet.getByTestId("export-comment-failed-checks")).toBeChecked();
+  await expect(sheet.getByTestId("export-track-changes")).toHaveCount(0);
   await expect(sheet.getByTestId("export-save-to")).toHaveText(
     (await realpath(out)).split(/[\\/]/).at(-1) ?? "",
   );
+  await screenshot(window, "export-options-en-wide");
   await format.selectOption("pdf");
   await expect(sheet.getByTestId("export-format-note")).toHaveText(
     "Citations become footnotes with the Document and Location.",
   );
-  await screenshot(window, "export-options-en-wide");
+  await expect(sheet.getByTestId("export-mark-ai-text")).toHaveCount(0);
   await sheet.getByRole("button", { name: "Cancel" }).click();
   await expect(sheet).toBeHidden();
   await openOptions(window, "Export options");
@@ -538,6 +539,13 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
   await expect(sheet.getByTestId("export-format-note")).toHaveText(
     "引用会成为脚注，写明文档和位置。",
   );
+  await format.selectOption("docx");
+  await expect(sheet.getByTestId("export-pending-note")).toHaveText(
+    "尚未接受的修订会以 IncarnaMind 的修订写入。",
+  );
+  await expect(sheet.getByTestId("export-mark-ai-text")).toHaveAccessibleName(
+    "为 AI 生成的文字添加批注",
+  );
   const [sheetBox, windowWidth] = await Promise.all([
     sheet.boundingBox(),
     window.evaluate(() => globalThis.innerWidth),
@@ -545,6 +553,7 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
   if (!sheetBox) throw new Error("The sheet isn't laid out.");
   expect(sheetBox.x).toBeGreaterThanOrEqual(0);
   expect(sheetBox.x + sheetBox.width).toBeLessThanOrEqual(windowWidth);
+  await motionSettled(window);
   await screenshot(window, "export-options-zh-narrow");
   await window.keyboard.press("Escape");
   await pointAndClick(window, exportButton);

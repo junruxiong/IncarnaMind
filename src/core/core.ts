@@ -1,5 +1,5 @@
 import { mkdirSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { homedir, tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import * as Y from "yjs";
 import { isCitationStyleId } from "../shared/citationStyles";
@@ -379,6 +379,7 @@ export function createCore(adapters: CoreAdapters): Core {
     adapters.systemLanguages,
     scriptSandbox,
     !capture ? "none" : capture.systemAudio ? "both" : "microphone",
+    () => adapters.systemUserName?.() || accountName(),
   );
   const folders = createFolders(db, now);
   const foldersChanged = () => events.emit("folders.changed", folders.list());
@@ -1237,6 +1238,7 @@ export function createCore(adapters: CoreAdapters): Core {
     paper: () => paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages())),
     ...(adapters.pictures && { pictures: adapters.pictures }),
     wordPackage: (mindId) => wordImports.packageOf(mindId),
+    author: () => settings.get().author,
     log: adapters.log ?? silentLogger,
     now,
   });
@@ -2556,7 +2558,13 @@ export function createCore(adapters: CoreAdapters): Core {
       return exported;
     },
     saveMindExport: async (mindId, options) => {
-      const { fileName, data, word, ...counts } = await mindExports.export(mindId, options);
+      const {
+        fileName,
+        fromWord: _,
+        data,
+        word,
+        ...counts
+      } = await mindExports.export(mindId, options);
       // What a Word file can't keep is said before anything is saved (#105).
       const accepted = new Set(Array.isArray(options?.accept) ? options.accept : []);
       if (word?.notKept.some((loss) => !accepted.has(loss.key))) return { status: "review", word };
@@ -2712,4 +2720,14 @@ export function createCore(adapters: CoreAdapters): Core {
       db.close();
     },
   };
+}
+
+/** The account's name, or "" where the OS can't say (`userInfo` throws for a user without one). */
+function accountName(): string {
+  try {
+    return userInfo().username;
+  } catch (error) {
+    console.warn("settings.accountName", error instanceof Error ? error.message : String(error));
+    return "";
+  }
 }

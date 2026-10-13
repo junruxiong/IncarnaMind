@@ -1373,6 +1373,11 @@ export interface UserSettings {
   leaveOutOwnFiles: boolean;
   /** How Export and ⇧⌘E export a Mind: the choices last saved in Export options (#100). */
   exportOptions: ExportPreferences;
+  /**
+   * The name the User's edits go under as tracked changes in a Word file
+   * (#107), or null: the name the computer knows them by (`Settings.author`).
+   */
+  authorName: string | null;
   /** The monthly cap on models billed per token: off (null) by default. */
   monthlyCap: MonthlyCap | null;
   /**
@@ -1481,6 +1486,11 @@ export interface Settings {
    * the microphone only (Linux, for now); "none": nothing (no capture).
    */
   meetingAudio: "both" | "microphone" | "none";
+  /**
+   * The name the User's edits go under as tracked changes in a Word file
+   * (#107): `UserSettings.authorName`, or the name the computer knows them by.
+   */
+  author: string;
 }
 
 export interface SettingsPatch {
@@ -5351,9 +5361,17 @@ export type ExportFormat = (typeof EXPORT_FORMATS)[number];
  */
 export interface ExportPreferences {
   format: ExportFormat;
-  docx: { includeQuestions: boolean };
+  docx: WordExportPreferences;
   pdf: { includeQuestions: boolean };
   html: { includeQuestions: boolean };
+}
+
+/** A Word export's own choices (#107), each on until the User turns it off (see `ExportMindOptions`). */
+export interface WordExportPreferences {
+  includeQuestions: boolean;
+  trackChanges: boolean;
+  markAiText: boolean;
+  commentFailedChecks: boolean;
 }
 
 export interface ExportMindOptions {
@@ -5370,6 +5388,21 @@ export interface ExportMindOptions {
    * exports anyway. `saveMindExport` saves nothing while anything else can't be kept.
    */
   accept?: string[];
+  /**
+   * Word only (#107): for a Mind imported from a Word file, the User's edits
+   * since the import go in as tracked changes under their name
+   * (`Settings.author`). Changes still waiting to be accepted always go into
+   * a Word file as tracked changes by IncarnaMind. Absent: off.
+   */
+  trackChanges?: boolean;
+  /** Word only: AI text gets a comment by IncarnaMind, "Written by IncarnaMind". Absent: off. */
+  markAiText?: boolean;
+  /**
+   * Word only: a Citation whose check failed (its quote wasn't found, or its
+   * claim is unsupported or contradicted) gets a comment by IncarnaMind
+   * saying so. Absent: off.
+   */
+  commentFailedChecks?: boolean;
 }
 
 /** What exporting a Mind will write, for the User to see before the file is written. */
@@ -5390,6 +5423,8 @@ export interface MindExportPreview {
   unverifiedCitations: number;
   /** The Question Blocks in the Mind, whether the export includes them or not. */
   questions: number;
+  /** The Mind was imported from a Word file, which a Word export writes back into (#105). */
+  fromWord: boolean;
 }
 
 /** A Mind exported as a file, for the host to save where the User chooses. */
@@ -5405,7 +5440,7 @@ export type SavedMindExport =
   /** Saved, with what it holds, so the result line can say how many quotes weren't found. */
   | ({ status: "saved"; file: SavedFile; word: WordExportReport | null } & Omit<
       MindExportPreview,
-      "fileName"
+      "fileName" | "fromWord"
     >)
   /**
    * Not saved: a Mind imported from Word can't keep something in its file
