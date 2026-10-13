@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import { readManifest, WORD_DIR } from "../../eval/word/corpus";
-import { checkEdits, checkExport } from "../../eval/word/exports";
+import { checkEdits, checkExport, checkReview } from "../../eval/word/exports";
 import { checkImport } from "../../eval/word/imports";
 
 const files = readManifest().map((entry) => entry.file);
@@ -29,6 +29,15 @@ test.each(files)(
   "%s takes edits of every kind: the export is a package Word opens and imports again",
   async (file) => {
     const outcome = await checkEdits(readFileSync(join(WORD_DIR, file)));
+    expect(outcome.ok, outcome.detail).toBe(true);
+  },
+  60_000,
+);
+
+test.each(files)(
+  "%s exports for review: the User's edits and changes still waiting tracked, comments whole, and accepting every change gives the Mind's text",
+  async (file) => {
+    const outcome = await checkReview(readFileSync(join(WORD_DIR, file)));
     expect(outcome.ok, outcome.detail).toBe(true);
   },
   60_000,
