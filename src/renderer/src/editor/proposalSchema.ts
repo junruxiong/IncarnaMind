@@ -19,6 +19,7 @@ export const PROPOSAL_NODE_TYPES = [
   "horizontalRule",
   "table",
   "chart",
+  "comparisonTable",
   "citation",
   "footnote",
   "inlineMath",
