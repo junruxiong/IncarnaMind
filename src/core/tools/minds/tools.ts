@@ -275,7 +275,7 @@ function lengths(before: string, after: string): string {
 const changes = (count: number) => (count === 1 ? "1 change" : `${count} changes`);
 
 const WAITING =
-  "They wait in the Mind for the User to accept or reject them; until then nothing in it has changed.";
+  "They wait in the Mind for the User to accept or reject them; until then nothing in it has changed, and they can't be changed again.";
 
 /** What `edit_mind`'s model reads of a result that proposed nothing, or why it failed. */
 function notProposed(result: EditWithAiResult, name: string): string {
