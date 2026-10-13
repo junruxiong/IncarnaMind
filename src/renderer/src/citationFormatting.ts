@@ -17,6 +17,7 @@ import {
   type StyledRun,
 } from "../../core/api";
 import type { CitationStyleId } from "../../shared/citationStyles";
+import { displayName } from "../../shared/documentNames";
 import { bibliographyShown } from "../../shared/mindBibliography";
 import {
   chosenCitationStyle,
@@ -152,9 +153,12 @@ export function useCitationFormattingFor(
           works: cluster.members.map((member) => citedWorkOf(member.attributes)),
         })),
       };
-      // A record edited since is a new request, though the Citations are as they were.
+      // A record edited or a Document renamed since is a new request, though the Citations are as they were.
       const records = new Map(
-        documents.map((document) => [document.id, document.reference?.updatedAt ?? ""]),
+        documents.map((document) => [
+          document.id,
+          `${document.reference?.updatedAt ?? ""}\n${displayName(document)}`,
+        ]),
       );
       const cited = request.clusters.flatMap((cluster) =>
         cluster.works.map((work) => (work.documentId ? (records.get(work.documentId) ?? "-") : "")),

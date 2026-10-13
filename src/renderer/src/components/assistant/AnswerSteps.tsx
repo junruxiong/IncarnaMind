@@ -5,6 +5,7 @@ import type {
   ConversationAnswer,
   ConversationQuestion,
 } from "../../../../core/api";
+import { shownDocumentName } from "../../../../shared/citations";
 import { citationLocation, formatLocation } from "../../../../shared/locations";
 import {
   type FoldedLine,
@@ -600,6 +601,9 @@ function SourceRow({ source }: { source: StepSource }) {
   const kind = useAppStore(
     (state) => state.documents.find((document) => document.id === source.documentId)?.kind,
   );
+  const name = useAppStore(
+    (state) => shownDocumentName(source, state.documents) || source.documentName,
+  );
   const location = citationLocation(source);
   const where = location ? formatLocation(location, t) : null;
   return (
@@ -607,11 +611,7 @@ function SourceRow({ source }: { source: StepSource }) {
       type="button"
       data-testid="answer-step-source"
       data-document-id={source.documentId}
-      title={
-        where
-          ? t("citation.where", { document: source.documentName, location: where })
-          : source.documentName
-      }
+      title={where ? t("citation.where", { document: name, location: where }) : name}
       onClick={() =>
         openCited(source, {
           check: source.check,
@@ -622,7 +622,7 @@ function SourceRow({ source }: { source: StepSource }) {
       className="answer-step-source"
     >
       <DocumentLineIcon kind={kind ?? "text"} className="answer-step-source-icon" />
-      <span className="answer-step-source-name">{source.documentName}</span>
+      <span className="answer-step-source-name">{name}</span>
       {where && <span className="answer-step-detail answer-step-source-where">{where}</span>}
     </button>
   );
