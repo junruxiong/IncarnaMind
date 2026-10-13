@@ -2694,10 +2694,49 @@ export interface LinkedFolder {
    * download it. `downloadOnlineOnlyFiles` downloads and indexes them.
    */
   onlineOnly: { files: number; bytes: number; downloading: boolean };
+  /** Files in it in a format IncarnaMind doesn't read (.doc, .xls, .ppt, .wps, .caj…), found at its last look: not Documents (#740). */
+  unsupportedFiles: number;
   /** ISO 8601, UTC. */
   createdAt: string;
   /** ISO 8601, UTC. */
   updatedAt: string;
+}
+
+/** A file in a Linked folder in a format IncarnaMind doesn't read: it is left out of every search (#740). */
+export interface UnsupportedFile {
+  /** Absolute. */
+  path: string;
+  /** The file's name, with its extension. */
+  name: string;
+  /** Lower case, with the dot: ".xls". */
+  extension: string;
+  linkedFolderId: string;
+  /** The folder it is in, relative to its Linked folder: "" at the top. */
+  relativeFolder: string;
+}
+
+/**
+ * Why a file in a search's scope wasn't read, and what the User can do:
+ * - "format": a format not read yet (.doc, .xls, .ppt, .wps, .caj…): convert it;
+ * - "scan": a scan with no text yet: it needs text recognition;
+ * - "password": password-protected: remove the password;
+ * - "damaged": the file is broken, or couldn't be read;
+ * - "too-large": too large to open;
+ * - "pages": a scan some of whose pages haven't been read yet.
+ */
+export type UnreadReason = "format" | "scan" | "password" | "damaged" | "too-large" | "pages";
+
+/** A file in a Search scope that couldn't be read, with why (#740). */
+export interface UnreadFile {
+  /** The Document's id, or the file's path for a file in a format not read. */
+  id: string;
+  /** The file's name, with its extension. */
+  name: string;
+  reason: UnreadReason;
+  /** For "format": its extension, lower case with the dot. Null otherwise. */
+  extension: string | null;
+  /** The Document, or null for a file in a format not read. */
+  documentId: string | null;
 }
 
 /**
@@ -4658,6 +4697,7 @@ export const dataKinds = [
   "answers",
   "web-searches",
   "verified-document",
+  "connector-search",
 ] as const;
 
 export type DataKind = (typeof dataKinds)[number];
@@ -4702,6 +4742,9 @@ export type DataKind = (typeof dataKinds)[number];
  * - "web-search": what an Answer searches the web for, written by the model
  *   from the Question, to the provider of the model it is asked with, whose
  *   own web search runs it (#128). None in local mode.
+ * - "connector-registry": the words the User types in Settings › Connectors'
+ *   search, to the official MCP Registry, which finds community Connectors
+ *   (#148). Asked the first time they search; none in local mode.
  */
 export const dataFlowIds = [
   "chat",
@@ -4717,6 +4760,7 @@ export const dataFlowIds = [
   "checks",
   "agents",
   "web-search",
+  "connector-registry",
 ] as const;
 
 export type DataFlowId = (typeof dataFlowIds)[number];
@@ -5283,6 +5327,42 @@ export interface ConnectorDirectoryEntry {
   /** Listed only in these interface languages, e.g. a service for Chinese Users. Absent: in every language. */
   languages?: Language[];
 }
+
+/** How a community server from the MCP Registry runs on this computer: its package, through npx or uvx. */
+export interface ConnectorRegistryCommand {
+  command: string;
+  args: string[];
+  /** The environment variables it reads, e.g. an API key, for the User to fill in. */
+  env: string[];
+}
+
+/** A community server found in the official MCP Registry. Not reviewed by IncarnaMind. */
+export interface ConnectorRegistryServer {
+  /** Its name in the Registry, e.g. "io.github.example/zotero-mcp". */
+  id: string;
+  /** Its title, or else its name's last part. */
+  name: string;
+  /** Who published it: its name's namespace, e.g. "io.github.example". */
+  publisher: string;
+  description: string;
+  /** Its MCP endpoint, when it runs remotely at an https URL IncarnaMind can use as it is. */
+  url: string | null;
+  /** How it runs on this computer, when it has a package IncarnaMind can start. */
+  command: ConnectorRegistryCommand | null;
+  /** Its website or repository, to read about it. */
+  link: string | null;
+}
+
+/**
+ * A search of the MCP Registry: the servers found, or why nothing was:
+ * - "local-mode": Local mode is on, so nothing was sent;
+ * - "declined": the User declined sending their search to the Registry;
+ * - "unreachable": it couldn't be reached, e.g. no network;
+ * - "service-error": it answered with an error, or something IncarnaMind can't read.
+ */
+export type ConnectorRegistrySearch =
+  | { outcome: "found"; servers: ConnectorRegistryServer[] }
+  | { outcome: "failed"; reason: "local-mode" | "declined" | "unreachable" | "service-error" };
 
 // ---------------------------------------------------------------------------
 // Approvals (#38)
@@ -6582,6 +6662,13 @@ export interface CoreApi {
   /** The Linked folders, in path order. */
   listLinkedFolders(): Promise<LinkedFolder[]>;
   /**
+   * The files in a Search scope that couldn't be read, and why (#740): its
+   * Documents with no text, password-protected or damaged, and the files in
+   * its Linked folders in a format not read. A scope of none (null) is every
+   * Document. Empty when everything in it was read.
+   */
+  listUnreadFiles(scope?: SearchScope | null): Promise<UnreadFile[]>;
+  /**
    * Points a Linked folder at where it is on this computer now, after it was
    * moved or renamed, or when the data folder is opened on another computer
    * (ADR-0020). Its Documents are looked for at their paths inside it and
@@ -7231,6 +7318,12 @@ export interface CoreApi {
    * instead, turned on.
    */
   addConnectorFromDirectory(entryId: string, client?: ConnectorClientInput): Promise<Connector>;
+  /**
+   * Searches the official MCP Registry for community servers matching what
+   * the User typed (two letters or more), asking them the first time
+   * ("connector-registry" flow). Nothing is sent in Local mode.
+   */
+  searchConnectorRegistry(query: string): Promise<ConnectorRegistrySearch>;
 
   /**
    * The User's approval policies, for the approvals page: every Tool always
@@ -7713,6 +7806,7 @@ const methods: Record<CoreApiMethod, true> = {
   previewLinkedFolder: true,
   addLinkedFolder: true,
   listLinkedFolders: true,
+  listUnreadFiles: true,
   locateLinkedFolder: true,
   removeLinkedFolder: true,
   listKeptCitationTexts: true,
@@ -7855,6 +7949,7 @@ const methods: Record<CoreApiMethod, true> = {
   importConnectors: true,
   listConnectorDirectory: true,
   addConnectorFromDirectory: true,
+  searchConnectorRegistry: true,
   listApprovalPolicies: true,
   setApprovalPolicy: true,
   revokeApprovalPolicy: true,
