@@ -254,7 +254,7 @@ export interface AnswerConversations {
   /** The Question of an Answer, to write the Answer again. */
   questionOf(input: unknown): { answerId: string; question: ConversationQuestion };
   /** Takes the Search scope off a Question: its Answers search every Document (#748). */
-  clearScope(questionId: string): void;
+  clearScope(questionId: string): ConversationQuestion | null;
   /** Empties an Answer, where it is, to write it again, reading `read`. */
   restartAnswer(
     answerId: string,

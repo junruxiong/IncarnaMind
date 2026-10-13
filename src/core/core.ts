@@ -1016,7 +1016,11 @@ export function createCore(adapters: CoreAdapters): Core {
         return turn;
       },
       questionOf: (input) => conversations.questionOf(input),
-      clearScope: (questionId) => conversations.clearScope(questionId),
+      clearScope: (questionId) => {
+        const question = conversations.clearScope(questionId);
+        if (question) events.emit("conversation.message", question);
+        return question;
+      },
       restartAnswer: (answerId, answerModel, read) => {
         const turn = conversations.restartAnswer(answerId, answerModel, read);
         events.emit("conversation.message", turn.answer);
