@@ -46,13 +46,14 @@ import type {
   ProviderError,
   SavedExport,
   SearchScope,
+  Task,
   Unsubscribe,
 } from "./api";
 import { createApprovals } from "./approvals";
 import { createBackgroundQueue } from "./backgroundQueue";
 import { createCitationStyles } from "./citationStyles";
 import { type CitedPages, type CitedPlace, createCitedPages } from "./citedPages";
-import { createComparisons } from "./comparisons";
+import { COMPARISON_TASK, createComparisons } from "./comparisons";
 import { createConnectors } from "./connectors";
 import { createConsent, type DataFlowRegistry } from "./consent";
 import { createConversations } from "./conversations";
@@ -141,6 +142,7 @@ import {
 } from "./referenceRecords";
 import { parseReference } from "./references";
 import { BUILT_IN_RERANKING_MODEL, createRerankingModel } from "./reranking";
+import { createTasks, type TaskKind, type TaskNotice } from "./runs/tasks";
 import { parseSearchScope, resolveSearchScope } from "./scope";
 import { createSecrets } from "./secrets";
 import { createSettings, isChatModelChoice } from "./settings";
@@ -255,6 +257,11 @@ export interface Core extends CoreApi, CoreEventSource {
    * pages were saved, its page couldn't be drawn, or it waits to be.
    */
   citedPageImage(citation: CitedPlace): Promise<DrawnPage | null>;
+  /**
+   * Starts a Task of a kind the host registered (`CoreAdapters.taskKinds`).
+   * Comparison tables start theirs through `compareDocuments`.
+   */
+  startTask(kind: string, mindId: string | null, input: unknown): Task;
   /**
    * For Answers (#29): the default chat model (or the one given), once Questions
    * can be asked and the User has accepted its data flow. Throws otherwise.
@@ -989,7 +996,10 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     resolveScope,
     emptyScopeAnswer: () => translate(settings.get().language, "scope.answer.empty"),
-    onWritingChange: (writing) => background.setAnswering(writing),
+    onWritingChange: (writing) => {
+      background.setAnswering(writing);
+      tasks.setAnswering(writing);
+    },
     reportError: (error) => console.error(error),
   });
 
@@ -1010,7 +1020,80 @@ export function createCore(adapters: CoreAdapters): Core {
       searchableCount: (ids) => documents.searchableCount(ids),
     },
     evidence: (ids) => evidence.scope(ids).documentIds ?? [...ids],
+    tasks: {
+      start: (kind, mindId, input) => tasks.start(kind, mindId, input),
+      unfinished: () => tasks.unfinished(),
+      isLive: (taskId) => tasks.isLive(taskId),
+      resume: (taskId) => tasks.resume(taskId),
+      stop: (taskId) => tasks.stop(taskId),
+    },
     emit: (event, payload) => events.emit(event, payload),
+    reportError: (error) => console.error(error),
+  });
+
+  /** A Task's name, as its notification says it. */
+  const taskName = (kind: string) =>
+    translate(
+      settings.get().language,
+      kind === COMPARISON_TASK ? "task.kind.comparison" : "task.kind.other",
+    );
+  /** Whether a Mind is the tab shown in a group of one of these windows. */
+  const mindShown = (mindId: string | null, windowIds: readonly string[]) =>
+    mindId !== null &&
+    windowIds.some((windowId) =>
+      layouts
+        .get(windowId)
+        .groups.some((group) =>
+          group.tabs.some(
+            (tab) =>
+              tab.id === group.activeTabId &&
+              tab.item.kind === "mind" &&
+              tab.item.mindId === mindId,
+          ),
+        ),
+    );
+  const notifyTask = ({ task, what }: TaskNotice) => {
+    const notifications = adapters.notifications;
+    if (!notifications) return;
+    const language = settings.get().language;
+    const name = taskName(task.kind);
+    const title = translate(
+      language,
+      what === "needs-you"
+        ? "task.notify.needsYou"
+        : task.status === "failed"
+          ? "task.notify.failed"
+          : "task.notify.finished",
+      { task: name },
+    );
+    let body = "";
+    try {
+      body = task.mindId ? minds.get(task.mindId).title : "";
+    } catch {
+      body = "";
+    }
+    notifications.show(
+      { title, body: body || translate(language, "task.notify.body") },
+      (windowIds) => mindShown(task.mindId, windowIds),
+      () =>
+        events.emit("task.shown", { taskId: task.id, mindId: task.mindId, blockId: task.blockId }),
+    );
+  };
+  // Tasks (#126): their journal survives a force-quit; comparison tables fill as one.
+  const taskKinds: TaskKind[] = [comparisons.taskKind, ...(adapters.taskKinds ?? [])];
+  const tasks = createTasks({
+    db,
+    now,
+    kinds: taskKinds,
+    approvals: {
+      decide: (call) => approvals.decide(call),
+      request: (call, signal) => approvals.request(call, signal),
+    },
+    retention,
+    cost: (taskId) => meter.taskCost(taskId),
+    changed: (task) => events.emit("task.changed", task),
+    notify: notifyTask,
+    stepsRunning: (running) => background.setTasksRunning(running),
     reportError: (error) => console.error(error),
   });
 
@@ -1682,6 +1765,7 @@ export function createCore(adapters: CoreAdapters): Core {
     changed: (list) => events.emit("meetings.changed", list),
     onCapturingChange: (capturing) => {
       background.setRecording(capturing);
+      tasks.setRecording(capturing);
       documents.hold(capturing);
     },
     ...(transcripts && { transcripts }),
@@ -1768,6 +1852,9 @@ export function createCore(adapters: CoreAdapters): Core {
     usageData.record({ event: "documents_added", fields: addedCounts(result, since) });
     return { ...result, batchId };
   };
+
+  // Everything a Task needs is up: those a quit or a crash left go on, or wait for the User.
+  tasks.settleOrphans();
 
   // Async on purpose: the renderer reaches these over IPC, and a future hosted core may be remote.
   return {
@@ -2096,8 +2183,13 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     compareDocuments: (input) => comparisons.compareDocuments(input),
     fillComparisonTable: (input) => comparisons.fillComparisonTable(input),
-    stopComparisonTable: async (input) => comparisons.stop(input),
+    stopComparisonTable: (input) => comparisons.stop(input),
     listFillingComparisons: async () => comparisons.filling(),
+    listTasks: async () => tasks.list(),
+    pauseTask: (taskId) => tasks.pause(taskId),
+    resumeTask: (taskId) => tasks.resume(taskId),
+    stopTask: (taskId) => tasks.stop(taskId),
+    answerTaskAsk: (taskId, answer) => tasks.answer(taskId, answer),
 
     askQuestion: async (input) => answers.ask(input),
     regenerateAnswer: async (input) => answers.regenerate(input),
@@ -2502,6 +2594,7 @@ export function createCore(adapters: CoreAdapters): Core {
     networkTraffic: privacy.traffic,
     retention,
     citedPageImage: (citation) => citedPages.image(citation),
+    startTask: (kind, mindId, input) => tasks.start(kind, mindId, input),
     prepareChatModel: (choice) => chat.prepareModel(choice),
     close: () => {
       if (lifetime.signal.aborted) return;
@@ -2517,8 +2610,9 @@ export function createCore(adapters: CoreAdapters): Core {
       // An import goes on from where it got to at the next start.
       wordImports.close();
       void chatGpt.cancelSignIn();
-      // Comparison tables stop filling first, so their cells being written aren't failed below.
-      comparisons.stopAll();
+      // Tasks stop where they are first, their journal as it was, so they go on at the next
+      // start; what they wait for is withdrawn before approvals deny what is left.
+      tasks.close();
       // Answers being written keep what they have, marked "stopped"; Tool calls waiting for
       // the User's approval are denied, and Skill scripts running are stopped.
       answers.stopAll();

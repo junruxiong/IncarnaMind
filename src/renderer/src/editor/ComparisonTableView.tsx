@@ -23,6 +23,7 @@ import { runStopText } from "../cost";
 import { resolveProposalsIn } from "../editWithAi";
 import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
+import { tableTask, useTasks } from "../tasks";
 import { addComparisonColumn } from "./comparisonCommands";
 import { CollapseIcon, ExpandIcon, TableIcon } from "./icons";
 import { useMindId } from "./mindContext";
@@ -116,6 +117,8 @@ export function ComparisonTableView({ node, editor }: ReactNodeViewProps) {
   const questions = comparisonQuestionsOf(node.attrs);
   const proposal = readProposalAttribute(node.attrs.proposal);
   const filling = useComparisons((state) => state.filling.has(tableId));
+  // Paused, its Task still holds its cells: they wait rather than stopped.
+  const waiting = useTasks((state) => tableTask(state, tableId) !== null);
   const expanded = useComparisons((state) => state.expanded === tableId);
   const problem = useComparisons((state) => state.problems[tableId]);
   const mindTitle = useAppStore(
@@ -169,6 +172,7 @@ export function ComparisonTableView({ node, editor }: ReactNodeViewProps) {
       data-testid="comparison-table"
       data-comparison-table={tableId}
       data-filling={filling || undefined}
+      data-waiting={(!filling && waiting) || undefined}
       data-expanded={expanded || undefined}
       data-pending={proposal ? "true" : undefined}
       className="comparison-table"

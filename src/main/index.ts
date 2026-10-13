@@ -15,6 +15,7 @@ import {
   createCore,
   resolveLanguage,
   type Settings,
+  type TaskKind,
 } from "../core";
 import { DataFromNewerVersionError } from "../core/errors";
 import type { Language } from "../core/language";
@@ -24,6 +25,7 @@ import { serveFileActions } from "./files";
 import { startLogging } from "./logging";
 import { isCaptureWindow } from "./meetings/capture";
 import { installAppMenu } from "./menu";
+import { createSystemNotifications } from "./notifications";
 import { chooseExecutor, createElectronAdapters, systemBrowser } from "./platform";
 import { DOWNLOAD_BUTTON, RELEASES_PAGE, startupDialog } from "./startupError";
 import { reportFullScreen, titleBarOptions } from "./titleBar";
@@ -60,6 +62,19 @@ async function testChatModel(): Promise<ChatModelFactory | undefined> {
     return createFakeChatModel;
   }
   return undefined;
+}
+
+/**
+ * The smoke tests' scripted Task, which asks for approval and writes files
+ * (see ./scriptedTask). Only a test build has it, as it has the scripted chat
+ * model; a test starts it through `globalThis.incarnamindScriptedTask`.
+ */
+async function testTaskKinds(): Promise<TaskKind[]> {
+  if (import.meta.env.MODE === "test" && process.env.INCARNAMIND_TEST_TASKS === "1") {
+    const { scriptedTask } = await import("./scriptedTask");
+    return [scriptedTask];
+  }
+  return [];
 }
 
 let core: Core | undefined;
@@ -202,6 +217,7 @@ async function showStartupError(error: unknown): Promise<void> {
 
 app.whenReady().then(async () => {
   const createChatModel = await testChatModel();
+  const taskKinds = await testTaskKinds();
   const executor = await scriptExecutor;
   // The window's page starts loading while the core starts. Its calls reach the core once
   // `exposeCore` has run, below: they wait until this synchronous run is done.
@@ -209,8 +225,10 @@ app.whenReady().then(async () => {
   try {
     core = createCore({
       ...createElectronAdapters(logger),
+      notifications: createSystemNotifications(appWindows),
       ...(executor && { executor }),
       ...(createChatModel && { createChatModel }),
+      ...(taskKinds.length > 0 && { taskKinds }),
     });
   } catch (error) {
     await showStartupError(error);
@@ -218,6 +236,12 @@ app.whenReady().then(async () => {
     return;
   }
   exposeCore(core);
+  if (taskKinds.length > 0) {
+    const started = core;
+    (globalThis as { incarnamindScriptedTask?: unknown }).incarnamindScriptedTask = {
+      start: (mindId: string, input: unknown) => started.startTask("scripted", mindId, input).id,
+    };
+  }
   registerUpdateCheck(core);
   serveFileActions(core, {
     dataDir: app.getPath("userData"),
