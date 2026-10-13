@@ -416,7 +416,7 @@ export function createWordImports(options: WordImportsOptions) {
         "SELECT id FROM word_packages WHERE mind_id = ? AND deleted_at IS NULL",
         [mindId],
       );
-      if (!row) throw new InvalidInputError("This Mind wasn't imported from a Word file.");
+      if (!row) throw new InvalidInputError({ key: "error.mind.notFromWord" });
       const documentId = await addOriginal(path, minds.get(mindId).folderId, null);
       if (documentId === null) return false;
       db.run("UPDATE word_packages SET document_id = ?, updated_at = ? WHERE id = ?", [
