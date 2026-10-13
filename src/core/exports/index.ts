@@ -114,12 +114,15 @@ export function createExports(deps: ExportsDependencies) {
     // its own (./citations).
     const trimBeforeCitation = style.form === "numbered";
 
+    const live = new Set(documents.map((document) => document.id));
     const { blocks, questions } = deps.read(mind.id, (fragment) => ({
       blocks: readBlocks(fragment, {
         includeQuestions,
         footnote,
         trimBeforeCitation,
         trimBeforeFootnote: true,
+        comparisonText: (key, params) => translate(language, key, params),
+        documentRemoved: (documentId) => !live.has(documentId),
       }),
       questions: countQuestions(fragment),
     }));

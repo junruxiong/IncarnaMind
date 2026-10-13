@@ -314,6 +314,7 @@ test("a Mind with one chart prints its picture, drawn at twice its size, its cap
     shown,
     value: Number(shown),
     unit: null,
+    scale: null,
     citation: cited,
     from: { kind: "cell", row, column: 1 },
   });
@@ -326,6 +327,7 @@ test("a Mind with one chart prints its picture, drawn at twice its size, its cap
       labelHeading: "Tide 潮",
       series: ["Range 潮差 (m)"],
       cutFrom: null,
+      cutRows: [],
       rows: [
         { label: "Spring 大潮", values: [value("4", 1, citationAttributes(tides, 1, "found"))] },
         { label: "Neap 小潮", values: [value("2", 2, citationAttributes(chinese, 1, "found"))] },

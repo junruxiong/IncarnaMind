@@ -31,6 +31,8 @@ export interface ChartValue {
   /** The number read from `shown` (./figures); null when it holds none, or none that reads one way: not drawn. */
   value: number | null;
   unit: FigureUnit | null;
+  /** What its scale word multiplies by: 1e6 for "million", 1 with none; null in a chart made before charts kept it. */
+  scale: number | null;
   /** The Citation that was with it, as its node held it; null: it had none. */
   citation: CitationAttributes | null;
   from: ChartValueOrigin;
@@ -51,6 +53,11 @@ export interface ChartData {
   rows: ChartRow[];
   /** How many rows the source had when only the first ones fit (`MAX_CHART_VALUES`); null: all are here. */
   cutFrom: number | null;
+  /**
+   * The source's rows after `rows`, when it was cut: never drawn, but listed in
+   * Show as table with their Citations, so none is out of reach (#503).
+   */
+  cutRows: ChartRow[];
 }
 
 export type ChartSource = { kind: "table"; blockId: string | null } | { kind: "figures" };
@@ -100,6 +107,10 @@ function readValue(value: unknown): ChartValue | null {
       isRecord(value.unit) && typeof value.unit.kind === "string"
         ? (value.unit as FigureUnit)
         : null,
+    scale:
+      typeof value.scale === "number" && Number.isFinite(value.scale) && value.scale > 0
+        ? value.scale
+        : null,
     citation: isRecord(value.citation) ? (value.citation as unknown as CitationAttributes) : null,
     from,
   };
@@ -107,21 +118,31 @@ function readValue(value: unknown): ChartValue | null {
 
 /** Anything malformed (from another version, or a sync) is left out rather than guessed. */
 export function readChartData(value: unknown): ChartData {
-  if (!isRecord(value)) return { labelHeading: "", series: [], rows: [], cutFrom: null };
+  if (!isRecord(value)) {
+    return { labelHeading: "", series: [], rows: [], cutFrom: null, cutRows: [] };
+  }
   const series = Array.isArray(value.series) ? value.series.map(text) : [];
-  const rows = (Array.isArray(value.rows) ? value.rows : []).flatMap((row): ChartRow[] => {
-    if (!isRecord(row)) return [];
-    const values = Array.isArray(row.values) ? row.values : [];
-    return [{ label: text(row.label), values: series.map((_, index) => readValue(values[index])) }];
-  });
+  const readRows = (list: unknown) =>
+    (Array.isArray(list) ? list : []).flatMap((row): ChartRow[] => {
+      if (!isRecord(row)) return [];
+      const values = Array.isArray(row.values) ? row.values : [];
+      return [
+        { label: text(row.label), values: series.map((_, index) => readValue(values[index])) },
+      ];
+    });
+  const rows = readRows(value.rows);
   const cutFrom =
     typeof value.cutFrom === "number" &&
     Number.isInteger(value.cutFrom) &&
     value.cutFrom > rows.length
       ? value.cutFrom
       : null;
-  return { labelHeading: text(value.labelHeading), series, rows, cutFrom };
+  const cutRows = cutFrom === null ? [] : readRows(value.cutRows);
+  return { labelHeading: text(value.labelHeading), series, rows, cutFrom, cutRows };
 }
+
+/** Every row, as Show as table lists them: those drawn, then those cut from the drawing. */
+export const listedRows = (data: ChartData): ChartRow[] => [...data.rows, ...data.cutRows];
 
 function readSource(value: unknown): ChartSource {
   if (isRecord(value) && value.kind === "figures") return { kind: "figures" };
@@ -166,12 +187,13 @@ export function drawnSeries(chart: Pick<ChartAttributes, "kind" | "drawn" | "dat
 }
 
 /**
- * The columns chosen, whatever the kind draws of them. The foot, Show as
- * table and exports count and list their cells, so switching kind changes
- * only the drawing.
+ * The columns chosen. The foot, Show as table and exports count and list
+ * their cells: bar, line and scatter every one chosen, whatever they draw of
+ * them; a pie the one it draws, the last chosen (#503).
  */
-export function chosenSeries(chart: Pick<ChartAttributes, "drawn" | "data">): number[] {
-  return chart.drawn ?? chart.data.series.map((_, index) => index);
+export function chosenSeries(chart: Pick<ChartAttributes, "kind" | "drawn" | "data">): number[] {
+  const chosen = chart.drawn ?? chart.data.series.map((_, index) => index);
+  return chart.kind === "pie" ? chosen.slice(-1) : chosen;
 }
 
 export interface ChartCell {
@@ -181,7 +203,7 @@ export interface ChartCell {
 }
 
 /** Row by row, as a table reads. */
-export function chartCells(chart: Pick<ChartAttributes, "drawn" | "data">): ChartCell[] {
+export function chartCells(chart: Pick<ChartAttributes, "kind" | "drawn" | "data">): ChartCell[] {
   const series = chosenSeries(chart);
   return chart.data.rows.flatMap((row, index) =>
     series.flatMap((each) => {
@@ -229,13 +251,16 @@ export function chartPoints(chart: Pick<ChartAttributes, "kind" | "drawn" | "dat
   const drawn = drawnSeries(chart);
   const { rows } = chart.data;
   const points: ChartPoint[] = [];
+  const unitless = new Map(drawn.map((series) => [series, unitlessRows(chart.data, series)]));
+  const drawable = (value: ChartValue | null | undefined, row: number, series: number) =>
+    value?.value != null && !unitless.get(series)?.has(row);
   if (chart.kind === "scatter") {
     const [across, up] = drawn;
     if (across === undefined || up === undefined) return [];
     rows.forEach((row, index) => {
       const x = row.values[across];
       const y = row.values[up];
-      if (x?.value != null && y?.value != null) {
+      if (drawable(x, index, across) && drawable(y, index, up)) {
         points.push({ row: index, series: up, value: y as ChartPoint["value"] });
       }
     });
@@ -245,11 +270,46 @@ export function chartPoints(chart: Pick<ChartAttributes, "kind" | "drawn" | "dat
     rows.forEach((row, index) => {
       const value = row.values[series];
       // A pie has no room for a share below nothing.
-      if (value?.value == null || (chart.kind === "pie" && value.value <= 0)) return;
+      if (!drawable(value, index, series) || (chart.kind === "pie" && (value?.value ?? 0) <= 0))
+        return;
       points.push({ row: index, series, value: value as ChartPoint["value"] });
     });
   }
   return points;
+}
+
+/** Whether a value says what it counts: a unit ("$", "%", "吨") or a scale ("million", "亿"). */
+function saysUnit(value: ChartValue): boolean {
+  return (value.unit !== null && value.unit.kind !== "plain") || (value.scale ?? 1) !== 1;
+}
+
+/** One key per unit a column's numbers can share: "$" whatever its scale, "%", or a scale alone. */
+function unitKey(value: ChartValue): string {
+  const { unit } = value;
+  if (!unit || unit.kind === "plain") return "scale";
+  if (unit.kind === "currency") return `currency:${unit.code}`;
+  if (unit.kind === "other") return `other:${unit.word}`;
+  return unit.kind;
+}
+
+/**
+ * The rows of a column whose number has no unit or scale ("120.0") while the
+ * column's other numbers share one, at least as many of them ("$331.2
+ * million"; #579). Drawn, the bare number would be read on another scale, and
+ * the chart never guesses its unit, so it isn't drawn. A column with no unit
+ * anywhere, or with different ones, is drawn as it is.
+ */
+export function unitlessRows(data: ChartData, series: number): Set<number> {
+  const numbered = data.rows.flatMap((row, index) => {
+    const value = row.values[series];
+    return value?.value != null ? [{ index, value }] : [];
+  });
+  const withUnit = numbered.filter((each) => saysUnit(each.value));
+  const bare = numbered.filter((each) => !saysUnit(each.value));
+  const units = new Set(withUnit.map((each) => unitKey(each.value)));
+  return bare.length > 0 && units.size === 1 && withUnit.length >= bare.length
+    ? new Set(bare.map((each) => each.index))
+    : new Set();
 }
 
 export interface ChartSourcePlace {
@@ -264,8 +324,12 @@ export interface ChartSourcePlace {
 export interface ChartSources {
   values: number;
   uncited: number;
+  /** Those values with no Citation, row by row: what the foot's "1 with no Citation" finds. */
+  uncitedCells: { row: number; series: number }[];
   /** Cells of the columns chosen that hold words but no number, so aren't drawn. */
   notDrawn: number;
+  /** Cells whose number has no unit where their column's others have one, so aren't drawn (`unitlessRows`). */
+  noUnit: number;
   places: ChartSourcePlace[];
   documents: number;
 }
@@ -280,21 +344,31 @@ function placeKey(citation: CitationAttributes): string {
 
 const isFound = (check: CitationCheck | undefined) => check === "found";
 
-export function chartSources(chart: Pick<ChartAttributes, "drawn" | "data">): ChartSources {
+export function chartSources(
+  chart: Pick<ChartAttributes, "kind" | "drawn" | "data">,
+): ChartSources {
   const places = new Map<string, ChartSourcePlace>();
   const documents = new Set<string>();
   let values = 0;
-  let uncited = 0;
+  const uncitedCells: ChartSources["uncitedCells"] = [];
   let notDrawn = 0;
-  for (const { value } of chartCells(chart)) {
+  let noUnit = 0;
+  const unitless = new Map(
+    chosenSeries(chart).map((series) => [series, unitlessRows(chart.data, series)]),
+  );
+  for (const { row, series, value } of chartCells(chart)) {
     if (value.value === null) {
       if (value.shown.trim() !== "") notDrawn++;
+      continue;
+    }
+    if (unitless.get(series)?.has(row)) {
+      noUnit++;
       continue;
     }
     values++;
     const { citation } = value;
     if (!citation) {
-      uncited++;
+      uncitedCells.push({ row, series });
       continue;
     }
     documents.add(citation.documentId ?? citation.documentName ?? "");
@@ -306,7 +380,15 @@ export function chartSources(chart: Pick<ChartAttributes, "drawn" | "data">): Ch
       if (isFound(place.citation.check) && !isFound(citation.check)) place.citation = citation;
     }
   }
-  return { values, uncited, notDrawn, places: [...places.values()], documents: documents.size };
+  return {
+    values,
+    uncited: uncitedCells.length,
+    uncitedCells,
+    notDrawn,
+    noUnit,
+    places: [...places.values()],
+    documents: documents.size,
+  };
 }
 
 /** What a figure doesn't settle that changes its value: drawn, it would be a guess. */
@@ -348,8 +430,8 @@ export interface FromTableOptions {
  * other column that holds a number is a series. The heading row names them:
  * the first row when it is one, or when its other cells hold no number. Each
  * value keeps its cell and the Citation in it. Only the first rows that fit
- * `MAX_CHART_VALUES` are kept, and the chart says how many there were. Null
- * when no column holds a number.
+ * `MAX_CHART_VALUES` are drawn, and the chart says how many there were; the
+ * rest are kept to list. Null when no column holds a number.
  */
 export function chartFromTable(
   grid: SourceGrid,
@@ -375,6 +457,7 @@ export function chartFromTable(
       shown: cell.text.trim(),
       value: read?.value ?? null,
       unit: read ? read.figure.unit : null,
+      scale: read ? read.figure.scale : null,
       citation: cell.citation,
       from: { kind: "cell", row, column },
     };
@@ -390,7 +473,10 @@ export function chartFromTable(
   if (seriesColumns.length === 0) return null;
 
   const fit = Math.max(1, Math.floor(MAX_CHART_VALUES / seriesColumns.length));
-  const kept = dataRows.slice(0, fit);
+  const rows = dataRows.map((row, index) => ({
+    label: row[0]?.text.trim() ?? "",
+    values: seriesColumns.map((column) => valueAt(row[column] ?? null, firstRow + index, column)),
+  }));
   return {
     kind: "bar",
     title: options.title.trim(),
@@ -398,13 +484,9 @@ export function chartFromTable(
     data: {
       labelHeading: headingRow ? (first[0]?.text.trim() ?? "") : "",
       series: seriesColumns.map((column) => (headingRow ? (first[column]?.text.trim() ?? "") : "")),
-      rows: kept.map((row, index) => ({
-        label: row[0]?.text.trim() ?? "",
-        values: seriesColumns.map((column) =>
-          valueAt(row[column] ?? null, firstRow + index, column),
-        ),
-      })),
-      cutFrom: dataRows.length > kept.length ? dataRows.length : null,
+      rows: rows.slice(0, fit),
+      cutFrom: rows.length > fit ? rows.length : null,
+      cutRows: rows.slice(fit),
     },
     source: { kind: "table", blockId: options.blockId },
   };
@@ -445,6 +527,7 @@ export function chartFromFigures(
           shown: figure.chars,
           value: read.value,
           unit: figure.unit,
+          scale: figure.scale,
           citation: line.citation,
           from: { kind: "text", line: index },
         },
@@ -452,7 +535,6 @@ export function chartFromFigures(
     });
   });
   if (rows.length === 0) return null;
-  const kept = rows.slice(0, MAX_CHART_VALUES);
   return {
     kind: "bar",
     title: options.title.trim(),
@@ -460,8 +542,9 @@ export function chartFromFigures(
     data: {
       labelHeading: "",
       series: [""],
-      rows: kept,
-      cutFrom: rows.length > kept.length ? rows.length : null,
+      rows: rows.slice(0, MAX_CHART_VALUES),
+      cutFrom: rows.length > MAX_CHART_VALUES ? rows.length : null,
+      cutRows: rows.slice(MAX_CHART_VALUES),
     },
     source: { kind: "figures" },
   };
