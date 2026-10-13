@@ -488,6 +488,7 @@ const ASKED = "2026-10-12T14:30:00.000Z";
 const REQUEST = "round-trip";
 const PROPOSED = "proposed";
 const AI_TEXT = "A paragraph the AI wrote for the round-trip check.";
+const PROPOSED_PARAGRAPH = "A paragraph a change adds.";
 const NOT_FOUND = "A quote the check didn't find.";
 
 /** What a review export is asked to say: the User's edits tracked, and every comment. */
@@ -546,9 +547,7 @@ function editForReview(doc: Y.Doc): void {
       createElement({
         type: "paragraph",
         attrs: { proposal: { ...change("c3"), kind: "insert" } },
-        content: [
-          { type: "text", text: "A paragraph a change adds.", marks: [{ type: "generated" }] },
-        ],
+        content: [{ type: "text", text: PROPOSED_PARAGRAPH, marks: [{ type: "generated" }] }],
       }),
       createElement({
         type: "paragraph",
@@ -657,6 +656,16 @@ export async function checkReview(bytes: Uint8Array): Promise<ReviewCheck> {
     const commentsXml = comments ? ((await pkg.zip.readText(comments)) ?? "") : "";
     const incomplete = commentsProblem(main, commentsXml);
     if (incomplete) return { ok: false, detail: incomplete, exported: result.data };
+    const proposedByIncarnaMind = new RegExp(
+      `<w:ins w:id="\\d+" w:author="IncarnaMind"[^>]*><w:r>(?:<w:rPr>(?:(?!</w:r>).)*?</w:rPr>)?<w:t[^>]*>${PROPOSED_PARAGRAPH}</w:t>`,
+    );
+    if (!proposedByIncarnaMind.test(main)) {
+      return {
+        ok: false,
+        detail: "the paragraph a change adds isn't IncarnaMind's insertion",
+        exported: result.data,
+      };
+    }
     if (!commentsXml.includes(NOT_FOUND) || !main.includes('w:author="IncarnaMind"')) {
       return {
         ok: false,
