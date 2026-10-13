@@ -77,6 +77,9 @@
  * Find support and Check against Documents (`checkReply`): a sentence that shares
  * three words with a Passage's line is supported, or contradicted when it has a
  * number the line doesn't; otherwise unsupported.
+ *
+ * Verify (`fakeClaims`): every sentence of a document claims something, but a
+ * question or thanks. Its claims are checked as above.
  */
 import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
@@ -869,6 +872,23 @@ function fakeStructuredOutput(options: GenerateOptions): string {
   return JSON.stringify({ tags: fakeTags(options.prompt, offeredTags(options)) });
 }
 
+/** Finding a verified document's claims (#97, src/core/answers/checks/claims.ts). */
+const FIND_CLAIMS = /^You sort the sentences of a document someone else wrote/m;
+
+/** The numbers of the listed sentences ("[3] …") that claim something: all but questions and thanks. */
+function fakeClaims(options: GenerateOptions): string | null {
+  if (!FIND_CLAIMS.test(systemOf(options.prompt))) return null;
+  const claims = lastUserText(options.prompt)
+    .split("\n")
+    .flatMap((line) => {
+      const listed = /^\[(\d+)\] (.*)$/.exec(line);
+      return listed?.[2] === undefined || /[?？]$|thank|谢/i.test(listed[2])
+        ? []
+        : [Number(listed[1])];
+    });
+  return JSON.stringify({ claims });
+}
+
 /** A check Run's instructions (#96, src/core/answers/checks/prompt.ts). */
 const CHECK_RUN = /^You check one sentence the User wrote against the User's Documents/m;
 
@@ -962,7 +982,11 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
           text:
             options.responseFormat?.type === "json"
               ? fakeStructuredOutput(options)
-              : (fakePlan(options) ?? fakeSkillDraft(options) ?? fakeEdit(options) ?? "OK"),
+              : (fakePlan(options) ??
+                fakeClaims(options) ??
+                fakeSkillDraft(options) ??
+                fakeEdit(options) ??
+                "OK"),
         },
       ],
       finishReason: { unified: "stop", raw: undefined },
