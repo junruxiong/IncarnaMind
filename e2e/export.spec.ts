@@ -9,6 +9,7 @@ import {
   addToNote,
   askInAssistant,
   closeSettings,
+  coreOf,
   createDataFolder,
   dismissChatSetup,
   editFolderInLibrary,
@@ -380,11 +381,8 @@ test("an export saved into a Linked folder is IncarnaMind's file: its viewer say
   await expect(exported.getByTestId("document.countAsEvidence")).toHaveCount(0);
   await expect(exported.getByTestId("document.leaveOutOfEvidence")).toHaveCount(0);
   await window.keyboard.press("Escape");
-  await window.evaluate(() =>
-    (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.createLibraryGroup({
-      name: "Reports",
-      description: "",
-    }),
+  await (await coreOf(window)).evaluate((core) =>
+    core.createLibraryGroup({ name: "Reports", description: "" }),
   );
   await window.getByTestId("browse-views").getByRole("button", { name: "Folders" }).click();
   await editFolderInLibrary(window, "Reports");

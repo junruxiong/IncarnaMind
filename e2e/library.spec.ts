@@ -11,6 +11,7 @@ import {
   addDocuments,
   closeSettings,
   useLocalChatModel as connectLocalChatModel,
+  coreOf,
   createDataFolder,
   dismissChatSetup,
   editFolderInLibrary,
@@ -50,9 +51,11 @@ async function saveOrganization(window: Page) {
   await closeSettings(window);
 }
 
-const makeFolders = (window: Page, folders: readonly { name: string; description: string }[]) =>
-  window.evaluate(async (input) => {
-    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+const makeFolders = async (
+  window: Page,
+  folders: readonly { name: string; description: string }[],
+) =>
+  (await coreOf(window)).evaluate(async (core, input) => {
     for (const folder of input) await core.createLibraryGroup(folder);
   }, folders);
 

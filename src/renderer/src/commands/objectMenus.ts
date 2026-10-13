@@ -20,6 +20,7 @@ registerMenu("mind", [
   "mind.citationStyle",
   "skill.fromMind",
   "mind.moveTo",
+  "folder.newWith",
   "mind.rename",
   "mind.delete",
 ]);
@@ -30,6 +31,7 @@ registerMenu("document", [
   "document.ask",
   "document.startMind",
   "document.moveTo",
+  "folder.newWith",
   "document.tags",
   "document.retry",
   "document.fetchAgain",
@@ -48,6 +50,7 @@ registerMenu("document", [
 registerMenu("folder", [
   "folder.open",
   "folder.newMind",
+  "folder.new",
   "folder.ask",
   "folder.organize",
   "folder.editDescription",

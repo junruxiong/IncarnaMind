@@ -55,6 +55,7 @@ Each rule has a check a reviewer can apply. A UI change that breaks a rule says 
 | Ask | One assistant per window, beside the tabs; ⌘J focuses its composer; it reads the Mind in focus and searches its Folder | Cursor, Notion AI |
 | Find anything | ⌘K searches Minds, Conversations, Documents, Folders and Tags, and runs any action | ChatGPT, Claude, Notion, Linear |
 | Open and rename | Click or Enter opens; double-click or F2 renames | Windows Explorer, Notion, Linear, Obsidian |
+| Make a Folder | ⇧⌘N makes "Untitled Folder" in the tree with its name field open; ⌃⌘N on macOS (or the selection's menu) makes it with the selected Documents and Minds in it; Enter keeps the name, Esc keeps "Untitled Folder", ⌘Z removes it | Finder, Windows Explorer (Ctrl+Shift+N) |
 | File into a Folder | Drag onto the Folder, or Move to… (⇧⌘M) | ChatGPT projects, Notion, Granola, Finder |
 | One Folder per Document | A drop on a Folder moves the Document; Tags group Documents across Folders | Finder |
 | Tags | Created, renamed, recoloured, merged and deleted in the sidebar's Tags view; a rename applies everywhere | Finder, Bear, Apple Notes |

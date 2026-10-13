@@ -150,6 +150,26 @@ export function moveMessage(
   return t(`move.done.${what.kind}`, { count: what.count, folder: folderName });
 }
 
+/**
+ * What the line says once a Folder is made: "Made “Chapter 2”", and with what
+ * went into it, "Made “Chapter 2” with 3 Documents".
+ */
+export function madeMessage(
+  t: Translate,
+  folderName: string,
+  items: MoveItems | null,
+  names: Names,
+): string {
+  const held = itemsOf(items ?? {});
+  if (held.mindIds.length + held.documentIds.length === 0) {
+    return t("folder.made", { name: folderName });
+  }
+  const what = whatMoves(t, held, names);
+  if ("name" in what) return t("folder.made.one", { name: folderName, item: what.name });
+  const kind = what.kind === "minds" || what.kind === "documents" ? what.kind : "items";
+  return t(`folder.made.${kind}`, { name: folderName, count: what.count });
+}
+
 /** The move as the Edit menu names it: "Move “Shortlist”", "Move 3 Documents". */
 export function moveName(t: Translate, items: MoveItems, names: Names): string {
   const what = whatMoves(t, items, names);

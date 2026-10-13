@@ -41,6 +41,8 @@ export interface Shortcut {
   outsideText?: true;
   /** The same command's second keys on Windows and Linux: Ctrl+Y redoes there, as Ctrl+Shift+Z does. */
   alsoOther?: Keys;
+  /** Keys only macOS has (Finder's ⌃⌘N): elsewhere the command has none, and stays in menus and ⌘K. */
+  macOnly?: true;
 }
 
 export interface CommandContext {
