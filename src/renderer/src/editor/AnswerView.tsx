@@ -21,6 +21,7 @@ import { PlugIcon, ScriptIcon, SkillIcon, StopIcon } from "../components/icons";
 import { DocumentLineIcon, FindSourcesLineIcon } from "../components/lineIcons";
 import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
 import { ProblemLine } from "../components/ProblemLine";
+import { core } from "../core";
 import { formatResetTime } from "../cost";
 import { useFindSources } from "../findSources";
 import { useLanguage, useT } from "../i18n";
@@ -230,6 +231,14 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
   );
 }
 
+/** Failures that can come of a model that can't answer, rather than of the connection. */
+const WRONG_MODEL: ReadonlySet<ProviderErrorKind> = new Set([
+  "model",
+  "provider",
+  "no-answer",
+  "unknown",
+]);
+
 /** A failed Answer, under what was written of it: one line, and the one thing that can fix it. */
 export function AnswerError({
   kind,
@@ -256,11 +265,28 @@ export function AnswerError({
   );
   // Whose plan it was decides where its usage is managed.
   useEffect(() => {
-    if (kind === "plan-limit") useAnswers.getState().loadModels();
+    if (kind === "plan-limit" || WRONG_MODEL.has(kind)) useAnswers.getState().loadModels();
   }, [kind]);
+  // A model the User added to the menu that then failed: one click takes it back out.
+  const added = useAnswers((state) =>
+    state.models?.some(
+      (group) =>
+        group.provider.id === providerId && modelId !== null && group.added.includes(modelId),
+    ),
+  );
+  const removeFromMenu =
+    added && WRONG_MODEL.has(kind) && providerId && modelId
+      ? () => {
+          void core.setChatModelInMenu({ providerId, modelId, inMenu: false }).then(() => {
+            useAnswers.setState({ models: null });
+            useAnswers.getState().loadModels();
+          });
+        }
+      : undefined;
   const { line, fix } = answerProblem(kind, provider);
-  const action =
-    fix.kind === "settings"
+  const action = removeFromMenu
+    ? { label: t("answer.error.removeFromMenu"), onClick: removeFromMenu }
+    : fix.kind === "settings"
       ? { label: t(fix.label), onClick: () => onOpenSettings(fix.page) }
       : fix.kind === "sign-in"
         ? {
@@ -288,6 +314,7 @@ export function AnswerError({
         className="mt-1 select-none"
       >
         {t(line, { model: modelId ?? t("answer.error.thisModel") })}
+        {removeFromMenu && kind !== "model" && ` · ${modelId}`}
         {kind === "plan-limit" && resetsAt && (
           <>
             <span aria-hidden="true"> · </span>
@@ -342,12 +369,15 @@ export function CallRow({ call }: { call: AnswerToolCall }) {
   return <ScriptCall call={call} />;
 }
 
-/** The approval card for a request: a Connector's Tool, or a Skill script. */
-export function ApprovalCard({ request }: { request: ApprovalRequest }) {
+/**
+ * The approval card for a request: a Connector's Tool, or a Skill script.
+ * `keys`: the shortcut that allows it once, shown on its button (the Task tray's ⌘↵).
+ */
+export function ApprovalCard({ request, keys }: { request: ApprovalRequest; keys?: string }) {
   return request.subject.kind === "skill-script" ? (
-    <ScriptApprovalCard request={request as SkillScriptApprovalRequest} />
+    <ScriptApprovalCard request={request as SkillScriptApprovalRequest} keys={keys} />
   ) : (
-    <ToolApprovalCard request={request as ToolApprovalRequest} />
+    <ToolApprovalCard request={request as ToolApprovalRequest} keys={keys} />
   );
 }
 
@@ -374,7 +404,7 @@ function TitleWithCode({ title, code }: { title: string; code: string }) {
  * when its Answer had read third-party text: "Always allow" wouldn't cover
  * such a call, so it isn't offered. The Answer waits meanwhile.
  */
-function ToolApprovalCard({ request }: { request: ToolApprovalRequest }) {
+function ToolApprovalCard({ request, keys }: { request: ToolApprovalRequest; keys?: string }) {
   const t = useT();
   const respond = useApprovals((state) => state.respond);
   const titleId = useId();
@@ -418,6 +448,7 @@ function ToolApprovalCard({ request }: { request: ToolApprovalRequest }) {
           className="approval-button approval-button--primary"
         >
           {t("approvals.card.allowOnce")}
+          {keys && <span className="approval-keys">{keys}</span>}
         </button>
         {!thirdParty && (
           <button
@@ -452,7 +483,13 @@ function ToolApprovalCard({ request }: { request: ToolApprovalRequest }) {
  * third-party text. "Always run" first shows a warning in the last section,
  * which must be confirmed. The Answer waits meanwhile.
  */
-function ScriptApprovalCard({ request }: { request: SkillScriptApprovalRequest }) {
+function ScriptApprovalCard({
+  request,
+  keys,
+}: {
+  request: SkillScriptApprovalRequest;
+  keys?: string;
+}) {
   const t = useT();
   const respond = useApprovals((state) => state.respond);
   const sandboxed = useAppStore((state) => state.settings?.scriptSandbox === "os");
@@ -554,6 +591,7 @@ function ScriptApprovalCard({ request }: { request: SkillScriptApprovalRequest }
             className="approval-button approval-button--primary"
           >
             {t("scripts.card.allowOnce")}
+            {keys && <span className="approval-keys">{keys}</span>}
           </button>
           {!asksAfterThirdParty(request) && (
             <button

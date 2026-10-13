@@ -150,6 +150,7 @@ import type {
   CiteOptions,
   DocumentLanguage,
   GatedCall,
+  ToolSet,
 } from "./engine";
 import { markdownToBlocks } from "./markdown";
 import {
@@ -183,6 +184,8 @@ interface Generation {
   model: ChatModelChoice;
   /** Writes what has arrived with the final status, now. Later calls do nothing. */
   finish(outcome: Outcome): void;
+  /** A Task's work (a comparison table's cell): its Task, not the Answer, holds background work back. */
+  task: boolean;
 }
 
 /**
@@ -265,6 +268,16 @@ export type OutsideAnswer =
       service: ExternalService | null;
     };
 
+/** A comparison table's cell as written (see `answerCell`). */
+export interface CellAnswer {
+  status: "done" | "stopped" | "failed";
+  markdown: string;
+  /** Its Blocks, each marker a Citation node, its words AI text (`GENERATED_MARK`). */
+  blocks: NodeJSON[];
+  citations: MarkedCitation[];
+  error: ProviderError | null;
+}
+
 /** No Search scope: every Document. */
 const NO_SCOPE: SearchScope = { folderIds: [], tagIds: [], documentIds: [] };
 
@@ -311,8 +324,9 @@ export interface AnswersOptions {
   scripts: AnswerScripts;
   /**
    * Hears whether any Answer is being written, each time that changes: from
-   * when the first one starts until none is left. Background model work gives
-   * way to Answers (see ../backgroundQueue).
+   * when the first one starts until none is left. Background model work and
+   * Tasks give way to Answers (see ../backgroundQueue, ../runs/tasks); a
+   * Task's own cells don't count.
    */
   onWritingChange?(writing: boolean): void;
   reportError(error: unknown): void;
@@ -515,6 +529,14 @@ export function createAnswers(options: AnswersOptions) {
   const { content, events, engine } = options;
   /** Answers being written, by id. */
   const active = new Map<string, Generation>();
+  /** Whether an Answer not written for a Task is being written. */
+  let writing = false;
+  const writingChanged = () => {
+    const now = [...active.values()].some((generation) => !generation.task);
+    if (now === writing) return;
+    writing = now;
+    options.onWritingChange?.(now);
+  };
 
   /** Marks Answers left "streaming" by an earlier run of the app as stopped: nothing writes them any more. */
   const settleOrphans = (mindId: string) => {
@@ -571,11 +593,16 @@ export function createAnswers(options: AnswersOptions) {
      */
     mind?: { read: AnswerRead | null; request: RequestMind } | null;
     /**
-     * An Answer for an outside agent (#351): no window hears of it (it is in
-     * no Mind or conversation), and it uses the Documents and Skills only: no
-     * Connector, and no Skill script, so nothing it does waits for the User.
+     * An Answer for an outside agent (#351), or a comparison table's cell
+     * (#98): no window hears of it (it is in no Mind or conversation), and it
+     * uses the Documents and Skills only: no Connector, and no Skill script,
+     * so nothing it does waits for the User.
      */
     outside?: boolean;
+    /** Which Tools its Run is offered (see `ToolSet`); absent: every Tool. */
+    toolSet?: ToolSet;
+    /** Written for a Task (#126), which gives way to Answers itself (see ../runs/tasks). */
+    task?: boolean;
   }): void {
     const { home, answerId, model, context, documentIds, forcedSkill } = input;
     const outside = input.outside === true;
@@ -764,7 +791,7 @@ export function createAnswers(options: AnswersOptions) {
       finishedAt = Date.now();
       if (timer) clearTimeout(timer);
       active.delete(answerId);
-      if (active.size === 0) options.onWritingChange?.(false);
+      writingChanged();
       controller.abort();
       skills?.release();
       // A Tool call still running when the Answer stopped didn't finish; one still waiting for
@@ -819,8 +846,8 @@ export function createAnswers(options: AnswersOptions) {
       }, ANSWER_WRITE_INTERVAL_MS);
     };
 
-    active.set(answerId, { home, model, finish });
-    if (active.size === 1) options.onWritingChange?.(true);
+    active.set(answerId, { home, model, finish, task: input.task === true });
+    writingChanged();
     announce("answer.started", { ...place, answerId, questionId: input.questionId, model });
 
     const base = answerInstructions();
@@ -1281,6 +1308,7 @@ export function createAnswers(options: AnswersOptions) {
         documents,
         tools: [...provided, ...fromSkills, ...fromWeb],
         gate,
+        toolSet: input.toolSet,
         thirdParty: contextReasons,
         support: startingSupport(prepared.support, supportByModel.get(learntKey)),
         structuredOutput: givesStructuredOutput(prepared.capabilities),
@@ -1851,6 +1879,56 @@ export function createAnswers(options: AnswersOptions) {
         const stop = () => active.get(answerId)?.finish({ status: "stopped" });
         if (signal.aborted) stop();
         else signal.addEventListener("abort", stop, { once: true });
+      });
+    },
+
+    /**
+     * Writes one cell of a comparison table (#98) from `documentIds` alone
+     * (its row's Document: a one-Document Search scope), as a check Run,
+     * offered the Documents' search and `cite` only, and kept nowhere: it
+     * comes back once written, its Citations checked, as the Blocks a Mind
+     * holds. The model is ready and allowed already. `signal` stops it.
+     */
+    answerCell(input: {
+      context: QuestionContext;
+      documentIds: string[];
+      model: ChatModelChoice;
+      signal: AbortSignal;
+    }): Promise<CellAnswer> {
+      const answerId = randomUUID();
+      return new Promise<CellAnswer>((resolve) => {
+        start({
+          home: {
+            place: { mindId: null },
+            write(answer, outcome) {
+              if (outcome) {
+                resolve({
+                  status: outcome.status,
+                  markdown: answer.markdown,
+                  blocks: answer.blocks(),
+                  citations: answer.citations(),
+                  error: outcome.status === "failed" ? outcome.error : null,
+                });
+              }
+              return true;
+            },
+          },
+          answerId,
+          questionId: answerId,
+          model: input.model,
+          context: input.context,
+          contextReasons: [],
+          documentIds: input.documentIds,
+          emptyScope: options.documents.searchableCount(input.documentIds) === 0,
+          forcedSkill: null,
+          consentNeeded: false,
+          outside: true,
+          toolSet: "check",
+          task: true,
+        });
+        const stop = () => active.get(answerId)?.finish({ status: "stopped" });
+        if (input.signal.aborted) stop();
+        else input.signal.addEventListener("abort", stop, { once: true });
       });
     },
 

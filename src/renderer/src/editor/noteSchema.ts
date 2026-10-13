@@ -9,6 +9,7 @@ import StarterKit from "@tiptap/starter-kit";
 import {
   ANSWER_BLOCK,
   BLOCK_ID_ATTRIBUTE,
+  COMPARISON_TABLE_NODE,
   FOOTNOTE_NODE,
   GENERATED_MARK,
   NOTE_BLOCK_TYPES,
@@ -19,10 +20,12 @@ import { Chart } from "./chartSchema";
 import { Citation } from "./citationSchema";
 import { ClaimCheck } from "./claimChecks";
 import { lowlight } from "./codeLanguages";
+import { ComparisonCell, ComparisonRow, ComparisonTable } from "./comparisonSchema";
 import { DocumentChip } from "./documentChipSchema";
 import { Footnote } from "./footnoteSchema";
 import { ProposalAttributes, ProposalDelete, ProposalInsert } from "./proposalSchema";
 import { Answer, MindDocument, Question, QuestionContextFlag } from "./questionSchema";
+import { InlineImage, WordAtom, WordBlock } from "./wordSchema";
 
 /** The attribute each Block keeps its UUID in. It is stored in the Mind's Yjs document. */
 export { BLOCK_ID_ATTRIBUTE };
@@ -35,7 +38,12 @@ export { BLOCK_ID_ATTRIBUTE };
  * and Answers get an ID too; only top-level IDs name Blocks. Footnotes get
  * one too, which names them across edits and sync; a pasted copy gets a new one.
  */
-const BLOCK_TYPES: readonly string[] = [...NOTE_BLOCK_TYPES, QUESTION_BLOCK, ANSWER_BLOCK];
+const BLOCK_TYPES: readonly string[] = [
+  ...NOTE_BLOCK_TYPES,
+  QUESTION_BLOCK,
+  ANSWER_BLOCK,
+  COMPARISON_TABLE_NODE,
+];
 
 /** The node types that hold a formula, written in LaTeX. */
 export const MATH_TYPES: readonly string[] = ["blockMath", "inlineMath"];
@@ -57,6 +65,17 @@ export interface NoteSchemaOptions {
   documentChipView?: NodeViewRenderer;
   /** Draws charts, with their menus and their points' cards. */
   chartView?: NodeViewRenderer;
+  /** Draw comparison tables (#98): the table with its heading row, each row's Document, each cell's state. */
+  comparisonViews?: {
+    table: NodeViewRenderer;
+    row: NodeViewRenderer;
+    cell: NodeViewRenderer;
+  };
+  /** Draws what a Word import kept as it is (#104): in the text, and as Blocks. */
+  wordAtomView?: NodeViewRenderer;
+  wordBlockView?: NodeViewRenderer;
+  /** Asked before a change deletes a Word file's section break; `retry` makes it. */
+  onSectionBreakDelete?: (retry: () => void) => void;
 }
 
 /**
@@ -67,7 +86,9 @@ export interface NoteSchemaOptions {
  * only. Document chips the User writes with "@". Citations, inline in Answers and in whatever they are copied into,
  * table cells included. Footnotes the User writes, inline, each holding its
  * text. Charts, drawn from a table or from cited figures, each value with its
- * Citation (#436). Proposals the AI made, waiting for the User (see `proposalSchema`).
+ * Citation (#436). Comparison tables, top-level only (#98). What a Word
+ * import kept as it is, and its inline pictures (#104, see `wordSchema`).
+ * Proposals the AI made, waiting for the User (see `proposalSchema`).
  * AI text, the words the AI wrote that the User hasn't made their own (see `aiText`).
  * The checks of the User's own sentences, on their text (see `claimChecks`).
  * Every Block and every footnote has a UUID. The editor adds its interface on
@@ -83,6 +104,10 @@ export function noteExtensions({
   footnoteView,
   documentChipView,
   chartView,
+  comparisonViews,
+  wordAtomView,
+  wordBlockView,
+  onSectionBreakDelete,
 }: NoteSchemaOptions = {}): Extensions {
   const onClick = onEditMath && ((_node: unknown, pos: number) => onEditMath(pos));
   const CodeBlock = CodeBlockLowlight.extend({
@@ -126,6 +151,15 @@ export function noteExtensions({
     Footnote.configure({ view: footnoteView ?? null }),
     DocumentChip.configure({ view: documentChipView ?? null }),
     Chart.configure({ view: chartView ?? null }),
+    ComparisonTable.configure({ view: comparisonViews?.table ?? null }),
+    ComparisonRow.configure({ view: comparisonViews?.row ?? null }),
+    ComparisonCell.configure({ view: comparisonViews?.cell ?? null }),
+    WordAtom.configure({
+      view: wordAtomView ?? null,
+      onSectionBreakDelete: onSectionBreakDelete ?? null,
+    }),
+    WordBlock.configure({ view: wordBlockView ?? null }),
+    InlineImage,
     QuestionContextFlag,
     // Proposals waiting for the User: words struck and added, and whole Blocks (#93).
     ProposalInsert,

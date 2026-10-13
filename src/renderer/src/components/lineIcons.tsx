@@ -32,6 +32,16 @@ export function PlusLineIcon(props: IconProps) {
   );
 }
 
+/** Search: a magnifier. */
+export function SearchLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="m20 20-4.35-4.35" />
+    </LineIcon>
+  );
+}
+
 /** A Mind: a notebook. */
 export function MindLineIcon(props: IconProps) {
   return (
@@ -266,16 +276,6 @@ export function MineLineIcon(props: IconProps) {
   );
 }
 
-/** A magnifier: Find support. */
-export function SearchLineIcon(props: IconProps) {
-  return (
-    <LineIcon {...props}>
-      <circle cx="11" cy="11" r="6" />
-      <path d="m20 20-4.5-4.5" />
-    </LineIcon>
-  );
-}
-
 export function CheckLineIcon(props: IconProps) {
   return (
     <LineIcon strokeWidth={2.25} {...props}>
@@ -303,6 +303,16 @@ export function SidebarLineIcon(props: IconProps) {
     <LineIcon {...props}>
       <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
       <path d="M9.5 4.5v15" />
+    </LineIcon>
+  );
+}
+
+/** This computer, for what stays on it: a laptop. */
+export function ComputerLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <rect x="4.5" y="5" width="15" height="10.5" rx="1.75" />
+      <path d="M2.75 19h18.5" />
     </LineIcon>
   );
 }

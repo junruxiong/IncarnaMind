@@ -13,6 +13,7 @@
  */
 import { type TextUnit, UnitBuilder } from "../../../shared/units";
 import { ExtractionError } from "./errors";
+import { dataUrlOf, imageTypeOf } from "./images";
 import { child, descendants, elements, local, parseXml, textOf, type XmlElement } from "./xml";
 import { openPackage, resolvePart, type ZipArchive } from "./zip";
 
@@ -251,15 +252,6 @@ export async function extractPptx(bytes: Uint8Array): Promise<PptxResult> {
   return { units, slides };
 }
 
-const IMAGE_TYPES: Readonly<Record<string, string>> = {
-  png: "image/png",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  gif: "image/gif",
-  bmp: "image/bmp",
-  webp: "image/webp",
-};
-
 /** The largest image the outline shows, in bytes. */
 const MAX_IMAGE_BYTES = 16 * 1024 * 1024;
 
@@ -270,7 +262,7 @@ const MAX_IMAGE_BYTES = 16 * 1024 * 1024;
  * scripts and links), and parts that are missing or too large.
  */
 export async function imageDataUrl(bytes: Uint8Array, part: string): Promise<string | null> {
-  const type = IMAGE_TYPES[part.split(".").pop()?.toLowerCase() ?? ""];
+  const type = imageTypeOf(part);
   if (!type) return null;
   let data: Uint8Array | undefined;
   try {
@@ -279,9 +271,5 @@ export async function imageDataUrl(bytes: Uint8Array, part: string): Promise<str
     return null;
   }
   if (!data) return null;
-  let binary = "";
-  for (let at = 0; at < data.length; at += 0x8000) {
-    binary += String.fromCharCode(...data.subarray(at, at + 0x8000));
-  }
-  return `data:${type};base64,${btoa(binary)}`;
+  return dataUrlOf(data, type);
 }

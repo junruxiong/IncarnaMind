@@ -15,6 +15,8 @@ interface Requests {
   editFolder: string | null;
   /** The Tag Manage Tags opens on, to rename. */
   manageTag: { id: string } | null;
+  /** The Folder just made, whose name field the sidebar opens in its row. */
+  nameFolder: string | null;
   ask(request: Partial<Omit<Requests, "ask" | "clear">>): void;
   clear(key: keyof Omit<Requests, "ask" | "clear">): void;
 }
@@ -24,6 +26,7 @@ export const useRequests = create<Requests>((set) => ({
   deletePermanently: null,
   editFolder: null,
   manageTag: null,
+  nameFolder: null,
   ask: (request) => set(request),
   clear: (key) => set({ [key]: null }),
 }));

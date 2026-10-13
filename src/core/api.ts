@@ -118,11 +118,23 @@ export interface CreateMindInput {
  *   columns or title, but its Update writes the values again without it.
  *   Older charts are version 14 content as they are: a value with no `scale`
  *   is one whose scale isn't known, and nothing is rewritten.
- * - 16: checks of the User's own sentences (#96): the `claimCheck` mark on a
+ * - 15: what a Word import keeps as it is (`WORD_ATOM_NODE`, `WORD_BLOCK_NODE`,
+ *   #104) and pictures in the text (`IMAGE_NODE`). Older content is version 15
+ *   content as it is: nothing is rewritten.
+ * - 16: the rows a cut chart doesn't draw (#503): `cutRows` beside `rows`
+ *   in a chart's `data`, which Show as table lists. An older version keeps
+ *   them while it changes a chart's kind, columns or title, but its Update
+ *   writes the data again without them. Older charts are version 16 content
+ *   as they are: one with no `cutRows` lists the rows it draws, and nothing
+ *   is rewritten.
+ * - 17: comparison tables (#98): `COMPARISON_TABLE_NODE`, `COMPARISON_ROW_NODE`
+ *   and `COMPARISON_CELL_NODE`. Older content is version 17 content as it is:
+ *   nothing is rewritten.
+ * - 18: checks of the User's own sentences (#96): the `claimCheck` mark on a
  *   sentence's text, which holds its result (see `CLAIM_CHECK_MARK`). Older
- *   content is version 16 content as it is: nothing is rewritten.
+ *   content is version 18 content as it is: nothing is rewritten.
  */
-export const CONTENT_SCHEMA_VERSION = 16;
+export const CONTENT_SCHEMA_VERSION = 18;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -335,8 +347,9 @@ export const MIND_PROPOSAL_REQUESTS_FIELD = "proposalRequests";
 /**
  * What made a request's Proposals: Edit with AI (#93), with what it was asked
  * so a change can be made again (regenerated) once it is out of date;
- * Regenerate of an Answer the User had edited (#94); or an Answer from the
- * assistant added to a new Mind, as changes to accept (#201). The assistant
+ * Regenerate of an Answer the User had edited (#94); an Answer from the
+ * assistant added to a new Mind, as changes to accept (#201); or Compare
+ * Documents, whose comparison table is one change (#98). The assistant
  * (#202) and Enhance (#114) add theirs.
  */
 export type ProposalRequest =
@@ -348,7 +361,8 @@ export type ProposalRequest =
       instruction?: string;
     })
   | (ProposalMaker & { source: "answer"; answerId: string })
-  | (ProposalMaker & { source: "answer-added" });
+  | (ProposalMaker & { source: "answer-added" })
+  | (ProposalMaker & { source: "comparison-table"; tableId: string });
 
 /** The model that made a request's Proposals, and when. */
 export interface ProposalMaker {
@@ -374,6 +388,7 @@ export const NOTE_BLOCK_TYPES = [
   "horizontalRule",
   "table",
   "chart",
+  "wordBlock",
 ] as const;
 
 /** The node type of a Question Block. Its content is the User's text (inline). */
@@ -381,6 +396,79 @@ export const QUESTION_BLOCK = "question";
 
 /** The node type of an Answer Block. Its content is rich text (Note node types), which the User can edit. */
 export const ANSWER_BLOCK = "answer";
+
+/**
+ * A comparison table (CONTEXT.md, #98): a top-level Block holding one row per
+ * Document and, in each row, one cell per Question (`ComparisonTableAttributes`).
+ */
+export const COMPARISON_TABLE_NODE = "comparisonTable";
+/** A comparison table's row: one Document (`ComparisonRowAttributes`), its cells in the columns' order. */
+export const COMPARISON_ROW_NODE = "comparisonRow";
+/**
+ * A comparison table's cell: the Answer to its column's Question from its
+ * row's Document alone, Citations and all (Note node types), or why there is
+ * none (`ComparisonCellAttributes`).
+ */
+export const COMPARISON_CELL_NODE = "comparisonCell";
+
+/** A comparison table's column: its Question. */
+export interface ComparisonQuestion {
+  /** A random UUID: what each row's cell for this column names. */
+  id: string;
+  text: string;
+}
+
+/** Attributes of a comparison table's Block, as stored in the Mind's Yjs document. */
+export interface ComparisonTableAttributes {
+  id: string | null;
+  /** Its columns, in order. */
+  questions: ComparisonQuestion[];
+  /** The model its cells are written with; both null: the default model. */
+  providerId: string | null;
+  modelId: string | null;
+  /** What else the User asked the table to show, for every cell; null for nothing. */
+  instruction: string | null;
+}
+
+/** Attributes of a comparison table's row. */
+export interface ComparisonRowAttributes {
+  documentId: string;
+  /** The Document's name when the table was made: shown once the Document is deleted. */
+  documentName: string;
+}
+
+/**
+ * Where a cell is: waiting for its turn, being written, written (its content
+ * is its Answer), or without an Answer (`problem` says why). A cell left
+ * "waiting" or "writing" by a fill that ended (a quit, or the table rejected
+ * and brought back) is stopped: filling the table again writes it.
+ */
+export type ComparisonCellStatus = "waiting" | "writing" | "done" | "failed";
+
+/**
+ * Why a cell has no Answer: its Document doesn't answer the Question
+ * ("not-found"), has no text to search, was deleted, or is a file
+ * IncarnaMind wrote, which checks leave out (#80); or why its model didn't
+ * write one (a `ProviderErrorKind`). "cost-cap" and "plan-limit" stopped the
+ * fill (`RunStop`): the cell wasn't checked.
+ */
+export type ComparisonProblem =
+  | "not-found"
+  | "nothing-to-search"
+  | "source-removed"
+  | "left-out"
+  | ProviderErrorKind;
+
+/** Attributes of a comparison table's cell. */
+export interface ComparisonCellAttributes {
+  questionId: string;
+  status: ComparisonCellStatus;
+  problem: ComparisonProblem | null;
+  /** The provider's own message for a failure, or what the model said when the Document doesn't answer. */
+  message: string | null;
+  /** "plan-limit": when the plan's limit resets (ISO 8601), when the provider says. */
+  resetsAt: string | null;
+}
 
 /**
  * A Note's "include in Question context" flag. Absent (or null) means on, the
@@ -657,6 +745,199 @@ export const DOCUMENT_CHIP_NODE = "documentChip";
 export const CHART_NODE = "chart";
 
 /**
+ * What a Mind imported from a Word file (#104) keeps as it is: content the
+ * editor can't represent, shown in place, never edited inside, which export
+ * writes back as the original XML (#105). `WORD_ATOM_NODE` sits inside a
+ * paragraph's text (a field, a content control, a text box, a bookmark…),
+ * `WORD_BLOCK_NODE` is a Block of its own (a block content control, a nested
+ * table, a header or footer). Both hold `WordAtomAttributes`.
+ */
+export const WORD_ATOM_NODE = "wordAtom";
+export const WORD_BLOCK_NODE = "wordBlock";
+
+/** A picture in a paragraph's text, as Tiptap names it: a .docx's inline pictures (#104). */
+export const IMAGE_NODE = "image";
+
+/**
+ * What a kept-as-is atom is. Bookmarks, other ranges (a comment's, an
+ * editing permission's, a move's), section breaks and page breaks are
+ * invisible; the rest show their text, or a mark of their own.
+ */
+export type WordAtomKind =
+  | "field"
+  | "control"
+  | "textBox"
+  | "shape"
+  | "smartArt"
+  | "chart"
+  | "picture"
+  | "object"
+  | "equation"
+  | "symbol"
+  | "footnote"
+  | "endnote"
+  | "comment"
+  | "insertion"
+  | "deletion"
+  | "bookmark"
+  | "range"
+  | "sectionBreak"
+  | "pageBreak"
+  | "table"
+  | "header"
+  | "footer"
+  | "other";
+
+/**
+ * The attributes of a kept-as-is atom (`WORD_ATOM_NODE`, `WORD_BLOCK_NODE`).
+ *
+ * `source` says where its XML is in the Mind's stored Word package
+ * (`WordFileInfo.part` unless it names a part): an element by its qualified
+ * name and its place among the elements of that name in the part, from 0, in
+ * document order, nested ones and those in `mc:Fallback` counted ("w:sdt#3"),
+ * or a run of elements from one to another ("w:r#40..w:r#44", a field), or a
+ * whole part ("word/header1.xml").
+ */
+export interface WordAtomAttributes {
+  kind: WordAtomKind;
+  /** What it shows: a field's result, a control's text, a footnote's number. */
+  label: string;
+  /** Its text, read for Questions and search: a text box's, a comment's, a footnote's. */
+  text: string;
+  source: string | null;
+  /** More about it: a change's or a comment's author and date, a field's type. */
+  info: WordAtomInfo | null;
+}
+
+export interface WordAtomInfo {
+  author?: string;
+  /** As the file has it, ISO 8601. */
+  date?: string;
+  /** A field's type, the first word of its instruction: "DATE", "REF", "TOC". */
+  field?: string;
+  /** Shown on a line of its own: a display equation, a drawing in a paragraph by itself. */
+  display?: boolean;
+  /** A bookmark's name. */
+  name?: string;
+}
+
+/**
+ * Why a Word file isn't imported, said before any Mind is made:
+ * - "legacy": a Word 97–2003 file (.doc);
+ * - "macros": a macro-enabled file (.docm): IncarnaMind never runs macros;
+ * - "encrypted": protected with a password;
+ * - "strict": saved as Strict Open XML;
+ * - "damaged": not a Word document that can be read (a broken package or XML);
+ * - "too-large": over the size limits for Office files (ADR-0011, #77);
+ * - "unreadable": the file couldn't be read (moved, or not allowed).
+ */
+export type WordRefusalReason =
+  | "legacy"
+  | "macros"
+  | "encrypted"
+  | "strict"
+  | "damaged"
+  | "too-large"
+  | "unreadable";
+
+/** Whose document an imported Word file is: someone else's makes its Blocks third-party text (#78). */
+export type WordOrigin = "own" | "someone-else";
+
+/** What the import screen needs to know about a Word file before it is imported (`checkWordFile`). */
+export interface WordFileCheck {
+  /** The file's name, as the User sees it ("Lease, draft 4.docx"). */
+  fileName: string;
+  /** Why it can't be imported; null when it can. */
+  refusal: WordRefusalReason | null;
+  /** What the import screen starts on: someone else's when the file carries tracked changes or comments. */
+  origin: WordOrigin;
+  /** Who wrote its tracked changes and comments, in the order they first appear. */
+  authors: string[];
+  /** Its tracked changes, of every kind (paragraph marks, formatting and moves too). */
+  changes: number;
+  comments: number;
+}
+
+export interface ImportWordFileInput {
+  /** The .docx's absolute path. */
+  path: string;
+  origin: WordOrigin;
+  /** The Folder to make the Mind in; none, or null: Not in a Folder. */
+  folderId?: string | null;
+}
+
+/**
+ * How an import went: the new Mind, which goes on filling in with the
+ * file's content (`WordImportProgress`), or why the file was refused, with
+ * no Mind made.
+ */
+export type ImportWordFileResult =
+  | { ok: true; mind: Mind }
+  | { ok: false; refusal: WordRefusalReason };
+
+/**
+ * What a Word import did with the file, by count, so nothing is dropped
+ * without a word: what became editable, and what is kept as is, by kind.
+ */
+export interface WordImportReport {
+  paragraphs: number;
+  headings: number;
+  listItems: number;
+  tables: number;
+  images: number;
+  links: number;
+  kept: Partial<Record<WordAtomKind, number>>;
+  /** Tracked changes, of every kind, and comments, whoever made them. */
+  changes: number;
+  comments: number;
+  sections: number;
+}
+
+/**
+ * The name of the Y.Map, beside the Blocks of a Mind imported from a Word
+ * file, that says what it was imported from (see src/shared/wordFiles.ts):
+ * the file (`WordFileInfo`), how far the import has got
+ * (`WordImportProgress`), and what it did (`WordImportReport`).
+ */
+export const MIND_WORD_FIELD = "word";
+
+/**
+ * The name of the Y.Map that says which paragraph or table of the stored Word
+ * package each of the Mind's nodes was imported from, by node id
+ * (`WordSource`), for export to write into the original (#105).
+ */
+export const MIND_WORD_SOURCES_FIELD = "wordSources";
+
+/** The Word file a Mind was imported from. Its package is kept in the data folder by `sha256`. */
+export interface WordFileInfo {
+  /** As the User named it, with its extension. */
+  name: string;
+  sha256: string;
+  size: number;
+  /** The package's main document part: "word/document.xml". */
+  part: string;
+}
+
+/** How far an import has got, in top-level Blocks. While `done` is under `total`, the Mind can't be edited. */
+export interface WordImportProgress {
+  done: number;
+  total: number;
+}
+
+/**
+ * Where a node of a Mind imported from a Word file came from, in the main
+ * document part: `p`, the paragraph's `w14:paraId`, when it has one no other
+ * paragraph shares; else `n`, the element's place, as in
+ * `WordAtomAttributes.source` ("w:p#12", "w:tbl#3"). `f` is the node's
+ * fingerprint as imported (`wordFingerprint`): one that differs now was edited.
+ */
+export interface WordSource {
+  n: string;
+  p?: string;
+  f: string;
+}
+
+/**
  * Where a Citation's check stands. The check compares the model's quote with
  * the text of the cited Units (its Location: one or two pages, slides,
  * sections, blocks of rows or of lines; see src/shared/units.ts), once, when
@@ -844,9 +1125,11 @@ export interface CalculatedFigure {
   /** The rules it was worked out and shown by (`FORMULA_VERSION`): a check runs the same ones. */
   engine: number;
   /**
-   * What the Answer wrote right before its marker when that isn't this figure:
-   * "26%" where IncarnaMind calculated 25.0%. Null when it wrote nothing
-   * there, or the same figure, which the text then shows once.
+   * What the Answer wrote beside its marker when that isn't this figure: a
+   * number right before it ("26%" where IncarnaMind calculated 25.0%), or a
+   * scale or currency right after it ("亿元" after a figure in 万元), which
+   * the text leaves out. Null when it wrote nothing there, or the same
+   * figure, which the text then shows once.
    */
   written: string | null;
 }
@@ -1221,6 +1504,8 @@ export type LayoutChange =
       where?: OpenWhere;
       /** A Document as a preview, replacing the group's preview if it has one. */
       preview?: boolean;
+      /** A Document already open as a preview is kept, as a double-click on its tab does. */
+      keep?: boolean;
       /** Its group becomes the focused one: true unless false. */
       focus?: boolean;
       /** A Document: where in it, e.g. a Citation's quote. */
@@ -2722,6 +3007,132 @@ export interface CostSummary {
  */
 export type RunStop = { reason: "cost-cap" } | { reason: "plan-limit"; resetsAt: string | null };
 
+/** What Compare Documents makes a comparison table of (#98). */
+export interface CompareDocumentsInput {
+  mindId: string;
+  /** The rows, in order: Documents IncarnaMind wrote that checks leave out are dropped (#80). */
+  documentIds: string[];
+  /** The columns, in order. */
+  questions: string[];
+  /** What else the table should show, for every cell. */
+  instruction?: string | null;
+  /** The model its cells are written with; the default model when left out. */
+  model?: ChatModelChoice | null;
+  /**
+   * The Block it goes after (the one the cursor is in), or before, when that
+   * Block is an empty paragraph, which stays to write on. None: the Mind's end.
+   */
+  afterBlockId?: string | null;
+}
+
+/** A comparison table, by its Mind and its Block's id. */
+export interface ComparisonTableRef {
+  mindId: string;
+  tableId: string;
+}
+
+/**
+ * What asking for a comparison table, or for its cells to be filled, did: it
+ * is in the Mind (a change to accept, the first time) and its cells are being
+ * filled; or nothing was written or sent, because the model can't be used yet
+ * (`readiness` says why) or the User didn't allow it to be sent to.
+ */
+export type ComparisonResult =
+  | { started: true; tableId: string }
+  | { started: false; reason: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
+  | { started: false; reason: "consent-declined" };
+
+/** A comparison table whose cells are being filled ("comparison.filling"). */
+export interface ComparisonFilling extends ComparisonTableRef {
+  filling: boolean;
+}
+
+/**
+ * Where a Task (CONTEXT.md, #126) is:
+ * - "running": doing its steps, or waiting for its turn behind an Answer or a
+ *   recording; with an `ask`, waiting for the User;
+ * - "paused": waiting until it is resumed (`pausedReason` says why);
+ * - "done", "stopped" (by the User, or its table or Mind went) or "failed":
+ *   finished, kept in Recent for 7 days.
+ */
+export type TaskStatus = "running" | "paused" | "done" | "stopped" | "failed";
+
+/**
+ * Why a Task is paused: the User paused it; IncarnaMind was closed while it
+ * waited for the User; the monthly cap or a plan's limit stopped it; or its
+ * model can't be used now (a key removed, local mode). All but "user" need
+ * the User to act.
+ */
+export type TaskPausedReason = "user" | "closed" | "cost-cap" | "plan-limit" | "not-ready";
+
+/**
+ * A step of a Task that changes something outside IncarnaMind's database,
+ * journalled before and after it runs, so that after a crash its outcome is
+ * checked before anything is done again: a whole file written (the SHA-256
+ * of what it writes, and of what was there before, null for no file), or a
+ * call of a Connector's Tool, which IncarnaMind can't check afterwards.
+ */
+export type TaskEffect =
+  | { kind: "file-write"; path: string; sha256: string; previous: string | null }
+  | { kind: "connector"; connectorId: string; connectorName: string; tool: string };
+
+/**
+ * What a Task waits for the User to answer, one at a time:
+ * - "approval": a call that asks first; the request itself is among
+ *   `listApprovalRequests` with this Task's `taskId`, answered with
+ *   `respondToApproval`, and asked again if IncarnaMind was closed meanwhile;
+ * - "unknown-outcome": IncarnaMind was closed in the middle of an Effect and
+ *   can't tell whether it happened; `answerTaskAsk` does it again or skips it.
+ * `number` counts the Task's asks so far, this one included.
+ */
+export type TaskAsk =
+  | { kind: "approval"; stepKey: string; number: number }
+  | { kind: "unknown-outcome"; stepKey: string; number: number; effect: TaskEffect };
+
+/** How far a Task is: so many of its items settled, of so many. */
+export interface TaskProgress {
+  done: number;
+  total: number;
+}
+
+/**
+ * A Task (CONTEXT.md): a Run that goes on in the background and keeps its
+ * place when IncarnaMind is quit. Its journal (`runs`, `run_steps`) records
+ * each step as started and completed.
+ */
+export interface Task {
+  id: string;
+  /** What runs it: "comparison" fills a comparison table. A kind this version doesn't know stays as it is. */
+  kind: string;
+  /** The Mind it works in, if any. */
+  mindId: string | null;
+  /** The Block in that Mind it works on (a comparison table), if any: where opening it goes. */
+  blockId: string | null;
+  status: TaskStatus;
+  pausedReason: TaskPausedReason | null;
+  /** "plan-limit": when the plan's limit resets (ISO 8601), when the provider says. */
+  resetsAt: string | null;
+  ask: TaskAsk | null;
+  progress: TaskProgress | null;
+  /** "failed": why, as a `ProviderErrorKind` or another short kind. */
+  problem: string | null;
+  /** What its model requests have cost, settled and reserved; null with none billed. */
+  cost: Money | null;
+  startedAt: string;
+  finishedAt: string | null;
+  updatedAt: string;
+}
+
+/** What answering a Task's "unknown-outcome" ask does: the step again, or on without it. */
+export type TaskAskAnswer = "redo" | "skip";
+
+/** Open a Task's place: its Mind, with its row in the tray (`showTask`, a notification's click). */
+export interface TaskShown {
+  taskId: string;
+  mindId: string | null;
+  blockId: string | null;
+}
+
 /** A large run to estimate: so many items (a comparison table's cells, verify's sentences…), each about an Answer. */
 export interface RunEstimateInput {
   items: number;
@@ -2785,14 +3196,44 @@ export type ChatReadiness =
       modelId: string;
     };
 
+/**
+ * Why a listed model isn't in the menu by default: "unknown" (the catalog
+ * doesn't know it), "older" (deprecated, or on its way out), or
+ * "cannot-answer" (it needs another API than chat, for `reason`; it can't be
+ * added).
+ */
+export interface OtherModel {
+  id: string;
+  why: "unknown" | "older" | "cannot-answer";
+  reason?: CannotAnswerReason;
+}
+
+/** Which API, other than chat, a model needs. */
+export type CannotAnswerReason = "completion" | "audio" | "deep-research" | "computer-use";
+
+export interface SetChatModelInMenuInput {
+  providerId: string;
+  modelId: string;
+  inMenu: boolean;
+}
+
 /** A saved chat provider and the models a Question's model picker offers on it. */
 export interface ChatModelGroup {
   provider: ChatProvider;
   /**
-   * Model ids: the models the provider lists, when it can be asked, and always
-   * the default model if it is on this provider. The default comes first.
+   * Model ids in the menu: the default model if it is on this provider, first;
+   * then the provider's role models, then the rest of the catalog's current chat
+   * models it lists (every model a server lists, for Ollama and other servers),
+   * then those the User added.
    */
   models: string[];
+  /**
+   * What the provider lists that the menu leaves out (see `OtherModel`), for
+   * Settings → Models → Other models, including ids the User has added.
+   */
+  other: OtherModel[];
+  /** The ids in `models` that the User added from `other`; "In the menu" is on for them. */
+  added: string[];
   /**
    * The ids in `models` whose capabilities are unknown: neither the catalog
    * nor the provider says what they can do. They still work; an Answer finds
@@ -3574,6 +4015,38 @@ export interface ConversationMatch {
 }
 
 // ---------------------------------------------------------------------------
+// The words inside Minds and Documents (⌘K, #116)
+
+/**
+ * A Mind whose Blocks hold every word searched for (`CoreApi.searchMinds`): its best Block, one
+ * that holds them all if there is one, as a short excerpt with the words found, and the heading
+ * it sits under.
+ */
+export interface MindTextMatch {
+  mindId: string;
+  blockId: string;
+  /** The text of the nearest heading above the Block, "" when there is none. */
+  heading: string;
+  excerpt: string;
+  highlights: TextRange[];
+}
+
+/**
+ * A Document whose Passages hold every word searched for (`CoreApi.searchDocumentText`), at
+ * least one of them in the Passage's text rather than only in the Document's name: its best
+ * Passage, as a short excerpt with the words found.
+ */
+export interface DocumentTextMatch {
+  documentId: string;
+  passageId: string;
+  /** The first Unit the Passage covers, from 1, as in `PassageSearchResult`; null: none. */
+  pageFrom: number | null;
+  pageTo: number | null;
+  excerpt: string;
+  highlights: TextRange[];
+}
+
+// ---------------------------------------------------------------------------
 // Skills (CONTEXT.md: Skill)
 
 /**
@@ -4136,6 +4609,8 @@ export const aiUseKinds = [
   "assistant-change-rejected",
   /** A change from Edit with AI accepted (#93). */
   "edit-with-ai-accepted",
+  /** A comparison table from Compare Documents accepted (#98). */
+  "comparison-table-accepted",
 ] as const;
 export type AiUseKind = (typeof aiUseKinds)[number];
 
@@ -4570,7 +5045,10 @@ export type ApprovalRequest = ToolApprovalRequest | SkillScriptApprovalRequest;
 
 interface ApprovalRequestBase extends AnswerPlace {
   requestId: string;
+  /** The Answer whose call this is; for a Task's call, the Task's id, as `taskId`. */
   answerId: string;
+  /** A Task's call (#126): it waits in the Task's row in the tray, and outlasts a quit. */
+  taskId?: string;
   /** The call's id among the Answer's `toolCalls`. */
   toolCallId: string;
   /** What the call can do, as its Tool declares it: why it asks. */
@@ -4719,10 +5197,10 @@ export interface TagMerge {
 // Export
 
 /**
- * What a Mind exports to: Markdown, for an archive, or Word (.docx) or PDF, for the
+ * What a Mind exports to: Markdown, for an archive, or Word (.docx), PDF or HTML, for the
  * deliverable. Formats are listed in the order the options sheet offers them.
  */
-export const EXPORT_FORMATS = ["docx", "pdf", "markdown"] as const;
+export const EXPORT_FORMATS = ["docx", "pdf", "html", "markdown"] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
 /**
@@ -4733,13 +5211,14 @@ export interface ExportPreferences {
   format: ExportFormat;
   docx: { includeQuestions: boolean };
   pdf: { includeQuestions: boolean };
+  html: { includeQuestions: boolean };
 }
 
 export interface ExportMindOptions {
   format: ExportFormat;
   /**
    * Whether Questions are exported, marked as Questions. Defaults to true for
-   * Markdown, an archive of everything, and to false for .docx and PDF: the
+   * Markdown, an archive of everything, and to false for .docx, PDF and HTML: the
    * deliverable leaves the working material out.
    */
   includeQuestions?: boolean;
@@ -4767,7 +5246,7 @@ export interface MindExportPreview {
 
 /** A Mind exported as a file, for the host to save where the User chooses. */
 export interface MindExport extends MindExportPreview {
-  /** The file's contents: UTF-8 text for Markdown, a ZIP package for .docx, a PDF for PDF. */
+  /** The file's contents: UTF-8 text for Markdown and HTML, a ZIP package for .docx, a PDF for PDF. */
   data: Uint8Array;
 }
 
@@ -5455,6 +5934,20 @@ export interface CoreApi {
 
   /** Makes a Mind, in a Folder if given (it must exist), and returns it. */
   createMind(input?: CreateMindInput): Promise<Mind>;
+  /**
+   * Reads a Word file for the import screen (#104): whether it can be imported, and
+   * whose document it looks like. Keeps nothing, and changes nothing.
+   */
+  checkWordFile(path: string): Promise<WordFileCheck>;
+  /**
+   * Imports a .docx as a new Mind (#104), titled after the file, keeping a copy of its
+   * package in the data folder to export back into (#105), so the file may move or go.
+   * A file that can't be imported is refused before any Mind is made. Otherwise the Mind
+   * is returned at once and fills in with the file's content, a batch at a time
+   * (`WordImportProgress` in its document; an import a quit cut short goes on at the
+   * next start). Someone else's document makes every Block third-party text (#78).
+   */
+  importWordFile(input: ImportWordFileInput): Promise<ImportWordFileResult>;
   /** Minds that are not deleted, most recently updated first. Editing a Mind's content updates it. */
   listMinds(): Promise<Mind[]>;
   /** Changes a Mind's title (trimmed; empty means "Untitled") and returns the Mind. */
@@ -5504,6 +5997,19 @@ export interface CoreApi {
    * each word may be still to type), newest first, with the messages that match.
    */
   searchConversations(query: string): Promise<ConversationMatch[]>;
+  /**
+   * ⌘K's "In your notes": the Minds, not deleted, whose Blocks hold every word of `query`
+   * (English and Chinese, as Document search reads them; the last letters of each word may be
+   * still to type), best match first, at most 20. Blocks are searched as they are now: words
+   * typed a moment ago are found.
+   */
+  searchMinds(query: string): Promise<MindTextMatch[]>;
+  /**
+   * ⌘K's "In your Documents": live Documents whose Passages hold every word of `query`, as
+   * `searchMinds` reads it, best match first, one Passage each, at most 20. Keyword search over
+   * the Passage index, whatever the embedding settings.
+   */
+  searchDocumentText(query: string): Promise<DocumentTextMatch[]>;
   /**
    * Gives a conversation the title the User typed (trimmed; empty goes back to its own
    * name) and returns it. A name the conversation gives itself never replaces it.
@@ -5918,6 +6424,11 @@ export interface CoreApi {
    */
   listChatModels(): Promise<ChatModelGroup[]>;
   /**
+   * Puts a model id in a provider's model menu, or takes an id the User added
+   * back out. Any id can be added, listed by the provider or not.
+   */
+  setChatModelInMenu(input: SetChatModelInMenuInput): Promise<void>;
+  /**
    * This month's cost so far, for Settings: what requests billed per token
    * cost, settled and still reserved, and each provider's use. Recorded on
    * this computer only.
@@ -5929,6 +6440,47 @@ export interface CoreApi {
    * tokens and price; for a plan or a model on this computer, nothing.
    */
   estimateRun(input: RunEstimateInput): Promise<RunEstimate>;
+
+  /**
+   * Compare Documents (#98): puts a comparison table into the Mind, one row
+   * per Document and one column per Question, as one change to accept or
+   * reject, and fills its cells, each an Answer from its row's Document alone
+   * with checked Citations ("comparison.filling" while it does). A model off
+   * this computer writes up to 4 cells at once, backing off when its provider
+   * limits requests; one on this computer, one at a time. The monthly cap or a
+   * plan's limit stops the fill, and the cells left say they weren't checked.
+   */
+  compareDocuments(input: CompareDocumentsInput): Promise<ComparisonResult>;
+  /**
+   * Fills a comparison table's cells that have no Answer (`cellToFill`): a
+   * column the editor just added, or cells a fill left (a quit, the monthly
+   * cap, a failure). A fill already going takes them up once its cells are done.
+   */
+  fillComparisonTable(input: ComparisonTableRef): Promise<ComparisonResult>;
+  /** Stops filling a comparison table: cells being written stay as they were. */
+  stopComparisonTable(input: ComparisonTableRef): Promise<void>;
+  /** The comparison tables whose cells are being filled now. */
+  listFillingComparisons(): Promise<ComparisonTableRef[]>;
+
+  /**
+   * Tasks (#126): those not finished, then those finished in the last 7 days,
+   * most recent first ("task.changed" as each changes). A comparison table
+   * fills as a Task: closing its Mind or quitting doesn't stop it, and it
+   * goes on when IncarnaMind starts again.
+   */
+  listTasks(): Promise<Task[]>;
+  /**
+   * Pauses a running Task where it is: a step being done (a cell being
+   * written) stops and is done again when it resumes, and what it asked is
+   * asked again then. A file or Connector change under way finishes first.
+   */
+  pauseTask(taskId: string): Promise<Task>;
+  /** Resumes a paused Task from where it stopped. A Task waiting for an answer resumes once answered. */
+  resumeTask(taskId: string): Promise<Task>;
+  /** Stops a Task for good: what it did stays, and what it waits for is withdrawn. */
+  stopTask(taskId: string): Promise<Task>;
+  /** Answers a Task's "unknown-outcome" ask: do the step again, or go on without it. */
+  answerTaskAsk(taskId: string, answer: TaskAskAnswer): Promise<Task>;
 
   /**
    * Asks a Question: its Answer is written into the Mind right after it, as the
@@ -6619,6 +7171,12 @@ export interface CoreEvents {
   "answer.citationAdded": AnswerCitationAdded;
   "answer.finished": AnswerFinished;
   "answer.failed": AnswerFailed;
+  /** A comparison table's cells started or stopped being filled. */
+  "comparison.filling": ComparisonFilling;
+  /** A Task started, moved on, waits for the User, paused, resumed or finished. */
+  "task.changed": Task;
+  /** A Task's notification was clicked: the window opens its Mind, with its row in the tray. */
+  "task.shown": TaskShown;
   /** The User accepted a suggestion into a Mind (see `acceptSuggestion`). */
   "suggestion.accepted": SuggestionAccepted;
   /**
@@ -6658,6 +7216,8 @@ export type CoreApiMethod = keyof CoreApi;
 // A Record over every method name: adding a method to CoreApi without listing it here fails the type-check.
 const methods: Record<CoreApiMethod, true> = {
   createMind: true,
+  checkWordFile: true,
+  importWordFile: true,
   listMinds: true,
   renameMind: true,
   deleteMind: true,
@@ -6670,6 +7230,8 @@ const methods: Record<CoreApiMethod, true> = {
   listConversations: true,
   getConversation: true,
   searchConversations: true,
+  searchMinds: true,
+  searchDocumentText: true,
   renameConversation: true,
   deleteConversation: true,
   resolveReference: true,
@@ -6735,8 +7297,18 @@ const methods: Record<CoreApiMethod, true> = {
   testChatConnection: true,
   getChatReadiness: true,
   listChatModels: true,
+  setChatModelInMenu: true,
   getCostSummary: true,
   estimateRun: true,
+  compareDocuments: true,
+  fillComparisonTable: true,
+  stopComparisonTable: true,
+  listFillingComparisons: true,
+  listTasks: true,
+  pauseTask: true,
+  resumeTask: true,
+  stopTask: true,
+  answerTaskAsk: true,
   askQuestion: true,
   regenerateAnswer: true,
   stopAnswer: true,

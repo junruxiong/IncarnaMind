@@ -47,12 +47,14 @@ import type {
   ProviderError,
   SavedExport,
   SearchScope,
+  Task,
   Unsubscribe,
 } from "./api";
 import { createApprovals } from "./approvals";
 import { createBackgroundQueue } from "./backgroundQueue";
 import { createCitationStyles } from "./citationStyles";
 import { type CitedPages, type CitedPlace, createCitedPages } from "./citedPages";
+import { COMPARISON_TASK, createComparisons } from "./comparisons";
 import { createConnectors } from "./connectors";
 import { createConsent, type DataFlowRegistry } from "./consent";
 import { createConversations } from "./conversations";
@@ -105,6 +107,7 @@ import { createCaptureHealth } from "./meetings/health";
 import { createTranscripts } from "./meetings/transcript";
 import { accessFor, isKnownKind } from "./mindAccess";
 import { createMindContent } from "./mindContent";
+import { createMindIndex } from "./mindIndex";
 import {
   createMinds,
   parseCreateMindInput,
@@ -141,6 +144,7 @@ import {
 } from "./referenceRecords";
 import { parseReference } from "./references";
 import { BUILT_IN_RERANKING_MODEL, createRerankingModel } from "./reranking";
+import { createTasks, type TaskKind, type TaskNotice } from "./runs/tasks";
 import { parseSearchScope, resolveSearchScope } from "./scope";
 import { createSecrets } from "./secrets";
 import { createSettings, isChatModelChoice } from "./settings";
@@ -165,6 +169,7 @@ import {
 } from "./transcription/model";
 import { createUsageData } from "./usageData";
 import { addedCounts, trackUsage } from "./usageTracking";
+import { createWordImports } from "./wordImports";
 import { ensureWorkspace } from "./workspace";
 
 export const DATABASE_FILE = "incarnamind.db";
@@ -255,6 +260,11 @@ export interface Core extends CoreApi, CoreEventSource {
    */
   citedPageImage(citation: CitedPlace): Promise<DrawnPage | null>;
   /**
+   * Starts a Task of a kind the host registered (`CoreAdapters.taskKinds`).
+   * Comparison tables start theirs through `compareDocuments`.
+   */
+  startTask(kind: string, mindId: string | null, input: unknown): Task;
+  /**
    * For Answers (#29): the default chat model (or the one given), once Questions
    * can be asked and the User has accepted its data flow. Throws otherwise.
    */
@@ -308,6 +318,14 @@ export function createCore(adapters: CoreAdapters): Core {
     }
     return mind;
   };
+  const mindExists = (mindId: string) => {
+    try {
+      minds.get(mindId);
+      return true;
+    } catch {
+      return false;
+    }
+  };
   const mindsChanged = () => events.emit("minds.changed", minds.list());
   // The assistant's conversations (ADR-0017); Answers a quit left being written are settled now.
   const conversations = createConversations(db, now);
@@ -316,8 +334,16 @@ export function createCore(adapters: CoreAdapters): Core {
     events.emit("mind.update", { mindId, update });
     // Only notes the change; what became of AI text is worked out once the Mind is quiet.
     aiUse.contentStored(mindId);
+    mindIndex.contentStored(mindId);
+    comparisons.mindChanged(mindId);
     const renamed = minds.setAutoTitle(mindId, content.peek(mindId, firstLineOf));
     if (minds.markEdited(mindId) || renamed) mindsChanged();
+  });
+  const mindIndex = createMindIndex({
+    db,
+    now,
+    content,
+    reportError: (error) => console.error(error),
   });
   // The record of AI use stays on this computer: it takes nothing from the network or the usage-data catalog.
   const aiUse = createAiUse({
@@ -855,12 +881,13 @@ export function createCore(adapters: CoreAdapters): Core {
     query: string,
     documentIds: readonly string[] | null,
     signal?: AbortSignal,
-    { rerank: reranking = true }: AnswerSearchOptions = {},
+    { rerank: reranking = true, parameters }: AnswerSearchOptions = {},
   ) => {
     const options = {
       signal,
       rerank: reranking ? (adapters.reranker ?? rerank.active()) : undefined,
       documentIds: documentIds ?? undefined,
+      ...(parameters && { parameters }),
     };
     const tuning = adapters.answerSearch;
     return tuning
@@ -917,14 +944,7 @@ export function createCore(adapters: CoreAdapters): Core {
     events,
     engine: answerEngine,
     requireMind: (mindId) => writableMind(mindId).id,
-    mindExists: (mindId) => {
-      try {
-        minds.get(mindId);
-        return true;
-      } catch {
-        return false;
-      }
-    },
+    mindExists,
     readableMindName: (mindId) => {
       const found = minds.locate(mindId);
       if (!found || found.deletedAt !== null) return null;
@@ -987,7 +1007,104 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     resolveScope,
     emptyScopeAnswer: () => translate(settings.get().language, "scope.answer.empty"),
-    onWritingChange: (writing) => background.setAnswering(writing),
+    onWritingChange: (writing) => {
+      background.setAnswering(writing);
+      tasks.setAnswering(writing);
+    },
+    reportError: (error) => console.error(error),
+  });
+
+  // Compare Documents (#98): each cell an Answer from one Document, its evidence as a check's.
+  const comparisons = createComparisons({
+    content,
+    requireMind: (mindId) => writableMind(mindId).id,
+    mindExists,
+    answers,
+    chat: {
+      providerExists: (providerId) => chat.exists(providerId),
+      readiness: (choice) => chat.readiness(choice),
+      prepareModel: (choice) => chat.prepareModel(choice),
+      runsLocally: (choice) => chat.metered(choice)?.billing === "free",
+    },
+    documents: {
+      live: (ids) => documents.getMany(ids),
+      searchableCount: (ids) => documents.searchableCount(ids),
+    },
+    evidence: (ids) => evidence.scope(ids).documentIds ?? [...ids],
+    tasks: {
+      start: (kind, mindId, input) => tasks.start(kind, mindId, input),
+      unfinished: () => tasks.unfinished(),
+      isLive: (taskId) => tasks.isLive(taskId),
+      resume: (taskId) => tasks.resume(taskId),
+      stop: (taskId) => tasks.stop(taskId),
+    },
+    emit: (event, payload) => events.emit(event, payload),
+    reportError: (error) => console.error(error),
+  });
+
+  /** A Task's name, as its notification says it. */
+  const taskName = (kind: string) =>
+    translate(
+      settings.get().language,
+      kind === COMPARISON_TASK ? "task.kind.comparison" : "task.kind.other",
+    );
+  /** Whether a Mind is the tab shown in a group of one of these windows. */
+  const mindShown = (mindId: string | null, windowIds: readonly string[]) =>
+    mindId !== null &&
+    windowIds.some((windowId) =>
+      layouts
+        .get(windowId)
+        .groups.some((group) =>
+          group.tabs.some(
+            (tab) =>
+              tab.id === group.activeTabId &&
+              tab.item.kind === "mind" &&
+              tab.item.mindId === mindId,
+          ),
+        ),
+    );
+  const notifyTask = ({ task, what }: TaskNotice) => {
+    const notifications = adapters.notifications;
+    if (!notifications) return;
+    const language = settings.get().language;
+    const name = taskName(task.kind);
+    const title = translate(
+      language,
+      what === "needs-you"
+        ? "task.notify.needsYou"
+        : task.status === "failed"
+          ? "task.notify.failed"
+          : "task.notify.finished",
+      { task: name },
+    );
+    let body = "";
+    try {
+      body = task.mindId ? minds.get(task.mindId).title : "";
+    } catch {
+      body = "";
+    }
+    notifications.show(
+      { title, body: body || translate(language, "task.notify.body") },
+      (windowIds) => mindShown(task.mindId, windowIds),
+      () =>
+        events.emit("task.shown", { taskId: task.id, mindId: task.mindId, blockId: task.blockId }),
+    );
+  };
+  // Tasks (#126): their journal survives a force-quit; comparison tables fill as one.
+  const taskKinds: TaskKind[] = [comparisons.taskKind, ...(adapters.taskKinds ?? [])];
+  const tasks = createTasks({
+    db,
+    now,
+    kinds: taskKinds,
+    approvals: {
+      decide: (call) => approvals.decide(call),
+      request: (call, signal) => approvals.request(call, signal),
+    },
+    retention,
+    cost: (taskId) => meter.taskCost(taskId),
+    changed: (task) => events.emit("task.changed", task),
+    notify: notifyTask,
+    stepsRunning: (running) => background.setTasksRunning(running),
     reportError: (error) => console.error(error),
   });
 
@@ -1351,6 +1468,19 @@ export function createCore(adapters: CoreAdapters): Core {
     services: async () => [],
   });
 
+  const wordImports = createWordImports({
+    db,
+    dataDir,
+    content,
+    minds,
+    requireFolder: (folderId) => void library.folder(folderId),
+    mindsChanged,
+    now,
+    log: adapters.log ?? silentLogger,
+  });
+  wordImports.resume();
+  wordImports.dropPurged().catch((error: unknown) => console.error(error));
+
   const recentlyDeleted = createRecentlyDeleted({
     db,
     now,
@@ -1671,6 +1801,7 @@ export function createCore(adapters: CoreAdapters): Core {
     changed: (list) => events.emit("meetings.changed", list),
     onCapturingChange: (capturing) => {
       background.setRecording(capturing);
+      tasks.setRecording(capturing);
       documents.hold(capturing);
     },
     ...(transcripts && { transcripts }),
@@ -1757,6 +1888,10 @@ export function createCore(adapters: CoreAdapters): Core {
     usageData.record({ event: "documents_added", fields: addedCounts(result, since) });
     return { ...result, batchId };
   };
+  mindIndex.start();
+
+  // Everything a Task needs is up: those a quit or a crash left go on, or wait for the User.
+  tasks.settleOrphans();
 
   // Async on purpose: the renderer reaches these over IPC, and a future hosted core may be remote.
   return {
@@ -1773,6 +1908,8 @@ export function createCore(adapters: CoreAdapters): Core {
       usageData.record({ event: "mind_created", fields: {} });
       return mind;
     },
+    checkWordFile: async (path) => wordImports.check(path),
+    importWordFile: async (input) => wordImports.import(input),
     listMinds: async () => minds.list(),
     renameMind: async (mindId, title) => {
       const mind = minds.rename(mindId, title);
@@ -1816,6 +1953,8 @@ export function createCore(adapters: CoreAdapters): Core {
     listConversations: async (options) => conversations.list(options),
     getConversation: async (conversationId) => conversations.content(conversationId),
     searchConversations: async (query) => conversations.search(query),
+    searchMinds: async (query) => mindIndex.search(query),
+    searchDocumentText: async (query) => documents.searchText(query),
     renameConversation: async (conversationId, title) => {
       const conversation = conversations.rename(conversationId, title);
       conversationsChanged();
@@ -2067,6 +2206,7 @@ export function createCore(adapters: CoreAdapters): Core {
     testChatConnection: (input) => loggingTest("chat")(chat.test(input)),
     getChatReadiness: () => chat.readiness(),
     listChatModels: () => chat.listModels(),
+    setChatModelInMenu: async (input) => chat.setInMenu(input),
     getCostSummary: async () => meter.summary(),
     estimateRun: async (input) => {
       if (!isRecord(input)) throw new InvalidInputError("estimateRun expects an object.");
@@ -2081,6 +2221,15 @@ export function createCore(adapters: CoreAdapters): Core {
       if (!metered) throw new InvalidInputError("There is no model to estimate for.");
       return meter.estimate(metered, items);
     },
+    compareDocuments: (input) => comparisons.compareDocuments(input),
+    fillComparisonTable: (input) => comparisons.fillComparisonTable(input),
+    stopComparisonTable: (input) => comparisons.stop(input),
+    listFillingComparisons: async () => comparisons.filling(),
+    listTasks: async () => tasks.list(),
+    pauseTask: (taskId) => tasks.pause(taskId),
+    resumeTask: (taskId) => tasks.resume(taskId),
+    stopTask: (taskId) => tasks.stop(taskId),
+    answerTaskAsk: (taskId, answer) => tasks.answer(taskId, answer),
 
     askQuestion: async (input) => answers.ask(input),
     regenerateAnswer: async (input) => answers.regenerate(input),
@@ -2213,7 +2362,7 @@ export function createCore(adapters: CoreAdapters): Core {
     listDeleted: async () => recentlyDeleted.list(),
     deletePermanently: async (refs) => {
       recentlyDeleted.deletePermanently(refs);
-      await Promise.all([webPages.dropPurged(), sources.dropPurged()]);
+      await Promise.all([webPages.dropPurged(), sources.dropPurged(), wordImports.dropPurged()]);
     },
     acceptAssignments: async (ids) => library.accept(ids),
     rejectAssignments: async (ids) => library.reject(ids),
@@ -2488,6 +2637,7 @@ export function createCore(adapters: CoreAdapters): Core {
     networkTraffic: privacy.traffic,
     retention,
     citedPageImage: (citation) => citedPages.image(citation),
+    startTask: (kind, mindId, input) => tasks.start(kind, mindId, input),
     prepareChatModel: (choice) => chat.prepareModel(choice),
     close: () => {
       if (lifetime.signal.aborted) return;
@@ -2500,7 +2650,12 @@ export function createCore(adapters: CoreAdapters): Core {
       // First, so stopping the Answers below starts no background work.
       citedPages.close();
       background.close();
+      // An import goes on from where it got to at the next start.
+      wordImports.close();
       void chatGpt.cancelSignIn();
+      // Tasks stop where they are first, their journal as it was, so they go on at the next
+      // start; what they wait for is withdrawn before approvals deny what is left.
+      tasks.close();
       // Answers being written keep what they have, marked "stopped"; Tool calls waiting for
       // the User's approval are denied, and Skill scripts running are stopped.
       answers.stopAll();
@@ -2526,6 +2681,7 @@ export function createCore(adapters: CoreAdapters): Core {
       textRecognitionModel?.close();
       activity.stop();
       aiUse.close();
+      mindIndex.close();
       events.clear();
       content.closeAll();
       db.close();
