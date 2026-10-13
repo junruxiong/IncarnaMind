@@ -32,7 +32,7 @@ export function UndoLine() {
 export function UndoLineAt({ place }: { place: string }) {
   const line = useUndo((state) => (state.line?.change?.shownAt === place ? state.line : null));
   return (
-    <div role="status" aria-live="polite" data-testid="undo-line-here">
+    <div aria-live="polite" data-testid="undo-line-here">
       {line && <Line key={line.id} line={line} />}
     </div>
   );

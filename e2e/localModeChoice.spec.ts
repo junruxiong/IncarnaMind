@@ -2,7 +2,14 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
-import { createDataFolder, launchApp, openSettings, removeDataFolder, setWindowSize } from "./app";
+import {
+  acceptPlainTextKeys,
+  createDataFolder,
+  launchApp,
+  openSettings,
+  removeDataFolder,
+  setWindowSize,
+} from "./app";
 
 let dataDir: string;
 let ollama: Server;
@@ -81,6 +88,7 @@ for (const [name, locale] of [
     const { app, window } = await launchApp(dataDir, { ollama: ollamaUrl });
     await setWindowSize(app, window, 900, 700);
     await window.getByTestId("chat-setup").getByTestId("chat-setup-later").click();
+    await acceptPlainTextKeys(window);
     await window.evaluate(async () => {
       const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
       await bridge.saveChatProvider({
