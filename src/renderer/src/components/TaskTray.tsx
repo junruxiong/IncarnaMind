@@ -37,6 +37,7 @@ import {
   ResumeLineIcon,
   StopLineIcon,
 } from "./lineIcons";
+import { MetaLine } from "./MetaLine";
 
 type Translate = ReturnType<typeof useT>;
 
@@ -145,9 +146,9 @@ function TaskRow({ task }: { task: Task }) {
         </TrayButton>
       </div>
       {unfolded && (
-        <p id={detailsId} data-testid="task-details" className="task-details">
-          {details(task, t, language).join(" · ")}
-        </p>
+        <div id={detailsId} data-testid="task-details" className="task-details">
+          <MetaLine as="div" parts={details(task, t, language)} />
+        </div>
       )}
     </div>
   );

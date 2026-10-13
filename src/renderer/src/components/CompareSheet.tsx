@@ -11,7 +11,7 @@ import {
   useComparisons,
 } from "../comparisons";
 import { core } from "../core";
-import { estimateText } from "../cost";
+import { type EstimateLine, estimateLine, joinMeta } from "../cost";
 import { RemoveIcon, TableIcon } from "../editor/icons";
 import { ModelChip, useMindModel } from "../editor/ModelChip";
 import { useLanguage, useT } from "../i18n";
@@ -51,7 +51,7 @@ export function CompareSheet({
   const region = useRef<HTMLElement>(null);
   const questionFields = useRef<(HTMLInputElement | null)[]>([]);
   const focusQuestion = useRef<number | null>(null);
-  const [estimate, setEstimate] = useState<string | null>(null);
+  const [estimate, setEstimate] = useState<EstimateLine | null>(null);
 
   const source = sheet?.source ?? "all";
   // biome-ignore lint/correctness/useExhaustiveDependencies: listed again when the Library or its Documents change.
@@ -98,7 +98,7 @@ export function CompareSheet({
     core
       .estimateRun({ items: cells, ...(model && { model }) })
       .then((result) => {
-        if (current) setEstimate(estimateText(result, t, language));
+        if (current) setEstimate(estimateLine(result, t, language));
       })
       .catch(() => {
         if (current) setEstimate(null);
@@ -322,9 +322,11 @@ export function CompareSheet({
         <span
           data-testid="compare-sheet-note"
           className="compare-sheet-note"
-          title={estimate ?? undefined}
+          title={estimate?.title}
         >
-          {empty ? t(empty, { max: MAX_COMPARISON_DOCUMENTS }) : estimate}
+          {empty
+            ? t(empty, { max: MAX_COMPARISON_DOCUMENTS })
+            : estimate && joinMeta(estimate.parts)}
         </span>
         <ModelChip doc={doc} onChosen={() => region.current?.focus()} />
         <button

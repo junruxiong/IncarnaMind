@@ -1,6 +1,6 @@
 import type { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
-import { Fragment, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import type { CitationAttributes } from "../../../core/api";
 import { citationState } from "../../../shared/citations";
 import { dismissCheckProblem, stopCheck, useChecks } from "../checks";
@@ -146,25 +146,21 @@ export function NoteHealth({ editor, mindId }: { editor: Editor; mindId: string 
           {parts.map((part) => {
             const text = label(part, health[part].length);
             return (
-              <Fragment key={part}>
-                <span className="mind-health-dot" aria-hidden="true">
-                  ·
-                </span>
-                <button
-                  type="button"
-                  data-testid={`health-${part}`}
-                  data-count={health[part].length}
-                  data-part={part}
-                  className="mind-health-part"
-                  aria-label={t("health.next", { part: text })}
-                  title={t("health.next", { part: text })}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => goToNext(part)}
-                >
-                  <PartMark part={part} />
-                  {text}
-                </button>
-              </Fragment>
+              <button
+                key={part}
+                type="button"
+                data-testid={`health-${part}`}
+                data-count={health[part].length}
+                data-part={part}
+                className="mind-health-part"
+                aria-label={t("health.next", { part: text })}
+                title={t("health.next", { part: text })}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => goToNext(part)}
+              >
+                <PartMark part={part} />
+                {text}
+              </button>
             );
           })}
         </fieldset>
