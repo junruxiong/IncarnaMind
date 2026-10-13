@@ -6,8 +6,9 @@
  * embeddings are off (the default), hybrid search is keyword search. The
  * search Tool (#30) and Search scopes (#36) build on these.
  */
-import type { DocumentKind, PassageSearchResult } from "../api";
+import type { DocumentKind, DocumentTextMatch, PassageSearchResult } from "../api";
 import type { Database } from "../storage";
+import { excerptOf, searchTerms, termQuery } from "../wordSearch";
 import { keywordQuery } from "./keywords";
 
 /** Reciprocal rank fusion's k: a Passage at rank r (from 1) in a list scores 1 / (k + r). */
@@ -45,6 +46,69 @@ export function keywordSearch(
       [match, ...scopeParams(documentIds), BigInt(limit)],
     )
     .map((row) => row.seq);
+}
+
+/** How many of a Document's best Passages a text search looks at for one that holds the words. */
+const PASSAGES_PER_DOCUMENT = 3;
+
+/**
+ * The live Documents, not missing, whose Passages hold every word of the
+ * query, the last letters of each still to type, best first, each with its
+ * best Passage that holds one of them in its text: a word only in a
+ * Document's name, which the index holds with each Passage, doesn't count.
+ * See `CoreApi.searchDocumentText`.
+ */
+export function textSearch(db: Database, query: string, limit: number): DocumentTextMatch[] {
+  const terms = searchTerms(query);
+  if (terms.length === 0) return [];
+  const ranked = db.all<{
+    passage_id: string;
+    document_id: string;
+    page_from: number | null;
+    page_to: number | null;
+    text: string;
+  }>(
+    // MATERIALIZED: bm25() can only be worked out before the rows are grouped. The best
+    // Documents come first, then a few of each one's best Passages, so a long Document never
+    // crowds out the others; twice as many Documents as asked for, as a few may match by name only.
+    `WITH scored AS MATERIALIZED (
+       SELECT p.seq, p.document_id, p.position, bm25(passages_fts) AS score
+       FROM passages_fts
+       JOIN passages p ON p.seq = passages_fts.rowid
+       JOIN documents d ON d.id = p.document_id
+       WHERE passages_fts MATCH ? AND p.deleted_at IS NULL
+         AND d.deleted_at IS NULL AND d.file_status <> 'missing'),
+     top AS (
+       SELECT document_id, min(score) AS best FROM scored
+       GROUP BY document_id ORDER BY best LIMIT ?),
+     placed AS (
+       SELECT s.seq, s.document_id, top.best, row_number() OVER (
+         PARTITION BY s.document_id ORDER BY s.score, s.position, s.seq) AS place
+       FROM scored s JOIN top ON top.document_id = s.document_id)
+     SELECT p.id AS passage_id, p.document_id, p.page_from, p.page_to, p.text
+     FROM placed JOIN passages p ON p.seq = placed.seq
+     WHERE placed.place <= ?
+     ORDER BY placed.best, placed.document_id, placed.place`,
+    [terms.map(termQuery).join(" AND "), BigInt(limit * 2), BigInt(PASSAGES_PER_DOCUMENT)],
+  );
+  const matches: DocumentTextMatch[] = [];
+  const seen = new Set<string>();
+  for (const row of ranked) {
+    if (seen.has(row.document_id)) continue;
+    const { excerpt, highlights } = excerptOf(row.text, terms);
+    if (highlights.length === 0) continue;
+    seen.add(row.document_id);
+    matches.push({
+      documentId: row.document_id,
+      passageId: row.passage_id,
+      pageFrom: row.page_from,
+      pageTo: row.page_to,
+      excerpt,
+      highlights,
+    });
+    if (matches.length === limit) break;
+  }
+  return matches;
 }
 
 /**

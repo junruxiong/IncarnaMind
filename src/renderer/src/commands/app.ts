@@ -33,14 +33,17 @@ import {
   mindCommands,
   tagCommands,
 } from "./objects";
+import { paletteCommands } from "./palette";
 import { proposalCommands } from "./proposals";
 import { sortCommands } from "./sort";
 import "./objectMenus";
 import { type Command, type CommandContext, commands, fromMenu } from "./registry";
 import { selectionCommands } from "./selection";
+import { settingsPageCommands } from "./settings";
 import { tableCommands } from "./tables";
 import { tabCommands } from "./tabs";
 import { onlyOne } from "./targets";
+import { taskCommands } from "./tasks";
 import { webPageCommands } from "./webPages";
 
 /** What opens the menu of the Block with this ID, if its Mind is open. */
@@ -105,12 +108,15 @@ const appCommands: readonly Command[] = [
   ...evidenceCommands,
   ...comparisonCommands,
   ...exportCommands,
+  ...taskCommands,
   {
     ...fromMenu("settings.open"),
     group: "open",
     reversible: true,
     run: () => useAppStore.getState().openSettings(),
   },
+  ...settingsPageCommands,
+  ...paletteCommands,
   {
     id: "chatgpt.continue",
     label: "chatgpt.continue",

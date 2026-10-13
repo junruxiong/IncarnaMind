@@ -184,6 +184,8 @@ interface Generation {
   model: ChatModelChoice;
   /** Writes what has arrived with the final status, now. Later calls do nothing. */
   finish(outcome: Outcome): void;
+  /** A Task's work (a comparison table's cell): its Task, not the Answer, holds background work back. */
+  task: boolean;
 }
 
 /**
@@ -322,8 +324,9 @@ export interface AnswersOptions {
   scripts: AnswerScripts;
   /**
    * Hears whether any Answer is being written, each time that changes: from
-   * when the first one starts until none is left. Background model work gives
-   * way to Answers (see ../backgroundQueue).
+   * when the first one starts until none is left. Background model work and
+   * Tasks give way to Answers (see ../backgroundQueue, ../runs/tasks); a
+   * Task's own cells don't count.
    */
   onWritingChange?(writing: boolean): void;
   reportError(error: unknown): void;
@@ -528,6 +531,14 @@ export function createAnswers(options: AnswersOptions) {
   const { content, events, engine } = options;
   /** Answers being written, by id. */
   const active = new Map<string, Generation>();
+  /** Whether an Answer not written for a Task is being written. */
+  let writing = false;
+  const writingChanged = () => {
+    const now = [...active.values()].some((generation) => !generation.task);
+    if (now === writing) return;
+    writing = now;
+    options.onWritingChange?.(now);
+  };
 
   /** Marks Answers left "streaming" by an earlier run of the app as stopped: nothing writes them any more. */
   const settleOrphans = (mindId: string) => {
@@ -592,6 +603,8 @@ export function createAnswers(options: AnswersOptions) {
     outside?: boolean;
     /** Which Tools its Run is offered (see `ToolSet`); absent: every Tool. */
     toolSet?: ToolSet;
+    /** Written for a Task (#126), which gives way to Answers itself (see ../runs/tasks). */
+    task?: boolean;
   }): void {
     const { home, answerId, model, context, documentIds, forcedSkill } = input;
     const outside = input.outside === true;
@@ -780,7 +793,7 @@ export function createAnswers(options: AnswersOptions) {
       finishedAt = Date.now();
       if (timer) clearTimeout(timer);
       active.delete(answerId);
-      if (active.size === 0) options.onWritingChange?.(false);
+      writingChanged();
       controller.abort();
       skills?.release();
       // A Tool call still running when the Answer stopped didn't finish; one still waiting for
@@ -835,8 +848,8 @@ export function createAnswers(options: AnswersOptions) {
       }, ANSWER_WRITE_INTERVAL_MS);
     };
 
-    active.set(answerId, { home, model, finish });
-    if (active.size === 1) options.onWritingChange?.(true);
+    active.set(answerId, { home, model, finish, task: input.task === true });
+    writingChanged();
     announce("answer.started", { ...place, answerId, questionId: input.questionId, model });
 
     const base = answerInstructions();
@@ -1913,6 +1926,7 @@ export function createAnswers(options: AnswersOptions) {
           consentNeeded: false,
           outside: true,
           toolSet: "check",
+          task: true,
         });
         const stop = () => active.get(answerId)?.finish({ status: "stopped" });
         if (input.signal.aborted) stop();
