@@ -12,6 +12,7 @@ import {
   setCitationStyle,
 } from "../shared/mindCitationStyle";
 import { mindModelOf } from "../shared/mindModel";
+import { mindName } from "../shared/naming";
 import { paperFor } from "../shared/printDocument";
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
@@ -30,6 +31,7 @@ import {
   isCited,
 } from "./answers/citedVersions";
 import { createCiting } from "./answers/citing";
+import { readMind } from "./answers/context";
 import type { AnswerSearchOptions } from "./answers/engine";
 import {
   type AddDocumentsResult,
@@ -988,6 +990,38 @@ export function createCore(adapters: CoreAdapters): Core {
     ],
     connectorsNeedingSignIn: () => connectors.needingSignIn(),
     web: webSearch,
+    // The assistant changes Minds and makes them, as Proposals (#202).
+    minds: {
+      list: () =>
+        minds.list().flatMap((mind) =>
+          isKnownKind(mind.kind)
+            ? [
+                {
+                  id: mind.id,
+                  name: mindName(mind) || translate(settings.get().language, "mind.untitled"),
+                },
+              ]
+            : [],
+        ),
+      read: (mindId, look) => content.read(mindId, look),
+      edit: (mindId, change) => content.edit(mindId, change),
+      text: (mindId, name, tokens) => {
+        const section = content
+          .peek(mindId, (blocks) => readMind(blocks, name, null))
+          .section(tokens);
+        return { text: section.text, origins: section.origins };
+      },
+      checkpoint: (mindId) => {
+        checkpoints.save(mindId, "accept");
+      },
+      create: (title, folderId) => {
+        const mind = makeMind({ title, kind: DEFAULT_MIND_KIND, folderId });
+        return { id: mind.id, name: mindName(mind) || title };
+      },
+      folderName: (folderId) =>
+        library.folders().find((folder) => folder.id === folderId)?.name ?? null,
+      proposeInMind: (input) => edits.proposeInMind(input),
+    },
     approvals: {
       decide: (call) => approvals.decide(call),
       request: (call, signal) => approvals.request(call, signal),

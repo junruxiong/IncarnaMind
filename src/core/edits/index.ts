@@ -51,6 +51,7 @@ import { docOf, forkChanges } from "../proposals/merge";
 import {
   proposeAfter,
   proposeRewrite,
+  type ReadResult,
   readSelection,
   type Selection,
   takeBackForRegenerate,
@@ -272,7 +273,22 @@ export function createEdits(options: EditsOptions) {
       throw error;
     }
     if (signal.aborted) return { kind: "cancelled" };
+    return rewrite(prepared, ask, selection, write, signal, settle);
+  }
 
+  /**
+   * `run`, on a model already prepared: what goes to it, and what comes back
+   * as Proposals. `heard` gets the passage's new text, before it is written.
+   */
+  async function rewrite(
+    prepared: PreparedChatModel,
+    ask: Ask,
+    selection: Selection,
+    write: Writer,
+    signal: AbortSignal,
+    settle?: () => void,
+    heard?: (reply: string) => void,
+  ): Promise<EditWithAiResult> {
     const explain = ask.action === "explain";
     const instructions = explain ? EXPLAIN_INSTRUCTIONS : EDIT_INSTRUCTIONS;
     const prompt = editPrompt({
@@ -320,6 +336,7 @@ export function createEdits(options: EditsOptions) {
       settle?.();
       return { kind: "unchanged" };
     }
+    heard?.(reply);
 
     const fresh = explain ? new Map() : freshCitations(selection, reply, options.recheck);
     const request = randomUUID();
@@ -380,25 +397,30 @@ export function createEdits(options: EditsOptions) {
     return changed.result;
   }
 
-  async function edit(input: ParsedInput, signal: AbortSignal): Promise<EditWithAiResult> {
+  /**
+   * The text from `from` to `to` in a Mind as the model will read it, and how
+   * Proposals for it are written once the model replies: over the text as it
+   * is then, or, if the User edited it meanwhile, over the text as the model
+   * read it, merged with the edits.
+   */
+  function readForEdit(
+    mindId: string,
+    from: TextPlace,
+    to: TextPlace,
+  ): { ok: true; selection: Selection; write: Writer } | Extract<ReadResult, { ok: false }> {
     // The Mind as the model reads it: Proposals are written over it if the User edits the text meanwhile.
-    const base = content.state(input.mindId);
-    const read = content.read(input.mindId, (blocks) =>
-      readSelection(blocks, input.from, input.to),
-    );
-    if (!read.ok) return { kind: read.reason === "has-proposals" ? "has-proposals" : "changed" };
+    const base = content.state(mindId);
+    const read = content.read(mindId, (blocks) => readSelection(blocks, from, to));
+    if (!read.ok) return read;
     const { selection } = read;
-    if (selection.plain !== input.text) return { kind: "changed" };
-    if (selection.text === "") return { kind: "unchanged" };
-
     const reread = (blocks: Y.XmlFragment) => {
-      const again = readSelection(blocks, input.from, input.to);
+      const again = readSelection(blocks, from, to);
       return again.ok ? again.selection : null;
     };
     const write: Writer = (propose) => {
-      const now = content.read(input.mindId, reread);
+      const now = content.read(mindId, reread);
       if (now?.plain === selection.plain) {
-        return content.edit(input.mindId, (blocks) => {
+        return content.edit(mindId, (blocks) => {
           const again = reread(blocks);
           return again ? propose(blocks, again) : null;
         });
@@ -406,7 +428,7 @@ export function createEdits(options: EditsOptions) {
       // Edited while the model worked: written as the model read it, and merged with the edits.
       const fork = docOf(base);
       try {
-        return mergeFrom(input.mindId, base, fork, (blocks) => {
+        return mergeFrom(mindId, base, fork, (blocks) => {
           const then = reread(blocks);
           return then ? propose(blocks, then) : null;
         });
@@ -414,6 +436,15 @@ export function createEdits(options: EditsOptions) {
         fork.destroy();
       }
     };
+    return { ok: true, selection, write };
+  }
+
+  async function edit(input: ParsedInput, signal: AbortSignal): Promise<EditWithAiResult> {
+    const read = readForEdit(input.mindId, input.from, input.to);
+    if (!read.ok) return { kind: read.reason === "has-proposals" ? "has-proposals" : "changed" };
+    const { selection, write } = read;
+    if (selection.plain !== input.text) return { kind: "changed" };
+    if (selection.text === "") return { kind: "unchanged" };
     return run(input, selection, write, signal);
   }
 
@@ -493,6 +524,61 @@ export function createEdits(options: EditsOptions) {
       const input = parseRegenerate(raw);
       options.requireMind(input.mindId);
       return stoppable(input.requestId, (signal) => regenerate(input, signal));
+    },
+
+    /**
+     * A change the assistant asks for in a Mind (#202): `instruction`, over the
+     * text from `from` to `to`, on the model its Answer is written with, which
+     * the User has allowed. As Edit with AI's, it comes back as Proposals.
+     * `length`: the text before and after, when it proposed.
+     */
+    async proposeInMind(input: {
+      mindId: string;
+      from: TextPlace;
+      to: TextPlace;
+      instruction: string;
+      prepared: PreparedChatModel;
+      signal: AbortSignal;
+      /** Runs once the change is known, just before its Proposals are written: a Checkpoint (#113). */
+      beforeWriting(): void;
+    }): Promise<{ result: EditWithAiResult; length: { before: string; after: string } | null }> {
+      options.requireMind(input.mindId);
+      const read = readForEdit(input.mindId, input.from, input.to);
+      if (!read.ok) {
+        return {
+          result: { kind: read.reason === "has-proposals" ? "has-proposals" : "changed" },
+          length: null,
+        };
+      }
+      const { selection, write } = read;
+      if (selection.text === "") return { result: { kind: "unchanged" }, length: null };
+      if (selection.characters > MAX_SELECTION_CHARACTERS) {
+        return { result: { kind: "too-long" }, length: null };
+      }
+      let reply = "";
+      const result = await rewrite(
+        input.prepared,
+        {
+          mindId: input.mindId,
+          action: "instruction",
+          instruction: input.instruction,
+          model: { providerId: input.prepared.provider.id, modelId: input.prepared.modelId },
+        },
+        selection,
+        (propose) => {
+          input.beforeWriting();
+          return write(propose);
+        },
+        input.signal,
+        undefined,
+        (text) => {
+          reply = text;
+        },
+      );
+      return {
+        result,
+        length: result.kind === "proposed" ? { before: selection.text, after: reply } : null,
+      };
     },
 
     cancel(requestId: unknown): void {

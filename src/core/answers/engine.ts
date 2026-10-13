@@ -266,6 +266,8 @@ export interface InstructionOptions {
   sourceTools?: boolean;
   /** The model is offered web search's Tools. */
   webTools?: boolean;
+  /** The model is offered the Minds' Tools (#202). */
+  mindTools?: boolean;
 }
 
 /** A Tool call at the Answer's gate. */
@@ -1378,6 +1380,7 @@ async function* toolLoop(
     connectorTools: tools.some((each) => each.provider.kind === "connector"),
     sourceTools: tools.some((each) => each.provider.kind === "sources"),
     webTools: tools.some((each) => each.provider.kind === "web"),
+    mindTools: tools.some((each) => each.provider.kind === "minds"),
   });
 
   // Within a window: the Question context that fits beside the instructions, the Tools and a search.

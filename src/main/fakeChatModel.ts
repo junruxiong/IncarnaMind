@@ -77,6 +77,14 @@
  *
  * Verify (`fakeClaims`): every sentence of a document claims something, but a
  * question or thanks. Its claims are checked as above.
+ *
+ * In the assistant, with the Minds' Tools (#202, `mindsReply`): a request to
+ * shorten (缩短, 改短) calls edit_mind with the request as its instruction,
+ * which Edit with AI's scripted model carries out as Shorten; one for a new
+ * note (新笔记, 新建) calls create_mind, titled from what follows "called"
+ * (叫), its content citing the Documents when there are any; and "add X to
+ * <Mind>" (把 X 添加到 <Mind>) calls add_to_mind with X. Each then replies with
+ * the first sentence of what its call came to.
  */
 import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
@@ -518,6 +526,8 @@ function nextReply(prompt: Prompt, tools: readonly OfferedTool[]): Reply {
   if (/blank reply/i.test(question)) return { text: "" };
   /** What the calls made first said, in order. */
   const said: string[] = [];
+  const minds = mindsReply(prompt, question, names);
+  if (minds) return minds;
   const run = scriptNamed(prompt, question, names);
   if (run) {
     const result = lastResult(prompt, "run_skill_script");
@@ -562,6 +572,54 @@ function nextReply(prompt: Prompt, tools: readonly OfferedTool[]): Reply {
   }
   const reply = answerReply(prompt, names);
   return "text" in reply && said.length > 0 ? { text: [...said, reply.text].join("\n\n") } : reply;
+}
+
+/** A request to shorten a Mind's text. */
+const SHORTEN = /\bshort(?:en|er)\b|缩短|改短/i;
+/** A request for a new note, and its title after "called" (叫). */
+const NEW_NOTE = /\bnew (?:note|mind)\b|新笔记|新建/i;
+const CALLED = /\b(?:called|named|titled)\s+[“"]?(.+?)[”"]?[.。]?$|叫[“"]?(.+?)[”"]?的/iu;
+/** A request to add something to a Mind by name: what, and to which. */
+const ADD_TO =
+  /^add\s+(.+?)\s+to\s+[“"]?(.+?)[”"]?[.。]?$|^把\s*(.+?)\s*添加到\s*[“"]?(.+?)[”"]?[。]?$/iu;
+
+/** The first sentence of what a call came to, as the scripted assistant's reply. */
+const firstSentence = (result: string) => /^[^.。]*[.。]?/u.exec(result)?.[0] ?? result;
+
+/**
+ * The scripted assistant's choice with the Minds' Tools (see the top of this
+ * file): a Tool call, the reply once it has returned, or null to answer.
+ */
+function mindsReply(prompt: Prompt, question: string, names: readonly string[]): Reply | null {
+  if (!names.includes("edit_mind")) return null;
+  if (SHORTEN.test(question)) {
+    const result = lastResult(prompt, "edit_mind");
+    if (result === undefined) return { tool: "edit_mind", input: { instruction: question } };
+    return { text: firstSentence(result) };
+  }
+  const add = ADD_TO.exec(question);
+  if (add) {
+    const result = lastResult(prompt, "add_to_mind");
+    if (result === undefined) {
+      return {
+        tool: "add_to_mind",
+        input: { mind: add[2] ?? add[4], content: add[1] ?? add[3] },
+      };
+    }
+    return { text: firstSentence(result) };
+  }
+  if (!NEW_NOTE.test(question)) return null;
+  const made = lastResult(prompt, "create_mind");
+  if (made !== undefined) return { text: firstSentence(made) };
+  const cited = toolResults(prompt, "cite").length > 0;
+  if (names.includes("search_documents") && !cited) {
+    const reply = answerReply(prompt, names);
+    if ("tool" in reply) return reply;
+  }
+  const called = CALLED.exec(question);
+  const title = called?.[1] ?? called?.[2] ?? "Scripted notes";
+  const content = `## Summary\n\n${cited ? CITED_ANSWER : "Written by the scripted assistant."}`;
+  return { tool: "create_mind", input: { title, content } };
 }
 
 /** A comparison table's cell (#98) says so before its Question. */
@@ -806,6 +864,7 @@ function fakeEdit(options: GenerateOptions): string | null {
       if (replace?.[1] && replace[2] !== undefined)
         return passage.split(replace[1]).join(replace[2]);
       if (/drop the citations|去掉引用/i.test(asked)) return passage.replace(/\s*\[\d+\]/g, "");
+      if (SHORTEN.test(asked)) return passage.replace(FILLER, "");
       return `${passage} (edited)`;
     }
   }
