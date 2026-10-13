@@ -49,12 +49,17 @@ function put(task: Task, live: boolean): void {
   });
 }
 
-/** A Task's row shows in the tray: unfinished, or finished here (done or failed) and not dismissed. */
-export function inTray(task: Task, state: Pick<TasksState, "finishedHere" | "dismissed">): boolean {
+/**
+ * A Task's row shows in the tray: unfinished, or finished (done or failed)
+ * here or opened from the Tasks chip, and not dismissed.
+ */
+export function inTray(
+  task: Task,
+  state: Pick<TasksState, "finishedHere" | "dismissed" | "shown">,
+): boolean {
   if (task.finishedAt === null) return true;
-  return (
-    task.status !== "stopped" && state.finishedHere.has(task.id) && !state.dismissed.has(task.id)
-  );
+  const seen = state.finishedHere.has(task.id) || state.shown === task.id;
+  return task.status !== "stopped" && seen && !state.dismissed.has(task.id);
 }
 
 /** The Tasks whose rows the tray of a Mind shows, oldest first. */
@@ -63,12 +68,6 @@ export function trayTasks(state: TasksState, mindId: string): Task[] {
     .filter((task) => task.mindId === mindId && inTray(task, state))
     .sort((a, b) => a.startedAt.localeCompare(b.startedAt));
 }
-
-/** Whether a Task waits for the User: an ask, or a pause only they can lift. */
-export const needsYou = (task: Task): boolean =>
-  task.finishedAt === null &&
-  (task.ask !== null ||
-    (task.status === "paused" && task.pausedReason !== null && task.pausedReason !== "user"));
 
 /** The unfinished Task filling a comparison table, if any. */
 export function tableTask(state: TasksState, tableId: string): Task | null {
@@ -95,14 +94,37 @@ export const dismissTask = (taskId: string) =>
 export const unfoldTask = (taskId: string, unfolded: boolean) =>
   useTasks.setState((state) => ({ unfolded: toggle(state.unfolded, taskId, unfolded) }));
 
-/** Opens a Task's Mind, with its row marked in the tray. */
-export function showTask(task: Pick<Task, "id" | "mindId">): void {
+/** Frames to wait for a Mind just opened to draw the Block a Task works on. */
+const BLOCK_FRAMES = 60;
+
+/** Scrolls the Block a Task works on (a comparison table) into the middle, once its Mind draws it. */
+function revealBlock(mindId: string, blockId: string, frames = BLOCK_FRAMES): void {
+  const block = document.querySelector(
+    `article[data-mind-id="${CSS.escape(mindId)}"] [data-comparison-table="${CSS.escape(blockId)}"]`,
+  );
+  if (block) block.scrollIntoView({ block: "center" });
+  else if (frames > 0) requestAnimationFrame(() => revealBlock(mindId, blockId, frames - 1));
+}
+
+/** Opens a Task's Mind at its place (its Block, if any), with its row marked in the tray. */
+export function showTask(task: Pick<Task, "id" | "mindId" | "blockId">): void {
   useTasks.setState({ shown: task.id });
-  if (task.mindId) useAppStore.getState().openMind(task.mindId);
+  if (!task.mindId) return;
+  useAppStore.getState().openMind(task.mindId);
+  if (task.blockId) revealBlock(task.mindId, task.blockId);
 }
 
 core.on("task.changed", (task) => put(task, true));
-core.on("task.shown", (shown) => showTask({ id: shown.taskId, mindId: shown.mindId }));
-core.listTasks().then((tasks) => {
-  for (const task of tasks) put(task, false);
-}, report);
+core.on("task.shown", (shown) =>
+  showTask({ id: shown.taskId, mindId: shown.mindId, blockId: shown.blockId }),
+);
+let listed = false;
+
+/** Once, when the window first shows Tasks: those the core already has. */
+export function loadTasks(): void {
+  if (listed) return;
+  listed = true;
+  core.listTasks().then((tasks) => {
+    for (const task of tasks) put(task, false);
+  }, report);
+}
