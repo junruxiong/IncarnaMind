@@ -4,7 +4,6 @@ import type { MessageKey } from "../../../../shared/i18n";
 import { useAnswers } from "../../answers";
 import { core } from "../../core";
 import { ChevronDownSmallIcon, ChevronRightSmallIcon } from "../../editor/icons";
-import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
 import { rowStatusClass, rowTitleClass, ruledListClass } from "../ui";
@@ -66,7 +65,7 @@ export function OtherModelsSettings() {
     try {
       await core.setChatModelInMenu({ providerId, modelId, inMenu });
     } catch (failure) {
-      useAppStore.setState({ actionError: errorMessage(failure) });
+      useAppStore.getState().reportError(failure);
     }
     useAnswers.setState({ models: null });
     refresh();
