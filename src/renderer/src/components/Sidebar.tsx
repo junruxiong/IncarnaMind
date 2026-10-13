@@ -5,6 +5,7 @@ import { TableIcon } from "../editor/icons";
 import { useFindSources } from "../findSources";
 import { useT } from "../i18n";
 import { canRecordMeetings } from "../meetings";
+import { usePruneSelection } from "../selection";
 import { useAppStore } from "../store";
 import { linksIn, useWebPages } from "../webPages";
 import { CopiedLine } from "./CopiedLine";
@@ -21,6 +22,7 @@ import {
   RecordingLineIcon,
   SettingsLineIcon,
 } from "./lineIcons";
+import { SidebarSelection } from "./SidebarSelection";
 import { SidebarStatus } from "./SidebarStatus";
 import { SidebarToggle } from "./SidebarToggle";
 import { rowButtonClass, rowClass, rowIconClass } from "./sidebarRows";
@@ -39,6 +41,7 @@ import { usePopoverMenu } from "./usePopoverMenu";
  */
 export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettings(): void }) {
   const t = useT();
+  usePruneSelection();
 
   return (
     <aside
@@ -70,6 +73,7 @@ export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettin
         data-testid="sidebar-footer"
         className="flex shrink-0 flex-col border-t border-rule p-2"
       >
+        <SidebarSelection />
         <SidebarStatus />
         <div className={rowClass(false)}>
           <button type="button" onClick={onOpenSettings} className={rowButtonClass}>
@@ -91,8 +95,9 @@ export function SidebarHeader({ children }: { children?: ReactNode }) {
   return (
     <header
       data-testid="sidebar-header"
-      // Its rule is inset 8px each side, like the rows: it never meets the sidebar's edge.
-      className="title-bar sidebar-header relative flex h-11 shrink-0 items-center pr-2 after:absolute after:inset-x-2 after:bottom-0 after:h-px after:bg-rule after:content-['']"
+      // Its rule is inset 8px each side, like the rows: it never meets the sidebar's edge. The
+      // 8px on top put its buttons on the card's band, y 8 to 44, so every header shares a line.
+      className="title-bar sidebar-header relative flex h-11 shrink-0 items-center pt-2 pr-2 after:absolute after:inset-x-2 after:bottom-0 after:h-px after:bg-rule after:content-['']"
     >
       <AppMark />
       <SidebarToggle place="header" />

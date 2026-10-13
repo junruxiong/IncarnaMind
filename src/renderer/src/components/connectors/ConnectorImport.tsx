@@ -133,7 +133,7 @@ export function ConnectorImport({ onDone }: { onDone(): void }) {
                   <span className={`min-w-0 flex-1 truncate ${rowTitleClass}`}>{entry.name}</span>
                   <span
                     className={`shrink-0 text-[13px] leading-5 ${
-                      entry.action === "add" ? "font-semibold text-success" : "text-ink-meta"
+                      entry.action === "add" ? "font-semibold text-ink" : "text-ink-meta"
                     }`}
                   >
                     {t(`connectors.import.action.${entry.action}`)}

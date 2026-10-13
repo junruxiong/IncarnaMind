@@ -36,8 +36,10 @@ import { proposalCommands } from "./proposals";
 import { sortCommands } from "./sort";
 import "./objectMenus";
 import { type Command, type CommandContext, commands, fromMenu } from "./registry";
+import { selectionCommands } from "./selection";
 import { tableCommands } from "./tables";
 import { tabCommands } from "./tabs";
+import { onlyOne } from "./targets";
 import { webPageCommands } from "./webPages";
 
 /** What opens the menu of the Block with this ID, if its Mind is open. */
@@ -84,6 +86,7 @@ const appCommands: readonly Command[] = [
     run: () => useWordImport.getState().pick(),
   },
   ...editCommands,
+  ...selectionCommands,
   ...mindCommands,
   ...documentCommands,
   ...folderCommands,
@@ -153,7 +156,8 @@ const appCommands: readonly Command[] = [
     // The picker's choice is taken back with Undo.
     reversible: true,
     // A Mind's row in the sidebar picks for that Mind.
-    when: (ctx) => ctx.here?.["mind.citationStyle"] !== undefined || mindInFront() !== null,
+    when: (ctx) =>
+      onlyOne(ctx) && (ctx.here?.["mind.citationStyle"] !== undefined || mindInFront() !== null),
     run: (ctx) => {
       if (ctx.here?.["mind.citationStyle"]) return ctx.here["mind.citationStyle"]();
       const mindId = mindInFront();
@@ -171,7 +175,7 @@ const appCommands: readonly Command[] = [
     keywords: ["skills.settings.title"],
     group: "main",
     reversible: true,
-    when: (ctx) => mindOf(ctx) !== null,
+    when: (ctx) => onlyOne(ctx) && mindOf(ctx) !== null,
     run: (ctx) => {
       const mindId = mindOf(ctx);
       if (mindId) return startSkillFromMind(mindId);
@@ -243,7 +247,7 @@ const appCommands: readonly Command[] = [
     group: "main",
     // Opening it changes nothing.
     reversible: true,
-    when: (ctx) => outlineMind(ctx) !== null,
+    when: (ctx) => onlyOne(ctx) && outlineMind(ctx) !== null,
     run: (ctx) => {
       const mindId = outlineMind(ctx);
       if (!mindId) return;

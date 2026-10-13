@@ -171,6 +171,7 @@ export const en = {
   "mind.more": "More for {title}",
   "mind.open": "Open",
   "mind.openSide": "Open to the side",
+  "mind.count": "{count} Minds",
   "mind.moveTo": "Move to…",
   "document.openTab": "Open in a new tab",
   "object.copy": "Copy",
@@ -716,6 +717,7 @@ export const en = {
   "documents.pick.filter": "Documents",
   "documents.retryAction": "Retry",
   "documents.renameLabel": "New name for {name}",
+  "documents.deleteAction.many": "Delete {count} Documents",
   "documents.deleteAction": "Delete",
   "documents.removeAction": "Remove from IncarnaMind",
   // Checks leave the files IncarnaMind wrote out of their evidence (#80).
@@ -989,7 +991,7 @@ export const en = {
   "embeddingProviders.form.localOnly":
     "Local mode is on, so only models on this computer can be chosen.",
   "embeddingProviders.form.localOnlyServer":
-    'Local mode is on, and this server isn\'t on this computer: use one at localhost or 127.0.0.1, or turn off "Keep everything on this computer" above.',
+    "Local mode is on, and this server isn’t on this computer: use one at localhost or 127.0.0.1, or turn off “Keep everything on this computer” above.",
   "embeddingProviders.form.builtInHint":
     "multilingual-e5-small: about 135 MB, downloaded once, and runs on this computer. English and Chinese.",
   "embeddingProviders.form.ollamaUrl": "Ollama URL (optional)",
@@ -1122,6 +1124,12 @@ export const en = {
   "library.selected": "{count} selected",
   "library.selected.tags": "Tags…",
   "library.selected.clear": "Clear selection",
+  "library.selected.more": "More for the {count} selected",
+  "sidebar.selected": "{count} selected · Esc clears",
+  "documents.startMind.many": "Start a Mind from these {count} Documents",
+  "documents.retryAction.many": "Retry {count} Documents",
+  "library.list": "Documents",
+  "command.selection.clear": "Clear Selection",
   "tags.chip.automatic": "{tag}: added automatically",
   "tags.chip.user": "{tag}: added by you",
   "tags.menu.open": "Tags of {name}",
@@ -1900,7 +1908,7 @@ export const en = {
   "citation.scan.unsureWord": "May be misread: check it on the page",
   "citation.quote": "The quote:",
   "citation.meaning":
-    '"Quote found" means these words are where it cites. It doesn\'t mean they support the sentence.',
+    "“Quote found” means these words are where it cites. It doesn’t mean they support the sentence.",
   "citation.open.page": "Open the page",
   "citation.open.slide": "Open the slide",
   "citation.open.section": "Open the section",
@@ -2124,6 +2132,7 @@ export const en = {
   "export.format": "Format",
   "export.format.docx": "Word (.docx)",
   "export.format.pdf": "PDF",
+  "export.format.html": "HTML",
   "export.format.markdown": "Markdown (.md)",
   "export.options": "Export options…",
   "export.options.title": "Export options",
@@ -2132,6 +2141,8 @@ export const en = {
   "export.options.saveHint": "Export and {shortcut} will use these",
   "export.options.docx": "Citations become Word footnotes, each naming its Document and Location.",
   "export.options.pdf": "Citations become footnotes with the Document and Location.",
+  "export.options.html":
+    "One file that opens in any browser. Citations become footnotes linked both ways.",
   "export.options.markdown": "Citations become footnotes. Questions are kept.",
   "export.saveTo": "Save to",
   "export.includeQuestions": "Include Questions",
@@ -2157,6 +2168,8 @@ export const en = {
   "export.done": "Saved {name}",
   "export.question": "Question:",
   "export.unverified": "[unverified]",
+  "export.html.notes": "Notes",
+  "export.html.back": "Back to text",
   "export.citation.location": "{document}, {location}",
   "export.citation.document": "{document}",
   "export.citation.separator": ", ",

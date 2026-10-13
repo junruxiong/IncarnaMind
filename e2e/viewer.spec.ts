@@ -18,6 +18,7 @@ import {
   openDocumentMenu,
   pathsOpened,
   removeDataFolder,
+  setLanguage,
   setWindowSize,
   widthOf,
 } from "./app";
@@ -320,6 +321,15 @@ test("in a narrow viewer with the outline open, Fit width fits the page in the w
   await expect(docx).toHaveAttribute("data-rendered", "yes");
   await viewer.getByTestId("viewer-outline-button").click();
   await expect(viewer.getByTestId("viewer-outline")).toBeVisible();
+  // Its icon is a list, not Show sidebar's window, and they have their own tooltips.
+  const outlineButton = viewer.getByTestId("viewer-outline-button");
+  const sidebarButton = window.getByTestId("sidebar-toggle");
+  expect(await outlineButton.locator("svg").innerHTML()).not.toBe(
+    await sidebarButton.locator("svg").innerHTML(),
+  );
+  expect(await outlineButton.getAttribute("title")).not.toBe(
+    await sidebarButton.getAttribute("title"),
+  );
   await expect.poll(() => fitsAcross(docx, docx.locator("section.docx").first())).toBe(true);
   await screenshot(viewer, "viewer-docx-outline");
   await app.close();
@@ -900,6 +910,156 @@ test("below 560 px a Document tab's toolbar hides its Tag chips and keeps the Ta
     await expect(picker.getByTestId("tag-token")).toHaveCount(3);
     await window.keyboard.press("Escape");
     await expect(picker).toBeHidden();
+  }
+  await app.close();
+});
+
+/** A Document's name of 120 characters, as long as a toolbar will meet. */
+const LONG_NAME =
+  `${"Harbour sediment survey, east basin transects 1–14, ".repeat(2)}grain-size tables and core logs`
+    .slice(0, 120)
+    .trim();
+
+/**
+ * Expects no two of a toolbar's drawn controls, kind icon and chips to overlap,
+ * and the toolbar not to scroll sideways.
+ */
+async function expectToolbarClear(header: Locator, where: string): Promise<void> {
+  const found = await header.evaluate((element) =>
+    [...element.querySelectorAll("button, input, [data-testid='tag-chip'], .viewer-kind")]
+      .map((item) => ({
+        id: item.getAttribute("data-testid") ?? item.tagName,
+        box: item.getBoundingClientRect(),
+      }))
+      .filter((item) => item.box.width > 0 && item.box.height > 0)
+      .map((item) => ({ id: item.id, left: item.box.left, right: item.box.right })),
+  );
+  const items = found.sort((a, b) => a.left - b.left);
+  for (const [index, item] of items.entries()) {
+    const next = items[index + 1];
+    if (next) {
+      expect(item.right, `${where}: ${item.id} / ${next.id}`).toBeLessThanOrEqual(next.left + 0.5);
+    }
+  }
+  await expect
+    .poll(() => header.evaluate((element) => element.scrollWidth - element.clientWidth), {
+      message: `${where}: the toolbar scrolls`,
+    })
+    .toBeLessThanOrEqual(0);
+}
+
+test("with a 120-character name and three Tags, a Document tab's toolbar gives the name way first, folds Tags into +N, and overlaps nothing from 900 to 1920px, in English and Chinese", async () => {
+  const name = LONG_NAME;
+  expect(name).toHaveLength(120);
+  const survey = join(sources, `${name}.md`);
+  await writeFile(survey, "# Harbour\n\nSediment survey notes.\n");
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await addDocuments(window, [survey]);
+  // As long as a Tag's chip goes before it is cut (10rem), so two of them need a wide toolbar.
+  const tagNames = [
+    "Harbour sediment cores, 2025 season",
+    "East basin transects 1 to 14",
+    "Grain-size tables and field logs",
+  ];
+  await (await coreOf(window)).evaluate(async (core, names) => {
+    const [first] = await core.listDocuments();
+    if (!first) throw new Error("The Document isn't there.");
+    for (const tagName of names) {
+      const tag = await core.createTag({ name: tagName });
+      await core.addDocumentTag(first.id, tag.id);
+    }
+  }, tagNames);
+  await newMind(window);
+  const viewer = window.getByTestId("viewer");
+  const header = viewer.getByTestId("viewer-header");
+  const title = header.getByTestId("viewer-title");
+  const row = header.getByTestId("document-tags");
+  const chips = row.getByTestId("tag-chip");
+  const more = row.getByTestId("tag-chip-more");
+
+  const expectNoOverlap = (where: string) => expectToolbarClear(header, where);
+
+  for (const language of ["en", "zh-CN"] as const) {
+    await setLanguage(window, language);
+    for (const width of [900, 1280, 1920]) {
+      await setWindowSize(app, window, width, 800);
+      await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(width);
+      // A window under 1,100px shows the Document over the Mind: it is opened from the sidebar.
+      if (!(await header.isVisible())) await window.getByTestId("open-document").click();
+      await expect(header).toBeVisible();
+      const where = `${language} at ${width}px`;
+
+      // The name is cut with an ellipsis, and its tooltip gives all of it.
+      expect(await title.getAttribute("title"), where).toContain(name);
+      expect(
+        await title.evaluate((element) => element.scrollWidth > element.clientWidth),
+        where,
+      ).toBe(true);
+      await expectNoOverlap(where);
+
+      // The chips, "+N" and the Tags button sit 4px apart.
+      const row4 = await row.evaluate((element) => {
+        const boxes = [...element.children]
+          .map((child) => child.getBoundingClientRect())
+          .filter((box) => box.width > 0 && box.height > 0);
+        return boxes.slice(1).map((box, index) => box.left - (boxes[index]?.right ?? 0));
+      });
+      for (const gap of row4) expect(gap, where).toBeCloseTo(4, 0);
+    }
+  }
+
+  // As the viewer narrows, the last chips fold into "+N" first, and "+N" says how many and which.
+  await setWindowSize(app, window, 1868, 800);
+  await setViewerWidth(window, 900);
+  await expect(chips).toHaveCount(2);
+  let before = 2;
+  for (const width of [900, 760, 680, 620, 560]) {
+    await setViewerWidth(window, width);
+    await expectNoOverlap(`viewer ${width}px`);
+    const drawn = await chips.evaluateAll((elements) =>
+      elements
+        .filter((each) => each.getBoundingClientRect().width > 0)
+        .map((each) => each.textContent?.trim()),
+    );
+    expect(drawn.length, `viewer ${width}px`).toBeLessThanOrEqual(before);
+    before = drawn.length;
+    await expect(more).toHaveText(`+${tagNames.length - drawn.length}`);
+    const folded = await more.getAttribute("aria-label");
+    for (const hidden of tagNames.filter((each) => !drawn.includes(each))) {
+      expect(folded).toContain(hidden);
+    }
+  }
+  expect(before, "the chips fold as the viewer narrows").toBeLessThan(2);
+  await app.close();
+});
+
+test("a PDF's busier toolbar, with a 120-character name and three Tags, overlaps nothing from 900 to 1920px, in English and Chinese", async () => {
+  const guide = join(sources, `${LONG_NAME}.pdf`);
+  await writeFile(guide, GUIDE);
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await addDocuments(window, [guide]);
+  await (await coreOf(window)).evaluate(async (core) => {
+    const [first] = await core.listDocuments();
+    if (!first) throw new Error("The Document isn't there.");
+    for (const name of ["Harbour cores", "East basin transects", "Grain-size tables"]) {
+      const tag = await core.createTag({ name });
+      await core.addDocumentTag(first.id, tag.id);
+    }
+  });
+  await newMind(window);
+  const header = window.getByTestId("viewer").getByTestId("viewer-header");
+
+  for (const language of ["en", "zh-CN"] as const) {
+    await setLanguage(window, language);
+    for (const width of [900, 1280, 1920]) {
+      await setWindowSize(app, window, width, 800);
+      await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(width);
+      if (!(await header.isVisible())) await window.getByTestId("open-document").click();
+      await expect(header).toBeVisible();
+      await expectToolbarClear(header, `${language} at ${width}px`);
+    }
   }
   await app.close();
 });
