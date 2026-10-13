@@ -25,6 +25,7 @@ import { core } from "../core";
 import { formatResetTime } from "../cost";
 import { useFindSources } from "../findSources";
 import { useLanguage, useT } from "../i18n";
+import { useModelNames } from "../modelNames";
 import { ANSWER_PROBLEMS, answerProblem } from "../problems";
 import type { SettingsPage } from "../settingsPages";
 import { useAppStore } from "../store";
@@ -81,6 +82,7 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
   const answerId = text(node.attrs[BLOCK_ID_ATTRIBUTE]);
   const questionId = text(node.attrs.questionId);
   const modelId = text(node.attrs.modelId);
+  const shownModel = useModelNames()(modelId ?? "");
   const status = text(node.attrs.status) ?? "done";
   const writing = useAnswers((state) => (answerId ? state.writing.has(answerId) : false));
   // The event says so first; the status says so in windows that opened since.
@@ -124,8 +126,8 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
   }
   if (modelId) {
     meta.push(
-      <span data-testid="answer-model" className="answer-model">
-        {modelId}
+      <span data-testid="answer-model" className="answer-model" title={shownModel.id}>
+        {shownModel.name}
       </span>,
     );
   }
@@ -260,6 +262,7 @@ export function AnswerError({
 }) {
   const t = useT();
   const language = useLanguage();
+  const shownModel = useModelNames()(modelId ?? "", providerId);
   const provider = useAnswers(
     (state) => state.models?.find((group) => group.provider.id === providerId)?.provider.kind,
   );
@@ -313,8 +316,8 @@ export function AnswerError({
         title={details ?? undefined}
         className="mt-1 select-none"
       >
-        {t(line, { model: modelId ?? t("answer.error.thisModel") })}
-        {removeFromMenu && kind !== "model" && ` · ${modelId}`}
+        {t(line, { model: modelId ? shownModel.name : t("answer.error.thisModel") })}
+        {removeFromMenu && kind !== "model" && ` · ${shownModel.name}`}
         {kind === "plan-limit" && resetsAt && (
           <>
             <span aria-hidden="true"> · </span>
@@ -367,6 +370,14 @@ export function CallRow({ call }: { call: AnswerToolCall }) {
   if (call.source === "sources") return <SourcesCall call={call} />;
   if (call.source === "web") return <WebCall call={call} />;
   return <ScriptCall call={call} />;
+}
+
+/**
+ * A button's tooltip and name with its shortcut: its label drops the hint when
+ * the assistant is narrow (#612), and the shortcut still works.
+ */
+export function withShortcut(label: string, keys: string | undefined) {
+  return keys ? { title: `${label} (${keys})`, "aria-label": `${label} (${keys})` } : {};
 }
 
 /**
@@ -446,6 +457,7 @@ function ToolApprovalCard({ request, keys }: { request: ToolApprovalRequest; key
           data-testid="approval-allow-once"
           onClick={() => decide("allow-once")}
           className="approval-button approval-button--primary"
+          {...withShortcut(t("approvals.card.allowOnce"), keys)}
         >
           {t("approvals.card.allowOnce")}
           {keys && <span className="approval-keys">{keys}</span>}
@@ -589,6 +601,7 @@ function ScriptApprovalCard({
             data-testid="approval-allow-once"
             onClick={() => respond(request.requestId, "allow-once")}
             className="approval-button approval-button--primary"
+            {...withShortcut(t("scripts.card.allowOnce"), keys)}
           >
             {t("scripts.card.allowOnce")}
             {keys && <span className="approval-keys">{keys}</span>}

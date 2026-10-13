@@ -221,7 +221,7 @@ export function TagPicker({
     try {
       await work();
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     }
   };
   const store = useAppStore.getState;

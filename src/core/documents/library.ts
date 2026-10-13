@@ -1409,9 +1409,9 @@ export function createLibrary(options: LibraryOptions) {
     try {
       real = await realpath(input);
     } catch {
-      throw new NotFoundError("There is no folder at that path.");
+      throw new NotFoundError({ key: "error.path.noFolder" });
     }
-    if (!(await isFolder(real))) throw new InvalidInputError("That path isn't a folder.");
+    if (!(await isFolder(real))) throw new InvalidInputError({ key: "error.path.notFolder" });
     return real;
   }
 
@@ -1420,7 +1420,7 @@ export function createLibrary(options: LibraryOptions) {
       throw new InvalidInputError("A Linked folder id is required.");
     }
     const row = folderRow(idInput);
-    if (!row) throw new NotFoundError("That Linked folder doesn't exist or has been removed.");
+    if (!row) throw new NotFoundError({ key: "error.linkedFolder.notFound" });
     return row;
   };
 

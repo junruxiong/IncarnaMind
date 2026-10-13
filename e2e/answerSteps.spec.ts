@@ -44,6 +44,7 @@ const TIDES = buildPdf([
   { lines: ["Spring and neap tides", SPRING] },
 ]);
 const MODEL = "claude-haiku-5-5";
+const MODEL_NAME = "Claude Haiku 5.5";
 const LONG_FOLDER = "Thesis: urban heat islands and the night-time cooling of city parks";
 
 let dataDir: string;
@@ -213,7 +214,7 @@ test("the folded line opens by click, Enter and Space, at once, to the reasoning
   expect(await answer.evaluate((node) => node.getAnimations({ subtree: true }).length)).toBe(0);
   expect(await stepsOf(timeline)).toEqual(["reasoning", "read", "search", "check"]);
   const reasoning = timeline.locator('[data-step="reasoning"]');
-  await expect(reasoning).toContainText(new RegExp(`^${MODEL} thought for \\d+s`));
+  await expect(reasoning).toContainText(new RegExp(`^${MODEL_NAME} thought for \\d+s`));
   await expect(reasoning.getByTestId("answer-reasoning")).toContainText(
     "When do spring tides happen?",
   );
@@ -276,7 +277,7 @@ test("in Chinese, the line and the timeline; after a restart the steps are still
   await expect(answer.getByTestId("answer-steps")).toHaveText("已搜索全部文档 · 1 个来源");
   let timeline = await openSteps(window, answer);
   await expect(timeline.locator('[data-step="reasoning"]')).toContainText(
-    new RegExp(`^${MODEL} 思考了 \\d+ 秒`),
+    new RegExp(`^${MODEL_NAME} 思考了 \\d+ 秒`),
   );
   await expect(timeline.locator('[data-step="read"]')).toHaveText("读了“Lit review: tides”");
   await expect(timeline.locator('[data-step="search"]')).toContainText(
@@ -332,7 +333,7 @@ test("an empty conversation says once what it reads and searches, following focu
   await window.mouse.move(10, 10);
   const actions = answer.getByTestId("answer-actions");
   await expect(actions).toHaveText("CopyAdd to note");
-  await expect(actions).not.toContainText(MODEL);
+  await expect(actions).not.toContainText(MODEL_NAME);
   await expect(answer.getByTestId("answer-copy")).toHaveCSS("font-size", "13px");
   await expect(answer.getByTestId("answer-copy")).toHaveCSS("font-weight", "600");
   await app.close();

@@ -371,7 +371,7 @@ export function createApprovals(options: ApprovalsOptions) {
         throw new InvalidInputError('policy must be "always", "ask" or null.');
       }
       if (subject.kind === "tool" && !owners.connectors().has(subject.connectorId)) {
-        throw new NotFoundError("That Connector doesn't exist.");
+        throw new NotFoundError({ key: "error.connector.notFound" });
       }
       if (subject.kind === "skill-script") {
         if (!owners.skills().has(subject.skillId))
