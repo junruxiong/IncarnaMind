@@ -29,6 +29,30 @@ export interface LibrarySection {
 }
 
 /**
+ * Whether a section asked for is on the page once nothing narrows it: a
+ * Folder that exists, Not in a Folder while it holds a Document, and
+ * Recently deleted unless it is known to be empty (`deletedCount` null: not
+ * read yet).
+ */
+export function sectionShows(
+  key: string,
+  documents: readonly Pick<Document, "id">[],
+  folders: readonly Pick<LibraryGroup, "id">[],
+  assignments: readonly Pick<DocumentGroupAssignment, "documentId" | "groupId">[],
+  deletedCount: number | null,
+): boolean {
+  if (key === RECENTLY_DELETED) return deletedCount !== 0;
+  const ids = new Set(folders.map((folder) => folder.id));
+  if (key !== NOT_IN_A_FOLDER) return ids.has(key);
+  const filed = new Set(
+    assignments.flatMap((each) =>
+      each.groupId !== null && ids.has(each.groupId) ? [each.documentId] : [],
+    ),
+  );
+  return documents.some((doc) => !filed.has(doc.id));
+}
+
+/**
  * One section per Folder, in the order given, then Not in a Folder, each with
  * its Documents in the order given. A Document whose Folder isn't among them
  * is Not in a Folder. Every Folder shows, empty or not, unless the page is

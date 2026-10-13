@@ -20,11 +20,14 @@ import {
   interceptShowItemInFolder,
   launchApp,
   newMind,
+  openOptions,
   pathsOpened,
   pathsShown,
   pointAndClick,
   removeDataFolder,
+  savedPath,
   setWindowSize,
+  tabMenu,
   useOutputLocation,
   WINDOW_SIZE,
 } from "./app";
@@ -146,31 +149,9 @@ async function documentNamed(window: Page, name: string): Promise<Document> {
   return found;
 }
 
-/** The result line's saved file, once it says it saved one. */
-async function savedPath(window: Page, name: string): Promise<string> {
-  const done = window.getByTestId("export-result").getByTestId("export-done");
-  await expect(done).toHaveText(`Saved ${name}`, { timeout: 30_000 });
-  return (await done.getAttribute("title")) ?? "";
-}
-
-/** The menu of the Mind's tab, opened by a right-click on the tab, as a person opens it. */
-async function tabMenu(window: Page): Promise<Locator> {
-  const tab = window.getByRole("tab", { selected: true }).first();
-  await pointAndClick(window, tab, { button: "right" });
-  const menu = tab.getByTestId("tab-actions");
-  await expect(menu).toBeVisible();
-  return menu;
-}
-
 /** Export as PDF, from the tab's menu, while Word is still the last format. */
 async function exportAsPdf(window: Page): Promise<void> {
   await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.exportAs.pdf"));
-}
-
-/** Export options…, from the tab's menu; resolves once the sheet shows `title`. */
-async function openOptions(window: Page, title: string): Promise<void> {
-  await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.exportOptions"));
-  await expect(window.getByTestId("export-dialog").getByRole("heading")).toHaveText(title);
 }
 
 let dataDir: string;

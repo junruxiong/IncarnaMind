@@ -49,24 +49,21 @@ export type ConnectorConfig = LocalConnectorConfig | RemoteConnectorConfig;
 function parseRemoteUrl(value: unknown): string {
   if (typeof value !== "string") throw new InvalidInputError("A Connector's URL must be text.");
   const text = value.trim();
-  if (!text) throw new InvalidInputError("Enter the server's URL.");
-  if (text.length > MAX_URL_LENGTH) throw new InvalidInputError("That URL is too long.");
+  if (!text) throw new InvalidInputError({ key: "error.connector.urlMissing" });
+  if (text.length > MAX_URL_LENGTH)
+    throw new InvalidInputError({ key: "error.connector.urlTooLong" });
   let url: URL;
   try {
     url = new URL(text);
   } catch {
-    throw new InvalidInputError(`"${text}" isn't a valid URL.`);
+    throw new InvalidInputError({ key: "error.connector.urlInvalid", values: { url: text } });
   }
   const local = isLoopbackHost(url.hostname);
   if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) {
-    throw new InvalidInputError(
-      "A remote Connector's URL must start with https:// (http:// only for a server on this computer).",
-    );
+    throw new InvalidInputError({ key: "error.connector.urlInsecure" });
   }
   if (url.username || url.password) {
-    throw new InvalidInputError(
-      "Leave the user name and password out of the URL: you sign in through your browser.",
-    );
+    throw new InvalidInputError({ key: "error.connector.urlCredentials" });
   }
   url.hash = "";
   return url.href;
@@ -76,29 +73,32 @@ function parseRemoteUrl(value: unknown): string {
 export function parseClient(value: unknown): ClientCredentials | null {
   if (value === undefined || value === null) return null;
   if (!isRecord(value)) throw new InvalidInputError("A Connector's client must be an object.");
-  if (typeof value.clientId !== "string") throw new InvalidInputError("Enter the client ID.");
+  if (typeof value.clientId !== "string")
+    throw new InvalidInputError({ key: "error.connector.clientIdMissing" });
   const clientId = value.clientId.trim();
-  if (!clientId) throw new InvalidInputError("Enter the client ID.");
+  if (!clientId) throw new InvalidInputError({ key: "error.connector.clientIdMissing" });
   if (clientId.length > MAX_CLIENT_ID_LENGTH || /\p{Cc}/u.test(clientId)) {
-    throw new InvalidInputError("That client ID isn't valid.");
+    throw new InvalidInputError({ key: "error.connector.clientIdInvalid" });
   }
   const rawSecret = value.clientSecret;
   if (rawSecret !== undefined && rawSecret !== null && typeof rawSecret !== "string") {
     throw new InvalidInputError("A client secret must be text.");
   }
   const clientSecret = typeof rawSecret === "string" ? rawSecret.trim() : "";
-  if (clientSecret.includes("\0")) throw new InvalidInputError("That client secret isn't valid.");
+  if (clientSecret.includes("\0"))
+    throw new InvalidInputError({ key: "error.connector.clientSecretInvalid" });
   return { clientId, clientSecret: clientSecret || null };
 }
 
 function parseName(value: unknown): string {
   if (typeof value !== "string") throw new InvalidInputError("A Connector's name must be text.");
   const name = value.trim();
-  if (!name) throw new InvalidInputError("A Connector's name can't be empty.");
+  if (!name) throw new InvalidInputError({ key: "error.connector.nameEmpty" });
   if (name.length > MAX_NAME_LENGTH) {
-    throw new InvalidInputError(
-      `A Connector's name can't be longer than ${MAX_NAME_LENGTH} characters.`,
-    );
+    throw new InvalidInputError({
+      key: "error.connector.nameTooLong",
+      values: { max: MAX_NAME_LENGTH },
+    });
   }
   return name;
 }
@@ -106,9 +106,9 @@ function parseName(value: unknown): string {
 function parseCommand(value: unknown): string {
   if (typeof value !== "string") throw new InvalidInputError("A Connector's command must be text.");
   const command = value.trim();
-  if (!command) throw new InvalidInputError("Enter the command that starts the Connector.");
+  if (!command) throw new InvalidInputError({ key: "error.connector.commandMissing" });
   if (command.length > MAX_COMMAND_LENGTH || command.includes("\0")) {
-    throw new InvalidInputError("That command isn't valid.");
+    throw new InvalidInputError({ key: "error.connector.commandInvalid" });
   }
   return command;
 }
@@ -140,13 +140,17 @@ function parseEnv(value: unknown): Record<string, string> {
   for (const [rawName, raw] of Object.entries(value)) {
     const name = rawName.trim();
     if (!ENV_NAME.test(name)) {
-      throw new InvalidInputError(`"${rawName}" isn't a valid environment variable name.`);
+      throw new InvalidInputError({
+        key: "error.connector.envNameInvalid",
+        values: { name: rawName },
+      });
     }
     if (typeof raw !== "string" && typeof raw !== "number" && typeof raw !== "boolean") {
       throw new InvalidInputError(`The value of ${name} must be text.`);
     }
     const text = String(raw);
-    if (text.includes("\0")) throw new InvalidInputError(`The value of ${name} isn't valid.`);
+    if (text.includes("\0"))
+      throw new InvalidInputError({ key: "error.connector.envValueInvalid", values: { name } });
     env[name] = text;
   }
   return env;
@@ -267,13 +271,11 @@ export function readMcpServers(json: unknown): ImportCandidate[] {
     parsed = JSON.parse(json);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    throw new InvalidInputError(`That isn't valid JSON: ${reason}`);
+    throw new InvalidInputError({ key: "error.connector.jsonInvalid", values: { reason } });
   }
   const servers = serversOf(parsed);
   if (!servers || Object.keys(servers).length === 0) {
-    throw new InvalidInputError(
-      'No MCP servers found: expected an "mcpServers" object, as Claude Desktop and Cursor write it.',
-    );
+    throw new InvalidInputError({ key: "error.connector.noServers" });
   }
   return Object.entries(servers).map(([key, value]) => candidate(key, value));
 }

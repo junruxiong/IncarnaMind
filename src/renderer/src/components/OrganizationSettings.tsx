@@ -3,7 +3,7 @@ import type { ChatProvider, LibraryClassifier, LibrarySettings } from "../../../
 import { supportsLibraryImages } from "../../../shared/libraryModels";
 import { core } from "../core";
 import { errorMessage as messageOf } from "../errors";
-import { useT } from "../i18n";
+import { translateNow, useT } from "../i18n";
 import { useAppStore } from "../store";
 import { ProblemMark } from "./ProblemLine";
 import { buttonStyle, errorTextClass, fieldLabelClass, inputClass, sectionNoteClass } from "./ui";
@@ -26,7 +26,7 @@ export function OrganizationSettings() {
       setSaved(true);
       return true;
     } catch (failure) {
-      setError(messageOf(failure));
+      setError(messageOf(failure, t));
       return false;
     } finally {
       setBusy(false);
@@ -102,7 +102,7 @@ function ClassifierForm({
           }
         },
         (failure) => {
-          if (!stopped) setLoadError(messageOf(failure));
+          if (!stopped) setLoadError(messageOf(failure, translateNow));
         },
       );
     };
