@@ -8,6 +8,7 @@ import type { Editor } from "@tiptap/core";
 import type { Node as ProseMirrorNode, Slice } from "@tiptap/pm/model";
 import { NOTE_BLOCK_TYPES } from "../../core/api";
 import type { NodeJSON } from "../../shared/blockJson";
+import { withoutCitationGlue } from "./editor/citationGlue";
 import { useAppStore } from "./store";
 
 const editors = new Map<string, Editor>();
@@ -43,9 +44,11 @@ function notesOf(slice: Slice): NodeJSON[] {
   slice.content.forEach((node) => {
     if ((NOTE_BLOCK_TYPES as readonly string[]).includes(node.type.name)) nodes.push(node);
   });
-  return nodes
-    .filter((node) => node.isLeaf || node.content.size > 0)
-    .map((node) => node.toJSON() as NodeJSON);
+  return withoutCitationGlue(
+    nodes
+      .filter((node) => node.isLeaf || node.content.size > 0)
+      .map((node) => node.toJSON() as NodeJSON),
+  );
 }
 
 /**
@@ -74,6 +77,8 @@ export async function copyAnswer(answerId: string): Promise<boolean> {
   const range = selectedRange(editor) ?? { from: 0, to: doc.content.size };
   // The editor's own copy: its Citations as footnotes, and the text with markers and Sources.
   const { dom, text } = editor.view.serializeForClipboard(doc.slice(range.from, range.to));
+  // The run's mark is how the Answer is drawn, not part of it.
+  for (const run of dom.querySelectorAll(".citation-glue")) run.replaceWith(...run.childNodes);
   try {
     await navigator.clipboard.write([
       new ClipboardItem({
