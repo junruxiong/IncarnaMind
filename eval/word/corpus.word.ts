@@ -202,8 +202,8 @@ function subjects(): Subject[] {
 describe("the Word corpus", () => {
   const manifest = readManifest();
 
-  it("lists 30 documents, 20 files with tracked changes and at most 6 saved by hand, each once", () => {
-    expect(manifest.filter((entry) => entry.set === "documents")).toHaveLength(30);
+  it("lists 32 documents, 20 files with tracked changes and at most 6 saved by hand, each once", () => {
+    expect(manifest.filter((entry) => entry.set === "documents")).toHaveLength(32);
     expect(manifest.filter((entry) => entry.set === "tracked-changes")).toHaveLength(20);
     expect(manifest.filter((entry) => entry.set === "saved").length).toBeLessThanOrEqual(6);
     expect(new Set(manifest.map((entry) => entry.file)).size).toBe(manifest.length);
