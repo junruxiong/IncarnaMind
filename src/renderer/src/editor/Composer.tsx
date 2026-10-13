@@ -525,7 +525,7 @@ export function Composer({
       event.preventDefault();
       stopEditing(mind.editor, mind.mindId);
     }
-    // Any other Esc goes on to the assistant, which folds (`Assistant`).
+    // Any other Esc goes on to the assistant, which gives the focus back to the Mind (`Assistant`).
   };
 
   const canAsk = draft.text.trim() !== "" || draft.pastes.length > 0;
