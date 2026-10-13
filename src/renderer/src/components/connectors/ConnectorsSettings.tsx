@@ -3,23 +3,32 @@ import {
   type ApprovalPolicy,
   type Connector,
   type ConnectorDirectoryEntry,
+  type ConnectorRegistrySearch,
+  type ConnectorRegistryServer,
   connectorDirectoryGroups,
 } from "../../../../core/api";
 import type { Language } from "../../../../core/language";
 import { core } from "../../core";
 import { useLanguage, useT } from "../../i18n";
+import { useAppStore } from "../../store";
 import { PlusLineIcon, SearchLineIcon } from "../lineIcons";
 import { buttonClass, pageIntroClass, ruledListClass } from "../ui";
 import { AddCustomConnector } from "./AddCustomConnector";
 import { ConnectorDetail, stateKey } from "./ConnectorDetail";
 import { ConnectorTile } from "./ConnectorTile";
+import { RegistryDetail } from "./RegistryDetail";
+import { RegistryResults } from "./RegistryResults";
 
 /** Which page of Settings › Connectors shows: the list, a Connector's page, or adding one. */
 type View =
   | { page: "list" }
   | { page: "entry"; entryId: string; signIn?: boolean }
   | { page: "connector"; connectorId: string; signIn?: boolean }
-  | { page: "custom" };
+  | { page: "registry"; server: ConnectorRegistryServer }
+  | { page: "custom"; from?: ConnectorRegistryServer };
+
+/** How long typing pauses before the MCP Registry is asked. */
+const REGISTRY_PAUSE_MS = 400;
 
 const headClass = "text-[13px] leading-5 font-semibold text-ink";
 
@@ -51,6 +60,13 @@ export function ConnectorsSettings() {
   const [directory, setDirectory] = useState<ConnectorDirectoryEntry[]>([]);
   const [view, setView] = useState<View>({ page: "list" });
   const [query, setQuery] = useState("");
+  /** The MCP Registry's answer to the words searched; null while it is being asked. */
+  const [registry, setRegistry] = useState<{
+    words: string;
+    search: ConnectorRegistrySearch | null;
+  } | null>(null);
+  /** Asking again after a failure, with the same words. */
+  const [attempt, setAttempt] = useState(0);
   const section = useRef<HTMLElement>(null);
   /** What opened the page now showing, to give the focus back to on the way back. */
   const opener = useRef<string | null>(null);
@@ -67,6 +83,34 @@ export function ConnectorsSettings() {
       for (const stop of stops) stop();
     };
   }, []);
+
+  // The MCP Registry is asked only once the User types, after a pause, and never for one letter.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Try again asks once more with the same words.
+  useEffect(() => {
+    const words = query.trim();
+    if (words.length < 2) {
+      setRegistry(null);
+      return;
+    }
+    let current = true;
+    const timer = setTimeout(() => {
+      setRegistry({ words, search: null });
+      core.searchConnectorRegistry(words).then(
+        (search) => {
+          if (current) setRegistry({ words, search });
+        },
+        (failure: unknown) => {
+          if (!current) return;
+          useAppStore.getState().reportError(failure);
+          setRegistry({ words, search: { outcome: "failed", reason: "service-error" } });
+        },
+      );
+    }, REGISTRY_PAUSE_MS);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  }, [query, attempt]);
 
   // Each page starts at its top; back on the list, the focus is where it was.
   useLayoutEffect(() => {
@@ -119,10 +163,24 @@ export function ConnectorsSettings() {
       );
     }
   }
+  if (view.page === "registry") {
+    return (
+      <section ref={section}>
+        <RegistryDetail
+          server={view.server}
+          onBack={back}
+          onAdded={(connector) => setView({ page: "connector", connectorId: connector.id })}
+          onSetUp={(server) => setView({ page: "custom", from: server })}
+        />
+      </section>
+    );
+  }
   if (view.page === "custom") {
+    const { from } = view;
     return (
       <section ref={section}>
         <AddCustomConnector
+          prefill={from?.command ? { name: from.name, ...from.command } : undefined}
           onBack={back}
           onAdded={(connector) => {
             const entry = entryOf(directory, connector);
@@ -232,6 +290,15 @@ export function ConnectorsSettings() {
           })
         )}
       </div>
+
+      {registry && (
+        <RegistryResults
+          words={registry.words}
+          search={registry.search}
+          onOpen={(server) => open({ page: "registry", server }, `registry:${server.id}`)}
+          onRetry={() => setAttempt((count) => count + 1)}
+        />
+      )}
 
       <div>
         <button

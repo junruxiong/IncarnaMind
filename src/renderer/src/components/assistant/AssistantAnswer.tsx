@@ -9,7 +9,9 @@ import { AskProblem } from "../../editor/AskProblem";
 import { useT } from "../../i18n";
 import { useScopeEmpty } from "../../scopeDocuments";
 import { useAppStore } from "../../store";
+import { useUnreadFiles } from "../../unreadFiles";
 import { ProblemLine } from "../ProblemLine";
+import { UnreadFilesLine } from "../UnreadFilesLine";
 import { AnswerActions } from "./AnswerActions";
 import { AnswerSteps, useStepsScopeOf } from "./AnswerSteps";
 import { AnswerText } from "./AnswerText";
@@ -58,6 +60,7 @@ export function AssistantAnswer({
   const { uncalculated } = figuresOf(answer.toolCalls);
   const scopeEmpty = useScopeEmpty(question?.scope ?? null);
   const scopeName = useStepsScopeOf(question)(0);
+  const unread = useUnreadFiles(question?.scope ?? null);
 
   return (
     <article
@@ -102,6 +105,7 @@ export function AssistantAnswer({
         </ProblemLine>
       )}
       {!streaming && uncalculated > 0 && <UncalculatedLine count={uncalculated} />}
+      {!streaming && status !== "failed" && <UnreadFilesLine files={unread} />}
       {!streaming && status === "failed" && (
         <AnswerError
           kind={answer.errorKind ?? "unknown"}
