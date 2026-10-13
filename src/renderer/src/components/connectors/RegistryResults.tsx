@@ -1,6 +1,7 @@
 import type { ConnectorRegistrySearch, ConnectorRegistryServer } from "../../../../core/api";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
+import { ProblemMark } from "../ProblemLine";
 import { buttonStyle } from "../ui";
 import { ConnectorTile } from "./ConnectorTile";
 
@@ -50,7 +51,10 @@ export function RegistryResults({
           data-reason={search.reason}
           className="flex flex-wrap items-center gap-2 text-[13px] leading-5 text-ink"
         >
-          <span>{t(`connectors.registry.failed.${search.reason}`)}</span>
+          <span>
+            <ProblemMark />
+            {t(`connectors.registry.failed.${search.reason}`)}
+          </span>
           {search.reason === "declined" ? (
             <button
               type="button"
