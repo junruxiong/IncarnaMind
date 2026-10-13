@@ -151,12 +151,10 @@ test("the header, the thread, the Task tray and the composer share one left edge
       return { left, right };
     });
     expect(Math.round(input - box.left)).toBe(12);
-    // Where a scrollbar takes room (Linux), the thread's content, and the bubble, end that much sooner.
-    const bubbleRight = await window.getByTestId("assistant-thread").evaluate((thread) => {
-      const bubble = [...thread.querySelectorAll(".assistant-question-bubble")].at(-1);
-      const scrollbar = thread.getBoundingClientRect().width - thread.clientWidth;
-      return (bubble?.getBoundingClientRect().right ?? 0) + scrollbar;
-    });
+    const bubbleRight = await window
+      .locator(".assistant-question-bubble")
+      .last()
+      .evaluate((el) => el.getBoundingClientRect().right);
     expect(Math.abs(bubbleRight - box.right)).toBeLessThanOrEqual(1);
     if (SCREENSHOTS) await assistant.screenshot({ path: join(SCREENSHOTS, `edge-en-${dock}.png`) });
   }

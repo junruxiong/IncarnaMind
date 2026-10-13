@@ -5000,12 +5000,29 @@
     white-space: nowrap;
     text-overflow: ellipsis;
   }
+  /*
+   * Its scrollbar is a fixed 8px that always has its room, so the 16px edge holds
+   * whatever the system's scrollbars are: the content ends where the composer's
+   * box does, and the scrollbar sits inside that edge (#612).
+   */
   .assistant-thread {
+    --scrollbar: 8px;
+
     flex: 1 1 auto;
     min-height: 0;
-    padding: 12px var(--edge);
+    padding: 12px calc(var(--edge) - var(--scrollbar)) 12px var(--edge);
     overflow-y: auto;
     overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+
+    &::-webkit-scrollbar {
+      width: var(--scrollbar);
+    }
+    &::-webkit-scrollbar-thumb {
+      border: 2px solid transparent;
+      border-radius: 4px;
+      background: var(--color-rule-strong) padding-box;
+    }
   }
   .assistant-empty {
     margin: 0;
