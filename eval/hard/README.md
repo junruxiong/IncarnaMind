@@ -164,15 +164,18 @@ Keyword + rerank at the top 8 and 10 is 135 and 143 of 180. The search Tool's fi
 
 ### 2026-10-13: the Answer rules (#548), before and after
 
-The Citation part only, with the library added as by default (embeddings off) and no retrieval modes, at `main` 3125b9cd with and without the rules and the Passages' dates. 60 Questions: 5 of each earlier difficulty, spread evenly through each, and the 20 new ones, which were asked a second time, so each cell counts 20 Answers. Scored with the rules in `lib/answerRules.ts` as committed, from each run's `report.json`. An Apple M2 Max with other work running.
+The Citation part only, with the library added as by default (embeddings off) and no retrieval modes, at `main` 3125b9cd without and with the rules and the Passages' dates. "Before" asked 60 Questions: 5 of each earlier difficulty, spread evenly through each, and the 20 new ones, asked a second time. "After" asked all 25 unanswerable Questions once and the 20 new ones twice, so each cell of the new difficulties counts 20 Answers. Scored with the rules in `lib/answerRules.ts` as committed, from each run's `report.json`. An Apple M2 Max with other work running.
 
 | | Haiku 5.5 before | Haiku 5.5 after | GPT-6 Luna before | GPT-6 Luna after |
 |---|---|---|---|---|
 | Premise flagged first | 19/20 | 20/20 | 14/20 | 17/20 |
-| Newer source leads, cited | 17/20 | 17/20 | 13/20 | 16/20 |
-| Names the older one too | 15/20 | 17/20 | 7/20 | 3/20 |
+| Newer source leads, cited | 17/20 | 18/20 | 13/20 | 16/20 |
+| Names the older one too | 15/20 | 17/20 | 7/20 | 6/20 |
+| Unanswerable: adds a figure from outside the Documents | 3/5, labelled | 0/25 | 3/5, unlabelled | 0/25 |
 
-- Claude Haiku 5.5 already flagged the premises and led with the newer source; GPT-6 Luna gains on both. Luna's Answers are short: after the change it mostly gives only the newer figure, and before it often gave the older one alone (five Functions for the NIST CSF Core, 4.8% for China in 2024), which counted as naming the older one.
+- Claude Haiku 5.5 already flagged the premises and led with the newer source. GPT-6 Luna gains on both.
+- Before, both models answered an unanswerable Question from their own knowledge after saying the Documents didn't cover it (Amazon's 2021 net income, a chikungunya vaccine's dose, Moutai's 2024 revenue); Luna didn't say the figure wasn't from the Documents. Now an Answer says so and stops, adding at most what the Passages say that comes closest, cited.
+- Luna leaves the older Document out. Its searches handed it both Documents in 13 of the 20 Answers, and it led with the newer one and named the older in 2 of those. Before, part of its 7 was Answers that gave only the older figure (five Functions for the NIST CSF Core, 4.8% for China in 2024).
 - The Lockheed Martin Question fails for both models before and after: their searches don't reach the 10-Ks' headcount Passages.
 - A Passage's date is often its file's creation date, which can differ from the date printed on the page: Haiku called the FDA draft "dated 3 January 2025" (the PDF's metadata) where its cover says it was issued on 7 January.
 
