@@ -4,6 +4,7 @@ import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
+  acceptPlainTextKeys,
   addDocuments,
   createDataFolder,
   dismissChatSetup,
@@ -114,6 +115,7 @@ test("Check for contradictions: the estimate first, then a cited claim another D
   await writeFile(join(sources, "Office.pdf"), OFFICE);
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
+  await acceptPlainTextKeys(window);
   await bridge(window).cloudModel();
   await setWindowSize(app, window, 1440, 900);
   await addDocuments(window, [join(sources, "Tides.pdf"), join(sources, "Office.pdf")]);
