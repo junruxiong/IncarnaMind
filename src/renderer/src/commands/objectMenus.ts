@@ -29,6 +29,7 @@ registerMenu("document", [
   "document.openTab",
   "document.ask",
   "document.startMind",
+  "document.moveTo",
   "document.tags",
   "document.retry",
   "document.fetchAgain",

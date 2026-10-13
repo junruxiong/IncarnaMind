@@ -6,7 +6,7 @@ import { startDocumentDrag } from "../documentDrag";
 import { documentStatusText } from "../documentStatus";
 import { useLanguage, useT } from "../i18n";
 import { currentTabOf } from "../layoutSlice";
-import { fileStatusLabel } from "../linkedFolders";
+import { fileStatusLabel, formatCount } from "../linkedFolders";
 import { scanningStatus } from "../scanStatus";
 import {
   extendThroughRows,
@@ -88,14 +88,12 @@ const isProcessing = (status: DocumentStatus) =>
  */
 export function DocumentsSection() {
   const t = useT();
+  const language = useLanguage();
   const hasTags = useAppStore((state) => state.tags.length > 0);
-  const hasAnyDocuments = useAppStore((state) => state.documents.length > 0);
+  const documentCount = useAppStore((state) => state.documents.length);
+  const hasAnyDocuments = documentCount > 0;
   const [chosenView, setView] = useState<BrowseView>("folders");
-  const libraryOpen = useAppStore(
-    (state) =>
-      currentTabOf(state.layout)?.item.kind === "library" &&
-      ["all", "new"].includes(state.libraryFilter),
-  );
+  const libraryOpen = useAppStore((state) => currentTabOf(state.layout)?.item.kind === "library");
   // The same array until the Documents or the Tag filter change (see `selectVisibleDocuments`).
   const documents = useAppStore(selectVisibleDocuments);
   const filtering = useAppStore((state) => state.tagFilter.length > 0);
@@ -183,7 +181,10 @@ export function DocumentsSection() {
           className={`${rowButtonClass} ${clearsActions.menu}`}
         >
           <DocumentLineIcon kind="text" className="size-4 shrink-0" />
-          <span className="truncate">{t("library.all")}</span>
+          <span className="min-w-0 flex-1 truncate">{t("library.title")}</span>
+          <span data-testid="library-row-count" className="text-[12px] tabular-nums text-ink-meta">
+            {formatCount(documentCount, language)}
+          </span>
         </button>
         <div className={rowActionsClass}>
           <button
@@ -386,7 +387,7 @@ const DocumentRow = memo(function DocumentRow({
  * full words (and a failure's message) are its tooltip, and what a screen
  * reader reads.
  */
-function DocumentStatusLabel({ item }: { item: Document }) {
+export function DocumentStatusLabel({ item }: { item: Document }) {
   const t = useT();
   const language = useLanguage();
   const fileState = fileStatusLabel(item.fileStatus);
