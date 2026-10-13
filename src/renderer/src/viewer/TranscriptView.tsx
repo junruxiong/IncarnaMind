@@ -12,6 +12,7 @@ import { clockTime } from "../../../shared/clock";
 import type { MessageKey } from "../../../shared/i18n";
 import { transcriptHandle, useHandle } from "../commands/handles";
 import { PlusLineIcon } from "../components/lineIcons";
+import { useDismissOnEscape } from "../escapeDismiss";
 import { useT } from "../i18n";
 import { useMeetings } from "../meetings";
 import { durationLabel } from "../meetingTime";
@@ -202,6 +203,7 @@ function TranscriptContent({
     const timer = setTimeout(() => setAdded(null), ADDED_SHOWN_MS);
     return () => clearTimeout(timer);
   }, [added]);
+  useDismissOnEscape(added !== null && added !== "failed", () => setAdded(null));
   const lend = useMemo(
     () => ({
       hasLine: () => meetingId !== null && activeRef.current !== null,

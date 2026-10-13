@@ -42,6 +42,7 @@ import type {
   DocumentScanProgress,
   DocumentStatus,
   DocumentText,
+  DocumentTextMatch,
   KeptCitationText,
   OwnFile,
   PassageSearchResult,
@@ -106,6 +107,7 @@ import {
   passagesBetween,
   passagesBySeq,
   passagesInWindow,
+  textSearch,
   type WindowedPassage,
   windowedPassagesBySeq,
 } from "./search";
@@ -2268,6 +2270,12 @@ export function createDocuments(options: DocumentsOptions) {
       const keywordOnly =
         similar.length > 0 ? keywordOnlyPassages(db, lists[0] ?? [], model.id) : undefined;
       return passagesBySeq(db, fuseRankings(lists, limit, keywordOnly));
+    },
+
+    /** See `CoreApi.searchDocumentText`. */
+    searchText(query: unknown): DocumentTextMatch[] {
+      if (typeof query !== "string") throw new InvalidInputError("The search query must be text.");
+      return textSearch(db, query, DEFAULT_SEARCH_LIMIT);
     },
 
     /** Linked folders (see ./library). */
