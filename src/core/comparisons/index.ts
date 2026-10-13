@@ -15,7 +15,11 @@
  * - Each cell is written as it finishes, with its problem when it has no
  *   Answer. A fill reads the cells to fill from the table each time, so a
  *   column added meanwhile, or the cells a quit left, are filled by the same
- *   call: what a Task (#126) will run in the background.
+ *   call.
+ * - A fill is a Task (#126, ../runs/tasks): closing the Mind or quitting
+ *   doesn't stop it, it goes on when IncarnaMind starts again, and it comes
+ *   below Answers. Each cell is a step in its journal. The monthly cap or a
+ *   plan's limit pauses it; "Fill N cells" resumes it.
  */
 import { randomUUID } from "node:crypto";
 import * as Y from "yjs";
@@ -51,16 +55,50 @@ import {
   type CoreEvents,
   PROPOSAL_ATTRIBUTE,
   type ProposalAttribute,
+  type RunStop,
 } from "../api";
 import { ChatNotReadyError, InvalidInputError, isRecord, NotFoundError } from "../errors";
 import type { MindContent } from "../mindContent";
 import { plainText } from "../mindText";
 import { classifyProviderError } from "../providers/providerErrors";
-import { type ItemOutcome, RunItemError, runItems } from "../runs/stop";
+import { type ItemOutcome, RunItemError, RunItemGaveWay, runItems } from "../runs/stop";
+import type { TaskEnd, TaskKind, TaskRun } from "../runs/tasks";
 import { cellContext, isNotFoundReply, saysNotFound } from "./prompt";
 
 /** Cells written at once on a model off this computer. */
 export const CLOUD_CELLS_AT_ONCE = 4;
+
+/** The kind of Task that fills a comparison table. */
+export const COMPARISON_TASK = "comparison";
+
+/** What a comparison table's Task fills: the table, with the model it was made with. */
+interface ComparisonTaskInput {
+  tableId: string;
+  providerId: string;
+  modelId: string;
+}
+
+function taskInputOf(input: unknown): ComparisonTaskInput | null {
+  if (
+    !isRecord(input) ||
+    typeof input.tableId !== "string" ||
+    typeof input.providerId !== "string" ||
+    typeof input.modelId !== "string"
+  ) {
+    return null;
+  }
+  return { tableId: input.tableId, providerId: input.providerId, modelId: input.modelId };
+}
+
+/** What comparison tables need of Tasks (see ../runs/tasks). */
+export interface ComparisonTasks {
+  start(kind: string, mindId: string, input: ComparisonTaskInput): void;
+  /** Unfinished Tasks, with their kind and input. */
+  unfinished(): readonly { id: string; kind: string; mindId: string | null; input: unknown }[];
+  isLive(taskId: string): boolean;
+  resume(taskId: string): Promise<unknown>;
+  stop(taskId: string): Promise<unknown>;
+}
 
 export interface ComparisonsOptions {
   content: Pick<MindContent, "read" | "edit">;
@@ -84,8 +122,8 @@ export interface ComparisonsOptions {
     runsLocally(choice: ChatModelChoice): boolean;
   };
   documents: {
-    /** The live Documents among `ids`, in that order. */
-    live(ids: readonly string[]): { id: string; name: string }[];
+    /** The live Documents among `ids`, in that order, with the version each is at. */
+    live(ids: readonly string[]): { id: string; name: string; contentHash: string }[];
     /** How many of `ids` have Passages to search. */
     searchableCount(ids: readonly string[]): number;
   };
@@ -93,6 +131,7 @@ export interface ComparisonsOptions {
   evidence(ids: readonly string[]): string[];
   /** Saves a Checkpoint of the Mind as it is before the table goes in (#113). */
   checkpoint(mindId: string): void;
+  tasks: ComparisonTasks;
   emit<E extends "comparison.filling">(event: E, payload: CoreEvents[E]): void;
   reportError(error: unknown): void;
 }
@@ -112,7 +151,11 @@ type Written =
 interface Fill {
   mindId: string;
   model: ChatModelChoice;
+  /** Aborts when its Task is paused, stopped or closing, or the table is gone. */
   controller: AbortController;
+  task: TaskRun;
+  /** Whether the model runs on this computer: one cell at a time, giving way to Answers. */
+  local: boolean;
 }
 
 /** What a cell's attributes are set to, and its content (none: one empty paragraph). */
@@ -120,6 +163,10 @@ type CellPatch = Partial<Omit<ComparisonCellAttributes, "questionId">> & { block
 
 const keyOf = (cell: Pick<Cell, "documentId" | "questionId">) =>
   `${cell.documentId}\n${cell.questionId}`;
+
+/** A cell's step in its Task's journal. */
+const stepOf = (cell: Pick<Cell, "documentId" | "questionId">) =>
+  `cell:${cell.documentId}:${cell.questionId}`;
 
 const EMPTY_CELL: NodeJSON[] = [{ type: "paragraph" }];
 
@@ -186,10 +233,33 @@ const cellJSON = (questionId: string): NodeJSON => ({
   content: EMPTY_CELL,
 });
 
+/** A table's cells settled (written, or without an Answer), and in all. */
+function progressOf(table: Y.XmlElement): { done: number; total: number } {
+  let done = 0;
+  let total = 0;
+  for (const row of elements(table)) {
+    if (row.nodeName !== COMPARISON_ROW_NODE) continue;
+    for (const cell of elements(row)) {
+      total++;
+      const status = comparisonCellOf(cell.getAttributes()).status;
+      if (status === "done" || status === "failed") done++;
+    }
+  }
+  return { done, total };
+}
+
 export function createComparisons(options: ComparisonsOptions) {
   const { content } = options;
   /** The fills going, by table. */
   const fills = new Map<string, Fill>();
+
+  /** The unfinished Task filling a table, if any. */
+  const taskOf = (tableId: string) =>
+    options.tasks
+      .unfinished()
+      .find(
+        (task) => task.kind === COMPARISON_TASK && taskInputOf(task.input)?.tableId === tableId,
+      ) ?? null;
 
   /** The model a table's cells are written with, ready and allowed; or why it can't be. */
   async function readyModel(
@@ -304,21 +374,64 @@ export function createComparisons(options: ComparisonsOptions) {
         break;
     }
     try {
-      if (setCell(fill, tableId, cell, patch) === "table") fill.controller.abort();
+      if (setCell(fill, tableId, cell, patch) === "table") {
+        fill.controller.abort();
+        return;
+      }
+      fill.task.settled(stepOf(cell), patch.status === "done" ? "completed" : "failed", {
+        problem: patch.problem ?? null,
+      });
+      reportProgress(fill, tableId);
     } catch (error) {
       options.reportError(error);
       fill.controller.abort();
     }
   }
 
-  /** Writes one cell: its Answer from its row's Document alone, or why there is none. */
+  function reportProgress(fill: Fill, tableId: string): void {
+    const progress = content.read(fill.mindId, (all) => {
+      const table = tableIn(all, tableId);
+      return table ? progressOf(table) : null;
+    });
+    if (progress) fill.task.progress(progress);
+  }
+
+  /**
+   * Writes one cell, once its Task's turn comes: its Answer from its row's
+   * Document alone, or why there is none. A cell on a model on this computer
+   * gives way to an Answer, and is written again after it.
+   */
   async function write(fill: Fill, tableId: string, cell: Cell): Promise<Written> {
-    const { signal } = fill.controller;
+    const turn = await fill.task.turn(fill.local);
+    try {
+      const written = await writeCell(
+        fill,
+        tableId,
+        cell,
+        AbortSignal.any([fill.controller.signal, turn.signal]),
+      );
+      if (turn.signal.aborted && !fill.controller.signal.aborted) throw new RunItemGaveWay();
+      return written;
+    } catch (error) {
+      if (turn.signal.aborted && !fill.controller.signal.aborted) throw new RunItemGaveWay();
+      throw error;
+    } finally {
+      turn.end();
+    }
+  }
+
+  async function writeCell(
+    fill: Fill,
+    tableId: string,
+    cell: Cell,
+    signal: AbortSignal,
+  ): Promise<Written> {
     const placed = setCell(fill, tableId, cell, { status: "writing" });
     if (placed !== "written") {
       if (placed === "table") fill.controller.abort();
       throw new DOMException("The cell is gone.", "AbortError");
     }
+    fill.task.started(stepOf(cell));
     const [document] = options.documents.live([cell.documentId]);
     if (!document) return { kind: "problem", problem: "source-removed" };
     const documentIds = options.evidence([document.id]);
@@ -346,18 +459,25 @@ export function createComparisons(options: ComparisonsOptions) {
     return { kind: "answer", blocks: answer.blocks };
   }
 
-  /** Fills the table's cells to fill, again while a column added meanwhile leaves more. */
-  async function run(fill: Fill, tableId: string): Promise<void> {
+  /**
+   * Fills the table's cells to fill, again while a column added meanwhile
+   * leaves more. Returns the monthly cap or plan's limit that stopped it.
+   */
+  async function run(fill: Fill, tableId: string): Promise<RunStop | null> {
     const tried = new Set<string>();
     const { signal } = fill.controller;
     for (;;) {
-      if (signal.aborted || !options.mindExists(fill.mindId)) return;
+      if (signal.aborted || !options.mindExists(fill.mindId)) return null;
       const cells = content.read(fill.mindId, (all) => {
         const table = tableIn(all, tableId);
         return table ? cellsToFill(table) : null;
       });
-      const next = (cells ?? []).filter((cell) => !tried.has(keyOf(cell)));
-      if (next.length === 0) return;
+      if (cells === null) {
+        fill.controller.abort();
+        return null;
+      }
+      const next = cells.filter((cell) => !tried.has(keyOf(cell)));
+      if (next.length === 0) return null;
       for (const cell of next) tried.add(keyOf(cell));
       // Each shows it waits again: a failure from before isn't its outcome now.
       const waiting = setCells(fill, tableId, next, {
@@ -367,9 +487,13 @@ export function createComparisons(options: ComparisonsOptions) {
         resetsAt: null,
         blocks: EMPTY_CELL,
       });
-      if (waiting === "table") return;
+      if (waiting === "table") {
+        fill.controller.abort();
+        return null;
+      }
+      reportProgress(fill, tableId);
       const { stop } = await runItems(next, (cell) => write(fill, tableId, cell), {
-        concurrency: options.chat.runsLocally(fill.model) ? 1 : CLOUD_CELLS_AT_ONCE,
+        concurrency: fill.local ? 1 : CLOUD_CELLS_AT_ONCE,
         signal,
         onOutcome: (cell, outcome) => record(fill, tableId, cell, outcome),
       });
@@ -380,26 +504,104 @@ export function createComparisons(options: ComparisonsOptions) {
           return table ? cellsToFill(table).filter((cell) => !tried.has(keyOf(cell))) : [];
         });
         for (const cell of left) record(fill, tableId, cell, { status: "not-checked", stop });
-        return;
+        return stop;
       }
     }
   }
 
-  /** Starts filling a table, unless a fill is going: that one takes the cells up. */
-  function startFill(mindId: string, tableId: string, model: ChatModelChoice): void {
-    if (fills.has(tableId)) return;
-    const fill: Fill = { mindId, model, controller: new AbortController() };
-    fills.set(tableId, fill);
-    options.emit("comparison.filling", { mindId, tableId, filling: true });
-    run(fill, tableId)
-      .catch((error: unknown) => {
-        if (!fill.controller.signal.aborted) options.reportError(error);
-      })
-      .finally(() => {
-        fills.delete(tableId);
-        options.emit("comparison.filling", { mindId, tableId, filling: false });
-      });
+  /** The Documents a table's rows are, at the versions they are now. */
+  function rowVersions(mindId: string, tableId: string) {
+    const ids = content.read(mindId, (all) => {
+      const table = tableIn(all, tableId);
+      return table
+        ? elements(table).map((row) => String(row.getAttribute("documentId") ?? ""))
+        : [];
+    });
+    return options.documents
+      .live(ids)
+      .map((document) => ({ documentId: document.id, contentHash: document.contentHash }));
   }
+
+  /**
+   * Fills a table as its Task, from where its journal and its cells are. It
+   * says it fills from the moment the Task starts, before its model is ready,
+   * so a table never looks stopped while its Task goes on.
+   */
+  async function runTask(task: TaskRun): Promise<TaskEnd> {
+    const input = taskInputOf(task.input);
+    const mindId = task.mindId;
+    if (!input || !mindId) return { status: "failed", problem: "unknown" };
+    const filling = (on: boolean) =>
+      options.emit("comparison.filling", { mindId, tableId: input.tableId, filling: on });
+    filling(true);
+    try {
+      return await fillAsTask(task, mindId, input);
+    } finally {
+      filling(false);
+    }
+  }
+
+  async function fillAsTask(
+    task: TaskRun,
+    mindId: string,
+    { tableId, providerId, modelId }: ComparisonTaskInput,
+  ): Promise<TaskEnd> {
+    const there = () =>
+      options.mindExists(mindId) && content.read(mindId, (all) => !!tableIn(all, tableId));
+    if (!there()) return { status: "stopped" };
+    const ready = await readyModel({ providerId, modelId });
+    if (!("model" in ready)) return { status: "paused", reason: "not-ready" };
+    if (task.signal.aborted) return { status: "stopped" };
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    task.signal.addEventListener("abort", abort, { once: true });
+    const fill: Fill = {
+      mindId,
+      model: ready.model,
+      controller,
+      task,
+      local: options.chat.runsLocally(ready.model),
+    };
+    fills.set(tableId, fill);
+    task.retain(rowVersions(mindId, tableId));
+    try {
+      const stop = await run(fill, tableId);
+      if (task.signal.aborted || controller.signal.aborted || !there()) {
+        return { status: "stopped" };
+      }
+      if (stop) {
+        return {
+          status: "paused",
+          reason: stop.reason,
+          resetsAt: stop.reason === "plan-limit" ? stop.resetsAt : null,
+        };
+      }
+      return { status: "done" };
+    } finally {
+      task.signal.removeEventListener("abort", abort);
+      if (fills.get(tableId) === fill) fills.delete(tableId);
+    }
+  }
+
+  /** Fills a table as a Task: resumes the one it has, or starts one; one going takes the cells up. */
+  function startFill(mindId: string, tableId: string, model: ChatModelChoice): void {
+    const task = taskOf(tableId);
+    if (task) {
+      if (!options.tasks.isLive(task.id)) options.tasks.resume(task.id).catch(options.reportError);
+      return;
+    }
+    options.tasks.start(COMPARISON_TASK, mindId, {
+      tableId,
+      providerId: model.providerId,
+      modelId: model.modelId,
+    });
+  }
+
+  const taskKind: TaskKind = {
+    kind: COMPARISON_TASK,
+    run: runTask,
+    blockOf: (input) => taskInputOf(input)?.tableId ?? null,
+  };
 
   /** Where the table goes: after the Block named, or before it when it is an empty paragraph. */
   function placeOf(blocks: Y.XmlFragment, afterBlockId: string | null): number {
@@ -511,38 +713,37 @@ export function createComparisons(options: ComparisonsOptions) {
           ? { providerId, modelId }
           : null;
       });
-      const going = fills.get(ref.tableId);
-      if (going) return { started: true, tableId: ref.tableId };
+      const task = taskOf(ref.tableId);
+      if (task && options.tasks.isLive(task.id)) return { started: true, tableId: ref.tableId };
       const ready = await readyModel(picked);
       if (!("model" in ready)) return ready;
       startFill(mindId, ref.tableId, ready.model);
       return { started: true, tableId: ref.tableId };
     },
 
-    stop(input: unknown): void {
+    async stop(input: unknown): Promise<void> {
       const ref = parseRef(input, "stopComparisonTable");
-      const fill = fills.get(ref.tableId);
-      if (fill && fill.mindId === ref.mindId) fill.controller.abort();
+      const task = taskOf(ref.tableId);
+      if (task && task.mindId === ref.mindId) await options.tasks.stop(task.id);
     },
 
     filling(): ComparisonTableRef[] {
       return [...fills].map(([tableId, fill]) => ({ mindId: fill.mindId, tableId }));
     },
 
-    /** A Mind changed: a fill whose table has gone (rejected, or deleted) stops. */
+    /** A Mind changed: the Task of a table that has gone (rejected, or deleted) stops. */
     mindChanged(mindId: string): void {
-      for (const [tableId, fill] of fills) {
-        if (fill.mindId !== mindId || fill.controller.signal.aborted) continue;
+      for (const task of options.tasks.unfinished()) {
+        const tableId = task.kind === COMPARISON_TASK ? taskInputOf(task.input)?.tableId : null;
+        if (!tableId || task.mindId !== mindId) continue;
         const there =
           options.mindExists(mindId) &&
           content.read(mindId, (blocks) => !!tableIn(blocks, tableId));
-        if (!there) fill.controller.abort();
+        if (!there) options.tasks.stop(task.id).catch(options.reportError);
       }
     },
 
-    /** Stops every fill, e.g. when the app quits: the cells left are filled next time. */
-    stopAll(): void {
-      for (const fill of fills.values()) fill.controller.abort();
-    },
+    /** The kind of Task a table fills as. */
+    taskKind,
   };
 }

@@ -11,15 +11,22 @@ import {
 } from "../../src/core";
 import { CLOUD_CELLS_AT_ONCE } from "../../src/core/comparisons";
 import { readBlocks } from "../../src/core/mindText";
-import { type ShownPassage, setUpWithDocuments, shownPassages } from "../helpers/citations";
-import { createTempDataFolder, startCore } from "../helpers/core";
+import {
+  answerEnded,
+  type ShownPassage,
+  setUpWithDocuments,
+  shownPassages,
+} from "../helpers/citations";
+import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core";
 import { addAndProcess, createSourceFolder, writeSourceFile } from "../helpers/documents";
 import { footnotesOf, part, textOf, unzip } from "../helpers/docx";
 import { exportMind, linkWithExports } from "../helpers/evidence";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
 import {
+  editMind,
   note,
   outline,
+  question,
   readMind,
   resolveChanges,
   shownWithAiText,
@@ -183,7 +190,8 @@ async function cloudSetUp(
     modelId: "claude-haiku-5-5",
   },
 ) {
-  const core = startCore(await createTempDataFolder(), {
+  const dataDir = await createTempDataFolder();
+  const core = startCore(dataDir, {
     createChatModel: scriptedModels(model).createChatModel,
   });
   core.on("consent.requested", (asked) => void core.respondToConsent(asked.requestId, true));
@@ -198,7 +206,7 @@ async function cloudSetUp(
   const documents = await addAndProcess(core, paths);
   const mind = await core.createMind({ title: "Shortlist" });
   const client = await connectToMind(core, mind.id);
-  return { core, documents, mind, client };
+  return { core, documents, mind, client, dataDir };
 }
 
 const QUESTIONS = ["Termination notice", "Liability cap"];
@@ -345,6 +353,7 @@ describe("Compare Documents", () => {
     expect(answers).toBe(1);
     expect(await core.listFillingComparisons()).toEqual([]);
     expect(outline(client)).not.toContain("comparisonTable");
+    expect((await core.listTasks())[0]?.status).toBe("stopped");
   });
 
   test("on a model off this computer, at most 4 cells are written at once; on one on it, one at a time", async () => {
@@ -683,7 +692,7 @@ describe("Compare Documents", () => {
     expect(chinese).toContain("| Lumeric（来源已删除） | 30 days[^5] | 未找到 |");
   });
 
-  test("quitting halfway: nothing is lost or doubled, the cells left wait, and filling again writes them", async () => {
+  test("quitting halfway: the table goes on filling by itself at the next start, nothing lost or doubled", async () => {
     const held = new Promise<void>(() => {});
     let first = true;
     const model = cellModel((call, asked) => {
@@ -703,24 +712,21 @@ describe("Compare Documents", () => {
     });
     if (!result.started) throw new Error("The table wasn't made.");
     await vi.waitFor(() => expect(model.doStreamCalls.length).toBe(1));
+    const [task] = await core.listTasks();
+    expect(task).toMatchObject({ kind: "comparison", mindId: mind.id, blockId: result.tableId });
     core.close();
 
     const reopened = startCore(dataDir, {
       createChatModel: scriptedModels(cellModel()).createChatModel,
     });
     const again = await connectToMind(reopened, mind.id);
-    expect(await reopened.listFillingComparisons()).toEqual([]);
-    expect(tableIn(again).rows.flatMap((row) => row.cells.map((cell) => cell.status))).toEqual([
-      "writing",
-      "waiting",
-      "waiting",
-      "waiting",
-      "waiting",
-      "waiting",
-    ]);
-    const filled = await reopened.fillComparisonTable({ mindId: mind.id, tableId: result.tableId });
-    expect(filled.started).toBe(true);
-    await fillEnded(reopened, result.tableId);
+    await vi.waitFor(
+      async () =>
+        expect((await reopened.listTasks()).find((each) => each.id === task?.id)?.status).toBe(
+          "done",
+        ),
+      { timeout: 10_000 },
+    );
     await again.settled();
     expect(tableIn(again).rows.map((row) => row.cells.map((cell) => cell.text))).toEqual([
       ["90 days", "12 months of fees"],
@@ -730,6 +736,126 @@ describe("Compare Documents", () => {
     // Each cell has its one Citation, none written twice.
     expect(
       tableIn(again).rows.flatMap((row) => row.cells.map((cell) => cell.citations.length)),
+    ).toEqual([1, 1, 1, 1, 1, 0]);
+  });
+
+  test("the monthly cap pauses the table's Task; filling again once the cap allows resumes that Task", async () => {
+    const model = cellModel();
+    const { core, client, mind, documents } = await cloudSetUp(model);
+    await core.updateSettings({ user: { monthlyCap: { amount: 0.000001, currency: "USD" } } });
+    const tableId = await compare(core, client, {
+      mindId: mind.id,
+      documentIds: documents.map((document) => document.id),
+      questions: QUESTIONS,
+    });
+    const [paused] = await core.listTasks();
+    expect(paused).toMatchObject({ status: "paused", pausedReason: "cost-cap", ask: null });
+    expect(paused?.finishedAt).toBeNull();
+
+    await core.updateSettings({ user: { monthlyCap: null } });
+    const ended = fillEnded(core, tableId);
+    expect((await core.fillComparisonTable({ mindId: mind.id, tableId })).started).toBe(true);
+    await ended;
+    await client.settled();
+    const tasks = await core.listTasks();
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]).toMatchObject({ id: paused?.id, status: "done" });
+    expect(tableIn(client).rows.map((row) => row.cells.map((cell) => cell.status))).toEqual([
+      ["done", "done"],
+      ["done", "done"],
+      ["done", "failed"],
+    ]);
+  });
+
+  test("a table's Task keeps its Documents' versions while unfinished (#79), and keys its requests to it", async () => {
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let paused = false;
+    const model = cellModel((call) => {
+      if (paused || call.results.length > 0) return null;
+      paused = true;
+      return { text: "", calls: [], pause: { after: 0, until: held } };
+    });
+    const { core, client, mind, documents, dataDir } = await cloudSetUp(model);
+    const before = model.doStreamCalls.length;
+    const result = await core.compareDocuments({
+      mindId: mind.id,
+      documentIds: documents.map((document) => document.id),
+      questions: QUESTIONS,
+    });
+    if (!result.started) throw new Error("The table wasn't made.");
+    const [task] = await core.listTasks();
+    if (!task) throw new Error("No Task.");
+    await vi.waitFor(
+      () =>
+        expect(core.retention.retainedBy("task", task.id).map((each) => each.documentId)).toEqual(
+          documents.map((document) => document.id),
+        ),
+      { timeout: 10_000 },
+    );
+    expect(core.retention.retainedBy("task", task.id).map((each) => each.contentHash)).toEqual(
+      documents.map((document) => document.contentHash),
+    );
+    const ended = fillEnded(core, result.tableId);
+    release();
+    await ended;
+    await client.settled();
+    expect(core.retention.retainedBy("task", task.id)).toEqual([]);
+    const done = (await core.listTasks())[0];
+    expect(done?.status).toBe("done");
+    expect(done?.cost?.amount).toBeGreaterThan(0);
+    // Every request its cells made is keyed to it, so its cost is told apart.
+    const keyed = queryDatabase<{ id: string }>(
+      dataDir,
+      "SELECT id FROM model_requests WHERE run_id = ? AND deleted_at IS NULL",
+      [task.id],
+    );
+    expect(keyed).toHaveLength(model.doStreamCalls.length - before);
+  });
+
+  test("Answers come first: a cell on this computer's model gives way to an Answer and is written after it", async () => {
+    let firstCell = true;
+    const events: string[] = [];
+    const model = cellModel((call, asked) => {
+      if (!asked.document) {
+        events.push("answer");
+        return { text: "High water is at noon." };
+      }
+      if (call.results.length === 0) events.push("cell");
+      if (firstCell && call.results.length === 0) {
+        firstCell = false;
+        return {
+          calls: [{ tool: "search_documents", input: { query: asked.question } }],
+          pause: { after: 0, until: new Promise<void>(() => {}) },
+        };
+      }
+      return null;
+    });
+    const { core, client, mind, documents } = await setUpWithDocuments(model, SUPPLIERS);
+    const result = await core.compareDocuments({
+      mindId: mind.id,
+      documentIds: documents.map((document) => document.id),
+      questions: QUESTIONS,
+    });
+    if (!result.started) throw new Error("The table wasn't made.");
+    await vi.waitFor(() => expect(events).toEqual(["cell"]), { timeout: 10_000 });
+    const ended = fillEnded(core, result.tableId);
+    // Asked below the table, which stays.
+    const asked = question("When is high water?");
+    editMind(client, (blocks) => [...blocks, asked]);
+    await client.settled();
+    const answer = await core.askQuestion({ mindId: mind.id, questionId: asked.attrs.id });
+    if (!answer.asked) throw new Error("The Question wasn't asked.");
+    expect((await answerEnded(core, answer.answerId)).event).toBe("finished");
+    await ended;
+    await client.settled();
+    // The cell in flight gave way; none started while the Answer was written; it was written after.
+    expect(events.slice(0, 2)).toEqual(["cell", "answer"]);
+    expect(events.filter((each) => each === "cell")).toHaveLength(7);
+    expect(
+      tableIn(client).rows.flatMap((row) => row.cells.map((cell) => cell.citations.length)),
     ).toEqual([1, 1, 1, 1, 1, 0]);
   });
 
