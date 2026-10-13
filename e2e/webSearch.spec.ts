@@ -30,6 +30,7 @@ const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
 const fixture = (name: string) => readFileSync(join(__dirname, `../tests/fixtures/web/${name}`));
 const TITLE = "Tea - The Open Encyclopedia";
 const MODEL = "claude-haiku-5-5";
+const MODEL_NAME = "Claude Haiku 5.5";
 
 let dataDir: string;
 let home: string;
@@ -95,7 +96,7 @@ test("asked to search the web, an Answer saves the page it reads as a Document a
   await pointAndClick(window, toggle);
   await expect(toggle).toBeChecked();
   await expect(section.getByTestId("web-search-status")).toHaveText(
-    `${MODEL} searches through Anthropic.`,
+    `${MODEL_NAME} searches through Anthropic.`,
   );
   await expect(section.getByTestId("web-search-route")).toHaveText("The model's own search");
   await section.scrollIntoViewIfNeeded();

@@ -198,7 +198,7 @@ describe("A provider's model list", () => {
 
     const [group] = await core.listChatModels();
 
-    expect(group?.models).toEqual(["gpt-6-sol", "gpt-6.1-sol", "gpt-6-astra", "gpt-6-luna"]);
+    expect(group?.models).toEqual(["gpt-6-sol", "gpt-6-luna", "gpt-6-astra", "gpt-6.1-sol"]);
     const why = (id: string) => group?.other.find((each) => each.id === id);
     for (const id of ["babbage-002", "davinci-002", "gpt-3.5-turbo-instruct"]) {
       expect(why(id)).toEqual({ id, why: "cannot-answer", reason: "completion" });
@@ -228,9 +228,9 @@ describe("A provider's model list", () => {
     const [after] = await core.listChatModels();
     expect(after?.models).toEqual([
       "gpt-6-sol",
-      "gpt-6.1-sol",
-      "gpt-6-astra",
       "gpt-6-luna",
+      "gpt-6-astra",
+      "gpt-6.1-sol",
       "gpt-4-turbo",
     ]);
     expect(after?.added).toEqual(["gpt-4-turbo"]);
@@ -340,6 +340,18 @@ describe("A provider's model list", () => {
     const next = await core.prepareChatModel({ providerId: provider.id, modelId: "claude-next" });
     expect(readsImages(next.capabilities)).toBe(true);
     expect(next.window).toEqual({ tokens: 2_000_000, outputTokens: 128_000 });
+  });
+});
+
+describe("The default Answers model", () => {
+  test("a model the User picked stays their choice, first in the menu, when the catalog's default changes", async () => {
+    const { core } = await startWithCloudModel({ kind: "anthropic", modelId: "claude-sonnet-5-5" });
+    answerFetch("https://api.anthropic.com/v1/models?limit=100", {
+      data: ["claude-fable-5-1", "claude-haiku-5-5", "claude-sonnet-5-5"].map((id) => ({ id })),
+    });
+    expect((await core.prepareChatModel()).modelId).toBe("claude-sonnet-5-5");
+    const [group] = await core.listChatModels();
+    expect(group?.models).toEqual(["claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-1"]);
   });
 });
 
