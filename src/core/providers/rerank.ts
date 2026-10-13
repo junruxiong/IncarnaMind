@@ -106,7 +106,7 @@ function parseApiKey(value: unknown): string | undefined {
 function parseModel(value: unknown): string | null {
   if (value === null || (typeof value === "string" && value.trim() === "")) return null;
   if (typeof value !== "string" || value.length > 200) {
-    throw new InvalidInputError("Enter a reranking model name.");
+    throw new InvalidInputError({ key: "error.provider.rerankModelMissing" });
   }
   return value.trim();
 }
@@ -149,9 +149,7 @@ export function createRerank(options: {
 
   const refuseInLocalMode = () => {
     if (options.localOnly()) {
-      throw new InvalidInputError(
-        "Local mode is on: search results aren't sent to a reranking service. Turn it off in Settings first.",
-      );
+      throw new InvalidInputError({ key: "error.provider.rerankLocalMode" });
     }
   };
 
@@ -314,7 +312,10 @@ export function createRerank(options: {
         input.modelId === undefined ? (sameKind ? saved.modelId : null) : parseModel(input.modelId);
       refuseInLocalMode();
       if (apiKey === undefined && (!sameKind || (await secrets.tryGet(KEY_NAME)) === null)) {
-        throw new InvalidInputError(`Enter your ${RERANK_SERVICES[kind].name} API key.`);
+        throw new InvalidInputError({
+          key: "error.provider.keyMissing",
+          values: { provider: RERANK_SERVICES[kind].name },
+        });
       }
       // Nothing changes unless the User accepts sending search results there.
       await consent.ensure("rerank", RERANK_SERVICES[kind]);
@@ -353,7 +354,11 @@ export function createRerank(options: {
           : parseModel(input.modelId);
       const apiKey =
         parseApiKey(input?.apiKey) ?? (sameKind ? await secrets.tryGet(KEY_NAME) : null);
-      if (!apiKey) throw new InvalidInputError(`Enter your ${RERANK_SERVICES[kind].name} API key.`);
+      if (!apiKey)
+        throw new InvalidInputError({
+          key: "error.provider.keyMissing",
+          values: { provider: RERANK_SERVICES[kind].name },
+        });
       refuseInLocalMode();
       try {
         await consent.ensure("rerank", RERANK_SERVICES[kind]);
