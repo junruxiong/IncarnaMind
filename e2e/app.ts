@@ -288,6 +288,20 @@ export async function openFolderInLibrary(window: Page, name: string): Promise<v
 }
 
 /**
+ * Opens a Folder's form (its name, description and evidence choice) under its
+ * section in the Library, from its menu in the sidebar: "Edit Description…".
+ */
+export async function editFolderInLibrary(window: Page, name: string): Promise<Locator> {
+  const folder = sidebarFolder(window, name);
+  await folder.getByTestId("folder-row").hover();
+  await folder.getByTestId("folder-menu").click();
+  await folder.getByTestId("folder.editDescription").click();
+  const form = window.getByTestId("library").getByTestId("folder-form");
+  await expect(form).toBeVisible();
+  return form;
+}
+
+/**
  * Shows the sidebar's Source locations view: each Linked folder with its
  * folders as on disk, and "Other Documents".
  */
@@ -688,13 +702,11 @@ export async function setWindowSize(
 }
 
 /**
- * Asks for the content size and waits until the page has it, asking again
- * while it hasn't. On Linux (Xvfb) a size asked for while the window is still
- * taking the one before it (a launch sets one, then a test its own) is
- * sometimes dropped, and the page stays as it was (#459). Asking again for the
- * same size didn't help on CI, probably because Electron skips a size it
- * already holds as the window's, so every other ask goes one pixel off the
- * target first, which makes a real change and so a new resize. The launch also
+ * Asks for the content size once, waits until the page has it, then until the
+ * page has drawn a frame at it. Chromium sends a page its next size only after
+ * the page has drawn at the one before. On a runner's first launch the first
+ * frames can take seconds, so a size asked right after the launch's waited
+ * that long, while the page still reported the old one (#432). The launch also
  * waits for the height; `setWindowSize` only the width.
  */
 async function resizeContent(
@@ -704,47 +716,35 @@ async function resizeContent(
   height: number,
   { message, waitForHeight = false }: { message?: string; waitForHeight?: boolean } = {},
 ): Promise<void> {
-  const ask = (size: { width: number; height: number }) =>
-    app.evaluate(
-      ({ BrowserWindow }, asked) =>
-        BrowserWindow.getAllWindows()[0]?.setContentSize(asked.width, asked.height),
-      size,
-    );
-  const look = async () => {
-    const [innerWidth, innerHeight] = await window.evaluate(() => [
-      globalThis.innerWidth,
-      globalThis.innerHeight,
-    ]);
-    return { innerWidth, innerHeight };
-  };
-  let asks = 0;
-  await ask({ width, height });
+  const browserWindow = await app.browserWindow(window);
+  await browserWindow.evaluate((win, asked) => win.setContentSize(asked.width, asked.height), {
+    width,
+    height,
+  });
+  const look = () =>
+    window.evaluate(() => ({ width: globalThis.innerWidth, height: globalThis.innerHeight }));
   try {
     await expect
       .poll(
         async () => {
-          const { innerWidth, innerHeight } = await look();
-          const arrived = innerWidth === width && (!waitForHeight || innerHeight === height);
-          if (!arrived) {
-            asks += 1;
-            if (asks % 2 === 1) await ask({ width: width + 1, height: height + 1 });
-            await ask({ width, height });
-          }
-          return [innerWidth, waitForHeight ? innerHeight : height];
+          const page = await look();
+          return [page.width, waitForHeight ? page.height : height];
         },
         { message },
       )
       .toEqual([width, height]);
   } catch (error) {
-    const contentSize = await app.evaluate(({ BrowserWindow }) =>
-      BrowserWindow.getAllWindows()[0]?.getContentSize(),
-    );
+    const content = await browserWindow.evaluate((win) => win.getContentSize());
     const page = await look();
     throw new Error(
-      `${message ?? "The window did not reach its size"}: asked ${width} × ${height} ${asks} times; the window's content is ${contentSize?.join(" × ")}, the page ${page.innerWidth} × ${page.innerHeight}.`,
+      `${message ?? "The window did not reach its size"}: asked ${width} × ${height}; the window's content is ${content.join(" × ")}, the page ${page.width} × ${page.height}.`,
       { cause: error },
     );
   }
+  await window.evaluate(
+    () =>
+      new Promise((drawn) => requestAnimationFrame(() => requestAnimationFrame(() => drawn(null)))),
+  );
 }
 
 /** Switches the interface's language, as Settings does. */

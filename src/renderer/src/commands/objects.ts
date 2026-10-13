@@ -168,6 +168,15 @@ export const documentCommands: readonly Command[] = [
     },
   },
   {
+    id: "document.moveTo",
+    label: "documents.moveTo",
+    rowKeys: "CmdOrCtrl+Shift+M",
+    group: "move",
+    appliesTo: ["document"],
+    reversible: true,
+    ...needsHere("document.moveTo"),
+  },
+  {
     id: "document.retry",
     label: (ctx, t) =>
       many(ctx)

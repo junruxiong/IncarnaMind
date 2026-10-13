@@ -6,7 +6,9 @@
  *   (instructions, Tools, earlier turns, then the new Question), with no
  *   per-request value in the stable part;
  * - Anthropic caches only where a request marks it, so `withCacheBreakpoints`
- *   marks the stable parts of each request to it;
+ *   marks the stable parts of each request to it, the start of a message a
+ *   request says the next one repeats too (`stablePrefixOptions`: the Mind
+ *   read with a Question, #564);
  * - OpenAI routes a request to a cache by its `prompt_cache_key`, so a
  *   conversation sends one (`cacheProviderOptions`).
  * DeepSeek and Gemini cache a repeated start on their own and need nothing.
@@ -26,6 +28,43 @@ type Params = Parameters<NonNullable<LanguageModelMiddleware["transformParams"]>
 type Prompt = Params["prompt"];
 
 const EPHEMERAL = { anthropic: { cacheControl: { type: "ephemeral" } } };
+/** Anthropic's most cache breakpoints in one request. */
+const MAX_BREAKPOINTS = 4;
+/** Where a message says how much of its start the next request repeats; no provider reads it. */
+const STABLE = "incarnamind";
+
+/** The provider options of a message whose first `length` characters the next request repeats as they are. */
+export const stablePrefixOptions = (length: number) => ({ [STABLE]: { stablePrefix: length } });
+
+/** The length a message's provider options give its stable start (`stablePrefixOptions`), if any. */
+export function stablePrefixOf(options: unknown): number | undefined {
+  if (typeof options !== "object" || options === null) return undefined;
+  const ours = (options as Record<string, unknown>)[STABLE];
+  if (typeof ours !== "object" || ours === null) return undefined;
+  const length = (ours as Record<string, unknown>).stablePrefix;
+  return typeof length === "number" && Number.isInteger(length) && length > 0 ? length : undefined;
+}
+
+/**
+ * A user message with its stable start (`stablePrefixOptions`) as a text part
+ * of its own, marked as a cached prefix; null for one without.
+ */
+function withStablePrefix(message: Prompt[number]): Prompt[number] | null {
+  const length = stablePrefixOf(message.providerOptions);
+  if (message.role !== "user" || length === undefined) return null;
+  const [first, ...rest] = message.content;
+  if (first?.type !== "text" || first.text.length < length) return null;
+  const prefix = {
+    ...first,
+    text: first.text.slice(0, length),
+    providerOptions: { ...first.providerOptions, ...EPHEMERAL },
+  };
+  const after = first.text.slice(length);
+  return {
+    ...message,
+    content: [prefix, ...(after ? [{ ...first, text: after }] : []), ...rest],
+  };
+}
 
 /**
  * The index of each message of `prompt` to mark as the end of a cached prefix:
@@ -52,8 +91,9 @@ export function breakpointsOf(prompt: Prompt): number[] {
 
 /**
  * A model whose requests carry cache breakpoints on their stable parts (see
- * `breakpointsOf`), and on the last Tool: the Tools alone stay cached when
- * the instructions change.
+ * `breakpointsOf`), at the end of a message's stable start (see
+ * `stablePrefixOptions`), and on the last Tool, while Anthropic's limit allows:
+ * the Tools alone stay cached when the instructions change.
  */
 export function withCacheBreakpoints(model: ChatLanguageModel): ChatLanguageModel {
   return wrapLanguageModel({
@@ -62,13 +102,18 @@ export function withCacheBreakpoints(model: ChatLanguageModel): ChatLanguageMode
       specificationVersion: "v4",
       transformParams: async ({ params }) => {
         const marks = new Set(breakpointsOf(params.prompt));
-        const prompt = params.prompt.map((message, at) =>
-          marks.has(at)
-            ? { ...message, providerOptions: { ...message.providerOptions, ...EPHEMERAL } }
-            : message,
-        ) as Prompt;
+        let prefixes = 0;
+        const prompt = params.prompt.map((message, at) => {
+          const split = prefixes === 0 ? withStablePrefix(message) : null;
+          if (split) prefixes++;
+          const each = split ?? message;
+          return marks.has(at)
+            ? { ...each, providerOptions: { ...each.providerOptions, ...EPHEMERAL } }
+            : each;
+        }) as Prompt;
+        const markTool = marks.size + prefixes < MAX_BREAKPOINTS;
         const tools = params.tools?.map((each, at, all) =>
-          at === all.length - 1 && each.type === "function"
+          markTool && at === all.length - 1 && each.type === "function"
             ? { ...each, providerOptions: { ...each.providerOptions, ...EPHEMERAL } }
             : each,
         );
