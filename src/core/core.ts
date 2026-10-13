@@ -1203,6 +1203,7 @@ export function createCore(adapters: CoreAdapters): Core {
       citationSource: (passageId) => documents.citationSource(passageId),
       pageTexts: (documentId, contentHash, from, to) =>
         documents.pageTexts(documentId, contentHash, from, to),
+      documentDate: (documentId) => documents.documentDate(documentId),
     },
     engine: answerEngine,
     retention,
