@@ -14,6 +14,7 @@ import { useWordImport } from "../wordImport";
 import { assistantCommands } from "./assistant";
 import { bibliographyCommands } from "./bibliography";
 import { chartCommands } from "./charts";
+import { checkCommands } from "./checks";
 import { comparisonCommands } from "./comparisons";
 import { deletedCommands } from "./deleted";
 import { editCommands } from "./edit";
@@ -315,6 +316,7 @@ const appCommands: readonly Command[] = [
   ...tableCommands,
   ...chartCommands,
   ...proposalCommands,
+  ...checkCommands,
 ];
 
 for (const command of appCommands) commands.register(command);

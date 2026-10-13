@@ -3,7 +3,9 @@ import { typesText } from "../undo";
 import { type Command, type CommandContext, fromMenu } from "./registry";
 
 const surfaceOf = (ctx: CommandContext): SelectSurface | null =>
-  ctx.surface === "sidebar" || ctx.surface === "library" ? ctx.surface : null;
+  ctx.surface === "sidebar" || ctx.surface === "library" || ctx.surface === "deleted"
+    ? ctx.surface
+    : null;
 
 /** Select All and Esc, the keys a list takes for its rows (docs/agents/interaction.md, rule 6). */
 export const selectionCommands: readonly Command[] = [
