@@ -180,13 +180,14 @@ export function createJevTagging(options: {
 
   /**
    * A quick check, with nothing to wait for: false when Jev certainly can't
-   * tag (it isn't set up, or the User declined the tagging flow to it).
+   * tag (it isn't set up, or the User hasn't allowed the tagging flow to it:
+   * tagging is background work, which never asks).
    */
   const mightBeReady = (): boolean => {
     const jev = stored();
     if (!jev) return false;
     const service = serviceOf(jev.endpoint);
-    return !service || consent.status("tagging", service) !== "declined";
+    return !service || consent.status("tagging", service) === "accepted";
   };
 
   return {
@@ -201,7 +202,10 @@ export function createJevTagging(options: {
       return jev ? serviceOf(jev.endpoint) : null;
     },
 
-    /** Sets Jev up, or changes it. The key is stored first: if the keychain refuses it, nothing changes. */
+    /**
+     * Sets Jev up, or changes it: choosing it allows the tagging flow to it
+     * (ADR-0022). The key is stored first: if the keychain refuses it, nothing changes.
+     */
     async save(input: unknown): Promise<JevSettings> {
       if (!isRecord(input)) throw new InvalidInputError("saveJevSettings expects an object.");
       for (const key of Object.keys(input)) {
@@ -228,6 +232,8 @@ export function createJevTagging(options: {
       }
       if (apiKey !== undefined) await secrets.set(KEY_NAME, apiKey);
       settings.writeDeviceValue(SETTINGS_KEY, next);
+      const service = serviceOf(next.endpoint);
+      if (service) consent.choose(["tagging"], service);
       return status();
     },
 
@@ -240,14 +246,15 @@ export function createJevTagging(options: {
 
     mightBeReady,
 
-    /** Whether Jev can take a tagging request now: set up, its key readable, its flow not declined. */
+    /** Whether Jev can take a tagging request now: set up, its key readable, its flow allowed. */
     async canRun(): Promise<boolean> {
       return mightBeReady() && (await secrets.tryGet(KEY_NAME)) !== null;
     },
 
     /**
      * Jev as the tagger, once the User has accepted the tagging flow to its
-     * service. Throws TaggingNotReadyError or ConsentDeclinedError; nothing is sent then.
+     * service. Throws TaggingNotReadyError, ConsentDeclinedError or
+     * ConsentNeededError; nothing is sent then.
      */
     async prepare(): Promise<TagClassifier> {
       const jev = stored();
@@ -296,8 +303,8 @@ export function createJevTagging(options: {
 
     /**
      * Asks Jev one question about a fixed text, with the given settings or
-     * the saved ones. The tagging flow to a cloud service must be accepted
-     * first: nothing is sent before.
+     * the saved ones. It sends the key and that text, nothing of the User's,
+     * so it needs no consent.
      */
     async test(input: unknown): Promise<ConnectionTestResult> {
       if (input !== undefined && !isRecord(input)) {
@@ -314,8 +321,6 @@ export function createJevTagging(options: {
           values: { provider: "Jev" },
         });
       try {
-        const service = serviceOf(endpoint);
-        if (service) await consent.ensure("tagging", service);
         await askJev({
           baseUrl: baseUrlOf(endpoint),
           apiKey,

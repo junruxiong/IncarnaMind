@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -10,6 +11,7 @@ import {
   InvalidInputError,
   type RerankSettings,
 } from "../../src/core";
+import { openDatabase } from "../../src/core/storage";
 import { setUpWithDocuments, unaskedModel } from "../helpers/citations";
 import { createMemoryKeychain, createTempDataFolder, nextEvent, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
@@ -19,6 +21,7 @@ import { mockRerankingModels } from "../helpers/embeddingProviders";
 const COHERE = { id: "https://api.cohere.com", name: "Cohere" };
 const VOYAGE = { id: "https://api.voyageai.com", name: "Voyage AI" };
 const COHERE_KEY = "cohere-test-key";
+const DECIDED_AT = "2026-09-01T09:00:00.000Z";
 
 /** A Markdown Document of `count` long sections, the word "lighthouse" only in `marked`. */
 function sections(count: number, marked: number, topic: string): string {
@@ -269,16 +272,39 @@ describe("Rerank", { timeout: 30_000 }, () => {
 });
 
 describe("Consent for rerank", { timeout: 30_000 }, () => {
-  test("nothing is sent before the User accepts; declining keeps the built-in model", async () => {
-    const { core, rerankers, keychain, ask } = await setUp();
-    const requested = nextEvent(core, "consent.requested");
+  test("choosing a service, where its form says what goes, allows it: nothing asks", async () => {
+    const { core } = await setUp();
+    const requests: string[] = [];
+    core.on("consent.requested", (request) => requests.push(request.flow.id));
 
-    const saving = core.saveRerankSettings({ kind: "cohere", apiKey: COHERE_KEY });
-    const request = await requested;
-    expect(request.flow).toEqual({ id: "rerank", service: COHERE, sends: ["queries", "passages"] });
-    await core.respondToConsent(request.requestId, false);
+    await core.saveRerankSettings({ kind: "cohere", apiKey: COHERE_KEY });
 
-    await expect(saving).rejects.toThrow(ConsentDeclinedError);
+    expect(requests).toEqual([]);
+    expect(await core.listDataFlows()).toContainEqual({
+      flow: { id: "rerank", service: COHERE, sends: ["queries", "passages"] },
+      consent: "accepted",
+      decidedAt: expect.any(String),
+      chosen: true,
+    });
+  });
+
+  test("a decline made before stays: choosing the service again keeps the built-in model and sends nothing", async () => {
+    const { core, rerankers, keychain, ask, dataDir } = await setUp();
+    const db = openDatabase(join(dataDir, DATABASE_FILE));
+    try {
+      db.run(
+        `INSERT INTO data_flow_consents
+           (id, flow, service_id, service_name, decision, data_kinds, created_at, updated_at)
+         VALUES (?, 'rerank', ?, ?, 'declined', '[]', ?, ?)`,
+        [randomUUID(), COHERE.id, COHERE.name, DECIDED_AT, DECIDED_AT],
+      );
+    } finally {
+      db.close();
+    }
+
+    await expect(core.saveRerankSettings({ kind: "cohere", apiKey: COHERE_KEY })).rejects.toThrow(
+      ConsentDeclinedError,
+    );
     expect(await core.getRerankSettings()).toMatchObject({ kind: "built-in", byDefault: true });
     expect(keychain.secrets.has("rerank:api-key")).toBe(false);
     expect((await ask())[0]?.document).toBe("Coast");
@@ -304,15 +330,15 @@ describe("Consent for rerank", { timeout: 30_000 }, () => {
 });
 
 describe("Testing the rerank connection", { timeout: 30_000 }, () => {
-  test("asks first, sends nothing of the User's, and saves nothing", async () => {
+  test("sends nothing of the User's, so it asks nothing, and saves nothing", async () => {
     const { core, rerankers } = await setUp();
-    const requested = nextEvent(core, "consent.requested");
-    const testing = core.testRerankConnection({ kind: "cohere", apiKey: COHERE_KEY });
-    const request = await requested;
-    expect(rerankers.calls).toEqual([]);
-    await core.respondToConsent(request.requestId, true);
+    const requests: string[] = [];
+    core.on("consent.requested", (request) => requests.push(request.flow.id));
 
-    expect(await testing).toEqual({ ok: true });
+    expect(await core.testRerankConnection({ kind: "cohere", apiKey: COHERE_KEY })).toEqual({
+      ok: true,
+    });
+    expect(requests).toEqual([]);
     expect(rerankers.calls).toHaveLength(1);
     expect(rerankers.calls[0]?.query).toContain("capital of France");
     expect(await core.getRerankSettings()).toMatchObject({ kind: "built-in", byDefault: true });
