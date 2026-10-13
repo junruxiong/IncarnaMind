@@ -26,6 +26,7 @@ import {
 import { core } from "./core";
 import { citationClusters, citedWorkOf } from "./editor/citationClusters";
 import { errorMessage } from "./errors";
+import { translateNow } from "./i18n";
 import { useAppStore } from "./store";
 
 /** A Mind's formatting, as last answered. */
@@ -172,7 +173,7 @@ export function useCitationFormattingFor(
         (error: unknown) => {
           if (id !== progress.latest) return;
           progress.asked = "";
-          update(mindId, { style, pending: false, problem: errorMessage(error) });
+          update(mindId, { style, pending: false, problem: errorMessage(error, translateNow) });
         },
       );
     };

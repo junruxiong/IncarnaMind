@@ -136,9 +136,7 @@ export function createMindContent(
   /** Refuses a write to a Mind a newer version wrote: the editor's schema would delete what it doesn't know. */
   const requireWritable = (mind: LoadedMind) => {
     if (contentVersionOf(mind.doc) > CONTENT_SCHEMA_VERSION) {
-      throw new MindReadOnlyError(
-        "A newer version of IncarnaMind wrote this Mind. Update IncarnaMind to edit it.",
-      );
+      throw new MindReadOnlyError({ key: "error.mind.newerVersionEdit" });
     }
   };
 
