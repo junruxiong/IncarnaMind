@@ -379,10 +379,11 @@ export function Composer({
     field.current?.focus();
   };
 
-  const ask = async () => {
+  /** Asks what is in the composer, or `said`: what ⌘K's "Ask about…" asks, leaving the draft as it is. */
+  const ask = async (said?: string) => {
     // As it is now, not as it was drawn: "Ask without it" has just taken the Skill off.
     const current = useComposer.getState().draft(key);
-    if (mind && useEdits.getState().editing[mind.mindId]) {
+    if (said === undefined && mind && useEdits.getState().editing[mind.mindId]) {
       // What to change in the selected text: it comes back as changes in the note.
       if (
         current.text.trim() !== "" &&
@@ -394,15 +395,20 @@ export function Composer({
     }
     // An Answer is being written, or its Question is on its way: Enter waits for it, as in
     // ChatGPT and Claude, so a second press never asks the Question twice. The button is Stop.
-    if (answerBeingWritten() !== null) return;
-    const typed = current.text.trim();
+    if (answerBeingWritten() !== null) {
+      if (said !== undefined && current.text === "") update({ text: said });
+      return;
+    }
+    const draft =
+      said === undefined ? current : { ...current, text: said, pastes: [], skill: null };
+    const typed = draft.text.trim();
     // What is pasted, in chips, goes with the words typed.
-    const text = [typed, ...current.pastes.map((paste) => paste.text.trim())]
+    const text = [typed, ...draft.pastes.map((paste) => paste.text.trim())]
       .filter((part) => part !== "")
       .join("\n\n");
     if (!text) return;
     useAnswers.getState().dismiss(composerKey(mindId));
-    update({ text: "", skill: null, pastes: [] });
+    if (said === undefined) update({ text: "", skill: null, pastes: [] });
     setExpanded(false);
     setViewing(null);
     setPicking(null);
@@ -413,15 +419,24 @@ export function Composer({
       focus: !mind || mind.editor.isDestroyed ? null : mindFocusOf(mind.editor.state),
       scope: composerScope(current, folderId),
       model: mind ? mindModelOf(mind.doc) : useComposer.getState().modelWithoutMind,
-      forcedSkill: current.skill,
+      forcedSkill: draft.skill,
     });
     if (asked) return;
     // Not asked: its words come back here, unless the User has typed anew meanwhile.
     const now = useComposer.getState().draft(key);
     if (now.text === "" && now.pastes.length === 0) {
-      update({ text: typed, pastes: current.pastes, skill: now.skill ?? current.skill });
+      update({ text: typed, pastes: draft.pastes, skill: now.skill ?? draft.skill });
     }
   };
+
+  const askWanted = useComposer((state) => state.askWanted);
+  const latestAsk = useRef(ask);
+  latestAsk.current = ask;
+  useEffect(() => {
+    if (askWanted === null) return;
+    useComposer.getState().askTaken();
+    void latestAsk.current(askWanted);
+  }, [askWanted]);
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     // Typing in an input method: its keys are its own.
