@@ -15,7 +15,14 @@ import { InlineName } from "./InlineName";
 import { MindLineIcon } from "./lineIcons";
 import { MoveToPicker } from "./MoveToPicker";
 import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
-import { rowActionsClass, rowButtonClass, rowClass, rowIconClass, rowPadding } from "./sidebarRows";
+import {
+  clearsActions,
+  rowActionsClass,
+  rowButtonClass,
+  rowClass,
+  rowIconClass,
+  rowPadding,
+} from "./sidebarRows";
 
 /**
  * A Mind in the sidebar's tree, in its Folder (`depth` 1) or Not in a Folder
@@ -110,7 +117,7 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
           rename.nameProps.onKeyDown(event);
           onKeyDown(event);
         }}
-        className={rowButtonClass}
+        className={`${rowButtonClass} ${clearsActions.menu}`}
         style={rowPadding(depth)}
       >
         <MindLineIcon className={rowIconClass(lit)} />

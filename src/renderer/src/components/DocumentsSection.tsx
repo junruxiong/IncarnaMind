@@ -38,6 +38,7 @@ import { DocumentLineIcon, MoreLineIcon } from "./lineIcons";
 import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
 import { SidebarTags } from "./SidebarTags";
 import {
+  clearsActions,
   rowActionButtonClass,
   rowActionsClass,
   rowButtonClass,
@@ -191,7 +192,7 @@ export function DocumentsSection() {
           onClick={(event) =>
             useAppStore.getState().openLibrary(undefined, { side: event.metaKey || event.ctrlKey })
           }
-          className={rowButtonClass}
+          className={`${rowButtonClass} ${clearsActions.menu}`}
         >
           <DocumentLineIcon kind="text" className="size-4 shrink-0" />
           <span className="truncate">{t("library.all")}</span>
@@ -362,7 +363,7 @@ const DocumentRow = memo(function DocumentRow({
           onClick={select.onClick}
           draggable
           onDragStart={(event) => startDocumentDrag(event, draggedWith(item.id))}
-          className={rowButtonClass}
+          className={`${rowButtonClass} ${clearsActions.tagsAndMenu}`}
           style={rowPadding(depth)}
         >
           <DocumentLineIcon kind={item.kind} className={rowIconClass(lit)} />

@@ -71,7 +71,8 @@ export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettin
       <CopiedLine />
       <footer
         data-testid="sidebar-footer"
-        className="flex shrink-0 flex-col border-t border-rule p-2"
+        // Its rule is inset 8px each side, like the header's.
+        className="relative flex shrink-0 flex-col p-2 before:absolute before:inset-x-2 before:top-0 before:h-px before:bg-rule before:content-['']"
       >
         <SidebarSelection />
         <SidebarStatus />

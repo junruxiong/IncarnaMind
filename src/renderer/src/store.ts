@@ -59,6 +59,7 @@ import {
   undoMoves,
 } from "./moves";
 import { untitledFolderName } from "./newFolder";
+import { useNotices } from "./notices";
 import { useRequests } from "./requests";
 import { resolveSettingsPage, type SettingsPage } from "./settingsPages";
 import { type Undoable, UndoRefused, useUndo } from "./undo";
@@ -110,8 +111,6 @@ interface AppState extends LayoutSlice {
   settings: Settings | null;
   /** Whether Questions can be asked. Set once loaded, then follows the core's event. */
   chatReadiness: ChatReadiness | null;
-  /** The last action that failed, shown until dismissed. */
-  actionError: string | null;
   /** Most recently added first. */
   documents: Document[];
   /**
@@ -268,7 +267,6 @@ interface AppState extends LayoutSlice {
   updateSettings(patch: SettingsPatch): Promise<void>;
   /** Changes pane widths on screen only, e.g. while dragging a divider. */
   previewLayout(layout: Partial<DeviceSettings>): void;
-  dismissActionError(): void;
   /**
    * Adds picked files as Documents. Files already in IncarnaMind, and those
    * it can't take, are named in the footer, once.
@@ -475,7 +473,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     try {
       await action();
     } catch (error) {
-      set({ actionError: errorMessage(error) });
+      useNotices.getState().showError(error);
     }
   };
   const push = (change: Undoable) => useUndo.getState().push(change);
@@ -642,14 +640,13 @@ export const useAppStore = create<AppState>()((set, get) => {
   };
 
   return {
-    ...createLayoutSlice(set, get, (error) => set({ actionError: errorMessage(error) })),
+    ...createLayoutSlice(set, get, (error) => useNotices.getState().showError(error)),
     status: { kind: "loading" },
     minds: [],
     titleToFocus: null,
     pickingDocuments: false,
     settings: null,
     chatReadiness: null,
-    actionError: null,
     documents: [],
     keptCitationTexts: [],
     skippedFiles: [],
@@ -1036,7 +1033,7 @@ export const useAppStore = create<AppState>()((set, get) => {
       }),
 
     reportError(error) {
-      set({ actionError: errorMessage(error) });
+      useNotices.getState().showError(error);
     },
 
     openDocument(location, how = { as: "list" }) {
@@ -1090,10 +1087,6 @@ export const useAppStore = create<AppState>()((set, get) => {
     previewLayout(layout) {
       const { settings } = get();
       if (settings) set({ settings: { ...settings, device: { ...settings.device, ...layout } } });
-    },
-
-    dismissActionError() {
-      set({ actionError: null });
     },
 
     addDocuments: (picked) =>
