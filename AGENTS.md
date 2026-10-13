@@ -65,7 +65,7 @@ Read [`docs/agents/testing.md`](docs/agents/testing.md). Work is done when the p
   - wait for states rather than times;
   - keep wall-clock limits out of unit tests.
 - Test through the core's public interface, as the UI uses it, and assert what a User would see. Tests need no API keys and no network.
-- Automated tests use the scripted chat model. Before calling an AI feature done, use it by hand with a real model: Claude Haiku 5.5 on an Anthropic API key, plus a small local Ollama model whenever the feature runs in Local mode. The pull request says which models you used. Every provider is tried before a release (`docs/agents/testing.md`).
+- Automated tests use the scripted chat model. Before calling an AI feature done, use it by hand with a real model: Claude Haiku 5.5 on an Anthropic API key (Sonnet 5.5 for a hard feature), plus a small local Ollama model whenever the feature runs in Local mode. The pull request says which models you used. Every provider is tried before a release (`docs/agents/testing.md`).
 
 ## UI
 
