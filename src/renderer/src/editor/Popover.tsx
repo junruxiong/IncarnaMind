@@ -27,7 +27,7 @@ interface PopoverProps extends HTMLAttributes<HTMLDivElement> {
    * Called on Esc, wherever the focus is, or on a press outside both the
    * popover and `anchor`.
    */
-  onDismiss(): void;
+  onDismiss(how: "escape" | "outside"): void;
   /** What gets the focus once the popover shows, e.g. a menu's first item, or a text editor. */
   initialFocus?: RefObject<{ focus(): void } | null>;
   children: ReactNode;
@@ -104,7 +104,7 @@ export function Popover({
       const target = event.target;
       if (!(target instanceof Node) || element.contains(target) || inLater(target)) return;
       if (anchor instanceof Element && anchor.contains(target)) return;
-      dismiss.current();
+      dismiss.current("outside");
     };
     // Esc while the focus is elsewhere, e.g. still in the editor or on the
     // button that opened it. Captured, and marked handled, before the
@@ -113,7 +113,7 @@ export function Popover({
       if (event.key !== "Escape" || event.defaultPrevented || inLater(event.target)) return;
       if (event.target instanceof Node && element.contains(event.target)) return;
       event.preventDefault();
-      dismiss.current();
+      dismiss.current("escape");
     };
     document.addEventListener("pointerdown", dismissOnPressOutside, true);
     document.addEventListener("keydown", dismissOnEscape, true);
@@ -138,7 +138,7 @@ export function Popover({
         if (event.key === "Escape" && !event.defaultPrevented) {
           // Handled here, so Esc doesn't also close the Document viewer.
           event.preventDefault();
-          dismiss.current();
+          dismiss.current("escape");
         }
       }}
       className={`editor-popover ${className}`}
