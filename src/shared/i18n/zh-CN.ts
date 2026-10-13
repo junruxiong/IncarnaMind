@@ -2762,20 +2762,19 @@ export const zhCN = {
   "gettingStarted.hide": "隐藏“开始使用”",
   "gettingStarted.done": "已完成：",
   "gettingStarted.step.citation": "在示例中核对一条引用",
-  "gettingStarted.step.documents": "添加文档或连接应用",
+  "gettingStarted.step.documents": "添加你的文档",
   "gettingStarted.step.question": "提出你自己的问题",
   "startGuide.title": "三步开始",
   "startGuide.documents.title": "添加文档，或连接应用",
   "startGuide.documents.body":
     "支持 PDF、Word、PowerPoint、Excel、Markdown 和文本文件。文件留在原处，IncarnaMind 只读取它们。同步到这台电脑的 Google Drive 或 OneDrive 文件夹也可以。",
   "startGuide.documents.linkFolder": "添加同步文件夹…",
-  "startGuide.documents.addFiles": "添加文件",
+  "startGuide.documents.addFiles": "添加文件…",
   "startGuide.documents.connectApp": "连接应用…",
   "startGuide.documents.apps":
-    "连接 Notion、Google Drive 或任何提供 MCP 服务器的应用后，回答也能在其中查找资料。只有你的文档会得到可核对的引用。",
+    "连接 Notion、Google Drive 等应用后，回答也能在其中查找资料。只有你的文档会得到可核对的引用。",
   "startGuide.ask.title": "提一个问题",
-  "startGuide.ask.body":
-    "在 Mind 中任意位置按 {shortcut}，然后输入问题。回答会根据你的文档写在下方。",
+  "startGuide.ask.body": "按 {shortcut} 提问，回答会出现在右侧，一键加入笔记。",
   "startGuide.ask.example": "例如：这些报告对第三季度营收是怎么说的？",
   "startGuide.check.title": "核对每个说法的出处",
   "startGuide.check.body":
