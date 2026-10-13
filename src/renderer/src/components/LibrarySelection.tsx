@@ -1,21 +1,34 @@
 import { useEffect, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { Document } from "../../../core/api";
+import type { CommandId } from "../../../shared/commands";
+import { menuKeysLabel } from "../commands/keymap";
 import { buildMenu, type MenuItem } from "../commands/menus";
 import { type CommandContext, commands, menuLabelOf } from "../commands/registry";
 import { useT } from "../i18n";
 import type { ObjectRef } from "../objects";
 import { useSelectedOn, useSelection } from "../selection";
 import { useAppStore } from "../store";
+import { useDocumentMove } from "./library/DocumentMoveTo";
 import { CloseLineIcon } from "./lineIcons";
 import { ObjectMenu } from "./ObjectMenu";
 import { SelectionTags } from "./SelectionTags";
-import { buttonStyle } from "./ui";
 
-const boxClass = "size-4 shrink-0 cursor-pointer accent-ink";
+const boxClass = "size-4 shrink-0 cursor-pointer accent-accent";
 
-/** How many commands the bar names beside Tags… when it is wide; "⋯" holds them all. */
-const NAMED_COMMANDS = 2;
+/** A command in the selection bar: a quiet text button, with its keys after it. */
+const barCommandClass =
+  "h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[13px] whitespace-nowrap text-ink-secondary hover:bg-rule hover:text-ink aria-disabled:text-ink-placeholder aria-disabled:hover:bg-transparent";
+
+/**
+ * The commands the bar names, in its order, each from the width it shows at;
+ * Tags… sits after the first. Narrower, they wait under ⋯, which holds them all.
+ */
+const NAMED: readonly { id: CommandId; from: string }[] = [
+  { id: "document.moveTo", from: "@[30rem]:inline-flex" },
+  { id: "document.ask", from: "@[44rem]:inline-flex" },
+  { id: "document.delete", from: "@[52rem]:inline-flex" },
+];
 
 const documentRef = (id: string): ObjectRef => ({ kind: "document", id });
 
@@ -41,7 +54,7 @@ export function LibrarySelectBox({ document }: { document: Pick<Document, "id" |
         if ((event.nativeEvent as MouseEvent).shiftKey) extendTo("library", ref);
         else toggle("library", ref);
       }}
-      className={`${boxClass} absolute top-3.5 -left-[21px] ${
+      className={`${boxClass} absolute top-3 -left-7 ${
         checked || selecting
           ? ""
           : "opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100"
@@ -51,10 +64,11 @@ export function LibrarySelectBox({ document }: { document: Pick<Document, "id" |
 }
 
 /**
- * Above the rows while two or more are selected: select all or none, how
- * many, the commands that apply to all of them (the same ones the right-click
- * menu offers: "⋯" holds every one), and Esc to clear. Wide, it names the
- * first few; narrow, they go under "⋯" and the bar never wraps.
+ * In the quiet bar's place while two or more are selected: select all or
+ * none, how many, then Move to…, Tags…, Ask about these and Delete, each
+ * saying how many it acts on, ⋯ for every command that applies to all of them
+ * (the right-click menu's), and Esc to clear. Narrow, the named ones go under
+ * ⋯ and the bar never wraps.
  */
 export function LibrarySelectionBar({ shownIds }: { shownIds: readonly string[] }) {
   const t = useT();
@@ -66,24 +80,68 @@ export function LibrarySelectionBar({ shownIds }: { shownIds: readonly string[] 
     }),
   );
   const all = useRef<HTMLInputElement>(null);
+  const bar = useRef<HTMLDivElement>(null);
   const every = items.length > 0 && items.length === shownIds.length;
   useEffect(() => {
     if (all.current) all.current.indeterminate = items.length > 0 && !every;
   });
   if (items.length < 2) return null;
   const last = items.at(-1) as ObjectRef;
-  const ctx: CommandContext = { selection: items, focus: last, surface: "library" };
-  const named = buildMenu("document", ctx)
-    .filter((entry): entry is MenuItem => entry !== "rule" && entry.command.id !== "document.tags")
-    .slice(0, NAMED_COMMANDS);
+  const ctx: CommandContext = {
+    selection: items,
+    focus: last,
+    surface: "library",
+    here: {
+      "document.moveTo": () => {
+        const anchor = bar.current?.querySelector<HTMLElement>('[data-command="document.moveTo"]');
+        if (anchor) {
+          useDocumentMove.getState().show({
+            anchor,
+            documentIds: items.flatMap((ref) => (ref.kind === "document" ? [ref.id] : [])),
+          });
+        }
+      },
+    },
+  };
+  const offered = buildMenu("document", ctx).filter((entry): entry is MenuItem => entry !== "rule");
+  const named = NAMED.flatMap(({ id, from }) => {
+    const item = offered.find((entry) => entry.command.id === id);
+    return item ? [{ item, from }] : [];
+  });
   const run = (item: MenuItem) => {
     if (item.enabled !== true) return;
     commands.run(item.command.id, ctx).catch(useAppStore.getState().reportError);
   };
+  const button = ({ item, from }: (typeof named)[number]) => {
+    const keys = menuKeysLabel(item.command);
+    return (
+      <button
+        key={item.command.id}
+        type="button"
+        data-testid="library-selection-action"
+        data-command={item.command.id}
+        aria-disabled={item.enabled === true ? undefined : true}
+        onClick={() => run(item)}
+        className={`${barCommandClass} hidden ${from}`}
+      >
+        {menuLabelOf(item.command, ctx, t)}
+        {keys && <span className="text-[12px] text-ink-meta">{keys}</span>}
+      </button>
+    );
+  };
+  const [move, ...rest] = named;
   return (
     <div
+      ref={bar}
+      role="toolbar"
+      aria-label={t("library.selected", { count: items.length })}
       data-testid="library-selection"
-      className="@container sticky top-0 z-10 mb-2 flex h-10 items-center gap-3 rounded-md bg-frame px-2 text-[13px]"
+      onKeyDown={(event) => {
+        if (event.key !== "Escape" || event.defaultPrevented) return;
+        event.preventDefault();
+        useSelection.getState().clear("library");
+      }}
+      className="@container sticky top-0 z-10 mt-2 flex h-9 min-w-0 items-center gap-1 rounded-md bg-frame pr-1 pl-2.5 text-[13px]"
     >
       <input
         ref={all}
@@ -96,25 +154,16 @@ export function LibrarySelectionBar({ shownIds }: { shownIds: readonly string[] 
         }
         className={boxClass}
       />
-      <span role="status" className="shrink-0 font-semibold text-ink">
+      <span role="status" className="mr-2 ml-1 shrink-0 font-semibold whitespace-nowrap text-ink">
         {t("library.selected", { count: items.length })}
       </span>
-      <SelectionTags documents={documents} testId="library-selection-tags" />
-      {named.map((item, index) => (
-        <button
-          key={item.command.id}
-          type="button"
-          data-testid="library-selection-action"
-          data-command={item.command.id}
-          aria-disabled={item.enabled === true ? undefined : true}
-          onClick={() => run(item)}
-          className={`${buttonStyle("secondary", "sm")} hidden ${
-            index === 0 ? "@[34rem]:inline-flex" : "@[46rem]:inline-flex"
-          }`}
-        >
-          {menuLabelOf(item.command, ctx, t)}
-        </button>
-      ))}
+      {move && button(move)}
+      <SelectionTags
+        documents={documents}
+        testId="library-selection-tags"
+        className={`${barCommandClass} inline-flex`}
+      />
+      {rest.map(button)}
       <ObjectMenu
         target={last}
         selection={items}

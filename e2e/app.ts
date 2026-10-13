@@ -288,6 +288,20 @@ export async function openFolderInLibrary(window: Page, name: string): Promise<v
 }
 
 /**
+ * Opens a Folder's form (its name, description and evidence choice) under its
+ * section in the Library, from its menu in the sidebar: "Edit Description…".
+ */
+export async function editFolderInLibrary(window: Page, name: string): Promise<Locator> {
+  const folder = sidebarFolder(window, name);
+  await folder.getByTestId("folder-row").hover();
+  await folder.getByTestId("folder-menu").click();
+  await folder.getByTestId("folder.editDescription").click();
+  const form = window.getByTestId("library").getByTestId("folder-form");
+  await expect(form).toBeVisible();
+  return form;
+}
+
+/**
  * Shows the sidebar's Source locations view: each Linked folder with its
  * folders as on disk, and "Other Documents".
  */

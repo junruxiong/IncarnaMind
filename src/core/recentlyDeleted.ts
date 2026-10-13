@@ -86,6 +86,12 @@ function purge(
       [at, at, list],
     );
     forgetMindBlocks(db, ids, at);
+    // Its checks' evidence (#96), retained under the Mind (src/core/answers/checks).
+    db.run(
+      `UPDATE retained_versions SET deleted_at = ?, updated_at = ?
+       WHERE kind = 'check-result' AND owner_id ${IN} AND deleted_at IS NULL`,
+      [at, at, list],
+    );
   }
   if (kind === "conversation") {
     // Its messages, their index and its titles: everything the User asked or was answered.

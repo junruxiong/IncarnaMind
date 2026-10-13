@@ -6,7 +6,7 @@ import { DocumentTagFooter } from "./DocumentTags";
 import {
   CheckLineIcon,
   CloseLineIcon,
-  PencilLineIcon,
+  PlusLineIcon,
   SparkLineIcon,
   TagLineIcon,
 } from "./lineIcons";
@@ -96,18 +96,10 @@ export function DocumentTagChips({
         className={
           header
             ? "viewer-icon-button"
-            : chips.length === 0
-              ? "h-6 shrink-0 rounded-sm px-1.5 text-[12px] text-ink-meta hover:bg-hover hover:text-ink"
-              : "inline-flex size-6 shrink-0 items-center justify-center rounded-sm text-ink-meta opacity-0 group-hover/row:opacity-100 hover:bg-hover hover:text-ink focus-visible:opacity-100 aria-expanded:opacity-100"
+            : "inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-ink-meta opacity-0 group-hover/row:opacity-60 group-has-[:focus-visible]/row:opacity-60 hover:bg-hover hover:text-ink hover:opacity-100! focus-visible:opacity-100 aria-expanded:opacity-100"
         }
       >
-        {header ? (
-          <TagLineIcon className="size-4" />
-        ) : chips.length === 0 ? (
-          t("library.addTags")
-        ) : (
-          <PencilLineIcon className="size-3.5" />
-        )}
+        {header ? <TagLineIcon className="size-4" /> : <PlusLineIcon className="size-3.5" />}
       </button>
       <div
         {...popover.popoverProps}

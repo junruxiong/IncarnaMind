@@ -107,7 +107,7 @@ test("a Document renames in its Library row and in the viewer's header, by doubl
   }
 });
 
-test("a Folder renames in the Library's heading, and a Tag in the sidebar: a name another has is a problem, a blank one changes nothing", async () => {
+test("a Folder renames in its section of the Library, and a Tag in the sidebar: a name another has is a problem, a blank one changes nothing", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
     await setWindowSize(app, window, 1100, 700);
@@ -119,18 +119,23 @@ test("a Folder renames in the Library's heading, and a Tag in the sidebar: a nam
     });
     await addDocuments(window, await writeTexts("Tides"));
 
-    // The Folder's page: its heading.
+    // The Folder's section in the Library: its name, by double-click and by F2.
     await sidebarFolder(window, "Finance").getByTestId("folder-row").click({ button: "right" });
     await window.getByTestId("folder.open").click();
-    const heading = window.getByTestId("library-heading");
-    await expect(heading).toHaveText("Finance");
-    await heading.getByRole("button").dblclick();
-    const field = window.getByTestId("library-heading-rename");
-    await cancels(window, field, heading, "Finance");
-    await heading.getByRole("button").dblclick();
+    const head = window.getByTestId("library").getByTestId("library-section-head").first();
+    const name = head.getByTestId("library-section-name");
+    await expect(name).toHaveText("Finance");
+    await name.dblclick();
+    const field = window.getByTestId("library-section-rename");
+    await cancels(window, field, name, "Finance");
+    // The double-click left the section as it was: open.
+    await expect(head).toHaveAttribute("data-open", "true");
+    await name.focus();
+    await window.keyboard.press("F2");
     await field.fill("Accounts");
     await window.keyboard.press("Enter");
-    await expect(heading).toHaveText("Accounts");
+    await expect(name).toHaveText("Accounts");
+    await expect(name).toBeFocused();
     await expect(sidebarFolder(window, "Accounts")).toHaveCount(1);
     await expect(window.getByRole("dialog")).toHaveCount(0);
 
