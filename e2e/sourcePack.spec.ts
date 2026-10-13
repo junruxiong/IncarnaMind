@@ -18,6 +18,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  motionSettled,
   newMind,
   openOptions,
   pointAndClick,
@@ -33,8 +34,11 @@ import { pdfPictures, pdfText } from "./pdfText";
 
 const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
 
-async function screenshot(target: Page | Locator, name: string): Promise<void> {
-  if (SCREENSHOTS) await target.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
+/** The window, once what moves in it has stopped. */
+async function screenshot(window: Page, name: string): Promise<void> {
+  if (!SCREENSHOTS) return;
+  await motionSettled(window);
+  await window.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
 }
 
 const FIXTURES = join(__dirname, "..", "tests", "fixtures", "formats");
