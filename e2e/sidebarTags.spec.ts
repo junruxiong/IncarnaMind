@@ -10,7 +10,9 @@ import {
   dismissChatSetup,
   launchApp,
   removeDataFolder,
+  setSidebarWidth,
   sidebarFolder,
+  tabTo,
 } from "./app";
 
 /*
@@ -67,25 +69,6 @@ async function slideAndClick(window: Page, target: Locator): Promise<void> {
   await window.mouse.up();
 }
 
-/** Presses Tab, or Shift+Tab if `target` comes before the focus, until `target` has the focus. */
-async function tabTo(window: Page, target: Locator, max = 40): Promise<void> {
-  const key = (await target.evaluate((element) => {
-    const focused = document.activeElement;
-    return (
-      focused !== null &&
-      focused !== document.body &&
-      (focused.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_PRECEDING) !== 0
-    );
-  }))
-    ? "Shift+Tab"
-    : "Tab";
-  for (let step = 0; step < max; step++) {
-    if (await target.evaluate((element) => element === document.activeElement)) return;
-    await window.keyboard.press(key);
-  }
-  await expect(target).toBeFocused();
-}
-
 /** Whether the focused control shows DESIGN.md's ring: a solid 2px accent outline. */
 const focusRingShows = (window: Page) =>
   window.evaluate(() => {
@@ -137,15 +120,6 @@ const setLanguage = (window: Page, language: "en" | "zh-CN") =>
         user: { language: wanted },
       }),
     language,
-  );
-
-const setSidebarWidth = (window: Page, width: number) =>
-  window.evaluate(
-    (sidebarWidth) =>
-      (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
-        device: { sidebarWidth },
-      }),
-    width,
   );
 
 /**
@@ -555,15 +529,18 @@ test("a Document row shows up to three Tag colours and +N after its name, names 
     );
     await expect(attention).toHaveAccessibleDescription("Tags: Book, Contract, Paper, Report");
     expect(await row("Attention").boundingBox()).toEqual(before[await indexOf(items, "Attention")]);
-    // The dots' ring follows the row: the hover wash while pointed at, the sidebar's frame after.
-    const ringOf = () =>
-      row("Attention")
-        .getByTestId("tag-dot")
-        .nth(1)
-        .evaluate((element) => getComputedStyle(element).boxShadow);
-    await expect.poll(ringOf).toContain("rgb(235, 237, 240)");
+    // Pointed at, the row's actions have the dots' room; away, they're back, ringed in the sidebar's frame.
+    await expect(row("Attention").getByTestId("tag-marks")).toBeHidden();
     await window.mouse.move(700, 400, { steps: 6 });
-    await expect.poll(ringOf).toContain("rgb(244, 245, 247)");
+    await expect(row("Attention").getByTestId("tag-marks")).toBeVisible();
+    await expect
+      .poll(() =>
+        row("Attention")
+          .getByTestId("tag-dot")
+          .nth(1)
+          .evaluate((element) => getComputedStyle(element).boxShadow),
+      )
+      .toContain("rgb(244, 245, 247)");
 
     // Reached by keyboard, the row shows its Tags' names, each after its dot, under it.
     const tip = window.getByTestId("tag-names-tip");
@@ -592,6 +569,12 @@ test("a Document row shows up to three Tag colours and +N after its name, names 
     const tipBox = await tip.boundingBox();
     if (!rowBox || !tipBox) throw new Error("The row or the tip isn't visible.");
     expect(tipBox.y).toBeGreaterThanOrEqual(rowBox.y + rowBox.height);
+    // The row's actions have taken the dots' place, so the first dot sits under the name's start.
+    await expect(row("Attention").getByTestId("tag-marks")).toBeHidden();
+    const nameBox = await row("Attention").getByTestId("row-text").boundingBox();
+    const dotBox = await tip.getByTestId("tag-dot").first().boundingBox();
+    if (!nameBox || !dotBox) throw new Error("The name or the tip's first dot isn't visible.");
+    expect(dotBox.x).toBeCloseTo(nameBox.x, 0);
     await screenshot(window, "row-marks-en");
     // Off the row, it goes; back, it comes; Esc puts it away.
     await window.keyboard.press("Tab");
