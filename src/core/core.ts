@@ -2301,10 +2301,8 @@ export function createCore(adapters: CoreAdapters): Core {
       const provider = await chat.save({ kind: "ollama", baseUrl, modelId: model });
       settingsChanged();
       await readinessChanged();
-      // Local mode: Document search stays on this computer too. A cloud
-      // embedding provider goes back to the built-in model, and the rebuild
-      // ("embedding.changed", reason "local-mode") tells the User.
-      await setLocalOnly(true);
+      // Local mode is the User's choice here (#545), made in the box under the button.
+      if (typeof input?.localOnly === "boolean") await setLocalOnly(input.localOnly);
       return provider;
     },
 

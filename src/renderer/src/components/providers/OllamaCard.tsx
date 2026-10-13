@@ -3,14 +3,16 @@ import type { ChatProvider, OllamaPullProgress, OllamaStatus } from "../../../..
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
+import { localModeChosen } from "../../localMode";
 import { errorTextClass } from "../ui";
+import { useKeepLocal } from "./KeepLocalChoice";
 
 /**
  * Local mode: whether Ollama runs on its default port, and, if it does, one
  * call that pulls the recommended model (with progress) and makes it the
  * default chat model.
  */
-export function useOllama(onSaved: (provider: ChatProvider) => void) {
+export function useOllama(onSaved: (provider: ChatProvider) => void, undoPlace?: string) {
   const [status, setStatus] = useState<OllamaStatus | null>(null);
   const [pulling, setPulling] = useState(false);
   const [progress, setProgress] = useState<OllamaPullProgress | null>(null);
@@ -31,12 +33,19 @@ export function useOllama(onSaved: (provider: ChatProvider) => void) {
 
   useEffect(() => core.on("ollama.pullProgress", setProgress), []);
 
+  const keepLocal = useKeepLocal(status?.running === true);
+
   const use = async () => {
     setPulling(true);
     setProgress(null);
     setError(null);
     try {
-      onSaved(await core.selectOllama());
+      const wasOn = (await core.getEmbeddingSettings()).localOnly;
+      const provider = await core.selectOllama(
+        keepLocal.setUp ? { localOnly: keepLocal.checked } : {},
+      );
+      await localModeChosen(wasOn, undoPlace);
+      onSaved(provider);
     } catch (failure) {
       setError(errorMessage(failure));
     } finally {
@@ -44,7 +53,7 @@ export function useOllama(onSaved: (provider: ChatProvider) => void) {
     }
   };
 
-  return { status, pulling, progress, error, detect, use };
+  return { status, pulling, progress, error, keepLocal, detect, use };
 }
 
 export type Ollama = ReturnType<typeof useOllama>;
