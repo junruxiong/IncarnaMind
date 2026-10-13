@@ -35,7 +35,6 @@ import {
   type Mind,
   type MindExport,
   type MindExportPreview,
-  type WordFileInfo,
 } from "../api";
 import { InvalidInputError, isRecord } from "../errors";
 import { safeFileName } from "../fileNames";
@@ -83,8 +82,8 @@ export interface ExportsDependencies {
   paper(): PrintPaper;
   /** Draws charts' pictures for Word; without it, a chart goes into Word as its table. */
   pictures?: Pictures;
-  /** The package a Mind was imported from, kept by its SHA-256 (#104); throws if it is gone. */
-  wordPackage(sha256: string): Promise<Uint8Array>;
+  /** The package a Mind was imported from (#104); throws if it is gone. */
+  wordPackage(mindId: string): Promise<Uint8Array>;
   log: Logger;
   now(): string;
 }
@@ -107,8 +106,8 @@ interface Prepared {
   mindId: string;
   title: string;
   readOptions: ReadOptions;
-  /** The Word file the Mind was imported from, and whether its import is still going. */
-  word: { file: WordFileInfo; importing: boolean } | null;
+  /** For a Mind imported from a Word file: whether its import is still going. */
+  word: { importing: boolean } | null;
   blocks: Block[];
   preview: MindExportPreview;
   language: Language;
@@ -141,14 +140,11 @@ export function createExports(deps: ExportsDependencies) {
       documentRemoved: (documentId) => !live.has(documentId),
     };
     const { blocks, questions, word } = deps.read(mind.id, (fragment) => {
-      const file = fragment.doc ? wordFileOf(fragment.doc) : null;
+      const { doc } = fragment;
       return {
         blocks: readBlocks(fragment, readOptions),
         questions: countQuestions(fragment),
-        word: file && {
-          file,
-          importing: fragment.doc !== null && wordImportProgressOf(fragment.doc) !== null,
-        },
+        word: doc && wordFileOf(doc) ? { importing: wordImportProgressOf(doc) !== null } : null,
       };
     });
     const footnotes = footnotesIn(blocks);
@@ -247,7 +243,7 @@ export function createExports(deps: ExportsDependencies) {
     try {
       if (state) Y.applyUpdate(doc, state);
       const { data, report } = await exportWordPatch({
-        bytes: await deps.wordPackage(word.file.sha256),
+        bytes: await deps.wordPackage(prepared.mindId),
         blocks: doc.getXmlFragment(MIND_CONTENT_FIELD),
         readOptions: prepared.readOptions,
         labels: exportLabels(language),

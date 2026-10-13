@@ -1102,7 +1102,7 @@ export function createCore(adapters: CoreAdapters): Core {
     printer: adapters.printer ?? null,
     paper: () => paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages())),
     ...(adapters.pictures && { pictures: adapters.pictures }),
-    wordPackage: (sha256) => wordImports.packageOf(sha256),
+    wordPackage: (mindId) => wordImports.packageOf(mindId),
     log: adapters.log ?? silentLogger,
     now,
   });

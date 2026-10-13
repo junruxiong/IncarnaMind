@@ -709,7 +709,7 @@ function paragraph(properties: ParagraphProperties, content: string): string {
     properties;
   // In the order the schema requires.
   const pPr = [
-    style ? `<w:pStyle w:val="${style}"/>` : "",
+    style ? `<w:pStyle w:val="${escapeXml(style)}"/>` : "",
     keepNext ? "<w:keepNext/>" : "",
     numbering
       ? `<w:numPr><w:ilvl w:val="${numbering.level}"/><w:numId w:val="${numbering.id}"/></w:numPr>`

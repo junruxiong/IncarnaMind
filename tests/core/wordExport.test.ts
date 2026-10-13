@@ -10,7 +10,7 @@ import { readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { JSONContent } from "@tiptap/core";
 import { describe, expect, test } from "vitest";
-import type { Core, Document } from "../../src/core";
+import { type Core, type Document, MIND_WORD_FIELD } from "../../src/core";
 import { wordFileOf, wordImportProgressOf } from "../../src/shared/wordFiles";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
@@ -133,6 +133,15 @@ describe("what the Mind didn't change", () => {
     const { files, word } = await exported(core, mindId);
     expect(changed(unzip(bytes), files)).toEqual([]);
     expect(word).toEqual({ notKept: [], unknownParts: [], keptFurniture: [] });
+  });
+
+  test("the package is the Mind's own, whatever its document says the file's hash is", async () => {
+    const { core, bytes, mindId, client } = await setUp({ body: paragraph("Text.") });
+    const word = client.doc.getMap(MIND_WORD_FIELD);
+    word.set("file", { ...(word.get("file") as object), sha256: "../../../Elsewhere/Report" });
+    await client.settled();
+    const { files } = await exported(core, mindId);
+    expect(changed(unzip(bytes), files)).toEqual([]);
   });
 
   test("a part IncarnaMind doesn't know is copied as it is, and listed", async () => {
