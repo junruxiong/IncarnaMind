@@ -1,4 +1,5 @@
 import { crc32, inflateRawSync } from "node:zlib";
+import { DOMParser, type Element, type Node } from "@xmldom/xmldom";
 
 /**
  * The files in a ZIP archive (a .docx), by path. Checks each entry's CRC-32
@@ -133,4 +134,75 @@ export function footnotesOf(xml: string): Record<string, string> {
     footnotes[match[1] as string] = textOf(match[2] as string).trim();
   }
   return footnotes;
+}
+
+const childElements = (node: Node): Element[] => {
+  const found: Element[] = [];
+  for (let child = node.firstChild; child; child = child.nextSibling) {
+    if (child.nodeType === 1) found.push(child as Element);
+  }
+  return found;
+};
+
+const named = (node: Node, name: string) =>
+  childElements(node).find((each) => each.nodeName === name);
+
+/** A paragraph's text with every change accepted: a footnote's mark as [*], a text box's left out. */
+function acceptedText(paragraph: Element): string {
+  let text = "";
+  const visit = (node: Node) => {
+    for (const child of childElements(node)) {
+      const name = child.nodeName;
+      if (["w:pPr", "w:rPr", "w:del", "w:moveFrom", "w:txbxContent", "mc:Fallback"].includes(name))
+        continue;
+      if (name === "w:t") text += child.textContent ?? "";
+      else if (name === "w:tab") text += "\t";
+      else if (name === "w:br") text += "\n";
+      else if (name === "w:footnoteReference") text += "[*]";
+      else visit(child);
+    }
+  };
+  visit(paragraph);
+  return text;
+}
+
+/**
+ * The body's paragraphs as Word shows them with every tracked change
+ * accepted (#107): insertions kept, deletions gone, a row deleted gone, and a
+ * paragraph whose mark is deleted run into the next one in its cell or the
+ * body. Table cells' paragraphs come in order, row by row. Walked with a
+ * stack of its own: a table can nest thousands deep.
+ */
+export function acceptedParagraphs(documentXml: string): string[] {
+  const document = new DOMParser().parseFromString(documentXml, "text/xml");
+  const body = document.documentElement && named(document.documentElement, "w:body");
+  const lines: string[] = [];
+  let pending: { text: string; parent: Node | null } | null = null;
+  const flush = () => {
+    if (pending) lines.push(pending.text);
+    pending = null;
+  };
+  const stack: Element[] = body ? childElements(body).reverse() : [];
+  while (stack.length > 0) {
+    const node = stack.pop() as Element;
+    if (node.nodeName === "w:p") {
+      if (pending && pending.parent !== node.parentNode) flush();
+      const text: string = (pending?.text ?? "") + acceptedText(node);
+      const mark = named(named(node, "w:pPr") ?? node, "w:rPr");
+      const markDeleted = mark?.parentNode?.nodeName === "w:pPr" && named(mark, "w:del");
+      pending = { text, parent: node.parentNode };
+      if (!markDeleted) flush();
+      continue;
+    }
+    if (node.nodeName === "w:tr") {
+      const trPr = named(node, "w:trPr");
+      if (trPr && named(trPr, "w:del")) continue;
+    }
+    if (["w:tbl", "w:tr", "w:tc", "w:sdt", "w:sdtContent", "w:customXml"].includes(node.nodeName)) {
+      if (node.nodeName === "w:tbl") flush();
+      stack.push(...childElements(node).reverse());
+    }
+  }
+  flush();
+  return lines;
 }
