@@ -875,6 +875,33 @@
   .tab-strip-spacer {
     flex: 1 1 auto;
   }
+  /* The Tasks chip (#126; DESIGN.md, Finding Tasks): a pill in the band while a Task runs or needs the User. */
+  .tasks-chip {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    margin: 0 4px 6px;
+    padding: 0 10px 0 8px;
+    border-radius: 9999px;
+    background: var(--color-sheet);
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--color-ink);
+    outline: none;
+
+    &:hover,
+    &[aria-expanded="true"] {
+      background: var(--color-frame);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 1px;
+    }
+  }
   .tab-export {
     gap: 6px;
     margin: 0 2px 4px;
@@ -5504,6 +5531,34 @@
   .task-dot--idle {
     background: var(--color-ink-placeholder);
     animation: none;
+  }
+  .tasks-popover {
+    width: 320px;
+    max-width: calc(100vw - 16px);
+
+    .model-menu-item {
+      align-items: start;
+    }
+    .task-dot {
+      margin: 7px 0 0 5px;
+    }
+  }
+  .tasks-popover-title,
+  .tasks-popover-line {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .tasks-popover-title {
+    font-size: 13px;
+    line-height: 18px;
+    font-weight: 600;
+  }
+  .tasks-popover-done {
+    width: 14px;
+    height: 14px;
+    margin-top: 2px;
+    color: var(--color-success);
   }
   .task-done-icon {
     width: 14px;
