@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from "vitest";
-import type { Document, Mind, Tag } from "../../src/core/api";
+import type { Mind } from "../../src/core/api";
 import type * as Palette from "../../src/renderer/src/palette";
 import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
 
@@ -31,7 +31,13 @@ const mind = (id: string, title: string, updatedAt = AT): Mind => ({
 });
 
 const documentNamed = (id: string, name: string, tagIds: string[] = []) =>
-  ({ id, name, kind: "pdf", tags: tagIds.map((tagId) => ({ tagId })) }) as unknown as Document;
+  ({
+    id,
+    name,
+    title: null,
+    kind: "pdf",
+    tags: tagIds.map((tagId) => ({ tagId })),
+  }) satisfies Palette.NamedDocument;
 
 const things = {
   minds: [
@@ -45,12 +51,12 @@ const things = {
     documentNamed("d-report", "2026 财务报表"),
   ],
   folders: [
-    { id: "f-finance", name: "财务", description: "" },
-    { id: "f-contracts", name: "Contracts & agreements", description: "" },
-  ] as never,
-  assignments: [{ documentId: "d-report", groupId: "f-finance" }] as never,
-  tags: [{ id: "t-contract", name: "Contract", colour: "red" } as unknown as Tag],
-};
+    { id: "f-finance", name: "财务" },
+    { id: "f-contracts", name: "Contracts & agreements" },
+  ],
+  assignments: [{ documentId: "d-report", groupId: "f-finance" }],
+  tags: [{ id: "t-contract", name: "Contract", colour: "red" }],
+} satisfies Palette.NamedThings;
 
 const shown = (groups: Palette.PaletteGroup[]) =>
   groups.map((group) => [group.id, group.items.map((item) => item.name)]);
