@@ -12,13 +12,13 @@ import {
   coreOf,
   createDataFolder,
   dismissChatSetup,
+  editFolderInLibrary,
   interceptOpenDialog,
   interceptOpenPath,
   interceptShowItemInFolder,
   launchApp,
   newMind,
   openDocumentMenu,
-  openFolderInLibrary,
   openSettings,
   pathsOpened,
   pathsShown,
@@ -385,9 +385,8 @@ test("an export saved into a Linked folder is IncarnaMind's file: its viewer say
     core.createLibraryGroup({ name: "Reports", description: "" }),
   );
   await window.getByTestId("browse-views").getByRole("button", { name: "Folders" }).click();
-  await openFolderInLibrary(window, "Reports");
+  await editFolderInLibrary(window, "Reports");
   const library = window.getByTestId("library");
-  await library.getByRole("button", { name: "Edit folder", exact: true }).click();
   const counts = library.getByTestId("folder-counts-own-files");
   await expect(counts).toBeChecked();
   await expect(counts).toBeDisabled();

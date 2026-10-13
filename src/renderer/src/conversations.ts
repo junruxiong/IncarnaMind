@@ -132,13 +132,13 @@ export async function openConversation(conversationId: string, answerId?: string
 }
 
 /**
- * Asks a Question from a Mind's composer in the assistant's conversation (a
+ * Asks a Question from the composer in the assistant's conversation (a
  * new one for a new chat): it shows at once, and its Answer streams in there.
  * Why it couldn't be asked is kept for the composer (`composerKey`). Resolves
  * to whether it was asked.
  */
 export async function askInAssistant(
-  input: Omit<AskInConversationInput, "conversationId"> & { mindId: string },
+  input: Omit<AskInConversationInput, "conversationId"> & { mindId: string | null },
 ): Promise<boolean> {
   const key = composerKey(input.mindId);
   useConversations.setState({ asking: input.text, stopWanted: false, sought: null });

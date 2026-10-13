@@ -209,6 +209,15 @@ export function MoreLineIcon(props: IconProps) {
   );
 }
 
+/** Dropping files in: an arrow down onto a line. */
+export function DropLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />
+    </LineIcon>
+  );
+}
+
 export function TrashLineIcon(props: IconProps) {
   return (
     <LineIcon {...props}>
@@ -431,6 +440,16 @@ export function HistoryLineIcon(props: IconProps) {
       <path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3" />
       <path d="M4.5 4.5V9H9" />
       <path d="M12 8.5V12l2.5 1.5" />
+    </LineIcon>
+  );
+}
+
+/** Restore: an arrow coming round to where it started. */
+export function RestoreLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M4 12a8 8 0 1 0 2.3-5.6" />
+      <path d="M4 4v4h4" />
     </LineIcon>
   );
 }
