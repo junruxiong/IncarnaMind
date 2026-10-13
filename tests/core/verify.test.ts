@@ -261,6 +261,19 @@ describe("Verify a document", () => {
     });
   });
 
+  test("a PDF with no text, or one that can't be read, makes no Mind and says why", async () => {
+    const { core, sources } = await setUp();
+    const blank = await writeSourceFile(sources, "Blank.pdf", buildPdf([{ lines: [] }]));
+    const broken = await writeSourceFile(sources, "Broken.pdf", "This is no PDF.");
+
+    expect(await core.verifyDocument({ path: blank })).toEqual({ ok: false, reason: "no-text" });
+    expect(await core.verifyDocument({ path: broken })).toEqual({
+      ok: false,
+      reason: "unreadable",
+    });
+    expect((await core.listMinds()).map((mind) => mind.title)).toEqual([]);
+  });
+
   test("one run at a time: another asked for while one runs says which Mind it is in", async () => {
     let release = () => {};
     const held = new Promise<void>((resolve) => {
