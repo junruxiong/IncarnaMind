@@ -3234,6 +3234,11 @@
     color: var(--color-ink-meta);
     text-decoration: line-through 1px var(--color-ink-meta);
   }
+  /* Someone's words from a Word file (#108) aren't AI text: in the User's ink, underlined the same. */
+  .mind-editor ins.proposal-insert.proposal-theirs,
+  .mind-editor .proposal-node--insert.proposal-theirs:not(.citation-marker) {
+    color: var(--color-ink);
+  }
   /* A Citation a change adds or removes: its marker underlined, or struck and faded. */
   .mind-editor .proposal-node--insert .citation-marker,
   .mind-editor .citation-marker.proposal-node--insert {
@@ -3249,14 +3254,17 @@
     background: var(--color-accent-wash);
     border-radius: 2px;
   }
-  /* "3 changes from the assistant · Accept all · Reject all": at the top of the Mind, in view as it scrolls. */
+  /*
+   * "3 changes from the assistant · Accept all · Reject all": at the top of
+   * the Mind, in view as it scrolls, with a line of its own for someone's
+   * changes from a Word file (#108).
+   */
   .proposals-bar {
     position: sticky;
     top: 0;
     z-index: 5;
     display: flex;
-    align-items: center;
-    gap: 6px;
+    flex-direction: column;
     min-width: 0;
     margin: 0 0 12px;
     padding: 6px 0;
@@ -3266,6 +3274,12 @@
     font-size: 13px;
     line-height: 20px;
     color: var(--color-ink-secondary);
+  }
+  .proposals-bar-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
   }
   .proposals-bar-icon {
     width: 14px;
@@ -3338,6 +3352,12 @@
   }
   .change-bar-drops {
     color: var(--color-warning);
+  }
+  .change-bar-author {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--color-ink-secondary);
   }
   /* What the AI is working on: the dot the Answer being written has. */
   .edit-pending-dot {
@@ -6004,12 +6024,36 @@
       overflow-y: auto;
       overscroll-behavior: contain;
     }
+    /* What it asks stays in view above the scrolled details, as the buttons stay below (#678). */
     .approval-head {
+      position: sticky;
+      top: 0;
+      z-index: 1;
       padding: 10px;
+      background: var(--color-sheet);
     }
     .approval-title {
       font-size: 14px;
       line-height: 20px;
+    }
+    /* In the short tray of the bottom dock the head is the title's one line, and the details scroll between it and the buttons. */
+    .assistant[data-dock="bottom"] & {
+      padding-block: 4px 6px;
+
+      .approval-actions {
+        padding-block: 4px;
+      }
+      .approval-head {
+        padding-block: 8px 4px;
+      }
+      .approval-title {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .approval-explanation {
+        display: none;
+      }
     }
     .approval-details {
       padding: 10px;

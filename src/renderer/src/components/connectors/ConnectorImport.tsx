@@ -5,6 +5,7 @@ import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { ProblemMark } from "../ProblemLine";
 import { SecretStorageNotice } from "../providers/ProviderForm";
+import { TypingTextarea } from "../TypingTextarea";
 import {
   buttonClass,
   errorTextClass,
@@ -83,7 +84,7 @@ export function ConnectorImport({ onDone }: { onDone(): void }) {
       <p className="text-[13px] leading-5 text-ink-secondary">{t("connectors.import.body")}</p>
       <label className={fieldLabelClass}>
         {t("connectors.import.json")}
-        <textarea
+        <TypingTextarea
           value={json}
           onChange={(event) => {
             setJson(event.target.value);

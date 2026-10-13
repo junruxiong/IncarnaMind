@@ -12,12 +12,19 @@ import { useAppStore } from "../../store";
  * say why nothing happened, and move the keyboard's focus with the tab.
  */
 
-/** Moves the keyboard's focus to a tab once it is drawn. */
-export function focusTab(tabId: string | null | undefined): void {
+/**
+ * Moves the keyboard's focus to a tab once it is drawn. With `onlyIfLost`, only if the focus
+ * is nowhere by then: a field the User has moved to since keeps it.
+ */
+export function focusTab(
+  tabId: string | null | undefined,
+  { onlyIfLost = false }: { onlyIfLost?: boolean } = {},
+): void {
   if (!tabId) return;
-  requestAnimationFrame(() =>
-    document.querySelector<HTMLElement>(`[data-tab-id="${CSS.escape(tabId)}"]`)?.focus(),
-  );
+  requestAnimationFrame(() => {
+    if (onlyIfLost && document.activeElement !== document.body) return;
+    document.querySelector<HTMLElement>(`[data-tab-id="${CSS.escape(tabId)}"]`)?.focus();
+  });
 }
 
 /** ⌥⌘\: a copy of a tab (the shown one by default) in a new group on the right. */

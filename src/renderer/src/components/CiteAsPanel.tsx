@@ -23,6 +23,7 @@ import {
 import { useAppStore } from "../store";
 import { useUndo } from "../undo";
 import { type ProblemAction, ProblemLine, ProblemMark } from "./ProblemLine";
+import { TypingTextarea } from "./TypingTextarea";
 import { buttonStyle } from "./ui";
 
 type TextField = Exclude<ReferenceField, "type">;
@@ -380,7 +381,7 @@ function TextValue({
   if (editing) {
     return (
       <div className="py-0.5">
-        <textarea
+        <TypingTextarea
           ref={input}
           rows={1}
           value={draft}
