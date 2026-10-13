@@ -118,6 +118,14 @@ _Avoid_: source (a Document is not one), database, provider on its own (an AI mo
 Where in a Document a Citation points, in the unit the Document's own readers use: one or two pages of a PDF, one or two slides of a deck (speaker notes count as part of their slide), a sheet and a range of rows of a spreadsheet, the section a quote sits under in a Word file or Markdown (for a quote of a Word comment, the section the comment is anchored in, and that it is a comment by its author), the section and paragraphs of a Web page, a range of lines in plain text, or a range of time in a Transcript (shown as the time the quote starts, "14:26").
 _Avoid_: page (for anything that isn't a PDF), position, anchor
 
+**Cited page**:
+How a Citation's Location looked in the version it quotes, saved as a picture when the Citation is made, with the text drawn on it, so the quote can be shown where it stood after its file changes or goes. It is kept while a Citation or a Checkpoint points at it, and is never searched.
+_Avoid_: screenshot, thumbnail, preview
+
+**Source pack**:
+A PDF of the pages a Mind cites, made from Export options: a cover list, then one page for each cited Location, drawn from its cited page, with each quote highlighted and numbered as the Mind numbers its Citations. It is made from the cited pages, so it holds when a file has changed or gone.
+_Avoid_: evidence bundle, appendix, bundle
+
 **Folder**:
 A project inside IncarnaMind: a named place for Documents and Minds, with a description of what belongs there. Each Document and each Mind belongs to one Folder or is Not in a Folder; this does not change where a Document's original file is stored. A Mind in a Folder searches the Folder by default; deleting a Folder moves its Documents and Minds to Not in a Folder.
 _Avoid_: project (in the interface), group (a Folder's former name; a Group is now a column of tabs), collection, category

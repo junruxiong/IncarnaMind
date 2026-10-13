@@ -3,9 +3,9 @@
  * (`PrintDocument`, from the core) and prints what it lays out. Chromium has no footnotes in
  * print, so the page makes its own pages: blocks flow into page-sized boxes, each footnote goes
  * to the foot of the page its marker lands on, and a block that won't fit is split between
- * lines, list items or table rows (the heading rows repeating), or moved on whole. Nothing here
- * reaches the network: the page's policy allows only the app's own files and the Mind's
- * pictures.
+ * lines, list items or table rows (the heading rows repeating), or moved on whole. A source pack's
+ * cited pages (#134) each start a sheet. Nothing here reaches the network: the page's policy
+ * allows only the app's own files and the Mind's pictures.
  */
 import "../src/fonts.css";
 import "./print.css";
@@ -13,6 +13,9 @@ import { PAPER, PRINT_ENTRY, type PrintDocument } from "../../shared/printDocume
 
 /** Room left at each page's foot, so rounding never pushes a page onto a second sheet. */
 const SAFETY_PX = 2;
+
+/** What a source pack's sheet keeps for its title and the notes under the picture, in CSS pixels. */
+const PACK_TEXT_PX = 84;
 
 /** Inline elements a line can't be broken inside: a footnote's number, maths, a picture. */
 const ATOMIC = "sup.note-ref, math, img, br, code.math-source, span.image-missing";
@@ -188,6 +191,11 @@ class Paginator {
     const queue = [...blocks];
     for (let block = queue.shift(); block; block = queue.shift()) {
       const page = this.page;
+      if (block.classList.contains("pack-page") && page.body.childElementCount > 0) {
+        this.page = this.newPage();
+        queue.unshift(block);
+        continue;
+      }
       if (this.tryPlace(page, page.body, block)) continue;
       const rest = this.split(page, page.body, block);
       if (rest === block && page.body.childElementCount === 0) {
@@ -356,14 +364,41 @@ function blocksOf(source: HTMLElement): HTMLElement[] {
   return blocks;
 }
 
+/** Moves a cited page's number badges apart, downwards, where two quotes start on about the same line. */
+function spreadBadges(frame: HTMLElement): void {
+  const badges = [...frame.querySelectorAll<HTMLElement>(".pack-badge")].sort(
+    (a, b) => a.offsetTop - b.offsetTop,
+  );
+  let bottom = Number.NEGATIVE_INFINITY;
+  for (const badge of badges) {
+    const top = Math.max(badge.offsetTop, bottom);
+    badge.style.top = `${top}px`;
+    bottom = top + badge.offsetHeight + 1;
+  }
+}
+
+/** Fills in the cover list's page numbers: the sheet each cited page came to. */
+function numberCoverList(pages: readonly HTMLElement[]): void {
+  const sheets = new Map<string, number>();
+  pages.forEach((page, index) => {
+    for (const sheet of page.querySelectorAll<HTMLElement>("section.pack-page")) {
+      sheets.set(sheet.dataset.pack ?? "", index + 1);
+    }
+  });
+  for (const ref of document.querySelectorAll<HTMLElement>("td.pack-ref")) {
+    ref.textContent = String(sheets.get(ref.dataset.pack ?? "") ?? "");
+  }
+}
+
 /** Lays the document out in pages; resolves with how many, once it is ready to print. */
 async function print(printed: PrintDocument): Promise<number> {
   const paper = PAPER[printed.paper];
   document.documentElement.lang = printed.language;
   document.title = printed.title;
   const page = document.createElement("style");
+  const room = paper.height - SAFETY_PX - 2 * paper.margin;
   page.textContent = `@page { size: ${paper.css}; margin: 0 }
-:root { --page-width: ${paper.width}px; --page-height: ${paper.height - SAFETY_PX}px; --page-margin: ${paper.margin}px; }`;
+:root { --page-width: ${paper.width}px; --page-height: ${paper.height - SAFETY_PX}px; --page-margin: ${paper.margin}px; --pack-height: ${room - PACK_TEXT_PX}px; }`;
   document.head.append(page);
 
   // Laid out first, at a page's width, so every face it uses has loaded before anything is measured.
@@ -379,13 +414,14 @@ async function print(printed: PrintDocument): Promise<number> {
   notes.getBoundingClientRect();
   await document.fonts.ready;
   await Promise.all([...document.images].map((image) => image.decode().catch(() => undefined)));
+  for (const frame of source.querySelectorAll<HTMLElement>(".pack-frame")) spreadBadges(frame);
   notes.remove();
 
   const container = document.createElement("main");
   container.className = "pages";
   document.body.append(container);
-  const room = paper.height - SAFETY_PX - 2 * paper.margin;
   const pages = new Paginator(container, printed.notes, room).run(blocksOf(source));
+  numberCoverList(pages);
   source.remove();
   return pages.length;
 }

@@ -7,6 +7,7 @@ const EXPORTS = [
   "mind.export",
   "mind.exportAs.docx",
   "mind.exportAs.pdf",
+  "mind.exportAs.source-pack",
   "mind.exportAs.html",
   "mind.exportAs.markdown",
   "mind.exportOptions",
