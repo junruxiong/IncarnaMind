@@ -37,15 +37,6 @@ test.afterEach(async () => {
   await removeDataFolder(dataDir);
 });
 
-async function start(language: "en" | "zh-CN") {
-  const { app, window } = await launchApp(dataDir, { fakeChat: true });
-  await dismissChatSetup(window);
-  await useLocalChatModel(window);
-  await setLanguage(window, language);
-  await setWindowSize(app, window, 1440, 900);
-  return { app, window };
-}
-
 /** A new Mind, its title and its Notes typed as a person types them. */
 async function writeMind(window: Page, title: string, notes: string[]): Promise<void> {
   await newMind(window);
@@ -60,7 +51,11 @@ async function writeMind(window: Page, title: string, notes: string[]): Promise<
 }
 
 test("a Question is answered and changes nothing; a request to shorten comes back as changes in the Mind, which the steps name", async () => {
-  const { window } = await start("en");
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setLanguage(window, "en");
+  await setWindowSize(app, window, 1440, 900);
   const note = "The quarter was very good, and sales were really strong.";
   await writeMind(window, "Q3 review", [note]);
   const editor = window.getByTestId("mind-editor");
@@ -87,7 +82,11 @@ test("a Question is answered and changes nothing; a request to shorten comes bac
 });
 
 test("a request for a new note makes a Mind beside the one in focus, its text as changes; in Chinese", async () => {
-  const { window } = await start("zh-CN");
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setLanguage(window, "zh-CN");
+  await setWindowSize(app, window, 1440, 900);
   await writeMind(window, "第三季度", ["销售非常好。"]);
 
   const answer = await askInAssistant(window, "新建一篇叫“田野计划”的笔记");
