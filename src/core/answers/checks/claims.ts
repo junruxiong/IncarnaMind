@@ -5,7 +5,8 @@
  * A PDF keeps its text a line at a time. A paragraph runs on until a line
  * ends a sentence, or a line well short of the page's width, with no closing
  * mark, is followed by one that starts afresh: a heading, a title, a byline.
- * A numbered heading starts a paragraph, and a short one is one.
+ * A short numbered heading is a paragraph of its own, unless the line
+ * before it stops mid-sentence.
  *
  * The model is shown the sentences numbered, in batches, and names those
  * that make claims; the sentences stay exactly as the document has them, so
@@ -17,6 +18,8 @@ import type { DocumentText } from "../../api";
 export interface DocumentParagraph {
   page: number;
   text: string;
+  /** A numbered heading on a line of its own. */
+  heading: boolean;
 }
 
 /** A line that ends a sentence, or a clause the next line doesn't go on with. */
@@ -27,9 +30,12 @@ const ENDS = /[.!?。！？…:：;；"”’)）\]】」』]$/u;
  * one ends a sentence or the line is a numbered heading.
  */
 const STARTS = /^[\p{Lu}\p{N}"“‘(（[【「『•·–—-]/u;
-/** A numbered heading, which starts a paragraph of its own: "2 Costs", "3.1 Roof", "二、", "（一）". */
+/** A numbered heading: "2 Costs", "3.1 Roof", "二、", "（一）". */
 const HEADING =
-  /^(?:\d+(?:\.\d+)*\.?\s+\p{Lu}|[一二三四五六七八九十]+、|[（(][一二三四五六七八九十\d]+[)）])/u;
+  /^(?:\d{1,2}(?:\.\d{1,2})*\.?\s+\p{Lu}|[一二三四五六七八九十]+、|[（(][一二三四五六七八九十\d]{1,2}[)）])/u;
+/** A line that stops mid-sentence, at a comma or a little word no heading ends with: the next goes on with it. */
+const MID_SENTENCE =
+  /(?:[,，、]|\b(?:a|an|the|of|to|in|on|at|by|for|with|and|or|from|as|than|that|is|are|was|were|be|per))$/iu;
 /** A character as wide as two Latin letters: CJK, and full-width marks. */
 const WIDE =
   /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\u3000-\u303F\uFF00-\uFFEF]/u;
@@ -63,19 +69,24 @@ export function paragraphsOf(pages: DocumentText["pages"]): DocumentParagraph[] 
       .filter((line) => line !== "");
     const full = fullWidth(lines);
     let current = "";
+    let lineCount = 0;
+    const end = () => {
+      paragraphs.push({ page, text: current, heading: lineCount === 1 && HEADING.test(current) });
+      current = "";
+      lineCount = 0;
+    };
     lines.forEach((line, index) => {
-      if (current && HEADING.test(line)) {
-        paragraphs.push({ page, text: current });
-        current = "";
-      }
-      current = current ? joinLines(current, line) : line;
-      const next = lines[index + 1];
       const short = widthOf(line) < full * SHORT;
-      const alone = short && next !== undefined && (STARTS.test(next) || HEADING.test(line));
-      if (next === undefined || ENDS.test(line) || alone) {
-        paragraphs.push({ page, text: current });
-        current = "";
-      }
+      if (current && short && HEADING.test(line) && !MID_SENTENCE.test(current)) end();
+      current = current ? joinLines(current, line) : line;
+      lineCount++;
+      const next = lines[index + 1];
+      const alone =
+        short &&
+        next !== undefined &&
+        (STARTS.test(next) || HEADING.test(line)) &&
+        !MID_SENTENCE.test(line);
+      if (next === undefined || ENDS.test(line) || alone) end();
     });
   }
   return paragraphs;

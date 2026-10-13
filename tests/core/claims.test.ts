@@ -13,7 +13,7 @@ const page = (number: number, ...lines: string[]) => ({
 });
 
 describe("A PDF's lines become paragraphs", () => {
-  test("a sentence runs on across lines; a short line before a fresh one ends its paragraph; a word broken at a hyphen is mended", () => {
+  test("a sentence runs on across lines, past a year or a date that starts one; a short line before a fresh one ends its paragraph; a word broken at a hyphen is mended", () => {
     const paragraphs = paragraphsOf([
       page(
         1,
@@ -21,19 +21,26 @@ describe("A PDF's lines become paragraphs", () => {
         "report 3",
         "1 Summary",
         "This report covers the roof and insulation package from 1 to 31 March 2027. Roof works were programmed to",
-        "start on 4 January 2027. Under our contract, the package is due to be com-",
-        "pleted in April 2027.",
+        "start on 4 January 2027. Under our contract, the package is due to be completed in April",
+        "2027. Our contract for the package is valued at £1,240,000. It is due to be com-",
+        "pleted on",
+        "12 March 2028.",
       ),
       page(2, "Forty-two operatives worked on site during March."),
     ]);
     expect(paragraphs).toEqual([
-      { page: 1, text: "Riverside Library roof and insulation works: progress report 3" },
-      { page: 1, text: "1 Summary" },
       {
         page: 1,
-        text: "This report covers the roof and insulation package from 1 to 31 March 2027. Roof works were programmed to start on 4 January 2027. Under our contract, the package is due to be completed in April 2027.",
+        text: "Riverside Library roof and insulation works: progress report 3",
+        heading: false,
       },
-      { page: 2, text: "Forty-two operatives worked on site during March." },
+      { page: 1, text: "1 Summary", heading: true },
+      {
+        page: 1,
+        heading: false,
+        text: "This report covers the roof and insulation package from 1 to 31 March 2027. Roof works were programmed to start on 4 January 2027. Under our contract, the package is due to be completed in April 2027. Our contract for the package is valued at £1,240,000. It is due to be completed on 12 March 2028.",
+      },
+      { page: 2, text: "Forty-two operatives worked on site during March.", heading: false },
     ]);
   });
 
