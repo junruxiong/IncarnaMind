@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
+import { InvalidInputError, NotFoundError } from "../../src/core/errors";
+import type { Language } from "../../src/core/language";
 import { describeError, errorMessage } from "../../src/renderer/src/errors";
+import { errorForWindow } from "../../src/shared/errorWording";
+import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
 
 /*
  * What a failed call to the core says (#157). Electron rejects it with the error written out,
@@ -10,6 +14,10 @@ import { describeError, errorMessage } from "../../src/renderer/src/errors";
 const ipc = (method: string, name: string, message: string) =>
   new Error(`Error invoking remote method '${method}': ${name}: ${message}`);
 
+const words = (language: Language) => (key: MessageKey, params?: MessageParams) =>
+  translate(language, key, params);
+const english = words("en");
+
 describe("an error from the core", () => {
   test("says the core's own sentence, without Electron's wrapping or the class's name", () => {
     const failure = ipc(
@@ -17,7 +25,7 @@ describe("an error from the core", () => {
       "InvalidInputError",
       "A Document's name can't be empty.",
     );
-    expect(errorMessage(failure)).toBe("A Document's name can't be empty.");
+    expect(errorMessage(failure, english)).toBe("A Document's name can't be empty.");
     expect(describeError(failure).reason).toBeNull();
   });
 
@@ -33,7 +41,7 @@ describe("an error from the core", () => {
 
   test("is as readable in Chinese", () => {
     const failure = ipc("core:moveToFolder", "NotFoundError", "这个文件夹已被删除。");
-    expect(errorMessage(failure)).toBe("这个文件夹已被删除。");
+    expect(errorMessage(failure, english)).toBe("这个文件夹已被删除。");
   });
 
   test("never shows a stack, even one written into the message", () => {
@@ -49,7 +57,57 @@ describe("an error from the core", () => {
 
   test("keeps a message that runs over several lines", () => {
     const failure = ipc("core:x", "InvalidInputError", "First line.\nSecond line.");
-    expect(errorMessage(failure)).toBe("First line.\nSecond line.");
+    expect(errorMessage(failure, english)).toBe("First line.\nSecond line.");
+  });
+});
+
+/*
+ * An error the core gave a wording (#627) crosses as the main process throws it to the window:
+ * Electron writes the error out with `toString()`, which is all the window receives.
+ */
+const crossed = (method: string, error: Error) =>
+  new Error(`Error invoking remote method '${method}': ${String(errorForWindow(error))}`);
+
+const TOO_LONG = "A Document's name can't be longer than 500 characters.";
+const tooLong = () =>
+  new InvalidInputError({ key: "error.document.nameTooLong", values: { max: 500 } });
+
+describe("an error the core gave a wording", () => {
+  test("says it in the interface language, and keeps the English sentence for the Details", () => {
+    const failure = crossed("core:renameDocument", tooLong());
+    expect(errorMessage(failure, words("zh-CN"))).toBe("文档名称不能超过 500 个字符。");
+    expect(errorMessage(failure, english)).toBe(TOO_LONG);
+    const { message, wording, detail } = describeError(failure);
+    expect(message).toBe(TOO_LONG);
+    expect(wording).toEqual({ key: "error.document.nameTooLong", values: { max: 500 } });
+    expect(detail).toBe(`core:renameDocument\nInvalidInputError: ${TOO_LONG}`);
+  });
+
+  test("leaves the log its class, its English sentence on the first line, and its stack", () => {
+    const error = tooLong();
+    const thrown = errorForWindow(error);
+    if (!(thrown instanceof Error)) throw new Error("No error was thrown.");
+    expect(thrown.name).toBe("InvalidInputError");
+    expect(thrown.message.split("\n")[0]).toBe(TOO_LONG);
+    expect(thrown.stack).toBe(error.stack);
+  });
+
+  test("falls back to the sentence when this window's dictionary doesn't know its key", () => {
+    const text = crossed("core:renameDocument", tooLong()).message;
+    const unknown = new Error(text.replace("error.document.nameTooLong", "error.document.newer"));
+    expect(errorMessage(unknown, words("zh-CN"))).toBe(TOO_LONG);
+    expect(describeError(unknown).wording).toBeNull();
+    const broken = new Error(text.replace('{"key"', "{key"));
+    expect(errorMessage(broken, words("zh-CN"))).toBe(TOO_LONG);
+    expect(describeError(broken).detail).toBe(
+      `core:renameDocument\nInvalidInputError: ${TOO_LONG}`,
+    );
+  });
+
+  test("an error with no wording crosses as it is, in its own words", () => {
+    const error = new NotFoundError("It was deleted.");
+    expect(errorForWindow(error)).toBe(error);
+    expect(errorMessage(crossed("core:x", error), words("zh-CN"))).toBe("It was deleted.");
   });
 });
 
@@ -61,7 +119,7 @@ describe("an error that did not cross the bridge", () => {
   });
 
   test("is made of what it is given when it isn't an Error", () => {
-    expect(errorMessage("The disk went away")).toBe("The disk went away");
+    expect(errorMessage("The disk went away", english)).toBe("The disk went away");
     expect(describeError(42).message).toBe("42");
   });
 

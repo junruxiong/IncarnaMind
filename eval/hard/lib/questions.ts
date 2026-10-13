@@ -21,7 +21,9 @@ import { DOMAINS, type Domain, type HardLanguage, LANGUAGES, type Manifest } fro
  * - cross-document: needs passages from two or more Documents;
  * - unanswerable: the library doesn't say: an Answer should cite nothing;
  * - cross-lingual: asked in the other language from its Document's;
- * - near-duplicate: two versions of a Document differ, and the right one must be found.
+ * - near-duplicate: two versions of a Document differ, and the right one must be found;
+ * - false-premise: the Question takes for granted what the Documents don't say (#548);
+ * - disagreeing: two Documents disagree, and the newer one should lead (#548).
  */
 export const DIFFICULTIES = [
   "easy",
@@ -32,6 +34,8 @@ export const DIFFICULTIES = [
   "unanswerable",
   "cross-lingual",
   "near-duplicate",
+  "false-premise",
+  "disagreeing",
 ] as const;
 export type Difficulty = (typeof DIFFICULTIES)[number];
 
@@ -44,6 +48,13 @@ export interface HardExpected {
   pages: [number, number];
   /** Text the Passage must contain, matched as the Citation check matches quotes. */
   quote: string;
+}
+
+/** What one of two Documents that disagree says, in the forms an Answer may write it ("116,000"). */
+export interface Saying {
+  /** A key of the manifest's Documents: one of the Question's expected. */
+  document: string;
+  says: string[];
 }
 
 export interface HardQuestion {
@@ -60,6 +71,11 @@ export interface HardQuestion {
   answer?: string;
   /** Where the Question comes from, when a benchmark: its name and its own id. */
   benchmark?: { name: (typeof BENCHMARKS)[number]; id: string };
+  /** False-premise Questions only: what the Question takes for granted that the Documents don't say. */
+  premise?: string;
+  /** Disagreeing Questions only: what the newer Document says, and what the older one does. */
+  newer?: Saying;
+  older?: Saying;
 }
 
 export interface HardQuestionSet {
@@ -115,6 +131,15 @@ export function questionProblems(question: HardQuestion, manifest: Manifest): st
   if (question.benchmark && !BENCHMARKS.includes(question.benchmark.name)) {
     problem("unknown benchmark.");
   }
+  if (question.premise !== undefined && question.difficulty !== "false-premise") {
+    problem("only a false-premise Question has a premise.");
+  }
+  if (
+    (question.newer !== undefined || question.older !== undefined) &&
+    question.difficulty !== "disagreeing"
+  ) {
+    problem("only a disagreeing Question has newer and older.");
+  }
 
   switch (question.difficulty) {
     case "unanswerable":
@@ -168,6 +193,27 @@ export function questionProblems(question: HardQuestion, manifest: Manifest): st
         if (versions.length < 2) {
           problem(`${key} has no other version in its language for a near-duplicate Question.`);
         }
+      }
+      break;
+    }
+    case "false-premise":
+      if (question.expected.length === 0) problem("expects no Passage.");
+      if (typeof question.premise !== "string" || !question.premise.trim()) {
+        problem("a false-premise Question needs its premise.");
+      }
+      break;
+    case "disagreeing": {
+      const { newer, older } = question;
+      const said = (saying: Saying | undefined) =>
+        saying !== undefined &&
+        keys.includes(saying.document) &&
+        Array.isArray(saying.says) &&
+        saying.says.length > 0 &&
+        saying.says.every((form) => typeof form === "string" && form.trim() !== "");
+      if (!said(newer) || !said(older) || newer?.document === older?.document) {
+        problem(
+          "a disagreeing Question needs newer and older: two of its expected Documents, each with what it says.",
+        );
       }
       break;
     }

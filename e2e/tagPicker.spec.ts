@@ -302,7 +302,7 @@ async function decisionServer(): Promise<{ server: Server; readonly requests: nu
   };
 }
 
-test("a Tag automatic tagging wasn't sure of is confirmed or removed in one click, and Tags filter the Library", async () => {
+test("a Tag automatic tagging wasn't sure of is confirmed or removed in one click, and + Filter's Tags narrow the Library", async () => {
   const decisions = await decisionServer();
   const { server } = decisions;
   const { app, window } = await launchApp(dataDir);
@@ -360,7 +360,7 @@ test("a Tag automatic tagging wasn't sure of is confirmed or removed in one clic
     await slideAndClick(window, window.getByTestId("document-tab").getByTestId("tab-close"));
     await expect(viewer).toBeHidden();
 
-    // ✓ and × show once the chip is pointed at; ✓ keeps the Tag, as the User's.
+    // ✓ and × show once the row is pointed at; ✓ keeps the Tag, as the User's.
     await expect(marchInvoice.getByTestId("confirm-document-tag")).toBeHidden();
     await slideTo(window, marchInvoice);
     await slideAndClick(window, marchInvoice.getByTestId("confirm-document-tag"));
@@ -394,9 +394,18 @@ test("a Tag automatic tagging wasn't sure of is confirmed or removed in one clic
     await expect(april.getByTestId("tag-chip")).toHaveCount(0);
     await expect(march.getByTestId("tag-chip")).toHaveAttribute("data-source", "user");
 
-    // A chip's name filters the Library by its Tag; the Tags filter says so, and so does the sidebar.
+    // + Filter's Tags narrow the Library by a Tag (a row's chip edits its Tags); the sidebar says so too.
     const q1 = rowOf(library, "Q1 report");
-    await slideAndClick(window, q1.getByTestId("tag-chip-filter"));
+    await slideAndClick(window, library.getByTestId("library-add-filter"));
+    await slideAndClick(
+      window,
+      window.locator('[data-testid="library-filter-kind"][data-facet="tag"]'),
+    );
+    await slideAndClick(
+      window,
+      library.getByRole("menuitemcheckbox", { name: "Report, 2 Documents" }),
+    );
+    await window.keyboard.press("Escape");
     const rows = library.getByTestId("library-document");
     await expect(rows).toHaveCount(2);
     const tagsFilter = library.locator('[data-testid="library-filter"][data-facet="tag"]');
