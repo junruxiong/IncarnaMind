@@ -52,31 +52,45 @@ const filesWith = (files: readonly Source[], pattern: RegExp) =>
 const renderer = sourcesIn(join(ROOT, "src/renderer/src"));
 
 describe("the right-click", () => {
-  // The object's menu opens from `useObjectMenu` (components/ObjectMenu.tsx) alone, so a
-  // right-click opens the menu the ⋯ opens, in one order. A listener by any name counts.
-  const OWNER = ["src/renderer/src/components/ObjectMenu.tsx"];
+  // The object's menu opens from `useObjectMenu` alone, so a right-click opens the menu the ⋯
+  // opens, in one order. Only that hook may handle it, not the rest of its file. A handler by
+  // any name counts: the React prop, the attribute, the event. (The key called "ContextMenu"
+  // opens the menu from the keyboard, and isn't one.)
+  const OWNER = "src/renderer/src/components/ObjectMenu.tsx";
+  const HOOK = /export function useObjectMenu\b[\s\S]*?\n}\n/;
+  const RIGHT_CLICK = /onContextMenu|oncontextmenu|\bcontextmenu\b/;
   const KNOWN: Record<string, string> = {
     "src/renderer/src/editor/tableCommands.ts":
       "a table's right-click opens the Block's menu from the note's own listener (#608)",
   };
 
+  const handlers = (files: readonly Source[]) =>
+    filesWith(
+      files.map((file) =>
+        file.path === OWNER ? { ...file, text: file.text.replace(HOOK, "") } : file,
+      ),
+      RIGHT_CLICK,
+    );
+
   test("is handled in one place: no onContextMenu outside useObjectMenu", () => {
-    expect(violations(filesWith(renderer, /contextmenu/i), OWNER, KNOWN)).toEqual([]);
+    expect(violations(handlers(renderer), [], KNOWN)).toEqual([]);
   });
 
-  test("fails a handler anywhere else, and a known one that is gone", () => {
-    const found = filesWith(
-      [
-        { path: "a.tsx", text: "<li onContextMenu={open} />" },
-        { path: "b.ts", text: "view.dom.addEventListener('contextmenu', open)" },
-        { path: "c.ts", text: "export const open = 1" },
-      ],
-      /contextmenu/i,
-    );
+  test("fails a handler anywhere else, the hook's own file included, and a known one that is gone", () => {
+    const hook = "export function useObjectMenu(target) {\n  return { onContextMenu() {} };\n}\n";
+    const files = [
+      { path: "a.tsx", text: "<li onContextMenu={open} />" },
+      { path: "b.ts", text: "view.dom.addEventListener('contextmenu', open)" },
+      { path: "c.ts", text: "export const open = 1" },
+      { path: OWNER, text: hook },
+    ];
+    const found = handlers(files);
     expect(violations(found, [], {})).toEqual(["a.tsx: breaks the rule", "b.ts: breaks the rule"]);
     expect(violations(found, ["a.tsx"], { "b.ts": "an issue", "d.ts": "an issue" })).toEqual([
       "d.ts: fixed, so take it off the list of known ones",
     ]);
+    const beside = `${hook}export function ObjectMenu() {\n  return <li onContextMenu={open} />;\n}\n`;
+    expect(handlers([{ path: OWNER, text: beside }])).toEqual([OWNER]);
   });
 });
 

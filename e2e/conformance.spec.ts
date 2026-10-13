@@ -97,6 +97,7 @@ const NO_UNDO_YET: Record<string, string> = {
   "linkedFolder.pause": "#607",
   "linkedFolder.layout": "#607",
   "answer.regenerate": "an AI change is taken back from History (#113), not by the note's ⌘Z",
+  "folder.organize": "what it suggests is taken back in To review (#241), not by ⌘Z",
 };
 
 let dataDir: string;
@@ -704,6 +705,15 @@ for (const kind of OBJECT_KINDS) {
     await dismissChatSetup(window);
     // The scripted model answers the Questions a kind asks.
     await useLocalChatModel(window);
+    // Organize runs when asked, not by itself, and not into Settings for want of a model.
+    await window.evaluate(async () => {
+      const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      const provider = await core.saveChatProvider({ kind: "ollama", modelId: "fake-model" });
+      await core.saveLibrarySettings({
+        classifier: { kind: "chat", choice: { providerId: provider.id, modelId: "fake-model" } },
+        automatic: false,
+      });
+    });
     // Exports save where the User chose, without asking again.
     await useOutputLocation(window, sources);
     await conform({ app, window, sources }, kind, stage);
