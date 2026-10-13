@@ -255,6 +255,16 @@ test("someone else's tracked changes wait in place with who made them and when: 
   await expect(bar.getByTestId("their-changes-reject-all").first()).toHaveText("全部拒绝");
   await motionSettled(window);
   await screenshot(window, "their-changes-zh");
+  // A narrow window: each line stays inside the Mind, its buttons whole.
+  await setWindowSize(app, window, 900, 660);
+  await motionSettled(window);
+  const pane = await window.getByTestId("mind-pane").boundingBox();
+  for (const line of await bar.getByTestId("their-changes-line").all()) {
+    const box = await line.boundingBox();
+    expect(box && pane && box.x >= pane.x && box.x + box.width <= pane.x + pane.width).toBe(true);
+  }
+  await screenshot(window, "their-changes-zh-narrow");
+  await setWindowSize(app, window, 1600, 660);
   await setLanguage(window, "en");
 
   // All of one person's: Lars's paragraph goes, Priya's change waits.
