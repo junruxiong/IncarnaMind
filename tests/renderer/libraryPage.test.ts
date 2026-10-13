@@ -136,6 +136,18 @@ describe("search", () => {
     expect(nameMatchOf(minutes, queryWords("财务"), tagNames)).toBeNull();
   });
 
+  test("as in ⌘K, a Chinese name is found by its pinyin and initials, and a long word with one typo", () => {
+    const name = displayName(minutes);
+    const marked = (query: string) =>
+      (nameMatchOf(minutes, queryWords(query), tagNames) ?? []).map((range) =>
+        name.slice(range.start, range.end),
+      );
+    expect(marked("huiyi")).toEqual(["会议"]);
+    expect(marked("hyjy")).toEqual(["会议纪要"]);
+    expect(nameMatchOf(lease, queryWords("rotterdma"), tagNames)).not.toBeNull();
+    expect(nameMatchOf(lease, queryWords("contarct"), tagNames)).not.toBeNull();
+  });
+
   test("the line found starts a little before its first word found, at a word, so a narrow row shows it", () => {
     const mark = (line: { text: string; ranges: { start: number; end: number }[] }) =>
       line.ranges.map((range) => line.text.slice(range.start, range.end));
