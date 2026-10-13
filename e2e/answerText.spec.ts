@@ -186,7 +186,7 @@ for (const language of ["en", "zh-CN"] as const) {
         );
         return {
           this_: this_ && { top: this_.top, bottom: this_.bottom },
-          stop: stop && { top: stop.top, left: stop.left },
+          stop: stop && { top: stop.top, bottom: stop.bottom, left: stop.left },
           chips: chips.map((chip) => ({
             top: chip.top,
             bottom: chip.bottom,
@@ -208,8 +208,11 @@ for (const language of ["en", "zh-CN"] as const) {
         if (next) expect(next.left - chip.right).toBeLessThanOrEqual(3);
       }
       const last = markers.chips[3] as { right: number };
-      const stop = markers.stop as { top: number; left: number };
-      expect(stop.top).toBeLessThan(thisLine.bottom);
+      const stop = markers.stop as { top: number; bottom: number; left: number };
+      // On the same line: the middle of the full stop is within the line of "this".
+      const stopMiddle = (stop.top + stop.bottom) / 2;
+      expect(stopMiddle).toBeGreaterThan(thisLine.top);
+      expect(stopMiddle).toBeLessThan(thisLine.bottom);
       expect(stop.left - last.right).toBeLessThanOrEqual(2);
 
       // A table wider than the Answer scrolls inside its frame, its cut edge faded.
