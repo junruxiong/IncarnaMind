@@ -45,6 +45,7 @@ import { tokenUsageOf } from "../providers/promptCache";
 import { CostCapError, PlanLimitError } from "../providers/providerErrors";
 import { retryAfterMs } from "../providers/retryAfter";
 import { searchFee } from "../providers/webSearch";
+import { currentTask } from "../runs/current";
 import type { TokenUsage } from "../runs/engine";
 import type { Database } from "../storage";
 import { costOf, inCurrency, promptTokensOf, reservationOf } from "./price";
@@ -232,8 +233,8 @@ export function createMeter(options: {
       }
       db.run(
         `INSERT INTO model_requests (id, provider_id, model_id, flow, billing, status, currency,
-           reserved, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 'reserved', ?, ?, ?, ?)`,
+           reserved, run_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'reserved', ?, ?, ?, ?, ?)`,
         [
           id,
           model.providerId,
@@ -242,6 +243,7 @@ export function createMeter(options: {
           model.billing,
           priced ? price.currency : null,
           reserved,
+          currentTask.getStore() ?? null,
           created,
           created,
         ],
@@ -439,6 +441,29 @@ export function createMeter(options: {
           : null,
         providers: [...byProvider.values()],
       };
+    },
+
+    /**
+     * What a Task's model requests billed per token have cost, settled and
+     * still reserved, in the currency of most of it (the other at the fixed
+     * rate); null when none was priced.
+     */
+    taskCost(taskId: string): Money | null {
+      const rows = db.all<{ currency: Currency; amount: number }>(
+        `SELECT currency, sum(CASE status WHEN 'reserved' THEN reserved ELSE cost END) AS amount
+         FROM model_requests
+         WHERE run_id = ? AND deleted_at IS NULL AND billing = 'per-token'
+           AND currency IS NOT NULL
+         GROUP BY currency ORDER BY amount DESC`,
+        [taskId],
+      );
+      const [main] = rows;
+      if (!main) return null;
+      const amount = rows.reduce(
+        (sum, row) => sum + inCurrency(row.amount ?? 0, row.currency, main.currency),
+        0,
+      );
+      return { currency: main.currency, amount };
     },
 
     /**

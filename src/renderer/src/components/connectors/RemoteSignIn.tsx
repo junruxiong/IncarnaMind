@@ -15,7 +15,7 @@ async function act(action: () => Promise<unknown>) {
   try {
     await action();
   } catch (failure) {
-    useAppStore.setState({ actionError: errorMessage(failure) });
+    useAppStore.getState().reportError(failure);
   }
 }
 
