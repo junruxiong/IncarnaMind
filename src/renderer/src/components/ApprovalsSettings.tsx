@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ApprovalPolicy } from "../../../core/api";
 import { core } from "../core";
-import { errorMessage } from "../errors";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import {
@@ -32,7 +31,7 @@ export function ApprovalsSettings() {
   if (!policies) return null;
   const revoke = (policy: ApprovalPolicy) =>
     core.revokeApprovalPolicy(policy.id).catch((failure: unknown) => {
-      useAppStore.setState({ actionError: errorMessage(failure) });
+      useAppStore.getState().reportError(failure);
     });
 
   return (

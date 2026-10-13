@@ -5,6 +5,7 @@ import type { CoreBridge } from "../src/core/api";
 import {
   assistantAnswers,
   useLocalChatModel as connectLocalChatModel,
+  coreOf,
   createDataFolder,
   dismissChatSetup,
   expectReadyDocuments,
@@ -64,10 +65,10 @@ async function libraryWithFolder(app: Parameters<typeof linkFolderFromSidebar>[0
   await expectReadyDocuments(window, 5);
   await window.getByTestId("open-library").click();
   const library = window.getByTestId("library");
-  await library.getByRole("button", { name: "New folder", exact: true }).click();
-  await library.getByLabel("Folder name", { exact: true }).fill(FOLDER);
-  await library.getByLabel("Description", { exact: true }).fill("Tides, harbours and estuaries");
-  await library.getByRole("button", { name: "Save folder" }).click();
+  await (await coreOf(window)).evaluate(
+    (core, name) => core.createLibraryGroup({ name, description: "Tides, harbours and estuaries" }),
+    FOLDER,
+  );
   for (const name of ["Tide report", "Harbour notes", "Estuary survey", "Undated memo"]) {
     const assignment = library.getByRole("combobox", { name: `Folder for ${name}`, exact: true });
     await assignment.selectOption({ label: FOLDER });
