@@ -11,10 +11,10 @@ import type * as Y from "yjs";
 import { create } from "zustand";
 import {
   type CheckSentencesResult,
-  type ProviderError,
   CITATION_NODE,
   CLAIM_CHECK_MARK,
   type ClaimCheckAction,
+  type ProviderError,
 } from "../../core/api";
 import { mindModelOf } from "../../shared/mindModel";
 import { core } from "./core";
