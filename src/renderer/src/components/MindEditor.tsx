@@ -86,6 +86,7 @@ import { CompareSheet } from "./CompareSheet";
 import { StartGuide, useGettingStarted, useIsExample } from "./GettingStarted";
 import { MineLineIcon, SparkLineIcon } from "./lineIcons";
 import { MindNotice } from "./MindNotice";
+import { TaskTray } from "./TaskTray";
 
 /** Stands in for the hint's button in its translated words, which are split around it. */
 const ASK = "\uE000";
@@ -579,7 +580,13 @@ function MindEditorView({
       </div>
       {dock &&
         !readOnly &&
-        createPortal(<Composer ref={composer} editor={editor} doc={doc} mindId={mindId} />, dock)}
+        createPortal(
+          <>
+            <TaskTray mindId={mindId} />
+            <Composer ref={composer} editor={editor} doc={doc} mindId={mindId} />
+          </>,
+          dock,
+        )}
       {sheetSlot &&
         comparing &&
         !readOnly &&
