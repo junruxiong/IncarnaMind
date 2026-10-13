@@ -612,7 +612,7 @@ function MindEditorView({
               <VerifyLine editor={editor} doc={doc} mindId={mindId} verification={verification} />
             ) : (
               <WordCount editor={editor} doc={doc}>
-                <NoteHealth editor={editor} mindId={mindId} />
+                <NoteHealth editor={editor} doc={doc} mindId={mindId} />
                 <ContradictionLine doc={doc} mindId={mindId} />
               </WordCount>
             )}

@@ -53,6 +53,7 @@ export function readContradictionWatch(settings: Y.Map<unknown>): ContradictionW
     contradicted: count(value.contradicted),
     cost: moneyOf(value.cost),
     stop: stopOf(value.stop),
+    smallModel: value.smallModel === true,
   };
 }
 

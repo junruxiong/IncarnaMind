@@ -7,7 +7,7 @@
 import { writeFile } from "node:fs/promises";
 import type { JSONContent } from "@tiptap/core";
 import { describe, expect, test, vi } from "vitest";
-import type { Core, Document } from "../../src/core";
+import { type Core, createOllamaModels, type Document } from "../../src/core";
 import { claimSpans } from "../../src/renderer/src/editor/claimChecks";
 import { claimCheckShown } from "../../src/shared/claimChecks";
 import { contradictionWatchOf } from "../../src/shared/contradictionWatch";
@@ -22,9 +22,11 @@ import {
 import { answerEnded, shownPassages } from "../helpers/citations";
 import { createTempDataFolder, manualClock, startCore } from "../helpers/core";
 import { addAndProcess, waitForProcessing, writeSourceFile } from "../helpers/documents";
+import { GIB } from "../helpers/localModels";
 import { connectToMind, type MindClient, typeInto } from "../helpers/mindClient";
 import { editMind, question, readMind, writeMind } from "../helpers/minds";
 import { type ModelCall, scriptedModel, scriptedModels } from "../helpers/models";
+import { startOllamaServer } from "../helpers/ollama";
 
 const TIDES = {
   name: "Tides.md",
@@ -70,22 +72,28 @@ const citation = (document: Document, quote: string): JSONContent => ({
   },
 });
 
-/** A core with Tides and the harbour office's note in a Folder, and a model on this computer. */
+/**
+ * A core with Tides and the harbour office's note in a Folder, and a model on
+ * this computer: of a size its runtime doesn't say, unless `ollama` says it.
+ */
 async function setUp({
   office = OFFICE.contents,
   calls = [] as ModelCall[],
   delayMs = 0,
+  ollama,
 }: {
   office?: string;
   calls?: ModelCall[];
   delayMs?: number;
+  ollama?: { baseUrl: string; modelId: string };
 } = {}) {
   const model = checkingModel(PLANS, calls);
   const core = startCore(await createTempDataFolder(), {
     createChatModel: scriptedModels(model).createChatModel,
     contradictionWatch: { delayMs },
+    ...(ollama && { ollamaModels: createOllamaModels({ memoryBytes: () => 32 * GIB }) }),
   });
-  await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
+  await core.saveChatProvider({ kind: "ollama", modelId: "local-model", ...ollama });
   const sources = await createTempDataFolder();
   const [tides, harbourOffice] = (await addAndProcess(core, [
     await writeSourceFile(sources, TIDES.name, TIDES.contents),
@@ -155,6 +163,7 @@ describe("Check for contradictions", () => {
       checked: 2,
       contradicted: 1,
       stop: null,
+      smallModel: false,
     });
 
     const checks = await shownChecks(core, client, folder.id);
@@ -271,10 +280,48 @@ describe("A new version of a Document in the Folder", { timeout: 30_000 }, () =>
         contradicted: 1,
         cost: null,
         stop: null,
+        smallModel: false,
       }),
     );
     // A Mind in another Folder isn't checked.
     expect(await shownChecks(core, other.client, elsewhere.id)).toEqual([]);
+  });
+
+  test("on a small model on this computer, what it found says so, on demand and in the record, for #680's notice", async () => {
+    const ollama = await startOllamaServer({
+      models: [
+        {
+          name: "small-model",
+          capabilities: ["completion", "tools"],
+          // Under #680's 20 billion, and big enough to search with Tools.
+          modelInfo: { "general.parameter_count": 9_000_000_000 },
+        },
+      ],
+      reply: () => ({}),
+    });
+    const { core, tides, office, folder } = await setUp({
+      office: QUIET_OFFICE,
+      ollama: { baseUrl: ollama.baseUrl, modelId: "small-model" },
+    });
+    const { mind, client } = await mindCiting(core, tides, folder.id);
+    expect(await core.checkContradictions({ requestId: "r1", mindId: mind.id })).toMatchObject({
+      kind: "checked",
+      contradicted: 0,
+      smallModel: true,
+    });
+
+    await writeFile(office.path, OFFICE.contents);
+    await core.reconcileDocuments();
+    await waitForProcessing(core, [office.id]);
+    await vi.waitFor(
+      () =>
+        expect(contradictionWatchOf(client.doc)).toMatchObject({
+          checked: 2,
+          contradicted: 1,
+          smallModel: true,
+        }),
+      { timeout: 10_000 },
+    );
   });
 
   test("waits, at low priority, while an Answer is being written", async () => {

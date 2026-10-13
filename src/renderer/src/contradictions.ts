@@ -6,8 +6,15 @@
  * While it runs, the line says so with Stop, as #96's checks do; then it says
  * what it found, or why there was nothing to check.
  */
+import { useEffect, useState } from "react";
+import type * as Y from "yjs";
 import { create } from "zustand";
-import type { ContradictionCheckOutcome, ContradictionCheckPlan } from "../../core/api";
+import type {
+  ContradictionCheckOutcome,
+  ContradictionCheckPlan,
+  ContradictionWatchRun,
+} from "../../core/api";
+import { contradictionWatchOf, observeContradictionWatch } from "../../shared/contradictionWatch";
 import {
   type CheckProblem,
   setCheckProblem,
@@ -45,6 +52,31 @@ function setFor<K extends keyof ContradictionsState>(
 const problemOf = (plan: Exclude<ContradictionCheckPlan, { kind: "ready" }>): CheckProblem =>
   plan.kind === "nothing" ? { kind: "no-cited" } : plan;
 
+/** What the line under the Mind's title shows, if anything. */
+export type ContradictionLineShown =
+  | { kind: "asking"; claims: number; estimate: string }
+  | { kind: "found"; run: ContradictionCheckOutcome }
+  | { kind: "watched"; run: ContradictionWatchRun };
+
+/**
+ * The question before a run billed per token; else what the last run on
+ * demand found; else the last run a new version of a Document started, kept
+ * in the Mind (`src/shared/contradictionWatch.ts`), as it changes.
+ */
+export function useContradictionLine(doc: Y.Doc, mindId: string): ContradictionLineShown | null {
+  const asking = useContradictions((state) => state.asking[mindId]);
+  const found = useContradictions((state) => state.found[mindId]);
+  const [watched, setWatched] = useState(() => contradictionWatchOf(doc));
+  useEffect(() => {
+    setWatched(contradictionWatchOf(doc));
+    return observeContradictionWatch(doc, () => setWatched(contradictionWatchOf(doc)));
+  }, [doc]);
+  if (asking) return { kind: "asking", ...asking };
+  if (found) return { kind: "found", run: found };
+  if (watched) return { kind: "watched", run: watched };
+  return null;
+}
+
 export const dismissContradictions = (mindId: string) => {
   setFor("asking", mindId, null);
   setFor("found", mindId, null);
@@ -59,9 +91,9 @@ export async function checkContradictions(mindId: string): Promise<void> {
   try {
     const result = await core.checkContradictions({ requestId, mindId });
     if (result.kind === "checked") {
-      const { claims, checked, contradicted, cost, stop } = result;
-      setFor("found", mindId, { claims, checked, contradicted, cost, stop });
-      setCheckSmallModel(mindId, result.smallModel);
+      const { claims, checked, contradicted, cost, stop, smallModel } = result;
+      setFor("found", mindId, { claims, checked, contradicted, cost, stop, smallModel });
+      setCheckSmallModel(mindId, smallModel);
     } else if (result.kind !== "cancelled") {
       setCheckProblem(mindId, result.kind === "nothing" ? { kind: "no-cited" } : result);
     }

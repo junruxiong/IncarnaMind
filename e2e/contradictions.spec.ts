@@ -38,6 +38,9 @@ const TIDES = buildPdf([
 const OFFICE = buildPdf([
   { lines: ["Harbour office", "Harbours publish the times of high water every 12 months."] },
 ]);
+const QUIET_OFFICE = buildPdf([
+  { lines: ["Harbour office", "The harbour office opens to visitors in the morning."] },
+]);
 const CLAIM = "Harbours publish the times of high water every 6 months.";
 
 let dataDir: string;
@@ -182,4 +185,36 @@ test("In Chinese and a narrow window: a Mind in no Folder, and a Folder of only 
     "“潮汐”中只有这些说法引用的文档。",
   );
   await screenshot(window, "contradictions-only-cited-zh-narrow");
+});
+
+test("A new version of a Document in the Folder has the Mind's cited claims checked by themselves; the line says what was found until closed", async () => {
+  await writeFile(join(sources, "Tides.pdf"), TIDES);
+  await writeFile(join(sources, "Office.pdf"), QUIET_OFFICE);
+  const { app, window } = await launchApp(dataDir, {
+    fakeChat: true,
+    contradictionWatchDelayMs: 0,
+  });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setWindowSize(app, window, 1440, 900);
+  await addDocuments(window, [join(sources, "Tides.pdf"), join(sources, "Office.pdf")]);
+  const line = await citedClaim(window);
+  await bridge(window).folder("Harbours", ["Tides", "Office"]);
+
+  await writeFile(join(sources, "Office.pdf"), OFFICE);
+
+  const watched = window.getByTestId("contradictions-watched");
+  await expect(watched).toContainText("After “Office” changed: 1 of 1 cited claims contradicted", {
+    timeout: 30_000,
+  });
+  await expect(window.getByTestId("claim-mark")).toHaveAttribute("data-check", "contradicted");
+  await expect(line.locator(".claim-wash--contradicted").first()).toBeVisible();
+  await expect(window.getByTestId("mind-health").getByTestId("health-contradicted")).toHaveText(
+    "1 contradicted",
+  );
+  await screenshot(window, "contradictions-watched-en");
+
+  await pointAndClick(window, watched.getByTestId("contradictions-watched-close"));
+  await expect(watched).toHaveCount(0);
+  await expect(window.getByTestId("claim-mark")).toHaveAttribute("data-check", "contradicted");
 });

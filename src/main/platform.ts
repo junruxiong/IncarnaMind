@@ -313,6 +313,14 @@ const sourceProvidersUrl =
   import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_SOURCES : undefined;
 
 /**
+ * Test-only launch flag: how long after a new version of a Document
+ * contradiction watch checks its Folder's Minds (#112), so the smoke tests
+ * needn't wait the 30 seconds. Only a test build honours it.
+ */
+const contradictionWatchDelay =
+  import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_CONTRADICTION_DELAY_MS : undefined;
+
+/**
  * Test-only launch flag: the port of a local server standing in for the web
  * (#128). Web search's fetcher resolves every host to a public address and
  * connects there, its guard still deciding which hosts it reaches, so the
@@ -414,6 +422,9 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     ...(usageData && { usageData }),
     ...(referenceLookupUrl && {
       referenceLookup: { crossref: referenceLookupUrl, arxiv: referenceLookupUrl },
+    }),
+    ...(contradictionWatchDelay && {
+      contradictionWatch: { delayMs: Number(contradictionWatchDelay) },
     }),
     ...(sourceProvidersUrl && {
       sourceProviders: {
