@@ -371,6 +371,27 @@ for (const place of PLACES) {
   });
 }
 
+test("a 300-page PDF is peeked at by its first pages alone, not drawn whole", async () => {
+  const path = join(sources, "Almanac.pdf");
+  await writeFile(
+    path,
+    buildPdf(Array.from({ length: 300 }, (_, index) => ({ lines: [`Almanac page ${index + 1}`] }))),
+  );
+  const { app, window } = await start();
+  try {
+    await addAndShow(window, sidebar, [path]);
+    await sidebar.main(sidebar.row(window, "Almanac")).focus();
+    await window.keyboard.press("Space");
+    const peek = peekOf(window);
+    await expect(peek.getByTestId("peek-kind")).toContainText("300 pages");
+    const drawn = peek.locator('[data-drawn="true"]');
+    await expect(drawn.first()).toBeVisible();
+    expect(await drawn.count()).toBeLessThan(5);
+  } finally {
+    await app.close();
+  }
+});
+
 test("in the sidebar, ↓ passes over the Folders and Minds between two Documents", async () => {
   const paths = await writeTexts(["Alpha", "Bravo"]);
   const { app, window } = await start();

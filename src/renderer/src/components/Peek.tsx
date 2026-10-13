@@ -13,7 +13,7 @@ import { useDocumentFolder, useUnitCount } from "../documentFacts";
 import { documentStatusText } from "../documentStatus";
 import { addedDate, documentSummary } from "../fileInfo";
 import { useLanguage, useT } from "../i18n";
-import { type Box, enterFrom, useExitToward } from "../motion";
+import { type Box, enterFrom } from "../motion";
 import {
   focusPeekedRow,
   openPeeked,
@@ -163,8 +163,6 @@ function PeekCard({ target }: { target: PeekTarget }) {
   const t = useT();
   const language = useLanguage();
   const card = useRef<HTMLDivElement>(null);
-  const lastRow = useRef(target.row);
-  lastRow.current = target.row;
   const [moving, setMoving] = useState<HTMLElement | null>(null);
   const document = useAppStore((state) =>
     state.documents.find((each) => each.id === target.documentId),
@@ -173,7 +171,6 @@ function PeekCard({ target }: { target: PeekTarget }) {
   const units = useUnitCount(settled ? (document ?? null) : null);
   const folder = useDocumentFolder(target.documentId);
   useWhileOpen(card);
-  useExitToward(card, () => lastRow.current);
 
   // Shown where it goes before it is drawn, growing from its row, in the list it was asked for in.
   const beside = useRef<Beside | null>(null);
