@@ -94,7 +94,6 @@ test("a release build asks on the first run, sends nothing when declined, and on
   await expect(dialog).toContainText("Help improve IncarnaMind?");
   await expect(dialog.getByTestId("usage-data-examples")).toContainText("A Question was asked");
   await expect(dialog).toContainText("Never your Documents or their names");
-  await expect(window.getByTestId("chat-setup")).toBeHidden();
 
   // Declined: nothing is sent, whatever the User does.
   await dialog.getByTestId("usage-data-decline").click();

@@ -349,13 +349,11 @@ export async function showSourceLocations(window: Page): Promise<void> {
 }
 
 /**
- * On a fresh data folder the first-run chat setup covers the window: choose
- * "set up later". The choice is remembered, so later launches don't show it.
+ * First run asks for no model (#103): the setup shows in the composer at the first own Question,
+ * so there is nothing to dismiss. Kept so a spec says where the old dialog used to be.
  */
 export async function dismissChatSetup(window: Page): Promise<void> {
-  const setup = window.getByTestId("chat-setup");
-  await setup.getByTestId("chat-setup-later").click();
-  await setup.waitFor({ state: "hidden" });
+  await expect(window.getByTestId("chat-setup")).toHaveCount(0);
 }
 
 /**

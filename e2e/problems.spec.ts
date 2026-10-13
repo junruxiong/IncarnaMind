@@ -151,7 +151,7 @@ test("a failed Answer says so under itself with one action: the key's page in Se
   }
 });
 
-test("asking without a chat model says what to set up, in the composer's row and at the top of the Mind, and its action opens Models", async () => {
+test("asking without a chat model says what to set up at the top of the Mind, and the first Question waits for the setup card", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await newMind(window);
@@ -163,24 +163,20 @@ test("asking without a chat model says what to set up, in the composer's row and
   await expect(window.getByRole("status").filter({ has: top })).toHaveCount(0);
   await screenshot(window, "needs-chat-model-en");
 
-  // In the composer's row, where it was asked; the Question waits there, not in the note.
+  // Asked from the composer, the Question waits in the conversation and the composer becomes the
+  // setup card, not a line; nothing is written into the note.
   await window.getByTestId("mind-editor").click();
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type("Is anyone there?");
   await window.keyboard.press("Enter");
-  const composer = window.getByTestId("composer");
-  const notReady = composer.getByTestId("composer-not-ready");
-  await expect(notReady).toContainText("Asking Questions needs a chat model");
-  await expect(notReady.getByRole("button")).toHaveCount(1);
-  await expect(notReady).toHaveCSS("color", "rgb(101, 107, 116)");
-  await expect(composer.getByTestId("composer-input")).toHaveValue("Is anyone there?");
+  await expect(window.getByTestId("model-setup")).toBeVisible();
   await expect(window.getByTestId("mind-editor").getByTestId("question")).toHaveCount(0);
   await expect(window.locator("dialog[open]")).toHaveCount(0);
   await screenshot(window, "needs-chat-model-composer-en");
 
-  // By keyboard: Tab reaches the action, Enter opens Settings on Models.
-  await notReady.getByRole("button").focus();
-  await expect(notReady.getByRole("button")).toHaveCSS("outline-style", "solid");
+  // The notice's action opens Settings on Models, by keyboard too.
+  await top.getByRole("button").focus();
+  await expect(top.getByRole("button")).toHaveCSS("outline-style", "solid");
   await window.keyboard.press("Enter");
   await expect(window.getByTestId("settings")).toHaveAttribute("data-page", "models");
   await window.keyboard.press("Escape");
@@ -189,7 +185,6 @@ test("asking without a chat model says what to set up, in the composer's row and
   await bridge(window).settings("zh-CN");
   await expect(top).toContainText("提问需要先设置对话模型");
   await expect(top.getByRole("button")).toHaveText("去设置");
-  await expect(notReady).toContainText("提问需要先设置对话模型");
   await screenshot(window, "needs-chat-model-zh");
   await app.close();
 });

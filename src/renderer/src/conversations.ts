@@ -11,6 +11,7 @@ import { settleAsk, useAnswers } from "./answers";
 import { composerKey } from "./composer";
 import { core } from "./core";
 import { translateNow } from "./i18n";
+import { useModelSetup, waitForModel } from "./modelSetup";
 import { useAppStore } from "./store";
 import { useUndo } from "./undo";
 
@@ -155,6 +156,16 @@ export async function askInAssistant(
       ...input,
       conversationId: useConversations.getState().openId,
     });
+    if (
+      !result.asked &&
+      result.reason === "not-ready" &&
+      result.readiness.reason === "no-provider"
+    ) {
+      // No model yet: the Question waits in the conversation while the setup card is shown.
+      settleAsk(key, null);
+      waitForModel({ ...input, conversationId: useConversations.getState().openId });
+      return true;
+    }
     settleAsk(key, result);
     if (!result.asked) return false;
     const id = result.conversation.id;
@@ -175,6 +186,26 @@ export async function askInAssistant(
     useConversations.setState({ asking: null, stopWanted: false });
   }
 }
+
+/** Asks the Question that waited for a model, now that one is set. */
+function askWaitingQuestion(): void {
+  const { waiting } = useModelSetup.getState();
+  if (!waiting) return;
+  useModelSetup.setState({ waiting: null });
+  const { conversationId, ...question } = waiting;
+  void (async () => {
+    // The conversation it was typed in, whichever is open now.
+    if (useConversations.getState().openId !== conversationId) {
+      if (conversationId) await openConversation(conversationId);
+      else startNewChat();
+    }
+    await askInAssistant(question);
+  })();
+}
+
+core.on("chatReadiness.changed", (readiness) => {
+  if (readiness.ready) askWaitingQuestion();
+});
 
 /** Writes an Answer of the open conversation again; why it couldn't be is kept under its id. */
 export async function regenerateAnswer(answerId: string): Promise<void> {

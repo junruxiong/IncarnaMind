@@ -16,7 +16,6 @@ import {
   openSettings,
   removeDataFolder,
   setWindowSize,
-  showSettingsPage,
   showSourceLocations,
   urlsOpened,
 } from "./app";
@@ -160,12 +159,6 @@ test("Continue with ChatGPT opens OpenAI's sign-in for IncarnaMind's own registr
   const { app, window } = await launchApp(dataDir);
   await interceptOpenExternal(app);
 
-  // First run offers the ChatGPT plan beside local models and a key, with its own button.
-  const setup = window.getByTestId("chat-setup");
-  await setup.getByTestId("chat-choice-chatgpt").check();
-  await expect(setup.getByTestId("chatgpt-continue")).toHaveText("Continue with ChatGPT");
-  await setup.getByTestId("chat-setup-later").click();
-
   // Settings → Models has it too. Nothing is signed in here: the browser is stood in for.
   await openSettings(window, "models");
   const section = window.getByTestId("chatgpt-settings");
@@ -202,90 +195,56 @@ test("Continue with ChatGPT opens OpenAI's sign-in for IncarnaMind's own registr
   await app.close();
 });
 
-test("first-run chat setup appears on a fresh data folder and can be set up later", async () => {
+test("first run asks for no model; the first own Question waits while the setup leads with one recommended way, and Set up later gives the words back", async () => {
   const first = await launchApp(dataDir);
   const { window } = first;
-
-  // No provider is preselected, and no key is needed to get past this screen. Where
-  // Answers come from is one choice: local models, an API key, or the ChatGPT plan.
-  const setup = window.getByTestId("chat-setup");
-  await expect(setup).toBeVisible();
-  await expect(setup.getByTestId("chat-provider-choices").getByRole("radio")).toHaveCount(3);
-  await expect(setup.getByRole("radio", { checked: true })).toHaveCount(0);
-  // Choosing an API key offers the seven first-class providers that take a key (ADR-0019), none
-  // chosen yet, and no "More providers": the rest are in Settings.
-  await expect(setup.getByTestId("provider-more-toggle")).toHaveCount(0);
-  await setup.getByTestId("chat-choice-api-key").check();
-  const providerChoices = setup.getByTestId("provider-form").getByRole("radio");
-  await expect(providerChoices).toHaveCount(7);
-  await expect(
-    setup.getByTestId("provider-form").getByRole("radio", { checked: true }),
-  ).toHaveCount(0);
-
-  await setup.getByTestId("chat-setup-later").click();
-  await expect(setup).toBeHidden();
-
-  // Notes and Documents work without a provider; Questions explain what to configure.
+  await expect(window.getByTestId("chat-setup")).toHaveCount(0);
   await newMind(window);
   await expect(window.getByTestId("mind-pane")).toBeVisible();
   await expect(window.getByTestId("chat-readiness")).toBeVisible();
+
+  // The first own Question waits in the conversation; the composer becomes the setup card.
+  await window.getByTestId("mind-editor").click();
+  await window.keyboard.press("ControlOrMeta+j");
+  await window.keyboard.type("What is in my Documents?");
+  await window.keyboard.press("Enter");
+  const card = window.getByTestId("model-setup");
+  await expect(card).toBeVisible();
+  await expect(window.getByTestId("assistant-waiting-model")).toHaveText(
+    "Waiting for you to choose a model",
+  );
+  await expect(card).toContainText("Choose where Answers come from");
+  await expect(card.getByTestId("setup-primary")).toHaveText("Use my ChatGPT plan");
+  await expect(card).toContainText("No key needed");
+  // The other ways are folded under the one recommended button.
+  await expect(card.getByTestId("way-key")).toBeHidden();
+  await card.getByTestId("setup-other").click();
+  await expect(card.getByTestId("way-key")).toBeVisible();
+  await expect(card.getByTestId("way-local")).toBeVisible();
+  await expect(card.getByTestId("setup-claude")).toContainText("Already pay for Claude?");
+
+  // In Chinese the recommended button is a DeepSeek key.
+  await window.evaluate(async () =>
+    (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+      user: { language: "zh-CN" },
+    }),
+  );
+  await expect(card.getByTestId("setup-primary")).toHaveText("粘贴 DeepSeek 密钥");
+  await window.evaluate(async () =>
+    (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+      user: { language: "en" },
+    }),
+  );
+
+  // Set up later: the words are back in the composer.
+  await card.getByTestId("setup-later").click();
+  await expect(card).toBeHidden();
+  await expect(window.getByTestId("composer-input")).toHaveValue("What is in my Documents?");
   await first.app.close();
-
-  // "Set up later" is remembered.
-  const second = await launchApp(dataDir);
-  await second.window.getByTestId("mind-list-item").click();
-  await expect(second.window.getByTestId("chat-readiness")).toBeVisible();
-  await expect(second.window.getByTestId("chat-setup")).toBeHidden();
-
-  // The notice opens Settings on its Models page, where a provider can be set up.
-  await second.window.getByTestId("chat-readiness").getByRole("button").click();
-  await expect(second.window.getByTestId("settings")).toHaveAttribute("data-page", "models");
-  await expect(second.window.getByTestId("chat-model-settings")).toBeVisible();
-  // What is sent to other services lives on the Privacy page.
-  await showSettingsPage(second.window, "privacy");
-  await expect(second.window.getByTestId("consent-settings")).toBeVisible();
-  await second.app.close();
 });
 
-test("first-run's line under an API key names only the providers listed below it, and says the others are in Settings", async () => {
+test("Settings → Models lists the key providers, and “Already pay for a plan?” with its routes", async () => {
   const { app, window } = await launchApp(dataDir);
-  const setup = window.getByTestId("chat-setup");
-  await setup.getByTestId("chat-choice-api-key").check();
-  const row = setup.locator("label").filter({ has: window.getByTestId("chat-choice-api-key") });
-  const radios = setup.getByTestId("provider-form").getByRole("radio");
-
-  const lists = {
-    en: {
-      names: ["Anthropic", "OpenAI", "Google", "OpenRouter", "DeepSeek", "Qwen", "SiliconFlow"],
-      others: "More providers are in Settings.",
-    },
-    "zh-CN": {
-      names: ["Anthropic", "OpenAI", "Google", "OpenRouter", "DeepSeek", "通义千问", "硅基流动"],
-      others: "更多提供商在“设置”中。",
-    },
-  } as const;
-  for (const language of ["zh-CN", "en"] as const) {
-    await window.evaluate(
-      async (user) => {
-        await (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
-          user,
-        });
-      },
-      { language },
-    );
-    const { names, others } = lists[language];
-    await expect(row).toContainText(others);
-    const line = (await row.innerText()).split(others)[0] ?? "";
-    await expect(radios).toHaveCount(7);
-    for (const name of names) expect(line).toContain(name);
-    const labels = await setup.getByTestId("provider-form").locator("label").allInnerTexts();
-    for (const name of names) expect(labels.some((label) => label.startsWith(name))).toBe(true);
-    for (const promised of ["Kimi", "GLM", "Mistral", "xAI", "OpenAI-compatible", "兼容"]) {
-      expect(line).not.toContain(promised);
-    }
-  }
-
-  await dismissChatSetup(window);
   const settings = await openSettings(window, "models");
   await expect(settings.getByTestId("chat-choice-api-key")).toBeVisible();
   await expect(
@@ -293,17 +252,29 @@ test("first-run's line under an API key names only the providers listed below it
   ).toContainText(
     "Kimi, GLM, Mistral, xAI, OpenRouter, SiliconFlow, or an OpenAI-compatible server",
   );
-  await app.close();
-});
-
-test("in Chinese, the provider form has no space after full-width punctuation where its pieces join", async () => {
-  const { app, window } = await launchApp(dataDir);
+  const plans = settings.getByTestId("plans-settings");
+  await expect(plans).toContainText("Already pay for a plan?");
+  await expect(plans).toContainText("ChatGPT Plus or Pro");
+  await expect(plans).toContainText("Claude Pro, Max or Team");
+  await expect(plans).toContainText("Google AI Pro or Ultra");
   await window.evaluate(async () =>
     (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
       user: { language: "zh-CN" },
     }),
   );
-  const form = window.getByTestId("chat-setup").getByTestId("provider-form");
+  await expect(plans).toContainText("已经在付费订阅？");
+  await app.close();
+});
+
+test("in Chinese, the provider form has no space after full-width punctuation where its pieces join", async () => {
+  const { app, window } = await launchApp(dataDir);
+  const settings = await openSettings(window, "models");
+  await window.evaluate(async () =>
+    (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+      user: { language: "zh-CN" },
+    }),
+  );
+  const form = settings.getByTestId("provider-form");
   await window.getByTestId("chat-choice-api-key").check();
   await form.getByRole("radio", { name: "OpenAI", exact: true }).check();
   const facts = (await form.getByTestId("provider-facts").innerText()).replace(/\s+/g, " ");
@@ -316,7 +287,8 @@ test("in Chinese, the provider form has no space after full-width punctuation wh
 
 test('after "Don\'t allow", a connection test offers to ask again, and asks before sending anything', async () => {
   const { app, window } = await launchApp(dataDir);
-  const form = window.getByTestId("chat-setup").getByTestId("provider-form");
+  const settings = await openSettings(window, "models");
+  const form = settings.getByTestId("provider-form");
   await window.getByTestId("chat-choice-api-key").check();
   await form.getByRole("radio", { name: "OpenAI", exact: true }).check();
   await form.getByLabel(/^API key/).fill("sk-not-a-real-key");
@@ -338,15 +310,6 @@ test('after "Don\'t allow", a connection test offers to ask again, and asks befo
 test("first run fits a small window; the not-ready notice and a long title keep the Mind's text edge", async () => {
   const { app, window } = await launchApp(dataDir);
   await setWindowSize(app, window, 1000, 600);
-  const setup = window.getByTestId("chat-setup");
-  await setup.getByTestId("chat-choice-api-key").check();
-  await setup
-    .getByTestId("provider-form")
-    .getByRole("radio", { name: "OpenAI", exact: true })
-    .check();
-  // The form makes the dialog scroll, and "Set up later" stays in view.
-  await expect(setup.getByTestId("chat-setup-later")).toBeInViewport();
-  await setup.getByTestId("chat-setup-later").click();
 
   await newMind(window);
   const title = window.getByTestId("mind-title");

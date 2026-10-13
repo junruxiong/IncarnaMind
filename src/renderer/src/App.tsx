@@ -16,7 +16,6 @@ import { HistoryView } from "./components/history/HistoryView";
 import { InfoPanel } from "./components/InfoPanel";
 import { MeetingNoticeDialog } from "./components/MeetingNoticeDialog";
 import { ChatGptWelcomeDialog } from "./components/providers/ChatGptSignIn";
-import { ChatSetupDialog } from "./components/providers/ChatSetupDialog";
 import { RequestedDialogs } from "./components/RequestedDialogs";
 import { ResizeRod } from "./components/ResizeRod";
 import { SettingsDialog } from "./components/SettingsDialog";
@@ -270,7 +269,6 @@ function Workspace() {
         <InfoPanel />
         <AddWebPageDialog />
         <WordImportDialog />
-        <ChatSetupDialog />
         <ChatGptWelcomeDialog />
         <UsageDataDialog />
         <CitationStylePickerHost />
