@@ -37,6 +37,7 @@ import { LibraryFolders } from "./LibraryFolders";
 import { LinkFolderDialog } from "./LinkFolderDialog";
 import { DocumentLineIcon, MoreLineIcon } from "./lineIcons";
 import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
+import { SidebarSearch } from "./SidebarSearch";
 import { SidebarTags } from "./SidebarTags";
 import {
   clearsActions,
@@ -184,6 +185,7 @@ export function DocumentsSection() {
         className="hidden"
         onChange={addPicked}
       />
+      <SidebarSearch />
       <div className={rowClass(libraryOpen)}>
         <button
           type="button"
