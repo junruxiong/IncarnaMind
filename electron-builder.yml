@@ -130,7 +130,7 @@ linux:
 
 publish:
   provider: github
-  owner: junruxiong
+  owner: IncarnaMind
   repo: IncarnaMind
   # Releases start as drafts. Installed apps only see an update once a maintainer publishes it.
   releaseType: draft
