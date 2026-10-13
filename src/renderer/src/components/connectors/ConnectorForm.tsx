@@ -4,6 +4,7 @@ import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { SecretStorageNotice } from "../providers/ProviderForm";
+import { TypingTextarea } from "../TypingTextarea";
 import {
   choiceListClass,
   compactChoiceRadioClass,
@@ -286,7 +287,7 @@ function LocalFields(props: {
       </label>
       <label className={fieldLabelClass}>
         {t("connectors.form.args")}
-        <textarea
+        <TypingTextarea
           value={args}
           onChange={(event) => setArgs(event.target.value)}
           rows={3}
@@ -297,7 +298,7 @@ function LocalFields(props: {
       </label>
       <label className={fieldLabelClass}>
         {t("connectors.form.env")}
-        <textarea
+        <TypingTextarea
           value={env}
           onChange={(event) => setEnv(event.target.value)}
           rows={2}

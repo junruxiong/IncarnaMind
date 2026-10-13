@@ -9,6 +9,7 @@ import {
   ySyncPluginKey,
 } from "@tiptap/y-tiptap";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { TypingTextarea } from "../components/TypingTextarea";
 import { useT } from "../i18n";
 import { MATH_TYPES } from "./noteSchema";
 import { Popover } from "./Popover";
@@ -195,7 +196,7 @@ export function MathEditor({
       aria-label={t("editor.math.label")}
       className="editor-menu math-editor"
     >
-      <textarea
+      <TypingTextarea
         ref={field}
         data-testid="math-editor"
         aria-label={t("editor.math.label")}
