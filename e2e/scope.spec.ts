@@ -120,7 +120,7 @@ test("typing @ in the composer limits the search to a Folder: the Answer cites o
   );
 
   // Once the folder is renamed on disk, its Folder is gone: the composer's chip shows it,
-  // struck through, the Answer's steps say so, and regenerating searches nothing.
+  // struck through, the Answer's steps say so, and regenerating searches nothing and says so.
   await rename(join(notes, "Ocean"), join(notes, "Sea"));
   await expect(composerChip).toHaveAttribute("data-deleted", "true");
   await expect(composerChip.locator("s")).toHaveText("Deleted Folder");
@@ -128,7 +128,8 @@ test("typing @ in the composer limits the search to a Folder: the Answer cites o
   await answer.hover();
   await answer.getByTestId("answer-regenerate").click();
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-  await expect(answer).toContainText("has no Documents to search");
+  // Not refused: the model answers, and the line says the scope has no Documents.
+  await expect(answer.getByTestId("answer-empty-scope")).toContainText("has no Documents");
   await expect(answer.getByTestId("citation")).toHaveCount(0);
 
   // The chip's × takes it out of the composer's scope.
@@ -206,7 +207,8 @@ test("an in-app folder scopes answers and deleting it never broadens the search"
     await openSteps(window, answer);
     await answer.getByTestId("answer-regenerate").click();
     await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-    await expect(answer).toContainText("has no Documents to search");
+    // Not refused: the model answers, and the line says the scope has no Documents.
+    await expect(answer.getByTestId("answer-empty-scope")).toContainText("has no Documents");
     await expect(answer.getByTestId("citation")).toHaveCount(0);
   } finally {
     await app.close();
