@@ -3777,12 +3777,13 @@ export interface ContradictionCheckOutcome {
   cost: Money | null;
   /** The monthly cap or a plan's limit stopped it; the claims after it weren't checked. */
   stop: RunStop | null;
+  /** The verdicts came from a model too small to judge reliably (#680). */
+  smallModel: boolean;
 }
 
 /** What `checkContradictions` did. */
 export type CheckContradictionsResult =
-  /** `smallModel`: the verdicts came from a model too small to judge reliably (#680). */
-  | ({ kind: "checked"; smallModel: boolean } & ContradictionCheckOutcome)
+  | ({ kind: "checked" } & ContradictionCheckOutcome)
   | Exclude<CheckSentencesResult, { kind: "checked" }>;
 
 /**

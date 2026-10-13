@@ -1,11 +1,13 @@
 import type { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { Fragment, useEffect, useState } from "react";
+import type * as Y from "yjs";
 import type { CitationAttributes } from "../../../core/api";
 import { citationState } from "../../../shared/citations";
 import { dismissCheckProblem, stopCheck, useChecks } from "../checks";
 import { ProblemLine } from "../components/ProblemLine";
 import { ReadinessExplanation, readinessAction } from "../components/providers/ChatReadinessNotice";
+import { useContradictionLine } from "../contradictions";
 import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
 import { shownClaims } from "./claimChecks";
@@ -90,13 +92,22 @@ function useHealth(editor: Editor): Health {
  * sentences are checked, what is happening with Stop; or why a check gave
  * nothing, with the one thing that helps.
  */
-export function NoteHealth({ editor, mindId }: { editor: Editor; mindId: string }) {
+export function NoteHealth({
+  editor,
+  doc,
+  mindId,
+}: {
+  editor: Editor;
+  doc: Y.Doc;
+  mindId: string;
+}) {
   const t = useT();
   const language = useLanguage();
   const health = useHealth(editor);
   const running = useChecks((state) => state.running[mindId]);
   const problem = useChecks((state) => state.problems[mindId]);
   const smallModel = useChecks((state) => state.smallModel[mindId] === true);
+  const contradictions = useContradictionLine(doc, mindId);
   const openSettings = useAppStore((state) => state.openSettings);
   const folderName = useAppStore((state) => {
     const folderId =
@@ -172,7 +183,8 @@ export function NoteHealth({ editor, mindId }: { editor: Editor; mindId: string 
           })}
         </fieldset>
       )}
-      {smallModel && parts.length > 0 && (
+      {((smallModel && parts.length > 0) ||
+        (contradictions?.kind !== "asking" && contradictions?.run.smallModel)) && (
         <p data-testid="checks-small-model" className="mind-health-line mind-health-note">
           {t("checks.smallModel")}
         </p>

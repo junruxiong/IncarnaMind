@@ -283,6 +283,7 @@ export function createContradictionWatch(options: WatchOptions) {
       contradicted,
       cost: options.runCost(runId),
       stop,
+      smallModel: judgesUnreliably(prepared),
     };
   }
 
@@ -324,6 +325,7 @@ export function createContradictionWatch(options: WatchOptions) {
             contradicted,
             cost: options.runCost(runId),
             stop,
+            smallModel: judgesUnreliably(prepared),
           }),
         );
       } catch (error) {
@@ -408,7 +410,7 @@ export function createContradictionWatch(options: WatchOptions) {
       try {
         const outcome = await check(mindId, requestId, ready, model.prepared, tracked.signal);
         if (tracked.signal.aborted) return { kind: "cancelled" };
-        return { kind: "checked", ...outcome, smallModel: judgesUnreliably(model.prepared) };
+        return { kind: "checked", ...outcome };
       } finally {
         tracked.done();
       }
@@ -435,7 +437,7 @@ export function createContradictionWatch(options: WatchOptions) {
         kind: "checked",
         sentences: outcome.claims,
         checked: outcome.checked,
-        smallModel: judgesUnreliably(model.prepared),
+        smallModel: outcome.smallModel,
       };
     },
 

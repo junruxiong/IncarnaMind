@@ -1,29 +1,14 @@
-import { useEffect, useState } from "react";
 import type * as Y from "yjs";
-import {
-  type ContradictionCheckOutcome,
-  type ContradictionWatchRun,
-  MIND_SETTINGS_FIELD,
-} from "../../../core/api";
-import {
-  clearContradictionWatch,
-  contradictionWatchOf,
-  observeContradictionWatch,
-} from "../../../shared/contradictionWatch";
+import { type ContradictionCheckOutcome, MIND_SETTINGS_FIELD } from "../../../core/api";
+import { clearContradictionWatch } from "../../../shared/contradictionWatch";
 import { ProblemLine } from "../components/ProblemLine";
-import { checkContradictions, dismissContradictions, useContradictions } from "../contradictions";
+import {
+  checkContradictions,
+  dismissContradictions,
+  useContradictionLine,
+} from "../contradictions";
 import { formatMoney, runStopText } from "../cost";
 import { useLanguage, useT } from "../i18n";
-
-/** The last check a new version of a Document started in the Mind, as it changes. */
-function useWatchRun(doc: Y.Doc): ContradictionWatchRun | null {
-  const [run, setRun] = useState(() => contradictionWatchOf(doc));
-  useEffect(() => {
-    setRun(contradictionWatchOf(doc));
-    return observeContradictionWatch(doc, () => setRun(contradictionWatchOf(doc)));
-  }, [doc]);
-  return run;
-}
 
 /**
  * Contradiction watch's line under the Mind's title (#112), beside its
@@ -34,9 +19,7 @@ function useWatchRun(doc: Y.Doc): ContradictionWatchRun | null {
 export function ContradictionLine({ doc, mindId }: { doc: Y.Doc; mindId: string }) {
   const t = useT();
   const language = useLanguage();
-  const asking = useContradictions((state) => state.asking[mindId]);
-  const found = useContradictions((state) => state.found[mindId]);
-  const watched = useWatchRun(doc);
+  const shown = useContradictionLine(doc, mindId);
   const format = (value: number) => new Intl.NumberFormat(language).format(value);
 
   const outcome = (run: ContradictionCheckOutcome) => {
@@ -48,7 +31,7 @@ export function ContradictionLine({ doc, mindId }: { doc: Y.Doc; mindId: string 
     return run.stop ? `${said} · ${runStopText(run.stop, t, language)}` : said;
   };
 
-  if (asking) {
+  if (shown?.kind === "asking") {
     return (
       <ProblemLine
         role="status"
@@ -65,14 +48,14 @@ export function ContradictionLine({ doc, mindId }: { doc: Y.Doc; mindId: string 
           onClick: () => dismissContradictions(mindId),
         }}
       >
-        {t(asking.claims === 1 ? "contradictions.ask.one" : "contradictions.ask", {
-          count: format(asking.claims),
-          estimate: asking.estimate,
+        {t(shown.claims === 1 ? "contradictions.ask.one" : "contradictions.ask", {
+          count: format(shown.claims),
+          estimate: shown.estimate,
         })}
       </ProblemLine>
     );
   }
-  if (found) {
+  if (shown?.kind === "found") {
     return (
       <ProblemLine
         role="status"
@@ -84,11 +67,12 @@ export function ContradictionLine({ doc, mindId }: { doc: Y.Doc; mindId: string 
           onClick: () => dismissContradictions(mindId),
         }}
       >
-        {outcome(found)}
+        {outcome(shown.run)}
       </ProblemLine>
     );
   }
-  if (watched) {
+  if (shown?.kind === "watched") {
+    const watched = shown.run;
     const result = t("contradictions.after", {
       document: watched.documentName,
       result: outcome(watched),
