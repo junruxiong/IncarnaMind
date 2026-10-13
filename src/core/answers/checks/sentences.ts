@@ -142,6 +142,30 @@ export function selectedSentences(
   return sentences.length > 0 ? { ok: true, sentences } : { ok: false, reason: "nothing" };
 }
 
+/** Every sentence of the Mind's paragraphs, in order, but those holding a change still waiting. */
+export function everySentence(blocks: Y.XmlFragment): SelectedSentence[] {
+  return textBlocks(blocks).flatMap(({ element, busy }) => {
+    const blockId = element.getAttribute(BLOCK_ID_ATTRIBUTE);
+    if (busy || element.nodeName !== "paragraph" || typeof blockId !== "string") return [];
+    const text = textOf(element);
+    return sentenceSpans(text).flatMap((span) =>
+      holdsProposal(element, span.from, span.to)
+        ? []
+        : [
+            {
+              element,
+              blockId,
+              from: span.from,
+              to: span.to,
+              text: text.slice(span.from, span.to),
+              context: text,
+              cited: citedIn(element, span.from, span.to),
+            },
+          ],
+    );
+  });
+}
+
 /** Puts a check's mark on `from`..`to` of a Block's text, in place of any check there. */
 export function markSentence(
   element: Y.XmlElement,

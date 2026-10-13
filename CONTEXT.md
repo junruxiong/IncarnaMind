@@ -202,7 +202,7 @@ A change to a Mind, made by the AI or brought in from another person's Word file
 _Avoid_: suggestion, edit, draft, diff
 
 **AI text**:
-The words the AI wrote into a Mind that the User hasn't made their own: in Answers, Answers added to a note, accepted changes and accepted suggestions. They are drawn a step softer than the User's writing. What the User types, even inside AI text, is theirs, and "Mark as mine" makes selected AI text theirs. Exports and Question context read it as any other text.
+The words the AI wrote into a Mind that the User hasn't made their own: in Answers, Answers added to a note, accepted changes and accepted suggestions. They are drawn a step softer than the User's writing. What the User types, even inside AI text, is theirs, and "Mark as mine" makes selected AI text theirs. Exports and Question context read it as any other text; a Word export can mark it with a comment.
 _Avoid_: AI content, machine text
 
 **Checkpoint**:

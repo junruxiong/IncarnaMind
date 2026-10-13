@@ -73,6 +73,7 @@ export function SpendingCapSettings() {
 
   const spent = summary && formatSpent(summary.spent, t, language);
   const unpriced = summary?.providers.reduce((sum, each) => sum + each.unpricedTokens, 0) ?? 0;
+  const interrupted = summary?.providers.reduce((sum, each) => sum + each.interrupted, 0) ?? 0;
   const spentLine = !summary
     ? null
     : cap && summary.spentTowardCap
@@ -99,6 +100,13 @@ export function SpendingCapSettings() {
             {spentLine && (
               <p data-testid="spending-cap-spent" className={hintClass}>
                 {spentLine}
+              </p>
+            )}
+            {interrupted > 0 && (
+              <p data-testid="spending-cap-interrupted" className={hintClass}>
+                {interrupted === 1
+                  ? t("cost.cap.interrupted.one")
+                  : t("cost.cap.interrupted", { count: interrupted })}
               </p>
             )}
             {unpriced > 0 && (

@@ -315,6 +315,7 @@ describe("exporting a Mind", () => {
       citations: 3,
       unverifiedCitations: 2,
       questions: 1,
+      fromWord: false,
     });
   });
 
