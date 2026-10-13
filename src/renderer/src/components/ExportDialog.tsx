@@ -6,6 +6,7 @@ import {
   type Mind,
   type MindCitationStyle,
   type OutputSettings,
+  type WordExportPreferences,
 } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
 import { styleLabel, useCitationStylePicker } from "../citationStylePicker";
@@ -40,6 +41,93 @@ const FORMAT_NOTES: Readonly<Record<ExportFormat, MessageKey>> = {
 
 /** A ruled row of the sheet: its words on the left, its control on the right. */
 const rowClass = "flex min-h-11 flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2";
+
+/** A switch in a row of the sheet, with what it does under its label. */
+function SwitchRow({
+  label,
+  hint,
+  checked,
+  onChange,
+  testId,
+}: {
+  label: string;
+  hint?: string;
+  checked: boolean;
+  onChange(checked: boolean): void;
+  testId: string;
+}) {
+  const id = useId();
+  return (
+    <div className="flex items-center justify-between gap-4 py-2">
+      <div className="flex min-w-0 flex-col">
+        <label htmlFor={id} className="text-ui text-ink">
+          {label}
+        </label>
+        {hint && (
+          <span id={`${id}-hint`} className={hintClass}>
+            {hint}
+          </span>
+        )}
+      </div>
+      <input
+        id={id}
+        type="checkbox"
+        role="switch"
+        data-testid={testId}
+        checked={checked}
+        aria-checked={checked}
+        aria-describedby={hint ? `${id}-hint` : undefined}
+        onChange={(event) => onChange(event.target.checked)}
+        className="switch shrink-0"
+      />
+    </div>
+  );
+}
+
+/**
+ * A Word file's review choices (#107): the User's edits as tracked changes,
+ * for a Mind imported from a Word file, and IncarnaMind's comments on AI
+ * text and on Citations whose check failed.
+ */
+function WordReviewRows({
+  draft,
+  fromWord,
+  onChange,
+}: {
+  draft: WordExportPreferences;
+  fromWord: boolean;
+  onChange(next: WordExportPreferences): void;
+}) {
+  const t = useT();
+  const author = useAppStore((state) => state.settings?.author ?? "");
+  return (
+    <>
+      {fromWord && (
+        <SwitchRow
+          label={t("export.trackChanges")}
+          hint={t("export.trackChanges.hint", { name: author })}
+          checked={draft.trackChanges}
+          onChange={(trackChanges) => onChange({ ...draft, trackChanges })}
+          testId="export-track-changes"
+        />
+      )}
+      <SwitchRow
+        label={t("export.markAiText")}
+        hint={t("export.markAiText.hint")}
+        checked={draft.markAiText}
+        onChange={(markAiText) => onChange({ ...draft, markAiText })}
+        testId="export-mark-ai-text"
+      />
+      <SwitchRow
+        label={t("export.commentFailedChecks")}
+        hint={t("export.commentFailedChecks.hint")}
+        checked={draft.commentFailedChecks}
+        onChange={(commentFailedChecks) => onChange({ ...draft, commentFailedChecks })}
+        testId="export-comment-failed-checks"
+      />
+    </>
+  );
+}
 
 /**
  * The Mind's citation style (#289), which its export is written in, with the button that
@@ -177,6 +265,7 @@ function ExportOptionsForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
   const hint = t("export.options.saveHint", { shortcut: shortcutLabel("mind.export") });
   const [draft, setDraft] = useState<ExportPreferences>(exportPreferences);
   const [questions, setQuestions] = useState(0);
+  const [fromWord, setFromWord] = useState(false);
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const { format } = draft;
@@ -186,7 +275,9 @@ function ExportOptionsForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
     let current = true;
     core.previewMindExport(mind.id, { format: "markdown" }).then(
       (preview) => {
-        if (current) setQuestions(preview.questions);
+        if (!current) return;
+        setQuestions(preview.questions);
+        setFromWord(preview.fromWord);
       },
       (error: unknown) => useAppStore.getState().reportError(error),
     );
@@ -256,9 +347,12 @@ function ExportOptionsForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
           </span>
         </div>
 
-        <p data-testid="export-format-note" className="py-3 text-[13px] leading-5 text-ink-meta">
-          {t(FORMAT_NOTES[format])}
-        </p>
+        <div className="flex flex-col py-3 text-[13px] leading-5 text-ink-meta">
+          <p data-testid="export-format-note">{t(FORMAT_NOTES[format])}</p>
+          {format === "docx" && (
+            <p data-testid="export-pending-note">{t("export.options.docx.pending")}</p>
+          )}
+        </div>
 
         {format !== "markdown" && (
           <div>
@@ -274,7 +368,10 @@ function ExportOptionsForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
                 checked={draft[format].includeQuestions}
                 aria-checked={draft[format].includeQuestions}
                 onChange={(event) =>
-                  setDraft({ ...draft, [format]: { includeQuestions: event.target.checked } })
+                  setDraft({
+                    ...draft,
+                    [format]: { ...draft[format], includeQuestions: event.target.checked },
+                  })
                 }
                 className="switch"
               />
@@ -287,6 +384,14 @@ function ExportOptionsForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
               </p>
             )}
           </div>
+        )}
+
+        {format === "docx" && (
+          <WordReviewRows
+            draft={draft.docx}
+            fromWord={fromWord}
+            onChange={(docx) => setDraft({ ...draft, docx })}
+          />
         )}
 
         <CitationStyleRow mindId={mind.id} />

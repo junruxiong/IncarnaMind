@@ -22,7 +22,12 @@ export const FORMAT_LABELS: Readonly<Record<ExportFormat, MessageKey>> = {
 /** Until settings load, as the core's defaults have it. */
 const DEFAULT_PREFERENCES: ExportPreferences = {
   format: "docx",
-  docx: { includeQuestions: false },
+  docx: {
+    includeQuestions: false,
+    trackChanges: true,
+    markAiText: true,
+    commentFailedChecks: true,
+  },
   pdf: { includeQuestions: false },
   html: { includeQuestions: false },
 };
@@ -37,7 +42,9 @@ export const optionsFor = (
 ): ExportMindOptions =>
   format === "markdown"
     ? { format }
-    : { format, includeQuestions: preferences[format].includeQuestions };
+    : format === "docx"
+      ? { format, ...preferences.docx }
+      : { format, includeQuestions: preferences[format].includeQuestions };
 
 /** How the last export went, said in the Mind it exported (`ExportResultLine`). */
 export type ExportResult =

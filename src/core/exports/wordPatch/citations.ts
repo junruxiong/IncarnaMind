@@ -11,7 +11,7 @@ import type { CitationStyle } from "../../../shared/citationStyles";
 import type { SourceContext } from "../../../shared/sources";
 import type { CitationFormatRequest, FormattedCitations } from "../../api";
 import type { Block, Inline } from "../../mindText";
-import { addSources, styleCitations } from "../citations";
+import { addSources, changeKey, styleCitations } from "../citations";
 import { NO_MARKS } from "./mind";
 import { special, type Token } from "./paragraph";
 
@@ -32,6 +32,9 @@ export interface CitationOptions {
 
 const isCitation = (token: Token | undefined) =>
   token?.kind === "special" && token.inline?.kind === "citation";
+/** Citations a change still waiting does the same to (#107), which can be one cluster. */
+const alike = (a: Token | undefined, b: Token | undefined) =>
+  changeKey(a?.inline ?? undefined) === changeKey(b?.inline ?? undefined);
 const isBlank = (token: Token | undefined) =>
   token?.kind === "char" && token.char !== "\n" && /^\s$/u.test(token.char);
 
@@ -58,14 +61,15 @@ function clustersOf(tokens: readonly Token[]): { start: number; end: number }[] 
       continue;
     }
     let end = index + 1;
+    const first = tokens[index];
     for (;;) {
-      if (isCitation(tokens[end])) {
+      if (isCitation(tokens[end]) && alike(tokens[end], first)) {
         end++;
         continue;
       }
       let blank = end;
       while (isBlank(tokens[blank])) blank++;
-      if (blank > end && isCitation(tokens[blank])) end = blank + 1;
+      if (blank > end && isCitation(tokens[blank]) && alike(tokens[blank], first)) end = blank + 1;
       else break;
     }
     found.push({ start: index, end });

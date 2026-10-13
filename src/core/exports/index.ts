@@ -42,10 +42,12 @@ import type { Language } from "../language";
 import {
   type Block,
   countQuestions,
+  type FailedCheck,
   type Footnote,
   footnotesIn,
   type ReadOptions,
   readBlocks,
+  reviewReading,
 } from "../mindText";
 import { addSources, styleCitations } from "./citations";
 import { renderDocx } from "./docx";
@@ -55,6 +57,7 @@ import { renderMarkdown } from "./markdown";
 import { unifyIdeographs } from "./pdfUnicode";
 import { renderPrintHtml } from "./printHtml";
 import { exportWordPatch } from "./wordPatch";
+import type { ReviewChoices } from "./wordReview";
 
 /** What a footnote needs of a live Document: a web page's site, address and fetch dates. */
 type LiveDocument = SourceDocument;
@@ -84,6 +87,8 @@ export interface ExportsDependencies {
   pictures?: Pictures;
   /** The package a Mind was imported from (#104); throws if it is gone. */
   wordPackage(mindId: string): Promise<Uint8Array>;
+  /** The name the User's edits go under as tracked changes in a Word file (`Settings.author`). */
+  author(): string;
   log: Logger;
   now(): string;
 }
@@ -103,6 +108,7 @@ const EXTENSIONS: Readonly<Record<ExportFormat, string>> = {
 /** What an export holds, read once for both its preview and its file. */
 interface Prepared {
   format: ExportFormat;
+  options: Required<ExportMindOptions>;
   mindId: string;
   title: string;
   readOptions: ReadOptions;
@@ -118,7 +124,8 @@ interface Prepared {
 
 export function createExports(deps: ExportsDependencies) {
   const prepare = (mindId: unknown, input: unknown): Prepared => {
-    const { format, includeQuestions } = parseExportOptions(input);
+    const options = parseExportOptions(input);
+    const { format, includeQuestions } = options;
     const mind = deps.mind(mindId);
     const language = deps.language();
     const style = citationStyle(deps.citationStyle(mind.id));
@@ -141,6 +148,8 @@ export function createExports(deps: ExportsDependencies) {
     };
     const { blocks, questions, word } = deps.read(mind.id, (fragment) => {
       const { doc } = fragment;
+      // A Word file shows what is waiting as tracked changes, and can mark AI text (#107).
+      if (format === "docx") readOptions.review = reviewReading(fragment);
       return {
         blocks: readBlocks(fragment, readOptions),
         questions: countQuestions(fragment),
@@ -153,9 +162,11 @@ export function createExports(deps: ExportsDependencies) {
       citations: footnotes.length,
       unverifiedCitations: footnotes.filter((each) => each.unverified).length,
       questions,
+      fromWord: word !== null,
     };
     return {
       format,
+      options,
       mindId: mind.id,
       title: mind.title,
       readOptions,
@@ -202,6 +213,7 @@ export function createExports(deps: ExportsDependencies) {
           language: language === "zh-CN" ? "zh-CN" : "en-US",
           paper: language === "en" ? "letter" : "a4",
           created: deps.now(),
+          review: reviewChoices(prepared, false),
         });
       } else if (format === "html") {
         const drawn = await withPictures(blocks, language, deps);
@@ -228,6 +240,17 @@ export function createExports(deps: ExportsDependencies) {
     },
   };
 
+  /** What a Word file says for review (#107): the User's edits are tracked only in a file of theirs. */
+  function reviewChoices(prepared: Prepared, imported: boolean): ReviewChoices {
+    const { options } = prepared;
+    return {
+      trackAs: imported && options.trackChanges ? deps.author() : null,
+      markAiText: options.markAiText,
+      commentFailedChecks: options.commentFailedChecks,
+      now: deps.now(),
+    };
+  }
+
   /** A Mind imported from a Word file, written back into that file (#105). */
   async function exportIntoWord(
     prepared: Prepared,
@@ -253,6 +276,7 @@ export function createExports(deps: ExportsDependencies) {
         sources: { language, documents },
         formatCitations: deps.formatCitations,
         withPictures: (blocks) => withPictures(blocks, language, deps),
+        review: reviewChoices(prepared, true),
       });
       deps.log.info("export.word", {
         notKept: report.notKept.length,
@@ -328,6 +352,13 @@ async function withPictures(
 function parseExportOptions(input: unknown): Required<ExportMindOptions> {
   if (!isRecord(input)) throw new InvalidInputError("Export options must be an object.");
   const { format, includeQuestions, accept } = input;
+  const choice = (name: "trackChanges" | "markAiText" | "commentFailedChecks") => {
+    const value = input[name];
+    if (value !== undefined && typeof value !== "boolean") {
+      throw new InvalidInputError(`${name} must be true or false.`);
+    }
+    return value === true;
+  };
   if (!EXPORT_FORMATS.some((each) => each === format)) {
     throw new InvalidInputError('The export format must be "markdown", "docx", "pdf" or "html".');
   }
@@ -345,6 +376,9 @@ function parseExportOptions(input: unknown): Required<ExportMindOptions> {
     format: format as ExportFormat,
     includeQuestions: includeQuestions ?? format === "markdown",
     accept: accept ?? [],
+    trackChanges: choice("trackChanges"),
+    markAiText: choice("markAiText"),
+    commentFailedChecks: choice("commentFailedChecks"),
   };
 }
 
@@ -376,6 +410,10 @@ function footnoteOf(
   const location = citedLocation(attributes, t);
   const state = citationState(attributes, documents, kept);
   const unverified = state.check !== "found";
+  const failed: FailedCheck | null =
+    state.check === "not-found" || state.check === "unsupported" || state.check === "contradicted"
+      ? { check: state.check, quote: attributes.quote ?? null, verdict: attributes.verdict ?? null }
+      : null;
   const web = documents.find((each) => each.id === state.documentId)?.web;
   if (!web) {
     return {
@@ -383,6 +421,7 @@ function footnoteOf(
         ? t("export.citation.location", { document, location })
         : t("export.citation.document", { document }),
       unverified,
+      ...(failed && { failed }),
     };
   }
   const version = web.versions.find((each) => each.contentHash === attributes.contentHash);
@@ -397,5 +436,6 @@ function footnoteOf(
     source: parts.join(t("export.citation.separator")),
     unverified,
     link: web.address,
+    ...(failed && { failed }),
   };
 }
