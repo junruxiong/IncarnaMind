@@ -71,6 +71,19 @@ test.afterEach(async () => {
   await removeDataFolder(out);
 });
 
+/** The sheet sits inside the window, and its format note and Save button are in it. */
+async function expectToFit(window: Page, sheet: Locator): Promise<void> {
+  const [box, width] = await Promise.all([
+    sheet.boundingBox(),
+    window.evaluate(() => globalThis.innerWidth),
+  ]);
+  if (!box) throw new Error("The sheet isn't laid out.");
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(width);
+  await expect(sheet.getByTestId("export-format-note")).toBeVisible();
+  await expect(sheet.getByTestId("export-save")).toBeVisible();
+}
+
 /** The Documents a page is saved for, by name, as the data folder's database has them. */
 function savedPageNames(): string[] {
   const db = openDatabase(join(dataDir, "incarnamind.db"));
@@ -168,6 +181,22 @@ test("Export options › Source pack writes a cover list and a page for each cit
     "Tides 潮汐 - source pack.pdf",
   ]);
   expect(existsSync(join(library, WORD))).toBe(false);
+
+  // The sheet holds at the narrowest and the widest window, in English and in Chinese.
+  await setWindowSize(app, window, 900, WINDOW_SIZE.height);
+  await openOptions(window, "Export options");
+  await expectToFit(window, sheet);
+  await screenshot(window, "source-pack-options-en-narrow");
+  await window.keyboard.press("Escape");
+  await setLanguage(window, "zh-CN");
+  await openOptions(window, "导出选项");
+  await expectToFit(window, sheet);
+  await screenshot(window, "source-pack-options-zh-narrow");
+  await window.keyboard.press("Escape");
+  await setWindowSize(app, window, WINDOW_SIZE.width, WINDOW_SIZE.height);
+  await openOptions(window, "导出选项");
+  await expectToFit(window, sheet);
+  await screenshot(window, "source-pack-options-zh-wide");
   await app.close();
 });
 
@@ -212,13 +241,7 @@ test("a Mind with no Citations says so in the sheet and on Export, and in Chines
   await expect(sheet.getByTestId("export-pack-empty")).toHaveText(
     "此 Mind 还没有引用，没有可收入合集的引用页面。",
   );
-  const [box, width] = await Promise.all([
-    sheet.boundingBox(),
-    window.evaluate(() => globalThis.innerWidth),
-  ]);
-  if (!box) throw new Error("The sheet isn't laid out.");
-  expect(box.x).toBeGreaterThanOrEqual(0);
-  expect(box.x + box.width).toBeLessThanOrEqual(width);
-  await screenshot(window, "source-pack-options-zh-narrow");
+  await expectToFit(window, sheet);
+  await screenshot(window, "source-pack-options-zh-empty-narrow");
   await app.close();
 });
