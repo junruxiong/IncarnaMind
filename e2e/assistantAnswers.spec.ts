@@ -184,8 +184,8 @@ test("an Answer streams into the assistant and leaves the Mind as it was; Add to
   const added = editor.getByTestId("citation-chip");
   await expect(added).toHaveCount(1);
   await expect(added).toHaveAttribute("data-check", "found");
-  // The link back shows in the margin.
-  await expect(window.getByTestId("conversation-link")).toHaveCount(1);
+  // No marker in the margin: where it came from is in the Block's menu and ⌘K.
+  await expect(window.getByTestId("conversation-link")).toHaveCount(0);
   await screenshot(window, "assistant-added");
 
   // Undo, on the line under the Answer: the note is as it was.
@@ -243,29 +243,29 @@ test("an Answer goes to another Mind through the ▾, and to a new Mind as chang
     .toEqual(["Outline.", "Your Documents answer this .", "That is all."]);
   await expect(chapter.getByTestId("citation-chip")).toHaveAttribute("data-check", "found");
 
-  // Hovering the added text names the conversation and the Question.
+  // Resting on the added text shows no card.
   await pointAt(window, chapter.locator(":scope > p").nth(1));
-  const card = window.getByTestId("origin-card");
-  await expect(card).toBeVisible();
-  await expect(card.getByTestId("origin-open")).toContainText(
-    "From the conversation “When do spring tides happen”",
-  );
-  await expect(card.getByTestId("origin-question")).toContainText(
-    "You asked: When do spring tides happen?",
-  );
+  await expect(window.getByTestId("origin-card")).toHaveCount(0);
 
-  // A new chat; the link back opens the conversation again, at that Answer, flashed.
+  // A new chat; the Block menu's "Open the source conversation" opens it again, at that Answer, flashed.
   await window.keyboard.press("ControlOrMeta+Shift+o");
   await expect(window.getByTestId("assistant-empty")).toBeVisible();
-  await pointAt(window, chapter.locator(":scope > p").nth(1));
-  await pointAndClick(window, card.getByTestId("origin-open"));
+  await (await slideToHandle(window, chapter.locator(":scope > p").nth(1))).click();
+  const open = window.getByTestId("block-menu-open-conversation");
+  await expect(open).toHaveText("Open the source conversation");
+  await pointAndClick(window, open);
   await expect(assistantAnswers(window)).toHaveCount(1);
   await expect(assistantAnswers(window).first()).toHaveAttribute("data-sought", "true");
 
-  // The Block menu has the same.
+  // ⌘K reaches it too, from the cursor in that Block.
   await window.keyboard.press("ControlOrMeta+Shift+o");
-  await (await slideToHandle(window, chapter.locator(":scope > p").nth(1))).click();
-  await pointAndClick(window, window.getByTestId("block-menu-open-conversation"));
+  await expect(window.getByTestId("assistant-empty")).toBeVisible();
+  await pointAndClick(window, chapter.locator(":scope > p").nth(1));
+  await expect(chapter.locator(":scope > p").nth(1)).toHaveClass(/has-focus/);
+  await window.keyboard.press("ControlOrMeta+k");
+  await window.keyboard.type(">source conversation");
+  await expect(window.getByTestId("palette-item")).toContainText("Open the source conversation");
+  await window.keyboard.press("Enter");
   await expect(assistantAnswers(window)).toHaveCount(1);
 
   // ▾ → New Mind: named as the conversation, in a new tab, its content as changes to accept.
@@ -306,11 +306,31 @@ test("an Answer goes to another Mind through the ▾, and to a new Mind as chang
       await bridge.deleteConversation(conversation.id);
     }
   });
-  // Onto the added text from outside it, so its card is asked for afresh.
-  await pointAt(window, window.getByTestId("mind-title"));
-  await pointAt(window, window.getByTestId("mind-editor").locator(":scope > p").nth(1));
-  await expect(window.getByTestId("origin-gone")).toContainText(
+  // Asked for from the Block's menu, it says the conversation is in Recently deleted.
+  await (
+    await slideToHandle(window, window.getByTestId("mind-editor").locator(":scope > p").nth(1))
+  ).click();
+  await pointAndClick(window, window.getByTestId("block-menu-open-conversation"));
+  await expect(window.getByRole("alert")).toContainText(
     "From the conversation “When do spring tides happen”, now in Recently deleted",
+  );
+
+  // In Chinese.
+  await window.evaluate(() =>
+    (
+      globalThis as unknown as {
+        incarnamind: { updateSettings(patch: unknown): Promise<unknown> };
+      }
+    ).incarnamind.updateSettings({ user: { language: "zh-CN" } }),
+  );
+  await window.keyboard.press("Escape");
+  await (
+    await slideToHandle(window, window.getByTestId("mind-editor").locator(":scope > p").nth(1))
+  ).click();
+  await expect(window.getByTestId("block-menu-open-conversation")).toHaveText("打开来源对话");
+  await pointAndClick(window, window.getByTestId("block-menu-open-conversation"));
+  await expect(window.getByRole("alert")).toContainText(
+    "来自对话“When do spring tides happen”，已移到回收站",
   );
   await app.close();
 });

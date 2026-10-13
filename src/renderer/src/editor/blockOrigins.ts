@@ -10,9 +10,8 @@ import { BLOCK_ID_ATTRIBUTE } from "./noteSchema";
 
 /**
  * Notes added from an Answer in the assistant (#201) keep a link back to it
- * (src/shared/blockOrigins.ts). Here the editor knows them, for the link's
- * mark in the margin and its card (`ConversationLinks`) and the Block menu
- * (`originOf`); just added, they are washed for a moment (`flashBlocks`,
+ * (src/shared/blockOrigins.ts). Here the editor knows them, for the Block
+ * menu and ⌘K ("Open the source conversation", `originOf`); just added, they are washed for a moment (`flashBlocks`,
  * DESIGN.md: "a brief wash on text just added"), so the eye finds them.
  */
 export interface BlockOriginsOptions {
@@ -31,18 +30,6 @@ const originsKey = new PluginKey<Origins>("blockOrigins");
 
 /** How long a Block just added stays washed. */
 const FLASH_MS = 1600;
-
-/** A run of Blocks added together, from one Answer: its first Block marks it in the margin. */
-export interface OriginRun {
-  pos: number;
-  blockId: string;
-  origin: BlockOrigin;
-}
-
-const sameAnswer = (a: BlockOrigin, b: BlockOrigin) =>
-  a.from.artifactId === b.from.artifactId &&
-  a.from.anchor.kind === b.from.anchor.kind &&
-  JSON.stringify(a.from.anchor) === JSON.stringify(b.from.anchor);
 
 function decorate(
   doc: ProseMirrorNode,
@@ -137,27 +124,6 @@ export const BlockOrigins = Extension.create<BlockOriginsOptions>({
 export function originOf(state: EditorState, blockId: unknown): BlockOrigin | null {
   if (typeof blockId !== "string") return null;
   return originsKey.getState(state)?.origins.get(blockId) ?? null;
-}
-
-/** Whether any Block in the Mind came from an Answer. */
-export const hasOrigins = (state: EditorState): boolean =>
-  (originsKey.getState(state)?.origins.size ?? 0) > 0;
-
-/** The runs of Blocks added from one Answer each, top to bottom. */
-export function originRuns(state: EditorState): OriginRun[] {
-  const origins = originsKey.getState(state)?.origins;
-  if (!origins || origins.size === 0) return [];
-  const runs: OriginRun[] = [];
-  let previous: BlockOrigin | null = null;
-  state.doc.forEach((node, pos) => {
-    const id = node.attrs[BLOCK_ID_ATTRIBUTE];
-    const origin = typeof id === "string" ? origins.get(id) : undefined;
-    if (origin && typeof id === "string" && !(previous && sameAnswer(previous, origin))) {
-      runs.push({ pos, blockId: id, origin });
-    }
-    previous = origin ?? null;
-  });
-  return runs;
 }
 
 /**

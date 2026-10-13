@@ -3775,93 +3775,11 @@
 
   /*
    * Notes added from an Answer (#201): just added, washed for a moment
-   * (DESIGN.md: "a brief wash on text just added"); beside each run of them,
-   * in the left margin beside the Block handle, a quiet conversation mark
-   * whose card names the conversation and the Question (`ConversationLinks`).
+   * (DESIGN.md: "a brief wash on text just added").
    */
   .mind-editor > .block-just-added {
     border-radius: 2px;
     animation: block-just-added 1600ms ease-in both;
-  }
-  .conversation-links {
-    position: absolute;
-    /* Over the Block handle's layer (10, set by Tiptap), where the two meet. */
-    z-index: 11;
-    top: 0;
-    left: 0;
-    width: 0;
-    height: 100%;
-    pointer-events: none;
-  }
-  /*
-   * At the start of the 56px margin, 2px clear of the Block handle, which takes 40px to 20px
-   * left of the text (--handle-gap); drawn over the handle's layer all the same, so a click
-   * on the mark opens the conversation, never the Block menu.
-   */
-  .conversation-link {
-    position: absolute;
-    left: -56px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 14px;
-    height: 28px;
-    border-radius: 4px;
-    color: var(--color-ink-placeholder);
-    cursor: pointer;
-    pointer-events: auto;
-  }
-  .conversation-links > .conversation-link:hover {
-    background: var(--color-hover);
-    color: var(--color-ink-secondary);
-  }
-  .editor-popover.origin-card {
-    /* Drawn from the margin's layer, which lets the pointer through to the note. */
-    pointer-events: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    max-width: 320px;
-    padding: 6px 8px;
-    border-radius: 10px;
-    background: var(--color-sheet);
-    box-shadow: var(--shadow-popover);
-    font-family: var(--font-sans);
-    font-size: 13px;
-    line-height: 20px;
-    color: var(--color-ink);
-  }
-  .origin-card-link,
-  .origin-card-gone {
-    display: flex;
-    align-items: flex-start;
-    gap: 6px;
-    margin: 0;
-    text-align: left;
-
-    > svg {
-      margin-top: 3px;
-      color: var(--color-ink-meta);
-    }
-  }
-  .origin-card-link {
-    border-radius: 4px;
-    font-weight: 600;
-    color: var(--color-accent);
-  }
-  .origin-card > .origin-card-link:hover {
-    text-decoration: underline;
-  }
-  .origin-card-gone {
-    color: var(--color-ink-secondary);
-  }
-  .origin-card-question {
-    margin: 0;
-    padding-left: 20px;
-    font-size: var(--text-label);
-    line-height: var(--text-label--line-height);
-    color: var(--color-ink-meta);
-    overflow-wrap: break-word;
   }
 
   /*
@@ -4775,10 +4693,6 @@
     }
     .claim-mark {
       left: 8px;
-    }
-    /* No margin for a link back's mark: hovering the text still shows its card. */
-    .conversation-link {
-      display: none;
     }
     /* No margin to hang the footnotes' numbers in. */
     .footnote-area-row {

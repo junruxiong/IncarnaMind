@@ -17,8 +17,8 @@ import { useT } from "../i18n";
 import { findBlock, questionWithAnswer } from "./blockCommands";
 import { blockMenuOpeners } from "./blockMenuOpeners";
 import { originOf } from "./blockOrigins";
-import { openOrigin } from "./ConversationLinks";
 import { BLOCK_ID_ATTRIBUTE } from "./noteSchema";
+import { openOrigin } from "./originActions";
 import { Popover } from "./Popover";
 
 /** Centred on the point `handleAnchor` gives, to its left. */
@@ -241,7 +241,7 @@ export function BlockHandle({ editor }: { editor: Editor }) {
           origin={originOf(editor.state, menuFor.id)}
           onOpenOrigin={(origin) => {
             closeMenu(false);
-            openOrigin(origin);
+            void openOrigin(origin);
           }}
           onDelete={deleteBlock}
           onToggleContext={toggleContext}
