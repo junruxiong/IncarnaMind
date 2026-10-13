@@ -581,6 +581,9 @@ export const en = {
   "health.recheck": "{count} needs re-check",
   "health.recheck.other": "{count} need re-check",
   "health.notChecked": "{count} not checked",
+  "health.checkedAll.one": "Checked 1 sentence, {when}",
+  "health.checkedAll": "Checked {count} sentences, {when}",
+  "health.checkAll": "Check all",
   "health.next": "{part}: go to the next",
   "checks.smallModel":
     "This model is small, so its verdicts may be wrong. A larger model checks more reliably.",
@@ -602,6 +605,7 @@ export const en = {
     "This Mind isn't in a Folder, so there are no other Documents to check it against.",
   "checks.problem.only-cited.folder": "“{folder}” holds only the Documents these claims cite.",
   "checks.problem.no-cited": "This Mind has no cited claims to check.",
+  "checks.problem.no-claims": "This Mind has no sentences to check.",
   "contradictions.command": "Check for contradictions",
   "contradictions.command.keywords":
     "contradictions conflict contradicted cited claims Folder watch",
@@ -618,6 +622,16 @@ export const en = {
   "contradictions.found": "{contradicted} of {count} cited claims contradicted",
   "contradictions.after": "After “{document}” changed: {result}",
   "contradictions.cost": "{result} · {cost}",
+  "mindCheck.command": "Check this Mind",
+  "mindCheck.command.keywords": "check all whole draft before sending claims sentences verify",
+  "mindCheck.ask.folder.one":
+    "Check this Mind’s sentence against this Folder’s Documents? {estimate}",
+  "mindCheck.ask.folder":
+    "Check this Mind’s {count} sentences against this Folder’s Documents? {estimate}",
+  "mindCheck.ask.all.one": "Check this Mind’s sentence against your Documents? {estimate}",
+  "mindCheck.ask.all": "Check this Mind’s {count} sentences against your Documents? {estimate}",
+  "mindCheck.check": "Check",
+  "mindCheck.cancel": "Not now",
   "verify.command": "Verify a document…",
   "verify.command.keywords": "verify check PDF claims fact-check received draft someone else",
   "verify.pick.title": "Verify a document",
@@ -2506,6 +2520,7 @@ export const en = {
   "error.verify.request": "That isn't a request to verify a document that IncarnaMind can read.",
   "error.verify.notVerifying": "This Mind doesn't verify a document.",
   "error.verify.noPath": "Choose the document to verify.",
+  "error.mindCheck.request": "That isn’t a request to check a Mind that IncarnaMind can read.",
   "error.contradictions.request":
     "That isn't a check for contradictions that IncarnaMind can read.",
   "error.document.fileUnavailable": "The Document's file can't be reached right now.",

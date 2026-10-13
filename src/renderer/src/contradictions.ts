@@ -98,10 +98,7 @@ export async function checkContradictions(mindId: string): Promise<void> {
       setCheckProblem(mindId, result.kind === "nothing" ? { kind: "no-cited" } : result);
     }
   } catch (error) {
-    setCheckProblem(mindId, {
-      kind: "failed",
-      message: error instanceof Error ? error.message : String(error),
-    });
+    setCheckProblem(mindId, { kind: "failed", error });
   } finally {
     setCheckRunning(mindId, null);
   }

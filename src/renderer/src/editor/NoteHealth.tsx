@@ -1,6 +1,6 @@
 import type { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import type * as Y from "yjs";
 import type { CitationAttributes } from "../../../core/api";
 import { citationState } from "../../../shared/citations";
@@ -8,7 +8,9 @@ import { dismissCheckProblem, stopCheck, useChecks } from "../checks";
 import { ProblemLine } from "../components/ProblemLine";
 import { ReadinessExplanation, readinessAction } from "../components/providers/ChatReadinessNotice";
 import { useContradictionLine } from "../contradictions";
+import { errorMessage } from "../errors";
 import { useLanguage, useT } from "../i18n";
+import { startMindCheck, useMindCheck, useMindCheckRun } from "../mindCheck";
 import { useAppStore } from "../store";
 import { shownClaims } from "./claimChecks";
 import {
@@ -18,6 +20,7 @@ import {
   noteHealth,
 } from "./healthCounts";
 import { CheckMarkIcon, ClaimMarkIcon } from "./icons";
+import { CheckedWhen, MindCheckAction, MindCheckProgress } from "./MindCheckLine";
 import { COUNT_IDLE_MS } from "./WordCount";
 
 const NONE: Health = {
@@ -28,6 +31,7 @@ const NONE: Health = {
   noCitation: [],
   recheck: [],
   notChecked: [],
+  unchecked: [],
 };
 
 /** Each part's small mark, as the margin draws its state; none for sentences with no Citation. */
@@ -51,7 +55,7 @@ function PartMark({ part }: { part: HealthPart }) {
 }
 
 /** The Mind's health, worked out a moment after it last changed, as the word count is. */
-function useHealth(editor: Editor): Health {
+function useHealth(editor: Editor, skipped: ReadonlySet<string>): Health {
   const documents = useAppStore((state) =>
     state.status.kind === "ready" ? state.documents : null,
   );
@@ -67,6 +71,7 @@ function useHealth(editor: Editor): Health {
           editor.state.doc,
           shownClaims(editor.state),
           (attributes: CitationAttributes) => citationState(attributes, documents, kept).check,
+          skipped,
         ),
       );
     };
@@ -80,7 +85,7 @@ function useHealth(editor: Editor): Health {
       clearTimeout(timer);
       editor.off("transaction", later);
     };
-  }, [editor, documents, kept]);
+  }, [editor, documents, kept, skipped]);
   return health;
 }
 
@@ -103,7 +108,11 @@ export function NoteHealth({
 }) {
   const t = useT();
   const language = useLanguage();
-  const health = useHealth(editor);
+  const checkedAll = useMindCheckRun(doc);
+  const skippedKeys = checkedAll?.skipped.join(" ") ?? "";
+  const skipped = useMemo(() => new Set(skippedKeys.split(" ").filter(Boolean)), [skippedKeys]);
+  const health = useHealth(editor, skipped);
+  const asking = useMindCheck((state) => state.asking[mindId] !== undefined);
   const running = useChecks((state) => state.running[mindId]);
   const problem = useChecks((state) => state.problems[mindId]);
   const smallModel = useChecks((state) => state.smallModel[mindId] === true);
@@ -147,6 +156,8 @@ export function NoteHealth({
   };
 
   const parts = HEALTH_PARTS.filter((part) => health[part].length > 0);
+  const canCheck =
+    !running && !asking && (health.unchecked.length > 0 || health.recheck.length > 0);
   const close = {
     label: t("checks.close"),
     testId: "checks-problem-close",
@@ -155,8 +166,16 @@ export function NoteHealth({
 
   return (
     <>
-      {parts.length > 0 && (
+      {(parts.length > 0 || checkedAll || canCheck) && (
         <fieldset className="mind-health" data-testid="mind-health" aria-label={t("health.label")}>
+          {checkedAll && !running && (
+            <>
+              <span className="mind-health-dot" aria-hidden="true">
+                ·
+              </span>
+              <CheckedWhen run={checkedAll} />
+            </>
+          )}
           {parts.map((part) => {
             const text = label(part, health[part].length);
             return (
@@ -181,6 +200,18 @@ export function NoteHealth({
               </Fragment>
             );
           })}
+          {canCheck && (
+            <>
+              <span className="mind-health-dot" aria-hidden="true">
+                ·
+              </span>
+              <MindCheckAction
+                unchecked={health.unchecked.length}
+                recheck={health.recheck.length}
+                onCheck={() => void startMindCheck(mindId, "changed")}
+              />
+            </>
+          )}
         </fieldset>
       )}
       {((smallModel && parts.length > 0) ||
@@ -200,7 +231,11 @@ export function NoteHealth({
             onClick: () => stopCheck(mindId),
           }}
         >
-          {t(`checks.running.${running.action}`)}
+          {running.action === "whole-mind" ? (
+            <MindCheckProgress editor={editor} requestId={running.requestId} />
+          ) : (
+            t(`checks.running.${running.action}`)
+          )}
         </ProblemLine>
       )}
       {!running && problem?.kind === "not-ready" && (
@@ -238,8 +273,15 @@ export function NoteHealth({
             : problem.kind === "only-cited"
               ? t("checks.problem.only-cited.folder", { folder: folderName ?? "" })
               : problem.kind === "failed"
-                ? t("checks.problem.failed", { message: problem.message })
-                : t(`checks.problem.${problem.kind}`)}
+                ? t("checks.problem.failed", { message: errorMessage(problem.error, t) })
+                : problem.kind === "find-failed"
+                  ? t("verify.problem.failed", {
+                      message:
+                        problem.error.kind === "cost-cap" || problem.error.kind === "plan-limit"
+                          ? t(`run.stopped.${problem.error.kind}`)
+                          : problem.error.message,
+                    })
+                  : t(`checks.problem.${problem.kind}`)}
         </ProblemLine>
       )}
     </>

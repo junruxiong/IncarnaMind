@@ -26,3 +26,14 @@ export function dayOf(
     ...(at.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
   }).format(at);
 }
+
+/** A day and time, "2 Oct, 15:20" (10月2日 15:20), with the year when it isn't this one. */
+export function dayAndTime(at: Date, now: Date, language: Language): string {
+  return new Intl.DateTimeFormat(language === "zh-CN" ? "zh-CN" : "en-GB", {
+    day: "numeric",
+    month: "short",
+    ...(at.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(at);
+}
