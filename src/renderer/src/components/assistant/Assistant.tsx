@@ -294,7 +294,7 @@ function AssistantMain({
           scrolled.current = event.currentTarget.scrollTop;
         }}
       >
-        <ConversationThread focusedMindId={readMindId} />
+        <ConversationThread focusedMindId={mind?.mindId ?? null} />
       </div>
       <div ref={onComposerSlot} data-testid="assistant-composer" className="assistant-composer">
         <Composer mind={mind} />
