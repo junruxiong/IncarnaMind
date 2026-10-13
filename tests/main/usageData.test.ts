@@ -125,6 +125,11 @@ describe("Usage data through PostHog", () => {
   });
 
   test("turning it off drops what is queued: nothing is sent, now or later", async () => {
+    // The SDK flushes on a timer: faked, the time it would take to flush passes at once.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     const network = fakeNetwork();
     const on = sender(network, { flushIntervalMs: 50 });
     on.setEnabled(true);
@@ -134,7 +139,7 @@ describe("Usage data through PostHog", () => {
 
     on.setEnabled(false);
     on.capture(message());
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await vi.advanceTimersByTimeAsync(1_000);
     expect(network.fetch).not.toHaveBeenCalled();
 
     // On again: a new start, without what was dropped.

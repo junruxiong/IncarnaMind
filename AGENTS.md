@@ -11,7 +11,7 @@ These rules are for everyone who changes this repository, people and coding agen
 
 ### Issue tracker
 
-Issues live in GitHub Issues on `junruxiong/IncarnaMind`, managed with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+Issues live in GitHub Issues on `IncarnaMind/IncarnaMind`, managed with the `gh` CLI. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 

@@ -15,11 +15,11 @@
   <a href="#下载"><b>下载</b></a> ·
   <a href="#你能用它做什么">你能用它做什么</a> ·
   <a href="#你的文件始终归你">隐私</a> ·
-  <a href="https://github.com/junruxiong/IncarnaMind/discussions">讨论区</a>
+  <a href="https://github.com/IncarnaMind/IncarnaMind/discussions">讨论区</a>
   <br><br>
   <img alt="桌面应用，支持 macOS、Windows 和 Linux" src="https://img.shields.io/badge/macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-desktop%20app-17191C">
-  <a href="LICENSE"><img alt="许可证：Apache-2.0" src="https://img.shields.io/github/license/junruxiong/IncarnaMind?color=17191C"></a>
-  <!-- 第一个版本发布后，加上：<a href="https://github.com/junruxiong/IncarnaMind/releases/latest"><img alt="最新版本" src="https://img.shields.io/github/v/release/junruxiong/IncarnaMind?color=17191C"></a> -->
+  <a href="LICENSE"><img alt="许可证：Apache-2.0" src="https://img.shields.io/github/license/IncarnaMind/IncarnaMind?color=17191C"></a>
+  <!-- 第一个版本发布后，加上：<a href="https://github.com/IncarnaMind/IncarnaMind/releases/latest"><img alt="最新版本" src="https://img.shields.io/github/v/release/IncarnaMind/IncarnaMind?color=17191C"></a> -->
 </p>
 
 <p align="center"><img src="docs/images/demo.gif" width="880" alt="依次展示八个界面：Mind 旁边是助手，回答里的引用都已核对；展开回答的过程，可以看到它搜了什么、用了哪些来源；在笔记旁打开一条引用，PDF 页面上高亮着引文；助手的修改在 Mind 里等你接受或拒绝；资料库里的全部文档、文件夹和标签；三组标签页并排；在 Mind 里记会议笔记，助手根据实时转写回答；以及中文界面。"></p>
@@ -30,10 +30,10 @@
 
 ## 下载
 
-**IncarnaMind 还没有正式发布。** 发布后，[发布页](https://github.com/junruxiong/IncarnaMind/releases)会提供 macOS（Apple 芯片和 Intel）、Windows 和 Linux 的安装包。想在发布时收到通知，可以[留下邮箱](https://tally.so/r/LZA5aG?ref=readme-zh)，或点本页右上角的 **Watch → Custom → Releases**。想现在试用，可以用 Node.js 24 或更高版本从源码运行：
+**IncarnaMind 还没有正式发布。** 发布后，[发布页](https://github.com/IncarnaMind/IncarnaMind/releases)会提供 macOS（Apple 芯片和 Intel）、Windows 和 Linux 的安装包。想在发布时收到通知，可以[留下邮箱](https://tally.so/r/LZA5aG?ref=readme-zh)，或点本页右上角的 **Watch → Custom → Releases**。想现在试用，可以用 Node.js 24 或更高版本从源码运行：
 
 ```shell
-git clone https://github.com/junruxiong/IncarnaMind.git && cd IncarnaMind
+git clone https://github.com/IncarnaMind/IncarnaMind.git && cd IncarnaMind
 npm install && npm run dev
 ```
 
@@ -98,15 +98,15 @@ Windows 版通过 SignPath Foundation 为开源项目提供的免费签名服务
 
 ## 即将推出
 
-下面是计划中的功能，现在还不能用，也没有具体日期（见[路线图](https://github.com/junruxiong/IncarnaMind/issues/74)）：会议进行中直接提问，回答引用实时转写；助手直接修改你的 Mind，每处修改都等你接受；打开 Word 文件再导出回去，修改保留为修订；对照你的文件核对你自己的草稿和别人的文档；跨文档的对比表；在后台运行的研究任务。
+下面是计划中的功能，现在还不能用，也没有具体日期（见[路线图](https://github.com/IncarnaMind/IncarnaMind/issues/74)）：会议进行中直接提问，回答引用实时转写；助手直接修改你的 Mind，每处修改都等你接受；打开 Word 文件再导出回去，修改保留为修订；对照你的文件核对你自己的草稿和别人的文档；跨文档的对比表；在后台运行的研究任务。
 
 ## 参与贡献
 
-欢迎写代码、用你自己的文档测试、翻译和提想法：先读 [CONTRIBUTING.md](CONTRIBUTING.md)（英文），也可以[提交 issue](https://github.com/junruxiong/IncarnaMind/issues/new/choose)，或到[讨论区](https://github.com/junruxiong/IncarnaMind/discussions)提问（中文、英文都可以）。
+欢迎写代码、用你自己的文档测试、翻译和提想法：先读 [CONTRIBUTING.md](CONTRIBUTING.md)（英文），也可以[提交 issue](https://github.com/IncarnaMind/IncarnaMind/issues/new/choose)，或到[讨论区](https://github.com/IncarnaMind/IncarnaMind/discussions)提问（中文、英文都可以）。
 
 ## 项目由来
 
-IncarnaMind 最早是 2023 年的一个 Python 命令行工具，用来和 PDF 对话，收获了大约 800 个 star；2026 年从头重写成桌面应用，核心只有一个想法：从文件里得到的回答，能核对才真正有用。旧版命令行工具保留在 [`v1-python-cli`](https://github.com/junruxiong/IncarnaMind/tree/v1-python-cli) 标签下。谢谢一直关注它的你；如果 IncarnaMind 对你有用，点个 star，能让更多人看到它。
+IncarnaMind 最早是 2023 年的一个 Python 命令行工具，用来和 PDF 对话，收获了大约 800 个 star；2026 年从头重写成桌面应用，核心只有一个想法：从文件里得到的回答，能核对才真正有用。旧版命令行工具保留在 [`v1-python-cli`](https://github.com/IncarnaMind/IncarnaMind/tree/v1-python-cli) 标签下。谢谢一直关注它的你；如果 IncarnaMind 对你有用，点个 star，能让更多人看到它。
 
 <details>
 <summary>引用 IncarnaMind</summary>
@@ -114,7 +114,7 @@ IncarnaMind 最早是 2023 年的一个 Python 命令行工具，用来和 PDF �
 ```bibtex
 @misc{IncarnaMind2023, author = {Junru Xiong}, title = {IncarnaMind}, year = {2023},
   publisher = {GitHub}, journal = {GitHub Repository},
-  howpublished = {\url{https://github.com/junruxiong/IncarnaMind}}}
+  howpublished = {\url{https://github.com/IncarnaMind/IncarnaMind}}}
 ```
 
 </details>
