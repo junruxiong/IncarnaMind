@@ -11,7 +11,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { createAiSdkRunEngine } from "../../src/core/runs/aiSdkEngine";
 import type {
   GateDecision,
@@ -29,8 +29,6 @@ import { controlledModel, type ModelCall, scriptedModel } from "../helpers/model
 const ENGINES: { name: string; create: () => RunEngine }[] = [
   { name: "AI SDK 7", create: createAiSdkRunEngine },
 ];
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 interface Run {
   events: RunEvent[];
@@ -303,15 +301,13 @@ describe.each(ENGINES)("A Run engine: $name", ({ create }) => {
     const controller = new AbortController();
     const model = stepsModel([[{ tool: "close_issue", input: { query: "42" } }]], "never");
 
-    const run = await collect(
+    const running = collect(
       create(),
       request(model, { tools: [close], gate: gate.gate, signal: controller.signal }),
-      (event) => {
-        if (event.type !== "tool-call") return;
-        setTimeout(() => controller.abort(), 50);
-      },
     );
-    await sleep(100);
+    await vi.waitFor(() => expect(gate.asked).toHaveLength(1), { timeout: 10_000 });
+    controller.abort();
+    const run = await running;
 
     // The gate never answers, so the Run comes back only because Stop ended the wait.
     expect(gate.asked).toHaveLength(1);
@@ -326,14 +322,13 @@ describe.each(ENGINES)("A Run engine: $name", ({ create }) => {
     const controller = new AbortController();
     const model = stepsModel([[SEARCH]], "never");
 
-    await collect(
+    const running = collect(
       create(),
       request(model, { tools: [search], signal: controller.signal }),
-      (event) => {
-        if (event.type !== "tool-call") return;
-        setTimeout(() => controller.abort(), 50);
-      },
     );
+    await vi.waitFor(() => expect(search.calls).toHaveLength(1), { timeout: 10_000 });
+    controller.abort();
+    await running;
 
     // The Tool would wait ten seconds, so the Run comes back only because Stop reached it.
     expect(search.calls.map((call) => call.aborted)).toEqual([true]);
@@ -343,11 +338,20 @@ describe.each(ENGINES)("A Run engine: $name", ({ create }) => {
   test("Stop while the model writes: its request is closed, and the Run settles at once", async () => {
     const controlled = controlledModel();
     const controller = new AbortController();
-    const running = collect(create(), request(controlled.model, { signal: controller.signal }));
+    let written = () => {};
+    const wrote = new Promise<void>((resolve) => {
+      written = resolve;
+    });
+    const running = collect(
+      create(),
+      request(controlled.model, { signal: controller.signal }),
+      (event) => {
+        if (event.type === "text-delta") written();
+      },
+    );
     await controlled.requested();
     controlled.push("High water ");
-
-    await sleep(50);
+    await wrote;
     controller.abort();
     const run = await running;
 
