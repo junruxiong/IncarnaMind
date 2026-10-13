@@ -36,7 +36,7 @@ const LANGUAGES = [
   {
     language: "zh-CN",
     more: "更多…",
-    first: ["Anthropic", "OpenAI", "Google", "DeepSeek", "Qwen"],
+    first: ["Anthropic", "OpenAI", "Google", "DeepSeek", "通义千问"],
     folded: ["OpenRouter", "硅基流动"],
     setUp: "Mistral",
     rest: ["xAI", "Kimi", "智谱 GLM", "OpenAI 兼容服务器"],
