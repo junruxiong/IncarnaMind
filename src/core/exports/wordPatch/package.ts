@@ -15,7 +15,7 @@ import {
   type ZipArchive,
   type ZipWriteEntry,
 } from "../../documents/formats/zip";
-import { escapeXml } from "../wordml";
+import { COMMENTS_CONTENT_TYPE, COMMENTS_RELATIONSHIP, escapeXml } from "../wordml";
 import { appendInside, applySplices } from "./text";
 
 /** A part that couldn't be written into: export stops and names it. */
@@ -35,6 +35,7 @@ export const RELATIONSHIP_TYPES = {
   styles: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles",
   hyperlink: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
   image: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+  comments: COMMENTS_RELATIONSHIP,
 } as const;
 
 const WORDPROCESSING = "application/vnd.openxmlformats-officedocument.wordprocessingml";
@@ -42,6 +43,7 @@ export const CONTENT_TYPES = {
   footnotes: `${WORDPROCESSING}.footnotes+xml`,
   numbering: `${WORDPROCESSING}.numbering+xml`,
   styles: `${WORDPROCESSING}.styles+xml`,
+  comments: COMMENTS_CONTENT_TYPE,
 } as const;
 
 const RELATIONSHIPS_NAMESPACE = "http://schemas.openxmlformats.org/package/2006/relationships";

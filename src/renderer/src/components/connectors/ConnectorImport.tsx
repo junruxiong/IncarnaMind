@@ -4,11 +4,13 @@ import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { SecretStorageNotice } from "../providers/ProviderForm";
+import { TypingTextarea } from "../TypingTextarea";
 import {
   buttonClass,
   errorTextClass,
   fieldLabelClass,
   ghostButtonClass,
+  hintClass,
   inputClass,
   primaryButtonClass,
   rowTitleClass,
@@ -82,7 +84,7 @@ export function ConnectorImport({ onDone }: { onDone(): void }) {
       <p className="text-[13px] leading-5 text-ink-secondary">{t("connectors.import.body")}</p>
       <label className={fieldLabelClass}>
         {t("connectors.import.json")}
-        <textarea
+        <TypingTextarea
           value={json}
           onChange={(event) => {
             setJson(event.target.value);
@@ -165,7 +167,10 @@ export function ConnectorImport({ onDone }: { onDone(): void }) {
               {t("connectors.import.nothing")}
             </p>
           ) : (
-            <div>
+            <div className="flex flex-col items-start gap-2">
+              <p data-testid="connector-import-sends" className={hintClass}>
+                {t("connectors.import.sends")}
+              </p>
               <button
                 type="button"
                 data-testid="connector-import-confirm"

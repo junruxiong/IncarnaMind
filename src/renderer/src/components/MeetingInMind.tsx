@@ -1,9 +1,12 @@
 import { isMacOS } from "@tiptap/core";
 import { useEffect, useId, useState } from "react";
 import type { Meeting } from "../../../core/api";
+import { commands } from "../commands/registry";
+import { useDismissOnEscape } from "../escapeDismiss";
 import { useGap, useLanguage, useT } from "../i18n";
 import { isLive, useMeetingOf, useMeetings } from "../meetings";
 import { clockTime } from "../meetingTime";
+import { useRequests } from "../requests";
 import { useAppStore } from "../store";
 import { CaptureDetails, CaptureDetailsLine, CaptureProblem } from "./CaptureDetails";
 import { CloseLineIcon, RecordingLineIcon } from "./lineIcons";
@@ -154,28 +157,36 @@ function MeetingStart({ meeting }: { meeting: Meeting }) {
   );
 }
 
+/** Puts the question about this Meeting's audio away, if it is the one being asked. */
+function keepAudio(meetingId: string): void {
+  const { deleteAudio, clear } = useRequests.getState();
+  if (deleteAudio?.meetingId === meetingId) clear("deleteAudio");
+}
+
 /**
  * How long was recorded, how long the audio stays on this computer, and
- * "Delete audio now", which asks first, on the same line: it can't be undone.
+ * "Delete audio now", which is the "meeting.deleteAudio" command, as ⌘K's
+ * "Delete audio" is: it asks first, on the same line, because it can't be undone.
  */
 function MeetingAudioLine({ meeting, className = "" }: { meeting: Meeting; className?: string }) {
   const t = useT();
   const language = useLanguage();
   const gap = useGap();
   const { deleteAudio } = useMeetings.getState();
-  const [confirming, setConfirming] = useState(false);
+  const asked = useRequests((state) => state.deleteAudio?.meetingId === meeting.id);
   const { audio } = meeting;
-  if (confirming && audio.kept) {
+  const asking = asked && audio.kept;
+  useDismissOnEscape(asking, () => keepAudio(meeting.id));
+  // Asked about while this line wasn't on screen, it is a question nobody saw.
+  useEffect(() => {
+    keepAudio(meeting.id);
+  }, [meeting.id]);
+  if (asking) {
     return (
       <p
         role="alert"
         data-testid="meeting-audio-confirm"
         className={`font-sans text-[13px] leading-5 break-words text-ink-meta ${className}`}
-        onKeyDown={(event) => {
-          if (event.key !== "Escape") return;
-          event.preventDefault();
-          setConfirming(false);
-        }}
       >
         {t("meetings.audio.confirm")}
         {gap(t("meetings.audio.confirm"), t("meetings.audio.deleteConfirm"))}
@@ -185,7 +196,7 @@ function MeetingAudioLine({ meeting, className = "" }: { meeting: Meeting; class
           autoFocus
           data-testid="meeting-audio-delete-confirm"
           onClick={() => {
-            setConfirming(false);
+            keepAudio(meeting.id);
             void deleteAudio(meeting.id);
           }}
           className="rounded-sm font-semibold text-ink underline underline-offset-2"
@@ -195,7 +206,7 @@ function MeetingAudioLine({ meeting, className = "" }: { meeting: Meeting; class
         <span aria-hidden="true"> · </span>
         <button
           type="button"
-          onClick={() => setConfirming(false)}
+          onClick={() => keepAudio(meeting.id)}
           className="rounded-sm font-semibold text-accent underline-offset-2 hover:underline"
         >
           {t("meetings.audio.keep")}
@@ -224,7 +235,10 @@ function MeetingAudioLine({ meeting, className = "" }: { meeting: Meeting; class
           ? {
               label: t("meetings.audio.delete"),
               testId: "meeting-audio-delete",
-              onClick: () => setConfirming(true),
+              onClick: () =>
+                void commands.run("meeting.deleteAudio", {
+                  focus: { kind: "mind", id: meeting.mindId },
+                }),
             }
           : undefined
       }

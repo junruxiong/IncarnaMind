@@ -13,7 +13,7 @@ npm run dist         # the installers for the current system; never published
 
 1. Set the version, commit it and tag it: `npm version 1.2.3`. This updates `package.json` and `package-lock.json`, commits, and creates the tag `v1.2.3`.
 2. Push the commit and the tag: `git push && git push origin v1.2.3`.
-3. The tag starts the **Release** workflow (`.github/workflows/release.yml`). It checks that the tag matches `package.json`, creates a draft GitHub Release, and builds and uploads:
+3. The tag starts the **Release** workflow (`.github/workflows/release.yml`). It checks that the tag matches `package.json`, creates a draft GitHub Release, builds, checks each package's contents and size (`npm run check:package`), and only then uploads:
    - for macOS, a dmg and a zip, each for Apple silicon and Intel;
    - for Windows, an NSIS installer;
    - for Linux, an AppImage;
@@ -38,7 +38,7 @@ The workflow signs and notarizes the macOS app when these repository secrets exi
 The Windows installer is unsigned until the SignPath Foundation approves the project and the Release workflow sends the installer to SignPath (#163). The terms the project keeps are in the [code signing policy](code-signing-policy.md):
 
 - The policy stays linked from both READMEs, under "Code signing policy".
-- Every release's notes end with the line "Code signing policy: https://github.com/junruxiong/IncarnaMind/blob/main/docs/code-signing-policy.md".
+- Every release's notes end with the line "Code signing policy: https://github.com/IncarnaMind/IncarnaMind/blob/main/docs/code-signing-policy.md".
 - Each signing request is approved by an approver listed in the policy, after the release's draft is reviewed.
 - The product name stays "IncarnaMind" and the version in the installer matches the tag.
 - Everyone in the team uses multi-factor authentication for GitHub and SignPath.

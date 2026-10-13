@@ -340,6 +340,34 @@ export function noteGroup(
   return items.length > 0 ? [{ id: "notes", items: items.slice(0, SHOWN.words) }] : [];
 }
 
+/** Where a Passage found is, for a PDF's page or a deck's slide; "" for the other kinds. */
+export function passagePlace(
+  kind: DocumentKind,
+  match: Pick<DocumentTextMatch, "pageFrom" | "pageTo">,
+  t: Translate,
+): string {
+  const unit = kind === "pdf" ? "page" : kind === "pptx" ? "slide" : null;
+  if (!unit || match.pageFrom === null) return "";
+  return formatLocation(
+    { kind: unit, from: match.pageFrom, to: match.pageTo ?? match.pageFrom },
+    t,
+  );
+}
+
+/** Where a Document found by its words opens: at the Passage, with the first words found marked. */
+export function atPassage(
+  found: Pick<DocumentTextMatch, "pageFrom" | "pageTo" | "excerpt" | "highlights">,
+): { pageFrom?: number; pageTo?: number; quote?: string } {
+  const first = found.highlights[0];
+  return {
+    ...(found.pageFrom !== null && {
+      pageFrom: found.pageFrom,
+      pageTo: found.pageTo ?? found.pageFrom,
+    }),
+    ...(first && { quote: found.excerpt.slice(first.start, first.end) }),
+  };
+}
+
 /** "In your Documents": the Documents the core found the words in, with the Passage that holds them. */
 export function documentTextGroup(
   found: readonly DocumentTextMatch[],
@@ -350,14 +378,7 @@ export function documentTextGroup(
   const items = found.flatMap((match): PaletteItem[] => {
     const document = byId.get(match.documentId);
     if (!document) return [];
-    const unit = document.kind === "pdf" ? "page" : document.kind === "pptx" ? "slide" : null;
-    const meta =
-      unit && match.pageFrom !== null
-        ? formatLocation(
-            { kind: unit, from: match.pageFrom, to: match.pageTo ?? match.pageFrom },
-            t,
-          )
-        : "";
+    const meta = passagePlace(document.kind, match, t);
     return [
       {
         kind: "passage",
@@ -411,20 +432,11 @@ export async function runItem(item: PaletteItem, { inTab = false } = {}): Promis
       if (editor) cursorAtBlock(editor, item.blockId);
       return;
     }
-    case "passage": {
-      const first = item.highlights[0];
+    case "passage":
       store.openDocument(
-        {
-          documentId: item.documentId,
-          ...(item.pageFrom !== null && {
-            pageFrom: item.pageFrom,
-            pageTo: item.pageTo ?? item.pageFrom,
-          }),
-          ...(first && { quote: item.excerpt.slice(first.start, first.end) }),
-        },
+        { documentId: item.documentId, ...atPassage(item) },
         { as: inTab ? "here" : "list" },
       );
       return;
-    }
   }
 }

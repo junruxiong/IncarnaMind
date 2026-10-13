@@ -24,7 +24,12 @@ export const FORMAT_LABELS: Readonly<Record<ExportFormat, MessageKey>> = {
 /** Until settings load, as the core's defaults have it. */
 const DEFAULT_PREFERENCES: ExportPreferences = {
   format: "docx",
-  docx: { includeQuestions: false },
+  docx: {
+    includeQuestions: false,
+    trackChanges: true,
+    markAiText: true,
+    commentFailedChecks: true,
+  },
   pdf: { includeQuestions: false },
   html: { includeQuestions: false },
 };
@@ -43,9 +48,11 @@ export const optionsFor = (
   format: ExportFormat,
   preferences: ExportPreferences,
 ): ExportMindOptions =>
-  hasQuestionsOption(format)
-    ? { format, includeQuestions: preferences[format].includeQuestions }
-    : { format };
+  format === "docx"
+    ? { format, ...preferences.docx }
+    : hasQuestionsOption(format)
+      ? { format, includeQuestions: preferences[format].includeQuestions }
+      : { format };
 
 /** How the last export went, said in the Mind it exported (`ExportResultLine`). */
 export type ExportResult =

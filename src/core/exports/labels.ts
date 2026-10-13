@@ -1,5 +1,6 @@
 import { translate } from "../../shared/i18n";
 import type { Language } from "../language";
+import type { Footnote } from "../mindText";
 
 export interface ExportLabels {
   question: string;
@@ -11,6 +12,10 @@ export interface ExportLabels {
   chartSources: string;
   chartUncited(count: number): string;
   chartCut(rows: number, total: number): string;
+  /** A Word file's comment on AI text (#107). */
+  aiText: string;
+  /** A Word file's comment on a Citation whose check failed: what failed, and the source. */
+  failedCheck(footnote: Footnote): string;
 }
 
 export function exportLabels(language: Language): ExportLabels {
@@ -27,5 +32,16 @@ export function exportLabels(language: Language): ExportLabels {
     chartUncited: (count) =>
       count === 1 ? t("export.chart.uncited.one") : t("export.chart.uncited.other", { count }),
     chartCut: (rows, total) => t("export.chart.cut", { rows, total }),
+    aiText: t("export.comment.aiText"),
+    failedCheck: ({ source, failed }) => {
+      if (!failed) return "";
+      const said =
+        failed.check === "not-found"
+          ? failed.quote
+            ? t("export.comment.notFound", { source, quote: failed.quote })
+            : t("export.comment.notFound.noQuote", { source })
+          : t(`export.comment.${failed.check}`, { source });
+      return failed.verdict ? `${said}\n${failed.verdict}` : said;
+    },
   };
 }

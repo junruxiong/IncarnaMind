@@ -92,11 +92,6 @@ interface Stage {
  * that. A fix takes its line out: the check fails for a command that is taken back now.
  */
 const NO_UNDO_YET: Record<string, string> = {
-  "folder.newMind": "#606",
-  "document.ask": "#606",
-  "document.startMind": "#606",
-  "linkedFolder.pause": "#607",
-  "linkedFolder.layout": "#607",
   "answer.regenerate": "an AI change is taken back from History (#113), not by the note's ⌘Z",
   "folder.organize": "what it suggests is taken back in To review (#241), not by ⌘Z",
 };

@@ -27,7 +27,15 @@ export function citationsIn(fragment: Fragment): Cited[] {
   return found;
 }
 
-/** A marker "[1]" and what it points at, as Word's clipboard names a footnote's two ends. */
+/** What marks the visible "[n]" to other apps, as comments until `wordFootnoteHtml` writes Word's own. */
+const FALLBACK_START = "[if !supportFootnotes]";
+const FALLBACK_END = "[endif]";
+
+/**
+ * A marker and what it points at, as Word's clipboard names a footnote's two ends. Word reads the
+ * span `mso-special-character:footnote` as the footnote's own number, which it keeps up to date;
+ * the "[n]" inside the conditional block is for every app that isn't Word.
+ */
 function marker(document: Document, number: number, end: "reference" | "note"): HTMLElement {
   const anchor = document.createElement("a");
   anchor.setAttribute("style", `mso-footnote-id:ftn${number}`);
@@ -36,10 +44,30 @@ function marker(document: Document, number: number, end: "reference" | "note"): 
   anchor.setAttribute("title", "");
   const mark = document.createElement(end === "reference" ? "sup" : "span");
   mark.setAttribute("class", "MsoFootnoteReference");
-  mark.textContent = `[${number}]`;
+  const automatic = document.createElement("span");
+  automatic.setAttribute("style", "mso-special-character:footnote");
+  const visible = document.createElement("span");
+  visible.setAttribute("class", "MsoFootnoteReference");
+  visible.textContent = `[${number}]`;
+  automatic.append(
+    document.createComment(FALLBACK_START),
+    visible,
+    document.createComment(FALLBACK_END),
+  );
+  mark.append(automatic);
   anchor.append(mark);
   return anchor;
 }
+
+/**
+ * Clipboard HTML with the fallback markers written as Word's conditional blocks,
+ * `<![if !supportFootnotes]>…<![endif]>`, which Word skips and every other app shows. A DOM
+ * serializer can only write them as comments, so this runs on the HTML string.
+ */
+export const wordFootnoteHtml = (html: string): string =>
+  html
+    .replaceAll(`<!--${FALLBACK_START}-->`, `<!${FALLBACK_START}>`)
+    .replaceAll(`<!--${FALLBACK_END}-->`, `<!${FALLBACK_END}>`);
 
 /** A footnote's text, its address a link when it has one. */
 function noteText(document: Document, text: string, link: string | null): Node[] {
