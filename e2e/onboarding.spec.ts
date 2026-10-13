@@ -196,7 +196,8 @@ test("an empty Mind of one's own shows the three steps; Get started ticks itself
   const hint = window.getByTestId("end-hint");
   await expect(hint).toHaveAttribute("data-place", "empty");
   // A first click puts the cursor on the line; then its link is armed.
-  await pointAndClick(window, hint, { atX: 12, through: true });
+  // (The first empty Mind's hint runs to two lines, so the click is on the line itself.)
+  await pointAndClick(window, window.getByTestId("mind-editor").locator("p").first());
   await expect(hint).toHaveAttribute("data-armed", "true");
   await pointAndClick(window, hint.getByTestId("end-hint-ask"));
   await expect(window.getByTestId("composer-input")).toBeFocused();

@@ -273,9 +273,7 @@ export const folderCommands: readonly Command[] = [
     group: "main",
     appliesTo: ["folder"],
     reversible: true,
-    run: async (ctx) => {
-      await store().createMind({ folderId: idsOf(ctx, "folder")[0] ?? null });
-    },
+    run: (ctx) => store().createMind({ folderId: idsOf(ctx, "folder")[0] ?? null }),
   },
   {
     id: "folder.ask",
@@ -413,9 +411,9 @@ export const linkedFolderCommands: readonly Command[] = [
     group: "main",
     appliesTo: ["linkedFolder"],
     reversible: true,
-    run: async (ctx) => {
+    run(ctx) {
       const linked = linkedOf(ctx);
-      if (linked) await store().setLinkedFolderPaused(linked.id, linked.status !== "paused");
+      return linked && store().setLinkedFolderPaused(linked.id, linked.status !== "paused");
     },
   },
   {
@@ -429,10 +427,12 @@ export const linkedFolderCommands: readonly Command[] = [
     group: "main",
     appliesTo: ["linkedFolder"],
     reversible: true,
-    run: async (ctx) => {
+    run(ctx) {
       const linked = linkedOf(ctx);
-      if (linked)
-        await store().setLinkedFolderLayout(linked.id, linked.layout === "flat" ? "tree" : "flat");
+      return (
+        linked &&
+        store().setLinkedFolderLayout(linked.id, linked.layout === "flat" ? "tree" : "flat")
+      );
     },
   },
   {

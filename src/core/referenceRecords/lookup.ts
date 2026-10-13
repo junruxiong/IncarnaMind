@@ -19,7 +19,7 @@ export const ARXIV: ExternalService = { id: "https://export.arxiv.org", name: "a
 const TIMEOUT_MS = 15_000;
 
 /** Crossref asks callers to say who they are, so it can reach them about their traffic. */
-const USER_AGENT = "IncarnaMind (https://github.com/junruxiong/IncarnaMind)";
+const USER_AGENT = "IncarnaMind (https://github.com/IncarnaMind/IncarnaMind)";
 
 export class LookupError extends Error {
   override name = "LookupError";

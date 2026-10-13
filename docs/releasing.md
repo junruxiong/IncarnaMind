@@ -38,7 +38,7 @@ The workflow signs and notarizes the macOS app when these repository secrets exi
 The Windows installer is unsigned until the SignPath Foundation approves the project and the Release workflow sends the installer to SignPath (#163). The terms the project keeps are in the [code signing policy](code-signing-policy.md):
 
 - The policy stays linked from both READMEs, under "Code signing policy".
-- Every release's notes end with the line "Code signing policy: https://github.com/junruxiong/IncarnaMind/blob/main/docs/code-signing-policy.md".
+- Every release's notes end with the line "Code signing policy: https://github.com/IncarnaMind/IncarnaMind/blob/main/docs/code-signing-policy.md".
 - Each signing request is approved by an approver listed in the policy, after the release's draft is reviewed.
 - The product name stays "IncarnaMind" and the version in the installer matches the tag.
 - Everyone in the team uses multi-factor authentication for GitHub and SignPath.

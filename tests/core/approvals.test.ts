@@ -11,6 +11,7 @@ import type {
 import { answerEnded, askAndFinish, askNew } from "../helpers/citations";
 import {
   logFileIn,
+  markServerLog,
   serverLog,
   testProcesses,
   tideServer,
@@ -140,14 +141,19 @@ describe("A Tool that may change something asks first", { timeout: 30_000 }, () 
         },
       ]),
     );
-    await new Promise((resolve) => setTimeout(resolve, 200));
     expect(answerIn(client, answerId).attrs.status).toBe("streaming");
     expect(model.doStreamCalls).toHaveLength(1);
-    expect(await callsReceived(logFile)).toEqual([]);
 
+    // Nothing is sent until the User decides: the call is in the server's log after this mark.
+    await markServerLog(logFile, "decided");
     const ended = answerEnded(core, answerId);
     await core.respondToApproval(request.requestId, "allow-once");
     expect((await ended).payload).toMatchObject({ status: "done" });
+    expect((await serverLog(logFile)).map((record) => record.event)).toEqual([
+      "start",
+      "mark",
+      "call",
+    ]);
   });
 
   test("Allow once: the call is made and the Answer carries on to the end; the next call asks again", async () => {
@@ -290,9 +296,10 @@ describe("A Tool that may change something asks first", { timeout: 30_000 }, () 
       { tool: "book_boat", status: "failed", approval: "denied" },
     ]);
 
-    // Deciding afterwards, e.g. in another window, does nothing.
+    // Deciding afterwards, e.g. in another window, does nothing: it resolves no request.
+    const later = recordApprovals(core);
     await core.respondToApproval(request.requestId, "allow-once");
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(later.resolved).toEqual([]);
     expect(await callsReceived(logFile)).toEqual([]);
   });
 
