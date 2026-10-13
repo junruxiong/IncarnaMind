@@ -2900,8 +2900,8 @@
   }
   /* In the assistant's narrower column the choices take less room, so Deny keeps its place at their row's end. */
   .assistant-answer .approval-actions {
-    gap: 6px;
-    padding-right: 12px;
+    gap: 4px;
+    padding-right: 4px;
   }
   .assistant-answer .approval-button {
     padding: 0 10px;
@@ -5709,7 +5709,7 @@
     flex-direction: column;
     min-height: 0;
     /* Narrow enough for the buttons to stay on one row at the 320px assistant, inside its 16px edge. */
-    padding: 8px 6px 10px;
+    padding: 8px 4px 10px;
     border-top: 1px solid var(--color-rule);
 
     .approval-card {
@@ -5735,7 +5735,7 @@
       position: sticky;
       bottom: 0;
       gap: 4px;
-      padding: 8px;
+      padding: 8px 6px;
       border-radius: 0 0 8px 8px;
       background: var(--color-sheet);
     }
@@ -5773,9 +5773,9 @@
     line-height: 20px;
     color: var(--color-ink-meta);
   }
-  /* At the bottom, the conversation and the composer keep to the Mind's column, 832px: the edge is where it starts. */
+  /* At the bottom, the conversation and the composer keep to the Mind's column, 832px, which gutters the text 40px: the edge is where it starts. */
   .assistant[data-dock="bottom"] {
-    --edge: max(16px, calc((100cqw - 812px) / 2));
+    --edge: max(40px, calc((100cqw - 812px) / 2));
   }
 
   /* A floating box's edges and corners resize it; its bottom-right corner also takes the keys. */
