@@ -2406,6 +2406,7 @@ export const zhCN = {
   "error.folder.nameTaken": "已有同名的文件夹。",
   "error.folder.limit": "资料库最多可以有 100 个文件夹。",
   "error.mind.notFound": "这个 Mind 不存在或已删除。",
+  "error.mind.notFromWord": "这个 Mind 不是从 Word 文件导入的，没有可添加的原文件。",
   "error.mind.newerVersion": "这是较新版本的 IncarnaMind 创建的。更新后才能打开。",
   "error.mind.newerVersionEdit":
     "较新版本的 IncarnaMind 修改过这个 Mind。更新 IncarnaMind 后才能编辑。",
