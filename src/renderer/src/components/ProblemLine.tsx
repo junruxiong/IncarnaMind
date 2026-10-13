@@ -1,4 +1,5 @@
-import { Fragment, type ReactNode } from "react";
+import type { ReactNode } from "react";
+import { MetaLine } from "./MetaLine";
 
 /** The one action a problem offers. */
 export interface ProblemAction {
@@ -37,31 +38,34 @@ export function ProblemLine({
   title?: string | undefined;
   className?: string;
 }) {
+  const buttons = [action, also].filter(
+    (each): each is ProblemAction => each !== undefined && each.label !== "",
+  );
   return (
-    <p
+    <div
       role={role}
       data-testid={testId}
       title={title}
       className={`font-sans text-[13px] leading-5 break-words text-ink-meta ${className}`}
     >
-      <span>{children}</span>
-      {[action, also].map(
-        (each) =>
-          each && (
-            <Fragment key={each.label}>
-              <span aria-hidden="true"> · </span>
-              <button
-                type="button"
-                data-testid={each.testId}
-                disabled={each.disabled}
-                onClick={each.onClick}
-                className="rounded-sm font-semibold text-accent underline-offset-2 hover:underline disabled:opacity-50 disabled:hover:no-underline"
-              >
-                {each.label}
-              </button>
-            </Fragment>
-          ),
-      )}
-    </p>
+      <MetaLine
+        as="div"
+        parts={[
+          children,
+          ...buttons.map((each) => (
+            <button
+              key={each.label}
+              type="button"
+              data-testid={each.testId}
+              disabled={each.disabled}
+              onClick={each.onClick}
+              className="rounded-sm font-semibold text-accent underline-offset-2 hover:underline disabled:opacity-50 disabled:hover:no-underline"
+            >
+              {each.label}
+            </button>
+          )),
+        ]}
+      />
+    </div>
   );
 }

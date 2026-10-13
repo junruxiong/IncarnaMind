@@ -50,7 +50,10 @@ export function runStopText(
   if (stop.reason === "cost-cap") return t("run.stopped.cost-cap");
   const line = t("run.stopped.plan-limit");
   return stop.resetsAt
-    ? `${line} · ${t("run.stopped.tryAfter", { time: formatResetTime(stop.resetsAt, language, now) })}`
+    ? joinMeta([
+        line,
+        t("run.stopped.tryAfter", { time: formatResetTime(stop.resetsAt, language, now) }),
+      ])
     : line;
 }
 
@@ -58,28 +61,50 @@ export function runStopText(
 export const notCheckedKey = (stop: RunStop): MessageKey =>
   stop.reason === "cost-cap" ? "run.notChecked.cost-cap" : "run.notChecked.plan-limit";
 
+/** Parts of a meta line on one line, joined by middle dots; `MetaLine` is for lines that can wrap. */
+export const joinMeta = (parts: readonly string[]): string => parts.filter(Boolean).join(" · ");
+
+/** The estimate as parts for a `MetaLine`, and the tooltip that adds the tokens. */
+export interface EstimateLine {
+  parts: string[];
+  title: string;
+}
+
 /**
  * The line before a large run on a model billed per token, shown and never
- * asked: "About 24 calls, 310K tokens, $0.40 · $12.40 of $20 used this month".
- * Null for a plan or a model on this computer, which show nothing.
+ * asked: "About $0.40 · 24 model calls · $12.40 of $20.00 used this month",
+ * with the tokens in its tooltip (price first, as DESIGN.md's plan card writes
+ * it). With no known price: "About 24 model calls · 310K tokens". Null for a
+ * plan or a model on this computer, which show nothing.
  */
-export function estimateText(
+export function estimateLine(
   estimate: RunEstimate,
   t: Translate,
   language: Language,
-): string | null {
+): EstimateLine | null {
   if (estimate.billing !== "per-token") return null;
-  const tokens = new Intl.NumberFormat(language, { notation: "compact" }).format(estimate.tokens);
+  const tokens = t("cost.estimate.tokens", {
+    tokens: new Intl.NumberFormat(language, { notation: "compact" }).format(estimate.tokens),
+  });
+  const { calls } = estimate;
+  const month =
+    estimate.cap && estimate.spentTowardCap
+      ? [
+          t("cost.estimate.month", {
+            spent: formatMoney(estimate.spentTowardCap, language),
+            cap: formatMoney(estimate.cap, language),
+          }),
+        ]
+      : [];
   const run = estimate.cost
-    ? t("cost.estimate", {
-        calls: estimate.calls,
+    ? [
+        t("cost.estimate.price", { cost: formatMoney(estimate.cost, language) }),
+        t(calls === 1 ? "cost.estimate.calls.one" : "cost.estimate.calls", { calls }),
+      ]
+    : [
+        t(calls === 1 ? "cost.estimate.callsAbout.one" : "cost.estimate.callsAbout", { calls }),
         tokens,
-        cost: formatMoney(estimate.cost, language),
-      })
-    : t("cost.estimate.unpriced", { calls: estimate.calls, tokens });
-  if (!estimate.cap || !estimate.spentTowardCap) return run;
-  return `${run} · ${t("cost.estimate.month", {
-    spent: formatMoney(estimate.spentTowardCap, language),
-    cap: formatMoney(estimate.cap, language),
-  })}`;
+      ];
+  const parts = [...run, ...month];
+  return { parts, title: joinMeta(estimate.cost ? [...run, tokens, ...month] : parts) };
 }

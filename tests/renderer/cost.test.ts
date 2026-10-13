@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
-  estimateText,
+  estimateLine,
   formatMoney,
   formatSpent,
   notCheckedKey,
@@ -63,16 +63,26 @@ describe("Cost in words", () => {
       spentTowardCap: { amount: 12.4, currency: "USD" as const },
       cap: { amount: 20, currency: "USD" as const },
     };
-    expect(estimateText(estimate, t("en"), "en")).toBe(
-      "About 24 calls, 310K tokens, $0.40 · $12.40 of $20.00 used this month",
+    const en = estimateLine(estimate, t("en"), "en");
+    expect(en?.parts).toEqual([
+      "About $0.40",
+      "24 model calls",
+      "$12.40 of $20.00 used this month",
+    ]);
+    expect(en?.title).toBe(
+      "About $0.40 · 24 model calls · 310K tokens · $12.40 of $20.00 used this month",
     );
-    expect(estimateText({ ...estimate, cap: null, spentTowardCap: null }, t("en"), "en")).toBe(
-      "About 24 calls, 310K tokens, $0.40",
-    );
-    expect(estimateText({ ...estimate, cost: null, cap: null }, t("zh-CN"), "zh-CN")).toBe(
-      "约 24 次调用、31万 token",
-    );
-    expect(estimateText({ billing: "plan" }, t("en"), "en")).toBeNull();
-    expect(estimateText({ billing: "free" }, t("en"), "en")).toBeNull();
+    expect(
+      estimateLine({ ...estimate, cap: null, spentTowardCap: null }, t("en"), "en")?.parts,
+    ).toEqual(["About $0.40", "24 model calls"]);
+    expect(estimateLine({ ...estimate, cost: null, cap: null }, t("en"), "en")?.parts).toEqual([
+      "About 24 model calls",
+      "310K tokens",
+    ]);
+    expect(
+      estimateLine({ ...estimate, cost: null, cap: null }, t("zh-CN"), "zh-CN")?.parts,
+    ).toEqual(["约 24 次模型调用", "31万 token"]);
+    expect(estimateLine({ billing: "plan" }, t("en"), "en")).toBeNull();
+    expect(estimateLine({ billing: "free" }, t("en"), "en")).toBeNull();
   });
 });

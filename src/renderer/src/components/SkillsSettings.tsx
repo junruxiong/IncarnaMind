@@ -15,6 +15,7 @@ import { useT } from "../i18n";
 import { formatSize, pickSkill, skillDescription } from "../skills";
 import { useAppStore } from "../store";
 import { ExportLineIcon, MoreLineIcon, PlusLineIcon } from "./lineIcons";
+import { MetaLine } from "./MetaLine";
 import { ProblemLine } from "./ProblemLine";
 import { SkillEditor } from "./SkillEditor";
 import {
@@ -519,7 +520,7 @@ function SkillRow({
           {skillDescription(skill, t)}
         </p>
         {details.length > 0 && (
-          <p className="text-[12px] leading-[18px] text-ink-meta">{details.join(" · ")}</p>
+          <MetaLine parts={details} className="text-[12px] leading-[18px] text-ink-meta" />
         )}
       </div>
       {/* 28px buttons and the switch, centred on the name's 20px line. */}
