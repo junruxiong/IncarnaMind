@@ -83,8 +83,9 @@
  * which Edit with AI's scripted model carries out as Shorten; one for a new
  * note (新笔记, 新建) calls create_mind, titled from what follows "called"
  * (叫), its content citing the Documents when there are any; and "add X to
- * <Mind>" (把 X 添加到 <Mind>) calls add_to_mind with X. Each then replies with
- * the first sentence of what its call came to.
+ * <Mind>" (把 X 添加到 <Mind>) calls add_to_mind with X; "add X to <Mind> and
+ * make a new note called Y" calls both. Each then replies with the first
+ * sentence of what its calls came to.
  */
 import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
@@ -582,6 +583,9 @@ const CALLED = /\b(?:called|named|titled)\s+[“"]?(.+?)[”"]?[.。]?$|叫[“"
 /** A request to add something to a Mind by name: what, and to which. */
 const ADD_TO =
   /^add\s+(.+?)\s+to\s+[“"]?(.+?)[”"]?[.。]?$|^把\s*(.+?)\s*添加到\s*[“"]?(.+?)[”"]?[。]?$/iu;
+/** Both at once: "add X to <Mind> and make a new note called Y". */
+const ADD_AND_NEW =
+  /^add\s+(.+?)\s+to\s+[“"]?(.+?)[”"]?\s+and\s+(?:make|create)\s+a\s+new\s+note\s+called\s+[“"]?(.+?)[”"]?[.。]?$/iu;
 
 /** The first sentence of what a call came to, as the scripted assistant's reply. */
 const firstSentence = (result: string) => /^[^.。]*[.。]?/u.exec(result)?.[0] ?? result;
@@ -592,6 +596,20 @@ const firstSentence = (result: string) => /^[^.。]*[.。]?/u.exec(result)?.[0] 
  */
 function mindsReply(prompt: Prompt, question: string, names: readonly string[]): Reply | null {
   if (!names.includes("edit_mind")) return null;
+  const both = ADD_AND_NEW.exec(question);
+  if (both) {
+    if (lastResult(prompt, "add_to_mind") === undefined) {
+      return { tool: "add_to_mind", input: { mind: both[2], content: both[1] } };
+    }
+    const made = lastResult(prompt, "create_mind");
+    if (made === undefined) {
+      const content = "## Summary\n\nWritten by the scripted assistant.";
+      return { tool: "create_mind", input: { title: both[3], content } };
+    }
+    return {
+      text: `${firstSentence(lastResult(prompt, "add_to_mind") ?? "")} ${firstSentence(made)}`,
+    };
+  }
   if (SHORTEN.test(question)) {
     const result = lastResult(prompt, "edit_mind");
     if (result === undefined) return { tool: "edit_mind", input: { instruction: question } };
