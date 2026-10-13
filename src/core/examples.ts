@@ -24,6 +24,8 @@ import {
   findBlock,
   type NodeJSON,
   syncContent,
+  toMarkdown,
+  topLevelBlocks,
 } from "./answers/blocks";
 import { markdownToBlocks } from "./answers/markdown";
 import {
@@ -72,6 +74,10 @@ export interface ExamplesOptions {
   readValue(key: string): unknown;
   writeValue(key: string, value: unknown): void;
   createMind(title: string): Mind;
+  /** Renames a Mind. */
+  renameMind(mindId: string, title: string): void;
+  /** A Mind's title; "" for one that doesn't exist. */
+  mindTitle(mindId: string): string;
   mindExists(mindId: string): boolean;
   deleteMind(mindId: string): void;
   editMind<T>(mindId: string, change: (blocks: Y.XmlFragment) => T): T;
@@ -191,11 +197,8 @@ export function createExamples(options: ExamplesOptions) {
     options.writeValue(valueKey(group), { ...examples, checked: true });
   };
 
-  /** Deletes an example Mind and unlinks its Documents, and the copies of their files. */
-  const remove = async (group: ExampleGroup = "tea"): Promise<void> => {
-    const examples = stored(group);
-    if (!examples) return;
-    if (options.mindExists(examples.mindId)) options.deleteMind(examples.mindId);
+  /** Unlinks an example's Documents and deletes the copies of their files. */
+  const discardFiles = async (examples: StoredExamples): Promise<void> => {
     if (options.linkedFolderExists(examples.linkedFolderId)) {
       options.unlinkFolder(examples.linkedFolderId);
     }
@@ -204,21 +207,20 @@ export function createExamples(options: ExamplesOptions) {
     if (inside !== "" && !inside.startsWith("..") && !inside.includes(":")) {
       await rm(examples.folder, { recursive: true, force: true });
     }
+  };
+
+  /** Deletes an example Mind and unlinks its Documents, and the copies of their files. */
+  const remove = async (group: ExampleGroup = "tea"): Promise<void> => {
+    const examples = stored(group);
+    if (!examples) return;
+    if (options.mindExists(examples.mindId)) options.deleteMind(examples.mindId);
+    await discardFiles(examples);
     options.writeValue(valueKey(group), null);
     options.changed(status(group));
   };
 
-  const create = async (group: ExampleGroup = "tea"): Promise<Examples> => {
-    if (!GROUPS.includes(group)) throw new Error(`There is no example for "${group}".`);
-    const current = status(group);
-    if (current.mindId && current.linkedFolderId) return current;
-    const source = options.source;
-    if (!source) throw new Error("This copy of IncarnaMind has no examples.");
-    // What is left of them (the Mind deleted, or the folder unlinked) goes first.
-    if (stored(group)) await remove(group);
-    const language = options.language();
-    const set = EXAMPLE_SETS[group][language];
-
+  /** Copies an example's Documents (with their licence) into the data folder and links them. */
+  const copyAndLink = async (source: string, set: ExampleSet) => {
     // The files, copied into the data folder: the User's own files are never touched.
     // The licence goes with them, so the sources and attribution travel with the files.
     const folder = join(options.dataDir, set.folder);
@@ -232,12 +234,18 @@ export function createExamples(options: ExamplesOptions) {
       force: false,
       errorOnExist: false,
     });
-    const linked = await options.linkFolder(folder);
+    return { folder, linked: await options.linkFolder(folder) };
+  };
 
-    const mind = options.createMind(set.title);
-    const questionId = randomUUID();
-    const answerId = randomUUID();
-    options.editMind(mind.id, (blocks) => {
+  /** Writes an example's Note, Question and Answer into its Mind, replacing what is there. */
+  const populate = (
+    mindId: string,
+    set: ExampleSet,
+    folderId: string,
+    questionId: string,
+    answerId: string,
+  ) =>
+    options.editMind(mindId, (blocks) => {
       blocks.delete(0, blocks.length);
       const answer = createElement({
         type: ANSWER_BLOCK,
@@ -251,7 +259,7 @@ export function createExamples(options: ExamplesOptions) {
         createElement({ type: "paragraph", content: [{ type: "text", text: set.intro }] }),
         createElement({
           type: QUESTION_BLOCK,
-          attrs: { [BLOCK_ID_ATTRIBUTE]: questionId, scopeFolderIds: [linked.folderId] },
+          attrs: { [BLOCK_ID_ATTRIBUTE]: questionId, scopeFolderIds: [folderId] },
           content: [{ type: "text", text: set.question }],
         }),
         answer,
@@ -260,6 +268,24 @@ export function createExamples(options: ExamplesOptions) {
       // Unedited: regenerating it with a model of one's own replaces it in place.
       answer.setAttribute("generatedHash", contentHash(answer));
     });
+
+  const create = async (group: ExampleGroup = "tea"): Promise<Examples> => {
+    if (!GROUPS.includes(group)) throw new Error(`There is no example for "${group}".`);
+    const current = status(group);
+    if (current.mindId && current.linkedFolderId) return current;
+    const source = options.source;
+    if (!source) throw new Error("This copy of IncarnaMind has no examples.");
+    // What is left of them (the Mind deleted, or the folder unlinked) goes first.
+    if (stored(group)) await remove(group);
+    const language = options.language();
+    const set = EXAMPLE_SETS[group][language];
+
+    const { folder, linked } = await copyAndLink(source, set);
+
+    const mind = options.createMind(set.title);
+    const questionId = randomUUID();
+    const answerId = randomUUID();
+    populate(mind.id, set, linked.folderId, questionId, answerId);
     options.writeValue(valueKey(group), {
       mindId: mind.id,
       linkedFolderId: linked.id,
@@ -274,10 +300,80 @@ export function createExamples(options: ExamplesOptions) {
     return made;
   };
 
+  /**
+   * Whether the Mind is still as the example made it (#709): its title, its
+   * Note, its Question and its Answer unchanged, and nothing written after them.
+   */
+  const untouched = (examples: StoredExamples, set: ExampleSet): boolean => {
+    if (options.mindTitle(examples.mindId) !== set.title) return false;
+    return options.editMind(examples.mindId, (blocks) => {
+      const top = topLevelBlocks(blocks);
+      const [note, question, answer, ...rest] = top;
+      if (!note || !question || !answer) return false;
+      if (note.nodeName !== "paragraph" || toMarkdown(note).trim() !== set.intro) return false;
+      if (question.nodeName !== QUESTION_BLOCK || toMarkdown(question).trim() !== set.question) {
+        return false;
+      }
+      if (answer.nodeName !== ANSWER_BLOCK) return false;
+      if (answer.getAttribute(BLOCK_ID_ATTRIBUTE) !== examples.answerId) return false;
+      if (answer.getAttribute("generatedHash") !== contentHash(answer)) return false;
+      return rest.every(
+        (block) => block.nodeName === "paragraph" && toMarkdown(block).trim() === "",
+      );
+    });
+  };
+
+  /** Swaps an untouched example, in its Mind, for the same example in `language`. */
+  const switchLanguage = async (
+    group: ExampleGroup,
+    examples: StoredExamples,
+    source: string,
+    language: Language,
+  ): Promise<void> => {
+    const set = EXAMPLE_SETS[group][language];
+    const sameFolder = resolve(examples.folder) === resolve(join(options.dataDir, set.folder));
+    // A folder of the same name would mix the two languages' files: the old ones go first.
+    if (sameFolder) await discardFiles(examples);
+    const { folder, linked } = await copyAndLink(source, set);
+    if (!sameFolder) await discardFiles(examples);
+    const questionId = randomUUID();
+    const answerId = randomUUID();
+    populate(examples.mindId, set, linked.folderId, questionId, answerId);
+    options.renameMind(examples.mindId, set.title);
+    options.writeValue(valueKey(group), {
+      mindId: examples.mindId,
+      linkedFolderId: linked.id,
+      answerId,
+      folder,
+      language,
+      checked: false,
+    } satisfies StoredExamples);
+    options.changed(status(group));
+    checkWhenRead(group);
+  };
+
   return {
     status,
 
     create,
+
+    /**
+     * The interface language changed (#709): each example the User hasn't
+     * touched becomes the same example in the new language, in its Mind, with
+     * its Documents swapped. One they changed stays as it is.
+     */
+    async followLanguage(): Promise<void> {
+      const source = options.source;
+      if (source === undefined) return;
+      const language = options.language();
+      for (const group of GROUPS) {
+        const examples = stored(group);
+        if (!examples || examples.language === language) continue;
+        if (!options.mindExists(examples.mindId)) continue;
+        if (!untouched(examples, EXAMPLE_SETS[group][examples.language])) continue;
+        await switchLanguage(group, examples, source, language);
+      }
+    },
 
     /**
      * On a first run (no Mind yet, examples never offered): makes the tea
