@@ -2146,6 +2146,8 @@ export const en = {
   "export.word.review.one": "1 thing in the Word file can't be kept",
   "export.word.review.other": "{count} things in the Word file can't be kept",
   "export.word.anyway": "Export anyway",
+  "export.word.review.spoken": ": {items}",
+  "export.word.review.separator": "; ",
   "export.word.comment": "{author}'s comment “{text}” is on text you deleted",
   "export.word.comment.anonymous": "The comment “{text}” is on text you deleted",
   "export.word.change": "{author}'s tracked change “{text}” is in text you deleted",

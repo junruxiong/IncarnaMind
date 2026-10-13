@@ -324,7 +324,7 @@ test("Export writes back into the Word file: what it can't keep is said first, E
   await window.getByTestId("export-mind").click();
   const result = window.getByTestId("export-result");
   await expect(result.getByTestId("export-review")).toHaveText(
-    "1 thing in the Word file can't be kept · Export anyway",
+    "1 thing in the Word file can't be kept: Marcus Hale's comment “Is spring realistic?” is on text you deleted · Export anyway",
   );
   await expect(result.getByTestId("export-review-items")).toHaveText(
     "Marcus Hale's comment “Is spring realistic?” is on text you deleted",
@@ -333,9 +333,8 @@ test("Export writes back into the Word file: what it can't keep is said first, E
   await motionSettled(window);
   await screenshot(window, "word-export-review");
   await setLanguage(window, "zh-CN");
-  await expect(result.getByTestId("export-review")).toHaveText(
-    "Word 文件中有 1 处无法保留 · 仍然导出",
-  );
+  await expect(result.getByTestId("export-review")).toContainText("Word 文件中有 1 处无法保留");
+  await expect(result.getByTestId("export-anyway")).toHaveText("仍然导出");
   await motionSettled(window);
   await screenshot(window, "word-export-review-zh");
   await setLanguage(window, "en");

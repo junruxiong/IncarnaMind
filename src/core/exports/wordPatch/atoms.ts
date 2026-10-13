@@ -12,7 +12,7 @@ import type { NodeJSON } from "../../../shared/blockJson";
 import { readWordAtom, wordAtomText } from "../../../shared/wordFiles";
 import type { WordAtomKind, WordExportLoss } from "../../api";
 import type { Places } from "../../documents/formats/docxImport";
-import { type Unit, unitsOf } from "./mind";
+import { type Counterpart, counterpartsOf } from "./mind";
 import { sourceOf } from "./paragraph";
 
 /** What an atom's copy can be written as again, having no id that would clash. */
@@ -164,23 +164,28 @@ function occurrences(
   const found = new Map<string, Occurrence[]>();
   const add = (source: string, occurrence: Occurrence) =>
     found.set(source, [...(found.get(source) ?? []), occurrence]);
-  const visit = (units: readonly Unit[]) => {
-    for (const unit of units) {
-      if (unit.kind === "kept") {
-        const source = readWordAtom(unit.node.attrs ?? {}).source;
-        if (source) add(source, { node: unit.node, owner: unit.node, ownerKey: unit.key });
-      } else if (unit.kind === "table") {
-        for (const row of unit.node.content ?? []) {
-          for (const cell of row.content ?? []) visit(unitsOf(cell.content ?? [], keyOf));
+  const visit = (counterparts: readonly Counterpart[]) => {
+    for (const counterpart of counterparts) {
+      if (counterpart.kind === "kept") {
+        const source = readWordAtom(counterpart.node.attrs ?? {}).source;
+        if (source)
+          add(source, {
+            node: counterpart.node,
+            owner: counterpart.node,
+            ownerKey: counterpart.key,
+          });
+      } else if (counterpart.kind === "table") {
+        for (const row of counterpart.node.content ?? []) {
+          for (const cell of row.content ?? []) visit(counterpartsOf(cell.content ?? [], keyOf));
         }
-      } else if (unit.kind === "paragraph") {
-        for (const node of unit.node.content ?? []) {
+      } else if (counterpart.kind === "paragraph") {
+        for (const node of counterpart.node.content ?? []) {
           const source = sourceOf(node);
-          if (source) add(source, { node, owner: unit.node, ownerKey: unit.key });
+          if (source) add(source, { node, owner: counterpart.node, ownerKey: counterpart.key });
         }
       }
     }
   };
-  visit(unitsOf(blocks, keyOf));
+  visit(counterpartsOf(blocks, keyOf));
   return found;
 }

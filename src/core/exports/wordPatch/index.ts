@@ -28,7 +28,7 @@ import {
 } from "../../api";
 import { readWordDocument } from "../../documents/formats/docxImport";
 import { openWordPackage, relationshipsOf, reviewOf } from "../../documents/formats/docxPackage";
-import { child, elements } from "../../documents/formats/xml";
+import { child, elements, type XmlElement } from "../../documents/formats/xml";
 import {
   type Block,
   plainText,
@@ -41,7 +41,7 @@ import type { ExportLabels } from "../labels";
 import { AtomPlan } from "./atoms";
 import { styleWritten, type Written } from "./citations";
 import { DocumentPatch } from "./document";
-import { isFurniture, mindJson, type Unit, unitsOf } from "./mind";
+import { type Counterpart, counterpartsOf, isFurniture, mindJson } from "./mind";
 import { WordPackageWriter, WordPartError } from "./package";
 import { currentTokens, type Token } from "./paragraph";
 import {
@@ -51,8 +51,6 @@ import {
   PatchTarget,
   reserveDrawingIds,
 } from "./parts";
-
-export { WordPartError };
 
 export interface WordPatchInput {
   /** The package kept when the Mind was imported. */
@@ -169,26 +167,32 @@ export async function exportWordPatch(input: WordPatchInput): Promise<WordPatchR
   };
   const written = new Map<NodeJSON, Written>();
   const order: Written[] = [];
-  const visit = (units: readonly Unit[]) => {
-    for (const unit of units) {
-      if (unit.kind === "paragraph" && (unit.key === null || edited(unit.node))) {
-        const each: Written = { tokens: currentTokens(unit.node.content ?? [], specialOf, textOf) };
-        written.set(unit.node, each);
+  const visit = (counterparts: readonly Counterpart[]) => {
+    for (const counterpart of counterparts) {
+      if (
+        counterpart.kind === "paragraph" &&
+        (counterpart.key === null || edited(counterpart.node))
+      ) {
+        const each: Written = {
+          tokens: currentTokens(counterpart.node.content ?? [], specialOf, textOf),
+        };
+        written.set(counterpart.node, each);
         order.push(each);
-      } else if (unit.kind === "table" && unit.key !== null) {
-        if (!edited(unit.node)) continue;
-        for (const row of unit.node.content ?? []) {
-          for (const cell of row.content ?? []) visit(unitsOf(cell.content ?? [], currentKey));
+      } else if (counterpart.kind === "table" && counterpart.key !== null) {
+        if (!edited(counterpart.node)) continue;
+        for (const row of counterpart.node.content ?? []) {
+          for (const cell of row.content ?? [])
+            visit(counterpartsOf(cell.content ?? [], currentKey));
         }
-      } else if (unit.kind === "other" || unit.kind === "table") {
-        const element = yOf.get(unit.node);
+      } else if (counterpart.kind === "other" || counterpart.kind === "table") {
+        const element = yOf.get(counterpart.node);
         const each: Written = { blocks: element ? readBlock(element, options) : [] };
-        written.set(unit.node, each);
+        written.set(counterpart.node, each);
         order.push(each);
       }
     }
   };
-  visit(unitsOf(current, currentKey));
+  visit(counterpartsOf(current, currentKey));
   const bibliography = await styleWritten(order, {
     style: input.style,
     bibliography: input.bibliography,
@@ -218,7 +222,15 @@ export async function exportWordPatch(input: WordPatchInput): Promise<WordPatchR
     plan,
     bibliography: await input.withPictures(bibliography),
   });
-  const text = patch.write();
+  let text: string;
+  try {
+    text = patch.write();
+  } catch (error) {
+    throw new WordPartError(
+      pkg.part,
+      `couldn't be written: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
   if (text !== base.text) writer.set(pkg.part, text);
   footnotes.add(docxWriter.footnotes);
   await footnotes.flush();
@@ -247,8 +259,8 @@ const signatureLoss: WordExportLoss = {
 };
 
 /** The width of the document's text, from its last section's page size and margins. */
-function textWidthOf(root: ReturnType<typeof child>): number {
-  const body = root && child(root, "w:body");
+function textWidthOf(root: XmlElement): number {
+  const body = child(root, "w:body");
   const sectPr =
     body &&
     elements(body)
@@ -306,7 +318,7 @@ function checkWellFormed(name: string, text: string): void {
   const problems: string[] = [];
   try {
     new DOMParser({ onError: (_level, message) => problems.push(message) }).parseFromString(
-      text.replace(/^﻿/, ""),
+      text.replace(/^\uFEFF/, ""),
       "text/xml",
     );
   } catch (error) {

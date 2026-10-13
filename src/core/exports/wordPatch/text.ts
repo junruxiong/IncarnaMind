@@ -52,12 +52,6 @@ export function openTag(text: string, element: XmlElement): string {
 
 export const closeTag = (element: XmlElement): string => `</${element.name}>`;
 
-/** The text of an element's content, between its tags: "" when it closes itself. */
-export function innerOf(text: string, element: XmlElement): string {
-  if (selfClosing(element)) return "";
-  return text.slice(element.openEnd ?? 0, endOf(element) - closeTag(element).length);
-}
-
 /** A splice that adds XML at the end of an element's content, opening one that closes itself. */
 export function appendInside(text: string, element: XmlElement, xml: string): Splice {
   if (selfClosing(element)) {
@@ -88,7 +82,7 @@ export function parentsOf(root: XmlElement): Map<XmlElement, XmlElement> {
 export type Namespaces = ReadonlyMap<string, string>;
 
 /** The namespaces an element declares itself. */
-export function declaredBy(element: XmlElement): Map<string, string> {
+function declaredBy(element: XmlElement): Map<string, string> {
   const declared = new Map<string, string>();
   for (const [name, value] of Object.entries(element.attrs)) {
     if (name === "xmlns") declared.set("", value);

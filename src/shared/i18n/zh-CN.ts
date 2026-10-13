@@ -2055,6 +2055,8 @@ export const zhCN = {
   "export.word.review.one": "Word 文件中有 1 处无法保留",
   "export.word.review.other": "Word 文件中有 {count} 处无法保留",
   "export.word.anyway": "仍然导出",
+  "export.word.review.spoken": "：{items}",
+  "export.word.review.separator": "；",
   "export.word.comment": "{author} 的批注“{text}”所在的文字已删除",
   "export.word.comment.anonymous": "批注“{text}”所在的文字已删除",
   "export.word.change": "{author} 的修订“{text}”所在的文字已删除",

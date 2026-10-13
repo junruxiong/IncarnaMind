@@ -40,6 +40,7 @@ export function WordExportReview({
   const t = useT();
   const { notKept } = result.word;
   const more = notKept.length - LISTED;
+  const items = notKept.map((loss) => lossText(loss, t));
   return (
     <>
       <ProblemLine
@@ -60,13 +61,20 @@ export function WordExportReview({
         {notKept.length === 1
           ? t("export.word.review.one")
           : t("export.word.review.other", { count: notKept.length })}
+        {/* Read out with the line: the list below is for the eye. */}
+        <span className="sr-only">
+          {t("export.word.review.spoken", {
+            items: items.join(t("export.word.review.separator")),
+          })}
+        </span>
       </ProblemLine>
       <ul
+        aria-hidden="true"
         data-testid="export-review-items"
         className="flex list-disc flex-col gap-0.5 pl-5 font-sans text-[13px] leading-5 break-words text-ink-meta"
       >
-        {notKept.slice(0, LISTED).map((loss) => (
-          <li key={loss.key}>{lossText(loss, t)}</li>
+        {notKept.slice(0, LISTED).map((loss, index) => (
+          <li key={loss.key}>{items[index]}</li>
         ))}
         {more > 0 && (
           <li className="list-none">

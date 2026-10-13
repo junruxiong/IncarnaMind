@@ -1,16 +1,17 @@
 /**
  * A paragraph written back into its own XML (#105). Its text as imported and
- * as it is now are compared character by character (Myers' diff), and only
+ * as it is now are compared word by word, as Proposals compare text, and only
  * what changed is written again: each child of the `w:p` whose text was all
  * kept, with its marks, is copied as it was; a child with an edit is written
  * again run by run, each character in the run it came from, with that run's
  * properties, so formatting the editor doesn't show (a font, a size, a
- * colour) stays. Typed text takes the formatting of the character before it,
- * as Word's typing does; the editor's marks are then set on top. What the
- * import kept as is (a field, a footnote mark, a bookmark…) goes back as its
- * original XML. A new paragraph is written the same way, with nothing to keep.
+ * colour) stays. Typed text takes the formatting of what it replaces, else of
+ * the character before it, as typing in Word does; the editor's marks are then
+ * set on top. What the import kept as is (a field, a footnote mark, a
+ * bookmark…) goes back as its original XML. A new paragraph is written the
+ * same way, with nothing to keep.
  */
-import type { MarkJSON, NodeJSON } from "../../../shared/blockJson";
+import type { NodeJSON } from "../../../shared/blockJson";
 import { readWordAtom } from "../../../shared/wordFiles";
 import { IMAGE_NODE, WORD_ATOM_NODE } from "../../api";
 import type { Places } from "../../documents/formats/docxImport";
@@ -125,7 +126,7 @@ export function currentTokens(
   const tokens: Token[] = [];
   for (const node of content) {
     if (node.type === "text") {
-      tokens.push(...textTokens(node.text ?? "", marksOf(node.marks as MarkJSON[]), null));
+      tokens.push(...textTokens(node.text ?? "", marksOf(node.marks), null));
     } else if (node.type === "hardBreak") {
       tokens.push({ ...char("\n", NO_MARKS, null), kind: "break", key: BREAK });
     } else {
@@ -256,14 +257,13 @@ export function writeParagraph(
   };
 
   // What changed, word by word, as Proposals compare text.
-  const writable = current;
-  const steps = diffTokens(baseList, writable);
+  const steps = diffTokens(baseList, current);
   /** For each current token, the base token it is (equal), or -1 (new). */
-  const baseOf = new Array<number>(writable.length).fill(-1);
+  const baseOf = new Array<number>(current.length).fill(-1);
   /** Each new token's child: that of the base token before it in the comparison, else after. */
-  const homeOf = new Array<Piece | null>(writable.length).fill(null);
+  const homeOf = new Array<Piece | null>(current.length).fill(null);
   /** Each character's formatting: its own run's; typed text takes the run of what it replaces, else of the character before it. */
-  const formatRun = new Array<XmlElement | null>(writable.length).fill(null);
+  const formatRun = new Array<XmlElement | null>(current.length).fill(null);
   let x = 0;
   let y = 0;
   let lastPiece: Piece | null = null;
@@ -275,7 +275,7 @@ export function writeParagraph(
     if (step === "insert") {
       homeOf[y] = lastPiece;
       if (!lastPiece) waiting.push(y);
-      if (isText(writable[y])) {
+      if (isText(current[y])) {
         formatRun[y] = replacing ?? previousRun;
         previousRun = formatRun[y] ?? previousRun;
       }
@@ -286,7 +286,7 @@ export function writeParagraph(
     const was = baseList[x] as Token;
     if (step === "equal") {
       baseOf[y] = x;
-      const now = writable[y] as Token;
+      const now = current[y] as Token;
       if (piece && isText(was) && !sameMarks(was.marks, now.marks)) piece.dirty = true;
       if (isText(was)) {
         formatRun[y] = was.run;
@@ -311,8 +311,8 @@ export function writeParagraph(
     else home.dirty = true;
   }
   let following: XmlElement | null = null;
-  for (let index = writable.length - 1; index >= 0; index--) {
-    if (!isText(writable[index])) continue;
+  for (let index = current.length - 1; index >= 0; index--) {
+    if (!isText(current[index])) continue;
     if (baseOf[index] !== -1) following = formatRun[index] ?? following;
     formatRun[index] ??= following;
   }
@@ -351,7 +351,7 @@ export function writeParagraph(
     }
   };
 
-  writable.forEach((token, index) => {
+  current.forEach((token, index) => {
     const from = baseOf[index] as number;
     const piece = from >= 0 ? pieceOfToken(from) : homeOf[index];
     if (from >= 0 && !piece) return; // kept outside the paragraph, where it is
@@ -395,12 +395,12 @@ export function writeParagraph(
  * by letter where the two happen to share some.
  */
 function diffTokens(a: readonly Token[], b: readonly Token[]): ReturnType<typeof diffSteps> {
-  const unitsOf = (tokens: readonly Token[]) => {
-    const units: { key: string; length: number }[] = [];
+  const wordsOf = (tokens: readonly Token[]) => {
+    const words: { key: string; length: number }[] = [];
     for (let index = 0; index < tokens.length; ) {
       const token = tokens[index] as Token;
       if (token.kind !== "char") {
-        units.push({ key: token.key, length: 1 });
+        words.push({ key: token.key, length: 1 });
         index++;
         continue;
       }
@@ -408,19 +408,19 @@ function diffTokens(a: readonly Token[], b: readonly Token[]): ReturnType<typeof
       let text = "";
       for (; tokens[end]?.kind === "char"; end++) text += (tokens[end] as Token).char;
       for (const word of splitWords(text))
-        units.push({ key: word, length: Array.from(word).length });
+        words.push({ key: word, length: Array.from(word).length });
       index = end;
     }
-    return units;
+    return words;
   };
-  const left = unitsOf(a);
-  const right = unitsOf(b);
+  const left = wordsOf(a);
+  const right = wordsOf(b);
   const steps: ReturnType<typeof diffSteps> = [];
   let x = 0;
   let y = 0;
   for (const step of diffSteps(
-    left.map((unit) => unit.key),
-    right.map((unit) => unit.key),
+    left.map((word) => word.key),
+    right.map((word) => word.key),
   )) {
     if (step === "equal") {
       for (let at = 0; at < (left[x] as { length: number }).length; at++) steps.push("equal");
