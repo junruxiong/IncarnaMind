@@ -3,6 +3,7 @@ import { typedAddresses } from "../../../shared/webAddresses";
 import { useT } from "../i18n";
 import { canTryAgain, reasonKey, useWebPages, type WebPageProblem } from "../webPages";
 import { ProblemLine } from "./ProblemLine";
+import { TypingTextarea } from "./TypingTextarea";
 import {
   buttonClass,
   dialogActionsClass,
@@ -77,7 +78,7 @@ export function AddWebPageDialog() {
               <label htmlFor={`${id}-addresses`} className={fieldLabelClass}>
                 {t("webPages.add.label")}
               </label>
-              <textarea
+              <TypingTextarea
                 id={`${id}-addresses`}
                 data-testid="add-web-page-addresses"
                 value={text}

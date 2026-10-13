@@ -380,6 +380,155 @@ describe("changes the User can take back", () => {
   });
 });
 
+describe("making a Mind", () => {
+  const made = {
+    id: "n",
+    title: "",
+    autoTitle: "",
+    kind: "mind" as const,
+    folderId: null,
+    createdAt: "",
+    updatedAt: "",
+  };
+  let useUndo: typeof import("../../src/renderer/src/undo").useUndo;
+
+  beforeAll(async () => {
+    ({ useUndo } = await import("../../src/renderer/src/undo"));
+  });
+
+  beforeEach(() => {
+    useUndo.setState({ done: [], undone: [], line: null });
+    useAppStore.setState({ minds: [], settings: null });
+    method("createMind").mockResolvedValue(made);
+  });
+
+  const top = () => useUndo.getState().done.at(-1);
+
+  test("is one change, resolved to, which Undo sends to Recently deleted and Redo brings back", async () => {
+    const change = await useAppStore.getState().createMind();
+    expect(change).toBe(top());
+    expect(change?.message).toBe("Made a new Mind");
+    expect(change?.name).toBe("New Mind");
+    await useUndo.getState().undo();
+    expect(method("deleteMind")).toHaveBeenCalledWith("n");
+    await useUndo.getState().redo();
+    expect(method("restore")).toHaveBeenCalledWith([{ kind: "mind", id: "n" }]);
+    expect(useUndo.getState().done).toEqual([change]);
+  });
+
+  test("one started from Documents or a Folder is said by its name, in Chinese too", async () => {
+    method("createMind").mockResolvedValue({ ...made, title: "Tides" });
+    await useAppStore.getState().createMind({ title: "Tides", startQuestion: true });
+    expect(method("createMind")).toHaveBeenCalledWith({ title: "Tides" });
+    expect(top()?.message).toBe("Started “Tides”");
+    useAppStore.setState({ settings: { language: "zh-CN" } as never });
+    await useAppStore.getState().createMind({ title: "Tides", startQuestion: true });
+    expect(top()?.message).toBe("已新建“Tides”");
+    expect(top()?.name).toBe("新建 Mind");
+    method("createMind").mockResolvedValue(made);
+    await useAppStore.getState().createMind();
+    expect(top()?.message).toBe("已新建 Mind");
+  });
+
+  test("a Mind the core can't make is a problem, with no step to undo", async () => {
+    method("createMind").mockRejectedValue(new Error("The disk is full."));
+    expect(await useAppStore.getState().createMind()).toBeUndefined();
+    expect(useUndo.getState().done).toEqual([]);
+    const { useNotices } = await import("../../src/renderer/src/notices");
+    for (const notice of useNotices.getState().errors)
+      useNotices.getState().dismissError(notice.id);
+  });
+
+  test("asking about Documents makes a Mind only when there is none to ask in", async () => {
+    const scope = { folderIds: [], tagIds: [], documentIds: ["a"] };
+    const bridge = { kind: "documents" as const, title: "a", count: 1, scope };
+    const change = await useAppStore.getState().askAbout(bridge);
+    expect(change?.message).toBe("Made a new Mind");
+    useUndo.setState({ done: [], undone: [], line: null });
+    useAppStore.setState({ minds: [made] });
+    expect(await useAppStore.getState().askAbout(bridge)).toBeUndefined();
+    expect(useUndo.getState().done).toEqual([]);
+  });
+});
+
+describe("changing a Linked folder", () => {
+  const linked = {
+    id: "l",
+    path: "/Users/me/Papers",
+    folderId: "f",
+    status: "watching" as const,
+    layout: "tree" as const,
+    progress: { files: 0, indexed: 0 },
+    onlineOnly: { files: 0, bytes: 0, downloading: false },
+    unsupportedFiles: 0,
+    createdAt: "",
+    updatedAt: "",
+  };
+  let useUndo: typeof import("../../src/renderer/src/undo").useUndo;
+
+  beforeAll(async () => {
+    ({ useUndo } = await import("../../src/renderer/src/undo"));
+  });
+
+  beforeEach(() => {
+    useUndo.setState({ done: [], undone: [], line: null });
+    useAppStore.setState({ linkedFolders: [linked], settings: null });
+  });
+
+  const top = () => useUndo.getState().done.at(-1);
+
+  test("pausing is undone by resuming it and done again by pausing", async () => {
+    method("setLinkedFolderPaused").mockResolvedValue({ ...linked, status: "paused" });
+    const change = await useAppStore.getState().setLinkedFolderPaused("l", true);
+    expect(change).toBe(top());
+    expect(change?.message).toBe("Paused indexing in “Papers”");
+    expect(change?.name).toBe("Pause indexing");
+    expect(useAppStore.getState().linkedFolders[0]?.status).toBe("paused");
+    method("setLinkedFolderPaused").mockResolvedValue(linked);
+    await useUndo.getState().undo();
+    expect(method("setLinkedFolderPaused")).toHaveBeenLastCalledWith("l", false);
+    expect(useAppStore.getState().linkedFolders[0]?.status).toBe("watching");
+    method("setLinkedFolderPaused").mockResolvedValue({ ...linked, status: "paused" });
+    await useUndo.getState().redo();
+    expect(method("setLinkedFolderPaused")).toHaveBeenLastCalledWith("l", true);
+    expect(top()?.message).toBe("Paused indexing in “Papers”");
+  });
+
+  test("resuming says so, and pausing what is paused already offers nothing to undo", async () => {
+    useAppStore.setState({ linkedFolders: [{ ...linked, status: "paused" }] });
+    method("setLinkedFolderPaused").mockResolvedValue({ ...linked, status: "paused" });
+    expect(await useAppStore.getState().setLinkedFolderPaused("l", true)).toBeUndefined();
+    method("setLinkedFolderPaused").mockResolvedValue({ ...linked, status: "scanning" });
+    const change = await useAppStore.getState().setLinkedFolderPaused("l", false);
+    expect(change?.message).toBe("Resumed indexing in “Papers”");
+    expect(change?.name).toBe("Resume indexing");
+  });
+
+  test("a layout is undone by the one it had and done again by the new one", async () => {
+    method("setLinkedFolderLayout").mockResolvedValue({ ...linked, layout: "flat" });
+    const change = await useAppStore.getState().setLinkedFolderLayout("l", "flat");
+    expect(change?.message).toBe("Showing “Papers” as a flat list");
+    expect(change?.name).toBe("Show as a flat list");
+    await useUndo.getState().undo();
+    expect(method("setLinkedFolderLayout")).toHaveBeenLastCalledWith("l", "tree");
+    await useUndo.getState().redo();
+    expect(method("setLinkedFolderLayout")).toHaveBeenLastCalledWith("l", "flat");
+    expect(await useAppStore.getState().setLinkedFolderLayout("l", "flat")).toBeUndefined();
+  });
+
+  test("the lines in Chinese", async () => {
+    useAppStore.setState({ settings: { language: "zh-CN" } as never });
+    method("setLinkedFolderPaused").mockResolvedValue({ ...linked, status: "paused" });
+    await useAppStore.getState().setLinkedFolderPaused("l", true);
+    expect(top()?.message).toBe("已暂停“Papers”的索引");
+    expect(top()?.name).toBe("暂停索引");
+    method("setLinkedFolderLayout").mockResolvedValue({ ...linked, layout: "flat" });
+    await useAppStore.getState().setLinkedFolderLayout("l", "flat");
+    expect(top()?.message).toBe("已将“Papers”显示为平铺列表");
+    expect(top()?.name).toBe("显示为平铺列表");
+  });
+});
+
 describe("making a Folder", () => {
   const made = {
     id: "n",

@@ -11,7 +11,7 @@ These rules are for everyone who changes this repository, people and coding agen
 
 ### Issue tracker
 
-Issues live in GitHub Issues on `junruxiong/IncarnaMind`, managed with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+Issues live in GitHub Issues on `IncarnaMind/IncarnaMind`, managed with the `gh` CLI. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
@@ -88,4 +88,4 @@ Read [`docs/agents/testing.md`](docs/agents/testing.md). Work is done when the p
 
 - Sign off every commit (`git commit -s`); see [`CONTRIBUTING.md`](CONTRIBUTING.md).
 - One issue per pull request, kept small. Say what the User gets and why, and link the issue ("Closes #123").
-- Merge the latest `main` before pushing. A pull request is merged only when its checks are green and it is up to date with `main`.
+- A pull request merges through GitHub's merge queue once its checks are green. The queue tests it together with `main`, so nobody brings a branch up to date by hand; merge `main` into yours only to resolve a conflict or to pick up something you need.
