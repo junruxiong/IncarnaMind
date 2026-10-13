@@ -1811,7 +1811,6 @@ export const en = {
   "models.other.group.older": "Older models",
   "models.other.group.cannotAnswer": "Can’t answer Questions here",
   "models.other.mayNotWork": "May not work",
-  "models.other.older": "Older",
   "models.other.reason.completion": "Completions only",
   "models.other.reason.audio": "Audio model",
   "models.other.reason.deepResearch": "Needs the deep research API",
