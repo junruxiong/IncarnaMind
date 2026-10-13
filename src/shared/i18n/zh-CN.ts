@@ -1355,6 +1355,8 @@ export const zhCN = {
   "setup.chatgpt.line": "Plus 或 Pro · 无需密钥 · 你的问题会通过你的 ChatGPT 账号发送给 OpenAI。",
   "setup.deepseek.use": "粘贴 DeepSeek 密钥",
   "setup.deepseek.line": "你的问题会通过你自己的密钥发送给 DeepSeek。",
+  "setup.how": "如何获取？",
+  "setup.getOllama": "获取 Ollama",
   "setup.other": "其他方式",
   "setup.way.key": "其他服务的 API 密钥（通义千问、智谱 GLM 等）",
   "setup.way.key.line": "Anthropic、OpenAI、Google、DeepSeek 等。",

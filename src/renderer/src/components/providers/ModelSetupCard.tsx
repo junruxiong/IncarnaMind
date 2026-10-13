@@ -6,6 +6,7 @@ import { useLanguage, useT } from "../../i18n";
 import { giveUpWaiting, useModelSetup } from "../../modelSetup";
 import { useAppStore } from "../../store";
 import { buttonStyle, hintClass } from "../ui";
+import { ChevronRightLineIcon } from "../lineIcons";
 import { ChatGptMark } from "./ChatGptMark";
 import {
   ChatGptSignInState,
@@ -73,6 +74,14 @@ export function ModelSetupCard() {
           >
             {t("setup.deepseek.use")}
           </button>
+          <button
+            type="button"
+            data-testid="setup-how"
+            onClick={() => open("deepseek")}
+            className="self-start text-[13px] font-semibold text-accent underline-offset-2 hover:underline"
+          >
+            {t("setup.how")}
+          </button>
           <p className={hintClass}>{t("setup.deepseek.line")}</p>
           {view === "deepseek" && (
             <ProviderForm providers={providers} onSaved={() => undefined} initialKind="deepseek" />
@@ -101,12 +110,14 @@ export function ModelSetupCard() {
                 title={t("setup.way.key")}
                 line={t("setup.way.key.line")}
                 onClick={() => open("key")}
+                link={{ label: t("setup.how"), onClick: () => open("key") }}
               />
               <Way
                 testId="way-local"
                 title={t("setup.way.local")}
                 line={t("setup.way.local.line")}
                 onClick={() => open("local")}
+                link={{ label: t("setup.getOllama"), href: "https://ollama.com/download" }}
               />
               <Way
                 testId="way-chatgpt"
@@ -122,12 +133,14 @@ export function ModelSetupCard() {
                 title={t("setup.way.key")}
                 line={t("setup.way.key.line")}
                 onClick={() => open("key")}
+                link={{ label: t("setup.how"), onClick: () => open("key") }}
               />
               <Way
                 testId="way-local"
                 title={t("setup.way.local")}
                 line={t("setup.way.local.line")}
                 onClick={() => open("local")}
+                link={{ label: t("setup.getOllama"), href: "https://ollama.com/download" }}
               />
             </>
           )}
@@ -157,22 +170,47 @@ function Way({
   title,
   line,
   onClick,
+  link,
 }: {
   testId: string;
   title: string;
   line: string;
   onClick(): void;
+  /** A link under the words (How do I get one?, Get Ollama), which is not the row's own click. */
+  link?: { label: string; href?: string; onClick?(): void };
 }) {
   return (
-    <button
-      type="button"
-      data-testid={testId}
-      onClick={onClick}
-      className="flex flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left hover:bg-hover"
-    >
-      <span className="text-ui font-semibold text-ink">{title}</span>
-      <span className="text-[13px] leading-5 text-ink-secondary">{line}</span>
-    </button>
+    <div className="flex items-center gap-2 rounded-md hover:bg-hover">
+      <button
+        type="button"
+        data-testid={testId}
+        onClick={onClick}
+        className="flex min-w-0 flex-1 flex-col items-start gap-0.5 px-2 py-1.5 text-left"
+      >
+        <span className="text-ui font-semibold text-ink">{title}</span>
+        <span className="text-[13px] leading-5 text-ink-secondary">{line}</span>
+      </button>
+      {link &&
+        (link.href ? (
+          <a
+            href={link.href}
+            target="_blank"
+            rel="noreferrer"
+            className="shrink-0 text-[13px] font-semibold text-accent underline-offset-2 hover:underline"
+          >
+            {link.label} ↗
+          </a>
+        ) : (
+          <button
+            type="button"
+            onClick={link.onClick}
+            className="shrink-0 text-[13px] font-semibold text-accent underline-offset-2 hover:underline"
+          >
+            {link.label}
+          </button>
+        ))}
+      <ChevronRightLineIcon aria-hidden="true" className="mr-2 size-3.5 shrink-0 text-ink-meta" />
+    </div>
   );
 }
 
