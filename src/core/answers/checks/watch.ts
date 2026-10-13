@@ -64,6 +64,13 @@ const CLOUD_CLAIMS_AT_ONCE = 3;
 /** How long after a new version arrives its Folder's Minds are checked: more versions may follow. */
 export const AFTER_NEW_VERSION_MS = 30_000;
 
+/**
+ * How long a background check of one claim may take. A request whose reply
+ * never comes would otherwise hold the background queue for good (seen once
+ * with GPT-6 Luna); no one is there to press Stop.
+ */
+export const CLAIM_TIME_LIMIT_MS = 3 * 60_000;
+
 type Prepared =
   | { ok: true; prepared: PreparedChatModel }
   | {
@@ -103,6 +110,8 @@ export interface WatchOptions {
   runCost(runId: string): Money | null;
   /** How long after a new version its Folder's Minds are checked, in ms (`AFTER_NEW_VERSION_MS`). */
   delayMs: number;
+  /** How long a background check of one claim may take, in ms (`CLAIM_TIME_LIMIT_MS`). */
+  claimTimeLimitMs: number;
   log: Logger;
   now(): Date;
 }
@@ -324,22 +333,38 @@ export function createContradictionWatch(options: WatchOptions) {
       options.background.add({
         kind: ACTION,
         async run(call) {
-          let result: ClaimCheckResult | null = null;
           try {
             if (stop || closed) return;
             if (!prepared.provider.service) call.runsLocally();
-            result = await currentTask.run(runId, () =>
+            const timedOut = AbortSignal.timeout(options.claimTimeLimitMs);
+            const ended = AbortSignal.any([call.signal, timedOut]);
+            // A reply that never comes, even once aborted, is given up on all the same.
+            const givenUp = new Promise<null>((resolve) =>
+              ended.addEventListener("abort", () => resolve(null), { once: true }),
+            );
+            const checking = currentTask.run(runId, () =>
               options.claimCheck({
                 claim: comparableSentence(claim.text),
                 context: claim.context,
                 scope: claim.scope,
                 model: prepared,
                 cacheKey: mindId,
-                signal: call.signal,
+                signal: ended,
               }),
             );
+            const replied = await Promise.race([checking, givenUp]);
             // Given way to an Answer, it runs again later; closing, it never does.
             if (call.signal.aborted) return;
+            const result: ClaimCheckResult =
+              replied === null || timedOut.aborted
+                ? {
+                    verdict: "not-checked",
+                    reason: "failed",
+                    detail: `No reply within ${Math.round(options.claimTimeLimitMs / 1000)} seconds.`,
+                    versions: [],
+                    excluded: [],
+                  }
+                : replied;
             const failure = runFailureOf(result);
             if (failure?.kind === "cost-cap") stop = { reason: "cost-cap" };
             else if (failure?.kind === "plan-limit")

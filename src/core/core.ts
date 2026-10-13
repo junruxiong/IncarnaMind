@@ -20,7 +20,7 @@ import { createAgentSetup, skillInstalled } from "./agents/setup";
 import { createAiUse } from "./aiUse";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
 import { createChecks } from "./answers/checks";
-import { AFTER_NEW_VERSION_MS } from "./answers/checks/watch";
+import { AFTER_NEW_VERSION_MS, CLAIM_TIME_LIMIT_MS } from "./answers/checks/watch";
 import { recheckCitation, recheckKept } from "./answers/citations";
 import {
   addCitedUnits,
@@ -1221,7 +1221,8 @@ export function createCore(adapters: CoreAdapters): Core {
         new Map(documents.list().map((document) => [document.id, document.contentHash])),
       background,
       runCost: (runId) => meter.taskCost(runId),
-      delayMs: adapters.contradictionWatchDelayMs ?? AFTER_NEW_VERSION_MS,
+      delayMs: adapters.contradictionWatch?.delayMs ?? AFTER_NEW_VERSION_MS,
+      claimTimeLimitMs: adapters.contradictionWatch?.claimTimeLimitMs ?? CLAIM_TIME_LIMIT_MS,
       log: adapters.log ?? silentLogger,
     },
     mindFolder: (mindId) => minds.get(mindId).folderId,

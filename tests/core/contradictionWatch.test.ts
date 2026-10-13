@@ -11,7 +11,14 @@ import type { Core, Document } from "../../src/core";
 import { claimSpans } from "../../src/renderer/src/editor/claimChecks";
 import { claimCheckShown } from "../../src/shared/claimChecks";
 import { contradictionWatchOf } from "../../src/shared/contradictionWatch";
-import { checkGenerate, checkingModel, checkReply, isCheckRun, type Plan } from "../helpers/checks";
+import {
+  checkGenerate,
+  checkingModel,
+  checkReply,
+  isCheckRun,
+  type Plan,
+  sentenceOf,
+} from "../helpers/checks";
 import { answerEnded, shownPassages } from "../helpers/citations";
 import { createTempDataFolder, manualClock, startCore } from "../helpers/core";
 import { addAndProcess, waitForProcessing, writeSourceFile } from "../helpers/documents";
@@ -76,7 +83,7 @@ async function setUp({
   const model = checkingModel(PLANS, calls);
   const core = startCore(await createTempDataFolder(), {
     createChatModel: scriptedModels(model).createChatModel,
-    contradictionWatchDelayMs: delayMs,
+    contradictionWatch: { delayMs },
   });
   await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
   const sources = await createTempDataFolder();
@@ -287,7 +294,7 @@ describe("A new version of a Document in the Folder", { timeout: 30_000 }, () =>
     );
     const core = startCore(await createTempDataFolder(), {
       createChatModel: scriptedModels(model).createChatModel,
-      contradictionWatchDelayMs: 0,
+      contradictionWatch: { delayMs: 0 },
     });
     await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
     const sources = await createTempDataFolder();
@@ -321,12 +328,50 @@ describe("A new version of a Document in the Folder", { timeout: 30_000 }, () =>
     );
   });
 
+  test("a claim whose reply never comes is given up after its time limit, and the run still records what it found", async () => {
+    const never = new Promise<void>(() => undefined);
+    const model = scriptedModel(
+      (call) =>
+        sentenceOf(call) === MOON
+          ? { text: "Verdict: unsupported", pause: { after: 0, until: never } }
+          : checkReply(call, PLANS),
+      { generate: checkGenerate(PLANS) },
+    );
+    const core = startCore(await createTempDataFolder(), {
+      createChatModel: scriptedModels(model).createChatModel,
+      contradictionWatch: { delayMs: 0, claimTimeLimitMs: 300 },
+    });
+    await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
+    const sources = await createTempDataFolder();
+    const [tides, office] = (await addAndProcess(core, [
+      await writeSourceFile(sources, TIDES.name, TIDES.contents),
+      await writeSourceFile(sources, OFFICE.name, QUIET_OFFICE),
+    ])) as [Document, Document];
+    const folder = await core.createLibraryGroup({ name: "Harbours", description: "" });
+    await core.moveToFolder({ documentIds: [tides.id, office.id], folderId: folder.id });
+    const { client } = await mindCiting(core, tides, folder.id);
+
+    await writeFile(office.path, OFFICE.contents);
+    await core.reconcileDocuments();
+    await waitForProcessing(core, [office.id]);
+
+    await vi.waitFor(
+      () =>
+        expect(contradictionWatchOf(client.doc)).toMatchObject({
+          claims: 2,
+          checked: 1,
+          contradicted: 1,
+        }),
+      { timeout: 10_000 },
+    );
+  });
+
   test("sends nothing, and asks nothing, before the User allowed the checks flow for the model's service", async () => {
     const calls: ModelCall[] = [];
     const model = checkingModel(PLANS, calls);
     const core = startCore(await createTempDataFolder(), {
       createChatModel: () => model,
-      contradictionWatchDelayMs: 0,
+      contradictionWatch: { delayMs: 0 },
       now: manualClock("2026-10-13T09:00:00.000Z").now,
     });
     const asked = vi.fn();
