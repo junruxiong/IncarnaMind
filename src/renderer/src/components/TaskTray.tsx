@@ -12,10 +12,10 @@ import { answerTaskAsk, loadTasks, useTasks } from "../tasks";
 const TRAY_SHARE = 0.4;
 /** The least the tray takes with an ask, room allowing: its count, its title and its buttons. */
 const MIN_TRAY = 220;
-/** The least it takes in a short column, where the composer comes first. */
-const MIN_ROOM = 64;
-/** What the conversation keeps above the tray and the composer, at the least. */
-const MIN_THREAD = 40;
+/** The least it takes in a short column: its buttons stay in reach, the ask scrolling above them. */
+const MIN_ROOM = 56;
+/** What the conversation keeps above the tray and the composer, at the least: a few lines (#678). */
+const MIN_THREAD = 120;
 
 const ALLOW_KEYS = "CmdOrCtrl+Enter";
 
@@ -143,7 +143,9 @@ export function TaskTray({ mindId }: { mindId: string }) {
     const column = element?.closest<HTMLElement>(".assistant-main");
     if (!present || !element || !column) return;
     const fitTray = () => {
-      const composer = element.nextElementSibling?.getBoundingClientRect().height ?? 0;
+      // The composer and the room under it, which the slot's padding keeps.
+      const slot = element.parentElement?.getBoundingClientRect().height ?? 0;
+      const composer = slot - element.getBoundingClientRect().height;
       const room = Math.max(MIN_ROOM, column.clientHeight - composer - MIN_THREAD);
       const share = Math.floor(column.clientHeight * TRAY_SHARE);
       setMaxHeight(Math.min(room, Math.max(share, MIN_TRAY)));

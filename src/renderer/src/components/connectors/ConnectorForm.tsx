@@ -47,6 +47,7 @@ export function ConnectorForm({
   onDone,
   editing,
   kind: fixedKind,
+  prefill,
 }: {
   /** Called with the Connector added or changed, or with nothing when the User cancelled. */
   onDone(connector?: Connector): void;
@@ -54,14 +55,16 @@ export function ConnectorForm({
   editing?: LocalConnector;
   /** Only this kind, with no choice between local and remote. */
   kind?: "local" | "remote";
+  /** A local Connector to add, filled in from elsewhere (the MCP Registry): its variables are named, to be given values. */
+  prefill?: { name: string; command: string; args: string[]; env: string[] };
 }) {
   const t = useT();
   const [chosenKind, setKind] = useState<"local" | "remote">("local");
   const kind = fixedKind ?? chosenKind;
-  const [name, setName] = useState(editing?.name ?? "");
-  const [command, setCommand] = useState(editing?.command ?? "");
-  const [args, setArgs] = useState(editing?.args.join("\n") ?? "");
-  const [env, setEnv] = useState("");
+  const [name, setName] = useState(editing?.name ?? prefill?.name ?? "");
+  const [command, setCommand] = useState(editing?.command ?? prefill?.command ?? "");
+  const [args, setArgs] = useState((editing?.args ?? prefill?.args)?.join("\n") ?? "");
+  const [env, setEnv] = useState(prefill?.env.map((each) => `${each}=`).join("\n") ?? "");
   const [url, setUrl] = useState("");
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
