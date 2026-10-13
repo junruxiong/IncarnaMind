@@ -1625,7 +1625,8 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
-    version: 85,
+    // 85 to 87 are reserved by work in progress.
+    version: 88,
     description: "Organize: a waiting or failed Document's problem as a wording (#654)",
     sql: `
       -- The problem in error_message as a key of the dictionary and its values (JSON), so the
