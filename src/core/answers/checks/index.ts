@@ -74,6 +74,8 @@ export interface ChecksOptions
   requireMind(mindId: string): void;
   /** The Folder the Mind is in; null for none. */
   mindFolder(mindId: string): string | null;
+  /** The file a Mind was imported from (#720), which its own checks never use as evidence. */
+  originalOf(mindId: string): CheckedDocument | null;
   /** The default chat model, used when the Mind has none of its own. */
   defaultModel(): ChatModelChoice | null;
   chat: {
@@ -285,7 +287,8 @@ export function createChecks(options: ChecksOptions) {
     const read = content.read(mindId, (blocks) => selectedSentences(blocks, input.from, input.to));
     if (!read.ok) return { kind: read.reason };
 
-    const { searchable, folderId, check } = scopeOf(mindId, input.allDocuments);
+    const original = options.originalOf(mindId) ?? undefined;
+    const { searchable, folderId, check } = scopeOf(mindId, input.allDocuments, original);
     if (searchable === 0) return { kind: "no-documents", folderId };
     const { scope: evidenceScope, marked: scope } = check;
 

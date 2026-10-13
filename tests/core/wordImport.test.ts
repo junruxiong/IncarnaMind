@@ -634,6 +634,7 @@ describe("whose document it is", () => {
       authors: [],
       changes: 0,
       comments: 0,
+      earlierDraft: null,
     });
 
     const changed = await saveFile(
