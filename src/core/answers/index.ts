@@ -1719,7 +1719,11 @@ export function createAnswers(options: AnswersOptions) {
     return { context, documentIds, emptyScope };
   };
 
-  async function ask(mindIdInput: unknown, questionIdInput: unknown): Promise<AskResult> {
+  async function ask(
+    mindIdInput: unknown,
+    questionIdInput: unknown,
+    beforeWriting?: (mindId: string) => void,
+  ): Promise<AskResult> {
     const mindId = options.requireMind(mindIdInput);
     const questionId = parseId(questionIdInput, "A Question id");
 
@@ -1739,6 +1743,7 @@ export function createAnswers(options: AnswersOptions) {
     const current = content.read(mindId, (blocks) => answerFor(blocks, questionId));
     const currentId = current && textAttribute(current, BLOCK_ID_ATTRIBUTE);
     if (currentId) active.get(currentId)?.finish({ status: "stopped" });
+    beforeWriting?.(mindId);
 
     /** What the Answer is written from: its Question context and Search scope, as they are now. */
     type Asked = {
@@ -1817,7 +1822,8 @@ export function createAnswers(options: AnswersOptions) {
       return ask(input.mindId, input.questionId);
     },
 
-    regenerate(input: unknown): Promise<AskResult> {
+    /** `beforeWriting` runs once the Answer can be written again, just before it is. */
+    regenerate(input: unknown, beforeWriting?: (mindId: string) => void): Promise<AskResult> {
       if (!isRecord(input)) throw new InvalidInputError("regenerateAnswer expects an object.");
       const mindId = options.requireMind(input.mindId);
       const answerId = parseId(input.answerId, "An Answer id");
@@ -1830,7 +1836,7 @@ export function createAnswers(options: AnswersOptions) {
         }
         return id;
       });
-      return ask(mindId, questionId);
+      return ask(mindId, questionId, beforeWriting);
     },
 
     stop(input: unknown): void {

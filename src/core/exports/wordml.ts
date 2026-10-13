@@ -66,7 +66,7 @@ function runOf(text: string, format: RunFormat, textElement: "w:t" | "w:delText"
   if (!text) return "";
   // In the order the schema requires.
   const rPr = [
-    format.style ? `<w:rStyle w:val="${format.style}"/>` : "",
+    format.style ? `<w:rStyle w:val="${escapeXml(format.style)}"/>` : "",
     format.monospace ? '<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:cs="Consolas"/>' : "",
     format.bold ? "<w:b/>" : "",
     format.italic ? "<w:i/>" : "",
@@ -90,17 +90,28 @@ function runOf(text: string, format: RunFormat, textElement: "w:t" | "w:delText"
 // ---------------------------------------------------------------------------
 // Footnotes
 
-/** Where a footnote is referred to in the text: its number, in the FootnoteReference style. */
-export function footnoteReference(id: number): string {
-  return `<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteReference w:id="${id}"/></w:r>`;
+/**
+ * The ids of Word's footnote styles in a document: these, in a new one; an
+ * imported document may name them otherwise (in Chinese Word, "aff1"…).
+ */
+export interface FootnoteStyles {
+  text: string;
+  reference: string;
+}
+
+const FOOTNOTE_STYLES: FootnoteStyles = { text: "FootnoteText", reference: "FootnoteReference" };
+
+/** Where a footnote is referred to in the text: its number, in the footnote reference style. */
+export function footnoteReference(id: number, style = FOOTNOTE_STYLES.reference): string {
+  return `<w:r><w:rPr><w:rStyle w:val="${escapeXml(style)}"/></w:rPr><w:footnoteReference w:id="${id}"/></w:r>`;
 }
 
 /**
- * A footnote, for the footnotes part: one paragraph in the FootnoteText
+ * A footnote, for the footnotes part: one paragraph in the footnote text
  * style, its number, then `runs`.
  */
-export function footnote(id: number, runs: string): string {
-  return `<w:footnote w:id="${id}"><w:p><w:pPr><w:pStyle w:val="FootnoteText"/></w:pPr><w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteRef/></w:r>${runs}</w:p></w:footnote>`;
+export function footnote(id: number, runs: string, styles = FOOTNOTE_STYLES): string {
+  return `<w:footnote w:id="${id}"><w:p><w:pPr><w:pStyle w:val="${escapeXml(styles.text)}"/></w:pPr><w:r><w:rPr><w:rStyle w:val="${escapeXml(styles.reference)}"/></w:rPr><w:footnoteRef/></w:r>${runs}</w:p></w:footnote>`;
 }
 
 /**

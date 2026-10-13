@@ -76,13 +76,20 @@ test("Add Documents ▾ → Find sources… asks each provider once, then adds a
     await newFolder(window, "Thesis");
     await window.getByTestId("open-library").click();
 
-    // The Library's Add Documents is a menu: files, or Find sources.
+    // The Library's Add Documents is a menu of the ways in, Find sources among them.
     const add = window.getByTestId("library-add-documents");
     await add.hover();
     await add.click();
     await expect(
       window.getByTestId("library-add-documents-items").getByRole("menuitem"),
-    ).toHaveText([/Files…/, /Find sources…/]);
+    ).toHaveText([
+      /Files…/,
+      /A folder that stays in sync…/,
+      /A web page…/,
+      /Find sources…/,
+      /Connect an app…/,
+      /Import references…/,
+    ]);
     await window.getByTestId("library-find-sources").click();
     const panel = window.getByTestId("find-sources");
     await expect(panel).toBeVisible();
