@@ -36,6 +36,7 @@ import { AssistantMenu } from "./AssistantMenu";
 import { ConversationThread } from "./ConversationThread";
 import { HistoryPopover } from "./HistoryPopover";
 import { useReadMindId } from "./readMind";
+import { useKeepInView } from "./useKeepInView";
 
 /**
  * The window's one assistant (#253), outside the tab groups, as in Cursor:
@@ -271,6 +272,7 @@ function AssistantMain({
   const seat = useComposer((state) => state.seat);
   const mind = seat !== null && seat.mindId === readMindId ? seat : null;
   const thread = useRef<HTMLDivElement>(null);
+  useKeepInView(thread);
   /** Where the conversation was scrolled to, put back when it shows again. */
   const scrolled = useRef(0);
   useLayoutEffect(() => {
