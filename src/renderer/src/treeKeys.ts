@@ -1,4 +1,5 @@
 import type { KeyboardEvent } from "react";
+import { pressed } from "./commands/keys";
 
 /*
  * The keys of the sidebar's tree (docs/agents/interaction.md, rules 1, 2 and
@@ -14,6 +15,14 @@ export const isMoveToKey = (event: KeyboardEvent) =>
   event.shiftKey &&
   !event.altKey &&
   (isMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey);
+
+/** A Library row's "Tags…", besides T alone. */
+export const TAGS_KEYS = "CmdOrCtrl+Alt+T";
+
+/** Whether a key is a Library row's "Tags…": T, or ⌥⌘T (Ctrl+Alt+T). */
+export const isTagsKey = (event: KeyboardEvent) =>
+  !event.nativeEvent.isComposing &&
+  (pressed("T", event, isMac) || pressed(TAGS_KEYS, event, isMac));
 
 /** Marks a row's main button as a stop for the arrow keys (`moveThroughRows`). */
 export const TREE_ROW = { "data-tree-row": "" } as const;
