@@ -28,8 +28,9 @@ Each rule has a check a reviewer can apply. A UI change that breaks a rule says 
    - Check: the speed test; by hand, nothing waits on a spinner for an action that should be instant.
 9. **One way to do each thing, with more behind it.** One primary action per screen and one visible place to add things. Advanced choices live behind ⋯ or in Settings. A new setting needs a reason in the pull request; prefer a good default.
    - Check: the change lists each visible way to reach its action; a second visible way needs a reason.
-10. **Say it plainly.** Use the words in `CONTEXT.md`. Say what happened and what the User can do next. A problem stays where it happened, as one line with one action, until dismissed (see #157); no toast for an error.
-    - Check: the copy reads well in English and Chinese, in `CONTEXT.md`'s words.
+10. **Say it plainly.** Use the words in `CONTEXT.md`. Say what happened and what the User can do next. A problem stays where it happened, as one line with one action, until the User dismisses it or fixes the cause; it never closes itself, with an action or without one. Only a confirmation ("Copied", "Added to note") goes by itself, after a few seconds. Esc closes either, the newest first. No toast that goes away for an error.
+    - A failure with no line of its own shows as a notice (`useNotices().showError`): the core's own sentence, or plain words in both languages when the sentence is the system's own code ("ENOSPC: no space left on device…"), never Electron's "Error invoking remote method…" or a stack, with the technical text, the system's included, under "Details". `describeError` in `src/renderer/src/errors.ts` is the one place that takes it apart; call `reportError`, don't format an error at the call site.
+    - Check: the copy reads well in English and Chinese, in `CONTEXT.md`'s words; no line shows an error's wrapping or a stack.
 11. **Hold the layout.** Every screen works at every window size the app supports, with and without the viewer open, in English and in Chinese. Text wraps by word, never by letter, and long names truncate with the full name in a tooltip.
     - Check: screenshots at a narrow and a wide window.
 12. **Match the design.** Every UI issue names its design boards (the design canvas's main page, "IncarnaMind: all screens"). Build to them: layout, labels, chips, states. Where the built screen differs, say why in the pull request, or fix it.
@@ -54,6 +55,7 @@ Each rule has a check a reviewer can apply. A UI change that breaks a rule says 
 | Ask | One assistant per window, beside the tabs; ⌘J focuses its composer; it reads the Mind in focus and searches its Folder | Cursor, Notion AI |
 | Find anything | ⌘K searches Minds, Conversations, Documents, Folders and Tags, and runs any action | ChatGPT, Claude, Notion, Linear |
 | Open and rename | Click or Enter opens; double-click or F2 renames | Windows Explorer, Notion, Linear, Obsidian |
+| Make a Folder | ⇧⌘N makes "Untitled Folder" in the tree with its name field open; ⌃⌘N on macOS (or the selection's menu) makes it with the selected Documents and Minds in it; Enter keeps the name, Esc keeps "Untitled Folder", ⌘Z removes it | Finder, Windows Explorer (Ctrl+Shift+N) |
 | File into a Folder | Drag onto the Folder, or Move to… (⇧⌘M) | ChatGPT projects, Notion, Granola, Finder |
 | One Folder per Document | A drop on a Folder moves the Document; Tags group Documents across Folders | Finder |
 | Tags | Created, renamed, recoloured, merged and deleted in the sidebar's Tags view; a rename applies everywhere | Finder, Bear, Apple Notes |

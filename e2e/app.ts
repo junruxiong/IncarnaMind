@@ -98,6 +98,11 @@ export interface LaunchOptions {
    * a JSON file of a `FakeScanScript`. Without, it reads nothing on them.
    */
   scans?: string;
+  /**
+   * The scripted Task that asks for approval and writes files (src/main/scriptedTask.ts),
+   * started with `startScriptedTask`. Needs a test build.
+   */
+  scriptedTasks?: boolean;
 }
 
 /**
@@ -143,6 +148,7 @@ export async function launchApp(
     transcriber,
     scans,
     web,
+    scriptedTasks = false,
   }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
@@ -162,6 +168,7 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS;
   delete env.INCARNAMIND_TEST_SCANS;
   delete env.INCARNAMIND_TEST_WEB;
+  delete env.INCARNAMIND_TEST_TASKS;
   // A test never uses the ChatGPT sign-in an agent's shell may point at for checks by hand.
   delete env.INCARNAMIND_CHATGPT_PROFILE;
   env.INCARNAMIND_TEST_AUDIO = "fake";
@@ -180,6 +187,7 @@ export async function launchApp(
   if (chatGpt) env.INCARNAMIND_TEST_CHATGPT = chatGpt;
   if (scans) env.INCARNAMIND_TEST_SCANS = scans;
   if (web) env.INCARNAMIND_TEST_WEB = String(web);
+  if (scriptedTasks) env.INCARNAMIND_TEST_TASKS = "1";
   env.INCARNAMIND_DATA_DIR = dataDir;
   env.INCARNAMIND_TEST_HOOKS = "1";
   if (fakeChat) env.INCARNAMIND_FAKE_CHAT = "1";
@@ -203,6 +211,46 @@ export async function launchApp(
   }
   return { app, window };
 }
+
+/**
+ * Starts the scripted Task (`LaunchOptions.scriptedTasks`) in a Mind: for each
+ * file it asks for approval, then writes the file into `folder`. Returns its id.
+ */
+export const startScriptedTask = (
+  app: ElectronApplication,
+  mindId: string,
+  input: { folder: string; files: string[] },
+) =>
+  app.evaluate(
+    (_electron, [mind, given]) =>
+      (
+        globalThis as unknown as {
+          incarnamindScriptedTask: { start(mindId: string, input: unknown): string };
+        }
+      ).incarnamindScriptedTask.start(mind, given),
+    [mindId, input] as const,
+  );
+
+/**
+ * Stands in for the system's notifications: each one shown is recorded
+ * instead (`notificationsShown`). Notifications made before this aren't.
+ */
+export const recordNotifications = (app: ElectronApplication) =>
+  app.evaluate(({ Notification }) => {
+    const shown: { title: string; body: string }[] = [];
+    (globalThis as { notificationsShown?: typeof shown }).notificationsShown = shown;
+    Notification.isSupported = () => true;
+    Notification.prototype.show = function show(this: Electron.Notification) {
+      shown.push({ title: this.title, body: this.body });
+    };
+  });
+
+export const notificationsShown = (app: ElectronApplication) =>
+  app.evaluate(
+    () =>
+      (globalThis as { notificationsShown?: { title: string; body: string }[] })
+        .notificationsShown ?? [],
+  );
 
 /** Chooses the Edit menu's Undo or Redo, as the application menu has it now. */
 export const clickEditItem = (app: ElectronApplication, id: "edit.undo" | "edit.redo") =>

@@ -29,6 +29,7 @@ import {
   resolveInEditor,
   setEditTarget,
 } from "./editor/proposalReview";
+import { errorMessage } from "./errors";
 import { translateNow } from "./i18n";
 import { useAppStore } from "./store";
 
@@ -140,7 +141,7 @@ function whenShown(editor: Editor, request: string): Promise<PendingProposal | n
 /** A request that threw, as the result the composer shows. */
 const failure = (error: unknown): EditWithAiResult => ({
   kind: "failed",
-  error: { kind: "unknown", message: error instanceof Error ? error.message : String(error) },
+  error: { kind: "unknown", message: errorMessage(error) },
 });
 
 /**

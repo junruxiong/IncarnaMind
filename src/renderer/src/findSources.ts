@@ -130,7 +130,7 @@ export const useFindSources = create<FindSourcesState>()((set, get) => ({
     const focus = used ?? null;
     set({ open: true, folderId, focus, ...fields });
     // The Library, as a tab, as it was: the User's Mind stays where it is.
-    app.openLibrary(app.libraryFilter === "new" ? "all" : app.libraryFilter);
+    app.openLibrary(app.libraryFilter);
     // Drug labels and trials start off: they are asked only when chosen, never with a search for papers.
     const startOff = (providers: SourceProviderInfo[]) =>
       providers

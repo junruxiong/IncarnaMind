@@ -3,6 +3,7 @@ import type { ConversationAnswer } from "../../../../core/api";
 import { copyAnswer } from "../../answerEditors";
 import { shortcutLabel } from "../../commands/keymap";
 import { stopAnswer } from "../../conversations";
+import { useDismissOnEscape } from "../../escapeDismiss";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
 import { answerUndoPlace, useUndo } from "../../undo";
@@ -46,6 +47,7 @@ export function AnswerActions({
   );
   const added = addedLine?.change ?? null;
   useGoesBy(addedLine?.id ?? null);
+  useDismissOnEscape(added !== null, () => useUndo.getState().dismiss());
   // Added from its own buttons (which are gone now): the focus goes to its Undo, so the keyboard
   // can take it back at once. Added from elsewhere (⌘⇧A in the note), the focus stays there.
   useEffect(() => {

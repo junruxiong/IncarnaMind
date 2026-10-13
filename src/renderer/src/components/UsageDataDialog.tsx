@@ -1,7 +1,6 @@
 import { useId, useState } from "react";
 import type { MessageKey } from "../../../shared/i18n";
 import { core } from "../core";
-import { errorMessage } from "../errors";
 import { useGap, useT } from "../i18n";
 import { usageDataQuestionWaiting, useAppStore } from "../store";
 import {
@@ -59,7 +58,7 @@ export function UsageDataDialog() {
     } catch (failure) {
       // Not answered after all: ask again.
       setAnswered(false);
-      useAppStore.setState({ actionError: errorMessage(failure) });
+      useAppStore.getState().reportError(failure);
     }
   };
 
