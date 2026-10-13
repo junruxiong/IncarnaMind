@@ -15,6 +15,10 @@ export const KIND_LABELS: Record<Document["kind"], MessageKey> = {
   transcript: "library.format.transcript",
 };
 
+/** "Show in Finder" on macOS, "Show in folder" on Windows and Linux: what every action that shows a file says. */
+export const showFileLabelKey = (platform: string): MessageKey =>
+  /Mac|iPhone|iPad/.test(platform) ? "file.showInFinder" : "file.showInFolder";
+
 /** "Get info" is "Properties" on Windows and Linux, in Chinese. */
 export const infoLabelKey = (platform: string): MessageKey =>
   /Mac|iPhone|iPad/.test(platform) ? "info.get" : "info.get.other";

@@ -7,6 +7,7 @@ const EXPORTS = [
   "mind.export",
   "mind.exportAs.docx",
   "mind.exportAs.pdf",
+  "mind.exportAs.html",
   "mind.exportAs.markdown",
   "mind.exportOptions",
 ] as const;

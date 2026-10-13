@@ -72,7 +72,11 @@ async function openHistoryFromTabMenu(window: Page, tab: Locator): Promise<void>
   await tab.focus();
   await window.keyboard.press("Shift+F10");
   await expect(menu.getByTestId("mind.outline")).toBeFocused();
-  for (let step = 0; step < 5; step++) await window.keyboard.press("ArrowDown");
+  const ids = await menu
+    .getByRole("menuitem")
+    .evaluateAll((items) => items.map((item) => item.getAttribute("data-testid")));
+  const steps = ids.indexOf("mind.history") - ids.indexOf("mind.outline");
+  for (let step = 0; step < steps; step++) await window.keyboard.press("ArrowDown");
   await expect(menu.getByTestId("mind.history")).toBeFocused();
 }
 

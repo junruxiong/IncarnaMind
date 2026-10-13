@@ -53,6 +53,7 @@ import { createBackgroundQueue } from "./backgroundQueue";
 import { createCheckpoints } from "./checkpoints";
 import { createCitationStyles } from "./citationStyles";
 import { type CitedPages, type CitedPlace, createCitedPages } from "./citedPages";
+import { createComparisons } from "./comparisons";
 import { createConnectors } from "./connectors";
 import { createConsent, type DataFlowRegistry } from "./consent";
 import { createConversations } from "./conversations";
@@ -165,6 +166,7 @@ import {
 } from "./transcription/model";
 import { createUsageData } from "./usageData";
 import { addedCounts, trackUsage } from "./usageTracking";
+import { createWordImports } from "./wordImports";
 import { ensureWorkspace } from "./workspace";
 
 export const DATABASE_FILE = "incarnamind.db";
@@ -308,6 +310,14 @@ export function createCore(adapters: CoreAdapters): Core {
     }
     return mind;
   };
+  const mindExists = (mindId: string) => {
+    try {
+      minds.get(mindId);
+      return true;
+    } catch {
+      return false;
+    }
+  };
   const mindsChanged = () => events.emit("minds.changed", minds.list());
   // The assistant's conversations (ADR-0017); Answers a quit left being written are settled now.
   const conversations = createConversations(db, now);
@@ -317,6 +327,7 @@ export function createCore(adapters: CoreAdapters): Core {
     // Only notes the change; what became of AI text is worked out once the Mind is quiet.
     aiUse.contentStored(mindId);
     checkpoints.edited(mindId);
+    comparisons.mindChanged(mindId);
     const renamed = minds.setAutoTitle(mindId, content.peek(mindId, firstLineOf));
     if (minds.markEdited(mindId) || renamed) mindsChanged();
   });
@@ -868,12 +879,13 @@ export function createCore(adapters: CoreAdapters): Core {
     query: string,
     documentIds: readonly string[] | null,
     signal?: AbortSignal,
-    { rerank: reranking = true }: AnswerSearchOptions = {},
+    { rerank: reranking = true, parameters }: AnswerSearchOptions = {},
   ) => {
     const options = {
       signal,
       rerank: reranking ? (adapters.reranker ?? rerank.active()) : undefined,
       documentIds: documentIds ?? undefined,
+      ...(parameters && { parameters }),
     };
     const tuning = adapters.answerSearch;
     return tuning
@@ -928,14 +940,7 @@ export function createCore(adapters: CoreAdapters): Core {
     events,
     engine: adapters.answerEngine ?? createAiSdkAnswerEngine({ runEngine: adapters.runEngine }),
     requireMind: (mindId) => writableMind(mindId).id,
-    mindExists: (mindId) => {
-      try {
-        minds.get(mindId);
-        return true;
-      } catch {
-        return false;
-      }
-    },
+    mindExists,
     readableMindName: (mindId) => {
       const found = minds.locate(mindId);
       if (!found || found.deletedAt !== null) return null;
@@ -999,6 +1004,28 @@ export function createCore(adapters: CoreAdapters): Core {
     resolveScope,
     emptyScopeAnswer: () => translate(settings.get().language, "scope.answer.empty"),
     onWritingChange: (writing) => background.setAnswering(writing),
+    reportError: (error) => console.error(error),
+  });
+
+  // Compare Documents (#98): each cell an Answer from one Document, its evidence as a check's.
+  const comparisons = createComparisons({
+    content,
+    requireMind: (mindId) => writableMind(mindId).id,
+    mindExists,
+    answers,
+    chat: {
+      providerExists: (providerId) => chat.exists(providerId),
+      readiness: (choice) => chat.readiness(choice),
+      prepareModel: (choice) => chat.prepareModel(choice),
+      runsLocally: (choice) => chat.metered(choice)?.billing === "free",
+    },
+    documents: {
+      live: (ids) => documents.getMany(ids),
+      searchableCount: (ids) => documents.searchableCount(ids),
+    },
+    evidence: (ids) => evidence.scope(ids).documentIds ?? [...ids],
+    checkpoint: (mindId) => checkpoints.save(mindId, "compare"),
+    emit: (event, payload) => events.emit(event, payload),
     reportError: (error) => console.error(error),
   });
 
@@ -1336,6 +1363,19 @@ export function createCore(adapters: CoreAdapters): Core {
     sends: REFERENCE_LOOKUP_SENDS,
     services: async () => [],
   });
+
+  const wordImports = createWordImports({
+    db,
+    dataDir,
+    content,
+    minds,
+    requireFolder: (folderId) => void library.folder(folderId),
+    mindsChanged,
+    now,
+    log: adapters.log ?? silentLogger,
+  });
+  wordImports.resume();
+  wordImports.dropPurged().catch((error: unknown) => console.error(error));
 
   const recentlyDeleted = createRecentlyDeleted({
     db,
@@ -1759,6 +1799,8 @@ export function createCore(adapters: CoreAdapters): Core {
       usageData.record({ event: "mind_created", fields: {} });
       return mind;
     },
+    checkWordFile: async (path) => wordImports.check(path),
+    importWordFile: async (input) => wordImports.import(input),
     listMinds: async () => minds.list(),
     renameMind: async (mindId, title) => {
       const mind = minds.rename(mindId, title);
@@ -2070,6 +2112,10 @@ export function createCore(adapters: CoreAdapters): Core {
       if (!metered) throw new InvalidInputError("There is no model to estimate for.");
       return meter.estimate(metered, items);
     },
+    compareDocuments: (input) => comparisons.compareDocuments(input),
+    fillComparisonTable: (input) => comparisons.fillComparisonTable(input),
+    stopComparisonTable: async (input) => comparisons.stop(input),
+    listFillingComparisons: async () => comparisons.filling(),
 
     askQuestion: async (input) => answers.ask(input),
     regenerateAnswer: async (input) =>
@@ -2200,7 +2246,7 @@ export function createCore(adapters: CoreAdapters): Core {
     listDeleted: async () => recentlyDeleted.list(),
     deletePermanently: async (refs) => {
       recentlyDeleted.deletePermanently(refs);
-      await Promise.all([webPages.dropPurged(), sources.dropPurged()]);
+      await Promise.all([webPages.dropPurged(), sources.dropPurged(), wordImports.dropPurged()]);
     },
     acceptAssignments: async (ids) => library.accept(ids),
     rejectAssignments: async (ids) => library.reject(ids),
@@ -2487,7 +2533,11 @@ export function createCore(adapters: CoreAdapters): Core {
       // First, so stopping the Answers below starts no background work.
       citedPages.close();
       background.close();
+      // An import goes on from where it got to at the next start.
+      wordImports.close();
       void chatGpt.cancelSignIn();
+      // Comparison tables stop filling first, so their cells being written aren't failed below.
+      comparisons.stopAll();
       // Answers being written keep what they have, marked "stopped"; Tool calls waiting for
       // the User's approval are denied, and Skill scripts running are stopped.
       answers.stopAll();
