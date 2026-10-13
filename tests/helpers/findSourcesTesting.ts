@@ -18,7 +18,7 @@ import { createTempDataFolder, startCore } from "./core";
 import { waitForProcessing } from "./documents";
 import { type SourceServices, startSourceServices } from "./sourceServices";
 
-export const USER_AGENT = "IncarnaMind (https://github.com/junruxiong/IncarnaMind)";
+export const USER_AGENT = "IncarnaMind (https://github.com/IncarnaMind/IncarnaMind)";
 
 /** A clock that moves only when the core waits: how long it waited is kept. */
 export function virtualTimers() {

@@ -1,5 +1,5 @@
 import { mkdirSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { homedir, tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import * as Y from "yjs";
 import { isCitationStyleId } from "../shared/citationStyles";
@@ -59,6 +59,7 @@ import { createCitationStyles } from "./citationStyles";
 import { type CitedPages, type CitedPlace, createCitedPages } from "./citedPages";
 import { COMPARISON_TASK, createComparisons } from "./comparisons";
 import { createConnectors } from "./connectors";
+import { connectorDirectory } from "./connectors/directory";
 import { createConsent, type DataFlowRegistry } from "./consent";
 import { createConversations } from "./conversations";
 import { createMeter } from "./cost/meter";
@@ -381,6 +382,7 @@ export function createCore(adapters: CoreAdapters): Core {
     adapters.systemLanguages,
     scriptSandbox,
     !capture ? "none" : capture.systemAudio ? "both" : "microphone",
+    () => adapters.systemUserName?.() || accountName(),
   );
   const folders = createFolders(db, now);
   const foldersChanged = () => events.emit("folders.changed", folders.list());
@@ -1264,6 +1266,7 @@ export function createCore(adapters: CoreAdapters): Core {
     paper: () => paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages())),
     ...(adapters.pictures && { pictures: adapters.pictures }),
     wordPackage: (mindId) => wordImports.packageOf(mindId),
+    author: () => settings.get().author,
     log: adapters.log ?? silentLogger,
     now,
   });
@@ -1700,6 +1703,7 @@ export function createCore(adapters: CoreAdapters): Core {
   };
   // Connectors that are on start with the app.
   connectors.startAll();
+  const directory = connectorDirectory(adapters.connectorDirectory);
   const layouts = createLayouts({
     readValue: (key) => settings.readDeviceValue(key),
     writeValue: (key, value) => settings.writeDeviceValue(key, value),
@@ -1992,7 +1996,7 @@ export function createCore(adapters: CoreAdapters): Core {
     getConversation: async (conversationId) => conversations.content(conversationId),
     searchConversations: async (query) => conversations.search(query),
     searchMinds: async (query) => mindIndex.search(query),
-    searchDocumentText: async (query) => documents.searchText(query),
+    searchDocumentText: async (query, options) => documents.searchText(query, options),
     renameConversation: async (conversationId, title) => {
       const conversation = conversations.rename(conversationId, title);
       conversationsChanged();
@@ -2268,6 +2272,7 @@ export function createCore(adapters: CoreAdapters): Core {
     resumeTask: (taskId) => tasks.resume(taskId),
     stopTask: (taskId) => tasks.stop(taskId),
     answerTaskAsk: (taskId, answer) => tasks.answer(taskId, answer),
+    listTaskSteps: async (taskId) => tasks.listSteps(taskId),
 
     askQuestion: async (input) => answers.ask(input),
     regenerateAnswer: async (input) =>
@@ -2511,6 +2516,12 @@ export function createCore(adapters: CoreAdapters): Core {
     cancelConnectorSignIn: (connectorId) => connectors.cancelSignIn(connectorId),
     signOutOfConnector: (connectorId) => connectors.signOut(connectorId),
     setConnectorClient: (connectorId, client) => connectors.setClient(connectorId, client),
+    listConnectorDirectory: async () => directory,
+    addConnectorFromDirectory: async (entryId, client) => {
+      const entry = directory.find((each) => each.id === entryId);
+      if (!entry) throw new NotFoundError({ key: "error.connector.notInDirectory" });
+      return connectors.addFromDirectory(entry, client);
+    },
     previewConnectorImport: async (json) => connectors.previewImport(json),
     importConnectors: (json) => connectors.import(json),
 
@@ -2573,7 +2584,13 @@ export function createCore(adapters: CoreAdapters): Core {
       return exported;
     },
     saveMindExport: async (mindId, options) => {
-      const { fileName, data, word, ...counts } = await mindExports.export(mindId, options);
+      const {
+        fileName,
+        fromWord: _,
+        data,
+        word,
+        ...counts
+      } = await mindExports.export(mindId, options);
       // What a Word file can't keep is said before anything is saved (#105).
       const accepted = new Set(Array.isArray(options?.accept) ? options.accept : []);
       if (word?.notKept.some((loss) => !accepted.has(loss.key))) return { status: "review", word };
@@ -2732,4 +2749,14 @@ export function createCore(adapters: CoreAdapters): Core {
       db.close();
     },
   };
+}
+
+/** The account's name, or "" where the OS can't say (`userInfo` throws for a user without one). */
+function accountName(): string {
+  try {
+    return userInfo().username;
+  } catch (error) {
+    console.warn("settings.accountName", error instanceof Error ? error.message : String(error));
+    return "";
+  }
 }

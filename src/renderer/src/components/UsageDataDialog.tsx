@@ -20,7 +20,7 @@ import { useModal } from "./useModal";
 
 /** Every event and field usage data can hold, for people to read. */
 export const USAGE_DATA_DETAILS_URL =
-  "https://github.com/junruxiong/IncarnaMind/blob/main/docs/privacy.md#usage-data";
+  "https://github.com/IncarnaMind/IncarnaMind/blob/main/docs/privacy.md#usage-data";
 
 /** What usage data looks like, in words. */
 const EXAMPLES: readonly MessageKey[] = [
