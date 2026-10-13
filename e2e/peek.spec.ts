@@ -540,14 +540,28 @@ test("in the Library, ↓ steps from one Folder's section into the next, and pas
       await expect(peekName).toHaveText(names.at(-1) as string);
       await window.keyboard.press("Escape");
     };
-    const all = await library.names(window);
+    // The page puts its sections in order as the moves arrive: its rows are read once they stop moving.
+    const settledNames = async () => {
+      let last = "";
+      await expect
+        .poll(async () => {
+          const now = (await library.names(window)).join("|");
+          const still = now === last;
+          last = now;
+          return still;
+        })
+        .toBe(true);
+      return library.names(window);
+    };
+    const all = await settledNames();
     expect(all).toHaveLength(4);
     await walk(all);
 
     // With a section folded its Documents aren't on the page: the peek goes past it.
-    await sections.nth(1).getByTestId("library-section-toggle").click();
-    const open = await library.names(window);
-    expect(open.length).toBeLessThan(4);
+    await sections.filter({ hasText: "Tide" }).getByTestId("library-section-toggle").click();
+    await expect(window.getByTestId("library-document-name")).toHaveCount(3);
+    const open = await settledNames();
+    expect(open).not.toContain("Charlie");
     await walk(open);
   } finally {
     await app.close();
@@ -587,7 +601,9 @@ test("the Folder and the Tags of a peeked Document change in the peek, by keyboa
     await tags.getByTestId("document-tags-menu").click();
     await expect(peek.getByTestId("tag-picker-input")).toBeFocused();
     // The same picker as everywhere: 360px wide.
-    expect((await peek.getByTestId("document-tags-popover").boundingBox())?.width).toBe(360);
+    await expect
+      .poll(async () => (await peek.getByTestId("document-tags-popover").boundingBox())?.width)
+      .toBe(360);
     await window.keyboard.type("Seawater");
     await window.keyboard.press("Enter");
     await window.keyboard.press("Escape");
