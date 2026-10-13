@@ -1735,7 +1735,6 @@ export const zhCN = {
   "models.other.group.older": "旧型号",
   "models.other.group.cannotAnswer": "无法在这里回答问题",
   "models.other.mayNotWork": "可能无法使用",
-  "models.other.older": "较旧",
   "models.other.reason.completion": "仅支持文本补全",
   "models.other.reason.audio": "音频模型",
   "models.other.reason.deepResearch": "需要深度研究接口",
