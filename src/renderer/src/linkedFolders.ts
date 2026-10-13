@@ -170,13 +170,6 @@ export function folderName(path: string): string {
   return parts.at(-1) ?? path;
 }
 
-/** "Show in Finder", "Show in Explorer", or the file manager in general elsewhere. */
-export function revealLabelKey(platform: string): MessageKey {
-  if (/Mac|iPhone|iPad/.test(platform)) return "linkedFolders.reveal.mac";
-  if (/Win/.test(platform)) return "linkedFolders.reveal.windows";
-  return "linkedFolders.reveal.other";
-}
-
 /**
  * What a Document's row says at its end about its file, and why its file
  * can't be opened or shown: nothing for a file that is where it was.
