@@ -1,6 +1,6 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import {
   acceptPlainTextKeys,
@@ -60,10 +60,12 @@ test("first run's local path starts ticked, because nothing in the cloud is set 
     "Also keep everything on this computer",
   );
   await expect(line).toHaveText("Nothing in the cloud is set up yet.");
+  expect(Math.abs((await textLeft(line)) - (await textLeft(label(box))))).toBeLessThanOrEqual(1);
 
   await language(window, "zh-CN");
   await expect(setup.getByTestId("keep-local")).toContainText("同时让所有内容都留在这台电脑上");
   await expect(line).toHaveText("目前没有设置任何云端服务。");
+  expect(Math.abs((await textLeft(line)) - (await textLeft(label(box))))).toBeLessThanOrEqual(1);
   await language(window, "en");
 
   await setup.getByTestId("ollama-use").click();
@@ -77,6 +79,18 @@ test("first run's local path starts ticked, because nothing in the cloud is set 
   await expect.poll(() => localOnly(window)).toBe(false);
   await app.close();
 });
+
+/** The left edge of an element's text, not of its box. */
+const textLeft = (element: Locator) =>
+  element.evaluate((node) => {
+    const range = document.createRange();
+    const text = document.createTreeWalker(node, NodeFilter.SHOW_TEXT).nextNode();
+    if (!text) throw new Error("No text.");
+    range.selectNodeContents(text);
+    return range.getBoundingClientRect().left;
+  });
+
+const label = (box: Locator) => box.locator("xpath=ancestor::label");
 
 for (const [name, locale] of [
   ["English", "en"],
@@ -111,6 +125,7 @@ for (const [name, locale] of [
         ? "会暂停 llm.example.com 和 1 个已连接的智能体，直到你关闭它。"
         : "Pauses llm.example.com and 1 connected agent until you turn it off.",
     );
+    expect(Math.abs((await textLeft(line)) - (await textLeft(label(box))))).toBeLessThanOrEqual(1);
 
     // Unticked: the model is chosen and Local mode stays off.
     await page.getByTestId("ollama-use").click();

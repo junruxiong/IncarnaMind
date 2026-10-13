@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from "react";
 import { core } from "../../core";
 import { useT } from "../../i18n";
-import { hintClass } from "../ui";
+import { checkBoxClass, checkHintClass, checkRowClass } from "../ui";
 
 /** What Local mode would pause: the cloud services set up, and the connected agents. */
 interface CloudSetUp {
@@ -100,10 +100,11 @@ export function KeepLocalChoice({
 
   return (
     <div data-testid="keep-local" className="flex flex-col gap-1">
-      <label htmlFor={id} className="flex items-center gap-2 text-ui text-ink">
+      <label htmlFor={id} className={checkRowClass}>
         <input
           id={id}
           type="checkbox"
+          className={checkBoxClass}
           data-testid="keep-local-box"
           aria-describedby={`${id}-line`}
           checked={keepLocal.checked}
@@ -112,7 +113,7 @@ export function KeepLocalChoice({
         />
         {t("localMode.keep.label")}
       </label>
-      <p id={`${id}-line`} data-testid="keep-local-line" className={`${hintClass} mt-0 pl-6`}>
+      <p id={`${id}-line`} data-testid="keep-local-line" className={checkHintClass}>
         {keepLocal.nothing ? t("localMode.keep.nothing") : t("localMode.keep.pauses", { services })}
       </p>
     </div>

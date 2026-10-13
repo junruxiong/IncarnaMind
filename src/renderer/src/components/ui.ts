@@ -55,6 +55,14 @@ export const fieldLabelClass = "block text-[13px] leading-5 text-ink-secondary";
 /** The line of help under a field. */
 export const hintClass = "mt-1 block text-[12px] leading-[18px] text-ink-meta";
 
+/**
+ * A checkbox with its label, and the line of help under it: the box is 16px
+ * and the gap 8px, so the line's indent (24px) is where the label's text starts.
+ */
+export const checkRowClass = "flex items-center gap-2 text-ui text-ink";
+export const checkBoxClass = "m-0 size-4 shrink-0";
+export const checkHintClass = `${hintClass} mt-0 pl-6`;
+
 /** A note that needs reading, on the frame: no tinted boxes outside Citations. */
 export const noticeClass =
   "rounded-lg border border-rule bg-frame px-3 py-2 text-[13px] leading-5 text-ink-secondary";
