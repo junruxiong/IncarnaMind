@@ -14,7 +14,7 @@ import {
   type CitationStyleId,
   citationStyle,
 } from "../../shared/citationStyles";
-import { citationState, citedLocation } from "../../shared/citations";
+import { citationState, citedLocation, shownDocumentName } from "../../shared/citations";
 import type { DrawnPage } from "../../shared/citedPage";
 import { titleWithoutSite } from "../../shared/documentNames";
 import { translate } from "../../shared/i18n";
@@ -413,7 +413,7 @@ function footnoteOf(
   language: Language,
 ): Footnote {
   const t: Translate = (key, params) => translate(language, key, params);
-  const document = attributes.documentName || t("export.unnamedDocument");
+  const document = shownDocumentName(attributes, documents) || t("export.unnamedDocument");
   const location = citedLocation(attributes, t);
   const state = citationState(attributes, documents, kept);
   const unverified = state.check !== "found";

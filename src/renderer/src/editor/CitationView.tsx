@@ -14,6 +14,7 @@ import {
   type CitationState,
   citationSource,
   citationState,
+  withShownName,
 } from "../../../shared/citations";
 import {
   citationLocation,
@@ -105,14 +106,15 @@ export function CitationView({
   /** The Mind's group: the Document opens in the group to its right. */
   const place = useTabPlace();
   const state = citationState(attributes, documents, kept);
+  const shown = withShownName(attributes, documents);
   const location = citationLocation(attributes);
   const where = location ? formatLocation(location, t) : null;
-  const badge = badgeMessage(state, attributes, t);
+  const badge = badgeMessage(state, shown, t);
   const badgeText = t(badge.key, badge.params);
   const number = citationNumberOf(decorations);
   // In a footnote's text it is part of the footnote: it shows where it points, not a number.
   const inFootnote = useContext(InFootnoteContext);
-  const pointsTo = citationSource(attributes, t).text;
+  const pointsTo = citationSource(shown, t).text;
   /** Clicked: the card stays until it is dismissed. */
   const [pinned, setPinned] = useState(false);
   /** Hovered or focused, with the card, the marker or its mark. */
@@ -323,7 +325,7 @@ export function CitationView({
           >
             <CitationCard
               state={state}
-              attributes={attributes}
+              attributes={shown}
               badgeText={badgeText}
               onOpen={(withQuote) => {
                 openCited(withQuote, true);

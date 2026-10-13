@@ -125,9 +125,9 @@ function writeSample(client: MindClient, tides: Document): void {
  * cell over two columns, and an image.
  */
 function writeEverythingElse(client: MindClient, tides: Document): void {
-  const at = (location: object, name: string): JSONContent => {
+  const at = (location: object): JSONContent => {
     const node = citation(tides, [1, 1], "found");
-    return { ...node, attrs: { ...node.attrs, documentName: name, location } };
+    return { ...node, attrs: { ...node.attrs, location } };
   };
   const linked = (value: string, href: string, ...marks: string[]): JSONContent => ({
     type: "text",
@@ -147,11 +147,11 @@ function writeEverythingElse(client: MindClient, tides: Document): void {
       text("new", "underline"),
       { type: "hardBreak" },
       text("Growth"),
-      at({ kind: "slide", from: 3, to: 3 }, "Deck"),
+      at({ kind: "slide", from: 3, to: 3 }),
       text(", revenue"),
-      at({ kind: "rows", sheet: "Revenue", from: 12, to: 14 }, "Model"),
+      at({ kind: "rows", sheet: "Revenue", from: 12, to: 14 }),
       text(", the crest"),
-      at({ kind: "section", heading: "2.1 Sensitivity" }, "Review"),
+      at({ kind: "section", heading: "2.1 Sensitivity" }),
       text("."),
     ),
     { type: "blockMath", attrs: { latex: "\\undefinedmacro{x}" } },
@@ -232,7 +232,7 @@ describe("exporting a Mind", () => {
       "quotes, rules, links, marks, breaks, tables, images and Locations",
       "rest",
       {},
-      "175d296eb972cb56143e9000248fe354a4517e0f289d9feb14a4df3e45ecbdd1",
+      "407655edf9fc643d253e7ec404d663cec5aaf0867e57b45195d0eaf51cc939cb",
     ],
   ] as const)(
     "the bytes of a .docx export don't change either: %s",
@@ -740,20 +740,20 @@ describe("exporting a Mind", () => {
 
   test("a footnote names its Citation's Location: a slide, rows of a sheet, a section, lines", async () => {
     const { core, mind, client, tides } = await setUp();
-    const at = (location: object, name: string): JSONContent => {
+    const at = (location: object): JSONContent => {
       const node = citation(tides, [1, 1], "found");
-      return { ...node, attrs: { ...node.attrs, documentName: name, location } };
+      return { ...node, attrs: { ...node.attrs, location } };
     };
     writeMind(client, [
       paragraph(
         text("Growth"),
-        at({ kind: "slide", from: 3, to: 3 }, "Deck"),
+        at({ kind: "slide", from: 3, to: 3 }),
         text(", revenue"),
-        at({ kind: "rows", sheet: "Revenue", from: 12, to: 14 }, "Model"),
+        at({ kind: "rows", sheet: "Revenue", from: 12, to: 14 }),
         text(", the crest"),
-        at({ kind: "section", heading: "2.1 Sensitivity" }, "Review"),
+        at({ kind: "section", heading: "2.1 Sensitivity" }),
         text(", the log"),
-        at({ kind: "lines", from: 120, to: 134 }, "Log"),
+        at({ kind: "lines", from: 120, to: 134 }),
         text("."),
       ),
     ]);
@@ -761,26 +761,26 @@ describe("exporting a Mind", () => {
 
     expect(decode(await core.exportMind(mind.id, { format: "markdown" }))).toContain(
       [
-        "[^1]: Deck, slide 3",
-        "[^2]: Model, Revenue, rows 12–14",
-        "[^3]: Review, § 2.1 Sensitivity",
-        "[^4]: Log, lines 120–134",
+        "[^1]: Tides, slide 3",
+        "[^2]: Tides, Revenue, rows 12–14",
+        "[^3]: Tides, § 2.1 Sensitivity",
+        "[^4]: Tides, lines 120–134",
       ].join("\n"),
     );
     const docx = unzip((await core.exportMind(mind.id, { format: "docx" })).data);
     expect(footnotesOf(part(docx, "word/footnotes.xml"))).toEqual({
-      "1": "Deck, slide 3",
-      "2": "Model, Revenue, rows 12–14",
-      "3": "Review, § 2.1 Sensitivity",
-      "4": "Log, lines 120–134",
+      "1": "Tides, slide 3",
+      "2": "Tides, Revenue, rows 12–14",
+      "3": "Tides, § 2.1 Sensitivity",
+      "4": "Tides, lines 120–134",
     });
     await core.updateSettings({ user: { language: "zh-CN" } });
     expect(decode(await core.exportMind(mind.id, { format: "markdown" }))).toContain(
       [
-        "[^1]: Deck，第 3 张幻灯片",
-        "[^2]: Model，Revenue，第 12–14 行",
-        "[^3]: Review，§ 2.1 Sensitivity",
-        "[^4]: Log，第 120–134 行",
+        "[^1]: Tides，第 3 张幻灯片",
+        "[^2]: Tides，Revenue，第 12–14 行",
+        "[^3]: Tides，§ 2.1 Sensitivity",
+        "[^4]: Tides，第 120–134 行",
       ].join("\n"),
     );
   });
