@@ -556,6 +556,12 @@ function marksOf(attributes: Record<string, unknown> = {}): Marks {
   };
 }
 
+/** Inline nodes as a paragraph's content reads: what a Word export writes new into an imported paragraph (#105). */
+export const readInlineNodes = (
+  children: readonly (Y.XmlElement | Y.XmlText)[],
+  options: ReadOptions,
+): Inline[] => readInline(children, options);
+
 function readInline(
   children: readonly (Y.XmlElement | Y.XmlText | Y.XmlHook)[],
   options: ReadOptions,
@@ -659,6 +665,34 @@ export function trimTrailingSpace(content: Inline[]): void {
 function stringAttribute(element: Y.XmlElement, name: string): string {
   const value = element.getAttribute(name);
   return typeof value === "string" ? value : "";
+}
+
+/**
+ * A Block's words, as search reads them: each paragraph, heading, list item or
+ * cell on a line of its own, so words of two lines never run together, and a
+ * footnote's text on the line after the one its marker is in. What a Proposal
+ * adds is left out, as everywhere.
+ */
+export function blockText(element: Y.XmlElement): string {
+  const lines: string[] = [];
+  const visit = (node: Y.XmlElement) => {
+    if (proposedOnly(node)) return;
+    const children = node.toArray();
+    if (!children.some((child) => child instanceof Y.XmlText)) {
+      for (const child of children) if (child instanceof Y.XmlElement) visit(child);
+      return;
+    }
+    lines.push(plainText(node));
+    for (const child of children) {
+      if (child instanceof Y.XmlElement && child.nodeName === FOOTNOTE_NODE && !proposedOnly(child))
+        lines.push(plainText(child, true));
+    }
+  };
+  visit(element);
+  return lines
+    .map((line) => line.trim())
+    .filter((line) => line !== "")
+    .join("\n");
 }
 
 /**

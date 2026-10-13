@@ -12,14 +12,15 @@ import { useShallow } from "zustand/react/shallow";
 import type { ApprovalRequest, Task, TaskEffect } from "../../../core/api";
 import { useApprovals } from "../approvals";
 import { keysLabel } from "../commands/keys";
-import { formatMoney, runStopText } from "../cost";
+import { formatMoney } from "../cost";
 import { ApprovalCard } from "../editor/AnswerView";
 import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
+import { needsYou } from "../taskGroups";
 import {
   answerTaskAsk,
   dismissTask,
-  needsYou,
+  loadTasks,
   pauseTask,
   resumeTask,
   stopTask,
@@ -27,6 +28,7 @@ import {
   unfoldTask,
   useTasks,
 } from "../tasks";
+import { stepLine, taskName } from "../taskText";
 import {
   CheckLineIcon,
   ChevronDownLineIcon,
@@ -59,38 +61,6 @@ function useMinutes(since: string): number {
     return () => clearInterval(timer);
   }, []);
   return Math.max(1, Math.round((now - new Date(since).getTime()) / 60_000));
-}
-
-const taskName = (task: Task, t: Translate) =>
-  t(task.kind === "comparison" ? "task.kind.comparison" : "task.kind.other");
-
-/** What a Task is doing, in one line: its step, or what it waits for. */
-function stepLine(task: Task, t: Translate, language: ReturnType<typeof useLanguage>): string {
-  if (task.ask) {
-    if (task.pausedReason === "closed") return t("task.status.pausedClosed");
-    return task.ask.kind === "approval"
-      ? t("task.status.waitingApproval")
-      : t("task.status.needsYou");
-  }
-  if (task.status === "paused") {
-    switch (task.pausedReason) {
-      case "cost-cap":
-        return runStopText({ reason: "cost-cap" }, t, language);
-      case "plan-limit":
-        return runStopText({ reason: "plan-limit", resetsAt: task.resetsAt }, t, language);
-      case "not-ready":
-        return t("task.status.notReady");
-      default:
-        return t("task.status.paused");
-    }
-  }
-  if (task.kind === "comparison" && task.progress && task.progress.total > 0) {
-    return t("task.comparison.filling", {
-      current: Math.min(task.progress.done + 1, task.progress.total),
-      total: task.progress.total,
-    });
-  }
-  return t("task.comparison.starting");
 }
 
 /** A Task's row in the tray: its dot, name, step and time; then Pause or Resume, Stop and ⌄. */
@@ -366,6 +336,7 @@ function TaskAskView({ task }: { task: Task }) {
  */
 export function TaskTray({ mindId }: { mindId: string }) {
   const t = useT();
+  useEffect(loadTasks, []);
   const tasks = useTasks(useShallow((state) => trayTasks(state, mindId)));
   const tray = useRef<HTMLElement>(null);
   const [maxHeight, setMaxHeight] = useState<number | undefined>(undefined);

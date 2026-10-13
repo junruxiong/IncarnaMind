@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { totalmem } from "node:os";
 import { join } from "node:path";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import { AUTO_CLASSIFICATION } from "../src/core/library/automatic";
 import { buildPdf } from "../tests/helpers/pdf";
@@ -14,10 +14,14 @@ import {
   coreOf,
   createDataFolder,
   dismissChatSetup,
+  editFolderInLibrary,
   expectReadyDocuments,
   launchApp,
   openFolderInLibrary,
+  openSettings,
   placeAssistant,
+  pointAndClick,
+  pointAt,
   removeDataFolder,
   sidebarFolder,
 } from "./app";
@@ -34,11 +38,9 @@ test.afterEach(async () => {
 });
 
 async function organizationSettings(window: Page) {
-  await window
-    .getByTestId("library")
-    .getByRole("button", { name: "Organization", exact: true })
-    .click();
-  return window.getByTestId("settings");
+  const settings = await openSettings(window, "models");
+  await expect(settings.getByTestId("organization-settings")).toBeVisible();
+  return settings;
 }
 async function saveOrganization(window: Page) {
   await window
@@ -49,6 +51,58 @@ async function saveOrganization(window: Page) {
   await closeSettings(window);
 }
 
+const makeFolders = async (
+  window: Page,
+  folders: readonly { name: string; description: string }[],
+) =>
+  (await coreOf(window)).evaluate(async (core, input) => {
+    for (const folder of input) await core.createLibraryGroup(folder);
+  }, folders);
+
+/** A section of the Library page, by its name. */
+const section = (library: Locator, name: string) =>
+  library.getByTestId("library-section").filter({
+    has: library.page().locator('[data-testid="library-section-name"]', {
+      hasText: new RegExp(`^${name}$`),
+    }),
+  });
+
+/** The row of the Document with this name. */
+const rowOf = (scope: Locator, name: string) =>
+  scope
+    .getByTestId("library-document")
+    .filter({ has: scope.page().getByRole("button", { name, exact: true }) });
+
+/** Chooses a Folder in a row's Move to…, from its ⋯. */
+async function moveRow(window: Page, row: Locator, folder: string) {
+  // Hovered once it holds still: Organize may still be moving rows between sections.
+  await row.hover();
+  await pointAndClick(window, row.getByTestId("document-file-menu"));
+  await pointAndClick(
+    window,
+    window
+      .getByTestId("document-file-actions")
+      .filter({ visible: true })
+      .getByTestId("document.moveTo"),
+  );
+  const picker = window.getByTestId("move-to-picker");
+  await expect(picker.getByTestId("move-to-search")).toBeFocused();
+  await pointAndClick(window, picker.getByTestId("move-to-option").filter({ hasText: folder }));
+  await expect(picker).toBeHidden();
+}
+
+/** Get info on a row, as ⌘I: its panel. Esc closes it. */
+async function infoOf(window: Page, row: Locator): Promise<Locator> {
+  await row.locator("[data-row-main]").focus();
+  await window.keyboard.press("ControlOrMeta+i");
+  const panel = window.getByTestId("info-panel");
+  await expect(panel).toBeVisible();
+  return panel;
+}
+
+/** Organize, beside Not in a Folder's count. */
+const organize = (library: Locator) => library.getByTestId("library-organize");
+
 test("folders, tags, search, edits and removal update the index while originals stay in place", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
@@ -57,22 +111,22 @@ test("folders, tags, search, edits and removal update the index while originals 
     const text = "Quarterly financial report. Revenue increased this year.";
     await writeFile(path, text);
     await addDocuments(window, [path]);
+    await makeFolders(window, [
+      { name: "Client work", description: "Reports for my clients" },
+      { name: "Research", description: "Papers" },
+    ]);
     await window.getByTestId("open-library").click();
     const library = window.getByTestId("library");
-    await library.getByRole("checkbox", { name: /^Meeting notes/ }).uncheck();
-    await library.getByRole("button", { name: "Add selected folders" }).click();
     const folders = window.getByTestId("library-folders");
-    // Four starter Folders, then Not in a Folder.
-    await expect(folders.getByTestId("library-folder")).toHaveCount(4);
+    await expect(folders.getByTestId("library-folder")).toHaveCount(2);
     await expect(folders.getByTestId("not-in-a-folder")).toBeVisible();
-    await (await coreOf(window)).evaluate((core) =>
-      core.createLibraryGroup({ name: "Client work", description: "Reports for my clients" }),
-    );
+
+    // Into a Folder with Move to…, then a Tag from the row.
     const row = library.getByTestId("library-document");
-    const assignment = library.getByRole("combobox", { name: "Folder for Quarterly report" });
-    await assignment.selectOption({ label: "Client work" });
-    await expect(row).toContainText("Your choice");
-    await row.getByTestId("document-tags-menu").click();
+    await moveRow(window, row, "Client work");
+    await expect(rowOf(section(library, "Client work"), "Quarterly report")).toHaveCount(1);
+    await pointAt(window, row);
+    await pointAndClick(window, row.getByTestId("document-tags-menu"));
     await expect
       .poll(() =>
         row.getByTestId("document-tags-popover").evaluate((element) => {
@@ -84,30 +138,37 @@ test("folders, tags, search, edits and removal update the index while originals 
     await row.getByRole("option", { name: "Report", exact: true }).click();
     await window.keyboard.press("Escape");
     await expect(row.getByTestId("document-tags")).toContainText("Report");
-    await openFolderInLibrary(window, "Client work");
-    await expect(library.getByRole("heading", { name: "Client work", exact: true })).toBeVisible();
-    await library.getByRole("button", { name: "Edit folder" }).click();
-    await library.getByLabel("Folder name", { exact: true }).fill("Client reports");
-    await library.getByRole("button", { name: "Save folder" }).click();
-    await expect(
-      library.getByRole("heading", { name: "Client reports", exact: true }),
-    ).toBeVisible();
+
+    // The Folder's name and description edit under its section, from its menu.
+    const form = await editFolderInLibrary(window, "Client work");
+    await form.getByLabel("Folder name", { exact: true }).fill("Client reports");
+    await form.getByRole("button", { name: "Save folder" }).click();
+    await expect(section(library, "Client reports")).toHaveCount(1);
+    await expect(form).toHaveCount(0);
+
     // The Folder opens and closes in place, in the sidebar; the Library stays as it is.
     const clientRow = sidebarFolder(window, "Client reports").getByTestId("folder-row");
     await clientRow.click();
     await expect(folders.getByTestId("document-list-item")).toHaveCount(1);
     await clientRow.click();
     await expect(folders.getByTestId("document-list-item")).toHaveCount(0);
-    await expect(
-      library.getByRole("heading", { name: "Client reports", exact: true }),
-    ).toBeVisible();
-    await library.getByLabel("Find by name or tag").fill("nonsense");
+    await expect(section(library, "Client reports")).toHaveCount(1);
+    await library.getByLabel("Search the Library").fill("nonsense");
     await expect(row).toHaveCount(0);
-    await library.getByLabel("Find by name or tag").fill("Report");
+    await library.getByLabel("Search the Library").fill("Report");
     await expect(row).toHaveCount(1);
-    // Deleting asks nothing: the Folder goes to Recently deleted.
-    await library.getByRole("button", { name: "Delete folder", exact: true }).click();
-    await expect(assignment).toHaveValue("");
+    await library.getByLabel("Search the Library").fill("");
+
+    // Deleting asks nothing: the Folder goes to Recently deleted, its Document to Not in a Folder.
+    const head = section(library, "Client reports").getByTestId("library-section-head");
+    await pointAt(window, head);
+    await pointAndClick(window, head.getByTestId("folder-menu"));
+    await pointAndClick(
+      window,
+      window.getByTestId("folder-actions").filter({ visible: true }).getByTestId("folder.delete"),
+    );
+    await expect(section(library, "Client reports")).toHaveCount(0);
+    await expect(rowOf(section(library, "Not in a Folder"), "Quarterly report")).toHaveCount(1);
     await expect(row.getByTestId("document-tags")).toContainText("Report");
     expect(await readFile(path, "utf8")).toBe(text);
     await window.setViewportSize({ width: 1000, height: 760 });
@@ -123,16 +184,12 @@ test("folders, tags, search, edits and removal update the index while originals 
   }
 });
 
-test("one Organize action assigns folder and tags, preserves corrections and survives reopening", async () => {
+test("Organize suggests a Folder and Tags, keeps corrections and survives reopening", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   try {
     await dismissChatSetup(window);
     await connectLocalChatModel(window, "main-chat");
-    await window.getByTestId("open-library").click();
-    const library = window.getByTestId("library");
-    await (await coreOf(window)).evaluate((core) =>
-      core.createLibraryGroup({ name: "Research", description: "Research papers and reports" }),
-    );
+    await makeFolders(window, [{ name: "Research", description: "Research papers and reports" }]);
     const settings = await organizationSettings(window);
     const providerId = await window.evaluate(
       async () =>
@@ -145,7 +202,7 @@ test("one Organize action assigns folder and tags, preserves corrections and sur
     if (!providerId) throw new Error("No provider");
     await settings.getByLabel("Connection", { exact: true }).selectOption(providerId);
     await settings.getByLabel("Model name", { exact: true }).fill("small-classifier");
-    // On by default; turned off here, so the Document waits for the Organize button.
+    // On by default; turned off here, so the Document waits for Organize.
     const automatic = settings.getByRole("checkbox", {
       name: /^Organize new and changed Documents automatically/,
     });
@@ -155,41 +212,61 @@ test("one Organize action assigns folder and tags, preserves corrections and sur
     const path = join(sources, "Research notes.txt");
     await writeFile(path, "Research report about membrane separation and water filtration.");
     await addDocuments(window, [path]);
-    await library.getByRole("button", { name: "Organize", exact: true }).click();
-    const row = library.getByTestId("library-document");
-    await expect(row.locator("summary")).toHaveText("Organized");
+    await window.getByTestId("open-library").click();
+    const library = window.getByTestId("library");
+    await pointAndClick(window, organize(library));
+
+    // Suggested: it lists and counts in the Folder, marked, with Organize's Tags.
+    const research = section(library, "Research");
+    const row = rowOf(research, "Research notes");
+    await expect(row.getByTestId("library-suggested")).toHaveText("Suggested");
     await expect(row.getByTestId("document-tags")).toContainText("Report");
-    const assignment = row.getByRole("combobox", { name: /^Folder for/ });
-    await expect(assignment.locator("option:checked")).toHaveText("Research");
-    await expect(library.getByLabel("Model name", { exact: true })).toHaveCount(0);
-    await row.getByTestId("document-tags-menu").click();
+    let info = await infoOf(window, row);
+    await expect(info.getByTestId("info-organize")).toContainText("Suggested");
+    await expect(info.getByTestId("info-organize")).toContainText("small-classifier · Text");
+    await window.keyboard.press("Escape");
+
+    // Corrected by hand: its Tags, and out of the Folder.
+    await pointAt(window, row);
+    await pointAndClick(window, row.getByTestId("document-tags-menu"));
     await row.getByRole("option", { name: "Report", exact: true }).click();
     await row.getByRole("option", { name: "Invoice", exact: true }).click();
     await window.keyboard.press("Escape");
-    await assignment.selectOption("");
-    await library.getByRole("button", { name: "Organize", exact: true }).click();
-    await expect(row.locator("summary")).toHaveText("Your choice");
-    await expect(assignment).toHaveValue("");
-    await expect(row.getByTestId("document-tags")).toContainText("Invoice");
-    await expect(row.getByTestId("document-tags")).not.toContainText("Report");
-    await library.getByRole("button", { name: "Manage tags" }).click();
+    await moveRow(window, row, "Not in a Folder");
+    const loose = section(library, "Not in a Folder");
+    const looseRow = rowOf(loose, "Research notes");
+    await expect(looseRow).toHaveCount(1);
+
+    // Organize again keeps both.
+    await pointAndClick(window, organize(library));
+    await expect(library.getByTestId("library-organizing")).toHaveCount(0);
+    await expect(looseRow.getByTestId("document-tags")).toContainText("Invoice");
+    await expect(looseRow.getByTestId("document-tags")).not.toContainText("Report");
+    info = await infoOf(window, looseRow);
+    await expect(info.getByTestId("info-organize")).toContainText("Your choice");
+    await window.keyboard.press("Escape");
+
+    // A new Tag, made in Manage Tags from the row's Tags, is one Organize can give.
+    await pointAt(window, looseRow);
+    await pointAndClick(window, looseRow.getByTestId("document-tags-menu"));
+    await looseRow.getByTestId("open-tags-dialog").click();
     const dialog = window.getByTestId("tags-dialog");
     await dialog.getByTestId("tag-name-input").fill("Membrane");
     await dialog.getByTestId("tag-description-input").fill("Membrane science");
     await dialog.getByTestId("save-tag").click();
     await dialog.getByRole("button", { name: "Done" }).click();
-    await library.getByRole("button", { name: "Organize", exact: true }).click();
-    await expect(row.getByTestId("document-tags")).toContainText("Membrane");
-    await library.getByLabel("Find by name or tag").fill("Membrane");
-    await expect(row).toHaveCount(1);
+    await pointAndClick(window, organize(library));
+    await expect(looseRow.getByTestId("document-tags")).toContainText("Membrane");
+    await library.getByLabel("Search the Library").fill("Membrane");
+    await expect(library.getByTestId("library-document")).toHaveCount(1);
   } finally {
     await app.close();
   }
   const reopened = await launchApp(dataDir, { fakeChat: true });
   try {
     await reopened.window.getByTestId("open-library").click();
-    const row = reopened.window.getByTestId("library-document");
-    await expect(row.getByRole("combobox", { name: /^Folder for/ })).toHaveValue("");
+    const library = reopened.window.getByTestId("library");
+    const row = rowOf(section(library, "Not in a Folder"), "Research notes");
     await expect(row.getByTestId("document-tags")).toContainText("Membrane");
     const settings = await organizationSettings(reopened.window);
     await expect(settings.getByLabel("Model name", { exact: true })).toHaveValue(
@@ -200,7 +277,7 @@ test("one Organize action assigns folder and tags, preserves corrections and sur
   }
 });
 
-test("onboarding offers starter folders and Chinese organization settings", async () => {
+test("onboarding offers starter folders, and Organize with no model chosen opens its settings, in Chinese", async () => {
   const { app, window } = await launchApp(dataDir, { examples: true });
   try {
     await window.getByTestId("onboarding-groups").click();
@@ -213,10 +290,7 @@ test("onboarding offers starter folders and Chinese organization settings", asyn
     );
     await window.getByTestId("library").getByRole("button", { name: "添加所选文件夹" }).click();
     await expect(sidebarFolder(window, "研究论文").getByTestId("folder-row")).toBeVisible();
-    await window
-      .getByTestId("library")
-      .getByRole("button", { name: "文档整理", exact: true })
-      .click();
+    await pointAndClick(window, organize(window.getByTestId("library")));
     await expect(window.getByTestId("settings-page-title")).toHaveText("模型");
     await expect(window.getByTestId("organization-settings")).toContainText("文档整理");
     await window.getByTestId("settings-close").click();
@@ -289,9 +363,12 @@ test("Auto routes text and scans with tags, reports failures, retries and preser
         ),
       )
       .toBe(2);
+    await window.evaluate(async () => {
+      const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      await core.addLibraryStarterGroups(["research", "reports"]);
+    });
     await window.getByTestId("open-library").click();
     const library = window.getByTestId("library");
-    await library.getByRole("button", { name: "Add selected folders" }).click();
     let settings = await organizationSettings(window);
     await settings.getByLabel("Connection", { exact: true }).selectOption("auto");
     await expect(settings.getByLabel("Model name", { exact: true })).toHaveCount(0);
@@ -299,37 +376,52 @@ test("Auto routes text and scans with tags, reports failures, retries and preser
       .getByLabel("Local Ollama address", { exact: true })
       .fill(`http://127.0.0.1:${(server.address() as AddressInfo).port}`);
     await saveOrganization(window);
-    await library.getByRole("button", { name: "Organize", exact: true }).click();
-    const notes = library
-      .getByTestId("library-document")
-      .filter({ has: window.getByRole("button", { name: "Research notes", exact: true }) });
-    const scan = library
-      .getByTestId("library-document")
-      .filter({ has: window.getByRole("button", { name: "Scanned diagram", exact: true }) });
-    await expect(notes.locator("summary")).toHaveText("Organized");
-    await expect(scan.locator("summary")).toHaveText("Organized");
-    await notes.locator("summary").click();
-    await scan.locator("summary").click();
-    await expect(notes).toContainText("tev1:0.8b · Text");
-    await expect(scan).toContainText("clef-flash · Text + PDF pages");
+    await pointAndClick(window, organize(library));
+    const notes = rowOf(library, "Research notes");
+    const scan = rowOf(library, "Scanned diagram");
+    const organized = async (row: Locator, model: string | RegExp) => {
+      const info = await infoOf(window, row);
+      await expect(info.getByTestId("info-organize")).toContainText("Organized");
+      await expect(info.getByTestId("info-organize")).toContainText(model);
+      await window.keyboard.press("Escape");
+    };
+    await expect(library.getByTestId("library-organizing")).toHaveCount(0);
+    await organized(notes, "tev1:0.8b · Text");
+    await organized(scan, "clef-flash · Text + PDF pages");
     expect(requests.map((item) => item.model)).toEqual(["tev1:0.8b", "clef-flash"]);
     expect(requests[0]?.images).toBeUndefined();
     expect(requests[1]?.images).toHaveLength(1);
+
+    // A failure says so where it happened, with one way to try again.
     models = [...models, "tev1:4b"];
     fail = true;
-    await library.getByRole("button", { name: "Organize", exact: true }).click();
-    await expect(notes).toContainText("Temporary test outage");
-    await expect(scan.locator("summary")).toHaveText("Needs attention");
+    await pointAndClick(window, organize(library));
+    await expect(library.getByTestId("library-organize-failed")).toHaveText(
+      /^Organize couldn't sort (1 Document|2 Documents) · Try again$/,
+    );
+    await expect(notes.getByTestId("library-not-sorted")).toHaveAttribute(
+      "title",
+      /Temporary test outage/,
+    );
+    const info = await infoOf(window, scan);
+    await expect(info.getByTestId("info-organize")).toContainText("Needs attention");
+    await window.keyboard.press("Escape");
     fail = false;
-    await library.getByRole("button", { name: "Organize", exact: true }).click();
+    await pointAndClick(
+      window,
+      library.getByTestId("library-organize-failed").getByRole("button", { name: "Try again" }),
+    );
+    await expect(library.getByTestId("library-organize-failed")).toHaveCount(0);
+    await expect(library.getByTestId("library-organizing")).toHaveCount(0);
     // Auto takes tev1:4b now it's there, unless this computer has too little memory for it
     // (the CI runner has 7 GB): then it keeps to the smaller model, and says why.
-    await expect(notes).toContainText(
+    await organized(
+      notes,
       totalmem() < AUTO_CLASSIFICATION.smallMemoryBytes
         ? "tev1:0.8b · Text · Smaller model for memory limits"
         : "tev1:4b · Text",
     );
-    await expect(scan.locator("summary")).toHaveText("Organized");
+    await organized(scan, /clef-flash/);
     // Explicit Clef override can include or omit PDF images; the choice persists.
     settings = await organizationSettings(window);
     await expect(settings.getByLabel("Connection", { exact: true })).toHaveValue("auto");
@@ -394,13 +486,22 @@ test("organized folders remain separate from source locations and follow changes
     await window.getByTestId("open-library").click();
     const library = window.getByTestId("library");
     await expect(library.getByTestId("library-document")).toHaveCount(6);
-    await expect(library.locator("summary").filter({ hasText: /^Organized$/ })).toHaveCount(6);
+    await expect
+      .poll(() =>
+        window.evaluate(
+          async () =>
+            (
+              await (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.getLibrary()
+            ).assignments.filter((item) => item.status === "classified").length,
+        ),
+      )
+      .toBe(6);
+    await expect(library.getByTestId("library-not-sorted")).toHaveCount(0);
     await expectReadyDocuments(window, 6);
     await window.setViewportSize({ width: 1280, height: 860 });
-    const row = library
-      .getByTestId("library-document")
-      .filter({ has: window.getByRole("button", { name: "Membrane separation", exact: true }) });
-    await row.getByRole("combobox", { name: /^Folder for/ }).selectOption({ label: "Finance" });
+    const row = rowOf(library, "Membrane separation");
+    await moveRow(window, row, "Finance");
+    await expect(rowOf(section(library, "Finance"), "Membrane separation")).toHaveCount(1);
     await window.getByRole("button", { name: "Source locations", exact: true }).click();
     await expect(window.getByTestId("folder-item")).toHaveCount(1);
     await window.getByRole("button", { name: "Folders", exact: true }).click();
@@ -411,9 +512,7 @@ test("organized folders remain separate from source locations and follow changes
     await expect(row.getByTestId("document-tags")).toContainText("Invoice", {
       timeout: 15_000,
     });
-    await expect(
-      row.getByRole("combobox", { name: /^Folder for/ }).locator("option:checked"),
-    ).toHaveText("Finance");
+    await expect(rowOf(section(library, "Finance"), "Membrane separation")).toHaveCount(1);
     expect(await readFile(path, "utf8")).toBe(revised);
     await expect(window.getByTestId("sidebar-status")).not.toContainText("Tags need a model");
     await window.setViewportSize({ width: 1000, height: 760 });
@@ -421,6 +520,7 @@ test("organized folders remain separate from source locations and follow changes
     await placeAssistant(window, { dock: "bottom" });
     await row.getByRole("button", { name: "Membrane separation", exact: true }).click();
     await expect(window.getByTestId("viewer")).toBeVisible();
+    await pointAt(window, row);
     await row.getByTestId("document-tags-menu").click();
     await expect(row.getByTestId("document-tags-popover")).toBeVisible();
     await window.keyboard.press("Escape");
@@ -430,7 +530,7 @@ test("organized folders remain separate from source locations and follow changes
   }
 });
 
-test("a bulk Organize leaves the Library's counts, filters and sidebar as the core has them", async () => {
+test("a bulk Organize leaves the Library's sections, filters and sidebar as the core has them", async () => {
   // Organize works through every Document, sending each one's progress (#156): the window
   // gathers those and must still end up showing exactly what the core saved.
   test.setTimeout(240_000);
@@ -480,13 +580,13 @@ test("a bulk Organize leaves the Library's counts, filters and sidebar as the co
 
     await window.getByTestId("open-library").click();
     const library = window.getByTestId("library");
-    const status = library.getByTestId("library-count");
-    await expect(status).toHaveText("200 Documents");
-    const organize = library.getByRole("button", { name: "Organize", exact: true });
-    await organize.click();
-    await expect(library.getByRole("button", { name: "Organizing…", exact: true })).toBeDisabled();
-    await expect(status).toHaveText("200 Documents", { timeout: 120_000 });
-    await expect(organize).toBeEnabled();
+    await expect(library.getByTestId("library-count")).toHaveText("200");
+    const loose = section(library, "Not in a Folder");
+    await expect(loose).toHaveAttribute("data-count", "200");
+    await pointAndClick(window, organize(library));
+    await expect(library.getByTestId("library-organizing")).toBeVisible();
+    await expect(library.getByTestId("library-organizing")).toHaveCount(0, { timeout: 120_000 });
+    await expect(organize(library)).toBeVisible();
 
     // What the core saved, Folder by Folder and Tag by Tag.
     const saved = await window.evaluate(async () => {
@@ -496,10 +596,11 @@ test("a bulk Organize leaves the Library's counts, filters and sidebar as the co
         core.listDocuments(),
         core.listTags(),
       ]);
-      const folders: Record<string, number> = { Unsorted: 0 };
+      const folders: Record<string, number> = { "Not in a Folder": 0 };
       for (const group of library.groups) folders[group.name] = 0;
       for (const item of library.assignments) {
-        const name = library.groups.find((group) => group.id === item.groupId)?.name ?? "Unsorted";
+        const name =
+          library.groups.find((group) => group.id === item.groupId)?.name ?? "Not in a Folder";
         folders[name] = (folders[name] ?? 0) + 1;
       }
       const byTag: Record<string, number> = {};
@@ -515,13 +616,13 @@ test("a bulk Organize leaves the Library's counts, filters and sidebar as the co
       };
     });
     expect(saved).toEqual({
-      folders: { Research: 80, Finance: 40, Meetings: 40, Unsorted: 40 },
+      folders: { Research: 80, Finance: 40, Meetings: 40, "Not in a Folder": 40 },
       byTag: expect.objectContaining({ Paper: 40, Report: 40, Invoice: 40, Notes: 40, Book: 0 }),
       classified: count,
       tagged: count,
     });
 
-    // The sidebar's Folders: the same counts, and every row listed done.
+    // The Library's sections and the sidebar's Folders: the same counts.
     const folders = window.getByTestId("library-folders");
     const folderRow = (name: string) =>
       folders.getByTestId("library-folder").filter({
@@ -529,7 +630,8 @@ test("a bulk Organize leaves the Library's counts, filters and sidebar as the co
       });
     const notInAFolder = folders.getByTestId("not-in-a-folder");
     for (const [name, total] of Object.entries(saved.folders)) {
-      if (name === "Unsorted")
+      await expect(section(library, name)).toHaveAttribute("data-count", String(total));
+      if (name === "Not in a Folder")
         await expect(notInAFolder).toHaveAttribute("data-count", String(total));
       else await expect(folderRow(name).getByTestId("browse-count")).toHaveText(String(total));
     }
@@ -547,31 +649,42 @@ test("a bulk Organize leaves the Library's counts, filters and sidebar as the co
     await expect(
       folders.locator('[data-testid="document-list-item"]:not([data-tagging="tagged"])'),
     ).toHaveCount(0);
-    // The Library's rows, the first 100: all organized.
-    await expect(library.getByTestId("library-document")).toHaveCount(100);
-    await expect(library.locator("summary").filter({ hasText: /^Organized$/ })).toHaveCount(100);
+    // Each section lists its first 8; none couldn't be sorted.
+    await expect(library.getByTestId("library-document")).toHaveCount(4 * 8);
+    await expect(library.getByTestId("library-not-sorted")).toHaveCount(0);
 
-    // A Folder: its count, its rows in it, and its Tags filter counting them.
+    // A Folder from the sidebar: its section, all of it, and a Tags filter counting among it.
     await openFolderInLibrary(window, "Research");
-    await expect(library.getByRole("heading", { name: "Research", exact: true })).toBeVisible();
-    await expect(status).toHaveText("80 Documents");
-    await expect(library.getByTestId("library-document")).toHaveCount(80);
-    await expect(
-      library.getByRole("combobox", { name: /^Folder for/ }).locator("option:checked"),
-    ).toHaveText(Array.from({ length: 80 }, () => "Research"));
-    await library.locator('[data-testid="library-filter"][data-facet="tag"]').click();
-    const tagOptions = library.locator(
-      '[data-testid="library-filter-menu"][data-facet="tag"] [data-testid="library-filter-option"]',
+    const inResearch = section(library, "Research");
+    await expect(inResearch.getByTestId("library-section-name")).toBeFocused();
+    await pointAndClick(window, inResearch.getByTestId("library-show-all"));
+    await expect(inResearch.getByTestId("library-document")).toHaveCount(80);
+    await pointAndClick(window, library.getByTestId("library-add-filter"));
+    await pointAndClick(
+      window,
+      window.locator('[data-testid="library-filter-kind"][data-facet="folder"]'),
     );
+    await pointAndClick(
+      window,
+      window.getByTestId("library-filter-option").filter({ hasText: "Research" }),
+    );
+    await window.keyboard.press("Escape");
+    await pointAndClick(window, library.getByTestId("library-add-filter"));
+    await pointAndClick(
+      window,
+      window.locator('[data-testid="library-filter-kind"][data-facet="tag"]'),
+    );
+    const tagOptions = window
+      .getByTestId("library-add-filter-menu")
+      .getByTestId("library-filter-option");
     await expect(tagOptions.filter({ hasText: "Paper" })).toHaveAttribute("data-count", "40");
     await expect(tagOptions.filter({ hasText: "Report" })).toHaveAttribute("data-count", "40");
-    await expect(tagOptions.filter({ hasText: "Invoice" })).toHaveCount(0);
+    await expect(tagOptions.filter({ hasText: "Invoice" })).toHaveAttribute("data-count", "0");
     await tagOptions.filter({ hasText: "Paper" }).click();
     await window.keyboard.press("Escape");
-    await expect(status).toHaveText("40 of 80 Documents");
     await expect(library.getByTestId("library-document")).toHaveCount(40);
-    await library.getByTestId("library-filters-clear").click();
-    await expect(status).toHaveText("80 Documents");
+    const remove = library.getByTestId("library-filter-remove");
+    while ((await remove.count()) > 0) await pointAndClick(window, remove.first());
 
     // The sidebar's Tags: the same counts, and a Tag shows its Documents across Folders.
     const browse = window.getByTestId("browse-views");
@@ -589,8 +702,10 @@ test("a bulk Organize leaves the Library's counts, filters and sidebar as the co
       .locator(":scope > div")
       .getByRole("button", { name: /^Invoice/ })
       .click();
-    await expect(library.getByRole("heading", { name: "All Documents" })).toBeVisible();
-    await expect(status).toHaveText("40 of 200 Documents");
+    await expect(library.getByTestId("library-heading")).toContainText("Library");
+    await expect(library.locator('[data-testid="library-filter"][data-facet="tag"]')).toHaveText(
+      "Tags: Invoice",
+    );
     await expect(
       library
         .getByTestId("library-document")
@@ -602,7 +717,7 @@ test("a bulk Organize leaves the Library's counts, filters and sidebar as the co
       .locator(":scope > div")
       .getByRole("button", { name: /^Invoice/ })
       .click({ position: { x: 120, y: 12 } });
-    await expect(status).toHaveText("200 Documents");
+    await expect(library.getByTestId("library-filter")).toHaveCount(0);
 
     // Source locations: every Document's row, each done.
     await browse.getByRole("button", { name: "Source locations", exact: true }).click();

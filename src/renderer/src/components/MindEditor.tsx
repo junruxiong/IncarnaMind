@@ -10,11 +10,12 @@ import { ANSWER_BLOCK, MIND_CONTENT_FIELD, type MindAccess } from "../../../core
 import { writingTime } from "../../../shared/blockTimes";
 import { citationStyle } from "../../../shared/citationStyles";
 import { translate } from "../../../shared/i18n";
+import { checkSentences } from "../checks";
 import { useCitationFormattingFor, useMindStyleChoice } from "../citationFormatting";
 import { noteHandle, readMindHandle } from "../commands/handles";
 import { shortcutLabel } from "../commands/keymap";
 import { startCompareDocuments, useComparisons } from "../comparisons";
-import { useComposer } from "../composer";
+import { chosenScope, useComposer } from "../composer";
 import { core } from "../core";
 import { AnswerView } from "../editor/AnswerView";
 import { holdsAiText } from "../editor/aiText";
@@ -26,10 +27,10 @@ import { CitationStylePrompt } from "../editor/CitationStylePrompt";
 import { CitationView } from "../editor/CitationView";
 import { CodeBlockView } from "../editor/CodeBlockView";
 import { ComparisonTableView } from "../editor/ComparisonTableView";
-import { Composer, type ComposerHandle } from "../editor/Composer";
 import { ConversationLinks } from "../editor/ConversationLinks";
 import { CitationClusters } from "../editor/citationClusters";
 import { CitationNumbers, redrawFootnotes, setCitationForm } from "../editor/citationNumbers";
+import { ClaimChecks, setClaimContext } from "../editor/claimChecks";
 import { comparisonCellView, comparisonRowView } from "../editor/comparisonViews";
 import { CopyCitations } from "../editor/copyCitations";
 import { DocumentChipView } from "../editor/DocumentChipView";
@@ -53,6 +54,7 @@ import {
   CountSlotContext,
   MindIdContext,
 } from "../editor/mindContext";
+import { NoteHealth } from "../editor/NoteHealth";
 import { NoteKeymap } from "../editor/noteKeymap";
 import { noteExtensions } from "../editor/noteSchema";
 import { ProposalBars } from "../editor/ProposalBars";
@@ -84,9 +86,8 @@ import { useAppStore } from "../store";
 import { askForSuggestion, describeSuggestion } from "../suggestions";
 import { CompareSheet } from "./CompareSheet";
 import { StartGuide, useGettingStarted, useIsExample } from "./GettingStarted";
-import { MineLineIcon, SparkLineIcon } from "./lineIcons";
+import { CheckLineIcon, MineLineIcon, SearchLineIcon, SparkLineIcon } from "./lineIcons";
 import { MindNotice } from "./MindNotice";
-import { TaskTray } from "./TaskTray";
 
 /** Stands in for the hint's button in its translated words, which are split around it. */
 const ASK = "\uE000";
@@ -259,7 +260,6 @@ function MindEditorView({
   const countSlot = useContext(CountSlotContext);
   const sheetSlot = useContext(CompareSheetSlotContext);
   const comparing = useComparisons((state) => state.sheets[mindId] !== undefined);
-  const composer = useRef<ComposerHandle>(null);
   /**
    * Whether the Mind's cursor is where Add to note puts an Answer (#201): since
    * the editor last had the focus, only the assistant (its composer, its
@@ -327,6 +327,7 @@ function MindEditorView({
         // Footnotes are numbered as the Mind's citation style counts its Citations (#289).
         CitationNumbers.configure({ form: () => citationStyle(styleRef.current).form }),
         CitationClusters,
+        ClaimChecks,
         CopyCitations,
         FootnoteKeys,
         DocumentChipKeys,
@@ -403,6 +404,21 @@ function MindEditorView({
     if (!editor.isDestroyed) editor.setEditable(!readOnly && !importing);
   }, [editor, readOnly, importing]);
 
+  // A sentence's check needs a re-check once a Document it read changes, or the Mind moves (#96).
+  const documents = useAppStore((state) =>
+    state.status.kind === "ready" ? state.documents : null,
+  );
+  const folderId = useAppStore(
+    (state) => state.minds.find((each) => each.id === mindId)?.folderId ?? null,
+  );
+  const versions = useMemo(
+    () => (documents ? new Map(documents.map((each) => [each.id, each.contentHash])) : null),
+    [documents],
+  );
+  useEffect(() => {
+    if (!editor.isDestroyed) setClaimContext(editor.view, { versions, folderId });
+  }, [editor, versions, folderId]);
+
   // The Citations and References in the Mind's citation style (#289), formatted off the
   // window's thread, and the footnotes numbered again when the style counts Citations otherwise.
   useCitationFormattingFor(editor, style, mindId);
@@ -476,6 +492,20 @@ function MindEditorView({
       },
       { id: "explain", label: "editor.ai.explain", icon: "?", available, run: run("explain") },
       {
+        id: "find-support",
+        label: "editor.ai.findSupport",
+        icon: <SearchLineIcon className="size-3.5" />,
+        available,
+        run: (current) => void checkSentences(current, mindId, doc, "find-support"),
+      },
+      {
+        id: "check-against-documents",
+        label: "editor.ai.checkAgainstDocuments",
+        icon: <CheckLineIcon className="size-3.5" />,
+        available,
+        run: (current) => void checkSentences(current, mindId, doc, "check-against-documents"),
+      },
+      {
         id: "mark-as-mine",
         label: "editor.ai.markAsMine",
         icon: <MineLineIcon className="size-3.5" />,
@@ -523,6 +553,16 @@ function MindEditorView({
     return () => document.removeEventListener("focusin", onFocusIn);
   }, [editor, dock]);
 
+  // The assistant's one composer asks in this Mind while it reads it (`Assistant`).
+  const asksHere = dock !== null && !readOnly;
+  useEffect(() => {
+    if (!asksHere) return;
+    useComposer.setState({ seat: { editor, doc, mindId } });
+    return () => {
+      if (useComposer.getState().seat?.mindId === mindId) useComposer.setState({ seat: null });
+    };
+  }, [asksHere, editor, doc, mindId]);
+
   // A Question asked for from outside the editor, e.g. "Ask your own Question" in Get
   // started, or "Ask about this Folder" in the Library, which gives its Search scope:
   // the composer takes the focus, the Question to go at the end of the Mind.
@@ -530,9 +570,15 @@ function MindEditorView({
   const composerShown = dock !== null;
   useEffect(() => {
     if (!questionHere || !composerShown) return;
-    composer.current?.focus(useAppStore.getState().questionToStart?.scope ?? null);
+    const scope = useAppStore.getState().questionToStart?.scope;
+    if (scope) {
+      const folderId =
+        useAppStore.getState().minds.find((each) => each.id === mindId)?.folderId ?? null;
+      useComposer.getState().update(mindId, { scope: chosenScope(scope, folderId) });
+    }
+    useComposer.getState().requestFocus();
     useAppStore.getState().questionStarted();
-  }, [questionHere, composerShown]);
+  }, [questionHere, composerShown, mindId]);
 
   /** The hint's "press ⌘J…": the composer takes the focus, the Question to go on the hint's line. */
   const askOnLine = (pos: number) => {
@@ -557,7 +603,9 @@ function MindEditorView({
         createPortal(
           <>
             <WordOrigin doc={doc} />
-            <WordCount editor={editor} doc={doc} />
+            <WordCount editor={editor} doc={doc}>
+              <NoteHealth editor={editor} mindId={mindId} />
+            </WordCount>
           </>,
           countSlot,
         )}
@@ -567,7 +615,7 @@ function MindEditorView({
         {!readOnly && <ProposalBars editor={editor} mindId={mindId} />}
         <EditorContent editor={editor} />
         {!readOnly && <EndHint editor={editor} text={hintText} onAsk={askOnLine} />}
-        <MarginChecks editor={editor} />
+        <MarginChecks editor={editor} mind={{ id: mindId, doc }} />
         <ConversationLinks editor={editor} />
         {!readOnly && <TableMenu editor={editor} />}
         <FootnoteArea editor={editor} citationView={citationView} />
@@ -578,15 +626,6 @@ function MindEditorView({
           <CitationStylePrompt mindId={mindId} editor={editor} doc={doc} />
         )}
       </div>
-      {dock &&
-        !readOnly &&
-        createPortal(
-          <>
-            <TaskTray mindId={mindId} />
-            <Composer ref={composer} editor={editor} doc={doc} mindId={mindId} />
-          </>,
-          dock,
-        )}
       {sheetSlot &&
         comparing &&
         !readOnly &&

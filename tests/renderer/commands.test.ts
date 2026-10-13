@@ -145,6 +145,15 @@ describe("New Folder with these", () => {
   });
 });
 
+/**
+ * In the note, the note's own keymap tries a Block's command first, and the window's acts where
+ * it isn't offered: ⌘K edits the link on selected text, and opens ⌘K anywhere else.
+ */
+const blockFirst = (window: Command, block: Command) =>
+  !window.appliesTo &&
+  block.appliesTo?.every((kind) => kind === "block") === true &&
+  block.when !== undefined;
+
 describe("shortcuts", () => {
   test.each(SYSTEMS)("no keys are bound twice where both commands can act, on $name", ({ mac }) => {
     const bound = all.filter((command) => command.shortcut);
@@ -162,9 +171,11 @@ describe("shortcuts", () => {
         const sameKeys = formsOf(one).some((form) => formsOf(other).includes(form));
         // Commands for different kinds of object never act on the same focus.
         const overlap =
-          !one.appliesTo ||
-          !other.appliesTo ||
-          one.appliesTo.some((kind) => other.appliesTo?.includes(kind));
+          !blockFirst(one, other) &&
+          !blockFirst(other, one) &&
+          (!one.appliesTo ||
+            !other.appliesTo ||
+            one.appliesTo.some((kind) => other.appliesTo?.includes(kind)));
         expect(sameKeys && overlap, `${one.id} and ${other.id}`).toBe(false);
       }
     }
@@ -390,6 +401,20 @@ describe("the registry", () => {
       expect(await commands.run("test.undoable")).toBe(undo);
     } finally {
       for (const stop of stops) stop();
+    }
+  });
+
+  test("a row's own action that hands back a frame's handle puts nothing on the undo line", async () => {
+    const stop = commands.register({
+      ...base,
+      id: "test.here",
+      // As `requestAnimationFrame` hands back: a number.
+      run: () => 42 as unknown as undefined,
+    });
+    try {
+      expect(await commands.run("test.here")).toBeUndefined();
+    } finally {
+      stop();
     }
   });
 

@@ -1,15 +1,16 @@
 /**
- * `npm run eval:word` (eval/word/README.md): for each file of the Word corpus, the checks that
- * can run today, the import as a Mind (#104) among them. Each is a step in `STEPS`; when the Word
- * export (#105) exists, its round-trip becomes more steps after "opens".
+ * `npm run eval:word` (eval/word/README.md): for each file of the Word corpus, its checks, each a
+ * step in `STEPS`: the package, the import as a Mind (#104), opening in LibreOffice, and the
+ * round-trip back into the file (#105), whose export is opened in LibreOffice too.
  *
  * INCARNAMIND_WORD_SET picks the files: "core" (the committed files, the default), "extended"
  * (the cache that `npm run eval:word:fetch` fills) or "all".
  * INCARNAMIND_WORD_REQUIRE_LIBREOFFICE=1 (CI sets it) fails the run when LibreOffice is missing,
  * instead of skipping that step.
  */
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   type CorpusEntry,
@@ -19,6 +20,7 @@ import {
   readManifest,
   WORD_DIR,
 } from "./corpus";
+import { checkExport } from "./exports";
 import { type Features, featureKinds } from "./features";
 import { checkImport } from "./imports";
 import { convertToPdf, findLibreOffice } from "./libreoffice";
@@ -44,8 +46,13 @@ interface Step {
 }
 
 const soffice = findLibreOffice();
+/** Where to keep a PDF of each edited export, for a person to look at (CI uploads them). */
+const keepPdfs = process.env.INCARNAMIND_WORD_PDFS;
 const required = process.env.INCARNAMIND_WORD_REQUIRE_LIBREOFFICE === "1";
 const wanted = process.env.INCARNAMIND_WORD_SET ?? "core";
+
+/** Each file's export with the scripted edit, for LibreOffice to open. */
+const exported = new Map<string, Uint8Array>();
 
 const STEPS: Step[] = [
   {
@@ -72,6 +79,38 @@ const STEPS: Step[] = [
       return result.opened
         ? { ok: true, detail: `${result.pdfBytes} bytes of PDF` }
         : { ok: false, detail: result.problem ?? "did not open" };
+    },
+  },
+  {
+    name: "exports back",
+    reports: true,
+    async run(subject, bytes) {
+      const outcome = await checkExport(bytes);
+      if (outcome.exported) exported.set(subject.name, outcome.exported);
+      return outcome;
+    },
+  },
+  {
+    name: "export opens in LibreOffice",
+    async run(subject) {
+      if (!soffice) return { ok: true, detail: "skipped: LibreOffice not found" };
+      const data = exported.get(subject.name);
+      if (!data) return { ok: true, detail: "nothing exported" };
+      const folder = mkdtempSync(join(tmpdir(), "incarnamind-word-export-"));
+      try {
+        const path = join(folder, basename(subject.path));
+        writeFileSync(path, data);
+        const keep = keepPdfs
+          ? join(keepPdfs, subject.name.replace(/\.docx$/i, ".pdf"))
+          : undefined;
+        const result = await convertToPdf(soffice, path, keep);
+        return result.opened
+          ? { ok: true, detail: `${result.pdfBytes} bytes of PDF` }
+          : { ok: false, detail: result.problem ?? "did not open" };
+      } finally {
+        rmSync(folder, { recursive: true, force: true });
+        exported.delete(subject.name);
+      }
     },
   },
 ];
