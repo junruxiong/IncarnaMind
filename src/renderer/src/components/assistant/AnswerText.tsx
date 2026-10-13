@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import type { NodeJSON } from "../../../../shared/blockJson";
 import { lendAnswerEditor } from "../../answerEditors";
 import { CitationView } from "../../editor/CitationView";
+import { CitationGlue, withCitationGlue } from "../../editor/citationGlue";
 import { CitationNumbers } from "../../editor/citationNumbers";
 import { CopyCitations } from "../../editor/copyCitations";
 import { MarginChecks } from "../../editor/MarginChecks";
@@ -21,7 +22,10 @@ const citationView = ReactNodeViewRenderer(CitationView, {
   },
 });
 
-const docOf = (blocks: readonly NodeJSON[]) => ({ type: "doc", content: [...blocks] });
+const docOf = (blocks: readonly NodeJSON[]) => ({
+  type: "doc",
+  content: withCitationGlue(blocks),
+});
 
 const editorPropsFor = (label: string) => ({
   attributes: {
@@ -57,7 +61,12 @@ export function AnswerText({
       shouldRerenderOnTransaction: false,
       content: docOf(blocks),
       editorProps: editorPropsFor(label),
-      extensions: [...noteExtensions({ citationView }), CitationNumbers, CopyCitations],
+      extensions: [
+        ...noteExtensions({ citationView }),
+        CitationGlue,
+        CitationNumbers,
+        CopyCitations,
+      ],
     },
     [],
   );

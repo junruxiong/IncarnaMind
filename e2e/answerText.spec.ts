@@ -159,61 +159,69 @@ for (const language of ["en", "zh-CN"] as const) {
       });
       expect(maths.formula).toBeLessThanOrEqual(maths.line);
 
-      // "this [1][2][3][4]." stays together, on the line of "this".
-      const markers = await cited.getByTestId("assistant-answer-text").evaluate((text) => {
-        const paragraph = text.querySelector("p") as HTMLElement;
-        const walker = document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT);
-        let this_: DOMRect | null = null;
-        let stop: DOMRect | null = null;
-        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-          const value = node.nodeValue ?? "";
-          const range = document.createRange();
-          const at = value.indexOf("this");
-          if (at >= 0) {
-            range.setStart(node, at);
-            range.setEnd(node, at + 4);
-            this_ = range.getBoundingClientRect();
-          }
-          const dot = value.indexOf(".");
-          if (dot >= 0 && value.trim() === ".") {
-            range.setStart(node, dot);
-            range.setEnd(node, dot + 1);
-            stop = range.getBoundingClientRect();
-          }
+      // "this [1][2][3][4]." stays together, on the line of "this", at larger sizes too, which break the line earlier.
+      for (const size of [14, 16, 18]) {
+        const markers = await cited
+          .getByTestId("assistant-answer-text")
+          .evaluate((text, fontSize) => {
+            (text as HTMLElement).style.fontSize = `${fontSize}px`;
+            const paragraph = text.querySelector("p") as HTMLElement;
+            const walker = document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT);
+            let this_: DOMRect | null = null;
+            let stop: DOMRect | null = null;
+            for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+              const value = node.nodeValue ?? "";
+              const range = document.createRange();
+              const at = value.indexOf("this");
+              if (at >= 0) {
+                range.setStart(node, at);
+                range.setEnd(node, at + 4);
+                this_ = range.getBoundingClientRect();
+              }
+              const dot = value.indexOf(".");
+              if (dot >= 0 && value.trim() === ".") {
+                range.setStart(node, dot);
+                range.setEnd(node, dot + 1);
+                stop = range.getBoundingClientRect();
+              }
+            }
+            const chips = [...paragraph.querySelectorAll(".citation-marker")].map((chip) =>
+              chip.getBoundingClientRect(),
+            );
+            return {
+              this_: this_ && { top: this_.top, bottom: this_.bottom },
+              stop: stop && { top: stop.top, bottom: stop.bottom, left: stop.left },
+              chips: chips.map((chip) => ({
+                top: chip.top,
+                bottom: chip.bottom,
+                left: chip.left,
+                right: chip.right,
+              })),
+            };
+          }, size);
+        expect(markers.chips).toHaveLength(4);
+        const thisLine = markers.this_ as { top: number; bottom: number };
+        for (const chip of markers.chips) {
+          // On the line of the word before: its middle is between that line's top and bottom.
+          const middle = (chip.top + chip.bottom) / 2;
+          expect(middle, `a marker at ${size}px`).toBeGreaterThan(thisLine.top);
+          expect(middle, `a marker at ${size}px`).toBeLessThan(thisLine.bottom);
         }
-        const chips = [...paragraph.querySelectorAll(".citation-marker")].map((chip) =>
-          chip.getBoundingClientRect(),
-        );
-        return {
-          this_: this_ && { top: this_.top, bottom: this_.bottom },
-          stop: stop && { top: stop.top, bottom: stop.bottom, left: stop.left },
-          chips: chips.map((chip) => ({
-            top: chip.top,
-            bottom: chip.bottom,
-            left: chip.left,
-            right: chip.right,
-          })),
-        };
+        for (const [index, chip] of markers.chips.entries()) {
+          const next = markers.chips[index + 1];
+          if (next) expect(next.left - chip.right).toBeLessThanOrEqual(3);
+        }
+        const last = markers.chips[3] as { right: number };
+        const stop = markers.stop as { top: number; bottom: number; left: number };
+        // On the same line: the middle of the full stop is within the line of "this".
+        const stopMiddle = (stop.top + stop.bottom) / 2;
+        expect(stopMiddle).toBeGreaterThan(thisLine.top);
+        expect(stopMiddle).toBeLessThan(thisLine.bottom);
+        expect(stop.left - last.right).toBeLessThanOrEqual(2);
+      }
+      await cited.getByTestId("assistant-answer-text").evaluate((text) => {
+        (text as HTMLElement).style.fontSize = "";
       });
-      expect(markers.chips).toHaveLength(4);
-      const thisLine = markers.this_ as { top: number; bottom: number };
-      for (const chip of markers.chips) {
-        // On the line of the word before: its middle is between that line's top and bottom.
-        const middle = (chip.top + chip.bottom) / 2;
-        expect(middle).toBeGreaterThan(thisLine.top);
-        expect(middle).toBeLessThan(thisLine.bottom);
-      }
-      for (const [index, chip] of markers.chips.entries()) {
-        const next = markers.chips[index + 1];
-        if (next) expect(next.left - chip.right).toBeLessThanOrEqual(3);
-      }
-      const last = markers.chips[3] as { right: number };
-      const stop = markers.stop as { top: number; bottom: number; left: number };
-      // On the same line: the middle of the full stop is within the line of "this".
-      const stopMiddle = (stop.top + stop.bottom) / 2;
-      expect(stopMiddle).toBeGreaterThan(thisLine.top);
-      expect(stopMiddle).toBeLessThan(thisLine.bottom);
-      expect(stop.left - last.right).toBeLessThanOrEqual(2);
 
       // A table wider than the Answer scrolls inside its frame, its cut edge faded.
       const table = wide.locator(".tableWrapper");
