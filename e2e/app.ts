@@ -1324,7 +1324,8 @@ export const coreOf = (window: Page) =>
 /**
  * What the core holds that a change to a Mind, Document, Folder, Tag, Linked folder or Recently
  * deleted touches, as plain data: a test compares it before and after, through the bridge and not
- * the screen. Dates are left out, as a change taken back is stamped again.
+ * the screen. Dates are left out, as a change taken back is stamped again, and so is where a
+ * Document's automatic tagging is, which moves on by itself when a Document changes Folder.
  */
 export async function coreState(window: Page): Promise<unknown> {
   return (await coreOf(window)).evaluate(async (core) => {
@@ -1345,8 +1346,11 @@ export async function coreState(window: Page): Promise<unknown> {
       linkedFolders,
       deleted,
     };
+    const progress = ["tagging", "taggingError"];
     return JSON.parse(
-      JSON.stringify(state, (key, value) => (key.endsWith("At") ? undefined : value)),
+      JSON.stringify(state, (key, value) =>
+        key.endsWith("At") || progress.includes(key) ? undefined : value,
+      ),
     );
   });
 }
