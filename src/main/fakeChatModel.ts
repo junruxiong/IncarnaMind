@@ -25,6 +25,11 @@
  * A Question with "blank reply" in it gets a reply with no text at all. A model whose id ends
  * "-not-found" fails as one its provider doesn't know.
  *
+ * A comparison table's cell (#98) cites its Document's line that shares the
+ * most words with the Question and answers with its value ("Termination
+ * notice: 90 days." gives "90 days"), or NOT_FOUND when no line shares one;
+ * a cell whose Question says "busy" is refused with an HTTP 429 the first time.
+ *
  * A Question about the User's notes or what they selected ("notes", "selected",
  * 笔记, 选中), asked beside a Mind, gets an Answer that starts by saying what it
  * read of the Mind: its name and first line, and the selected text.
@@ -529,6 +534,34 @@ function nextReply(prompt: Prompt, tools: readonly OfferedTool[]): Reply {
   return "text" in reply && said.length > 0 ? { text: [...said, reply.text].join("\n\n") } : reply;
 }
 
+/** A comparison table's cell (#98) says so before its Question. */
+const isCell = (prompt: Prompt) => lastUserText(prompt).includes("one cell of a comparison table");
+
+/**
+ * A cell: the line of its Document that shares the most words with the
+ * Question, cited, then its value ("Termination notice: 90 days." gives "90
+ * days"); NOT_FOUND when no line shares a word.
+ */
+function cellReply(prompt: Prompt, question: string): Reply {
+  const searches = toolResults(prompt, "search_documents");
+  if (searches.length === 0) return { tool: "search_documents", input: { query: question } };
+  let best: { record: Record<string, unknown>; shared: number } | null = null;
+  for (const passage of passagesIn(searches.at(-1) ?? "")) {
+    const found = recordFor(passage, question, 1);
+    if (found && (!best || found.shared > best.shared)) best = found;
+  }
+  if (!best || best.shared === 0) return { text: "NOT_FOUND" };
+  if (toolResults(prompt, "cite").length === 0) {
+    return { tool: "cite", input: { citations: [best.record] } };
+  }
+  const quote = String(best.record.quote);
+  const value = (quote.split(": ")[1] ?? quote).replace(/[.。]$/, "");
+  return { text: `${value} [^1]` };
+}
+
+/** The cells whose provider has refused them once already ("busy" in the Question). */
+const refusedOnce = new Set<string>();
+
 /** The scripted provider's web search: it searches once and finds `FOUND_PAGES`, as Anthropic reports them. */
 function searchParts(tool: string, query: string): StreamPart[] {
   return [
@@ -562,6 +595,7 @@ function searchParts(tool: string, query: string): StreamPart[] {
 /** What the model does next, apart from Connector Tools: call a Tool, or stream its Answer. */
 function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
   const question = lastQuestion(prompt);
+  if (tools.includes("search_documents") && isCell(prompt)) return cellReply(prompt, question);
   if (tools.includes("use_skill") && toolResults(prompt, "use_skill").length === 0) {
     const named = skillNamed(prompt, question);
     if (named) return { tool: "use_skill", input: { name: named } };
@@ -841,6 +875,19 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
           url: "https://fake.invalid/chat",
           requestBodyValues: {},
           statusCode: 404,
+        });
+      }
+      // A busy provider refuses each "busy" cell's first request once, as an HTTP 429.
+      const cell =
+        isCell(prompt) && /\bbusy\b/i.test(lastQuestion(prompt)) ? lastUserText(prompt) : null;
+      if (cell && !refusedOnce.has(cell)) {
+        refusedOnce.add(cell);
+        throw new APICallError({
+          message: "Too Many Requests",
+          url: "http://127.0.0.1/v1/chat/completions",
+          requestBodyValues: {},
+          statusCode: 429,
+          isRetryable: false,
         });
       }
       const search = tools?.find((each) => each.type === "provider");
