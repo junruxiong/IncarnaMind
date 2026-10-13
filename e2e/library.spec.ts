@@ -11,6 +11,7 @@ import {
   addDocuments,
   closeSettings,
   useLocalChatModel as connectLocalChatModel,
+  coreOf,
   createDataFolder,
   dismissChatSetup,
   expectReadyDocuments,
@@ -64,10 +65,9 @@ test("folders, tags, search, edits and removal update the index while originals 
     // Four starter Folders, then Not in a Folder.
     await expect(folders.getByTestId("library-folder")).toHaveCount(4);
     await expect(folders.getByTestId("not-in-a-folder")).toBeVisible();
-    await library.getByRole("button", { name: "New folder", exact: true }).click();
-    await library.getByLabel("Folder name", { exact: true }).fill("Client work");
-    await library.getByLabel("Description", { exact: true }).fill("Reports for my clients");
-    await library.getByRole("button", { name: "Save folder" }).click();
+    await (await coreOf(window)).evaluate((core) =>
+      core.createLibraryGroup({ name: "Client work", description: "Reports for my clients" }),
+    );
     const row = library.getByTestId("library-document");
     const assignment = library.getByRole("combobox", { name: "Folder for Quarterly report" });
     await assignment.selectOption({ label: "Client work" });
@@ -130,10 +130,9 @@ test("one Organize action assigns folder and tags, preserves corrections and sur
     await connectLocalChatModel(window, "main-chat");
     await window.getByTestId("open-library").click();
     const library = window.getByTestId("library");
-    await library.getByRole("button", { name: "New folder", exact: true }).click();
-    await library.getByLabel("Folder name", { exact: true }).fill("Research");
-    await library.getByLabel("Description", { exact: true }).fill("Research papers and reports");
-    await library.getByRole("button", { name: "Save folder" }).click();
+    await (await coreOf(window)).evaluate((core) =>
+      core.createLibraryGroup({ name: "Research", description: "Research papers and reports" }),
+    );
     const settings = await organizationSettings(window);
     const providerId = await window.evaluate(
       async () =>
