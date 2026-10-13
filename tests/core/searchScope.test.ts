@@ -3,7 +3,6 @@ import { join } from "node:path";
 import type { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test, vi } from "vitest";
 import type { Core, CoreAdapters, Document, Folder, SearchScope } from "../../src/core";
-import { translate } from "../../src/shared/i18n";
 import {
   answerEnded,
   askAndFinish,
@@ -295,9 +294,11 @@ describe("Resolving a Search scope", { timeout: 30_000 }, () => {
 });
 
 describe("A Search scope with no Documents to search", { timeout: 30_000 }, () => {
-  const EMPTY = translate("en", "scope.answer.empty");
+  /** The instructions the model was sent: they say the scope holds no Documents (#748). */
+  const toldEmpty = (model: ReturnType<typeof searchingModel>) =>
+    expect(promptOf(model)[0]?.text).toContain("holds no Documents");
 
-  test("gets an Answer saying so, instead of a search of every Document: nothing is sent", async () => {
+  test("goes to the model, told the scope is empty, with nothing searched", async () => {
     const model = searchingModel();
     const { core, client, mind, searches, folders } = await setUpLibrary(model);
 
@@ -305,12 +306,13 @@ describe("A Search scope with no Documents to search", { timeout: 30_000 }, () =
       folderIds: [folders.empty.id],
     });
 
-    expect(answerText(client, answerId)).toBe(EMPTY);
+    // Not refused: the model wrote the Answer, and it had no Documents to search or cite.
+    expect(model.doStreamCalls).toHaveLength(1);
     expect(finished).toMatchObject({ status: "done", citations: [], citationSupport: null });
-    // No model wrote it: it names none, and none was asked.
-    expect(answerIn(client, answerId).attrs).toMatchObject({ modelId: null, status: "done" });
-    expect(model.doStreamCalls).toHaveLength(0);
+    expect(answerIn(client, answerId).attrs).toMatchObject({ status: "done" });
+    expect(answerIn(client, answerId).attrs?.modelId).not.toBeNull();
     expect(searches).toEqual([]);
+    toldEmpty(model);
   });
 
   test("a scope whose Folders, Tags and Documents were all deleted is empty, not every Document", async () => {
@@ -319,23 +321,14 @@ describe("A Search scope with no Documents to search", { timeout: 30_000 }, () =
     await renameKitchen(core, library);
     await core.deleteDocument(id("Almanac"));
 
-    const { answerId } = await askScoped(core, client, mind.id, {
+    await askScoped(core, client, mind.id, {
       folderIds: [folders.kitchen.id],
       documentIds: [id("Almanac")],
     });
 
-    expect(answerText(client, answerId)).toBe(EMPTY);
-    expect(model.doStreamCalls).toHaveLength(0);
+    expect(model.doStreamCalls).toHaveLength(1);
     expect(searches).toEqual([]);
-  });
-
-  test("says so in the interface language", async () => {
-    const { core, client, mind, folders } = await setUpLibrary();
-    await core.updateSettings({ user: { language: "zh-CN" } });
-
-    const { answerId } = await askScoped(core, client, mind.id, { folderIds: [folders.empty.id] });
-
-    expect(answerText(client, answerId)).toBe(translate("zh-CN", "scope.answer.empty"));
+    toldEmpty(model);
   });
 });
 
