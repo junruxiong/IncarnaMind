@@ -13,7 +13,7 @@ npm run dist         # the installers for the current system; never published
 
 1. Set the version, commit it and tag it: `npm version 1.2.3`. This updates `package.json` and `package-lock.json`, commits, and creates the tag `v1.2.3`.
 2. Push the commit and the tag: `git push && git push origin v1.2.3`.
-3. The tag starts the **Release** workflow (`.github/workflows/release.yml`). It checks that the tag matches `package.json`, creates a draft GitHub Release, and builds and uploads:
+3. The tag starts the **Release** workflow (`.github/workflows/release.yml`). It checks that the tag matches `package.json`, creates a draft GitHub Release, builds, checks each package's contents and size (`npm run check:package`), and only then uploads:
    - for macOS, a dmg and a zip, each for Apple silicon and Intel;
    - for Windows, an NSIS installer;
    - for Linux, an AppImage;

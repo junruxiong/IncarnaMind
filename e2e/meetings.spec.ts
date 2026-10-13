@@ -46,6 +46,14 @@ const bridge = (window: Page) =>
     (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.listMeetings(),
   );
 
+/** ⌘K with this typed, once it is open and has the focus. */
+async function searchPalette(window: Page, text: string): Promise<void> {
+  await window.keyboard.press("ControlOrMeta+k");
+  await expect(window.getByTestId("palette-search")).toBeFocused();
+  await window.keyboard.type(text);
+  await expect(window.getByTestId("palette-search")).toHaveValue(text);
+}
+
 /** Settings → Meetings → Record meetings, by its switch. */
 async function turnOnMeetings(window: Page, name?: string): Promise<void> {
   const settings = await openSettings(window, "meetings");
@@ -102,7 +110,7 @@ const fakeAudio = (app: ElectronApplication) =>
     return { settingsOpened: [...fake.settingsOpened], running: fake.running };
   });
 
-test("a meeting records from the + menu, after the one-time notice: the bar, ⌘⇧P, Stop and Delete audio now", async () => {
+test("a meeting records from the + menu, after the one-time notice: the bar, ⌘⇧P, Stop and Delete audio, from the line and from ⌘K", async () => {
   const { window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   // The Transcript is saved at Stop without asking where.
@@ -249,8 +257,29 @@ test("a meeting records from the + menu, after the one-time notice: the bar, ⌘
   const confirm = window.getByTestId("meeting-audio-confirm");
   await expect(confirm).toContainText("It can’t be brought back. Your notes stay.");
   await expect(confirm.getByTestId("meeting-audio-delete-confirm")).toBeFocused();
+  const question = await confirm.textContent();
   await window.keyboard.press("Escape");
   await expect(audio).toContainText("Audio kept on this computer");
+
+  // ⌘K's "Delete audio" is the same command: the same question, in the same place, and Esc
+  // or "Keep it" keeps the audio.
+  const palette = window.getByTestId("palette");
+  const deleteAudio = palette.getByTestId("palette-item").filter({ hasText: "Delete audio" });
+  await searchPalette(window, "delete audio");
+  await expect(deleteAudio).toHaveCount(1);
+  await shot(window, "meeting-delete-audio-palette-en");
+  await window.keyboard.press("Enter");
+  await expect(palette).toBeHidden();
+  await expect(confirm).toHaveText(question ?? "");
+  await expect(confirm.getByTestId("meeting-audio-delete-confirm")).toBeFocused();
+  await window.keyboard.press("Escape");
+  await expect(audio).toContainText("Audio kept on this computer");
+  await searchPalette(window, "delete audio");
+  await window.keyboard.press("Enter");
+  await confirm.getByRole("button", { name: "Keep it" }).click();
+  await expect(audio).toContainText("Audio kept on this computer");
+  expect((await bridge(window))[0]?.audio.kept).toBe(true);
+
   await audio.getByTestId("meeting-audio-delete").click();
   await shot(window, "meeting-delete-audio-en");
   await window.getByTestId("meeting-audio-delete-confirm").click();
@@ -258,6 +287,12 @@ test("a meeting records from the + menu, after the one-time notice: the bar, ⌘
   const [meeting] = await bridge(window);
   expect(meeting?.audio.kept).toBe(false);
   expect(existsSync(join(dataDir, "meetings", meeting?.id ?? ""))).toBe(false);
+
+  // With the audio gone, there is nothing to delete, and ⌘K no longer offers it.
+  await searchPalette(window, "delete audio");
+  await expect(deleteAudio).toHaveCount(0);
+  await window.keyboard.press("Escape");
+  await expect(palette).toBeHidden();
 
   // The notice comes once on a device: the next meeting records at once.
   await startRecording(window, await recordMeeting(window));
