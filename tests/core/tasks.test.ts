@@ -12,7 +12,7 @@ import {
   type TaskRun,
 } from "../../src/core";
 import { openDatabase } from "../../src/core/storage";
-import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core";
+import { createTempDataFolder, nextTurn, queryDatabase, startCore } from "../helpers/core";
 
 /** Waits for a state, with room for a busy machine. */
 const waitFor = <T>(check: () => T | Promise<T>) => vi.waitFor(check, { timeout: 10_000 });
@@ -351,11 +351,11 @@ describe("the Task journal", () => {
     try {
       tasks.setAnswering(true);
       const task = tasks.start("test-turns", null, {});
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await nextTurn();
       expect(log).toEqual([]);
       tasks.setAnswering(false);
       tasks.setRecording(true);
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await nextTurn();
       expect(log).toEqual([]);
       tasks.setRecording(false);
       await waitFor(() => expect(log).toEqual(["turn"]));
