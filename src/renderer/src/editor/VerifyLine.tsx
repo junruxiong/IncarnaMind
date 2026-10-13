@@ -155,28 +155,34 @@ export function VerifyLine({
   );
   let state: ReactNode[];
   if (running === "finding") {
-    state = [<span role="status">{t("verify.finding")}</span>, stop];
+    state = [
+      <span key="p158" role="status">
+        {t("verify.finding")}
+      </span>,
+      stop,
+    ];
   } else if (running === "checking") {
     const progress = t("verify.checking", {
       done: format(marks.marked - marks.checking),
       total: format(marks.marked),
     });
     state = [
-      <span role="status" data-testid="verify-progress" className="tabular-nums">
+      <span key="p165" role="status" data-testid="verify-progress" className="tabular-nums">
         {progress}
       </span>,
       stop,
     ];
   } else if (outcome?.kind === "no-documents") {
     state = [
-      <span data-testid="verify-empty">
+      <span key="p172" data-testid="verify-empty">
         {t(inFolder ? "verify.noDocuments.folder" : "verify.noDocuments.all")}
       </span>,
     ];
   } else if (claims === null) {
     state = [
-      <span>{t("verify.notFound")}</span>,
+      <span key="p178">{t("verify.notFound")}</span>,
       <button
+        key="p179"
         type="button"
         data-testid="verify-find"
         className={buttonStyle("secondary", "sm")}
@@ -186,11 +192,16 @@ export function VerifyLine({
       </button>,
     ];
   } else if (total === 0 || outcome?.kind === "nothing") {
-    state = [<span data-testid="verify-empty">{t("verify.none")}</span>];
+    state = [
+      <span key="p189" data-testid="verify-empty">
+        {t("verify.none")}
+      </span>,
+    ];
   } else if (marks.marked === 0) {
     state = [
-      <span>{t(inFolder ? "verify.ask.folder" : "verify.ask.all")}</span>,
+      <span key="p192">{t(inFolder ? "verify.ask.folder" : "verify.ask.all")}</span>,
       <button
+        key="p193"
         type="button"
         data-testid="verify-check"
         title={estimate?.title}
@@ -209,7 +220,7 @@ export function VerifyLine({
     });
     const stopped = outcome?.kind === "checked" ? outcome.stop : null;
     state = [
-      <span>
+      <span key="p212">
         {t(marks.marked === 1 ? "verify.checked.one" : "verify.checked", {
           count: format(marks.marked),
         })}
@@ -229,6 +240,7 @@ export function VerifyLine({
       ),
       stopped && <span data-testid="verify-stopped">{runStopText(stopped, t, language)}</span>,
       <button
+        key="p231"
         type="button"
         data-testid="verify-again"
         className="mind-verify-link"
@@ -247,6 +259,7 @@ export function VerifyLine({
           as="div"
           parts={[
             <button
+              key="p249"
               type="button"
               data-testid="verify-from"
               className="mind-verify-from"
