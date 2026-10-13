@@ -2408,6 +2408,7 @@ export const en = {
   "error.verify.request": "That isn't a request to verify a document that IncarnaMind can read.",
   "error.verify.notVerifying": "This Mind doesn't verify a document.",
   "error.verify.noPath": "Choose the document to verify.",
+  "error.contradictions.request": "That isn't a check for contradictions that IncarnaMind can read.",
   "error.document.fileUnavailable": "The Document's file can't be reached right now.",
   "error.document.fileGone": "The Document's file isn't there to read.",
   "error.document.fileCantOpen": "The Document's file can't be opened.",

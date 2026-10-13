@@ -20,6 +20,7 @@ import { createAgentSetup, skillInstalled } from "./agents/setup";
 import { createAiUse } from "./aiUse";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
 import { createChecks } from "./answers/checks";
+import { AFTER_NEW_VERSION_MS } from "./answers/checks/watch";
 import { recheckCitation, recheckKept } from "./answers/citations";
 import {
   addCitedUnits,
@@ -1214,6 +1215,15 @@ export function createCore(adapters: CoreAdapters): Core {
     onStatus: (listener) => events.on("document.status", listener),
     readText: (documentId) => documents.readText(documentId),
     createMind: (title, folderId) => makeMind({ title, kind: DEFAULT_MIND_KIND, folderId }),
+    watch: {
+      minds: () => minds.list().map((mind) => ({ id: mind.id, folderId: mind.folderId })),
+      documentVersions: () =>
+        new Map(documents.list().map((document) => [document.id, document.contentHash])),
+      background,
+      runCost: (runId) => meter.taskCost(runId),
+      delayMs: adapters.contradictionWatchDelayMs ?? AFTER_NEW_VERSION_MS,
+      log: adapters.log ?? silentLogger,
+    },
     mindFolder: (mindId) => minds.get(mindId).folderId,
     defaultModel: () => settings.get().user.chatModel,
     chat,
@@ -1746,6 +1756,9 @@ export function createCore(adapters: CoreAdapters): Core {
     changed: (value) => events.emit("examples.changed", value),
   });
   events.on("document.status", () => examples.documentChanged());
+  // A new version of a Document in a Folder: its Minds' cited claims are checked for contradictions (#112).
+  checks.startWatching();
+  events.on("document.status", (document) => checks.documentChanged(document));
   // Linked folders and single files are compared with the disk, then watched.
   documents.start();
 
@@ -2286,6 +2299,8 @@ export function createCore(adapters: CoreAdapters): Core {
     verifyDocument: (input) => checks.verifyDocument(input),
     findClaims: (input) => checks.findClaims(input),
     verifyClaims: (input) => checks.verifyClaims(input),
+    planContradictionCheck: (mindId) => checks.planContradictionCheck(mindId),
+    checkContradictions: (input) => checks.checkContradictions(input),
 
     getSecretStorage: async () => secrets.status(),
     acceptPlainTextSecretStorage: async () => secrets.acceptPlainText(),

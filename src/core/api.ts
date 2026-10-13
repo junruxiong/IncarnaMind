@@ -133,8 +133,12 @@ export interface CreateMindInput {
  * - 18: checks of the User's own sentences (#96): the `claimCheck` mark on a
  *   sentence's text, which holds its result (see `CLAIM_CHECK_MARK`). Older
  *   content is version 18 content as it is: nothing is rewritten.
+ * - 19: contradiction watch (#112): "contradiction-watch", a third `action`
+ *   of the `claimCheck` mark. An older version reads it as Find support, so
+ *   its Check again would check the sentence against the very Documents it
+ *   cites. Older content is version 19 content as it is: nothing is rewritten.
  */
-export const CONTENT_SCHEMA_VERSION = 18;
+export const CONTENT_SCHEMA_VERSION = 19;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -3568,13 +3572,19 @@ export type EditWithAiResult =
   | { kind: "failed"; error: ProviderError };
 
 /**
- * The checks of the User's own sentences (#96). Both check each sentence's
+ * The checks of the User's own sentences (#96). Each checks a sentence's
  * claim against the Documents: Find support looks for a Passage that backs
  * it; Check against Documents does the same for a sentence that already has
  * Citations, telling the model what they quote, so the claim is checked and
- * not only the quote.
+ * not only the quote. Contradiction watch (#112) checks a cited sentence
+ * against the other Documents in its Mind's Folder, the ones it cites left
+ * out, and keeps a mark only where one contradicts it.
  */
-export const claimCheckActions = ["find-support", "check-against-documents"] as const;
+export const claimCheckActions = [
+  "find-support",
+  "check-against-documents",
+  "contradiction-watch",
+] as const;
 export type ClaimCheckAction = (typeof claimCheckActions)[number];
 
 /** What a claim check found (CONTEXT.md: supported, unsupported, contradicted). */
@@ -3725,7 +3735,59 @@ export type CheckSentencesResult =
   /** Nothing was sent: the selection holds changes still waiting. */
   | { kind: "has-proposals" }
   /** The User stopped it (`cancelCheck`): the sentences not checked yet say "stopped". */
-  | { kind: "cancelled" };
+  | { kind: "cancelled" }
+  /** Contradiction watch, nothing sent: the Mind is in no Folder, so there is none to check against. */
+  | { kind: "no-folder" }
+  /** Contradiction watch, nothing sent: the Folder holds no Documents but those its claims cite. */
+  | { kind: "only-cited"; folderId: string };
+
+/** Contradiction watch (#112) on a whole Mind, on demand. */
+export interface CheckContradictionsInput {
+  /** Chosen by the caller, so it can stop the request (`cancelCheck`). */
+  requestId: string;
+  mindId: string;
+  /** The model to use: the Mind's own; none, or null, the default chat model. */
+  model?: ChatModelChoice | null;
+}
+
+/** What a check for contradictions would check, before anything is sent. */
+export type ContradictionCheckPlan =
+  /** `claims` cited sentences, each checked against the other Documents in the Folder. */
+  | { kind: "ready"; claims: number }
+  | Extract<
+      CheckSentencesResult,
+      { kind: "no-folder" | "only-cited" | "no-documents" | "nothing" | "has-proposals" }
+    >;
+
+/** What a check for contradictions found, on demand or after a new version (`ContradictionWatchRun`). */
+export interface ContradictionCheckOutcome {
+  /** The cited sentences checked: a contradicted one has its mark, the others none. */
+  claims: number;
+  /** Of them, those the model gave a verdict for. */
+  checked: number;
+  contradicted: number;
+  /** What its requests billed per token cost; null when none was priced. */
+  cost: Money | null;
+  /** The monthly cap or a plan's limit stopped it; the claims after it weren't checked. */
+  stop: RunStop | null;
+}
+
+/** What `checkContradictions` did. */
+export type CheckContradictionsResult =
+  | ({ kind: "checked" } & ContradictionCheckOutcome)
+  | Exclude<CheckSentencesResult, { kind: "checked" }>;
+
+/**
+ * The last check for contradictions a new version of a Document in the Mind's
+ * Folder started (#112), kept in the Mind's settings so its line can show
+ * what it found and cost (`src/shared/contradictionWatch.ts`).
+ */
+export interface ContradictionWatchRun extends ContradictionCheckOutcome {
+  /** When it finished. ISO 8601, UTC. */
+  at: string;
+  /** The Document whose new version started it, by name. */
+  documentName: string;
+}
 
 /** A document someone else wrote, to verify claim by claim (#97): the window offers PDFs. */
 export interface VerifyDocumentInput {
@@ -6827,6 +6889,21 @@ export interface CoreApi {
    * limit stops the run. `cancelCheck` stops it. One verify run at a time.
    */
   verifyClaims(input: VerifyClaimsInput): Promise<VerifyClaimsResult>;
+  /**
+   * What "Check for contradictions" would check in a Mind (#112): its cited
+   * sentences, or why there is nothing to check. Sends nothing.
+   */
+  planContradictionCheck(mindId: string): Promise<ContradictionCheckPlan>;
+  /**
+   * Contradiction watch (#112): checks each cited sentence of a Mind against
+   * the other Documents in its Folder, the Documents it cites and IncarnaMind's
+   * own files left out, with `checkClaim`. A contradicted sentence gets a
+   * "contradiction-watch" `CLAIM_CHECK_MARK`; any such mark on the others goes.
+   * A new version of a Document in a Folder starts the same check, in the
+   * background, for the Folder's Minds, when the User allowed the "checks"
+   * flow for the model's service (`ContradictionWatchRun`). `cancelCheck` stops it.
+   */
+  checkContradictions(input: CheckContradictionsInput): Promise<CheckContradictionsResult>;
 
   getSecretStorage(): Promise<SecretStorageStatus>;
   /** The User accepts storing keys without keyring protection on this device. */
@@ -7596,6 +7673,8 @@ const methods: Record<CoreApiMethod, true> = {
   verifyDocument: true,
   findClaims: true,
   verifyClaims: true,
+  planContradictionCheck: true,
+  checkContradictions: true,
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,
   detectOllama: true,

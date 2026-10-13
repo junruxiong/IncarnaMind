@@ -2313,6 +2313,7 @@ export const zhCN = {
   "error.verify.request": "无法读取这个核对文档的请求。",
   "error.verify.notVerifying": "这个 Mind 没有在核对文档。",
   "error.verify.noPath": "请选择要核对的文档。",
+  "error.contradictions.request": "无法读取这个检查矛盾的请求。",
   "error.document.fileUnavailable": "暂时无法访问这个文档的文件。",
   "error.document.fileGone": "这个文档的文件已不在原处，无法读取。",
   "error.document.fileCantOpen": "无法打开这个文档的文件。",

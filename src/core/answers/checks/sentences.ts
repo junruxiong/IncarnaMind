@@ -38,8 +38,8 @@ export interface SelectedSentence {
   text: string;
   /** Its paragraph's text, for what its words refer to. */
   context: string;
-  /** What its Citations quote. */
-  cited: { documentName: string; quote: string }[];
+  /** What its Citations quote, and the Documents they cite. */
+  cited: { documentId: string | null; documentName: string; quote: string }[];
 }
 
 export type SelectedSentences =
@@ -89,14 +89,20 @@ function holdsProposal(element: Y.XmlElement, from: number, to: number): boolean
   return false;
 }
 
-/** What the Citations in `from`..`to` of a Block quote. */
+/** What the Citations in `from`..`to` of a Block quote, and the Documents they cite. */
 function citedIn(element: Y.XmlElement, from: number, to: number) {
   return layout(element).flatMap(({ node, start }) => {
     if (start < from || start >= to || !(node instanceof Y.XmlElement)) return [];
     if (node.nodeName !== CITATION_NODE) return [];
-    const { documentName, quote } = node.getAttributes() as Attributes;
+    const { documentId, documentName, quote } = node.getAttributes() as Attributes;
     return typeof quote === "string" && quote !== ""
-      ? [{ documentName: typeof documentName === "string" ? documentName : "", quote }]
+      ? [
+          {
+            documentId: typeof documentId === "string" && documentId !== "" ? documentId : null,
+            documentName: typeof documentName === "string" ? documentName : "",
+            quote,
+          },
+        ]
       : [];
   });
 }
@@ -180,6 +186,33 @@ export function markSentence(
     if (begin >= end) continue;
     node.format(begin - start, end - begin, { [CLAIM_CHECK_MARK]: { ...check } });
   }
+}
+
+/** Takes the marks of checks made by `action` off `from`..`to` of a Block's text; true if there were any. */
+export function unmarkSentence(
+  element: Y.XmlElement,
+  from: number,
+  to: number,
+  action: ClaimCheckAttributes["action"],
+): boolean {
+  let removed = false;
+  for (const { node, start } of layout(element)) {
+    if (!(node instanceof Y.XmlText)) continue;
+    let offset = start;
+    for (const run of node.toDelta() as Run[]) {
+      const length = typeof run.insert === "string" ? run.insert.length : 1;
+      const check = readClaimCheck(run.attributes?.[CLAIM_CHECK_MARK]);
+      if (check?.action === action && offset < to && offset + length > from) {
+        const begin = Math.max(from, offset);
+        node.format(begin - start, Math.min(to, offset + length) - begin, {
+          [CLAIM_CHECK_MARK]: null,
+        });
+        removed = true;
+      }
+      offset += length;
+    }
+  }
+  return removed;
 }
 
 /** Where a check's mark is: its Block and the stretch of text from its first marked character to its last. */
