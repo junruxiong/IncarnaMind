@@ -1523,9 +1523,7 @@ export function createDocuments(options: DocumentsOptions) {
     };
     if (!model.enabled()) {
       if (mode === "vector") {
-        throw new InvalidInputError(
-          "Vector search needs embeddings, which are off: turn them on in Settings → Search.",
-        );
+        throw new InvalidInputError({ key: "error.provider.embeddingsOff" });
       }
       return null;
     }
