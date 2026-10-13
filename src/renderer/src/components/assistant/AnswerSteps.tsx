@@ -16,6 +16,7 @@ import {
   type StepSource,
   stepRows,
 } from "../../answerSteps";
+import { checkedWords, checkingWords } from "../../answerStepWords";
 import { useAnswers } from "../../answers";
 import { stepsScope } from "../../assistantContext";
 import { NO_SCOPE } from "../../composer";
@@ -181,9 +182,7 @@ function liveText(t: Translate, step: LiveStep, scope: string): string {
     case "writing":
       return t("answer.phase.writing");
     case "checking":
-      return step.count === 1
-        ? t("steps.live.checking.one")
-        : t("steps.live.checking", { count: step.count });
+      return checkingWords(t, step.count);
     case "checking-figures":
       return t("answer.phase.checking-figures");
   }
@@ -677,7 +676,7 @@ function CheckStep({ count, notFound }: { count: number; notFound: number }) {
       }
     >
       <p className="answer-step-title">
-        {t(count === 1 ? "steps.check.one" : "steps.check", { count })}
+        {checkedWords(t, count)}
         <span aria-hidden="true"> · </span>
         {result}
       </p>
