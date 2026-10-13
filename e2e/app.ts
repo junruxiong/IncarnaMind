@@ -54,7 +54,10 @@ export interface LaunchOptions {
    * on the example Mind with "Get started". Without, a test build ships none.
    */
   examples?: boolean;
-  /** A home folder for the app instead of the User's, so nothing it writes there is theirs. */
+  /**
+   * The app's home folder, for a test that looks at what the app writes there. Without one,
+   * each launch gets its own temporary home, so nothing the app writes there is the User's.
+   */
   home?: string;
   /**
    * Where Look up asks Crossref and arXiv: a local server standing in for
@@ -95,6 +98,11 @@ export interface LaunchOptions {
    * a JSON file of a `FakeScanScript`. Without, it reads nothing on them.
    */
   scans?: string;
+  /**
+   * The scripted Task that asks for approval and writes files (src/main/scriptedTask.ts),
+   * started with `startScriptedTask`. Needs a test build.
+   */
+  scriptedTasks?: boolean;
 }
 
 /**
@@ -140,6 +148,7 @@ export async function launchApp(
     transcriber,
     scans,
     web,
+    scriptedTasks = false,
   }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
@@ -159,6 +168,7 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS;
   delete env.INCARNAMIND_TEST_SCANS;
   delete env.INCARNAMIND_TEST_WEB;
+  delete env.INCARNAMIND_TEST_TASKS;
   // A test never uses the ChatGPT sign-in an agent's shell may point at for checks by hand.
   delete env.INCARNAMIND_CHATGPT_PROFILE;
   env.INCARNAMIND_TEST_AUDIO = "fake";
@@ -170,12 +180,14 @@ export async function launchApp(
     env.INCARNAMIND_TEST_POSTHOG_HOST = usageData.host;
     if (usageData.testerBuild) env.INCARNAMIND_TEST_TESTER_BUILD = "1";
   }
-  if (home) env.HOME = home;
+  const appHome = home ?? (await mkdtemp(join(tmpdir(), "incarnamind-home-")));
+  env.HOME = appHome;
   if (referenceLookup) env.INCARNAMIND_TEST_REFERENCE_LOOKUP = referenceLookup;
   if (sources) env.INCARNAMIND_TEST_SOURCES = sources;
   if (chatGpt) env.INCARNAMIND_TEST_CHATGPT = chatGpt;
   if (scans) env.INCARNAMIND_TEST_SCANS = scans;
   if (web) env.INCARNAMIND_TEST_WEB = String(web);
+  if (scriptedTasks) env.INCARNAMIND_TEST_TASKS = "1";
   env.INCARNAMIND_DATA_DIR = dataDir;
   env.INCARNAMIND_TEST_HOOKS = "1";
   if (fakeChat) env.INCARNAMIND_FAKE_CHAT = "1";
@@ -185,7 +197,10 @@ export async function launchApp(
 
   const app = await electron.launch({ args: [appDir], env });
   openApps.set(app, dataDir);
-  app.on("close", () => openApps.delete(app));
+  app.on("close", () => {
+    openApps.delete(app);
+    if (!home) void rm(appHome, { recursive: true, force: true, maxRetries: 3 });
+  });
   const window = await app.firstWindow();
   await window.getByTestId("plus-menu").waitFor();
   if (!keepWindow) {
@@ -196,6 +211,46 @@ export async function launchApp(
   }
   return { app, window };
 }
+
+/**
+ * Starts the scripted Task (`LaunchOptions.scriptedTasks`) in a Mind: for each
+ * file it asks for approval, then writes the file into `folder`. Returns its id.
+ */
+export const startScriptedTask = (
+  app: ElectronApplication,
+  mindId: string,
+  input: { folder: string; files: string[] },
+) =>
+  app.evaluate(
+    (_electron, [mind, given]) =>
+      (
+        globalThis as unknown as {
+          incarnamindScriptedTask: { start(mindId: string, input: unknown): string };
+        }
+      ).incarnamindScriptedTask.start(mind, given),
+    [mindId, input] as const,
+  );
+
+/**
+ * Stands in for the system's notifications: each one shown is recorded
+ * instead (`notificationsShown`). Notifications made before this aren't.
+ */
+export const recordNotifications = (app: ElectronApplication) =>
+  app.evaluate(({ Notification }) => {
+    const shown: { title: string; body: string }[] = [];
+    (globalThis as { notificationsShown?: typeof shown }).notificationsShown = shown;
+    Notification.isSupported = () => true;
+    Notification.prototype.show = function show(this: Electron.Notification) {
+      shown.push({ title: this.title, body: this.body });
+    };
+  });
+
+export const notificationsShown = (app: ElectronApplication) =>
+  app.evaluate(
+    () =>
+      (globalThis as { notificationsShown?: { title: string; body: string }[] })
+        .notificationsShown ?? [],
+  );
 
 /** Chooses the Edit menu's Undo or Redo, as the application menu has it now. */
 export const clickEditItem = (app: ElectronApplication, id: "edit.undo" | "edit.redo") =>
