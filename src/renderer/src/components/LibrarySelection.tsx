@@ -9,7 +9,7 @@ import { useT } from "../i18n";
 import type { ObjectRef } from "../objects";
 import { useSelectedOn, useSelection } from "../selection";
 import { useAppStore } from "../store";
-import { TAGS_KEYS } from "../treeKeys";
+import { DELETE_KEYS, TAGS_KEYS } from "../treeKeys";
 import { useDocumentMove } from "./library/DocumentMoveTo";
 import { CloseLineIcon } from "./lineIcons";
 import { ObjectMenu } from "./ObjectMenu";
@@ -22,13 +22,15 @@ const barCommandClass =
   "h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[13px] whitespace-nowrap text-ink-secondary hover:bg-rule hover:text-ink aria-disabled:text-ink-placeholder aria-disabled:hover:bg-transparent";
 
 /**
- * The commands the bar names, in its order, each from the width it shows at;
- * Tags… sits after the first. Narrower, they wait under ⋯, which holds them all.
+ * The commands the bar names, in its order, each from the width it shows at,
+ * with the keys a Library row takes for it where the command has none of its
+ * own; Tags… sits after the first. Narrower, they wait under ⋯, which holds
+ * them all.
  */
-const NAMED: readonly { id: CommandId; from: string }[] = [
+const NAMED: readonly { id: CommandId; from: string; keys?: string }[] = [
   { id: "document.moveTo", from: "@[30rem]:inline-flex" },
   { id: "document.ask", from: "@[44rem]:inline-flex" },
-  { id: "document.delete", from: "@[52rem]:inline-flex" },
+  { id: "document.delete", from: "@[52rem]:inline-flex", keys: DELETE_KEYS },
 ];
 
 const documentRef = (id: string): ObjectRef => ({ kind: "document", id });
@@ -104,16 +106,16 @@ export function LibrarySelectionBar({ shownIds }: { shownIds: readonly string[] 
     here: { "document.moveTo": () => moveBeside('[data-command="document.moveTo"]') },
   };
   const offered = buildMenu("document", ctx).filter((entry): entry is MenuItem => entry !== "rule");
-  const named = NAMED.flatMap(({ id, from }) => {
+  const named = NAMED.flatMap(({ id, from, keys }) => {
     const item = offered.find((entry) => entry.command.id === id);
-    return item ? [{ item, from }] : [];
+    return item ? [{ item, from, keys: keys && keysHere(keys) }] : [];
   });
   const run = (item: MenuItem) => {
     if (item.enabled !== true) return;
     commands.run(item.command.id, ctx).catch(useAppStore.getState().reportError);
   };
-  const button = ({ item, from }: (typeof named)[number]) => {
-    const keys = menuKeysLabel(item.command);
+  const button = ({ item, from, keys: rowKeys }: (typeof named)[number]) => {
+    const keys = menuKeysLabel(item.command) ?? rowKeys;
     return (
       <button
         key={item.command.id}

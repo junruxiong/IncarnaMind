@@ -349,6 +349,129 @@ test("search finds the words inside Documents too, in every section: the line th
   }
 });
 
+test("every task on the page by keyboard alone: / and ↓ into the rows, ↑ back, ← and →, T, ⇧⌘M, Shift+↓, ⌘⌫ with ⌘Z, ⌘A, Esc and Enter", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1600, 900);
+    await placeAssistant(window, { folded: true });
+    const library = await openFullLibrary(window);
+    const search = library.getByTestId("library-search");
+    const contracts = section(library, "Contracts");
+    const focusedRow = library.locator("[data-document-id]:has([data-row-main]:focus)");
+    const focusedName = () => focusedRow.getByTestId("library-document-name").textContent();
+
+    // / searches; ↓ goes from the field to the first row, ↑ back up to the field.
+    await window.keyboard.press("/");
+    await expect(search).toBeFocused();
+    await window.keyboard.type("agreement");
+    await expect(rowsOf(library)).toHaveCount(2);
+    await window.keyboard.press("ArrowDown");
+    await expect(rowsOf(contracts).first().locator("[data-row-main]")).toBeFocused();
+    await window.keyboard.press("ArrowUp");
+    await expect(contracts.getByTestId("library-section-name")).toBeFocused();
+    await window.keyboard.press("ArrowUp");
+    await expect(search).toBeFocused();
+    await window.keyboard.press("Escape");
+    await expect(search).toHaveValue("");
+
+    // ← folds the section its head has the focus on, → opens it again.
+    await window.keyboard.press("ArrowDown");
+    const board = section(library, "Board");
+    await expect(rowsOf(board).first().locator("[data-row-main]")).toBeFocused();
+    await window.keyboard.press("ArrowUp");
+    await expect(board.getByTestId("library-section-name")).toBeFocused();
+    await window.keyboard.press("ArrowLeft");
+    await expect(rowsOf(board)).toHaveCount(0);
+    await window.keyboard.press("ArrowRight");
+    await expect(rowsOf(board)).not.toHaveCount(0);
+
+    // T opens the row's Tags; a Tag typed and ↵ is on it, and Esc gives the focus back.
+    await window.keyboard.press("ArrowDown");
+    const tagged = await focusedName();
+    await window.keyboard.press("t");
+    await expect(focusedRow).toHaveCount(0);
+    await window.keyboard.type("Paper");
+    await window.keyboard.press("Enter");
+    await window.keyboard.press("Escape");
+    await expect(focusedRow.getByTestId("library-document-name")).toHaveText(tagged ?? "");
+    await expect(focusedRow.getByTestId("tag-chip").filter({ hasText: "Paper" })).toHaveCount(1);
+
+    // ⇧⌘M moves it, and the focus goes with it to its new section.
+    await window.keyboard.press("ControlOrMeta+Shift+M");
+    await window.keyboard.type("Contracts");
+    await window.keyboard.press("Enter");
+    await expect(row(contracts, tagged ?? "")).toHaveCount(1);
+    await expect(row(contracts, tagged ?? "").locator("[data-row-main]")).toBeFocused();
+
+    // Shift+↓ selects the rows below it; ⌘⌫ deletes the three, the focus moving on; ⌘Z brings them back.
+    await window.keyboard.press("Shift+ArrowDown");
+    await window.keyboard.press("Shift+ArrowDown");
+    const bar = library.getByTestId("library-selection");
+    await expect(bar.getByRole("status")).toHaveText("3 selected");
+    await expect(bar.locator('[data-command="document.delete"]')).toHaveText(
+      /^Delete 3 Documents(⌘⌫|Ctrl\+Backspace)$/,
+    );
+    const count = library.getByTestId("library-count");
+    const shown = FIXTURE_COUNT - DELETED.length;
+    await window.keyboard.press("ControlOrMeta+Backspace");
+    await expect(count).toHaveText(String(shown - 3));
+    await expect(row(contracts, tagged ?? "")).toHaveCount(0);
+    await expect(focusedRow).toHaveCount(1);
+    await expect(window.getByTestId("undo-line")).toContainText("3 Documents");
+    await window.keyboard.press("ControlOrMeta+z");
+    await expect(count).toHaveText(String(shown));
+    await expect(row(contracts, tagged ?? "")).toHaveCount(1);
+
+    // ⌘A selects every row shown; Esc lets go.
+    await focusedRow.locator("[data-row-main]").focus();
+    await window.keyboard.press("ControlOrMeta+a");
+    await expect(bar.getByRole("status")).toHaveText(`${shown} selected`);
+    await window.keyboard.press("Escape");
+    await expect(bar).toHaveCount(0);
+
+    // Enter opens the row beside the list.
+    const opened = await focusedName();
+    await window.keyboard.press("Enter");
+    const viewer = window.getByTestId("viewer");
+    await expect(viewer).toBeVisible();
+    await expect(viewer.getByTestId("viewer-header")).toContainText(opened ?? "");
+  } finally {
+    await app.close();
+  }
+});
+
+test("a Document is found and asked about in four steps by keyboard: /, its words, ↓, and Ask from its menu", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1600, 900);
+    const library = await openFullLibrary(window);
+    // 1 and 2: the search, and words of what is wanted.
+    await window.keyboard.press("/");
+    await window.keyboard.type("rotterdam lease");
+    // 3: ↓ to what was found.
+    await window.keyboard.press("ArrowDown");
+    const lease = row(section(library, "Contracts"), "Lease: Rotterdam warehouse");
+    await expect(lease.locator("[data-row-main]")).toBeFocused();
+    const id = await lease.getAttribute("data-document-id");
+    // 4: Ask, from its menu (⇧F10, as the context-menu key).
+    await window.keyboard.press("Shift+F10");
+    const ask = window.getByTestId("document-file-actions").filter({ visible: true });
+    for (let step = 0; step < 6; step++) {
+      if (await ask.getByTestId("document.ask").evaluate((item) => item === document.activeElement))
+        break;
+      await window.keyboard.press("ArrowDown");
+    }
+    await expect(ask.getByTestId("document.ask")).toBeFocused();
+    await window.keyboard.press("Enter");
+    const composer = window.getByTestId("composer");
+    await expect(composer.getByTestId("composer-input")).toBeFocused();
+    await expect(composer.getByTestId("scope-chip")).toHaveCount(1);
+    await expect(composer.getByTestId("scope-chip")).toHaveAttribute("data-id", id ?? "");
+  } finally {
+    await app.close();
+  }
+});
+
 test("five Documents go into a Folder with Move to…, from the selection bar and by ⇧⌘M, with Undo; no row has a dropdown", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
@@ -374,7 +497,7 @@ test("five Documents go into a Folder with Move to…, from the selection bar an
     await expect(bar.getByTestId("library-selection-action")).toHaveText([
       /^Move to…(⇧⌘M|Ctrl\+Shift\+M)$/,
       "Ask about these 5 Documents",
-      "Delete 5 Documents",
+      /^Delete 5 Documents(⌘⌫|Ctrl\+Backspace)$/,
     ]);
     // The quiet bar gives way to the selection's.
     await expect(library.getByTestId("library-bar")).toHaveCount(0);

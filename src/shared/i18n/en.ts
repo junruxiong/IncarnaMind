@@ -55,7 +55,6 @@ export const en = {
   "library.showMore": "Show more Documents",
   "library.loading": "Loading Library…",
   "library.groups": "Folders",
-  "library.all": "All Documents",
   "library.unsorted": "Not in a Folder",
   "library.chooseStarters": "Starter folders",
   "library.cancel": "Cancel",
