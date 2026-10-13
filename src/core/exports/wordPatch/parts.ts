@@ -17,7 +17,7 @@ import {
   type StyleBases,
   type StyleRole,
 } from "../docx";
-import { footnotesPart, W_NAMESPACE, WordIds, XML_DECLARATION } from "../wordml";
+import { commentsPart, footnotesPart, W_NAMESPACE, WordIds, XML_DECLARATION } from "../wordml";
 import {
   CONTENT_TYPES,
   type PartRelationships,
@@ -153,6 +153,14 @@ export class DocumentStyles {
         },
         get reference() {
           return id("footnoteReference");
+        },
+      },
+      comment: {
+        get text() {
+          return id("commentText");
+        },
+        get reference() {
+          return id("commentReference");
         },
       },
     };
@@ -334,18 +342,65 @@ export class DocumentFootnotes {
 }
 
 // ---------------------------------------------------------------------------
-// Drawings
+// Comments
+
+/** The document's comments part, and IncarnaMind's comments added (#107). */
+export class DocumentComments {
+  private constructor(
+    private readonly pkg: WordPackageWriter,
+    private readonly document: string,
+    private readonly relationships: PartRelationships,
+    private readonly name: string,
+    private readonly part: PartText | null,
+  ) {}
+
+  static async read(
+    pkg: WordPackageWriter,
+    document: string,
+    relationships: PartRelationships,
+  ): Promise<DocumentComments> {
+    const known = relationships.ofType(RELATIONSHIP_TYPES.comments)?.target ?? null;
+    const part = known ? await pkg.part(known) : null;
+    const name =
+      known ??
+      (pkg.has("word/comments.xml") ? pkg.freeName("word/comments", "xml") : "word/comments.xml");
+    return new DocumentComments(pkg, document, relationships, name, part);
+  }
+
+  /** Writes the comments added after the document's own, or makes the part. */
+  async flush(comments: readonly string[]): Promise<void> {
+    if (comments.length === 0) return;
+    if (this.part) {
+      const { text, root } = this.part;
+      this.pkg.set(this.name, applySplices(text, [appendInside(text, root, comments.join(""))]));
+      return;
+    }
+    this.pkg.add(this.name, commentsPart(comments));
+    this.relationships.add(RELATIONSHIP_TYPES.comments, relativeTo(this.document, this.name));
+    await this.pkg.addContentType(this.name, CONTENT_TYPES.comments);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Ids
 
 /** The parts whose drawings share one set of ids with the main document's. */
-const DRAWING_PART = /^word\/(?:document\d*|header\d*|footer\d*|footnotes|endnotes|comments)\.xml$/;
+const STORY_PART = /^word\/(?:document\d*|header\d*|footer\d*|footnotes|endnotes|comments)\.xml$/;
 
-/** Reserves the ids the document's drawings have, so a new picture's is its own. */
-export async function reserveDrawingIds(pkg: WordPackageWriter, ids: WordIds): Promise<void> {
+/**
+ * Reserves the ids the document's drawings have, so a new picture's is its
+ * own, and every `w:id` its stories have (their changes, comments and
+ * bookmarks), so a new tracked change's or comment's is its own.
+ */
+export async function reserveIds(pkg: WordPackageWriter, ids: WordIds): Promise<void> {
   for (const name of pkg.zip.names()) {
-    if (!DRAWING_PART.test(name)) continue;
+    if (!STORY_PART.test(name)) continue;
     const text = (await pkg.text(name)) ?? "";
     for (const match of text.matchAll(/<(?:[\w.-]+:)?docPr\b[^>]*?\sid\s*=\s*"(\d+)"/g)) {
       ids.reserve("drawing", Number(match[1]));
+    }
+    for (const match of text.matchAll(/\bw:id\s*=\s*"(-?\d+)"/g)) {
+      ids.reserve("annotation", Number(match[1]));
     }
   }
 }

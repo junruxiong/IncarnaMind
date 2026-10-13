@@ -27,9 +27,9 @@ export function useKeepInView(thread: RefObject<HTMLElement | null>): void {
       if (scroller.clientHeight === 0) return;
       atEnd = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= AT_END_PX;
       const top = scroller.getBoundingClientRect().top;
-      const turn = [...scroller.querySelectorAll("[data-answer-id], .assistant-question")].find(
-        (each) => each.getBoundingClientRect().bottom > top + 1,
-      );
+      const turn = [
+        ...scroller.querySelectorAll("[data-answer-id], .assistant-question, .task-progress"),
+      ].find((each) => each.getBoundingClientRect().bottom > top + 1);
       anchor = turn ? { turn, offset: turn.getBoundingClientRect().top - top } : null;
     };
     const restore = () => {
