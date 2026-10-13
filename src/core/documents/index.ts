@@ -326,7 +326,7 @@ function searchLimit(limit: unknown = DEFAULT_SEARCH_LIMIT): number {
     limit < 1 ||
     limit > MAX_SEARCH_LIMIT
   ) {
-    throw new InvalidInputError(`The limit must be a whole number from 1 to ${MAX_SEARCH_LIMIT}.`);
+    throw new InvalidInputError({ key: "error.search.limit", values: { max: MAX_SEARCH_LIMIT } });
   }
   return limit;
 }
@@ -2305,7 +2305,7 @@ export function createDocuments(options: DocumentsOptions) {
     searchText(query: unknown, options?: unknown): DocumentTextMatch[] {
       if (typeof query !== "string") throw new InvalidInputError("The search query must be text.");
       if (options !== undefined && !isRecord(options)) {
-        throw new InvalidInputError("searchDocumentText expects an object.");
+        throw new InvalidInputError({ key: "error.search.options" });
       }
       return textSearch(db, query, searchLimit(options?.limit));
     },

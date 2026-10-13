@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DocumentTextMatch } from "../../core/api";
 import { core } from "./core";
-import { errorMessage } from "./errors";
 import { searchesWords } from "./palette";
 
 /** As ⌘K: the core is asked once typing pauses. */
@@ -13,18 +12,19 @@ const MOST_DOCUMENTS = 200;
 interface Answer {
   query: string;
   matches: Map<string, DocumentTextMatch>;
-  failed: string | null;
+  failure: { error: unknown } | null;
 }
 
 /**
  * The words inside Documents for the Library's search, by Document id, once
- * the core answers for what is typed now; `waiting` until it does. `failed`
- * says why it couldn't search, and `retry` asks again.
+ * the core answers for what is typed now; `waiting` until it does. `failure`
+ * holds the error that stopped it (worded where it shows, with
+ * `errorMessage`), and `retry` asks again.
  */
 export function useTextSearch(search: string): {
   matches: ReadonlyMap<string, DocumentTextMatch> | null;
   waiting: boolean;
-  failed: string | null;
+  failure: { error: unknown } | null;
   retry(): void;
 } {
   const query = search.trim();
@@ -40,11 +40,11 @@ export function useTextSearch(search: string): {
       (items) => {
         if (latest.current !== asked) return;
         const matches = new Map(items.map((item) => [item.documentId, item]));
-        setAnswer({ query: asked, matches, failed: null });
+        setAnswer({ query: asked, matches, failure: null });
       },
       (error: unknown) => {
         if (latest.current === asked) {
-          setAnswer({ query: asked, matches: new Map(), failed: errorMessage(error) });
+          setAnswer({ query: asked, matches: new Map(), failure: { error } });
         }
       },
     );
@@ -64,7 +64,7 @@ export function useTextSearch(search: string): {
   return {
     matches: shown?.matches ?? null,
     waiting: searching && answer?.query !== query,
-    failed: shown?.query === query ? shown.failed : null,
+    failure: shown?.query === query ? shown.failure : null,
     retry: () => ask(query),
   };
 }

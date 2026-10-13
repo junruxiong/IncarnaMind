@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { Document, LibraryGroup } from "../../../core/api";
 import { LIBRARY_DELETED } from "../deletedItems";
+import { errorMessage } from "../errors";
 import { useFindSources } from "../findSources";
 import { useLanguage, useT } from "../i18n";
 import {
@@ -290,7 +291,7 @@ export function LibraryPane() {
                   />
                 ))}
               </div>
-              {inside.failed !== null && (
+              {inside.failure && (
                 <ProblemLine
                   role="alert"
                   testId="library-inside-failed"
@@ -301,7 +302,7 @@ export function LibraryPane() {
                     onClick: inside.retry,
                   }}
                 >
-                  {t("library.inside.failed", { reason: inside.failed })}
+                  {t("library.inside.failed", { reason: errorMessage(inside.failure.error, t) })}
                 </ProblemLine>
               )}
               {narrowing && sections.length === 0 && !inside.waiting && (

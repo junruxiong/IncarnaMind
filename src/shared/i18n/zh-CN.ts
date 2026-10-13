@@ -2287,6 +2287,8 @@ export const zhCN = {
   "error.document.fileGone": "这个文档的文件已不在原处，无法读取。",
   "error.document.fileCantOpen": "无法打开这个文档的文件。",
   "error.document.notFailed": "只有处理失败的文档才能重试。",
+  "error.search.limit": "数量必须是 1 到 {max} 之间的整数。",
+  "error.search.options": "搜索的选项格式不对。",
   "error.tag.notFound": "这个标签不存在或已删除。",
   "error.tag.nameEmpty": "标签名称不能为空。",
   "error.tag.nameTooLong": "标签名称不能超过 {max} 个字符。",
