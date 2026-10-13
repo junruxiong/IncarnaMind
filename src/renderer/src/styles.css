@@ -4892,7 +4892,8 @@
     flex-direction: column;
     min-width: 0;
     min-height: 0;
-    overflow: hidden;
+    /* Clip, not hidden: a picker wider than the composer mustn't scroll the panel sideways as it scrolls its choice into view. */
+    overflow: clip;
     border-radius: 10px;
     background: var(--color-sheet);
     container: assistant / inline-size;

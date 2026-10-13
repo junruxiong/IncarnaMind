@@ -220,6 +220,7 @@ export function ResearchPlanCard({ mindId }: { mindId: string }) {
       <div className="research-plan-foot">
         <Estimate
           steps={Math.max(1, steps.length)}
+          web={searchesWeb}
           model={model}
           note={
             !card.planning && steps.length === 0
@@ -458,10 +459,13 @@ function PlanProblem({
 /** "About $0.60 · 8–12 min · Sonnet 5.5": the cost on a model billed per token, the time, and the chip's model. */
 function Estimate({
   steps,
+  web,
   model,
   note,
 }: {
   steps: number;
+  /** It searches the web: a search a step, which its provider bills. */
+  web: boolean;
   model: ChatModelChoice | null;
   note: string | null;
 }) {
@@ -471,7 +475,8 @@ function Estimate({
   const [estimate, setEstimate] = useState<RunEstimate | null>(null);
   useEffect(() => {
     let current = true;
-    core.estimateRun({ items: researchItems(steps), ...(model && { model }) }).then(
+    const searches = web ? steps : 0;
+    core.estimateRun({ items: researchItems(steps), searches, ...(model && { model }) }).then(
       (result) => {
         if (current) setEstimate(result);
       },
@@ -482,7 +487,7 @@ function Estimate({
     return () => {
       current = false;
     };
-  }, [steps, model]);
+  }, [steps, web, model]);
   const { from, to } = researchMinutes(steps);
   const name = model ? nameOf(model.modelId, model.providerId).name : "";
   const text =

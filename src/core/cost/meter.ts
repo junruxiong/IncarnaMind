@@ -44,7 +44,7 @@ import type { ChatLanguageModel } from "../providers/models";
 import { tokenUsageOf } from "../providers/promptCache";
 import { CostCapError, PlanLimitError } from "../providers/providerErrors";
 import { retryAfterMs } from "../providers/retryAfter";
-import { searchFee } from "../providers/webSearch";
+import { searchFee, searchFeeOf } from "../providers/webSearch";
 import { currentTask } from "../runs/current";
 import type { TokenUsage } from "../runs/engine";
 import type { Database } from "../storage";
@@ -474,7 +474,7 @@ export function createMeter(options: {
      * below to 2.5 times above: higher when recent requests found the prompt
      * cache cold, as the first of a session does, and a run's later ones don't.
      */
-    estimate(model: MeteredModel, items: number): RunEstimate {
+    estimate(model: MeteredModel, items: number, searches = 0): RunEstimate {
       if (model.billing !== "per-token") return { billing: model.billing };
       const recent = db.all<Required<TokenUsage>>(
         `SELECT input_tokens AS inputTokens, coalesce(cached_input_tokens, 0) AS cachedInputTokens,
@@ -499,14 +499,26 @@ export function createMeter(options: {
       const calls = Math.max(0, Math.round(items)) * CALLS_PER_ITEM;
       const at = now();
       const cap = options.cap();
+      const fee = searchFeeOf(model.kind);
+      const searchCost = (price: Price) =>
+        fee
+          ? searches *
+            (inCurrency(fee.amount, fee.currency, price.currency) +
+              costOf({ inputTokens: SEARCH_INPUT_TOKENS }, price, at))
+          : 0;
       return {
         billing: "per-token",
         calls,
-        tokens: Math.round(calls * (call.inputTokens + call.outputTokens)),
+        tokens: Math.round(
+          calls * (call.inputTokens + call.outputTokens) +
+            (fee ? searches * SEARCH_INPUT_TOKENS : 0),
+        ),
         cost: model.price
           ? {
               currency: model.price.currency,
-              amount: calls * costOf(call, model.price, at, { cacheWrites: writesCache(model) }),
+              amount:
+                calls * costOf(call, model.price, at, { cacheWrites: writesCache(model) }) +
+                searchCost(model.price),
             }
           : null,
         spentTowardCap: cap

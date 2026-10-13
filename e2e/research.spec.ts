@@ -146,11 +146,13 @@ test("Research… plans in the tray: the steps edited in place, the sources, whe
     `What do the sources say about ${TOPIC}?`,
   );
   const steps = card.getByTestId("research-plan-step");
-  await expect.poll(() => valuesOf(steps)).toEqual([
-    `Search the web and the Library for ${TOPIC}`,
-    `Read what the sources say about ${TOPIC}`,
-    "Compare what they found",
-  ]);
+  await expect
+    .poll(() => valuesOf(steps))
+    .toEqual([
+      `Search the web and the Library for ${TOPIC}`,
+      `Read what the sources say about ${TOPIC}`,
+      "Compare what they found",
+    ]);
   await expect(card.getByTestId("research-plan-write-step")).toHaveText(
     "Write a cited draft into “Credit memo”",
   );
