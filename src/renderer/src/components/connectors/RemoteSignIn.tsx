@@ -1,5 +1,5 @@
 import { type FormEvent, useState } from "react";
-import type { RemoteConnector } from "../../../../core/api";
+import type { ConnectorClientInput, RemoteConnector } from "../../../../core/api";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
@@ -30,24 +30,8 @@ export function RemoteSignIn({ connector }: { connector: RemoteConnector }) {
   const [editingClient, setEditingClient] = useState(false);
   const needsClient = signIn.error?.kind === "client-id-required";
 
-  if (state === "signing-in") {
-    return (
-      <div
-        data-testid="connector-signing-in"
-        className={`mt-1 flex flex-wrap items-center gap-2 ${noticeClass}`}
-      >
-        <span className="flex-1">{t("remoteConnectors.signingIn")}</span>
-        <button
-          type="button"
-          data-testid="connector-sign-in-cancel"
-          onClick={() => void act(() => core.cancelConnectorSignIn(id))}
-          className={buttonStyle("secondary", "sm")}
-        >
-          {t("remoteConnectors.cancel")}
-        </button>
-      </div>
-    );
-  }
+  // The page's head shows the wait, with Cancel.
+  if (state === "signing-in") return null;
 
   const clientLine = clientId && (
     <p className="mt-1 flex flex-wrap items-center gap-2 text-[12px] leading-[18px] text-ink-meta">
@@ -77,9 +61,14 @@ export function RemoteSignIn({ connector }: { connector: RemoteConnector }) {
         )}
         {needsClient || editingClient ? (
           <ClientForm
-            connector={connector}
-            onDone={() => setEditingClient(false)}
-            cancellable={!needsClient}
+            initialClientId={connector.clientId ?? ""}
+            submitLabel={t("remoteConnectors.client.save")}
+            onSubmit={async (client) => {
+              await core.setConnectorClient(id, client);
+              setEditingClient(false);
+              await core.signInToConnector(id);
+            }}
+            onCancel={needsClient ? undefined : () => setEditingClient(false)}
           />
         ) : (
           <div className="mt-2 flex flex-wrap items-center gap-3">
@@ -128,19 +117,24 @@ export function RemoteSignIn({ connector }: { connector: RemoteConnector }) {
   );
 }
 
-/** The OAuth app the User registered with the service: its client ID, and secret if it has one. */
-function ClientForm({
-  connector,
-  onDone,
-  cancellable,
+/**
+ * The OAuth app the User registered with a service that registers only the
+ * apps it knows: its client ID, and secret if it has one.
+ */
+export function ClientForm({
+  initialClientId = "",
+  submitLabel,
+  onSubmit,
+  onCancel,
 }: {
-  connector: RemoteConnector;
-  onDone(): void;
-  /** False when the service can't be signed in to without one. */
-  cancellable: boolean;
+  initialClientId?: string;
+  submitLabel: string;
+  onSubmit(client: ConnectorClientInput): Promise<void>;
+  /** Absent when the service can't be signed in to without one. */
+  onCancel?: () => void;
 }) {
   const t = useT();
-  const [clientId, setClientId] = useState(connector.clientId ?? "");
+  const [clientId, setClientId] = useState(initialClientId);
   const [clientSecret, setClientSecret] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -150,12 +144,7 @@ function ClientForm({
     setBusy(true);
     setError(null);
     try {
-      await core.setConnectorClient(connector.id, {
-        clientId,
-        ...(clientSecret.trim() ? { clientSecret } : {}),
-      });
-      onDone();
-      await core.signInToConnector(connector.id);
+      await onSubmit({ clientId, ...(clientSecret.trim() ? { clientSecret } : {}) });
     } catch (failure) {
       setError(errorMessage(failure));
     } finally {
@@ -195,13 +184,14 @@ function ClientForm({
       <div className="flex flex-wrap gap-2">
         <button
           type="submit"
+          data-testid="connector-client-submit"
           disabled={busy || !clientId.trim()}
           className={buttonStyle("primary", "sm")}
         >
-          {t("remoteConnectors.client.save")}
+          {submitLabel}
         </button>
-        {cancellable && (
-          <button type="button" onClick={onDone} className={buttonStyle("ghost", "sm")}>
+        {onCancel && (
+          <button type="button" onClick={onCancel} className={buttonStyle("ghost", "sm")}>
             {t("remoteConnectors.cancel")}
           </button>
         )}

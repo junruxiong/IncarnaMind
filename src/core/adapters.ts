@@ -785,6 +785,11 @@ export interface CoreAdapters {
    */
   connectorSignInTimeoutMs?: number;
   /**
+   * The Connectors directory's entries, in its JSON form, in place of the
+   * list that ships with the app; tests point an entry at a local stand-in.
+   */
+  connectorDirectory?: unknown;
+  /**
    * Where requests to TypeSafe's hosted Jev go. Defaults to
    * https://api.typesafe.ai; tests point it at a local fake server. Consent
    * still treats them as going to TypeSafe.

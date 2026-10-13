@@ -46,7 +46,7 @@ export type ConnectorConfig = LocalConnectorConfig | RemoteConnectorConfig;
  * since its sign-in's tokens travel with every request. The fragment is
  * dropped: an MCP endpoint (and an OAuth resource) never has one.
  */
-function parseRemoteUrl(value: unknown): string {
+export function parseRemoteUrl(value: unknown): string {
   if (typeof value !== "string") throw new InvalidInputError("A Connector's URL must be text.");
   const text = value.trim();
   if (!text) throw new InvalidInputError("Enter the server's URL.");

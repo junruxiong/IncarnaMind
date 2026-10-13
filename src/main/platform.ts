@@ -2,7 +2,7 @@
  * Electron implementations of the core's adapters. This is the only place that
  * turns Electron APIs into capabilities the core can use.
  */
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -313,6 +313,17 @@ const sourceProvidersUrl =
   import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_SOURCES : undefined;
 
 /**
+ * Test-only launch flag: a JSON file of Connectors directory entries (#148)
+ * in place of the list that ships with the app, so the smoke tests connect
+ * an entry served by a local stand-in. Only a test build honours it.
+ */
+function testConnectorDirectory(): unknown {
+  const file =
+    import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_CONNECTOR_DIRECTORY : undefined;
+  return file ? JSON.parse(readFileSync(file, "utf8")) : undefined;
+}
+
+/**
  * Test-only launch flag: the port of a local server standing in for the web
  * (#128). Web search's fetcher resolves every host to a public address and
  * connects there, its guard still deciding which hosts it reaches, so the
@@ -406,7 +417,9 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
   const chatGptStore = chatGptTestProfile(log);
   const chatGptPlan = chatGptStandIn();
   const web = webStandIn();
+  const connectorDirectory = testConnectorDirectory();
   return {
+    ...(connectorDirectory !== undefined && { connectorDirectory }),
     ...(chatGptStore && { chatGptStore }),
     ...(chatGptPlan && { chatGptPlan }),
     ...(web && { web }),
