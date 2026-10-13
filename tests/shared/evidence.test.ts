@@ -12,6 +12,7 @@ const settings = (leaveOutOwnFiles: boolean): Pick<Settings, "user"> => ({
       format: "docx",
       docx: { includeQuestions: false },
       pdf: { includeQuestions: false },
+      html: { includeQuestions: false },
     },
     monthlyCap: null,
     webSearch: false,
