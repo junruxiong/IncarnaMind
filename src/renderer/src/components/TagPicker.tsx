@@ -11,17 +11,20 @@ import {
 } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { Document, DocumentTag, Tag } from "../../../core/api";
+import { pressesShortcut, shortcutLabel } from "../commands/keymap";
 import { errorMessage } from "../errors";
 import { useT } from "../i18n";
 import { type Box, enterFrom, exitToward } from "../motion";
 import { useAppStore } from "../store";
 import { actionFor, pickerOptions, type TagOnDocuments, tagsOnDocuments } from "../tagEditing";
+import { useUndo } from "../undo";
 import { CheckLineIcon, CloseLineIcon, PlusLineIcon, SparkLineIcon } from "./lineIcons";
 import { ReviewRing, TagDot, tagChipColour } from "./TagColour";
 import { buttonStyle, errorTextClass, hintClass, inputClass, menuRuleClass } from "./ui";
 
 const GAP_PX = 4;
 const EDGE_PX = 8;
+const COVER_INSET_PX = 4;
 
 /**
  * Below its button, or above it if the window is too short; kept inside the
@@ -29,20 +32,29 @@ const EDGE_PX = 8;
  * moment to measure it as it will show (as `usePopoverMenu` does). Returns
  * where it put it.
  */
-function place(button: HTMLElement | null, popover: HTMLElement | null): Box | null {
-  const anchor = button?.getBoundingClientRect();
+function place(
+  button: HTMLElement | null,
+  popover: HTMLElement | null,
+  cover: HTMLElement | null = null,
+): Box | null {
+  const anchor = (cover ?? button)?.getBoundingClientRect();
   if (!anchor || !popover) return null;
   const hidden = !popover.matches(":popover-open");
   if (hidden) popover.style.display = "block";
   const width = popover.offsetWidth;
   const height = popover.offsetHeight;
   if (hidden) popover.style.removeProperty("display");
-  const left = Math.max(EDGE_PX, Math.min(anchor.left, window.innerWidth - width - EDGE_PX));
-  const below = anchor.bottom + GAP_PX;
+  const bottomEdge = window.innerHeight - EDGE_PX;
+  // Over what it covers, its field where the cell's Tags were, as a Notion database's cell opens.
+  const start = cover ? anchor.left - COVER_INSET_PX : anchor.left;
+  const left = Math.max(EDGE_PX, Math.min(start, window.innerWidth - width - EDGE_PX));
+  const below = cover ? anchor.top - COVER_INSET_PX : anchor.bottom + GAP_PX;
   const top =
-    below + height > window.innerHeight - EDGE_PX
-      ? Math.max(EDGE_PX, anchor.top - GAP_PX - height)
-      : below;
+    below + height <= bottomEdge
+      ? below
+      : cover
+        ? Math.max(EDGE_PX, bottomEdge - height)
+        : Math.max(EDGE_PX, anchor.top - GAP_PX - height);
   popover.style.left = `${left}px`;
   popover.style.top = `${top}px`;
   return { left, top, width, height };
@@ -55,21 +67,29 @@ const focusFieldIn = (popover: HTMLElement | null) =>
 /**
  * A popover that opens from a button, like `usePopoverMenu`, for the Tag
  * picker: it takes the focus into its field, Esc closes only it, and a
- * click outside closes it.
+ * click outside closes it. Given `cover`, it opens over that element (a
+ * row's Tags cell) instead of under the button.
  */
-export function useTagPopover() {
+export function useTagPopover({ cover }: { cover?: () => HTMLElement | null } = {}) {
   const id = useId();
   const button = useRef<HTMLButtonElement>(null);
   const popover = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
+  const covered = useRef(cover);
+  covered.current = cover;
+  // Where the focus was when it opened (its button, or the row T was pressed on), to go back to.
+  const returnTo = useRef<HTMLElement | null>(null);
+  const giveBackFocus = () =>
+    (returnTo.current?.isConnected ? returnTo.current : button.current)?.focus();
 
   // Once rendered with the picker, and before it is drawn: placed, so it shows where it
   // belongs from the first frame, growing from its button. It takes the focus once it shows
   // (here or on `toggle`).
   useLayoutEffect(() => {
     if (!open) return;
-    const box = place(button.current, popover.current);
-    if (popover.current && box) enterFrom(popover.current, button.current, box);
+    const over = covered.current?.() ?? null;
+    const box = place(button.current, popover.current, over);
+    if (popover.current && box) enterFrom(popover.current, over ?? button.current, box);
     if (popover.current?.matches(":popover-open")) focusFieldIn(popover.current);
   }, [open]);
 
@@ -77,11 +97,11 @@ export function useTagPopover() {
     open,
     close() {
       popover.current?.hidePopover();
-      button.current?.focus();
+      giveBackFocus();
     },
     /** Places it again, e.g. after its height changed. */
     reposition: () => {
-      place(button.current, popover.current);
+      place(button.current, popover.current, covered.current?.() ?? null);
     },
     buttonProps: {
       ref: button,
@@ -97,6 +117,10 @@ export function useTagPopover() {
         if (event.newState === "closed" && popover.current) {
           exitToward(popover.current, button.current);
         }
+        if (event.newState === "open") {
+          const focus = document.activeElement;
+          returnTo.current = focus instanceof HTMLElement && focus !== document.body ? focus : null;
+        }
         setOpen(event.newState === "open");
       },
       // Now it shows, where it was placed: it can take the focus.
@@ -108,7 +132,7 @@ export function useTagPopover() {
         // Here, so the Document viewer's Esc doesn't close it too.
         event.preventDefault();
         popover.current?.hidePopover();
-        button.current?.focus();
+        giveBackFocus();
       },
     },
   };
@@ -116,7 +140,7 @@ export function useTagPopover() {
 
 /** The popover's look: a menu's, a little wider, with room for the field. */
 export const tagPopoverClass =
-  "inset-auto m-0 w-80 max-w-[calc(100vw-16px)] overflow-visible rounded-lg border-0 bg-sheet p-0 text-ui font-normal text-ink shadow-popover";
+  "inset-auto m-0 w-[360px] max-w-[calc(100vw-16px)] overflow-visible rounded-lg border-0 bg-sheet p-0 text-ui font-normal text-ink shadow-popover";
 
 /** A chip's shape in the picker's field and on a row: 20px, radius 4. Its colours are its Tag's. */
 export const chipClass =
@@ -159,13 +183,21 @@ export function ReviewDot() {
   return <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-attention" />;
 }
 
+const undoStepOf = (event: KeyboardEvent) =>
+  pressesShortcut("edit.undo", event.nativeEvent)
+    ? "undo"
+    : pressesShortcut("edit.redo", event.nativeEvent)
+      ? "redo"
+      : null;
+
 /**
  * Edits the Tags of one Document or several, keyboard first: type to filter,
  * ↑↓ to move, Enter to add (or, on one Document, to confirm a Tag awaiting
  * review, or to take off one it has), Backspace in the empty field to pick
- * the last Tag and again to take it off, × on a Tag to take it off. A name
- * no Tag has is created, optionally with a description (Shift+Enter), and
- * added. With several Documents, a Tag some of them have is added to all.
+ * the last Tag and again to take it off, × on a Tag to take it off, ⌘Z in
+ * the empty field to take back the last change. A name no Tag has is
+ * created, optionally with a description (Shift+Enter), and added. With
+ * several Documents, a Tag some of them have is added to all.
  */
 export function TagPicker({
   documentIds,
@@ -277,6 +309,14 @@ export function TagPicker({
         if (event.shiftKey) setDescribing(option.name);
         else void createTag(option.name);
       } else void choose(option.state);
+      return;
+    }
+    // An empty field has nothing of its own to take back: ⌘Z takes back the last change to the Tags.
+    const step = query === "" ? undoStepOf(event) : null;
+    if (step) {
+      event.preventDefault();
+      setPicked(null);
+      void run(() => useUndo.getState()[step]());
       return;
     }
     if (event.key === "Backspace" && query === "") {
@@ -453,14 +493,13 @@ export function TagPicker({
         </p>
       )}
       <div className={menuRuleClass} />
-      {/* The keys, unless the row has actions to offer instead; the field's own placeholder starts it. */}
-      <div className="flex min-h-8 items-center justify-between gap-2 px-1 pb-1">
-        {footer ? (
-          <div className="flex min-w-0 items-center">{footer}</div>
-        ) : (
-          <span className="truncate px-2 text-[12px] text-ink-meta">{t("tags.picker.hint")}</span>
-        )}
-      </div>
+      <p
+        data-testid="tag-picker-keys"
+        className="px-3 pt-1 pb-1.5 text-[12px] leading-4 text-ink-meta"
+      >
+        {t("tags.picker.keys", { undo: shortcutLabel("edit.undo") })}
+      </p>
+      {footer && <div className="flex min-h-8 min-w-0 items-center px-1 pb-1">{footer}</div>}
     </div>
   );
 }
