@@ -24,7 +24,7 @@ export function noteAround(element: Element | null): Editor | null {
 }
 
 /** The top-level Block the selection starts in, or right after. */
-function blockAt({ $from }: Selection): ObjectRef | null {
+export function blockAt({ $from }: Selection): ObjectRef | null {
   const node = $from.depth > 0 ? $from.node(1) : $from.nodeAfter;
   const id: unknown = node?.attrs[BLOCK_ID_ATTRIBUTE];
   return typeof id === "string" ? { kind: "block", id } : null;

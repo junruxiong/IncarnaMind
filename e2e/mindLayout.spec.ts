@@ -189,7 +189,7 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
   // The measure is 680px, with its margins inside the pane.
   expectNear((await textColumn(editor)).width, MEASURE, 1, "the measure");
 
-  // The link back of a Note added from an Answer, and the block handle, sit in the left margin.
+  // The block handle sits in the left margin; an added Note has no mark beside it.
   const inLeftMargin = async (locator: Locator, name: string) => {
     const rect = await box(locator);
     expect
@@ -197,11 +197,7 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
       .toBeGreaterThanOrEqual(edge - LEFT_MARGIN - 1);
     expect.soft(rect.x + rect.width, `${name} is left of the text`).toBeLessThanOrEqual(edge + 1);
   };
-  const link = window.getByTestId("conversation-link");
-  await expect(link).toHaveCount(1);
-  await inLeftMargin(link, "the link back to the conversation");
-  // It is level with the added Note's first 28px line.
-  expectNear(middle(await box(link)), (await box(texts.added)).y + 14, 1, "the link's middle");
+  await expect(window.getByTestId("conversation-link")).toHaveCount(0);
   // The composer is the assistant's, beside the Mind (#253), not in its column.
   const composer = await box(window.getByTestId("composer"));
   expect

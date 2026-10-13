@@ -18,6 +18,7 @@ import {
   removeDataFolder,
   setWindowSize,
   sidebarFolder,
+  slideToHandle,
 } from "./app";
 
 /**
@@ -296,7 +297,10 @@ test("in Chinese, the line and the timeline; after a restart the steps are still
   window = second.window;
   await setWindowSize(second.app, window, 1440, 900);
   await pointAndClick(window, window.getByTestId("mind-list-item"));
-  await pointAndClick(window, window.getByTestId("conversation-link"));
+  await (
+    await slideToHandle(window, window.getByTestId("mind-editor").locator(":scope > *").first())
+  ).click();
+  await pointAndClick(window, window.getByTestId("block-menu-open-conversation"));
   answer = assistantAnswers(window).first();
   const line = answer.getByTestId("answer-steps");
   await expect(line).toHaveText("已搜索全部文档 · 1 个来源");

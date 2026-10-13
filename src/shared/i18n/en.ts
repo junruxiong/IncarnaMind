@@ -3320,11 +3320,9 @@ export const en = {
   "command.answer.regenerate": "Regenerate the Answer",
   "command.answer.stop": "Stop the Answer",
   "command.answer.stop.unavailable": "No Answer is being written",
-  "origin.from": "From the conversation “{title}”",
-  "origin.open": "Open the conversation this came from",
+  "origin.open": "Open the source conversation",
   "origin.deleted": "From the conversation “{title}”, now in Recently deleted",
   "origin.gone": "From a conversation that has been deleted",
-  "origin.asked": "You asked: {question}",
   "assistant.narrow":
     "While the window is narrower than 1,000 px the assistant sits at the bottom; it goes back to the side when the window is wider.",
   "command.assistant.dock": "Assistant: {dock}",
