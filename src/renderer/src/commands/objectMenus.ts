@@ -31,6 +31,7 @@ registerMenu("document", [
   "document.openTab",
   "document.ask",
   "document.startMind",
+  "document.moveTo",
   "folder.newWith",
   "document.tags",
   "document.retry",

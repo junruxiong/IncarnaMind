@@ -59,6 +59,13 @@ const connectorCall: AnswerToolCall = {
   resultCount: null,
 };
 
+const STEPS = {
+  sentAt: "2026-10-12T09:00:00.000Z",
+  finishedAt: "2026-10-12T09:00:04.200Z",
+  phases: [{ phase: "writing" as const, at: "2026-10-12T09:00:00.500Z" }],
+  reasoning: null,
+};
+
 function input(
   answer: Partial<StepsInput["answer"]> = {},
   extra: Partial<StepsInput> = {},
@@ -69,12 +76,7 @@ function input(
       citations: [],
       toolCalls: [],
       model: MODEL,
-      steps: {
-        sentAt: "2026-10-12T09:00:00.000Z",
-        finishedAt: "2026-10-12T09:00:04.200Z",
-        phases: [{ phase: "writing", at: "2026-10-12T09:00:00.500Z" }],
-        reasoning: null,
-      },
+      steps: STEPS,
       read: null,
       ...answer,
     },
@@ -205,27 +207,39 @@ describe("an Answer's steps", () => {
   // protects=an Answer that read its Mind says so, whole or in part, and a Mind deleted since reads as deleted; fails_when=it says "Asked from", hides the cut, or shows a deleted Mind's name; no_claim=what the Answer read is the core's (tests/core/assistantReadsMind.test.ts).
   test("an Answer that read its Mind: Read {Mind}, part of it, or a deleted Mind", () => {
     const steps = input({ read: READ, toolCalls: [search("s1", "tides")] }, { askedFrom: MIND });
-    expect(stepRows(steps)[1]).toEqual({ kind: "read", mind: READ });
+    expect(stepRows(steps)[1]).toEqual({ kind: "read", mind: READ, share: null });
     const part = { ...READ, partial: true };
     expect(foldedLine(input({ read: part }, { askedFrom: MIND }))).toEqual({
       kind: "read",
       mind: part,
+      share: null,
     });
     const gone = { ...READ, deleted: true };
     expect(foldedLine(input({ read: gone }, { askedFrom: { ...MIND, deleted: true } }))).toEqual({
       kind: "read",
       mind: gone,
+      share: null,
     });
   });
 
   // protects=when the folded line is the Mind step (no search), the timeline doesn't say it again and starts with the next step; fails_when=the Mind's row repeats under the line, or another row goes; no_claim=the line's link to the Mind is the component's, tested end to end.
   test("folded to the Mind it read, or asked from, the timeline leaves that step out", () => {
     const read = input({ read: READ, toolCalls: [connectorCall] }, { askedFrom: MIND });
-    expect(foldedLine(read)).toEqual({ kind: "read", mind: READ });
+    expect(foldedLine(read)).toEqual({ kind: "read", mind: READ, share: null });
     expect(stepRows(read).map((row) => row.kind)).toEqual(["answered", "call"]);
     const asked = input({}, { askedFrom: MIND });
     expect(foldedLine(asked)).toEqual({ kind: "asked", mind: MIND });
     expect(stepRows(asked).map((row) => row.kind)).toEqual(["answered"]);
+  });
+
+  // protects=a Mind read in part says how much of it was read, in the timeline even when the folded line names the Mind (#564); fails_when=the share is missing, shown for a whole read, or the row is left out; no_claim=the words, the component's.
+  test("a Mind read in part: its row says how much, under a folded line that names it too", () => {
+    const part = { ...READ, partial: true };
+    const steps = input({ read: part, steps: { ...STEPS, readShare: 0.4 } }, { askedFrom: MIND });
+    expect(foldedLine(steps)).toEqual({ kind: "read", mind: part, share: 0.4 });
+    expect(stepRows(steps)[1]).toEqual({ kind: "read", mind: part, share: 0.4 });
+    const whole = input({ read: READ, steps: { ...STEPS, readShare: 0.4 } }, { askedFrom: MIND });
+    expect(stepRows(whole).map((row) => row.kind)).toEqual(["answered"]);
   });
 
   // protects=a Question asked from a Mind its Answer didn't read (deleted since, or an Answer written before #544) says where it was asked from; fails_when=it claims a read, or shows a deleted Mind's old name; no_claim=none beyond protects.
@@ -250,6 +264,7 @@ describe("an Answer's steps", () => {
     expect(foldedLine(input({ read: READ }, { askedFrom: MIND }))).toEqual({
       kind: "read",
       mind: READ,
+      share: null,
     });
     expect(foldedLine(input({}, { askedFrom: MIND }))).toEqual({ kind: "asked", mind: MIND });
     expect(foldedLine(input())).toEqual({ kind: "answered", model: "claude-sonnet-5-5" });
