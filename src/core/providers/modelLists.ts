@@ -8,15 +8,17 @@
  * What isn't a chat model is left out by what the provider and the catalog
  * say, never by its name: Google lists the methods each model supports,
  * Ollama its capabilities, and the catalog the ids its sources know as
- * embedding, speech, image or video models (see ./catalog). An id none of
- * them knows is listed, its capabilities unknown. Where a list says what a
- * model can do (Anthropic's capabilities and limits, Ollama's capabilities),
+ * embedding, speech, image or video models (see ./catalog). Of what is left, a
+ * hosted provider's list gives the menu only the catalog's current chat
+ * models (OpenAI's list says nothing of what a model is, only when one shuts
+ * down); the other ids are `other`: ones the catalog doesn't know, deprecated
+ * ones, and ones that need another API than chat. Where a list says what a model can do (Anthropic's capabilities and limits, Ollama's capabilities),
  * that is kept as the server's word on it (see ./capabilities).
  */
-import type { ChatProviderKind } from "../api";
+import type { ChatProviderKind, OtherModel } from "../api";
 import { isRecord } from "../errors";
 import type { ModelFactsLayer } from "./capabilities";
-import { isNonChatModel, type ModelInput, modelsProviderOfKind } from "./catalog";
+import { isNonChatModel, type ModelInput, modelsProviderOfKind, otherModel } from "./catalog";
 import { KNOWN_PLAN_MODELS } from "./chatgpt/planEndpoint";
 import { endpointUrl } from "./kinds";
 import { isCloudModelName, isRemoteEntry } from "./ollamaCloud";
@@ -40,6 +42,10 @@ export interface ListedModel {
   facts?: ModelFactsLayer;
   /** An Ollama model that runs on ollama.com, not on this computer. */
   cloud?: boolean;
+  /** The provider has announced this model's shutdown (OpenAI's `shutdown_date`). */
+  shuttingDown?: true;
+  /** Why it isn't in the model menu until the User adds it; absent: it is in the menu. */
+  other?: Omit<OtherModel, "id">;
 }
 
 async function getJson(url: string, headers: Record<string, string>): Promise<unknown> {
@@ -207,7 +213,16 @@ async function fetchModels({ kind, baseUrl, apiKey, endpoint }: ModelListSpec) {
       return listed(await getJson(`${hosted}/models`, bearer), openRouterModelFacts);
     case "openai":
       if (!apiKey) return [];
-      return idsOf(await getJson(`${hosted}/models`, bearer));
+      return dataOf(await getJson(`${hosted}/models`, bearer)).flatMap((model): ListedModel[] =>
+        typeof model.id === "string"
+          ? [
+              {
+                id: model.id,
+                ...(typeof model.shutdown_date === "string" && { shuttingDown: true }),
+              },
+            ]
+          : [],
+      );
     case "anthropic": {
       if (!apiKey) return [];
       const body = await getJson(`${hosted}/models?limit=100`, {
@@ -236,7 +251,7 @@ async function fetchModels({ kind, baseUrl, apiKey, endpoint }: ModelListSpec) {
   }
 }
 
-/** The chat models a provider lists, sorted; empty if it can't be reached. */
+/** The models a provider lists: the menu's first, then `other`, each sorted; empty if it can't be reached. */
 export async function listProviderModels(spec: ModelListSpec): Promise<ListedModel[]> {
   try {
     const catalogId = modelsProviderOfKind(spec.kind, spec.endpoint);
@@ -244,7 +259,19 @@ export async function listProviderModels(spec: ModelListSpec): Promise<ListedMod
     for (const model of await fetchModels(spec)) {
       if (!byId.has(model.id) && !isNonChatModel(catalogId, model.id)) byId.set(model.id, model);
     }
-    return [...byId.values()].sort((a, b) => a.id.localeCompare(b.id)).slice(0, MAX_MODELS);
+    const ids = new Set(byId.keys());
+    const sorted = [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));
+    const classified = sorted.map((model): ListedModel => {
+      const other =
+        spec.kind === "chatgpt"
+          ? undefined
+          : otherModel(catalogId, model.id, ids, model.shuttingDown);
+      return other ? { ...model, other } : model;
+    });
+    return [
+      ...classified.filter((model) => !model.other).slice(0, MAX_MODELS),
+      ...classified.filter((model) => model.other).slice(0, MAX_MODELS),
+    ];
   } catch {
     return [];
   }
