@@ -19,6 +19,8 @@ import { type ModelCall, type ScriptedReply, scriptedModel, scriptedModels } fro
 export interface ShownPassage {
   id: string;
   document: string;
+  /** Its Document's date, when known: "2025-05-14", "2024-03" or "2019". */
+  date: string | null;
   /** A PDF's: "3" or "3-4". Null for other kinds, which have a `location`. */
   pages: string | null;
   /** Every kind but PDF: where the Passage is, e.g. "slides 3–4" or "lines 1–12". */
@@ -40,14 +42,15 @@ export function recordSearches() {
 export function shownPassages(result: string): ShownPassage[] {
   const passages: ShownPassage[] = [];
   const pattern =
-    /<passage id="([^"]+)" document="([^"]*)"(?: pages="([^"]+)")?(?: location="([^"]+)")?>\n([\s\S]*?)\n<\/passage>/g;
+    /<passage id="([^"]+)" document="([^"]*)"(?: date="([^"]+)")?(?: pages="([^"]+)")?(?: location="([^"]+)")?>\n([\s\S]*?)\n<\/passage>/g;
   for (const match of result.matchAll(pattern)) {
     passages.push({
       id: match[1] as string,
       document: match[2] as string,
-      pages: match[3] ?? null,
-      location: match[4] ?? null,
-      text: match[5] as string,
+      date: match[3] ?? null,
+      pages: match[4] ?? null,
+      location: match[5] ?? null,
+      text: match[6] as string,
     });
   }
   return passages;
