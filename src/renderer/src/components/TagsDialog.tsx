@@ -10,6 +10,7 @@ import { useAppStore } from "../store";
 import { deleteTag, editTag, mergeTags } from "../tagChanges";
 import { MergeLineIcon, PencilLineIcon, TrashLineIcon } from "./lineIcons";
 import { TagColourPicker, tagChipColour } from "./TagColour";
+import { TypingTextarea } from "./TypingTextarea";
 import {
   buttonClass,
   dialogActionsClass,
@@ -398,7 +399,7 @@ function TagForm(props: {
       </label>
       <label className={fieldLabelClass}>
         {t("tags.dialog.description")}
-        <textarea
+        <TypingTextarea
           value={description}
           data-testid="tag-description-input"
           maxLength={500}

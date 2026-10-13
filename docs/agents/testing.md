@@ -4,7 +4,7 @@ Read this before writing code or tests, whether you are a person or a coding age
 
 **The bar:** a change is done when its pull request's checks are green on GitHub, not when the tests pass on your computer. CI runs on clean machines that are slower than yours and have a different screen. A test that passes only on your computer is a broken test.
 
-CI (`.github/workflows/ci.yml`) runs three checks on every pull request (a push to `main` runs the first only: the smoke test passed on the pull request, which was up to date with `main`):
+CI (`.github/workflows/ci.yml`) runs three checks on every pull request (`pull_request`), and again on each group the merge queue tests on top of `main` (`merge_group`). A push to `main` runs the first only, since the queue already ran the smoke test on that exact code:
 
 | Check | Where | What it runs |
 |---|---|---|
@@ -12,13 +12,13 @@ CI (`.github/workflows/ci.yml`) runs three checks on every pull request (a push 
 | Electron smoke test (Linux) | Ubuntu | `npm ci`, the Noto CJK fonts (the runner has no Chinese face), then `npm run test:smoke` on a virtual display (`xvfb-run`): builds the app and runs every spec in `e2e/`, split into eight shards that run at once (`Smoke shard N/8`); this check passes when all eight do |
 | Every commit is signed off (DCO) | Ubuntu | a `Signed-off-by:` line on each commit (`git commit -s`) |
 
-`main` must stay green. A pull request is merged only when all three pass and it is up to date with `main`. If `main` goes red, fixing it comes before new work.
+`main` must stay green. A pull request merges through GitHub's merge queue once all three pass: the queue builds it together with `main` and the pull requests ahead of it, runs the checks again, and merges only if they pass. Nobody brings a branch up to date by hand. If `main` goes red, fixing it comes before new work.
 
 Every night, and by hand from the Actions tab, the Electron smoke test (macOS) in `.github/workflows/nightly.yml` runs the same suite on macOS, with the specs only macOS has, such as the traffic lights in the title bar. A failing night is fixed before new work, like a red `main`.
 
 ## Before you open a pull request
 
-1. Merge the latest `main` into your branch.
+1. Merge `main` into your branch only to resolve a conflict or to pick up something you need; the merge queue tests your change on top of `main` anyway.
 2. Run what CI runs: `npm run typecheck`, `npm run lint`, `npm test`.
 3. Run `npm run test:smoke`: the whole suite, or at least every spec that touches what you changed. To find them, search `e2e/` for the test ids, labels and strings you changed or removed.
 4. When you change or remove UI, update or remove the tests that used it in the same pull request. A test still looking for something your change removed is broken by your change.
