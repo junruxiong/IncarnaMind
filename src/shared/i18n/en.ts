@@ -2064,6 +2064,8 @@ export const en = {
   "cost.cap.spentOf": "Spent this month: {spent} of {cap} on your keys.",
   "cost.cap.nothing": "Nothing spent on your keys this month.",
   "cost.cap.unpriced": "{tokens} tokens went to models with no known price, and aren't counted.",
+  "cost.cap.interrupted.one": "1 request was interrupted; its cost isn’t known.",
+  "cost.cap.interrupted": "{count} requests were interrupted; their cost isn’t known.",
   "cost.cap.amount": "Monthly cap",
   "cost.cap.currency": "Currency",
   "cost.provider.thisMonth": "This month: {spent}",

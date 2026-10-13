@@ -13,8 +13,10 @@
  *   provider that doesn't say, a stop, a failure halfway), at the prompt's
  *   estimate and the output that came, never above the reservation. One the
  *   provider never answered cost nothing, and its row is soft-deleted.
- *   Reservations left open by a crash settle at the reserved amount at the
- *   next start (`settleOpen`): nothing else is known of them.
+ *   Usage heard while a reply streams is kept on its open row. A reservation
+ *   a crash left open settles at that usage at the next start (`settleOpen`),
+ *   never at the reservation; with none heard, at nothing, marked
+ *   "interrupted" so the cost line can say its cost isn't known (#636).
  * - A request that offers the provider's own web search (#128) also
  *   reserves a search's fee and the input its pages may add, and settles at
  *   the fee for each search it made.
@@ -95,6 +97,7 @@ interface RequestRow {
   requests: number;
   amount: number | null;
   tokens: number | null;
+  interrupted: number;
 }
 
 /** What streamed of a reply that reported no usage, to settle it by: about a token per three bytes. */
@@ -175,7 +178,8 @@ export function createMeter(options: {
     db.all<RequestRow>(
       `SELECT provider_id, billing, currency, count(*) AS requests,
          sum(CASE status WHEN 'reserved' THEN reserved ELSE cost END) AS amount,
-         sum(coalesce(input_tokens, 0) + coalesce(output_tokens, 0)) AS tokens
+         sum(coalesce(input_tokens, 0) + coalesce(output_tokens, 0)) AS tokens,
+         sum(status = 'interrupted') AS interrupted
        FROM model_requests
        WHERE deleted_at IS NULL AND created_at >= ?
        GROUP BY provider_id, billing, currency
@@ -271,6 +275,35 @@ export function createMeter(options: {
     };
     /** The web searches the reply made, by their tool's name. */
     const searches: string[] = [];
+    /** What a usage report costs, with the searches made so far. */
+    const counted = (usage: Usage) =>
+      tokenUsageOf({
+        inputTokens: usage.inputTokens.total,
+        outputTokens: usage.outputTokens.total,
+        inputTokenDetails: {
+          cacheReadTokens: usage.inputTokens.cacheRead,
+          cacheWriteTokens: usage.inputTokens.cacheWrite,
+        },
+      });
+    /** Keeps usage heard before the reply ended on the open row, for a crash to settle by. */
+    const record = (usage: Usage) => {
+      if (!open || !reported(usage)) return;
+      const tokens = counted(usage);
+      db.run(
+        `UPDATE model_requests SET cost = ?, input_tokens = ?, cached_input_tokens = ?,
+           cache_write_tokens = ?, output_tokens = ?, updated_at = ?
+         WHERE id = ?`,
+        [
+          priced ? costOf(tokens, price, at, { cacheWrites }) + feesOf(searches) : null,
+          tokens.inputTokens ?? null,
+          tokens.cachedInputTokens ?? null,
+          tokens.cacheWriteTokens ?? null,
+          tokens.outputTokens ?? null,
+          now().toISOString(),
+          id,
+        ],
+      );
+    };
     /** Settles at what came back when nothing was reported: the prompt's estimate and the output's bytes. */
     const estimated = (outputBytes: number) => {
       const outputTokens = Math.ceil(outputBytes / 3);
@@ -290,20 +323,15 @@ export function createMeter(options: {
       heard(part: object) {
         const search = searchMade(offered, part);
         if (search) searches.push(search);
+        const usage = "usage" in part ? (part.usage as Usage | undefined) : undefined;
+        if (usage && !("finishReason" in part)) record(usage);
       },
       settle(usage: Usage, outputBytes: number) {
         if (!reported(usage)) return estimated(outputBytes);
-        const counted = tokenUsageOf({
-          inputTokens: usage.inputTokens.total,
-          outputTokens: usage.outputTokens.total,
-          inputTokenDetails: {
-            cacheReadTokens: usage.inputTokens.cacheRead,
-            cacheWriteTokens: usage.inputTokens.cacheWrite,
-          },
-        });
+        const tokens = counted(usage);
         close(
-          priced ? costOf(counted, price, at, { cacheWrites }) + feesOf(searches) : null,
-          counted,
+          priced ? costOf(tokens, price, at, { cacheWrites }) + feesOf(searches) : null,
+          tokens,
         );
       },
       /** It ended without a report: a failure after it began, a stop, or a provider that reports none. */
@@ -393,14 +421,22 @@ export function createMeter(options: {
       });
     },
 
-    /** Settles the reservations a crash left open, at their reserved amount. Returns how many. */
+    /**
+     * Settles the reservations a crash left open: at the usage heard before it, else at
+     * nothing, marked interrupted (what the provider billed isn't known, and no lookup is
+     * made). Never at the reservation. Returns how many.
+     */
     settleOpen(): number {
       const open = db.get<{ count: number }>(
         "SELECT count(*) AS count FROM model_requests WHERE status = 'reserved' AND deleted_at IS NULL",
       );
       if (!open?.count) return 0;
       db.run(
-        `UPDATE model_requests SET status = 'settled', cost = reserved, updated_at = ?
+        `UPDATE model_requests
+         SET status = CASE WHEN cost IS NOT NULL OR input_tokens IS NOT NULL OR output_tokens IS NOT NULL
+                           THEN 'settled' ELSE 'interrupted' END,
+             cost = CASE WHEN cost IS NULL AND currency IS NOT NULL THEN 0 ELSE cost END,
+             updated_at = ?
          WHERE status = 'reserved' AND deleted_at IS NULL`,
         [now().toISOString()],
       );
@@ -420,8 +456,10 @@ export function createMeter(options: {
           requests: 0,
           spent: [],
           unpricedTokens: 0,
+          interrupted: 0,
         };
         provider.requests += row.requests;
+        provider.interrupted += row.interrupted;
         if (row.billing === "per-token" && row.currency === null) {
           provider.unpricedTokens += row.tokens ?? 0;
         } else if (row.billing === "per-token" && row.currency && row.amount !== null) {
