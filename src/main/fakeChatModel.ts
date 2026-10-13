@@ -274,7 +274,7 @@ interface ShownPassage {
 
 function passagesIn(result: string): ShownPassage[] {
   const pattern =
-    /<passage id="([^"]+)" document="([^"]*)"(?: pages="(\d+)(?:-\d+)?")?(?: location="([^"]+)")?>\n([\s\S]*?)\n<\/passage>/g;
+    /<passage id="([^"]+)" document="([^"]*)"(?: date="[^"]*")?(?: pages="(\d+)(?:-\d+)?")?(?: location="([^"]+)")?>\n([\s\S]*?)\n<\/passage>/g;
   return [...result.matchAll(pattern)].map((match) => ({
     id: match[1] as string,
     document: match[2] as string,
