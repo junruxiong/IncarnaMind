@@ -37,3 +37,57 @@ export function chipOf(tasks: readonly Task[]): { running: number; needsYou: num
   const waiting = tasks.filter(needsYou).length;
   return running + waiting > 0 ? { running, needsYou: waiting } : null;
 }
+
+/** When the thread on screen began, and the Tasks it has shown running since. */
+export interface ThreadStart {
+  since: string;
+  /** Kept as the thread is drawn: a Task seen running stays when it finishes. */
+  seen: Set<string>;
+}
+
+/**
+ * The Tasks a conversation's thread shows for the Mind the assistant reads
+ * (D189): those still going, those it showed going, the one a click asked to
+ * show, and those started since the thread began; oldest first.
+ */
+export function threadTasks(
+  tasks: readonly Task[],
+  mindId: string | null,
+  thread: ThreadStart,
+  shown: string | null,
+): Task[] {
+  if (mindId === null) return [];
+  const shownTasks = tasks
+    .filter(
+      (task) =>
+        task.mindId === mindId &&
+        (task.finishedAt === null ||
+          thread.seen.has(task.id) ||
+          task.id === shown ||
+          task.startedAt >= thread.since),
+    )
+    .sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+  for (const task of shownTasks) if (task.finishedAt === null) thread.seen.add(task.id);
+  return shownTasks;
+}
+
+/**
+ * The thread in order: its messages as they are, each Task where it started
+ * among them, by time. A Task started before the first message comes first.
+ */
+export function interleave<M extends { createdAt: string }>(
+  messages: readonly M[],
+  tasks: readonly Task[],
+): ({ kind: "message"; message: M } | { kind: "task"; task: Task })[] {
+  const entries: ({ kind: "message"; message: M } | { kind: "task"; task: Task })[] = [];
+  let next = 0;
+  for (const message of messages) {
+    for (let task = tasks[next]; task && task.startedAt < message.createdAt; task = tasks[next]) {
+      entries.push({ kind: "task", task });
+      next++;
+    }
+    entries.push({ kind: "message", message });
+  }
+  for (const task of tasks.slice(next)) entries.push({ kind: "task", task });
+  return entries;
+}
