@@ -2323,6 +2323,10 @@ export const en = {
     "{model} runs on ollama.com, not on this computer. Choose a local model, or pick it in the model menu.",
   "error.provider.rerankLocalMode":
     "Local mode is on: search results aren't sent to a reranking service. Turn it off in Settings first.",
+  "error.provider.embeddingLocalMode":
+    "Local mode is on: Document search keeps everything on this computer. Turn it off in Settings to use a cloud embedding provider.",
+  "error.provider.embeddingsOff":
+    "Vector search needs embeddings, which are off: turn them on in Settings → Search.",
   "error.secrets.plainText":
     "No keyring is running, so API keys would be stored in plain text. Start GNOME Keyring or KWallet, or accept plain-text storage in Settings.",
   "error.secrets.unencrypted": "This system can't encrypt API keys, so they can't be saved.",

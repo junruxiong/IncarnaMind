@@ -2230,6 +2230,9 @@ export const zhCN = {
     "{model} 在 ollama.com 上运行，不在这台电脑上。选择一个本地模型，或到模型菜单中选择。",
   "error.provider.rerankLocalMode":
     "本地模式已开启：搜索结果不会发送给重排序服务。请先在设置中关闭本地模式。",
+  "error.provider.embeddingLocalMode":
+    "本地模式已开启：文档搜索的所有内容都留在这台电脑上。要使用云端嵌入模型，请先在设置中关闭本地模式。",
+  "error.provider.embeddingsOff": "向量搜索需要嵌入，而嵌入已关闭：请在“设置 → 搜索”中开启。",
   "error.secrets.plainText":
     "当前没有运行任何密钥环，API 密钥会以明文形式保存。请启动 GNOME Keyring 或 KWallet，或在设置中允许以明文保存。",
   "error.secrets.unencrypted": "此系统无法加密 API 密钥，因此无法保存密钥。",

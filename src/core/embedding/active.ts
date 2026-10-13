@@ -416,9 +416,7 @@ export function createActiveEmbedding(options: {
 
   function refuseCloudInLocalMode(service: ExternalService | null): void {
     if (service && localOnly()) {
-      throw new InvalidInputError(
-        "Local mode is on: Document search keeps everything on this computer. Turn it off in Settings to use a cloud embedding provider.",
-      );
+      throw new InvalidInputError({ key: "error.provider.embeddingLocalMode" });
     }
   }
 
