@@ -159,7 +159,7 @@ function ClientForm({
       onDone();
       await core.signInToConnector(connector.id);
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     } finally {
       setBusy(false);
     }

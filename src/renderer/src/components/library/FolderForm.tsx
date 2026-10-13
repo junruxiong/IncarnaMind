@@ -3,7 +3,7 @@ import type { LibraryGroup } from "../../../../core/api";
 import { libraryPresetKeys } from "../../../../shared/libraryPresets";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
-import { useT } from "../../i18n";
+import { translateNow, useT } from "../../i18n";
 import { useAppStore } from "../../store";
 import { ProblemMark } from "../ProblemLine";
 import { buttonStyle, errorTextClass, fieldLabelClass, inputClass } from "../ui";
@@ -20,7 +20,7 @@ function useLibraryAction() {
       await useAppStore.getState().refreshLibrary();
       return true;
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, translateNow));
       return false;
     } finally {
       setBusy(false);

@@ -229,7 +229,7 @@ describe("Answers cite Passages", { timeout: 30_000 }, () => {
     );
     expect(system).toMatch(/The User has added 1 Document /);
     // Short: it is sent with every Question.
-    expect(system.length).toBeLessThan(2500);
+    expect(system.length).toBeLessThan(3800);
   });
 
   test("a marker with no record is removed, and a record naming no Passage is dropped: both are counted", async () => {

@@ -57,7 +57,7 @@ export function ChatGptPlanSettings() {
     try {
       await task();
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     } finally {
       setBusy(null);
     }

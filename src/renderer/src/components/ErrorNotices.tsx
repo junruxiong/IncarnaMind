@@ -26,7 +26,12 @@ function Notice({ notice }: { notice: ErrorNoticeState }) {
   const t = useT();
   const dismiss = () => useNotices.getState().dismissError(notice.id);
   useDismissOnEscape(true, dismiss);
-  const line = t("error.action", { message: notice.reason ? t(notice.reason) : notice.message });
+  const said = notice.wording
+    ? t(notice.wording.key, notice.wording.values)
+    : notice.reason
+      ? t(notice.reason)
+      : notice.message;
+  const line = t("error.action", { message: said });
   return (
     <div
       role="alert"
