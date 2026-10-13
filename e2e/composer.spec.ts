@@ -174,8 +174,6 @@ test("typing in the composer and pressing Enter shows the Question in the assist
 
   await pointAndClick(window, window.getByTestId("plus-menu"));
   await pointAndClick(window, window.getByTestId("plus-new-mind"));
-  // The window's own composer, drawn until the Mind is, is replaced by the Mind's.
-  await expect(window.getByTestId("mind-editor")).toBeVisible();
   const title = window.getByTestId("mind-title");
   await title.fill("Reading notes: tides");
   await enterContent(window);
@@ -274,8 +272,6 @@ test("Stop keeps what streamed, and Regenerate writes the Answer again", async (
   await useLocalChatModel(window);
   await pointAndClick(window, window.getByTestId("plus-menu"));
   await pointAndClick(window, window.getByTestId("plus-new-mind"));
-  // The window's own composer, drawn until the Mind is, is replaced by the Mind's.
-  await expect(window.getByTestId("mind-editor")).toBeVisible();
   const composer = window.getByTestId("composer");
   await pointAndClick(window, composer.getByTestId("composer-input"));
   // A long Question keeps its Answer streaming while the pointer slides to Stop, even on a
@@ -319,8 +315,6 @@ test("sending empties the composer and shows the Question with its Answer on its
     await bridge(window).ollama(ollama.url);
     await pointAndClick(window, window.getByTestId("plus-menu"));
     await pointAndClick(window, window.getByTestId("plus-new-mind"));
-    // The window's own composer, drawn until the Mind is, is replaced by the Mind's.
-    await expect(window.getByTestId("mind-editor")).toBeVisible();
     const composer = window.getByTestId("composer");
     const input = composer.getByTestId("composer-input");
     const ask = composer.getByTestId("composer-ask");
@@ -408,8 +402,6 @@ test("Stop works before the Answer has started; a Question that can't be asked p
     await bridge(window).ollama(ollama.url);
     await pointAndClick(window, window.getByTestId("plus-menu"));
     await pointAndClick(window, window.getByTestId("plus-new-mind"));
-    // The window's own composer, drawn until the Mind is, is replaced by the Mind's.
-    await expect(window.getByTestId("mind-editor")).toBeVisible();
     const composer = window.getByTestId("composer");
     const input = composer.getByTestId("composer-input");
     const ask = composer.getByTestId("composer-ask");
@@ -486,8 +478,6 @@ test("⌘J focuses the composer from the note; Shift+Enter breaks the Question's
   await useLocalChatModel(window);
   await pointAndClick(window, window.getByTestId("plus-menu"));
   await pointAndClick(window, window.getByTestId("plus-new-mind"));
-  // The window's own composer, drawn until the Mind is, is replaced by the Mind's.
-  await expect(window.getByTestId("mind-editor")).toBeVisible();
   await enterContent(window);
   await window.keyboard.type("First thought");
   await window.keyboard.press("Enter");
@@ -583,8 +573,6 @@ test("the model chip chooses the model for one Mind, which remembers it after a 
     // A Mind that chooses another model, with the mouse.
     await pointAndClick(window, window.getByTestId("plus-menu"));
     await pointAndClick(window, window.getByTestId("plus-new-mind"));
-    // The window's own composer, drawn until the Mind is, is replaced by the Mind's.
-    await expect(window.getByTestId("mind-editor")).toBeVisible();
     await window.getByTestId("mind-title").fill("Other model");
     const chip = window.getByTestId("composer-model");
     await expect(chip).toHaveText("fake-model");
@@ -618,8 +606,6 @@ test("the model chip chooses the model for one Mind, which remembers it after a 
     // A new Mind takes the default; by keyboard, the menu opens and closes again.
     await pointAndClick(window, window.getByTestId("plus-menu"));
     await pointAndClick(window, window.getByTestId("plus-new-mind"));
-    // The window's own composer, drawn until the Mind is, is replaced by the Mind's.
-    await expect(window.getByTestId("mind-editor")).toBeVisible();
     await window.getByTestId("mind-title").fill("Default model");
     await expect(chip).toHaveText("fake-model");
     await chip.focus();
@@ -750,8 +736,6 @@ test("a follow-up asked straight away goes into the same conversation, without t
   await useLocalChatModel(window);
   await pointAndClick(window, window.getByTestId("plus-menu"));
   await pointAndClick(window, window.getByTestId("plus-new-mind"));
-  // The window's own composer, drawn until the Mind is, is replaced by the Mind's.
-  await expect(window.getByTestId("mind-editor")).toBeVisible();
   const input = window.getByTestId("composer-input");
   await pointAndClick(window, input);
   await window.keyboard.type("A first Question?");
@@ -787,8 +771,6 @@ test("in Chinese: the composer with a Search scope and a Skill chosen from its p
 
   await pointAndClick(window, window.getByTestId("plus-menu"));
   await pointAndClick(window, window.getByTestId("plus-new-mind"));
-  // The window's own composer, drawn until the Mind is, is replaced by the Mind's.
-  await expect(window.getByTestId("mind-editor")).toBeVisible();
   await window.getByTestId("mind-title").fill("潮汐笔记");
   await enterContent(window);
   await window.keyboard.type("大潮每月出现两次。");
@@ -859,8 +841,6 @@ test("after the consent dialog closes, the caret is back in the composer, and bo
   });
   await pointAndClick(window, window.getByTestId("plus-menu"));
   await pointAndClick(window, window.getByTestId("plus-new-mind"));
-  // The window's own composer, drawn until the Mind is, is replaced by the Mind's.
-  await expect(window.getByTestId("mind-editor")).toBeVisible();
   await enterContent(window);
   await window.keyboard.type("Alpha");
   await window.keyboard.press("Enter");

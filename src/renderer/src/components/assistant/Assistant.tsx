@@ -274,6 +274,10 @@ function AssistantMain({
   readMindId: string | null;
   onComposerSlot(element: HTMLElement | null): void;
 }) {
+  // One composer for every focus, so keys typed and the focus carry over as a Mind opens: it asks
+  // in the Mind in focus once that Mind's editor is open, and of every Document until then.
+  const seat = useComposer((state) => state.seat);
+  const mind = seat !== null && seat.mindId === readMindId ? seat : null;
   const thread = useRef<HTMLDivElement>(null);
   /** Where the conversation was scrolled to, put back when it shows again. */
   const scrolled = useRef(0);
@@ -293,7 +297,7 @@ function AssistantMain({
         <ConversationThread focusedMindId={readMindId} />
       </div>
       <div ref={onComposerSlot} data-testid="assistant-composer" className="assistant-composer">
-        {readMindId === null && <Composer mind={null} />}
+        <Composer mind={mind} />
       </div>
     </div>
   );
