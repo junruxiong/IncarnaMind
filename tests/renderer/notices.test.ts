@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, test } from "vitest";
+import { InvalidInputError } from "../../src/core/errors";
 import { dismissNewest, registerDismissable } from "../../src/renderer/src/escapeDismiss";
 import { type Clock, CONFIRMATION_SHOWN_MS, createNotices } from "../../src/renderer/src/notices";
+import { errorForWindow } from "../../src/shared/errorWording";
 
 /*
  * Notices by kind (#157): an error stays until the User dismisses it, a confirmation such as
@@ -59,6 +61,21 @@ describe("an error", () => {
     );
     const everything = JSON.stringify(notices.getState().errors);
     expect(everything).not.toContain("Error invoking remote method");
+  });
+
+  test("keeps the core's wording, for the interface language, and its English for Details", () => {
+    const error = new InvalidInputError({ key: "error.document.nameEmpty" });
+    notices
+      .getState()
+      .showError(
+        new Error(`Error invoking remote method 'core:renameDocument': ${errorForWindow(error)}`),
+      );
+    const [notice] = notices.getState().errors;
+    expect(notice?.wording).toEqual({ key: "error.document.nameEmpty" });
+    expect(notice?.message).toBe("A Document's name can't be empty.");
+    expect(notice?.detail).toBe(
+      "core:renameDocument\nInvalidInputError: A Document's name can't be empty.",
+    );
   });
 
   test("stays however long it is left, whether or not anything else happens", () => {
