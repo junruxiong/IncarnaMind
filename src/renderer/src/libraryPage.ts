@@ -8,6 +8,7 @@ import type { Language } from "../../core/language";
 import { displayName } from "../../shared/documentNames";
 import type { MessageKey, MessageParams } from "../../shared/i18n";
 import { type LibraryFacet, type LibraryStatus, libraryStatus } from "./libraryFilters";
+import { matchName, queryWords } from "./matcher";
 
 type Translate = (key: MessageKey, params?: MessageParams) => string;
 
@@ -58,11 +59,13 @@ export function sectionsOf(
   );
 }
 
-/** The words of a search, lowercased: each must be found. */
-export const searchWords = (search: string): string[] =>
-  search.toLocaleLowerCase().split(/\s+/).filter(Boolean);
+/** The words of a search, folded as names are (see ./matcher): each must be found. */
+export const searchWords = queryWords;
 
-/** Whether a Document's name, title or Tags hold every word. */
+/**
+ * Whether a Document's name, title or Tags hold every word, as ⌘K matches
+ * names: a Chinese name by its pinyin too, and a long word with one typo.
+ */
 export function matchesSearch(
   document: Document,
   words: readonly string[],
@@ -74,10 +77,8 @@ export function matchesSearch(
     document.name,
     document.title ?? "",
     ...document.tags.map((link) => tagNames.get(link.tagId) ?? ""),
-  ]
-    .join(" ")
-    .toLocaleLowerCase();
-  return words.every((word) => text.includes(word));
+  ].join(" ");
+  return matchName(words, text) !== null;
 }
 
 /** What can be wrong with a Document that the problem line announces, in the order it names them. */
