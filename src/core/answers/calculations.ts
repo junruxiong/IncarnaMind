@@ -18,7 +18,10 @@
  *   "in millions"), when the result depends on it, until the model gives that
  *   line as `unitQuote`: a scale is never guessed;
  * - what the evaluator refuses: a syntax error, units that don't combine,
- *   division by zero.
+ *   division by zero;
+ * - a formula that changes an amount's scale itself ("rev / 10000" for 万 to
+ *   亿): inputs are in base units with their page's scale applied, so the
+ *   figure would be 10,000 times too small (#577); `scale` shows it in 亿.
  * In a workbook, the formula uses the number a cell stores (#435), not the one
  * it shows rounded.
  */
@@ -37,7 +40,11 @@ import {
   type FormulaProblem,
   type FormulaResult,
   formulaText,
+  type ScaleChange,
   type ShowAs,
+  scaleChanges,
+  scaleWordOf,
+  scaleWords,
   showResult,
 } from "../../shared/formula";
 import {
@@ -52,6 +59,18 @@ import { detectLanguage } from "../documents/textLanguage";
 import type { Language } from "../language";
 import type { AnswerDocuments, Quoted, QuoteInput } from "./citations";
 import type { CiteOptions } from "./engine";
+
+/** Why a formula mustn't change an amount's scale, and how to show the figure in the scale meant. */
+function scaleChangeProblem(change: ScaleChange, language: Language): string {
+  const meant = (change.from?.exponent ?? 0) - change.exponent;
+  const word = meant > 0 ? scaleWordOf(meant, language) : null;
+  const applied = change.from?.word ? ` (${change.from.word} applied)` : "";
+  const instead = `write ${change.amount} in place of ${change.text}`;
+  const how = word
+    ? `to show it in ${word}, give scale: "${word}" and ${instead}`
+    : `${instead}, and give scale (${scaleWords(language).join(", ")}) for the scale it is shown in`;
+  return `${change.text} changes the scale itself, but inputs are already in base units${applied}; ${how}.`;
+}
 
 /** The most figures one call records, and inputs one figure has. */
 export const MAX_FIGURES_PER_CALL = 20;
@@ -640,6 +659,11 @@ export function createCalculationSession(options: CalculationSessionOptions) {
     const inputs = numbers(false);
     const result: FormulaResult | FormulaProblem = evaluateFormula(given.formula, inputs);
     if (!result.ok) return { problems: [`${lead}: ${result.message}`] };
+    const changes = scaleChanges(given.formula, inputs);
+    if (changes.length > 0)
+      return {
+        problems: changes.map((change) => `${lead}: ${scaleChangeProblem(change, language)}`),
+      };
     let show: FigureShowOptions = {
       language,
       as: SHOW_AS.find((each) => each === given.as) ?? null,

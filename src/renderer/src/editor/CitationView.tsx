@@ -148,13 +148,16 @@ export function CitationView({
     };
   }, [hold]);
 
-  /** Opens the cited place, or the Document; amber when opened anyway after "not found". */
-  const openCited = (withQuote: boolean) => {
+  /**
+   * Opens the cited place, or the Document; amber when opened anyway after "not found".
+   * From the card, a preview of the Document already open is kept.
+   */
+  const openCited = (withQuote: boolean, keep = false) => {
     const documentId = state.documentId ?? attributes.documentId;
     if (!documentId) return;
     openCitedPlace(
       { ...attributes, documentId },
-      { check: state.check, withQuote, number, label: where, from: place?.groupId },
+      { check: state.check, withQuote, number, label: where, from: place?.groupId, keep },
     );
   };
 
@@ -171,7 +174,7 @@ export function CitationView({
 
   /** What the card's Open does: the cited place, the quote washed where the check found it. */
   const openFromCard = () => {
-    openCited(quoteSaysSo(state.check));
+    openCited(quoteSaysSo(state.check), true);
     dismiss();
     // The focus stays in the Mind, unless the window shows one group and the Document came to the front.
     if (!groupsMerged()) editor.view.focus();
@@ -323,7 +326,7 @@ export function CitationView({
               attributes={attributes}
               badgeText={badgeText}
               onOpen={(withQuote) => {
-                openCited(withQuote);
+                openCited(withQuote, true);
                 dismiss();
                 if (!groupsMerged()) editor.view.focus();
               }}

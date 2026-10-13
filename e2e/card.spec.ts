@@ -13,6 +13,7 @@ import {
   placeAssistant,
   previewLink,
   removeDataFolder,
+  setLanguage,
   setWindowSize,
   showSourceLocations,
   widthOf,
@@ -109,6 +110,57 @@ test("the Mind sits in a card 8px from the sidebar and the window's edges, with 
     await window.keyboard.press("ControlOrMeta+w");
     await expect(groups).toHaveCount(1);
     await placeAssistant(window, { dock: "right" });
+  }
+  await app.close();
+});
+
+test("every pane header's contents sit on the band's centre line and their rules level, in English and Chinese", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await newMind(window, "Reading notes");
+  await newMind(window, "Interview plan");
+  await setWindowSize(app, window, 1440, 860);
+
+  const centreOf = async (locator: Locator) => {
+    const box = await boxOf(locator);
+    return box.y + box.height / 2;
+  };
+  const activeTab = window.locator('[role="tab"][aria-selected="true"]');
+  const otherTab = window.locator('[role="tab"][aria-selected="false"]').first();
+
+  for (const language of ["en", "zh-CN"] as const) {
+    await setLanguage(window, language);
+    // The assistant's header is at the window's top docked on either side.
+    for (const dock of ["right", "left"] as const) {
+      await placeAssistant(window, { dock });
+      const strip = await boxOf(window.getByTestId("tab-strip"));
+      const line = strip.y + strip.height / 2;
+
+      const contents = [
+        window.getByTestId("plus-menu"),
+        window.getByTestId("sidebar-toggle"),
+        activeTab.getByTestId("tab-title"),
+        activeTab.getByTestId("tab-close"),
+        otherTab.getByTestId("tab-title"),
+        window.getByTestId("new-tab"),
+        window.getByTestId("export-mind"),
+        window.getByTestId("assistant-title"),
+        ...(await window.getByTestId("assistant-header").getByRole("button").all()),
+      ];
+      for (const item of contents) {
+        expect(Math.abs((await centreOf(item)) - line), `${language} ${dock}`).toBeLessThanOrEqual(
+          1,
+        );
+      }
+
+      // The three rules end on one row: the band's bottom, y 44.
+      const bottom = async (testId: string) => {
+        const box = await boxOf(window.getByTestId(testId));
+        return box.y + box.height;
+      };
+      expect(await bottom("sidebar-header")).toBe(strip.y + strip.height);
+      expect(await bottom("assistant-header")).toBe(strip.y + strip.height);
+    }
   }
   await app.close();
 });

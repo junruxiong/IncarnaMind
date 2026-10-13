@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect } from "react";
 import type { DeletedItem } from "../../../core/api";
 import { daysLeft, whenDeleted } from "../deletedItems";
 import { useLanguage, useT } from "../i18n";
 import { deletedName, restoreItems, useDeleted, watchDeleted } from "../recentlyDeleted";
 import { useRequests } from "../requests";
+import { useSelectable, useSelectedOn, useSelection, useSelectionOrder } from "../selection";
 import { useAppStore } from "../store";
 import {
   ConversationLineIcon,
@@ -32,14 +33,6 @@ function KindIcon({ item }: { item: DeletedItem }) {
   return <Icon className={iconClass} />;
 }
 
-/** The ids from one to the other, both included, in the rows' order. */
-function rangeBetween(ids: readonly string[], from: string, to: string): string[] {
-  const start = ids.indexOf(from);
-  const end = ids.indexOf(to);
-  if (start === -1 || end === -1) return [to];
-  return ids.slice(Math.min(start, end), Math.max(start, end) + 1);
-}
-
 /**
  * Recently deleted (CONTEXT.md): a view of the Library tab. Each deleted Mind,
  * conversation, Document, Folder and Tag of the last 30 days, newest first,
@@ -51,8 +44,7 @@ export function RecentlyDeleted() {
   const language = useLanguage();
   const items = useDeleted((state) => state.items);
   const groups = useAppStore((state) => state.library?.groups);
-  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
-  const anchor = useRef<string | null>(null);
+  const held = useSelectedOn("library");
 
   useEffect(() => {
     const report = useAppStore.getState().reportError;
@@ -63,15 +55,14 @@ export function RecentlyDeleted() {
   // The selection keeps only what is still listed.
   useEffect(() => {
     if (!items) return;
-    setSelected((current) => {
-      const kept = [...current].filter((id) => items.some((item) => item.id === id));
-      return kept.length === current.size ? current : new Set(kept);
-    });
+    const listed = new Set(items.map((item) => item.id));
+    useSelection.getState().keepOnly((ref) => ref.kind !== "deleted" || listed.has(ref.id));
   }, [items]);
 
   const rows = items ?? [];
-  const ids = useMemo(() => rows.map((item) => item.id), [rows]);
-  const chosen = rows.filter((item) => selected.has(item.id));
+  useSelectionOrder("library", () => rows.map((item) => ({ kind: "deleted", id: item.id })));
+  const heldIds = new Set(held.map((ref) => ref.id));
+  const chosen = rows.filter((item) => heldIds.has(item.id));
   const now = new Date();
 
   const wasIn = (item: DeletedItem): string => {
@@ -83,21 +74,6 @@ export function RecentlyDeleted() {
       rows.find((each) => each.kind === "folder" && each.id === item.groupId);
     if (folder) return folder.name;
     return t(item.kind === "conversation" ? "deleted.wasIn.chats" : "deleted.wasIn.none");
-  };
-
-  const pick = (item: DeletedItem, how: { range: boolean; toggle: boolean }) => {
-    setSelected((current) => {
-      if (how.range && anchor.current !== null) {
-        return new Set(rangeBetween(ids, anchor.current, item.id));
-      }
-      if (how.toggle || (current.size === 1 && current.has(item.id))) {
-        const next = new Set(current);
-        if (!next.delete(item.id)) next.add(item.id);
-        return next;
-      }
-      return new Set([item.id]);
-    });
-    if (!how.range) anchor.current = item.id;
   };
 
   const deletePermanently = (these: readonly DeletedItem[]) =>
@@ -157,7 +133,7 @@ export function RecentlyDeleted() {
                   aria-label={t("deleted.selected", { count: chosen.length })}
                   data-testid="deleted-selection"
                   onKeyDown={(event) => {
-                    if (event.key === "Escape") setSelected(new Set());
+                    if (event.key === "Escape") useSelection.getState().clear("library");
                   }}
                   className="sticky top-0 z-10 mb-2 flex min-h-10 flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-frame px-2 py-1 text-[13px]"
                 >
@@ -170,7 +146,9 @@ export function RecentlyDeleted() {
                       if (box) box.indeterminate = chosen.length < rows.length;
                     }}
                     onChange={() =>
-                      setSelected(chosen.length === rows.length ? new Set() : new Set(ids))
+                      chosen.length === rows.length
+                        ? useSelection.getState().clear("library")
+                        : useSelection.getState().all("library")
                     }
                     className={boxClass}
                   />
@@ -204,7 +182,7 @@ export function RecentlyDeleted() {
                     type="button"
                     data-testid="deleted-clear"
                     className={`${buttonStyle("ghost", "sm")} ml-auto`}
-                    onClick={() => setSelected(new Set())}
+                    onClick={() => useSelection.getState().clear("library")}
                   >
                     {t("deleted.clear")}
                   </button>
@@ -222,14 +200,12 @@ export function RecentlyDeleted() {
                 </span>
                 <span />
               </div>
+              {/* biome-ignore lint/a11y/useSemanticElements: a list of rows laid out as columns, not a table. */}
               <ul
+                // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: the list is one grid whose rows select (aria-multiselectable).
+                role="grid"
+                aria-multiselectable="true"
                 aria-label={t("deleted.list")}
-                onKeyDown={(event) => {
-                  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a") {
-                    event.preventDefault();
-                    setSelected(new Set(ids));
-                  } else if (event.key === "Escape") setSelected(new Set());
-                }}
               >
                 {rows.map((item) => (
                   <DeletedRow
@@ -238,10 +214,7 @@ export function RecentlyDeleted() {
                     wasIn={wasIn(item)}
                     when={whenDeleted(item, now, language, t)}
                     left={daysLeft(item, now)}
-                    selected={selected.has(item.id)}
-                    selecting={selected.size > 0}
-                    selection={chosen}
-                    onPick={pick}
+                    selecting={chosen.length > 0}
                     onRestore={restore}
                     onDelete={deletePermanently}
                   />
@@ -260,10 +233,7 @@ function DeletedRow({
   wasIn,
   when,
   left,
-  selected,
   selecting,
-  selection,
-  onPick,
   onRestore,
   onDelete,
 }: {
@@ -271,10 +241,7 @@ function DeletedRow({
   wasIn: string;
   when: string;
   left: number;
-  selected: boolean;
   selecting: boolean;
-  selection: readonly DeletedItem[];
-  onPick(item: DeletedItem, how: { range: boolean; toggle: boolean }): void;
   onRestore(items: readonly DeletedItem[]): void;
   onDelete(items: readonly DeletedItem[]): void;
 }) {
@@ -282,9 +249,17 @@ function DeletedRow({
   const name = deletedName(item);
   const target = { kind: "deleted", id: item.id } as const;
   const objectMenu = useObjectMenu(target);
+  // A click on the row selects just it; there is nothing to open.
+  const select = useSelectable(target, "library", () => undefined);
+  const selected = select.selected;
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: the checkbox is the keyboard's way to select the row.
+    // biome-ignore lint/a11y/useSemanticElements: the row is laid out as columns, not as a table row.
+    // biome-ignore lint/a11y/useFocusableInteractive: the row's buttons and checkbox take the focus.
     <li
+      // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: a row of the grid, which says whether it is selected.
+      role="row"
+      {...select.rowProps}
       data-testid="deleted-item"
       data-kind={item.kind}
       data-deleted-id={item.id}
@@ -293,7 +268,7 @@ function DeletedRow({
       onClick={(event) => {
         if (event.target instanceof Element && event.target.closest("button, input, [role=menu]"))
           return;
-        onPick(item, { range: event.shiftKey, toggle: event.metaKey || event.ctrlKey });
+        select.onClick(event);
       }}
       className={`group/row deleted-columns relative border-b border-rule py-2.5 ${
         selected ? "bg-accent-wash" : ""
@@ -304,12 +279,11 @@ function DeletedRow({
         data-testid="deleted-select"
         aria-label={t("deleted.select", { name })}
         checked={selected}
-        onChange={(event) =>
-          onPick(item, {
-            range: (event.nativeEvent as MouseEvent).shiftKey,
-            toggle: true,
-          })
-        }
+        onChange={(event) => {
+          const { toggle, extendTo } = useSelection.getState();
+          if ((event.nativeEvent as MouseEvent).shiftKey) extendTo("library", target);
+          else toggle("library", target);
+        }}
         className={`${boxClass} absolute top-3.5 -left-[21px] ${
           selected || selecting
             ? ""
@@ -360,7 +334,6 @@ function DeletedRow({
         <ObjectMenu
           target={target}
           label={t("deleted.more", { name })}
-          selection={selection.map(({ id }) => ({ kind: "deleted", id }))}
           className={`${rowActionButtonClass} opacity-0 group-hover/row:opacity-100 group-has-[:focus-visible]/row:opacity-100 aria-expanded:opacity-100`}
         />
       </span>
