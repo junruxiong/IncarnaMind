@@ -10,6 +10,8 @@ import { NO_MIND, useComposer } from "./composer";
 
 export type WaitingQuestion = Omit<AskInConversationInput, "conversationId"> & {
   mindId: string | null;
+  /** The conversation it was typed in (null: a new chat), where it is asked once a model is set. */
+  conversationId: string | null;
 };
 
 export const useModelSetup = create<{ waiting: WaitingQuestion | null }>(() => ({

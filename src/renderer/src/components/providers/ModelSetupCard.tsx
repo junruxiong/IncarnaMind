@@ -3,7 +3,7 @@ import type { AgentClient, ChatProvider } from "../../../../core/api";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useLanguage, useT } from "../../i18n";
-import { giveUpWaiting } from "../../modelSetup";
+import { giveUpWaiting, useModelSetup } from "../../modelSetup";
 import { useAppStore } from "../../store";
 import { buttonStyle, hintClass } from "../ui";
 import { ChatGptMark } from "./ChatGptMark";
@@ -40,7 +40,12 @@ export function ModelSetupCard() {
   const [providers, setProviders] = useState<ChatProvider[]>([]);
   const ollama = useOllama(() => undefined);
   useEffect(() => {
-    core.listChatProviders().then(setProviders, () => undefined);
+    // Only to tell the form a key is already saved: the form works with none listed.
+    core
+      .listChatProviders()
+      .then(setProviders, (error: unknown) =>
+        console.error("The saved chat providers couldn't be listed for the setup card.", error),
+      );
   }, []);
   const open = (next: Exclude<View, null>) => setView(view === next ? null : next);
 
@@ -129,7 +134,7 @@ export function ModelSetupCard() {
           {view === "key" && <ProviderForm providers={providers} onSaved={() => undefined} />}
           {view === "local" && <LocalWay ollama={ollama} />}
           {view === "chatgpt" && <ChatGptWay />}
-          <ClaudeWay />
+          {!chinese && <ClaudeWay />}
         </div>
       </details>
 
@@ -214,29 +219,36 @@ function LocalWay({ ollama }: { ollama: OllamaState }) {
 function ClaudeWay() {
   const t = useT();
   const reportError = useAppStore((state) => state.reportError);
+  const showPage = useAppStore((state) => state.showSettingsPage);
   const [client, setClient] = useState<AgentClient | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
-  const folders = useAppStore((state) => state.library?.groups ?? []);
+  const [done, setDone] = useState<"copy" | "connected" | null>(null);
+  // Only the Folder of the Mind the Question was asked from is shared.
+  const folderId = useAppStore((state) => {
+    const mindId = useModelSetup.getState().waiting?.mindId;
+    return state.minds.find((mind) => mind.id === mindId)?.folderId ?? null;
+  });
   useEffect(() => {
     core.listAgentClients().then(
       (all) => setClient(all.find((each) => each.id === "claude-desktop") ?? null),
-      () => setClient(null),
+      (error: unknown) => {
+        console.error("The agent list couldn't be read for the setup card.", error);
+        setClient(null);
+      },
     );
   }, []);
   const connect = async () => {
+    if (!folderId) return;
     setBusy(true);
     setProblem(null);
     try {
       await core.setAgentsEnabled(true);
-      const { result } = await core.setUpAgent({
-        client: "claude-desktop",
-        folderIds: folders.map((folder) => folder.id),
-      });
-      if (result.kind === "copy")
+      const { result } = await core.setUpAgent({ client: "claude-desktop", folderIds: [folderId] });
+      if (result.kind === "copy") {
         await navigator.clipboard.writeText(result.text).catch(reportError);
-      setDone(true);
+        setDone("copy");
+      } else setDone("connected");
     } catch (error) {
       setProblem(errorMessage(error, t));
     } finally {
@@ -259,16 +271,33 @@ function ClaudeWay() {
             {t("setup.claude.download")} ↗
           </a>
         </>
-      ) : (
+      ) : done ? (
+        <p data-testid="setup-claude-done" role="status" className={hintClass}>
+          {t(done === "copy" ? "setup.claude.copied" : "setup.claude.connected")}
+        </p>
+      ) : folderId ? (
         <button
           type="button"
           data-testid="setup-claude-connect"
-          disabled={busy || done || folders.length === 0}
+          disabled={busy}
           onClick={() => void connect()}
           className={buttonStyle("secondary", "sm")}
         >
           {t("setup.claude.connect")}
         </button>
+      ) : (
+        <>
+          <span data-testid="setup-claude-nofolder" className={hintClass}>
+            {t("setup.claude.noFolder")}
+          </span>
+          <button
+            type="button"
+            onClick={() => showPage("agents")}
+            className={buttonStyle("secondary", "sm")}
+          >
+            {t("setup.claude.openAgents")}
+          </button>
+        </>
       )}
       {problem && (
         <p role="alert" className="text-[13px] leading-5 text-danger">

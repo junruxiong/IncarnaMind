@@ -1403,6 +1403,11 @@ export const en = {
   "setup.claude.missing":
     "Needs the Claude app for Mac or Windows; claude.ai in a browser can’t reach this computer.",
   "setup.claude.download": "Download Claude",
+  "setup.claude.copied": "Copied. Paste it into the Claude app, then ask your Documents there.",
+  "setup.claude.connected": "Connected. Open the Claude app and ask your Documents there.",
+  "setup.claude.noFolder":
+    "Claude reads one Folder. Put this Mind in a Folder first, or set it up in Settings.",
+  "setup.claude.openAgents": "Open Agents settings",
   "plans.title": "Already pay for a plan?",
   "plans.chatgpt.title": "ChatGPT Plus or Pro",
   "plans.chatgpt.line": "Sign in with your ChatGPT account. No key needed.",
