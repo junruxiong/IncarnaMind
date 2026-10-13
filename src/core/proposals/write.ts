@@ -113,6 +113,54 @@ interface Segment {
   /** Where those tokens start and end (`from`..`to` with the spaces left out). */
   start: number;
   end: number;
+  /**
+   * The kind of Block the model was shown it as (`blockMarker`): its own,
+   * when the selection starts at the Block's start; a plain paragraph's
+   * otherwise, as a part of a Block has no marker.
+   */
+  kind: BlockKind;
+}
+
+/**
+ * What kind of Block a paragraph of the selection is, as the model reads it
+ * and writes it back: a heading of a level ("heading:2"), a bullet, a
+ * numbered item, a quote, or a plain paragraph.
+ */
+type BlockKind = "paragraph" | "bullet" | "numbered" | "quote" | `heading:${number}`;
+
+/** A paragraph's or heading's kind of Block, from where it is. */
+function kindOf(element: Y.XmlElement): BlockKind {
+  if (element.nodeName === "heading") {
+    return `heading:${Math.min(6, Math.max(1, Number(element.getAttribute("level")) || 1))}`;
+  }
+  const parent = element.parent;
+  if (parent instanceof Y.XmlElement && parent.nodeName === "listItem") {
+    const list = parent.parent;
+    return list instanceof Y.XmlElement && list.nodeName === "orderedList" ? "numbered" : "bullet";
+  }
+  if (parent instanceof Y.XmlElement && parent.nodeName === "blockquote") return "quote";
+  return "paragraph";
+}
+
+/** How the model reads a paragraph's kind: a Markdown-like marker at its start; none for a plain one. */
+function blockMarker(kind: BlockKind): string {
+  if (kind.startsWith("heading:")) return `${"#".repeat(Number(kind.slice("heading:".length)))} `;
+  return kind === "bullet" ? "- " : kind === "numbered" ? "1. " : kind === "quote" ? "> " : "";
+}
+
+/** A marker at the start of one of the model's paragraphs: its kind, and how long the marker is. */
+function readBlockMarker(paragraph: string): { kind: BlockKind; length: number } | null {
+  const match = /^(?:(#{1,6})|[-*•]|\d+[.)]|(>))[ \t]+/.exec(paragraph);
+  if (!match) return null;
+  const [marker, hashes, quote] = match;
+  const kind: BlockKind = hashes
+    ? `heading:${hashes.length}`
+    : quote
+      ? "quote"
+      : /^\d/.test(marker)
+        ? "numbered"
+        : "bullet";
+  return { kind, length: marker.length };
 }
 
 /** A stretch of a Mind's text, read for Edit with AI. */
@@ -124,8 +172,14 @@ export interface Selection {
   footnotes: Y.XmlElement[];
   /** The selected text as the editor reads it: an inline node as U+FFFC, a line per paragraph. */
   plain: string;
-  /** The selected text as the model reads it: markers for Citations, paragraphs apart. */
+  /**
+   * The selected text as the model reads it: markers for Citations,
+   * paragraphs apart, each Block that isn't a plain paragraph with its kind's
+   * marker (`blockMarker`).
+   */
   text: string;
+  /** Some paragraph of `text` has a kind's marker: the model's paragraphs are read with theirs. */
+  marked: boolean;
   /** The whole paragraphs it is in, the same way. */
   context: string;
   /**
@@ -270,6 +324,7 @@ export function readSelection(blocks: Y.XmlFragment, from: TextPlace, to: TextPl
       .map((token) => token.text ?? token.shown ?? "")
       .join("")
       .trim();
+    const kind = start === 0 ? kindOf(element) : "paragraph";
     segments.push({
       element,
       from: start,
@@ -279,9 +334,10 @@ export function readSelection(blocks: Y.XmlFragment, from: TextPlace, to: TextPl
       tokens: kept,
       start: kept[0]?.from ?? start,
       end: kept.at(-1)?.to ?? start,
+      kind,
     });
     plain.push(tokens.map((token) => token.text ?? NODE_CHARACTER).join(""));
-    text.push(shownText);
+    text.push(shownText === "" ? "" : `${blockMarker(kind)}${shownText}`);
     context.push(blockText(element));
     characters += shownText.length;
   }
@@ -295,6 +351,7 @@ export function readSelection(blocks: Y.XmlFragment, from: TextPlace, to: TextPl
       footnotes,
       plain: plain.join("\n"),
       text: text.filter((each) => each !== "").join("\n\n"),
+      marked: segments.some((segment) => segment.shown && segment.kind !== "paragraph"),
       context: context.join("\n\n"),
       before: firstBlock ? nearWords(blockText(firstBlock, 0, from.offset), "before") : "",
       after: lastBlock ? nearWords(blockText(lastBlock, to.offset), "after") : "",
@@ -420,16 +477,28 @@ interface NewToken {
 const MARKER = /\[\^(\d+)\]|\[(\d+)\]|\$([^$\n]+)\$|\n/g;
 
 /**
+ * One of the new text's paragraphs: its tokens, and the kind of Block it is
+ * by its marker. Null kind: the model wrote no markers at all, though it was
+ * shown some, so the paragraph's kind is unknown and it may take any Block's.
+ */
+interface NewParagraph {
+  kind: BlockKind | null;
+  tokens: NewToken[];
+}
+
+/**
  * The new text's paragraphs as tokens. A marker "[n]" is Citation n of the
  * selection, with `fresh` attributes when its check came out differently
  * now, and "[^n]" is its footnote n; a marker for none it had is left out.
- * A formula the selection had is kept; another stays text.
+ * A formula the selection had is kept; another stays text. When the
+ * selection was shown with its Blocks' markers, each paragraph's marker is
+ * read off as its kind.
  */
 function newParagraphs(
   text: string,
   selection: Selection,
   fresh: ReadonlyMap<number, Attributes>,
-): NewToken[][] {
+): NewParagraph[] {
   const formulas = new Set(
     selection.segments.flatMap((segment) =>
       segment.tokens.flatMap((token) =>
@@ -453,41 +522,54 @@ function newParagraphs(
       node: { name: FOOTNOTE_NODE, attributes: source.getAttributes() as Attributes, source },
     };
   };
-  return text
-    .split(/\n[ \t]*\n+/)
+  const tokensOf = (paragraph: string): NewToken[] => {
+    const tokens: NewToken[] = [];
+    const words = (part: string) => {
+      for (const word of splitWords(part)) tokens.push({ key: keyOf.text(word), text: word });
+    };
+    let at = 0;
+    for (const match of paragraph.matchAll(MARKER)) {
+      words(paragraph.slice(at, match.index));
+      at = match.index + match[0].length;
+      const [, footnote, citation, formula] = match;
+      if (match[0] === "\n") {
+        tokens.push({ key: keyOf.break(), node: { name: BREAK, attributes: {} } });
+      } else if (footnote !== undefined || citation !== undefined) {
+        const n = Number(footnote ?? citation);
+        const node = footnote !== undefined ? footnoteNode(n) : citationNode(n);
+        if (node) tokens.push(node);
+        // Spaces left where an unknown marker was are one.
+        else if (/\s$/.test(paragraph.slice(0, match.index)) && /^\s/.test(paragraph.slice(at)))
+          at++;
+      } else if (formula !== undefined && formulas.has(formula)) {
+        tokens.push({
+          key: keyOf.math(formula),
+          node: { name: MATH, attributes: { latex: formula } },
+        });
+      } else {
+        words(match[0]);
+      }
+    }
+    words(paragraph.slice(at));
+    return tokens;
+  };
+  // A line that starts with a Block's mark starts a paragraph, even after a single line break.
+  const apart = selection.marked
+    ? /\n[ \t]*\n+|\n(?=(?:#{1,6}|[-*•]|\d+[.)]|>)[ \t])/
+    : /\n[ \t]*\n+/;
+  const paragraphs = text
+    .split(apart)
     .map((paragraph) => paragraph.trim())
     .filter((paragraph) => paragraph !== "")
-    .map((paragraph) => {
-      const tokens: NewToken[] = [];
-      const words = (part: string) => {
-        for (const word of splitWords(part)) tokens.push({ key: keyOf.text(word), text: word });
-      };
-      let at = 0;
-      for (const match of paragraph.matchAll(MARKER)) {
-        words(paragraph.slice(at, match.index));
-        at = match.index + match[0].length;
-        const [, footnote, citation, formula] = match;
-        if (match[0] === "\n") {
-          tokens.push({ key: keyOf.break(), node: { name: BREAK, attributes: {} } });
-        } else if (footnote !== undefined || citation !== undefined) {
-          const n = Number(footnote ?? citation);
-          const node = footnote !== undefined ? footnoteNode(n) : citationNode(n);
-          if (node) tokens.push(node);
-          // Spaces left where an unknown marker was are one.
-          else if (/\s$/.test(paragraph.slice(0, match.index)) && /^\s/.test(paragraph.slice(at)))
-            at++;
-        } else if (formula !== undefined && formulas.has(formula)) {
-          tokens.push({
-            key: keyOf.math(formula),
-            node: { name: MATH, attributes: { latex: formula } },
-          });
-        } else {
-          words(match[0]);
-        }
-      }
-      words(paragraph.slice(at));
-      return tokens;
+    .map((written) => {
+      const marker = selection.marked ? readBlockMarker(written) : null;
+      return { marker, paragraph: marker ? written.slice(marker.length) : written };
     });
+  const anyMarker = paragraphs.some(({ marker }) => marker !== null);
+  return paragraphs.map(({ marker, paragraph }) => ({
+    kind: marker?.kind ?? (selection.marked && !anyMarker ? null : "paragraph"),
+    tokens: tokensOf(paragraph),
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -665,16 +747,14 @@ function insertTokens(
   flush();
 }
 
-/** A new paragraph, as the Proposal's whole Block, holding these tokens. */
-function paragraphOf(
+/** A new paragraph or heading holding these tokens, with these attributes. */
+function textBlockOf(
   tokens: readonly NewToken[],
-  ref: ProposalRef,
   newId: () => string,
+  type = "paragraph",
+  attrs: Attributes = {},
 ): Y.XmlElement {
-  const paragraph = createElement({
-    type: "paragraph",
-    attrs: { [PROPOSAL_ATTRIBUTE]: { ...refOf(ref), kind: "insert" } satisfies ProposalAttribute },
-  });
+  const block = createElement({ type, attrs });
   const children: (Y.XmlElement | Y.XmlText)[] = [];
   let runs: Run[] = [];
   const flush = () => {
@@ -696,8 +776,19 @@ function paragraphOf(
     else runs.push({ insert: token.text ?? "", attributes: marks });
   }
   flush();
-  paragraph.insert(0, children);
-  return paragraph;
+  block.insert(0, children);
+  return block;
+}
+
+/** A new paragraph, as the Proposal's whole Block, holding these tokens. */
+function paragraphOf(
+  tokens: readonly NewToken[],
+  ref: ProposalRef,
+  newId: () => string,
+): Y.XmlElement {
+  return textBlockOf(tokens, newId, "paragraph", {
+    [PROPOSAL_ATTRIBUTE]: { ...refOf(ref), kind: "insert" } satisfies ProposalAttribute,
+  });
 }
 
 /** The element a removed paragraph takes with it: the list item, list or quote that holds only it. */
@@ -711,12 +802,121 @@ function removedWith(element: Y.XmlElement): Y.XmlElement {
   return current;
 }
 
+/**
+ * Blocks to remove, with each list or quote they empty removed whole in their
+ * place, so that accepting the Proposals leaves no empty list behind, which
+ * the editor would drop beyond Undo's reach. In the order they come.
+ */
+function wholeWrappers(removed: readonly Y.XmlElement[]): Y.XmlElement[] {
+  let units = [...removed];
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const unit of units) {
+      const parent = unit.parent;
+      if (!(parent instanceof Y.XmlElement) || !WRAPPERS.has(parent.nodeName)) continue;
+      const children = parent.toArray().filter((child) => child instanceof Y.XmlElement);
+      if (!children.every((child) => units.includes(child))) continue;
+      units = [...units.filter((each) => !children.includes(each)), parent];
+      changed = true;
+      break;
+    }
+  }
+  const order = (unit: Y.XmlElement) => removed.findIndex((each) => isInside(each, unit));
+  return units.sort((a, b) => order(a) - order(b));
+}
+
+/** Whether `element` is `container` or inside it. */
+function isInside(element: Y.XmlElement, container: Y.XmlElement): boolean {
+  for (let at: unknown = element; at instanceof Y.XmlElement; at = at.parent) {
+    if (at === container) return true;
+  }
+  return false;
+}
+
 /** Adds `elements` after `anchor`, in its parent. */
 function addAfter(anchor: Y.XmlElement, elements: Y.XmlElement[]): void {
+  addBeside(anchor, elements, "after");
+}
+
+/** Adds `elements` just after or just before `anchor`, in its parent. */
+function addBeside(anchor: Y.XmlElement, elements: Y.XmlElement[], side: "after" | "before"): void {
   const parent = anchor.parent;
   if (!(parent instanceof Y.XmlElement || parent instanceof Y.XmlFragment)) return;
   const index = parent.toArray().indexOf(anchor);
-  parent.insert(index + 1, elements);
+  parent.insert(side === "after" ? index + 1 : index, elements);
+}
+
+/** The list item, list or quote a Block sits in, as far out as they go. */
+function outermost(element: Y.XmlElement): Y.XmlElement {
+  let current = element;
+  while (current.parent instanceof Y.XmlElement && WRAPPERS.has(current.parent.nodeName)) {
+    current = current.parent;
+  }
+  return current;
+}
+
+/** Where a new Block goes: next to a paragraph or heading, which is of this kind. */
+interface Place {
+  element: Y.XmlElement;
+  kind: BlockKind;
+  side: "after" | "before";
+}
+
+/**
+ * Adds a new Block of `kind` holding `tokens`, as a Proposal of its own, at
+ * `place`: a list item into the list the place is in, when it is of that
+ * list's kind, or else in a list of its own; a plain paragraph beside a plain
+ * one; anything else beside the list or quote the place is in. Returns its
+ * paragraph or heading, where the next new Block goes.
+ */
+function addBlock(
+  place: Place,
+  kind: BlockKind,
+  tokens: readonly NewToken[],
+  ref: ProposalRef,
+  newId: () => string,
+): Y.XmlElement {
+  const proposal: ProposalAttribute = { ...refOf(ref), kind: "insert" };
+  const heading = kind.startsWith("heading:");
+  const text = textBlockOf(
+    tokens,
+    newId,
+    heading ? "heading" : "paragraph",
+    heading ? { level: Number(kind.slice("heading:".length)) } : {},
+  );
+  const listType = kind === "bullet" ? "bulletList" : kind === "numbered" ? "orderedList" : null;
+  const item = place.element.parent;
+  if (
+    listType &&
+    item instanceof Y.XmlElement &&
+    item.nodeName === "listItem" &&
+    item.parent instanceof Y.XmlElement &&
+    item.parent.nodeName === listType
+  ) {
+    const added = createElement({ type: "listItem" });
+    setProposal(added, proposal);
+    added.insert(0, [text]);
+    addBeside(item, [added], place.side);
+    return text;
+  }
+  if (kind === "paragraph" && place.kind === "paragraph") {
+    setProposal(text, proposal);
+    addBeside(place.element, [text], place.side);
+    return text;
+  }
+  let block = text;
+  if (listType) {
+    const added = createElement({ type: "listItem" });
+    added.insert(0, [text]);
+    block = createElement({ type: listType });
+    block.insert(0, [added]);
+  } else if (kind === "quote") {
+    block = createElement({ type: "blockquote" });
+    block.insert(0, [text]);
+  }
+  setProposal(block, proposal);
+  addBeside(outermost(place.element), [block], place.side);
+  return text;
 }
 
 /** The Citation a token is, by its marker (or by what it cites, in an Answer); null for any other token. */
@@ -826,14 +1026,118 @@ function proposalsOf(request: string, newId: () => string) {
   return { proposals, next };
 }
 
+/** The words of a run, for telling how alike two runs are: no spaces or punctuation, any case. */
+const wordsOf = (tokens: readonly { key: string; text?: string }[]) =>
+  tokens.flatMap((token) =>
+    token.text === undefined
+      ? [token.key.replace(/\*$/, "")]
+      : /[\p{L}\p{N}]/u.test(token.text)
+        ? [token.text.toLowerCase()]
+        : [],
+  );
+
+/** How alike two runs of words are, from 0 to 1: the share of their words they have in common. */
+function likeness(old: readonly OldToken[], next: readonly NewToken[]): number {
+  const a = wordsOf(old);
+  const b = wordsOf(next);
+  if (a.length + b.length === 0) return 1;
+  const counts = new Map<string, number>();
+  for (const word of a) counts.set(word, (counts.get(word) ?? 0) + 1);
+  let shared = 0;
+  for (const word of b) {
+    const left = counts.get(word) ?? 0;
+    if (left === 0) continue;
+    shared++;
+    counts.set(word, left - 1);
+  }
+  return (2 * shared) / (a.length + b.length);
+}
+
+/** How alike a paragraph of unknown kind must be to one of the selection's to pair with it. */
+const UNKNOWN_KIND_LIKENESS = 0.3;
+/** How alike a new paragraph of unknown kind must be to one of the selection's to take its kind. */
+const MOVED_LIKENESS = 0.5;
+
 /**
- * Writes the model's `text` for the selection as Proposals of `request`:
- * each paragraph against the selection's in order, word by word; a
- * paragraph more is a new Block after the last, and one fewer removes the
- * selection's (its whole Block, if all of it was selected). `fresh`:
- * Citations whose check came out differently now, by marker, with their new
- * attributes: one the text keeps is replaced by the checked copy. Call it
- * in a Yjs transaction.
+ * The kind of a new paragraph the model wrote no mark for: that of the
+ * selection's paragraph it is most like, when it is that paragraph moved;
+ * else a plain paragraph's.
+ */
+function kindByLikeness(segments: readonly Segment[], paragraph: NewParagraph): BlockKind {
+  let found: BlockKind = "paragraph";
+  let best = MOVED_LIKENESS;
+  for (const segment of segments) {
+    const alike = likeness(segment.tokens, paragraph.tokens);
+    if (alike >= best) {
+      best = alike;
+      found = segment.kind;
+    }
+  }
+  return found;
+}
+
+/**
+ * Which of the selection's paragraphs each of the model's is, in order: the
+ * pairing with the most pairs of the same kind of Block, the more alike the
+ * better, so that a paragraph the new text moves is added where it now goes
+ * rather than written into whatever paragraph held that place. One of
+ * unknown kind pairs with any. Null: a new paragraph, paired with none.
+ */
+function pairUp(
+  segments: readonly Segment[],
+  paragraphs: readonly NewParagraph[],
+): (number | null)[] {
+  const weight = (i: number, j: number): number | null => {
+    const segment = segments[i] as Segment;
+    const paragraph = paragraphs[j] as NewParagraph;
+    if (paragraph.kind !== null && paragraph.kind !== segment.kind) return null;
+    const alike = likeness(segment.tokens, paragraph.tokens);
+    // Of unknown kind, only a paragraph like it can take a Block's place.
+    if (paragraph.kind === null && alike < UNKNOWN_KIND_LIKENESS) return null;
+    return 1 + 2 * alike;
+  };
+  const rows = segments.length;
+  const columns = paragraphs.length;
+  // best[i][j]: the most the paragraphs from i and from j can pair for.
+  const best = Array.from({ length: rows + 1 }, () => new Array<number>(columns + 1).fill(0));
+  const at = (i: number, j: number) => best[i]?.[j] ?? 0;
+  for (let i = rows - 1; i >= 0; i--) {
+    for (let j = columns - 1; j >= 0; j--) {
+      const pair = weight(i, j);
+      (best[i] as number[])[j] = Math.max(
+        at(i + 1, j),
+        at(i, j + 1),
+        pair === null ? Number.NEGATIVE_INFINITY : pair + at(i + 1, j + 1),
+      );
+    }
+  }
+  // From the start, pairing whenever that is as good as anything else: a tie pairs in order.
+  const paired: (number | null)[] = new Array<number | null>(columns).fill(null);
+  const TIE = 1e-9;
+  let i = 0;
+  let j = 0;
+  while (i < rows && j < columns) {
+    const pair = weight(i, j);
+    if (pair !== null && pair + at(i + 1, j + 1) >= at(i, j) - TIE) {
+      paired[j] = i;
+      i++;
+      j++;
+    } else if (at(i + 1, j) >= at(i, j) - TIE) i++;
+    else j++;
+  }
+  return paired;
+}
+
+/**
+ * Writes the model's `text` for the selection as Proposals of `request`.
+ * Each of its paragraphs pairs with the selection's paragraph it is (see
+ * `pairUp`) and is compared with it word by word, so a heading stays a
+ * heading and a list item a list item; a paragraph that pairs with none is a
+ * new Block of its kind where it goes in the new text; and a paragraph of the
+ * selection with none goes (its whole Block, if all of it was selected).
+ * `fresh`: Citations whose check came out differently now, by marker, with
+ * their new attributes: one the text keeps is replaced by the checked copy.
+ * Call it in a Yjs transaction.
  */
 export function proposeRewrite(
   selection: Selection,
@@ -847,32 +1151,36 @@ export function proposeRewrite(
   const notes: CitationNotes = { removed: new Set(), added: new Set() };
   // Only the paragraphs the model was shown: an empty one between two isn't in its text.
   const segments = selection.segments.filter((segment) => segment.shown);
-  const pairs = Math.min(paragraphs.length, segments.length);
+  const first = segments[0];
+  if (!first) return { proposals, droppedCitations: 0 };
+  const paired = pairUp(segments, paragraphs);
 
-  for (let index = 0; index < pairs; index++) {
-    writeHunks(segments[index] as Segment, paragraphs[index] as NewToken[], next, newId, notes);
+  // In the new text's order, so each new Block goes after the one before it.
+  let place: Place = { element: first.element, kind: first.kind, side: "before" };
+  for (const [index, paragraph] of paragraphs.entries()) {
+    const segment = segments[paired[index] ?? -1];
+    if (segment) {
+      writeHunks(segment, paragraph.tokens, next, newId, notes);
+      place = { element: segment.element, kind: segment.kind, side: "after" };
+      continue;
+    }
+    const kind = paragraph.kind ?? kindByLikeness(segments, paragraph);
+    for (const token of paragraph.tokens) noteCitation(notes.added, token);
+    const added = addBlock(place, kind, paragraph.tokens, next(""), newId);
+    place = { element: added, kind, side: "after" };
   }
 
-  // Fewer paragraphs: the rest of the selection goes.
-  for (const segment of segments.slice(pairs)) {
-    if (segment.tokens.length === 0) continue;
-    if (segment.whole) {
-      const removed = removedWith(segment.element);
-      setProposal(removed, { ...refOf(next(targetText(removed))), kind: "delete" });
-    } else {
-      markRemoved(segment.element, segment.start, segment.end, next(targetOf(segment.tokens)));
-    }
+  // The selection's paragraphs the new text has none for go: a whole one with its Block.
+  const kept = new Set(paired);
+  const gone: Y.XmlElement[] = [];
+  for (const [index, segment] of segments.entries()) {
+    if (kept.has(index) || segment.tokens.length === 0) continue;
+    if (segment.whole) gone.push(removedWith(segment.element));
+    else markRemoved(segment.element, segment.start, segment.end, next(targetOf(segment.tokens)));
     for (const token of segment.tokens) noteCitation(notes.removed, token);
   }
-
-  // More paragraphs: each a new Block after the last one paired.
-  const anchor = segments[Math.max(0, pairs - 1)];
-  if (anchor && paragraphs.length > pairs) {
-    const added = paragraphs.slice(pairs).map((tokens) => {
-      for (const token of tokens) noteCitation(notes.added, token);
-      return paragraphOf(tokens, next(""), newId);
-    });
-    addAfter(anchor.element, added);
+  for (const removed of wholeWrappers(gone)) {
+    setProposal(removed, { ...refOf(next(targetText(removed))), kind: "delete" });
   }
 
   return { proposals, droppedCitations: droppedOf(notes) };
@@ -1061,6 +1369,7 @@ export function proposeBlocks(
           tokens,
           start: 0,
           end: sizeOf(element),
+          kind: kindOf(element),
         };
         return { kind: "words" as const, segment, tokens: jsonTokens(node.content ?? []) };
       }

@@ -157,6 +157,123 @@ test("Shorten comes back as changes with their own bars: one accepted by mouse, 
   await expect(note.getByTestId("citation")).toHaveAttribute("data-check", "found");
 });
 
+test("a whole Mind restructured with ⌘A and ⌘J keeps its headings, lists and Citation through Accept all, and Undo takes it back in one step (#703)", async () => {
+  await writeFile(join(sources, "Tides.pdf"), TIDES);
+  const { window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await addDocuments(window, [join(sources, "Tides.pdf")]);
+  const tides = await window.evaluate(async () => {
+    const documents = await (
+      globalThis as unknown as { incarnamind: CoreBridge }
+    ).incarnamind.listDocuments();
+    const found = documents.find((each) => each.name.startsWith("Tides"));
+    return found && { id: found.id, name: found.name, contentHash: found.contentHash };
+  });
+  if (!tides) throw new Error("Tides.pdf wasn't added.");
+  await newMind(window);
+  const editor = window.getByTestId("mind-editor");
+  await editor.click();
+
+  // Findings as bullets, one with a Citation; Decisions as numbered items; a closing line.
+  const paragraphOf = (...content: object[]) => ({ type: "paragraph", content });
+  const words = (text: string) => ({ type: "text", text });
+  const items = (...lines: object[][]) =>
+    lines.map((content) => ({ type: "listItem", content: [paragraphOf(...content)] }));
+  await editor.evaluate(
+    (dom, blocks) => {
+      const { editor: tiptap } = dom as unknown as { editor: Editor };
+      tiptap.commands.setContent(blocks);
+    },
+    [
+      { type: "heading", attrs: { level: 2 }, content: [words("Findings")] },
+      {
+        type: "bulletList",
+        content: items(
+          [
+            words("Spring tides happen at new moon. "),
+            {
+              type: "citation",
+              attrs: {
+                passageId: `passage-${tides.id}`,
+                documentId: tides.id,
+                documentName: tides.name,
+                contentHash: tides.contentHash,
+                pageFrom: 2,
+                pageTo: 2,
+                quote: "Spring tides happen at new moon and at full moon",
+                check: "found",
+              },
+            },
+          ],
+          [words("Neap tides are the weakest.")],
+        ),
+      },
+      { type: "heading", attrs: { level: 2 }, content: [words("Decisions")] },
+      {
+        type: "orderedList",
+        content: items(
+          [words("Publish the tide tables in March.")],
+          [words("Check the harbour gauges weekly.")],
+        ),
+      },
+      paragraphOf(words("Harbours publish the times of high water every year.")),
+    ],
+  );
+  const headings = editor.locator(":scope > h2");
+  const bullets = editor.locator(":scope > ul > li");
+  const numbered = editor.locator(":scope > ol > li");
+  await expect(headings).toHaveText(["Findings", "Decisions"]);
+
+  // The whole Mind, then what to change.
+  await editor.click();
+  await window.keyboard.press("ControlOrMeta+a");
+  await window.keyboard.press("ControlOrMeta+j");
+  await expect(window.getByTestId("composer-input")).toBeFocused();
+  await window.keyboard.type("Restructure so the decisions come first. Cut the last paragraph.");
+  await window.keyboard.press("Enter");
+  const bar = window.getByTestId("proposals-bar");
+  await expect(bar.getByTestId("proposals-count")).toContainText("changes from the assistant");
+  await screenshot(window, "edit-restructure-changes-en");
+
+  // Accept all: decisions first, each Block still the kind it was, the Citation still found.
+  await pointAndClick(window, bar.getByTestId("proposals-accept-all"));
+  await expect(bar).toHaveCount(0);
+  await expect(headings).toHaveText(["Decisions", "Findings"]);
+  await expect(numbered).toHaveText([
+    "Publish the tide tables in March.",
+    "Check the harbour gauges weekly.",
+  ]);
+  await expect(bullets).toHaveCount(2);
+  await expect(bullets.first()).toContainText("Spring tides happen at new moon.");
+  await expect(bullets.first().getByTestId("citation")).toHaveAttribute("data-check", "found");
+  await expect(bullets.last()).toHaveText("Neap tides are the weakest.");
+  await expect(editor.locator(":scope > p")).not.toContainText(["Harbours publish"]);
+  const order = await editor.evaluate((dom) =>
+    [...dom.children].map((child) => `${child.tagName}:${child.textContent?.slice(0, 12)}`),
+  );
+  // An empty paragraph the editor keeps at the end doesn't count.
+  expect(order.filter((each) => each !== "P:")).toEqual([
+    "H2:Decisions",
+    "OL:Publish the ",
+    "H2:Findings",
+    "UL:Spring tides",
+  ]);
+  await screenshot(window, "edit-restructure-accepted-en");
+
+  // One Undo brings every change back; Reject all leaves the Mind as it was.
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(bar.getByTestId("proposals-count")).toContainText("changes from the assistant");
+  await pointAndClick(window, bar.getByTestId("proposals-reject-all"));
+  await expect(bar).toHaveCount(0);
+  await expect(headings).toHaveText(["Findings", "Decisions"]);
+  await expect(bullets).toHaveCount(2);
+  await expect(bullets.first().getByTestId("citation")).toHaveAttribute("data-check", "found");
+  await expect(editor.locator(":scope > p").last()).toHaveText(
+    "Harbours publish the times of high water every year.",
+  );
+});
+
 test("⌘J with text selected says what to change in the composer, in Chinese; ⌘↵ accepts, Undo, and Reject all", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);

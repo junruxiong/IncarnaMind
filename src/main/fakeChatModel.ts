@@ -67,6 +67,9 @@
  * of" as "many", Translate… puts the text in capitals, Explain says what the
  * passage starts with, and an instruction to "replace X with Y" (把 X 换成 Y)
  * does so, or "drop the citations" (去掉引用) leaves their markers out.
+ * "Restructure" (重新组织) cuts a plain last paragraph and puts the last
+ * section, from its heading (a "#" paragraph) on, first, keeping each
+ * paragraph's mark, as a model restructuring a whole Mind does (#703).
  *
  * Make this a Skill (`fakeSkillDraft`): a draft whose "when to use it" and first
  * step quote the Mind's last Question, so a test sees that the Mind was read.
@@ -765,6 +768,17 @@ function fakeSkillDraft(options: GenerateOptions): string | null {
 
 const FILLER = /(?:\b(?:very|really|truly|quite|actually|basically)\s+|非常|真的|其实|十分)/giu;
 
+/** A passage restructured (see the top of this file): its last section first, a plain last paragraph cut. */
+function restructured(passage: string): string {
+  const paragraphs = passage.split(/\n\n+/);
+  if (paragraphs.length > 1 && !/^(?:#|- |\d+\. |> )/.test(paragraphs.at(-1) ?? "")) {
+    paragraphs.pop();
+  }
+  const last = paragraphs.findLastIndex((paragraph) => paragraph.startsWith("#"));
+  if (last <= 0) return paragraphs.join("\n\n");
+  return [...paragraphs.slice(last), ...paragraphs.slice(0, last)].join("\n\n");
+}
+
 /** The scripted Edit with AI (see the top of this file): the passage's new text, or an explanation. */
 function fakeEdit(options: GenerateOptions): string | null {
   const request = options.prompt
@@ -806,6 +820,7 @@ function fakeEdit(options: GenerateOptions): string | null {
       if (replace?.[1] && replace[2] !== undefined)
         return passage.split(replace[1]).join(replace[2]);
       if (/drop the citations|去掉引用/i.test(asked)) return passage.replace(/\s*\[\d+\]/g, "");
+      if (/restructure|重新组织/i.test(asked)) return restructured(passage);
       return `${passage} (edited)`;
     }
   }
