@@ -6194,11 +6194,12 @@ export interface CoreApi {
    */
   searchMinds(query: string): Promise<MindTextMatch[]>;
   /**
-   * ⌘K's "In your Documents": live Documents whose Passages hold every word of `query`, as
-   * `searchMinds` reads it, best match first, one Passage each, at most 20. Keyword search over
-   * the Passage index, whatever the embedding settings.
+   * ⌘K's "In your Documents" and the Library's search: live Documents whose Passages hold every
+   * word of `query`, as `searchMinds` reads it, best match first, one Passage each, at most
+   * `limit` (20 unless asked; InvalidInputError outside 1 to 200). Keyword search over the
+   * Passage index, whatever the embedding settings.
    */
-  searchDocumentText(query: string): Promise<DocumentTextMatch[]>;
+  searchDocumentText(query: string, options?: { limit?: number }): Promise<DocumentTextMatch[]>;
   /**
    * Gives a conversation the title the User typed (trimmed; empty goes back to its own
    * name) and returns it. A name the conversation gives itself never replaces it.

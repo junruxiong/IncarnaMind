@@ -3,11 +3,18 @@
  * problem line and its dates. Pure: no store, no bridge, so the tests import it.
  */
 
-import type { Document, DocumentGroupAssignment, LibraryGroup } from "../../core/api";
+import type {
+  Document,
+  DocumentGroupAssignment,
+  DocumentTextMatch,
+  LibraryGroup,
+  TextRange,
+} from "../../core/api";
 import type { Language } from "../../core/language";
 import { displayName } from "../../shared/documentNames";
 import type { MessageKey, MessageParams } from "../../shared/i18n";
 import { type LibraryFacet, type LibraryStatus, libraryStatus } from "./libraryFilters";
+import { joinRanges, matchName } from "./matcher";
 
 type Translate = (key: MessageKey, params?: MessageParams) => string;
 
@@ -82,26 +89,85 @@ export function sectionsOf(
   );
 }
 
-/** The words of a search, lowercased: each must be found. */
-export const searchWords = (search: string): string[] =>
-  search.toLocaleLowerCase().split(/\s+/).filter(Boolean);
+/** How a Document matches the Library's search. */
+export interface SearchMatch {
+  /** Where the words typed are in its shown name. */
+  ranges: TextRange[];
+  /** The Passage that holds them, if they were found inside it. */
+  text: DocumentTextMatch | null;
+}
 
-/** Whether a Document's name, title or Tags hold every word. */
-export function matchesSearch(
+/**
+ * Where the words typed (`queryWords`) are in a Document's shown name, when
+ * its name, file name, title or Tags hold every one of them, each word in any
+ * of these; null when one is in none.
+ */
+export function nameMatchOf(
   document: Document,
   words: readonly string[],
   tagNames: ReadonlyMap<string, string>,
-): boolean {
-  if (words.length === 0) return true;
-  const text = [
-    displayName(document),
+): TextRange[] | null {
+  const name = displayName(document);
+  const others = [
     document.name,
     document.title ?? "",
     ...document.tags.map((link) => tagNames.get(link.tagId) ?? ""),
-  ]
-    .join(" ")
-    .toLocaleLowerCase();
-  return words.every((word) => text.includes(word));
+  ];
+  const ranges: TextRange[] = [];
+  for (const word of words) {
+    const inName = matchName([word], name);
+    if (inName) ranges.push(...inName.ranges);
+    else if (!others.some((text) => matchName([word], text))) return null;
+  }
+  return joinRanges(ranges);
+}
+
+/**
+ * The line a Document was found by, started a few characters before the first
+ * words found (at a word's start where words are spaced), so a narrow row
+ * still shows them; "…" where it is cut.
+ */
+export function foundLine(
+  found: Pick<DocumentTextMatch, "excerpt" | "highlights">,
+  before = 16,
+): { text: string; ranges: TextRange[] } {
+  const first = found.highlights[0]?.start ?? 0;
+  if (first <= before + 1) return { text: found.excerpt, ranges: found.highlights };
+  let cut = first - before;
+  const space = found.excerpt.slice(cut, first).search(/\s/);
+  if (space !== -1) cut += space + 1;
+  const code = found.excerpt.charCodeAt(cut);
+  if (code >= 0xdc00 && code <= 0xdfff) cut -= 1;
+  const shift = 1 - cut;
+  return {
+    text: `…${found.excerpt.slice(cut)}`,
+    ranges: found.highlights.map((range) => ({
+      start: range.start + shift,
+      end: range.end + shift,
+    })),
+  };
+}
+
+/**
+ * The Documents a search finds, by id: those whose names or Tags hold the
+ * words, and those the core found them inside (`inside`, by Document id; null
+ * until it answers), with the Passage only when the shown name holds none of
+ * the words. Null when nothing is typed.
+ */
+export function searchMatches(
+  documents: readonly Document[],
+  words: readonly string[],
+  tagNames: ReadonlyMap<string, string>,
+  inside: ReadonlyMap<string, DocumentTextMatch> | null,
+): Map<string, SearchMatch> | null {
+  if (words.length === 0) return null;
+  const matches = new Map<string, SearchMatch>();
+  for (const document of documents) {
+    const ranges = nameMatchOf(document, words, tagNames);
+    const text = ranges?.length ? null : (inside?.get(document.id) ?? null);
+    if (ranges || text) matches.set(document.id, { ranges: ranges ?? [], text });
+  }
+  return matches;
 }
 
 /** What can be wrong with a Document that the problem line announces, in the order it names them. */
