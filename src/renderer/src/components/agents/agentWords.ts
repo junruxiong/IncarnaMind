@@ -110,6 +110,6 @@ export const timeWords = (at: string, language: Language) =>
 
 /** Where the step-by-step help for an agent is: the setup notes, in the interface language. */
 export const helpUrl = (client: AgentClientId | string, language: Language) =>
-  `https://github.com/junruxiong/IncarnaMind/blob/main/docs/${
+  `https://github.com/IncarnaMind/IncarnaMind/blob/main/docs/${
     language === "zh-CN" ? "agents.zh-CN.md" : "agents.md"
   }#${(AGENT_CLIENT_IDS as readonly string[]).includes(client) ? client : "other"}`;
