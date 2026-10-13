@@ -4,7 +4,8 @@ import { describe, expect, test, vi } from "vitest";
 import type { ClaimCheckAction, ClaimCheckAttributes, Core, Document } from "../../src/core";
 import { claimSpans } from "../../src/renderer/src/editor/claimChecks";
 import { claimCheckShown } from "../../src/shared/claimChecks";
-import { setUpWithDocuments, shownPassages } from "../helpers/citations";
+import { checkingModel as checkingModelOf, type Plan, sentenceOf } from "../helpers/checks";
+import { setUpWithDocuments } from "../helpers/citations";
 import { createTempDataFolder, manualClock, queryDatabase, startCore } from "../helpers/core";
 import { addAndProcess, sha256, waitForProcessing, writeSourceFile } from "../helpers/documents";
 import { connectToMind, type MindClient, typeInto } from "../helpers/mindClient";
@@ -31,18 +32,6 @@ const SUPPORTED = "Spring tides come at new and full moon.";
 const CONTRADICTED = "Harbours publish the times of high water every week.";
 const UNSUPPORTED = "Penguins nest on the cliffs above the harbour.";
 
-/** How the scripted model checks a sentence: what it cites, and how it replies. */
-interface Plan {
-  verdict?: "supported" | "unsupported" | "contradicted";
-  /** The line it cites, from the Passage that holds it. */
-  quote?: string;
-  says?: string;
-  /** Its reply instead, once it has searched. */
-  reply?: ScriptedReply;
-  /** What it says when asked to confirm a contradiction it found. */
-  judgement?: "conflict" | "same" | "neither";
-}
-
 const PLANS: Record<string, Plan> = {
   [SUPPORTED]: {
     verdict: "supported",
@@ -57,63 +46,12 @@ const PLANS: Record<string, Plan> = {
   [UNSUPPORTED]: { verdict: "unsupported" },
 };
 
-/** The sentence a check Run is asked about. */
-const sentenceOf = (call: ModelCall) => {
-  const text = call.options.prompt
-    .filter((message) => message.role === "user")
-    .map((message) =>
-      typeof message.content === "string"
-        ? message.content
-        : message.content.map((part) => ("text" in part ? part.text : "")).join(""),
-    )
-    .join("\n");
-  return /<sentence>\n([\s\S]*?)\n<\/sentence>/.exec(text)?.[1] ?? "";
-};
-
-/**
- * A model that checks as its plans say: it searches for the sentence, cites,
- * then gives its verdict. Asked once more for the deciding Passage, it gives
- * `evidence` (none by default).
- */
-function checkingModel(
+/** A model that checks as `PLANS` say, unless told otherwise. */
+const checkingModel = (
   plans: Record<string, Plan> = PLANS,
   calls: ModelCall[] = [],
-  evidence: string = JSON.stringify({ passage: null }),
-) {
-  return scriptedModel(
-    (call) => {
-      calls.push(call);
-      const plan = plans[sentenceOf(call)] ?? { verdict: "unsupported" };
-      const searches = call.results.filter((result) => result.tool === "search_documents");
-      if (searches.length === 0) {
-        return { calls: [{ tool: "search_documents", input: { query: sentenceOf(call) } }] };
-      }
-      if (plan.reply) return plan.reply;
-      const { quote } = plan;
-      if (quote && !call.results.some((result) => result.tool === "cite")) {
-        const passage =
-          shownPassages(searches.at(-1)?.text ?? "").find((each) => each.text.includes(quote)) ??
-          shownPassages(searches.at(-1)?.text ?? "")[0];
-        return {
-          calls: [
-            { tool: "cite", input: { citations: [{ marker: 1, passage: passage?.id, quote }] } },
-          ],
-        };
-      }
-      return {
-        text: `Verdict: ${plan.verdict}${plan.says ? `\n${plan.says} [^1]` : ""}`,
-      };
-    },
-    {
-      // Asked to confirm a contradiction, it judges as the sentence's plan says; else it gives `evidence`.
-      generate: (call) => {
-        if (!call.system.startsWith("Compare a sentence")) return { text: evidence };
-        const sentence = /<sentence>\n([\s\S]*?)\n<\/sentence>/.exec(call.prompt)?.[1] ?? "";
-        return { text: plans[sentence]?.judgement ?? "conflict" };
-      },
-    },
-  );
-}
+  evidence?: string,
+) => checkingModelOf(plans, calls, evidence);
 
 let blocks = 0;
 const paragraph = (...content: JSONContent[]): JSONContent & { attrs: { id: string } } => ({
