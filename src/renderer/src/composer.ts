@@ -1,3 +1,5 @@
+import type { Editor } from "@tiptap/core";
+import type * as Y from "yjs";
 import { create } from "zustand";
 import type { ChatModelChoice, SearchScope } from "../../core/api";
 import { hasSearchScope } from "../../shared/searchScope";
@@ -74,6 +76,11 @@ interface ComposerState {
   focusWanted: boolean;
   /** The model chosen in the composer with no Mind in focus; null: the default. Lost on quitting. */
   modelWithoutMind: ChatModelChoice | null;
+  /**
+   * The Mind the assistant reads, once its editor is open: what the one composer
+   * needs of it (see `Assistant`). Null before then and with no Mind in focus.
+   */
+  seat: { editor: Editor; doc: Y.Doc; mindId: string } | null;
   draft(mindId: string): Draft;
   update(mindId: string, change: Partial<Draft>): void;
   requestFocus(): void;
@@ -85,6 +92,7 @@ export const useComposer = create<ComposerState>()((set, get) => ({
   drafts: {},
   focusWanted: false,
   modelWithoutMind: null,
+  seat: null,
   draft: (mindId) => get().drafts[mindId] ?? EMPTY_DRAFT,
   update(mindId, change) {
     set((state) => ({

@@ -3,10 +3,8 @@ import {
   type ChangeEvent,
   type ClipboardEvent,
   type KeyboardEvent,
-  type Ref,
   useEffect,
   useId,
-  useImperativeHandle,
   useLayoutEffect,
   useRef,
   useState,
@@ -90,12 +88,6 @@ const TRIGGER = /(?:^|\s)([@/])([^\s@/]*)$/;
 const isCommand = (event: { metaKey: boolean; ctrlKey: boolean }) =>
   isMacOS() ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
 
-/** What the composer can be asked to do from outside: take the focus, with a Search scope. */
-export interface ComposerHandle {
-  /** Takes the focus; a `scope` (from the Library) becomes the Mind's Search scope. */
-  focus(scope?: SearchScope | null): void;
-}
-
 /**
  * The one input, at the foot of the assistant (DESIGN.md, Composer; #253),
  * for the Mind the assistant reads: "Ask, or say what to change…". ⌘J
@@ -117,11 +109,9 @@ export interface ComposerHandle {
  */
 export function Composer({
   mind,
-  ref,
 }: {
   /** The Mind in focus; null in the Library, on Home or in a Document: every Document is searched. */
   mind: { editor: Editor; doc: Y.Doc; mindId: string } | null;
-  ref?: Ref<ComposerHandle>;
 }) {
   const t = useT();
   const mindId = mind?.mindId ?? null;
@@ -132,6 +122,25 @@ export function Composer({
     (state) => state.minds.find((each) => each.id === mindId)?.folderId ?? null,
   );
   const scope = composerScope(draft, folderId);
+  // The Mind in focus changes under the one composer: what was typed with no Mind goes with the
+  // User into the Mind that opens, whose draft is empty; the rest of its state starts over.
+  const was = useRef(key);
+  useEffect(() => {
+    const before = was.current;
+    was.current = key;
+    if (before === key) return;
+    setPicking(null);
+    setExpanded(false);
+    setViewing(null);
+    if (before !== NO_MIND) return;
+    const state = useComposer.getState();
+    const loose = state.draft(NO_MIND);
+    const own = state.draft(key);
+    if (loose.text === "" && loose.pastes.length === 0) return;
+    if (own.text !== "" || own.pastes.length > 0) return;
+    state.update(key, { text: loose.text, pastes: loose.pastes });
+    state.update(NO_MIND, { text: "", pastes: [] });
+  }, [key]);
   const problem = useAnswers((state) => state.blocked[composerKey(mindId)]);
   const skills = useAppStore((state) => state.skills);
   const field = useRef<HTMLTextAreaElement>(null);
@@ -226,13 +235,6 @@ export function Composer({
     if (kind === "skill" && enabledSkills.length === 0) return null;
     return { kind, query, from, to: at };
   };
-
-  useImperativeHandle(ref, () => ({
-    focus(given) {
-      if (given) updateScope(given);
-      useComposer.getState().requestFocus();
-    },
-  }));
 
   // Asked for from elsewhere: ⌘J anywhere in the window but a dialog ("composer.focus"; with
   // text selected in the note, to say what to change in it), Edit with AI… and its siblings,

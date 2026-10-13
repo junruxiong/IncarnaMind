@@ -199,3 +199,20 @@ test("in Chinese: the composer stays in the Library, and the line says what it s
   await screenshot(window, "composer-stays-library-zh");
   await app.close();
 });
+
+test("clicking + New Mind and then the composer at once: what is typed, and the focus, carry over to the Mind's composer", async () => {
+  const { app, window } = await start(1440, 900);
+  await pointAndClick(window, window.getByTestId("plus-menu"));
+  await pointAndClick(window, window.getByTestId("plus-new-mind"));
+  // No wait for the Mind: the window's composer is there, and the Mind's takes over from it.
+  const text = "When do spring tides happen, and why do they come twice a month?";
+  await window.getByTestId("composer-input").click();
+  await window.keyboard.type(text);
+  await expect(window.getByTestId("mind-editor")).toBeVisible();
+  await expect(window.getByTestId("composer")).toHaveCount(1);
+  await expect(window.getByTestId("composer-input")).toHaveValue(text);
+  await expect(window.getByTestId("composer-input")).toBeFocused();
+  await window.keyboard.type(" Thanks.");
+  await expect(window.getByTestId("composer-input")).toHaveValue(`${text} Thanks.`);
+  await app.close();
+});
