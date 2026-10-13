@@ -89,21 +89,19 @@ export function LibrarySelectionBar({ shownIds }: { shownIds: readonly string[] 
   });
   if (items.length < 2) return null;
   const last = items.at(-1) as ObjectRef;
+  const moveBeside = (selector: string) => {
+    const anchor = bar.current?.querySelector<HTMLElement>(selector);
+    if (!anchor) return;
+    useDocumentMove.getState().show({
+      anchor,
+      documentIds: items.flatMap((ref) => (ref.kind === "document" ? [ref.id] : [])),
+    });
+  };
   const ctx: CommandContext = {
     selection: items,
     focus: last,
     surface: "library",
-    here: {
-      "document.moveTo": () => {
-        const anchor = bar.current?.querySelector<HTMLElement>('[data-command="document.moveTo"]');
-        if (anchor) {
-          useDocumentMove.getState().show({
-            anchor,
-            documentIds: items.flatMap((ref) => (ref.kind === "document" ? [ref.id] : [])),
-          });
-        }
-      },
-    },
+    here: { "document.moveTo": () => moveBeside('[data-command="document.moveTo"]') },
   };
   const offered = buildMenu("document", ctx).filter((entry): entry is MenuItem => entry !== "rule");
   const named = NAMED.flatMap(({ id, from }) => {
@@ -174,6 +172,10 @@ export function LibrarySelectionBar({ shownIds }: { shownIds: readonly string[] 
       <ObjectMenu
         target={last}
         selection={items}
+        here={{
+          // Once the menu has closed and given the focus back, so the picker opens beside ⋯.
+          "document.moveTo": () => requestAnimationFrame(() => moveBeside("[data-object-menu]")),
+        }}
         label={t("library.selected.more", { count: items.length })}
       />
       <span className="flex-1" />

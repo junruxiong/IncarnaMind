@@ -488,7 +488,13 @@ test("the selection's bar holds at 900px and at 1,100px beside the viewer, in En
       const menu = window.getByTestId("document-file-actions").filter({ visible: true });
       await expect(menu.getByTestId("document.ask")).toBeVisible();
       await expect(menu.getByTestId("document.delete")).toBeVisible();
+      // Move to… among them, its picker beside ⋯ when the bar's own button has folded away.
+      await pointAndClick(window, menu.getByTestId("document.moveTo"));
+      const picker = window.getByTestId("move-to-picker");
+      await expect(picker.getByTestId("move-to-search")).toBeFocused();
+      await expect(picker).toBeInViewport();
       await window.keyboard.press("Escape");
+      await expect(picker).toBeHidden();
     };
     const finance = section(library, "Finance");
     const choose = async () => {
@@ -536,6 +542,15 @@ test("a Folder opened from the sidebar brings its section into view, open, with 
     await pointAndClick(window, target.getByTestId("library-section-toggle"));
     await expect(rowsOf(target)).toHaveCount(0);
     await library.evaluate((element) => element.querySelector(":scope > div")?.scrollTo(0, 0));
+    // A Tag filter from the sidebar that none of its Documents has gives way too.
+    await pointAndClick(window, window.getByTestId("tag-filter-menu"));
+    await pointAndClick(
+      window,
+      window.getByTestId("tag-filters").getByTestId("tag-filter").filter({ hasText: "Slides" }),
+    );
+    await window.keyboard.press("Escape");
+    await expect(window.getByTestId("tag-filter-active")).toContainText("Slides");
+    await expect(target).toHaveCount(0);
 
     const folder = sidebarFolder(window, last.name);
     await pointAt(window, folder.getByTestId("folder-row"));
@@ -546,6 +561,7 @@ test("a Folder opened from the sidebar brings its section into view, open, with 
     await expect(rowsOf(target)).toHaveCount(last.documents.length);
     // The page still shows every Folder.
     await expect(sections(library)).toHaveCount(FOLDERS.length + 1);
+    await expect(window.getByTestId("tag-filter-active")).toHaveCount(0);
   } finally {
     await app.close();
   }
