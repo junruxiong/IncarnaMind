@@ -30,9 +30,15 @@ interface ChecksState {
   running: Readonly<Record<string, { requestId: string; action: ClaimCheckAction }>>;
   /** By Mind: why the last request gave no marks. */
   problems: Readonly<Record<string, CheckProblem>>;
+  /** By Mind: its last verdicts came from a model too small to judge reliably (#680). */
+  smallModel: Readonly<Record<string, true>>;
 }
 
-export const useChecks = create<ChecksState>()(() => ({ running: {}, problems: {} }));
+export const useChecks = create<ChecksState>()(() => ({
+  running: {},
+  problems: {},
+  smallModel: {},
+}));
 
 function setFor<K extends keyof ChecksState>(
   key: K,
@@ -95,6 +101,7 @@ export async function checkSentences(
     setFor("running", mindId, null);
   }
   if (result.kind !== "checked" && result.kind !== "cancelled") setFor("problems", mindId, result);
+  if (result.kind === "checked") setFor("smallModel", mindId, result.smallModel ? true : null);
 }
 
 /** Stops the Mind's check: the sentences not checked yet say "stopped". */

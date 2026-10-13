@@ -10,6 +10,7 @@ import { useMindTools } from "../mindTools";
 import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
 import { findTab } from "../tabs";
+import { verifyDocument } from "../verify";
 import { useWordImport } from "../wordImport";
 import { assistantCommands } from "./assistant";
 import { bibliographyCommands } from "./bibliography";
@@ -91,6 +92,15 @@ const appCommands: readonly Command[] = [
     group: "main",
     reversible: true,
     run: () => useWordImport.getState().pick(),
+  },
+  {
+    id: "verify.document",
+    label: "verify.command",
+    keywords: ["verify.command.keywords"],
+    group: "main",
+    // It adds the PDF and makes a Mind of it, each deleted as any other is.
+    reversible: true,
+    run: () => verifyDocument(),
   },
   ...editCommands,
   ...selectionCommands,

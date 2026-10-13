@@ -24,12 +24,18 @@ import {
   type Image,
   type Inline,
   type Marks,
+  type Pendings,
   type TableCell,
   tableLayout,
 } from "../mindText";
+import { changeKey } from "./citations";
 import type { ExportLabels } from "./labels";
 import { latexToOmml, MATH_NAMESPACE } from "./math";
 import {
+  COMMENTS_CONTENT_TYPE,
+  COMMENTS_RELATIONSHIP,
+  type CommentStyles,
+  commentsPart,
   escapeXml,
   type FootnoteStyles,
   footnote,
@@ -42,6 +48,14 @@ import {
   WordIds,
   XML_DECLARATION,
 } from "./wordml";
+import {
+  type Authorship,
+  passagesOf,
+  Review,
+  type ReviewChoices,
+  trackBlocks,
+  trackInline,
+} from "./wordReview";
 
 export interface DocxOptions {
   /** The Mind's title, as the document's title. Empty: none. */
@@ -52,6 +66,8 @@ export interface DocxOptions {
   paper: "letter" | "a4";
   /** When the document was made, ISO 8601. */
   created: string;
+  /** What the file says for review (#107); none: Blocks read for review are written as they read. */
+  review?: ReviewChoices;
 }
 
 /** The prefixes the writer writes, and their namespaces. */
@@ -107,7 +123,11 @@ const EMU_PER_PIXEL = 9525;
 export function renderDocx(blocks: readonly Block[], options: DocxOptions): Uint8Array {
   const paper = PAPER[options.paper];
   const target = new NewDocxTarget();
-  const writer = new DocxWriter(options.labels, paper.width - 2 * MARGIN, target);
+  const review = options.review
+    ? new Review(options.review, target.ids, options.labels, () => NEW_DOCUMENT_STYLES.comment)
+    : null;
+  review?.mark(passagesOf(piecesOf(blocks)));
+  const writer = new DocxWriter(options.labels, paper.width - 2 * MARGIN, target, review);
   const title = options.title ? paragraph({ style: "Title" }, run(options.title)) : "";
   const body = writer.body(blocks);
 
@@ -117,17 +137,21 @@ export function renderDocx(blocks: readonly Block[], options: DocxOptions): Uint
     `<w:sectPr><w:pgSz w:w="${paper.width}" w:h="${paper.height}"/><w:pgMar w:top="${MARGIN}" w:right="${MARGIN}" w:bottom="${MARGIN}" w:left="${MARGIN}" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>` +
     "</w:body></w:document>";
 
+  const comments = review?.comments ?? [];
   const relationships = [
     { id: "rIdStyles", type: RELATIONSHIP.styles, target: "styles.xml" },
     { id: "rIdSettings", type: RELATIONSHIP.settings, target: "settings.xml" },
     { id: "rIdNumbering", type: RELATIONSHIP.numbering, target: "numbering.xml" },
     { id: "rIdFootnotes", type: RELATIONSHIP.footnotes, target: "footnotes.xml" },
+    ...(comments.length > 0
+      ? [{ id: "rIdComments", type: COMMENTS_RELATIONSHIP, target: "comments.xml" }]
+      : []),
     ...target.relationships,
   ];
 
   return writeZip(
     [
-      { name: "[Content_Types].xml", data: contentTypes() },
+      { name: "[Content_Types].xml", data: contentTypes(comments.length > 0) },
       {
         name: "_rels/.rels",
         data: relationshipsXml([
@@ -138,10 +162,11 @@ export function renderDocx(blocks: readonly Block[], options: DocxOptions): Uint
       { name: "docProps/core.xml", data: coreProperties(options) },
       { name: "word/document.xml", data: document },
       { name: "word/_rels/document.xml.rels", data: relationshipsXml(relationships) },
-      { name: "word/styles.xml", data: styles(options.language) },
+      { name: "word/styles.xml", data: styles(options.language, comments.length > 0) },
       { name: "word/settings.xml", data: SETTINGS },
       { name: "word/numbering.xml", data: numbering(target.lists) },
       { name: "word/footnotes.xml", data: footnotesPart(writer.footnotes) },
+      ...(comments.length > 0 ? [{ name: "word/comments.xml", data: commentsPart(comments) }] : []),
       // Links in footnotes are the footnotes part's own relationships.
       ...(target.noteRelationships.length > 0
         ? [
@@ -181,6 +206,7 @@ export interface DocxStyles {
   hyperlink: string;
   tableGrid: string;
   footnote: FootnoteStyles;
+  comment: CommentStyles;
 }
 
 export const NEW_DOCUMENT_STYLES: DocxStyles = {
@@ -195,6 +221,7 @@ export const NEW_DOCUMENT_STYLES: DocxStyles = {
   hyperlink: "Hyperlink",
   tableGrid: "TableGrid",
   footnote: { text: "FootnoteText", reference: "FootnoteReference" },
+  comment: { text: "CommentText", reference: "CommentReference" },
 };
 
 /** A picture to add to the package. */
@@ -301,8 +328,22 @@ export class DocxWriter {
     private readonly labels: ExportLabels,
     private readonly textWidth: number,
     private readonly target: DocxTarget,
+    /** Changes still waiting, as tracked changes, and comments (#107); none: neither. */
+    private readonly review: Review | null = null,
   ) {
     this.styles = target.styles;
+  }
+
+  /** XML written for content that changes still waiting add or remove: their tracked changes. */
+  private tracked(xml: string, change: Pendings, blocks: boolean): string {
+    const { review } = this;
+    if (!review) return xml;
+    const track = blocks ? trackBlocks : trackInline;
+    let out = xml;
+    if (change.deleted) out = track(out, review.pending("delete", change.deleted), this.target.ids);
+    if (change.inserted)
+      out = track(out, review.pending("insert", change.inserted), this.target.ids);
+    return out;
   }
 
   body(blocks: readonly Block[]): string {
@@ -338,7 +379,7 @@ export class DocxWriter {
   private blocks(blocks: readonly Block[], context: Context): string {
     let xml = "";
     for (const block of blocks) {
-      const next = this.block(block, context);
+      const next = this.tracked(this.block(block, context), block, true);
       // Two tables in a row would merge into one.
       if (xml.endsWith("</w:tbl>") && next.startsWith("<w:tbl>")) xml += "<w:p/>";
       xml += next;
@@ -508,17 +549,21 @@ export class DocxWriter {
     let xml = "";
     for (const item of block.items) {
       const [first, ...rest] = item;
-      if (first?.kind === "paragraph") xml += numbered(this.inline(first.content, context));
+      if (first?.kind === "paragraph")
+        xml += this.tracked(numbered(this.inline(first.content, context)), first, true);
       else xml += numbered("");
       for (const child of first?.kind === "paragraph" ? rest : item) {
-        xml +=
+        xml += this.tracked(
           child.kind === "list"
             ? this.list(child, { ...context, listDepth: context.listDepth + 1 })
             : this.block(child, {
                 ...context,
                 indent: textIndent,
                 style: this.styles.listParagraph,
-              });
+              }),
+          child,
+          true,
+        );
       }
     }
     return xml;
@@ -576,18 +621,55 @@ export class DocxWriter {
     return `${xml}</w:tbl>`;
   }
 
+  /** Inline content, each stretch that changes still waiting do the same to as its tracked change. */
   private inline(content: readonly Inline[], context: Context): string {
     let xml = "";
-    for (let index = 0; index < content.length; index++) {
+    for (let from = 0; from < content.length; ) {
+      const key = changeKey(content[from]);
+      let to = from + 1;
+      while (to < content.length && changeKey(content[to]) === key) to++;
+      xml += this.tracked(
+        this.inlineRange(content, from, to, context),
+        content[from] as Inline,
+        false,
+      );
+      from = to;
+    }
+    return xml;
+  }
+
+  /** A run of text, with IncarnaMind's comment on AI text starting before it or ending after it. */
+  private text(
+    item: Extract<Inline, { kind: "text" }>,
+    format: RunFormat,
+    context: Context,
+  ): string {
+    const xml = run(item.text, format);
+    if (!this.review || context.note) return xml;
+    return this.review.before(item) + xml + this.review.after(item);
+  }
+
+  private inlineRange(
+    content: readonly Inline[],
+    from: number,
+    to: number,
+    context: Context,
+  ): string {
+    let xml = "";
+    for (let index = from; index < to; index++) {
       const item = content[index] as Inline;
       if (item.kind === "text" && item.marks.link && isWebLink(item.marks.link)) {
         // Consecutive text with the same link is one hyperlink.
         const href = item.marks.link;
         let runs = "";
-        for (; index < content.length; index++) {
+        for (; index < to; index++) {
           const next = content[index] as Inline;
           if (next.kind !== "text" || next.marks.link !== href) break;
-          runs += run(next.text, formatOf(next.marks, context, this.styles, this.styles.hyperlink));
+          runs += this.text(
+            next,
+            formatOf(next.marks, context, this.styles, this.styles.hyperlink),
+            context,
+          );
         }
         index--;
         const id = this.target.link(href, context.note === true);
@@ -596,7 +678,7 @@ export class DocxWriter {
       }
       switch (item.kind) {
         case "text":
-          xml += run(item.text, formatOf(item.marks, context, this.styles));
+          xml += this.text(item, formatOf(item.marks, context, this.styles), context);
           break;
         case "math":
           xml += latexToOmml(item.latex, false) ?? run(`$${item.latex}$`, { bold: context.bold });
@@ -610,7 +692,10 @@ export class DocxWriter {
             const before = content[index - 1];
             const apart = before?.kind === "text" && /\S$/.test(before.text);
             xml += this.source(item.footnote, apart ? " " : "");
-          } else xml += this.footnote(item.footnote);
+          } else {
+            const reference = this.footnote(item.footnote);
+            xml += this.review ? this.review.failed(reference, [item.footnote]) : reference;
+          }
           break;
         case "footnote":
           if (!context.note) xml += this.userFootnote(item.content);
@@ -619,9 +704,12 @@ export class DocxWriter {
           // A picture's relationship belongs to the document part, not to a footnote.
           xml += context.note ? run(item.image.alt) : this.image(item.image, context);
           break;
-        case "cite":
-          xml += this.cite(item, context);
+        case "cite": {
+          const cited = this.cite(item, context);
+          xml +=
+            this.review && !context.note ? this.review.failed(cited, item.failed ?? []) : cited;
           break;
+        }
       }
     }
     return xml;
@@ -687,6 +775,40 @@ export class DocxWriter {
 }
 
 const isWebLink = (href: string) => /^(https?:|mailto:)/i.test(href);
+
+/**
+ * The pieces of text in Blocks, in the order the writer writes them, for
+ * finding AI text's passages (`passagesOf`): text is the AI's or the User's;
+ * what a change still waiting adds, a Citation, a chart's values and the
+ * Bibliography are neither.
+ */
+export function* piecesOf(
+  blocks: readonly Block[],
+): Generator<{ key: object; authorship: Authorship }> {
+  for (const block of blocks) {
+    if (block.inserted) continue;
+    switch (block.kind) {
+      case "paragraph":
+      case "heading":
+      case "question":
+        for (const inline of block.content) {
+          if (inline.kind !== "text" || inline.inserted) continue;
+          const authorship = inline.ai ? "ai" : inline.text.trim() === "" ? "neither" : "own";
+          yield { key: inline, authorship };
+        }
+        break;
+      case "list":
+        for (const item of block.items) yield* piecesOf(item);
+        break;
+      case "quote":
+        yield* piecesOf(block.content);
+        break;
+      case "table":
+        for (const row of block.rows) for (const cell of row) yield* piecesOf(cell.content);
+        break;
+    }
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Paragraphs and runs
@@ -790,7 +912,7 @@ function imageSize(data: Buffer): Omit<DecodedImage, "data"> | null {
 // ---------------------------------------------------------------------------
 // The package's other parts
 
-function contentTypes(): string {
+function contentTypes(comments: boolean): string {
   const types = [
     `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>`,
     `<Default Extension="xml" ContentType="application/xml"/>`,
@@ -802,6 +924,9 @@ function contentTypes(): string {
     `<Override PartName="/word/settings.xml" ContentType="${MAIN_CONTENT_TYPE}.settings+xml"/>`,
     `<Override PartName="/word/numbering.xml" ContentType="${MAIN_CONTENT_TYPE}.numbering+xml"/>`,
     `<Override PartName="/word/footnotes.xml" ContentType="${MAIN_CONTENT_TYPE}.footnotes+xml"/>`,
+    ...(comments
+      ? [`<Override PartName="/word/comments.xml" ContentType="${COMMENTS_CONTENT_TYPE}"/>`]
+      : []),
     `<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>`,
   ];
   return `${XML_DECLARATION}<Types xmlns="${NS.contentTypes}">${types.join("")}</Types>`;
@@ -876,7 +1001,9 @@ export type StyleRole =
   | "footnoteReference"
   | "hyperlink"
   | "codeChar"
-  | "tableGrid";
+  | "tableGrid"
+  | "commentText"
+  | "commentReference";
 
 /** The ids of the styles a document's styles are based on, where it has them. */
 export interface StyleBases {
@@ -975,6 +1102,18 @@ export const STYLE_DEFINITIONS: Readonly<Record<StyleRole, StyleDefinition>> = {
     xml: (id, bases) =>
       `<w:style w:type="character" w:styleId="${escapeXml(id)}"><w:name w:val="Inline Code"/>${basedOn(bases.character)}<w:rPr>${CODE_FONT}<w:shd w:val="clear" w:color="auto" w:fill="F3F4F6"/></w:rPr></w:style>`,
   },
+  commentText: {
+    name: "annotation text",
+    type: "paragraph",
+    xml: (id, bases) =>
+      `<w:style w:type="paragraph" w:styleId="${escapeXml(id)}"><w:name w:val="annotation text"/>${basedOn(bases.paragraph)}<w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:pPr><w:spacing w:line="240" w:lineRule="auto"/></w:pPr><w:rPr><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr></w:style>`,
+  },
+  commentReference: {
+    name: "annotation reference",
+    type: "character",
+    xml: (id, bases) =>
+      `<w:style w:type="character" w:styleId="${escapeXml(id)}"><w:name w:val="annotation reference"/>${basedOn(bases.character)}<w:uiPriority w:val="99"/><w:semiHidden/><w:unhideWhenUsed/><w:rPr><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr></w:style>`,
+  },
   tableGrid: {
     name: "Table Grid",
     type: "table",
@@ -1003,15 +1142,21 @@ export const NEW_DOCUMENT_STYLE_IDS: Readonly<Record<StyleRole, string>> = {
   hyperlink: "Hyperlink",
   codeChar: "CodeChar",
   tableGrid: "TableGrid",
+  commentText: "CommentText",
+  commentReference: "CommentReference",
 };
 
-function styles(language: string): string {
+/** The styles only a document with comments needs. */
+const COMMENT_ROLES: ReadonlySet<StyleRole> = new Set(["commentText", "commentReference"]);
+
+function styles(language: string, comments: boolean): string {
   const bases: StyleBases = {
     paragraph: "Normal",
     character: "DefaultParagraphFont",
     table: "TableNormal",
   };
   const defined = (Object.keys(STYLE_DEFINITIONS) as StyleRole[])
+    .filter((role) => comments || !COMMENT_ROLES.has(role))
     .map((role) => STYLE_DEFINITIONS[role].xml(NEW_DOCUMENT_STYLE_IDS[role], bases))
     .join("");
   return (

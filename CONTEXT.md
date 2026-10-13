@@ -83,7 +83,7 @@ A short span of a Document that can be retrieved and cited.
 _Avoid_: chunk, snippet
 
 **Citation**:
-A reference, anchored in the text of an Answer, to the Passage a claim was drawn from: the Location it cites, and a quote from the Passage that is checked against the text at that Location. Copied into a Note, it stays a Citation; Question context shows it as a plain reference to its Document.
+A reference, anchored in the text of an Answer, to the Passage a claim was drawn from: the Location it cites, and a quote from the Passage that is checked against the text at that Location. Copied into a Note, it stays a Citation; Question context shows it as a plain reference to its Document. It names its Document as the Document is named now, so a rename shows in every Citation of it; the name it was made with is kept, never rewritten, and shown only when the Document can't be found.
 _Avoid_: source, reference
 
 **Calculated figure**:
@@ -206,7 +206,7 @@ A change to a Mind, made by the AI or brought in from another person's Word file
 _Avoid_: suggestion, edit, draft, diff
 
 **AI text**:
-The words the AI wrote into a Mind that the User hasn't made their own: in Answers, Answers added to a note, accepted changes and accepted suggestions. They are drawn a step softer than the User's writing. What the User types, even inside AI text, is theirs, and "Mark as mine" makes selected AI text theirs. Exports and Question context read it as any other text.
+The words the AI wrote into a Mind that the User hasn't made their own: in Answers, Answers added to a note, accepted changes and accepted suggestions. They are drawn a step softer than the User's writing. What the User types, even inside AI text, is theirs, and "Mark as mine" makes selected AI text theirs. Exports and Question context read it as any other text; a Word export can mark it with a comment.
 _Avoid_: AI content, machine text
 
 **Checkpoint**:
