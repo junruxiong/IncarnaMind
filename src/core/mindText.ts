@@ -556,6 +556,12 @@ function marksOf(attributes: Record<string, unknown> = {}): Marks {
   };
 }
 
+/** Inline nodes as a paragraph's content reads: what a Word export writes new into an imported paragraph (#105). */
+export const readInlineNodes = (
+  children: readonly (Y.XmlElement | Y.XmlText)[],
+  options: ReadOptions,
+): Inline[] => readInline(children, options);
+
 function readInline(
   children: readonly (Y.XmlElement | Y.XmlText | Y.XmlHook)[],
   options: ReadOptions,

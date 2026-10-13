@@ -385,6 +385,16 @@ export function resolveProposalsIn(
   outcome: "accept" | "reject",
 ): void {
   if (editor.isDestroyed || ids.length === 0) return;
+  // A Checkpoint of the Mind before an AI change goes in (#113). Not awaited: the core takes it
+  // before the change this sends next.
+  const accepting =
+    outcome === "accept" &&
+    pendingIn(editor.state).some(
+      (proposal) => !proposal.outOfDate && (ids === "all" || ids.includes(proposal.id)),
+    );
+  if (accepting) {
+    core.saveCheckpoint(mindId, "accept").catch(useAppStore.getState().reportError);
+  }
   const resolved = resolveInEditor(editor, ids === "all" ? ids : new Set(ids), outcome);
   if (resolved.length === 0) {
     // Only changes out of date were picked: they can't be accepted, and the User hears why.
