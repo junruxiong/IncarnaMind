@@ -1,0 +1,183 @@
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { expect, type Locator, type Page, test } from "@playwright/test";
+import type { CoreBridge } from "../src/core/api";
+import { buildPdf } from "../tests/helpers/pdf";
+import {
+  addDocuments,
+  createDataFolder,
+  dismissChatSetup,
+  launchApp,
+  newMind,
+  pointAndClick,
+  removeDataFolder,
+  setLanguage,
+  setWindowSize,
+  slideSelect,
+  useLocalChatModel,
+} from "./app";
+
+/*
+ * Contradiction watch (#112): "Check for contradictions" (⌘K, the Mind's
+ * menu) checks each cited sentence of a Mind against the other Documents in
+ * its Folder. The User cites a sentence with Find support's Add as Citation;
+ * the scripted model (src/main/fakeChatModel.ts) finds a sentence
+ * contradicted when it shares three words with a line that has other numbers.
+ * Set INCARNAMIND_SCREENSHOTS to a folder to also save screenshots.
+ */
+
+const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
+const screenshot = async (window: Page, name: string) => {
+  if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
+};
+
+const TIDES = buildPdf([
+  { lines: ["Harbour times", "Harbours publish the times of high water every 6 months."] },
+]);
+const OFFICE = buildPdf([
+  { lines: ["Harbour office", "Harbours publish the times of high water every 12 months."] },
+]);
+const CLAIM = "Harbours publish the times of high water every 6 months.";
+
+let dataDir: string;
+let sources: string;
+test.beforeEach(async () => {
+  dataDir = await createDataFolder();
+  sources = await createDataFolder();
+});
+test.afterEach(async () => {
+  await removeDataFolder(dataDir);
+  await removeDataFolder(sources);
+});
+
+const bridge = (window: Page) => ({
+  /** Claude Haiku 5.5 on an Anthropic key, billed per token, allowed to be sent to. */
+  cloudModel: () =>
+    window.evaluate(async () => {
+      const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      const provider = await core.saveChatProvider({
+        kind: "anthropic",
+        apiKey: "sk-ant-test",
+        modelId: "claude-haiku-5-5",
+      });
+      if (provider.service) {
+        for (const flow of ["chat", "tagging", "checks"] as const) {
+          await core.allowDataFlow(flow, provider.service.id);
+        }
+      }
+    }),
+  /** A Folder holding these Documents, by name, and the Mind in front. */
+  folder: (name: string, documents: string[]) =>
+    window.evaluate(
+      async ({ folderName, names }) => {
+        const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+        const folder = await core.createLibraryGroup({ name: folderName, description: "" });
+        const all = await core.listDocuments();
+        const documentIds = all.filter((each) => names.includes(each.name)).map((each) => each.id);
+        const mindIds = (await core.listMinds()).map((mind) => mind.id);
+        await core.moveToFolder({ documentIds, mindIds, folderId: folder.id });
+      },
+      { folderName: name, names: documents },
+    ),
+});
+
+/** A Mind with the claim, cited with Find support's Add as Citation. */
+async function citedClaim(window: Page): Promise<Locator> {
+  await newMind(window);
+  const editor = window.getByTestId("mind-editor");
+  await editor.click();
+  await window.keyboard.type(CLAIM);
+  const line = editor.locator(":scope > p").first();
+  await slideSelect(window, line, "Harbours publish", { line, words: "6 months." });
+  const menu = window.getByTestId("selection-menu");
+  await pointAndClick(window, menu.getByTestId("selection-action-find-support"));
+  const mark = window.getByTestId("claim-mark");
+  await expect(mark).toHaveAttribute("data-check", "supported");
+  await pointAndClick(window, mark);
+  await pointAndClick(window, window.getByTestId("claim-card").getByTestId("claim-add-citation"));
+  await expect(line.getByTestId("citation")).toHaveAttribute("data-check", "found");
+  await expect(window.getByTestId("claim-mark")).toHaveCount(0);
+  return line;
+}
+
+async function runFromPalette(window: Page, query: string, label: string) {
+  await window.keyboard.press("ControlOrMeta+k");
+  await expect(window.getByTestId("palette-search")).toBeFocused();
+  await window.keyboard.type(query);
+  const item = window.getByTestId("palette-item").filter({ hasText: label }).first();
+  await expect(item).toBeVisible();
+  await pointAndClick(window, item);
+}
+
+test("Check for contradictions: the estimate first, then a cited claim another Document contradicts gets “≠”, its card naming that Document", async () => {
+  await writeFile(join(sources, "Tides.pdf"), TIDES);
+  await writeFile(join(sources, "Office.pdf"), OFFICE);
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await bridge(window).cloudModel();
+  await setWindowSize(app, window, 1440, 900);
+  await addDocuments(window, [join(sources, "Tides.pdf"), join(sources, "Office.pdf")]);
+  const line = await citedClaim(window);
+  await bridge(window).folder("Harbours", ["Tides", "Office"]);
+
+  await runFromPalette(window, "contradictions", "Check for contradictions");
+
+  // A model billed per token: the line asks first, with the estimate.
+  const ask = window.getByTestId("contradictions-ask");
+  await expect(ask).toContainText("Check 1 cited claim against this Folder’s other Documents?");
+  await expect(ask).toContainText("About");
+  await screenshot(window, "contradictions-ask-en");
+  await pointAndClick(window, ask.getByTestId("contradictions-check"));
+
+  const found = window.getByTestId("contradictions-found");
+  await expect(found).toContainText("1 of 1 cited claims contradicted");
+  const mark = window.getByTestId("claim-mark");
+  await expect(mark).toHaveAttribute("data-check", "contradicted");
+  await expect(line.locator(".claim-wash--contradicted").first()).toBeVisible();
+  await expect(window.getByTestId("mind-health").getByTestId("health-contradicted")).toHaveText(
+    "1 contradicted",
+  );
+  await screenshot(window, "contradictions-found-en");
+
+  await pointAndClick(window, mark);
+  const card = window.getByTestId("claim-card");
+  await expect(card.getByTestId("claim-badge")).toHaveText("Contradicted");
+  await expect(card).toContainText("Office");
+  await expect(card.getByTestId("claim-quote")).toHaveText(
+    "Harbours publish the times of high water every 12 months.",
+  );
+  await screenshot(window, "contradictions-card-en");
+  await window.keyboard.press("Escape");
+
+  // Editing the claim makes it need a re-check, as Find support's do.
+  await slideSelect(window, line, "Harbours");
+  await window.keyboard.type("Ports");
+  await expect(mark).toHaveAttribute("data-check", "needs-recheck");
+});
+
+test("In Chinese and a narrow window: a Mind in no Folder, and a Folder of only the cited Document, say so; the Mind's menu has the command", async () => {
+  await writeFile(join(sources, "Tides.pdf"), TIDES);
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await addDocuments(window, [join(sources, "Tides.pdf")]);
+  await citedClaim(window);
+  await setLanguage(window, "zh-CN");
+  await setWindowSize(app, window, 900, 720);
+
+  await runFromPalette(window, "矛盾", "检查矛盾");
+  const problem = window.getByTestId("checks-problem");
+  await expect(problem).toContainText("这个 Mind 不在任何文件夹中");
+
+  await bridge(window).folder("潮汐", ["Tides"]);
+  await pointAndClick(window, problem.getByTestId("checks-problem-close"));
+  // The Mind's own menu, on its tab.
+  await window.getByTestId("mind-tab").first().click({ button: "right" });
+  const item = window.getByRole("menuitem", { name: "检查矛盾" });
+  await expect(item).toBeVisible();
+  await pointAndClick(window, item);
+  await expect(window.getByTestId("checks-problem")).toContainText(
+    "“潮汐”中只有这些说法引用的文档。",
+  );
+  await screenshot(window, "contradictions-only-cited-zh-narrow");
+});

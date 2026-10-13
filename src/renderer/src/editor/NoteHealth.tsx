@@ -98,8 +98,10 @@ export function NoteHealth({ editor, mindId }: { editor: Editor; mindId: string 
   const problem = useChecks((state) => state.problems[mindId]);
   const openSettings = useAppStore((state) => state.openSettings);
   const folderName = useAppStore((state) => {
-    if (problem?.kind !== "no-documents" || problem.folderId === null) return null;
-    return state.library?.groups.find((group) => group.id === problem.folderId)?.name ?? null;
+    const folderId =
+      problem?.kind === "no-documents" || problem?.kind === "only-cited" ? problem.folderId : null;
+    if (folderId === null) return null;
+    return state.library?.groups.find((group) => group.id === folderId)?.name ?? null;
   });
   const format = (value: number) => new Intl.NumberFormat(language).format(value);
 
@@ -215,9 +217,11 @@ export function NoteHealth({ editor, mindId }: { editor: Editor; mindId: string 
             ? folderName
               ? t("checks.problem.no-documents.folder", { folder: folderName })
               : t("checks.problem.no-documents.all")
-            : problem.kind === "failed"
-              ? t("checks.problem.failed", { message: problem.message })
-              : t(`checks.problem.${problem.kind}`)}
+            : problem.kind === "only-cited"
+              ? t("checks.problem.only-cited.folder", { folder: folderName ?? "" })
+              : problem.kind === "failed"
+                ? t("checks.problem.failed", { message: problem.message })
+                : t(`checks.problem.${problem.kind}`)}
         </ProblemLine>
       )}
     </>

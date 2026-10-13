@@ -136,7 +136,11 @@ describe("Check for contradictions", () => {
     const { core, tides, office, folder, calls } = await setUp();
     const { mind, client } = await mindCiting(core, tides, folder.id);
 
-    expect(await core.planContradictionCheck(mind.id)).toEqual({ kind: "ready", claims: 2 });
+    expect(await core.planContradictionCheck(mind.id)).toEqual({
+      kind: "ready",
+      claims: 2,
+      model: null,
+    });
     const result = await core.checkContradictions({ requestId: "r1", mindId: mind.id });
     expect(result).toMatchObject({
       kind: "checked",

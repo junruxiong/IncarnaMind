@@ -565,6 +565,7 @@ export const en = {
   "health.next": "{part}: go to the next",
   "checks.running.find-support": "Finding support…",
   "checks.running.check-against-documents": "Checking against Documents…",
+  "checks.running.contradiction-watch": "Checking cited claims for contradictions…",
   "checks.stop": "Stop",
   "checks.close": "Close",
   "checks.problem.no-documents.folder":
@@ -576,6 +577,23 @@ export const en = {
     "Local mode is on, and the model isn't on this computer, so nothing was checked.",
   "checks.problem.chooseModel": "Choose a model",
   "checks.problem.failed": "Couldn't check: {message}",
+  "checks.problem.no-folder":
+    "This Mind isn't in a Folder, so there are no other Documents to check it against.",
+  "checks.problem.only-cited.folder": "“{folder}” holds only the Documents these claims cite.",
+  "checks.problem.no-cited": "This Mind has no cited claims to check.",
+  "contradictions.command": "Check for contradictions",
+  "contradictions.command.keywords":
+    "contradictions conflict contradicted cited claims Folder watch",
+  "contradictions.ask.one": "Check 1 cited claim against this Folder’s other Documents? {estimate}",
+  "contradictions.ask":
+    "Check {count} cited claims against this Folder’s other Documents? {estimate}",
+  "contradictions.check": "Check",
+  "contradictions.cancel": "Not now",
+  "contradictions.none": "No contradictions in {count} cited claims",
+  "contradictions.none.one": "No contradiction in 1 cited claim",
+  "contradictions.found": "{contradicted} of {count} cited claims contradicted",
+  "contradictions.after": "After “{document}” changed: {result}",
+  "contradictions.cost": "{result} · {cost}",
   "verify.command": "Verify a document…",
   "verify.command.keywords": "verify check PDF claims fact-check received draft someone else",
   "verify.pick.title": "Verify a document",
@@ -2408,7 +2426,8 @@ export const en = {
   "error.verify.request": "That isn't a request to verify a document that IncarnaMind can read.",
   "error.verify.notVerifying": "This Mind doesn't verify a document.",
   "error.verify.noPath": "Choose the document to verify.",
-  "error.contradictions.request": "That isn't a check for contradictions that IncarnaMind can read.",
+  "error.contradictions.request":
+    "That isn't a check for contradictions that IncarnaMind can read.",
   "error.document.fileUnavailable": "The Document's file can't be reached right now.",
   "error.document.fileGone": "The Document's file isn't there to read.",
   "error.document.fileCantOpen": "The Document's file can't be opened.",

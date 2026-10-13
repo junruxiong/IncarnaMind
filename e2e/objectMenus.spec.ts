@@ -178,6 +178,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "mind.exportAs.markdown",
     "mind.exportOptions",
     "mind.history",
+    "mind.checkContradictions",
     "mind.citationStyle",
     "skill.fromMind",
     "—",
@@ -295,7 +296,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
   const tabMenu = tab.getByTestId("tab-actions");
   const byRightClick = await commandsIn(tabMenu);
   // Its Mind's items first, then the tab's own.
-  expect(byRightClick.slice(0, 11)).toEqual([
+  expect(byRightClick.slice(0, 12)).toEqual([
     "mind.outline",
     "mind.export",
     "mind.exportAs.pdf",
@@ -304,6 +305,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "mind.exportAs.markdown",
     "mind.exportOptions",
     "mind.history",
+    "mind.checkContradictions",
     "—",
     "mind.delete",
     "—",
@@ -429,6 +431,7 @@ test("each item shows its shortcut as the system writes it, and the labels are i
     "导出为 Markdown（.md）",
     "导出选项…",
     "历史版本",
+    "检查矛盾",
     "引用格式…",
     "做成技能",
     /^移动到…(⇧⌘M|Ctrl\+Shift\+M)$/,

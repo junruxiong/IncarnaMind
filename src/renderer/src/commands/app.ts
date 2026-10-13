@@ -1,5 +1,6 @@
 import { signInAgain } from "../chatGptSignIn";
 import { useCitationStylePicker } from "../citationStylePicker";
+import { startContradictionCheck } from "../contradictions";
 import { blockMenuOpeners } from "../editor/blockMenuOpeners";
 import { noteHolding } from "../editor/noteKeymap";
 import { useFindSources } from "../findSources";
@@ -200,6 +201,19 @@ const appCommands: readonly Command[] = [
     run: (ctx) => {
       const mindId = mindShown(ctx);
       if (mindId) useHistory.getState().open(mindId);
+    },
+  },
+  {
+    id: "mind.checkContradictions",
+    label: "contradictions.command",
+    keywords: ["contradictions.command.keywords"],
+    group: "main",
+    // It changes no words: its marks go with Check again, or when the sentence is edited.
+    reversible: true,
+    when: (ctx) => onlyOne(ctx) && mindShown(ctx) !== null,
+    run: (ctx) => {
+      const mindId = mindShown(ctx);
+      if (mindId) return startContradictionCheck(mindId);
     },
   },
   {

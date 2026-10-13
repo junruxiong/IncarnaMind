@@ -67,6 +67,9 @@ export function writeContradictionWatch(settings: Y.Map<unknown>, run: Contradic
   });
 }
 
+/** Forgets the last run, once the User has closed its line. */
+export const clearContradictionWatch = (settings: Y.Map<unknown>) => settings.delete(KEY);
+
 /** Calls `listener` whenever the Mind's last run may have changed. Returns how to stop. */
 export function observeContradictionWatch(doc: Y.Doc, listener: () => void): () => void {
   const settings = doc.getMap(MIND_SETTINGS_FIELD);
