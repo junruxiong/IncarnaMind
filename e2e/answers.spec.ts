@@ -100,19 +100,17 @@ test("a Note switched out of Question context looks muted, and asking without a 
   await toggle.click();
   await expect(sideNote).toHaveClass(/context-off/);
 
-  // Asking from the composer without a chat model explains, in its row, what to set up; nothing
-  // is kept in the assistant, and the words stay in the composer.
+  // Asking from the composer without a chat model waits: the Question stays in the conversation
+  // while the composer becomes the setup card; nothing is written into the Mind.
   await sideNote.click();
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type("Is anyone there?");
   await window.keyboard.press("Enter");
-  const notReady = window.getByTestId("composer").getByTestId("composer-not-ready");
-  await expect(notReady).toBeVisible();
-  await expect(notReady).toContainText("needs a chat model");
-  await expect(window.getByTestId("composer-input")).toHaveValue("Is anyone there?");
-  await expect(window.getByTestId("assistant-question")).toHaveCount(0);
-  await expect(window.getByTestId("assistant-empty")).toBeVisible();
+  await expect(window.getByTestId("model-setup")).toBeVisible();
+  await expect(window.getByTestId("assistant-waiting-model")).toBeVisible();
   await expect(editor.getByTestId("question")).toHaveCount(0);
+  await window.getByTestId("setup-later").click();
+  await expect(window.getByTestId("composer-input")).toHaveValue("Is anyone there?");
   await app.close();
 });
 
