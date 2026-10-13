@@ -293,17 +293,23 @@ export function createConsent(
     /**
      * The User chose `service` where a line said what goes to it (ADR-0022):
      * each of `flowIds` to it is allowed, as chosen, and requests waiting for
-     * one are answered. A flow the User declined stays declined; one that
-     * isn't registered is left out.
+     * one are answered. `unnamed`: kinds of data the line doesn't name, which
+     * still ask. A flow the User declined stays declined; one that isn't
+     * registered is left out.
      */
-    choose(flowIds: readonly DataFlowId[], service: ExternalService): void {
+    choose(
+      flowIds: readonly DataFlowId[],
+      service: ExternalService,
+      unnamed: readonly DataKind[] = [],
+    ): void {
       for (const flowId of flowIds) {
         if (!definitions.has(flowId)) continue;
         const flow = flowFor(flowId, service);
         if (statusOf(flow).consent === "declined") continue;
+        const named = { ...flow, sends: flow.sends.filter((kind) => !unnamed.includes(kind)) };
         const waiting = waitingFor(flow);
-        if (waiting) answer(waiting, true, true);
-        else recordAccepted(flow, true);
+        if (waiting && named.sends.length === flow.sends.length) answer(waiting, true, true);
+        else recordAccepted(named, true);
       }
     },
 

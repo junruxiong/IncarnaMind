@@ -510,9 +510,10 @@ export function createActiveEmbedding(options: {
 
     /**
      * Switches to the provider in `input` (choosing a cloud one allows the
-     * embeddings flow to it, ADR-0022), or turns embeddings off ("off", which deletes any key). Turning them on,
-     * or a different model, makes Documents without its vectors embed; the
-     * same model only takes the new key, and tries again after an error.
+     * embeddings flow to it, ADR-0022), or turns embeddings off ("off", which
+     * deletes any key). Turning them on, or a different model, makes Documents
+     * without its vectors embed; the same model only takes the new key, and
+     * tries again after an error.
      */
     async save(input: unknown): Promise<void> {
       const parsed = parseEmbeddingInput(input);
