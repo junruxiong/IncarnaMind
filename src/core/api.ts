@@ -3122,6 +3122,8 @@ export interface ProviderCost {
   spent: Money[];
   /** Tokens of requests to models with no known price: counted here, not toward the cap. */
   unpricedTokens: number;
+  /** Requests a quit cut short with no usage known: counted as costing nothing (#636). */
+  interrupted: number;
 }
 
 /** Settings' month-to-date cost: recorded on this computer, never sent. */
