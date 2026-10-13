@@ -90,8 +90,54 @@ export function signInNeededInstructions(connectorNames: readonly string[]): str
   return `The User's ${plural ? "Connectors" : "Connector"} ${names} ${plural ? "need" : "needs"} the User to sign in again (in Settings → Connectors), so ${plural ? "their" : "its"} Tools can't be used for this Answer. If the Question needs ${plural ? "them" : "it"}, say so in one short sentence, then answer as well as you can without ${plural ? "them" : "it"}.`;
 }
 
-const NOT_COVERED =
-  "If the Documents don't cover the Question, say so plainly, then answer from your own knowledge if you can, without markers.";
+/**
+ * What the Documents don't answer is said, and left there (#548): in an app
+ * where claims carry Citations, a figure from the model's own knowledge reads
+ * as one from the User's Documents. General knowledge only for a general
+ * Question, labelled, and without figures. `cite`: the Answer cites with markers.
+ */
+function notCovered(cite: boolean): string {
+  return `If the Documents don't cover the Question, say so plainly. You may add what the Passages do say that comes closest${cite ? ", cited" : ""}, then stop: never fill the gap from your own knowledge, so no figure, date or name that isn't in a Passage. Only a general Question that isn't about the User's Documents (a concept or a method) may be answered from your own knowledge, in a paragraph that starts "Not from your Documents:" ("以下内容不是来自你的文档："), with no figures${cite ? " and no markers" : ""}.`;
+}
+
+/**
+ * A premise the Passages don't support, and Passages that disagree (#548):
+ * what a careful reader catches. The examples are in English and Chinese, so
+ * an Answer in either has its model. `cite`: the Answer cites with markers.
+ */
+function readingRules(cite: boolean): string {
+  const marker = (n: number) => (cite ? `[^${n}]` : "");
+  return [
+    `- If the Question takes for granted what the Passages don't say (an approval, a date, a figure, a cause), say so first, in one plain sentence, then answer from what they say: "The Documents don't record a Board approval; the 14 May memo asks for one." / "文档中没有董事会批准的记录；5 月 14 日的备忘录是在申请批准。"`,
+    `- If Passages from different Documents disagree, or give different figures for the same thing (one updates the other), lead with the newer Document by its date (a Passage's date is its Document's: the date it states, else when its file last changed)${cite ? " and cite it" : ""}. Then write one sentence naming the older Document, its date and its figure${cite ? ", with a Citation" : ""}; never leave it out: "Report outages over 4 hours (memo, May 2025)${marker(1)}. The older handbook (January 2024) says 6 hours${marker(2)}." / "2025 年 5 月的备忘录要求报告超过 4 小时的停电${marker(1)}。较早的手册（2024 年 1 月）写的是 6 小时${marker(2)}。" Say "probably" (可能) only when neither is dated or newer.`,
+  ].join("\n");
+}
+
+/** A Passage's Document and its date, as `formatPassages` (./citations) writes them. */
+const DATED_PASSAGE = /<passage id="[^"]*" document="([^"]*)" date="([^"]+)"/g;
+
+/**
+ * A reminder after Passages that come from Documents of different dates
+ * (#660): GPT-6 Luna, told the rule in its instructions, still gave only the
+ * newer Document's figure when a search handed it both. It names each dated
+ * Document with its date, newest first; empty when fewer than two dates differ.
+ * Without its line on passing mentions, Luna took "the other five Functions"
+ * in NIST CSF 2.0 for the Core's count.
+ */
+export function datedDocumentsNote(passages: string): string {
+  const dates = new Map<string, string>();
+  for (const [, document, date] of passages.matchAll(DATED_PASSAGE)) {
+    if (document !== undefined && date !== undefined && !dates.has(document)) {
+      dates.set(document, date);
+    }
+  }
+  if (new Set(dates.values()).size < 2) return "";
+  const listed = [...dates]
+    .sort(([, a], [, b]) => b.localeCompare(a))
+    .map(([document, date]) => `"${document}" (${date})`)
+    .join(", ");
+  return `These Passages come from Documents of different dates: ${listed}. Take each Document's figure only from a sentence that states it for that Document, never from a passing mention. Where they give different figures for the same thing, lead with the newer Document, then write one sentence naming the older one, its date and its figure, with a Citation.`;
+}
 
 const RECORD =
   'the Passage\'s id, where the quote is, and a short quote copied exactly from the Passage, without its marks. Where: the page, slide, section, or rows or lines the quote is in, or two in a row, written as the Passage names them (its pages or location, and marks where each new one starts, like [p. 4], [slide 4], [§ 2.1 Sensitivity], [Revenue, rows 2–41] or [lines 51–100]; name rows or lines more narrowly when you can, e.g. "Revenue, rows 12–14")';
@@ -169,6 +215,8 @@ export function documentInstructions(
   calculate = false,
 ): string {
   const documents = `${listed.total} Document${listed.total === 1 ? "" : "s"}`;
+  const note = datedDocumentsNote(passages);
+  const dated = note ? [note] : [];
   const added = `${scoped ? `The User limited this Question to ${documents} of theirs` : `The User has added ${documents}`} (PDF, Word, PowerPoint, Excel, CSV, text and Markdown files).`;
   switch (mode) {
     case "no-documents":
@@ -183,7 +231,8 @@ export function documentInstructions(
         UNBROKEN_QUOTE,
         "- In the Answer, put the marker as [^1] right after each claim it supports, in a table's cell too. Use only markers you recorded, and add no list of sources.",
         "- Write nothing before your Tool calls: only the Answer, after them.",
-        NOT_COVERED,
+        notCovered(true),
+        readingRules(true),
         ...(calculate ? ["", CALCULATE] : []),
       ].join("\n");
     case "structured-output":
@@ -193,6 +242,7 @@ export function documentInstructions(
         "",
         "Passages found in the User's Documents for this Question:",
         passages,
+        ...dated,
         "",
         // The example's location is a placeholder: a small model copied a real-looking one ("p. 3") as its own (#67).
         calculate
@@ -202,7 +252,8 @@ export function documentInstructions(
         `- citations: one record for each marker: ${RECORD}.`,
         UNBROKEN_QUOTE,
         ...(calculate ? [CALCULATIONS] : []),
-        NOT_COVERED,
+        notCovered(true),
+        readingRules(true),
       ].join("\n");
     case "none":
       return [
@@ -211,9 +262,11 @@ export function documentInstructions(
         "",
         "Passages found in the User's Documents for this Question:",
         passages,
+        ...dated,
         "",
         "Use them where they help. Don't write citation markers or a list of sources.",
-        "If the Passages don't cover the Question, say so plainly, then answer from your own knowledge if you can.",
+        notCovered(false),
+        readingRules(false),
       ].join("\n");
   }
 }

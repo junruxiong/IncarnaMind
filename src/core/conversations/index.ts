@@ -397,13 +397,13 @@ export function createConversations(db: Database, now: () => string) {
       `SELECT ${CONVERSATION_COLUMNS} FROM conversations WHERE id = ? AND deleted_at IS NULL`,
       [conversationId],
     );
-    if (!row) throw new NotFoundError("That conversation doesn't exist or has been deleted.");
+    if (!row) throw new NotFoundError({ key: "error.conversation.notFound" });
     return row;
   };
 
   const get = (conversationId: unknown): Conversation => {
     const [conversation] = toConversations([liveRow(conversationId)]);
-    if (!conversation) throw new NotFoundError("That conversation doesn't exist.");
+    if (!conversation) throw new NotFoundError({ key: "error.conversation.notFound" });
     return conversation;
   };
 
@@ -584,7 +584,7 @@ export function createConversations(db: Database, now: () => string) {
       if (!isRecord(input)) throw new InvalidInputError("askInConversation expects an object.");
       const { text, conversationId, mindId, model, forcedSkill, focus } = input;
       if (typeof text !== "string" || text.trim() === "") {
-        throw new InvalidInputError("Write the Question before asking it.");
+        throw new InvalidInputError({ key: "error.question.empty" });
       }
       let mind: QuestionInput["mind"] = null;
       if (mindId !== undefined && mindId !== null) {
@@ -595,7 +595,7 @@ export function createConversations(db: Database, now: () => string) {
           "SELECT folder_id FROM minds WHERE id = ? AND deleted_at IS NULL",
           [mindId],
         );
-        if (!row) throw new NotFoundError("That Mind doesn't exist or has been deleted.");
+        if (!row) throw new NotFoundError({ key: "error.mind.notFound" });
         mind = { id: mindId, folderId: row.folder_id };
       }
       if (model !== undefined && model !== null && !isChatModelChoice(model)) {
@@ -709,11 +709,11 @@ export function createConversations(db: Database, now: () => string) {
       const conversation = liveRow(input.conversationId);
       const answer = liveMessage(input.answerId);
       if (answer?.kind !== "answer" || answer.conversation_id !== conversation.id) {
-        throw new NotFoundError("That Answer isn't in this conversation.");
+        throw new NotFoundError({ key: "error.answer.notInConversation" });
       }
       const question = liveMessage(answer.question_id);
       if (question?.kind !== "question") {
-        throw new NotFoundError("The Question of this Answer has been deleted.");
+        throw new NotFoundError({ key: "error.answer.questionGone" });
       }
       return { answerId: answer.id, question: toQuestion(question) };
     },
@@ -728,7 +728,7 @@ export function createConversations(db: Database, now: () => string) {
         const answer = liveMessage(answerId);
         const question = liveMessage(answer?.question_id);
         if (!answer || !question)
-          throw new NotFoundError("That Answer isn't in this conversation.");
+          throw new NotFoundError({ key: "error.answer.notInConversation" });
         db.run(
           `UPDATE conversation_messages SET text = '', citations = '[]', figures = '[]', tool_calls = '[]',
              status = 'streaming', error_kind = NULL, error_message = NULL,

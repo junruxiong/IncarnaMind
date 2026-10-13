@@ -92,7 +92,7 @@ export function CiteAsPanel({
         },
       });
     } catch (failure) {
-      setProblem(errorMessage(failure));
+      setProblem(errorMessage(failure, t));
     }
   };
 
@@ -105,7 +105,7 @@ export function CiteAsPanel({
       result = await core.lookUpReference(document.id);
     } catch (failure) {
       setLookingUp(false);
-      setLookUpLine({ text: errorMessage(failure), role: "alert" });
+      setLookUpLine({ text: errorMessage(failure, t), role: "alert" });
       return;
     }
     setLookingUp(false);

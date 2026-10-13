@@ -352,6 +352,117 @@ test("five Documents go into a Folder with Move to…, from the selection bar an
   }
 });
 
+test("Tags are edited on the row: a click in the cell opens the picker over it, T and ⌥⌘T from the keyboard, × takes one off, and each change has its own ⌘Z", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1100, 760);
+    const library = await openFullLibrary(window);
+    await placeAssistant(window, { folded: true });
+    const finance = section(library, "Finance");
+    await pointAndClick(window, finance.getByTestId("library-show-all"));
+    const invoice = row(finance, "Invoice 4471");
+    const cell = invoice.getByTestId("document-tags");
+    const chips = cell.getByTestId("tag-chip");
+    await expect(chips).toHaveText(["Invoice"]);
+
+    // A click on a chip opens the picker over the cell, its field where the chips were.
+    await pointAndClick(window, chips.first());
+    const picker = invoice.getByTestId("document-tags-popover");
+    const field = picker.getByTestId("tag-picker-input");
+    await expect(field).toBeFocused();
+    await expect(window.getByTestId("viewer")).toHaveCount(0);
+    const [cellBox, pickerBox] = await Promise.all([cell.boundingBox(), picker.boundingBox()]);
+    if (!cellBox || !pickerBox) throw new Error("The picker isn't showing.");
+    expect(Math.abs(pickerBox.x - cellBox.x)).toBeLessThanOrEqual(8);
+    expect(pickerBox.y).toBeLessThanOrEqual(cellBox.y);
+    expect(pickerBox.y + pickerBox.height).toBeGreaterThan(cellBox.y + cellBox.height);
+    await expect(picker.getByTestId("tag-picker-keys")).toHaveText(
+      /^↵ adds or removes · ⌫ removes the last · (⌘Z|Ctrl\+Z) undoes · Esc closes$/,
+    );
+
+    // Two Tags added; ⌘Z in the empty field takes back one change at a time, and ⇧⌘Z does it again.
+    const tokens = picker.getByTestId("tag-token");
+    await window.keyboard.type("Contract");
+    await window.keyboard.press("Enter");
+    await window.keyboard.type("Report");
+    await window.keyboard.press("Enter");
+    await expect(tokens).toHaveText(["Contract", "Invoice", "Report"]);
+    await window.keyboard.press("ControlOrMeta+z");
+    await expect(tokens).toHaveText(["Contract", "Invoice"]);
+    await window.keyboard.press("ControlOrMeta+z");
+    await expect(tokens).toHaveText(["Invoice"]);
+    await window.keyboard.press("ControlOrMeta+Shift+z");
+    await expect(tokens).toHaveText(["Contract", "Invoice"]);
+    await expect(field).toBeFocused();
+    await window.keyboard.press("Escape");
+    await expect(picker).toBeHidden();
+    await expect(cell.getByTestId("document-tags-menu")).toBeFocused();
+    await expect(chips).toHaveText(["Contract", "Invoice"]);
+
+    // Pointed at, a chip offers × to take it off in one click; ⌘Z puts it back.
+    const contract = chips.filter({ hasText: "Contract" });
+    await pointAt(window, library.getByTestId("library-count"));
+    await expect(contract.getByTestId("remove-document-tag")).toBeHidden();
+    await pointAt(window, contract);
+    await pointAndClick(window, contract.getByTestId("remove-document-tag"));
+    await expect(chips).toHaveText(["Invoice"]);
+    await expect(window.getByTestId("undo-line")).toContainText("Contract");
+    await window.keyboard.press("ControlOrMeta+z");
+    await expect(chips).toHaveText(["Contract", "Invoice"]);
+
+    // T on a focused row opens its Tags, and Esc gives the focus back to the row; ⌥⌘T does the same.
+    const statement = row(finance, "Bank statement, August");
+    const statementPicker = statement.getByTestId("document-tags-popover");
+    await statement.locator("[data-row-main]").focus();
+    await window.keyboard.press("t");
+    await expect(statementPicker.getByTestId("tag-picker-input")).toBeFocused();
+    await window.keyboard.press("Escape");
+    await expect(statementPicker).toBeHidden();
+    await expect(statement.locator("[data-row-main]")).toBeFocused();
+    await window.keyboard.press("ControlOrMeta+Alt+t");
+    await expect(statementPicker.getByTestId("tag-picker-input")).toBeFocused();
+    await window.keyboard.type("Invoice");
+    await window.keyboard.press("Enter");
+    await window.keyboard.press("Escape");
+    await expect(statement.getByTestId("tag-chip")).toHaveText(["Invoice"]);
+
+    // Two selected: T on one of them opens Tags… in the selection's bar, for both.
+    const others = [row(finance, "Invoice 4502"), row(finance, "Invoice 4519")];
+    for (const each of others) await pointAndClick(window, each.getByTestId("library-select"));
+    const bar = library.getByTestId("library-selection");
+    await expect(bar.getByTestId("library-selection-tags")).toHaveText(/^Tags…(⌥⌘T|Ctrl\+Alt\+T)$/);
+    await others[1]?.locator("[data-row-main]").focus();
+    await window.keyboard.press("t");
+    const bulk = bar.getByTestId("selection-tags-popover");
+    await expect(bulk.getByTestId("tag-picker-input")).toBeFocused();
+    await window.keyboard.type("Report");
+    await window.keyboard.press("Enter");
+    await window.keyboard.press("Escape");
+    for (const each of others) {
+      await expect(each.getByTestId("tag-chip")).toHaveText(["Invoice", "Report"]);
+    }
+    await window.keyboard.press("Escape");
+    await expect(bar).toHaveCount(0);
+
+    // In Chinese, at the narrowest window, the picker speaks Chinese and stays in the window.
+    await setLanguage(window, "zh-CN");
+    await setWindowSize(app, window, 900, 660);
+    await invoice.scrollIntoViewIfNeeded();
+    await pointAndClick(window, chips.first());
+    await expect(picker.getByTestId("tag-picker-keys")).toHaveText(
+      /^↵ 添加或移除 · ⌫ 移除最后一个 · (⌘Z|Ctrl\+Z) 撤销 · Esc 关闭$/,
+    );
+    const narrow = await picker.boundingBox();
+    const width = await window.evaluate(() => innerWidth);
+    if (!narrow) throw new Error("The picker isn't showing.");
+    expect(narrow.x).toBeGreaterThanOrEqual(0);
+    expect(narrow.x + narrow.width).toBeLessThanOrEqual(width);
+    await window.keyboard.press("Escape");
+  } finally {
+    await app.close();
+  }
+});
+
 test("the selection's bar holds at 900px and at 1,100px beside the viewer, in English and Chinese: no sideways scroll, Esc in sight, the rest under ⋯", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
@@ -377,7 +488,13 @@ test("the selection's bar holds at 900px and at 1,100px beside the viewer, in En
       const menu = window.getByTestId("document-file-actions").filter({ visible: true });
       await expect(menu.getByTestId("document.ask")).toBeVisible();
       await expect(menu.getByTestId("document.delete")).toBeVisible();
+      // Move to… among them, its picker beside ⋯ when the bar's own button has folded away.
+      await pointAndClick(window, menu.getByTestId("document.moveTo"));
+      const picker = window.getByTestId("move-to-picker");
+      await expect(picker.getByTestId("move-to-search")).toBeFocused();
+      await expect(picker).toBeInViewport();
       await window.keyboard.press("Escape");
+      await expect(picker).toBeHidden();
     };
     const finance = section(library, "Finance");
     const choose = async () => {
@@ -425,6 +542,15 @@ test("a Folder opened from the sidebar brings its section into view, open, with 
     await pointAndClick(window, target.getByTestId("library-section-toggle"));
     await expect(rowsOf(target)).toHaveCount(0);
     await library.evaluate((element) => element.querySelector(":scope > div")?.scrollTo(0, 0));
+    // A Tag filter from the sidebar that none of its Documents has gives way too.
+    await pointAndClick(window, window.getByTestId("tag-filter-menu"));
+    await pointAndClick(
+      window,
+      window.getByTestId("tag-filters").getByTestId("tag-filter").filter({ hasText: "Slides" }),
+    );
+    await window.keyboard.press("Escape");
+    await expect(window.getByTestId("tag-filter-active")).toContainText("Slides");
+    await expect(target).toHaveCount(0);
 
     const folder = sidebarFolder(window, last.name);
     await pointAt(window, folder.getByTestId("folder-row"));
@@ -435,6 +561,7 @@ test("a Folder opened from the sidebar brings its section into view, open, with 
     await expect(rowsOf(target)).toHaveCount(last.documents.length);
     // The page still shows every Folder.
     await expect(sections(library)).toHaveCount(FOLDERS.length + 1);
+    await expect(window.getByTestId("tag-filter-active")).toHaveCount(0);
   } finally {
     await app.close();
   }
