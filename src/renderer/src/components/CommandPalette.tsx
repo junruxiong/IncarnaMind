@@ -437,6 +437,7 @@ function Option({
       aria-selected={active}
       data-testid="palette-item"
       data-kind={item.kind === "object" ? item.ref.kind : item.kind}
+      data-key={item.key}
       // Choosing with the pointer keeps the focus in the field until it closes.
       onMouseDown={(event) => event.preventDefault()}
       onMouseMove={onPoint}
