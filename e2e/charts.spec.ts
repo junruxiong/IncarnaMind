@@ -11,6 +11,7 @@ import {
   clickEditItem,
   createDataFolder,
   dismissChatSetup,
+  focusEditor,
   launchApp,
   newMind,
   pointAndClick,
@@ -675,7 +676,7 @@ for (const [language, width] of [
     // From the composer back to the Mind, and up into the table's last row.
     await window.keyboard.press("ControlOrMeta+j");
     await window.keyboard.press("Escape");
-    await editor.focus();
+    await focusEditor(window, editor);
     await expect(editor).toBeFocused();
     await window.keyboard.press("ControlOrMeta+End");
     for (let press = 0; press < 12; press++) {

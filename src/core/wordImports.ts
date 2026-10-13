@@ -28,6 +28,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import * as Y from "yjs";
+import { recordProposalRequest } from "../shared/proposals";
 import { setTextOrigin } from "../shared/textOrigins";
 import {
   recordWordImportProgress,
@@ -158,6 +159,11 @@ export function recordSources(doc: Y.Doc, element: Y.XmlElement, structure: Word
   }
 }
 
+/** Records who made each of someone's changes the file has, and when (#108). */
+export function recordChanges(doc: Y.Doc, structure: WordStructure): void {
+  for (const [request, made] of structure.changes) recordProposalRequest(doc, request, made);
+}
+
 export function createWordImports(options: WordImportsOptions) {
   const { db, content, minds, log } = options;
   const folder = join(options.dataDir, WORD_PACKAGES_FOLDER);
@@ -223,6 +229,7 @@ export function createWordImports(options: WordImportsOptions) {
       content.edit(mindId, (blocks) => {
         const doc = blocks.doc;
         if (!doc) return;
+        if (written === from) recordChanges(doc, structure);
         const elements = batch.map(createElement);
         const after = last ? blocks.toArray().indexOf(last) + 1 : 0;
         blocks.insert(after > 0 ? after : Math.min(written, blocks.length), elements);
