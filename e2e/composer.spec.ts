@@ -486,7 +486,7 @@ test("Stop works before the Answer has started; a Question that can't be asked p
   }
 });
 
-test("⌘J focuses the composer from the note; Shift+Enter breaks the Question's line; Esc folds the assistant and a second Esc goes back to the note, where the cursor was", async () => {
+test("⌘J focuses the composer from the note; Shift+Enter breaks the Question's line; Esc goes back to the note, where the cursor was, and leaves the assistant open", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
@@ -520,14 +520,12 @@ test("⌘J focuses the composer from the note; Shift+Enter breaks the Question's
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect.poll(() => order(editor)).toEqual(["First thought", "Second thought"]);
 
-  // Esc folds the assistant, the focus on what shows it again; a second Esc goes back to the
-  // note, where the cursor was, to write there.
+  // Esc goes back to the note, where the cursor was, to write there; the assistant stays open.
   await expect(input).toBeFocused();
   await window.keyboard.press("Escape");
   const assistant = window.getByTestId("assistant");
-  await expect(assistant).toHaveAttribute("data-folded", "true");
-  await window.keyboard.press("Escape");
   await expect(editor).toBeFocused();
+  await expect(assistant).not.toHaveAttribute("data-folded");
   await window.keyboard.type(" noted");
   await expect.poll(() => order(editor)).toEqual(["First thought noted", "Second thought"]);
 
