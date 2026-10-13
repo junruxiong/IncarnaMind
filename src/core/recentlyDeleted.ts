@@ -79,6 +79,11 @@ function purge(
       [at, at, list],
     );
     db.run(`DELETE FROM mind_checkpoints WHERE mind_id ${IN}`, [list]);
+    // The Word package it was imported from goes once no other Mind keeps it (`sweepWordPackages`).
+    db.run(
+      `UPDATE word_packages SET deleted_at = ?, updated_at = ? WHERE mind_id ${IN} AND deleted_at IS NULL`,
+      [at, at, list],
+    );
   }
   if (kind === "conversation") {
     // Its messages, their index and its titles: everything the User asked or was answered.

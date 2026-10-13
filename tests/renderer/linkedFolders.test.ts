@@ -8,7 +8,6 @@ import {
   formatDuration,
   indexingShare,
   linkedFolderRowState,
-  revealLabelKey,
   rowStateLabel,
 } from "../../src/renderer/src/linkedFolders";
 import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
@@ -173,12 +172,6 @@ describe("names and labels", () => {
     expect(folderName("/Users/ada/Papers")).toBe("Papers");
     expect(folderName("/Users/ada/Papers/")).toBe("Papers");
     expect(folderName("C:\\Users\\ada\\Zotero\\storage")).toBe("storage");
-  });
-
-  test("the file manager is named for the system", () => {
-    expect(en(revealLabelKey("MacIntel"))).toBe("Show in Finder");
-    expect(en(revealLabelKey("Win32"))).toBe("Show in Explorer");
-    expect(en(revealLabelKey("Linux x86_64"))).toBe("Show in file manager");
   });
 
   test("a Document's file status: words for missing and unavailable, nothing when it's there", () => {

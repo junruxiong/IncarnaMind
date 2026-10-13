@@ -127,6 +127,7 @@ describe("the menus", () => {
       "mind.outline",
       "mind.export",
       "mind.exportAs.pdf",
+      "mind.exportAs.html",
       "mind.exportAs.markdown",
       "mind.exportOptions",
       "mind.history",
@@ -147,6 +148,7 @@ describe("the menus", () => {
       "mind.outline",
       "mind.export",
       "mind.exportAs.pdf",
+      "mind.exportAs.html",
       "mind.exportAs.markdown",
       "mind.exportOptions",
       "mind.history",
@@ -156,7 +158,7 @@ describe("the menus", () => {
     ]);
   });
 
-  test("a Document's file group is Open in default app, Show in folder, Copy path, then Get info", () => {
+  test("a Document's file group is Open in default app, Show the file, Copy path, then Get info", () => {
     const here = { "document.rename": () => undefined };
     const ids = idsIn(buildMenu("document", focusOn("document", here)));
     const start = ids.indexOf("document.openExternally");

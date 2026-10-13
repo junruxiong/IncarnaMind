@@ -1418,7 +1418,32 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
-    // 74 to 78 are reserved by work in progress.
+    // 74 is reserved by work in progress.
+    version: 75,
+    description: "Word files imported as Minds keep their original package (#104)",
+    sql: `
+      -- The .docx a Mind was imported from, kept in the data folder as "Word imports/<sha256>.docx"
+      -- so export can write back into it (#105) after the User's file has moved or gone. Two Minds
+      -- imported from the same file share it. completed_at: when every Block was written; NULL
+      -- while the import runs, so one a quit cut short goes on at the next start. deleted_at: the
+      -- Mind was deleted permanently, and the package goes once no Mind keeps it.
+      CREATE TABLE word_packages (
+        id TEXT PRIMARY KEY NOT NULL,
+        mind_id TEXT NOT NULL REFERENCES minds (id),
+        sha256 TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        size INTEGER NOT NULL,
+        completed_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX word_packages_by_mind ON word_packages (mind_id) WHERE deleted_at IS NULL;
+      CREATE INDEX word_packages_by_sha256 ON word_packages (sha256) WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    // 76 to 78 are reserved by work in progress.
     version: 79,
     description: "Checkpoints: a Mind as it was before an AI change, or after a pause (#113)",
     sql: `
