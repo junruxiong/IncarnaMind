@@ -843,12 +843,14 @@ export function createLibrary(options: LibraryOptions) {
   /**
    * The Document a new file is, moved and edited where IncarnaMind didn't see
    * it (#389), once its content matched none: the one whose file went that was
-   * this file on its disk. Or, from another disk, which gives the file a new
-   * number: the one whose file went in this pass or was found missing in the
-   * last, with the file's name, an older modified time and a size close to
-   * its, if no other new file in the pass has that name (`twins`). Never one of
-   * two that fit. Taken out of `removed` if found there. With `single`, only a
-   * file added on its own.
+   * this file on its disk. Or one whose file went in this pass or was found
+   * missing in the last, with the file's name: on the same disk, saved by an
+   * editor that replaces the file (#604), the one with its creation time, or
+   * else one with an older modified time; from another disk, which gives the
+   * file a new number, one with an older modified time and a size close to
+   * its. Those without the creation time only if no other new file in the
+   * pass has that name (`twins`). Never one of two that fit. Taken out of
+   * `removed` if found there. With `single`, only a file added on its own.
    */
   async function editedDocument(
     file: Found,
@@ -861,9 +863,8 @@ export function createLibrary(options: LibraryOptions) {
     const fits = (row: FileRow) =>
       row.kind === file.kind && !isLegacyCopy(row.path) && (!single || !row.linked_folder_id);
     let candidates = (await sameFileGone(file.path, identity, removed)).filter(fits);
-    if (candidates.length === 0 && !twins.has(basename(file.path))) {
-      candidates = fromAnotherDisk(file, identity, removed).filter(fits);
-    }
+    const named = candidates.length === 0 ? goneWithName(file, removed).filter(fits) : [];
+    if (named.length > 0) candidates = savedAgain(file, identity, named, twins);
     const [match] = candidates;
     if (!match || candidates.length > 1) return undefined;
     const at = removed.findIndex((row) => row.id === match.id);
@@ -908,15 +909,37 @@ export function createLibrary(options: LibraryOptions) {
   }
 
   /**
-   * The Documents a file from another disk could be: those whose file went in
-   * this pass or was found missing in the last, on another disk than the
-   * file, with its name, an older modified time and a size close to its.
+   * The ones of `named` (`goneWithName`) a file could be, its content and
+   * number new. On its disk: the ones that had its creation time, which Word
+   * keeps when it saves by replacing the file; else, as Pages saves, those
+   * with an older modified time, whatever their size, since an editor's save
+   * can make a file several times larger. From another disk: those with an
+   * older modified time and a size close to its. Only the creation time
+   * holds when another new file has the name.
    */
-  function fromAnotherDisk(
+  function savedAgain(
     file: Found,
     identity: FileIdentity,
-    removed: readonly FileRow[],
+    named: readonly FileRow[],
+    twins: ReadonlySet<string>,
   ): FileRow[] {
+    const sameDisk = named.filter((row) => row.file_device === identity.device);
+    const created = sameDisk.filter(
+      (row) => identity.createdNs !== null && row.file_created_ns === identity.createdNs,
+    );
+    if (created.length > 0 || twins.has(basename(file.path))) return created;
+    const older = (row: FileRow) => row.file_mtime_ms !== null && file.mtimeMs > row.file_mtime_ms;
+    return named.filter(
+      (row) =>
+        older(row) && (row.file_device === identity.device || closeInSize(row.size, file.size)),
+    );
+  }
+
+  /**
+   * The Documents whose file went in this pass or was found missing in the
+   * last, with the file's name, whose disk was known.
+   */
+  function goneWithName(file: Found, removed: readonly FileRow[]): FileRow[] {
     const recent = new Map<string, FileRow>();
     for (const row of removed) {
       if (row.file_status === "available" || missingBefore.has(row.id)) recent.set(row.id, row);
@@ -933,13 +956,7 @@ export function createLibrary(options: LibraryOptions) {
     }
     const name = basename(file.path);
     return [...recent.values()].filter(
-      (row) =>
-        row.file_device !== null &&
-        row.file_device !== identity.device &&
-        basename(row.path) === name &&
-        row.file_mtime_ms !== null &&
-        file.mtimeMs > row.file_mtime_ms &&
-        closeInSize(row.size, file.size),
+      (row) => row.file_device !== null && basename(row.path) === name,
     );
   }
 
