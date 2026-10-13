@@ -1003,6 +1003,9 @@ export async function slideSelect(
   await window.mouse.down();
   await window.mouse.move(end.right - 1, end.y, { steps: 12 });
   await window.mouse.up();
+  // After a drag, ProseMirror puts its selection back into the page in a task queued as the
+  // mouse comes up; a key pressed before that task runs is undone by it. This waits for it.
+  await window.evaluate(() => new Promise((resolve) => setTimeout(resolve)));
 }
 
 /**

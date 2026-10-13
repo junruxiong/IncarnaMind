@@ -1,6 +1,7 @@
 import type { ClipboardEvent, ReactNode } from "react";
 import { shortcutLabel } from "../commands/keymap";
 import { commands } from "../commands/registry";
+import { TableIcon } from "../editor/icons";
 import { useFindSources } from "../findSources";
 import { useT } from "../i18n";
 import { canRecordMeetings } from "../meetings";
@@ -133,7 +134,8 @@ function pasteLinks(event: ClipboardEvent<HTMLElement>) {
 
 /**
  * The one "+" menu, the one place to add: New Mind, Import a Word file…,
- * Record a meeting (once Meetings are turned on), New Folder…, Add Documents…, Add a web page…,
+ * Record a meeting (once Meetings are turned on), Compare Documents…, New Folder…,
+ * Add Documents…, Add a web page…,
  * Find sources… and Link a folder…. Opened by keyboard or mouse, its items
  * are menu items reached with the arrow keys.
  */
@@ -205,6 +207,16 @@ function PlusMenu() {
             <span className="flex-1">{t("meetings.record")}</span>
           </button>
         )}
+        <button
+          type="button"
+          role="menuitem"
+          data-testid="plus-compare-documents"
+          onClick={choose(() => void commands.run("comparison.start").catch(reportError))}
+          className={`${menuItemClass} pl-2`}
+        >
+          <TableIcon className="size-4 shrink-0 text-ink-meta" />
+          <span className="flex-1">{t("command.compareDocuments")}</span>
+        </button>
         <button
           type="button"
           role="menuitem"
