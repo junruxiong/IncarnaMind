@@ -3815,6 +3815,11 @@ export interface AnswerSteps {
    * Null when the model gave no summary. Raw chain of thought is never kept.
    */
   reasoning: { summary: string; ms: number } | null;
+  /**
+   * How much of the Mind it read (`ConversationAnswer.read`) it read, from 0
+   * to 1, when that was part of it (#564).
+   */
+  readShare?: number;
 }
 
 /** A Tool call of an Answer started, or finished (see `call.status`). */
