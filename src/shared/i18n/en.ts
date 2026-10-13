@@ -59,7 +59,9 @@ export const en = {
   "library.unsorted": "Not in a Folder",
   "library.chooseStarters": "Starter folders",
   "library.cancel": "Cancel",
-  "library.search": "Search names and Tags",
+  "library.search": "Search names, words inside, Tags",
+  "library.inside.failed": "The words inside Documents couldn't be searched: {reason}",
+  "library.inside.retry": "Try again",
   "library.classify": "Organize",
   "library.progress": "Organizing {count} Documents…",
   "library.waiting":

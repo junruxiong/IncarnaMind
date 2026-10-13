@@ -283,6 +283,72 @@ test("search narrows every section and hides the empty ones; a filter chip and t
   }
 });
 
+test("search finds the words inside Documents too, in every section: the line that holds them, where it is, its Folder, and a click opens it there, in English and Chinese", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1600, 900);
+    await placeAssistant(window, { folded: true });
+    const library = await openFullLibrary(window);
+    const search = library.getByTestId("library-search");
+    await expect(search).toHaveAttribute("placeholder", "Search names, words inside, Tags");
+
+    // "ledger" is in no name, but in the text of every English Document that has text:
+    // far more than ⌘K's 20.
+    const withText = [...FOLDERS.flatMap((folder) => folder.documents), ...NOT_IN_A_FOLDER]
+      .map(([name]) => name)
+      .filter((name) => name !== SCAN_NAME && !DELETED.includes(name));
+    const english = withText.filter((name) => !/\p{Script=Han}/u.test(name));
+    await search.fill("ledger");
+    await expect(rowsOf(library)).toHaveCount(english.length);
+    expect(english.length).toBeGreaterThan(20);
+    await expect(library.getByTestId("library-no-match")).toHaveCount(0);
+
+    // Each row says the line that holds the words, with them in bold, and its Folder.
+    const invoice = row(section(library, "Finance"), "Invoice 4471");
+    await expect(invoice.getByTestId("library-found-text")).toHaveText(
+      /against the ledger on 12 March 2026\.$/,
+    );
+    await expect(invoice.getByTestId("library-found-text").locator("b")).toHaveText(["ledger"]);
+    await expect(invoice.getByTestId("library-found-place")).toHaveText("p. 1");
+    await expect(invoice.getByTestId("library-path")).toHaveText("Finance");
+    // Not in a Folder's rows need no path.
+    const loose = row(section(library, "Not in a Folder"), "Reading list");
+    await expect(loose.getByTestId("library-found-text")).toContainText("ledger");
+    await expect(loose.getByTestId("library-path")).toHaveCount(0);
+
+    // A name that holds the words has them in bold too.
+    await search.fill("invoice 4471");
+    await expect(invoice.getByTestId("library-document-name").locator("b")).toHaveText([
+      "Invoice",
+      "4471",
+    ]);
+
+    // A click opens it at the words.
+    await search.fill("ledger");
+    await pointAndClick(window, invoice.getByTestId("library-document-name"));
+    const viewer = window.getByTestId("viewer");
+    await expect(viewer).toBeVisible();
+    await expect(viewer.getByTestId("viewer-header")).toContainText("Invoice 4471");
+
+    // Cleared, rows are one line again.
+    await library.getByRole("button", { name: "Clear the search", exact: true }).click();
+    await expect(library.getByTestId("library-found-text")).toHaveCount(0);
+    await expect(library.getByTestId("library-path")).toHaveCount(0);
+
+    // In Chinese: the placeholder, and words inside Chinese Documents.
+    await setLanguage(window, "zh-CN");
+    await expect(search).toHaveAttribute("placeholder", "搜索名称、文档内容和标签");
+    const chinese = withText.filter((name) => /\p{Script=Han}/u.test(name));
+    await search.fill("核对");
+    await expect(rowsOf(library)).toHaveCount(chinese.length);
+    const report = row(section(library, "财务报表"), "审计意见书");
+    await expect(report.getByTestId("library-found-text").locator("b")).toHaveText(["核对"]);
+    await expect(report.getByTestId("library-path")).toHaveText("财务报表");
+  } finally {
+    await app.close();
+  }
+});
+
 test("five Documents go into a Folder with Move to…, from the selection bar and by ⇧⌘M, with Undo; no row has a dropdown", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
