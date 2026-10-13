@@ -101,7 +101,9 @@ export function DocumentTagChips({
           header
             ? "viewer-icon-button"
             : addsInWords
-              ? "h-6 shrink-0 rounded-sm px-1.5 text-[12px] text-ink-meta hover:bg-hover hover:text-ink"
+              ? `h-6 shrink-0 rounded-sm px-1.5 text-[12px] text-ink-meta hover:bg-hover hover:text-ink ${
+                  variant === "peek" && chips.length === 0 ? "-ml-1.5" : ""
+                }`
               : "inline-flex size-6 shrink-0 items-center justify-center rounded-sm text-ink-meta opacity-0 group-hover/row:opacity-100 hover:bg-hover hover:text-ink focus-visible:opacity-100 aria-expanded:opacity-100"
         }
       >

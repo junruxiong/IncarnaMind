@@ -24,8 +24,8 @@ export interface PeekTarget {
   row: HTMLElement;
 }
 
-/** The sidebar or the Library, whichever holds the row. */
-export const scopeOf = (row: HTMLElement): HTMLElement | null => row.closest("[data-surface]");
+/** The sidebar or the Library, whichever holds the element. */
+export const scopeOf = (element: Element): HTMLElement | null => element.closest("[data-surface]");
 
 export const usePeek = create<{
   target: PeekTarget | null;
@@ -44,14 +44,28 @@ export function togglePeek(target: PeekTarget): void {
   else show(target);
 }
 
+const rowOfDocument = (documentId: string, surface: SelectSurface) =>
+  document.querySelector<HTMLElement>(
+    `[data-surface="${surface}"] [data-select-ref="document:${CSS.escape(documentId)}"]`,
+  );
+
+/**
+ * The row the peek is about, found again if its list drew it anew (moving the
+ * Document to another Folder does); null if the list no longer shows it.
+ */
+export function peekedRow(target: PeekTarget): HTMLElement | null {
+  if (target.row.isConnected) return target.row;
+  const row = rowOfDocument(target.documentId, target.surface);
+  if (row) usePeek.getState().show({ ...target, row });
+  return row;
+}
+
 /**
  * Peeks at a Document by its row in the sidebar or the Library, if the row is on
  * the page, with the focus on the row so that the keys of the peek reach it.
  */
 export function peekAt(documentId: string, surface: SelectSurface): void {
-  const row = document.querySelector<HTMLElement>(
-    `[data-surface="${surface}"] [data-select-ref="document:${CSS.escape(documentId)}"]`,
-  );
+  const row = rowOfDocument(documentId, surface);
   if (!row) return;
   togglePeek({ documentId, surface, row });
   row.querySelector<HTMLElement>(ROW_BUTTON)?.focus();
@@ -86,9 +100,10 @@ export function usePeekKey(documentId: string, surface: SelectSurface) {
  */
 export function stepPeek(step: 1 | -1): void {
   const { target } = usePeek.getState();
-  const scope = target && scopeOf(target.row);
-  if (!target || !scope) return;
-  const next = neighbour(documentRows(scope), target.row, step);
+  const row = target && peekedRow(target);
+  const scope = row && scopeOf(row);
+  if (!target || !row || !scope) return;
+  const next = neighbour(documentRows(scope), row, step);
   const id = refOfKey(next?.dataset.selectRef ?? "")?.id;
   if (!next || !id) return;
   useSelection.getState().choose(target.surface, { kind: "document", id });
@@ -99,13 +114,15 @@ export function stepPeek(step: 1 | -1): void {
 export function openPeeked(): void {
   const { target, close } = usePeek.getState();
   if (!target) return;
+  const button = peekedRow(target)?.querySelector<HTMLElement>(ROW_BUTTON);
   close();
-  const button = target.row.isConnected ? target.row.querySelector<HTMLElement>(ROW_BUTTON) : null;
   if (button) button.click();
   else useAppStore.getState().openDocument({ documentId: target.documentId });
 }
 
 /** The focus back on the peeked Document's row. */
 export function focusPeekedRow(): void {
-  usePeek.getState().target?.row.querySelector<HTMLElement>(ROW_BUTTON)?.focus();
+  const { target } = usePeek.getState();
+  const row = target && peekedRow(target);
+  row?.querySelector<HTMLElement>(ROW_BUTTON)?.focus();
 }

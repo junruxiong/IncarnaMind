@@ -7,7 +7,13 @@ import {
   labelOf,
   menuLabelOf,
 } from "../../src/renderer/src/commands/registry";
-import { neighbour, PEEK_WIDTH, placePeek } from "../../src/renderer/src/peekPlace";
+import {
+  DRAWN_UP_TO_BYTES,
+  neighbour,
+  PEEK_WIDTH,
+  peekDraws,
+  placePeek,
+} from "../../src/renderer/src/peekPlace";
 import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
 
 /*
@@ -60,6 +66,20 @@ describe("where a peek goes", () => {
       height: 300,
     });
     expect(spot).toEqual({ left: 8, top: 8 });
+  });
+});
+
+describe("which Documents a peek draws", () => {
+  test("draws a small file of any kind", () => {
+    for (const kind of ["docx", "pptx", "xlsx", "csv", "markdown", "text"]) {
+      expect(peekDraws({ kind, size: 50_000 }), kind).toBe(true);
+    }
+  });
+
+  test("shows only the kind of a large file that the viewer would read whole, but draws any PDF", () => {
+    expect(peekDraws({ kind: "docx", size: DRAWN_UP_TO_BYTES + 1 })).toBe(false);
+    expect(peekDraws({ kind: "text", size: 40_000_000 })).toBe(false);
+    expect(peekDraws({ kind: "pdf", size: 400_000_000 })).toBe(true);
   });
 });
 

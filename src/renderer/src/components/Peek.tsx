@@ -102,7 +102,8 @@ function place(card: HTMLElement, beside: Beside): Box {
  * Document's row in its list is what it shows.
  */
 function useWhileOpen(card: RefObject<HTMLElement | null>) {
-  useEffect(() => {
+  // Before it is drawn, so no key reaches the list while the peek shows but doesn't answer.
+  useLayoutEffect(() => {
     const inside = (node: EventTarget | null) =>
       node instanceof Element && (card.current?.contains(node) || node.closest("[popover]"));
     const onKey = (event: KeyboardEvent) => {
@@ -110,7 +111,7 @@ function useWhileOpen(card: RefObject<HTMLElement | null>) {
       if (!target || event.isComposing) return;
       if (event.key === "Escape") {
         // What the peek opened (a picker, a dialog) closes first, by its own Esc.
-        if (document.querySelector("dialog[open], [popover]:popover-open:not([data-peek])")) return;
+        if (document.querySelector("dialog[open], :popover-open:not([inert], [data-peek])")) return;
         event.preventDefault();
         event.stopPropagation();
         if (card.current?.contains(document.activeElement)) focusPeekedRow();
@@ -119,7 +120,7 @@ function useWhileOpen(card: RefObject<HTMLElement | null>) {
       }
       const row = event.target;
       if (event.altKey || event.ctrlKey || event.metaKey || !(row instanceof HTMLElement)) return;
-      if (!row.matches(ROW_BUTTON) || scopeOf(row) !== scopeOf(target.row)) return;
+      if (!row.matches(ROW_BUTTON) || scopeOf(row)?.dataset.surface !== target.surface) return;
       if ((event.key === "ArrowDown" || event.key === "ArrowUp") && !event.shiftKey) {
         event.preventDefault();
         event.stopPropagation();
@@ -138,9 +139,10 @@ function useWhileOpen(card: RefObject<HTMLElement | null>) {
       const { target, show, close } = usePeek.getState();
       const node = event.target;
       if (!target || !(node instanceof Element) || inside(node)) return;
-      const row = scopeOf(target.row)?.contains(node)
-        ? node.closest<HTMLElement>("[data-select-ref]")
-        : null;
+      const row =
+        scopeOf(node)?.dataset.surface === target.surface
+          ? node.closest<HTMLElement>("[data-select-ref]")
+          : null;
       const ref = refOfKey(row?.dataset.selectRef ?? "");
       if (!row || ref?.kind !== "document") close();
       else if (row !== target.row) show({ ...target, documentId: ref.id, row });
@@ -172,7 +174,7 @@ function PeekCard({ target }: { target: PeekTarget }) {
   const folder = useDocumentFolder(target.documentId);
   useWhileOpen(card);
 
-  // Shown where it goes before it is drawn, growing from its row, in the list it was asked for in.
+  // Opened before it is measured: a closed popover has no size.
   const beside = useRef<Beside | null>(null);
   const entered = useRef(false);
   // biome-ignore lint/correctness/useExhaustiveDependencies: placed where it opened, and not as it steps to other rows.
@@ -186,7 +188,6 @@ function PeekCard({ target }: { target: PeekTarget }) {
     entered.current = true;
   }, [target.surface]);
 
-  // Kept inside the window as its content and the window change.
   useEffect(() => {
     const element = card.current;
     if (!element) return;
@@ -205,7 +206,6 @@ function PeekCard({ target }: { target: PeekTarget }) {
     };
   }, []);
 
-  // What it shows was deleted.
   useEffect(() => {
     if (!document) usePeek.getState().close();
   }, [document]);
