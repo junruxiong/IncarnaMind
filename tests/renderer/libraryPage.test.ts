@@ -9,7 +9,9 @@ import {
   organizeState,
   problemOf,
   problemText,
+  RECENTLY_DELETED,
   searchWords,
+  sectionShows,
   sectionsOf,
 } from "../../src/renderer/src/libraryPage";
 import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
@@ -74,6 +76,24 @@ describe("sections", () => {
       "finance",
     ]);
     expect(sectionsOf([board, finance], [], folderOf, true)).toEqual([]);
+  });
+
+  test("a section asked for is there only if it would show, so the page never waits to scroll to it", () => {
+    const assignments = [
+      { documentId: a.id, groupId: "finance" },
+      { documentId: c.id, groupId: "gone" },
+    ];
+    const shows = (key: string, documents: Document[], deleted: number | null = null) =>
+      sectionShows(key, documents, [board, finance], assignments, deleted);
+    expect(shows("board", [])).toBe(true);
+    expect(shows("gone", [a, c])).toBe(false);
+    expect(shows(NOT_IN_A_FOLDER, [a])).toBe(false);
+    // A Document whose Folder has gone is Not in a Folder.
+    expect(shows(NOT_IN_A_FOLDER, [a, c])).toBe(true);
+    expect(shows(RECENTLY_DELETED, [], 0)).toBe(false);
+    expect(shows(RECENTLY_DELETED, [], 2)).toBe(true);
+    // Not read yet: it may be there.
+    expect(shows(RECENTLY_DELETED, [], null)).toBe(true);
   });
 });
 

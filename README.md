@@ -37,6 +37,8 @@ git clone https://github.com/junruxiong/IncarnaMind.git && cd IncarnaMind
 npm install && npm run dev
 ```
 
+Windows releases are signed through the SignPath Foundation's free signing for open-source projects: see the [Code signing policy](docs/code-signing-policy.md).
+
 <details>
 <summary>If your system won't open it</summary>
 
