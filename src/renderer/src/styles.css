@@ -6011,12 +6011,36 @@
       overflow-y: auto;
       overscroll-behavior: contain;
     }
+    /* What it asks stays in view above the scrolled details, as the buttons stay below (#678). */
     .approval-head {
+      position: sticky;
+      top: 0;
+      z-index: 1;
       padding: 10px;
+      background: var(--color-sheet);
     }
     .approval-title {
       font-size: 14px;
       line-height: 20px;
+    }
+    /* In the short tray of the bottom dock the head is the title's one line, and the details scroll between it and the buttons. */
+    .assistant[data-dock="bottom"] & {
+      padding-block: 4px 6px;
+
+      .approval-actions {
+        padding-block: 4px;
+      }
+      .approval-head {
+        padding-block: 8px 4px;
+      }
+      .approval-title {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .approval-explanation {
+        display: none;
+      }
     }
     .approval-details {
       padding: 10px;
