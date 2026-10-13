@@ -498,11 +498,18 @@ describe("Existing Documents get their creation date once, in the background", {
     expect((await again.listDocuments()).map((document) => document.creationDate)).toEqual(
       documents.map((document) => document.creationDate),
     );
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    expect(later).toEqual([]);
-    expect(queryDatabase(dataDir, "SELECT id, updated_at FROM documents ORDER BY id")).toEqual(
-      written,
-    );
+    // The processor takes jobs in the order queued: once a Document added now is ready, any job
+    // the start would have queued has run.
+    const [control] = await addAndProcess(again, [
+      await writeSourceFile(await createSourceFolder(), "Control.md", "Nothing to do with them."),
+    ]);
+    expect(later.filter((id) => id !== control?.id)).toEqual([]);
+    expect(
+      queryDatabase<{ id: string }>(
+        dataDir,
+        "SELECT id, updated_at FROM documents ORDER BY id",
+      ).filter((row) => row.id !== control?.id),
+    ).toEqual(written);
     expect(embedder.texts).toEqual([]);
   });
 });

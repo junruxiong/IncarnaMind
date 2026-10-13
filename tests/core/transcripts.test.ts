@@ -217,7 +217,6 @@ describe("A Meeting's live Transcript", { timeout: 60_000 }, () => {
     expect((await transcriptOf(first.core, meeting.id)).state).toBe("finishing");
     first.core.close();
     // Nothing reaches the closed core; the next start finishes what was left.
-    await new Promise((resolve) => setTimeout(resolve, 200));
     const second = await transcribingCore(dataDir);
     const saved = await until(
       second.core,
