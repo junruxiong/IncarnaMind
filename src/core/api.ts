@@ -3746,14 +3746,17 @@ export interface CheckContradictionsInput {
   /** Chosen by the caller, so it can stop the request (`cancelCheck`). */
   requestId: string;
   mindId: string;
-  /** The model to use: the Mind's own; none, or null, the default chat model. */
+  /** The model to use; none, or null: the Mind's own, else the default chat model. */
   model?: ChatModelChoice | null;
 }
 
 /** What a check for contradictions would check, before anything is sent. */
 export type ContradictionCheckPlan =
-  /** `claims` cited sentences, each checked against the other Documents in the Folder. */
-  | { kind: "ready"; claims: number }
+  /**
+   * `claims` cited sentences, each checked against the other Documents in the
+   * Folder, with `model`: the Mind's own, or null for the default.
+   */
+  | { kind: "ready"; claims: number; model: ChatModelChoice | null }
   | Extract<
       CheckSentencesResult,
       { kind: "no-folder" | "only-cited" | "no-documents" | "nothing" | "has-proposals" }

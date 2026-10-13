@@ -363,7 +363,8 @@ export function createContradictionWatch(options: WatchOptions) {
     planContradictionCheck(mindId: string): ContradictionCheckPlan {
       options.requireMind(mindId);
       const ready = plan(mindId);
-      return ready.kind === "ready" ? { kind: "ready", claims: ready.claims.length } : ready;
+      if (ready.kind !== "ready") return ready;
+      return { kind: "ready", claims: ready.claims.length, model: modelOf(mindId) };
     },
 
     /** See `CoreApi.checkContradictions`. */
@@ -375,7 +376,9 @@ export function createContradictionWatch(options: WatchOptions) {
       const { requestId, mindId } = input;
       const ready = plan(mindId);
       if (ready.kind !== "ready") return ready;
-      const model = await options.prepare(input.model ?? options.defaultModel());
+      const model = await options.prepare(
+        input.model ?? modelOf(mindId) ?? options.defaultModel(),
+      );
       if (!model.ok) return model.result;
       const tracked = options.track(requestId, mindId);
       try {

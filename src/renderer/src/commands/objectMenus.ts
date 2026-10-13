@@ -19,6 +19,7 @@ registerMenu("mind", [
   "mind.outline",
   ...EXPORTS,
   "mind.history",
+  "mind.checkContradictions",
   "mind.citationStyle",
   "skill.fromMind",
   "mind.moveTo",
@@ -78,7 +79,18 @@ registerMenu("linkedFolder", [
 registerMenu("deleted", ["deleted.restore", "deleted.deletePermanently"]);
 
 // A tab's menu is its Mind's, then the tab's own.
-registerMenu("tab", ["mind.outline", ...EXPORTS, "mind.history", "mind.moveTo", "mind.delete"], 0);
+registerMenu(
+  "tab",
+  [
+    "mind.outline",
+    ...EXPORTS,
+    "mind.history",
+    "mind.checkContradictions",
+    "mind.moveTo",
+    "mind.delete",
+  ],
+  0,
+);
 registerMenu(
   "tab",
   [

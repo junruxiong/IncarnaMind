@@ -27,6 +27,7 @@ import { CitationStylePrompt } from "../editor/CitationStylePrompt";
 import { CitationView } from "../editor/CitationView";
 import { CodeBlockView } from "../editor/CodeBlockView";
 import { ComparisonTableView } from "../editor/ComparisonTableView";
+import { ContradictionLine } from "../editor/ContradictionLine";
 import { ConversationLinks } from "../editor/ConversationLinks";
 import { CitationClusters } from "../editor/citationClusters";
 import { CitationNumbers, redrawFootnotes, setCitationForm } from "../editor/citationNumbers";
@@ -610,6 +611,7 @@ function MindEditorView({
             ) : (
               <WordCount editor={editor} doc={doc}>
                 <NoteHealth editor={editor} mindId={mindId} />
+                <ContradictionLine doc={doc} mindId={mindId} />
               </WordCount>
             )}
           </>,

@@ -23,7 +23,9 @@ import { selectionForEdit } from "./editor/editSelection";
 /** Why a check gave no marks, for the line under the Mind's title. */
 export type CheckProblem =
   | Exclude<CheckSentencesResult, { kind: "checked" } | { kind: "cancelled" }>
-  | { kind: "failed"; message: string };
+  | { kind: "failed"; message: string }
+  /** Check for contradictions in a Mind with no cited claims (#112). */
+  | { kind: "no-cited" };
 
 interface ChecksState {
   /** By Mind: the request checking its sentences now, and how many. */
@@ -48,6 +50,16 @@ function setFor<K extends keyof ChecksState>(
 }
 
 export const dismissCheckProblem = (mindId: string) => setFor("problems", mindId, null);
+
+/** Records a check of a Mind as running, or as no longer running (null). */
+export const setCheckRunning = (
+  mindId: string,
+  running: { requestId: string; action: ClaimCheckAction } | null,
+) => setFor("running", mindId, running);
+
+/** Says why a check of a Mind gave no marks, under its title. */
+export const setCheckProblem = (mindId: string, problem: CheckProblem) =>
+  setFor("problems", mindId, problem);
 
 /**
  * Checks the sentences the selection (or `range`) touches, each whole, as
