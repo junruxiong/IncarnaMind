@@ -19,8 +19,8 @@ import {
 
 /**
  * A Question asked beside a Mind reads that Mind (#544): the scripted model's
- * Answer says what it read of it, the steps say "Read {Mind}" ("Read part of
- * {Mind}" for a long one), a selection leads, and the consent the first
+ * Answer says what it read of it, the steps say "Read “{Mind}”" ("Read part of
+ * “{Mind}” for a long one), a selection leads, and the consent the first
  * Question asks for says the Mind goes with it; in English and Chinese. Set
  * INCARNAMIND_SCREENSHOTS to a folder to also save screenshots.
  */
@@ -122,7 +122,7 @@ test("“Summarise my notes” beside a Mind reads it: the consent says so, the 
     "Read “Tide notes”, which starts: Spring tides come at new and full moon.",
   );
   // With no search, the folded line is the step: the timeline doesn't say it again.
-  await expect(answer.getByTestId("answer-steps-line")).toHaveText("Read Tide notes");
+  await expect(answer.getByTestId("answer-steps-line")).toHaveText("Read “Tide notes”");
   const timeline = await openSteps(window, answer);
   await expect(timeline.getByTestId("answer-step")).not.toHaveCount(0);
   await expect(timeline.locator('[data-step="read"]')).toHaveCount(0);
@@ -144,7 +144,7 @@ test("“Summarise my notes” beside a Mind reads it: the consent says so, the 
   await longMind(window, "Long notes");
   const long = await ask(window, "Summarise my notes");
   await expect(long).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-  await expect(long.getByTestId("answer-steps-line")).toHaveText("Read part of Long notes");
+  await expect(long.getByTestId("answer-steps-line")).toHaveText("Read part of “Long notes”");
   await screenshot(window, "steps-read-part-en");
 
   // The Mind's name in the folded line goes to that Mind.
