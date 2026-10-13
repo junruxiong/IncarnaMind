@@ -10,6 +10,7 @@ import { ANSWER_BLOCK, MIND_CONTENT_FIELD, type MindAccess } from "../../../core
 import { writingTime } from "../../../shared/blockTimes";
 import { citationStyle } from "../../../shared/citationStyles";
 import { translate } from "../../../shared/i18n";
+import { checkSentences } from "../checks";
 import { useCitationFormattingFor, useMindStyleChoice } from "../citationFormatting";
 import { noteHandle, readMindHandle } from "../commands/handles";
 import { shortcutLabel } from "../commands/keymap";
@@ -29,6 +30,7 @@ import { ComparisonTableView } from "../editor/ComparisonTableView";
 import { ConversationLinks } from "../editor/ConversationLinks";
 import { CitationClusters } from "../editor/citationClusters";
 import { CitationNumbers, redrawFootnotes, setCitationForm } from "../editor/citationNumbers";
+import { ClaimChecks, setClaimContext } from "../editor/claimChecks";
 import { comparisonCellView, comparisonRowView } from "../editor/comparisonViews";
 import { CopyCitations } from "../editor/copyCitations";
 import { DocumentChipView } from "../editor/DocumentChipView";
@@ -52,6 +54,7 @@ import {
   CountSlotContext,
   MindIdContext,
 } from "../editor/mindContext";
+import { NoteHealth } from "../editor/NoteHealth";
 import { NoteKeymap } from "../editor/noteKeymap";
 import { noteExtensions } from "../editor/noteSchema";
 import { ProposalBars } from "../editor/ProposalBars";
@@ -83,7 +86,7 @@ import { useAppStore } from "../store";
 import { askForSuggestion, describeSuggestion } from "../suggestions";
 import { CompareSheet } from "./CompareSheet";
 import { StartGuide, useGettingStarted, useIsExample } from "./GettingStarted";
-import { MineLineIcon, SparkLineIcon } from "./lineIcons";
+import { CheckLineIcon, MineLineIcon, SearchLineIcon, SparkLineIcon } from "./lineIcons";
 import { MindNotice } from "./MindNotice";
 
 /** Stands in for the hint's button in its translated words, which are split around it. */
@@ -324,6 +327,7 @@ function MindEditorView({
         // Footnotes are numbered as the Mind's citation style counts its Citations (#289).
         CitationNumbers.configure({ form: () => citationStyle(styleRef.current).form }),
         CitationClusters,
+        ClaimChecks,
         CopyCitations,
         FootnoteKeys,
         DocumentChipKeys,
@@ -400,6 +404,21 @@ function MindEditorView({
     if (!editor.isDestroyed) editor.setEditable(!readOnly && !importing);
   }, [editor, readOnly, importing]);
 
+  // A sentence's check needs a re-check once a Document it read changes, or the Mind moves (#96).
+  const documents = useAppStore((state) =>
+    state.status.kind === "ready" ? state.documents : null,
+  );
+  const folderId = useAppStore(
+    (state) => state.minds.find((each) => each.id === mindId)?.folderId ?? null,
+  );
+  const versions = useMemo(
+    () => (documents ? new Map(documents.map((each) => [each.id, each.contentHash])) : null),
+    [documents],
+  );
+  useEffect(() => {
+    if (!editor.isDestroyed) setClaimContext(editor.view, { versions, folderId });
+  }, [editor, versions, folderId]);
+
   // The Citations and References in the Mind's citation style (#289), formatted off the
   // window's thread, and the footnotes numbered again when the style counts Citations otherwise.
   useCitationFormattingFor(editor, style, mindId);
@@ -472,6 +491,20 @@ function MindEditorView({
         run: () => undefined,
       },
       { id: "explain", label: "editor.ai.explain", icon: "?", available, run: run("explain") },
+      {
+        id: "find-support",
+        label: "editor.ai.findSupport",
+        icon: <SearchLineIcon className="size-3.5" />,
+        available,
+        run: (current) => void checkSentences(current, mindId, doc, "find-support"),
+      },
+      {
+        id: "check-against-documents",
+        label: "editor.ai.checkAgainstDocuments",
+        icon: <CheckLineIcon className="size-3.5" />,
+        available,
+        run: (current) => void checkSentences(current, mindId, doc, "check-against-documents"),
+      },
       {
         id: "mark-as-mine",
         label: "editor.ai.markAsMine",
@@ -570,7 +603,9 @@ function MindEditorView({
         createPortal(
           <>
             <WordOrigin doc={doc} />
-            <WordCount editor={editor} doc={doc} />
+            <WordCount editor={editor} doc={doc}>
+              <NoteHealth editor={editor} mindId={mindId} />
+            </WordCount>
           </>,
           countSlot,
         )}
@@ -580,7 +615,7 @@ function MindEditorView({
         {!readOnly && <ProposalBars editor={editor} mindId={mindId} />}
         <EditorContent editor={editor} />
         {!readOnly && <EndHint editor={editor} text={hintText} onAsk={askOnLine} />}
-        <MarginChecks editor={editor} />
+        <MarginChecks editor={editor} mind={{ id: mindId, doc }} />
         <ConversationLinks editor={editor} />
         {!readOnly && <TableMenu editor={editor} />}
         <FootnoteArea editor={editor} citationView={citationView} />
