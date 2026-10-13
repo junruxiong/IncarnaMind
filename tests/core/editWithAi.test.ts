@@ -786,6 +786,222 @@ describe("Edit with AI", () => {
   });
 });
 
+/** The Mind's paragraphs and headings with what kind of Block each is: "h2", "•" a bullet, "1." a numbered item, "p". */
+function structure(client: MindClient): string[] {
+  const lines: string[] = [];
+  readMind(client).descendants((node, _position, parent) => {
+    if (!node.isTextblock) return true;
+    const list = parent?.type.name === "listItem" ? readMindParentOf(client, node) : null;
+    const kind =
+      node.type.name === "heading"
+        ? `h${node.attrs.level}`
+        : list === "bulletList"
+          ? "•"
+          : list === "orderedList"
+            ? "1."
+            : "p";
+    let line = "";
+    node.forEach((child) => {
+      line += child.isText ? (child.text ?? "") : `⟨${child.attrs.check}⟩`;
+    });
+    lines.push(`${kind} ${line}`);
+    return false;
+  });
+  return lines;
+}
+
+/** The kind of list a list item's paragraph is in. */
+function readMindParentOf(
+  client: MindClient,
+  paragraph: ReturnType<typeof readMind>,
+): string | null {
+  let found: string | null = null;
+  readMind(client).descendants((node) => {
+    if (node.type.name !== "bulletList" && node.type.name !== "orderedList") return true;
+    node.descendants((inner) => {
+      if (inner === paragraph || inner.eq(paragraph)) found = node.type.name;
+    });
+    return false;
+  });
+  return found;
+}
+
+describe("Edit with AI over Blocks of several kinds", () => {
+  const heading = (value: string): JSONContent => ({
+    type: "heading",
+    attrs: { id: `block-${++ids}`, level: 2 },
+    content: [text(value)],
+  });
+  const list = (type: "bulletList" | "orderedList", ...items: JSONContent[][]): JSONContent => ({
+    type,
+    content: items.map((content) => ({ type: "listItem", content: [paragraph(...content)] })),
+  });
+  /** Findings with a cited bullet, decisions as numbered items, and a closing paragraph. */
+  const mixed = (tides: Document): JSONContent[] => [
+    heading("Findings"),
+    list(
+      "bulletList",
+      [text("Spring tides are strongest at new moon. "), citation(tides)],
+      [text("Neap tides are weakest.")],
+    ),
+    heading("Decisions"),
+    list(
+      "orderedList",
+      [text("Publish the tide tables in March.")],
+      [text("Check the harbour gauges weekly.")],
+    ),
+    paragraph(text("Harbours publish the times of high water every year.")),
+  ];
+  const whole = (client: MindClient, mindId: string): EditWithAiInput => {
+    const blocks: { id: string; size: number }[] = [];
+    readMind(client).descendants((node) => {
+      if (!node.isTextblock) return true;
+      blocks.push({ id: String(node.attrs.id), size: node.content.size });
+      return false;
+    });
+    const first = blocks[0] as { id: string };
+    const last = blocks.at(-1) as { id: string; size: number };
+    return {
+      requestId: `edit-${++ids}`,
+      mindId,
+      from: { blockId: first.id, offset: 0 },
+      to: { blockId: last.id, offset: last.size },
+      text: blocks.map((block) => plainOf(client, block.id)).join("\n"),
+      action: "instruction",
+      instruction: "Restructure so the decisions come first. Cut the last paragraph.",
+    };
+  };
+  const BEFORE = [
+    "h2 Findings",
+    "• Spring tides are strongest at new moon. ⟨found⟩",
+    "• Neap tides are weakest.",
+    "h2 Decisions",
+    "1. Publish the tide tables in March.",
+    "1. Check the harbour gauges weekly.",
+    "p Harbours publish the times of high water every year.",
+  ];
+  const RESTRUCTURED = [
+    "h2 Decisions",
+    "1. Publish the tide tables in March.",
+    "1. Check the harbour gauges weekly.",
+    "h2 Findings",
+    "• Spring tides are strongest at new moon. ⟨found⟩",
+    "• Neap tides are weakest.",
+  ];
+
+  test("the model reads each Block's kind by its mark, and a restructure keeps headings, lists and Citations; Accept all is one step of Undo (#703)", async () => {
+    const calls: EditCall[] = [];
+    const { core, mind, client, tides } = await setUp(
+      editingModel(
+        () =>
+          [
+            "## Decisions",
+            "1. Publish the tide tables in March.",
+            "1. Check the harbour gauges weekly.",
+            "## Findings",
+            "- Spring tides are strongest at new moon. [1]",
+            "- Neap tides are weakest.",
+          ].join("\n\n"),
+        calls,
+      ),
+    );
+    writeMind(client, mixed(tides));
+    await client.settled();
+    expect(structure(client)).toEqual(BEFORE);
+
+    await core.editWithAi(whole(client, mind.id));
+
+    expect(calls[0]?.passage).toBe(
+      [
+        "## Findings",
+        "- Spring tides are strongest at new moon. [1]",
+        "- Neap tides are weakest.",
+        "## Decisions",
+        "1. Publish the tide tables in March.",
+        "1. Check the harbour gauges weekly.",
+        "Harbours publish the times of high water every year.",
+      ].join("\n\n"),
+    );
+    const undo = new Y.UndoManager(client.blocks, { trackedOrigins: new Set(["editor"]) });
+    await resolveChanges(client, "accept");
+    expect(structure(client)).toEqual(RESTRUCTURED);
+    const markdown = await exported(core, mind.id);
+    expect(markdown).toContain("## Decisions\n\n1. Publish the tide tables in March.");
+    expect(markdown).toContain("## Findings\n\n- Spring tides are strongest at new moon.");
+
+    undo.undo();
+    await client.settled();
+    expect(pendingProposals(client.blocks).length).toBeGreaterThan(0);
+    await resolveChanges(client, "reject");
+    expect(structure(client)).toEqual(BEFORE);
+  });
+
+  test("a reply without marks pairs paragraphs by their words, not their place: none is written into a heading, and moved ones keep their kind", async () => {
+    const { core, mind, client, tides } = await setUp(
+      editingModel(() =>
+        [
+          "Decisions",
+          "Publish the tide tables in March.",
+          "Check the harbour gauges weekly.",
+          "Findings",
+          "Spring tides are strongest at new moon. [1]",
+          "Neap tides are weakest.",
+        ].join("\n\n"),
+      ),
+    );
+    writeMind(client, mixed(tides));
+    await client.settled();
+
+    await core.editWithAi(whole(client, mind.id));
+    await resolveChanges(client, "accept");
+
+    expect(structure(client)).toEqual(RESTRUCTURED);
+  });
+
+  test("a line that starts with a mark is a paragraph of its own, even after a single line break", async () => {
+    const { core, mind, client, tides } = await setUp(
+      editingModel(() =>
+        [
+          "## Decisions",
+          "1. Publish the tide tables in March.",
+          "1. Check the harbour gauges weekly.",
+          "## Findings",
+          "- Spring tides are strongest at new moon. [1]",
+          "- Neap tides are weakest.",
+        ].join("\n"),
+      ),
+    );
+    writeMind(client, mixed(tides));
+    await client.settled();
+
+    await core.editWithAi(whole(client, mind.id));
+    await resolveChanges(client, "accept");
+
+    expect(structure(client)).toEqual(RESTRUCTURED);
+  });
+
+  test("a Block the model marks as another kind becomes that kind", async () => {
+    const { core, mind, client } = await setUp(
+      editingModel(() =>
+        ["## Tides", "- Harbours publish the times of high water every year."].join("\n\n"),
+      ),
+    );
+    writeMind(client, [
+      heading("Tides"),
+      paragraph(text("Harbours publish the times of high water every year.")),
+    ]);
+    await client.settled();
+
+    await core.editWithAi(whole(client, mind.id));
+    await resolveChanges(client, "accept");
+
+    expect(structure(client)).toEqual([
+      "h2 Tides",
+      "• Harbours publish the times of high water every year.",
+    ]);
+  });
+});
+
 describe("Changes out of date", () => {
   test("a paragraph edited while the model works keeps the User's edits, and the change to words they edited is out of date until it is made again", async () => {
     let release = () => {};
