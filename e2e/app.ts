@@ -70,6 +70,11 @@ export interface LaunchOptions {
    */
   sources?: string;
   /**
+   * A JSON file of Connectors directory entries in place of the list that
+   * ships with the app, e.g. one served by a local stand-in. A test build honours it.
+   */
+  connectorDirectory?: string;
+  /**
    * Where the ChatGPT plan signs in and asks: the origin of a local server
    * standing in for OpenAI (tests/helpers/fakeOpenAI.ts). A test build honours it.
    */
@@ -142,6 +147,7 @@ export async function launchApp(
     home,
     referenceLookup,
     sources,
+    connectorDirectory,
     chatGpt,
     keepWindow = false,
     computerSound = "allowed",
@@ -164,6 +170,7 @@ export async function launchApp(
   delete env.POSTHOG_CAPTURE_MODE;
   delete env.INCARNAMIND_TEST_REFERENCE_LOOKUP;
   delete env.INCARNAMIND_TEST_SOURCES;
+  delete env.INCARNAMIND_TEST_CONNECTOR_DIRECTORY;
   delete env.INCARNAMIND_TEST_CHATGPT;
   delete env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS;
   delete env.INCARNAMIND_TEST_SCANS;
@@ -184,6 +191,7 @@ export async function launchApp(
   env.HOME = appHome;
   if (referenceLookup) env.INCARNAMIND_TEST_REFERENCE_LOOKUP = referenceLookup;
   if (sources) env.INCARNAMIND_TEST_SOURCES = sources;
+  if (connectorDirectory) env.INCARNAMIND_TEST_CONNECTOR_DIRECTORY = connectorDirectory;
   if (chatGpt) env.INCARNAMIND_TEST_CHATGPT = chatGpt;
   if (scans) env.INCARNAMIND_TEST_SCANS = scans;
   if (web) env.INCARNAMIND_TEST_WEB = String(web);

@@ -31,6 +31,7 @@ import type { Tool as McpTool } from "@modelcontextprotocol/sdk/types.js";
 import type { Browser, ProcessLauncher } from "../adapters";
 import type {
   Connector,
+  ConnectorDirectoryEntry,
   ConnectorError,
   ConnectorImportEntry,
   ConnectorImportResult,
@@ -887,14 +888,50 @@ export function createConnectors(options: ConnectorsOptions) {
     };
   };
 
+  const added = async (config: ConnectorConfig): Promise<Connector> => {
+    const id = await insert(config);
+    start(id);
+    options.onEnabledChange();
+    return toConnector(requireRow(id));
+  };
+
+  function setEnabled(id: unknown, enabled: unknown): Connector {
+    const row = requireRow(id);
+    if (typeof enabled !== "boolean") throw new InvalidInputError("enabled must be true or false.");
+    if ((row.enabled === 1) !== enabled) {
+      db.run("UPDATE connectors SET enabled = ?, updated_at = ? WHERE id = ?", [
+        enabled ? 1 : 0,
+        now(),
+        row.id,
+      ]);
+    }
+    if (enabled) {
+      const runtime = runtimes.get(row.id);
+      if (!runtime?.client && !runtime?.starting && !runtime?.signingIn) start(row.id);
+    } else {
+      stop(row.id);
+    }
+    changed();
+    options.onEnabledChange();
+    return toConnector(requireRow(row.id));
+  }
+
   return {
     list,
 
-    async add(input: unknown): Promise<Connector> {
-      const id = await insert(parseAddInput(input));
-      start(id);
-      options.onEnabledChange();
-      return toConnector(requireRow(id));
+    add: async (input: unknown): Promise<Connector> => added(parseAddInput(input)),
+
+    /**
+     * Adds a directory entry as a remote Connector at its URL, named as the
+     * service; a Connector already at that URL is the entry, turned on.
+     */
+    async addFromDirectory(entry: ConnectorDirectoryEntry, client: unknown): Promise<Connector> {
+      const existing = liveRows().find((row) => {
+        const config = storedConfig(row);
+        return config.transport === "http" && config.url === entry.url;
+      });
+      if (existing) return setEnabled(existing.id, true);
+      return added(parseAddInput({ name: entry.name, url: entry.url, client }));
     },
 
     /**
@@ -933,27 +970,7 @@ export function createConnectors(options: ConnectorsOptions) {
       return toConnector(requireRow(row.id));
     },
 
-    setEnabled(id: unknown, enabled: unknown): Connector {
-      const row = requireRow(id);
-      if (typeof enabled !== "boolean")
-        throw new InvalidInputError("enabled must be true or false.");
-      if ((row.enabled === 1) !== enabled) {
-        db.run("UPDATE connectors SET enabled = ?, updated_at = ? WHERE id = ?", [
-          enabled ? 1 : 0,
-          now(),
-          row.id,
-        ]);
-      }
-      if (enabled) {
-        const runtime = runtimes.get(row.id);
-        if (!runtime?.client && !runtime?.starting && !runtime?.signingIn) start(row.id);
-      } else {
-        stop(row.id);
-      }
-      changed();
-      options.onEnabledChange();
-      return toConnector(requireRow(row.id));
-    },
+    setEnabled,
 
     async restart(id: unknown): Promise<Connector> {
       const row = requireRow(id);
