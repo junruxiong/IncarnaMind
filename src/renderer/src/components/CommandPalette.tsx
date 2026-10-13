@@ -287,7 +287,11 @@ function Palette() {
           </Group>
         ))}
         {problem !== undefined ? (
-          <p role="alert" className="px-2 pt-3 text-[13px] leading-5 break-words text-danger">
+          <p
+            id={`${id}-status`}
+            role="alert"
+            className="px-2 pt-3 text-[13px] leading-5 break-words text-danger"
+          >
             {problem}
           </p>
         ) : (

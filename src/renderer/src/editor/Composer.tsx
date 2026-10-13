@@ -395,10 +395,7 @@ export function Composer({
     }
     // An Answer is being written, or its Question is on its way: Enter waits for it, as in
     // ChatGPT and Claude, so a second press never asks the Question twice. The button is Stop.
-    if (answerBeingWritten() !== null) {
-      if (said !== undefined && current.text === "") update({ text: said });
-      return;
-    }
+    if (answerBeingWritten() !== null) return;
     const draft =
       said === undefined ? current : { ...current, text: said, pastes: [], skill: null };
     const typed = draft.text.trim();
@@ -430,13 +427,15 @@ export function Composer({
   };
 
   const askWanted = useComposer((state) => state.askWanted);
+  const writing = useAnswerBeingWritten();
   const latestAsk = useRef(ask);
   latestAsk.current = ask;
+  // Asked once the Answer being written is done, as Enter would be.
   useEffect(() => {
-    if (askWanted === null) return;
+    if (askWanted === null || writing !== null) return;
     useComposer.getState().askTaken();
     void latestAsk.current(askWanted);
-  }, [askWanted]);
+  }, [askWanted, writing]);
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     // Typing in an input method: its keys are its own.
@@ -475,7 +474,7 @@ export function Composer({
 
   const canAsk = draft.text.trim() !== "" || draft.pastes.length > 0;
   /** An Answer is being written in the assistant, or on its way: the button is Stop meanwhile. */
-  const answering = useAnswerBeingWritten() !== null;
+  const answering = writing !== null;
   const activeOption = picking && option >= 0 ? `${listId}-${option}` : undefined;
 
   return (
