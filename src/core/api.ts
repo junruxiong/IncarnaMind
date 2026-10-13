@@ -3364,6 +3364,8 @@ export interface ChatModelGroup {
    * then those the User added.
    */
   models: string[];
+  /** The names the provider's own list gives, by model id, where it gives them. */
+  names: Record<string, string>;
   /**
    * What the provider lists that the menu leaves out (see `OtherModel`), for
    * Settings → Models → Other models, including ids the User has added.
@@ -5340,14 +5342,16 @@ export interface TagMerge {
 
 /**
  * What a Mind exports to: Markdown, for an archive, or Word (.docx), PDF or HTML, for the
- * deliverable. Formats are listed in the order the options sheet offers them.
+ * deliverable; or a source pack, a PDF of the pages the Mind cites (#134). Formats are listed
+ * in the order the options sheet offers them.
  */
-export const EXPORT_FORMATS = ["docx", "pdf", "html", "markdown"] as const;
+export const EXPORT_FORMATS = ["docx", "pdf", "source-pack", "html", "markdown"] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
 /**
  * The User's export choices (`UserSettings.exportOptions`): the format Export uses, and each
- * format's own options. Markdown, the archive, always keeps the Questions.
+ * format's own options. Markdown, the archive, always keeps the Questions; a source pack has
+ * none.
  */
 export interface ExportPreferences {
   format: ExportFormat;
@@ -5361,7 +5365,7 @@ export interface ExportMindOptions {
   /**
    * Whether Questions are exported, marked as Questions. Defaults to true for
    * Markdown, an archive of everything, and to false for .docx, PDF and HTML: the
-   * deliverable leaves the working material out.
+   * deliverable leaves the working material out. A source pack has no Questions.
    */
   includeQuestions?: boolean;
   /**
@@ -5394,7 +5398,7 @@ export interface MindExportPreview {
 
 /** A Mind exported as a file, for the host to save where the User chooses. */
 export interface MindExport extends MindExportPreview {
-  /** The file's contents: UTF-8 text for Markdown and HTML, a ZIP package for .docx, a PDF for PDF. */
+  /** The file's contents: UTF-8 text for Markdown and HTML, a ZIP package for .docx, a PDF for PDF and a source pack. */
   data: Uint8Array;
   /** For a Mind imported from a Word file, exported back into it: what it kept and couldn't keep. */
   word: WordExportReport | null;
