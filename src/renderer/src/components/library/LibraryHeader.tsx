@@ -9,17 +9,21 @@ import { CloseLineIcon } from "../lineIcons";
 /**
  * The page's head: "Library" and how many Documents it holds, as the
  * sidebar says, the one primary "Add Documents ▾", and under them the wide
- * search field, which `/` focuses from anywhere on the page but a field.
+ * search field, which `/` focuses from anywhere on the page but a field, and
+ * ↓ leaves for the first row.
  */
 export function LibraryHeader({
   count,
   search,
   onSearch,
+  onDown,
   field,
 }: {
   count: number;
   search: string;
   onSearch(search: string): void;
+  /** ↓ in the search field. */
+  onDown(): void;
   field: RefObject<HTMLInputElement | null>;
 }) {
   const t = useT();
@@ -73,6 +77,9 @@ export function LibraryHeader({
               event.preventDefault();
               event.stopPropagation();
               onSearch("");
+            } else if (event.key === "ArrowDown" && !event.nativeEvent.isComposing) {
+              event.preventDefault();
+              onDown();
             }
           }}
           className="min-w-0 flex-1 bg-transparent text-ui text-ink outline-0 placeholder:text-ink-placeholder [&::-webkit-search-cancel-button]:hidden"

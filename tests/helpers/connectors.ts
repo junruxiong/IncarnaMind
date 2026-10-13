@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { appendFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, vi } from "vitest";
@@ -43,7 +43,15 @@ export function tideServer(logFile: string, input: Partial<AddLocalConnectorInpu
 
 export type ServerRecord =
   | { event: "start"; pid: number; env: Record<string, string | null> }
-  | { event: "call"; tool: string; arguments: Record<string, unknown> };
+  | { event: "call"; tool: string; arguments: Record<string, unknown> }
+  | { event: "mark"; name: string };
+
+/**
+ * Writes a mark into the server's log, between what reached it before and what reaches it
+ * after: a call is known to have come after a moment, without waiting a while for it.
+ */
+export const markServerLog = (logFile: string, name: string) =>
+  appendFile(logFile, `${JSON.stringify({ event: "mark", name })}\n`);
 
 /** What the tiny server logged, oldest first. */
 export async function serverLog(logFile: string): Promise<ServerRecord[]> {

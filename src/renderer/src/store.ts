@@ -33,7 +33,15 @@ import { displayName } from "../../shared/documentNames";
 import type { DocumentLocation } from "../../shared/documentViewer";
 import { type MessageKey, type MessageParams, translate } from "../../shared/i18n";
 import { mindName } from "../../shared/naming";
-import { deleted, renamed, retagged, tagLinks } from "./changes";
+import {
+  deleted,
+  linkedFolderPaused,
+  linkedFolderShown,
+  mindMade,
+  renamed,
+  retagged,
+  tagLinks,
+} from "./changes";
 import { core, files } from "./core";
 import { LIBRARY_DELETED } from "./deletedItems";
 import { applyAssignments, applyDocumentChanges, createDocumentUpdates } from "./documentUpdates";
@@ -48,6 +56,7 @@ import {
 } from "./layoutSlice";
 import { type LibraryBridge, mindToAskIn } from "./libraryBridges";
 import { matchesTags, NEEDS_REVIEW } from "./libraryFilters";
+import { folderName as linkedFolderName } from "./linkedFolders";
 import {
   foldersMovedFrom,
   itemsOf,
@@ -184,7 +193,8 @@ interface AppState extends LayoutSlice {
   /**
    * Creates a Mind, in a Folder if given, and opens it in a new tab after the
    * shown one, in the focused group or `groupId`, with its title focused, or
-   * with a Question started in it (with a Search scope, if given).
+   * with a Question started in it (with a Search scope, if given). Undo sends it
+   * to Recently deleted; redo brings it back and shows it. Resolves to that change.
    */
   createMind(options?: {
     startQuestion?: boolean;
@@ -192,7 +202,7 @@ interface AppState extends LayoutSlice {
     scope?: SearchScope | null;
     folderId?: string | null;
     groupId?: string;
-  }): Promise<void>;
+  }): Promise<Undoable | undefined>;
   /**
    * Moves Minds and Documents into a Folder, or out of every Folder (null):
    * shown at once, then as the core has it, with "Moved … · Undo" (and ⌘Z).
@@ -225,14 +235,16 @@ interface AppState extends LayoutSlice {
   /**
    * "Ask about this Folder" in the Library: a Question with the bridge's
    * Search scope at the end of the most recent Mind (see `mindToAskIn`), or
-   * of a new Mind if there is none, with the cursor in it.
+   * of a new Mind if there is none, with the cursor in it. Resolves to the
+   * change of that new Mind (see `createMind`); a Question in a Mind already
+   * there is the note's own to undo.
    */
-  askAbout(bridge: LibraryBridge): Promise<void>;
+  askAbout(bridge: LibraryBridge): Promise<Undoable | undefined>;
   /**
    * "Start a Mind from this Folder": a new Mind titled as the Library's
    * sheet, whose first Block is a Question with the bridge's Search scope.
    */
-  startMindFrom(bridge: LibraryBridge): Promise<void>;
+  startMindFrom(bridge: LibraryBridge): Promise<Undoable | undefined>;
   /** Opens the example Mind, making the examples again if they were removed. */
   openExamples(): Promise<void>;
   /** Deletes the example Mind and its Documents. */
@@ -322,10 +334,13 @@ interface AppState extends LayoutSlice {
   confirmLinkedFolder(layout: LinkedFolderLayout): Promise<void>;
   /** Closes the link dialog without linking. */
   cancelLinkedFolder(): void;
-  /** Pauses or resumes a Linked folder's indexing. */
-  setLinkedFolderPaused(linkedFolderId: string, paused: boolean): Promise<void>;
-  /** Shows a Linked folder as Folders or as a flat list. */
-  setLinkedFolderLayout(linkedFolderId: string, layout: LinkedFolderLayout): Promise<void>;
+  /** Pauses or resumes a Linked folder's indexing, with Undo. Resolves to that change, if it changed anything. */
+  setLinkedFolderPaused(linkedFolderId: string, paused: boolean): Promise<Undoable | undefined>;
+  /** Shows a Linked folder as Folders or as a flat list, with Undo. Resolves to that change, if it changed anything. */
+  setLinkedFolderLayout(
+    linkedFolderId: string,
+    layout: LinkedFolderLayout,
+  ): Promise<Undoable | undefined>;
   /** Downloads a Linked folder's online-only files and indexes them. */
   downloadOnlineOnlyFiles(linkedFolderId: string): Promise<void>;
   /** Shows a Linked folder in the system's file manager. */
@@ -483,6 +498,8 @@ export const useAppStore = create<AppState>()((set, get) => {
     }
   };
   const push = (change: Undoable) => useUndo.getState().push(change);
+  const showLinked = (linked: LinkedFolder) =>
+    set((state) => ({ linkedFolders: replaceLinked(state.linkedFolders, linked) }));
 
   /**
    * Refuses to put something back in a Folder deleted since, as the core would,
@@ -765,19 +782,32 @@ export const useAppStore = create<AppState>()((set, get) => {
       }
     },
 
-    createMind: (options) =>
-      attempt(async () => {
+    createMind: async (options) => {
+      let made: Undoable | undefined;
+      await attempt(async () => {
         const mind = await core.createMind({
           ...(options?.title && { title: options.title }),
           ...(options?.folderId && { folderId: options.folderId }),
         });
+        made = mindMade(
+          t,
+          mindName(mind),
+          () => core.deleteMind(mind.id),
+          async () => {
+            await core.restore([{ kind: "mind", id: mind.id }]);
+            get().openMind(mind.id);
+          },
+        );
+        push(made);
         set(
           options?.startQuestion
             ? { questionToStart: { mindId: mind.id, scope: options.scope ?? null } }
             : { titleToFocus: mind.id },
         );
         await get().showNewMind(mind, options?.groupId);
-      }),
+      });
+      return made;
+    },
 
     showNewMind: async (mind, groupId) => {
       // The "minds.changed" event may have listed it already.
@@ -810,6 +840,7 @@ export const useAppStore = create<AppState>()((set, get) => {
       if (!mindId) return get().createMind({ startQuestion: true, scope });
       get().openMind(mindId);
       set({ questionToStart: { mindId, scope } });
+      return undefined;
     },
 
     // From a Folder as it is, the new Mind is the Folder's.
@@ -1226,17 +1257,38 @@ export const useAppStore = create<AppState>()((set, get) => {
       if (get().linking) nextLink();
     },
 
-    setLinkedFolderPaused: (linkedFolderId, paused) =>
-      attempt(async () => {
-        const linked = await core.setLinkedFolderPaused(linkedFolderId, paused);
-        set((state) => ({ linkedFolders: replaceLinked(state.linkedFolders, linked) }));
-      }),
+    setLinkedFolderPaused: async (linkedFolderId, paused) => {
+      let change: Undoable | undefined;
+      await attempt(async () => {
+        const before = get().linkedFolders.find((each) => each.id === linkedFolderId);
+        const setPaused = async (to: boolean) => {
+          showLinked(await core.setLinkedFolderPaused(linkedFolderId, to));
+        };
+        await setPaused(paused);
+        if (before && (before.status === "paused") !== paused) {
+          change = linkedFolderPaused(t, linkedFolderName(before.path), paused, setPaused);
+          push(change);
+        }
+      });
+      return change;
+    },
 
-    setLinkedFolderLayout: (linkedFolderId, layout) =>
-      attempt(async () => {
-        const linked = await core.setLinkedFolderLayout(linkedFolderId, layout);
-        set((state) => ({ linkedFolders: replaceLinked(state.linkedFolders, linked) }));
-      }),
+    setLinkedFolderLayout: async (linkedFolderId, layout) => {
+      let change: Undoable | undefined;
+      await attempt(async () => {
+        const before = get().linkedFolders.find((each) => each.id === linkedFolderId);
+        const setLayout = async (to: LinkedFolderLayout) => {
+          showLinked(await core.setLinkedFolderLayout(linkedFolderId, to));
+        };
+        await setLayout(layout);
+        if (before && before.layout !== layout) {
+          const layouts = { before: before.layout, after: layout };
+          change = linkedFolderShown(t, linkedFolderName(before.path), layouts, setLayout);
+          push(change);
+        }
+      });
+      return change;
+    },
 
     downloadOnlineOnlyFiles: (linkedFolderId) =>
       attempt(async () => {

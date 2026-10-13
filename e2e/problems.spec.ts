@@ -13,6 +13,7 @@ import {
   interceptOpenDialog,
   interceptShowItemInFolder,
   launchApp,
+  motionSettled,
   newMind,
   openDocumentAt,
   openSteps,
@@ -278,7 +279,7 @@ test("a Document that is gone says so in the viewer and in Chinese; one that can
   await expect(removed.getByTestId("viewer-problem")).toContainText("已从 IncarnaMind 中删除");
   await expect(removed.getByRole("button")).toHaveCount(0);
   await expect(removed).toContainText("Rent is due monthly.");
-  await window.waitForTimeout(600);
+  await motionSettled(window);
   await screenshot(window, "viewer-deleted-zh");
   await app.close();
 });

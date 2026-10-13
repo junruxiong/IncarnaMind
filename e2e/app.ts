@@ -74,6 +74,11 @@ export interface LaunchOptions {
    */
   sources?: string;
   /**
+   * A JSON file of Connectors directory entries in place of the list that
+   * ships with the app, e.g. one served by a local stand-in. A test build honours it.
+   */
+  connectorDirectory?: string;
+  /**
    * Where the ChatGPT plan signs in and asks: the origin of a local server
    * standing in for OpenAI (tests/helpers/fakeOpenAI.ts). A test build honours it.
    */
@@ -147,6 +152,7 @@ export async function launchApp(
     home,
     referenceLookup,
     sources,
+    connectorDirectory,
     chatGpt,
     keepWindow = false,
     computerSound = "allowed",
@@ -171,6 +177,7 @@ export async function launchApp(
   delete env.POSTHOG_CAPTURE_MODE;
   delete env.INCARNAMIND_TEST_REFERENCE_LOOKUP;
   delete env.INCARNAMIND_TEST_SOURCES;
+  delete env.INCARNAMIND_TEST_CONNECTOR_DIRECTORY;
   delete env.INCARNAMIND_TEST_CHATGPT;
   delete env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS;
   delete env.INCARNAMIND_TEST_SCANS;
@@ -191,6 +198,7 @@ export async function launchApp(
   env.HOME = appHome;
   if (referenceLookup) env.INCARNAMIND_TEST_REFERENCE_LOOKUP = referenceLookup;
   if (sources) env.INCARNAMIND_TEST_SOURCES = sources;
+  if (connectorDirectory) env.INCARNAMIND_TEST_CONNECTOR_DIRECTORY = connectorDirectory;
   if (chatGpt) env.INCARNAMIND_TEST_CHATGPT = chatGpt;
   if (scans) env.INCARNAMIND_TEST_SCANS = scans;
   if (web) env.INCARNAMIND_TEST_WEB = String(web);
@@ -237,6 +245,20 @@ export const startScriptedTask = (
       ).incarnamindScriptedTask.start(mind, given),
     [mindId, input] as const,
   );
+
+/**
+ * Returns once everything the app captured for usage data so far has reached
+ * the server `LaunchOptions.usageData` names, so a test can say nothing else
+ * did without waiting a while for it.
+ */
+export const flushUsageData = (app: ElectronApplication) =>
+  app.evaluate(async () => {
+    const hooks = (globalThis as { incarnamindUsageData?: { flush(): Promise<void> } })
+      .incarnamindUsageData;
+    if (!hooks)
+      throw new Error("Launch with `usageData`: only then has the app a usage data sender.");
+    await hooks.flush();
+  });
 
 /**
  * Stands in for the system's notifications: each one shown is recorded
@@ -1067,6 +1089,21 @@ async function wordsBox(line: Locator, words: string) {
   }, words);
   if (!box) throw new Error(`"${words}" isn't in the line.`);
   return box;
+}
+
+/**
+ * Returns once ProseMirror has settled its selection with the page after the editor got the
+ * focus. 20 ms after the focus it puts its own selection back into the page if the page's has
+ * moved since, which undoes a key pressed in those 20 ms (⌘A, End). Called after the focus, a
+ * 21 ms timer runs after the one ProseMirror set then.
+ */
+export const afterEditorFocus = (window: Page) =>
+  window.evaluate(() => new Promise((done) => setTimeout(done, 21)));
+
+/** Gives the editor the focus, and waits as `afterEditorFocus` says. */
+export async function focusEditor(window: Page, editor: Locator): Promise<void> {
+  await editor.focus();
+  await afterEditorFocus(window);
 }
 
 /**
