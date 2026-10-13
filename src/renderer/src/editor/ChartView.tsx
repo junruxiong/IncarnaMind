@@ -25,6 +25,7 @@ import {
   type CitationState,
   citationSource,
   citationState,
+  withShownName,
 } from "../../../shared/citations";
 import { citationLocation, formatLocation } from "../../../shared/locations";
 import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
@@ -291,8 +292,9 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
   const sourceText = (value: ChartValue | null | undefined) => {
     const state = stateOf(value);
     if (!value?.citation || !state) return t("chart.point.noCitation");
-    const badge = badgeMessage(state, value.citation, t);
-    return `${citationSource(value.citation, t).text}. ${t(badge.key, badge.params)}`;
+    const citation = withShownName(value.citation, documents);
+    const badge = badgeMessage(state, citation, t);
+    return `${citationSource(citation, t).text}. ${t(badge.key, badge.params)}`;
   };
 
   const openValue = (point: PointRef) => {
@@ -463,7 +465,7 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
               const state = stateOf(value);
               if (!value.citation || !state)
                 return { check: null, label: t("chart.point.noCitation") };
-              const badge = badgeMessage(state, value.citation, t);
+              const badge = badgeMessage(state, withShownName(value.citation, documents), t);
               return { check: state.check, label: t(badge.key, badge.params) };
             }}
           />
@@ -539,7 +541,7 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
                     })
                   : null
               }
-              citation={shownCard.citation}
+              citation={shownCard.citation && withShownName(shownCard.citation, documents)}
               state={shownState}
               onOpen={() => {
                 openValue(card.point);

@@ -82,6 +82,7 @@ export function startCore(dataDir: string, overrides: Partial<CoreAdapters> = {}
     // A Documents folder of its own, so a test that saves a file never writes into the User's.
     paths: { dataDir, documents: join(dataDir, "Documents"), citationStyles: CITATION_STYLES },
     systemLanguages: () => ["en-US"],
+    systemUserName: () => "Priya Raman",
     keychain: createMemoryKeychain(),
     browser: {
       open: async () => {
