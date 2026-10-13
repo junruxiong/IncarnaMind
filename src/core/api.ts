@@ -3374,6 +3374,8 @@ export interface ChatModelGroup {
    * then those the User added.
    */
   models: string[];
+  /** The names the provider's own list gives, by model id, where it gives them. */
+  names: Record<string, string>;
   /**
    * What the provider lists that the menu leaves out (see `OtherModel`), for
    * Settings → Models → Other models, including ids the User has added.

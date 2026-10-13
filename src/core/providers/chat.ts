@@ -201,7 +201,7 @@ const displayName = (kind: ChatProviderKind, baseUrl: string | null) =>
 /** What chat providers need from the ChatGPT plan provider. */
 export type ChatGptPlanAccess = Pick<
   ChatGptPlan,
-  "hasSignIn" | "credentials" | "apiBaseUrl" | "modelIds"
+  "hasSignIn" | "credentials" | "apiBaseUrl" | "models"
 >;
 
 export function createChat(options: {
@@ -627,7 +627,7 @@ export function createChat(options: {
           if (provider.kind === "chatgpt") {
             // The account's own list, read with its sign-in like the sign-in's own traffic, and
             // kept by the plan itself: it carries nothing of the User's.
-            listed = (await chatGpt.modelIds()).map((id) => ({ id }));
+            listed = (await chatGpt.models()).map(({ id, name }) => ({ id, name }));
           }
           if (!listed && !mayAsk) listed = [];
           if (!listed) {
@@ -675,7 +675,10 @@ export function createChat(options: {
           ) {
             cloud.push(chosen);
           }
-          return { provider, models, other, added, unknown, cloud };
+          const names = Object.fromEntries(
+            listed.flatMap((each) => (each.name ? [[each.id, each.name]] : [])),
+          );
+          return { provider, models, names, other, added, unknown, cloud };
         }),
       );
     },

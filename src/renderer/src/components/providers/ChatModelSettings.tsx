@@ -1,8 +1,11 @@
 import { type FormEvent, useCallback, useEffect, useId, useState } from "react";
 import type { ChatGptPlanModel, ChatProvider } from "../../../../core/api";
+import { modelName } from "../../../../shared/modelName";
+import { useAnswers } from "../../answers";
 import { core } from "../../core";
 import { formatSpent } from "../../cost";
 import { useLanguage, useT } from "../../i18n";
+import { useModelNames } from "../../modelNames";
 import { useAppStore } from "../../store";
 import { useCostSummary } from "../SpendingCapSettings";
 import {
@@ -40,6 +43,12 @@ export function ChatModelSettings() {
   const [model, setModel] = useState(chatModel?.modelId ?? "");
   const [chatGptPlan] = useChatGptPlan();
   const modelFieldId = useId();
+  const groups = useAnswers((state) => state.models);
+  const loadModels = useAnswers((state) => state.loadModels);
+  const nameOf = useModelNames();
+  useEffect(() => {
+    if (readiness) loadModels();
+  }, [readiness, loadModels]);
 
   const refresh = useCallback(() => {
     core.listChatProviders().then(setProviders, () => undefined);
@@ -62,6 +71,18 @@ export function ChatModelSettings() {
   const current = chatModel
     ? providers.find((each) => each.id === chatModel.providerId)
     : undefined;
+
+  // A provider whose models the catalog names offers its menu to choose from, by name; a
+  // server's models are named by their ids, which the User types.
+  const menuModels = current
+    ? groups?.find((each) => each.provider.id === current.id)?.models
+    : undefined;
+  const choosable =
+    current && current.kind !== "ollama" && current.kind !== "openai-compatible" && menuModels
+      ? menuModels.includes(model) || model === ""
+        ? menuModels
+        : [model, ...menuModels]
+      : null;
 
   const saveModel = (event: FormEvent) => {
     event.preventDefault();
@@ -122,8 +143,22 @@ export function ChatModelSettings() {
                   className={inputClass}
                 >
                   {planModelOptions(chatGptPlan?.models ?? [], chatModel?.modelId).map((each) => (
-                    <option key={each.id} value={each.id}>
-                      {each.name}
+                    <option key={each.id} value={each.id} title={each.id}>
+                      {modelName(each.id, { kind: "chatgpt", names: { [each.id]: each.name } })}
+                    </option>
+                  ))}
+                </select>
+              ) : choosable ? (
+                <select
+                  id={modelFieldId}
+                  value={model}
+                  title={model}
+                  onChange={(event) => setModel(event.target.value)}
+                  className={inputClass}
+                >
+                  {choosable.map((id) => (
+                    <option key={id} value={id} title={id}>
+                      {nameOf(id, current.id).name}
                     </option>
                   ))}
                 </select>
@@ -135,6 +170,11 @@ export function ChatModelSettings() {
                   spellCheck={false}
                   className={inputClass}
                 />
+              )}
+              {model !== "" && nameOf(model, current.id).id && (
+                <p data-testid="chat-model-id" className="mt-1 text-[13px] leading-5 text-ink-meta">
+                  {model}
+                </p>
               )}
             </div>
             <button
