@@ -583,6 +583,8 @@ export const zhCN = {
   "composer.edit.quote": "正在编辑“{text}”",
   "composer.edit.stop": "不再编辑选中的文字",
   "composer.edit.send": "修改（Enter）",
+  "composer.selection.drop": "不针对这段内容",
+  "assistant.question.quote": "针对：",
   "composer.edit.translateInto": "翻译为",
   "proposal.region": "来自助手的修订",
   "proposal.count": "来自助手的 {count} 处修订",
@@ -1137,8 +1139,6 @@ export const zhCN = {
   "tags.colour.purple": "紫色",
   "tags.colour.gray": "灰色",
   "tags.filter.review": "待确认",
-  "tags.chip.filter": "只显示带“{tag}”标签的文档",
-  "tags.chip.unfilter": "取消按“{tag}”筛选",
   "tags.chip.more": "另有 {count} 个：{names}",
   "tags.marks": "标签：{names}",
   "tags.chip.reviewTitle": "{tag}：自动添加，但不太确定。确认即可保留，也可以移除。",
@@ -1155,6 +1155,7 @@ export const zhCN = {
   "tags.picker.back": "返回",
   "tags.picker.none": "没有匹配的标签。",
   "tags.picker.hint": "Enter 添加 · Backspace 移除",
+  "tags.picker.keys": "↵ 添加或移除 · ⌫ 移除最后一个 · {undo} 撤销 · Esc 关闭",
   "tags.picker.some": "{total} 个文档中的 {count} 个",
   "tags.picker.remove": "移除“{tag}”",
   "tags.picker.automatic": "自动",
@@ -1735,7 +1736,6 @@ export const zhCN = {
   "models.other.group.older": "旧型号",
   "models.other.group.cannotAnswer": "无法在这里回答问题",
   "models.other.mayNotWork": "可能无法使用",
-  "models.other.older": "较旧",
   "models.other.reason.completion": "仅支持文本补全",
   "models.other.reason.audio": "音频模型",
   "models.other.reason.deepResearch": "需要深度研究接口",
@@ -2008,7 +2008,7 @@ export const zhCN = {
   "skills.settings.builtIn": "内置",
   // The Built-in Skills, as Settings and the slash menu describe them; their SKILL.md, which Answers read, stays as written.
   "skills.builtIn.literature-review":
-    "围绕问题的主题，跨你的文档撰写文献综述：按主题综合，而不是逐篇罗列，写出各文档的一致与分歧以及遗漏之处，每个论断都附引用。",
+    "围绕问题的主题，跨你的文档撰写文献综述：按主题综合，而不是逐篇罗列，写出各文档的一致与分歧以及遗漏之处，每个说法都附引用。",
   "skills.builtIn.mind-to-report":
     "把这个 Mind（问题上方的笔记、问题和回答）整理成结构化的报告草稿，包括标题、摘要、章节和结论，保留其中的引用，不虚构来源。",
   "skills.builtIn.summarise-document":
@@ -2592,7 +2592,7 @@ export const zhCN = {
   "examples.banner.label": "关于这个示例",
   "examples.banner.title": "这是一个示例 Mind。",
   "examples.banner.body":
-    "你可以像在普通文档里一样在这里写作，并就你的文档提问；回答中的每个论断都链接到出处所在的页面。点击勾号查看引文，绿色表示找到了这段引文。",
+    "你可以像在普通文档里一样在这里写作，并就你的文档提问；回答中的每个说法都链接到出处所在的页面。点击勾号查看引文，绿色表示找到了这段引文。",
   "examples.banner.addOwn": "添加你的文档或应用",
   "examples.banner.remove": "移除示例",
   "examples.answer": "预先写好的示例回答，无需模型即可体验",
@@ -2616,9 +2616,9 @@ export const zhCN = {
   "startGuide.ask.body":
     "在 Mind 中任意位置按 {shortcut}，然后输入问题。回答会根据你的文档写在下方。",
   "startGuide.ask.example": "例如：这些报告对第三季度营收是怎么说的？",
-  "startGuide.check.title": "核对每个论断的出处",
+  "startGuide.check.title": "核对每个说法的出处",
   "startGuide.check.body":
-    "每个论断旁的页边都有一个标记：在你的文档中找到引文时显示 {mark}。点击它即可打开那一页。",
+    "每个说法旁的页边都有一个标记：在你的文档中找到引文时显示 {mark}。点击它即可打开那一页。",
   "startGuide.example.lead": "想先看看效果？",
   "startGuide.example.open": "打开示例 Mind",
   "restore.error.unknown": "回收站中没有这一项。",
@@ -2995,6 +2995,7 @@ export const zhCN = {
   "steps.sources.none": "没有来源",
   "steps.read": "读了“{mind}”",
   "steps.read.part": "读了“{mind}”的一部分",
+  "steps.read.selection": "读了你在“{mind}”中选中的内容",
   "steps.read.share": "约 {percent}%",
   "steps.read.deleted": "读了一个已删除的 Mind",
   "steps.asked": "从“{mind}”提问",

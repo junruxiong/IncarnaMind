@@ -120,7 +120,7 @@ ${sourceOf(document)}`
               {displayName(document)}
             </button>
           ) : null}
-          {document && <DocumentTagChips document={document} variant="header" />}
+          {document && <DocumentTagChips document={document} />}
         </div>
         {children}
         {preview && (

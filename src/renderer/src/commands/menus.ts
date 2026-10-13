@@ -3,7 +3,7 @@ import type { MessageKey } from "../../../shared/i18n";
 import type { ObjectKind } from "../objects";
 import { COMMAND_GROUPS, type Command, type CommandContext, commands, offered } from "./registry";
 
-interface Registered {
+export interface Registered {
   id: CommandId;
   section: number;
 }
@@ -24,8 +24,11 @@ export function registerMenu(kind: ObjectKind, ids: readonly CommandId[], sectio
 
 export const menuKinds = (): ObjectKind[] => [...registered.keys()];
 
+/** A kind's menu as registered: each command with its section, in the order given. */
+export const menuEntries = (kind: ObjectKind): readonly Registered[] => registered.get(kind) ?? [];
+
 export const menuIds = (kind: ObjectKind): readonly CommandId[] =>
-  (registered.get(kind) ?? []).map((each) => each.id);
+  menuEntries(kind).map((each) => each.id);
 
 /** An item of a menu: a command that applies here, and whether it can run now (else, why not). */
 export interface MenuItem {
