@@ -409,9 +409,8 @@ test("an approval card is a ruled block whose sections share one text edge, for 
   const deny = await box(card.getByTestId("approval-deny"));
   const always = await box(card.getByTestId("approval-always-allow"));
   const cardBox = await box(card);
-  // On one row with the others, a button's gap off.
-  expect(Math.abs(deny.y - always.y)).toBeLessThan(2);
-  expect(deny.x - (always.x + always.width)).toBeGreaterThanOrEqual(4);
+  expect(Math.abs(deny.y - always.y), "on one row").toBeLessThan(2);
+  expect(deny.x - (always.x + always.width)).toBeGreaterThan(8);
   expect(cardBox.x + cardBox.width - (deny.x + deny.width)).toBeLessThan(24);
   await screenshot(window, "approval.png");
   await screenshot(answer, "approval-card.png");

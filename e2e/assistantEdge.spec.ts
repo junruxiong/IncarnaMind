@@ -48,16 +48,37 @@ async function dockAs(window: Page, dock: Dock) {
 const leftOf = async (target: Locator) =>
   await target.evaluate((el) => el.getBoundingClientRect().left);
 
-/** The tray's approval buttons stand on one row: their tops are equal. */
+/**
+ * The tray's approval buttons stand on one row with the gap and the room from
+ * the tray's edges the card has on DESIGN.md's scale (4px between, 8px of the
+ * tray's padding and the card's 10px, less a hair), and the shortcut stays in
+ * the main button's name.
+ */
 async function expectButtonsOnOneRow(window: Page, name: string) {
-  const tops = await window
-    .getByTestId("task-tray")
-    .locator(".approval-actions button")
-    .evaluateAll((buttons) =>
-      buttons.map((button) => Math.round(button.getBoundingClientRect().top)),
-    );
-  expect(tops.length, `${name}: the approval's buttons`).toBeGreaterThan(1);
-  expect(new Set(tops).size, `${name}: one row`).toBe(1);
+  const tray = window.getByTestId("task-tray");
+  const boxes = await tray.locator(".approval-actions button").evaluateAll((buttons) =>
+    buttons.map((button) => {
+      const { top, left, right } = button.getBoundingClientRect();
+      return { top: Math.round(top), left, right };
+    }),
+  );
+  expect(boxes.length, `${name}: the approval's buttons`).toBeGreaterThan(1);
+  expect(new Set(boxes.map((box) => box.top)).size, `${name}: one row`).toBe(1);
+  for (const [index, box] of boxes.entries()) {
+    const next = boxes[index + 1];
+    if (next) expect(next.left - box.right, `${name}: the gap`).toBeGreaterThanOrEqual(4);
+  }
+  const edge = await tray.evaluate((el) => {
+    const { left, right } = el.getBoundingClientRect();
+    return { left, right };
+  });
+  expect((boxes[0]?.left ?? 0) - edge.left, `${name}: room at the left`).toBeGreaterThanOrEqual(16);
+  expect((boxes.at(-1)?.right ?? 0) + 16, `${name}: room at the right`).toBeLessThanOrEqual(
+    edge.right,
+  );
+  // The hint is dropped from the label, not from the button's name.
+  await expect(tray.locator(".approval-keys").first()).toBeHidden();
+  await expect(tray.getByTestId("approval-allow-once")).toHaveAccessibleName(/\(.+\)$/);
 }
 
 /** The x of each thing that should sit on the edge, with the panel's own. */

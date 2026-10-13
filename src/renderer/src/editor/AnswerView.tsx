@@ -370,6 +370,14 @@ export function CallRow({ call }: { call: AnswerToolCall }) {
 }
 
 /**
+ * A button's tooltip and name with its shortcut: its label drops the hint when
+ * the assistant is narrow (#612), and the shortcut still works.
+ */
+export function withShortcut(label: string, keys: string | undefined) {
+  return keys ? { title: `${label} (${keys})`, "aria-label": `${label} (${keys})` } : {};
+}
+
+/**
  * The approval card for a request: a Connector's Tool, or a Skill script.
  * `keys`: the shortcut that allows it once, shown on its button (the Task tray's ⌘↵).
  */
@@ -446,6 +454,7 @@ function ToolApprovalCard({ request, keys }: { request: ToolApprovalRequest; key
           data-testid="approval-allow-once"
           onClick={() => decide("allow-once")}
           className="approval-button approval-button--primary"
+          {...withShortcut(t("approvals.card.allowOnce"), keys)}
         >
           {t("approvals.card.allowOnce")}
           {keys && <span className="approval-keys">{keys}</span>}
@@ -589,6 +598,7 @@ function ScriptApprovalCard({
             data-testid="approval-allow-once"
             onClick={() => respond(request.requestId, "allow-once")}
             className="approval-button approval-button--primary"
+            {...withShortcut(t("scripts.card.allowOnce"), keys)}
           >
             {t("scripts.card.allowOnce")}
             {keys && <span className="approval-keys">{keys}</span>}
