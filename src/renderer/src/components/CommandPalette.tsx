@@ -14,7 +14,7 @@ import { keysHere, pressesShortcut } from "../commands/keymap";
 import { commands } from "../commands/registry";
 import { core } from "../core";
 import { errorMessage } from "../errors";
-import { useT } from "../i18n";
+import { translateNow, useT } from "../i18n";
 import { enter, exit } from "../motion";
 import {
   actionGroup,
@@ -104,12 +104,14 @@ function Palette() {
       core.searchMinds(text).then(
         (items) => current && setNotes({ query: text, items }),
         (error: unknown) =>
-          current && setNotes({ query: text, items: [], failed: errorMessage(error) }),
+          current &&
+          setNotes({ query: text, items: [], failed: errorMessage(error, translateNow) }),
       );
       core.searchDocumentText(text).then(
         (items) => current && setPassages({ query: text, items }),
         (error: unknown) =>
-          current && setPassages({ query: text, items: [], failed: errorMessage(error) }),
+          current &&
+          setPassages({ query: text, items: [], failed: errorMessage(error, translateNow) }),
       );
     }, WORDS_DELAY_MS);
     return () => {
