@@ -261,6 +261,40 @@ describe("Verify a document", () => {
     });
   });
 
+  test("read from the PDF, a sentence runs on past a line that starts with a year, and a numbered heading stays a heading", async () => {
+    const { core, sources } = await setUp();
+    const progress = await writeSourceFile(
+      sources,
+      "Progress report.pdf",
+      buildPdf([
+        {
+          lines: [
+            "Riverside Library roof and insulation works: progress report 3",
+            "1 Summary",
+            "This report covers the roof and insulation package from 1 to 31 March 2027. Roof works were",
+            "programmed to start on 4 January 2027. Under our contract, the package is due to be completed in April",
+            "2027. Our contract for the roof and insulation package is valued at £1,240,000.",
+            "2 Progress",
+            "Forty-two operatives worked on site during March.",
+          ],
+        },
+      ]),
+    );
+    const { client } = await verified(core, progress);
+
+    const blocks: JSONContent[] = readMind(client).toJSON().content ?? [];
+    expect(blocks.map((block) => [block.type, block.content?.[0]?.text])).toEqual([
+      ["paragraph", "Riverside Library roof and insulation works: progress report 3"],
+      ["heading", "1 Summary"],
+      [
+        "paragraph",
+        "This report covers the roof and insulation package from 1 to 31 March 2027. Roof works were programmed to start on 4 January 2027. Under our contract, the package is due to be completed in April 2027. Our contract for the roof and insulation package is valued at £1,240,000.",
+      ],
+      ["heading", "2 Progress"],
+      ["paragraph", "Forty-two operatives worked on site during March."],
+    ]);
+  });
+
   test("a PDF with no text, or one that can't be read, makes no Mind and says why", async () => {
     const { core, sources } = await setUp();
     const blank = await writeSourceFile(sources, "Blank.pdf", buildPdf([{ lines: [] }]));
