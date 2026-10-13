@@ -438,6 +438,7 @@ export const en = {
   "chart.point.where": "{document} · {location}",
   "chart.point.open": "Open",
   "chart.point.noCitation": "No Citation",
+  "chart.point.position": "{index} of {count}",
   "chart.point.notDrawn": "Not a number, so not drawn",
   "chart.point.noUnit": "No unit, so not drawn",
   "chart.value.noUnit": "no unit",

@@ -6000,6 +6000,22 @@
     gap: 6px;
     min-width: 0;
   }
+  /* The foot's "1 with no Citation" (#503): a way to find them, so quiet, not the accent. */
+  .chart-find {
+    border-radius: 2px;
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: var(--color-rule-strong);
+    text-underline-offset: 3px;
+
+    &:hover {
+      color: var(--color-ink-secondary);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 1px;
+    }
+  }
   .chart-link {
     padding: 0 2px;
     border-radius: 4px;
@@ -6036,10 +6052,18 @@
     }
   }
   .chart-card-title {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
     font-size: 12px;
     line-height: 16px;
     font-weight: 600;
     color: var(--color-ink-meta);
+  }
+  .chart-card-position {
+    flex: none;
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
   }
   .chart-card-value {
     font-size: 15px;
