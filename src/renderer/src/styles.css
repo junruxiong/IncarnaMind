@@ -1743,6 +1743,20 @@
     line-height: 16px;
     color: var(--color-ink-meta);
   }
+  .model-menu-search {
+    width: calc(100% - 8px);
+    margin: 4px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: var(--color-hover);
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink);
+
+    &::placeholder {
+      color: var(--color-ink-meta);
+    }
+  }
   .model-menu-heading {
     padding: 8px 8px 2px;
     font-size: 12px;
