@@ -2293,6 +2293,7 @@ export const zhCN = {
   "error.startup.newer.quit": "退出",
 
   "error.document.notFound": "找不到这个文档。",
+  "error.export.choice": "{name} 只能是 true 或 false。",
   "error.document.gone": "这个文档已不存在。",
   "error.document.nameEmpty": "文档名称不能为空。",
   "error.document.nameTooLong": "文档名称不能超过 {max} 个字符。",

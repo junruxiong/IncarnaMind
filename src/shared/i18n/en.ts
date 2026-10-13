@@ -2387,6 +2387,7 @@ export const en = {
   "error.startup.newer.quit": "Quit",
 
   "error.document.notFound": "There is no such Document.",
+  "error.export.choice": "{name} must be true or false.",
   "error.document.gone": "That Document no longer exists.",
   "error.document.nameEmpty": "A Document's name can't be empty.",
   "error.document.nameTooLong": "A Document's name can't be longer than {max} characters.",
