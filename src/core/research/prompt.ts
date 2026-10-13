@@ -116,8 +116,8 @@ const MAX_TAG_NAME = 40;
 export const TAG_INSTRUCTIONS = [
   "You tag the web pages a research Task saved into a Folder of the User's Library, so they can find them by subject.",
   'Reply with 1 to 3 Tags, one a line, each with the numbers of the pages it fits: "Results: 1, 3".',
-  "- A Tag is one or two words.",
-  "- Use one of the User's Tags when it fits.",
+  "- A Tag is one or two words that name what pages are about, such as a company, a place or a kind of figure.",
+  "- Use one of the User's Tags only when it names the same thing.",
   "- Write in the language of the research question.",
 ].join("\n");
 
@@ -165,6 +165,7 @@ export function draftContext(input: {
     `The User asked: ${input.topic}`,
     ...(found.length > 0 ? ["What the research found:", ...found, ""] : []),
     "Search the Documents for what supports each point and cite it. Start with a short heading, then a few short paragraphs or a list. Leave out what no Document supports, and say what is still open.",
+    "Write for the notebook's reader: don't mention these notes, the research steps or the User.",
   ].join("\n");
   return {
     messages: [{ role: "user", content: `${framing}\n\n${input.plan.title}` }],

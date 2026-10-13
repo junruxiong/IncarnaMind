@@ -119,7 +119,7 @@ async function research(window: Page, topic: string): Promise<Locator> {
   return card;
 }
 
-test("Research… plans in the tray: the steps edited in place, the sources, where it writes and an estimate with the composer's model; Start shows it searching under its Question", async () => {
+test("Research… plans in the tray: the steps edited in place, the sources, where it writes and an estimate with the composer's model; Start shows it searching under its Question, then the pages it saved are filed into a new Folder with Tags and its cited draft waits as changes", async () => {
   test.setTimeout(120_000);
   const { app, window } = await launchApp(dataDir, { fakeChat: true, home, web: port });
   await dismissChatSetup(window);
@@ -233,12 +233,44 @@ test("Research… plans in the tray: the steps edited in place, the sources, whe
   await screenshot(window, "research-running-en-1600");
   await expect(progress).toHaveAttribute("data-status", "done", { timeout: 60_000 });
   await expect(progress.getByTestId("task-progress-meta")).toHaveText(/^Done in \d+ min$/);
-  const documents = await window.evaluate(() =>
-    (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.listDocuments(),
+  const folderName = `What do the sources say about ${TOPIC}`;
+  await expect(progress.getByTestId("task-progress-steps")).toContainText(
+    `1 source saved in “${folderName}”`,
   );
-  expect(documents.filter((each) => each.kind === "web").map((each) => each.name)).toEqual([
-    "Tea - The Open Encyclopedia",
-  ]);
+  await expect(progress.getByTestId("task-progress-steps")).toContainText(
+    "Wrote a cited draft as 2 changes in “Credit memo”",
+  );
+
+  // The page it read is a Document filed into a new Folder named for the research, with a Tag.
+  const state = await window.evaluate(async () => {
+    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    return {
+      documents: await core.listDocuments(),
+      library: await core.getLibrary(),
+      tags: await core.listTags(),
+    };
+  });
+  const page = state.documents.find((each) => each.kind === "web");
+  expect(page?.name).toBe("Tea - The Open Encyclopedia");
+  const filed = state.library.groups.find((each) => each.name === folderName);
+  expect(state.library.assignments.find((each) => each.documentId === page?.id)?.groupId).toBe(
+    filed?.id,
+  );
+  const tea = state.tags.find((each) => each.name === "Tea");
+  expect(page?.tags.map((each) => each.tagId)).toContain(tea?.id);
+  await expect(window.getByTestId("sidebar").getByText(folderName)).toBeVisible();
+
+  // The draft waits in the Mind as changes to accept, its Citation found; Review brings it into view.
+  const editor = window.getByTestId("mind-editor");
+  await expect(window.getByTestId("proposals-count")).toHaveText("2 changes from the assistant");
+  await expect(editor.locator("[data-proposal-id]").first()).toContainText(
+    "Your Documents answer this",
+  );
+  await expect(editor.getByTestId("citation").first()).toHaveAttribute("data-check", "found");
+  await progress.getByTestId("task-progress-review").focus();
+  await window.keyboard.press("Enter");
+  await expect(editor.locator("[data-proposal-id]").first()).toBeInViewport();
+  await screenshot(window, "research-done-en-1600");
   await app.close();
 });
 
@@ -307,7 +339,7 @@ test("the plan card follows the composer's model chip, says when the web can't b
     const progress = window.getByTestId("assistant-thread").getByTestId("task-progress");
     await expect(progress).toHaveAttribute("data-status", "running");
     await expect(progress.getByTestId("task-progress-meta")).toHaveText(
-      /^已完成 0\/3 步 · \d+ 分钟$/,
+      /^已完成 0\/4 步 · \d+ 分钟$/,
     );
     await expect(progress.getByTestId("task-progress-actions").getByRole("button")).toHaveText([
       "暂停",

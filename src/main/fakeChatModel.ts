@@ -69,7 +69,8 @@
  * does so, or "drop the citations" (去掉引用) leaves their markers out.
  *
  * Research (`fakePlan`): a plan of three steps about the topic; each step is
- * then answered as a Question that asks for the web is.
+ * then answered as a Question that asks for the web is, and the pages it saved
+ * are tagged with their names' first words (`fakeResearchTags`).
  *
  * Make this a Skill (`fakeSkillDraft`): a draft whose "when to use it" and first
  * step quote the Mind's last Question, so a test sees that the Mind was read.
@@ -841,6 +842,21 @@ function fakePlan(options: GenerateOptions): string | null {
   ].join("\n");
 }
 
+/** Research's tagger (#130, src/core/research/prompt.ts). */
+const RESEARCH_TAGGER = /^You tag the web pages a research Task saved/m;
+
+/** Tags for the pages Research saved: each page's first word, the pages that share it under it. */
+function fakeResearchTags(options: GenerateOptions): string | null {
+  if (!RESEARCH_TAGGER.test(systemOf(options.prompt))) return null;
+  const request = userText(options.prompt.find((message) => message.role === "user"));
+  const pages = new Map<string, number[]>();
+  for (const [, number, name] of request.matchAll(/^(\d+)\. (.+)$/gm)) {
+    const word = /\p{L}+/u.exec(name ?? "")?.[0];
+    if (word) pages.set(word, [...(pages.get(word) ?? []), Number(number)]);
+  }
+  return [...pages].map(([word, numbers]) => `${word}: ${numbers.join(", ")}`).join("\n");
+}
+
 /** Test-only classifier: chooses a group whose name appears in the excerpt. */
 function fakeStructuredOutput(options: GenerateOptions): string {
   const format = options.responseFormat;
@@ -983,6 +999,7 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
             options.responseFormat?.type === "json"
               ? fakeStructuredOutput(options)
               : (fakePlan(options) ??
+                fakeResearchTags(options) ??
                 fakeClaims(options) ??
                 fakeSkillDraft(options) ??
                 fakeEdit(options) ??
