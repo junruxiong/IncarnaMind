@@ -391,10 +391,12 @@ describe("making a Folder", () => {
   };
   let useUndo: typeof import("../../src/renderer/src/undo").useUndo;
   let useRequests: typeof import("../../src/renderer/src/requests").useRequests;
+  let useNotices: typeof import("../../src/renderer/src/notices").useNotices;
 
   beforeAll(async () => {
     ({ useUndo } = await import("../../src/renderer/src/undo"));
     ({ useRequests } = await import("../../src/renderer/src/requests"));
+    ({ useNotices } = await import("../../src/renderer/src/notices"));
   });
 
   /** The Library as the core has it once the new Folder is in it, named `name`. */
@@ -436,8 +438,9 @@ describe("making a Folder", () => {
     );
     expect(await useAppStore.getState().createFolder()).toBeNull();
     expect(useUndo.getState().done).toEqual([]);
-    expect(useAppStore.getState().actionError).toContain("already exists");
-    useAppStore.getState().dismissActionError();
+    const [notice] = useNotices.getState().errors;
+    expect(notice?.message).toContain("already exists");
+    if (notice) useNotices.getState().dismissError(notice.id);
   });
 
   test("a name the Folders already have is numbered, and Chinese names are made in Chinese", async () => {

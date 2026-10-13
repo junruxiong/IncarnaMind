@@ -2,7 +2,6 @@ import { type ReactNode, useEffect, useState } from "react";
 import type { LanguagePreference } from "../../../core/language";
 import type { MessageKey } from "../../../shared/i18n";
 import { files } from "../core";
-import { errorMessage } from "../errors";
 import { useT } from "../i18n";
 import { type SettingsPage, settingsPages } from "../settingsPages";
 import { recordUsage, useAppStore } from "../store";
@@ -290,7 +289,7 @@ function DataFolderSettings() {
   const t = useT();
   const open = (folder: Promise<void>) =>
     folder.catch((failure: unknown) => {
-      useAppStore.setState({ actionError: errorMessage(failure) });
+      useAppStore.getState().reportError(failure);
     });
   return (
     <section data-testid="data-folder-settings">

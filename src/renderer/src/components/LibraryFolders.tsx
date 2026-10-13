@@ -15,7 +15,14 @@ import { InlineName } from "./InlineName";
 import { ChevronDownLineIcon, ChevronRightLineIcon, FolderLineIcon } from "./lineIcons";
 import { MindRow } from "./MindRow";
 import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
-import { rowActionsClass, rowButtonClass, rowClass, rowIconClass, rowPadding } from "./sidebarRows";
+import {
+  clearsActions,
+  rowActionsClass,
+  rowButtonClass,
+  rowClass,
+  rowIconClass,
+  rowPadding,
+} from "./sidebarRows";
 
 /** How many Documents a Folder lists at first; "Show N more Documents" lists more, in place. */
 export const FIRST_DOCUMENTS = 5;
@@ -371,7 +378,7 @@ function FolderGroup({
               rename.nameProps.onKeyDown(event);
               onKeyDown(event);
             }}
-            className={rowButtonClass}
+            className={`${rowButtonClass} ${clearsActions.menu}`}
           >
             <FolderLineIcon className={rowIconClass(selected)} />
             <span data-testid="row-text" className="min-w-0 flex-1 truncate">
