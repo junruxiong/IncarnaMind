@@ -2694,10 +2694,49 @@ export interface LinkedFolder {
    * download it. `downloadOnlineOnlyFiles` downloads and indexes them.
    */
   onlineOnly: { files: number; bytes: number; downloading: boolean };
+  /** Files in it in a format IncarnaMind doesn't read (.doc, .xls, .ppt, .wps, .caj…), found at its last look: not Documents (#740). */
+  unsupportedFiles: number;
   /** ISO 8601, UTC. */
   createdAt: string;
   /** ISO 8601, UTC. */
   updatedAt: string;
+}
+
+/** A file in a Linked folder in a format IncarnaMind doesn't read: it is left out of every search (#740). */
+export interface UnsupportedFile {
+  /** Absolute. */
+  path: string;
+  /** The file's name, with its extension. */
+  name: string;
+  /** Lower case, with the dot: ".xls". */
+  extension: string;
+  linkedFolderId: string;
+  /** The folder it is in, relative to its Linked folder: "" at the top. */
+  relativeFolder: string;
+}
+
+/**
+ * Why a file in a search's scope wasn't read, and what the User can do:
+ * - "format": a format not read yet (.doc, .xls, .ppt, .wps, .caj…): convert it;
+ * - "scan": a scan with no text yet: it needs text recognition;
+ * - "password": password-protected: remove the password;
+ * - "damaged": the file is broken, or couldn't be read;
+ * - "too-large": too large to open;
+ * - "pages": a scan some of whose pages haven't been read yet.
+ */
+export type UnreadReason = "format" | "scan" | "password" | "damaged" | "too-large" | "pages";
+
+/** A file in a Search scope that couldn't be read, with why (#740). */
+export interface UnreadFile {
+  /** The Document's id, or the file's path for a file in a format not read. */
+  id: string;
+  /** The file's name, with its extension. */
+  name: string;
+  reason: UnreadReason;
+  /** For "format": its extension, lower case with the dot. Null otherwise. */
+  extension: string | null;
+  /** The Document, or null for a file in a format not read. */
+  documentId: string | null;
 }
 
 /**
@@ -6610,6 +6649,13 @@ export interface CoreApi {
   /** The Linked folders, in path order. */
   listLinkedFolders(): Promise<LinkedFolder[]>;
   /**
+   * The files in a Search scope that couldn't be read, and why (#740): its
+   * Documents with no text, password-protected or damaged, and the files in
+   * its Linked folders in a format not read. A scope of none (null) is every
+   * Document. Empty when everything in it was read.
+   */
+  listUnreadFiles(scope?: SearchScope | null): Promise<UnreadFile[]>;
+  /**
    * Points a Linked folder at where it is on this computer now, after it was
    * moved or renamed, or when the data folder is opened on another computer
    * (ADR-0020). Its Documents are looked for at their paths inside it and
@@ -7747,6 +7793,7 @@ const methods: Record<CoreApiMethod, true> = {
   previewLinkedFolder: true,
   addLinkedFolder: true,
   listLinkedFolders: true,
+  listUnreadFiles: true,
   locateLinkedFolder: true,
   removeLinkedFolder: true,
   listKeptCitationTexts: true,
