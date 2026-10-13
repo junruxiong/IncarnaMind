@@ -5538,7 +5538,7 @@
     font-size: 13px;
     color: var(--color-ink-meta);
   }
-  /* The composer of the Mind it reads is drawn here, the panel's width. */
+  /* The composer is drawn here, the panel's width: the Mind's it reads, or the one with none in focus. */
   .assistant-composer {
     flex: none;
     padding: 0 10px 10px;
@@ -5776,11 +5776,6 @@
       width: auto;
       max-width: 812px;
       margin-inline: auto;
-    }
-    .assistant-no-mind {
-      width: auto;
-      max-width: 812px;
-      margin: 0 max(40px, calc((100% - 812px) / 2)) 10px;
     }
   }
 

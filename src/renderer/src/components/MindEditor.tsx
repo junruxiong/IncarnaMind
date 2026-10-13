@@ -14,7 +14,7 @@ import { useCitationFormattingFor, useMindStyleChoice } from "../citationFormatt
 import { noteHandle, readMindHandle } from "../commands/handles";
 import { shortcutLabel } from "../commands/keymap";
 import { startCompareDocuments, useComparisons } from "../comparisons";
-import { useComposer } from "../composer";
+import { chosenScope, useComposer } from "../composer";
 import { core } from "../core";
 import { AnswerView } from "../editor/AnswerView";
 import { holdsAiText } from "../editor/aiText";
@@ -26,7 +26,6 @@ import { CitationStylePrompt } from "../editor/CitationStylePrompt";
 import { CitationView } from "../editor/CitationView";
 import { CodeBlockView } from "../editor/CodeBlockView";
 import { ComparisonTableView } from "../editor/ComparisonTableView";
-import { Composer, type ComposerHandle } from "../editor/Composer";
 import { ConversationLinks } from "../editor/ConversationLinks";
 import { CitationClusters } from "../editor/citationClusters";
 import { CitationNumbers, redrawFootnotes, setCitationForm } from "../editor/citationNumbers";
@@ -86,7 +85,6 @@ import { CompareSheet } from "./CompareSheet";
 import { StartGuide, useGettingStarted, useIsExample } from "./GettingStarted";
 import { MineLineIcon, SparkLineIcon } from "./lineIcons";
 import { MindNotice } from "./MindNotice";
-import { TaskTray } from "./TaskTray";
 
 /** Stands in for the hint's button in its translated words, which are split around it. */
 const ASK = "\uE000";
@@ -259,7 +257,6 @@ function MindEditorView({
   const countSlot = useContext(CountSlotContext);
   const sheetSlot = useContext(CompareSheetSlotContext);
   const comparing = useComparisons((state) => state.sheets[mindId] !== undefined);
-  const composer = useRef<ComposerHandle>(null);
   /**
    * Whether the Mind's cursor is where Add to note puts an Answer (#201): since
    * the editor last had the focus, only the assistant (its composer, its
@@ -523,6 +520,16 @@ function MindEditorView({
     return () => document.removeEventListener("focusin", onFocusIn);
   }, [editor, dock]);
 
+  // The assistant's one composer asks in this Mind while it reads it (`Assistant`).
+  const asksHere = dock !== null && !readOnly;
+  useEffect(() => {
+    if (!asksHere) return;
+    useComposer.setState({ seat: { editor, doc, mindId } });
+    return () => {
+      if (useComposer.getState().seat?.mindId === mindId) useComposer.setState({ seat: null });
+    };
+  }, [asksHere, editor, doc, mindId]);
+
   // A Question asked for from outside the editor, e.g. "Ask your own Question" in Get
   // started, or "Ask about this Folder" in the Library, which gives its Search scope:
   // the composer takes the focus, the Question to go at the end of the Mind.
@@ -530,9 +537,15 @@ function MindEditorView({
   const composerShown = dock !== null;
   useEffect(() => {
     if (!questionHere || !composerShown) return;
-    composer.current?.focus(useAppStore.getState().questionToStart?.scope ?? null);
+    const scope = useAppStore.getState().questionToStart?.scope;
+    if (scope) {
+      const folderId =
+        useAppStore.getState().minds.find((each) => each.id === mindId)?.folderId ?? null;
+      useComposer.getState().update(mindId, { scope: chosenScope(scope, folderId) });
+    }
+    useComposer.getState().requestFocus();
     useAppStore.getState().questionStarted();
-  }, [questionHere, composerShown]);
+  }, [questionHere, composerShown, mindId]);
 
   /** The hint's "press ⌘J…": the composer takes the focus, the Question to go on the hint's line. */
   const askOnLine = (pos: number) => {
@@ -578,15 +591,6 @@ function MindEditorView({
           <CitationStylePrompt mindId={mindId} editor={editor} doc={doc} />
         )}
       </div>
-      {dock &&
-        !readOnly &&
-        createPortal(
-          <>
-            <TaskTray mindId={mindId} />
-            <Composer ref={composer} editor={editor} doc={doc} mindId={mindId} />
-          </>,
-          dock,
-        )}
       {sheetSlot &&
         comparing &&
         !readOnly &&
