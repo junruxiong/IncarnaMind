@@ -1,4 +1,12 @@
-import { type ChangeEvent, memo, type ReactNode, useMemo, useRef, useState } from "react";
+import {
+  type ChangeEvent,
+  memo,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { Document, DocumentStatus, Tag } from "../../../core/api";
 import { displayName, sourceOf } from "../../../shared/documentNames";
 import type { MessageKey } from "../../../shared/i18n";
@@ -7,6 +15,7 @@ import { documentStatusText } from "../documentStatus";
 import { useLanguage, useT } from "../i18n";
 import { currentTabOf } from "../layoutSlice";
 import { fileStatusLabel } from "../linkedFolders";
+import { useRequests } from "../requests";
 import { scanningStatus } from "../scanStatus";
 import {
   extendThroughRows,
@@ -92,9 +101,7 @@ export function DocumentsSection() {
   const hasAnyDocuments = useAppStore((state) => state.documents.length > 0);
   const [chosenView, setView] = useState<BrowseView>("folders");
   const libraryOpen = useAppStore(
-    (state) =>
-      currentTabOf(state.layout)?.item.kind === "library" &&
-      ["all", "new"].includes(state.libraryFilter),
+    (state) => currentTabOf(state.layout)?.item.kind === "library" && state.libraryFilter === "all",
   );
   // The same array until the Documents or the Tag filter change (see `selectVisibleDocuments`).
   const documents = useAppStore(selectVisibleDocuments);
@@ -120,6 +127,11 @@ export function DocumentsSection() {
     ...(somethingToBrowse ? (["sources"] as const) : []),
   ];
   const view = views.includes(chosenView) ? chosenView : "folders";
+  // A Folder just made is named in its row, which only the Folders view has.
+  const naming = useRequests((state) => state.nameFolder !== null);
+  useEffect(() => {
+    if (naming) setView("folders");
+  }, [naming]);
   /**
    * Each Document's row as last made, by depth, while the Tags stay the same
    * (#156). A list of thousands drawn again because one Document changed

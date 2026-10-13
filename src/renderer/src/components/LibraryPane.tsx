@@ -99,15 +99,16 @@ function LibrarySheet() {
     [facetFilter, tagFilter],
   );
   const [limit, setLimit] = useState(100);
-  const [editing, setEditing] = useState<LibraryGroup | "new" | null>(null);
+  const [editing, setEditing] = useState<LibraryGroup | null>(null);
   const [starters, setStarters] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: each view of the Library starts clean.
   useEffect(() => {
     setLimit(100);
     setSearch("");
     setFacetFilter({});
-    setEditing(filter === "new" ? "new" : null);
+    setEditing(null);
     // Another Folder: what was selected in this one isn't in view any more.
     useSelection.getState().clear("library");
   }, [filter]);
@@ -224,10 +225,6 @@ function LibrarySheet() {
   const renameFolder = useAppStore((state) => state.renameFolder);
   const renameHeading = useRename<HTMLButtonElement>("library-heading");
   const heading = selected?.name ?? t(filter === "unsorted" ? "library.unsorted" : "library.all");
-  const closeForm = () => {
-    setEditing(null);
-    if (filter === "new") useAppStore.getState().openLibrary();
-  };
   return (
     <section
       data-testid="library"
@@ -306,16 +303,6 @@ function LibrarySheet() {
               type="button"
               className={buttonStyle("ghost", "sm")}
               onClick={() => {
-                setEditing("new");
-                setStarters(false);
-              }}
-            >
-              {t("library.newGroup")}
-            </button>
-            <button
-              type="button"
-              className={buttonStyle("ghost", "sm")}
-              onClick={() => {
                 setStarters(!starters);
                 setEditing(null);
               }}
@@ -364,11 +351,11 @@ function LibrarySheet() {
           )}
           {editing && (
             <GroupForm
-              key={editing === "new" ? "new" : editing.id}
+              key={editing.id}
               group={editing}
               busy={busy}
               act={act}
-              close={closeForm}
+              close={() => setEditing(null)}
             />
           )}
           {(starters || groups.length === 0) && !editing && snapshot && (
@@ -794,7 +781,7 @@ function GroupForm({
   act,
   close,
 }: {
-  group: LibraryGroup | "new";
+  group: LibraryGroup;
   busy: boolean;
   act: Action;
   close(): void;
@@ -804,11 +791,9 @@ function GroupForm({
   useEffect(() => {
     nameInput.current?.focus();
   }, []);
-  const [name, setName] = useState(group === "new" ? "" : group.name);
-  const [description, setDescription] = useState(group === "new" ? "" : group.description);
-  const [countsOwnFiles, setCountsOwnFiles] = useState(
-    group === "new" ? false : group.countsOwnFiles,
-  );
+  const [name, setName] = useState(group.name);
+  const [description, setDescription] = useState(group.description);
+  const [countsOwnFiles, setCountsOwnFiles] = useState(group.countsOwnFiles);
   // Settings counts IncarnaMind's files everywhere: there's nothing for a folder to switch.
   const leftOut = useAppStore((state) => state.settings?.user.leaveOutOwnFiles ?? true);
   return (
@@ -818,8 +803,7 @@ function GroupForm({
         event.preventDefault();
         void act(async () => {
           const input = { name, description, countsOwnFiles };
-          if (group === "new") await core.createLibraryGroup(input);
-          else await useAppStore.getState().editFolder(group.id, input);
+          await useAppStore.getState().editFolder(group.id, input);
           close();
         });
       }}
