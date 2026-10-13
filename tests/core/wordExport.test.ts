@@ -11,10 +11,11 @@ import { join } from "node:path";
 import type { JSONContent } from "@tiptap/core";
 import { describe, expect, test } from "vitest";
 import { type Core, type Document, MIND_WORD_FIELD } from "../../src/core";
+import { recordProposalRequest } from "../../src/shared/proposals";
 import { wordFileOf, wordImportProgressOf } from "../../src/shared/wordFiles";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
-import { textOf, unzip } from "../helpers/docx";
+import { acceptedParagraphs, textOf, unzip } from "../helpers/docx";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
 import { editMind } from "../helpers/minds";
 import {
@@ -277,27 +278,246 @@ describe("an edited paragraph", () => {
     ]);
   });
 
-  test("a change still waiting to be accepted isn't written: the paragraph stays as it was", async () => {
+  test("a change still waiting goes in as IncarnaMind's tracked change, in its paragraph's own run", async () => {
     const { core, mindId, client, bytes } = await setUp({
-      body: paragraph("Rent is due monthly."),
+      body: paragraph(run("Rent is due monthly.", { font: "Georgia" })) + paragraph("Kept."),
     });
-    editMind(client, ([first]) => [
+    recordProposalRequest(client.doc, "r1", {
+      source: "edit-with-ai",
+      providerId: "anthropic",
+      modelId: "claude",
+      createdAt: "2026-10-12T14:30:00.000Z",
+    });
+    editMind(client, ([first, second]) => [
       {
         ...first,
         content: [
           text("Rent is due "),
           {
-            type: "text",
-            text: "weekly ",
-            marks: [{ type: "proposalInsert", attrs: { proposalId: "p", requestId: "r" } }],
+            ...text("monthly"),
+            marks: [{ type: "proposalDelete", attrs: { id: "c1", request: "r1" } }],
           },
-          text("monthly."),
+          {
+            ...text("weekly"),
+            marks: [{ type: "proposalInsert", attrs: { id: "c1", request: "r1" } }],
+          },
+          text("."),
         ],
+      },
+      second as JSONContent,
+    ]);
+    await client.settled();
+
+    const { document, files } = await exported(core, mindId);
+
+    expect(changed(unzip(bytes), files)).toEqual(["word/document.xml"]);
+    const georgia = '<w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"/></w:rPr>';
+    expect(document).toContain(
+      `<w:del w:id="0" w:author="IncarnaMind" w:date="2026-10-12T14:30:00Z"><w:r>${georgia}<w:delText xml:space="preserve">monthly</w:delText></w:r></w:del><w:ins w:id="1" w:author="IncarnaMind" w:date="2026-10-12T14:30:00Z"><w:r>${georgia}<w:t xml:space="preserve">weekly</w:t></w:r></w:ins>`,
+    );
+    expect(document).toContain(paragraph("Kept."));
+  });
+});
+
+describe("the User's edits as tracked changes (#107)", () => {
+  const tracking = { format: "docx", trackChanges: true } as const;
+
+  test("a paragraph a change still waiting adds is IncarnaMind's insertion, its words too, with the User's edits tracked", async () => {
+    const { core, mindId, client } = await setUp({ body: paragraph("Kept.") });
+    editMind(client, (blocks) => [
+      ...blocks,
+      {
+        type: "paragraph",
+        attrs: { proposal: { id: "c1", request: "r1", kind: "insert" } },
+        content: [text("Proposed.")],
       },
     ]);
     await client.settled();
-    const { files } = await exported(core, mindId);
-    expect(changed(unzip(bytes), files)).toEqual([]);
+
+    const document =
+      unzip((await core.exportMind(mindId, tracking)).data)
+        .get("word/document.xml")
+        ?.toString("utf8") ?? "";
+
+    expect(document).toMatch(
+      /<w:p><w:pPr><w:rPr><w:ins w:id="\d+" w:author="IncarnaMind"\/><\/w:rPr><\/w:pPr><w:ins w:id="\d+" w:author="IncarnaMind"><w:r><w:t xml:space="preserve">Proposed.<\/w:t><\/w:r><\/w:ins><\/w:p>/,
+    );
+    expect(document).not.toContain('w:author="Priya Raman"');
+  });
+
+  test("a changed word is the User's deletion and insertion, under their name, in the run's own format; off, it is written plainly", async () => {
+    const { core, mindId, client } = await setUp({
+      body: paragraph(run("Rent is due monthly.", { font: "Georgia" })),
+    });
+    editText(client, (value) => value.replace("monthly", "weekly"));
+    await client.settled();
+    await core.updateSettings({ user: { authorName: "P. Raman" } });
+
+    const tracked = unzip((await core.exportMind(mindId, tracking)).data);
+    const plain = await exported(core, mindId);
+
+    const document = tracked.get("word/document.xml")?.toString("utf8") ?? "";
+    const georgia = '<w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"/></w:rPr>';
+    expect(document).toMatch(
+      new RegExp(
+        `<w:del w:id="\\d+" w:author="P. Raman" w:date="[^"]+"><w:r>${georgia}<w:delText xml:space="preserve">monthly</w:delText></w:r></w:del><w:ins w:id="\\d+" w:author="P. Raman" w:date="[^"]+"><w:r>${georgia}<w:t xml:space="preserve">weekly</w:t></w:r></w:ins>`,
+      ),
+    );
+    expect(acceptedParagraphs(document)).toEqual(["Rent is due weekly."]);
+    expect(plain.document).not.toMatch(/<w:(ins|del) /);
+  });
+
+  test("a deleted paragraph stays as the User's deletion, someone's comment on it with it, and nothing is lost", async () => {
+    const remark = commented(0, "Lars Eklund", "Check the date.", run("Due in May."));
+    const { core, mindId, client } = await setUp({
+      body: paragraph("Kept.") + paragraph(remark.inline) + paragraph("Last."),
+      comments: remark.comment,
+    });
+    editMind(client, ([first, , last]) => [first as JSONContent, last as JSONContent]);
+    await client.settled();
+
+    const { data, word } = await core.exportMind(mindId, tracking);
+    const files = unzip(data);
+    const document = files.get("word/document.xml")?.toString("utf8") ?? "";
+
+    expect(word?.notKept).toEqual([]);
+    expect(document).toContain('<w:commentRangeStart w:id="0"/>');
+    expect(document).toMatch(
+      /<w:del [^>]*w:author="Priya Raman"[^>]*><w:r><w:delText xml:space="preserve">Due in May.<\/w:delText>/,
+    );
+    expect(document).toMatch(
+      /<w:del [^>]*><w:r><w:rPr><w:rStyle w:val="CommentReference"\/><\/w:rPr><w:commentReference w:id="0"\/>/,
+    );
+    expect(files.get("word/comments.xml")?.toString("utf8")).toContain("Check the date.");
+    expect(acceptedParagraphs(document)).toEqual(["Kept.", "Last."]);
+  });
+
+  test("a new paragraph is the User's insertion, its paragraph mark too; a moved one their deletion where it was and insertion where it is", async () => {
+    const { core, mindId, client } = await setUp({
+      body: paragraph("One.") + paragraph("Two.") + paragraph("Three."),
+    });
+    editMind(client, ([one, two, three]) => [
+      three as JSONContent,
+      one as JSONContent,
+      { type: "paragraph", content: [text("New.")] },
+      two as JSONContent,
+    ]);
+    await client.settled();
+
+    const document =
+      unzip((await core.exportMind(mindId, tracking)).data)
+        .get("word/document.xml")
+        ?.toString("utf8") ?? "";
+
+    expect(document).toMatch(
+      /<w:p><w:pPr><w:rPr><w:ins w:id="\d+" w:author="Priya Raman"[^>]*\/><\/w:rPr><\/w:pPr><w:ins [^>]*><w:r><w:t xml:space="preserve">New.<\/w:t><\/w:r><\/w:ins><\/w:p>/,
+    );
+    // The body's last paragraph mark is never deleted: Word keeps an empty paragraph there.
+    expect(acceptedParagraphs(document)).toEqual(["Three.", "One.", "New.", "Two.", ""]);
+    expect([
+      ...document.matchAll(/<w:delText xml:space="preserve">Three.<\/w:delText>/g),
+    ]).toHaveLength(1);
+  });
+
+  test("bold turned on says what the run was (w:rPrChange), and a heading's new level what the paragraph was (w:pPrChange)", async () => {
+    const { core, mindId, client } = await setUp({
+      body:
+        paragraph("Terms", { style: "Heading1" }) +
+        paragraph(run("Rent is due monthly.", { font: "Georgia" })),
+    });
+    editMind(client, ([title, body]) => [
+      { ...(title as JSONContent), attrs: { ...(title as JSONContent).attrs, level: 2 } },
+      {
+        ...(body as JSONContent),
+        content: [text("Rent is due "), text("monthly", "bold"), text(".")],
+      },
+    ]);
+    await client.settled();
+
+    const document =
+      unzip((await core.exportMind(mindId, tracking)).data)
+        .get("word/document.xml")
+        ?.toString("utf8") ?? "";
+
+    expect(document).toMatch(
+      /<w:pStyle w:val="Heading2"\/><w:pPrChange w:id="\d+" w:author="Priya Raman" w:date="[^"]+"><w:pPr><w:pStyle w:val="Heading1"\/><\/w:pPr><\/w:pPrChange>/,
+    );
+    expect(document).toMatch(
+      /<w:r><w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"\/><w:b\/><w:bCs\/><w:rPrChange w:id="\d+" w:author="Priya Raman" w:date="[^"]+"><w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"\/><\/w:rPr><\/w:rPrChange><\/w:rPr><w:t xml:space="preserve">monthly<\/w:t><\/w:r>/,
+    );
+    expect(document).not.toMatch(/<w:(ins|del) /);
+  });
+
+  test("a table's row added and one deleted are the User's row insertion and deletion", async () => {
+    const { core, mindId, client } = await setUp({
+      body: table([
+        ["A1", "B1"],
+        ["A2", "B2"],
+      ]),
+    });
+    editMind(client, ([grid]) => {
+      const rows = (grid as JSONContent).content ?? [];
+      const cell = (value: string): JSONContent => ({
+        type: "tableCell",
+        content: [{ type: "paragraph", content: [text(value)] }],
+      });
+      return [
+        {
+          ...(grid as JSONContent),
+          content: [
+            rows[0] as JSONContent,
+            { type: "tableRow", content: [cell("A3"), cell("B3")] },
+            { type: "tableRow", content: [cell("A4"), cell("B4")] },
+          ],
+        },
+      ];
+    });
+    await client.settled();
+
+    const document =
+      unzip((await core.exportMind(mindId, tracking)).data)
+        .get("word/document.xml")
+        ?.toString("utf8") ?? "";
+
+    expect(document).toMatch(
+      /<w:tr><w:trPr><w:del w:id="\d+" w:author="Priya Raman"[^>]*\/><\/w:trPr>/,
+    );
+    expect(document).toMatch(
+      /<w:tr><w:trPr><w:ins w:id="\d+" w:author="Priya Raman"[^>]*\/><\/w:trPr>/,
+    );
+    expect([...document.matchAll(/<w:trPr><w:ins /g)]).toHaveLength(2);
+    expect(acceptedParagraphs(document)).toEqual(["A1", "B1", "A3", "B3", "A4", "B4"]);
+  });
+});
+
+describe("IncarnaMind's comments in an imported file (#107)", () => {
+  test("AI text added gets IncarnaMind's comment, after the comments the file has", async () => {
+    const remark = commented(0, "Lars Eklund", "Check the date.", run("Due in May."));
+    const { core, mindId, client } = await setUp({
+      body: paragraph(remark.inline),
+      comments: remark.comment,
+    });
+    editMind(client, (blocks) => [
+      ...blocks,
+      {
+        type: "paragraph",
+        content: [{ ...text("Rent rises with inflation."), marks: [{ type: "generated" }] }],
+      },
+    ]);
+    await client.settled();
+
+    const files = unzip((await core.exportMind(mindId, { format: "docx", markAiText: true })).data);
+    const comments = files.get("word/comments.xml")?.toString("utf8") ?? "";
+    const document = files.get("word/document.xml")?.toString("utf8") ?? "";
+
+    expect(
+      [...comments.matchAll(/<w:comment w:id="(\d+)" w:author="([^"]+)"/g)].map((m) => m[2]),
+    ).toEqual(["Lars Eklund", "IncarnaMind"]);
+    const id = /<w:comment w:id="(\d+)" w:author="IncarnaMind"/.exec(comments)?.[1];
+    expect(id).not.toBe("0");
+    expect(document).toContain(`<w:commentRangeStart w:id="${id}"/>`);
+    expect(document).toContain(`<w:commentReference w:id="${id}"/>`);
+    expect(comments).toContain("Written by IncarnaMind");
   });
 });
 

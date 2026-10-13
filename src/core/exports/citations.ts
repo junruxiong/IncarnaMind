@@ -7,7 +7,7 @@
 import type { CitationStyle } from "../../shared/citationStyles";
 import { type SourceContext, sourceEntry, sourcesOf } from "../../shared/sources";
 import type { CitationFormatRequest, CitedWork, FormattedCitations, StyledRun } from "../api";
-import { type Block, type Inline, trimTrailingSpace } from "../mindText";
+import { type Block, type Inline, type Pendings, trimTrailingSpace } from "../mindText";
 
 /** Every run of inline content in the Blocks, in order, mapped by `map`. */
 function mapInlines(blocks: readonly Block[], map: (content: Inline[]) => Inline[]): Block[] {
@@ -49,7 +49,14 @@ interface Cluster {
 export const isBlank = (inline: Inline | undefined) =>
   inline?.kind === "text" && inline.text.trim() === "" && !inline.text.includes("\n");
 
-/** The clusters in one run of content: Citations with nothing but spaces between them. */
+/** What changes still waiting do to an inline, as one key: a cluster is all one or all another (#107). */
+export const changeKey = (inline: Pendings | undefined): string =>
+  `${inline?.inserted?.id ?? ""}\u0000${inline?.deleted?.id ?? ""}`;
+
+/**
+ * The clusters in one run of content: Citations with nothing but spaces
+ * between them, that changes still waiting do the same to.
+ */
 function clustersIn(content: readonly Inline[]): Cluster[] {
   const found: Cluster[] = [];
   let index = 0;
@@ -60,12 +67,14 @@ function clustersIn(content: readonly Inline[]): Cluster[] {
       continue;
     }
     const cluster: Cluster = { start: index, end: index + 1, citations: [first] };
+    const alike = (inline: Inline | undefined): inline is Extract<Inline, { kind: "citation" }> =>
+      inline?.kind === "citation" && changeKey(inline) === changeKey(first);
     for (;;) {
       const next = content[cluster.end];
-      if (next?.kind === "citation") {
+      if (alike(next)) {
         cluster.citations.push(next);
         cluster.end++;
-      } else if (isBlank(next) && content[cluster.end + 1]?.kind === "citation") {
+      } else if (isBlank(next) && alike(content[cluster.end + 1])) {
         cluster.end++;
       } else {
         break;
@@ -132,11 +141,18 @@ export async function styleCitations(
       const note = formatted.form === "note";
       // A note's number, or a raised number, goes right after the word, as in print.
       if (note || runs[0]?.script === "sup") trimTrailingSpace(out);
+      const [first] = cluster.citations;
+      const failed = cluster.citations.flatMap((citation) =>
+        citation.footnote.failed ? [citation.footnote] : [],
+      );
       out.push({
         kind: "cite",
         runs,
         note,
         unverified: cluster.citations.some((citation) => citation.footnote.unverified),
+        ...(failed.length > 0 && { failed }),
+        ...(first?.inserted && { inserted: first.inserted }),
+        ...(first?.deleted && { deleted: first.deleted }),
       });
       at = cluster.end;
     }

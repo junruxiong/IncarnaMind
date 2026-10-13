@@ -24,6 +24,11 @@ function inputOf(input: unknown): ScriptedInput | null {
  */
 export const scriptedTask: TaskKind = {
   kind: SCRIPTED_TASK,
+  describeSteps: (_task, keys) =>
+    keys.map((key) => {
+      const [step, name] = key.split(":");
+      return step === "approve" ? `Asked to write ${name}` : `Wrote ${name}`;
+    }),
   async run(task) {
     const input = inputOf(task.input);
     if (!input) return { status: "failed", problem: "unknown" };

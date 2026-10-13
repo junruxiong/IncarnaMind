@@ -7,6 +7,10 @@
  * start and end, a comment's range and its mark) are left out when their
  * other half is gone, as Word would repair the file. What can't be kept,
  * someone's comment or tracked change on deleted text, is said.
+ *
+ * When the User's edits are tracked (#107), what they deleted stays in the
+ * file as their deletion, with whatever is kept as is in it: nothing is left
+ * out, and every pair stays whole.
  */
 import type { NodeJSON } from "../../../shared/blockJson";
 import { readWordAtom, wordAtomText } from "../../../shared/wordFiles";
@@ -56,6 +60,8 @@ export class AtomPlan {
   private readonly writer = new Map<string, NodeJSON>();
   /** Atoms nothing writes: deleted, or the other half of their pair is. */
   private readonly unwritten = new Set<string>();
+  /** Atoms written where they were, in what the User deleted, as their deletion. */
+  private readonly removed = new Set<string>();
   readonly losses: WordExportLoss[] = [];
 
   constructor(
@@ -64,6 +70,8 @@ export class AtomPlan {
     baseKey: (node: NodeJSON) => string | null,
     currentKey: (node: NodeJSON) => string | null,
     places: Places,
+    /** The User's edits are tracked: what they deleted stays, as deleted. */
+    track = false,
   ) {
     const baseAtoms = occurrences(base, baseKey);
     const now = occurrences(current, currentKey);
@@ -76,7 +84,9 @@ export class AtomPlan {
         home && presentKeys.has(home) ? found.find((each) => each.ownerKey === home) : undefined;
       this.writer.set(source, (atHome ?? (found[0] as Occurrence)).owner);
     }
-    for (const source of baseAtoms.keys()) if (!this.writer.has(source)) this.unwritten.add(source);
+    for (const source of baseAtoms.keys()) {
+      if (!this.writer.has(source)) (track ? this.removed : this.unwritten).add(source);
+    }
 
     // Pairs: a half whose other half isn't written goes too.
     const halves = new Map<string, Map<"start" | "end" | "mark", string>>();
@@ -141,6 +151,11 @@ export class AtomPlan {
 
   /** Whether the atom is written somewhere. */
   written(source: string): boolean {
+    return this.writer.has(source) || this.removed.has(source);
+  }
+
+  /** Whether the atom is written by something in the Mind, rather than where it was, as deleted. */
+  writtenElsewhere(source: string): boolean {
     return this.writer.has(source);
   }
 

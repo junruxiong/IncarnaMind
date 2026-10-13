@@ -5,6 +5,7 @@ import { files } from "../core";
 import { useT } from "../i18n";
 import { type SettingsPage, settingsPageLabels, settingsPages } from "../settingsPages";
 import { recordUsage, useAppStore } from "../store";
+import { AuthorNameSettings } from "./AuthorNameSettings";
 import { AgentsSettings } from "./agents/AgentsSettings";
 import { ConnectorsSettings } from "./connectors/ConnectorsSettings";
 import { EvidenceSettings } from "./EvidenceSettings";
@@ -42,7 +43,7 @@ const languageOptions: readonly { value: LanguagePreference; label: MessageKey }
   { value: "zh-CN", label: "settings.language.zh-CN" },
 ];
 
-const REPOSITORY_URL = "https://github.com/junruxiong/IncarnaMind";
+const REPOSITORY_URL = "https://github.com/IncarnaMind/IncarnaMind";
 
 /**
  * Settings, in a native modal <dialog>: a list of pages on the frame on the
@@ -151,6 +152,7 @@ function PageContent({ page }: { page: SettingsPage }) {
           <MotionSettings />
           <SuggestionSettings />
           <OutputLocationSettings />
+          <AuthorNameSettings />
           <DataFolderSettings />
           <AboutSettings />
         </Page>
