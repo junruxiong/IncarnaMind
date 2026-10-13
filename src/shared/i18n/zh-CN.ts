@@ -1935,6 +1935,8 @@ export const zhCN = {
   "cost.cap.spentOf": "本月 API 密钥已花费：{spent}，上限 {cap}。",
   "cost.cap.nothing": "本月 API 密钥尚无花费。",
   "cost.cap.unpriced": "另有 {tokens} token 用于价格未知的模型，未计入。",
+  "cost.cap.interrupted.one": "有 1 次请求被中断，费用未知。",
+  "cost.cap.interrupted": "有 {count} 次请求被中断，费用未知。",
   "cost.cap.amount": "每月上限",
   "cost.cap.currency": "币种",
   "cost.provider.thisMonth": "本月：{spent}",
