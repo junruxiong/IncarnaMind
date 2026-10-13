@@ -49,7 +49,8 @@ function Line({ line }: { line: UndoLineState }) {
   useDismissOnEscape(true, () => useUndo.getState().dismiss());
 
   if (line.problem) {
-    const { step, reason, fix } = line.problem;
+    const { step, wording, fix } = line.problem;
+    const reason = wording ? t(wording.key, wording.values) : line.problem.reason;
     return (
       <div ref={shown} role="alert" data-testid="undo-problem" className={`${lineClass} items-end`}>
         <span aria-hidden="true" className="mb-[9px] size-1.5 shrink-0 rounded-full bg-attention" />
