@@ -11,9 +11,6 @@ import { describe, expect, test, vi } from "vitest";
 import {
   type CapturePage,
   CITED_PAGES_FOLDER,
-  type CitationAttributes,
-  type Core,
-  type DrawnPage,
   type LogFields,
   type PageCaptureRequest,
 } from "../../src/core";
@@ -26,6 +23,7 @@ import {
   setUpWithDocuments,
   shownPassages,
 } from "../helpers/citations";
+import { PNG, savedPage } from "../helpers/citedPages";
 import { queryDatabase, startCore } from "../helpers/core";
 import { sha256, waitForDocuments, waitForProcessing } from "../helpers/documents";
 import { connectToMind } from "../helpers/mindClient";
@@ -45,14 +43,6 @@ const TIDES = buildPdf([
 const SPRING = "Spring tides happen at new moon and at full moon.";
 const TABLES = "Harbours publish the times of high water every year.";
 const MOON = "The Moon raises two bulges of water on the Earth.";
-
-/** The smallest PNG there is: one pixel. */
-const PNG = Uint8Array.from(
-  Buffer.from(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==",
-    "base64",
-  ),
-);
 
 /**
  * A viewer drawing off screen, as the desktop app's hidden window does: it
@@ -100,18 +90,6 @@ function fakeViewer(steps: string[] = []) {
       held = null;
     },
   };
-}
-
-/** Waits until the Citation's page is saved, and gives it. */
-async function savedPage(core: Core, citation: CitationAttributes): Promise<DrawnPage> {
-  return vi.waitFor(
-    async () => {
-      const page = await core.citedPageImage(citation);
-      if (!page) throw new Error("The cited page isn't saved yet.");
-      return page;
-    },
-    { timeout: 20_000, interval: 50 },
-  );
 }
 
 /** The pictures in the data folder's cited pages. */
