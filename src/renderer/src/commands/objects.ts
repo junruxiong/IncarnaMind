@@ -66,6 +66,12 @@ const fileReason = (ctx: CommandContext) => {
 
 const onFiles = (ctx: CommandContext) => everyDocument(ctx, (document) => !document.web);
 
+/** The Mind a Word file was imported as (#720), while it is there. */
+const importedMindOf = (ctx: CommandContext) => {
+  const id = documentsOf(ctx)[0]?.importedAs;
+  return id ? store().minds.find((each) => each.id === id) : undefined;
+};
+
 export const mindCommands: readonly Command[] = [
   {
     id: "mind.open",
@@ -140,6 +146,18 @@ export const documentCommands: readonly Command[] = [
     reversible: true,
     run: (ctx) =>
       store().openDocument({ documentId: idsOf(ctx, "document")[0] ?? "" }, { as: "here" }),
+  },
+  {
+    id: "document.openMind",
+    label: "document.openMind",
+    group: "open",
+    appliesTo: ["document"],
+    when: (ctx) => onlyOne(ctx) && importedMindOf(ctx) !== undefined,
+    reversible: true,
+    run(ctx) {
+      const mind = importedMindOf(ctx);
+      if (mind) store().openMind(mind.id);
+    },
   },
   {
     id: "document.ask",

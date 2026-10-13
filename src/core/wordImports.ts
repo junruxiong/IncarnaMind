@@ -16,6 +16,13 @@
  * Each node mapped from the document records where it came from and its
  * fingerprint as imported (`WordSource`), for export to write into the
  * original (#105). Someone else's document makes its Blocks third-party text (#78).
+ *
+ * The original can also be added to the Library as a Document, in the Mind's
+ * Folder (#720), so Answers cite the file as received: the Mind is the User's
+ * working copy and is never cited. Both ends know the other: the package's
+ * row names the Document (migration 86), and the Mind's Word settings do too.
+ * A newer file of the same name imported into the same Folder can become a
+ * new version of that Document instead.
  */
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
@@ -34,6 +41,7 @@ import type { Logger } from "./adapters";
 import { createElement } from "./answers/blocks";
 import {
   BLOCK_ID_ATTRIBUTE,
+  type CheckedDocument,
   DEFAULT_MIND_KIND,
   type ImportWordFileResult,
   type Mind,
@@ -73,6 +81,12 @@ export interface WordImportsOptions {
   minds: ReturnType<typeof createMinds>;
   /** Throws unless the Folder exists. */
   requireFolder(folderId: string): void;
+  /** Adds the file to the Library, a new one filed in the Folder: its Document, or null when it wasn't added. */
+  addOriginal(path: string, folderId: string | null): Promise<string | null>;
+  /** Makes the file a new version of a Document added on its own; false when it can't take it. */
+  newVersion(documentId: string, path: string): Promise<boolean>;
+  /** A Document's link to its Mind changed: windows hear of it. */
+  documentChanged(documentId: string): void;
   mindsChanged(): void;
   now(): string;
   log: Logger;
@@ -233,6 +247,48 @@ export function createWordImports(options: WordImportsOptions) {
     log.info("word.import.done", { blocks: total });
   };
 
+  /**
+   * The Document of the last import of a file of this name into the Folder, added on its
+   * own, which a different file can become a new version of.
+   */
+  const earlierDraft = (
+    fileName: string,
+    path: string,
+    sha256: string,
+    folderId: string | null,
+  ): WordFileCheck["earlierDraft"] => {
+    const row = db.get<{ id: string; name: string }>(
+      `SELECT d.id, d.name FROM word_packages p
+       JOIN documents d ON d.id = p.document_id
+       JOIN minds m ON m.id = p.mind_id
+       WHERE p.file_name = ? AND m.folder_id IS ? AND p.deleted_at IS NULL
+         AND d.deleted_at IS NULL AND d.source_kind = 'file' AND d.path != ?
+         AND d.content_hash != ?
+       ORDER BY p.created_at DESC, p.rowid DESC LIMIT 1`,
+      [fileName, folderId, path, sha256],
+    );
+    return row ? { documentId: row.id, name: row.name } : null;
+  };
+
+  /** The Document the original becomes: a new version of an earlier draft's, or its own. */
+  const addOriginal = async (
+    path: string,
+    folderId: string | null,
+    newVersionOf: string | null,
+  ): Promise<string | null> => {
+    try {
+      if (newVersionOf !== null && (await options.newVersion(newVersionOf, path))) {
+        return newVersionOf;
+      }
+      return await options.addOriginal(path, folderId);
+    } catch (error) {
+      log.error("word.import.originalNotAdded", {
+        error: error instanceof Error ? error.name : "unknown",
+      });
+      return null;
+    }
+  };
+
   const start = (
     mindId: string,
     structure: WordStructure,
@@ -245,8 +301,9 @@ export function createWordImports(options: WordImportsOptions) {
 
   return {
     /** See `CoreApi.checkWordFile`. */
-    async check(input: unknown): Promise<WordFileCheck> {
+    async check(input: unknown, folderInput?: unknown): Promise<WordFileCheck> {
       const path = parsePath(input);
+      const folderId = parseFolderChoice(folderInput);
       const fileName = basename(path);
       const read = await readWordFile(path);
       checked = "refusal" in read ? null : read;
@@ -258,9 +315,17 @@ export function createWordImports(options: WordImportsOptions) {
           authors: [],
           changes: 0,
           comments: 0,
+          earlierDraft: null,
         };
       }
-      return { fileName, refusal: null, origin: defaultOrigin(read.review), ...read.review };
+      const sha256 = createHash("sha256").update(read.bytes).digest("hex");
+      return {
+        fileName,
+        refusal: null,
+        origin: defaultOrigin(read.review),
+        ...read.review,
+        earlierDraft: earlierDraft(fileName, path, sha256, folderId),
+      };
     },
 
     /** See `CoreApi.importWordFile`. */
@@ -270,6 +335,10 @@ export function createWordImports(options: WordImportsOptions) {
       const origin = parseOrigin(input.origin);
       const folderId = parseFolderChoice(input.folderId);
       if (folderId !== null) options.requireFolder(folderId);
+      const newVersionOf =
+        typeof input.newVersionOf === "string" && input.newVersionOf !== ""
+          ? input.newVersionOf
+          : null;
 
       const read = (await unchangedSinceChecked(path)) ?? (await readWordFile(path));
       checked = null;
@@ -282,16 +351,20 @@ export function createWordImports(options: WordImportsOptions) {
       keeping.add(sha256);
       const fileName = basename(path);
       const title = basename(fileName, extname(fileName)).trim();
-      const at = options.now();
       let mind: Mind;
+      let documentId: string | null = null;
       try {
         await keepPackage(sha256, bytes);
+        if (input.addOriginal === true)
+          documentId = await addOriginal(path, folderId, newVersionOf);
+        const at = options.now();
         mind = db.transaction(() => {
           const made = minds.create({ title, kind: DEFAULT_MIND_KIND, folderId });
           db.run(
-            `INSERT INTO word_packages (id, mind_id, sha256, file_name, size, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [randomUUID(), made.id, sha256, fileName, bytes.byteLength, at, at],
+            `INSERT INTO word_packages (id, mind_id, sha256, file_name, size, document_id,
+               created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [randomUUID(), made.id, sha256, fileName, bytes.byteLength, documentId, at, at],
           );
           return made;
         });
@@ -302,7 +375,7 @@ export function createWordImports(options: WordImportsOptions) {
         if (blocks.doc) {
           startWordImport(
             blocks.doc,
-            { name: fileName, sha256, size: bytes.byteLength, part },
+            { name: fileName, sha256, size: bytes.byteLength, part, documentId },
             origin,
             structure.report,
             structure.blocks.length,
@@ -319,6 +392,7 @@ export function createWordImports(options: WordImportsOptions) {
       // The first batch is written before this returns, so the Mind never opens empty.
       start(mind.id, structure, origin, 0);
       options.mindsChanged();
+      if (documentId !== null) options.documentChanged(documentId);
       return { ok: true, mind };
     },
 
@@ -371,6 +445,22 @@ export function createWordImports(options: WordImportsOptions) {
           "The Word file this Mind was imported from is missing from IncarnaMind's data folder.",
         );
       }
+    },
+
+    /**
+     * A Mind's original, for its checks to leave out (#720): the Document it was also added
+     * as, and any copy of the file as imported. Null for a Mind not imported from Word.
+     */
+    originalOf(mindId: string): CheckedDocument | null {
+      const row = db.get<{ document_id: string | null; sha256: string }>(
+        "SELECT document_id, sha256 FROM word_packages WHERE mind_id = ? AND deleted_at IS NULL",
+        [mindId],
+      );
+      if (!row) return null;
+      return {
+        ...(row.document_id !== null && { documentIds: [row.document_id] }),
+        contentHashes: [row.sha256],
+      };
     },
 
     /** Stops writing Blocks: each import goes on from where it got to at the next start. */

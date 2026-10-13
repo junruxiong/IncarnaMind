@@ -1215,6 +1215,7 @@ export function createCore(adapters: CoreAdapters): Core {
     readText: (documentId) => documents.readText(documentId),
     createMind: (title, folderId) => makeMind({ title, kind: DEFAULT_MIND_KIND, folderId }),
     mindFolder: (mindId) => minds.get(mindId).folderId,
+    originalOf: (mindId) => wordImports.originalOf(mindId),
     defaultModel: () => settings.get().user.chatModel,
     chat,
     consent,
@@ -1520,6 +1521,12 @@ export function createCore(adapters: CoreAdapters): Core {
     content,
     minds,
     requireFolder: (folderId) => void library.folder(folderId),
+    async addOriginal(path, folderId) {
+      const added = await addDocuments([path], folderId === null ? {} : { groupId: folderId });
+      return added.documents[0]?.id ?? null;
+    },
+    newVersion: (documentId, path) => documents.newVersionFrom(documentId, path),
+    documentChanged: (documentId) => events.emit("document.status", documents.get(documentId)),
     mindsChanged,
     now,
     log: adapters.log ?? silentLogger,
@@ -1942,7 +1949,7 @@ export function createCore(adapters: CoreAdapters): Core {
   // Async on purpose: the renderer reaches these over IPC, and a future hosted core may be remote.
   return {
     createMind: async (input) => makeMind(parseCreateMindInput(input)),
-    checkWordFile: async (path) => wordImports.check(path),
+    checkWordFile: async (path, folderId) => wordImports.check(path, folderId),
     importWordFile: async (input) => wordImports.import(input),
     listMinds: async () => minds.list(),
     renameMind: async (mindId, title) => {

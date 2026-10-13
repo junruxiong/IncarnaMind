@@ -1624,6 +1624,20 @@ export const migrations: readonly Migration[] = [
         WHERE deleted_at IS NULL;
     `,
   },
+  {
+    // 85 is reserved by work in progress.
+    version: 86,
+    description: "A Word file imported as a Mind is also a Document (#720)",
+    sql: `
+      -- The Document the original file was also added as, so the Mind can say where it came
+      -- from and leave it out of its own checks, and the Document can open its Mind. NULL: the
+      -- User left it out of the Library, or the import was made before. No foreign key: a
+      -- later sync may deliver a row before its Document.
+      ALTER TABLE word_packages ADD COLUMN document_id TEXT;
+      CREATE INDEX word_packages_by_document ON word_packages (document_id)
+        WHERE document_id IS NOT NULL AND deleted_at IS NULL;
+    `,
+  },
 ];
 
 /**

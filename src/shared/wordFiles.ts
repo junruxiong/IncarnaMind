@@ -94,11 +94,17 @@ const sourcesMap = (doc: Y.Doc) => doc.getMap<unknown>(MIND_WORD_SOURCES_FIELD);
 export function wordFileOf(doc: Y.Doc): WordFileInfo | null {
   const file = wordMap(doc).get("file");
   if (!isRecord(file)) return null;
-  const { name, sha256, size, part } = file;
+  const { name, sha256, size, part, documentId } = file;
   if (typeof name !== "string" || typeof sha256 !== "string" || typeof part !== "string") {
     return null;
   }
-  return { name, sha256, size: typeof size === "number" ? size : 0, part };
+  return {
+    name,
+    sha256,
+    size: typeof size === "number" ? size : 0,
+    part,
+    documentId: typeof documentId === "string" && documentId !== "" ? documentId : null,
+  };
 }
 
 /** How far the import has got; null once it is done, or for a Mind that wasn't imported. */

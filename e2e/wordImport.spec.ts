@@ -16,15 +16,20 @@ import {
   wordFile,
 } from "../tests/helpers/word";
 import {
+  askInAssistant,
   coreOf,
   createDataFolder,
   dismissChatSetup,
+  expectReadyDocuments,
   interceptOpenDialog,
   launchApp,
   motionSettled,
+  openDocumentMenu,
+  pointAndClick,
   removeDataFolder,
   setLanguage,
   setWindowSize,
+  useLocalChatModel,
   useOutputLocation,
 } from "./app";
 
@@ -32,8 +37,9 @@ import {
  * Importing a Word file as a Mind (#104): from the "+" menu and by a drop on a
  * Mind, the import screen that asks whose document it is, the Mind with what
  * is kept as is shown in place, a section break that asks before it goes, and
- * a file refused with the reason. Set INCARNAMIND_SCREENSHOTS to a folder to
- * also save screenshots there.
+ * a file refused with the reason; and the original also added as a Document
+ * that Answers cite (#720). Set INCARNAMIND_SCREENSHOTS to a folder to also
+ * save screenshots there.
  */
 
 const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
@@ -361,5 +367,122 @@ test("Export writes back into the Word file: what it can't keep is said first, E
   expect(document).toContain("The end.");
   expect(document).not.toContain("First sales in");
   expect(document).not.toContain("comment");
+  await app.close();
+});
+
+const CAP =
+  "Each party's total liability is capped at the fees paid in the twelve months before the claim.";
+
+/** A counterparty's draft: two clauses, the liability cap in clause 9. */
+function contract(): Buffer {
+  return wordFile({
+    body: [
+      paragraph("Supply agreement", { style: "Title" }),
+      paragraph("Clause 8 Payment", { style: "Heading1" }),
+      paragraph("The Buyer pays each invoice within 30 days of receiving it."),
+      paragraph("Clause 9 Limitation of liability", { style: "Heading1" }),
+      paragraph(CAP),
+    ].join(""),
+  });
+}
+
+test("the original is also a Document: an Answer beside the Mind cites its clause, which opens there, and each finds the other", async () => {
+  const path = join(files, "Supply agreement.docx");
+  await writeFile(path, contract());
+  const { app, window } = await launchApp(dataDir, { home, fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setWindowSize(app, window, 1440, 860);
+  await interceptOpenDialog(app, path);
+
+  const dialog = await importFromMenu(window);
+  const tick = dialog.getByTestId("word-import-add-original");
+  await expect(tick).toBeChecked();
+  await expect(tick.locator("xpath=..")).toHaveText(
+    "Also add the original to the Library, so Answers can cite it",
+  );
+  await expect(dialog.getByTestId("word-import-new-version")).toHaveCount(0);
+  await screenshot(dialog, "word-import-original");
+  await dialog.getByTestId("word-import-confirm").click();
+  await expect(dialog).toBeHidden();
+  await expect(window.getByTestId("mind-title")).toHaveValue("Supply agreement");
+  await expectReadyDocuments(window, 1);
+
+  // "From Supply agreement.docx" opens the original beside the Mind.
+  const from = window.getByTestId("mind-word-original");
+  await expect(window.getByTestId("mind-word-origin")).toHaveText(
+    "From Supply agreement.docx · Export keeps its styles",
+  );
+  await pointAndClick(window, from);
+  await expect(window.getByTestId("viewer-title")).toHaveText("Supply agreement");
+  await expect(window.getByTestId("mind-pane")).toBeVisible();
+
+  // A Question beside the Mind cites the clause, by its section.
+  const answer = await askInAssistant(window, "Is total liability capped?");
+  const chip = answer.getByTestId("citation-chip");
+  await expect(chip).toHaveAttribute(
+    "aria-label",
+    "Citation 1: Supply agreement, § Clause 9 Limitation of liability. Quote found in § Clause 9 Limitation of liability",
+  );
+  await pointAndClick(window, chip);
+  const card = window.getByTestId("citation-card");
+  if (await card.isVisible()) await card.getByTestId("citation-open").click();
+  const viewer = window.getByTestId("viewer");
+  await expect(window.getByTestId("viewer-title")).toHaveText("Supply agreement");
+  const docx = viewer.getByTestId("viewer-docx");
+  await expect(docx).toHaveAttribute("data-rendered", "yes");
+  await expect(docx.locator("[data-quote-highlight]").first()).toBeInViewport();
+  expect((await docx.locator("[data-quote-highlight]").allTextContents()).join("")).toContain(
+    "total liability is capped",
+  );
+  await expect(viewer.getByTestId("viewer-quote-mark-label")).toHaveText(
+    "§ Clause 9 Limitation of liability",
+  );
+  await motionSettled(window);
+  await screenshot(window, "word-original-cited");
+
+  // In the sidebar: Get info names its Mind, and its menu opens it.
+  const row = window.getByTestId("document-list-item").filter({ hasText: "Supply agreement" });
+  await row.getByTestId("open-document").focus();
+  await window.keyboard.press("ControlOrMeta+i");
+  const panel = window.getByTestId("info-panel");
+  await expect(panel.getByTestId("info-imported-as")).toContainText("Imported as a Mind");
+  await expect(panel.getByTestId("info-open-mind")).toHaveText("Supply agreement");
+  await screenshot(panel, "word-original-info");
+  await window.keyboard.press("Escape");
+  await expect(panel).toBeHidden();
+  const mindTab = window.getByTestId("mind-tab").filter({ hasText: "Supply agreement" });
+  await mindTab.hover();
+  await mindTab.getByTestId("tab-close").click();
+  await expect(window.getByTestId("mind-pane")).toHaveCount(0);
+  await openDocumentMenu(row);
+  const menu = row.getByTestId("document-file-actions");
+  await expect(menu.getByTestId("document.openMind")).toHaveText("Open its Mind");
+  await pointAndClick(window, menu.getByTestId("document.openMind"));
+  await expect(window.getByTestId("mind-title")).toHaveValue("Supply agreement");
+
+  await setLanguage(window, "zh-CN");
+  await expect(window.getByTestId("mind-word-original")).toHaveText("来自“Supply agreement.docx”");
+  await app.close();
+});
+
+test("unticked, the Word file is imported as a Mind alone", async () => {
+  const path = join(files, "Supply agreement.docx");
+  await writeFile(path, contract());
+  const { app, window } = await launchApp(dataDir, { home });
+  await dismissChatSetup(window);
+  await interceptOpenDialog(app, path);
+
+  const dialog = await importFromMenu(window);
+  await dialog.getByTestId("word-import-add-original").uncheck();
+  await dialog.getByTestId("word-import-confirm").click();
+  await expect(dialog).toBeHidden();
+
+  await expect(window.getByTestId("mind-word-origin")).toHaveText(
+    "From Supply agreement.docx · Export keeps its styles",
+  );
+  await expect(window.getByTestId("mind-word-original")).toHaveCount(0);
+  const documents = await (await coreOf(window)).evaluate((bridge) => bridge.listDocuments());
+  expect(documents).toEqual([]);
   await app.close();
 });

@@ -1147,7 +1147,8 @@
     line-height: 20px;
     color: var(--color-ink-meta);
   }
-  .mind-verify-from {
+  .mind-verify-from,
+  .mind-word-from {
     display: flex;
     align-items: center;
     gap: 6px;

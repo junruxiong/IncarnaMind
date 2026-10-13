@@ -216,6 +216,7 @@ export const en = {
   "mind.count": "{count} Minds",
   "mind.moveTo": "Move to…",
   "document.openTab": "Open in a new tab",
+  "document.openMind": "Open its Mind",
   "object.copy": "Copy",
   "document.tags": "Tags…",
   "folder.organize": "Organize this Folder",
@@ -905,6 +906,8 @@ export const en = {
   "info.from.linked": "Linked folder “{name}”",
   "info.from.own": "Other Documents",
   "info.folder": "Folder",
+  "info.mind": "Mind",
+  "info.importedAs": "Imported as a Mind",
   "info.tags": "Tags",
   "info.created": "Created",
   "info.createdValue": "{date} (the file’s own date)",
@@ -3447,6 +3450,8 @@ export const en = {
   "wordImport.othersMore": "{count} more",
   "wordImport.keeps":
     "IncarnaMind keeps a copy of the file, so export can write your changes back into it.",
+  "wordImport.addOriginal": "Also add the original to the Library, so Answers can cite it",
+  "wordImport.newerDraft": "A newer draft of “{name}”? Keep both as versions",
   "wordImport.import": "Import",
   "wordImport.importing": "Importing…",
   "wordImport.cancel": "Cancel",
@@ -3467,6 +3472,7 @@ export const en = {
     "“{name}” couldn’t be read. It may have moved, or IncarnaMind isn’t allowed to open it.",
   "wordImport.from": "From {name}",
   "wordImport.keepsStyles": "Export keeps its styles",
+  "wordImport.from.open": "Open {name} beside it",
   "wordImport.from.tooltip":
     "Opened from a Word file. Export writes your changes back into it and keeps its styles, numbering, headers and footers.",
   "wordImport.progress": "Importing “{name}” · {percent}%",

@@ -9,6 +9,8 @@ import {
 } from "../../../shared/wordFiles";
 import { DocumentLineIcon } from "../components/lineIcons";
 import { useLanguage, useT } from "../i18n";
+import { useAppStore } from "../store";
+import { openDocumentBeside } from "../verify";
 import { wordAtomName } from "./WordAtomView";
 
 /** What the Mind keeps about the Word file it was imported from, kept up to date as the import goes on. */
@@ -55,13 +57,18 @@ function reportLines(
 /**
  * The line under the title of a Mind imported from a Word file (#104; the
  * board Final-30-Word-Import): "From Lease.docx · Export keeps its styles",
- * what the import did on hover. While the import goes on, how far it has
- * got, with a 2px bar, as a Linked folder's indexing shows it.
+ * what the import did on hover. "From Lease.docx" opens the original beside
+ * the Mind while it is a Document (#720), as a verified PDF's line does.
+ * While the import goes on, how far it has got, with a 2px bar, as a Linked
+ * folder's indexing shows it.
  */
 export function WordOrigin({ doc }: { doc: Y.Doc }) {
   const t = useT();
   const language = useLanguage();
   const { file, progress, report } = useWordFile(doc);
+  const original = useAppStore((state) =>
+    file?.documentId ? state.documents.find((each) => each.id === file.documentId) : undefined,
+  );
   if (!file) return null;
   const icon = <DocumentLineIcon kind="docx" className="size-3.5 shrink-0" />;
   if (progress) {
@@ -91,12 +98,27 @@ export function WordOrigin({ doc }: { doc: Y.Doc }) {
   ]
     .filter(Boolean)
     .join("\n");
+  const from = t("wordImport.from", { name: file.name });
   return (
     <p className="mind-word" data-testid="mind-word-origin" title={tooltip}>
-      {icon}
-      <span className="min-w-0 truncate">
-        {t("wordImport.from", { name: file.name })} · {t("wordImport.keepsStyles")}
-      </span>
+      {original ? (
+        <button
+          type="button"
+          data-testid="mind-word-original"
+          className="mind-word-from"
+          title={t("wordImport.from.open", { name: file.name })}
+          onClick={() => openDocumentBeside(original.id)}
+        >
+          {icon}
+          <span className="min-w-0 truncate">{from}</span>
+        </button>
+      ) : (
+        <>
+          {icon}
+          <span className="min-w-0 truncate">{from}</span>
+        </>
+      )}
+      <span className="shrink-0">{` · ${t("wordImport.keepsStyles")}`}</span>
     </p>
   );
 }

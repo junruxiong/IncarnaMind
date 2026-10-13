@@ -1771,6 +1771,54 @@ export function createLibrary(options: LibraryOptions) {
       })().finally(end);
     },
 
+    /**
+     * Makes a file the new version of a Document added on its own (#720: a newer draft of
+     * a Word file imported before), keeping its id, Tags, Folder and Citations; the old
+     * version's text stays while a Citation quotes it. False when it can't be: the
+     * Document is gone or in a Linked folder, or the file is another Document, in a
+     * Linked folder, of another kind, or unreadable.
+     */
+    newVersionFrom(documentId: string, path: string): Promise<boolean> {
+      begin();
+      return (async () => {
+        const row = documentById(documentId);
+        const kind = kindOf(path);
+        if (row?.source_kind !== "file" || kind !== row.kind) return false;
+        let real: string;
+        let info: Awaited<ReturnType<typeof statFile>>;
+        try {
+          real = await realpath(path);
+          info = await statFile(real);
+        } catch {
+          return false;
+        }
+        if (!info || documentAt(real) || ownerOf(real)) return false;
+        let hashed: Awaited<ReturnType<typeof hashFile>>;
+        try {
+          hashed = await hashFile(real);
+        } catch {
+          return false;
+        }
+        const changes: Changes = { announced: new Set(), moved: new Set(), folders: new Set() };
+        const file: Found = {
+          path: real,
+          kind,
+          size: info.size,
+          mtimeMs: info.mtimeMs,
+          onlineOnly: false,
+          owner: null,
+        };
+        const seen = {
+          size: hashed.size,
+          identity: await identify(real),
+          newVersion: hashed.contentHash !== row.content_hash,
+        };
+        const moved = await relocate(row, file, seen, changes);
+        finish(changes, new Set());
+        return moved;
+      })().finally(end);
+    },
+
     close(): void {
       closed = true;
       clearInterval(retryTimer);

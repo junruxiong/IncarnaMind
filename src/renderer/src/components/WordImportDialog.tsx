@@ -26,6 +26,9 @@ const ORIGINS: readonly { value: WordOrigin; label: MessageKey; note: MessageKey
   { value: "someone-else", label: "wordImport.someoneElse", note: "wordImport.someoneElse.note" },
 ];
 
+const tickClass = "mt-3 flex items-start gap-2 text-[13px] leading-5 text-ink-secondary";
+const tickBoxClass = "mt-0.5 size-4 shrink-0 accent-ink";
+
 /** At most this many authors are named; the rest are counted. */
 const NAMED = 3;
 
@@ -33,14 +36,16 @@ const NAMED = 3;
  * "Import a Word file": the file, read first. One that can't be imported says
  * why, in plain words, with "Choose another file…". Otherwise it asks whose
  * document it is, starting on someone else's when the file carries tracked
- * changes or comments, and names their authors. Import makes the Mind and
- * opens it; Esc or Cancel leaves everything as it was.
+ * changes or comments, and names their authors. A tick, on by default, also
+ * adds the original as a Document (#720), and offers to make a newer draft of
+ * one imported before a new version of it. Import makes the Mind and opens
+ * it; Esc or Cancel leaves everything as it was.
  */
 export function WordImportDialog() {
   const t = useT();
   const language = useLanguage();
   const state = useWordImport();
-  const { path, check, origin, importing, refusal, dropped } = state;
+  const { path, check, origin, importing, refusal, dropped, addOriginal, newVersion } = state;
   const dialog = useModal(path !== null);
   const id = useId();
   const fileName = check?.fileName ?? path?.split(/[\\/]/).pop() ?? "";
@@ -120,6 +125,28 @@ export function WordImportDialog() {
               </p>
             )}
             <p className="mt-3 text-[13px] leading-5 text-ink-meta">{t("wordImport.keeps")}</p>
+            <label className={tickClass}>
+              <input
+                type="checkbox"
+                data-testid="word-import-add-original"
+                checked={addOriginal}
+                onChange={(event) => state.setAddOriginal(event.target.checked)}
+                className={tickBoxClass}
+              />
+              {t("wordImport.addOriginal")}
+            </label>
+            {addOriginal && check.earlierDraft && (
+              <label className={`${tickClass} ml-6`}>
+                <input
+                  type="checkbox"
+                  data-testid="word-import-new-version"
+                  checked={newVersion}
+                  onChange={(event) => state.setNewVersion(event.target.checked)}
+                  className={tickBoxClass}
+                />
+                {t("wordImport.newerDraft", { name: check.earlierDraft.name })}
+              </label>
+            )}
           </fieldset>
         )}
 
