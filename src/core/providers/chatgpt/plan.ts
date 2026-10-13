@@ -142,8 +142,8 @@ export function createChatGptPlan(options: {
     hasSignIn: signIn.hasSignIn,
     /** Whether the sign-in's traffic can happen on this device: it has signed in, or is signing in. */
     used: signIn.used,
-    /** The account's model ids, for a Question's model picker. */
-    modelIds: async () => (await models()).map((model) => model.id),
+    /** The account's models, for a Question's model picker. */
+    models,
 
     async signIn(input: { anotherAccount?: boolean } = {}): Promise<ChatGptSignInResult> {
       try {

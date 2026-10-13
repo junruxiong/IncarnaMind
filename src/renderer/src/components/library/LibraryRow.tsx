@@ -8,7 +8,8 @@ import { addedLabel } from "../../libraryPage";
 import { missingList } from "../../referenceEditing";
 import { useSelectable } from "../../selection";
 import { useAppStore } from "../../store";
-import { isMoveToKey, TREE_ROW } from "../../treeKeys";
+import { isMoveToKey, isTagsKey, TREE_ROW } from "../../treeKeys";
+import { typesText } from "../../undo";
 import { useRename } from "../../useRename";
 import { CiteAsPanel } from "../CiteAsPanel";
 import { DocumentStatusLabel } from "../DocumentsSection";
@@ -17,10 +18,10 @@ import { LibrarySelectBox } from "../LibrarySelection";
 import { DocumentLineIcon } from "../lineIcons";
 import { ObjectMenu, useObjectMenu } from "../ObjectMenu";
 import { rowActionButtonClass } from "../sidebarRows";
-import { DocumentTagChips } from "../TagChips";
 import { ReviewRing } from "../TagColour";
 import { useTabPlace } from "../tabs/tabItems";
 import { documentsToMove, useDocumentMove } from "./DocumentMoveTo";
+import { RowTags } from "./RowTags";
 
 /**
  * The columns past the name, and the widths of the page at which they give
@@ -34,11 +35,14 @@ export const COLUMN_CLASSES = {
   more: "flex w-7 shrink-0 justify-end",
 } as const;
 
-/** A row of the page: 40px folded, washed when pointed at, its focus ring around the whole row. */
+/**
+ * A row of the page: 40px folded, washed when pointed at, its focus ring
+ * around the whole row, as while its Tags or its menu are open over it.
+ */
 export const pageRowClass = (selected: boolean) =>
   `group/row relative border-b border-rule ${
     selected ? "bg-accent-wash" : "hover:bg-frame"
-  } has-[[data-row-main]:focus-visible]:shadow-[inset_0_0_0_2px_var(--color-accent)]`;
+  } has-[[data-row-main]:focus-visible]:shadow-[inset_0_0_0_2px_var(--color-accent)] has-[:popover-open]:shadow-[inset_0_0_0_2px_var(--color-accent)]`;
 
 /** Keeps the preview showing a Document, if one does. */
 function keepPreviewOf(documentId: string): void {
@@ -49,6 +53,18 @@ function keepPreviewOf(documentId: string): void {
       (tab) => tab.preview && tab.item.kind === "document" && tab.item.documentId === documentId,
     );
   if (preview) void changeLayout({ type: "keep", tabId: preview.id });
+}
+
+/**
+ * Opens the Tags of a row: its own cell's editor, or, when it is one of several
+ * selected, Tags… for all of them in the selection's bar.
+ */
+function openTags(row: HTMLElement | null, documentId: string): void {
+  const several = documentsToMove(documentId).length > 1;
+  const opener = several
+    ? row?.closest('[data-surface="library"]')?.querySelector<HTMLElement>("[data-selection-tags]")
+    : row?.querySelector<HTMLElement>('[data-testid="document-tags-menu"]');
+  opener?.click();
 }
 
 /** Clicks on these, inside a row, are theirs, not the row's. */
@@ -103,9 +119,14 @@ export const LibraryRow = memo(function LibraryRow({
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     objectMenu.rowProps.onKeyDown(event);
-    if (event.defaultPrevented || !isMoveToKey(event)) return;
-    event.preventDefault();
-    moveTo(menuButton());
+    if (event.defaultPrevented || typesText(event.target)) return;
+    if (isMoveToKey(event)) {
+      event.preventDefault();
+      moveTo(menuButton());
+    } else if (isTagsKey(event)) {
+      event.preventDefault();
+      openTags(row.current, doc.id);
+    }
   };
 
   return (
@@ -194,7 +215,7 @@ export const LibraryRow = memo(function LibraryRow({
           </div>
         </div>
         <div data-row-cell="tags" className={`${COLUMN_CLASSES.tags} flex min-w-0 items-center`}>
-          <DocumentTagChips document={doc} />
+          <RowTags document={doc} />
         </div>
         <span
           data-testid="library-document-format"
