@@ -8,7 +8,7 @@
  */
 import * as Y from "yjs";
 import type { MarkJSON, NodeJSON } from "../../../shared/blockJson";
-import { readProposalAttribute, readProposalRef } from "../../../shared/proposals";
+import { readProposalAttribute } from "../../../shared/proposals";
 import { readWordAtom } from "../../../shared/wordFiles";
 import {
   ANSWER_BLOCK,
@@ -17,7 +17,7 @@ import {
   PROPOSAL_INSERT_MARK,
   WORD_BLOCK_NODE,
 } from "../../api";
-import type { Pending, Pendings, ReviewReading } from "../../mindText";
+import { type Pendings, pendingOf, type ReviewReading } from "../../mindText";
 
 /** The formatting of text the export writes: the editor's marks, and its link. */
 export interface TextMarks {
@@ -63,17 +63,10 @@ export const sameMarks = (a: TextMarks, b: TextMarks): boolean =>
   a.code === b.code &&
   a.link === b.link;
 
-/** The change still waiting that a mark's or an attribute's value is part of, read for review; none if out of date. */
-export function pendingIn(value: unknown, review: ReviewReading | undefined): Pending | undefined {
-  const ref = review ? readProposalRef(value) : null;
-  if (!review || !ref || review.stale.has(ref.id)) return undefined;
-  return { id: ref.id, at: review.at(ref.request) };
-}
-
 /** What changes still waiting do to a node as a whole: its `proposal` attribute. */
 export function nodePendings(node: NodeJSON, review: ReviewReading | undefined): Pendings {
   const attribute = readProposalAttribute(node.attrs?.[PROPOSAL_ATTRIBUTE]);
-  const pending = attribute ? pendingIn(attribute, review) : undefined;
+  const pending = attribute ? pendingOf(attribute, review) : undefined;
   if (!attribute || !pending) return {};
   return attribute.kind === "insert" ? { inserted: pending } : { deleted: pending };
 }
@@ -81,8 +74,8 @@ export function nodePendings(node: NodeJSON, review: ReviewReading | undefined):
 /** What changes still waiting do to a text node: its marks. */
 export function textPendings(node: NodeJSON, review: ReviewReading | undefined): Pendings {
   const attrsOf = (type: string) => node.marks?.find((mark) => mark.type === type)?.attrs;
-  const inserted = pendingIn(attrsOf(PROPOSAL_INSERT_MARK), review);
-  const deleted = pendingIn(attrsOf(PROPOSAL_DELETE_MARK), review);
+  const inserted = pendingOf(attrsOf(PROPOSAL_INSERT_MARK), review);
+  const deleted = pendingOf(attrsOf(PROPOSAL_DELETE_MARK), review);
   return { ...(inserted && { inserted }), ...(deleted && { deleted }) };
 }
 
@@ -99,7 +92,7 @@ export function mindJson(
   review?: ReviewReading,
 ): NodeJSON | null {
   const attribute = readProposalAttribute(element.getAttribute(PROPOSAL_ATTRIBUTE));
-  if (attribute?.kind === "insert" && !pendingIn(attribute, review)) return null;
+  if (attribute?.kind === "insert" && !pendingOf(attribute, review)) return null;
   const content: NodeJSON[] = [];
   for (const child of element.toArray()) {
     if (child instanceof Y.XmlText) {
@@ -110,7 +103,7 @@ export function mindJson(
         const attributes = run.attributes ?? {};
         if (
           PROPOSAL_INSERT_MARK in attributes &&
-          !pendingIn(attributes[PROPOSAL_INSERT_MARK], review)
+          !pendingOf(attributes[PROPOSAL_INSERT_MARK], review)
         )
           continue;
         if (typeof run.insert !== "string" || run.insert === "") continue;

@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { expect, test } from "@playwright/test";
+import { startFakeRegistry } from "../tests/helpers/fakeRegistry";
 import { type FakeRemote, startFakeRemote } from "../tests/helpers/remoteMcp";
 import {
   acceptPlainTextKeys,
@@ -195,12 +196,13 @@ test("a reviewed Connector in the directory connects in one click, signing in in
     await expect(card).toContainText("Wiki");
     await expect(card).toContainText("Search the team wiki");
     await expect(card).toContainText("Needs your Wiki Pro subscription");
-    // Search finds it; a word nothing has says so.
+    // Search finds it; a letter nothing has says so. One letter doesn't ask the MCP Registry.
     const search = page.getByTestId("connectors-search");
-    await search.fill("zebra");
-    await expect(page).toContainText("No connector matches “zebra”.");
-    await search.fill("wik");
+    await search.fill("q");
+    await expect(page).toContainText("No connector matches “q”.");
+    await search.fill("w");
     await expect(page.getByTestId("connector-entry")).toHaveCount(1);
+    await expect(page.getByTestId("connectors-registry")).toHaveCount(0);
     // Looking at the directory reaches no service.
     expect(fake.requests).toEqual([]);
 
@@ -243,6 +245,60 @@ test("a reviewed Connector in the directory connects in one click, signing in in
     await app.close();
   } finally {
     await fake.close();
+  }
+});
+
+test("the search asks the MCP Registry only once the User types and agrees, and marks what it finds as not reviewed", async () => {
+  const registry = await startFakeRegistry();
+  try {
+    const { app, window } = await launchApp(dataDir, { connectorRegistry: registry.url });
+    await dismissChatSetup(window);
+    await openSettings(window, "connectors");
+    const page = window.getByTestId("settings-page-connectors");
+    const search = page.getByTestId("connectors-search");
+    await expect(search).toHaveAttribute("placeholder", "Search connectors and the MCP Registry");
+
+    // One letter asks nothing.
+    await search.fill("z");
+    await expect(page.getByTestId("connectors-registry")).toHaveCount(0);
+    expect(registry.requests).toEqual([]);
+
+    // Two or more: the User is asked first, then the Registry is.
+    await search.fill("zotero");
+    const consent = window.getByTestId("consent-dialog");
+    await expect(consent).toContainText("What you type in the Connectors search");
+    expect(registry.requests).toEqual([]);
+    await consent.getByTestId("consent-allow").click();
+    const found = page.getByTestId("connectors-registry");
+    await expect(found).toContainText("From the MCP Registry");
+    await expect(found.getByTestId("connectors-registry-badge")).toHaveText(
+      "Community · not reviewed",
+    );
+    await expect(found).toContainText("Searched only because you typed.");
+    await expect(found.getByTestId("registry-server")).toHaveCount(3);
+    expect(registry.requests).toEqual(["/v0.1/servers?search=zotero&version=latest&limit=20"]);
+
+    // A local one opens Add custom connector's command, filled in, for its key.
+    await found.getByRole("button", { name: /Zotero library \(local\)/ }).click();
+    const detail = page.getByTestId("registry-detail");
+    await expect(detail).toContainText("Published as io.github.example");
+    await expect(detail).toContainText("Community · not reviewed");
+    await expect(detail).toContainText("Runs on this computer: uvx zotero-mcp-server@0.11.0 serve");
+    await detail.getByTestId("registry-set-up").click();
+    const form = page.getByTestId("connector-form");
+    await expect(page.getByRole("tab", { name: "Command" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(form.getByLabel("Name", { exact: true })).toHaveValue("Zotero library (local)");
+    await expect(form.getByLabel(/^Command/)).toHaveValue("uvx");
+    await expect(form.getByLabel("Arguments, one per line")).toHaveValue(
+      "zotero-mcp-server@0.11.0\nserve",
+    );
+    await expect(form.getByLabel(/^Environment variables/)).toHaveValue("ZOTERO_API_KEY=");
+    await app.close();
+  } finally {
+    await registry.close();
   }
 });
 
