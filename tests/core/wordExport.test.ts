@@ -339,6 +339,16 @@ describe("Blocks added, deleted and moved", () => {
     expect(files.has("word/footnotes.xml")).toBe(false);
   });
 
+  test("an empty document takes new paragraphs before its section's properties", async () => {
+    const { core, mindId, client } = await setUp({ body: "" });
+    editMind(client, () => [{ type: "paragraph", content: [text("First words.")] }]);
+    await client.settled();
+    const { document } = await exported(core, mindId);
+    expect(document).toContain(
+      '<w:body><w:p><w:r><w:t xml:space="preserve">First words.</w:t></w:r></w:p><w:sectPr>',
+    );
+  });
+
   test("a deleted paragraph goes, and a moved one moves as it was written", async () => {
     const one = paragraph("One.", { paraId: "00000001" });
     const two = paragraph("Two.", { paraId: "00000002" });
