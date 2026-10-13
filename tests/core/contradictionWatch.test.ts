@@ -195,7 +195,7 @@ describe("Check for contradictions", () => {
         from: { blockId: "cited", offset: 0 },
         to: { blockId: "cited", offset: 1 },
       }),
-    ).toEqual({ kind: "checked", sentences: 1, checked: 0 });
+    ).toEqual({ kind: "checked", sentences: 1, checked: 0, smallModel: false });
     // The new version says nothing of the times, so the quote isn't there to rest a contradiction on.
     expect((await shownChecks(core, client, folder.id)).map((each) => each.shown)).toEqual([
       { state: "not-checked", reason: "no-evidence" },

@@ -8,7 +8,13 @@
  */
 import { create } from "zustand";
 import type { ContradictionCheckOutcome, ContradictionCheckPlan } from "../../core/api";
-import { type CheckProblem, setCheckProblem, setCheckRunning, useChecks } from "./checks";
+import {
+  type CheckProblem,
+  setCheckProblem,
+  setCheckRunning,
+  setCheckSmallModel,
+  useChecks,
+} from "./checks";
 import { core } from "./core";
 import { estimateText } from "./cost";
 import { languageNow, translateNow } from "./i18n";
@@ -55,6 +61,7 @@ export async function checkContradictions(mindId: string): Promise<void> {
     if (result.kind === "checked") {
       const { claims, checked, contradicted, cost, stop } = result;
       setFor("found", mindId, { claims, checked, contradicted, cost, stop });
+      setCheckSmallModel(mindId, result.smallModel);
     } else if (result.kind !== "cancelled") {
       setCheckProblem(mindId, result.kind === "nothing" ? { kind: "no-cited" } : result);
     }

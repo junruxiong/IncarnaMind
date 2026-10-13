@@ -3781,7 +3781,8 @@ export interface ContradictionCheckOutcome {
 
 /** What `checkContradictions` did. */
 export type CheckContradictionsResult =
-  | ({ kind: "checked" } & ContradictionCheckOutcome)
+  /** `smallModel`: the verdicts came from a model too small to judge reliably (#680). */
+  | ({ kind: "checked"; smallModel: boolean } & ContradictionCheckOutcome)
   | Exclude<CheckSentencesResult, { kind: "checked" }>;
 
 /**

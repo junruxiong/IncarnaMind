@@ -20,6 +20,7 @@ import { randomUUID } from "node:crypto";
 import { writeContradictionWatch } from "../../../shared/contradictionWatch";
 import { mindModelOf } from "../../../shared/mindModel";
 import { comparableSentence, isClaim } from "../../../shared/sentences";
+import { judgesUnreliably } from "../../../shared/smallModel";
 import type { Logger } from "../../adapters";
 import type {
   ChatModelChoice,
@@ -406,7 +407,8 @@ export function createContradictionWatch(options: WatchOptions) {
       const tracked = options.track(requestId, mindId);
       try {
         const outcome = await check(mindId, requestId, ready, model.prepared, tracked.signal);
-        return tracked.signal.aborted ? { kind: "cancelled" } : { kind: "checked", ...outcome };
+        if (tracked.signal.aborted) return { kind: "cancelled" };
+        return { kind: "checked", ...outcome, smallModel: judgesUnreliably(model.prepared) };
       } finally {
         tracked.done();
       }
@@ -429,7 +431,12 @@ export function createContradictionWatch(options: WatchOptions) {
       if (!model.ok) return model.result;
       const outcome = await check(input.mindId, input.requestId, ready, model.prepared, signal);
       if (signal.aborted) return { kind: "cancelled" };
-      return { kind: "checked", sentences: outcome.claims, checked: outcome.checked };
+      return {
+        kind: "checked",
+        sentences: outcome.claims,
+        checked: outcome.checked,
+        smallModel: judgesUnreliably(model.prepared),
+      };
     },
 
     /**
