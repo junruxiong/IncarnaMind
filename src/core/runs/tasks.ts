@@ -30,11 +30,13 @@
 import type {
   Money,
   Task,
+  TaskAction,
   TaskAsk,
   TaskAskAnswer,
   TaskEffect,
   TaskPausedReason,
   TaskProgress,
+  TaskStep,
 } from "../api";
 import type { RetainVersion, VersionRetention } from "../documents/retention";
 import { InvalidInputError, NotFoundError } from "../errors";
@@ -109,7 +111,26 @@ export interface TaskKind {
   run(task: TaskRun): Promise<TaskEnd>;
   /** The Block in the Task's Mind it works on, from its input. */
   blockOf?(input: unknown): string | null;
+  /** What the User can ask of it from its progress (D189). Absent: Pause and Stop. */
+  readonly actions?: readonly TaskAction[];
+  /** What its steps do, in its own words, by key; a step it can't name shows its key. */
+  describeSteps?(
+    task: { mindId: string | null; input: unknown },
+    keys: readonly string[],
+  ): string[];
 }
+
+/** The steps a Task's progress shows at rest; the rest are a click away (`listTaskSteps`). */
+export const LATEST_STEPS = 4;
+
+const DEFAULT_ACTIONS: readonly TaskAction[] = ["pause", "stop"];
+
+const STEP_STATUS: Record<StepRecord["status"], TaskStep["status"]> = {
+  started: "running",
+  completed: "done",
+  failed: "failed",
+  skipped: "skipped",
+};
 
 /** A Task's notification, as the host shows it. */
 export interface TaskNotice {
@@ -169,7 +190,32 @@ export function createTasks(options: TasksOptions) {
   let closed = false;
   const held = () => answering || recording;
 
+  /** Steps as the thread shows them, in their kind's words. */
+  const stepsOf = (record: TaskRecord, steps: readonly StepRecord[]): TaskStep[] => {
+    const texts = describe(
+      record,
+      steps.map((step) => step.key),
+    );
+    return steps.map((step, index) => ({
+      key: step.key,
+      text: texts[index] ?? step.key,
+      status: STEP_STATUS[step.status],
+    }));
+  };
+
+  const describe = (record: TaskRecord, keys: readonly string[]): readonly string[] => {
+    const kind = kinds.get(record.kind);
+    if (!kind?.describeSteps || keys.length === 0) return keys;
+    try {
+      return kind.describeSteps({ mindId: record.mindId, input: record.input }, keys);
+    } catch (error) {
+      options.reportError(error);
+      return keys;
+    }
+  };
+
   const view = (record: TaskRecord): Task => {
+    const latest = journal.latestSteps(record.id, LATEST_STEPS);
     const ask: TaskAsk | null =
       record.ask?.kind === "approval"
         ? { kind: "approval", stepKey: record.ask.stepKey, number: record.ask.number }
@@ -186,6 +232,9 @@ export function createTasks(options: TasksOptions) {
       progress: record.progress,
       problem: record.problem,
       cost: options.cost(record.id),
+      actions: [...(kinds.get(record.kind)?.actions ?? DEFAULT_ACTIONS)],
+      steps: stepsOf(record, latest.steps),
+      stepCount: latest.count,
       startedAt: record.startedAt,
       finishedAt: record.finishedAt,
       updatedAt: record.updatedAt,
@@ -305,14 +354,21 @@ export function createTasks(options: TasksOptions) {
       mindId: record.mindId,
       input: record.input,
       signal,
-      started: (key) => journal.started(taskId, key, null),
-      settled: (key, status, result) => journal.settled(taskId, key, status, result ?? null),
+      started: (key) => {
+        journal.started(taskId, key, null);
+        announce(journal.get(taskId));
+      },
+      settled: (key, status, result) => {
+        journal.settled(taskId, key, status, result ?? null);
+        announce(journal.get(taskId));
+      },
       step: (key) => journal.step(taskId, key),
       async effect(key, effect, perform) {
         const known = journal.step(taskId, key);
         if (known?.status === "completed") return true;
         if (known?.status === "skipped") return false;
         journal.started(taskId, key, effect);
+        announce(journal.get(taskId));
         try {
           await perform();
         } catch (error) {
@@ -320,6 +376,7 @@ export function createTasks(options: TasksOptions) {
           throw error;
         }
         journal.settled(taskId, key, "completed");
+        announce(journal.get(taskId));
         return true;
       },
       async approve(key, call) {
@@ -528,6 +585,12 @@ export function createTasks(options: TasksOptions) {
     /** The journal's steps of a Task, in the order they first started. */
     steps(taskId: string): StepRecord[] {
       return journal.steps(taskId);
+    },
+
+    /** Every step of a Task as its progress shows them. */
+    listSteps(taskId: unknown): TaskStep[] {
+      const record = requireTask(taskId);
+      return stepsOf(record, journal.steps(record.id));
     },
 
     async pause(taskId: unknown): Promise<Task> {

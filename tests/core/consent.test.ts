@@ -105,9 +105,13 @@ describe("Data-flow consent", () => {
         consent: "not-asked",
         decidedAt: null,
       },
-      // So do Find support and Check against Documents (#96), which ask for themselves too.
+      // So do Find support and Check against Documents (#96), and verify (#97), which ask for themselves too.
       {
-        flow: { id: "checks", service: OPENAI_SERVICE, sends: ["selection", "passages"] },
+        flow: {
+          id: "checks",
+          service: OPENAI_SERVICE,
+          sends: ["selection", "passages", "verified-document"],
+        },
         consent: "not-asked",
         decidedAt: null,
       },

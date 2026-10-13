@@ -18,6 +18,7 @@ import {
   useChatGptStorage,
   useContinueWithChatGpt,
 } from "./ChatGptSignIn";
+import { KeepLocalChoice } from "./KeepLocalChoice";
 import { type Ollama, OllamaProgress, ollamaDescription } from "./OllamaCard";
 import { ProviderForm } from "./ProviderForm";
 
@@ -89,10 +90,13 @@ export function ChatProviderChoices(props: ChatProviderChoicesProps) {
         inputId={`${name}-ollama`}
         chosen={choice === "ollama"}
         details={
-          (ollamaActionInRow || ollama.pulling || ollama.error) && (
+          (ollamaActionInRow || ollama.pulling || ollama.error || ollama.status?.running) && (
             <div className="flex flex-col items-start gap-3">
               <OllamaProgress ollama={ollama} />
               {ollamaActionInRow && <OllamaAction ollama={ollama} />}
+              {ollama.status?.running && (
+                <KeepLocalChoice keepLocal={ollama.keepLocal} disabled={ollama.pulling} />
+              )}
             </div>
           )
         }
@@ -194,7 +198,7 @@ export function OllamaAction({ ollama, large = false }: { ollama: Ollama; large?
       <button
         type="button"
         data-testid="ollama-use"
-        disabled={pulling}
+        disabled={pulling || !ollama.keepLocal.asked}
         onClick={() => void ollama.use()}
         className={buttonStyle("primary", size)}
       >
