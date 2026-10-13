@@ -32,6 +32,16 @@ export function PlusLineIcon(props: IconProps) {
   );
 }
 
+/** Search: a magnifier. */
+export function SearchLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="m20 20-4.35-4.35" />
+    </LineIcon>
+  );
+}
+
 /** A Mind: a notebook. */
 export function MindLineIcon(props: IconProps) {
   return (

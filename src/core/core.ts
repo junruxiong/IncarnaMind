@@ -107,6 +107,7 @@ import { createCaptureHealth } from "./meetings/health";
 import { createTranscripts } from "./meetings/transcript";
 import { accessFor, isKnownKind } from "./mindAccess";
 import { createMindContent } from "./mindContent";
+import { createMindIndex } from "./mindIndex";
 import {
   createMinds,
   parseCreateMindInput,
@@ -334,9 +335,16 @@ export function createCore(adapters: CoreAdapters): Core {
     // Only notes the change; what became of AI text is worked out once the Mind is quiet.
     aiUse.contentStored(mindId);
     checkpoints.edited(mindId);
+    mindIndex.contentStored(mindId);
     comparisons.mindChanged(mindId);
     const renamed = minds.setAutoTitle(mindId, content.peek(mindId, firstLineOf));
     if (minds.markEdited(mindId) || renamed) mindsChanged();
+  });
+  const mindIndex = createMindIndex({
+    db,
+    now,
+    content,
+    reportError: (error) => console.error(error),
   });
   // The record of AI use stays on this computer: it takes nothing from the network or the usage-data catalog.
   const aiUse = createAiUse({
@@ -1867,6 +1875,7 @@ export function createCore(adapters: CoreAdapters): Core {
     usageData.record({ event: "documents_added", fields: addedCounts(result, since) });
     return { ...result, batchId };
   };
+  mindIndex.start();
 
   // Everything a Task needs is up: those a quit or a crash left go on, or wait for the User.
   tasks.settleOrphans();
@@ -1934,6 +1943,8 @@ export function createCore(adapters: CoreAdapters): Core {
     listConversations: async (options) => conversations.list(options),
     getConversation: async (conversationId) => conversations.content(conversationId),
     searchConversations: async (query) => conversations.search(query),
+    searchMinds: async (query) => mindIndex.search(query),
+    searchDocumentText: async (query) => documents.searchText(query),
     renameConversation: async (conversationId, title) => {
       const conversation = conversations.rename(conversationId, title);
       conversationsChanged();
@@ -2658,6 +2669,7 @@ export function createCore(adapters: CoreAdapters): Core {
       activity.stop();
       checkpoints.close();
       aiUse.close();
+      mindIndex.close();
       events.clear();
       content.closeAll();
       db.close();

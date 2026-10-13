@@ -1543,7 +1543,63 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
-    version: 82,
+    // 82 is reserved by work in progress.
+    version: 83,
+    description: "The words inside Minds, Block by Block, for ⌘K (#116)",
+    sql: `
+      -- Each top-level Block of each Mind as plain text (src/core/mindIndex.ts): its id, its node
+      -- type ('paragraph', 'heading', 'answer'…), its place among the Mind's Blocks from 0, and
+      -- its text, each paragraph, list item or cell on a line. The core derives the rows from the
+      -- Mind's content as it changes, so a computer that syncs a Mind derives its own. A Block
+      -- taken out of its Mind is marked deleted, its text dropped; the same row comes back with
+      -- the Block. No foreign key: a later sync may bring a Mind's content before its row.
+      CREATE TABLE mind_blocks (
+        seq INTEGER PRIMARY KEY, -- local key for the keyword index only
+        id TEXT NOT NULL UNIQUE,
+        mind_id TEXT NOT NULL,
+        block_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        text TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX mind_blocks_by_block ON mind_blocks (mind_id, block_id);
+
+      -- Keyword index, as for Passages (migration 10): each Block's words, segmented by the
+      -- core; rowid is the row's seq. Only the index is stored.
+      CREATE VIRTUAL TABLE mind_blocks_fts USING fts5 (
+        text,
+        content = '',
+        contentless_delete = 1,
+        tokenize = 'unicode61 remove_diacritics 2'
+      );
+      CREATE TRIGGER mind_blocks_fts_soft_delete AFTER UPDATE OF deleted_at ON mind_blocks
+      WHEN old.deleted_at IS NULL AND new.deleted_at IS NOT NULL BEGIN
+        DELETE FROM mind_blocks_fts WHERE rowid = old.seq;
+      END;
+      CREATE TRIGGER mind_blocks_fts_delete AFTER DELETE ON mind_blocks
+      WHEN old.deleted_at IS NULL BEGIN
+        DELETE FROM mind_blocks_fts WHERE rowid = old.seq;
+      END;
+
+      -- When the core last read each Mind's Blocks into mind_blocks (updated_at). A Mind whose
+      -- content was stored after that, as when the app quit before reading it, or that was never
+      -- read, such as every Mind written before this migration, is read at the next start.
+      CREATE TABLE mind_block_reads (
+        id TEXT PRIMARY KEY NOT NULL,
+        mind_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX mind_block_reads_by_mind ON mind_block_reads (mind_id)
+        WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    version: 84,
     description: "Checkpoints: a Mind as it was before an AI change, or after a pause (#113)",
     sql: `
       -- One row per Checkpoint (src/core/checkpoints): the Mind's whole Yjs document as one
