@@ -11,7 +11,12 @@ import {
 } from "@playwright/test";
 import type { Editor } from "@tiptap/core";
 import * as Y from "yjs";
-import type { AssistantPlace, CoreBridge } from "../src/core/api";
+import {
+  type AssistantPlace,
+  CHOSEN_PROVIDER_FLOWS,
+  type CoreBridge,
+  type SaveChatProviderInput,
+} from "../src/core/api";
 import type { FakeTranscriberOptions } from "../src/core/transcription/fake";
 import type { DocumentLocation } from "../src/shared/documentViewer";
 import type { TestHooks } from "../src/shared/testHooks";
@@ -78,6 +83,8 @@ export interface LaunchOptions {
    * ships with the app, e.g. one served by a local stand-in. A test build honours it.
    */
   connectorDirectory?: string;
+  /** Where the Connectors search asks the MCP Registry: a local stand-in. A test build honours it. */
+  connectorRegistry?: string;
   /**
    * Where the ChatGPT plan signs in and asks: the origin of a local server
    * standing in for OpenAI (tests/helpers/fakeOpenAI.ts). A test build honours it.
@@ -153,6 +160,7 @@ export async function launchApp(
     referenceLookup,
     sources,
     connectorDirectory,
+    connectorRegistry,
     chatGpt,
     keepWindow = false,
     computerSound = "allowed",
@@ -178,6 +186,7 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_REFERENCE_LOOKUP;
   delete env.INCARNAMIND_TEST_SOURCES;
   delete env.INCARNAMIND_TEST_CONNECTOR_DIRECTORY;
+  delete env.INCARNAMIND_TEST_CONNECTOR_REGISTRY;
   delete env.INCARNAMIND_TEST_CHATGPT;
   delete env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS;
   delete env.INCARNAMIND_TEST_SCANS;
@@ -199,6 +208,8 @@ export async function launchApp(
   if (referenceLookup) env.INCARNAMIND_TEST_REFERENCE_LOOKUP = referenceLookup;
   if (sources) env.INCARNAMIND_TEST_SOURCES = sources;
   if (connectorDirectory) env.INCARNAMIND_TEST_CONNECTOR_DIRECTORY = connectorDirectory;
+  // Nowhere, unless a test serves one: a search in a test never reaches the real Registry.
+  env.INCARNAMIND_TEST_CONNECTOR_REGISTRY = connectorRegistry ?? "http://127.0.0.1:9";
   if (chatGpt) env.INCARNAMIND_TEST_CHATGPT = chatGpt;
   if (scans) env.INCARNAMIND_TEST_SCANS = scans;
   if (web) env.INCARNAMIND_TEST_WEB = String(web);
@@ -1235,6 +1246,28 @@ export async function askInAssistant(window: Page, question: string): Promise<Lo
 
 /** The tiny MCP server the core tests use: `lookup_tide` is read-only, `book_boat` isn't. */
 const TIDE_SERVER = resolve(__dirname, "../tests/fixtures/mcp-server.mjs");
+
+/**
+ * Saves a chat provider through the core's bridge as it was left when
+ * choosing it wasn't yet the consent (ADR-0022): nothing allowed, so the
+ * first Question asks.
+ */
+export async function saveProviderUnasked(
+  window: Page,
+  input: SaveChatProviderInput,
+): Promise<void> {
+  await window.evaluate(
+    async ({ provider, flows }) => {
+      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      const saved = await bridge.saveChatProvider(provider);
+      const service = (await bridge.listChatProviders()).find(
+        (each) => each.id === saved.id,
+      )?.service;
+      if (service) for (const flow of flows) await bridge.revokeConsent(flow, service.id);
+    },
+    { provider: input, flows: CHOSEN_PROVIDER_FLOWS },
+  );
+}
 
 /** Adds the tiny server as a Connector through the core's bridge, waits until it's ready, and returns its id. */
 export async function addTideConnector(window: Page): Promise<string> {

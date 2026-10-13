@@ -35,6 +35,18 @@ export const en = {
   "library.problem.unavailable": "{count} Documents can't be reached",
   "library.problem.mixed": "{count} Documents need attention",
   "library.problem.show": "Show",
+  "unread.count.one": "1 file couldn't be read",
+  "unread.count": "{count} files couldn't be read",
+  "unread.show": "Show",
+  "unread.file": "{name}: {reason}",
+  "unread.hide": "Hide",
+  "unread.reason.format":
+    "Format not read yet ({extension}). Convert it to PDF, Word, PowerPoint or Excel.",
+  "unread.reason.scan": "A scan with no text yet. Make a copy with text (OCR) and add it.",
+  "unread.reason.password": "Password-protected. Remove the password and add it again.",
+  "unread.reason.damaged": "The file is damaged or couldn't be opened.",
+  "unread.reason.too-large": "Too large to open.",
+  "unread.reason.pages": "Some scanned pages haven't been read yet.",
   "library.noMatch": "No Documents match",
   "library.noMatch.clear": "Clear search and filters",
   "library.drop.title": "Drop files or a folder here",
@@ -85,7 +97,7 @@ export const en = {
     "Start with the folders you need. Rename them or add your own at any time.",
   "library.addSelected": "Add selected folders",
   "library.modelHint":
-    "Choose the model that assigns folders and tags. This can be different from your chat model. Cloud models ask before receiving your document text, folder names and tag definitions, and, if they can read images, the first pages of scanned PDFs.",
+    "Choose the model that assigns folders and tags. This can be different from your chat model. A cloud model receives your document text, folder names and tag definitions, and, if it can read images, the first pages of scanned PDFs.",
   "library.connection": "Connection",
   "library.manualOnly": "Organize manually",
   "library.jev": "Jev · saved connection",
@@ -685,6 +697,21 @@ export const en = {
   "proposal.sourceRemoved": "Source removed",
   "proposal.sourceRemoved.why":
     "A Document this change cites has been deleted. Its Citation keeps the quote.",
+  "proposal.region.review": "Changes to review",
+  "proposal.theirs.count": "{count} changes from {name}",
+  "proposal.theirs.count.one": "1 change from {name}",
+  "proposal.theirs.acceptAll": "Accept all changes from {name}",
+  "proposal.theirs.rejectAll": "Reject all changes from {name}",
+  "proposal.unknownAuthor": "Unknown author",
+  "proposal.madeBy": "{author}, {date}",
+  "proposal.outOfDate.why.theirs":
+    "You edited this text after the change was made, so it can't be accepted. Reject it, or finish the edit yourself.",
+  "proposal.announce.theirs":
+    "{author}'s change: {what}. Accept with {accept}, reject with {reject}.",
+  "proposal.announce.theirs.outOfDate":
+    "{author}'s change, out of date: {what}. You edited its text after it was made. Reject it with {reject}.",
+  "proposal.cantAccept.theirs":
+    "This change is out of date: reject it, or finish the edit yourself.",
   "editor.turnInto.label": "Turn into",
   "editor.turnInto.bulletList": "Bulleted list",
   "editor.turnInto.orderedList": "Numbered list",
@@ -1032,6 +1059,7 @@ export const en = {
   "status.tagging.one": "Tagging 1 Document…",
   "status.tagging.other": "Tagging {count} Documents…",
   "status.taggingWaiting": "Tags need a model",
+  "status.taggingPermission": "Tags need your OK",
   "status.setUp": "Set up",
   "status.downloading": "Search model",
   "status.downloadFailed": "Search model download failed",
@@ -1298,8 +1326,8 @@ export const en = {
   "tags.dialog.retag.started": "Re-tagging has started.",
   "tags.dialog.done": "Done",
 
-  "jev.waiting.notice":
-    "Automatic tagging is waiting for a model. Your Documents are tagged as soon as one is set up.",
+  "jev.waiting.notice": "Tags wait until you choose a model.",
+  "jev.waiting.permission": "Tags wait until you allow Document text to go to {service}.",
   "jev.chip.needsReview": "needs review",
   "jev.chip.likely": "{tag}: added automatically, {percent}% likely",
   "jev.chip.review":
@@ -1327,6 +1355,7 @@ export const en = {
   "jev.form.reviewHint":
     "Below the first number a Tag isn't applied; from the second it is applied without a mark.",
   "jev.form.save": "Use Jev for tagging",
+  "jev.form.sends": "Document text for Tags goes to Jev when it tags your Documents.",
 
   "settings.title": "Settings",
   "settings.pages.models": "Models",
@@ -1427,6 +1456,8 @@ export const en = {
   "providers.form.test": "Test connection",
   "providers.form.testing": "Testing…",
   "providers.form.save": "Use this provider",
+  "providers.sends":
+    "Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to {provider} when you use it.",
   "providers.form.saving": "Saving…",
 
   "providers.test.ok": "Connected: the provider answered.",
@@ -1586,6 +1617,9 @@ export const en = {
   "consent.flow.reference-lookup": "Reference look-up",
   "consent.flow.reference-lookup.purpose": "fill in a Document's details for citing it",
   "consent.data.identifiers": "The Document's DOI or arXiv ID, and nothing else of it",
+  "consent.flow.connector-registry": "Connector search",
+  "consent.flow.connector-registry.purpose": "find community connectors in the MCP Registry",
+  "consent.data.connector-search": "What you type in the Connectors search, and nothing else",
   "consent.flow.find-sources": "Find sources",
   "consent.flow.find-sources.purpose": "find papers and other sources, and add the ones you choose",
   "consent.data.search-terms": "What you search for: the words and filters, such as years",
@@ -1717,12 +1751,13 @@ export const en = {
   "privacy.intro":
     "IncarnaMind collects no usage data. This page lists everything it sends from this computer, and lets you change it.",
   "privacy.flows.intro":
-    "These send your content to a service outside this computer. Nothing is sent on one until you allow it, and nothing at all while “Keep everything on this computer” is on. Where a provider offers the choice, IncarnaMind asks it not to store your requests.",
+    "These send your content to a service outside this computer. Choosing a service, where IncarnaMind says what goes to it, allows these; nothing is sent on one you haven't allowed, and nothing at all while “Keep everything on this computer” is on. Where a provider offers the choice, IncarnaMind asks it not to store your requests.",
   "privacy.flows.service": "to {service}",
   "privacy.flows.local": "Stays on this computer",
   "privacy.flows.sends": "Sends:",
   "privacy.flows.notInUse": "Not in use: everything stays on this computer.",
   "privacy.flows.decided": "{status} on {date}",
+  "privacy.flows.chosen": "Allowed when you chose {service}, {date}",
   "privacy.flows.allow": "Allow",
   "privacy.traffic.title": "Other network traffic",
   "privacy.traffic.intro":
@@ -2513,6 +2548,7 @@ export const en = {
     "No keyring is running, so API keys would be stored in plain text. Start GNOME Keyring or KWallet, or accept plain-text storage in Settings.",
   "error.secrets.unencrypted": "This system can't encrypt API keys, so they can't be saved.",
   "error.consent.declined": "You declined sending data to {service}, so nothing was sent.",
+  "error.consent.needed": "Waiting until you allow sending data to {service}. Nothing was sent.",
   "error.connector.notFound": "That Connector doesn't exist.",
   "error.connector.nameEmpty": "A Connector's name can't be empty.",
   "error.connector.nameTooLong": "A Connector's name can't be longer than {max} characters.",
@@ -2618,7 +2654,30 @@ export const en = {
   "connectors.settings.title": "Connectors",
   "connectors.directory.intro":
     "Services the assistant can look things up in. Nothing of yours goes to one until you agree, and it asks before it changes anything there.",
-  "connectors.directory.search": "Search connectors",
+  "connectors.directory.search": "Search connectors and the MCP Registry",
+  "connectors.registry.title": "From the MCP Registry",
+  "connectors.registry.badge": "Community · not reviewed",
+  "connectors.registry.note":
+    "Searched only because you typed. Community connectors haven't been reviewed; check what they can do before you connect one.",
+  "connectors.registry.searching": "Searching the MCP Registry…",
+  "connectors.registry.none": "Nothing in the MCP Registry matches “{query}”.",
+  "connectors.registry.failed.local-mode": "Local mode is on, so the MCP Registry isn't searched.",
+  "connectors.registry.failed.declined":
+    "You chose not to send your search to the MCP Registry. You can change that in Privacy.",
+  "connectors.registry.failed.unreachable":
+    "The MCP Registry can't be reached. Check your connection and try again.",
+  "connectors.registry.failed.service-error":
+    "The MCP Registry didn't answer as expected. Try again later.",
+  "connectors.registry.retry": "Try again",
+  "connectors.registry.privacy": "Privacy",
+  "connectors.registry.by": "Published as {publisher}",
+  "connectors.registry.remote": "Runs on its own server: {url}",
+  "connectors.registry.local": "Runs on this computer: {command}",
+  "connectors.registry.add": "Add",
+  "connectors.registry.setUp": "Set up…",
+  "connectors.registry.link": "Read about it",
+  "connectors.registry.cannot":
+    "IncarnaMind can't run this one by itself. Read about it to see how it's set up.",
   "connectors.directory.connected": "Connected",
   "connectors.directory.browse": "Browse",
   "connectors.directory.group.files": "Where your files are",
@@ -2649,7 +2708,7 @@ export const en = {
   "connectors.directory.tool.changes": "May change things",
   "connectors.directory.where": "Where your data goes",
   "connectors.directory.where.body":
-    "What the assistant asks {name} for, such as words from your Question, goes to {name}, once you agree. What it returns goes to your chat model, as your Documents do.",
+    "Once you connect it, what the assistant asks {name} for, such as words from your Question, goes to {name}. What it returns goes to your chat model, as your Documents do.",
   "connectors.directory.how": "How it signs in",
   "connectors.directory.how.browser":
     "Sign in with {name} in your browser. Your sign-in is kept in your keychain.",
@@ -2695,6 +2754,8 @@ export const en = {
     "For API keys and the like. The values are kept in your keychain, never in IncarnaMind's database.",
   "connectors.form.envInvalid": "Write each environment variable as NAME=value.",
   "connectors.form.add": "Add Connector",
+  "connectors.form.sends":
+    "What Answers ask this Connector's Tools goes to it, and it may send that over the internet.",
   "connectors.form.adding": "Adding…",
   "connectors.form.cancel": "Cancel",
   "connectors.form.save": "Save and restart",
@@ -2713,6 +2774,8 @@ export const en = {
   "connectors.import.env": "Environment: {names} (kept in your keychain)",
   "connectors.import.confirm": "Add {count} Connectors",
   "connectors.import.confirm.one": "Add 1 Connector",
+  "connectors.import.sends":
+    "What Answers ask these Connectors' Tools goes to them, and they may send that over the internet.",
   "connectors.import.nothing": "Nothing here can be added.",
   "connectors.import.adding": "Adding…",
   "connectors.consent.note":
@@ -2817,6 +2880,10 @@ export const en = {
   // Onboarding: the example Mind, the "Get started" checklist and the three steps.
   "editor.hint.empty": "Start writing, or {ask}",
   "editor.hint.empty.ask": "press {shortcut} to ask a Question…",
+  "editor.hint.first":
+    "A Mind is a page where you write, and ask your Documents with every quote checked. {ask}",
+  "editor.hint.first.ask": "Press {shortcut} to ask.",
+  "tabs.new.about": "New Mind: a page to write in and ask your Documents ({shortcut})",
   "editor.hint.afterAnswer": "Keep writing, or {ask}",
   "editor.hint.afterAnswer.ask": "press {shortcut} to ask a follow-up",
   "editor.hint.example": "Try it: write a line here, or {ask}",
@@ -2825,7 +2892,7 @@ export const en = {
   "examples.banner.label": "About this example",
   "examples.banner.title": "This is an example Mind.",
   "examples.banner.body":
-    "You write here like in any document, ask Questions about your Documents, and every claim in an Answer links to the page it came from. Click a check to see the quote; green means it was found.",
+    "A Mind is a page where you write, and ask your Documents with every quote checked. You write here like in any document, ask Questions about your Documents, and every claim in an Answer links to the page it came from. Click a check to see the quote; green means it was found.",
   "examples.banner.addOwn": "Add your Documents or apps",
   "examples.banner.remove": "Remove the examples",
   "examples.answer": "Example Answer, written in advance: no model needed to try it",
@@ -3554,6 +3621,13 @@ export const en = {
   "wordImport.count.images": "{count} pictures",
   "wordImport.count.links": "{count} links",
   "wordImport.count.kept": "{kind} ({count})",
+  "wordImport.report.keptChanges": "Changes kept as they are, to accept or reject in Word: {list}.",
+  "wordImport.keptChange.format": "formatting ({count})",
+  "wordImport.keptChange.paragraphMark": "paragraph marks ({count})",
+  "wordImport.keptChange.move": "moves ({count})",
+  "wordImport.keptChange.row": "table rows ({count})",
+  "wordImport.keptChange.cell": "table cells ({count})",
+  "wordImport.keptChange.content": "fields, pictures or notes ({count})",
   "wordImport.sectionBreak.title": "Delete the section break?",
   "wordImport.sectionBreak.body":
     "The pages after it will take the layout of the pages before it: page size, orientation, columns, headers and footers.",
