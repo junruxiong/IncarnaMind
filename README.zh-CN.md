@@ -15,29 +15,29 @@
   <a href="#下载"><b>下载</b></a> ·
   <a href="#你能用它做什么">你能用它做什么</a> ·
   <a href="#你的文件始终归你">隐私</a> ·
-  <a href="https://github.com/junruxiong/IncarnaMind/discussions">讨论区</a>
+  <a href="https://github.com/IncarnaMind/IncarnaMind/discussions">讨论区</a>
   <br><br>
   <img alt="桌面应用，支持 macOS、Windows 和 Linux" src="https://img.shields.io/badge/macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-desktop%20app-17191C">
-  <a href="LICENSE"><img alt="许可证：Apache-2.0" src="https://img.shields.io/github/license/junruxiong/IncarnaMind?color=17191C"></a>
-  <!-- 第一个版本发布后，加上：<a href="https://github.com/junruxiong/IncarnaMind/releases/latest"><img alt="最新版本" src="https://img.shields.io/github/v/release/junruxiong/IncarnaMind?color=17191C"></a> -->
+  <a href="LICENSE"><img alt="许可证：Apache-2.0" src="https://img.shields.io/github/license/IncarnaMind/IncarnaMind?color=17191C"></a>
+  <!-- 第一个版本发布后，加上：<a href="https://github.com/IncarnaMind/IncarnaMind/releases/latest"><img alt="最新版本" src="https://img.shields.io/github/v/release/IncarnaMind/IncarnaMind?color=17191C"></a> -->
 </p>
 
-<p align="center"><img src="docs/images/demo.gif" width="880" alt="依次展示八个界面：Mind 旁边是助手，回答里的引用都已核对；展开回答的过程，可以看到它搜了什么、用了哪些来源；在笔记旁打开一条引用，PDF 页面上高亮着引文；助手的修改在 Mind 里等你接受或拒绝；资料库里的全部文档、文件夹和标签；三组标签页并排；在 Mind 里记会议笔记，助手根据实时转写回答；以及中文界面。"></p>
+<p align="center"><img src="docs/images/demo.gif" width="880" alt="依次展示六个界面：选中草稿里的两句话，菜单里有“对照文档核对”；同一篇草稿核对后，每句话都标出有依据、无依据或与文档矛盾，标题下显示统计；在笔记旁打开一条引用，PDF 页面上高亮着引文；打开一份别人写的贷款人季度报告来核对，显示“核对 8 条说法”；核对结果中有一条与贷款协议第 3 页矛盾；以及中文界面下核对过的草稿。"></p>
 
-<p align="center"><sub>助手修改 Mind 等你接受，以及根据会议实时转写回答，都<a href="#即将推出">即将推出</a>，其余功能现在就能用。</sub></p>
+<p align="center"><sub>图中展示的功能现在都能用。</sub></p>
 
 **IncarnaMind** 是一款免费开源的桌面应用，支持 macOS、Windows 和 Linux：你可以就自己的文档（PDF、Word、PowerPoint、Excel 等）提问，并借助 AI 写作。每个回答都标明出处的确切页码，IncarnaMind 会核对每段引文确实在那里。它可以使用你自己的 API 密钥、通过 Ollama 运行的本地模型，或你的 ChatGPT 订阅。
 
 ## 下载
 
-**IncarnaMind 还没有正式发布。** 发布后，[发布页](https://github.com/junruxiong/IncarnaMind/releases)会提供 macOS（Apple 芯片和 Intel）、Windows 和 Linux 的安装包。想在发布时收到通知，可以[留下邮箱](https://tally.so/r/LZA5aG?ref=readme-zh)，或点本页右上角的 **Watch → Custom → Releases**。想现在试用，可以用 Node.js 24 或更高版本从源码运行：
+**IncarnaMind 还没有正式发布。** 发布后，[发布页](https://github.com/IncarnaMind/IncarnaMind/releases)会提供 macOS（Apple 芯片和 Intel）、Windows 和 Linux 的安装包。想在发布时收到通知，可以[留下邮箱](https://tally.so/r/LZA5aG?ref=readme-zh)，或点本页右上角的 **Watch → Custom → Releases**。想现在试用，可以用 Node.js 24 或更高版本从源码运行：
 
 ```shell
-git clone https://github.com/junruxiong/IncarnaMind.git && cd IncarnaMind
+git clone https://github.com/IncarnaMind/IncarnaMind.git && cd IncarnaMind
 npm install && npm run dev
 ```
 
-Windows 版通过 SignPath Foundation 为开源项目提供的免费签名服务签名，见[代码签名政策（Code signing policy）](docs/code-signing-policy.md)。
+Windows 版将通过 SignPath Foundation 为开源项目提供的免费签名服务签名，在此之前安装程序暂未签名。见[代码签名政策（Code signing policy）](docs/code-signing-policy.md)。
 
 <details>
 <summary>系统不让打开时</summary>
@@ -50,7 +50,9 @@ Windows 版通过 SignPath Foundation 为开源项目提供的免费签名服务
 
 ## 你能用它做什么
 
-**边写边问。** 一个 Mind 就是为一个主题准备的笔记本，旁边就是助手：就当前的 Mind 或你的文件向它提问，回答以对话的形式留在助手里，每个引用都已核对。你的草稿保持原样，直到你点 **添加到笔记**：回答连同引用放到光标处，可以像普通文字一样修改，还带着回到原对话的链接。
+**交稿前先核对一遍。** 在 Mind 里选中几句话，选择 **对照文档核对**：每句话都会标出在你的文档里有依据、无依据还是与文档矛盾，原文一键打开，标题下还会统计还有几处需要留意。别人写的 PDF 也能这样逐条核对说法：**+ → 核对文档…**。
+
+**边写边问。** 一个 Mind 就是为一个主题准备的笔记本，旁边就是助手：就当前的 Mind 或你的文件向它提问，回答以对话的形式留在助手里，每个引用都已核对。你的草稿保持原样，直到你点 **添加到笔记**：回答连同引用放到光标处，可以像普通文字一样修改。
 
 **每个回答都能核对。** 回答会标出每个说法的出处，并附上原文引文，再逐条到那个位置核对：找到了打绿勾，没找到就标成橙色；点一下，原文就打开到那一页，引文高亮显示。展开回答的过程，可以看到它搜了什么、用了哪些来源。
 
@@ -68,7 +70,9 @@ Windows 版通过 SignPath Foundation 为开源项目提供的免费签名服务
 
 **在你已经在用的 AI 智能体里提问**（实验功能，默认关闭）。在**设置 → 智能体**里连接 Claude、Codex、Cursor 等，用的是它们自己的订阅：它们只能读你选定的文件夹，从 IncarnaMind 拿到的每条引文都经过核对；它们读到的内容会按其服务条款发给它们的 AI 服务。[各个智能体的连接方法](docs/agents.zh-CN.md)。
 
-**写完就能交。** 把 Mind 导出为 Word 或 Markdown，引用和参考文献按你选的引用格式排好：APA、MLA、Chicago、Harvard、IEEE、Vancouver、GB/T 7714，或 IncarnaMind 自己的编号格式。没通过核对的引用会标上“[未核实]”。
+**写完就能交。** 把 Mind 导出为 Word 或 Markdown，引用和参考文献按你选的引用格式排好：APA、MLA、Chicago、Harvard、IEEE、Vancouver、GB/T 7714，或 IncarnaMind 自己的编号格式。没通过核对的引用会标上“[未核实]”。也可以把 Word 文件打开成 Mind，再导出回同一个文件：没改动的部分原样保留，你的修改可以作为修订写回去。
+
+**用表格对比文档。** **对比文档…** 会向你选的每个文件提出同样的问题，填成一张表，每一格都是带引用、经过核对的回答。
 
 **连接应用和技能，运行前先问你。** 添加连接器（MCP 服务器），或者直接导入你在 Claude Desktop、Cursor 里配置好的；也可以添加技能（标准的 `SKILL.md` 文件夹），内置三个。可能改动内容的工具和技能里的脚本，都要你同意后才会运行。
 
@@ -98,15 +102,15 @@ Windows 版通过 SignPath Foundation 为开源项目提供的免费签名服务
 
 ## 即将推出
 
-下面是计划中的功能，现在还不能用，也没有具体日期（见[路线图](https://github.com/junruxiong/IncarnaMind/issues/74)）：会议进行中直接提问，回答引用实时转写；助手直接修改你的 Mind，每处修改都等你接受；打开 Word 文件再导出回去，修改保留为修订；对照你的文件核对你自己的草稿和别人的文档；跨文档的对比表；在后台运行的研究任务。
+下面是计划中的功能，现在还不能用，也没有具体日期（见[路线图](https://github.com/IncarnaMind/IncarnaMind/issues/74)）：会议进行中直接提问，回答引用实时转写；助手直接修改你的 Mind，每处修改都等你接受；在审阅栏里逐条查看别人在 Word 文件里的修订；在后台运行的研究任务。
 
 ## 参与贡献
 
-欢迎写代码、用你自己的文档测试、翻译和提想法：先读 [CONTRIBUTING.md](CONTRIBUTING.md)（英文），也可以[提交 issue](https://github.com/junruxiong/IncarnaMind/issues/new/choose)，或到[讨论区](https://github.com/junruxiong/IncarnaMind/discussions)提问（中文、英文都可以）。
+欢迎写代码、用你自己的文档测试、翻译和提想法：先读 [CONTRIBUTING.md](CONTRIBUTING.md)（英文），也可以[提交 issue](https://github.com/IncarnaMind/IncarnaMind/issues/new/choose)，或到[讨论区](https://github.com/IncarnaMind/IncarnaMind/discussions)提问（中文、英文都可以）。
 
 ## 项目由来
 
-IncarnaMind 最早是 2023 年的一个 Python 命令行工具，用来和 PDF 对话，收获了大约 800 个 star；2026 年从头重写成桌面应用，核心只有一个想法：从文件里得到的回答，能核对才真正有用。旧版命令行工具保留在 [`v1-python-cli`](https://github.com/junruxiong/IncarnaMind/tree/v1-python-cli) 标签下。谢谢一直关注它的你；如果 IncarnaMind 对你有用，点个 star，能让更多人看到它。
+IncarnaMind 最早是 2023 年的一个 Python 命令行工具，用来和 PDF 对话，收获了大约 800 个 star；2026 年从头重写成桌面应用，核心只有一个想法：从文件里得到的回答，能核对才真正有用。旧版命令行工具保留在 [`v1-python-cli`](https://github.com/IncarnaMind/IncarnaMind/tree/v1-python-cli) 标签下。谢谢一直关注它的你；如果 IncarnaMind 对你有用，点个 star，能让更多人看到它。
 
 <details>
 <summary>引用 IncarnaMind</summary>
@@ -114,7 +118,7 @@ IncarnaMind 最早是 2023 年的一个 Python 命令行工具，用来和 PDF �
 ```bibtex
 @misc{IncarnaMind2023, author = {Junru Xiong}, title = {IncarnaMind}, year = {2023},
   publisher = {GitHub}, journal = {GitHub Repository},
-  howpublished = {\url{https://github.com/junruxiong/IncarnaMind}}}
+  howpublished = {\url{https://github.com/IncarnaMind/IncarnaMind}}}
 ```
 
 </details>

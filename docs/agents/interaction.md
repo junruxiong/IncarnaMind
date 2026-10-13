@@ -18,6 +18,7 @@ Each rule has a check a reviewer can apply. A UI change that breaks a rule says 
    - Check: no label starts with "Back to". One that does means this rule is broken.
 4. **Undo instead of asking.** Anything the User can take back happens at once and offers Undo: ⌘Z / Ctrl+Z, and one short line such as "Moved 3 Documents to Finance · Undo". Deleting a Mind, Conversation, Document, Folder or Tag moves it to Recently deleted, where it waits 30 days, with no question asked. Ask first only before something that can't be taken back, and say what will be lost.
    - Check: each action in the change is marked reversible (with its undo) or irreversible (with its confirmation text).
+   - In a multi-line field a run of typing is one step to undo, as on the computer: use `TypingTextarea`, never a plain `<textarea>` (the linter fails one).
 5. **Every object has one right-click menu, in one order.** Open (and Open in new tab), the object's own actions, Move to…, Tags…, Rename, the file's actions (Show in Finder, Copy path), then Delete last, after a separator. The ⋯ button opens the same menu, and each item shows its shortcut.
    - Check: right-click every kind of object the change shows, and compare with this order.
 6. **One way to select.** In every list: a click opens, and so does Enter on the focused item; ⌘-click / Ctrl-click adds or removes; Shift-click extends; ⌘A selects everything in view; Esc clears. An action applies to everything selected and says how many ("Delete 3 Documents"). Dragging one of several selected items drags them all.

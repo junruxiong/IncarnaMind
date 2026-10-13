@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { onTestFinished } from "vitest";
 import {
+  CHOSEN_PROVIDER_FLOWS,
+  type ChatProvider,
   type Core,
   type CoreAdapters,
   type CoreEventName,
@@ -11,6 +13,7 @@ import {
   createCore,
   DATABASE_FILE,
   type Keychain,
+  type SaveChatProviderInput,
   type SecretProtection,
 } from "../../src/core";
 import { createFakeEmbedder } from "../../src/core/embedding/fake";
@@ -82,6 +85,7 @@ export function startCore(dataDir: string, overrides: Partial<CoreAdapters> = {}
     // A Documents folder of its own, so a test that saves a file never writes into the User's.
     paths: { dataDir, documents: join(dataDir, "Documents"), citationStyles: CITATION_STYLES },
     systemLanguages: () => ["en-US"],
+    systemUserName: () => "Priya Raman",
     keychain: createMemoryKeychain(),
     browser: {
       open: async () => {
@@ -160,6 +164,12 @@ export function tickingClock(start = "2026-10-06T09:00:00.000Z"): () => Date {
   };
 }
 
+/**
+ * Returns on the next turn of the event loop: by then every promise chain that needs no timer,
+ * thread or process has run to its end. For checking what such work did or didn't do.
+ */
+export const nextTurn = () => new Promise<void>((resolve) => setImmediate(resolve));
+
 /** Resolves with the payload of the next `event` the core emits. */
 export function nextEvent<E extends CoreEventName>(core: Core, event: E): Promise<CoreEvents[E]> {
   return new Promise((resolve) => {
@@ -168,4 +178,20 @@ export function nextEvent<E extends CoreEventName>(core: Core, event: E): Promis
       resolve(payload);
     });
   });
+}
+
+/**
+ * Saves a chat provider as it was left when choosing it wasn't yet the
+ * consent (ADR-0022): nothing allowed or declined, so each flow's first send asks.
+ */
+export async function saveProviderUnasked(
+  core: Core,
+  input: SaveChatProviderInput,
+): Promise<ChatProvider> {
+  const provider = await core.saveChatProvider(input);
+  const service = (await core.listChatProviders()).find((each) => each.id === provider.id)?.service;
+  if (service) {
+    for (const flow of CHOSEN_PROVIDER_FLOWS) await core.revokeConsent(flow, service.id);
+  }
+  return provider;
 }

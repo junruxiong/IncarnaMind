@@ -118,3 +118,34 @@ describe("the sources of a Mind's Citations", () => {
     ]);
   });
 });
+
+describe("the name a Citation's source shows", () => {
+  const renamed = { ...en, documents: [{ id: "tides", contentHash: "h1", name: "Tide tables" }] };
+
+  test("is the Document's current name while it is there, in a footnote and in the sources", () => {
+    expect(sourceText(tides(14), renamed).text).toBe("Tide tables, p. 14");
+    expect(sourceText(tides(14), { ...zh, documents: renamed.documents }).text).toBe(
+      "Tide tables，第 14 页",
+    );
+    const sources = sourcesOf([tides(14), tides(22)], renamed);
+    expect(sources.map((source) => [source.name, source.documentId])).toEqual([
+      ["Tide tables", "tides"],
+    ]);
+    expect(sourceEntry(sources[0] as NonNullable<(typeof sources)[number]>, "en")).toBe(
+      "Tide tables. Cited: p. 14; p. 22",
+    );
+  });
+
+  test("is the stored one when the Document can't be found, or its names aren't known yet", () => {
+    expect(sourceText(tides(14), { language: "en", documents: [] }).text).toBe("Tides, p. 14");
+    expect(sourceText(tides(14), { language: "en", documents: null }).text).toBe("Tides, p. 14");
+    expect(sourceText(tides(14), en).text).toBe("Tides, p. 14");
+  });
+
+  test("a machine-made name gives way to the Document's title, as everywhere", () => {
+    const scanned = { id: "tides", contentHash: "h1", name: "IMG_0042", title: "Tide tables" };
+    expect(sourceText(tides(14), { language: "en", documents: [scanned] }).text).toBe(
+      "Tide tables, p. 14",
+    );
+  });
+});

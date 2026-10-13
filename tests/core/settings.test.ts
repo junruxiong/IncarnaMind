@@ -2,17 +2,27 @@ import { describe, expect, test } from "vitest";
 import { type Executor, InvalidInputError } from "../../src/core";
 import { createTempDataFolder, startCore } from "../helpers/core";
 
-/** Export uses Word until the User saves other options, and the deliverables leave Questions out. */
+/**
+ * Export uses Word until the User saves other options, and the deliverables leave Questions
+ * out. A Word file tracks the User's edits and marks AI text and failed checks (#107).
+ */
+const DEFAULT_WORD = {
+  includeQuestions: false,
+  trackChanges: true,
+  markAiText: true,
+  commentFailedChecks: true,
+} as const;
+
 const DEFAULT_EXPORT = {
   format: "docx",
-  docx: { includeQuestions: false },
+  docx: DEFAULT_WORD,
   pdf: { includeQuestions: false },
   html: { includeQuestions: false },
 } as const;
 
 const PDF_EXPORT = {
   format: "pdf",
-  docx: { includeQuestions: false },
+  docx: { ...DEFAULT_WORD, markAiText: false },
   pdf: { includeQuestions: true },
   html: { includeQuestions: false },
 } as const;
@@ -28,6 +38,7 @@ describe("Settings", () => {
         suggestWhileWriting: false,
         leaveOutOwnFiles: true,
         exportOptions: DEFAULT_EXPORT,
+        authorName: null,
         monthlyCap: null,
         webSearch: false,
       },
@@ -54,6 +65,7 @@ describe("Settings", () => {
       scriptSandbox: "none",
       // No capture in these tests: Meetings can't record.
       meetingAudio: "none",
+      author: "Priya Raman",
     });
   });
 
@@ -120,6 +132,7 @@ describe("Settings", () => {
       suggestWhileWriting: false,
       leaveOutOwnFiles: true,
       exportOptions: DEFAULT_EXPORT,
+      authorName: null,
       monthlyCap: null,
       webSearch: false,
     });
@@ -180,6 +193,7 @@ describe("Settings", () => {
         suggestWhileWriting: true,
         leaveOutOwnFiles: false,
         exportOptions: PDF_EXPORT,
+        authorName: "P. Raman",
         monthlyCap: { amount: 20, currency: "USD" },
         webSearch: true,
       },
@@ -196,6 +210,7 @@ describe("Settings", () => {
         suggestWhileWriting: true,
         leaveOutOwnFiles: false,
         exportOptions: PDF_EXPORT,
+        authorName: "P. Raman",
         monthlyCap: { amount: 20, currency: "USD" },
         webSearch: true,
       },
@@ -203,6 +218,7 @@ describe("Settings", () => {
       language: "zh-CN",
       scriptSandbox: "none",
       meetingAudio: "none",
+      author: "P. Raman",
     });
   });
 

@@ -187,6 +187,10 @@ test("copying Blocks with Citations puts footnotes in the HTML, and markers with
   // each Citation still a Citation to paste back into IncarnaMind.
   expect(copied.html).toContain('data-type="citation"');
   expect(copied.html).toContain("mso-element:footnote-list");
+  // Word numbers the footnotes itself (its own auto-number span); every other app shows "[n]".
+  expect(copied.html).toContain("mso-special-character:footnote");
+  expect(copied.html).toContain("<![if !supportFootnotes]>");
+  expect(copied.html).toContain("<![endif]>");
   const held = await footnotesIn(window, copied.html);
   expect(held.markers).toEqual(["[1]", "[2]"]);
   expect(held.notes.map((note) => note.id)).toEqual(["ftn1", "ftn2"]);
