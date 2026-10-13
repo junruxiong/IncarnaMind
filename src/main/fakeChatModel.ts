@@ -22,7 +22,8 @@
  * that thinks does. A Question asked "slowly" waits a moment before each step
  * and writes its Answer word by word, so a test sees each step of the Answer.
  *
- * A Question with "blank reply" in it gets a reply with no text at all.
+ * A Question with "blank reply" in it gets a reply with no text at all. A model whose id ends
+ * "-not-found" fails as one its provider doesn't know.
  *
  * A comparison table's cell (#98) cites its Document's line that shares the
  * most words with the Question and answers with its value ("Termination
@@ -867,6 +868,15 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
       warnings: [],
     }),
     doStream: async ({ prompt, tools, abortSignal }) => {
+      // A model id ending "-not-found" is one its provider doesn't know, for a test of that Problem.
+      if (spec.modelId.endsWith("-not-found")) {
+        throw new APICallError({
+          message: `The model ${spec.modelId} does not exist`,
+          url: "https://fake.invalid/chat",
+          requestBodyValues: {},
+          statusCode: 404,
+        });
+      }
       // A busy provider refuses each "busy" cell's first request once, as an HTTP 429.
       const cell =
         isCell(prompt) && /\bbusy\b/i.test(lastQuestion(prompt)) ? lastUserText(prompt) : null;
