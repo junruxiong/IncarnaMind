@@ -5,12 +5,13 @@
  * so a Citation is the same footnote, and a list the same Word list, whichever
  * export made it.
  */
-import { descendants, elements, type XmlElement } from "../../documents/formats/xml";
+import { elements } from "../../documents/formats/xml";
 import {
   type DocxStyles,
   type DocxTarget,
   listDefinition,
   listInstance,
+  NEW_DOCUMENT_STYLE_IDS,
   type NewPicture,
   STYLE_DEFINITIONS,
   type StyleBases,
@@ -24,16 +25,21 @@ import {
   RELATIONSHIP_TYPES,
   type WordPackageWriter,
 } from "./package";
-import { applySplices, closeTag, endOf, type Splice, startOf } from "./text";
+import {
+  appendInside,
+  applySplices,
+  closeTag,
+  endOf,
+  type Splice,
+  selfClosing,
+  startOf,
+} from "./text";
 
 /** A part's name relative to the folder of the document part: "word/styles.xml" → "styles.xml". */
 const relativeTo = (owner: string, part: string) => {
   const folder = owner.slice(0, owner.lastIndexOf("/") + 1);
   return part.startsWith(folder) ? part.slice(folder.length) : `/${part}`;
 };
-
-/** Where to add before an element's end tag. */
-const beforeEnd = (element: XmlElement) => endOf(element) - closeTag(element).length;
 
 // ---------------------------------------------------------------------------
 // Styles
@@ -99,7 +105,7 @@ export class DocumentStyles {
     const definition = STYLE_DEFINITIONS[role];
     let id = this.find(definition.type, definition.name);
     if (!id) {
-      const wanted = definition.name.replace(/[^A-Za-z0-9]/g, "") || "Style";
+      const wanted = NEW_DOCUMENT_STYLE_IDS[role];
       id = wanted;
       for (let number = 2; this.ids.has(id); number++) id = `${wanted}${number}`;
       this.ids.add(id);
@@ -157,11 +163,14 @@ export class DocumentStyles {
     if (this.added.length === 0) return;
     const added = this.added.join("");
     if (this.part) {
-      const at = beforeEnd(this.part.root);
-      this.pkg.set(this.name, applySplices(this.part.text, [{ from: at, to: at, text: added }]));
+      const { text, root } = this.part;
+      this.pkg.set(this.name, applySplices(text, [appendInside(text, root, added)]));
       return;
     }
-    this.pkg.add(this.name, `${XML_DECLARATION}<w:styles xmlns:w="${W_NAMESPACE}">${added}</w:styles>`);
+    this.pkg.add(
+      this.name,
+      `${XML_DECLARATION}<w:styles xmlns:w="${W_NAMESPACE}">${added}</w:styles>`,
+    );
     this.relationships.add(RELATIONSHIP_TYPES.styles, relativeTo(this.document, this.name));
     await this.pkg.addContentType(this.name, CONTENT_TYPES.styles);
   }
@@ -235,12 +244,20 @@ export class DocumentNumbering {
       await this.pkg.addContentType(this.name, CONTENT_TYPES.numbering);
       return;
     }
-    const children = elements(this.part.root);
+    const { text, root } = this.part;
+    if (selfClosing(root)) {
+      this.pkg.set(
+        this.name,
+        applySplices(text, [appendInside(text, root, definitions + instances)]),
+      );
+      return;
+    }
+    const children = elements(root);
     const lastDefinition = children.filter((each) => each.name === "w:abstractNum").at(-1);
     const firstInstance = children.find((each) => each.name === "w:num");
     const lastInstance = children.filter((each) => each.name === "w:num").at(-1);
     const cleanup = children.find((each) => each.name === "w:numIdMacAtCleanup");
-    const end = beforeEnd(this.part.root);
+    const end = endOf(root) - closeTag(root).length;
     const definitionsAt = lastDefinition
       ? endOf(lastDefinition)
       : firstInstance
@@ -256,7 +273,7 @@ export class DocumentNumbering {
             { from: definitionsAt, to: definitionsAt, text: definitions },
             { from: instancesAt, to: instancesAt, text: instances },
           ];
-    this.pkg.set(this.name, applySplices(this.part.text, splices));
+    this.pkg.set(this.name, applySplices(text, splices));
   }
 }
 
@@ -279,16 +296,23 @@ export class DocumentFootnotes {
     pkg: WordPackageWriter,
     document: string,
     relationships: PartRelationships,
-    ids: WordIds,
   ): Promise<DocumentFootnotes> {
     const known = relationships.ofType(RELATIONSHIP_TYPES.footnotes)?.target ?? null;
     const part = known ? await pkg.part(known) : null;
-    for (const note of part ? elements(part.root) : []) {
+    const name =
+      known ??
+      (pkg.has("word/footnotes.xml")
+        ? pkg.freeName("word/footnotes", "xml")
+        : "word/footnotes.xml");
+    return new DocumentFootnotes(pkg, document, relationships, name, part);
+  }
+
+  /** Reserves the ids the document's footnotes (and their separators) have. */
+  reserveIds(ids: WordIds): void {
+    for (const note of this.part ? elements(this.part.root) : []) {
       const id = Number(note.attrs["w:id"]);
       if (Number.isInteger(id)) ids.reserve("footnote", id);
     }
-    const name = known ?? (pkg.has("word/footnotes.xml") ? pkg.freeName("word/footnotes", "xml") : "word/footnotes.xml");
-    return new DocumentFootnotes(pkg, document, relationships, name, part);
   }
 
   add(footnotes: readonly string[]): void {
@@ -299,11 +323,8 @@ export class DocumentFootnotes {
   async flush(): Promise<void> {
     if (this.added.length === 0) return;
     if (this.part) {
-      const at = beforeEnd(this.part.root);
-      this.pkg.set(
-        this.name,
-        applySplices(this.part.text, [{ from: at, to: at, text: this.added.join("") }]),
-      );
+      const { text, root } = this.part;
+      this.pkg.set(this.name, applySplices(text, [appendInside(text, root, this.added.join(""))]));
       return;
     }
     this.pkg.add(this.name, footnotesPart(this.added));
@@ -322,10 +343,9 @@ const DRAWING_PART = /^word\/(?:document\d*|header\d*|footer\d*|footnotes|endnot
 export async function reserveDrawingIds(pkg: WordPackageWriter, ids: WordIds): Promise<void> {
   for (const name of pkg.zip.names()) {
     if (!DRAWING_PART.test(name)) continue;
-    const part = await pkg.part(name);
-    for (const docPr of part ? descendants(part.root, "docPr") : []) {
-      const id = Number(docPr.attrs.id);
-      if (Number.isInteger(id)) ids.reserve("drawing", id);
+    const text = (await pkg.text(name)) ?? "";
+    for (const match of text.matchAll(/<(?:[\w.-]+:)?docPr\b[^>]*?\sid\s*=\s*"(\d+)"/g)) {
+      ids.reserve("drawing", Number(match[1]));
     }
   }
 }

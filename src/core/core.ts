@@ -1102,6 +1102,7 @@ export function createCore(adapters: CoreAdapters): Core {
     printer: adapters.printer ?? null,
     paper: () => paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages())),
     ...(adapters.pictures && { pictures: adapters.pictures }),
+    wordPackage: (sha256) => wordImports.packageOf(sha256),
     log: adapters.log ?? silentLogger,
     now,
   });
@@ -2399,9 +2400,12 @@ export function createCore(adapters: CoreAdapters): Core {
       return exported;
     },
     saveMindExport: async (mindId, options) => {
-      const { fileName, data, ...counts } = await mindExports.export(mindId, options);
+      const { fileName, data, word, ...counts } = await mindExports.export(mindId, options);
+      // What a Word file can't keep is said before anything is saved (#105).
+      const accepted = new Set(Array.isArray(options?.accept) ? options.accept : []);
+      if (word?.notKept.some((loss) => !accepted.has(loss.key))) return { status: "review", word };
       const saved = await saveExport(fileName, data, () => recordExport(options));
-      return saved.status === "saved" ? { ...saved, ...counts } : saved;
+      return saved.status === "saved" ? { ...saved, ...counts, word } : saved;
     },
     saveSkillExport: async (skillId) => {
       const { fileName, data } = await skills.exportZip(skillId);

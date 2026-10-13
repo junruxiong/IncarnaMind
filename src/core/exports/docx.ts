@@ -54,6 +54,16 @@ export interface DocxOptions {
   created: string;
 }
 
+/** The prefixes the writer writes, and their namespaces. */
+export const WRITER_NAMESPACES: ReadonlyMap<string, string> = new Map([
+  ["w", W_NAMESPACE],
+  ["r", R_NAMESPACE],
+  ["wp", "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"],
+  ["a", "http://schemas.openxmlformats.org/drawingml/2006/main"],
+  ["pic", "http://schemas.openxmlformats.org/drawingml/2006/picture"],
+  ["m", MATH_NAMESPACE],
+]);
+
 const NS = {
   w: W_NAMESPACE,
   r: R_NAMESPACE,
@@ -846,9 +856,7 @@ export function listInstance(numId: number, definition: number, list: List): str
 
 /** Two list definitions, bullets (0) and numbers (1), and an instance of one for each list. */
 function numbering(lists: readonly List[]): string {
-  const instances = lists.map((list, index) =>
-    listInstance(index + 1, list.ordered ? 1 : 0, list),
-  );
+  const instances = lists.map((list, index) => listInstance(index + 1, list.ordered ? 1 : 0, list));
   return `${XML_DECLARATION}<w:numbering xmlns:w="${NS.w}">${listDefinition(0, false)}${listDefinition(1, true)}${instances.join("")}</w:numbering>`;
 }
 
@@ -976,7 +984,7 @@ export const STYLE_DEFINITIONS: Readonly<Record<StyleRole, StyleDefinition>> = {
 };
 
 /** A new document's ids for the styles, which `NEW_DOCUMENT_STYLES` writes in. */
-const NEW_DOCUMENT_STYLE_IDS: Readonly<Record<StyleRole, string>> = {
+export const NEW_DOCUMENT_STYLE_IDS: Readonly<Record<StyleRole, string>> = {
   title: "Title",
   heading1: "Heading1",
   heading2: "Heading2",

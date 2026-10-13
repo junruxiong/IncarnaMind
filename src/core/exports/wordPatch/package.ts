@@ -5,17 +5,18 @@
  * ones added. Relationships and content types are added the same way, so a
  * part's existing ones keep their bytes.
  */
-import { escapeXml } from "../wordml";
+
 import { decodePart } from "../../documents/formats/docxImport";
 import { descendants, parseXml, type XmlElement } from "../../documents/formats/xml";
 import {
   type Deflate,
   resolvePart,
+  writeZip,
   type ZipArchive,
   type ZipWriteEntry,
-  writeZip,
 } from "../../documents/formats/zip";
-import { applySplices, closeTag, endOf, type Splice } from "./text";
+import { escapeXml } from "../wordml";
+import { appendInside, applySplices } from "./text";
 
 /** A part that couldn't be written into: export stops and names it. */
 export class WordPartError extends Error {
@@ -60,10 +61,12 @@ export const relationshipsPartOf = (part: string): string => {
 
 export class WordPackageWriter {
   private readonly read = new Map<string, PartText>();
+  private readonly texts = new Map<string, string>();
   private readonly changed = new Map<string, string>();
   private readonly added = new Map<string, string | Uint8Array>();
   private readonly relationships = new Map<string, PartRelationships>();
-  private contentTypes: Splice[] = [];
+  /** Defaults and overrides to add to [Content_Types].xml. */
+  private contentTypes: string[] = [];
 
   constructor(readonly zip: ZipArchive) {}
 
@@ -79,6 +82,17 @@ export class WordPackageWriter {
     if (known) return known;
     const added = this.added.get(name);
     if (typeof added === "string") return { text: added, root: parsed(name, added) };
+    const text = await this.text(name);
+    if (text === null) return null;
+    const part = { text, root: parsed(name, text) };
+    this.read.set(name, part);
+    return part;
+  }
+
+  /** A stored part's text, without parsing it; null if there is no such part. */
+  async text(name: string): Promise<string | null> {
+    const known = this.read.get(name)?.text ?? this.texts.get(name);
+    if (known !== undefined) return known;
     if (!this.zip.has(name)) return null;
     const bytes = await this.zip.read(name);
     if (!bytes) return null;
@@ -87,9 +101,8 @@ export class WordPackageWriter {
     if (!sameBytes(new TextEncoder().encode(text), bytes)) {
       throw new WordPartError(name, "isn't stored as UTF-8 text.");
     }
-    const part = { text, root: parsed(name, text) };
-    this.read.set(name, part);
-    return part;
+    this.texts.set(name, text);
+    return text;
   }
 
   /** Replaces a part's text. */
@@ -124,15 +137,13 @@ export class WordPackageWriter {
     if (!types) throw new WordPartError(CONTENT_TYPES_PART, "is missing.");
     const has = (name: string, test: (element: XmlElement) => boolean) =>
       descendants(types.root, name).some(test);
-    const queued = this.contentTypes.some((splice) =>
-      splice.text.includes(`PartName="/${escapeXml(part)}"`),
+    const queued = this.contentTypes.some((added) =>
+      added.includes(`PartName="/${escapeXml(part)}"`),
     );
     if (queued || has("Override", (each) => each.attrs.PartName === `/${part}`)) return;
-    this.contentTypes.push({
-      from: closingAt(types),
-      to: closingAt(types),
-      text: `<Override PartName="/${escapeXml(part)}" ContentType="${escapeXml(contentType)}"/>`,
-    });
+    this.contentTypes.push(
+      `<Override PartName="/${escapeXml(part)}" ContentType="${escapeXml(contentType)}"/>`,
+    );
   }
 
   /** Says which content type parts with this extension have, unless the package already does. */
@@ -143,15 +154,13 @@ export class WordPackageWriter {
     const known = descendants(types.root, "Default").some(
       (each) => each.attrs.Extension?.toLowerCase() === wanted,
     );
-    const queued = this.contentTypes.some((splice) =>
-      splice.text.includes(`Extension="${escapeXml(wanted)}"`),
+    const queued = this.contentTypes.some((added) =>
+      added.includes(`Extension="${escapeXml(wanted)}"`),
     );
     if (known || queued) return;
-    this.contentTypes.push({
-      from: closingAt(types),
-      to: closingAt(types),
-      text: `<Default Extension="${escapeXml(wanted)}" ContentType="${escapeXml(contentType)}"/>`,
-    });
+    this.contentTypes.push(
+      `<Default Extension="${escapeXml(wanted)}" ContentType="${escapeXml(contentType)}"/>`,
+    );
   }
 
   /** A free name for a new part, "word/media/image3.png" from "word/media/image", "png". */
@@ -162,14 +171,22 @@ export class WordPackageWriter {
     }
   }
 
-  /** The package with every change made, untouched entries copied byte for byte. */
-  async write(deflate: Deflate): Promise<Uint8Array> {
+  /**
+   * The package with every change made, untouched entries copied byte for
+   * byte. `check` sees each part written as text first, and may throw.
+   */
+  async write(deflate: Deflate, check: (name: string, text: string) => void): Promise<Uint8Array> {
     for (const relationships of this.relationships.values()) relationships.flush();
     if (this.contentTypes.length > 0) {
       const types = await this.part(CONTENT_TYPES_PART);
-      if (types) this.set(CONTENT_TYPES_PART, applySplices(types.text, this.contentTypes));
+      if (types) {
+        const added = appendInside(types.text, types.root, this.contentTypes.join(""));
+        this.set(CONTENT_TYPES_PART, applySplices(types.text, [added]));
+      }
       this.contentTypes = [];
     }
+    for (const [name, text] of this.changed) check(name, text);
+    for (const [name, data] of this.added) if (typeof data === "string") check(name, data);
     const entries: ZipWriteEntry[] = this.zip.names().map((name) => {
       const text = this.changed.get(name);
       if (text !== undefined) return { name, data: text };
@@ -182,9 +199,6 @@ export class WordPackageWriter {
   }
 }
 
-/** Where to add before a part's end tag. */
-const closingAt = (part: PartText) => endOf(part.root) - closeTag(part.root).length;
-
 function parsed(name: string, text: string): XmlElement {
   try {
     return parseXml(text);
@@ -193,11 +207,8 @@ function parsed(name: string, text: string): XmlElement {
   }
 }
 
-function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) return false;
-  for (let index = 0; index < a.length; index++) if (a[index] !== b[index]) return false;
-  return true;
-}
+const sameBytes = (a: Uint8Array, b: Uint8Array): boolean =>
+  Buffer.from(a.buffer, a.byteOffset, a.byteLength).equals(b);
 
 /** A relationship of a part: its target resolved to a part name, unless it is external. */
 export interface PartRelationship {
@@ -262,8 +273,7 @@ export class PartRelationships {
     this.added.length = 0;
     const { part } = this;
     if (part) {
-      const at = closingAt(part);
-      this.pkg.set(name, applySplices(part.text, [{ from: at, to: at, text: added }]));
+      this.pkg.set(name, applySplices(part.text, [appendInside(part.text, part.root, added)]));
     } else {
       this.pkg.add(
         name,

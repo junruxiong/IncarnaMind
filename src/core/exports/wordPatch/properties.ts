@@ -101,6 +101,9 @@ interface Child {
 
 /** Properties as a list of children, each as written, that changes are made to. */
 export class Properties {
+  /** Whether a change was made: if not, the properties are written as they were. */
+  changed = false;
+
   private constructor(
     private readonly tag: string,
     private readonly children: Child[],
@@ -114,6 +117,11 @@ export class Properties {
 
   static run(xml: string): Properties {
     return Properties.parse("w:rPr", xml, RUN_ORDER);
+  }
+
+  /** Other properties, whose children the schema puts in `order`. */
+  static ofOrder(tag: string, xml: string, order: readonly string[]): Properties {
+    return Properties.parse(tag, xml, order);
   }
 
   private static parse(tag: string, xml: string, order: readonly string[]): Properties {
@@ -138,9 +146,11 @@ export class Properties {
   set(name: string, xml: string): this {
     const at = this.children.findIndex((each) => each.name === name);
     if (at >= 0) {
+      if (this.children[at]?.xml !== xml) this.changed = true;
       this.children[at] = { name, xml };
       return this;
     }
+    this.changed = true;
     const rank = this.order.indexOf(name);
     const before = this.children.findIndex((each) => {
       const other = this.order.indexOf(each.name);
@@ -153,7 +163,10 @@ export class Properties {
 
   remove(...names: string[]): this {
     for (let at = this.children.length - 1; at >= 0; at--) {
-      if (names.includes(this.children[at]?.name ?? "")) this.children.splice(at, 1);
+      if (names.includes(this.children[at]?.name ?? "")) {
+        this.children.splice(at, 1);
+        this.changed = true;
+      }
     }
     return this;
   }
@@ -166,11 +179,10 @@ export class Properties {
 }
 
 /** The editor's marks that a run's own properties give its text, as the import reads them. */
-export const marksOfRun = (rPr: string): TextMarks =>
-  marksOf(rPr ? runMarks(parseXml(rPr)) : []);
+export const marksOfRun = (rPr: string): TextMarks => marksOf(rPr ? runMarks(parseXml(rPr)) : []);
 
 /** The value a child's `w:val` has, as written in its XML. */
-const valueOf = (xml: string | null) => {
+const valueIn = (xml: string | null) => {
   const value = xml && /\bw:val\s*=\s*"([^"]*)"/.exec(xml)?.[1];
   return value ? decodeEntities(value) : null;
 };
@@ -187,8 +199,11 @@ export function runPropertiesFor(rPr: string, to: TextMarks, linkStyle: string |
   const properties = Properties.run(rPr);
   const toggle = (on: boolean, was: boolean, names: string[], xml: string[]) => {
     if (on === was) return;
-    if (on) names.forEach((name, index) => properties.set(name, xml[index] as string));
-    else properties.remove(...names);
+    if (!on) {
+      properties.remove(...names);
+      return;
+    }
+    for (const [index, name] of names.entries()) properties.set(name, xml[index] as string);
   };
   toggle(to.bold, from.bold, ["w:b", "w:bCs"], ["<w:b/>", "<w:bCs/>"]);
   toggle(to.italic, from.italic, ["w:i", "w:iCs"], ["<w:i/>", "<w:iCs/>"]);
@@ -199,7 +214,7 @@ export function runPropertiesFor(rPr: string, to: TextMarks, linkStyle: string |
   }
   toggle(to.highlight, from.highlight, ["w:highlight"], ['<w:highlight w:val="yellow"/>']);
   if (to.code) properties.set("w:rFonts", CODE_FONT);
-  const style = valueOf(properties.get("w:rStyle"));
+  const style = valueIn(properties.get("w:rStyle"));
   if (to.link && linkStyle && !style) {
     properties.set("w:rStyle", `<w:rStyle w:val="${escapeXml(linkStyle)}"/>`);
   } else if (!to.link && linkStyle && style === linkStyle) {

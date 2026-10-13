@@ -13,9 +13,10 @@
 import type { MarkJSON, NodeJSON } from "../../../shared/blockJson";
 import { readWordAtom } from "../../../shared/wordFiles";
 import { IMAGE_NODE, WORD_ATOM_NODE } from "../../api";
+import type { Places } from "../../documents/formats/docxImport";
 import { elements, type XmlElement } from "../../documents/formats/xml";
 import type { Inline } from "../../mindText";
-import { diffSteps } from "../../proposals/diff";
+import { diffSteps, splitWords } from "../../proposals/diff";
 import { escapeXml } from "../wordml";
 import { marksOf, NO_MARKS, sameMarks, type TextMarks } from "./mind";
 import { runPropertiesFor } from "./properties";
@@ -91,7 +92,8 @@ export function baseTokens(
   for (const node of content) {
     const run = origins.get(node) ?? null;
     if (node.type === "text") tokens.push(...textTokens(node.text ?? "", marksOf(node.marks), run));
-    else if (node.type === "hardBreak") tokens.push({ ...char("\n", NO_MARKS, run), kind: "break", key: BREAK });
+    else if (node.type === "hardBreak")
+      tokens.push({ ...char("\n", NO_MARKS, run), kind: "break", key: BREAK });
     else {
       const source = sourceOf(node);
       if (source) tokens.push(atom(source));
@@ -143,9 +145,7 @@ export function currentTokens(
 export interface ParagraphContext {
   text: string;
   parents: ReadonlyMap<XmlElement, XmlElement>;
-  places: ReadonlyMap<string, XmlElement>;
-  /** Whether this paragraph writes an atom's XML; one it doesn't is left out. */
-  writes(source: string): boolean;
+  places: Places;
   /** A special's XML, from the native writer. */
   special(inline: Inline): string;
   /** Where an original hyperlink leads, as the import reads it. */
@@ -226,7 +226,14 @@ export function writeParagraph(
   for (let index = 0; index < children.length; ) {
     let to = index;
     for (const [from, last] of spans) if (from >= 0 && from <= to && last > to) to = last;
-    const piece: Piece = { from: index, to, tokens: [], frozen: false, dirty: false, written: false };
+    const piece: Piece = {
+      from: index,
+      to,
+      tokens: [],
+      frozen: false,
+      dirty: false,
+      written: false,
+    };
     for (let at = index; at <= to; at++) pieceOf[at] = piece;
     pieces.push(piece);
     index = to + 1;
@@ -246,85 +253,75 @@ export function writeParagraph(
     return from >= 0 ? pieceOf[from] : null;
   };
 
-  // What changed.
-  const writable = current.map((token) =>
-    token.kind === "atom" && token.source && !context.writes(token.source)
-      ? { ...token, key: `\u0003${token.key}` }
-      : token,
-  );
-  const steps = diffSteps(
-    baseList.map((token) => token.key),
-    writable.map((token) => token.key),
-  );
+  // What changed, word by word, as Proposals compare text.
+  const writable = current;
+  const steps = diffTokens(baseList, writable);
   /** For each current token, the base token it is (equal), or -1 (new). */
   const baseOf = new Array<number>(writable.length).fill(-1);
+  /** Each new token's child: that of the base token before it in the comparison, else after. */
+  const homeOf = new Array<Piece | null>(writable.length).fill(null);
+  /** Each character's formatting: its own run's; typed text takes the run of what it replaces, else of the character before it. */
+  const formatRun = new Array<XmlElement | null>(writable.length).fill(null);
   let x = 0;
   let y = 0;
+  let lastPiece: Piece | null = null;
+  let previousRun: XmlElement | null = null;
+  let replacing: XmlElement | null = null;
+  const waiting: number[] = [];
+  const isText = (token: Token | undefined) => token?.kind === "char" || token?.kind === "break";
   for (const step of steps) {
-    if (step === "equal") {
-      baseOf[y] = x;
-      const piece = pieceOfToken(x);
-      const was = baseList[x] as Token;
-      const now = writable[y] as Token;
-      if (piece && (was.kind === "char" || was.kind === "break") && !sameMarks(was.marks, now.marks)) {
-        piece.dirty = true;
+    if (step === "insert") {
+      homeOf[y] = lastPiece;
+      if (!lastPiece) waiting.push(y);
+      if (isText(writable[y])) {
+        formatRun[y] = replacing ?? previousRun;
+        previousRun = formatRun[y] ?? previousRun;
       }
-      x++;
       y++;
-    } else if (step === "delete") {
-      const piece = pieceOfToken(x);
-      if (piece) piece.dirty = true;
-      x++;
-    } else y++;
-  }
-
-  // Where each new token goes: inside a child (its neighbours both in it, or a link it continues), or between children.
-  const homeOf = new Array<Piece | null>(writable.length).fill(null);
-  for (let start = 0; start < writable.length; ) {
-    if (baseOf[start] !== -1) {
-      start++;
       continue;
     }
-    let end = start;
-    while (end < writable.length && baseOf[end] === -1) end++;
-    const before = start > 0 ? pieceOfToken(baseOf[start - 1] as number) : null;
-    const after = end < writable.length ? pieceOfToken(baseOf[end] as number) : null;
-    const inserted = writable.slice(start, end);
-    const texts = inserted.every((token) => token.kind === "char" || token.kind === "break");
-    const link = texts ? (inserted[0]?.marks.link ?? null) : null;
-    const sameLink = link !== null && inserted.every((token) => token.marks.link === link);
-    const linkOf = (index: number) => (baseList[baseOf[index] as number] as Token).marks.link;
-    let home: Piece | null = null;
-    if (before && before === after) home = before;
-    else if (sameLink && before && start > 0 && linkOf(start - 1) === link) home = before;
-    else if (sameLink && after && end < writable.length && linkOf(end) === link) home = after;
-    if (home) {
-      home.dirty = true;
-      for (let at = start; at < end; at++) homeOf[at] = home;
+    const piece = pieceOfToken(x);
+    const was = baseList[x] as Token;
+    if (step === "equal") {
+      baseOf[y] = x;
+      const now = writable[y] as Token;
+      if (piece && isText(was) && !sameMarks(was.marks, now.marks)) piece.dirty = true;
+      if (isText(was)) {
+        formatRun[y] = was.run;
+        previousRun = was.run ?? previousRun;
+      }
+      replacing = null;
+      y++;
+    } else {
+      if (piece) piece.dirty = true;
+      if (isText(was) && replacing === null) replacing = was.run;
     }
-    start = end;
+    if (piece) {
+      for (const at of waiting) homeOf[at] = piece;
+      waiting.length = 0;
+      lastPiece = piece;
+    }
+    x++;
   }
-
-  if (base && !input.pPrChanged && steps.every((step) => step === "equal") && pieces.every((piece) => !piece.dirty)) {
-    return { xml: sliceOf(text, base.element), lost: 0 };
+  for (const [index, home] of homeOf.entries()) {
+    if (baseOf[index] !== -1 || !home) continue;
+    if (home.frozen) homeOf[index] = null;
+    else home.dirty = true;
   }
-
-  // Each character's formatting: its own run's, else the character before it, else the one after.
-  const formatRun = new Array<XmlElement | null>(writable.length).fill(null);
-  let previous: XmlElement | null = null;
-  writable.forEach((token, index) => {
-    if (token.kind !== "char" && token.kind !== "break") return;
-    const from = baseOf[index] as number;
-    previous = from >= 0 ? ((baseList[from] as Token).run ?? previous) : previous;
-    formatRun[index] = previous;
-  });
   let following: XmlElement | null = null;
   for (let index = writable.length - 1; index >= 0; index--) {
-    const token = writable[index] as Token;
-    if (token.kind !== "char" && token.kind !== "break") continue;
-    const from = baseOf[index] as number;
-    if (from >= 0) following = (baseList[from] as Token).run ?? following;
+    if (!isText(writable[index])) continue;
+    if (baseOf[index] !== -1) following = formatRun[index] ?? following;
     formatRun[index] ??= following;
+  }
+
+  if (
+    base &&
+    !input.pPrChanged &&
+    steps.every((step) => step === "equal") &&
+    pieces.every((piece) => !piece.dirty)
+  ) {
+    return { xml: sliceOf(text, base.element), lost: 0 };
   }
 
   const writer = new RunWriter(input, context, scope, element);
@@ -336,7 +333,10 @@ export function writeParagraph(
     const from = children[piece.from] as XmlElement;
     const to = children[piece.to] as XmlElement;
     out += writer.flush();
-    const gapStart = lastVerbatim >= 0 && lastVerbatim === piece.from - 1 ? endOf(children[lastVerbatim] as XmlElement) : startOf(from);
+    const gapStart =
+      lastVerbatim >= 0 && lastVerbatim === piece.from - 1
+        ? endOf(children[lastVerbatim] as XmlElement)
+        : startOf(from);
     out += text.slice(gapStart, endOf(to));
     lastVerbatim = piece.to;
     piece.written = true;
@@ -387,6 +387,54 @@ export function writeParagraph(
   return { xml: `${open}${input.pPr}${out}</w:p>`, lost };
 }
 
+/**
+ * The steps from one paragraph's tokens to another's, comparing text by words
+ * (`splitWords`), so a word replaced is replaced whole rather than kept letter
+ * by letter where the two happen to share some.
+ */
+function diffTokens(a: readonly Token[], b: readonly Token[]): ReturnType<typeof diffSteps> {
+  const unitsOf = (tokens: readonly Token[]) => {
+    const units: { key: string; length: number }[] = [];
+    for (let index = 0; index < tokens.length; ) {
+      const token = tokens[index] as Token;
+      if (token.kind !== "char") {
+        units.push({ key: token.key, length: 1 });
+        index++;
+        continue;
+      }
+      let end = index;
+      let text = "";
+      for (; tokens[end]?.kind === "char"; end++) text += (tokens[end] as Token).char;
+      for (const word of splitWords(text))
+        units.push({ key: word, length: Array.from(word).length });
+      index = end;
+    }
+    return units;
+  };
+  const left = unitsOf(a);
+  const right = unitsOf(b);
+  const steps: ReturnType<typeof diffSteps> = [];
+  let x = 0;
+  let y = 0;
+  for (const step of diffSteps(
+    left.map((unit) => unit.key),
+    right.map((unit) => unit.key),
+  )) {
+    if (step === "equal") {
+      for (let at = 0; at < (left[x] as { length: number }).length; at++) steps.push("equal");
+      x++;
+      y++;
+    } else if (step === "delete") {
+      for (let at = 0; at < (left[x] as { length: number }).length; at++) steps.push("delete");
+      x++;
+    } else {
+      for (let at = 0; at < (right[y] as { length: number }).length; at++) steps.push("insert");
+      y++;
+    }
+  }
+  return steps;
+}
+
 /** A wrapper open around runs: an original element (a hyperlink, a smart tag), or a new link. */
 interface Wrapper {
   key: XmlElement | string;
@@ -398,7 +446,13 @@ interface Wrapper {
 class RunWriter {
   private out = "";
   private open: Wrapper[] = [];
-  private run: { key: string; rPr: string; startTag: string; content: string } | null = null;
+  private run: {
+    key: string;
+    rPr: string;
+    startTag: string;
+    content: string;
+    text: string;
+  } | null = null;
 
   constructor(
     private readonly input: ParagraphInput,
@@ -411,7 +465,11 @@ class RunWriter {
   private wrappersOf(element: XmlElement | null): XmlElement[] {
     const chain: XmlElement[] = [];
     if (!this.paragraph || !element) return chain;
-    for (let at = this.context.parents.get(element); at && at !== this.paragraph; at = this.context.parents.get(at)) {
+    for (
+      let at = this.context.parents.get(element);
+      at && at !== this.paragraph;
+      at = this.context.parents.get(at)
+    ) {
       chain.unshift(at);
     }
     return this.inside(element) ? chain : [];
@@ -436,7 +494,12 @@ class RunWriter {
   /** Opens and closes wrappers until exactly `wanted` are open. */
   private enter(wanted: Wrapper[]): void {
     let same = 0;
-    while (same < this.open.length && same < wanted.length && this.open[same]?.key === wanted[same]?.key) same++;
+    while (
+      same < this.open.length &&
+      same < wanted.length &&
+      this.open[same]?.key === wanted[same]?.key
+    )
+      same++;
     if (same === this.open.length && same === wanted.length) return;
     this.endRun();
     for (let at = this.open.length - 1; at >= same; at--) this.out += this.open[at]?.close ?? "";
@@ -446,7 +509,7 @@ class RunWriter {
 
   private endRun(): void {
     if (!this.run) return;
-    this.out += `${this.run.startTag}${this.run.rPr}${this.run.content}</w:r>`;
+    this.out += `${this.run.startTag}${this.run.rPr}${this.run.content}${textElement(this.run.text)}</w:r>`;
     this.run = null;
   }
 
@@ -463,26 +526,48 @@ class RunWriter {
   private addText(token: Token, formatRun: XmlElement | null): void {
     const { text, hrefOf, linkStyle, newLink } = this.context;
     const original = this.wrappersOf(formatRun);
-    const inheritedLink = original.filter((each) => each.name === "w:hyperlink").map(hrefOf).at(-1) ?? null;
-    const kept = original.filter((each) => each.name !== "w:hyperlink" || hrefOf(each) === token.marks.link);
+    const inheritedLink =
+      original
+        .filter((each) => each.name === "w:hyperlink")
+        .map(hrefOf)
+        .at(-1) ?? null;
+    const kept = original.filter(
+      (each) => each.name !== "w:hyperlink" || hrefOf(each) === token.marks.link,
+    );
     const wanted = kept.map((each) => this.wrapper(each));
     const linked = kept.some((each) => each.name === "w:hyperlink");
     if (token.marks.link && !linked) {
-      wanted.push({ key: `link:${token.marks.link}`, open: newLink(token.marks.link), close: "</w:hyperlink>" });
+      wanted.push({
+        key: `link:${token.marks.link}`,
+        open: newLink(token.marks.link),
+        close: "</w:hyperlink>",
+      });
     }
     this.enter(wanted);
 
-    const rPrElement = formatRun ? elements(formatRun).find((each) => each.name === "w:rPr") : undefined;
-    const baseRPr = formatRun ? (rPrElement ? sliceOf(text, rPrElement) : "") : this.input.fallbackRun;
+    const rPrElement = formatRun
+      ? elements(formatRun).find((each) => each.name === "w:rPr")
+      : undefined;
+    const baseRPr = formatRun
+      ? rPrElement
+        ? sliceOf(text, rPrElement)
+        : ""
+      : this.input.fallbackRun;
     const linkChanged = token.marks.link !== inheritedLink;
     const rPr = runPropertiesFor(baseRPr, token.marks, linkChanged ? linkStyle : null);
     const startTag = formatRun ? openTag(text, formatRun) : "<w:r>";
     const key = `${startTag}\u0000${rPr}`;
     if (this.run?.key !== key) {
       this.endRun();
-      this.run = { key, rPr, startTag, content: "" };
+      this.run = { key, rPr, startTag, content: "", text: "" };
     }
-    this.run.content += contentOf(token);
+    const element = elementOf(token);
+    if (element === null) {
+      this.run.text += token.char;
+    } else {
+      this.run.content += textElement(this.run.text) + element;
+      this.run.text = "";
+    }
   }
 
   private addAtom(source: string): void {
@@ -504,7 +589,9 @@ class RunWriter {
     }
     this.enter(this.wrappersOf(around).map((each) => this.wrapper(each)));
     this.endRun();
-    this.out += this.inside(first) ? xml : rescoped(xml, scopeOf(parent ?? first, parents), this.scope);
+    this.out += this.inside(first)
+      ? xml
+      : rescoped(xml, scopeOf(parent ?? first, parents), this.scope);
   }
 
   /** What was written since the last flush, every wrapper closed. */
@@ -517,8 +604,12 @@ class RunWriter {
   }
 }
 
-/** A character or a line break as a run's content. */
-function contentOf(token: Token): string {
+/** Text as a run's `w:t`; none for no text. */
+const textElement = (text: string) =>
+  text ? `<w:t xml:space="preserve">${escapeXml(text)}</w:t>` : "";
+
+/** The element a character is written as, if not as text: a tab, a line break, Word's hyphens. */
+function elementOf(token: Token): string | null {
   if (token.kind === "break") return "<w:br/>";
   switch (token.char) {
     case "\t":
@@ -530,6 +621,6 @@ function contentOf(token: Token): string {
     case "\n":
       return "<w:br/>";
     default:
-      return `<w:t xml:space="preserve">${escapeXml(token.char)}</w:t>`;
+      return null;
   }
 }
