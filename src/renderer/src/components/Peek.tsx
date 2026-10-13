@@ -297,7 +297,7 @@ function PeekCard({ target }: { target: PeekTarget }) {
         </Fact>
         <Fact label={t("info.added")} testId="peek-added">
           <span className="flex min-w-0 items-baseline gap-1">
-            <span className="shrink-0">{addedDate(document.createdAt, language)}</span>
+            <span className="shrink-0">{addedDate(document.createdAt, language, "medium")}</span>
             <span aria-hidden="true" className="shrink-0 text-ink-meta">
               ·
             </span>

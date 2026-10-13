@@ -1,6 +1,53 @@
 import { describe, expect, test } from "vitest";
-import { fileDate, infoLabelKey, showFileLabelKey } from "../../src/renderer/src/fileInfo";
+import {
+  addedDate,
+  documentSummary,
+  fileDate,
+  infoLabelKey,
+  showFileLabelKey,
+} from "../../src/renderer/src/fileInfo";
 import { translate } from "../../src/shared/i18n";
+
+test("when something was added is a day, in long or medium words", () => {
+  expect(addedDate("2026-10-13T12:00:00Z", "en")).toBe("October 13, 2026");
+  expect(addedDate("2026-10-13T12:00:00Z", "en", "medium")).toBe("Oct 13, 2026");
+});
+
+describe("a Document's summary line", () => {
+  const english = (
+    key: Parameters<typeof translate>[1],
+    params?: Parameters<typeof translate>[2],
+  ) => translate("en", key, params);
+  const chinese = (
+    key: Parameters<typeof translate>[1],
+    params?: Parameters<typeof translate>[2],
+  ) => translate("zh-CN", key, params);
+
+  test("gives a PDF's pages, a deck's slides and a workbook's sheets, and nothing for a Word file", () => {
+    expect(
+      documentSummary({ kind: "pdf", pageCount: 38, size: 2_400_000 }, null, english, "en"),
+    ).toBe("PDF · 38 pages · 2.4 MB");
+    expect(
+      documentSummary(
+        { kind: "pptx", pageCount: null, size: 48_000 },
+        { key: "info.slides", count: 1 },
+        english,
+        "en",
+      ),
+    ).toBe("PowerPoint · 1 slide · 48 KB");
+    expect(
+      documentSummary(
+        { kind: "xlsx", pageCount: null, size: 9_000 },
+        { key: "info.sheets", count: 3 },
+        chinese,
+        "zh-CN",
+      ),
+    ).toBe("Excel · 3 个工作表 · 9 KB");
+    expect(
+      documentSummary({ kind: "docx", pageCount: null, size: 12_000 }, null, english, "en"),
+    ).toBe("Word · 12 KB");
+  });
+});
 
 describe("a file's own date", () => {
   test("is shown at the precision the file gave", () => {
