@@ -22,6 +22,7 @@ function accessAnswering(outcome: OutsideAnswer) {
       throw new Error("Not called.");
     },
     minds: () => [],
+    liveDocuments: () => [],
     show: () => undefined,
     mindMarkdown: () => "",
     answer: async () => outcome,

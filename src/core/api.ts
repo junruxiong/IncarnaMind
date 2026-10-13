@@ -3673,14 +3673,25 @@ export type ClaimCheckResult =
       excluded: LeftOutDocument[];
     };
 
+/**
+ * What a sentence already cites: a Citation's quote, and its Document as it was cited. With
+ * `documentId` (or `contentHash`) the check names the Document as it is named now.
+ */
+export interface CitedQuote {
+  documentName: string;
+  quote: string;
+  documentId?: string;
+  contentHash?: string;
+}
+
 /** What the claim-check function checks (`checkClaim`). */
 export interface CheckClaimInput {
   /** The sentence, or claim, to check: the User's own words. */
   claim: string;
   /** The paragraph it is in, for what its words refer to. */
   context?: string;
-  /** What the sentence already cites, for Check against Documents: each Citation's Document and quote. */
-  cited?: { documentName: string; quote: string }[];
+  /** What the sentence already cites, for Check against Documents. */
+  cited?: CitedQuote[];
   /** Where to look. None: every Document. */
   scope?: SearchScope | null;
   /** The document being checked, which is never its own evidence (#97). */

@@ -10,6 +10,7 @@ import { INLINE_NODE, sentenceSpans } from "../../../shared/sentences";
 import {
   BLOCK_ID_ATTRIBUTE,
   CITATION_NODE,
+  type CitedQuote,
   CLAIM_CHECK_MARK,
   type ClaimCheckAttributes,
   PROPOSAL_ATTRIBUTE,
@@ -39,7 +40,7 @@ export interface SelectedSentence {
   /** Its paragraph's text, for what its words refer to. */
   context: string;
   /** What its Citations quote. */
-  cited: { documentName: string; quote: string }[];
+  cited: CitedQuote[];
 }
 
 export type SelectedSentences =
@@ -90,13 +91,20 @@ function holdsProposal(element: Y.XmlElement, from: number, to: number): boolean
 }
 
 /** What the Citations in `from`..`to` of a Block quote. */
-function citedIn(element: Y.XmlElement, from: number, to: number) {
+function citedIn(element: Y.XmlElement, from: number, to: number): CitedQuote[] {
   return layout(element).flatMap(({ node, start }) => {
     if (start < from || start >= to || !(node instanceof Y.XmlElement)) return [];
     if (node.nodeName !== CITATION_NODE) return [];
-    const { documentName, quote } = node.getAttributes() as Attributes;
+    const { documentId, documentName, contentHash, quote } = node.getAttributes() as Attributes;
     return typeof quote === "string" && quote !== ""
-      ? [{ documentName: typeof documentName === "string" ? documentName : "", quote }]
+      ? [
+          {
+            documentName: typeof documentName === "string" ? documentName : "",
+            quote,
+            ...(typeof documentId === "string" && { documentId }),
+            ...(typeof contentHash === "string" && { contentHash }),
+          },
+        ]
       : [];
   });
 }
