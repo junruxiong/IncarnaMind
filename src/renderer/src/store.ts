@@ -85,10 +85,14 @@ export interface ViewerTarget extends DocumentLocation {
  * - "list": from the sidebar, ⌘K or a test, as a preview beside the Mind;
  * - "library": from a Library row in group `from`, as a preview to its right;
  * - "here": a normal tab in group `from` (⌘-click in the Library).
+ *
+ * A Document already open goes to its tab, in any group. `keep`, for
+ * "citation": a preview there is kept (Open the page, in a Citation's card).
  */
 export interface OpenDocumentHow {
   as: "citation" | "list" | "library" | "here";
   from?: string;
+  keep?: boolean;
 }
 
 interface AppState extends LayoutSlice {
@@ -141,8 +145,6 @@ interface AppState extends LayoutSlice {
    * of them (`NEEDS_REVIEW` stands for a Tag awaiting review). Empty: all.
    */
   tagFilter: readonly string[];
-  /** The Library's Documents the User selected, e.g. to tag them at once. */
-  selectedDocuments: ReadonlySet<string>;
   tagsDialogOpen: boolean;
   library: LibrarySnapshot | null;
   /** What the Library shows: "all", "unsorted", "new" (the new-Folder form), a Folder's id, or `LIBRARY_DELETED`. */
@@ -193,6 +195,8 @@ interface AppState extends LayoutSlice {
   editFolder(folderId: string, input: LibraryGroupInput): Promise<void>;
   /** Deletes a Folder, with Undo: its Documents and Minds go to Not in a Folder. */
   deleteFolder(folderId: string): Promise<void>;
+  /** Lists a Mind just made and opens it in a new tab after the shown one, in the focused group or `groupId`. */
+  showNewMind(mind: Mind, groupId?: string): Promise<void>;
   /** Called once the new Mind's title has the focus. */
   titleFocused(): void;
   /** Starts a Question at the end of the open Mind, or of a new Mind if none is open. */
@@ -326,9 +330,6 @@ interface AppState extends LayoutSlice {
   removeTagFromDocuments(documentIds: readonly string[], tagId: string): Promise<void>;
   /** Creates a Tag; the list follows the core's event. Throws what the core throws. */
   createTag(name: string, description?: string): Promise<Tag>;
-  /** Selects Documents in the Library, or deselects them. */
-  selectDocuments(documentIds: readonly string[], selected: boolean): void;
-  clearSelection(): void;
   /** Recomputes the automatic Tags of these Documents, or of all of them. */
   retagDocuments(documentIds?: string[]): Promise<void>;
   openTagsDialog(): void;
@@ -634,7 +635,6 @@ export const useAppStore = create<AppState>()((set, get) => {
     linkQueue: [],
     tags: [],
     tagFilter: [],
-    selectedDocuments: new Set(),
     tagsDialogOpen: false,
     library: null,
     libraryFilter: "all",
@@ -656,11 +656,7 @@ export const useAppStore = create<AppState>()((set, get) => {
       });
     },
     openLibrary: (filter = "all", options) => {
-      set((state) => ({
-        libraryFilter: filter,
-        // Another Folder: what was selected in this one isn't in view any more.
-        ...(filter !== state.libraryFilter && { selectedDocuments: new Set<string>() }),
-      }));
+      set({ libraryFilter: filter });
       void get().changeLayout({
         type: "open",
         item: { kind: "library" },
@@ -745,19 +741,23 @@ export const useAppStore = create<AppState>()((set, get) => {
           ...(options?.title && { title: options.title }),
           ...(options?.folderId && { folderId: options.folderId }),
         });
-        // The "minds.changed" event may have listed it already.
-        set((state) => ({
-          minds: [mind, ...state.minds.filter((each) => each.id !== mind.id)],
-          ...(options?.startQuestion
+        set(
+          options?.startQuestion
             ? { questionToStart: { mindId: mind.id, scope: options.scope ?? null } }
-            : { titleToFocus: mind.id }),
-        }));
-        await get().changeLayout({
-          type: "open",
-          item: { kind: "mind", mindId: mind.id },
-          where: { in: "group", ...(options?.groupId && { groupId: options.groupId }) },
-        });
+            : { titleToFocus: mind.id },
+        );
+        await get().showNewMind(mind, options?.groupId);
       }),
+
+    showNewMind: async (mind, groupId) => {
+      // The "minds.changed" event may have listed it already.
+      set((state) => ({ minds: [mind, ...state.minds.filter((each) => each.id !== mind.id)] }));
+      await get().changeLayout({
+        type: "open",
+        item: { kind: "mind", mindId: mind.id },
+        where: { in: "group", ...(groupId && { groupId }) },
+      });
+    },
 
     titleFocused: () => set({ titleToFocus: null }),
 
@@ -966,6 +966,7 @@ export const useAppStore = create<AppState>()((set, get) => {
       const at = Object.keys(place).length > 0 ? { place } : {};
       // A merged window shows one group: what opens to the side comes to the front.
       const merged = groupsMerged();
+      const keep = how.keep ? { keep: true } : {};
       const change: LayoutChange =
         how.as === "here"
           ? {
@@ -981,6 +982,7 @@ export const useAppStore = create<AppState>()((set, get) => {
                 type: "open",
                 item,
                 ...at,
+                ...keep,
                 preview: true,
                 where: { in: "side", ...(how.from && { from: how.from }) },
                 focus: merged,
@@ -1215,19 +1217,6 @@ export const useAppStore = create<AppState>()((set, get) => {
             ),
       }));
       return tag;
-    },
-
-    selectDocuments(documentIds, selected) {
-      const next = new Set(get().selectedDocuments);
-      for (const id of documentIds) {
-        if (selected) next.add(id);
-        else next.delete(id);
-      }
-      set({ selectedDocuments: next });
-    },
-
-    clearSelection() {
-      if (get().selectedDocuments.size > 0) set({ selectedDocuments: new Set() });
     },
 
     retagDocuments: (documentIds) =>

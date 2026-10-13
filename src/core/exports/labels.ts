@@ -3,6 +3,8 @@ import type { Language } from "../language";
 
 export interface ExportLabels {
   question: string;
+  notes: string;
+  backToText: string;
   unverified: string;
   chart(title: string): string;
   /** With the space that follows it, if any: "Source: ", "数据来源：". */
@@ -16,6 +18,8 @@ export function exportLabels(language: Language): ExportLabels {
     translate(language, key, params);
   return {
     question: t("export.question"),
+    notes: t("export.html.notes"),
+    backToText: t("export.html.back"),
     unverified: t("export.unverified"),
     chart: (title) => (title ? t("export.chart.titled", { title }) : t("export.chart")),
     // No space after full-width punctuation (docs/agents/zh-CN.md).

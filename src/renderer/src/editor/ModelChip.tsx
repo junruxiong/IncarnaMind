@@ -7,6 +7,7 @@ import type { MessageKey } from "../../../shared/i18n";
 import { mindModelOf, observeMindModel, setMindModel } from "../../../shared/mindModel";
 import { useAnswers } from "../answers";
 import { CheckLineIcon } from "../components/lineIcons";
+import { OnThisComputer } from "../components/OnThisComputer";
 import { ChatGptMark } from "../components/providers/ChatGptMark";
 import {
   ChatGptSignInState,
@@ -65,7 +66,7 @@ const same = (a: ChatModelChoice | null, b: ChatModelChoice | null) =>
   a !== null && b !== null && a.providerId === b.providerId && a.modelId === b.modelId;
 
 /** The model chosen for the Mind, kept up to date as it changes here or elsewhere. */
-function useMindModel(doc: Y.Doc): ChatModelChoice | null {
+export function useMindModel(doc: Y.Doc): ChatModelChoice | null {
   const [choice, setChoice] = useState(() => mindModelOf(doc));
   useEffect(() => {
     setChoice(mindModelOf(doc));
@@ -230,6 +231,7 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc; onChosen(): void }) {
                           provider={each}
                           modelId={modelId}
                           hint={t(HINTS[group])}
+                          onThisComputer={group === "local"}
                           checked={same({ providerId: each.id, modelId }, current)}
                           // Local mode: only a model on this computer can be asked.
                           unavailable={localMode && group !== "local"}
@@ -279,6 +281,7 @@ function ModelItem({
   provider,
   modelId,
   hint,
+  onThisComputer = false,
   checked,
   unavailable,
   onChoose,
@@ -286,6 +289,8 @@ function ModelItem({
   provider: ChatProvider;
   modelId: string;
   hint: string;
+  /** The hint says it stays on this computer: it takes that mark. */
+  onThisComputer?: boolean;
   checked: boolean;
   unavailable: boolean;
   onChoose(choice: ChatModelChoice): void;
@@ -313,7 +318,13 @@ function ModelItem({
       <span className="model-menu-name">
         <span className="truncate">{modelId}</span>
         <span className="model-menu-hint">
-          {unavailable ? t("composer.model.localModeOff") : hint}
+          {unavailable ? (
+            t("composer.model.localModeOff")
+          ) : onThisComputer ? (
+            <OnThisComputer>{hint}</OnThisComputer>
+          ) : (
+            hint
+          )}
         </span>
       </span>
       <span className="model-menu-provider">{providerName(provider, t)}</span>

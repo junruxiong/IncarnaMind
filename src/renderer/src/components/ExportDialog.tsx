@@ -34,6 +34,7 @@ import { useModal } from "./useModal";
 const FORMAT_NOTES: Readonly<Record<ExportFormat, MessageKey>> = {
   docx: "export.options.docx",
   pdf: "export.options.pdf",
+  html: "export.options.html",
   markdown: "export.options.markdown",
 };
 
