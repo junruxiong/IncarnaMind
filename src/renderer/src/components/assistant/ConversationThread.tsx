@@ -93,7 +93,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
     if (scroller && (atFoot.current || asking) && !sought) {
       scroller.scrollTop = scroller.scrollHeight;
     }
-  }, [messages, asking, sought, allTasks]);
+  }, [messages, asking, sought]);
 
   // A link back led here: that Answer comes into view, flashed, once it shows (its conversation's
   // messages may come a moment after it is opened).
