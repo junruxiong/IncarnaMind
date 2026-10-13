@@ -15,9 +15,10 @@
  *   again after a pause when its provider limits requests, and stops the Task
  *   at the monthly cap or a plan's limit (../runs/stop). Quit or paused, the
  *   Task goes on from the first step not done.
+ * - Then it files the web pages it saved and writes its cited draft (./finish).
  */
+import { randomUUID } from "node:crypto";
 import { generateText } from "ai";
-import type { MessageKey, MessageParams } from "../../shared/i18n";
 import {
   MAX_RESEARCH_STEP,
   MAX_RESEARCH_STEPS,
@@ -53,6 +54,15 @@ import type { StepRecord } from "../runs/journal";
 import { RunItemError, RunItemGaveWay, runItems } from "../runs/stop";
 import type { TaskEnd, TaskKind, TaskRun } from "../runs/tasks";
 import { parseSearchScope } from "../scope";
+import {
+  DRAFT_STEP,
+  type FinishOptions,
+  fileSources,
+  SAVE_STEP,
+  savedOf,
+  writeDraft,
+  writtenOf,
+} from "./finish";
 import { notesOf, PLAN_INSTRUCTIONS, planPrompt, readPlan, stepContext } from "./prompt";
 
 /** A plan that takes longer than this (a local model loading) fails. */
@@ -67,6 +77,8 @@ interface ResearchInput {
   scope: SearchScope | null;
   providerId: string;
   modelId: string;
+  /** The request its draft's changes are made under: one draft, however often it goes on. */
+  draftRequest: string;
 }
 
 /** What a step found: its notes, and the Documents it cited or read. */
@@ -81,7 +93,7 @@ type CallStep =
   | { kind: "read"; name: string }
   | { kind: "unread"; address: string };
 
-export interface ResearchOptions {
+export interface ResearchOptions extends FinishOptions {
   /** Throws unless the Mind exists and this version may write to it; returns its id. */
   requireMind(mindId: unknown): string;
   chat: {
@@ -102,7 +114,15 @@ export interface ResearchOptions {
       signal: AbortSignal;
       onCall(call: AnswerToolCall): void;
     }): Promise<CellAnswer>;
+    answerCell(input: {
+      context: QuestionContext;
+      documentIds: string[];
+      model: ChatModelChoice;
+      signal: AbortSignal;
+    }): Promise<CellAnswer>;
   };
+  /** A Mind's name, as the window shows it; null once it is gone. */
+  mindName(mindId: string): string | null;
   /** The ids of the live Documents a Search scope covers; null with none (every Document). */
   resolveScope(scope: SearchScope): string[] | null;
   tasks: {
@@ -110,8 +130,6 @@ export interface ResearchOptions {
     /** A Task's journal, in the order its steps first started. */
     steps(taskId: string): StepRecord[];
   };
-  /** In the User's language. */
-  say(key: MessageKey, params?: MessageParams): string;
 }
 
 /** Text on one line, not empty and at most `max` characters; else `wording` says so. */
@@ -174,7 +192,7 @@ function parseTarget(value: unknown): ResearchTarget {
 
 function inputOf(input: unknown): ResearchInput | null {
   if (!isRecord(input) || !isRecord(input.plan) || !isRecord(input.sources)) return null;
-  const { topic, plan, sources, writeInto, scope, providerId, modelId } = input;
+  const { topic, plan, sources, writeInto, scope, providerId, modelId, draftRequest } = input;
   if (
     typeof topic !== "string" ||
     typeof plan.title !== "string" ||
@@ -183,7 +201,8 @@ function inputOf(input: unknown): ResearchInput | null {
     typeof sources.web !== "boolean" ||
     typeof sources.library !== "boolean" ||
     typeof providerId !== "string" ||
-    typeof modelId !== "string"
+    typeof modelId !== "string" ||
+    typeof draftRequest !== "string"
   ) {
     return null;
   }
@@ -203,6 +222,7 @@ function inputOf(input: unknown): ResearchInput | null {
     scope: within,
     providerId,
     modelId,
+    draftRequest,
   };
 }
 
@@ -293,6 +313,26 @@ export function createResearch(options: ResearchOptions) {
     if (key.startsWith("step:")) {
       return input?.plan.steps[Number(key.slice("step:".length))] ?? key;
     }
+    if (key === SAVE_STEP) {
+      const saved = step?.status === "completed" ? savedOf(step.result) : null;
+      if (!saved) return options.say("research.step.saving");
+      if (saved.documents === 0) return options.say("research.step.savedNone");
+      return options.say(
+        saved.documents === 1 ? "research.step.saved.one" : "research.step.saved.other",
+        { count: saved.documents, folder: saved.folder },
+      );
+    }
+    if (key === DRAFT_STEP) {
+      const written = step?.status === "completed" ? writtenOf(step.result) : null;
+      if (!written) return options.say("research.step.writing");
+      return options.say(
+        written.changes === 1 ? "research.step.wrote.one" : "research.step.wrote.other",
+        {
+          count: written.changes,
+          mind: options.mindName(written.mindId) ?? options.say("mind.untitled"),
+        },
+      );
+    }
     const call = callStepFrom(step?.result);
     if (!call) return key;
     switch (call.kind) {
@@ -306,6 +346,53 @@ export function createResearch(options: ResearchOptions) {
         return options.say("research.step.unread", { host: hostOf(call.address) });
     }
   }
+
+  /**
+   * Runs an Answer of the Task's in its turn, below Answers, giving way to
+   * one when its model is on this computer, tried again after a provider's
+   * rate limit: its Answer, why it failed, or how the Task ends (the monthly
+   * cap or a plan's limit pauses it; a stop stops it).
+   */
+  const answering =
+    (task: TaskRun, local: boolean) =>
+    async (
+      run: (signal: AbortSignal) => Promise<CellAnswer>,
+    ): Promise<{ answer: CellAnswer } | { failed: string } | { end: TaskEnd }> => {
+      const { outcomes, stop } = await runItems(
+        [run],
+        async () => {
+          const turn = await task.turn(local);
+          try {
+            const answer = await run(AbortSignal.any([task.signal, turn.signal]));
+            if (turn.signal.aborted && !task.signal.aborted) throw new RunItemGaveWay();
+            if (answer.status === "stopped") throw new DOMException("Stopped.", "AbortError");
+            if (answer.status === "failed" && answer.error) throw new RunItemError(answer.error);
+            return answer;
+          } catch (error) {
+            if (turn.signal.aborted && !task.signal.aborted) throw new RunItemGaveWay();
+            throw error;
+          } finally {
+            turn.end();
+          }
+        },
+        { signal: task.signal },
+      );
+      if (stop) {
+        return {
+          end: {
+            status: "paused",
+            reason: stop.reason,
+            resetsAt: stop.reason === "plan-limit" ? stop.resetsAt : null,
+          },
+        };
+      }
+      const outcome = outcomes[0];
+      if (!outcome || outcome.status === "stopped" || outcome.status === "not-checked") {
+        return { end: { status: "stopped" } };
+      }
+      if (outcome.status === "failed") return { failed: outcome.error.kind };
+      return { answer: outcome.value };
+    };
 
   /** Does one step, from where the journal is: its Answer, and a step for each search and page read. */
   async function doStep(
@@ -349,51 +436,25 @@ export function createResearch(options: ResearchOptions) {
         shown,
       );
     };
-    const { outcomes, stop } = await runItems(
-      [index],
-      async () => {
-        const turn = await task.turn(local);
-        try {
-          const answer = await options.answers.answerResearch({
-            mindId: task.mindId ?? "",
-            context,
-            documentIds,
-            web: input.sources.web,
-            model,
-            signal: AbortSignal.any([task.signal, turn.signal]),
-            onCall,
-          });
-          if (turn.signal.aborted && !task.signal.aborted) throw new RunItemGaveWay();
-          if (answer.status === "stopped") throw new DOMException("Stopped.", "AbortError");
-          if (answer.status === "failed" && answer.error) throw new RunItemError(answer.error);
-          return answer;
-        } catch (error) {
-          if (turn.signal.aborted && !task.signal.aborted) throw new RunItemGaveWay();
-          throw error;
-        } finally {
-          turn.end();
-        }
-      },
-      { signal: task.signal },
+    const result = await answering(
+      task,
+      local,
+    )((signal) =>
+      options.answers.answerResearch({
+        mindId: task.mindId ?? "",
+        context,
+        documentIds,
+        web: input.sources.web,
+        model,
+        signal,
+        onCall,
+      }),
     );
-    if (stop) {
-      return {
-        end: {
-          status: "paused",
-          reason: stop.reason,
-          resetsAt: stop.reason === "plan-limit" ? stop.resetsAt : null,
-        },
-      };
+    if (!("answer" in result)) {
+      if ("failed" in result) task.settled(key, "failed", { problem: result.failed });
+      return result;
     }
-    const outcome = outcomes[0];
-    if (!outcome || outcome.status === "stopped" || outcome.status === "not-checked") {
-      return { end: { status: "stopped" } };
-    }
-    if (outcome.status === "failed") {
-      task.settled(key, "failed", { problem: outcome.error.kind });
-      return { failed: outcome.error.kind };
-    }
-    const answer = outcome.value;
+    const { answer } = result;
     const found: StepFound = {
       notes: notesOf(answer.markdown),
       documents: [...new Set([...answer.citations.map((each) => each.documentId), ...read])],
@@ -409,21 +470,53 @@ export function createResearch(options: ResearchOptions) {
     if (!("model" in ready)) return { status: "paused", reason: "not-ready" };
     if (task.signal.aborted) return { status: "stopped" };
     const local = options.chat.runsLocally(ready.model);
-    const total = input.plan.steps.length;
-    const doneSteps = () =>
-      input.plan.steps.filter((_, index) => task.step(stepKey(index))?.status === "completed")
-        .length;
-    task.progress({ done: doneSteps(), total });
+    const keys = [
+      ...input.plan.steps.map((_, index) => stepKey(index)),
+      ...(input.sources.web ? [SAVE_STEP] : []),
+      DRAFT_STEP,
+    ];
+    const done = (key: string) => task.step(key)?.status === "completed";
+    const report = () => task.progress({ done: keys.filter(done).length, total: keys.length });
+    report();
     let problem: string | null = null;
     for (const [index] of input.plan.steps.entries()) {
       if (task.signal.aborted) return { status: "stopped" };
-      if (task.step(stepKey(index))?.status === "completed") continue;
+      if (done(stepKey(index))) continue;
       const result = await doStep(task, input, index, ready.model, local);
       if ("end" in result) return result.end;
       if ("failed" in result) problem = result.failed;
-      task.progress({ done: doneSteps(), total });
+      report();
     }
-    if (doneSteps() === 0) return { status: "failed", problem: problem ?? "unknown" };
+    const found = input.plan.steps
+      .map((_, index) => foundOf(task.step(stepKey(index))))
+      .filter((each): each is StepFound => each !== null);
+    if (found.length === 0) return { status: "failed", problem: problem ?? "unknown" };
+    const documents = [...new Set(found.flatMap((each) => each.documents))];
+    if (task.signal.aborted) return { status: "stopped" };
+    let saved = savedOf(task.step(SAVE_STEP)?.result);
+    if (input.sources.web && !done(SAVE_STEP)) {
+      saved = await fileSources(options, task, input, documents, ready.prepared);
+      report();
+    }
+    if (task.signal.aborted) return { status: "stopped" };
+    if (!done(DRAFT_STEP)) {
+      const drafted = await writeDraft(
+        options,
+        task,
+        input,
+        {
+          notes: found.map((each) => each.notes),
+          documents,
+          folderId: saved?.folderId || null,
+        },
+        ready.model,
+        answering(task, local),
+        options.answers.answerCell,
+      );
+      if ("end" in drafted) return drafted.end;
+      if ("failed" in drafted) return { status: "failed", problem: drafted.failed };
+      report();
+    }
     return { status: "done" };
   }
 
@@ -431,6 +524,11 @@ export function createResearch(options: ResearchOptions) {
     kind: RESEARCH_TASK,
     run: runTask,
     questionOf: (input) => inputOf(input)?.topic ?? null,
+    reviewOf(task) {
+      const step = options.tasks.steps(task.id).find((each) => each.key === DRAFT_STEP);
+      const written = step?.status === "completed" ? writtenOf(step.result) : null;
+      return written ? { mindId: written.mindId, proposalId: written.proposalId || null } : null;
+    },
     describeSteps(task, keys) {
       const input = inputOf(task.input);
       const steps = new Map(options.tasks.steps(task.id).map((step) => [step.key, step]));
@@ -508,6 +606,7 @@ export function createResearch(options: ResearchOptions) {
         scope,
         providerId: ready.model.providerId,
         modelId: ready.model.modelId,
+        draftRequest: randomUUID(),
       });
       return { started: true, task };
     },

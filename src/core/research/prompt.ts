@@ -108,3 +108,66 @@ export const notesOf = (markdown: string) =>
     .replace(/\s*\[\^\d+\]/g, "")
     .replace(/\s*\[=\d+\]/g, "")
     .trim();
+
+/** The most Tags the sources are filed with, and the longest a Tag's name is. */
+const MAX_TAGS = 3;
+const MAX_TAG_NAME = 40;
+
+export const TAG_INSTRUCTIONS = [
+  "You tag the web pages a research Task saved into a Folder of the User's Library, so they can find them by subject.",
+  'Reply with 1 to 3 Tags, one a line, each with the numbers of the pages it fits: "Results: 1, 3".',
+  "- A Tag is one or two words.",
+  "- Use one of the User's Tags when it fits.",
+  "- Write in the language of the research question.",
+].join("\n");
+
+export function tagPrompt(
+  title: string,
+  pages: readonly string[],
+  existing: readonly string[],
+): string {
+  return [
+    `Research question: ${title}`,
+    `The User's Tags: ${existing.length > 0 ? existing.join(", ") : "none yet"}`,
+    "The pages:",
+    ...pages.map((name, index) => `${index + 1}. ${name}`),
+  ].join("\n");
+}
+
+/** The Tags in a model's reply, each with the pages it fits, by their number from 1; pages out of range are left out. */
+export function readTags(reply: string, pages: number): { name: string; pages: number[] }[] {
+  const tags: { name: string; pages: number[] }[] = [];
+  for (const line of reply.split("\n")) {
+    const match = /^[-*•\d.)\s]*([^:：]+)[:：]\s*([\d,，、\s]+)$/.exec(line.trim());
+    const name = clean(match?.[1] ?? "").slice(0, MAX_TAG_NAME);
+    const numbers = (match?.[2] ?? "")
+      .split(/[,，、\s]+/)
+      .map(Number)
+      .filter((each) => Number.isInteger(each) && each >= 1 && each <= pages);
+    if (!name || numbers.length === 0 || tags.some((tag) => tag.name === name)) continue;
+    tags.push({ name, pages: [...new Set(numbers)] });
+    if (tags.length === MAX_TAGS) break;
+  }
+  return tags;
+}
+
+/** The cited draft as an Answer's Question: what to write, from what the steps found. */
+export function draftContext(input: {
+  topic: string;
+  plan: ResearchPlan;
+  notes: readonly string[];
+}): QuestionContext {
+  const found = input.notes
+    .map((note, at) => (note.trim() ? `Step ${at + 1}: ${note.slice(0, NOTES_PER_STEP)}` : ""))
+    .filter(Boolean);
+  const framing = [
+    "Write a cited draft for the User's notebook from research done in the background.",
+    `The User asked: ${input.topic}`,
+    ...(found.length > 0 ? ["What the research found:", ...found, ""] : []),
+    "Search the Documents for what supports each point and cite it. Start with a short heading, then a few short paragraphs or a list. Leave out what no Document supports, and say what is still open.",
+  ].join("\n");
+  return {
+    messages: [{ role: "user", content: `${framing}\n\n${input.plan.title}` }],
+    question: input.plan.title,
+  };
+}

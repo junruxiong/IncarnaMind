@@ -45,6 +45,7 @@ import { currentTask } from "./current";
 import { verifyEffect } from "./effects";
 import {
   createJournal,
+  isStep,
   type StepRecord,
   type StoredAsk,
   type TaskApprovalCall,
@@ -78,6 +79,8 @@ export interface TaskRun {
   readonly id: string;
   readonly mindId: string | null;
   readonly input: unknown;
+  /** When it was started (ISO 8601): what it made since is its own. */
+  readonly startedAt: string;
   /** Aborts when the Task is paused or stopped, or IncarnaMind closes: start no more steps. */
   readonly signal: AbortSignal;
   /** Records a step without an Effect as started. */
@@ -113,6 +116,8 @@ export interface TaskKind {
   blockOf?(input: unknown): string | null;
   /** What the User asked it, in their words, from its input. */
   questionOf?(input: unknown): string | null;
+  /** Where Review opens, when its work went somewhere other than its own place. */
+  reviewOf?(task: { id: string; mindId: string | null; input: unknown }): Task["review"];
   /** What the User can ask of it from its progress (D189). Absent: Pause and Stop. */
   readonly actions?: readonly TaskAction[];
   /** What its steps do, in its own words, by key; a step it can't name shows its key. */
@@ -219,6 +224,17 @@ export function createTasks(options: TasksOptions) {
     }
   };
 
+  const reviewOf = (record: TaskRecord): Task["review"] => {
+    const kind = kinds.get(record.kind);
+    if (!kind?.reviewOf || record.status !== "done") return null;
+    try {
+      return kind.reviewOf({ id: record.id, mindId: record.mindId, input: record.input });
+    } catch (error) {
+      options.reportError(error);
+      return null;
+    }
+  };
+
   const view = (record: TaskRecord): Task => {
     const latest = journal.latestSteps(record.id, LATEST_STEPS);
     const ask: TaskAsk | null =
@@ -231,6 +247,7 @@ export function createTasks(options: TasksOptions) {
       mindId: record.mindId,
       blockId: kinds.get(record.kind)?.blockOf?.(record.input) ?? null,
       question: kinds.get(record.kind)?.questionOf?.(record.input) ?? null,
+      review: reviewOf(record),
       status: record.status,
       pausedReason: record.status === "paused" ? record.pausedReason : null,
       resetsAt: record.resetsAt,
@@ -359,6 +376,7 @@ export function createTasks(options: TasksOptions) {
       id: taskId,
       mindId: record.mindId,
       input: record.input,
+      startedAt: record.startedAt,
       signal,
       started: (key) => {
         journal.started(taskId, key, null);
@@ -596,7 +614,10 @@ export function createTasks(options: TasksOptions) {
     /** Every step of a Task as its progress shows them. */
     listSteps(taskId: unknown): TaskStep[] {
       const record = requireTask(taskId);
-      return stepsOf(record, journal.steps(record.id));
+      return stepsOf(
+        record,
+        journal.steps(record.id).filter((step) => isStep(step.key)),
+      );
     },
 
     async pause(taskId: unknown): Promise<Task> {
