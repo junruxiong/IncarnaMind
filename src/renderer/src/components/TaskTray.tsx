@@ -3,7 +3,7 @@ import { type KeyboardEvent, useEffect, useId, useLayoutEffect, useRef, useState
 import type { ApprovalRequest, Task, TaskEffect } from "../../../core/api";
 import { useApprovals } from "../approvals";
 import { keysLabel } from "../commands/keys";
-import { ApprovalCard } from "../editor/AnswerView";
+import { ApprovalCard, withShortcut } from "../editor/AnswerView";
 import { useT } from "../i18n";
 import type { Translate } from "../objects";
 import { answerTaskAsk, loadTasks, useTasks } from "../tasks";
@@ -57,6 +57,7 @@ function UnknownOutcomeCard({ task, effect }: { task: Task; effect: TaskEffect }
           data-allow
           onClick={() => answerTaskAsk(task.id, "redo")}
           className="approval-button approval-button--primary"
+          {...withShortcut(t("task.unknown.redo"), keysLabel(ALLOW_KEYS, mac))}
         >
           {t("task.unknown.redo")}
           <span className="approval-keys">{keysLabel(ALLOW_KEYS, mac)}</span>
