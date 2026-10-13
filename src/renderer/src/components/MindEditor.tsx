@@ -44,6 +44,7 @@ import { FootnotePopover } from "../editor/FootnotePopover";
 import { type FootnoteLabel, footnoteView } from "../editor/FootnoteView";
 import { FindInMind } from "../editor/findInMind";
 import { FootnoteKeys } from "../editor/footnoteSchema";
+import { HeldSelection } from "../editor/heldSelection";
 import { LinkBubble } from "../editor/LinkBubble";
 import { MarginChecks } from "../editor/MarginChecks";
 import { MathEditing, MathEditor } from "../editor/MathEditor";
@@ -378,6 +379,7 @@ function MindEditorView({
         MathEditing.configure({ onEdit: setEditingMath }),
         BlockCommands,
         FindInMind,
+        HeldSelection,
         TableKeys,
         NoteKeymap,
         QuestionCommands.configure({
