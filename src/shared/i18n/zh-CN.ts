@@ -52,7 +52,6 @@ export const zhCN = {
   "library.showMore": "显示更多文档",
   "library.loading": "正在加载资料库…",
   "library.groups": "文件夹",
-  "library.all": "全部文档",
   "library.unsorted": "不在文件夹中",
   "library.chooseStarters": "预设文件夹",
   "library.cancel": "取消",

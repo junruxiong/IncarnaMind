@@ -2,6 +2,7 @@ import { type KeyboardEvent, memo, type Ref, useId, useRef, useState } from "rea
 import type { Document, ReferenceField, ReferenceRecord } from "../../../../core/api";
 import { displayName, sourceOf } from "../../../../shared/documentNames";
 import { missingDetails } from "../../../../shared/references";
+import { commands } from "../../commands/registry";
 import { useLanguage, useT } from "../../i18n";
 import { FORMAT_LABELS } from "../../libraryFilters";
 import { addedLabel, foundLine, type SearchMatch } from "../../libraryPage";
@@ -9,7 +10,7 @@ import { atPassage, passagePlace } from "../../palette";
 import { missingList } from "../../referenceEditing";
 import { useSelectable } from "../../selection";
 import { useAppStore } from "../../store";
-import { isMoveToKey, isTagsKey, TREE_ROW } from "../../treeKeys";
+import { isDeleteKey, isMoveToKey, isTagsKey, TREE_ROW } from "../../treeKeys";
 import { typesText } from "../../undo";
 import { useRename } from "../../useRename";
 import { CiteAsPanel } from "../CiteAsPanel";
@@ -67,6 +68,35 @@ function openTags(row: HTMLElement | null, documentId: string): void {
     ? row?.closest('[data-surface="library"]')?.querySelector<HTMLElement>("[data-selection-tags]")
     : row?.querySelector<HTMLElement>('[data-testid="document-tags-menu"]');
   opener?.click();
+}
+
+/**
+ * Deletes a row's Document, or every one selected with it, to Recently
+ * deleted, and moves the focus to the row after them (before them at the end),
+ * as Finder does.
+ */
+function deleteFrom(row: HTMLElement | null, documentId: string): void {
+  const ids = documentsToMove(documentId);
+  const gone = new Set(ids);
+  const grid = row?.closest('[role="grid"]');
+  const rows = [...(grid?.querySelectorAll<HTMLElement>("[data-document-id]") ?? [])];
+  const at = rows.findIndex((each) => each.dataset.documentId === documentId);
+  const stays = (each: HTMLElement) => !gone.has(each.dataset.documentId ?? "");
+  const next = rows.slice(at + 1).find(stays) ?? rows.slice(0, at).reverse().find(stays);
+  const nextId = next?.dataset.documentId;
+  commands
+    .run("document.delete", {
+      selection: ids.map((id) => ({ kind: "document", id })),
+      focus: { kind: "document", id: documentId },
+      surface: "library",
+    })
+    .then(() => {
+      if (!nextId) return;
+      grid
+        ?.querySelector<HTMLElement>(`[data-document-id="${CSS.escape(nextId)}"] [data-row-main]`)
+        ?.focus();
+    })
+    .catch(useAppStore.getState().reportError);
 }
 
 /** Clicks on these, inside a row, are theirs, not the row's. */
@@ -137,6 +167,9 @@ export const LibraryRow = memo(function LibraryRow({
     } else if (isTagsKey(event)) {
       event.preventDefault();
       openTags(row.current, doc.id);
+    } else if (isDeleteKey(event)) {
+      event.preventDefault();
+      deleteFrom(row.current, doc.id);
     }
   };
 

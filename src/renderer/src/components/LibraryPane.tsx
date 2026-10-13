@@ -78,6 +78,7 @@ export function LibraryPane() {
   /** The format, year, status and Folder filters' choices; the Tags filter is the store's, shared with the sidebar. */
   const [facetFilter, setFacetFilter] = useState<FilterSelection>({});
   const field = useRef<HTMLInputElement>(null);
+  const grid = useRef<HTMLDivElement>(null);
 
   const groups = snapshot?.groups ?? NO_GROUPS;
   const assignments = useMemo(
@@ -218,6 +219,13 @@ export function LibraryPane() {
             count={documents.length}
             search={search}
             onSearch={setSearch}
+            onDown={() =>
+              // The first Document found, as Finder's first result; the first head when none is open.
+              (
+                grid.current?.querySelector<HTMLElement>("[data-document-id] [data-row-main]") ??
+                grid.current?.querySelector<HTMLElement>("[data-tree-row]")
+              )?.focus()
+            }
             field={field}
           />
           {findingSources && <FindSourcesPanel />}
@@ -273,11 +281,23 @@ export function LibraryPane() {
               )}
               {/* biome-ignore lint/a11y/useSemanticElements: sections of rows laid out as columns, not a table. */}
               <div
+                ref={grid}
                 role="grid"
                 aria-multiselectable="true"
                 aria-label={t("library.sections")}
                 onKeyDown={(event) => {
-                  if (!moveThroughRows(event)) extendThroughRows(event, "library");
+                  if (moveThroughRows(event) || extendThroughRows(event, "library")) return;
+                  // ↑ on the first row goes back to the search, as ↓ came from it.
+                  const plain =
+                    !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey;
+                  if (
+                    event.key === "ArrowUp" &&
+                    plain &&
+                    event.target === grid.current?.querySelector("[data-tree-row]")
+                  ) {
+                    event.preventDefault();
+                    field.current?.focus();
+                  }
                 }}
               >
                 {sections.map((section) => (
