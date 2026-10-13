@@ -123,6 +123,17 @@ for (const each of CASES) {
         ),
     ).toBe(0);
     await expect(window.getByTestId("health-notFound")).toHaveCount(0);
+
+    // A chart made from that table: every value carries the Citation.
+    await pointAndClick(window, table.locator("td").nth(1));
+    await pointAndClick(window, window.getByTestId("table-menu"));
+    await pointAndClick(window, window.getByTestId("table-chart"));
+    const chart = editor.getByTestId("chart");
+    await expect(chart).toHaveCount(1);
+    await expect(chart.getByTestId("chart-point")).toHaveCount(2);
+    await expect(chart.getByTestId("chart-source")).not.toContainText(/no Citation|没有引用/);
+    await pointAt(window, chart.getByTestId("chart-point").first());
+    await expect(window.getByTestId("chart-check")).toHaveAttribute("data-check", "found");
     await app.close();
   });
 
