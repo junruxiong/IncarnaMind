@@ -4528,6 +4528,7 @@ export const dataKinds = [
   "scoped-minds",
   "answers",
   "web-searches",
+  "connector-search",
 ] as const;
 
 export type DataKind = (typeof dataKinds)[number];
@@ -4571,6 +4572,9 @@ export type DataKind = (typeof dataKinds)[number];
  * - "web-search": what an Answer searches the web for, written by the model
  *   from the Question, to the provider of the model it is asked with, whose
  *   own web search runs it (#128). None in local mode.
+ * - "connector-registry": the words the User types in Settings › Connectors'
+ *   search, to the official MCP Registry, which finds community Connectors
+ *   (#148). Asked the first time they search; none in local mode.
  */
 export const dataFlowIds = [
   "chat",
@@ -4586,6 +4590,7 @@ export const dataFlowIds = [
   "checks",
   "agents",
   "web-search",
+  "connector-registry",
 ] as const;
 
 export type DataFlowId = (typeof dataFlowIds)[number];
@@ -5152,6 +5157,42 @@ export interface ConnectorDirectoryEntry {
   /** Listed only in these interface languages, e.g. a service for Chinese Users. Absent: in every language. */
   languages?: Language[];
 }
+
+/** How a community server from the MCP Registry runs on this computer: its package, through npx or uvx. */
+export interface ConnectorRegistryCommand {
+  command: string;
+  args: string[];
+  /** The environment variables it reads, e.g. an API key, for the User to fill in. */
+  env: string[];
+}
+
+/** A community server found in the official MCP Registry. Not reviewed by IncarnaMind. */
+export interface ConnectorRegistryServer {
+  /** Its name in the Registry, e.g. "io.github.example/zotero-mcp". */
+  id: string;
+  /** Its title, or else its name's last part. */
+  name: string;
+  /** Who published it: its name's namespace, e.g. "io.github.example". */
+  publisher: string;
+  description: string;
+  /** Its MCP endpoint, when it runs remotely at an https URL IncarnaMind can use as it is. */
+  url: string | null;
+  /** How it runs on this computer, when it has a package IncarnaMind can start. */
+  command: ConnectorRegistryCommand | null;
+  /** Its website or repository, to read about it. */
+  link: string | null;
+}
+
+/**
+ * A search of the MCP Registry: the servers found, or why nothing was:
+ * - "local-mode": Local mode is on, so nothing was sent;
+ * - "declined": the User declined sending their search to the Registry;
+ * - "unreachable": it couldn't be reached, e.g. no network;
+ * - "service-error": it answered with an error, or something IncarnaMind can't read.
+ */
+export type ConnectorRegistrySearch =
+  | { outcome: "found"; servers: ConnectorRegistryServer[] }
+  | { outcome: "failed"; reason: "local-mode" | "declined" | "unreachable" | "service-error" };
 
 // ---------------------------------------------------------------------------
 // Approvals (#38)
@@ -7038,6 +7079,12 @@ export interface CoreApi {
    * instead, turned on.
    */
   addConnectorFromDirectory(entryId: string, client?: ConnectorClientInput): Promise<Connector>;
+  /**
+   * Searches the official MCP Registry for community servers matching what
+   * the User typed (two letters or more), asking them the first time
+   * ("connector-registry" flow). Nothing is sent in Local mode.
+   */
+  searchConnectorRegistry(query: string): Promise<ConnectorRegistrySearch>;
 
   /**
    * The User's approval policies, for the approvals page: every Tool always
@@ -7658,6 +7705,7 @@ const methods: Record<CoreApiMethod, true> = {
   importConnectors: true,
   listConnectorDirectory: true,
   addConnectorFromDirectory: true,
+  searchConnectorRegistry: true,
   listApprovalPolicies: true,
   setApprovalPolicy: true,
   revokeApprovalPolicy: true,
