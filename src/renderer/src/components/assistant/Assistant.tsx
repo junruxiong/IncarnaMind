@@ -36,6 +36,7 @@ import { AssistantMenu } from "./AssistantMenu";
 import { ConversationThread } from "./ConversationThread";
 import { HistoryPopover } from "./HistoryPopover";
 import { useReadMindId } from "./readMind";
+import { useKeepInView } from "./useKeepInView";
 
 /**
  * The window's one assistant (#253), outside the tab groups, as in Cursor:
@@ -48,8 +49,8 @@ import { useReadMindId } from "./readMind";
  * Nothing in it is remounted when it moves, resizes or folds: the composer
  * keeps its draft and the conversation its scroll position.
  *
- * Esc inside it, with nothing in it open, folds it, the focus on what
- * unfolds it; a second Esc goes back to the Mind, where its cursor was.
+ * Esc inside it, with nothing in it open, goes back to the Mind, where its
+ * cursor was; the chevron folds it.
  */
 export function Assistant({
   dock,
@@ -115,11 +116,12 @@ export function Assistant({
   };
   const openHistory = (from: HTMLElement) => setHistory((open) => (open ? null : from));
 
-  // Esc with the focus in it and nothing in it open: it folds, the focus on what unfolds it; then
-  // Esc goes back to the Mind. Heard on the window, after everything in it (the composer is drawn
-  // here from its Mind, so React's own bubbling never reaches here): a picker, a menu or History
-  // closes first, by its own Esc. Whether one was open is seen before anything handles the key,
-  // as a native menu closes itself on Esc without marking the key handled.
+  // Esc with the focus in it and nothing in it open goes back to the Mind, where its cursor was,
+  // and leaves the assistant as it is: only its chevron folds it. Heard on the window, after
+  // everything in it (the composer is drawn here from its Mind, so React's own bubbling never
+  // reaches here): a picker, a menu or History closes first, by its own Esc. Whether one was
+  // open is seen before anything handles the key, as a native menu closes itself on Esc without
+  // marking the key handled.
   useEffect(() => {
     let openInside = false;
     const before = (event: KeyboardEvent) => {
@@ -132,16 +134,6 @@ export function Assistant({
       const element = aside.current;
       if (!element || !(event.target instanceof Node) || !element.contains(event.target)) return;
       event.preventDefault();
-      if (!folded) {
-        setHistory(null);
-        void useAppStore
-          .getState()
-          .placeAssistant({ folded: true })
-          .then(() =>
-            element.querySelector<HTMLElement>('[data-testid="assistant-fold"]')?.focus(),
-          );
-        return;
-      }
       readMindHandle.current?.returnToNote();
     };
     window.addEventListener("keydown", before, true);
@@ -150,7 +142,7 @@ export function Assistant({
       window.removeEventListener("keydown", before, true);
       window.removeEventListener("keydown", onKey);
     };
-  }, [folded]);
+  }, []);
 
   const newChatButton = (
     <IconButton
@@ -280,6 +272,7 @@ function AssistantMain({
   const seat = useComposer((state) => state.seat);
   const mind = seat !== null && seat.mindId === readMindId ? seat : null;
   const thread = useRef<HTMLDivElement>(null);
+  useKeepInView(thread);
   /** Where the conversation was scrolled to, put back when it shows again. */
   const scrolled = useRef(0);
   useLayoutEffect(() => {

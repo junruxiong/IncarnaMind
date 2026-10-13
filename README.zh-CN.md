@@ -37,6 +37,8 @@ git clone https://github.com/junruxiong/IncarnaMind.git && cd IncarnaMind
 npm install && npm run dev
 ```
 
+Windows 版通过 SignPath Foundation 为开源项目提供的免费签名服务签名，见[代码签名政策（Code signing policy）](docs/code-signing-policy.md)。
+
 <details>
 <summary>系统不让打开时</summary>
 
