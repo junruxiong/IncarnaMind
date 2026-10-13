@@ -315,6 +315,26 @@ describe("The chat flow with Connectors", { timeout: 30_000 }, () => {
     expect(await core.getChatReadiness()).toMatchObject({ consent: "accepted" });
   });
 
+  test("choosing a cloud provider with a Connector on doesn't allow Tool results, which its line doesn't name: the first Question asks", async () => {
+    const dataDir = await createTempDataFolder();
+    const core = startCore(dataDir, {
+      createChatModel: scriptedModels(scriptedModel(() => ({ text: "OK" }))).createChatModel,
+      processes: testProcesses(),
+    });
+    await core.addConnector({ name: "Mine", command: "tide-cli-not-installed" });
+
+    await core.saveChatProvider({ kind: "openai", apiKey: "sk-test", modelId: "gpt-5.4-mini" });
+
+    expect(await core.getChatReadiness()).toMatchObject({ ready: true, consent: "needed" });
+    const requested = nextEvent(core, "consent.requested");
+    const prepared = core.prepareChatModel();
+    const request = await requested;
+    expect(request.newKinds).toEqual(["tool-results"]);
+    await core.respondToConsent(request.requestId, true);
+    await prepared;
+    expect(await core.getChatReadiness()).toMatchObject({ consent: "accepted" });
+  });
+
   test("Skills alone don't make it ask again: their Tools return only the Skills' own text", async () => {
     const dataDir = await createTempDataFolder();
     const core = startCore(dataDir, {

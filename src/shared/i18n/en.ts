@@ -2649,7 +2649,7 @@ export const en = {
   "connectors.directory.tool.changes": "May change things",
   "connectors.directory.where": "Where your data goes",
   "connectors.directory.where.body":
-    "What the assistant asks {name} for, such as words from your Question, goes to {name}, once you agree. What it returns goes to your chat model, as your Documents do.",
+    "Once you connect it, what the assistant asks {name} for, such as words from your Question, goes to {name}. What it returns goes to your chat model, as your Documents do.",
   "connectors.directory.how": "How it signs in",
   "connectors.directory.how.browser":
     "Sign in with {name} in your browser. Your sign-in is kept in your keychain.",

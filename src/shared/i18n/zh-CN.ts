@@ -2544,7 +2544,7 @@ export const zhCN = {
   "connectors.directory.tool.changes": "可能修改内容",
   "connectors.directory.where": "你的数据去哪里",
   "connectors.directory.where.body":
-    "你同意后，助手向 {name} 查询的内容（例如问题里的关键词）会发送给 {name}。它返回的内容会发给你的对话模型，和你的文档一样。",
+    "连接后，助手向 {name} 查询的内容（例如问题里的关键词）会发送给 {name}。它返回的内容会发给你的对话模型，和你的文档一样。",
   "connectors.directory.how": "怎么登录",
   "connectors.directory.how.browser": "在浏览器里登录 {name}。登录信息保存在你的钥匙串里。",
   "connectors.directory.how.browser.subscription":
