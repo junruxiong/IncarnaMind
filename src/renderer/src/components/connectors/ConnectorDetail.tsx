@@ -218,9 +218,9 @@ export function ConnectorDetail({
         <div
           role="status"
           data-testid="connector-connected"
-          className="flex flex-wrap items-center gap-2.5 rounded-lg bg-success-wash px-3 py-2.5 text-[13px] leading-5 text-success"
+          className="flex flex-wrap items-center gap-2.5 rounded-lg bg-frame px-3 py-2.5 text-[13px] leading-5 text-ink"
         >
-          <CheckLineIcon className="size-3.5 shrink-0" />
+          <CheckLineIcon className="size-3.5 shrink-0 text-ink-secondary" />
           <span className="flex-1">{t("connectors.directory.done", { name })}</span>
           <button
             type="button"
@@ -232,7 +232,7 @@ export function ConnectorDetail({
                 ?.addEventListener("close", () => focusComposer(), { once: true });
               useAppStore.getState().closeSettings();
             }}
-            className={`${buttonStyle("secondary", "sm")} text-ink`}
+            className={buttonStyle("secondary", "sm")}
           >
             {t("connectors.directory.try")}
           </button>
