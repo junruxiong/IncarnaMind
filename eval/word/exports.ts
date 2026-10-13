@@ -23,14 +23,18 @@ import { child, elements, parseXml, walk } from "../../src/core/documents/format
 import { openPackage } from "../../src/core/documents/formats/zip";
 import { exportLabels } from "../../src/core/exports/labels";
 import { exportWordPatch } from "../../src/core/exports/wordPatch";
+import type { ReviewChoices } from "../../src/core/exports/wordReview";
+import { reviewReading } from "../../src/core/mindText";
 import { recordSources } from "../../src/core/wordImports";
 import type { NodeJSON } from "../../src/shared/blockJson";
 import { citationStyle } from "../../src/shared/citationStyles";
+import { recordProposalRequest, resolveProposals } from "../../src/shared/proposals";
 import {
   recordWordImportProgress,
   startWordImport,
   wordSourceOf,
 } from "../../src/shared/wordFiles";
+import { acceptedParagraphs } from "../../tests/helpers/docx";
 import { inspectPackage } from "./corpus";
 
 const REFUSED: ReadonlySet<WordRefusalReason> = new Set([
@@ -74,15 +78,32 @@ async function mindOf(bytes: Uint8Array): Promise<Y.Doc> {
   return doc;
 }
 
-async function exportOf(bytes: Uint8Array, doc: Y.Doc) {
+/** What an export says for review: nothing, unless a check asks (#107). */
+const PLAIN: ReviewChoices = {
+  trackAs: null,
+  markAiText: false,
+  commentFailedChecks: false,
+  now: "2026-10-13T09:00:00.000Z",
+};
+
+async function exportOf(bytes: Uint8Array, doc: Y.Doc, review: ReviewChoices = PLAIN) {
+  const blocks = doc.getXmlFragment(MIND_CONTENT_FIELD);
   return exportWordPatch({
     bytes,
-    blocks: doc.getXmlFragment(MIND_CONTENT_FIELD),
+    blocks,
     readOptions: {
       includeQuestions: false,
-      footnote: () => ({ source: SOURCE, unverified: false }),
+      footnote: (attributes) =>
+        attributes.check === "not-found"
+          ? {
+              source: SOURCE,
+              unverified: true,
+              failed: { check: "not-found", quote: NOT_FOUND, verdict: null },
+            }
+          : { source: SOURCE, unverified: false },
       trimBeforeCitation: true,
       trimBeforeFootnote: true,
+      review: reviewReading(blocks),
     },
     labels: exportLabels("en"),
     style: citationStyle("numbered"),
@@ -90,7 +111,8 @@ async function exportOf(bytes: Uint8Array, doc: Y.Doc) {
     bibliographyHeading: "References",
     sources: { language: "en", documents: [] },
     formatCitations: () => Promise.reject(new Error("Numbered needs no formatting.")),
-    withPictures: async (blocks) => blocks,
+    withPictures: async (written) => written,
+    review,
   });
 }
 
@@ -148,6 +170,108 @@ function edit(doc: Y.Doc): string | null {
     blocks.insert(after, [paragraph]);
   });
   return changed;
+}
+
+/**
+ * Edits of every kind the export writes: a paragraph deleted, a word made
+ * bold, a link added, a heading's level changed, a list item and a table row
+ * added, a paragraph moved, and a new list and table at the end.
+ */
+function editEveryKind(doc: Y.Doc): void {
+  const blocks = doc.getXmlFragment(MIND_CONTENT_FIELD);
+  const all = (kind: string) => {
+    const found: Y.XmlElement[] = [];
+    const visit = (element: Y.XmlElement) => {
+      if (element.nodeName === kind) found.push(element);
+      for (const each of element.toArray()) if (each instanceof Y.XmlElement) visit(each);
+    };
+    for (const each of blocks.toArray()) if (each instanceof Y.XmlElement) visit(each);
+    return found;
+  };
+  const texts = (element: Y.XmlElement) =>
+    element.toArray().filter((each): each is Y.XmlText => each instanceof Y.XmlText);
+  doc.transact(() => {
+    const top = () =>
+      blocks.toArray().filter((each): each is Y.XmlElement => each instanceof Y.XmlElement);
+    const paragraphs = top().filter((each) => each.nodeName === "paragraph");
+    if (paragraphs.length >= 3) blocks.delete(top().indexOf(paragraphs[1] as Y.XmlElement), 1);
+    const bolded = all("paragraph").find((each) => texts(each).some((text) => text.length > 3));
+    const text = bolded && texts(bolded).find((each) => each.length > 3);
+    text?.format(0, 3, { bold: true });
+    const linked = all("paragraph").at(-1);
+    const end = linked && texts(linked).at(-1);
+    end?.insert(end.length, " (see the site)", {
+      link: { href: "https://example.com/round-trip" },
+    });
+    const heading = all("heading")[0];
+    if (heading)
+      heading.setAttribute(
+        "level",
+        String((Number(heading.getAttribute("level")) % 6) + 1) as never,
+      );
+    const item = all("listItem")[0];
+    if (item?.parent instanceof Y.XmlElement) {
+      const list = item.parent;
+      list.insert(list.toArray().indexOf(item) + 1, [
+        createElement({
+          type: "listItem",
+          content: [{ type: "paragraph", content: [{ type: "text", text: "A new item." }] }],
+        }),
+      ]);
+    }
+    const table = all("table")[0];
+    const firstRow = table?.toArray()[0];
+    if (table && firstRow instanceof Y.XmlElement) {
+      const cells = firstRow.toArray().length;
+      table.push([
+        createElement({
+          type: "tableRow",
+          content: Array.from({ length: cells }, () => ({
+            type: "tableCell",
+            content: [{ type: "paragraph", content: [{ type: "text", text: "A new row." }] }],
+          })),
+        }),
+      ]);
+    }
+    const last = top()
+      .filter((each) => each.nodeName === "paragraph")
+      .at(-1);
+    if (last && top().length > 2) {
+      const at = top().indexOf(last);
+      const moved = last.clone();
+      blocks.delete(at, 1);
+      blocks.insert(0, [moved]);
+    }
+    blocks.push([
+      createElement({
+        type: "bulletList",
+        content: [
+          {
+            type: "listItem",
+            content: [{ type: "paragraph", content: [{ type: "text", text: "A new list." }] }],
+          },
+        ],
+      }),
+      createElement({
+        type: "table",
+        content: [
+          {
+            type: "tableRow",
+            content: [
+              {
+                type: "tableHeader",
+                content: [{ type: "paragraph", content: [{ type: "text", text: "New" }] }],
+              },
+              {
+                type: "tableHeader",
+                content: [{ type: "paragraph", content: [{ type: "text", text: "Table" }] }],
+              },
+            ],
+          },
+        ],
+      }),
+    ]);
+  });
 }
 
 /** The top-level body elements of a main part, as written, and where the element at `place` is. */
@@ -317,100 +441,7 @@ export async function checkEdits(bytes: Uint8Array): Promise<ExportCheck> {
     };
   }
   try {
-    const blocks = doc.getXmlFragment(MIND_CONTENT_FIELD);
-    const all = (kind: string) => {
-      const found: Y.XmlElement[] = [];
-      const visit = (element: Y.XmlElement) => {
-        if (element.nodeName === kind) found.push(element);
-        for (const each of element.toArray()) if (each instanceof Y.XmlElement) visit(each);
-      };
-      for (const each of blocks.toArray()) if (each instanceof Y.XmlElement) visit(each);
-      return found;
-    };
-    const texts = (element: Y.XmlElement) =>
-      element.toArray().filter((each): each is Y.XmlText => each instanceof Y.XmlText);
-    doc.transact(() => {
-      const top = () =>
-        blocks.toArray().filter((each): each is Y.XmlElement => each instanceof Y.XmlElement);
-      const paragraphs = top().filter((each) => each.nodeName === "paragraph");
-      if (paragraphs.length >= 3) blocks.delete(top().indexOf(paragraphs[1] as Y.XmlElement), 1);
-      const bolded = all("paragraph").find((each) => texts(each).some((text) => text.length > 3));
-      const text = bolded && texts(bolded).find((each) => each.length > 3);
-      text?.format(0, 3, { bold: true });
-      const linked = all("paragraph").at(-1);
-      const end = linked && texts(linked).at(-1);
-      end?.insert(end.length, " (see the site)", {
-        link: { href: "https://example.com/round-trip" },
-      });
-      const heading = all("heading")[0];
-      if (heading)
-        heading.setAttribute(
-          "level",
-          String((Number(heading.getAttribute("level")) % 6) + 1) as never,
-        );
-      const item = all("listItem")[0];
-      if (item?.parent instanceof Y.XmlElement) {
-        const list = item.parent;
-        list.insert(list.toArray().indexOf(item) + 1, [
-          createElement({
-            type: "listItem",
-            content: [{ type: "paragraph", content: [{ type: "text", text: "A new item." }] }],
-          }),
-        ]);
-      }
-      const table = all("table")[0];
-      const firstRow = table?.toArray()[0];
-      if (table && firstRow instanceof Y.XmlElement) {
-        const cells = firstRow.toArray().length;
-        table.push([
-          createElement({
-            type: "tableRow",
-            content: Array.from({ length: cells }, () => ({
-              type: "tableCell",
-              content: [{ type: "paragraph", content: [{ type: "text", text: "A new row." }] }],
-            })),
-          }),
-        ]);
-      }
-      const last = top()
-        .filter((each) => each.nodeName === "paragraph")
-        .at(-1);
-      if (last && top().length > 2) {
-        const at = top().indexOf(last);
-        const moved = last.clone();
-        blocks.delete(at, 1);
-        blocks.insert(0, [moved]);
-      }
-      blocks.push([
-        createElement({
-          type: "bulletList",
-          content: [
-            {
-              type: "listItem",
-              content: [{ type: "paragraph", content: [{ type: "text", text: "A new list." }] }],
-            },
-          ],
-        }),
-        createElement({
-          type: "table",
-          content: [
-            {
-              type: "tableRow",
-              content: [
-                {
-                  type: "tableHeader",
-                  content: [{ type: "paragraph", content: [{ type: "text", text: "New" }] }],
-                },
-                {
-                  type: "tableHeader",
-                  content: [{ type: "paragraph", content: [{ type: "text", text: "Table" }] }],
-                },
-              ],
-            },
-          ],
-        }),
-      ]);
-    });
+    editEveryKind(doc);
     const result = await exportOf(bytes, doc);
     const before = new Set((await inspectPackage(bytes)).problems);
     const problems = (await inspectPackage(result.data)).problems.filter(
@@ -441,6 +472,226 @@ export async function checkEdits(bytes: Uint8Array): Promise<ExportCheck> {
         return { ok: false, detail: `"${expected}" doesn't import again`, exported: result.data };
     }
     return { ok: true, detail: "edits of every kind written", exported: result.data };
+  } catch (error) {
+    return {
+      ok: false,
+      detail: `export failed: ${error instanceof Error ? (error.stack ?? error.message) : error}`,
+    };
+  } finally {
+    doc.destroy();
+  }
+}
+
+/** Who the User's tracked edits are by, and when changes still waiting were asked for. */
+const REVIEWER = "Round-trip Reviewer";
+const ASKED = "2026-10-12T14:30:00.000Z";
+const REQUEST = "round-trip";
+const PROPOSED = "proposed";
+const AI_TEXT = "A paragraph the AI wrote for the round-trip check.";
+const PROPOSED_PARAGRAPH = "A paragraph a change adds.";
+const NOT_FOUND = "A quote the check didn't find.";
+
+/** What a review export is asked to say: the User's edits tracked, and every comment. */
+const REVIEWED: ReviewChoices = {
+  trackAs: REVIEWER,
+  markAiText: true,
+  commentFailedChecks: true,
+  now: PLAIN.now,
+};
+
+/**
+ * Changes still waiting, AI text and a Citation whose quote wasn't found: a
+ * word of the first paragraph that has one replaced by a change, a paragraph a
+ * change adds and one it removes, and an AI paragraph with the Citation.
+ */
+function editForReview(doc: Y.Doc): void {
+  const blocks = doc.getXmlFragment(MIND_CONTENT_FIELD);
+  recordProposalRequest(doc, REQUEST, {
+    source: "edit-with-ai",
+    providerId: "eval",
+    modelId: "eval",
+    createdAt: ASKED,
+  });
+  const change = (id: string) => ({ id, request: REQUEST });
+  const top = () =>
+    blocks.toArray().filter((each): each is Y.XmlElement => each instanceof Y.XmlElement);
+  doc.transact(() => {
+    const replaced = top().find(
+      (each) =>
+        each.nodeName === "paragraph" &&
+        each
+          .toArray()
+          .some((text) => text instanceof Y.XmlText && /\p{L}{5,}/u.test(text.toString())),
+    );
+    const text = replaced
+      ?.toArray()
+      .find(
+        (each): each is Y.XmlText =>
+          each instanceof Y.XmlText && /\p{L}{5,}/u.test(each.toString()),
+      );
+    const word = text && /\p{L}{5,}/u.exec(text.toString());
+    if (text && word) {
+      text.format(word.index, word[0].length, { proposalDelete: change("c1") });
+      text.insert(word.index + word[0].length, PROPOSED, {
+        proposalInsert: change("c1"),
+        generated: {},
+      });
+    }
+    const removed = top()
+      .filter((each) => each.nodeName === "paragraph")
+      .at(-1);
+    if (removed && removed !== replaced) {
+      removed.setAttribute("proposal", { ...change("c2"), kind: "delete" } as never);
+    }
+    blocks.push([
+      createElement({
+        type: "paragraph",
+        attrs: { proposal: { ...change("c3"), kind: "insert" } },
+        content: [{ type: "text", text: PROPOSED_PARAGRAPH, marks: [{ type: "generated" }] }],
+      }),
+      createElement({
+        type: "paragraph",
+        content: [
+          { type: "text", text: `${AI_TEXT} `, marks: [{ type: "generated" }] },
+          {
+            type: "citation",
+            attrs: {
+              passageId: "round-trip",
+              documentId: "round-trip",
+              documentName: "Round-trip check source",
+              quote: NOT_FOUND,
+              check: "not-found",
+            },
+          },
+        ],
+      }),
+    ]);
+  });
+}
+
+/** The paragraphs the Mind's text is with every change accepted, as a Word export without review writes it. */
+async function acceptedInMind(bytes: Uint8Array, doc: Y.Doc): Promise<string[]> {
+  const copy = new Y.Doc();
+  try {
+    Y.applyUpdate(copy, Y.encodeStateAsUpdate(doc));
+    copy.transact(() =>
+      resolveProposals(copy.getXmlFragment(MIND_CONTENT_FIELD), () => true, "accept"),
+    );
+    const { data } = await exportOf(bytes, copy);
+    const pkg = await openWordPackage(data);
+    return acceptedParagraphs((await pkg.zip.readText(pkg.part)) ?? "");
+  } finally {
+    copy.destroy();
+  }
+}
+
+/** Every comment range has its end, its mark and its comment, and every comment of IncarnaMind's its range. */
+function commentsProblem(main: string, comments: string): string | null {
+  const ids = (pattern: RegExp, xml: string) =>
+    new Set([...xml.matchAll(pattern)].map((m) => m[1]));
+  const starts = ids(/<w:commentRangeStart w:id="(\d+)"/g, main);
+  const ends = ids(/<w:commentRangeEnd w:id="(\d+)"/g, main);
+  const marks = ids(/<w:commentReference w:id="(\d+)"/g, main);
+  const written = ids(/<w:comment\b[^>]*\sw:id="(\d+)"/g, comments);
+  const ours = ids(/<w:comment\b(?=[^>]*\sw:author="IncarnaMind")[^>]*\sw:id="(\d+)"/g, comments);
+  for (const id of starts) {
+    if (!ends.has(id) || !marks.has(id)) return `comment ${id} has no end or mark`;
+    if (!written.has(id)) return `comment ${id} isn't in the comments part`;
+  }
+  for (const id of ours) if (!starts.has(id)) return `IncarnaMind's comment ${id} has no range`;
+  return null;
+}
+
+/** The text a review export shows with every change accepted: what LibreOffice should show too. */
+export interface ReviewCheck extends ExportCheck {
+  accepted?: string[];
+}
+
+/**
+ * The edits of every kind, as the User's tracked edits, with changes still
+ * waiting, AI text and a failed check, exported for review (#107): the
+ * package passes the checks Word's repair prompt is about, every comment is
+ * whole, and accepting every change gives the text accepting every change in
+ * the Mind does.
+ */
+export async function checkReview(bytes: Uint8Array): Promise<ReviewCheck> {
+  let doc: Y.Doc;
+  try {
+    doc = await mindOf(bytes);
+  } catch (error) {
+    if (error instanceof WordRefusedError && REFUSED.has(error.reason)) {
+      return { ok: true, detail: `refused, as it should be: ${error.reason}` };
+    }
+    return {
+      ok: false,
+      detail: `didn't import: ${error instanceof Error ? error.message : error}`,
+    };
+  }
+  try {
+    editEveryKind(doc);
+    editForReview(doc);
+    const result = await exportOf(bytes, doc, REVIEWED);
+    const before = new Set((await inspectPackage(bytes)).problems);
+    const problems = (await inspectPackage(result.data)).problems.filter(
+      (each) => !before.has(each),
+    );
+    if (problems.length > 0)
+      return {
+        ok: false,
+        detail: `the export: ${problems.slice(0, 2).join("; ")}`,
+        exported: result.data,
+      };
+    const lost = result.report.notKept.filter(
+      (each) => each.kind !== "edit" && each.kind !== "signature",
+    );
+    if (lost.length > 0)
+      return {
+        ok: false,
+        detail: `reported as not kept: ${lost.map((each) => `${each.kind} "${each.text}"`).join(", ")}`,
+        exported: result.data,
+      };
+    const pkg = await openWordPackage(result.data);
+    const main = (await pkg.zip.readText(pkg.part)) ?? "";
+    const comments = [...pkg.zip.names()].find((name) => /^word\/comments\d*\.xml$/.test(name));
+    const commentsXml = comments ? ((await pkg.zip.readText(comments)) ?? "") : "";
+    const incomplete = commentsProblem(main, commentsXml);
+    if (incomplete) return { ok: false, detail: incomplete, exported: result.data };
+    const proposedByIncarnaMind = new RegExp(
+      `<w:ins w:id="\\d+" w:author="IncarnaMind"[^>]*><w:r>(?:<w:rPr>(?:(?!</w:r>).)*?</w:rPr>)?<w:t[^>]*>${PROPOSED_PARAGRAPH}</w:t>`,
+    );
+    if (!proposedByIncarnaMind.test(main)) {
+      return {
+        ok: false,
+        detail: "the paragraph a change adds isn't IncarnaMind's insertion",
+        exported: result.data,
+      };
+    }
+    if (!commentsXml.includes(NOT_FOUND) || !main.includes('w:author="IncarnaMind"')) {
+      return {
+        ok: false,
+        detail: "IncarnaMind's comments or changes aren't in the file",
+        exported: result.data,
+      };
+    }
+
+    const shown = acceptedParagraphs(main).filter((line) => line.trim() !== "");
+    const accepted = (await acceptedInMind(bytes, doc)).filter((line) => line.trim() !== "");
+    const at = shown.findIndex((line, index) => line !== accepted[index]);
+    if (at >= 0 || shown.length !== accepted.length) {
+      const index = at >= 0 ? at : Math.min(shown.length, accepted.length);
+      return {
+        ok: false,
+        detail: `accepting every change shows ${JSON.stringify(shown[index]?.slice(0, 60))} where the Mind has ${JSON.stringify(accepted[index]?.slice(0, 60))}`,
+        exported: result.data,
+      };
+    }
+    const changes = [...main.matchAll(/<w:(?:ins|del) w:id="\d+" w:author="([^"]+)"/g)];
+    return {
+      ok: true,
+      detail: `${changes.filter((m) => m[1] === REVIEWER).length} of the User's changes and ${changes.filter((m) => m[1] === "IncarnaMind").length} of IncarnaMind's tracked, ${[...commentsXml.matchAll(/w:author="IncarnaMind"/g)].length} comments`,
+      exported: result.data,
+      accepted,
+    };
   } catch (error) {
     return {
       ok: false,

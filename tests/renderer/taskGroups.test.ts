@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Task } from "../../src/core/api";
-import { chipOf, taskGroups } from "../../src/renderer/src/taskGroups";
+import { chipOf, interleave, taskGroups, threadTasks } from "../../src/renderer/src/taskGroups";
 import { resultLine, stepLine } from "../../src/renderer/src/taskText";
 import { translate } from "../../src/shared/i18n";
 
@@ -16,6 +16,9 @@ const task = (id: string, patch: Partial<Task>): Task => ({
   progress: { done: 2, total: 6 },
   problem: null,
   cost: null,
+  actions: ["pause", "stop"],
+  steps: [],
+  stepCount: 0,
   startedAt: "2026-10-12T10:00:00.000Z",
   finishedAt: null,
   updatedAt: "2026-10-12T10:05:00.000Z",
@@ -64,5 +67,49 @@ describe("the Tasks chip", () => {
     expect(stepLine(running, zh, "zh-CN")).toBe("正在填写第 3 个单元格，共 6 个");
     expect(resultLine(done, zh)).toBe("9 个单元格");
     expect(translate("zh-CN", "tasks.chip.running", { count: 1 })).toBe("1 个进行中");
+  });
+});
+
+describe("a Task's progress in the thread", () => {
+  const message = (id: string, createdAt: string) => ({ id, createdAt });
+  const at = (time: string) => `2026-10-12T${time}:00.000Z`;
+
+  test("shows the read Mind's Tasks going, those seen going, the one asked for, and those since the thread began", () => {
+    const old = task("old", { status: "done", startedAt: at("08:00"), finishedAt: at("08:05") });
+    const recent = task("recent", {
+      status: "done",
+      startedAt: at("10:30"),
+      finishedAt: at("10:40"),
+    });
+    const going = task("going", { startedAt: at("07:00") });
+    const elsewhere = task("elsewhere", { mindId: "other" });
+    const all = [old, recent, going, elsewhere];
+    const thread = { since: at("10:00"), seen: new Set<string>() };
+    expect(threadTasks(all, "mind", thread, null).map((each) => each.id)).toEqual([
+      "going",
+      "recent",
+    ]);
+    expect(threadTasks(all, "mind", thread, "old").map((each) => each.id)).toEqual([
+      "going",
+      "old",
+      "recent",
+    ]);
+    expect(threadTasks(all, null, thread, null)).toEqual([]);
+    // Seen going, it stays once it is done, though it started before the thread.
+    const finished = { ...going, status: "done" as const, finishedAt: at("11:00") };
+    expect(threadTasks([finished], "mind", thread, null).map((each) => each.id)).toEqual(["going"]);
+  });
+
+  test("each Task sits where it started among the messages", () => {
+    const first = task("first", { startedAt: at("09:00") });
+    const second = task("second", { startedAt: at("10:30") });
+    const third = task("third", { startedAt: at("12:00") });
+    const entries = interleave(
+      [message("question", at("10:00")), message("answer", at("10:01"))],
+      [first, second, third],
+    );
+    expect(
+      entries.map((entry) => (entry.kind === "task" ? entry.task.id : entry.message.id)),
+    ).toEqual(["first", "question", "answer", "second", "third"]);
   });
 });

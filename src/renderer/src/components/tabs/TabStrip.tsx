@@ -292,7 +292,7 @@ function Tab({ tab, groupId, selected, focusedGroup, divider, dragged, drag }: T
             title={title}
             onDone={() => {
               renameTab(null);
-              focusTab(tab.id);
+              focusTab(tab.id, { onlyIfLost: true });
             }}
           />
         ) : (
