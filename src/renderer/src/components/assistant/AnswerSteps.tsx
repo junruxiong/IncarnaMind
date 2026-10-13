@@ -702,7 +702,9 @@ function useAskedInMeeting(question: ConversationQuestion | undefined): boolean 
 }
 
 /** What a Question searched, with `extra` scopes besides (see `stepsScope`). */
-function useStepsScopeOf(question: ConversationQuestion | undefined): (extra: number) => string {
+export function useStepsScopeOf(
+  question: ConversationQuestion | undefined,
+): (extra: number) => string {
   const t = useT();
   const folders = useAppStore((state) => state.folders);
   const groups = useAppStore((state) => state.library?.groups);

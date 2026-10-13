@@ -4179,6 +4179,11 @@ export interface AskInConversationInput {
 export interface ConversationAnswerInput {
   conversationId: string;
   answerId: string;
+  /**
+   * Regenerating: first clears the Question's Search scope, so the Answer
+   * is written from every Document ("Search all Documents", #748).
+   */
+  clearScope?: boolean;
 }
 
 /** What asking in a conversation (or regenerating an Answer there) did. */
@@ -6348,6 +6353,11 @@ export interface CoreApi {
    * reading the Mind it was asked from as that Mind is now.
    */
   regenerateConversationAnswer(input: ConversationAnswerInput): Promise<ConversationAskResult>;
+  /**
+   * How many Documents a Search scope covers that can be searched now; for a
+   * scope of none (null), every Document's. 0: the scope holds none (#748).
+   */
+  countScopeDocuments(scope?: SearchScope | null): Promise<number>;
   /** Stops an Answer of a conversation being written, keeping what it has. */
   stopConversationAnswer(input: ConversationAnswerInput): Promise<void>;
   /**
@@ -7631,6 +7641,7 @@ const methods: Record<CoreApiMethod, true> = {
   restoreCheckpoint: true,
   askInConversation: true,
   regenerateConversationAnswer: true,
+  countScopeDocuments: true,
   stopConversationAnswer: true,
   listConversations: true,
   getConversation: true,

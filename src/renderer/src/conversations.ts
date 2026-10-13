@@ -176,13 +176,26 @@ export async function askInAssistant(
   }
 }
 
-/** Writes an Answer of the open conversation again; why it couldn't be is kept under its id. */
-export async function regenerateAnswer(answerId: string): Promise<void> {
+/**
+ * Writes an Answer of the open conversation again; why it couldn't be is kept under its id.
+ * `clearScope`: from every Document, its Question's Search scope taken off (#748).
+ */
+export async function regenerateAnswer(
+  answerId: string,
+  { clearScope = false }: { clearScope?: boolean } = {},
+): Promise<void> {
   const conversationId = useConversations.getState().openId;
   if (!conversationId) return;
   settleAsk(answerId, null);
   try {
-    settleAsk(answerId, await core.regenerateConversationAnswer({ conversationId, answerId }));
+    settleAsk(
+      answerId,
+      await core.regenerateConversationAnswer({
+        conversationId,
+        answerId,
+        ...(clearScope && { clearScope }),
+      }),
+    );
   } catch (error) {
     settleAsk(answerId, null, error);
   }

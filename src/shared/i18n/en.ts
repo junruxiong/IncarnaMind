@@ -1890,6 +1890,7 @@ export const en = {
   "scope.chip.more": "+{count} more",
   "scope.chip.moreLabel": "Show the other {count} Documents in the Search scope",
   "scope.chip.fewer": "Show fewer",
+  "scope.empty.line": "{scope} has no Documents",
   "scope.answer.empty":
     "This Question's Search scope has no Documents to search, so nothing was searched. Add Documents to its Folders or Tags, or remove the scope to search all your Documents.",
 
