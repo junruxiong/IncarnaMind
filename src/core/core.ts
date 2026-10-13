@@ -2503,7 +2503,7 @@ export function createCore(adapters: CoreAdapters): Core {
     listConnectorDirectory: async () => directory,
     addConnectorFromDirectory: async (entryId, client) => {
       const entry = directory.find((each) => each.id === entryId);
-      if (!entry) throw new InvalidInputError("That Connector isn't in the directory.");
+      if (!entry) throw new NotFoundError({ key: "error.connector.notInDirectory" });
       return connectors.addFromDirectory(entry, client);
     },
     previewConnectorImport: async (json) => connectors.previewImport(json),
