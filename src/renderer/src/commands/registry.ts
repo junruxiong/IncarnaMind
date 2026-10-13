@@ -12,7 +12,7 @@ import { useUndo } from "../undo";
 import { checkKeys } from "./keys";
 
 /** Where the User is acting, as `data-surface` marks it on the page. */
-export const SURFACES = ["sidebar", "library", "mind", "viewer", "palette"] as const;
+export const SURFACES = ["sidebar", "library", "deleted", "mind", "viewer", "palette"] as const;
 export type Surface = (typeof SURFACES)[number];
 
 /** The menus' order of commands (docs/agents/interaction.md, rule 5). */
@@ -150,7 +150,9 @@ export const commands = {
     if (!command) throw new Error(`There is no command ${id}.`);
     const ctx = { ...NO_CONTEXT, ...given };
     if (!offered(command, ctx) || !isEnabled(command, ctx)) return undefined;
-    const change = (await command.run(ctx)) ?? undefined;
+    const done: unknown = await command.run(ctx);
+    // What a row's own action (`here`) hands back, such as a frame's handle, is no change to undo.
+    const change = typeof done === "object" && done !== null ? (done as Undoable) : undefined;
     if (change) useUndo.getState().push(change);
     return change;
   },
