@@ -420,6 +420,7 @@ export const zhCN = {
   "chart.point.where": "{document} · {location}",
   "chart.point.open": "打开",
   "chart.point.noCitation": "没有引用",
+  "chart.point.position": "第 {index} 个，共 {count} 个",
   "chart.point.notDrawn": "不是数字，未绘制",
   "chart.point.noUnit": "没有单位，未绘制",
   "chart.value.noUnit": "无单位",
