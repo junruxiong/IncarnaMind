@@ -299,9 +299,7 @@ function parseSearchOptions(options: unknown): {
   if (!SEARCH_MODES.includes(mode as SearchMode)) {
     throw new InvalidInputError(`The search mode must be one of ${SEARCH_MODES.join(", ")}.`);
   }
-  if (!Number.isInteger(limit) || (limit as number) < 1 || (limit as number) > MAX_SEARCH_LIMIT) {
-    throw new InvalidInputError(`The limit must be a whole number from 1 to ${MAX_SEARCH_LIMIT}.`);
-  }
+  const checked = searchLimit(limit);
   if (
     documentIds !== undefined &&
     (!Array.isArray(documentIds) || !documentIds.every((id) => typeof id === "string" && id !== ""))
@@ -310,9 +308,22 @@ function parseSearchOptions(options: unknown): {
   }
   return {
     mode: mode as SearchMode,
-    limit: limit as number,
+    limit: checked,
     documentIds: documentIds as string[] | undefined,
   };
+}
+
+/** A search's `limit`, checked: a whole number from 1 to 200, 20 when not given. */
+function searchLimit(limit: unknown = DEFAULT_SEARCH_LIMIT): number {
+  if (
+    typeof limit !== "number" ||
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > MAX_SEARCH_LIMIT
+  ) {
+    throw new InvalidInputError({ key: "error.search.limit", values: { max: MAX_SEARCH_LIMIT } });
+  }
+  return limit;
 }
 
 /** What the keyword index holds for a Passage: its Document's name, then its own words. */
@@ -2283,9 +2294,12 @@ export function createDocuments(options: DocumentsOptions) {
     },
 
     /** See `CoreApi.searchDocumentText`. */
-    searchText(query: unknown): DocumentTextMatch[] {
+    searchText(query: unknown, options?: unknown): DocumentTextMatch[] {
       if (typeof query !== "string") throw new InvalidInputError("The search query must be text.");
-      return textSearch(db, query, DEFAULT_SEARCH_LIMIT);
+      if (options !== undefined && !isRecord(options)) {
+        throw new InvalidInputError({ key: "error.search.options" });
+      }
+      return textSearch(db, query, searchLimit(options?.limit));
     },
 
     /** Linked folders (see ./library). */

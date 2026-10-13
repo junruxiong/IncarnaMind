@@ -1193,7 +1193,7 @@ export type CitationLocation =
 export interface CitationAttributes {
   passageId: string | null;
   documentId: string | null;
-  /** The Document's display name when the Citation was made. */
+  /** The Document's name when the Citation was made: shown only when the Document can't be found (see `shownDocumentName`). */
   documentName: string | null;
   /**
    * The version of the Document the Citation quotes: the SHA-256 of its file
@@ -1374,6 +1374,11 @@ export interface UserSettings {
   leaveOutOwnFiles: boolean;
   /** How Export and ⇧⌘E export a Mind: the choices last saved in Export options (#100). */
   exportOptions: ExportPreferences;
+  /**
+   * The name the User's edits go under as tracked changes in a Word file
+   * (#107), or null: the name the computer knows them by (`Settings.author`).
+   */
+  authorName: string | null;
   /** The monthly cap on models billed per token: off (null) by default. */
   monthlyCap: MonthlyCap | null;
   /**
@@ -1482,6 +1487,11 @@ export interface Settings {
    * the microphone only (Linux, for now); "none": nothing (no capture).
    */
   meetingAudio: "both" | "microphone" | "none";
+  /**
+   * The name the User's edits go under as tracked changes in a Word file
+   * (#107): `UserSettings.authorName`, or the name the computer knows them by.
+   */
+  author: string;
 }
 
 export interface SettingsPatch {
@@ -3237,6 +3247,21 @@ export interface TaskProgress {
   total: number;
 }
 
+/** What the User can ask of a Task from its progress in the thread, as its kind allows (D189). */
+export type TaskAction = "plan" | "tell" | "pause" | "stop";
+
+/**
+ * A step of a Task, as its progress shows it: what it does, in the Task's own
+ * words ("Corvane Agreement · Termination notice"), and how it went. "failed":
+ * it ended without its result (a cell with no Answer); "skipped": the User
+ * chose to go on without it.
+ */
+export interface TaskStep {
+  key: string;
+  text: string;
+  status: "running" | "done" | "failed" | "skipped";
+}
+
 /**
  * A Task (CONTEXT.md): a Run that goes on in the background and keeps its
  * place when IncarnaMind is quit. Its journal (`runs`, `run_steps`) records
@@ -3260,6 +3285,12 @@ export interface Task {
   problem: string | null;
   /** What its model requests have cost, settled and reserved; null with none billed. */
   cost: Money | null;
+  /** What its kind lets the User ask of it, whatever it is doing now. */
+  actions: TaskAction[];
+  /** Its latest steps, oldest first (`listTaskSteps` has them all). */
+  steps: TaskStep[];
+  /** How many steps it has started in all. */
+  stepCount: number;
   startedAt: string;
   finishedAt: string | null;
   updatedAt: string;
@@ -3268,7 +3299,7 @@ export interface Task {
 /** What answering a Task's "unknown-outcome" ask does: the step again, or on without it. */
 export type TaskAskAnswer = "redo" | "skip";
 
-/** Open a Task's place: its Mind, with its row in the tray (`showTask`, a notification's click). */
+/** Open a Task's place: its Mind, with its progress in the thread (`showTask`, a notification's click). */
 export interface TaskShown {
   taskId: string;
   mindId: string | null;
@@ -5163,6 +5194,61 @@ export interface ConnectorImportResult {
   skipped: ConnectorImportEntry[];
 }
 
+/** Words in each interface language, for data shipped beside the code, such as the Connectors directory. */
+export type LocalizedText = Record<Language, string>;
+
+/**
+ * The directory's groups, by use, in the order Settings › Connectors shows
+ * them: where the User's files are, financial data, legal research, medicine
+ * and research, and work.
+ */
+export const connectorDirectoryGroups = [
+  "files",
+  "financial-data",
+  "legal-research",
+  "medicine-and-research",
+  "work",
+] as const;
+export type ConnectorDirectoryGroup = (typeof connectorDirectoryGroups)[number];
+
+/**
+ * How a Connector in the directory signs in:
+ * - "browser": in the User's browser, IncarnaMind registering itself with the service;
+ * - "own-app": in the browser too, but the service registers only the apps it
+ *   knows: the User registers an OAuth app with it and enters its client ID
+ *   (`ConnectorClientInput`) before signing in;
+ * - "none": it needs no sign-in.
+ */
+export type ConnectorDirectorySignIn = "browser" | "own-app" | "none";
+
+/**
+ * A remote Connector IncarnaMind has reviewed, listed in Settings ›
+ * Connectors before the User connects it. The list ships with the app as
+ * data (src/core/connectors/directory.json).
+ */
+export interface ConnectorDirectoryEntry {
+  /** Stable across versions of the list, e.g. "factset". */
+  id: string;
+  /** The service's name, which the Connector takes when it is added, e.g. "FactSet". */
+  name: string;
+  /** Who runs the server, e.g. "FactSet". */
+  publisher: string;
+  group: ConnectorDirectoryGroup;
+  /** One line on what it reads. */
+  summary: LocalizedText;
+  /**
+   * What the User needs from the service: their own subscription to a
+   * product (`{ product: "FactSet" }`), nothing ("free"), or null when that
+   * depends on their account, e.g. a free tier.
+   */
+  subscription: { product: string } | "free" | null;
+  /** Its MCP endpoint, an https URL. A Connector at this URL is this entry, connected. */
+  url: string;
+  signIn: ConnectorDirectorySignIn;
+  /** Listed only in these interface languages, e.g. a service for Chinese Users. Absent: in every language. */
+  languages?: Language[];
+}
+
 // ---------------------------------------------------------------------------
 // Approvals (#38)
 
@@ -5420,9 +5506,17 @@ export type ExportFormat = (typeof EXPORT_FORMATS)[number];
  */
 export interface ExportPreferences {
   format: ExportFormat;
-  docx: { includeQuestions: boolean };
+  docx: WordExportPreferences;
   pdf: { includeQuestions: boolean };
   html: { includeQuestions: boolean };
+}
+
+/** A Word export's own choices (#107), each on until the User turns it off (see `ExportMindOptions`). */
+export interface WordExportPreferences {
+  includeQuestions: boolean;
+  trackChanges: boolean;
+  markAiText: boolean;
+  commentFailedChecks: boolean;
 }
 
 export interface ExportMindOptions {
@@ -5439,6 +5533,21 @@ export interface ExportMindOptions {
    * exports anyway. `saveMindExport` saves nothing while anything else can't be kept.
    */
   accept?: string[];
+  /**
+   * Word only (#107): for a Mind imported from a Word file, the User's edits
+   * since the import go in as tracked changes under their name
+   * (`Settings.author`). Changes still waiting to be accepted always go into
+   * a Word file as tracked changes by IncarnaMind. Absent: off.
+   */
+  trackChanges?: boolean;
+  /** Word only: AI text gets a comment by IncarnaMind, "Written by IncarnaMind". Absent: off. */
+  markAiText?: boolean;
+  /**
+   * Word only: a Citation whose check failed (its quote wasn't found, or its
+   * claim is unsupported or contradicted) gets a comment by IncarnaMind
+   * saying so. Absent: off.
+   */
+  commentFailedChecks?: boolean;
 }
 
 /** What exporting a Mind will write, for the User to see before the file is written. */
@@ -5459,6 +5568,8 @@ export interface MindExportPreview {
   unverifiedCitations: number;
   /** The Question Blocks in the Mind, whether the export includes them or not. */
   questions: number;
+  /** The Mind was imported from a Word file, which a Word export writes back into (#105). */
+  fromWord: boolean;
 }
 
 /** A Mind exported as a file, for the host to save where the User chooses. */
@@ -5474,7 +5585,7 @@ export type SavedMindExport =
   /** Saved, with what it holds, so the result line can say how many quotes weren't found. */
   | ({ status: "saved"; file: SavedFile; word: WordExportReport | null } & Omit<
       MindExportPreview,
-      "fileName"
+      "fileName" | "fromWord"
     >)
   /**
    * Not saved: a Mind imported from Word can't keep something in its file
@@ -6263,11 +6374,12 @@ export interface CoreApi {
    */
   searchMinds(query: string): Promise<MindTextMatch[]>;
   /**
-   * ⌘K's "In your Documents": live Documents whose Passages hold every word of `query`, as
-   * `searchMinds` reads it, best match first, one Passage each, at most 20. Keyword search over
-   * the Passage index, whatever the embedding settings.
+   * ⌘K's "In your Documents" and the Library's search: live Documents whose Passages hold every
+   * word of `query`, as `searchMinds` reads it, best match first, one Passage each, at most
+   * `limit` (20 unless asked; InvalidInputError outside 1 to 200). Keyword search over the
+   * Passage index, whatever the embedding settings.
    */
-  searchDocumentText(query: string): Promise<DocumentTextMatch[]>;
+  searchDocumentText(query: string, options?: { limit?: number }): Promise<DocumentTextMatch[]>;
   /**
    * Gives a conversation the title the User typed (trimmed; empty goes back to its own
    * name) and returns it. A name the conversation gives itself never replaces it.
@@ -6739,6 +6851,8 @@ export interface CoreApi {
   stopTask(taskId: string): Promise<Task>;
   /** Answers a Task's "unknown-outcome" ask: do the step again, or go on without it. */
   answerTaskAsk(taskId: string, answer: TaskAskAnswer): Promise<Task>;
+  /** Every step of a Task, in the order each first started. */
+  listTaskSteps(taskId: string): Promise<TaskStep[]>;
 
   /**
    * Asks a Question: its Answer is written into the Mind right after it, as the
@@ -7060,6 +7174,15 @@ export interface CoreApi {
   previewConnectorImport(json: string): Promise<ConnectorImportEntry[]>;
   /** Adds every server of an `mcpServers` configuration that the preview marks "add". */
   importConnectors(json: string): Promise<ConnectorImportResult>;
+  /** The reviewed Connectors of Settings › Connectors' Browse, in the directory's order. Reads nothing from the network. */
+  listConnectorDirectory(): Promise<ConnectorDirectoryEntry[]>;
+  /**
+   * Adds a directory entry as a remote Connector named as the service, and
+   * starts it, as `addConnector` does, with the User's OAuth app for an
+   * "own-app" entry. A Connector already at the entry's URL is returned
+   * instead, turned on.
+   */
+  addConnectorFromDirectory(entryId: string, client?: ConnectorClientInput): Promise<Connector>;
 
   /**
    * The User's approval policies, for the approvals page: every Tool always
@@ -7594,6 +7717,7 @@ const methods: Record<CoreApiMethod, true> = {
   resumeTask: true,
   stopTask: true,
   answerTaskAsk: true,
+  listTaskSteps: true,
   askQuestion: true,
   regenerateAnswer: true,
   stopAnswer: true,
@@ -7681,6 +7805,8 @@ const methods: Record<CoreApiMethod, true> = {
   setConnectorClient: true,
   previewConnectorImport: true,
   importConnectors: true,
+  listConnectorDirectory: true,
+  addConnectorFromDirectory: true,
   listApprovalPolicies: true,
   setApprovalPolicy: true,
   revokeApprovalPolicy: true,

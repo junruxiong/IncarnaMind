@@ -283,6 +283,195 @@ test("search narrows every section and hides the empty ones; a filter chip and t
   }
 });
 
+test("search finds the words inside Documents too, in every section: the line that holds them, where it is, its Folder, and a click opens it there, in English and Chinese", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1600, 900);
+    await placeAssistant(window, { folded: true });
+    const library = await openFullLibrary(window);
+    const search = library.getByTestId("library-search");
+    await expect(search).toHaveAttribute("placeholder", "Search names, words inside, Tags");
+
+    // "ledger" is in no name, but in the text of every English Document that has text:
+    // far more than ⌘K's 20.
+    const withText = [...FOLDERS.flatMap((folder) => folder.documents), ...NOT_IN_A_FOLDER]
+      .map(([name]) => name)
+      .filter((name) => name !== SCAN_NAME && !DELETED.includes(name));
+    const english = withText.filter((name) => !/\p{Script=Han}/u.test(name));
+    await search.fill("ledger");
+    await expect(rowsOf(library)).toHaveCount(english.length);
+    expect(english.length).toBeGreaterThan(20);
+    await expect(library.getByTestId("library-no-match")).toHaveCount(0);
+
+    // Each row says the line that holds the words, with them in bold, and its Folder.
+    const invoice = row(section(library, "Finance"), "Invoice 4471");
+    await expect(invoice.getByTestId("library-found-text")).toHaveText(
+      /against the ledger on 12 March 2026\.$/,
+    );
+    await expect(invoice.getByTestId("library-found-text").locator("b")).toHaveText(["ledger"]);
+    await expect(invoice.getByTestId("library-found-place")).toHaveText("p. 1");
+    await expect(invoice.getByTestId("library-path")).toHaveText("Finance");
+    // Not in a Folder's rows need no path.
+    const loose = row(section(library, "Not in a Folder"), "Reading list");
+    await expect(loose.getByTestId("library-found-text")).toContainText("ledger");
+    await expect(loose.getByTestId("library-path")).toHaveCount(0);
+
+    // A name that holds the words has them in bold too.
+    await search.fill("invoice 4471");
+    await expect(invoice.getByTestId("library-document-name").locator("b")).toHaveText([
+      "Invoice",
+      "4471",
+    ]);
+
+    // A click opens it at the words.
+    await search.fill("ledger");
+    await pointAndClick(window, invoice.getByTestId("library-document-name"));
+    const viewer = window.getByTestId("viewer");
+    await expect(viewer).toBeVisible();
+    await expect(viewer.getByTestId("viewer-header")).toContainText("Invoice 4471");
+
+    // Cleared, rows are one line again.
+    await library.getByRole("button", { name: "Clear the search", exact: true }).click();
+    await expect(library.getByTestId("library-found-text")).toHaveCount(0);
+    await expect(library.getByTestId("library-path")).toHaveCount(0);
+
+    // In Chinese: the placeholder, and words inside Chinese Documents.
+    await setLanguage(window, "zh-CN");
+    await expect(search).toHaveAttribute("placeholder", "搜索名称、文档内容和标签");
+    const chinese = withText.filter((name) => /\p{Script=Han}/u.test(name));
+    await search.fill("核对");
+    await expect(rowsOf(library)).toHaveCount(chinese.length);
+    const report = row(section(library, "财务报表"), "审计意见书");
+    await expect(report.getByTestId("library-found-text").locator("b")).toHaveText(["核对"]);
+    await expect(report.getByTestId("library-path")).toHaveText("财务报表");
+  } finally {
+    await app.close();
+  }
+});
+
+test("every task on the page by keyboard alone: / and ↓ into the rows, ↑ back, ← and →, T, ⇧⌘M, Shift+↓, ⌘⌫ with ⌘Z, ⌘A, Esc and Enter", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1600, 900);
+    await placeAssistant(window, { folded: true });
+    const library = await openFullLibrary(window);
+    const search = library.getByTestId("library-search");
+    const contracts = section(library, "Contracts");
+    const focusedRow = library.locator("[data-document-id]:has([data-row-main]:focus)");
+    const focusedName = () => focusedRow.getByTestId("library-document-name").textContent();
+
+    // / searches; ↓ goes from the field to the first row, ↑ back up to the field.
+    await window.keyboard.press("/");
+    await expect(search).toBeFocused();
+    await window.keyboard.type("agreement");
+    await expect(rowsOf(library)).toHaveCount(2);
+    await window.keyboard.press("ArrowDown");
+    await expect(rowsOf(contracts).first().locator("[data-row-main]")).toBeFocused();
+    await window.keyboard.press("ArrowUp");
+    await expect(contracts.getByTestId("library-section-name")).toBeFocused();
+    await window.keyboard.press("ArrowUp");
+    await expect(search).toBeFocused();
+    await window.keyboard.press("Escape");
+    await expect(search).toHaveValue("");
+
+    // ← folds the section its head has the focus on, → opens it again.
+    await window.keyboard.press("ArrowDown");
+    const board = section(library, "Board");
+    await expect(rowsOf(board).first().locator("[data-row-main]")).toBeFocused();
+    await window.keyboard.press("ArrowUp");
+    await expect(board.getByTestId("library-section-name")).toBeFocused();
+    await window.keyboard.press("ArrowLeft");
+    await expect(rowsOf(board)).toHaveCount(0);
+    await window.keyboard.press("ArrowRight");
+    await expect(rowsOf(board)).not.toHaveCount(0);
+
+    // T opens the row's Tags; a Tag typed and ↵ is on it, and Esc gives the focus back.
+    await window.keyboard.press("ArrowDown");
+    const tagged = await focusedName();
+    await window.keyboard.press("t");
+    await expect(focusedRow).toHaveCount(0);
+    await window.keyboard.type("Paper");
+    await window.keyboard.press("Enter");
+    await window.keyboard.press("Escape");
+    await expect(focusedRow.getByTestId("library-document-name")).toHaveText(tagged ?? "");
+    await expect(focusedRow.getByTestId("tag-chip").filter({ hasText: "Paper" })).toHaveCount(1);
+
+    // ⇧⌘M moves it, and the focus goes with it to its new section.
+    await window.keyboard.press("ControlOrMeta+Shift+M");
+    await window.keyboard.type("Contracts");
+    await window.keyboard.press("Enter");
+    await expect(row(contracts, tagged ?? "")).toHaveCount(1);
+    await expect(row(contracts, tagged ?? "").locator("[data-row-main]")).toBeFocused();
+
+    // Shift+↓ selects the rows below it; ⌘⌫ deletes the three, the focus moving on; ⌘Z brings them back.
+    await window.keyboard.press("Shift+ArrowDown");
+    await window.keyboard.press("Shift+ArrowDown");
+    const bar = library.getByTestId("library-selection");
+    await expect(bar.getByRole("status")).toHaveText("3 selected");
+    await expect(bar.locator('[data-command="document.delete"]')).toHaveText(
+      /^Delete 3 Documents(⌘⌫|Ctrl\+Backspace)$/,
+    );
+    const count = library.getByTestId("library-count");
+    const shown = FIXTURE_COUNT - DELETED.length;
+    await window.keyboard.press("ControlOrMeta+Backspace");
+    await expect(count).toHaveText(String(shown - 3));
+    await expect(row(contracts, tagged ?? "")).toHaveCount(0);
+    await expect(focusedRow).toHaveCount(1);
+    await expect(window.getByTestId("undo-line")).toContainText("3 Documents");
+    await window.keyboard.press("ControlOrMeta+z");
+    await expect(count).toHaveText(String(shown));
+    await expect(row(contracts, tagged ?? "")).toHaveCount(1);
+
+    // ⌘A selects every row shown; Esc lets go.
+    await focusedRow.locator("[data-row-main]").focus();
+    await window.keyboard.press("ControlOrMeta+a");
+    await expect(bar.getByRole("status")).toHaveText(`${shown} selected`);
+    await window.keyboard.press("Escape");
+    await expect(bar).toHaveCount(0);
+
+    // Enter opens the row beside the list.
+    const opened = await focusedName();
+    await window.keyboard.press("Enter");
+    const viewer = window.getByTestId("viewer");
+    await expect(viewer).toBeVisible();
+    await expect(viewer.getByTestId("viewer-header")).toContainText(opened ?? "");
+  } finally {
+    await app.close();
+  }
+});
+
+test("a Document is found and asked about in four steps by keyboard: /, its words, ↓, and Ask from its menu", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1600, 900);
+    const library = await openFullLibrary(window);
+    // 1 and 2: the search, and words of what is wanted.
+    await window.keyboard.press("/");
+    await window.keyboard.type("rotterdam lease");
+    // 3: ↓ to what was found.
+    await window.keyboard.press("ArrowDown");
+    const lease = row(section(library, "Contracts"), "Lease: Rotterdam warehouse");
+    await expect(lease.locator("[data-row-main]")).toBeFocused();
+    const id = await lease.getAttribute("data-document-id");
+    // 4: Ask, from its menu (⇧F10, as the context-menu key).
+    await window.keyboard.press("Shift+F10");
+    const ask = window.getByTestId("document-file-actions").filter({ visible: true });
+    for (let step = 0; step < 6; step++) {
+      if (await ask.getByTestId("document.ask").evaluate((item) => item === document.activeElement))
+        break;
+      await window.keyboard.press("ArrowDown");
+    }
+    await expect(ask.getByTestId("document.ask")).toBeFocused();
+    await window.keyboard.press("Enter");
+    const composer = window.getByTestId("composer");
+    await expect(composer.getByTestId("composer-input")).toBeFocused();
+    await expect(composer.getByTestId("scope-chip")).toHaveCount(1);
+    await expect(composer.getByTestId("scope-chip")).toHaveAttribute("data-id", id ?? "");
+  } finally {
+    await app.close();
+  }
+});
+
 test("five Documents go into a Folder with Move to…, from the selection bar and by ⇧⌘M, with Undo; no row has a dropdown", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
@@ -308,7 +497,7 @@ test("five Documents go into a Folder with Move to…, from the selection bar an
     await expect(bar.getByTestId("library-selection-action")).toHaveText([
       /^Move to…(⇧⌘M|Ctrl\+Shift\+M)$/,
       "Ask about these 5 Documents",
-      "Delete 5 Documents",
+      /^Delete 5 Documents(⌘⌫|Ctrl\+Backspace)$/,
     ]);
     // The quiet bar gives way to the selection's.
     await expect(library.getByTestId("library-bar")).toHaveCount(0);
@@ -450,7 +639,7 @@ test("Tags are edited on the row: a click in the cell opens the picker over it, 
     await invoice.scrollIntoViewIfNeeded();
     await pointAndClick(window, chips.first());
     await expect(picker.getByTestId("tag-picker-keys")).toHaveText(
-      /^↵ 添加或移除 · ⌫ 移除最后一个 · (⌘Z|Ctrl\+Z) 撤销 · Esc 关闭$/,
+      /^Enter 添加或移除 · Backspace 移除最后一个 · (⌘Z|Ctrl\+Z) 撤销 · Esc 关闭$/,
     );
     const narrow = await picker.boundingBox();
     const width = await window.evaluate(() => innerWidth);
