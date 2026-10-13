@@ -2289,10 +2289,11 @@ export const en = {
   "export.action": "Export",
   "export.action.title": "Export as {format} ({shortcut})",
   "export.as": "Export as {format}",
-  "export.keywords": "export download save PDF Word docx Markdown",
+  "export.keywords": "export download save PDF Word docx Markdown source pack cited pages",
   "export.format": "Format",
   "export.format.docx": "Word (.docx)",
   "export.format.pdf": "PDF",
+  "export.format.source-pack": "Source pack (PDF)",
   "export.format.html": "HTML",
   "export.format.markdown": "Markdown (.md)",
   "export.options": "Export options…",
@@ -2305,6 +2306,19 @@ export const en = {
   "export.options.html":
     "One file that opens in any browser. Citations become footnotes linked both ways.",
   "export.options.markdown": "Citations become footnotes. Questions are kept.",
+  "export.options.source-pack":
+    "A cover list, then each cited page as it was saved, its quotes highlighted and numbered like the Mind's Citations.",
+  "export.pack.empty":
+    "This Mind has no Citations yet, so there are no cited pages to put in a pack.",
+  "export.pack.fileName": "{name} - source pack",
+  "export.pack.caption":
+    "The pages this Mind cites. Each quote is highlighted and numbered as its Citation is in the Mind.",
+  "export.pack.column.citation": "Citation",
+  "export.pack.column.source": "Document and Location",
+  "export.pack.column.page": "Page",
+  "export.pack.picture": "Cited page: {source}",
+  "export.pack.notFound": "{number} · Quote not found on this page",
+  "export.pack.noPage": "This page wasn't saved when it was cited, so only the quotes are shown.",
   "export.saveTo": "Save to",
   "export.includeQuestions": "Include Questions",
   "export.questionsLeftOut.one": "1 Question is left out.",
