@@ -24,6 +24,11 @@ export const isTagsKey = (event: KeyboardEvent) =>
   !event.nativeEvent.isComposing &&
   (pressed("T", event, isMac) || pressed(TAGS_KEYS, event, isMac));
 
+/** A Library row's Delete, as Finder's Move to Trash. */
+export const DELETE_KEYS = "CmdOrCtrl+Backspace";
+
+export const isDeleteKey = (event: KeyboardEvent) => pressed(DELETE_KEYS, event, isMac);
+
 /** Marks a row's main button as a stop for the arrow keys (`moveThroughRows`). */
 export const TREE_ROW = { "data-tree-row": "" } as const;
 
