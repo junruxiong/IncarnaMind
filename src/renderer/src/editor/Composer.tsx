@@ -16,7 +16,7 @@ import { hasSearchScope, type ScopeKind, scopeIds } from "../../../shared/search
 import { useAnswers } from "../answers";
 import { shortcutLabel } from "../commands/keymap";
 import { SearchIcon, StopIcon } from "../components/icons";
-import { SparkLineIcon } from "../components/lineIcons";
+import { SearchLineIcon, SparkLineIcon } from "../components/lineIcons";
 import { ProblemLine } from "../components/ProblemLine";
 import { TypingTextarea } from "../components/TypingTextarea";
 import {
@@ -40,6 +40,14 @@ import { core } from "../core";
 import { carriesDocuments, droppedDocumentIds } from "../documentDrag";
 import { editFromComposer, stopEditing, useEdits } from "../editWithAi";
 import { useT } from "../i18n";
+import {
+  cancelResearch,
+  changePlan,
+  openResearch,
+  startResearch,
+  useResearch,
+  useWebReach,
+} from "../research";
 import type { ScopeChoice } from "../scope";
 import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
@@ -47,7 +55,7 @@ import { AnswerAnnouncer } from "./AnswerAnnouncer";
 import { AskProblem } from "./AskProblem";
 import { EditStatus } from "./EditStatus";
 import { AskArrowIcon, CollapseIcon, ExpandIcon, RemoveIcon } from "./icons";
-import { ModelChip } from "./ModelChip";
+import { ModelChip, useMindModel } from "./ModelChip";
 import { mindFocusOf } from "./mindFocus";
 import { PasteChip, usePasteLabel } from "./PasteChip";
 import { SkillChip } from "./QuestionView";
@@ -168,6 +176,11 @@ export function Composer({
   const skill = draft.skill ? skills.find((each) => each.name === draft.skill) : undefined;
   /** The selection the composer is saying what to change in (Edit with AI…, ⌘J with a selection). */
   const editing = useEdits((state) => state.editing[key]);
+  /** The Research plan open in the tray (#130): what is typed changes it. */
+  const plan = useResearch((state) => (mindId ? state.plans[mindId] : undefined));
+  const researching = mind !== null && draft.research === true;
+  const chosenModel = useMindModel(mind?.doc ?? null);
+  const webReach = useWebReach(chosenModel);
 
   const update = (change: Partial<Draft>) => useComposer.getState().update(key, change);
   /** Keeps the scope the User chose; the Mind's own follows it to another Folder. */
@@ -231,8 +244,8 @@ export function Composer({
     const from = at - query.length - 1;
     if (dismissed.current === from) return null;
     const kind = match[1] === "@" ? "scope" : "skill";
-    // A slash is just a slash while there is no Skill to choose.
-    if (kind === "skill" && enabledSkills.length === 0) return null;
+    // A slash is just a slash while there is nothing to choose: no Skill, and no Mind to research for.
+    if (kind === "skill" && enabledSkills.length === 0 && !mind) return null;
     return { kind, query, from, to: at };
   };
 
@@ -307,8 +320,16 @@ export function Composer({
     field.current?.focus();
   };
 
+  /** Research…: what is typed next is a topic (#130). */
+  const chooseResearch = () => {
+    update({ research: true, skill: null, ...(picking && { text: withoutTyped(picking) }) });
+    useAnswers.getState().dismiss(composerKey(mindId));
+    setPicking(null);
+    field.current?.focus();
+  };
+
   const chooseSkill = (name: string) => {
-    update({ skill: name, ...(picking && { text: withoutTyped(picking) }) });
+    update({ skill: name, research: false, ...(picking && { text: withoutTyped(picking) }) });
     useAnswers.getState().dismiss(composerKey(mindId));
     setPicking(null);
     field.current?.focus();
@@ -392,6 +413,14 @@ export function Composer({
       }
       return;
     }
+    if (mind && (plan || current.research)) {
+      const topic = current.text.trim();
+      if (!topic) return;
+      update({ text: "", research: false });
+      if (plan) void changePlan(mind.mindId, topic, mindModelOf(mind.doc));
+      else openResearch(mind.mindId, topic, mindModelOf(mind.doc), webReach === "ready");
+      return;
+    }
     // An Answer is being written, or its Question is on its way: Enter waits for it, as in
     // ChatGPT and Claude, so a second press never asks the Question twice. The button is Stop.
     if (answerBeingWritten() !== null) return;
@@ -442,6 +471,22 @@ export function Composer({
     if (event.key === "Enter" && !event.shiftKey && !event.altKey && !isCommand(event)) {
       event.preventDefault();
       void ask();
+      return;
+    }
+    if (event.key === "Enter" && isCommand(event) && plan && mind) {
+      event.preventDefault();
+      void startResearch(mind.mindId, mindModelOf(mind.doc));
+      return;
+    }
+    if (event.key === "Escape" && plan && mind) {
+      event.preventDefault();
+      cancelResearch(mind.mindId);
+      return;
+    }
+    if (event.key === "Escape" && researching) {
+      // Back to asking; the next Esc is the assistant's.
+      event.preventDefault();
+      update({ research: false });
       return;
     }
     if (event.key === "Escape" && expanded) {
@@ -589,6 +634,28 @@ export function Composer({
             </button>
           </span>
         )}
+        {researching && (
+          <span
+            data-testid="composer-research"
+            title={t("research.command.hint")}
+            className="question-skill"
+          >
+            <SearchLineIcon className="question-skill-icon" />
+            <span className="truncate">{t("research.chip")}</span>
+            <button
+              type="button"
+              data-testid="composer-research-remove"
+              aria-label={t("research.chip.remove")}
+              title={t("research.chip.remove")}
+              // The text keeps the focus.
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => update({ research: false })}
+              className="scope-chip-remove"
+            >
+              <RemoveIcon className="size-2.5" />
+            </button>
+          </span>
+        )}
         {draft.skill && (
           <SkillChip
             name={draft.skill}
@@ -609,7 +676,15 @@ export function Composer({
               ? t("composer.edit.label")
               : t("composer.label", { shortcut: shortcutLabel("composer.focus") })
           }
-          placeholder={editing ? t("composer.edit.placeholder") : t("composer.placeholder")}
+          placeholder={
+            editing
+              ? t("composer.edit.placeholder")
+              : plan
+                ? t("research.placeholder.change")
+                : researching
+                  ? t("research.placeholder")
+                  : t("composer.placeholder")
+          }
           aria-autocomplete="list"
           aria-controls={picking ? listId : undefined}
           aria-activedescendant={activeOption}
@@ -714,6 +789,7 @@ export function Composer({
             <SkillChoiceList
               ref={list}
               id={listId}
+              onResearch={mind ? chooseResearch : undefined}
               skills={enabledSkills}
               describe={(each) => skillDescription(each, t)}
               query={picking.query}

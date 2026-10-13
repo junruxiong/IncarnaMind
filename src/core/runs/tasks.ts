@@ -111,11 +111,13 @@ export interface TaskKind {
   run(task: TaskRun): Promise<TaskEnd>;
   /** The Block in the Task's Mind it works on, from its input. */
   blockOf?(input: unknown): string | null;
+  /** What the User asked it, in their words, from its input. */
+  questionOf?(input: unknown): string | null;
   /** What the User can ask of it from its progress (D189). Absent: Pause and Stop. */
   readonly actions?: readonly TaskAction[];
   /** What its steps do, in its own words, by key; a step it can't name shows its key. */
   describeSteps?(
-    task: { mindId: string | null; input: unknown },
+    task: { id: string; mindId: string | null; input: unknown },
     keys: readonly string[],
   ): string[];
 }
@@ -207,7 +209,10 @@ export function createTasks(options: TasksOptions) {
     const kind = kinds.get(record.kind);
     if (!kind?.describeSteps || keys.length === 0) return keys;
     try {
-      return kind.describeSteps({ mindId: record.mindId, input: record.input }, keys);
+      return kind.describeSteps(
+        { id: record.id, mindId: record.mindId, input: record.input },
+        keys,
+      );
     } catch (error) {
       options.reportError(error);
       return keys;
@@ -225,6 +230,7 @@ export function createTasks(options: TasksOptions) {
       kind: record.kind,
       mindId: record.mindId,
       blockId: kinds.get(record.kind)?.blockOf?.(record.input) ?? null,
+      question: kinds.get(record.kind)?.questionOf?.(record.input) ?? null,
       status: record.status,
       pausedReason: record.status === "paused" ? record.pausedReason : null,
       resetsAt: record.resetsAt,

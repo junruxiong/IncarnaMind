@@ -6,7 +6,9 @@ import { keysLabel } from "../commands/keys";
 import { ApprovalCard, withShortcut } from "../editor/AnswerView";
 import { useT } from "../i18n";
 import type { Translate } from "../objects";
+import { useResearch } from "../research";
 import { answerTaskAsk, loadTasks, useTasks } from "../tasks";
+import { ResearchPlanCard } from "./ResearchPlanCard";
 
 /** The share of the assistant's column the tray may take (DESIGN.md, Task tray). */
 const TRAY_SHARE = 0.4;
@@ -121,10 +123,9 @@ function TaskAskView({ task }: { task: Task }) {
  * top of the assistant's composer, only what waits for the User, nearest the
  * keyboard. Top to bottom: the plan card before a Task starts, the one
  * waiting ask, then queued messages, which wrap. Progress is in the thread
- * (`TaskProgress`); the plan card and the queue come with the first kind that
- * has them (#130), in those places around the ask. It takes at most 40% of
- * the column, and at least room for the ask's buttons; the ask scrolls inside
- * with its buttons pinned. Nothing in it goes into the Mind.
+ * (`TaskProgress`). The plan card is Research's (#130). It takes at most 40%
+ * of the column, and at least room for the ask's buttons; the ask scrolls
+ * inside with its buttons pinned. Nothing in it goes into the Mind.
  */
 export function TaskTray({ mindId }: { mindId: string }) {
   const t = useT();
@@ -134,9 +135,10 @@ export function TaskTray({ mindId }: { mindId: string }) {
       (task) => task.mindId === mindId && task.finishedAt === null && task.ask !== null,
     ),
   );
+  const planning = useResearch((state) => state.plans[mindId] !== undefined);
   const tray = useRef<HTMLElement>(null);
   const [maxHeight, setMaxHeight] = useState<number | undefined>(undefined);
-  const present = asking !== undefined;
+  const present = asking !== undefined || planning;
 
   useLayoutEffect(() => {
     const element = tray.current;
@@ -154,7 +156,7 @@ export function TaskTray({ mindId }: { mindId: string }) {
     return () => observer.disconnect();
   }, [present]);
 
-  if (!asking) return null;
+  if (!present) return null;
   return (
     <section
       ref={tray}
@@ -163,7 +165,8 @@ export function TaskTray({ mindId }: { mindId: string }) {
       className="task-tray"
       style={{ maxHeight }}
     >
-      <TaskAskView task={asking} />
+      {planning && <ResearchPlanCard mindId={mindId} />}
+      {asking && <TaskAskView task={asking} />}
     </section>
   );
 }

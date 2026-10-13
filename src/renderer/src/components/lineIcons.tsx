@@ -42,6 +42,16 @@ export function SearchLineIcon(props: IconProps) {
   );
 }
 
+/** A Research plan: layers, one step on another. */
+export function PlanLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="m12 4 8 4-8 4-8-4z" />
+      <path d="m4 12 8 4 8-4M4 16l8 4 8-4" />
+    </LineIcon>
+  );
+}
+
 /** A Mind: a notebook. */
 export function MindLineIcon(props: IconProps) {
   return (

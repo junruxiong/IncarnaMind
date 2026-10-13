@@ -629,6 +629,10 @@ export function createAnswers(options: AnswersOptions) {
     toolSet?: ToolSet;
     /** Written for a Task (#126), which gives way to Answers itself (see ../runs/tasks). */
     task?: boolean;
+    /** Offers web search's Tools whatever the Question says: a Research Task's Web source (#130). */
+    web?: boolean;
+    /** Hears each Tool call as it ends. */
+    onCall?(call: AnswerToolCall): void;
   }): void {
     const { home, answerId, model, context, documentIds, forcedSkill } = input;
     const outside = input.outside === true;
@@ -906,6 +910,7 @@ export function createAnswers(options: AnswersOptions) {
       if (found.error) call.error = found.error;
       if (found.webPage) call.webPage = found.webPage;
       announce("answer.toolCallFinished", { ...place, answerId, call: { ...call } });
+      input.onCall?.({ ...call });
       writeSoon();
     };
     const setApproval = (id: string, approval: ToolCallApproval) => {
@@ -1228,9 +1233,9 @@ export function createAnswers(options: AnswersOptions) {
       }
       // Web search's Tools, only for a Question that asks for the web, with a model whose provider
       // searches it, while the User has it on (#128).
-      const web = outside ? undefined : options.web;
+      const web = outside && !input.web ? undefined : options.web;
       let webService: ExternalService | null = null;
-      if (web && asksForWeb(context.question)) {
+      if (web && (input.web || asksForWeb(context.question))) {
         try {
           webService = await web.service(model);
         } catch (error) {
@@ -2003,6 +2008,64 @@ export function createAnswers(options: AnswersOptions) {
           outside: true,
           toolSet: "check",
           task: true,
+        });
+        const stop = () => active.get(answerId)?.finish({ status: "stopped" });
+        if (input.signal.aborted) stop();
+        else input.signal.addEventListener("abort", stop, { once: true });
+      });
+    },
+
+    /**
+     * Does one step of a Research Task (#130) as an Answer kept nowhere, as a
+     * cell is: from the Documents of `documentIds` (null: every Document)
+     * and, with `web`, the web, whatever the step's words; a page it reads is
+     * saved into the Folder of `mindId`. It uses no Connector and no Skill
+     * script, so nothing it does waits for the User. The model is ready and
+     * allowed already. `onCall` hears each Tool call as it ends.
+     */
+    answerResearch(input: {
+      mindId: string;
+      context: QuestionContext;
+      documentIds: string[] | null;
+      web: boolean;
+      model: ChatModelChoice;
+      signal: AbortSignal;
+      onCall(call: AnswerToolCall): void;
+    }): Promise<CellAnswer> {
+      const answerId = randomUUID();
+      return new Promise<CellAnswer>((resolve) => {
+        start({
+          home: {
+            place: { mindId: input.mindId },
+            write(answer, outcome) {
+              if (outcome) {
+                resolve({
+                  status: outcome.status,
+                  markdown: answer.markdown,
+                  blocks: answer.blocks(),
+                  citations: answer.citations(),
+                  error: outcome.status === "failed" ? outcome.error : null,
+                });
+              }
+              return true;
+            },
+          },
+          answerId,
+          questionId: answerId,
+          model: input.model,
+          context: input.context,
+          contextReasons: [],
+          documentIds: input.documentIds,
+          emptyScope:
+            !input.web &&
+            input.documentIds !== null &&
+            options.documents.searchableCount(input.documentIds) === 0,
+          forcedSkill: null,
+          consentNeeded: false,
+          outside: true,
+          task: true,
+          web: input.web,
+          onCall: input.onCall,
         });
         const stop = () => active.get(answerId)?.finish({ status: "stopped" });
         if (input.signal.aborted) stop();

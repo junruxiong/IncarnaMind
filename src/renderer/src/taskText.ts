@@ -1,11 +1,18 @@
 import type { Task } from "../../core/api";
 import type { Language } from "../../core/language";
+import { RESEARCH_TASK } from "../../shared/research";
 import { runStopText } from "./cost";
 import type { Translate } from "./objects";
 
 /** A Task's name, from its kind. */
 export const taskName = (task: Task, t: Translate) =>
-  t(task.kind === "comparison" ? "task.kind.comparison" : "task.kind.other");
+  t(
+    task.kind === "comparison"
+      ? "task.kind.comparison"
+      : task.kind === RESEARCH_TASK
+        ? "task.kind.research"
+        : "task.kind.other",
+  );
 
 /** What a Task is doing, in one line: its step, or what it waits for. */
 export function stepLine(task: Task, t: Translate, language: Language): string {
@@ -29,6 +36,12 @@ export function stepLine(task: Task, t: Translate, language: Language): string {
   }
   if (task.kind === "comparison" && task.progress && task.progress.total > 0) {
     return t("task.comparison.filling", {
+      current: Math.min(task.progress.done + 1, task.progress.total),
+      total: task.progress.total,
+    });
+  }
+  if (task.kind === RESEARCH_TASK && task.progress && task.progress.total > 0) {
+    return t("task.research.step", {
       current: Math.min(task.progress.done + 1, task.progress.total),
       total: task.progress.total,
     });
