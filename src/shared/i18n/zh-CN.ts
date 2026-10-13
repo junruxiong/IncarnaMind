@@ -1344,6 +1344,11 @@ export const zhCN = {
   "setup.claude.missing":
     "需要 Mac 或 Windows 版 Claude 应用；浏览器里的 claude.ai 无法访问这台电脑。",
   "setup.claude.download": "下载 Claude",
+  "setup.claude.copied": "已复制。粘贴到 Claude 应用里，然后在那里问你的文档。",
+  "setup.claude.connected": "已连接。打开 Claude 应用，在那里问你的文档。",
+  "setup.claude.noFolder":
+    "Claude 只能读取一个文件夹。请先把这个 Mind 放进文件夹，或在设置中配置。",
+  "setup.claude.openAgents": "打开智能体设置",
   "plans.title": "已经在付费订阅？",
   "plans.chatgpt.title": "ChatGPT Plus 或 Pro",
   "plans.chatgpt.line": "用你的 ChatGPT 账号登录，无需密钥。",

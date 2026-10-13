@@ -163,7 +163,7 @@ export async function askInAssistant(
     ) {
       // No model yet: the Question waits in the conversation while the setup card is shown.
       settleAsk(key, null);
-      waitForModel(input);
+      waitForModel({ ...input, conversationId: useConversations.getState().openId });
       return true;
     }
     settleAsk(key, result);
@@ -192,7 +192,15 @@ function askWaitingQuestion(): void {
   const { waiting } = useModelSetup.getState();
   if (!waiting) return;
   useModelSetup.setState({ waiting: null });
-  void askInAssistant(waiting);
+  const { conversationId, ...question } = waiting;
+  void (async () => {
+    // The conversation it was typed in, whichever is open now.
+    if (useConversations.getState().openId !== conversationId) {
+      if (conversationId) await openConversation(conversationId);
+      else startNewChat();
+    }
+    await askInAssistant(question);
+  })();
 }
 
 core.on("chatReadiness.changed", (readiness) => {
