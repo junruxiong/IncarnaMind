@@ -11,12 +11,13 @@ import {
   useState,
 } from "react";
 import type { AssistantDock } from "../../../../core/api";
-import { isSide } from "../../assistantPlace";
+import { foldsInMenu, isSide } from "../../assistantPlace";
 import { newChat } from "../../commands/assistant";
 import { assistantHandle, readMindHandle, useHandle } from "../../commands/handles";
 import { shortcutLabel } from "../../commands/keymap";
 import { useComposer } from "../../composer";
 import { conversationLabel, useOpenConversation } from "../../conversations";
+import { files } from "../../core";
 import { Composer } from "../../editor/Composer";
 import { useT } from "../../i18n";
 import { useAssistantWaiting } from "../../mindStatus";
@@ -82,6 +83,7 @@ export function Assistant({
   const titleButton = useRef<HTMLButtonElement>(null);
   const aside = useRef<HTMLElement>(null);
   const rail = folded && isSide(dock);
+  const foldInMenu = foldsInMenu(files.titleBar, dock);
   const readMindId = useReadMindId();
   const title = conversationLabel(useOpenConversation());
 
@@ -228,7 +230,6 @@ export function Assistant({
             onClick={(event) => openHistory(event.currentTarget)}
             className="assistant-title"
           >
-            <ChatLineIcon className="size-4 shrink-0 text-ink-meta" />
             {/* The conversation's name; a new chat is "New chat". */}
             <span className="truncate">{title}</span>
             <ChevronDownLineIcon className="size-3 shrink-0 text-ink-meta" />
@@ -237,19 +238,21 @@ export function Assistant({
           <span className="flex-1" />
           {clock}
           {newChatButton}
-          <AssistantMenu />
-          <IconButton
-            testId="assistant-fold"
-            label={
-              folded
-                ? t("assistant.unfold", { shortcut: shortcutLabel("composer.focus") })
-                : t("assistant.fold")
-            }
-            expanded={!folded}
-            onClick={fold}
-          >
-            <FoldIcon dock={dock} folded={folded} />
-          </IconButton>
+          <AssistantMenu withFold={foldInMenu} />
+          {!foldInMenu && (
+            <IconButton
+              testId="assistant-fold"
+              label={
+                folded
+                  ? t("assistant.unfold", { shortcut: shortcutLabel("composer.focus") })
+                  : t("assistant.fold")
+              }
+              expanded={!folded}
+              onClick={fold}
+            >
+              <FoldIcon dock={dock} folded={folded} />
+            </IconButton>
+          )}
         </header>
       )}
       <AssistantMain folded={folded} readMindId={readMindId} onComposerSlot={onComposerSlot} />

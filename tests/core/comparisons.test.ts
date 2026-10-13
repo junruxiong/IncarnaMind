@@ -255,6 +255,33 @@ describe("Compare Documents", () => {
     }
   });
 
+  test("a table's Task names each cell's step by its Document and its Question, and offers Pause and Stop", async () => {
+    const { core, client, mind, documents } = await setUpWithDocuments(cellModel(), SUPPLIERS);
+    await compare(core, client, {
+      mindId: mind.id,
+      documentIds: documents.map((document) => document.id),
+      questions: QUESTIONS,
+    });
+    const [task] = await core.listTasks();
+    if (!task) throw new Error("The table has no Task.");
+    expect(task.actions).toEqual(["pause", "stop"]);
+    expect(task.stepCount).toBe(6);
+    expect(task.steps).toHaveLength(4);
+    const steps = await core.listTaskSteps(task.id);
+    expect(steps.map((step) => step.text).sort()).toEqual(
+      [
+        "Corvane · Liability cap",
+        "Corvane · Termination notice",
+        "Halvard · Liability cap",
+        "Halvard · Termination notice",
+        "Lumeric · Liability cap",
+        "Lumeric · Termination notice",
+      ].sort(),
+    );
+    // Lumeric's terms say nothing of a liability cap: its step ended without a result.
+    expect(steps.find((step) => step.text === "Lumeric · Liability cap")?.status).toBe("failed");
+  });
+
   test("the table arrives as one change after the cursor's Block: Accept all keeps it, Reject all takes it out", async () => {
     const { core, client, mind, documents } = await setUpWithDocuments(cellModel(), SUPPLIERS);
     const first = note("Ten suppliers made the shortlist.");

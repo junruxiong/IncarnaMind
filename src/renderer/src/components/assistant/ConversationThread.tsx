@@ -17,12 +17,15 @@ import {
 import { useT } from "../../i18n";
 import { type ScopeChip, scopeChips } from "../../scope";
 import { useAppStore } from "../../store";
+import { interleave, type ThreadStart, threadTasks } from "../../taskGroups";
+import { loadTasks, useTasks } from "../../tasks";
 import { SearchIcon } from "../icons";
 import { SparkLineIcon } from "../lineIcons";
 import { AddToMindPicker } from "./AddToMindPicker";
 import { WritingLine } from "./AnswerActions";
 import { LiveLine } from "./AnswerSteps";
 import { type AnswerKeeping, AssistantAnswer } from "./AssistantAnswer";
+import { TaskProgress } from "./TaskProgress";
 
 /** How long an Answer a link back led to stays flashed. */
 const SOUGHT_MS = 1600;
@@ -40,8 +43,10 @@ const notesOf = (answer: ConversationAnswer) =>
  * Question reads and searches, and what asking here does. A Question shows
  * the moment it is sent, with its Answer's first step and Stop under it
  * before the core has checked the model, so asking never looks like nothing
- * happened. It keeps up with an Answer being written while the User is at its
- * foot, and brings an Answer a link back led to into view, flashed.
+ * happened. The Tasks of the Mind it reads show their progress where each
+ * started, by time among the messages (D189). It keeps up with an Answer
+ * being written while the User is at its foot, and brings an Answer a link
+ * back led to into view, flashed.
  */
 export function ConversationThread({ focusedMindId }: { focusedMindId: string | null }) {
   const t = useT();
@@ -51,6 +56,11 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
   const stopWanted = useConversations((state) => state.stopWanted);
   const sought = useConversations((state) => state.sought);
   const conversation = useOpenConversation();
+  useEffect(loadTasks, []);
+  const allTasks = useTasks((state) => state.tasks);
+  const shownTask = useTasks((state) => state.shown);
+  const thread = useThreadStart(conversation ?? null);
+  const tasks = threadTasks(Object.values(allTasks), focusedMindId, thread, shownTask);
   const focusedMind = useAppStore((state) => state.minds.find((mind) => mind.id === focusedMindId));
   const focusedMindName = focusedMindId
     ? (focusedMind && mindName(focusedMind)) || t("mind.untitled")
@@ -82,7 +92,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
     if (scroller && (atFoot.current || asking) && !sought) {
       scroller.scrollTop = scroller.scrollHeight;
     }
-  }, [messages, asking, sought]);
+  }, [messages, asking, sought, allTasks]);
 
   // A link back led here: that Answer comes into view, flashed, once it shows (its conversation's
   // messages may come a moment after it is opened).
@@ -138,8 +148,10 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
           </p>
         </>
       )}
-      {messages.map((message) =>
-        message.kind === "question" ? (
+      {interleave(messages, tasks).map((entry) => {
+        if (entry.kind === "task") return <TaskProgress key={entry.task.id} task={entry.task} />;
+        const message = entry.message;
+        return message.kind === "question" ? (
           <QuestionBubble key={message.id} question={message} />
         ) : (
           <AssistantAnswer
@@ -149,8 +161,8 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
             sought={message.id === sought}
             keeping={keeping}
           />
-        ),
-      )}
+        );
+      })}
       {asking !== null && <QuestionBubble text={asking} />}
       {onItsWay && (
         // Its line shows at rest, as an Answer's being written does.
@@ -247,4 +259,33 @@ function useNextScope(mindId: string | null): ScopeChip[] {
     mind?.folderId ?? null,
   );
   return scopeChips({ folders, groups, deletedGroups, tags, documents }, scope);
+}
+
+/**
+ * When the thread on screen began, and the Tasks it has shown running, for
+ * the Tasks it shows: its conversation's start, or, for a new chat, when it
+ * opened. A conversation that a new chat on screen became, with its first
+ * Question, keeps the new chat's start and Tasks, so a Task started before
+ * that Question stays where it was.
+ */
+function useThreadStart(conversation: { id: string; createdAt: string } | null): ThreadStart {
+  const id = conversation?.id ?? null;
+  const [thread, setThread] = useState(() => ({
+    id,
+    start: {
+      since: conversation?.createdAt ?? new Date().toISOString(),
+      seen: new Set<string>(),
+    },
+  }));
+  if (thread.id === id) return thread.start;
+  const born = conversation !== null && thread.id === null;
+  const start: ThreadStart = born
+    ? {
+        since:
+          thread.start.since < conversation.createdAt ? thread.start.since : conversation.createdAt,
+        seen: thread.start.seen,
+      }
+    : { since: conversation?.createdAt ?? new Date().toISOString(), seen: new Set() };
+  setThread({ id, start });
+  return start;
 }

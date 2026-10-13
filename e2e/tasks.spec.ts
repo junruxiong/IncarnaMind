@@ -19,10 +19,12 @@ import {
 } from "./app";
 
 /*
- * Tasks (#126): a comparison table keeps filling as a Task when its Mind is
- * closed and when IncarnaMind is force-quit, and goes on at the next start;
- * a Task that was waiting for approval comes back paused, "Needs you", with
- * the ask in the tray above the composer. The Tasks chip in the band says
+ * Tasks (#126, D189): a comparison table keeps filling as a Task when its
+ * Mind is closed and when IncarnaMind is force-quit, and goes on at the next
+ * start; its progress shows in the assistant's thread, where it started, with
+ * its bar, latest steps and what it can be asked (Pause, Stop). A Task that
+ * was waiting for approval comes back paused, "Needs you", with the ask in
+ * the tray above the composer, which holds nothing else. The Tasks chip in the band says
  * what runs or needs the User, and its popover opens a Task's Mind. Set
  * INCARNAMIND_SCREENSHOTS to a folder to also save screenshots.
  */
@@ -150,19 +152,38 @@ test("a comparison table keeps filling as a Task: closing its Mind and force-qui
 
   const table = window.getByTestId("comparison-table");
   await expect(table).toBeVisible();
-  // The tray above the composer shows the Task, and the cells not yet answered wait.
-  const tray = window.getByTestId("task-tray");
-  const row = tray.getByTestId("task-row");
-  await expect(row).toContainText("Compare Documents");
-  await expect(row.getByTestId("task-step")).toHaveText(/^Filling cell \d of 6$/);
+  // Its progress is in the thread: its name, how far, the bar and its latest steps; no tray.
+  const progress = window.getByTestId("assistant-thread").getByTestId("task-progress");
+  await expect(progress).toContainText("Compare Documents");
+  await expect(progress.getByTestId("task-progress-meta")).toHaveText(/^\d of 6 cells · \d+ min$/);
+  await expect(progress.getByRole("progressbar")).toBeVisible();
+  await expect(progress.getByTestId("task-progress-steps")).toContainText(
+    "Corvane Agreement · Termination notice, slowly",
+  );
+  await expect(window.getByTestId("task-tray")).toHaveCount(0);
   const waiting = table.getByTestId("comparison-cell").last().locator(".comparison-cell-running");
   await expect(waiting).toBeVisible();
   await expect(waiting).toHaveText("Waiting…");
-  await expectAboveComposer(window, tray);
   await expect(table.getByTestId("comparison-cell").first()).toContainText("90 days", {
     timeout: 30_000,
   });
+  // A comparison offers Pause and Stop; Tab reaches them, and Enter pauses and resumes it.
+  await expect(progress.getByTestId("task-progress-actions").getByRole("button")).toHaveText([
+    "Pause",
+    "Stop",
+  ]);
   await screenshot(window, "compare-task-en-1440");
+  await progress.getByTestId("task-progress-pause").focus();
+  await window.keyboard.press("Tab");
+  await expect(progress.getByTestId("task-progress-stop")).toBeFocused();
+  await window.keyboard.press("Shift+Tab");
+  await window.keyboard.press("Enter");
+  await expect(progress).toHaveAttribute("data-status", "paused");
+  await expect(progress.getByTestId("task-progress-waiting")).toHaveText("Paused");
+  // Resume takes Pause's place, the focus on it.
+  await expect(progress.getByTestId("task-progress-resume")).toBeFocused();
+  await window.keyboard.press("Enter");
+  await expect(progress).toHaveAttribute("data-status", "running");
 
   // The chip in the band says it runs; its popover lists it, by keyboard, beside the assistant.
   const chip = window.getByTestId("tasks-chip");
@@ -211,9 +232,19 @@ test("a comparison table keeps filling as a Task: closing its Mind and force-qui
   );
   const reopened = again.window.getByTestId("comparison-table");
   await expect(reopened).toBeVisible();
-  const doneRow = again.window.getByTestId("task-tray").getByTestId("task-row");
-  await expect(doneRow).toHaveAttribute("data-status", "done", { timeout: 90_000 });
-  await expect(doneRow).toContainText("Compare Documents done · 6 cells");
+  // Done: it says how long it took, its steps stay, and it offers Review and Details; no tray.
+  const done = again.window.getByTestId("assistant-thread").getByTestId("task-progress");
+  await expect(done).toHaveAttribute("data-status", "done", { timeout: 90_000 });
+  await expect(done.getByTestId("task-progress-meta")).toHaveText(/^Done in \d+ min$/);
+  await expect(done.getByRole("progressbar")).toHaveCount(0);
+  await expect(done.getByTestId("task-progress-actions").getByRole("button")).toHaveText([
+    "Review",
+    "Details",
+  ]);
+  await expect(again.window.getByTestId("task-tray")).toHaveCount(0);
+  await pointAndClick(again.window, done.getByTestId("task-progress-details"));
+  await expect(done.getByTestId("task-progress-record")).toContainText("6 of 6 cells written");
+  await expect(done.getByTestId("task-progress-steps").locator("li")).toHaveCount(6);
   // Every cell answered once: one Citation each where its Document answers.
   expect(await cellTexts(reopened)).toEqual([
     ["90 days 1", "12 months of fees 2"],
@@ -221,10 +252,19 @@ test("a comparison table keeps filling as a Task: closing its Mind and force-qui
     ["30 days 5", "! not found"],
   ]);
   await screenshot(again.window, "compare-task-done-en-1440");
-  // The tray's rows and asks never go into the Mind.
+  // Review brings the table into view.
+  await again.window
+    .locator(".mind-scroller")
+    .first()
+    .evaluate((scroller) => {
+      scroller.scrollTop = scroller.scrollHeight;
+    });
+  await pointAndClick(again.window, done.getByTestId("task-progress-review"));
+  await expect(reopened).toBeInViewport();
+  // Progress never goes into the Mind.
   const text = await again.window.locator(".mind-editor").first().innerText();
-  expect(text).not.toContain("Filling cell");
-  expect(text).not.toContain("Compare Documents done");
+  expect(text).not.toContain("6 cells");
+  expect(text).not.toContain("Done in");
 });
 
 test("a Task waiting for approval comes back paused after a quit: “Needs you”, the ask in the tray with its buttons pinned, answered by keyboard", async () => {
@@ -267,7 +307,10 @@ test("a Task waiting for approval comes back paused after a quit: “Needs you�
     await expect(memoTab).toHaveAttribute("aria-selected", "true");
     const tray = window.getByTestId("task-tray");
     const ask = tray.getByTestId("task-ask");
-    await expect(tray.getByTestId("task-step")).toHaveText("Waiting for your approval");
+    const progress = window.getByTestId("assistant-thread").getByTestId("task-progress");
+    await expect(progress.getByTestId("task-progress-waiting")).toHaveText(
+      "Waiting for your approval below",
+    );
     await expect(ask.getByTestId("approval-card")).toBeVisible();
     await expect(ask.getByTestId("task-ask-count")).toHaveCount(0);
     await expectAboveComposer(window, tray);
@@ -284,10 +327,10 @@ test("a Task waiting for approval comes back paused after a quit: “Needs you�
       again.window.getByTestId("mind-tab").filter({ hasText: "Credit memo" }),
     );
     const paused = again.window.getByTestId("task-tray");
-    const first = paused.getByTestId("task-row").first();
+    const first = again.window.getByTestId("assistant-thread").getByTestId("task-progress");
     await expect(first).toHaveAttribute("data-needs-you", "true");
-    await expect(first.getByTestId("task-step")).toHaveText(
-      "Needs you · paused while IncarnaMind was closed",
+    await expect(first.getByTestId("task-progress-waiting")).toHaveText(
+      "Paused while IncarnaMind was closed: it needs you below",
     );
     const pausedAsk = paused.getByTestId("task-ask");
     await expect(pausedAsk.getByTestId("task-ask-count")).toHaveText("2 of 2");
@@ -314,9 +357,12 @@ test("a Task waiting for approval comes back paused after a quit: “Needs you�
     await expect(pausedPopover).toBeHidden();
     await screenshot(again.window, "tasks-paused-en-900");
     await setLanguage(again.window, "zh-CN");
-    await expect(first.getByTestId("task-step")).toHaveText(
-      "需要你处理 · IncarnaMind 关闭时已暂停",
+    await expect(first.getByTestId("task-progress-waiting")).toHaveText(
+      "IncarnaMind 关闭时已暂停：需要你在下方处理",
     );
+    await expect(first.getByTestId("task-progress-actions").getByRole("button")).toHaveText([
+      "停止",
+    ]);
     await expect(pausedAsk.getByTestId("task-ask-count")).toHaveText("2/2");
     await screenshot(again.window, "tasks-paused-zh-900");
     await setLanguage(again.window, "en");
@@ -324,8 +370,8 @@ test("a Task waiting for approval comes back paused after a quit: “Needs you�
 
     await buttons.focus();
     await again.window.keyboard.press("ControlOrMeta+Enter");
-    const done = paused.getByTestId("task-row");
-    await expect(done).toHaveAttribute("data-status", "done");
+    await expect(first).toHaveAttribute("data-status", "done");
+    await expect(again.window.getByTestId("task-tray")).toHaveCount(0);
     const finished: Task | undefined = (await tasksOf(again.window)).find(
       (each) => each.id === taskId,
     );
@@ -333,8 +379,48 @@ test("a Task waiting for approval comes back paused after a quit: “Needs you�
     // Each file written once.
     expect(await readFile(join(folder, "a.txt"), "utf8")).toBe("Written by the scripted Task.\n");
     expect(await readFile(join(folder, "b.txt"), "utf8")).toBe("Written by the scripted Task.\n");
-    await pointAndClick(again.window, done.getByTestId("task-dismiss"));
-    await expect(again.window.getByTestId("task-tray")).toHaveCount(0);
+  } finally {
+    await removeDataFolder(folder);
+  }
+});
+
+test("Stop in a Task's progress ends it and withdraws its ask; the progress fits the assistant's 320px in Chinese, under a header with no chat icon", async () => {
+  const folder = await createDataFolder();
+  try {
+    const { app, window } = await launchApp(dataDir, { scriptedTasks: true });
+    await dismissChatSetup(window);
+    await setWindowSize(app, window, 1440, 860);
+    await newMind(window);
+    await window.keyboard.type("Credit memo");
+    const memo = await mindIdOf(window, "Credit memo");
+    await setLanguage(window, "zh-CN");
+    await startScriptedTask(app, memo, { folder, files: ["a.txt"] });
+
+    const thread = window.getByTestId("assistant-thread");
+    const progress = thread.getByTestId("task-progress");
+    await expect(progress.getByTestId("task-progress-waiting")).toHaveText("等待你在下方批准");
+    await expect(window.getByTestId("task-tray").getByTestId("task-ask")).toBeVisible();
+    await expect(progress.getByTestId("task-progress-actions").getByRole("button")).toHaveText([
+      "停止",
+    ]);
+    // Its words wrap inside the assistant's column; nothing runs past it.
+    const [block, column] = [await progress.boundingBox(), await thread.boundingBox()];
+    if (!block || !column) throw new Error("The progress or the thread isn't on screen.");
+    expect(block.x + block.width).toBeLessThanOrEqual(column.x + column.width + 1);
+    // The header's title has only its ▾: no chat icon before it.
+    await expect(window.getByTestId("assistant-title").locator("svg")).toHaveCount(1);
+    await screenshot(window, "tasks-progress-zh-1440");
+
+    await progress.getByTestId("task-progress-stop").focus();
+    await window.keyboard.press("Enter");
+    await expect(progress).toHaveAttribute("data-status", "stopped");
+    await expect(progress.getByTestId("task-progress-meta")).toHaveText("已停止");
+    await expect(window.getByTestId("task-tray")).toHaveCount(0);
+    expect(
+      await window.evaluate(() =>
+        (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.listApprovalRequests(),
+      ),
+    ).toEqual([]);
   } finally {
     await removeDataFolder(folder);
   }
