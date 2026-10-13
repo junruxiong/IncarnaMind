@@ -50,6 +50,7 @@ import {
   type SavedExport,
   type SearchScope,
   type Task,
+  type UnreadFile,
   type Unsubscribe,
 } from "./api";
 import { createApprovals } from "./approvals";
@@ -76,6 +77,7 @@ import { createOwnFiles } from "./documents/ownFiles";
 import { createVersionRetention, type VersionRetention } from "./documents/retention";
 import { BUILT_IN_TEXT_RECOGNITION_MODEL, createTextRecognitionModel } from "./documents/scan";
 import { tunedSearch } from "./documents/searchTuning";
+import { findUnreadDocuments } from "./documents/unread";
 import { fsWatchFolder } from "./documents/watcher";
 import { createWebPages } from "./documents/web";
 import { createEdits } from "./edits";
@@ -2165,6 +2167,42 @@ export function createCore(adapters: CoreAdapters): Core {
       return { ...linked, batchId };
     },
     listLinkedFolders: async () => documents.linkedFolders.list(),
+    listUnreadFiles: async (scope) => {
+      const wanted = parseSearchScope(scope);
+      const inScope = wanted ? resolveScope(wanted) : null;
+      const kept = inScope === null ? null : new Set(inScope);
+      const unread = findUnreadDocuments(
+        documents.list().filter((each) => kept === null || kept.has(each.id)),
+      );
+      // Files in a format not read belong to Folders only: a Tag or a Document can't name them.
+      // A Folder holds those in it and under it, even where no Document is.
+      const named = wanted
+        ? folders.list().filter((folder) => wanted.folderIds.includes(folder.id))
+        : null;
+      const files = documents.linkedFolders
+        .unsupportedFiles()
+        .filter(
+          (file) =>
+            named === null ||
+            named.some(
+              (folder) =>
+                folder.linkedFolderId === file.linkedFolderId &&
+                (folder.relativePath === "" ||
+                  file.relativeFolder === folder.relativePath ||
+                  file.relativeFolder.startsWith(`${folder.relativePath}/`)),
+            ),
+        )
+        .map(
+          (file): UnreadFile => ({
+            id: file.path,
+            name: file.name,
+            reason: "format",
+            extension: file.extension,
+            documentId: null,
+          }),
+        );
+      return [...unread, ...files];
+    },
     locateLinkedFolder: (linkedFolderId, path) =>
       documents.linkedFolders.locate(linkedFolderId, path),
     removeLinkedFolder: async (linkedFolderId) => unlinkFolder(linkedFolderId),
