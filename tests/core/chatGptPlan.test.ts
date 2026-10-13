@@ -475,6 +475,11 @@ describe("Answers with the ChatGPT plan", () => {
       "gpt-6.1-sol",
       "gpt-6-luna",
     ]);
+    // The names are the account's own, for the picker to show.
+    expect(groups.find((group) => group.provider.kind === "chatgpt")?.names).toEqual({
+      "gpt-6.1-sol": "GPT-6.1 Sol",
+      "gpt-6-luna": "GPT-6 Luna",
+    });
     const asked = fake.apiRequests.find((request) => request.path === "/v1/models");
     expect(asked?.headers.authorization).toBe(`Bearer ${fake.issued[0]?.accessToken}`);
 
