@@ -380,6 +380,205 @@ describe("changes the User can take back", () => {
   });
 });
 
+describe("making a Folder", () => {
+  const made = {
+    id: "n",
+    name: "Untitled Folder",
+    description: "",
+    countsOwnFiles: false,
+    createdAt: "",
+    updatedAt: "",
+  };
+  let useUndo: typeof import("../../src/renderer/src/undo").useUndo;
+  let useRequests: typeof import("../../src/renderer/src/requests").useRequests;
+  let useNotices: typeof import("../../src/renderer/src/notices").useNotices;
+
+  beforeAll(async () => {
+    ({ useUndo } = await import("../../src/renderer/src/undo"));
+    ({ useRequests } = await import("../../src/renderer/src/requests"));
+    ({ useNotices } = await import("../../src/renderer/src/notices"));
+  });
+
+  /** The Library as the core has it once the new Folder is in it, named `name`. */
+  const withNewFolder = (name = made.name, assignments: DocumentGroupAssignment[] = []) => {
+    const library = snapshot(assignments);
+    method("getLibrary").mockResolvedValue({
+      ...library,
+      groups: [...library.groups, { ...made, name }],
+    });
+  };
+  const top = () => useUndo.getState().done.at(-1);
+
+  beforeEach(() => {
+    useUndo.setState({ done: [], undone: [], line: null });
+    useRequests.setState({ nameFolder: null });
+    useAppStore.setState({ settings: null, minds: [] });
+    method("createLibraryGroup").mockResolvedValue(made);
+    withNewFolder();
+  });
+
+  test("makes “Untitled Folder”, asks for its name in place, and one Undo removes it, one Redo brings it back", async () => {
+    expect(await useAppStore.getState().createFolder()).toBe("n");
+    expect(method("createLibraryGroup")).toHaveBeenCalledWith({
+      name: "Untitled Folder",
+      description: "",
+    });
+    expect(useRequests.getState().nameFolder).toBe("n");
+    expect(top()?.message).toBe("Made “Untitled Folder”");
+    expect(top()?.name).toBe("New Folder");
+    await useUndo.getState().undo();
+    expect(method("deleteLibraryGroup")).toHaveBeenCalledWith("n");
+    await useUndo.getState().redo();
+    expect(method("restore")).toHaveBeenCalledWith([{ kind: "folder", id: "n" }]);
+  });
+
+  test("a Folder the core can't make is a problem in place, with no step to undo", async () => {
+    method("createLibraryGroup").mockRejectedValue(
+      new Error("A folder with this name already exists."),
+    );
+    expect(await useAppStore.getState().createFolder()).toBeNull();
+    expect(useUndo.getState().done).toEqual([]);
+    const [notice] = useNotices.getState().errors;
+    expect(notice?.message).toContain("already exists");
+    if (notice) useNotices.getState().dismissError(notice.id);
+  });
+
+  test("a name the Folders already have is numbered, and Chinese names are made in Chinese", async () => {
+    useAppStore.setState({
+      library: {
+        ...snapshot([]),
+        groups: [{ ...made, id: "x", name: "untitled folder" }],
+      },
+    });
+    await useAppStore.getState().createFolder();
+    expect(method("createLibraryGroup")).toHaveBeenLastCalledWith({
+      name: "Untitled Folder 2",
+      description: "",
+    });
+    useAppStore.setState({ settings: { language: "zh-CN" } as never, library: snapshot([]) });
+    await useAppStore.getState().createFolder();
+    expect(method("createLibraryGroup")).toHaveBeenLastCalledWith({
+      name: "未命名文件夹",
+      description: "",
+    });
+    expect(top()?.message).toBe("已新建文件夹“未命名文件夹”");
+  });
+
+  test("its first name is part of making it: one step, named, which one Undo removes", async () => {
+    await useAppStore.getState().createFolder();
+    withNewFolder("Chapter 2");
+    method("updateLibraryGroup").mockResolvedValue({ ...made, name: "Chapter 2" });
+    await useAppStore.getState().nameNewFolder("n", "  Chapter 2 ");
+    expect(method("updateLibraryGroup")).toHaveBeenCalledWith("n", {
+      name: "Chapter 2",
+      description: "",
+    });
+    expect(useUndo.getState().done).toHaveLength(1);
+    expect(top()?.message).toBe("Made “Chapter 2”");
+    await useUndo.getState().undo();
+    expect(method("deleteLibraryGroup")).toHaveBeenCalledWith("n");
+    expect(method("updateLibraryGroup")).toHaveBeenCalledTimes(1);
+  });
+
+  test("a blank name, or one the Folder has, changes nothing; a later name is a step of its own", async () => {
+    await useAppStore.getState().createFolder();
+    await useAppStore.getState().nameNewFolder("n", "   ");
+    await useAppStore.getState().nameNewFolder("n", "Untitled Folder");
+    expect(method("updateLibraryGroup")).not.toHaveBeenCalled();
+    expect(top()?.message).toBe("Made “Untitled Folder”");
+    // Another change came after it, so the name no longer belongs to making it.
+    useUndo.getState().push({ message: "Something else", undo: async () => undefined });
+    method("updateLibraryGroup").mockResolvedValue({ ...made, name: "Later" });
+    await useAppStore.getState().nameNewFolder("n", "Later");
+    expect(useUndo.getState().done.map((each) => each.message)).toEqual([
+      "Made “Untitled Folder”",
+      "Something else",
+      "Renamed to “Later”",
+    ]);
+  });
+
+  test("with Documents and Minds: they move in at once, in one step, and Undo puts each back before the Folder goes", async () => {
+    const filed = assignment("a", "classified", "g");
+    useAppStore.setState({
+      documents: [doc("a"), doc("b"), doc("c")],
+      minds: [
+        {
+          id: "m",
+          title: "Plan",
+          autoTitle: "",
+          kind: "mind",
+          folderId: "g",
+          createdAt: "",
+          updatedAt: "",
+        },
+      ],
+      library: snapshot([filed]),
+    });
+    method("moveToFolder").mockResolvedValue({
+      folderId: "n",
+      minds: [{ id: "m", from: "g" }],
+      documents: [
+        { id: "a", from: "g", previous: filed },
+        { id: "b", from: null, previous: null },
+        { id: "c", from: null, previous: null },
+      ],
+      conversations: [],
+    });
+    withNewFolder("Untitled Folder", [filed]);
+
+    await useAppStore.getState().createFolder({ mindIds: ["m"], documentIds: ["a", "b", "c"] });
+    expect(method("moveToFolder")).toHaveBeenCalledWith({
+      mindIds: ["m"],
+      documentIds: ["a", "b", "c"],
+      conversationIds: [],
+      folderId: "n",
+    });
+    expect(top()?.message).toBe("Made “Untitled Folder” with 4 items");
+
+    await useUndo.getState().undo();
+    expect(method("moveToFolder")).toHaveBeenLastCalledWith({
+      mindIds: ["m"],
+      documentIds: [],
+      conversationIds: [],
+      folderId: "g",
+    });
+    expect(method("restoreAssignment")).toHaveBeenCalledWith("a", filed);
+    expect(method("restoreAssignment")).toHaveBeenCalledWith("b", null);
+    expect(method("restoreAssignment")).toHaveBeenCalledWith("c", null);
+    expect(method("deleteLibraryGroup").mock.invocationCallOrder[0]).toBeGreaterThan(
+      method("restoreAssignment").mock.invocationCallOrder[2] ?? 0,
+    );
+
+    await useUndo.getState().redo();
+    expect(method("restore")).toHaveBeenCalledWith([{ kind: "folder", id: "n" }]);
+    expect(method("moveToFolder")).toHaveBeenLastCalledWith({
+      mindIds: ["m"],
+      documentIds: ["a", "b", "c"],
+      conversationIds: [],
+      folderId: "n",
+    });
+  });
+
+  test("the line says how many went in, in English and in Chinese", async () => {
+    useAppStore.setState({ documents: [doc("a"), doc("b"), doc("c")] });
+    method("moveToFolder").mockResolvedValue({
+      folderId: "n",
+      minds: [],
+      documents: ["a", "b", "c"].map((id) => ({ id, from: null, previous: null })),
+      conversations: [],
+    });
+    await useAppStore.getState().createFolder({ documentIds: ["a", "b", "c"] });
+    expect(top()?.message).toBe("Made “Untitled Folder” with 3 Documents");
+    useUndo.setState({ done: [], undone: [], line: null });
+    useAppStore.setState({ settings: { language: "zh-CN" } as never, library: snapshot([]) });
+    await useAppStore.getState().createFolder({ documentIds: ["a"] });
+    expect(top()?.message).toBe("已新建文件夹“未命名文件夹”，放入“a v0”");
+    useAppStore.setState({ library: snapshot([]) });
+    await useAppStore.getState().createFolder({ documentIds: ["a", "b", "c"] });
+    expect(top()?.message).toBe("已新建文件夹“未命名文件夹”，放入 3 个文档");
+  });
+});
+
 describe("loading keeps a list the core pushed after reading it", () => {
   const folder = (id: string) => ({ id, name: id }) as unknown as Folder;
   const folderIds = () => useAppStore.getState().folders.map((each) => each.id);

@@ -69,6 +69,26 @@ async function rightClick(window: Page, target: Locator): Promise<{ x: number; y
   return point;
 }
 
+/**
+ * Whether the item shows the focus ring DESIGN.md gives every control: a solid accent outline, 2px,
+ * drawn inside the item so the menu's scrolling can't clip it.
+ */
+const ringShows = (item: Locator) =>
+  item.evaluate((element) => {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--color-accent)";
+    document.body.append(probe);
+    const accent = getComputedStyle(probe).color;
+    probe.remove();
+    const style = getComputedStyle(element);
+    return (
+      style.outlineStyle === "solid" &&
+      Number.parseFloat(style.outlineWidth) >= 2 &&
+      style.outlineColor === accent &&
+      Number.parseFloat(style.outlineOffset) < 0
+    );
+  });
+
 /** The commands a menu holds, in order, with its rules as "—". */
 async function commandsIn(menu: Locator): Promise<string[]> {
   await expect(menu).toBeVisible();
@@ -136,8 +156,8 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
   await expect(editor.getByTestId("citation")).toHaveCount(1);
   await newMind(window);
 
-  // A Mind: Open, Open to the side; Export as… (the last format first), Export options…; Move to…;
-  // Rename; then Delete after a rule.
+  // A Mind: Open, Open to the side; Export as… (the last format first), Export options…; Move to…,
+  // New Folder with this Mind; Rename; then Delete after a rule.
   const mind = window.getByTestId("mind-row").first();
   const mindMenu = await sameFromBothWays(
     window,
@@ -161,6 +181,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "skill.fromMind",
     "—",
     "mind.moveTo",
+    "folder.newWith",
     "—",
     "mind.rename",
     "—",
@@ -186,6 +207,8 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "—",
     "document.ask",
     "document.startMind",
+    "—",
+    "folder.newWith",
     "—",
     "document.tags",
     "—",
@@ -216,6 +239,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "folder.open",
     "—",
     "folder.newMind",
+    "folder.new",
     "folder.organize",
     "folder.editDescription",
     "folder.sort",
@@ -342,10 +366,14 @@ test("the context-menu key and Shift+F10 open the focused row's menu; arrows mov
     await row.focus();
     await window.keyboard.press(key);
     await expect(menu).toBeVisible();
-    // The first item has the focus; the arrows move through the items and wrap round.
+    // The first item has the focus; the arrows move through the items and wrap round. The focused
+    // one shows the blue ring, not only a faint fill (#157).
     await expect(menu.getByTestId("mind.open")).toBeFocused();
+    await expect.poll(() => ringShows(menu.getByTestId("mind.open"))).toBe(true);
     await window.keyboard.press("ArrowDown");
     await expect(menu.getByTestId("mind.openSide")).toBeFocused();
+    await expect.poll(() => ringShows(menu.getByTestId("mind.openSide"))).toBe(true);
+    await expect.poll(() => ringShows(menu.getByTestId("mind.open"))).toBe(false);
     await window.keyboard.press("ArrowUp");
     await window.keyboard.press("ArrowUp");
     await expect(menu.getByTestId("mind.delete")).toBeFocused();
@@ -401,6 +429,7 @@ test("each item shows its shortcut as the system writes it, and the labels are i
     "引用格式…",
     "做成技能",
     /^移动到…(⇧⌘M|Ctrl\+Shift\+M)$/,
+    /^新建文件夹并放入此 Mind(⌃⌘N)?$/,
     /^重命名F2$/,
     "删除",
   ]);

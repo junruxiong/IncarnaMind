@@ -185,7 +185,7 @@ function LocalOnlySetting({ localOnly }: { localOnly: boolean }) {
     try {
       useAppStore.setState({ embedding: await core.setLocalOnly(enabled) });
     } catch (failure) {
-      useAppStore.setState({ actionError: errorMessage(failure) });
+      useAppStore.getState().reportError(failure);
     } finally {
       setBusy(false);
     }

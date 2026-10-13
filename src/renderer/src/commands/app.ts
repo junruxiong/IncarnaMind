@@ -24,6 +24,7 @@ import { footnoteCommands } from "./footnotes";
 import { citationHandle, findHandle, sidebarHandle } from "./handles";
 import { linkCommands } from "./links";
 import { meetingCommands } from "./meetings";
+import { newFolderCommands } from "./newFolder";
 import {
   answerCommands,
   citationCommands,
@@ -91,6 +92,7 @@ const appCommands: readonly Command[] = [
   ...mindCommands,
   ...documentCommands,
   ...folderCommands,
+  ...newFolderCommands,
   ...tagCommands,
   ...linkedFolderCommands,
   ...deletedCommands,

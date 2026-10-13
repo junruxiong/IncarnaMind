@@ -175,7 +175,7 @@ export const menuTitleClass = "px-2 pt-1.5 pb-1 text-label font-semibold text-in
 
 /** A menu item: a 28px row, in the menu's ink unless it says otherwise. */
 export const menuItemClass =
-  "flex h-7 w-full items-center gap-2 rounded-md pr-2 text-left outline-none hover:bg-hover focus-visible:bg-hover disabled:text-ink-placeholder disabled:hover:bg-transparent";
+  "flex h-7 w-full items-center gap-2 rounded-md pr-2 text-left -outline-offset-2 hover:bg-hover focus-visible:bg-hover disabled:text-ink-placeholder disabled:hover:bg-transparent";
 
 /**
  * A menu item that can't be used right now (`aria-disabled`): it stays in

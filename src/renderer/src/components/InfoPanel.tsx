@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Document, LinkedFolder } from "../../../core/api";
 import { displayName } from "../../../shared/documentNames";
-import { copyText, useCopied } from "../copied";
+import { copyText } from "../copied";
 import { core, files } from "../core";
 import { documentStatusText } from "../documentStatus";
 import { addedDate, fileDate, KIND_LABELS, showFileLabelKey } from "../fileInfo";
@@ -16,6 +16,7 @@ import {
   rowStateLabel,
 } from "../linkedFolders";
 import { type Box, enterFrom, useExitToward } from "../motion";
+import { useNotices } from "../notices";
 import { scanningStatus } from "../scanStatus";
 import { useAppStore } from "../store";
 import { chipsOf } from "../tagEditing";
@@ -177,7 +178,7 @@ function Actions({
   onShow(): void;
 }) {
   const t = useT();
-  const copied = useCopied((state) => state.shown);
+  const copied = useNotices((state) => state.confirmation?.message === "info.copied");
   return (
     <div className="flex flex-wrap gap-2 px-4 pb-3.5">
       <button
