@@ -59,6 +59,7 @@ import { createCitationStyles } from "./citationStyles";
 import { type CitedPages, type CitedPlace, createCitedPages } from "./citedPages";
 import { COMPARISON_TASK, createComparisons } from "./comparisons";
 import { createConnectors } from "./connectors";
+import { connectorDirectory } from "./connectors/directory";
 import { createConsent, type DataFlowRegistry } from "./consent";
 import { createConversations } from "./conversations";
 import { createMeter } from "./cost/meter";
@@ -1702,6 +1703,7 @@ export function createCore(adapters: CoreAdapters): Core {
   };
   // Connectors that are on start with the app.
   connectors.startAll();
+  const directory = connectorDirectory(adapters.connectorDirectory);
   const layouts = createLayouts({
     readValue: (key) => settings.readDeviceValue(key),
     writeValue: (key, value) => settings.writeDeviceValue(key, value),
@@ -2513,6 +2515,12 @@ export function createCore(adapters: CoreAdapters): Core {
     cancelConnectorSignIn: (connectorId) => connectors.cancelSignIn(connectorId),
     signOutOfConnector: (connectorId) => connectors.signOut(connectorId),
     setConnectorClient: (connectorId, client) => connectors.setClient(connectorId, client),
+    listConnectorDirectory: async () => directory,
+    addConnectorFromDirectory: async (entryId, client) => {
+      const entry = directory.find((each) => each.id === entryId);
+      if (!entry) throw new NotFoundError({ key: "error.connector.notInDirectory" });
+      return connectors.addFromDirectory(entry, client);
+    },
     previewConnectorImport: async (json) => connectors.previewImport(json),
     importConnectors: (json) => connectors.import(json),
 
