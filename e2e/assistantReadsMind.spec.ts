@@ -20,7 +20,7 @@ import {
 /**
  * A Question asked beside a Mind reads that Mind (#544): the scripted model's
  * Answer says what it read of it, the steps say "Read “{Mind}”" ("Read part of
- * “{Mind}” for a long one), a selection leads, and the consent the first
+ * “{Mind}” for a long one, and how much of it when unfolded), a selection leads, and the consent the first
  * Question asks for says the Mind goes with it; in English and Chinese. Set
  * INCARNAMIND_SCREENSHOTS to a folder to also save screenshots.
  */
@@ -78,10 +78,10 @@ async function ask(window: Page, question: string) {
   return assistantAnswers(window).last();
 }
 
-/** A Mind of 40 Notes of about 500 tokens each, more than a Question reads, made through the bridge. */
+/** A Mind of 120 Notes of about 500 tokens each, more than a Question reads whole (#564), made through the bridge. */
 async function longMind(window: Page, title: string): Promise<void> {
   const doc = new Y.Doc();
-  const notes = Array.from({ length: 40 }, (_, index) => {
+  const notes = Array.from({ length: 120 }, (_, index) => {
     const element = new Y.XmlElement("paragraph");
     element.setAttribute("id", crypto.randomUUID());
     element.insert(0, [new Y.XmlText(`Note ${index + 1}: ${"lorem ipsum ".repeat(170)}`)]);
@@ -146,6 +146,12 @@ test("“Summarise my notes” beside a Mind reads it: the consent says so, the 
   await expect(long).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(long.getByTestId("answer-steps-line")).toHaveText("Read part of “Long notes”");
   await screenshot(window, "steps-read-part-en");
+  // Unfolded, the steps say how much of it was read (#564).
+  const longSteps = await openSteps(window, long);
+  await expect(longSteps.getByTestId("answer-step-read-share")).toHaveText(
+    /^About \d{1,2}% of it$/,
+  );
+  await screenshot(window, "steps-read-share-en");
 
   // The Mind's name in the folded line goes to that Mind.
   await expect(window.getByTestId("mind-title")).toHaveValue("Long notes");
@@ -178,5 +184,8 @@ test("in Chinese: the consent, the Answer that read the Mind, and the steps", as
   await expect(long).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(long.getByTestId("answer-steps-line")).toHaveText("读了“长笔记”的一部分");
   await screenshot(window, "steps-read-part-zh");
+  const longSteps = await openSteps(window, long);
+  await expect(longSteps.getByTestId("answer-step-read-share")).toHaveText(/^约 \d{1,2}%$/);
+  await screenshot(window, "steps-read-share-zh");
   await app.close();
 });
