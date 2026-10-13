@@ -18,7 +18,7 @@ import type { DocumentText } from "../../api";
 export interface DocumentParagraph {
   page: number;
   text: string;
-  /** A numbered heading on a line of its own. */
+  /** A short numbered heading on a line of its own. */
   heading: boolean;
 }
 
@@ -71,7 +71,8 @@ export function paragraphsOf(pages: DocumentText["pages"]): DocumentParagraph[] 
     let current = "";
     let lineCount = 0;
     const end = () => {
-      paragraphs.push({ page, text: current, heading: lineCount === 1 && HEADING.test(current) });
+      const heading = lineCount === 1 && widthOf(current) < full * SHORT && HEADING.test(current);
+      paragraphs.push({ page, text: current, heading });
       current = "";
       lineCount = 0;
     };

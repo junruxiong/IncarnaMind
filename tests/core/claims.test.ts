@@ -68,12 +68,15 @@ describe("A PDF's lines become paragraphs", () => {
         "件。",
         "二、库存情况",
         "萧山冷链仓有机鲜牛奶库存量为4200，高于3000的安全库存。",
+        "三、供货说明我公司供应的有机鲜牛奶保质期为7天。双方约定的结算周期为月结30天。",
       ),
     ]);
-    expect(paragraphs.map((each) => each.text)).toEqual([
-      "老年人持卡乘车继续免费。第三季度共处理乘客投诉1,250件。",
-      "二、库存情况",
-      "萧山冷链仓有机鲜牛奶库存量为4200，高于3000的安全库存。",
+    // A section a PDF ran into its heading's line is text, not a heading.
+    expect(paragraphs.map((each) => [each.text, each.heading])).toEqual([
+      ["老年人持卡乘车继续免费。第三季度共处理乘客投诉1,250件。", false],
+      ["二、库存情况", true],
+      ["萧山冷链仓有机鲜牛奶库存量为4200，高于3000的安全库存。", false],
+      ["三、供货说明我公司供应的有机鲜牛奶保质期为7天。双方约定的结算周期为月结30天。", false],
     ]);
   });
 });
