@@ -36,6 +36,18 @@ export class RunItemError extends Error {
   }
 }
 
+/**
+ * What `each` throws when its item gave way to something that comes first (an
+ * Answer, while a Task's model runs on this computer, #126): the item is
+ * tried again, from the start, before the next, and it counts as no try.
+ */
+export class RunItemGaveWay extends Error {
+  constructor() {
+    super("The item gave way.");
+    this.name = "RunItemGaveWay";
+  }
+}
+
 /** The pauses before trying an item the provider limited again, the first first. */
 export const RATE_LIMIT_PAUSES_MS = [1_000, 2_000, 4_000, 8_000, 16_000] as const;
 
@@ -109,6 +121,11 @@ export async function runItems<I, T>(
         if (signal?.aborted) {
           settle(index, { status: "stopped" });
           return;
+        }
+        if (thrown instanceof RunItemGaveWay) {
+          tries[index] = (tries[index] ?? 1) - 1;
+          queue.unshift(index);
+          continue;
         }
         const error = failureOf(thrown);
         const stopped = runStopOf(error);
