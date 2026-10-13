@@ -71,13 +71,47 @@ export async function readWordStructure(
   pkg: WordPackage,
   review: WordReview,
 ): Promise<WordStructure> {
+  return (await readWordDocument(pkg, review)).structure;
+}
+
+/**
+ * The main document as the import reads it, for export to write into (#105):
+ * its Blocks, its text as stored (a byte-order mark kept), its root element
+ * with each element's offsets in that text, each element by its place
+ * ("w:p#12"), and the XML each text, line break, table row and cell was read
+ * from (`origins`: a text's run; a cell's `w:tc`, and the cells merged into
+ * it in `merged`). Reading the same package again gives the same places.
+ */
+export interface WordDocument {
+  structure: WordStructure;
+  text: string;
+  root: XmlElement;
+  places: Places;
+  origins: ReadonlyMap<NodeJSON, XmlElement>;
+  merged: ReadonlyMap<NodeJSON, readonly XmlElement[]>;
+}
+
+/** Elements by their place ("w:p#12"), and each element's place. */
+export interface Places {
+  get(place: string): XmlElement | undefined;
+  placeOf(element: XmlElement): string | null;
+}
+
+export async function readWordDocument(
+  pkg: WordPackage,
+  review: WordReview,
+): Promise<WordDocument> {
   try {
     const reader = await Reader.open(pkg, review);
-    return reader.read();
+    return reader.readDocument();
   } catch (error) {
     throw refusalOf(error);
   }
 }
+
+/** A part's text as stored: a byte-order mark is kept, so offsets and bytes agree. */
+export const decodePart = (bytes: Uint8Array): string =>
+  new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes);
 
 // ---------------------------------------------------------------------------
 // Parts the document refers to
@@ -254,7 +288,7 @@ const isOn = (element: XmlElement | undefined) =>
   element !== undefined && !["false", "0", "off"].includes(element.attrs["w:val"] ?? "true");
 
 /** The editor's marks for a run's own formatting. */
-function runMarks(rPr: XmlElement | undefined): MarkJSON[] {
+export function runMarks(rPr: XmlElement | undefined): MarkJSON[] {
   if (!rPr) return [];
   const marks: MarkJSON[] = [];
   if (isOn(child(rPr, "w:b"))) marks.push({ type: "bold" });
@@ -362,6 +396,12 @@ const paragraphNode = (type: "paragraph" | "heading", attrs: Record<string, unkn
 
 class Reader {
   private readonly ordinals = new Map<XmlElement, number>();
+  /** Each element name's elements, in document order: a place's element is at its number. */
+  private readonly byName = new Map<string, XmlElement[]>();
+  private readonly origins = new Map<NodeJSON, XmlElement>();
+  private readonly merged = new Map<NodeJSON, XmlElement[]>();
+  /** The run whose content is being read. */
+  private currentRun: XmlElement | null = null;
   private readonly duplicateParaIds = new Set<string>();
   private readonly sources = new Map<string, Omit<WordSource, "f">>();
   private readonly report: WordImportReport;
@@ -379,6 +419,7 @@ class Reader {
   private readonly numIdsSeen = new Set<string>();
 
   private constructor(
+    private readonly documentText: string,
     private readonly document: XmlElement,
     private readonly rels: Map<string, Relationship>,
     private readonly styles: Styles,
@@ -407,8 +448,9 @@ class Reader {
 
   static async open(pkg: WordPackage, review: WordReview): Promise<Reader> {
     const { zip, part } = pkg;
-    const documentXml = await zip.readText(part);
-    if (documentXml === undefined) throw new WordRefusedError("damaged", "No document part.");
+    const documentBytes = await zip.read(part);
+    if (documentBytes === undefined) throw new WordRefusedError("damaged", "No document part.");
+    const documentXml = decodePart(documentBytes);
     const document = parseXml(documentXml);
     const namespace = document.attrs["xmlns:w"];
     if (namespace === NS_STRICT) throw new WordRefusedError("strict", "Strict Open XML.");
@@ -463,6 +505,7 @@ class Reader {
       partTexts.set(rel.target, xml ? blockText(parseXml(xml)) : "");
     }
     return new Reader(
+      documentXml,
       document,
       rels,
       styles,
@@ -483,6 +526,9 @@ class Reader {
       const count = counts.get(element.name) ?? 0;
       counts.set(element.name, count + 1);
       this.ordinals.set(element, count);
+      const named = this.byName.get(element.name);
+      if (named) named.push(element);
+      else this.byName.set(element.name, [element]);
       if (element.name === "w:p") {
         const paraId = element.attrs["w14:paraId"];
         if (paraId && paraIds.has(paraId)) this.duplicateParaIds.add(paraId);
@@ -537,7 +583,29 @@ class Reader {
     };
   }
 
-  read(): WordStructure {
+  readDocument(): WordDocument {
+    return {
+      structure: this.read(),
+      text: this.documentText,
+      root: this.document,
+      places: {
+        get: (place) => {
+          const at = place.lastIndexOf("#");
+          return at < 0
+            ? undefined
+            : this.byName.get(place.slice(0, at))?.[Number(place.slice(at + 1))];
+        },
+        placeOf: (element) => {
+          const ordinal = this.ordinals.get(element);
+          return ordinal === undefined ? null : `${element.name}#${ordinal}`;
+        },
+      },
+      origins: this.origins,
+      merged: this.merged,
+    };
+  }
+
+  private read(): WordStructure {
     const body = child(this.document, "w:body");
     const blocks: NodeJSON[] = [];
     if (body) this.blocks(body, blocks, false);
@@ -820,11 +888,17 @@ class Reader {
             }
           }
           const blocks = content.get(at) ?? [];
-          cells.push({
+          const cellNode: NodeJSON = {
             type: cellType,
             attrs: { colspan, rowspan },
             content: blocks.length > 0 ? blocks : [paragraphNode("paragraph", {})],
-          });
+          };
+          this.origins.set(cellNode, at.cell);
+          const continued = [...mergedInto].flatMap(([cell, into]) =>
+            into === at ? [cell.cell] : [],
+          );
+          if (continued.length > 0) this.merged.set(cellNode, continued);
+          cells.push(cellNode);
           column += colspan;
         } else if (occupied[r]?.[column]) {
           column++;
@@ -844,7 +918,10 @@ class Reader {
           column = end;
         }
       }
-      return { type: "tableRow", content: cells };
+      const rowNode: NodeJSON = { type: "tableRow", content: cells };
+      const tr = rows[r]?.element;
+      if (tr) this.origins.set(rowNode, tr);
+      return rowNode;
     });
 
     const id = newId();
@@ -966,6 +1043,7 @@ class Reader {
 
   private run(run: XmlElement, marks: MarkJSON[], out: NodeJSON[]): void {
     const own = [...marks, ...runMarks(child(run, "w:rPr"))];
+    this.currentRun = run;
     for (const element of elements(run)) {
       if (element.name === "w:rPr") continue;
       if (element.name === "w:fldChar") {
@@ -981,7 +1059,14 @@ class Reader {
   }
 
   private text(text: string, marks: MarkJSON[], out: NodeJSON[]): void {
-    if (text) out.push(marks.length > 0 ? { type: "text", text, marks } : { type: "text", text });
+    if (text)
+      this.fromRun(marks.length > 0 ? { type: "text", text, marks } : { type: "text", text }, out);
+  }
+
+  /** Text or a line break, recorded with the run it was read from. */
+  private fromRun(node: NodeJSON, out: NodeJSON[]): void {
+    if (this.currentRun) this.origins.set(node, this.currentRun);
+    out.push(node);
   }
 
   private runContent(element: XmlElement, marks: MarkJSON[], out: NodeJSON[]): void {
@@ -1000,13 +1085,13 @@ class Reader {
         this.text("­", marks, out);
         break;
       case "w:cr":
-        out.push({ type: "hardBreak" });
+        this.fromRun({ type: "hardBreak" }, out);
         break;
       case "w:br": {
         const type = element.attrs["w:type"];
         if (type === "page" || type === "column") {
           out.push(this.atom("pageBreak", this.place(element), {}));
-        } else out.push({ type: "hardBreak" });
+        } else this.fromRun({ type: "hardBreak" }, out);
         break;
       }
       case "w:drawing":
