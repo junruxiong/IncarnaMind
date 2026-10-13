@@ -7,6 +7,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  motionSettled,
   newMind,
   notificationsShown,
   pointAndClick,
@@ -21,8 +22,9 @@ import {
  * Tasks (#126): a comparison table keeps filling as a Task when its Mind is
  * closed and when IncarnaMind is force-quit, and goes on at the next start;
  * a Task that was waiting for approval comes back paused, "Needs you", with
- * the ask in the tray above the composer. Set INCARNAMIND_SCREENSHOTS to a
- * folder to also save screenshots.
+ * the ask in the tray above the composer. The Tasks chip in the band says
+ * what runs or needs the User, and its popover opens a Task's Mind. Set
+ * INCARNAMIND_SCREENSHOTS to a folder to also save screenshots.
  */
 const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
 async function screenshot(window: Page, name: string): Promise<void> {
@@ -82,6 +84,22 @@ async function expectAboveComposer(window: Page, tray: Locator): Promise<void> {
   expect(trayBox.y + trayBox.height).toBeLessThanOrEqual(composerBox.y + 1);
   expect(Math.abs(trayBox.x - composerBox.x)).toBeLessThan(2);
   expect(Math.abs(trayBox.width - composerBox.width)).toBeLessThan(2);
+}
+
+/** The Tasks chip's popover never covers the assistant: its composer, its thread, its tray. */
+async function expectClearOfAssistant(window: Page, popover: Locator): Promise<void> {
+  await motionSettled(window);
+  const [own, other] = [
+    await popover.boundingBox(),
+    await window.getByTestId("assistant").boundingBox(),
+  ];
+  if (!own || !other) throw new Error("The popover or the assistant isn't on screen.");
+  const apart =
+    own.x + own.width <= other.x + 1 ||
+    other.x + other.width <= own.x + 1 ||
+    own.y + own.height <= other.y + 1 ||
+    other.y + other.height <= own.y + 1;
+  expect(apart).toBe(true);
 }
 
 const cellTexts = (table: Locator) =>
@@ -145,6 +163,23 @@ test("a comparison table keeps filling as a Task: closing its Mind and force-qui
     timeout: 30_000,
   });
   await screenshot(window, "compare-task-en-1440");
+
+  // The chip in the band says it runs; its popover lists it, by keyboard, beside the assistant.
+  const chip = window.getByTestId("tasks-chip");
+  await expect(chip).toHaveText("1 running");
+  await chip.focus();
+  await window.keyboard.press("Enter");
+  const popover = window.getByTestId("tasks-popover");
+  const listed = popover.getByTestId("tasks-popover-row");
+  await expect(listed).toHaveCount(1);
+  await expect(listed).toBeFocused();
+  await expect(listed).toContainText("Compare Documents");
+  await expect(listed).toContainText(/Shortlist · Filling cell \d of 6/);
+  await expectClearOfAssistant(window, popover);
+  await screenshot(window, "tasks-popover-en-1440");
+  await window.keyboard.press("Escape");
+  await expect(popover).toBeHidden();
+  await expect(chip).toBeFocused();
 
   // Closing the Mind doesn't stop it.
   const settledBefore = (await tasksOf(window))[0]?.progress?.done ?? 0;
@@ -218,7 +253,18 @@ test("a Task waiting for approval comes back paused after a quit: “Needs you�
       .toEqual([{ title: "Task needs you", body: "Credit memo" }]);
     await expect(window.getByTestId("task-tray")).toHaveCount(0);
 
-    await pointAndClick(window, memoTab);
+    // The chip says it needs the User; its row opens its Mind, with the ask in the tray.
+    const chip = window.getByTestId("tasks-chip");
+    await expect(chip).toHaveText("1 needs you");
+    await expect(chip).toHaveAttribute("data-needs-you", "true");
+    await pointAndClick(window, chip);
+    const popover = window.getByTestId("tasks-popover");
+    await expect(popover).toContainText("Needs you");
+    const listed = popover.getByTestId("tasks-popover-row");
+    await expect(listed).toContainText("Credit memo · Waiting for your approval");
+    await pointAndClick(window, listed);
+    await expect(popover).toBeHidden();
+    await expect(memoTab).toHaveAttribute("aria-selected", "true");
     const tray = window.getByTestId("task-tray");
     const ask = tray.getByTestId("task-ask");
     await expect(tray.getByTestId("task-step")).toHaveText("Waiting for your approval");
@@ -255,6 +301,17 @@ test("a Task waiting for approval comes back paused after a quit: “Needs you�
 
     await setWindowSize(again.app, again.window, 900, 640);
     await expectAboveComposer(again.window, paused);
+    // With the assistant at the bottom, the popover ends above it.
+    const pausedChip = again.window.getByTestId("tasks-chip");
+    await expect(pausedChip).toHaveText("1 needs you");
+    await pausedChip.focus();
+    await again.window.keyboard.press("Enter");
+    const pausedPopover = again.window.getByTestId("tasks-popover");
+    await expect(pausedPopover.getByTestId("tasks-popover-row")).toBeFocused();
+    await expectClearOfAssistant(again.window, pausedPopover);
+    await screenshot(again.window, "tasks-popover-en-900");
+    await again.window.keyboard.press("Escape");
+    await expect(pausedPopover).toBeHidden();
     await screenshot(again.window, "tasks-paused-en-900");
     await setLanguage(again.window, "zh-CN");
     await expect(first.getByTestId("task-step")).toHaveText(

@@ -221,57 +221,61 @@ test("the sidebar's ⋯ sorts the Folders, and Use for all Folders sets one choi
   await app.close();
 });
 
-test("the Library sorts by its Name header, a second click reverses it, and each view remembers its own", async () => {
+/** Opens the Library's Sort, and picks `choice` in the menu that opens. */
+async function sortLibrary(window: Page, library: Locator, choice: string): Promise<void> {
+  await slideClick(window, library.getByTestId("library-sort"));
+  const menu = window.getByTestId("sort-menu");
+  await expect(menu).toBeVisible();
+  await expect(menu.getByTestId("sort-folders-first")).toHaveCount(0);
+  await slideClick(window, menu.getByTestId(choice));
+  await expect(menu).toBeHidden();
+}
+
+test("the Library's Sort orders every section by Name, Date modified or Date added, either way, and remembers it after a restart", async () => {
   const paths = await writeFiles();
-  const { app, window } = await launchApp(dataDir);
+  let { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await setWindowSize(app, window, 1400, 800);
   await addInOrder(window, paths);
+  await window.getByTestId("open-library").click();
+  let library = window.getByTestId("library");
+  const names = () => library.getByTestId("library-document-name").allTextContents();
+  const bar = () => library.getByTestId("library-sort");
+  await expect(bar()).toHaveText("Sort: Date added ↓");
+  await expect.poll(names).toEqual(["cherry", "Apple", "banana"]);
+
+  await sortLibrary(window, library, "sort-name");
+  await expect(bar()).toHaveText("Sort: Name ↓");
+  await expect.poll(names).toEqual(["cherry", "banana", "Apple"]);
+  await sortLibrary(window, library, "sort-asc");
+  await expect(bar()).toHaveText("Sort: Name ↑");
+  await expect.poll(names).toEqual(["Apple", "banana", "cherry"]);
+  await screenshot(window, "sort-library-name");
+
+  // banana's file is the newest, cherry's the oldest.
+  await sortLibrary(window, library, "sort-modified");
+  await sortLibrary(window, library, "sort-desc");
+  await expect(bar()).toHaveText("Sort: Date modified ↓");
+  await expect.poll(names).toEqual(["banana", "Apple", "cherry"]);
+
+  // Each section keeps the one order: a Document filed in a Folder sorts among the Folder's.
   await window.evaluate(async () => {
     const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     const group = await core.createLibraryGroup({ name: "Reading", description: "" });
-    const [one] = await core.listDocuments();
-    if (one) await core.assignDocumentGroup(one.id, group.id);
+    const documents = await core.listDocuments();
+    await core.moveToFolder({
+      documentIds: documents.filter((each) => each.name !== "Apple").map((each) => each.id),
+      folderId: group.id,
+    });
   });
+  await expect.poll(names).toEqual(["banana", "cherry", "Apple"]);
+
+  await app.close();
+  ({ app, window } = await launchApp(dataDir));
   await window.getByTestId("open-library").click();
-  const library = window.getByTestId("library");
-  const names = () => library.getByTestId("library-document-name").allTextContents();
-  const bar = library.getByTestId("library-sort");
-  await expect(bar).toHaveText("Sort: Date added ↓");
-  await expect.poll(names).toEqual(["cherry", "Apple", "banana"]);
-
-  const header = library.getByTestId("library-sort-name");
-  await slideClick(window, header);
-  await expect.poll(names).toEqual(["Apple", "banana", "cherry"]);
-  await expect(bar).toHaveText("Sort: Name ↑");
-  await slideClick(window, header);
-  await expect.poll(names).toEqual(["cherry", "banana", "Apple"]);
-  await expect(bar).toHaveText("Sort: Name ↓");
-  await screenshot(window, "sort-library-name");
-
-  // The button opens the same menu, without the Folder choices.
-  await slideClick(window, bar);
-  const menu = window.getByTestId("sort-menu");
-  await expect(menu.getByTestId("sort-folders-first")).toHaveCount(0);
-  await slideClick(window, menu.getByTestId("sort-modified"));
-  await expect(bar).toHaveText("Sort: Date modified ↓");
-  // banana's file is the newest.
-  await expect.poll(names).toEqual(["banana", "Apple", "cherry"]);
-
-  // A Folder's view keeps its own, which is still the newest added first.
-  await window
-    .getByTestId("library-folder")
-    .filter({ hasText: "Reading" })
-    .getByTestId("folder-row")
-    .click();
-  await window
-    .getByTestId("library-folder")
-    .filter({ hasText: "Reading" })
-    .getByTestId("folder-menu")
-    .click();
-  await window.getByTestId("folder.open").click();
-  await expect(library.getByTestId("library-heading")).toHaveText("Reading");
-  await expect(library.getByTestId("library-sort")).toHaveText("Sort: Date added ↓");
+  library = window.getByTestId("library");
+  await expect(bar()).toHaveText("Sort: Date modified ↓");
+  await expect.poll(names).toEqual(["banana", "cherry", "Apple"]);
   await app.close();
 });
 
@@ -293,7 +297,8 @@ test("Chinese names sort by pinyin in the Library and the sidebar", async () => 
   await expect.poll(async () => (await bridgeOf(window)).length).toBe(4);
   await window.getByTestId("open-library").click();
   const library = window.getByTestId("library");
-  await slideClick(window, library.getByTestId("library-sort-name"));
+  await sortLibrary(window, library, "sort-name");
+  await sortLibrary(window, library, "sort-asc");
   // an, chen, li, zhang.
   await expect
     .poll(() => library.getByTestId("library-document-name").allTextContents())
