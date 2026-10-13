@@ -1013,6 +1013,7 @@ export function createCore(adapters: CoreAdapters): Core {
         return turn;
       },
       questionOf: (input) => conversations.questionOf(input),
+      clearScope: (questionId) => conversations.clearScope(questionId),
       restartAnswer: (answerId, answerModel, read) => {
         const turn = conversations.restartAnswer(answerId, answerModel, read);
         events.emit("conversation.message", turn.answer);
@@ -1991,6 +1992,10 @@ export function createCore(adapters: CoreAdapters): Core {
     askInConversation: async (input) =>
       answers.askInConversation(conversations.parseQuestion(input)),
     regenerateConversationAnswer: async (input) => answers.regenerateInConversation(input),
+    countScopeDocuments: async (scope) => {
+      const wanted = parseSearchScope(scope);
+      return documents.searchableCount((wanted ? resolveScope(wanted) : null) ?? undefined);
+    },
     stopConversationAnswer: async (input) => answers.stopInConversation(input),
     listConversations: async (options) => conversations.list(options),
     getConversation: async (conversationId) => conversations.content(conversationId),

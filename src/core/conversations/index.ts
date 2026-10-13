@@ -718,6 +718,14 @@ export function createConversations(db: Database, now: () => string) {
       return { answerId: answer.id, question: toQuestion(question) };
     },
 
+    /** Takes the Search scope off a Question, so its Answers search every Document (#748). */
+    clearScope(questionId: string): void {
+      db.run(
+        "UPDATE conversation_messages SET scope = NULL, updated_at = ? WHERE id = ? AND kind = 'question'",
+        [now(), questionId],
+      );
+    },
+
     /** Empties an Answer, where it is, to write it again with `answerModel` from the Mind it reads. */
     restartAnswer(
       answerId: string,

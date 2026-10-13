@@ -1809,6 +1809,7 @@ export const zhCN = {
   "scope.chip.more": "还有 {count} 个",
   "scope.chip.moreLabel": "显示搜索范围中的另外 {count} 个文档",
   "scope.chip.fewer": "收起",
+  "scope.empty.line": "{scope}中没有文档",
   "scope.answer.empty":
     "此问题的搜索范围内没有可搜索的文档，因此没有搜索。请向其中的文件夹或标签添加文档，或移除搜索范围，改为搜索全部文档。",
 

@@ -497,3 +497,28 @@ describe("The migration", () => {
     ).toEqual([{ version: 72 }]);
   });
 });
+
+describe("A Question whose Search scope holds no Documents (#748)", { timeout: 30_000 }, () => {
+  // protects=an empty Search scope never blocks a request: the model is called, told the scope is empty, and reads the Mind; fails_when=the Answer is a refusal made without the model, or the model isn't told; no_claim=how a model words its Answer.
+  test("goes to the model, which reads the Mind and is told the scope is empty", async () => {
+    const { core, model, mind, client } = await setUp(streamingModel("It is shorter now."));
+    writeMind(client, [heading(1, "Summary"), note("The summary section is long and wordy.")]);
+    await client.settled();
+    const empty = await core.createLibraryGroup({ name: "Contracts", description: "" });
+
+    const answer = await ask(core, {
+      text: "Make the summary section shorter",
+      mindId: mind.id,
+      scope: { folderIds: [empty.id], tagIds: [], documentIds: [] },
+    });
+
+    expect(model.doStreamCalls).toHaveLength(1);
+    expect(answer.text).toBe("It is shorter now.");
+    expect(answer.model).not.toBeNull();
+    expect(answer.read).not.toBeNull();
+    expect(lastSent(model)).toContain("The summary section is long and wordy.");
+    expect(promptOf(model, 0).find((message) => message.role === "system")?.text).toContain(
+      "holds no Documents",
+    );
+  });
+});
