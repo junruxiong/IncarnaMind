@@ -4,6 +4,7 @@ import type { DocumentStatus, EmbeddingModelError } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
 import { useT } from "../i18n";
 import { useCapturing } from "../meetings";
+import { downloadProgress } from "../modelDownload";
 import { enterFrom, exitToward } from "../motion";
 import { rerankingModelStatus } from "../rerankStatus";
 import { isOwnDocument, useAppStore } from "../store";
@@ -17,9 +18,6 @@ import { rowActionButtonClass } from "./sidebarRows";
 /** The status row's button: a small ghost one, inside the 28px row. */
 const statusActionClass =
   "inline-flex h-6 shrink-0 items-center rounded-md px-2 text-[12px] font-semibold text-ink-secondary hover:bg-rule hover:text-ink focus-visible:outline-offset-0 aria-expanded:bg-rule aria-expanded:text-ink";
-
-/** Decimal megabytes, as the model's 135 MB is quoted elsewhere. */
-const MEGABYTE = 1_000_000;
 
 /** The gap between the "+N" button and the list of the other statuses above it. */
 const GAP_PX = 4;
@@ -50,8 +48,10 @@ const dotTones: Record<Tone, string> = {
 interface Status {
   testId: string;
   tone: Tone;
-  /** What the row shows: short enough for one line. */
+  /** What the row shows: short enough for one line. It gives way to `figure`. */
   short: string;
+  /** How far along it is ("3/22 MB"): shown after `short`, never cut. */
+  figure?: string;
   /** All of it: the tooltip, and what a screen reader reads. */
   full: string;
   action?: { label: string; testId?: string; run(): void };
@@ -83,7 +83,7 @@ export function SidebarStatus() {
 
 function StatusRow({ status, children }: { status: Status; children?: ReactNode }) {
   const t = useT();
-  const { tone, short, full, action, dismiss } = status;
+  const { tone, short, figure, full, action, dismiss } = status;
   return (
     <div
       role={tone === "error" ? "alert" : "status"}
@@ -98,8 +98,15 @@ function StatusRow({ status, children }: { status: Status; children?: ReactNode 
           }`}
         />
       </span>
-      <span aria-hidden="true" className="min-w-0 flex-1 truncate">
-        {short}
+      <span aria-hidden="true" className="flex min-w-0 flex-1 items-center gap-1">
+        <span data-testid="status-label" className="min-w-0 truncate">
+          {figure ? `${short} ·` : short}
+        </span>
+        {figure && (
+          <span data-testid="status-figure" className="shrink-0 tabular-nums">
+            {figure}
+          </span>
+        )}
       </span>
       <span className="sr-only">{full}</span>
       {children}
@@ -251,6 +258,7 @@ function useStatuses(): Status[] {
     testId: rerankingStatus.testId,
     tone: rerankingStatus.tone,
     short: rerankingStatus.short,
+    figure: rerankingStatus.figure,
     full: rerankingStatus.full,
     ...(rerankingStatus.retry && {
       action: {
@@ -373,12 +381,12 @@ function useStatuses(): Status[] {
   }
 
   if (model?.state === "downloading") {
-    const downloaded = Math.floor(model.downloadedBytes / MEGABYTE);
-    const total = Math.ceil(model.totalBytes / MEGABYTE);
+    const { downloaded, total, figure } = downloadProgress(model, t);
     statuses.push({
       testId: "embedding-model-download",
       tone: "progress",
-      short: t("status.downloading", { downloaded, total }),
+      short: t("status.downloading"),
+      figure,
       full: `${t("embedding.model.downloading", { downloaded, total })}\n${t("embedding.model.note")}`,
     });
   }
@@ -397,7 +405,8 @@ function useStatuses(): Status[] {
     statuses.push({
       testId: "embedding-rebuild-notice",
       tone: "progress",
-      short: t("status.rebuilding", { done: rebuild.done, total: rebuild.total }),
+      short: t("status.rebuilding"),
+      figure: `${rebuild.done}/${rebuild.total}`,
       full: `${reason}${title}\n${t("embeddingProviders.rebuild.note")}`,
     });
   }

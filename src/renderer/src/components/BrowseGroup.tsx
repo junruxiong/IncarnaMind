@@ -7,7 +7,7 @@ import { useRename } from "../useRename";
 import { InlineName } from "./InlineName";
 import { ChevronDownLineIcon, ChevronRightLineIcon } from "./lineIcons";
 import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
-import { rowActionsClass, rowButtonClass, rowClass } from "./sidebarRows";
+import { clearsActions, rowActionsClass, rowButtonClass, rowClass } from "./sidebarRows";
 
 /** How many Documents a Tag lists under it in the sidebar; the Library shows them all. */
 const LISTED = 50;
@@ -79,7 +79,9 @@ export function BrowseGroup({
             {...TREE_ROW}
             aria-current={selectedAs === "current" && selected ? "page" : undefined}
             aria-pressed={selectedAs === "pressed" ? selected : undefined}
-            className={rowButtonClass}
+            className={
+              object ? `${rowButtonClass} ${clearsActions.menuBeforeChevron}` : rowButtonClass
+            }
             onClick={onOpen}
           >
             {icon}
