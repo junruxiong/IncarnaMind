@@ -2883,7 +2883,7 @@ export interface EmbeddingSettings {
    * "Keep everything on this computer": only embedding providers on this
    * computer can be chosen, and search results aren't reranked by a cloud
    * service. Turned on in Settings, or by choosing local models with one
-   * click (`selectOllama`).
+   * click (`selectOllama`, when the User asks for it).
    */
   localOnly: boolean;
   /** Set while Documents are embedded again after a switch. */
@@ -4608,6 +4608,11 @@ export interface SelectOllamaInput {
   baseUrl?: string;
   /** Defaults to the recommended model. */
   model?: string;
+  /**
+   * "Also keep everything on this computer": Local mode is turned on or off
+   * to match. Left out, Local mode stays as it was.
+   */
+  localOnly?: boolean;
 }
 
 export interface OllamaPullProgress {
