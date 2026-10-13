@@ -127,6 +127,8 @@ test("Import a Word file… asks whose it is, then opens the Mind with what is k
   await expect(dialog.getByTestId("word-import-authors")).toHaveText(
     "It has changes or comments by Marcus Hale.",
   );
+  // A memo's look is what the Mind draws: no word about its layout.
+  await expect(dialog.getByTestId("word-import-layout")).toHaveCount(0);
   await screenshot(dialog, "word-import-dialog");
   await dialog.getByTestId("word-import-confirm").click();
   await expect(dialog).toBeHidden();
@@ -171,6 +173,52 @@ test("Import a Word file… asks whose it is, then opens the Mind with what is k
   await window.keyboard.type("!");
   await expect(date).toHaveText("9 October 2026");
   await expect(editor.locator("p").first()).toContainText("9 October 2026!");
+  await app.close();
+});
+
+/** The Word corpus's résumés (#735): tables with no borders, shading, tab stops, fonts, sizes and colours. */
+const RESUMES = join(__dirname, "..", "eval", "word", "documents", "synthetic");
+
+test("a résumé laid out with tables, shading and tab stops says, before Import, that its layout isn't shown but is kept; the Mind's line says so on hover; in Chinese too", async () => {
+  const path = join(files, "Alex Example CV.docx");
+  await writeFile(path, await readFile(join(RESUMES, "en-resume-layout.docx")));
+  const { app, window } = await launchApp(dataDir, { home });
+  await dismissChatSetup(window);
+  await setWindowSize(app, window, 1440, 900);
+  await interceptOpenDialog(app, path);
+
+  const dialog = await importFromMenu(window);
+  const note = dialog.getByTestId("word-import-layout");
+  await expect(note).toHaveText(
+    "This file’s layout (fonts, colours, shading and aligned columns) isn’t shown in the Mind. It’s kept, and comes back when you export to Word.",
+  );
+  // Before Import, in one place: above the buttons.
+  const noteBox = await note.boundingBox();
+  const importBox = await dialog.getByTestId("word-import-confirm").boundingBox();
+  expect((noteBox?.y ?? 0) + (noteBox?.height ?? 0)).toBeLessThanOrEqual(importBox?.y ?? 0);
+  await screenshot(dialog, "word-import-layout-en");
+  await dialog.getByTestId("word-import-confirm").click();
+  await expect(dialog).toBeHidden();
+  const origin = window.getByTestId("mind-word-origin");
+  await expect(origin).toHaveAttribute("title", /This file’s layout .* isn’t shown in the Mind/);
+  await screenshot(window.getByTestId("mind-pane"), "word-import-layout-mind");
+
+  await setLanguage(window, "zh-CN");
+  const chinese = join(files, "张示例简历.docx");
+  await writeFile(chinese, await readFile(join(RESUMES, "zh-resume-layout.docx")));
+  await interceptOpenDialog(app, chinese);
+  await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-import-word").click();
+  await expect(dialog.getByTestId("word-import-layout")).toHaveText(
+    "这份文件的版式（字体、颜色、底色和对齐）在 Mind 里不显示，会保留，导出 Word 时原样还原。",
+  );
+  await screenshot(dialog, "word-import-layout-zh");
+  await dialog.getByTestId("word-import-confirm").click();
+  await expect(dialog).toBeHidden();
+  await expect(window.locator('[data-testid="mind-word-origin"]:visible')).toHaveAttribute(
+    "title",
+    /这份文件的版式/,
+  );
   await app.close();
 });
 

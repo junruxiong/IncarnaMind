@@ -961,6 +961,8 @@ export interface WordFileCheck {
   origin: WordOrigin;
   /** Who wrote its tracked changes and comments, in the order they first appear. */
   authors: string[];
+  /** Its look is mostly what a Mind doesn't draw, so the import screen says it is kept (#735). */
+  layoutNotShown: boolean;
   /** Its tracked changes, of every kind (paragraph marks, formatting and moves too). */
   changes: number;
   comments: number;
@@ -999,6 +1001,25 @@ export interface WordImportReport {
   changes: number;
   comments: number;
   sections: number;
+  /** What the Mind doesn't draw of the file's look; absent from a report made before #735. */
+  layout?: WordLayout;
+}
+
+/**
+ * What a Word file's look holds that a Mind doesn't draw (#735), counted from
+ * the document's own formatting: paragraphs, runs and cells shaded;
+ * paragraphs with a border; tab stops set; tables with no borders, which
+ * place text; and how many text colours (other than black), fonts and sizes
+ * it sets.
+ */
+export interface WordLayout {
+  shading: number;
+  borders: number;
+  tabStops: number;
+  layoutTables: number;
+  colours: number;
+  fonts: number;
+  sizes: number;
 }
 
 /**

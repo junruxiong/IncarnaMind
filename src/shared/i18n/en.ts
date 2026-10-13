@@ -3523,6 +3523,8 @@ export const en = {
   "wordImport.othersMore": "{count} more",
   "wordImport.keeps":
     "IncarnaMind keeps a copy of the file, so export can write your changes back into it.",
+  "wordImport.layoutNotShown":
+    "This file’s layout (fonts, colours, shading and aligned columns) isn’t shown in the Mind. It’s kept, and comes back when you export to Word.",
   "wordImport.import": "Import",
   "wordImport.importing": "Importing…",
   "wordImport.cancel": "Cancel",

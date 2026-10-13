@@ -2,13 +2,13 @@
 
 Issue #84, for the Word work in #74: the files that #104 (import) and #105 (export back into the original) are checked against, from simple memos to 125-page agreements, in ten languages, with the Word features a round-trip has to keep.
 
-- **Core set, committed (90 files, 1.7 MB):**
-  - `documents/`: 30 realistic documents, in English and Chinese.
+- **Core set, committed (92 files, 1.7 MB):**
+  - `documents/`: 32 realistic documents, in English and Chinese, two of them résumés laid out with tables, shading and tab stops (#735).
   - `tracked-changes/`: 20 files with someone else's tracked changes.
   - `breadth/`: 36 files for more domains, languages and complexity: 14 synthetic domain documents, 4 Chinese and Taiwanese official documents, 18 real test documents.
   - `saved/`: files re-saved by hand in Word for Mac and Google Docs (2 each); the 2 WPS ones are the step left, see [`TO-SAVE.md`](TO-SAVE.md).
 - **Extended set, not committed (148 files, 2.8 MB when fetched):** listed in [`extended.json`](extended.json) and [`EXTENDED.md`](EXTENDED.md) with a commit-pinned URL, SHA-256, licence and features each; `npm run eval:word:fetch` puts them in a cache. 127 are real test documents; 21 are synthetic documents generated on the same run.
-- **Together:** 238 files. The coverage table below says what is where.
+- **Together:** 240 files. The coverage table below says what is where.
 
 Domains: legal (contracts, a court filing, policies), finance (annual reports, a prospectus, an audit letter), medical and pharma (protocols, SOPs), academic (papers with equations, a thesis), government (notices, regulations, forms), engineering (specifications and standards with numbered requirements), HR, education, and general business memos. Languages: English, Simplified and Traditional Chinese, Japanese, Korean, German, French, Spanish, Arabic (right-to-left), Hebrew (right-to-left) and files that mix languages.
 
@@ -16,7 +16,7 @@ Domains: legal (contracts, a court filing, policies), finance (annual reports, a
 
 | Origin | Licence | Notes |
 |---|---|---|
-| `synthetic` | Apache-2.0 (written for this repository) | Invented text and names, written by [`generate-synthetic.py`](generate-synthetic.py) (18 contracts, memos and reports) and [`generate-domains.py`](generate-domains.py) (domain documents; standard library only, same script gives the same bytes), with [`ooxml.py`](ooxml.py) writing the packages and [`domain_text.py`](domain_text.py) holding the text. Equations, charts, text boxes, shapes, comment threads, form fields and content controls are hand-written OOXML and have only been opened in LibreOffice, not Word. |
+| `synthetic` | Apache-2.0 (written for this repository) | Invented text and names, written by [`generate-synthetic.py`](generate-synthetic.py) (18 contracts, memos and reports, and 2 résumés) and [`generate-domains.py`](generate-domains.py) (domain documents; standard library only, same script gives the same bytes), with [`ooxml.py`](ooxml.py) writing the packages and [`domain_text.py`](domain_text.py) holding the text. Equations, charts, text boxes, shapes, comment threads, form fields and content controls are hand-written OOXML and have only been opened in LibreOffice, not Word. |
 | `libreoffice` | MPL-2.0 | Test documents from [LibreOffice core](https://github.com/LibreOffice/core) (`sw/qa/extras/ooxmlexport/data`, `ooxmlimport/data`), pinned to commit `7094a2f2`. |
 | `apache-poi` | Apache-2.0 | Test documents from [Apache POI](https://github.com/apache/poi) (`test-data/document`), pinned to `f3688f45`. |
 | `apache-tika` | Apache-2.0 | Test documents from [Apache Tika](https://github.com/apache/tika). |
@@ -97,11 +97,11 @@ Each cell is the number of files, and in brackets how many of them are committed
 | academic | 1 | 1 (0) | · | · | · | · | · | · | · | 1 (0) | · | · | 3 (1) |
 | government | 1 (0) | 2 | 2 | 1 (0) | · | · | 1 (0) | · | · | · | · | · | 7 (4) |
 | engineering | 3 (2) | · | · | · | · | 1 (0) | · | · | · | · | · | · | 4 (2) |
-| hr | 3 (2) | 1 | · | 1 | · | · | · | · | · | 1 | · | · | 6 (5) |
+| hr | 4 (3) | 2 | · | 1 | · | · | · | · | · | 1 | · | · | 8 (7) |
 | education | 1 (0) | · | · | · | · | · | · | 1 (0) | 1 (0) | · | · | · | 3 (0) |
 | business | 2 | 2 | · | · | · | · | · | · | · | · | 3 (1) | · | 7 (5) |
 | test | 74 (20) | 8 (1) | · | 7 (1) | 2 (0) | 11 (0) | 7 (2) | 4 (1) | 8 (1) | · | 2 | 53 (21) | 176 (49) |
-| All | 99 (39) | 23 (14) | 3 (2) | 10 (2) | 3 (1) | 15 (1) | 9 (3) | 6 (1) | 10 (2) | 2 (1) | 5 (3) | 53 (21) | 238 (90) |
+| All | 100 (40) | 24 (15) | 3 (2) | 10 (2) | 3 (1) | 15 (1) | 9 (3) | 6 (1) | 10 (2) | 2 (1) | 5 (3) | 53 (21) | 240 (92) |
 
 **Feature by language** (files with at least one)
 
@@ -120,7 +120,7 @@ Each cell is the number of files, and in brackets how many of them are committed
 | Headers and footers | 43 (28) | 15 (13) | 3 (2) | 3 (1) | 1 | 7 (1) | 3 (1) | 2 (0) | 3 (1) | 2 (1) | 3 (1) | 15 (10) | 100 (60) |
 | Several sections | 18 (7) | 3 (0) | · | · | 1 (0) | 1 (0) | 1 (0) | · | 1 (0) | · | · | 6 (5) | 31 (12) |
 | Columns | 9 (3) | 1 (0) | · | · | · | · | · | · | · | · | · | 2 (1) | 12 (4) |
-| Tables | 38 (17) | 9 (7) | 3 (2) | 5 (1) | 1 | 8 (0) | 5 (1) | 3 (1) | 2 (1) | 1 | 3 (1) | 9 (5) | 87 (38) |
+| Tables | 39 (18) | 10 (8) | 3 (2) | 5 (1) | 1 | 8 (0) | 5 (1) | 3 (1) | 2 (1) | 1 | 3 (1) | 9 (5) | 89 (40) |
 | Nested tables | 6 (2) | · | · | 1 (0) | · | · | · | · | · | · | · | 3 (2) | 10 (4) |
 | Merged cells | 17 (9) | · | · | · | 1 | 2 (0) | · | · | 1 (0) | · | · | 3 (2) | 24 (12) |
 | Lists | 40 (19) | 9 (7) | 1 (0) | 3 (1) | 1 | 5 (1) | 3 (1) | 2 (0) | 3 (1) | 2 (1) | 3 (1) | 4 | 76 (37) |
@@ -155,7 +155,7 @@ Each cell is the number of files, and in brackets how many of them are committed
 | Headers and footers | 17 (15) | 9 (5) | 6 (4) | 3 (1) | 7 (4) | 4 (2) | 6 (5) | 3 (0) | 7 (5) | 38 (19) | 100 (60) |
 | Several sections | · | 1 | · | 1 | · | 1 | · | · | · | 28 (9) | 31 (12) |
 | Columns | · | 1 | · | 1 | · | · | · | · | · | 10 (2) | 12 (4) |
-| Tables | 12 (10) | 7 (4) | 3 (2) | 1 (0) | 6 (3) | 3 (1) | 2 | 3 (0) | 7 (5) | 43 (11) | 87 (38) |
+| Tables | 12 (10) | 7 (4) | 3 (2) | 1 (0) | 6 (3) | 3 (1) | 4 | 3 (0) | 7 (5) | 43 (11) | 89 (40) |
 | Nested tables | · | · | 1 | · | · | · | · | · | · | 9 (3) | 10 (4) |
 | Merged cells | 4 (3) | 1 | 2 | · | · | 1 | · | 2 (0) | · | 14 (5) | 24 (12) |
 | Lists | 16 (14) | 5 (1) | 4 (2) | 3 (1) | 3 (0) | 4 (2) | 4 (3) | 3 (0) | 6 (4) | 28 (10) | 76 (37) |
@@ -173,7 +173,7 @@ Each cell is the number of files, and in brackets how many of them are committed
 | Older compatibility mode | 2 | 1 | 1 | · | 2 | 1 | 1 | · | · | 137 (36) | 145 (44) |
 | 100+ pages | 1 | 1 (0) | · | 1 (0) | · | 1 (0) | · | · | · | 1 | 5 (2) |
 
-90 committed files (1.7 MB) and 148 in the extended set (2.6 MB when fetched): 238 in all.
+92 committed files (1.7 MB) and 148 in the extended set (2.6 MB when fetched): 240 in all.
 
 <!-- coverage:end -->
 
@@ -183,7 +183,7 @@ Lang: `en`, `zh` (Simplified), `zh-TW`, `ja`, `ko`, `de`, `fr`, `es`, `ar`, `he`
 
 <!-- files:start -->
 
-### Documents (30)
+### Documents (32)
 
 | File | Lang | Domain | Licence | Source | Kinds | Features (count) |
 |---|---|---|---|---|---|---|
@@ -209,6 +209,7 @@ Lang: `en`, `zh` (Simplified), `zh-TW`, `ja`, `ko`, `de`, `fr`, `es`, `ar`, `he`
 | `synthetic/en-policy-numbered.docx` | en | engineering | Apache-2.0 | synthetic | 3 | Fields 2, Headers and footers 2, Lists 7 |
 | `synthetic/en-report-quarterly.docx` | en | finance | Apache-2.0 | synthetic | 9 | Footnotes 1, Endnotes 1, Fields 4, TOC 1, Cross-references 1, Bookmarks 1, Headers and footers 2, Tables 1, Content controls 1 |
 | `synthetic/en-report-sections.docx` | en | finance | Apache-2.0 | synthetic | 3 | Footnotes 1, Fields 1, Headers and footers 4 |
+| `synthetic/en-resume-layout.docx` | en | hr | Apache-2.0 | synthetic | 1 | Tables 1 |
 | `synthetic/zh-bilingual-contract.docx` | zh | legal | Apache-2.0 | synthetic | 6 | Comments 1, Footnotes 1, Fields 2, Headers and footers 2, Tables 1, Content controls 1 |
 | `synthetic/zh-contract-redline.docx` | zh | legal | Apache-2.0 | synthetic | 5 | Tracked changes 7, Comments 1, Fields 2, Headers and footers 2, Lists 6 (change authors: 审核人甲, 对方律师) |
 | `synthetic/zh-contract-sale.docx` | zh | legal | Apache-2.0 | synthetic | 5 | Comments 2, Footnotes 1, Fields 2, Headers and footers 2, Lists 6 |
@@ -217,6 +218,7 @@ Lang: `en`, `zh` (Simplified), `zh-TW`, `ja`, `ko`, `de`, `fr`, `es`, `ar`, `he`
 | `synthetic/zh-memo-notice.docx` | zh | business | Apache-2.0 | synthetic | 4 | Tracked changes 2, Headers and footers 2, Tables 1, Lists 3 (change authors: 财务负责人) |
 | `synthetic/zh-policy-rules.docx` | zh | hr | Apache-2.0 | synthetic | 4 | Comments 1, Fields 2, Headers and footers 2, Lists 8 |
 | `synthetic/zh-report-annual.docx` | zh | finance | Apache-2.0 | synthetic | 6 | Footnotes 1, Endnotes 1, Fields 4, TOC 1, Headers and footers 2, Tables 1 |
+| `synthetic/zh-resume-layout.docx` | zh | hr | Apache-2.0 | synthetic | 1 | Tables 2 |
 
 ### Files with someone else's tracked changes (20)
 
