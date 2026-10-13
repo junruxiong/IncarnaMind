@@ -352,14 +352,15 @@ export class Review {
   }
 
   /**
-   * IncarnaMind's tracked change for part of a change still waiting: one
-   * object for each, so the parts of one next to each other are one change.
+   * The tracked change for part of a change still waiting: IncarnaMind's,
+   * or, for someone's change from a Word file, theirs (#108). One object for
+   * each, so the parts of one next to each other are one change.
    */
   pending(kind: Tracking["kind"], pending: Pending): Tracking {
     const key = `${kind}:${pending.id}`;
     let tracking = this.trackings.get(key);
     if (!tracking) {
-      tracking = { kind, author: INCARNAMIND, date: pending.at };
+      tracking = { kind, author: pending.by ?? INCARNAMIND, date: pending.at };
       this.trackings.set(key, tracking);
     }
     return tracking;
