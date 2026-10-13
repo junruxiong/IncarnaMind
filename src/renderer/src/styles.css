@@ -2903,10 +2903,21 @@
     position: relative;
     display: inline;
   }
-  /* Word joiners keep a marker on the line of the word before it, with the markers and the punctuation after it. */
-  .citation::before,
-  .citation::after {
-    content: "\2060";
+  /* A word, its Citations and the punctuation after them, in one run (see `CitationGlue`). */
+  .citation-glue {
+    white-space: nowrap;
+  }
+  /*
+   * The node view's wrappers are `white-space: normal` and would allow a break
+   * between markers; its menu keeps normal text.
+   */
+  .node-citation,
+  .citation {
+    white-space: nowrap !important;
+
+    > [popover] {
+      white-space: normal;
+    }
   }
   /* The Citation's ⋯, out of sight: its menu opens from the marker (see `ObjectMenu`). */
   .citation-menu-anchor {
