@@ -61,19 +61,15 @@ const bridge = (window: Page) => ({
         }),
       language,
     ),
-  /** Claude Haiku 5.5 on an Anthropic key, billed per token, allowed to be sent to. */
+  /** Claude Haiku 5.5 on an Anthropic key, billed per token: choosing it allows sending to it. */
   cloudModel: () =>
     window.evaluate(async () => {
       const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-      const provider = await core.saveChatProvider({
+      await core.saveChatProvider({
         kind: "anthropic",
         apiKey: "sk-ant-test",
         modelId: "claude-haiku-5-5",
       });
-      if (provider.service) {
-        await core.allowDataFlow("chat", provider.service.id);
-        await core.allowDataFlow("tagging", provider.service.id);
-      }
     }),
   documentId: (name: string) =>
     window.evaluate(

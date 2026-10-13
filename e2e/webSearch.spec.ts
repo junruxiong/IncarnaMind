@@ -68,18 +68,11 @@ async function screenshot(target: Page | Locator, name: string): Promise<void> {
   await target.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
 }
 
-/** An Anthropic key, with Questions and automatic tagging allowed to go there. */
+/** An Anthropic key: choosing it allows Questions and automatic tagging to go there. */
 const useAnthropic = (window: Page) =>
   window.evaluate(async (modelId) => {
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-    const provider = await bridge.saveChatProvider({
-      kind: "anthropic",
-      apiKey: "sk-ant-test",
-      modelId,
-    });
-    if (!provider.service) return;
-    await bridge.allowDataFlow("chat", provider.service.id);
-    await bridge.allowDataFlow("tagging", provider.service.id);
+    await bridge.saveChatProvider({ kind: "anthropic", apiKey: "sk-ant-test", modelId });
   }, MODEL);
 
 test("asked to search the web, an Answer saves the page it reads as a Document and cites it by section and paragraph, found; a page it couldn't save says why", async () => {

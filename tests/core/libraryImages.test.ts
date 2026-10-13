@@ -5,7 +5,7 @@ import { describe, expect, test, vi } from "vitest";
 import type { Core } from "../../src/core";
 import { decisionGroupClassifier } from "../../src/core/library/classifier";
 import { documentPageImages } from "../../src/core/library/pageImages";
-import { createTempDataFolder, nextEvent, startCore } from "../helpers/core";
+import { createTempDataFolder, startCore } from "../helpers/core";
 import { addAndProcess, sha256, writeSourceFile } from "../helpers/documents";
 import { startFakeJev } from "../helpers/jev";
 import { buildPdf } from "../helpers/pdf";
@@ -311,21 +311,22 @@ describe("Library PDF page images", () => {
       return { core, fake, scan, text };
     }
 
-    test("a cloud model that reads images gets a scan's page images, after consent; text goes as text", async () => {
+    test("a cloud model that reads images gets a scan's page images, which choosing it allowed; text goes as text", async () => {
       const { core, fake, scan, text } = await setup({
         kind: "anthropic",
         modelId: "claude-sonnet-5-5",
       });
-      const requested = nextEvent(core, "consent.requested");
+      // Choosing the model allowed organizing to send to it, page images included (ADR-0022).
+      expect(await core.listDataFlows()).toContainEqual(
+        expect.objectContaining({
+          flow: expect.objectContaining({
+            id: "classification",
+            sends: ["groups", "tags", "document-excerpts", "page-images"],
+          }),
+          consent: "accepted",
+        }),
+      );
       await core.classifyDocuments([scan.id, text.id]);
-      // Organizing's consent names page images, and nothing is sent before it.
-      const request = await requested;
-      expect(request.flow).toMatchObject({
-        id: "classification",
-        sends: ["groups", "tags", "document-excerpts", "page-images"],
-      });
-      expect(fake.calls).toHaveLength(0);
-      await core.respondToConsent(request.requestId, true);
       // Rendering the scan's pages takes a while on a busy machine, as in the tests above.
       await vi.waitFor(
         async () => {

@@ -1,11 +1,14 @@
 /**
  * Data-flow consent: nothing leaves the machine on a flow until the User has
- * accepted that flow for that service.
+ * accepted that flow for that service (ADR-0022).
  *
- * Core modules register their external flows here (chat now; embeddings,
- * tagging, rerank and Connectors in later tickets) and call `ensure` before
- * every request. The first time, `ensure` raises a "consent.requested" event
- * and waits for the UI to answer with `respondToConsent`. Decisions are kept
+ * Core modules register their external flows here and call `ensure` before
+ * every request. Choosing a service where a line says what goes to it (the
+ * chat model's provider in setup or Settings, a search service, a Connector)
+ * allows its flows at once: `choose`. A flow the User hasn't allowed asks
+ * once: `ensure` raises a "consent.requested" event and waits for the UI to
+ * answer with `respondToConsent`, except on a background flow, which never
+ * asks and throws `ConsentNeededError`, so its work waits. Decisions are kept
  * per flow and service. A flow that starts sending a new kind of data asks
  * again; a declined flow stays unused until the User revokes the decision or
  * allows it in Settings (the Privacy page lists every registered flow).
@@ -22,7 +25,12 @@ import {
   type ExternalService,
   type RegisteredDataFlow,
 } from "./api";
-import { ConsentDeclinedError, InvalidInputError, NotFoundError } from "./errors";
+import {
+  ConsentDeclinedError,
+  ConsentNeededError,
+  InvalidInputError,
+  NotFoundError,
+} from "./errors";
 import type { createEventHub } from "./events";
 import type { Database } from "./storage";
 
@@ -34,6 +42,8 @@ export interface DataFlowDefinition {
   sendsTo?(serviceId: string): readonly DataKind[];
   /** The external services the flow currently goes to; empty when everything stays on this computer. */
   services(): Promise<ExternalService[]>;
+  /** Background work, which never asks (ADR-0022): it waits until the User allows the flow. */
+  background?: boolean;
 }
 
 /** The registry of every external data flow. Registering an id again replaces it. */
@@ -48,6 +58,7 @@ type Decision = "accepted" | "declined";
 interface ConsentRow {
   decision: Decision;
   data_kinds: string;
+  chosen: number;
   updated_at: string;
 }
 
@@ -92,7 +103,7 @@ export function createConsent(
 
   const find = (flow: DataFlowId, serviceId: string) =>
     db.get<ConsentRow>(
-      `SELECT decision, data_kinds, updated_at FROM data_flow_consents
+      `SELECT decision, data_kinds, chosen, updated_at FROM data_flow_consents
        WHERE flow = ? AND service_id = ? AND deleted_at IS NULL`,
       [flow, serviceId],
     );
@@ -109,34 +120,60 @@ export function createConsent(
   /** The User's decision on a flow, and what it sends that they haven't accepted. */
   const statusOf = (flow: DataFlow) => {
     const row = find(flow.id, flow.service.id);
-    if (!row) return { consent: "not-asked" as const, decidedAt: null, missing: flow.sends };
+    if (!row) {
+      return { consent: "not-asked" as const, decidedAt: null, chosen: false, missing: flow.sends };
+    }
     if (row.decision === "declined") {
-      return { consent: "declined" as const, decidedAt: row.updated_at, missing: [] };
+      return {
+        consent: "declined" as const,
+        decidedAt: row.updated_at,
+        chosen: false,
+        missing: [],
+      };
     }
     const accepted = acceptedKinds(row);
     const missing = flow.sends.filter((kind) => !accepted.includes(kind));
+    const chosen = row.chosen === 1;
     return missing.length === 0
-      ? { consent: "accepted" as const, decidedAt: row.updated_at, missing }
+      ? { consent: "accepted" as const, decidedAt: row.updated_at, chosen, missing }
       : // Allowed before it sent more: when, so the Privacy page can say it asks again.
-        { consent: "not-asked" as const, decidedAt: row.updated_at, missing };
+        { consent: "not-asked" as const, decidedAt: row.updated_at, chosen, missing };
   };
 
-  const record = (flow: DataFlow, decision: Decision, kinds: readonly DataKind[]) => {
+  /** `chosen`: allowed by choosing the service (ADR-0022), not in a dialog or in Settings › Privacy. */
+  const record = (
+    flow: DataFlow,
+    decision: Decision,
+    kinds: readonly DataKind[],
+    chosen = false,
+  ) => {
     const at = now();
     const json = JSON.stringify(kinds);
+    const chosenValue = chosen ? 1 : 0;
     db.transaction(() => {
       if (find(flow.id, flow.service.id)) {
         db.run(
-          `UPDATE data_flow_consents SET decision = ?, data_kinds = ?, service_name = ?, updated_at = ?
+          `UPDATE data_flow_consents
+           SET decision = ?, data_kinds = ?, chosen = ?, service_name = ?, updated_at = ?
            WHERE flow = ? AND service_id = ? AND deleted_at IS NULL`,
-          [decision, json, flow.service.name, at, flow.id, flow.service.id],
+          [decision, json, chosenValue, flow.service.name, at, flow.id, flow.service.id],
         );
       } else {
         db.run(
           `INSERT INTO data_flow_consents
-             (id, flow, service_id, service_name, decision, data_kinds, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [randomUUID(), flow.id, flow.service.id, flow.service.name, decision, json, at, at],
+             (id, flow, service_id, service_name, decision, data_kinds, chosen, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            randomUUID(),
+            flow.id,
+            flow.service.id,
+            flow.service.name,
+            decision,
+            json,
+            chosenValue,
+            at,
+            at,
+          ],
         );
       }
     });
@@ -171,17 +208,17 @@ export function createConsent(
   };
 
   /** Accepts everything the flow sends, keeping the kinds accepted before. */
-  const recordAccepted = (flow: DataFlow) => {
+  const recordAccepted = (flow: DataFlow, chosen = false) => {
     const row = find(flow.id, flow.service.id);
     const previous = row?.decision === "accepted" ? acceptedKinds(row) : [];
-    record(flow, "accepted", [...new Set([...previous, ...flow.sends])]);
+    record(flow, "accepted", [...new Set([...previous, ...flow.sends])], chosen);
   };
 
   /** Records the User's answer to a waiting request, and lets the requests waiting on it go on. */
-  const answer = (entry: Pending, accepted: boolean) => {
+  const answer = (entry: Pending, accepted: boolean, chosen = false) => {
     const { requestId, flow } = entry.request;
     pending.delete(requestId);
-    if (accepted) recordAccepted(flow);
+    if (accepted) recordAccepted(flow, chosen);
     else record(flow, "declined", []);
     events.emit("consent.resolved", { requestId, accepted });
     entry.settle();
@@ -215,8 +252,8 @@ export function createConsent(
     for (const definition of definitions.values()) {
       const services = (await servicesOf(definition)).map((service): DataFlowStatus => {
         const flow = flowFor(definition.id, service);
-        const { consent, decidedAt } = statusOf(flow);
-        return { flow, consent, decidedAt };
+        const { consent, decidedAt, chosen } = statusOf(flow);
+        return { flow, consent, decidedAt, chosen };
       });
       result.push({ id: definition.id, sends: [...definition.sends], services });
     }
@@ -231,10 +268,15 @@ export function createConsent(
       return statusOf(flowFor(flowId, service)).consent;
     },
 
+    /** Whether the flow is background work, which never asks. */
+    isBackground: (flowId: DataFlowId) => definitions.get(flowId)?.background === true,
+
     /**
      * Resolves once the User has accepted everything the flow sends to the
      * service, asking them first if needed. Throws `ConsentDeclinedError` if
-     * they declined: the caller must not send anything.
+     * they declined, and, on a background flow, which never asks,
+     * `ConsentNeededError` if they haven't allowed it: the caller must not
+     * send anything.
      */
     async ensure(flowId: DataFlowId, service: ExternalService): Promise<void> {
       for (;;) {
@@ -242,8 +284,32 @@ export function createConsent(
         const { consent, missing } = statusOf(flow);
         if (consent === "accepted") return;
         if (consent === "declined") throw new ConsentDeclinedError(flow);
+        if (definitions.get(flowId)?.background) throw new ConsentNeededError(flow);
         // The decision is recorded before the request settles, so the loop re-checks it.
         await ask(flow, missing).promise;
+      }
+    },
+
+    /**
+     * The User chose `service` where a line said what goes to it (ADR-0022):
+     * each of `flowIds` to it is allowed, as chosen, and requests waiting for
+     * one are answered. `unnamed`: kinds of data the line doesn't name, which
+     * still ask. A flow the User declined stays declined; one that isn't
+     * registered is left out.
+     */
+    choose(
+      flowIds: readonly DataFlowId[],
+      service: ExternalService,
+      unnamed: readonly DataKind[] = [],
+    ): void {
+      for (const flowId of flowIds) {
+        if (!definitions.has(flowId)) continue;
+        const flow = flowFor(flowId, service);
+        if (statusOf(flow).consent === "declined") continue;
+        const named = { ...flow, sends: flow.sends.filter((kind) => !unnamed.includes(kind)) };
+        const waiting = waitingFor(flow);
+        if (waiting && named.sends.length === flow.sends.length) answer(waiting, true, true);
+        else recordAccepted(named, true);
       }
     },
 

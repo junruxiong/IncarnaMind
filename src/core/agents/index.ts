@@ -79,7 +79,7 @@ export interface AgentsOptions {
   now(): string;
   clock(): number;
   secrets: Pick<Secrets, "set" | "tryGet" | "delete">;
-  consent: Pick<Consent, "status" | "allow" | "revoke" | "registry">;
+  consent: Pick<Consent, "status" | "choose" | "revoke" | "registry">;
   readValue(key: string): unknown;
   writeValue(key: string, value: unknown): void;
   /** Local mode is on: every pairing is paused. */
@@ -471,7 +471,7 @@ export function createAgents(options: AgentsOptions) {
       );
       tokens.set(id, token);
       // The User confirmed what it may read and where that goes before this was called.
-      await options.consent.allow("agents", serviceOf({ id, name }).id);
+      options.consent.choose(["agents"], serviceOf({ id, name }));
       changed();
       return { pairing: requirePairing(id), launch: launchFor(token) } satisfies ConnectedAgent;
     },

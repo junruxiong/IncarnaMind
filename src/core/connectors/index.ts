@@ -787,6 +787,8 @@ export function createConnectors(options: ConnectorsOptions) {
       if (secretName) await secrets.delete(secretName).catch(options.reportError);
       throw error;
     }
+    // Connecting it, where the form says what goes to it, allows its Tool calls (ADR-0022).
+    consent.choose(["connectors"], serviceOf(requireRow(id)));
     return id;
   };
 

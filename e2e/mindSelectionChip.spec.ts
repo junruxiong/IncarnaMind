@@ -132,12 +132,6 @@ const selectedInEditor = (window: Page) =>
     return editor.state.doc.textBetween(from, to);
   });
 
-async function allowSending(window: Page): Promise<void> {
-  const consent = window.getByTestId("consent-dialog");
-  await expect(consent).toBeVisible();
-  await pointAndClick(window, consent.getByTestId("consent-allow"));
-}
-
 /** The chip's quote and where it is from, and the mark that keeps the passage drawn in grey. */
 async function expectDrawn(window: Page, words: string, title: string): Promise<void> {
   const chip = chipOf(window);
@@ -201,7 +195,6 @@ for (const [language, width] of [
     await expect(composer).toBeFocused();
     await window.keyboard.type(words.summary);
     await window.keyboard.press("Enter");
-    await allowSending(window);
     const whole = assistantAnswers(window).first();
     await expect(whole).toHaveAttribute("data-status", "done", { timeout: 15_000 });
     await expect(whole.getByTestId("answer-steps-line")).toHaveText(words.whole);

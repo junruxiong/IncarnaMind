@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ChatGptAccount, ConnectionTestResult } from "../../../../core/api";
+import { CHATGPT_SERVICE } from "../../../../core/providers/chatgpt/service";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
@@ -22,7 +23,7 @@ import {
   useChatGptStorage,
   useContinueWithChatGpt,
 } from "./ChatGptSignIn";
-import { TestResult } from "./ProviderForm";
+import { ProviderSendsLine, TestResult } from "./ProviderForm";
 
 /**
  * Settings → Models → ChatGPT plan: "Continue with ChatGPT" (Sign in with
@@ -92,6 +93,7 @@ export function ChatGptPlanSettings() {
       <div className="flex flex-col gap-1">
         <h4 className={sectionTitleClass}>{t("chatgpt.title")}</h4>
         <p className={rowTextClass}>{t("chatgpt.description")}</p>
+        {!inUse && <ProviderSendsLine provider={CHATGPT_SERVICE.name} />}
       </div>
 
       {status && (
@@ -159,7 +161,7 @@ export function ChatGptPlanSettings() {
           {t("chatgpt.signedOut.unconfirmed")} <ManageUsageLink />
         </p>
       )}
-      {test && <TestResult result={test} onRetry={() => void testConnection()} />}
+      {test && <TestResult result={test} />}
       {error && (
         <p role="alert" data-testid="chatgpt-settings-error" className={errorTextClass}>
           {error}
