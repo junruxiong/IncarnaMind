@@ -376,8 +376,6 @@ export async function checkEdits(bytes: Uint8Array): Promise<ExportCheck> {
         .filter((each) => each.nodeName === "paragraph")
         .at(-1);
       if (last && top().length > 2) {
-        const json = last.toJSON();
-        void json;
         const at = top().indexOf(last);
         const moved = last.clone();
         blocks.delete(at, 1);
