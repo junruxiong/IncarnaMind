@@ -1,7 +1,9 @@
 /**
  * `npm run eval:word` (eval/word/README.md): for each file of the Word corpus, its checks, each a
- * step in `STEPS`: the package, the import as a Mind (#104), opening in LibreOffice, and the
- * round-trip back into the file (#105), whose export is opened in LibreOffice too.
+ * step in `STEPS`: the package, the import as a Mind (#104), opening in LibreOffice, the
+ * round-trip back into the file (#105), and the export for review (#107), each export opened in
+ * LibreOffice too. Last, a file exported for review has every change accepted in LibreOffice,
+ * which must show the text accepting every change in IncarnaMind does.
  *
  * INCARNAMIND_WORD_SET picks the files: "core" (the committed files, the default), "extended"
  * (the cache that `npm run eval:word:fetch` fills) or "all".
@@ -12,6 +14,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { paragraph, run, table, wordFile } from "../../tests/helpers/word";
 import {
   type CorpusEntry,
   extendedCache,
@@ -20,10 +23,10 @@ import {
   readManifest,
   WORD_DIR,
 } from "./corpus";
-import { checkExport } from "./exports";
+import { checkExport, checkReview } from "./exports";
 import { type Features, featureKinds } from "./features";
 import { checkImport } from "./imports";
-import { convertToPdf, findLibreOffice } from "./libreoffice";
+import { acceptAllChanges, convertToPdf, findLibreOffice } from "./libreoffice";
 
 interface Outcome {
   ok: boolean;
@@ -51,8 +54,29 @@ const keepPdfs = process.env.INCARNAMIND_WORD_PDFS;
 const required = process.env.INCARNAMIND_WORD_REQUIRE_LIBREOFFICE === "1";
 const wanted = process.env.INCARNAMIND_WORD_SET ?? "core";
 
-/** Each file's export with the scripted edit, for LibreOffice to open. */
+/** Each file's export with the scripted edit, and its export for review, for LibreOffice to open. */
 const exported = new Map<string, Uint8Array>();
+const reviewed = new Map<string, Uint8Array>();
+
+/** Opens an export in LibreOffice, keeping its PDF as `suffix` says for a person to look at. */
+async function openExport(subject: Subject, data: Uint8Array | undefined, suffix: string) {
+  if (!soffice) return { ok: true, detail: "skipped: LibreOffice not found" };
+  if (!data) return { ok: true, detail: "nothing exported" };
+  const folder = mkdtempSync(join(tmpdir(), "incarnamind-word-export-"));
+  try {
+    const path = join(folder, basename(subject.path));
+    writeFileSync(path, data);
+    const keep = keepPdfs
+      ? join(keepPdfs, subject.name.replace(/\.docx$/i, `${suffix}.pdf`))
+      : undefined;
+    const result = await convertToPdf(soffice, path, keep);
+    return result.opened
+      ? { ok: true, detail: `${result.pdfBytes} bytes of PDF` }
+      : { ok: false, detail: result.problem ?? "did not open" };
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
+}
 
 const STEPS: Step[] = [
   {
@@ -93,27 +117,55 @@ const STEPS: Step[] = [
   {
     name: "export opens in LibreOffice",
     async run(subject) {
-      if (!soffice) return { ok: true, detail: "skipped: LibreOffice not found" };
-      const data = exported.get(subject.name);
-      if (!data) return { ok: true, detail: "nothing exported" };
-      const folder = mkdtempSync(join(tmpdir(), "incarnamind-word-export-"));
-      try {
-        const path = join(folder, basename(subject.path));
-        writeFileSync(path, data);
-        const keep = keepPdfs
-          ? join(keepPdfs, subject.name.replace(/\.docx$/i, ".pdf"))
-          : undefined;
-        const result = await convertToPdf(soffice, path, keep);
-        return result.opened
-          ? { ok: true, detail: `${result.pdfBytes} bytes of PDF` }
-          : { ok: false, detail: result.problem ?? "did not open" };
-      } finally {
-        rmSync(folder, { recursive: true, force: true });
-        exported.delete(subject.name);
-      }
+      const outcome = await openExport(subject, exported.get(subject.name), "");
+      exported.delete(subject.name);
+      return outcome;
+    },
+  },
+  {
+    name: "exports for review",
+    reports: true,
+    async run(subject, bytes) {
+      const outcome = await checkReview(bytes);
+      if (outcome.exported) reviewed.set(subject.name, outcome.exported);
+      return outcome;
+    },
+  },
+  {
+    name: "review export opens in LibreOffice",
+    async run(subject) {
+      const outcome = await openExport(subject, reviewed.get(subject.name), "-review");
+      reviewed.delete(subject.name);
+      return outcome;
     },
   },
 ];
+
+/** A line's words, for comparing text LibreOffice saved with the Mind's: no numbers, marks or bullets. */
+const wordsOf = (lines: readonly string[]) =>
+  lines
+    .map((line) =>
+      line
+        .replace(/\[\*\]/g, "")
+        .replace(/[^\p{L}\s]/gu, "")
+        .replace(/\s+/g, " ")
+        .trim(),
+    )
+    .filter((line) => line !== "");
+
+/** The file LibreOffice accepts every change in: headings, paragraphs and a table, edited every way. */
+const ACCEPT_FIXTURE = wordFile({
+  body:
+    paragraph("Lease terms", { style: "Heading1" }) +
+    paragraph("The tenant pays rent every month, in advance.") +
+    paragraph("The landlord repairs the roof and the walls.") +
+    paragraph(run("Either party may end the lease with notice.", { font: "Georgia" })) +
+    table([
+      ["Item", "Amount"],
+      ["Rent", "Monthly"],
+    ]) +
+    paragraph("Signed by both parties."),
+});
 
 function driftIn(listed: Features, found: Features): string | undefined {
   const keys = Object.keys(found) as (keyof Features)[];
@@ -168,6 +220,25 @@ describe("the Word corpus", () => {
   it.skipIf(!required)("has LibreOffice when CI asks for it", () => {
     expect(soffice).toBeDefined();
   });
+
+  it.skipIf(!soffice)(
+    "accepting every change in LibreOffice gives the text accepting every change in IncarnaMind does",
+    async () => {
+      const outcome = await checkReview(ACCEPT_FIXTURE);
+      expect(outcome.ok, outcome.detail).toBe(true);
+      const folder = mkdtempSync(join(tmpdir(), "incarnamind-word-fixture-"));
+      try {
+        const path = join(folder, "lease.docx");
+        writeFileSync(path, outcome.exported ?? new Uint8Array());
+        const accepted = await acceptAllChanges(soffice as string, path);
+        if ("problem" in accepted) throw new Error(`LibreOffice: ${accepted.problem}`);
+        expect(wordsOf(accepted.text.split("\n"))).toEqual(wordsOf(outcome.accepted ?? []));
+      } finally {
+        rmSync(folder, { recursive: true, force: true });
+      }
+    },
+    5 * 60_000,
+  );
 
   it(`opens every file of the "${wanted}" set, and reports each step`, async () => {
     const all = subjects();

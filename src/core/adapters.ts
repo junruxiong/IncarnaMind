@@ -669,6 +669,12 @@ export interface CoreAdapters {
    * "": the region of the most preferred system language.
    */
   systemRegion?(): string;
+  /**
+   * The name the computer knows the User by, which their edits go under as
+   * tracked changes in a Word file until they choose another (#107): their
+   * full name where the OS keeps one. Absent: the account's name.
+   */
+  systemUserName?(): string;
   keychain: Keychain;
   browser: Browser;
   /**
@@ -790,6 +796,11 @@ export interface CoreAdapters {
    * and how long a background check of one claim may take (3 minutes).
    */
   contradictionWatch?: { delayMs?: number; claimTimeLimitMs?: number };
+  /**
+   * The Connectors directory's entries, in its JSON form, in place of the
+   * list that ships with the app; tests point an entry at a local stand-in.
+   */
+  connectorDirectory?: unknown;
   /**
    * Where requests to TypeSafe's hosted Jev go. Defaults to
    * https://api.typesafe.ai; tests point it at a local fake server. Consent

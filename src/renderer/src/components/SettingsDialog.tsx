@@ -5,6 +5,7 @@ import { files } from "../core";
 import { useT } from "../i18n";
 import { type SettingsPage, settingsPageLabels, settingsPages } from "../settingsPages";
 import { recordUsage, useAppStore } from "../store";
+import { AuthorNameSettings } from "./AuthorNameSettings";
 import { AgentsSettings } from "./agents/AgentsSettings";
 import { ConnectorsSettings } from "./connectors/ConnectorsSettings";
 import { EvidenceSettings } from "./EvidenceSettings";
@@ -150,6 +151,7 @@ function PageContent({ page }: { page: SettingsPage }) {
           <MotionSettings />
           <SuggestionSettings />
           <OutputLocationSettings />
+          <AuthorNameSettings />
           <DataFolderSettings />
           <AboutSettings />
         </Page>

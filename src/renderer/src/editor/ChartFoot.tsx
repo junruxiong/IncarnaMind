@@ -2,8 +2,9 @@ import { Fragment, type ReactNode, type RefObject } from "react";
 import type { CitationCheck } from "../../../core/api";
 import type { ChartInk } from "../../../shared/chartLayout";
 import { type ChartSources, MAX_CHART_VALUES } from "../../../shared/charts";
-import { citationSource } from "../../../shared/citations";
+import { citationSource, withShownName } from "../../../shared/citations";
 import { useT } from "../i18n";
+import { useAppStore } from "../store";
 import { ChartCheck } from "./ChartCheck";
 
 export function ChartFoot({
@@ -32,8 +33,11 @@ export function ChartFoot({
 }) {
   const t = useT();
   const cited = sources.values - sources.uncited;
+  const documents = useAppStore((state) =>
+    state.status.kind === "ready" ? state.documents : null,
+  );
   const place = sources.places[0]?.citation;
-  const source = place ? citationSource(place, t) : null;
+  const source = place ? citationSource(withShownName(place, documents), t) : null;
   const document = source?.name ?? "";
   const plural = (count: number) => (count === 1 ? "one" : "other");
 
