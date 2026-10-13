@@ -1112,9 +1112,11 @@ export interface CalculatedFigure {
   /** The rules it was worked out and shown by (`FORMULA_VERSION`): a check runs the same ones. */
   engine: number;
   /**
-   * What the Answer wrote right before its marker when that isn't this figure:
-   * "26%" where IncarnaMind calculated 25.0%. Null when it wrote nothing
-   * there, or the same figure, which the text then shows once.
+   * What the Answer wrote beside its marker when that isn't this figure: a
+   * number right before it ("26%" where IncarnaMind calculated 25.0%), or a
+   * scale or currency right after it ("亿元" after a figure in 万元), which
+   * the text leaves out. Null when it wrote nothing there, or the same
+   * figure, which the text then shows once.
    */
   written: string | null;
 }
@@ -1489,6 +1491,8 @@ export type LayoutChange =
       where?: OpenWhere;
       /** A Document as a preview, replacing the group's preview if it has one. */
       preview?: boolean;
+      /** A Document already open as a preview is kept, as a double-click on its tab does. */
+      keep?: boolean;
       /** Its group becomes the focused one: true unless false. */
       focus?: boolean;
       /** A Document: where in it, e.g. a Citation's quote. */
@@ -4953,10 +4957,10 @@ export interface TagMerge {
 // Export
 
 /**
- * What a Mind exports to: Markdown, for an archive, or Word (.docx) or PDF, for the
+ * What a Mind exports to: Markdown, for an archive, or Word (.docx), PDF or HTML, for the
  * deliverable. Formats are listed in the order the options sheet offers them.
  */
-export const EXPORT_FORMATS = ["docx", "pdf", "markdown"] as const;
+export const EXPORT_FORMATS = ["docx", "pdf", "html", "markdown"] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
 /**
@@ -4967,13 +4971,14 @@ export interface ExportPreferences {
   format: ExportFormat;
   docx: { includeQuestions: boolean };
   pdf: { includeQuestions: boolean };
+  html: { includeQuestions: boolean };
 }
 
 export interface ExportMindOptions {
   format: ExportFormat;
   /**
    * Whether Questions are exported, marked as Questions. Defaults to true for
-   * Markdown, an archive of everything, and to false for .docx and PDF: the
+   * Markdown, an archive of everything, and to false for .docx, PDF and HTML: the
    * deliverable leaves the working material out.
    */
   includeQuestions?: boolean;
@@ -5001,7 +5006,7 @@ export interface MindExportPreview {
 
 /** A Mind exported as a file, for the host to save where the User chooses. */
 export interface MindExport extends MindExportPreview {
-  /** The file's contents: UTF-8 text for Markdown, a ZIP package for .docx, a PDF for PDF. */
+  /** The file's contents: UTF-8 text for Markdown and HTML, a ZIP package for .docx, a PDF for PDF. */
   data: Uint8Array;
 }
 
