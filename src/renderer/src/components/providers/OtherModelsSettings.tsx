@@ -22,11 +22,6 @@ const WHY_TITLES: Record<Why, MessageKey> = {
   "cannot-answer": "models.other.group.cannotAnswer",
 };
 
-const NOTES: Record<Exclude<Why, "cannot-answer">, MessageKey> = {
-  unknown: "models.other.mayNotWork",
-  older: "models.other.older",
-};
-
 const REASONS: Record<NonNullable<OtherModel["reason"]>, MessageKey> = {
   completion: "models.other.reason.completion",
   audio: "models.other.reason.audio",
@@ -211,9 +206,11 @@ function ModelRow({
       >
         {name}
       </span>
-      <span className="ml-auto shrink-0 text-[13px] leading-5 text-ink-meta">
-        {t(NOTES[row.why])}
-      </span>
+      {row.why === "unknown" && (
+        <span className="ml-auto shrink-0 text-[13px] leading-5 text-ink-meta">
+          {t("models.other.mayNotWork")}
+        </span>
+      )}
     </label>
   );
 }

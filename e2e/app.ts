@@ -1130,14 +1130,14 @@ export async function clickEndOf(window: Page, line: Locator): Promise<void> {
     .toBe(true);
 }
 
-/** Slides the mouse onto an element, in steps, as a person does, and leaves it there. */
-export async function pointAt(window: Page, target: Locator): Promise<void> {
+/** Slides the mouse onto an element, in steps, as a person does, and leaves it there: returns where. */
+export async function pointAt(window: Page, target: Locator): Promise<{ x: number; y: number }> {
   await target.scrollIntoViewIfNeeded();
   const box = await target.boundingBox();
   if (!box) throw new Error("The element isn't visible.");
-  await window.mouse.move(box.x + Math.min(box.width / 2, 40), box.y + box.height / 2, {
-    steps: 8,
-  });
+  const point = { x: box.x + Math.min(box.width / 2, 40), y: box.y + box.height / 2 };
+  await window.mouse.move(point.x, point.y, { steps: 8 });
+  return point;
 }
 
 /** Presses Tab, or Shift+Tab if `target` comes before the focus, until `target` has the focus. */
@@ -1357,3 +1357,61 @@ export async function removeDataFolder(dataDir: string): Promise<void> {
 /** The core's bridge in the page, for a test to set things up or read them: `(await coreOf(window)).evaluate(...)`. */
 export const coreOf = (window: Page) =>
   window.evaluateHandle(() => (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind);
+
+/**
+ * What the core holds that a change to a Mind, Document, Folder, Tag, Linked folder or Recently
+ * deleted touches, as plain data: a test compares it before and after, through the bridge and not
+ * the screen. Dates are left out, as a change taken back is stamped again, and so is where a
+ * Document's automatic tagging is, which moves on by itself when a Document changes Folder.
+ */
+export async function coreState(window: Page): Promise<unknown> {
+  return (await coreOf(window)).evaluate(async (core) => {
+    const [minds, documents, library, tags, linkedFolders, deleted] = await Promise.all([
+      core.listMinds(),
+      core.listDocuments(),
+      core.getLibrary(),
+      core.listTags(),
+      core.listLinkedFolders(),
+      core.listDeleted(),
+    ]);
+    const state = {
+      minds,
+      documents,
+      folders: library.groups,
+      assignments: library.assignments,
+      tags,
+      linkedFolders,
+      deleted,
+    };
+    const progress = ["tagging", "taggingError"];
+    return JSON.parse(
+      JSON.stringify(state, (key, value) =>
+        key.endsWith("At") || progress.includes(key) ? undefined : value,
+      ),
+    );
+  });
+}
+
+/**
+ * The commands a menu holds, in order, with its rules as "—": the menu's items by their test ids,
+ * which are the commands' IDs.
+ */
+export async function menuCommands(menu: Locator): Promise<string[]> {
+  await expect(menu).toBeVisible();
+  // Its items draw a moment after the popover shows.
+  await expect(menu.getByRole("menuitem").first()).toBeVisible();
+  return menu.evaluate((element) =>
+    Array.from(element.children).map((child) =>
+      child.getAttribute("role") === "menuitem" ? (child.getAttribute("data-testid") ?? "") : "—",
+    ),
+  );
+}
+
+/** Clicks the empty foot of the sidebar's tree, so the focus isn't in text and ⌘Z goes to the app's changes. */
+export async function leaveText(window: Page): Promise<void> {
+  const box = await window.getByTestId("sidebar-tree").boundingBox();
+  if (!box) throw new Error("The sidebar isn't showing.");
+  await window.mouse.move(box.x + box.width / 2, box.y + box.height - 8, { steps: 8 });
+  await window.mouse.down();
+  await window.mouse.up();
+}

@@ -29,6 +29,8 @@ export interface StepsInput {
    * before #544.
    */
   askedFrom: AskedFrom | null;
+  /** The Question was about a selection in the Mind (#565). */
+  selection?: boolean;
   /** It was asked while its Mind's meeting was recording: the assistant listened to the live transcript. */
   meeting: boolean;
 }
@@ -42,7 +44,7 @@ export type StepRow =
   /** A model that gave no reasoning summary, and how long the Answer took when that is known. */
   | { kind: "answered"; model: string; seconds: number | null }
   /** The Mind the Answer read, all of it or part of it: `share` of it (#564), when part and known. */
-  | { kind: "read"; mind: MindRead; share: number | null }
+  | { kind: "read"; mind: MindRead; share: number | null; selection?: true }
   /** The Mind it was asked from, which it didn't read. */
   | { kind: "asked"; mind: AskedFrom }
   /** One search, or several in a row, with the sources their Citations point to. */
@@ -68,7 +70,7 @@ export type FoldedLine =
   | { kind: "searched"; sources: number; extraScopes: number }
   | { kind: "searched-web"; sources: number }
   | { kind: "listened"; sources: number }
-  | { kind: "read"; mind: MindRead; share: number | null }
+  | { kind: "read"; mind: MindRead; share: number | null; selection?: true }
   | { kind: "asked"; mind: AskedFrom }
   | { kind: "answered"; model: string };
 
@@ -125,12 +127,13 @@ const placeOf = (citation: MarkedCitation) =>
   `${citation.documentId}\n${citation.pageFrom}-${citation.pageTo}\n${JSON.stringify(citation.location)}`;
 
 /** The Mind the Answer read, or the one it was asked from and didn't read. */
-const mindRow = ({ answer, askedFrom }: StepsInput) =>
+const mindRow = ({ answer, askedFrom, selection }: StepsInput) =>
   answer.read
     ? ({
         kind: "read",
         mind: answer.read,
         share: answer.read.partial ? (answer.steps?.readShare ?? null) : null,
+        ...(selection && !answer.read.partial && { selection: true as const }),
       } as const)
     : askedFrom
       ? ({ kind: "asked", mind: askedFrom } as const)
