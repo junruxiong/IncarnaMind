@@ -1726,6 +1726,11 @@ export function createCore(adapters: CoreAdapters): Core {
       mindsChanged();
       return mind;
     },
+    renameMind: (mindId, title) => {
+      minds.rename(mindId, title);
+      mindsChanged();
+    },
+    mindTitle: (mindId) => minds.list().find((mind) => mind.id === mindId)?.title ?? "",
     mindExists: (mindId) => minds.list().some((mind) => mind.id === mindId),
     deleteMind: (mindId) => {
       const at = now();
@@ -2036,7 +2041,13 @@ export function createCore(adapters: CoreAdapters): Core {
           change = { ...patch, user };
         }
       }
+      const languageWas = settings.get().language;
       const updated = settings.update(change);
+      if (updated.language !== languageWas) {
+        examples
+          .followLanguage()
+          .catch((error) => console.error("The example Minds didn't follow the language:", error));
+      }
       if (!updated.user.suggestWhileWriting) suggestions.stop();
       events.emit("settings.changed", updated);
       // Skill scripts turned off: none runs any more, and none waits to.
