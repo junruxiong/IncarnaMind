@@ -4,7 +4,8 @@ import { describe, expect, test, vi } from "vitest";
 import type { ClaimCheckAction, ClaimCheckAttributes, Core, Document } from "../../src/core";
 import { claimSpans } from "../../src/renderer/src/editor/claimChecks";
 import { claimCheckShown } from "../../src/shared/claimChecks";
-import { setUpWithDocuments, shownPassages } from "../helpers/citations";
+import { checkingModel as checkingModelOf, type Plan, sentenceOf } from "../helpers/checks";
+import { setUpWithDocuments } from "../helpers/citations";
 import { createTempDataFolder, manualClock, queryDatabase, startCore } from "../helpers/core";
 import { addAndProcess, sha256, waitForProcessing, writeSourceFile } from "../helpers/documents";
 import { connectToMind, type MindClient, typeInto } from "../helpers/mindClient";
@@ -31,16 +32,6 @@ const SUPPORTED = "Spring tides come at new and full moon.";
 const CONTRADICTED = "Harbours publish the times of high water every week.";
 const UNSUPPORTED = "Penguins nest on the cliffs above the harbour.";
 
-/** How the scripted model checks a sentence: what it cites, and how it replies. */
-interface Plan {
-  verdict?: "supported" | "unsupported" | "contradicted";
-  /** The line it cites, from the Passage that holds it. */
-  quote?: string;
-  says?: string;
-  /** Its reply instead, once it has searched. */
-  reply?: ScriptedReply;
-}
-
 const PLANS: Record<string, Plan> = {
   [SUPPORTED]: {
     verdict: "supported",
@@ -55,56 +46,12 @@ const PLANS: Record<string, Plan> = {
   [UNSUPPORTED]: { verdict: "unsupported" },
 };
 
-/** The sentence a check Run is asked about. */
-const sentenceOf = (call: ModelCall) => {
-  const text = call.options.prompt
-    .filter((message) => message.role === "user")
-    .map((message) =>
-      typeof message.content === "string"
-        ? message.content
-        : message.content.map((part) => ("text" in part ? part.text : "")).join(""),
-    )
-    .join("\n");
-  return /<sentence>\n([\s\S]*?)\n<\/sentence>/.exec(text)?.[1] ?? "";
-};
-
-/**
- * A model that checks as its plans say: it searches for the sentence, cites,
- * then gives its verdict. Asked once more for the deciding Passage, it gives
- * `evidence` (none by default).
- */
-function checkingModel(
+/** A model that checks as `PLANS` say, unless told otherwise. */
+const checkingModel = (
   plans: Record<string, Plan> = PLANS,
   calls: ModelCall[] = [],
-  evidence: string = JSON.stringify({ passage: null }),
-) {
-  return scriptedModel(
-    (call) => {
-      calls.push(call);
-      const plan = plans[sentenceOf(call)] ?? { verdict: "unsupported" };
-      const searches = call.results.filter((result) => result.tool === "search_documents");
-      if (searches.length === 0) {
-        return { calls: [{ tool: "search_documents", input: { query: sentenceOf(call) } }] };
-      }
-      if (plan.reply) return plan.reply;
-      const { quote } = plan;
-      if (quote && !call.results.some((result) => result.tool === "cite")) {
-        const passage =
-          shownPassages(searches.at(-1)?.text ?? "").find((each) => each.text.includes(quote)) ??
-          shownPassages(searches.at(-1)?.text ?? "")[0];
-        return {
-          calls: [
-            { tool: "cite", input: { citations: [{ marker: 1, passage: passage?.id, quote }] } },
-          ],
-        };
-      }
-      return {
-        text: `Verdict: ${plan.verdict}${plan.says ? `\n${plan.says} [^1]` : ""}`,
-      };
-    },
-    { generate: () => ({ text: evidence }) },
-  );
-}
+  evidence?: string,
+) => checkingModelOf(plans, calls, evidence);
 
 let blocks = 0;
 const paragraph = (...content: JSONContent[]): JSONContent & { attrs: { id: string } } => ({
@@ -220,6 +167,7 @@ describe("Find support", () => {
     "P1 is about spring tides, not penguins.\n\nVerdict: unsupported",
     "Unsupported. No Passage mentions penguins.",
     '{"verdict": "unsupported"}',
+    "Verdict: contradicted\nP1 is about another harbour, so it doesn't bear on this.\nVerdict: unsupported",
   ])("reads the verdict however the model words it: %j", async (reply) => {
     const plans = { [UNSUPPORTED]: { reply: { text: reply } } };
     const { core, client, check } = await mindWith([UNSUPPORTED], checkingModel(plans));
@@ -289,6 +237,24 @@ describe("One claim check", () => {
     expect((await shownChecks(core, client)).map((each) => each.check.action)).toEqual([
       "check-against-documents",
     ]);
+  });
+
+  test("a contradiction counts only once the sentence and its quote, judged alone, conflict", async () => {
+    const near = { ...PLANS[CONTRADICTED], judgement: "neither" as const };
+    const { core, client, check } = await mindWith(
+      [CONTRADICTED],
+      checkingModel({ [CONTRADICTED]: near }),
+    );
+    await check();
+    expect((await shownChecks(core, client))[0]?.shown).toEqual({ state: "unsupported" });
+
+    const same = { ...PLANS[CONTRADICTED], judgement: "same" as const };
+    const again = await mindWith([CONTRADICTED], checkingModel({ [CONTRADICTED]: same }));
+    await again.check();
+    expect((await shownChecks(again.core, again.client))[0]).toMatchObject({
+      shown: { state: "supported" },
+      check: { evidence: { quote: "Harbours publish the times of high water every year." } },
+    });
   });
 
   test("checkClaim is the same check, for a claim outside a Mind", async () => {

@@ -27,6 +27,7 @@ import { judgesUnreliably } from "../../../shared/smallModel";
 import {
   type ChatModelChoice,
   type ChatReadiness,
+  type CheckedDocument,
   type CheckSentencesResult,
   type Citation,
   type CitationAttributes,
@@ -52,15 +53,23 @@ import { parseSearchScope } from "../../scope";
 import type { AnswerEngine } from "../engine";
 import { type ClaimCheckDependencies, createClaimCheck } from "./claimCheck";
 import { markedSentences, markSentence, selectedSentences, updateCheck } from "./sentences";
+import { createVerify, type VerifyOptions } from "./verify";
 
-/** What the "checks" flow sends: the sentences checked, with their paragraphs, and the Passages found. */
-export const CHECKS_FLOW_SENDS = ["selection", "passages"] as const;
+/**
+ * What the "checks" flow sends: the sentences checked, with their paragraphs,
+ * the Passages found, and a verified document's sentences, to find its claims (#97).
+ */
+export const CHECKS_FLOW_SENDS = ["selection", "passages", "verified-document"] as const;
 
 /** The longest claim one check takes, in characters: a sentence, not a page. */
 const MAX_CLAIM_CHARACTERS = 2_000;
 
-export interface ChecksOptions {
-  content: Pick<MindContent, "read" | "edit">;
+export interface ChecksOptions
+  extends Pick<
+    VerifyOptions,
+    "requireFolder" | "addFile" | "document" | "onStatus" | "readText" | "createMind"
+  > {
+  content: Pick<MindContent, "read" | "edit" | "readSettings">;
   /** Throws unless the Mind exists and this version may write to it. */
   requireMind(mindId: string): void;
   /** The Folder the Mind is in; null for none. */
@@ -190,11 +199,12 @@ export function createChecks(options: ChecksOptions) {
   });
 
   /** The model to check with, or why there is none; the consent dialog shows before anything is sent. */
-  async function prepare(
-    choice: ChatModelChoice | null,
-  ): Promise<
+  async function prepare(choice: ChatModelChoice | null): Promise<
     | { ok: true; prepared: PreparedChatModel }
-    | { ok: false; result: Exclude<CheckSentencesResult, { kind: "checked" }> }
+    | {
+        ok: false;
+        result: Extract<CheckSentencesResult, { kind: "not-ready" | "local-mode" | "cancelled" }>;
+      }
   > {
     const readiness = await chat.readiness(choice ?? undefined, "checks");
     if (!readiness.ready) return { ok: false, result: { kind: "not-ready", readiness } };
@@ -251,6 +261,22 @@ export function createChecks(options: ChecksOptions) {
     });
   }
 
+  /** Where a Mind's sentences are checked: its Folder, or every Document. */
+  function scopeOf(mindId: string, allDocuments: boolean, checked?: CheckedDocument) {
+    const folderId = options.mindFolder(mindId);
+    const marked: ClaimCheckScope = { folderId, widened: allDocuments };
+    const searched =
+      allDocuments || folderId === null
+        ? null
+        : options.resolveScope({ folderIds: [folderId], tagIds: [], documentIds: [] });
+    const scope = options.evidence.scope(searched, checked);
+    return {
+      searchable: options.documents.searchableCount(scope.documentIds),
+      folderId: allDocuments ? null : folderId,
+      check: { scope, marked },
+    };
+  }
+
   async function checkSentences(
     input: ParsedCheck,
     signal: AbortSignal,
@@ -259,16 +285,9 @@ export function createChecks(options: ChecksOptions) {
     const read = content.read(mindId, (blocks) => selectedSentences(blocks, input.from, input.to));
     if (!read.ok) return { kind: read.reason };
 
-    const folderId = options.mindFolder(mindId);
-    const scope: ClaimCheckScope = { folderId, widened: input.allDocuments };
-    const searched =
-      input.allDocuments || folderId === null
-        ? null
-        : options.resolveScope({ folderIds: [folderId], tagIds: [], documentIds: [] });
-    const evidenceScope = options.evidence.scope(searched);
-    if (options.documents.searchableCount(evidenceScope.documentIds) === 0) {
-      return { kind: "no-documents", folderId: input.allDocuments ? null : folderId };
-    }
+    const { searchable, folderId, check } = scopeOf(mindId, input.allDocuments);
+    if (searchable === 0) return { kind: "no-documents", folderId };
+    const { scope: evidenceScope, marked: scope } = check;
 
     const ready = await prepare(input.model ?? options.defaultModel());
     if (!ready.ok) return ready.result;
@@ -337,7 +356,25 @@ export function createChecks(options: ChecksOptions) {
     };
   }
 
+  const verify = createVerify({
+    ...options,
+    prepare,
+    evidenceScope: (mindId, allDocuments, verification) =>
+      scopeOf(mindId, allDocuments, { documentIds: [verification.documentId] }),
+    claimCheck,
+    withResult,
+    retainEvidence,
+    settleStopped,
+    track(requestId, mindId) {
+      const controller = new AbortController();
+      running.set(requestId, { controller, mindId });
+      return { signal: controller.signal, done: () => running.delete(requestId) };
+    },
+  });
+
   return {
+    ...verify,
+
     async checkSentences(input: unknown): Promise<CheckSentencesResult> {
       const parsed = parseCheck(input);
       options.requireMind(parsed.mindId);
