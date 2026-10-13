@@ -5,7 +5,7 @@
  * one sentence on what the Document says, carrying the marker.
  */
 import type { CitationSupport, ClaimVerdict } from "../../api";
-import { detectLanguage } from "../../documents/textLanguage";
+import type { Language } from "../../language";
 
 const VERDICTS: readonly ClaimVerdict[] = ["supported", "unsupported", "contradicted"];
 
@@ -24,12 +24,21 @@ const RULES = [
   "- a sentence that adds a detail the Passages don't mention.",
 ];
 
-const REPLY = [
-  "Reply in exactly this form, the verdict word in English:",
-  "Verdict: supported, unsupported or contradicted",
-  "Then, for supported or contradicted, one plain sentence in the language of the User's sentence saying what the Document says, with the marker [^1] at its end. For contradicted, name the thing, and give the Document's value and the sentence's.",
-  "Write nothing else.",
-].join("\n");
+/** The interface language, as the model is told to write in it. */
+const LANGUAGE_NAMES: Record<Language, string> = { en: "English", "zh-CN": "Simplified Chinese" };
+
+/**
+ * The sentence is written in the interface's language, whatever language the
+ * User's sentence or the Documents are in (#701): without this, a model that
+ * read Documents in another language wrote its sentence in that one.
+ */
+const reply = (language: Language) =>
+  [
+    "Reply in exactly this form, the verdict word in English:",
+    "Verdict: supported, unsupported or contradicted",
+    `Then, for supported or contradicted, one plain sentence in ${LANGUAGE_NAMES[language]}, whatever language the Documents and the User's sentence are in, saying what the Document says, with the marker [^1] at its end. For contradicted, name the thing, and give the Document's value and the sentence's.`,
+    "Write nothing else.",
+  ].join("\n");
 
 const QUOTE =
   "a short quote copied exactly from the Passage, the words that decide it, as one unbroken stretch without an ellipsis";
@@ -37,7 +46,12 @@ const QUOTE =
 const RECORD = `the Passage's id, where the quote is as the Passage names it (its pages or location, and marks like [p. 4], [slide 4], [§ 2.1 Sensitivity], [Revenue, rows 2–41] or [lines 51–100]), and ${QUOTE}`;
 
 /** The instructions of a check Run, for a way of citing; `passages`: what the one search found, for a model without Tools. */
-export function checkInstructions(mode: CitationSupport | "no-documents", passages = ""): string {
+export function checkInstructions(
+  mode: CitationSupport | "no-documents",
+  language: Language,
+  passages = "",
+): string {
+  const REPLY = reply(language);
   switch (mode) {
     case "tools":
       return [
@@ -79,11 +93,10 @@ export function claimPrompt(input: {
   claim: string;
   context?: string;
   cited?: readonly { documentName: string; quote: string }[];
+  language: Language;
 }): string {
   const context = input.context?.trim();
   const cited = input.cited ?? [];
-  // The paragraph tells a short sentence's language when its own words don't.
-  const language = detectLanguage(input.claim) ?? detectLanguage(`${input.claim} ${context ?? ""}`);
   return [
     ...(context && context !== input.claim.trim()
       ? [
@@ -101,7 +114,8 @@ export function claimPrompt(input: {
       : []),
     "The sentence to check:",
     `<sentence>\n${input.claim.trim()}\n</sentence>`,
-    ...(language ? ["", `It is written in ${language}: write your sentence in ${language}.`] : []),
+    "",
+    `Write your sentence in ${LANGUAGE_NAMES[input.language]}.`,
   ].join("\n");
 }
 

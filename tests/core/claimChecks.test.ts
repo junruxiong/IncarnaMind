@@ -116,6 +116,39 @@ async function mindWith(sentences: readonly string[], model = checkingModel()) {
   return { ...setup, block, body, check, tides: setup.documents[0] as Document };
 }
 
+describe("The language of a check's sentence", () => {
+  test.each([
+    ["en", "English", "Simplified Chinese"],
+    ["zh-CN", "Simplified Chinese", "English"],
+  ] as const)(
+    "is the interface's, %s, whatever language the sentence is in, and the request says so",
+    async (language, named, other) => {
+      const calls: ModelCall[] = [];
+      const { core, check } = await mindWith([CONTRADICTED], checkingModel(PLANS, calls));
+      await core.updateSettings({ user: { language } });
+
+      await check();
+
+      expect(calls.length).toBeGreaterThan(0);
+      for (const call of calls) {
+        expect(call.system).toContain(`one plain sentence in ${named}`);
+        expect(call.system).not.toContain(`sentence in ${other}`);
+        expect(JSON.stringify(call.options.prompt)).toContain(`Write your sentence in ${named}.`);
+      }
+    },
+  );
+
+  test("follows a sentence in Chinese too only as far as the interface does", async () => {
+    const calls: ModelCall[] = [];
+    const sentence = "涨潮每天发生两次。";
+    const { check } = await mindWith([sentence], checkingModel({}, calls));
+
+    await check();
+
+    expect(JSON.stringify(calls[0]?.options.prompt)).toContain("Write your sentence in English.");
+  });
+});
+
 describe("Find support", () => {
   test("marks each sentence the selection touches with what its check found", async () => {
     const { core, client, check, tides } = await mindWith([SUPPORTED, CONTRADICTED, UNSUPPORTED]);

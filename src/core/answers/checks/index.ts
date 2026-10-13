@@ -21,6 +21,7 @@
  * Nothing leaves the computer before the User allows the "checks" flow to
  * the model's service, and in local mode only a model on this computer is used.
  */
+
 import { randomUUID } from "node:crypto";
 import type * as Y from "yjs";
 import { judgesUnreliably } from "../../../shared/smallModel";
@@ -46,6 +47,7 @@ import { parseCheckedDocument } from "../../documents/evidence";
 import type { RetainVersion, VersionRetention } from "../../documents/retention";
 import { parseModel, parsePlace } from "../../edits";
 import { ChatNotReadyError, ConsentDeclinedError, InvalidInputError, isRecord } from "../../errors";
+import type { Language } from "../../language";
 import type { MindContent } from "../../mindContent";
 import { parseMindId } from "../../minds";
 import type { PreparedChatModel } from "../../providers/chat";
@@ -69,6 +71,8 @@ export interface ChecksOptions
     VerifyOptions,
     "requireFolder" | "addFile" | "document" | "onStatus" | "readText" | "createMind"
   > {
+  /** The interface language: what a check's sentence is written in. */
+  language(): Language;
   content: Pick<MindContent, "read" | "edit" | "readSettings">;
   /** Throws unless the Mind exists and this version may write to it. */
   requireMind(mindId: string): void;

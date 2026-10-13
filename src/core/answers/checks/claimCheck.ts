@@ -13,6 +13,7 @@
  * checked. A refusal, a reply with no verdict, an empty one or a provider's
  * failure leaves the claim not checked, with the reason; never supported.
  */
+
 import { generateText } from "ai";
 import type {
   CheckedVersion,
@@ -24,6 +25,7 @@ import type {
   ThirdPartyReason,
 } from "../../api";
 import type { Evidence, EvidenceScope } from "../../documents/evidence";
+import type { Language } from "../../language";
 import { givesStructuredOutput } from "../../providers/capabilities";
 import type { PreparedChatModel } from "../../providers/chat";
 import { type AnswerDocuments, createCitationSession } from "../citations";
@@ -48,6 +50,8 @@ import {
 } from "./prompt";
 
 export interface ClaimCheckDependencies {
+  /** The interface language: what a check's sentence is written in. */
+  language(): Language;
   engine: AnswerEngine;
   evidence: Pick<Evidence, "search">;
   documents: Pick<AnswerDocuments, "citationSource" | "pageTexts" | "documentDate"> & {
@@ -145,8 +149,8 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
     let finished = false;
     const { model } = request;
     for await (const event of deps.engine.generate({
-      instructions: (mode, options) => checkInstructions(mode, options?.passages),
-      messages: [{ role: "user", content: claimPrompt(request) }],
+      instructions: (mode, options) => checkInstructions(mode, deps.language(), options?.passages),
+      messages: [{ role: "user", content: claimPrompt({ ...request, language: deps.language() }) }],
       question: request.claim,
       model: model.model,
       documents: tools,
