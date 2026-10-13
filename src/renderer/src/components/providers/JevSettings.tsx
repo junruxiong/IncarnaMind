@@ -52,7 +52,7 @@ export function JevSettingsSection() {
     try {
       setJev(await core.removeJevSettings());
     } catch (failure) {
-      useAppStore.setState({ actionError: errorMessage(failure) });
+      useAppStore.getState().reportError(failure);
     }
   };
 
