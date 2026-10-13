@@ -2,6 +2,7 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
+import { openDatabase } from "../src/core/storage";
 import { createFakeOpenAI, signInAt } from "../tests/helpers/fakeOpenAI";
 import {
   acceptPlainTextKeys,
@@ -209,5 +210,52 @@ test("Settings → Models shows what a key spent this month, and the ChatGPT pla
   } finally {
     await app.close();
     await openai.close();
+  }
+});
+
+test("a request a force-quit cut short counts for nothing, and the cost line says it was interrupted, in English and Chinese (#636)", async () => {
+  const first = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(first.window);
+  await acceptPlainTextKeys(first.window);
+  const providerId = await first.window.evaluate(async () => {
+    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    const provider = await core.saveChatProvider({
+      kind: "anthropic",
+      apiKey: "sk-ant-test",
+      modelId: "claude-haiku-5-5",
+    });
+    return provider.id;
+  });
+  await first.app.close();
+  // What a quit mid-request leaves: a reservation, never settled.
+  const db = openDatabase(join(dataDir, "incarnamind.db"));
+  const at = new Date().toISOString();
+  db.run(
+    `INSERT INTO model_requests (id, provider_id, model_id, flow, billing, status, currency,
+       reserved, created_at, updated_at)
+     VALUES ('interrupted-1', ?, 'claude-haiku-5-5', 'chat', 'per-token', 'reserved', 'USD', 0.26, ?, ?)`,
+    [providerId, at, at],
+  );
+  db.close();
+
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  try {
+    await setWindowSize(app, window, WIDE.width, WIDE.height);
+    const settings = await openSettings(window, "general");
+    const cap = settings.getByTestId("spending-cap-settings");
+    await expect(cap.getByTestId("spending-cap-spent")).toHaveText(
+      "Spent this month: $0 on your keys.",
+    );
+    await expect(cap.getByTestId("spending-cap-interrupted")).toHaveText(
+      "1 request was interrupted; its cost isn’t known.",
+    );
+    await shot(window, "cost-interrupted-wide-en");
+    await bridge(window).language("zh-CN");
+    await expect(cap.getByTestId("spending-cap-interrupted")).toHaveText(
+      "有 1 次请求被中断，费用未知。",
+    );
+    await shot(window, "cost-interrupted-wide-zh");
+  } finally {
+    await app.close();
   }
 });
