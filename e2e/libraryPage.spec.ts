@@ -306,7 +306,7 @@ test("five Documents go into a Folder with Move to…, from the selection bar an
     const bar = library.getByTestId("library-selection");
     await expect(bar.getByRole("status")).toHaveText("5 selected");
     await expect(bar.getByTestId("library-selection-action")).toHaveText([
-      "Move to…⇧⌘M",
+      /^Move to…(⇧⌘M|Ctrl\+Shift\+M)$/,
       "Ask about these 5 Documents",
       "Delete 5 Documents",
     ]);
