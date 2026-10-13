@@ -315,7 +315,7 @@ export function createCore(adapters: CoreAdapters): Core {
   const writableMind = (mindId: unknown): Mind => {
     const mind = minds.get(mindId);
     if (!isKnownKind(mind.kind)) {
-      throw new MindReadOnlyError("A newer version of IncarnaMind made this. Update to open it.");
+      throw new MindReadOnlyError({ key: "error.mind.newerVersion" });
     }
     return mind;
   };
@@ -976,6 +976,7 @@ export function createCore(adapters: CoreAdapters): Core {
       citationSource: (passageId) => documents.citationSource(passageId),
       pageTexts: (documentId, contentHash, from, to) =>
         documents.pageTexts(documentId, contentHash, from, to),
+      documentDate: (documentId) => documents.documentDate(documentId),
     },
     toolProviders: [
       { kind: "connector", tools: (signal) => connectors.tools(signal) },
@@ -1202,6 +1203,7 @@ export function createCore(adapters: CoreAdapters): Core {
       citationSource: (passageId) => documents.citationSource(passageId),
       pageTexts: (documentId, contentHash, from, to) =>
         documents.pageTexts(documentId, contentHash, from, to),
+      documentDate: (documentId) => documents.documentDate(documentId),
     },
     engine: answerEngine,
     retention,
@@ -1233,6 +1235,7 @@ export function createCore(adapters: CoreAdapters): Core {
     citationStyle: (mindId) => mindCitationStyle(mindId).style,
     bibliography: (mindId) => content.readSettings(mindId, bibliographyShown),
     formatCitations: (request) => citationStyles.format(request),
+    citedPage: (citation) => citedPages.image(citation),
     printer: adapters.printer ?? null,
     paper: () => paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages())),
     ...(adapters.pictures && { pictures: adapters.pictures }),
@@ -1240,6 +1243,8 @@ export function createCore(adapters: CoreAdapters): Core {
     log: adapters.log ?? silentLogger,
     now,
   });
+  const ownFileOf = (options: ExportMindOptions): OwnFileKind =>
+    options.format === "source-pack" ? "source-pack" : "export";
   /** Usage data: which format, and whether Questions went with it. */
   const recordExport = (options: ExportMindOptions) =>
     usageData.record({
@@ -1286,9 +1291,10 @@ export function createCore(adapters: CoreAdapters): Core {
     name: string,
     data: Uint8Array,
     after: () => void = () => undefined,
+    ownFile: OwnFileKind = "export",
   ): Promise<SavedExport> => {
     try {
-      const file = await outputs.save({ name, data, ownFile: "export" });
+      const file = await outputs.save({ name, data, ownFile });
       after();
       return { status: "saved", file };
     } catch (error) {
@@ -2038,7 +2044,7 @@ export function createCore(adapters: CoreAdapters): Core {
         folderId !== null &&
         !library.snapshot().groups.some((group) => group.id === folderId)
       ) {
-        throw new NotFoundError("There is no such Folder.");
+        throw new NotFoundError({ key: "error.folder.notFound" });
       }
       const since = now();
       const result = await webPages.save(input);
@@ -2274,15 +2280,13 @@ export function createCore(adapters: CoreAdapters): Core {
       const baseUrl = ollamaUrl(input);
       const model = input?.model ?? RECOMMENDED_OLLAMA_MODEL;
       if (typeof model !== "string" || model.trim() === "") {
-        throw new InvalidInputError("Enter a model name.");
+        throw new InvalidInputError({ key: "error.provider.modelMissing" });
       }
       const status = await detectOllama(baseUrl);
       if (!status.running) throw new Error(`Ollama isn't running at ${baseUrl}.`);
       // One click means a model on this computer; a cloud model is chosen from the model menu.
       if (isCloudModelName(model) || hasOllamaModel(status.cloudModels, model)) {
-        throw new InvalidInputError(
-          `${model} runs on ollama.com, not on this computer. Choose a local model, or pick it in the model menu.`,
-        );
+        throw new InvalidInputError({ key: "error.provider.ollamaCloud", values: { model } });
       }
       if (!hasOllamaModel(status.models, model)) {
         await pullOllamaModel(
@@ -2551,7 +2555,7 @@ export function createCore(adapters: CoreAdapters): Core {
     exportMind: async (mindId, options) => {
       const exported = await mindExports.export(mindId, options);
       // The host saves these bytes as a file: IncarnaMind's, wherever it goes.
-      recordOwnFile(exported.data, "export");
+      recordOwnFile(exported.data, ownFileOf(options));
       recordExport(options);
       return exported;
     },
@@ -2560,7 +2564,12 @@ export function createCore(adapters: CoreAdapters): Core {
       // What a Word file can't keep is said before anything is saved (#105).
       const accepted = new Set(Array.isArray(options?.accept) ? options.accept : []);
       if (word?.notKept.some((loss) => !accepted.has(loss.key))) return { status: "review", word };
-      const saved = await saveExport(fileName, data, () => recordExport(options));
+      const saved = await saveExport(
+        fileName,
+        data,
+        () => recordExport(options),
+        ownFileOf(options),
+      );
       return saved.status === "saved" ? { ...saved, ...counts, word } : saved;
     },
     saveSkillExport: async (skillId) => {
@@ -2625,14 +2634,12 @@ export function createCore(adapters: CoreAdapters): Core {
       adapters.shell.showItemInFolder(path);
     },
     showSavedFile: async (path) => {
-      if (!outputs.saved(path))
-        throw new NotFoundError("Only a file IncarnaMind saved can be shown.");
+      if (!outputs.saved(path)) throw new NotFoundError({ key: "error.files.notSaved.show" });
       if (!adapters.shell) throw new Error("This copy of IncarnaMind can't show files.");
       adapters.shell.showItemInFolder(path);
     },
     openSavedFile: async (path) => {
-      if (!outputs.saved(path))
-        throw new NotFoundError("Only a file IncarnaMind saved can be opened.");
+      if (!outputs.saved(path)) throw new NotFoundError({ key: "error.files.notSaved.open" });
       if (!adapters.shell)
         throw new Error("This copy of IncarnaMind can't open files in other apps.");
       await adapters.shell.openPath(path);

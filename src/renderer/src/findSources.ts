@@ -8,6 +8,7 @@ import {
 } from "../../core/api";
 import { core } from "./core";
 import { errorMessage } from "./errors";
+import { translateNow } from "./i18n";
 import { useAppStore } from "./store";
 
 /** A work being added, or how adding it went, with the Folder it went to (null: Not in a Folder). */
@@ -181,7 +182,8 @@ export const useFindSources = create<FindSourcesState>()((set, get) => ({
       if (ticket === searchTicket) set({ result, adds: {} });
     } catch (error) {
       // The last search's results aren't this one's: they go with it.
-      if (ticket === searchTicket) set({ error: errorMessage(error), result: null, adds: {} });
+      if (ticket === searchTicket)
+        set({ error: errorMessage(error, translateNow), result: null, adds: {} });
     } finally {
       if (ticket === searchTicket) set({ searching: false });
       // A consent decision may have changed what each provider shows.
@@ -200,7 +202,7 @@ export const useFindSources = create<FindSourcesState>()((set, get) => ({
       if (key !== null && keyProblems(get().result).includes(providerId)) void get().search();
       return null;
     } catch (error) {
-      return errorMessage(error);
+      return errorMessage(error, translateNow);
     }
   },
 
@@ -212,7 +214,7 @@ export const useFindSources = create<FindSourcesState>()((set, get) => ({
       const result = await core.addFoundSource({ key: work.key, folderId });
       next = { status: "done", result, folderId };
     } catch (error) {
-      next = { status: "failed", message: errorMessage(error) };
+      next = { status: "failed", message: errorMessage(error, translateNow) };
     }
     set((state) => ({ adds: { ...state.adds, [work.key]: next } }));
   },

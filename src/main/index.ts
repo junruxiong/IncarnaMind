@@ -5,7 +5,6 @@ import {
   dialog,
   type IpcMainEvent,
   type IpcMainInvokeEvent,
-  ipcMain,
   powerMonitor,
 } from "electron";
 import {
@@ -22,6 +21,7 @@ import type { Language } from "../core/language";
 import { channelFor, EVENT_CHANNEL } from "../shared/bridge";
 import { registerDocumentScheme, serveDocumentFiles } from "./documentProtocol";
 import { serveFileActions } from "./files";
+import { handle } from "./ipc";
 import { startLogging } from "./logging";
 import { isCaptureWindow } from "./meetings/capture";
 import { installAppMenu } from "./menu";
@@ -93,7 +93,7 @@ function isFromOurRenderer(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
  */
 function exposeCore(core: Core): void {
   for (const method of coreApiMethods) {
-    ipcMain.handle(channelFor(method), (event, ...args: unknown[]) => {
+    handle(channelFor(method), (event, ...args) => {
       if (!isFromOurRenderer(event)) throw new Error("Refused a call from an unknown page.");
       return Reflect.apply(core[method], core, args) as Promise<unknown>;
     });
