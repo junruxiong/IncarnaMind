@@ -13,6 +13,7 @@
  */
 import { createHash } from "node:crypto";
 import * as Y from "yjs";
+import type { LiveDocument } from "../../shared/citations";
 import { parseThirdPartySource } from "../../shared/textOrigins";
 import {
   ANSWER_BLOCK,
@@ -108,20 +109,26 @@ function tail(text: string, tokens: number): string {
   return `…${chars.slice(start).join("").trimStart()}`;
 }
 
+/**
+ * The live Documents a Question context names its Citations' Documents by (see
+ * `shownDocumentName`); null: as they were cited.
+ */
+type Documents = readonly LiveDocument[] | null;
+
 /** What a Block above the Question contributes, if anything. */
-function pieceOf(block: Y.XmlElement): Piece | null {
+function pieceOf(block: Y.XmlElement, documents: Documents): Piece | null {
   if (block.nodeName === QUESTION_BLOCK) {
-    const text = toMarkdown(block);
+    const text = toMarkdown(block, documents);
     return text ? { role: "user", text } : null;
   }
   if (block.nodeName === ANSWER_BLOCK) {
     if (textAttribute(block, "status") === "failed") return null;
-    const text = contentMarkdown(block);
+    const text = contentMarkdown(block, documents);
     return text ? { role: "assistant", text } : null;
   }
   // A Note.
   if (attribute(block, INCLUDE_IN_CONTEXT_ATTRIBUTE) === false) return null;
-  const text = toMarkdown(block);
+  const text = toMarkdown(block, documents);
   return text ? { role: "user", text } : null;
 }
 
@@ -179,24 +186,26 @@ export function buildQuestionContext(
 
 /**
  * `buildQuestionContext`, with where the third-party text in the Blocks it
- * keeps came from, as the Mind's `textOrigins` records it.
+ * keeps came from, as the Mind's `textOrigins` records it, and its Citations
+ * naming their Documents as `documents` names them now.
  */
 export function questionContextOf(
   blocks: Y.XmlFragment,
   index: number,
   budget = QUESTION_CONTEXT_TOKEN_BUDGET,
+  documents: Documents = null,
 ): QuestionContextWithOrigins {
   const children = blocks.toArray();
   const question = children[index];
   if (!(question instanceof Y.XmlElement)) throw new Error("No Question at that index.");
-  const questionText = toMarkdown(question);
+  const questionText = toMarkdown(question, documents);
   const origins = blocks.doc?.getMap<unknown>(MIND_TEXT_ORIGINS_FIELD);
   const recorded = origins && origins.size > 0 ? origins : null;
   /** What the Blocks above contribute, newest first, read only as far as the budget goes. */
   const newestFirst = function* (): Generator<Piece> {
     for (let at = index - 1; at >= 0; at--) {
       const block = children[at];
-      const piece = block instanceof Y.XmlElement ? pieceOf(block) : null;
+      const piece = block instanceof Y.XmlElement ? pieceOf(block, documents) : null;
       if (!piece) continue;
       yield recorded && block instanceof Y.XmlElement
         ? { ...piece, origins: originsIn(block, recorded) }
@@ -272,11 +281,13 @@ function readText(block: Y.XmlElement, piece: Piece): string {
  * excluded stay out, earlier Answers keep their Citations as plain references,
  * and Proposals still waiting aren't read. `focus` is where the User is in it:
  * the text they selected is read first, unless it is in a Note they excluded.
+ * Its Citations name their Documents as `documents` names them now.
  */
 export function readMind(
   blocks: Y.XmlFragment,
   name: string,
   focus: MindFocus | null,
+  documents: Documents = null,
 ): MindReading {
   const recordedOrigins = blocks.doc?.getMap<unknown>(MIND_TEXT_ORIGINS_FIELD);
   const recorded = recordedOrigins && recordedOrigins.size > 0 ? recordedOrigins : null;
@@ -288,7 +299,7 @@ export function readMind(
   const byId = new Map<string, { index: number; excluded: boolean }>();
   for (const block of blocks.toArray()) {
     if (!(block instanceof Y.XmlElement)) continue;
-    const piece = pieceOf(block);
+    const piece = pieceOf(block, documents);
     const id = textAttribute(block, BLOCK_ID_ATTRIBUTE);
     if (id) {
       byId.set(id, {
@@ -497,12 +508,13 @@ type MindParts = Pick<MindCut, "text" | "selection">;
  * first, as in a Mind. A failed Answer adds nothing. `mind`, what of the Mind in
  * focus it reads (`MindCut`), starts the first message, where a provider's
  * prompt cache keeps it from one Question to the next while it doesn't change
- * (#564); what the User selected in it starts the Question's message.
+ * (#564); what the User selected in it starts the Question's message. The
+ * Citations of earlier Answers name their Documents as `documents` names them now.
  */
 export function conversationContext(
   earlier: readonly ConversationMessage[],
   question: string,
-  options: { mind?: MindParts; budget?: number } = {},
+  options: { mind?: MindParts; budget?: number; documents?: Documents } = {},
 ): QuestionContext {
   return conversationContextOf(earlier, question, options).context;
 }
@@ -514,13 +526,17 @@ export function conversationContext(
 export function conversationContextOf(
   earlier: readonly ConversationMessage[],
   question: string,
-  { mind, budget = QUESTION_CONTEXT_TOKEN_BUDGET }: { mind?: MindParts; budget?: number } = {},
+  {
+    mind,
+    budget = QUESTION_CONTEXT_TOKEN_BUDGET,
+    documents = null,
+  }: { mind?: MindParts; budget?: number; documents?: Documents } = {},
 ): QuestionContextWithOrigins {
   const pieces: Piece[] = earlier.flatMap((message): Piece[] => {
     if (message.kind === "question")
       return message.text ? [{ role: "user", text: message.text }] : [];
     if (message.status === "failed") return [];
-    const text = answerMarkdown(message.text, message.citations, message.figures);
+    const text = answerMarkdown(message.text, message.citations, message.figures, documents);
     if (!text) return [];
     return [
       { role: "assistant", text, ...(message.textOrigin && { origins: [message.textOrigin] }) },

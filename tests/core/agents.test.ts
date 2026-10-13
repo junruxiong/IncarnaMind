@@ -18,6 +18,8 @@ import {
 } from "../helpers/agents";
 import { citingModel } from "../helpers/citations";
 import { addAndProcess, createSourceFolder, writeSourceFile } from "../helpers/documents";
+import { connectToMind } from "../helpers/mindClient";
+import { writeMind } from "../helpers/minds";
 import { replyingModel } from "../helpers/models";
 
 const TIDES = [
@@ -399,6 +401,63 @@ describe("outside agents", () => {
       arguments: { mindId: inFinance.id },
     });
     expect(refused.isError).toBe(true);
+  });
+
+  it("name a renamed Document as it is now, in a Mind they read and in the Citations they check or show", async () => {
+    const { core, launch, tides, coast } = await pairedToCoast();
+    const agent = await connectLegacyAgent(launch);
+    const [found] = structured<SearchOut>(
+      await agent.callTool({ name: "search", arguments: { query: "spring tides new moon" } }),
+    ).passages;
+    if (!found?.cite) throw new Error("Nothing was found to cite.");
+    const mind = await core.createMind({ title: "Field notes", folderId: coast.id });
+    const client = await connectToMind(core, mind.id);
+    writeMind(client, [
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "They come at new moon " },
+          {
+            type: "citation",
+            attrs: {
+              passageId: found.passageId,
+              documentId: tides.id,
+              documentName: "Tides",
+              contentHash: tides.contentHash,
+              quote: SPRING,
+              check: "found",
+            },
+          },
+        ],
+      },
+    ]);
+    await client.settled();
+    const checkedFrom = async () =>
+      structured<{ citations: { document: string | null }[] }>(
+        await agent.callTool({ name: "check_citations", arguments: { text: found.cite } }),
+      ).citations[0]?.document;
+    const markdown = async () =>
+      structured<{ markdown: string }>(
+        await agent.callTool({ name: "read_mind", arguments: { mindId: mind.id } }),
+      ).markdown;
+    expect(await markdown()).toContain("Tides");
+    expect(await checkedFrom()).toBe("Tides");
+
+    await core.renameDocument(tides.id, "Harbour tide tables");
+
+    expect(await markdown()).toContain("Harbour tide tables");
+    expect(await markdown()).not.toContain("Tides");
+    expect(await checkedFrom()).toBe("Harbour tide tables");
+    expect(
+      structured<{ document: string }>(
+        await agent.callTool({ name: "show_citation", arguments: { cite: found.cite } }),
+      ).document,
+    ).toBe("Harbour tide tables");
+
+    // Once the Document is gone the agent is told of neither name: it is outside what it may read.
+    await core.deleteDocument(tides.id);
+    expect(await checkedFrom()).toBeNull();
+    expect(await markdown()).not.toMatch(/Tides|Harbour tide tables/);
   });
 
   it("never write the token to the log, the database or any file in the data folder", async () => {

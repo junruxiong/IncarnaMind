@@ -973,6 +973,7 @@ export function createCore(adapters: CoreAdapters): Core {
     prepareModel: (choice) => chat.prepareModel(choice),
     documents: {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
+      names: () => documents.names(),
       searchableNames: (documentIds, limit) =>
         documents.searchableNames(documentIds ?? undefined, limit),
       searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
@@ -1225,6 +1226,7 @@ export function createCore(adapters: CoreAdapters): Core {
     evidence,
     documents: {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
+      names: () => documents.names(),
       searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
       citationSource: (passageId) => documents.citationSource(passageId),
       pageTexts: (documentId, contentHash, from, to) =>
@@ -1893,6 +1895,7 @@ export function createCore(adapters: CoreAdapters): Core {
       citing,
       recheck: (input) => recheckCitation(documents, input),
       minds: () => minds.list().filter((mind) => isKnownKind(mind.kind)),
+      liveDocuments: () => documents.names(),
       mindMarkdown: (mindId, footnote) => {
         const mind = minds.get(mindId);
         const { language } = settings.get();
