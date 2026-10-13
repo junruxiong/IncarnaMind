@@ -162,6 +162,153 @@ describe("Tabs and groups", () => {
     expect(tabOf(layout, notes).tab.opened).toBe(openedBefore + 1);
   });
 
+  test("a Document already open is shown where it is, even in the group it is opened from; Open the page keeps its preview; only Open in a new tab makes a second tab", async () => {
+    const { mind, change, shown, report } = await setUp();
+    const lit = await mind("Lit review");
+    const mindGroup = (await change({ type: "open", item: lit })).focusedGroupId;
+    const cite = (from: string, keep?: boolean) =>
+      change({
+        type: "open",
+        item: report,
+        where: { in: "side", from },
+        preview: true,
+        focus: false,
+        place: { quote: "Parks are cooler" },
+        ...(keep && { keep }),
+      });
+
+    let layout = await cite(mindGroup);
+    expect(shown(layout)).toEqual(["*Lit review", "*~Report"]);
+    const { group, tab } = tabOf(layout, report);
+
+    // The Document's own group has the focus, as when it is read: still no second tab.
+    layout = await change({ type: "focus", groupId: group.id });
+    layout = await cite(group.id);
+    expect(shown(layout)).toEqual(["*Lit review", "*~Report"]);
+    expect(tabOf(layout, report).tab.opened).toBe(tab.opened + 1);
+
+    layout = await cite(mindGroup, true);
+    expect(shown(layout)).toEqual(["*Lit review", "*Report"]);
+    expect(tabOf(layout, report).tab.opened).toBe(tab.opened + 2);
+
+    layout = await change({
+      type: "open",
+      item: report,
+      where: { in: "group", groupId: mindGroup },
+      preview: false,
+    });
+    expect(shown(layout)).toEqual(["Lit review *Report", "*Report"]);
+  });
+
+  test("a Document not open yet opens as a preview even when Open the page keeps what it finds", async () => {
+    const { mind, change, shown, paper } = await setUp();
+    const mindGroup = (await change({ type: "open", item: await mind("Lit review") }))
+      .focusedGroupId;
+
+    const layout = await change({
+      type: "open",
+      item: paper,
+      where: { in: "side", from: mindGroup },
+      preview: true,
+      keep: true,
+    });
+
+    expect(shown(layout)).toEqual(["*Lit review", "*~Paper"]);
+  });
+
+  test("a Document behind the Mind in its group moves beside it, with one tab left, its state kept and the Mind still in view", async () => {
+    const { mind, change, shown, report, paper, notes } = await setUp();
+    const lit = await mind("Lit review");
+    const mindGroup = (await change({ type: "open", item: lit })).focusedGroupId;
+    const behindMind = async (item: TabItem, preview: boolean) => {
+      const layout = await change({
+        type: "open",
+        item,
+        where: { in: "group", groupId: mindGroup },
+        preview,
+      });
+      return change({ type: "show", tabId: tabOf(layout, lit).tab.id });
+    };
+    const cite = (item: TabItem) =>
+      change({
+        type: "open",
+        item,
+        where: { in: "side", from: mindGroup },
+        preview: true,
+        focus: false,
+        place: { quote: "Parks are cooler" },
+      });
+    const tabsOf = (layout: WindowLayout, item: TabItem) =>
+      layout.groups
+        .flatMap((group) => group.tabs)
+        .filter((tab) => JSON.stringify(tab.item) === JSON.stringify(item));
+
+    // Kept: it moves, as the same tab, to the group a new tab would open in; the Mind stays shown and focused.
+    let layout = await behindMind(report, false);
+    expect(shown(layout)).toEqual(["*Lit review Report"]);
+    const before = tabOf(layout, report).tab;
+    layout = await cite(report);
+    expect(shown(layout)).toEqual(["*Lit review", "*Report"]);
+    expect(tabsOf(layout, report)).toHaveLength(1);
+    expect(tabOf(layout, report).tab.id).toBe(before.id);
+    expect(tabOf(layout, report).tab.place).toEqual({ quote: "Parks are cooler" });
+    expect(layout.focusedGroupId).toBe(mindGroup);
+
+    // A preview stays a preview.
+    layout = await behindMind(paper, true);
+    expect(shown(layout)).toEqual(["*Lit review ~Paper", "*Report"]);
+    layout = await cite(paper);
+    expect(shown(layout)).toEqual(["*Lit review", "Report *~Paper"]);
+
+    // A pinned tab stays pinned, at the left of its new group.
+    layout = await behindMind(notes, false);
+    layout = await change({ type: "pin", tabId: tabOf(layout, notes).tab.id, pinned: true });
+    layout = await cite(notes);
+    expect(shown(layout)).toEqual(["*Lit review", "*^Notes Report ~Paper"]);
+    expect(tabsOf(layout, notes)).toHaveLength(1);
+  });
+
+  test("a preview moved beside the Mind replaces the preview there, and a Document from a list moves too", async () => {
+    const { mind, change, shown, report, paper } = await setUp();
+    const lit = await mind("Lit review");
+    const mindGroup = (await change({ type: "open", item: lit })).focusedGroupId;
+    let layout = await change({
+      type: "open",
+      item: paper,
+      where: { in: "side", from: mindGroup },
+      preview: true,
+      focus: false,
+    });
+    layout = await change({
+      type: "open",
+      item: report,
+      where: { in: "group", groupId: mindGroup },
+      preview: true,
+    });
+    layout = await change({ type: "show", tabId: tabOf(layout, lit).tab.id });
+    expect(shown(layout)).toEqual(["*Lit review ~Report", "*~Paper"]);
+
+    layout = await change({
+      type: "open",
+      item: report,
+      where: { in: "side", from: mindGroup },
+      preview: true,
+      focus: false,
+    });
+    expect(shown(layout)).toEqual(["*Lit review", "*~Report"]);
+
+    // From a list: the Mind's group is the focused one, and a Document behind the Mind still moves.
+    layout = await change({
+      type: "open",
+      item: paper,
+      where: { in: "group", groupId: mindGroup },
+      preview: false,
+    });
+    layout = await change({ type: "show", tabId: tabOf(layout, lit).tab.id });
+    layout = await change({ type: "open", item: paper, where: { in: "beside" }, preview: true });
+    expect(shown(layout)).toEqual(["*Lit review", "~Report *Paper"]);
+  });
+
   test("Documents from a list open beside the Mind, or in the group showing a Document; the Library has one tab", async () => {
     const { mind, change, shown, report, paper } = await setUp();
     await change({ type: "open", item: await mind("Draft") });

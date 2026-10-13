@@ -53,6 +53,11 @@ export interface ChartData {
   rows: ChartRow[];
   /** How many rows the source had when only the first ones fit (`MAX_CHART_VALUES`); null: all are here. */
   cutFrom: number | null;
+  /**
+   * The source's rows after `rows`, when it was cut: never drawn, but listed in
+   * Show as table with their Citations, so none is out of reach (#503).
+   */
+  cutRows: ChartRow[];
 }
 
 export type ChartSource = { kind: "table"; blockId: string | null } | { kind: "figures" };
@@ -113,21 +118,31 @@ function readValue(value: unknown): ChartValue | null {
 
 /** Anything malformed (from another version, or a sync) is left out rather than guessed. */
 export function readChartData(value: unknown): ChartData {
-  if (!isRecord(value)) return { labelHeading: "", series: [], rows: [], cutFrom: null };
+  if (!isRecord(value)) {
+    return { labelHeading: "", series: [], rows: [], cutFrom: null, cutRows: [] };
+  }
   const series = Array.isArray(value.series) ? value.series.map(text) : [];
-  const rows = (Array.isArray(value.rows) ? value.rows : []).flatMap((row): ChartRow[] => {
-    if (!isRecord(row)) return [];
-    const values = Array.isArray(row.values) ? row.values : [];
-    return [{ label: text(row.label), values: series.map((_, index) => readValue(values[index])) }];
-  });
+  const readRows = (list: unknown) =>
+    (Array.isArray(list) ? list : []).flatMap((row): ChartRow[] => {
+      if (!isRecord(row)) return [];
+      const values = Array.isArray(row.values) ? row.values : [];
+      return [
+        { label: text(row.label), values: series.map((_, index) => readValue(values[index])) },
+      ];
+    });
+  const rows = readRows(value.rows);
   const cutFrom =
     typeof value.cutFrom === "number" &&
     Number.isInteger(value.cutFrom) &&
     value.cutFrom > rows.length
       ? value.cutFrom
       : null;
-  return { labelHeading: text(value.labelHeading), series, rows, cutFrom };
+  const cutRows = cutFrom === null ? [] : readRows(value.cutRows);
+  return { labelHeading: text(value.labelHeading), series, rows, cutFrom, cutRows };
 }
+
+/** Every row, as Show as table lists them: those drawn, then those cut from the drawing. */
+export const listedRows = (data: ChartData): ChartRow[] => [...data.rows, ...data.cutRows];
 
 function readSource(value: unknown): ChartSource {
   if (isRecord(value) && value.kind === "figures") return { kind: "figures" };
@@ -172,12 +187,13 @@ export function drawnSeries(chart: Pick<ChartAttributes, "kind" | "drawn" | "dat
 }
 
 /**
- * The columns chosen, whatever the kind draws of them. The foot, Show as
- * table and exports count and list their cells, so switching kind changes
- * only the drawing.
+ * The columns chosen. The foot, Show as table and exports count and list
+ * their cells: bar, line and scatter every one chosen, whatever they draw of
+ * them; a pie the one it draws, the last chosen (#503).
  */
-export function chosenSeries(chart: Pick<ChartAttributes, "drawn" | "data">): number[] {
-  return chart.drawn ?? chart.data.series.map((_, index) => index);
+export function chosenSeries(chart: Pick<ChartAttributes, "kind" | "drawn" | "data">): number[] {
+  const chosen = chart.drawn ?? chart.data.series.map((_, index) => index);
+  return chart.kind === "pie" ? chosen.slice(-1) : chosen;
 }
 
 export interface ChartCell {
@@ -187,7 +203,7 @@ export interface ChartCell {
 }
 
 /** Row by row, as a table reads. */
-export function chartCells(chart: Pick<ChartAttributes, "drawn" | "data">): ChartCell[] {
+export function chartCells(chart: Pick<ChartAttributes, "kind" | "drawn" | "data">): ChartCell[] {
   const series = chosenSeries(chart);
   return chart.data.rows.flatMap((row, index) =>
     series.flatMap((each) => {
@@ -308,6 +324,8 @@ export interface ChartSourcePlace {
 export interface ChartSources {
   values: number;
   uncited: number;
+  /** Those values with no Citation, row by row: what the foot's "1 with no Citation" finds. */
+  uncitedCells: { row: number; series: number }[];
   /** Cells of the columns chosen that hold words but no number, so aren't drawn. */
   notDrawn: number;
   /** Cells whose number has no unit where their column's others have one, so aren't drawn (`unitlessRows`). */
@@ -326,11 +344,13 @@ function placeKey(citation: CitationAttributes): string {
 
 const isFound = (check: CitationCheck | undefined) => check === "found";
 
-export function chartSources(chart: Pick<ChartAttributes, "drawn" | "data">): ChartSources {
+export function chartSources(
+  chart: Pick<ChartAttributes, "kind" | "drawn" | "data">,
+): ChartSources {
   const places = new Map<string, ChartSourcePlace>();
   const documents = new Set<string>();
   let values = 0;
-  let uncited = 0;
+  const uncitedCells: ChartSources["uncitedCells"] = [];
   let notDrawn = 0;
   let noUnit = 0;
   const unitless = new Map(
@@ -348,7 +368,7 @@ export function chartSources(chart: Pick<ChartAttributes, "drawn" | "data">): Ch
     values++;
     const { citation } = value;
     if (!citation) {
-      uncited++;
+      uncitedCells.push({ row, series });
       continue;
     }
     documents.add(citation.documentId ?? citation.documentName ?? "");
@@ -362,7 +382,8 @@ export function chartSources(chart: Pick<ChartAttributes, "drawn" | "data">): Ch
   }
   return {
     values,
-    uncited,
+    uncited: uncitedCells.length,
+    uncitedCells,
     notDrawn,
     noUnit,
     places: [...places.values()],
@@ -409,8 +430,8 @@ export interface FromTableOptions {
  * other column that holds a number is a series. The heading row names them:
  * the first row when it is one, or when its other cells hold no number. Each
  * value keeps its cell and the Citation in it. Only the first rows that fit
- * `MAX_CHART_VALUES` are kept, and the chart says how many there were. Null
- * when no column holds a number.
+ * `MAX_CHART_VALUES` are drawn, and the chart says how many there were; the
+ * rest are kept to list. Null when no column holds a number.
  */
 export function chartFromTable(
   grid: SourceGrid,
@@ -452,7 +473,10 @@ export function chartFromTable(
   if (seriesColumns.length === 0) return null;
 
   const fit = Math.max(1, Math.floor(MAX_CHART_VALUES / seriesColumns.length));
-  const kept = dataRows.slice(0, fit);
+  const rows = dataRows.map((row, index) => ({
+    label: row[0]?.text.trim() ?? "",
+    values: seriesColumns.map((column) => valueAt(row[column] ?? null, firstRow + index, column)),
+  }));
   return {
     kind: "bar",
     title: options.title.trim(),
@@ -460,13 +484,9 @@ export function chartFromTable(
     data: {
       labelHeading: headingRow ? (first[0]?.text.trim() ?? "") : "",
       series: seriesColumns.map((column) => (headingRow ? (first[column]?.text.trim() ?? "") : "")),
-      rows: kept.map((row, index) => ({
-        label: row[0]?.text.trim() ?? "",
-        values: seriesColumns.map((column) =>
-          valueAt(row[column] ?? null, firstRow + index, column),
-        ),
-      })),
-      cutFrom: dataRows.length > kept.length ? dataRows.length : null,
+      rows: rows.slice(0, fit),
+      cutFrom: rows.length > fit ? rows.length : null,
+      cutRows: rows.slice(fit),
     },
     source: { kind: "table", blockId: options.blockId },
   };
@@ -515,7 +535,6 @@ export function chartFromFigures(
     });
   });
   if (rows.length === 0) return null;
-  const kept = rows.slice(0, MAX_CHART_VALUES);
   return {
     kind: "bar",
     title: options.title.trim(),
@@ -523,8 +542,9 @@ export function chartFromFigures(
     data: {
       labelHeading: "",
       series: [""],
-      rows: kept,
-      cutFrom: rows.length > kept.length ? rows.length : null,
+      rows: rows.slice(0, MAX_CHART_VALUES),
+      cutFrom: rows.length > MAX_CHART_VALUES ? rows.length : null,
+      cutRows: rows.slice(MAX_CHART_VALUES),
     },
     source: { kind: "figures" },
   };

@@ -24,7 +24,7 @@ import {
 } from "../../eval/hard/lib/report";
 import {
   type HardQuestionResult,
-  KEYWORD_20_RERANK_MODE,
+  KEYWORD_60_RERANK_MODE,
   modeResult,
   ranksOf,
   rerankAll,
@@ -459,9 +459,9 @@ describe("The hard tier's report", () => {
       "hybrid + reranker",
       "vector",
     ]);
-    // Keyword search's top 60 reranked is the search Tool's default, and the gating set's gate.
-    expect(REPORT.retrieval.modes[1]?.mode).toBe(KEYWORD_20_RERANK_MODE);
-    expect(REPORT.retrieval.modes[2]?.mode).toBe(GATING_MODE);
+    // Keyword search's top 20 reranked is what the search Tool does by default.
+    expect(REPORT.retrieval.modes[1]?.mode).toBe(GATING_MODE);
+    expect(REPORT.retrieval.modes[2]?.mode).toBe(KEYWORD_60_RERANK_MODE);
     expect(REPORT.retrieval.modes[4]?.mode).toBe(HYBRID_RERANK_MODE);
   });
 
@@ -477,7 +477,7 @@ describe("The hard tier's report", () => {
       "- **Turning embeddings on** then took 1500 s until every Passage had a vector, 1200 s of it in the embedding model (0.8 Passages a second). With embeddings on from the start, a User waits for both.",
     );
     expect(markdown).toContain("- q9: gone isn't in the library.");
-    expect(markdown).toContain("| | keyword | keyword top 60 + reranker | hybrid |");
+    expect(markdown).toContain("| | keyword | keyword top 20 + reranker | hybrid |");
     expect(markdown).toContain(
       "| Easy (the Documents' own words) | 1/2 (50%) | 2/2 (100%) | 2/2 (100%) |",
     );
@@ -486,7 +486,7 @@ describe("The hard tier's report", () => {
     );
     expect(markdown).toContain("| English | 1/3 (33%) | 2/3 (67%) | 3/3 (100%) |");
     expect(markdown).toContain(
-      "| x1 | cross-lingual | reports | – / 2 | – | – / 1 | (11) / 1 | – | – | x1? |",
+      "| x1 | cross-lingual | reports | – / 2 | – / 1 | – | (11) / 1 | – | – | x1? |",
     );
     expect(markdown).toContain(
       "| Keyword search, `ORDER BY bm25(passages_fts)` (the app's) | 3.0 ms | 120 ms | 26 ms | 120 ms |  |",

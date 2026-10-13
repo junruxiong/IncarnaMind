@@ -5,12 +5,13 @@
  * would: a new temporary data folder, embeddings turned on (they are off by
  * default) so the evaluation set's Documents are also processed with the real
  * built-in embedding model (on a worker thread), then searches for each
- * Question: keyword search's top 60 reranked by the real built-in reranking
- * model, as the search Tool does by default (the gate), hybrid search's
- * candidates reranked as with embeddings on, other ways to find the
- * candidates with embeddings off (./lib/searches), and the plain search
- * modes, reported only. When a chat model is given, embeddings are turned
- * off again, as Users have them, and Answers and their Citations are scored.
+ * Question: keyword search's top 20 reranked by the real built-in reranking
+ * model, as the search Tool does by default, hybrid search's candidates
+ * reranked as with embeddings on, other ways to find the candidates with
+ * embeddings off (./lib/searches), and the plain search modes, reported only.
+ * Then embeddings are turned off again, as Users have them, and the search
+ * Tool itself is run for each Question: what it hands the model is the gate.
+ * When a chat model is given, Answers and their Citations are scored.
  * Then the same for the every-format set (#70), on a library of its own,
  * reported per format and never gating.
  * It runs under Vitest only for its TypeScript and worker-thread handling
@@ -23,8 +24,10 @@ import { expect, test } from "vitest";
 import {
   BUILT_IN_EMBEDDING_MODEL,
   BUILT_IN_RERANKING_MODEL,
+  DATABASE_FILE,
   type RerankingModelDefinition,
 } from "../src/core";
+import { openDatabase } from "../src/core/storage";
 import {
   type CitationRun,
   checkQuestionIds,
@@ -68,8 +71,11 @@ import {
   SEARCH_DESCRIPTIONS,
   SEARCH_LABELS,
   summarise,
+  TOOL_LABEL,
+  TOOL_MODE,
   TOP_K,
 } from "./lib/retrieval";
+import { runSearchTool } from "./lib/searchToolScore";
 import { answerOptionsOf } from "./lib/timing";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -103,7 +109,7 @@ async function retrieve(
   line(HYBRID, HYBRID);
 
   // Reranked modes, one model at a time: each is downloaded once into the model cache. Each
-  // model reranks keyword search's top 60 (keyword + rerank, the gate's mode), then hybrid
+  // model reranks keyword search's top 20 (keyword + rerank, the Tool's order), then hybrid
   // search's candidates, opened afresh for each so the timings are the mode's own. The
   // built-in model then reranks the other searches' candidates, the Questions' own only.
   const rerankers: RerankerInfo[] = [];
@@ -133,7 +139,7 @@ async function retrieve(
       );
       const info = { ...reranker.info(), candidates: found };
       rerankers.push(info);
-      line(mode, mode === GATING_MODE ? `${label} (gating)` : label);
+      line(mode, label);
       log(
         `${label}: per search, ${found.mean.toFixed(0)} ms to find the candidates and ${info.latency.mean.toFixed(0)} ms to rerank them on average (95th percentile ${found.p95.toFixed(0)} and ${info.latency.p95.toFixed(0)} ms); the model loaded in ${info.loadSeconds.toFixed(1)} s`,
       );
@@ -161,10 +167,10 @@ async function retrieve(
       `${SEARCH_LABELS[counts.search]} + rerank searches had ${counts.mean.toFixed(1)} candidates on average (${counts.min} to ${counts.max}, over ${counts.searches} searches); they held the expected Passage for ${reached.hits}/${reached.total} gating and ${paraphrase.hits}/${paraphrase.total} paraphrase Questions`,
     );
   }
-  // How deep the gate's misses are in plain keyword search: whether more candidates could reach them.
+  // How deep the reranked order's misses are in plain keyword search: whether more candidates could reach them.
   for (const result of results) {
-    const gate = result.modes[GATING_MODE];
-    if (!gate || gate.hit || result.keywordRank === undefined) continue;
+    const reranked = result.modes[GATING_MODE];
+    if (!reranked || reranked.hit || result.keywordRank === undefined) continue;
     log(
       `${result.id}, missed by ${GATING_LABEL}: keyword search ranks its expected Passage ${result.keywordRank === null ? `below ${KEYWORD_RANK_DEPTH}` : `at ${result.keywordRank}`}`,
     );
@@ -349,6 +355,36 @@ test("retrieval and Citation evaluation", async () => {
         { candidates: rerankWith, cacheDir: config.cacheDir, onCpu: config.rerankOnCpu, others },
       ),
     ];
+    // The gate is the search Tool as Users have it, with embeddings off, and so are the Answers.
+    await searchAsByDefault(builtIn, log);
+    const [gated] = runs;
+    if (gated) {
+      const ids = new Map([...builtIn.documents].map(([key, document]) => [key, document.id]));
+      const db = openDatabase(join(builtIn.dataDir, DATABASE_FILE));
+      const reranker = await openReranker(
+        BUILT_IN_RERANKING_MODEL,
+        config.cacheDir,
+        log,
+        GATING_MODE,
+        config.rerankOnCpu,
+      );
+      try {
+        await runSearchTool(
+          { core: builtIn.core, db, reranker },
+          set.questions,
+          ids,
+          gated.questions,
+        );
+      } finally {
+        reranker.close();
+        db.close();
+      }
+      gated.summary = summarise(gated.questions);
+      const tool = gated.summary[TOOL_MODE];
+      log(
+        `${TOOL_LABEL} (gating): English ${tool?.en.hits}/${tool?.en.total}, Chinese ${tool?.zh.hits}/${tool?.zh.total}`,
+      );
+    }
 
     const cloud = config.cloudEmbedding;
     if (cloud) {
@@ -370,14 +406,13 @@ test("retrieval and Citation evaluation", async () => {
     }
 
     const skipped = notAsked(config, set.questions);
-    if (config.chat && !skipped) await searchAsByDefault(builtIn, log);
     const citations: CitationRun | { skipped: string } =
       config.chat && !skipped
         ? await runCitations(builtIn, set.questions, config.chat, config, log)
         : { skipped: skipped ?? "" };
 
     const failures = [
-      ...retrievalFailures(runs[0]?.summary[GATING_MODE]),
+      ...retrievalFailures(runs[0]?.summary[TOOL_MODE]),
       ...("skipped" in citations ? [] : citations.failures),
     ];
     const cpu = cpus();
@@ -409,7 +444,7 @@ test("retrieval and Citation evaluation", async () => {
         const document = builtIn.documents.get(key);
         return { key, name: document?.name ?? key, pageCount: document?.pageCount ?? null };
       }),
-      retrieval: { topK: TOP_K, gatingMode: GATING_MODE, runs },
+      retrieval: { topK: TOP_K, gatingMode: TOOL_MODE, runs },
       citations,
     };
   } finally {

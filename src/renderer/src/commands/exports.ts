@@ -5,6 +5,7 @@ import { currentTabOf } from "../layoutSlice";
 import { useAppStore } from "../store";
 import { findTab } from "../tabs";
 import type { Command, CommandContext } from "./registry";
+import { onlyOne } from "./targets";
 
 /**
  * The Mind a command exports: the Mind's row or the tab its menu was opened on, else the Mind in
@@ -39,7 +40,7 @@ export const exportCommands: readonly Command[] = [
     group: "main",
     // A new file under a free name: nothing is replaced, and the file stays the User's to delete.
     reversible: true,
-    when: (ctx) => mindOf(ctx) !== null,
+    when: (ctx) => onlyOne(ctx) && mindOf(ctx) !== null,
     run: (ctx) => {
       const mindId = mindOf(ctx);
       if (mindId) return exportMind(mindId);
@@ -53,7 +54,7 @@ export const exportCommands: readonly Command[] = [
       group: "main",
       reversible: true,
       // The last format is "mind.export", with its keys.
-      when: (ctx) => mindOf(ctx) !== null && exportPreferences().format !== format,
+      when: (ctx) => onlyOne(ctx) && mindOf(ctx) !== null && exportPreferences().format !== format,
       run: (ctx) => {
         const mindId = mindOf(ctx);
         if (mindId) return exportMind(mindId, format);
@@ -67,7 +68,7 @@ export const exportCommands: readonly Command[] = [
     group: "main",
     // Only opens the sheet; what it saves is the User's choice of options.
     reversible: true,
-    when: (ctx) => mindOf(ctx) !== null,
+    when: (ctx) => onlyOne(ctx) && mindOf(ctx) !== null,
     run: (ctx) => {
       const mindId = mindOf(ctx);
       if (mindId) useExportDialog.getState().open(mindId);

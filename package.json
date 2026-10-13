@@ -117,6 +117,7 @@
     "electron": "44.5.1",
     "electron-builder": "26.17.0",
     "electron-vite": "5.0.0",
+    "html-validate": "11.16.2",
     "opencc-data": "1.4.2",
     "posthog-node": "5.54.1",
     "tailwindcss": "4.3.3",
