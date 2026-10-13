@@ -3,6 +3,7 @@ import type { Connector, ConnectorRegistryServer } from "../../../../core/api";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
+import { ProblemMark } from "../ProblemLine";
 import { errorTextClass, primaryButtonClass } from "../ui";
 import { BackToConnectors } from "./ConnectorDetail";
 import { ConnectorTile } from "./ConnectorTile";
@@ -95,6 +96,7 @@ export function RegistryDetail({
       </div>
       {error && (
         <p role="alert" className={errorTextClass}>
+          <ProblemMark />
           {error}
         </p>
       )}
