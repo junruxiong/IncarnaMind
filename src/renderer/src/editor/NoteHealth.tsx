@@ -96,6 +96,7 @@ export function NoteHealth({ editor, mindId }: { editor: Editor; mindId: string 
   const health = useHealth(editor);
   const running = useChecks((state) => state.running[mindId]);
   const problem = useChecks((state) => state.problems[mindId]);
+  const smallModel = useChecks((state) => state.smallModel[mindId] === true);
   const openSettings = useAppStore((state) => state.openSettings);
   const folderName = useAppStore((state) => {
     const folderId =
@@ -170,6 +171,11 @@ export function NoteHealth({ editor, mindId }: { editor: Editor; mindId: string 
             );
           })}
         </fieldset>
+      )}
+      {smallModel && parts.length > 0 && (
+        <p data-testid="checks-small-model" className="mind-health-line mind-health-note">
+          {t("checks.smallModel")}
+        </p>
       )}
       {running && (
         <ProblemLine
