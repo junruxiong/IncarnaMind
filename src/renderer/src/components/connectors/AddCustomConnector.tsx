@@ -22,14 +22,17 @@ const tabLabel = {
 export function AddCustomConnector({
   onBack,
   onAdded,
+  prefill,
 }: {
   onBack(): void;
   /** One Connector added, whose page opens next. */
   onAdded(connector: Connector): void;
+  /** A command to start from, e.g. a community server's from the MCP Registry: it opens on Command. */
+  prefill?: { name: string; command: string; args: string[]; env: string[] };
 }) {
   const t = useT();
   const id = useId();
-  const [tab, setTab] = useState<Tab>("remote");
+  const [tab, setTab] = useState<Tab>(prefill ? "local" : "remote");
   const done = (connector?: Connector) => (connector ? onAdded(connector) : onBack());
 
   // The arrow keys move between the tabs, as in any tab strip.
@@ -78,7 +81,12 @@ export function AddCustomConnector({
         {tab === "import" ? (
           <ConnectorImport onDone={onBack} />
         ) : (
-          <ConnectorForm key={tab} kind={tab} onDone={done} />
+          <ConnectorForm
+            key={tab}
+            kind={tab}
+            onDone={done}
+            prefill={tab === "local" ? prefill : undefined}
+          />
         )}
       </div>
       <p className="text-[12px] leading-[18px] text-ink-meta">{t("connectors.custom.note")}</p>

@@ -59,10 +59,12 @@ import {
   PROPOSAL_ATTRIBUTE,
   PROPOSAL_DELETE_MARK,
   PROPOSAL_INSERT_MARK,
+  type ProposalRequest,
   QUESTION_BLOCK,
   type StyledRun,
   WORD_ATOM_NODE,
   WORD_BLOCK_NODE,
+  WORD_CHANGE_ID,
 } from "./api";
 
 export interface Marks {
@@ -101,8 +103,10 @@ export interface FailedCheck {
 export interface Pending {
   /** The Proposal it is part of. */
   id: string;
-  /** When it was asked for, ISO 8601; null when the Mind doesn't say. */
+  /** When it was asked for, or made, ISO 8601; null when the Mind doesn't say. */
   at: string | null;
+  /** Who made it, for someone's change in a Word file (#108); otherwise IncarnaMind's. */
+  by?: string;
 }
 
 /**
@@ -236,9 +240,10 @@ export interface ReadOptions {
   /**
    * Read for a Word file's review (#107, see `reviewReading`): what changes still
    * waiting add is read too, and each part of one is marked (`Pendings`), and
-   * AI text is marked `ai`. One out of date is read as if it weren't there,
-   * as accepting every change leaves it. Absent everywhere else: a change's
-   * words aren't the Mind's until it is accepted.
+   * AI text is marked `ai`. One of the AI's out of date is read as if it
+   * weren't there, as accepting every change leaves it; someone's change from
+   * the Word file stays theirs to resolve (#108). Absent everywhere else: a
+   * change's words aren't the Mind's until it is accepted.
    */
   review?: ReviewReading;
   /** Set by the reader in an Answer from before AI text was marked, which is the AI's as a whole. */
@@ -247,28 +252,43 @@ export interface ReadOptions {
 
 /** What reading for review needs to know of a Mind's changes (`reviewReading`). */
 export interface ReviewReading {
-  /** The changes out of date, by id. */
+  /** The changes out of date that are read as if they weren't there, by id. */
   stale: ReadonlySet<string>;
-  /** When a request's changes were asked for, ISO 8601; null when the Mind doesn't say. */
-  at(request: string): string | null;
+  /** When a request's changes were made, and by whom if not by IncarnaMind. */
+  made(request: string): Omit<Pending, "id">;
 }
 
 /** What a Mind's Blocks need for reading them for review (`ReadOptions.review`). */
 export function reviewReading(blocks: Y.XmlFragment): ReviewReading {
   const { doc } = blocks;
   return {
-    stale: outOfDateProposals(blocks),
-    at: (request) => (doc ? (proposalRequestOf(doc, request)?.createdAt ?? null) : null),
+    stale: new Set([...outOfDateProposals(blocks)].filter((id) => !id.startsWith(WORD_CHANGE_ID))),
+    made: (request) => madeBy(doc ? proposalRequestOf(doc, request) : null),
   };
 }
 
+/** When a request's changes were made, and by whom if not by IncarnaMind: someone's from a Word file. */
+export function madeBy(made: ProposalRequest | null): Omit<Pending, "id"> {
+  if (made?.source === "word-change") return { at: made.date, by: made.author ?? "" };
+  return { at: made?.createdAt ?? null };
+}
+
 /** The change a mark's or an attribute's value is part of, read for review; none if it is out of date. */
-function pendingIn(value: unknown, options: ReadOptions): Pending | undefined {
-  const { review } = options;
+export function pendingOf(value: unknown, review: ReviewReading | undefined): Pending | undefined {
   const ref = review ? readProposalRef(value) : null;
   if (!review || !ref || review.stale.has(ref.id)) return undefined;
-  return { id: ref.id, at: review.at(ref.request) };
+  return { id: ref.id, ...review.made(ref.request) };
 }
+
+/** Whether two things have the same changes still waiting. */
+export const samePendings = (a: Pendings, b: Pendings): boolean =>
+  a.inserted?.id === b.inserted?.id && a.deleted?.id === b.deleted?.id;
+
+/** Whether a change is someone's, from the Word file the Mind was imported from (#108). */
+export const isWordChange = (pending: Pending | undefined): pending is Pending =>
+  pending?.id.startsWith(WORD_CHANGE_ID) === true;
+
+const pendingIn = (value: unknown, options: ReadOptions) => pendingOf(value, options.review);
 
 /**
  * What a change does to an element: null for one it adds that isn't read

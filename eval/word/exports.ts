@@ -12,7 +12,14 @@
  */
 import * as Y from "yjs";
 import { createElement } from "../../src/core/answers/blocks";
-import { MIND_CONTENT_FIELD, type WordRefusalReason } from "../../src/core/api";
+import {
+  MIND_CONTENT_FIELD,
+  PROPOSAL_ATTRIBUTE,
+  PROPOSAL_DELETE_MARK,
+  PROPOSAL_INSERT_MARK,
+  WORD_CHANGE_ID,
+  type WordRefusalReason,
+} from "../../src/core/api";
 import { readWordDocument, readWordStructure } from "../../src/core/documents/formats/docxImport";
 import {
   openWordPackage,
@@ -25,10 +32,20 @@ import { exportLabels } from "../../src/core/exports/labels";
 import { exportWordPatch } from "../../src/core/exports/wordPatch";
 import type { ReviewChoices } from "../../src/core/exports/wordReview";
 import { reviewReading } from "../../src/core/mindText";
-import { recordSources } from "../../src/core/wordImports";
+import { recordChanges, recordSources } from "../../src/core/wordImports";
 import type { NodeJSON } from "../../src/shared/blockJson";
 import { citationStyle } from "../../src/shared/citationStyles";
-import { recordProposalRequest, resolveProposals } from "../../src/shared/proposals";
+import {
+  NODE_CHARACTER,
+  outOfDateProposals,
+  pendingProposals,
+  proposalRequestOf,
+  readProposalAttribute,
+  readProposalRef,
+  recordProposalRequest,
+  resolveProposals,
+  targetText,
+} from "../../src/shared/proposals";
 import {
   recordWordImportProgress,
   startWordImport,
@@ -70,6 +87,7 @@ async function mindOf(bytes: Uint8Array): Promise<Y.Doc> {
       structure.report,
       structure.blocks.length,
     );
+    recordChanges(doc, structure);
     const created = structure.blocks.map(createElement);
     blocks.insert(0, created);
     for (const element of created) recordSources(doc, element, structure);
@@ -127,6 +145,28 @@ async function entriesOf(bytes: Uint8Array): Promise<Map<string, Uint8Array>> {
 const same = (a: Uint8Array | undefined, b: Uint8Array | undefined) =>
   a !== undefined && b !== undefined && Buffer.from(a).equals(Buffer.from(b));
 
+/** A word in a text that no change still waiting adds or removes: where it starts, its length and formatting. */
+function plainWord(
+  text: Y.XmlText,
+): { index: number; length: number; attributes: Record<string, unknown> } | null {
+  let at = 0;
+  for (const run of text.toDelta() as { insert: unknown; attributes?: Record<string, unknown> }[]) {
+    const length = typeof run.insert === "string" ? run.insert.length : 1;
+    const changed =
+      run.attributes !== undefined &&
+      ("proposalInsert" in run.attributes || "proposalDelete" in run.attributes);
+    const word =
+      typeof run.insert === "string" && !changed
+        ? /[\p{L}]{4,}|[\p{Script=Han}]{2,}/u.exec(run.insert)
+        : null;
+    if (word) {
+      return { index: at + word.index, length: word[0].length, attributes: run.attributes ?? {} };
+    }
+    at += length;
+  }
+  return null;
+}
+
 /**
  * The scripted edit: a word of the first imported paragraph that has one
  * changed, and a paragraph with a Citation added after the Block it is in.
@@ -142,10 +182,10 @@ function edit(doc: Y.Doc): string | null {
       const source = typeof id === "string" ? wordSourceOf(doc, id) : null;
       for (const text of element.toArray()) {
         if (!(text instanceof Y.XmlText) || !source) continue;
-        const word = /[\p{L}]{4,}|[\p{Script=Han}]{2,}/u.exec(text.toString());
+        const word = plainWord(text);
         if (!word) continue;
-        text.delete(word.index, word[0].length);
-        text.insert(word.index, EDITED);
+        text.delete(word.index, word.length);
+        text.insert(word.index, EDITED, word.attributes);
         changed = source.n;
         after = top + 1;
         return true;
@@ -689,6 +729,151 @@ export async function checkReview(bytes: Uint8Array): Promise<ReviewCheck> {
     return {
       ok: true,
       detail: `${changes.filter((m) => m[1] === REVIEWER).length} of the User's changes and ${changes.filter((m) => m[1] === "IncarnaMind").length} of IncarnaMind's tracked, ${[...commentsXml.matchAll(/w:author="IncarnaMind"/g)].length} comments`,
+      exported: result.data,
+      accepted,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      detail: `export failed: ${error instanceof Error ? (error.stack ?? error.message) : error}`,
+    };
+  } finally {
+    doc.destroy();
+  }
+}
+
+/** What a change still waiting does, by whom and when, and its text: "insert|author|date|text". */
+type ChangeKey = string;
+
+/** Someone's changes waiting in a Mind (#108), each part by its kind, as `ChangeKey`s, sorted. */
+function changesInMind(doc: Y.Doc): ChangeKey[] {
+  const parts = new Map<string, { request: string; kind: string; text: string }>();
+  const add = (value: unknown, kind: string, text: string) => {
+    const ref = readProposalRef(value);
+    if (!ref?.id.startsWith(WORD_CHANGE_ID)) return;
+    const key = `${ref.id}|${kind}`;
+    const part = parts.get(key) ?? { request: ref.request, kind, text: "" };
+    part.text += text;
+    parts.set(key, part);
+  };
+  const visit = (parent: Y.XmlFragment | Y.XmlElement) => {
+    for (const each of parent.toArray()) {
+      if (each instanceof Y.XmlText) {
+        for (const run of each.toDelta() as {
+          insert: unknown;
+          attributes?: Record<string, unknown>;
+        }[]) {
+          const text = typeof run.insert === "string" ? run.insert : NODE_CHARACTER;
+          add(run.attributes?.[PROPOSAL_INSERT_MARK], "insert", text);
+          add(run.attributes?.[PROPOSAL_DELETE_MARK], "delete", text);
+        }
+      } else if (each instanceof Y.XmlElement) {
+        const attribute = readProposalAttribute(each.getAttribute(PROPOSAL_ATTRIBUTE));
+        if (attribute) add(attribute, attribute.kind, targetText(each));
+        else visit(each);
+      }
+    }
+  };
+  visit(doc.getXmlFragment(MIND_CONTENT_FIELD));
+  return [...parts.values()]
+    .map((part) => {
+      const made = proposalRequestOf(doc, part.request);
+      const by = made?.source === "word-change" ? `${made.author}|${made.date}` : "?|?";
+      return `${part.kind}|${by}|${part.text}`;
+    })
+    .sort();
+}
+
+/**
+ * Someone's changes accepted and rejected (#108): of those a file has, in
+ * order, every third accepted, the next rejected and the next left, exported
+ * with the User's edits tracked. No change is out of date as imported; the
+ * package passes the checks Word's repair prompt is about; nothing is reported
+ * lost; nothing is tracked as the User's or IncarnaMind's; the changes left
+ * import again as they were, with their author and date; and accepting every
+ * change gives the text accepting every change in the Mind does.
+ */
+export async function checkTheirChanges(bytes: Uint8Array): Promise<ReviewCheck> {
+  let doc: Y.Doc;
+  try {
+    doc = await mindOf(bytes);
+  } catch (error) {
+    if (error instanceof WordRefusedError && REFUSED.has(error.reason)) {
+      return { ok: true, detail: `refused, as it should be: ${error.reason}` };
+    }
+    return {
+      ok: false,
+      detail: `didn't import: ${error instanceof Error ? error.message : error}`,
+    };
+  }
+  try {
+    const blocks = doc.getXmlFragment(MIND_CONTENT_FIELD);
+    const theirs = pendingProposals(blocks).filter((each) => each.id.startsWith(WORD_CHANGE_ID));
+    if (theirs.length === 0) return { ok: true, detail: "no changes of someone's to resolve" };
+    const stale = [...outOfDateProposals(blocks)].filter((id) => id.startsWith(WORD_CHANGE_ID));
+    if (stale.length > 0) return { ok: false, detail: `${stale.length} out of date as imported` };
+    const outcome = (index: number) => (["accept", "reject", null] as const)[index % 3];
+    const order = new Map(theirs.map((each, index) => [each.id, index]));
+    doc.transact(() => {
+      for (const kind of ["accept", "reject"] as const) {
+        resolveProposals(blocks, (each) => outcome(order.get(each.id) ?? 2) === kind, kind);
+      }
+    });
+    const left = changesInMind(doc);
+
+    const result = await exportOf(bytes, doc, REVIEWED);
+    const before = new Set((await inspectPackage(bytes)).problems);
+    const problems = (await inspectPackage(result.data)).problems.filter(
+      (each) => !before.has(each),
+    );
+    if (problems.length > 0)
+      return {
+        ok: false,
+        detail: `the export: ${problems.slice(0, 2).join("; ")}`,
+        exported: result.data,
+      };
+    if (result.report.notKept.length > 0)
+      return {
+        ok: false,
+        detail: `reported as not kept: ${result.report.notKept.map((each) => each.kind).join(", ")}`,
+        exported: result.data,
+      };
+    const pkg = await openWordPackage(result.data);
+    const main = (await pkg.zip.readText(pkg.part)) ?? "";
+    for (const author of [REVIEWER, "IncarnaMind"]) {
+      if (main.includes(`w:author="${author}"`))
+        return { ok: false, detail: `a change is tracked as ${author}'s`, exported: result.data };
+    }
+
+    const again = await mindOf(result.data);
+    try {
+      const found = changesInMind(again);
+      const missing = left.filter((each) => !found.includes(each));
+      const extra = found.filter((each) => !left.includes(each));
+      if (missing.length > 0 || extra.length > 0)
+        return {
+          ok: false,
+          detail: `the changes left don't import again as they were: ${JSON.stringify((missing[0] ?? extra[0] ?? "").slice(0, 80))} ${missing.length > 0 ? "is missing" : "is new"}`,
+          exported: result.data,
+        };
+    } finally {
+      again.destroy();
+    }
+
+    const shown = acceptedParagraphs(main).filter((line) => line.trim() !== "");
+    const accepted = (await acceptedInMind(bytes, doc)).filter((line) => line.trim() !== "");
+    const at = shown.findIndex((line, index) => line !== accepted[index]);
+    if (at >= 0 || shown.length !== accepted.length) {
+      const index = at >= 0 ? at : Math.min(shown.length, accepted.length);
+      return {
+        ok: false,
+        detail: `accepting every change shows ${JSON.stringify(shown[index]?.slice(0, 60))} where the Mind has ${JSON.stringify(accepted[index]?.slice(0, 60))}`,
+        exported: result.data,
+      };
+    }
+    return {
+      ok: true,
+      detail: `${theirs.length} changes, ${Math.ceil(theirs.length / 3)} accepted and ${Math.ceil((theirs.length - 1) / 3)} rejected; ${left.length} parts left as they were`,
       exported: result.data,
       accepted,
     };

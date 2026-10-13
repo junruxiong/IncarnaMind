@@ -22,8 +22,8 @@ export interface ModelServer {
   source: EmbeddingModelSource;
   /** The bytes each file should have, by path. */
   contents: ReadonlyMap<string, Uint8Array>;
-  /** Every request, in order, with its Range header. */
-  requests: { path: string; range: string | null }[];
+  /** Every request, in order, with its Range header, and whether its connection has closed. */
+  requests: { path: string; range: string | null; closed: boolean }[];
   behave(path: string, behaviour: FileBehaviour): void;
   /** Lets held requests through, and stops holding new ones. */
   release(): void;
@@ -49,7 +49,11 @@ export async function startModelServer(files: Record<string, number>): Promise<M
   const serve = async (request: IncomingMessage, response: ServerResponse) => {
     const path = decodeURIComponent((request.url ?? "/").slice(1));
     const range = request.headers.range ?? null;
-    requests.push({ path, range });
+    const record = { path, range, closed: false };
+    requests.push(record);
+    response.on("close", () => {
+      record.closed = true;
+    });
     const content = contents.get(path);
     if (!content) {
       response.writeHead(404).end();

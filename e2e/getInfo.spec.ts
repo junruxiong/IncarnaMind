@@ -1,6 +1,6 @@
 import { copyFile, mkdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { expect, type Locator, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge, Document } from "../src/core/api";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
@@ -15,6 +15,7 @@ import {
   openDocumentMenu,
   openLinkedFolderMenu,
   pathsShown,
+  pointAndClick,
   removeDataFolder,
   setWindowSize,
   showSourceLocations,
@@ -77,14 +78,6 @@ const documentsOf = (window: Page) =>
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     return await bridge.listDocuments();
   }) as Promise<Document[]>;
-
-/** Moves the mouse onto a menu item in small steps, as a person does, and clicks it. */
-async function slideClick(window: Page, target: Locator): Promise<void> {
-  const box = await target.boundingBox();
-  if (!box) throw new Error("The item isn't visible.");
-  await window.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 8 });
-  await window.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-}
 
 test("Get info shows what is known of a PDF, a Word file, a spreadsheet and a deck, by ⌘I and by the menu, and Esc closes it", async () => {
   await writeFile(join(sources, "Report.pdf"), REPORT);
@@ -158,7 +151,7 @@ test("Get info shows what is known of a PDF, a Word file, a spreadsheet and a de
   await openDocumentMenu(report);
   const menu = report.getByTestId("document-file-actions");
   await expect(menu.getByTestId("file.info")).toHaveText(/^Get info(⌘I|Ctrl\+I)$/);
-  await slideClick(window, menu.getByTestId("file.info"));
+  await pointAndClick(window, menu.getByTestId("file.info"));
   await expect(panel.getByTestId("info-name")).toHaveText("Report");
   // It sits beside the row it is about, inside the window.
   const beside = await panel.boundingBox();
@@ -215,7 +208,7 @@ test("Copy path puts a Document's full path, and a Linked folder's, on the clipb
     "file.copyPath",
     "file.info",
   ]);
-  await slideClick(window, actions.getByTestId("file.copyPath"));
+  await pointAndClick(window, actions.getByTestId("file.copyPath"));
   expect(await copied()).toBe(join(sources, "Alone.pdf"));
   await expect(copiedLine).toHaveText("Copied");
   await expect(copiedLine).toHaveText("", { timeout: 10_000 });
@@ -232,7 +225,7 @@ test("Copy path puts a Document's full path, and a Linked folder's, on the clipb
     .getByRole("menuitem")
     .evaluateAll((items) => items.map((item) => item.getAttribute("data-testid")));
   expect(entries.indexOf("file.copyPath")).toBe(entries.indexOf("linkedFolder.reveal") + 1);
-  await slideClick(window, menu.getByTestId("file.copyPath"));
+  await pointAndClick(window, menu.getByTestId("file.copyPath"));
   expect(await copied()).toBe(library);
   await expect(copiedLine).toHaveText("Copied");
 
