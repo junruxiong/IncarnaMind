@@ -15,6 +15,7 @@ import {
   useContinueWithChatGpt,
 } from "../components/providers/ChatGptSignIn";
 import { usePopoverMenu } from "../components/usePopoverMenu";
+import { useComposer } from "../composer";
 import { core } from "../core";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
@@ -65,14 +66,24 @@ const VIA: Record<ModelGroup, MessageKey> = {
 const same = (a: ChatModelChoice | null, b: ChatModelChoice | null) =>
   a !== null && b !== null && a.providerId === b.providerId && a.modelId === b.modelId;
 
-/** The model chosen for the Mind, kept up to date as it changes here or elsewhere. */
-export function useMindModel(doc: Y.Doc): ChatModelChoice | null {
-  const [choice, setChoice] = useState(() => mindModelOf(doc));
+/**
+ * The model chosen for the Mind, kept up to date as it changes here or elsewhere;
+ * with no Mind (`doc` null), the one chosen for the composer until the app quits.
+ */
+export function useMindModel(doc: Y.Doc | null): ChatModelChoice | null {
+  const [choice, setChoice] = useState(() => (doc ? mindModelOf(doc) : null));
+  const withoutMind = useComposer((state) => state.modelWithoutMind);
   useEffect(() => {
+    if (!doc) return;
     setChoice(mindModelOf(doc));
     return observeMindModel(doc, () => setChoice(mindModelOf(doc)));
   }, [doc]);
-  return choice;
+  return doc ? choice : withoutMind;
+}
+
+function chooseModel(doc: Y.Doc | null, choice: ChatModelChoice): void {
+  if (doc) setMindModel(doc, choice);
+  else useComposer.setState({ modelWithoutMind: choice });
 }
 
 /**
@@ -85,7 +96,7 @@ export function useMindModel(doc: Y.Doc): ChatModelChoice | null {
  * with ChatGPT"; while its model is chosen, it says the plan is in use, with
  * "Manage usage". Not shown before any chat model is set up.
  */
-export function ModelChip({ doc, onChosen }: { doc: Y.Doc; onChosen(): void }) {
+export function ModelChip({ doc, onChosen }: { doc: Y.Doc | null; onChosen(): void }) {
   const t = useT();
   const chosen = useMindModel(doc);
   const defaultModel = useAppStore((state) => state.settings?.user.chatModel ?? null);
@@ -101,7 +112,7 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc; onChosen(): void }) {
     keepDefault: true,
     onSignedIn: ({ provider, modelId }) => {
       loadModels();
-      setMindModel(doc, { providerId: provider.id, modelId });
+      chooseModel(doc, { providerId: provider.id, modelId });
       menu.close();
       onChosen();
     },
@@ -137,7 +148,7 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc; onChosen(): void }) {
     : t("composer.model.labelPlain", { model: current.modelId });
 
   const choose = (choice: ChatModelChoice) => {
-    setMindModel(doc, choice);
+    chooseModel(doc, choice);
     menu.close();
     onChosen();
   };

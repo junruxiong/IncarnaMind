@@ -2802,6 +2802,8 @@ export const zhCN = {
   "assistant.reads.one": "正在读“{mind}” · 搜索“{scope}”",
   "assistant.reads.more": "正在读“{mind}” · 搜索“{scope}”等 {total} 项",
   "assistant.searchesAll": "搜索全部文档",
+  "assistant.searches.one": "搜索“{scope}”",
+  "assistant.searches.more": "搜索“{scope}”等 {total} 项",
   "assistant.empty":
     "就当前的 Mind 或你的文档提问。回答留在这里，每个引用都已核对；需要时再添加到笔记。",
   "assistant.log": "对话“{title}”",
@@ -2876,8 +2878,6 @@ export const zhCN = {
   "origin.deleted": "来自对话“{title}”，已移到回收站",
   "origin.gone": "来自一个已删除的对话",
   "origin.asked": "你的问题：{question}",
-  "assistant.noMind": "打开一个 Mind 即可在此就它提问，也可以在新 Mind 中提问。",
-  "assistant.noMind.ask": "在新 Mind 中提问",
   "assistant.narrow": "窗口宽度小于 1000 像素时，助手显示在底部；窗口变宽后会回到侧边。",
   "command.assistant.dock": "助手：{dock}",
   "command.assistant.fold": "助手：收起",

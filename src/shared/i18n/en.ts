@@ -2942,6 +2942,8 @@ export const en = {
   "assistant.reads.one": "Reads “{mind}” · searches “{scope}”",
   "assistant.reads.more": "Reads “{mind}” · searches “{scope}” and {count} more",
   "assistant.searchesAll": "Searches All Documents",
+  "assistant.searches.one": "Searches “{scope}”",
+  "assistant.searches.more": "Searches “{scope}” and {count} more",
   "assistant.empty":
     "Ask about the Mind you’re in or your Documents. Answers stay here, every Citation checked, until you add one to a note.",
   "assistant.log": "Conversation “{title}”",
@@ -3017,8 +3019,6 @@ export const en = {
   "origin.deleted": "From the conversation “{title}”, now in Recently deleted",
   "origin.gone": "From a conversation that has been deleted",
   "origin.asked": "You asked: {question}",
-  "assistant.noMind": "Open a Mind to ask about it here, or ask in a new one.",
-  "assistant.noMind.ask": "Ask in a new Mind",
   "assistant.narrow":
     "While the window is narrower than 1,000 px the assistant sits at the bottom; it goes back to the side when the window is wider.",
   "command.assistant.dock": "Assistant: {dock}",
