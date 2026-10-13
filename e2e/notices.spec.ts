@@ -134,9 +134,12 @@ test("Esc closes the newest notice, an error or a confirmation, one at a time; t
     await expect(notices).toHaveCount(1);
     await sidebarFolder(window, "Finance").getByTestId("folder-row").click({ button: "right" });
     await window.getByTestId("folder.open").click();
-    const heading = window.getByTestId("library-heading");
-    await heading.getByRole("button").dblclick();
-    await window.getByTestId("library-heading-rename").fill("x".repeat(101));
+    const name = window
+      .getByTestId("library")
+      .getByTestId("library-section-name")
+      .filter({ hasText: "Finance" });
+    await name.dblclick();
+    await window.getByTestId("library-section-rename").fill("x".repeat(101));
     await window.keyboard.press("Enter");
     await expect(notices).toHaveCount(2);
     await expect(notices.first().getByTestId("error-notice-message")).toContainText(TOO_LONG);
