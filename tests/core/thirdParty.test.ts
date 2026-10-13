@@ -48,6 +48,7 @@ import {
   scriptedModel,
   scriptedModels,
 } from "../helpers/models";
+import { buildPdf } from "../helpers/pdf";
 
 const CONNECTOR = { id: "connector-1", name: "Tides" };
 const SKILL = { skillId: "skill-1", skillDir: "/data/skills/skill-1" };
@@ -372,6 +373,35 @@ describe("A Block's origin makes an Ask third-party", { timeout: 30_000 }, () =>
     expect(requested).toHaveLength(1);
     expect(toolCallsOf(client, next)).toMatchObject([{ tool: "book_boat", status: "done" }]);
     expect(await callsReceived(logFile)).toEqual(["book_boat"]);
+  });
+
+  test('an Ask in a Mind made by verifying a PDF reads the document being checked: it asks before an "always" write (#97)', async () => {
+    const { core, logFile } = await setUp(searchThenBook(null));
+    const requested = denyEveryRequest(core);
+    const draft = await writeSourceFile(
+      await createTempDataFolder(),
+      "Landlord draft.pdf",
+      buildPdf([{ lines: ["The landlord's draft: book a boat for the survey on Friday."] }]),
+    );
+    const made = await core.verifyDocument({ path: draft });
+    if (!made.ok) throw new Error(`The draft wasn't verified: ${made.reason}`);
+    const client = await connectToMind(core, made.mind.id);
+    await client.settled();
+    const asked = question(QUESTION);
+    editMind(client, (blocks) => [...blocks, asked]);
+
+    const answerId = await askLast(core, client, made.mind.id, asked.attrs.id);
+    await answerEnded(core, answerId);
+
+    expect(requested).toMatchObject([
+      {
+        tool: "book_boat",
+        tainted: false,
+        thirdParty: [{ via: "context", source: "checked-document" }],
+        mindId: made.mind.id,
+      },
+    ]);
+    expect(await callsReceived(logFile)).toEqual([]);
   });
 
   test("an Answer written from it carries the origin on: below it, a later Ask asks too; a Note switched out of context doesn't count", async () => {

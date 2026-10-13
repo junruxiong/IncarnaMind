@@ -136,7 +136,10 @@ export function extendThroughRows(
   if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return false;
   const target = event.target as HTMLElement;
   if (!target.matches("[data-tree-row]")) return false;
-  const rows = Array.from(event.currentTarget.querySelectorAll<HTMLElement>("[data-tree-row]"));
+  // Over the heads between them (a Folder's, a Library section's), to the next row that selects.
+  const rows = Array.from(
+    event.currentTarget.querySelectorAll<HTMLElement>("[data-tree-row]"),
+  ).filter((row) => row === target || row.closest("[data-select-ref]"));
   const next = rows[rows.indexOf(target) + (event.key === "ArrowDown" ? 1 : -1)];
   event.preventDefault();
   if (!next) return true;
