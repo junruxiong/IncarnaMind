@@ -46,7 +46,7 @@ interface Cluster {
   citations: Extract<Inline, { kind: "citation" }>[];
 }
 
-const isBlank = (inline: Inline | undefined) =>
+export const isBlank = (inline: Inline | undefined) =>
   inline?.kind === "text" && inline.text.trim() === "" && !inline.text.includes("\n");
 
 /** The clusters in one run of content: Citations with nothing but spaces between them. */

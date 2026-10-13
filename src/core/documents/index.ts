@@ -227,11 +227,12 @@ function parseId(id: unknown): string {
 function parseName(name: unknown): string {
   if (typeof name !== "string") throw new InvalidInputError("A Document's name must be text.");
   const trimmed = name.trim();
-  if (!trimmed) throw new InvalidInputError("A Document's name can't be empty.");
+  if (!trimmed) throw new InvalidInputError({ key: "error.document.nameEmpty" });
   if (trimmed.length > MAX_NAME_LENGTH) {
-    throw new InvalidInputError(
-      `A Document's name can't be longer than ${MAX_NAME_LENGTH} characters.`,
-    );
+    throw new InvalidInputError({
+      key: "error.document.nameTooLong",
+      values: { max: MAX_NAME_LENGTH },
+    });
   }
   return trimmed;
 }
@@ -325,7 +326,7 @@ function searchLimit(limit: unknown = DEFAULT_SEARCH_LIMIT): number {
     limit < 1 ||
     limit > MAX_SEARCH_LIMIT
   ) {
-    throw new InvalidInputError(`The limit must be a whole number from 1 to ${MAX_SEARCH_LIMIT}.`);
+    throw new InvalidInputError({ key: "error.search.limit", values: { max: MAX_SEARCH_LIMIT } });
   }
   return limit;
 }
@@ -1533,9 +1534,7 @@ export function createDocuments(options: DocumentsOptions) {
     };
     if (!model.enabled()) {
       if (mode === "vector") {
-        throw new InvalidInputError(
-          "Vector search needs embeddings, which are off: turn them on in Settings → Search.",
-        );
+        throw new InvalidInputError({ key: "error.provider.embeddingsOff" });
       }
       return null;
     }
@@ -1674,14 +1673,15 @@ export function createDocuments(options: DocumentsOptions) {
   async function openablePath(idInput: unknown): Promise<DocumentRow> {
     const id = parseId(idInput);
     const before = find(id);
-    if (!before) throw new NotFoundError("There is no such Document.");
+    if (!before) throw new NotFoundError({ key: "error.document.notFound" });
     // A file is looked at again when it is opened: it may have changed, moved or gone.
     await library.check([before.path]);
     const row = find(id);
-    if (!row) throw new NotFoundError("There is no such Document.");
-    if (row.file_status === "missing") throw new NotFoundError("The Document's file is missing.");
+    if (!row) throw new NotFoundError({ key: "error.document.notFound" });
+    if (row.file_status === "missing")
+      throw new NotFoundError({ key: "error.document.fileMissing" });
     if (row.file_status === "unavailable") {
-      throw new NotFoundError("The Document's file can't be reached right now.");
+      throw new NotFoundError({ key: "error.document.fileUnavailable" });
     }
     return row;
   }
@@ -1827,6 +1827,24 @@ export function createDocuments(options: DocumentsOptions) {
     },
 
     /**
+     * A live Document's date, as Answers see it beside its Passages (#548):
+     * the date it states (its reference record's, else its creation date),
+     * else the day its file was last modified, in UTC. ISO 8601 at the
+     * precision known: "2025-05-14", "2024-03" or "2019". Null when nothing
+     * gives one, or the Document was deleted.
+     */
+    documentDate(documentId: string): string | null {
+      const row = find(documentId);
+      if (!row) return null;
+      const issued = referenceOf(db, documentId)?.fields.issued;
+      if (issued) return issued;
+      if (row.creation_date) return row.creation_date.slice(0, 10);
+      return row.file_mtime_ms === null
+        ? null
+        : new Date(row.file_mtime_ms).toISOString().slice(0, 10);
+    },
+
+    /**
      * The live Passages of a Document's current version that cover pages
      * `from` to `to` (any, for a Document without pages), in reading order.
      */
@@ -1855,7 +1873,7 @@ export function createDocuments(options: DocumentsOptions) {
      */
     cellNumber(idInput: unknown, sheet: string | null, ref: string): number | null {
       const row = find(parseId(idInput));
-      if (!row) throw new NotFoundError("There is no such Document.");
+      if (!row) throw new NotFoundError({ key: "error.document.notFound" });
       const units = db.all<UnitRow>(
         `SELECT page, text, kind, label, anchors FROM document_pages
          WHERE document_id = ? AND content_hash = ? AND deleted_at IS NULL AND kind = 'rows'
@@ -1873,7 +1891,7 @@ export function createDocuments(options: DocumentsOptions) {
     /** The text kept of a live Document's current version (see `CoreApi.readDocumentText`). */
     readText(idInput: unknown): DocumentText {
       const row = find(parseId(idInput));
-      if (!row) throw new NotFoundError("There is no such Document.");
+      if (!row) throw new NotFoundError({ key: "error.document.notFound" });
       const pages = db.all<UnitRow>(
         `SELECT page, text, kind, label, anchors FROM document_pages
          WHERE document_id = ? AND content_hash = ? AND deleted_at IS NULL ORDER BY page`,
@@ -1895,7 +1913,7 @@ export function createDocuments(options: DocumentsOptions) {
     /** The scanned pages of a live Document's current version (see `CoreApi.readScannedText`). */
     readScannedText(idInput: unknown): ScannedText {
       const row = find(parseId(idInput));
-      if (!row) throw new NotFoundError("There is no such Document.");
+      if (!row) throw new NotFoundError({ key: "error.document.notFound" });
       const units = db
         .all<UnitRow>(
           `SELECT page, text, kind, label, anchors FROM document_pages
@@ -2014,7 +2032,7 @@ export function createDocuments(options: DocumentsOptions) {
       announce(id);
       process(id);
       const row = find(id);
-      if (!row) throw new NotFoundError("There is no such Document.");
+      if (!row) throw new NotFoundError({ key: "error.document.notFound" });
       return toDocument(row);
     },
 
@@ -2049,7 +2067,7 @@ export function createDocuments(options: DocumentsOptions) {
     /** A live Document. Throws NotFoundError for an unknown or deleted one. */
     get(idInput: unknown): Document {
       const row = find(parseId(idInput));
-      if (!row) throw new NotFoundError("There is no such Document.");
+      if (!row) throw new NotFoundError({ key: "error.document.notFound" });
       return toDocument(row);
     },
 
@@ -2068,13 +2086,13 @@ export function createDocuments(options: DocumentsOptions) {
     rename(idInput: unknown, nameInput: unknown): Document {
       const id = parseId(idInput);
       const name = parseName(nameInput);
-      if (!find(id)) throw new NotFoundError("There is no such Document.");
+      if (!find(id)) throw new NotFoundError({ key: "error.document.notFound" });
       db.transaction(() => {
         db.run("UPDATE documents SET name = ?, updated_at = ? WHERE id = ?", [name, now(), id]);
         reindexName(id, name);
       });
       const row = find(id);
-      if (!row) throw new NotFoundError("There is no such Document.");
+      if (!row) throw new NotFoundError({ key: "error.document.notFound" });
       return toDocument(row);
     },
 
@@ -2088,7 +2106,7 @@ export function createDocuments(options: DocumentsOptions) {
         throw new InvalidInputError("counted must be true or false.");
       }
       const row = find(id);
-      if (!row) throw new NotFoundError("There is no such Document.");
+      if (!row) throw new NotFoundError({ key: "error.document.notFound" });
       if (row.own_file === null) {
         throw new InvalidInputError("Only a file IncarnaMind wrote is left out of evidence.");
       }
@@ -2101,7 +2119,7 @@ export function createDocuments(options: DocumentsOptions) {
         announce(id);
       }
       const updated = find(id);
-      if (!updated) throw new NotFoundError("There is no such Document.");
+      if (!updated) throw new NotFoundError({ key: "error.document.notFound" });
       return toDocument(updated);
     },
 
@@ -2112,7 +2130,7 @@ export function createDocuments(options: DocumentsOptions) {
     async delete(idInput: unknown): Promise<void> {
       const id = parseId(idInput);
       const row = find(id);
-      if (!row) throw new NotFoundError("There is no such Document.");
+      if (!row) throw new NotFoundError({ key: "error.document.notFound" });
       removeFromIndex([id], now());
       if (row.path !== legacyFolder && isInside(legacyFolder, row.path)) {
         await rm(row.path, { force: true }).catch(reportError);
@@ -2196,12 +2214,12 @@ export function createDocuments(options: DocumentsOptions) {
     retry(idInput: unknown): Document {
       const id = parseId(idInput);
       const row = find(id);
-      if (!row) throw new NotFoundError("There is no such Document.");
+      if (!row) throw new NotFoundError({ key: "error.document.notFound" });
       if (!failedNow(row)) {
-        throw new InvalidInputError("Only a Document that failed to process can be retried.");
+        throw new InvalidInputError({ key: "error.document.notFailed" });
       }
       if (row.file_status !== "available") {
-        throw new NotFoundError("The Document's file isn't there to read.");
+        throw new NotFoundError({ key: "error.document.fileGone" });
       }
       process(id);
       return toDocument(find(id) ?? row);
@@ -2227,7 +2245,7 @@ export function createDocuments(options: DocumentsOptions) {
         return { document: toDocument(row), stream, size };
       } catch (error) {
         await library.check([row.path]);
-        throw new NotFoundError("The Document's file can't be opened.", { cause: error });
+        throw new NotFoundError({ key: "error.document.fileCantOpen" }, { cause: error });
       }
     },
 
@@ -2287,7 +2305,7 @@ export function createDocuments(options: DocumentsOptions) {
     searchText(query: unknown, options?: unknown): DocumentTextMatch[] {
       if (typeof query !== "string") throw new InvalidInputError("The search query must be text.");
       if (options !== undefined && !isRecord(options)) {
-        throw new InvalidInputError("searchDocumentText expects an object.");
+        throw new InvalidInputError({ key: "error.search.options" });
       }
       return textSearch(db, query, searchLimit(options?.limit));
     },
