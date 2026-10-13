@@ -121,7 +121,12 @@ export interface CreateMindInput {
  * - 15: what a Word import keeps as it is (`WORD_ATOM_NODE`, `WORD_BLOCK_NODE`,
  *   #104) and pictures in the text (`IMAGE_NODE`). Older content is version 15
  *   content as it is: nothing is rewritten.
- * - 16: still to come (#503).
+ * - 16: the rows a cut chart doesn't draw (#503): `cutRows` beside `rows`
+ *   in a chart's `data`, which Show as table lists. An older version keeps
+ *   them while it changes a chart's kind, columns or title, but its Update
+ *   writes the data again without them. Older charts are version 16 content
+ *   as they are: one with no `cutRows` lists the rows it draws, and nothing
+ *   is rewritten.
  * - 17: comparison tables (#98): `COMPARISON_TABLE_NODE`, `COMPARISON_ROW_NODE`
  *   and `COMPARISON_CELL_NODE`. Older content is version 17 content as it is:
  *   nothing is rewritten.

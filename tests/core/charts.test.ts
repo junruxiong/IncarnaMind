@@ -244,6 +244,37 @@ describe("a chart from a cited table", { timeout: 30_000 }, () => {
     expect(chinese).toContain("数据来源：[^1][^2] 1 个数值没有引用。");
   });
 
+  test("a pie's export covers the one column it draws, its sources too (#503)", async () => {
+    const model = figuresModel();
+    const { core, client, mind } = await setUpWithDocuments(model, [
+      { name: "Acme.pdf", contents: REPORT },
+    ]);
+    await askAndFinish(core, client, mind.id, "Revenue by quarter? Answer as a table.");
+    writeMind(client, [chartBlock({ ...chartOfFirstTable(client), kind: "pie" })]);
+    await client.settled();
+
+    const exported = await core.exportMind(mind.id, { format: "markdown" });
+    expect(new TextDecoder().decode(exported.data)).toBe(
+      [
+        "# Tides",
+        "",
+        "*Chart: Revenue by quarter*",
+        "",
+        "| Quarter | 2025 |",
+        "| --- | ---: |",
+        "| Q1 | 341.5 |",
+        "| Q2 | 362.0 |",
+        "| Q3 | 377.9 |",
+        "| Q4 | 401.2 |",
+        "",
+        "Source: [^1] 1 value has no Citation.",
+        "",
+        "[^1]: Acme, p. 2",
+        "",
+      ].join("\n"),
+    );
+  });
+
   test("Word has its picture, its caption, and its sources as real footnotes; with no picture, its table", async () => {
     const model = figuresModel();
     const pictures = fakePictures();
