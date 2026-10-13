@@ -35,6 +35,18 @@ export const en = {
   "library.problem.unavailable": "{count} Documents can't be reached",
   "library.problem.mixed": "{count} Documents need attention",
   "library.problem.show": "Show",
+  "unread.count.one": "1 file couldn't be read",
+  "unread.count": "{count} files couldn't be read",
+  "unread.show": "Show",
+  "unread.file": "{name}: {reason}",
+  "unread.hide": "Hide",
+  "unread.reason.format":
+    "Format not read yet ({extension}). Convert it to PDF, Word, PowerPoint or Excel.",
+  "unread.reason.scan": "A scan with no text yet. Make a copy with text (OCR) and add it.",
+  "unread.reason.password": "Password-protected. Remove the password and add it again.",
+  "unread.reason.damaged": "The file is damaged or couldn't be opened.",
+  "unread.reason.too-large": "Too large to open.",
+  "unread.reason.pages": "Some scanned pages haven't been read yet.",
   "library.noMatch": "No Documents match",
   "library.noMatch.clear": "Clear search and filters",
   "library.drop.title": "Drop files or a folder here",
@@ -685,6 +697,21 @@ export const en = {
   "proposal.sourceRemoved": "Source removed",
   "proposal.sourceRemoved.why":
     "A Document this change cites has been deleted. Its Citation keeps the quote.",
+  "proposal.region.review": "Changes to review",
+  "proposal.theirs.count": "{count} changes from {name}",
+  "proposal.theirs.count.one": "1 change from {name}",
+  "proposal.theirs.acceptAll": "Accept all changes from {name}",
+  "proposal.theirs.rejectAll": "Reject all changes from {name}",
+  "proposal.unknownAuthor": "Unknown author",
+  "proposal.madeBy": "{author}, {date}",
+  "proposal.outOfDate.why.theirs":
+    "You edited this text after the change was made, so it can't be accepted. Reject it, or finish the edit yourself.",
+  "proposal.announce.theirs":
+    "{author}'s change: {what}. Accept with {accept}, reject with {reject}.",
+  "proposal.announce.theirs.outOfDate":
+    "{author}'s change, out of date: {what}. You edited its text after it was made. Reject it with {reject}.",
+  "proposal.cantAccept.theirs":
+    "This change is out of date: reject it, or finish the edit yourself.",
   "editor.turnInto.label": "Turn into",
   "editor.turnInto.bulletList": "Bulleted list",
   "editor.turnInto.orderedList": "Numbered list",
@@ -1580,6 +1607,9 @@ export const en = {
   "consent.flow.reference-lookup": "Reference look-up",
   "consent.flow.reference-lookup.purpose": "fill in a Document's details for citing it",
   "consent.data.identifiers": "The Document's DOI or arXiv ID, and nothing else of it",
+  "consent.flow.connector-registry": "Connector search",
+  "consent.flow.connector-registry.purpose": "find community connectors in the MCP Registry",
+  "consent.data.connector-search": "What you type in the Connectors search, and nothing else",
   "consent.flow.find-sources": "Find sources",
   "consent.flow.find-sources.purpose": "find papers and other sources, and add the ones you choose",
   "consent.data.search-terms": "What you search for: the words and filters, such as years",
@@ -2702,7 +2732,30 @@ export const en = {
   "connectors.settings.title": "Connectors",
   "connectors.directory.intro":
     "Services the assistant can look things up in. Nothing of yours goes to one until you agree, and it asks before it changes anything there.",
-  "connectors.directory.search": "Search connectors",
+  "connectors.directory.search": "Search connectors and the MCP Registry",
+  "connectors.registry.title": "From the MCP Registry",
+  "connectors.registry.badge": "Community · not reviewed",
+  "connectors.registry.note":
+    "Searched only because you typed. Community connectors haven't been reviewed; check what they can do before you connect one.",
+  "connectors.registry.searching": "Searching the MCP Registry…",
+  "connectors.registry.none": "Nothing in the MCP Registry matches “{query}”.",
+  "connectors.registry.failed.local-mode": "Local mode is on, so the MCP Registry isn't searched.",
+  "connectors.registry.failed.declined":
+    "You chose not to send your search to the MCP Registry. You can change that in Privacy.",
+  "connectors.registry.failed.unreachable":
+    "The MCP Registry can't be reached. Check your connection and try again.",
+  "connectors.registry.failed.service-error":
+    "The MCP Registry didn't answer as expected. Try again later.",
+  "connectors.registry.retry": "Try again",
+  "connectors.registry.privacy": "Privacy",
+  "connectors.registry.by": "Published as {publisher}",
+  "connectors.registry.remote": "Runs on its own server: {url}",
+  "connectors.registry.local": "Runs on this computer: {command}",
+  "connectors.registry.add": "Add",
+  "connectors.registry.setUp": "Set up…",
+  "connectors.registry.link": "Read about it",
+  "connectors.registry.cannot":
+    "IncarnaMind can't run this one by itself. Read about it to see how it's set up.",
   "connectors.directory.connected": "Connected",
   "connectors.directory.browse": "Browse",
   "connectors.directory.group.files": "Where your files are",
@@ -2901,6 +2954,10 @@ export const en = {
   // Onboarding: the example Mind, the "Get started" checklist and the three steps.
   "editor.hint.empty": "Start writing, or {ask}",
   "editor.hint.empty.ask": "press {shortcut} to ask a Question…",
+  "editor.hint.first":
+    "A Mind is a page where you write, and ask your Documents with every quote checked. {ask}",
+  "editor.hint.first.ask": "Press {shortcut} to ask.",
+  "tabs.new.about": "New Mind: a page to write in and ask your Documents ({shortcut})",
   "editor.hint.afterAnswer": "Keep writing, or {ask}",
   "editor.hint.afterAnswer.ask": "press {shortcut} to ask a follow-up",
   "editor.hint.example": "Try it: write a line here, or {ask}",
@@ -2909,7 +2966,7 @@ export const en = {
   "examples.banner.label": "About this example",
   "examples.banner.title": "This is an example Mind.",
   "examples.banner.body":
-    "You write here like in any document, ask Questions about your Documents, and every claim in an Answer links to the page it came from. Click a check to see the quote; green means it was found.",
+    "A Mind is a page where you write, and ask your Documents with every quote checked. You write here like in any document, ask Questions about your Documents, and every claim in an Answer links to the page it came from. Click a check to see the quote; green means it was found.",
   "examples.banner.addOwn": "Add your Documents or apps",
   "examples.banner.remove": "Remove the examples",
   "examples.answer": "Example Answer, written in advance: no model needed to try it",
@@ -3618,6 +3675,13 @@ export const en = {
   "wordImport.count.images": "{count} pictures",
   "wordImport.count.links": "{count} links",
   "wordImport.count.kept": "{kind} ({count})",
+  "wordImport.report.keptChanges": "Changes kept as they are, to accept or reject in Word: {list}.",
+  "wordImport.keptChange.format": "formatting ({count})",
+  "wordImport.keptChange.paragraphMark": "paragraph marks ({count})",
+  "wordImport.keptChange.move": "moves ({count})",
+  "wordImport.keptChange.row": "table rows ({count})",
+  "wordImport.keptChange.cell": "table cells ({count})",
+  "wordImport.keptChange.content": "fields, pictures or notes ({count})",
   "wordImport.sectionBreak.title": "Delete the section break?",
   "wordImport.sectionBreak.body":
     "The pages after it will take the layout of the pages before it: page size, orientation, columns, headers and footers.",
