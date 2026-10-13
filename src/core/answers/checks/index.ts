@@ -76,7 +76,7 @@ export interface ChecksOptions
   /** What contradiction watch needs besides (#112). */
   watch: Pick<
     WatchOptions,
-    "minds" | "documentVersions" | "background" | "runCost" | "delayMs" | "log"
+    "minds" | "documentVersions" | "background" | "runCost" | "delayMs" | "claimTimeLimitMs" | "log"
   >;
   /** Throws unless the Mind exists and this version may write to it. */
   requireMind(mindId: string): void;

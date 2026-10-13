@@ -785,10 +785,11 @@ export interface CoreAdapters {
    */
   connectorSignInTimeoutMs?: number;
   /**
-   * How long after a new version of a Document its Folder's Minds are checked
-   * for contradictions (#112). Defaults to 30 seconds; tests shorten it.
+   * Contradiction watch's timings (#112), which tests shorten: how long after
+   * a new version of a Document its Folder's Minds are checked (30 seconds),
+   * and how long a background check of one claim may take (3 minutes).
    */
-  contradictionWatchDelayMs?: number;
+  contradictionWatch?: { delayMs?: number; claimTimeLimitMs?: number };
   /**
    * Where requests to TypeSafe's hosted Jev go. Defaults to
    * https://api.typesafe.ai; tests point it at a local fake server. Consent
