@@ -23,6 +23,7 @@ import type { createDocuments } from "./documents";
 import { InvalidInputError, isRecord, NotFoundError } from "./errors";
 import type { createLibrary } from "./library";
 import type { createMindContent } from "./mindContent";
+import { forgetMindBlocks } from "./mindIndex";
 import type { createMinds } from "./minds";
 import type { Database } from "./storage";
 import { parseTagLinkStates, sameName, type TagsStore } from "./tags";
@@ -84,6 +85,7 @@ function purge(
       `UPDATE word_packages SET deleted_at = ?, updated_at = ? WHERE mind_id ${IN} AND deleted_at IS NULL`,
       [at, at, list],
     );
+    forgetMindBlocks(db, ids, at);
   }
   if (kind === "conversation") {
     // Its messages, their index and its titles: everything the User asked or was answered.
