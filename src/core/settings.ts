@@ -51,8 +51,12 @@ const hasOnly = (value: unknown, keys: readonly string[]): value is Record<strin
 const isQuestionsOption = (value: unknown) =>
   hasOnly(value, ["includeQuestions"]) && isBoolean(value.includeQuestions);
 
+/** HTML came after the others: choices saved before it have no `html`, and read as the default. */
 const isExportPreferences = (value: unknown): value is ExportPreferences =>
-  hasOnly(value, ["format", "docx", "pdf"]) &&
+  isRecord(value) &&
+  (Object.hasOwn(value, "html")
+    ? hasOnly(value, ["format", "docx", "pdf", "html"]) && isQuestionsOption(value.html)
+    : hasOnly(value, ["format", "docx", "pdf"])) &&
   EXPORT_FORMATS.some((format) => format === value.format) &&
   isQuestionsOption(value.docx) &&
   isQuestionsOption(value.pdf);
@@ -79,6 +83,7 @@ const userScope: Scope<UserSettings> = {
       format: "docx",
       docx: { includeQuestions: false },
       pdf: { includeQuestions: false },
+      html: { includeQuestions: false },
     },
     monthlyCap: null,
     webSearch: false,
@@ -225,6 +230,11 @@ export function createSettings(
 ) {
   const get = (): Settings => {
     const user = read(db, userScope);
+    const stored: Partial<ExportPreferences> = user.exportOptions;
+    user.exportOptions = {
+      ...user.exportOptions,
+      html: stored.html ?? { includeQuestions: false },
+    };
     const device = read(db, deviceScope);
     const language = resolveLanguage(user.language, systemLanguages());
     return { user, device, language, scriptSandbox, meetingAudio };

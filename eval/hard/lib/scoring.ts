@@ -38,31 +38,31 @@ import { DIFFICULTIES, type Difficulty, type HardExpected, type HardQuestion } f
 
 /**
  * The reranked searches, each reranked by the built-in model: keyword
- * search's top 20 (the default before), its top 60 (the search Tool's
- * default with embeddings off, and the gating set's gate), and hybrid
- * search's candidates (the search Tool's with embeddings on).
+ * search's top 20 (the search Tool's default with embeddings off), its top 60
+ * (the default until 2026-10-12), and hybrid search's candidates (the search
+ * Tool's with embeddings on).
  */
 export const HARD_RERANKED_SEARCHES: readonly RerankedSearch[] = [
-  "keyword",
   GATING_SEARCH,
+  "keyword-60",
   "hybrid",
 ];
 
-/** Keyword search's top 20, reranked by the built-in model. */
-export const KEYWORD_20_RERANK_MODE: RetrievalMode = rerankMode(
+/** Keyword search's top 60, reranked by the built-in model. */
+export const KEYWORD_60_RERANK_MODE: RetrievalMode = rerankMode(
   BUILT_IN_RERANKING_MODEL,
-  "keyword",
+  "keyword-60",
 );
 
 /**
  * The modes, in the order the report lists them: keyword search and its top
- * 20 and top 60 reranked (the default), then hybrid search and its candidates
+ * 20 (the default) and top 60 reranked, then hybrid search and its candidates
  * reranked (to compare with the default), and vector search.
  */
 export const HARD_MODES: readonly RetrievalMode[] = [
   "keyword",
-  KEYWORD_20_RERANK_MODE,
   GATING_MODE,
+  KEYWORD_60_RERANK_MODE,
   "hybrid",
   HYBRID_RERANK_MODE,
   "vector",

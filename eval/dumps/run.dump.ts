@@ -35,13 +35,22 @@ import {
 import { formatOf } from "../lib/formats";
 import { openLibrary } from "../lib/library";
 import { createLog, type Log } from "../lib/log";
+
 import {
   createWorkerCrossEncoder,
   openReranker,
   prepareGpuFile,
   type ScoringReranker,
 } from "../lib/rerank";
-import { GATING_MODE, runReranked, runRetrieval, summarise, type Tally } from "../lib/retrieval";
+import {
+  GATING_MODE,
+  KEYWORD_RERANK_DEPTH,
+  runReranked,
+  runRetrieval,
+  summarise,
+  type Tally,
+} from "../lib/retrieval";
+
 import { type Dump, formatScore, type Order, type ScoreOptions, scoreDump } from "../score";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
@@ -61,7 +70,7 @@ interface Context {
 
 /** What a set's dump says at top 5 for keyword search and keyword + rerank, in the group of Questions the run scores. */
 function dumpTop5(dump: Dump, group: { tag: string; value: string } | null) {
-  const options: ScoreOptions = { depth: dump.rerankedDepth, dropNeighbours: false };
+  const options: ScoreOptions = { depth: KEYWORD_RERANK_DEPTH, dropNeighbours: false };
   const score = scoreDump(dump, ORDERS, [5], options, group?.tag ?? dump.groupBy);
   const pick = (order: number): Tally => {
     const entry = score.orders[order]?.byTop[0];
@@ -98,7 +107,7 @@ async function write(context: Context, dump: Dump): Promise<void> {
   await mkdir(context.dir, { recursive: true });
   const file = join(context.dir, `${dump.set}.json`);
   await writeFile(file, JSON.stringify(dump));
-  const options: ScoreOptions = { depth: dump.rerankedDepth, dropNeighbours: false };
+  const options: ScoreOptions = { depth: KEYWORD_RERANK_DEPTH, dropNeighbours: false };
   console.log(`\n${formatScore(scoreDump(dump, ORDERS, TOPS, options), dump)}\nWrote ${file}\n`);
 }
 
