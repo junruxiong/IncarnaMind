@@ -42,6 +42,7 @@ import {
   type EmbeddingModelStatus,
   type EmbeddingSettings,
   type ExportMindOptions,
+  type ExternalService,
   type Meeting,
   type Mind,
   type MindCitationStyle,
@@ -50,6 +51,7 @@ import {
   type SavedExport,
   type SearchScope,
   type Task,
+  type UnreadFile,
   type Unsubscribe,
 } from "./api";
 import { createApprovals } from "./approvals";
@@ -60,6 +62,7 @@ import { type CitedPages, type CitedPlace, createCitedPages } from "./citedPages
 import { COMPARISON_TASK, createComparisons } from "./comparisons";
 import { createConnectors } from "./connectors";
 import { connectorDirectory } from "./connectors/directory";
+import { createConnectorRegistry, REGISTRY, REGISTRY_SENDS } from "./connectors/registry";
 import { createConsent, type DataFlowRegistry } from "./consent";
 import { createConversations } from "./conversations";
 import { createMeter } from "./cost/meter";
@@ -75,6 +78,7 @@ import { createOwnFiles } from "./documents/ownFiles";
 import { createVersionRetention, type VersionRetention } from "./documents/retention";
 import { BUILT_IN_TEXT_RECOGNITION_MODEL, createTextRecognitionModel } from "./documents/scan";
 import { tunedSearch } from "./documents/searchTuning";
+import { findUnreadDocuments } from "./documents/unread";
 import { fsWatchFolder } from "./documents/watcher";
 import { createWebPages } from "./documents/web";
 import { createEdits } from "./edits";
@@ -1353,6 +1357,7 @@ export function createCore(adapters: CoreAdapters): Core {
   consent.registry.register({
     id: "tagging",
     sends: TAGGING_FLOW_SENDS,
+    background: true,
     async services() {
       const service = jev.enabled() ? jev.service() : chat.defaultService();
       return service ? [service] : [];
@@ -1388,8 +1393,11 @@ export function createCore(adapters: CoreAdapters): Core {
     now,
     tags,
     enabled: () => !organizationConfigured(),
-    canRun: async () =>
-      jev.enabled() ? jev.canRun() : (await chat.readiness(undefined, "tagging")).ready,
+    canRun: async () => {
+      if (jev.enabled()) return jev.canRun();
+      const readiness = await chat.readiness(undefined, "tagging");
+      return readiness.ready && readiness.consent !== "needed";
+    },
     mightBeReady: () => (jev.enabled() ? jev.mightBeReady() : chat.mightBeReady("tagging")),
     prepare: async () => {
       if (jev.enabled()) return jev.prepare();
@@ -1467,21 +1475,24 @@ export function createCore(adapters: CoreAdapters): Core {
       };
     },
   });
+  /** The service the model organizing Documents sends to, if it isn't on this computer. */
+  const classificationServices = async (): Promise<ExternalService[]> => {
+    const selected = library.settings().classifier;
+    if (selected?.kind === "jev") {
+      const service = jev.service();
+      return service ? [service] : [];
+    }
+    if (selected?.kind === "chat") {
+      const provider = (await chat.list()).find((item) => item.id === selected.choice.providerId);
+      return provider?.service ? [provider.service] : [];
+    }
+    return [];
+  };
   consent.registry.register({
     id: "classification",
     sends: CLASSIFICATION_FLOW_SENDS,
-    async services() {
-      const selected = library.settings().classifier;
-      if (selected?.kind === "jev") {
-        const service = jev.service();
-        return service ? [service] : [];
-      }
-      if (selected?.kind === "chat") {
-        const provider = (await chat.list()).find((item) => item.id === selected.choice.providerId);
-        return provider?.service ? [provider.service] : [];
-      }
-      return [];
-    },
+    background: true,
+    services: classificationServices,
   });
   libraryDocumentChanged = (id) => library.documentChanged(id);
   library.start();
@@ -1704,6 +1715,17 @@ export function createCore(adapters: CoreAdapters): Core {
   // Connectors that are on start with the app.
   connectors.startAll();
   const directory = connectorDirectory(adapters.connectorDirectory);
+  const registry = createConnectorRegistry({
+    baseUrl: adapters.connectorRegistryUrl ?? REGISTRY.id,
+    consent,
+    localOnly: () => embedding.localOnly(),
+  });
+  // Asked only once the User searches, as Find sources' providers are.
+  consent.registry.register({
+    id: "connector-registry",
+    sends: REGISTRY_SENDS,
+    services: async () => [],
+  });
   const layouts = createLayouts({
     readValue: (key) => settings.readDeviceValue(key),
     writeValue: (key, value) => settings.writeDeviceValue(key, value),
@@ -1730,6 +1752,11 @@ export function createCore(adapters: CoreAdapters): Core {
       mindsChanged();
       return mind;
     },
+    renameMind: (mindId, title) => {
+      minds.rename(mindId, title);
+      mindsChanged();
+    },
+    mindTitle: (mindId) => minds.list().find((mind) => mind.id === mindId)?.title ?? "",
     mindExists: (mindId) => minds.list().some((mind) => mind.id === mindId),
     deleteMind: (mindId) => {
       const at = now();
@@ -2040,7 +2067,13 @@ export function createCore(adapters: CoreAdapters): Core {
           change = { ...patch, user };
         }
       }
+      const languageWas = settings.get().language;
       const updated = settings.update(change);
+      if (updated.language !== languageWas) {
+        examples
+          .followLanguage()
+          .catch((error) => console.error("The example Minds didn't follow the language:", error));
+      }
       if (!updated.user.suggestWhileWriting) suggestions.stop();
       events.emit("settings.changed", updated);
       // Skill scripts turned off: none runs any more, and none waits to.
@@ -2142,6 +2175,42 @@ export function createCore(adapters: CoreAdapters): Core {
       return { ...linked, batchId };
     },
     listLinkedFolders: async () => documents.linkedFolders.list(),
+    listUnreadFiles: async (scope) => {
+      const wanted = parseSearchScope(scope);
+      const inScope = wanted ? resolveScope(wanted) : null;
+      const kept = inScope === null ? null : new Set(inScope);
+      const unread = findUnreadDocuments(
+        documents.list().filter((each) => kept === null || kept.has(each.id)),
+      );
+      // Files in a format not read belong to Folders only: a Tag or a Document can't name them.
+      // A Folder holds those in it and under it, even where no Document is.
+      const named = wanted
+        ? folders.list().filter((folder) => wanted.folderIds.includes(folder.id))
+        : null;
+      const files = documents.linkedFolders
+        .unsupportedFiles()
+        .filter(
+          (file) =>
+            named === null ||
+            named.some(
+              (folder) =>
+                folder.linkedFolderId === file.linkedFolderId &&
+                (folder.relativePath === "" ||
+                  file.relativeFolder === folder.relativePath ||
+                  file.relativeFolder.startsWith(`${folder.relativePath}/`)),
+            ),
+        )
+        .map(
+          (file): UnreadFile => ({
+            id: file.path,
+            name: file.name,
+            reason: "format",
+            extension: file.extension,
+            documentId: null,
+          }),
+        );
+      return [...unread, ...files];
+    },
     locateLinkedFolder: (linkedFolderId, path) =>
       documents.linkedFolders.locate(linkedFolderId, path),
     removeLinkedFolder: async (linkedFolderId) => unlinkFolder(linkedFolderId),
@@ -2237,7 +2306,7 @@ export function createCore(adapters: CoreAdapters): Core {
     saveChatProvider: async (input) => {
       const provider = await chat.save(input);
       settingsChanged();
-      await readinessChanged();
+      await dataFlowsChanged();
       return provider;
     },
     deleteChatProvider: async (id) => {
@@ -2384,7 +2453,15 @@ export function createCore(adapters: CoreAdapters): Core {
       return deletion;
     },
     addLibraryStarterGroups: async (keys) => library.addStarters(keys),
-    saveLibrarySettings: async (input) => library.saveSettings(input),
+    saveLibrarySettings: async (input) => {
+      const saved = library.saveSettings(input);
+      // Choosing the model that organizes Documents, where Settings says what goes, allows it (ADR-0022).
+      for (const service of await classificationServices()) {
+        consent.choose(["classification"], service);
+      }
+      await dataFlowsChanged();
+      return saved;
+    },
     classifyDocuments: async (ids) => {
       library.classify(ids);
       const classifier = library.settings().classifier;
@@ -2493,6 +2570,7 @@ export function createCore(adapters: CoreAdapters): Core {
     getJevSettings: () => jev.status(),
     saveJevSettings: async (input) => {
       await jev.save(input);
+      await dataFlowsChanged();
       return jevChanged();
     },
     removeJevSettings: async () => {
@@ -2522,6 +2600,7 @@ export function createCore(adapters: CoreAdapters): Core {
       if (!entry) throw new NotFoundError({ key: "error.connector.notInDirectory" });
       return connectors.addFromDirectory(entry, client);
     },
+    searchConnectorRegistry: (query) => registry.search(query),
     previewConnectorImport: async (json) => connectors.previewImport(json),
     importConnectors: (json) => connectors.import(json),
 

@@ -260,6 +260,9 @@ function JevForm({
         </div>
       </details>
 
+      <p data-testid="jev-sends" className={hintClass}>
+        {t("jev.form.sends")}
+      </p>
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="submit"
@@ -281,7 +284,7 @@ function JevForm({
         </button>
       </div>
 
-      {test && <TestResult result={test} onRetry={() => void run("testing")} />}
+      {test && <TestResult result={test} />}
       {error && (
         <p role="alert" className={errorTextClass}>
           {error}
