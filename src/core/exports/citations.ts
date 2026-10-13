@@ -46,7 +46,7 @@ interface Cluster {
   citations: Extract<Inline, { kind: "citation" }>[];
 }
 
-const isBlank = (inline: Inline | undefined) =>
+export const isBlank = (inline: Inline | undefined) =>
   inline?.kind === "text" && inline.text.trim() === "" && !inline.text.includes("\n");
 
 /** What changes still waiting do to an inline, as one key: a cluster is all one or all another (#107). */

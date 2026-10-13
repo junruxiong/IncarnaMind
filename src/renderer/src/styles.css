@@ -1357,7 +1357,7 @@
     }
   }
   .composer-problem {
-    padding: 8px 12px 0 16px;
+    padding: 8px 12px 0 11px;
     user-select: none;
   }
   .composer-row {
@@ -1366,7 +1366,8 @@
     align-items: flex-end;
     gap: 4px 8px;
     min-height: 44px;
-    padding: 8px 8px 8px 12px;
+    /* The text sits 12px inside the box: its 1px edge and 11px. */
+    padding: 8px 8px 8px 11px;
   }
   .composer-input {
     flex: 1 1 14rem;
@@ -1374,7 +1375,7 @@
     min-height: 28px;
     /* Eight lines, then it scrolls. */
     max-height: 168px;
-    padding: 4px 0 4px 4px;
+    padding: 4px 0;
     border: 0;
     outline: none;
     resize: none;
@@ -2973,8 +2974,12 @@
   }
   /* In the assistant's narrower column the choices take less room, so Deny keeps its place at their row's end. */
   .assistant-answer .approval-actions {
-    gap: 6px;
-    padding-right: 12px;
+    gap: 4px;
+    padding-right: 8px;
+  }
+  /* Deny has no frame: its padding is only its hit area, and the others need the room. */
+  .assistant-answer .approval-button--ghost {
+    padding-inline: 8px;
   }
   .assistant-answer .approval-button {
     padding: 0 10px;
@@ -4853,6 +4858,8 @@
     background: var(--color-sheet);
     container: assistant / inline-size;
     -webkit-app-region: no-drag;
+    /* The side inset of everything in it: the header's contents, the thread and the composer's box (#612). */
+    --edge: 16px;
 
     &::after {
       content: "";
@@ -4875,12 +4882,16 @@
     }
   }
   .assistant-header {
+    /* Where its first button's box starts: its icon, 6px in, sits on the edge. */
+    --header-start: calc(var(--edge) - 6px);
+
+    position: relative;
     display: flex;
     flex: none;
     align-items: center;
     gap: 2px;
     height: 36px;
-    padding: 0 4px 0 2px;
+    padding: 0 var(--header-start);
     border-bottom: 1px solid var(--color-rule);
     /* It looks movable: the move cursor, and a grip while pointed at. */
     cursor: move;
@@ -4894,9 +4905,11 @@
   .assistant:not([data-folded]) .assistant-header {
     padding-top: 1px;
   }
+  /* In the margin left of the first button, so it takes no room from the edge. */
   .assistant-grip {
-    flex: none;
-    width: 12px;
+    position: absolute;
+    left: calc(var(--header-start) - 10px);
+    width: 10px;
     height: 12px;
     color: var(--color-ink-placeholder);
     opacity: 0;
@@ -4955,14 +4968,14 @@
   }
   /* At the window's top-right corner, clear of Windows' buttons; at its top-left, of macOS's traffic lights. */
   .assistant[data-dock="right"] .assistant-header {
-    padding-right: max(4px, calc(var(--window-buttons-right) - 8px));
+    padding-right: max(var(--header-start), calc(var(--window-buttons-right) - 8px));
   }
   :root[data-title-bar="overlay"] .assistant[data-dock="right"] .assistant-rail {
     padding-top: 40px;
   }
   :root[data-title-bar="inset"]:not([data-full-screen]) .assistant[data-at-window-left] {
     .assistant-header {
-      padding-left: max(2px, calc(var(--window-buttons-left) - 8px));
+      padding-left: max(var(--header-start), calc(var(--window-buttons-left) + 6px));
     }
     .assistant-rail {
       padding-top: 40px;
@@ -5001,12 +5014,29 @@
     white-space: nowrap;
     text-overflow: ellipsis;
   }
+  /*
+   * Its scrollbar is a fixed 8px that always has its room, so the 16px edge holds
+   * whatever the system's scrollbars are: the content ends where the composer's
+   * box does, and the scrollbar sits inside that edge (#612).
+   */
   .assistant-thread {
+    --scrollbar: 8px;
+
     flex: 1 1 auto;
     min-height: 0;
-    padding: 12px 14px;
+    padding: 12px calc(var(--edge) - var(--scrollbar)) 12px var(--edge);
     overflow-y: auto;
     overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+
+    &::-webkit-scrollbar {
+      width: var(--scrollbar);
+    }
+    &::-webkit-scrollbar-thumb {
+      border: 2px solid transparent;
+      border-radius: 4px;
+      background: var(--color-rule-strong) padding-box;
+    }
   }
   .assistant-empty {
     margin: 0;
@@ -5643,7 +5673,7 @@
   /* The composer is drawn here, the panel's width: the Mind's it reads, or the one with none in focus. */
   .assistant-composer {
     flex: none;
-    padding: 0 10px 10px;
+    padding: 0 var(--edge) 10px;
 
     &:empty {
       display: none;
@@ -5851,13 +5881,19 @@
     font-weight: 400;
     opacity: 0.75;
   }
+  /* In a narrow assistant the buttons keep one row without the hint; the key stays in the button's tooltip and name. */
+  @container assistant (max-width: 360px) {
+    .approval-keys {
+      display: none;
+    }
+  }
   .assistant-no-mind {
     display: flex;
     flex: none;
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
-    margin: 0 10px 10px;
+    margin: 0 var(--edge) 10px;
     padding: 10px 12px;
     border: 1px solid var(--color-rule);
     border-radius: 10px;
@@ -5865,20 +5901,9 @@
     line-height: 20px;
     color: var(--color-ink-meta);
   }
-  /* At the bottom, the conversation and the composer keep to the Mind's column, 832px. */
+  /* At the bottom, the conversation and the composer keep to the Mind's column, 832px, which gutters the text 40px: the edge is where it starts. */
   .assistant[data-dock="bottom"] {
-    .assistant-thread {
-      padding-inline: 40px;
-    }
-    .assistant-composer {
-      padding-inline: 40px;
-    }
-    .assistant-thread > *,
-    .assistant-composer > .composer {
-      width: auto;
-      max-width: 812px;
-      margin-inline: auto;
-    }
+    --edge: max(40px, calc((100cqw - 812px) / 2));
   }
 
   /* A floating box's edges and corners resize it; its bottom-right corner also takes the keys. */

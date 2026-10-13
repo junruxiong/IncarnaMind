@@ -13,7 +13,7 @@ import { styleLabel, useCitationStylePicker } from "../citationStylePicker";
 import { shortcutLabel } from "../commands/keymap";
 import { core } from "../core";
 import { errorMessage } from "../errors";
-import { exportPreferences, FORMAT_LABELS } from "../exports";
+import { exportPreferences, FORMAT_LABELS, hasQuestionsOption } from "../exports";
 import { useT } from "../i18n";
 import { folderName } from "../linkedFolders";
 import { chooseOutputLocation } from "../outputFiles";
@@ -35,6 +35,7 @@ import { useModal } from "./useModal";
 const FORMAT_NOTES: Readonly<Record<ExportFormat, MessageKey>> = {
   docx: "export.options.docx",
   pdf: "export.options.pdf",
+  "source-pack": "export.options.source-pack",
   html: "export.options.html",
   markdown: "export.options.markdown",
 };
@@ -264,20 +265,27 @@ function ExportOptionsForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
   const hintId = useId();
   const hint = t("export.options.saveHint", { shortcut: shortcutLabel("mind.export") });
   const [draft, setDraft] = useState<ExportPreferences>(exportPreferences);
-  const [questions, setQuestions] = useState(0);
-  const [fromWord, setFromWord] = useState(false);
+  const [counts, setCounts] = useState<{
+    questions: number;
+    packCitations: number;
+    fromWord: boolean;
+  } | null>(null);
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const { format } = draft;
 
-  // How many Questions the Mind has, which a deliverable leaves out unless asked: said under its switch.
+  // How many Questions the Mind has, which a deliverable leaves out unless asked: said under its
+  // switch; and how many Citations a source pack would hold, since with none it says so.
   useEffect(() => {
     let current = true;
-    core.previewMindExport(mind.id, { format: "markdown" }).then(
+    core.previewMindExport(mind.id, { format: "source-pack" }).then(
       (preview) => {
-        if (!current) return;
-        setQuestions(preview.questions);
-        setFromWord(preview.fromWord);
+        if (current)
+          setCounts({
+            questions: preview.questions,
+            packCitations: preview.citations,
+            fromWord: preview.fromWord,
+          });
       },
       (error: unknown) => useAppStore.getState().reportError(error),
     );
@@ -301,8 +309,9 @@ function ExportOptionsForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
     }
   };
 
-  const includeQuestions = format === "markdown" || draft[format].includeQuestions;
-  const leftOut = includeQuestions ? 0 : questions;
+  const leftOut =
+    hasQuestionsOption(format) && !draft[format].includeQuestions ? (counts?.questions ?? 0) : 0;
+  const emptyPack = format === "source-pack" && counts?.packCitations === 0;
 
   return (
     <form onSubmit={(event) => void save(event)} className="flex flex-col">
@@ -353,8 +362,13 @@ function ExportOptionsForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
             <p data-testid="export-pending-note">{t("export.options.docx.pending")}</p>
           )}
         </div>
+        {emptyPack && (
+          <p data-testid="export-pack-empty" className={`-mt-1 pb-2 ${hintClass}`}>
+            {t("export.pack.empty")}
+          </p>
+        )}
 
-        {format !== "markdown" && (
+        {hasQuestionsOption(format) && (
           <div>
             <div className={rowClass}>
               <label htmlFor={questionsId} className="text-ui text-ink">
@@ -389,7 +403,7 @@ function ExportOptionsForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
         {format === "docx" && (
           <WordReviewRows
             draft={draft.docx}
-            fromWord={fromWord}
+            fromWord={counts?.fromWord ?? false}
             onChange={(docx) => setDraft({ ...draft, docx })}
           />
         )}

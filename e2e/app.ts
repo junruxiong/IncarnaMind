@@ -381,15 +381,6 @@ export type SettingsPage =
   | "agents"
   | "privacy";
 
-/** Opens the selected tab's menu, with a right-click. Returns the menu. */
-export async function tabMenu(window: Page): Promise<Locator> {
-  const tab = window.getByRole("tab", { selected: true }).first();
-  await pointAndClick(window, tab, { button: "right" });
-  const menu = tab.getByTestId("tab-actions");
-  await expect(menu).toBeVisible();
-  return menu;
-}
-
 /** Opens Settings from the sidebar, then one of the pages in its list. Returns the dialog. */
 export async function openSettings(window: Page, page: SettingsPage): Promise<Locator> {
   await window.getByRole("button", { name: "Settings" }).click();
@@ -460,6 +451,28 @@ export async function useOutputLocation(window: Page, folder: string): Promise<v
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     await bridge.setOutputLocation(path);
   }, folder);
+}
+
+/** The result line's saved file, once it says it saved one. */
+export async function savedPath(window: Page, name: string): Promise<string> {
+  const done = window.getByTestId("export-result").getByTestId("export-done");
+  await expect(done).toHaveText(`Saved ${name}`, { timeout: 30_000 });
+  return (await done.getAttribute("title")) ?? "";
+}
+
+/** The menu of the Mind's tab, opened by a right-click on the tab, as a person opens it. */
+export async function tabMenu(window: Page): Promise<Locator> {
+  const tab = window.getByRole("tab", { selected: true }).first();
+  await pointAndClick(window, tab, { button: "right" });
+  const menu = tab.getByTestId("tab-actions");
+  await expect(menu).toBeVisible();
+  return menu;
+}
+
+/** Export options…, from the tab's menu; resolves once the sheet shows `title`. */
+export async function openOptions(window: Page, title: string): Promise<void> {
+  await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.exportOptions"));
+  await expect(window.getByTestId("export-dialog").getByRole("heading")).toHaveText(title);
 }
 
 /**
