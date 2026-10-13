@@ -20,8 +20,17 @@
   .viewer-kind {
     @apply size-4 shrink-0 text-ink-meta;
   }
+  /*
+   * The name and its Tags take what the other controls leave. The name gives
+   * way first, down to 4rem; then the Tags fold into "+N" (see
+   * `useFittingChips`). The room keeps 6.25rem: that, its 4px margin, the gap
+   * and the 28px Tags button.
+   */
+  .viewer-name-area {
+    @apply flex min-w-[6.25rem] flex-1 basis-0 items-center gap-1;
+  }
   .viewer-title {
-    @apply ml-1 min-w-12 shrink truncate text-[13px] font-semibold text-ink;
+    @apply ml-1 min-w-16 shrink truncate text-[13px] font-semibold text-ink;
   }
   /* Keep open, on a preview: a small secondary button, as on the design. */
   .viewer-keep {
@@ -40,9 +49,9 @@
       @apply sr-only;
     }
   }
-  /* The Document's Tags after its name: chips while there is room, then only their button. */
+  /* The Document's Tags after its name: chips while there is room, then "+N", then only their button. */
   .viewer-tags {
-    @apply max-w-[45%];
+    @apply shrink-0;
   }
   .viewer-icon-button {
     @apply flex size-7 shrink-0 items-center justify-center rounded-md text-ink-secondary;

@@ -29,6 +29,8 @@ export const MENU_COMMANDS = {
   // In a field the menu takes them back itself, as the field's own undo (src/main/menu.ts).
   "edit.undo": { label: "menu.undo", keys: "CmdOrCtrl+Z" },
   "edit.redo": { label: "menu.redo", keys: "CmdOrCtrl+Shift+Z" },
+  // A list's own key selects its rows; anywhere else the system's Select All (src/renderer/src/commands/selection.ts).
+  "edit.selectAll": { label: "menu.selectAll", keys: "CmdOrCtrl+A" },
 } as const satisfies Record<CommandId, { label: MessageKey; keys: Keys }>;
 
 export type MenuCommandId = keyof typeof MENU_COMMANDS;

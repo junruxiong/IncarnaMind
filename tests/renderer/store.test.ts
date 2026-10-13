@@ -410,13 +410,13 @@ describe("making a Folder", () => {
   beforeEach(() => {
     useUndo.setState({ done: [], undone: [], line: null });
     useRequests.setState({ nameFolder: null });
-    useAppStore.setState({ settings: null, minds: [], selectedDocuments: new Set() });
+    useAppStore.setState({ settings: null, minds: [] });
     method("createLibraryGroup").mockResolvedValue(made);
     withNewFolder();
   });
 
   test("makes “Untitled Folder”, asks for its name in place, and one Undo removes it, one Redo brings it back", async () => {
-    await useAppStore.getState().createFolder();
+    expect(await useAppStore.getState().createFolder()).toBe("n");
     expect(method("createLibraryGroup")).toHaveBeenCalledWith({
       name: "Untitled Folder",
       description: "",
@@ -428,6 +428,16 @@ describe("making a Folder", () => {
     expect(method("deleteLibraryGroup")).toHaveBeenCalledWith("n");
     await useUndo.getState().redo();
     expect(method("restore")).toHaveBeenCalledWith([{ kind: "folder", id: "n" }]);
+  });
+
+  test("a Folder the core can't make is a problem in place, with no step to undo", async () => {
+    method("createLibraryGroup").mockRejectedValue(
+      new Error("A folder with this name already exists."),
+    );
+    expect(await useAppStore.getState().createFolder()).toBeNull();
+    expect(useUndo.getState().done).toEqual([]);
+    expect(useAppStore.getState().actionError).toContain("already exists");
+    useAppStore.getState().dismissActionError();
   });
 
   test("a name the Folders already have is numbered, and Chinese names are made in Chinese", async () => {
@@ -500,7 +510,6 @@ describe("making a Folder", () => {
         },
       ],
       library: snapshot([filed]),
-      selectedDocuments: new Set(["a", "b", "c"]),
     });
     method("moveToFolder").mockResolvedValue({
       folderId: "n",
@@ -522,8 +531,6 @@ describe("making a Folder", () => {
       folderId: "n",
     });
     expect(top()?.message).toBe("Made “Untitled Folder” with 4 items");
-    // They are in the Folder now, so they are no longer chosen.
-    expect([...useAppStore.getState().selectedDocuments]).toEqual([]);
 
     await useUndo.getState().undo();
     expect(method("moveToFolder")).toHaveBeenLastCalledWith({

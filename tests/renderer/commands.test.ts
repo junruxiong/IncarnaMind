@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from "vitest";
+import { beforeAll, describe, expect, test, vi } from "vitest";
 import { keysForm, keysLabel, keysOn, pressed } from "../../src/renderer/src/commands/keys";
 import {
   COMMAND_GROUPS,
@@ -160,6 +160,46 @@ describe("New Folder with these", () => {
     expect(saysIn(selecting(["mind", "m"], ["document", "a"]), "zh-CN")).toBe(
       "新建文件夹并放入 2 项",
     );
+  });
+
+  describe("from the keys on a row", () => {
+    const row = (kind: ObjectRef["kind"], id: string, surface: CommandContext["surface"]) => ({
+      selection: [],
+      focus: { kind, id },
+      surface,
+    });
+
+    test("act for the sidebar's selection when it holds the row, and for the row alone when not", async () => {
+      const { useSelection } = await import("../../src/renderer/src/selection");
+      const { useAppStore } = await import("../../src/renderer/src/store");
+      const createFolder = vi.fn(async () => "n");
+      useAppStore.setState({ createFolder });
+      const { choose, toggle } = useSelection.getState();
+      choose("sidebar", { kind: "document", id: "a" });
+      toggle("sidebar", { kind: "mind", id: "m" });
+      toggle("sidebar", { kind: "document", id: "b" });
+
+      expect(saysIn(row("document", "a", "sidebar") as CommandContext, "en")).toBe(
+        "New Folder with 3 items",
+      );
+      expect(saysIn(row("document", "z", "sidebar") as CommandContext, "en")).toBe(
+        "New Folder with this Document",
+      );
+      // The selection belongs to the sidebar: from the Library the row stands alone.
+      expect(saysIn(row("document", "a", "library") as CommandContext, "en")).toBe(
+        "New Folder with this Document",
+      );
+
+      await commands.run("folder.newWith", row("mind", "m", "sidebar") as CommandContext);
+      expect(createFolder).toHaveBeenCalledWith({ mindIds: ["m"], documentIds: ["a", "b"] });
+      // Once its items are in the Folder the selection is spent.
+      expect(useSelection.getState().items).toEqual([]);
+    });
+
+    test("do nothing from a place that isn't a row, or for a Folder", () => {
+      expect(offered(command(), { selection: [], focus: null, surface: "sidebar" })).toBe(false);
+      expect(offered(command(), row("folder", "f", "sidebar"))).toBe(false);
+    });
   });
 });
 

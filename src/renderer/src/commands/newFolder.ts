@@ -1,8 +1,9 @@
 import type { MessageKey } from "../../../shared/i18n";
-import { currentTabOf } from "../layoutSlice";
+import type { ObjectRef } from "../objects";
+import { selectedOn, useSelection } from "../selection";
 import { useAppStore } from "../store";
 import { type Command, type CommandContext, fromMenu } from "./registry";
-import { idsOf, targetsOf } from "./targets";
+import { targetsOf } from "./targets";
 
 const store = () => useAppStore.getState();
 
@@ -14,31 +15,21 @@ interface Chosen {
 const NOTHING: Chosen = { mindIds: [], documentIds: [] };
 const countOf = ({ mindIds, documentIds }: Chosen) => mindIds.length + documentIds.length;
 
-/** The Documents checked in the Library, while it is in front. */
-function checkedInLibrary(): string[] {
-  const { layout, selectedDocuments } = store();
-  return currentTabOf(layout)?.item.kind === "library" ? [...selectedDocuments] : [];
+/** The selection that holds the row the keys were pressed on, which they act for as a whole. */
+function heldWithFocus({ focus, surface }: CommandContext): readonly ObjectRef[] {
+  if (!focus || (surface !== "sidebar" && surface !== "library")) return [];
+  const held = selectedOn(surface);
+  return held.some((each) => each.kind === focus.kind && each.id === focus.id) ? held : [];
 }
 
-/**
- * What "New Folder with these" takes: the Documents and Minds a menu names or
- * the selection holds. Until the shared selection (#225), the Library's checked
- * Documents are the selection, and one of them stands for all.
- */
+/** What "New Folder with these" takes: the Documents and Minds a menu names, or the selection holds. */
 function chosenBy(ctx: CommandContext): Chosen {
-  const targets = targetsOf(ctx);
-  const checked = checkedInLibrary();
-  const [only] = targets;
-  if (
-    ctx.selection.length === 0 &&
-    (targets.length === 0 || (only?.kind === "document" && checked.includes(only.id)))
-  ) {
-    return { mindIds: [], documentIds: checked };
-  }
-  if (!targets.every((target) => target.kind === "mind" || target.kind === "document")) {
-    return NOTHING;
-  }
-  return { mindIds: idsOf(ctx, "mind"), documentIds: idsOf(ctx, "document") };
+  const selection = ctx.selection.length > 0 ? ctx.selection : heldWithFocus(ctx);
+  const items = selection.length > 0 ? selection : targetsOf(ctx);
+  if (!items.every((item) => item.kind === "mind" || item.kind === "document")) return NOTHING;
+  const idsOf = (kind: ObjectRef["kind"]) =>
+    items.filter((item) => item.kind === kind).map((item) => item.id);
+  return { mindIds: idsOf("mind"), documentIds: idsOf("document") };
 }
 
 function labelFor(chosen: Chosen): MessageKey {
@@ -56,7 +47,9 @@ export const newFolderCommands: readonly Command[] = [
     ...fromMenu("folder.new"),
     group: "main",
     reversible: true,
-    run: () => store().createFolder(),
+    async run() {
+      await store().createFolder();
+    },
   },
   {
     id: "folder.newWith",
@@ -64,10 +57,13 @@ export const newFolderCommands: readonly Command[] = [
       const chosen = chosenBy(ctx);
       return t(labelFor(chosen), { count: countOf(chosen) });
     },
-    shortcut: { keys: "Ctrl+Cmd+N", macOnly: true },
+    shortcut: { keys: "Ctrl+Cmd+N", macOnly: true, list: true },
     group: "move",
     reversible: true,
     when: (ctx) => countOf(chosenBy(ctx)) > 0,
-    run: (ctx) => store().createFolder(chosenBy(ctx)),
+    async run(ctx) {
+      // The selection is spent once its items are in the Folder.
+      if (await store().createFolder(chosenBy(ctx))) useSelection.getState().clear();
+    },
   },
 ];

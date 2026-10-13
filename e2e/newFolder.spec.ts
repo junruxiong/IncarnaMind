@@ -8,6 +8,7 @@ import {
   dismissChatSetup,
   documentIdOf,
   launchApp,
+  motionSettled,
   newMind,
   pointAndClick,
   removeDataFolder,
@@ -205,7 +206,7 @@ test("a blank name changes nothing, a name another Folder has is said in a line,
   }
 });
 
-test("New Folder with these puts the Documents checked in the Library in the new Folder, named in place; one ⌘Z puts them back and removes it", async () => {
+test("New Folder with these puts the Documents selected in the Library in the new Folder, named in place; one ⌘Z puts them back and removes it", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
     await setWindowSize(app, window, 1100, 700);
@@ -226,11 +227,14 @@ test("New Folder with these puts the Documents checked in the Library in the new
     await expect(window.getByTestId("folder.newWith")).toHaveText(/New Folder with 3 Documents/);
     await window.keyboard.press("Escape");
 
-    await pointAndClick(window, bar.getByTestId("library-selection-new-folder"));
+    // The selection bar's ⋯ is the selection's menu.
+    await pointAndClick(window, bar.getByTestId("document-file-menu"));
+    await expect(window.getByTestId("folder.newWith")).toHaveText(/New Folder with 3 Documents/);
+    await pointAndClick(window, window.getByTestId("folder.newWith"));
     const field = nameField(window);
     await expect(field).toBeFocused();
     await expect(field).toHaveValue("Untitled Folder");
-    // The three are in it already, as the name is typed; the Library's choice is spent.
+    // The three are in it already, as the name is typed; the selection is spent.
     const folder = window.getByTestId("library-folder").filter({ has: field });
     await expect(folder).toHaveAttribute("data-count", "3");
     await expect(bar).toHaveCount(0);
@@ -262,29 +266,113 @@ test("New Folder with these puts the Documents checked in the Library in the new
   }
 });
 
-test("⌃⌘N does the same with the checked Documents, and does nothing with none checked", async () => {
+test("⌃⌘N on a selected row does the same for the whole selection, in the sidebar and in the Library, and does nothing off a row", async () => {
   test.skip(process.platform !== "darwin", "⌃⌘N is Finder's chord, and macOS only has it");
   const { app, window } = await launchApp(dataDir);
   try {
-    await setWindowSize(app, window, 1100, 700);
+    // Wide enough for a Document opened from the Library to sit beside it.
+    await setWindowSize(app, window, 1400, 800);
     await dismissChatSetup(window);
-    await addDocuments(window, await writeTexts("Alpha", "Beta", "Gamma"));
-    await window.getByTestId("open-library").click();
-    const library = window.getByTestId("library");
-    const row = (name: string) => library.getByTestId("library-document").filter({ hasText: name });
-    // Nothing is checked, so the chord does nothing.
+    await addDocuments(window, await writeTexts("Alpha", "Beta", "Gamma", "Delta"));
+    // Off a row, the chord does nothing.
     await window.keyboard.press("Control+Meta+n");
     await expect.poll(() => folderNames(window)).toEqual([]);
-    await pointAndClick(window, row("Alpha").getByTestId("library-select"));
-    await pointAndClick(window, row("Beta").getByTestId("library-select"));
 
+    // The sidebar's selection: a click selects and opens, ⌘-click adds.
+    const sidebarRow = (name: string) =>
+      window
+        .getByTestId("sidebar")
+        .getByTestId("document-list-item")
+        .filter({ hasText: name })
+        .getByTestId("open-document");
+    await pointAndClick(window, sidebarRow("Alpha"));
+    await pointAndClick(window, sidebarRow("Beta"), { modifiers: ["ControlOrMeta"] });
     await window.keyboard.press("Control+Meta+n");
     await expect(nameField(window)).toBeFocused();
     await window.keyboard.type("Pair");
     await window.keyboard.press("Enter");
     await expect(sidebarFolder(window, "Pair")).toHaveAttribute("data-count", "2");
-    expect(await filedIn(window, ["Alpha", "Beta", "Gamma"])).toEqual(["Pair", "Pair", null]);
+    expect(await filedIn(window, ["Alpha", "Beta", "Gamma", "Delta"])).toEqual([
+      "Pair",
+      "Pair",
+      null,
+      null,
+    ]);
     await expect(undoMessage(window)).toHaveText("Made “Pair” with 2 Documents");
+
+    // The Library's rows are selected the same way.
+    await window.getByTestId("open-library").click();
+    const library = window.getByTestId("library");
+    const row = (name: string) => library.getByTestId("library-document").filter({ hasText: name });
+    await pointAndClick(window, row("Gamma").getByTestId("library-document-name"));
+    await pointAndClick(window, row("Delta").getByTestId("library-document-name"), {
+      modifiers: ["ControlOrMeta"],
+    });
+    await expect(library.getByTestId("library-selection")).toContainText("2 selected");
+    await row("Delta").locator("[data-row-main]").focus();
+    await window.keyboard.press("Control+Meta+n");
+    await expect(nameField(window)).toBeFocused();
+    await window.keyboard.press("Enter");
+    expect(await filedIn(window, ["Alpha", "Beta", "Gamma", "Delta"])).toEqual([
+      "Pair",
+      "Pair",
+      "Untitled Folder",
+      "Untitled Folder",
+    ]);
+  } finally {
+    await app.close();
+  }
+});
+
+test("a sidebar selection of Documents and a Mind makes one Folder with all of them by the right-click menu; one ⌘Z puts each back", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1100, 700);
+    await dismissChatSetup(window);
+    await addDocuments(window, await writeTexts("Alpha", "Beta", "Gamma"));
+    await newMind(window);
+    await window.getByTestId("mind-title").fill("Plan");
+    const sidebar = window.getByTestId("sidebar");
+    const documentRow = (name: string) =>
+      sidebar
+        .getByTestId("document-list-item")
+        .filter({ hasText: name })
+        .getByTestId("open-document");
+    const mind = sidebar.getByTestId("mind-row").filter({ hasText: "Plan" });
+    await pointAndClick(window, documentRow("Alpha"));
+    await pointAndClick(window, documentRow("Beta"), { modifiers: ["ControlOrMeta"] });
+    await pointAndClick(window, mind.getByTestId("mind-list-item"), {
+      modifiers: ["ControlOrMeta"],
+    });
+    await expect(window.getByTestId("sidebar-selection")).toContainText("3 selected");
+
+    // A selected row's menu is for the selection, whatever kinds are in it.
+    await pointAndClick(window, documentRow("Beta"), { button: "right" });
+    const entry = window.getByTestId("folder.newWith");
+    await expect(entry).toHaveText(/New Folder with 3 items/);
+    await pointAndClick(window, entry);
+    await expect(nameField(window)).toBeFocused();
+    await window.keyboard.type("Mixed");
+    await window.keyboard.press("Enter");
+    await expect(sidebarFolder(window, "Mixed")).toHaveAttribute("data-count", "2");
+    await expect(sidebarFolder(window, "Mixed")).toHaveAttribute("data-minds", "1");
+    expect(await filedIn(window, ["Alpha", "Beta", "Gamma"])).toEqual(["Mixed", "Mixed", null]);
+    await expect(undoMessage(window)).toHaveText("Made “Mixed” with 3 items");
+    // The selection is spent once its items are in the Folder.
+    await expect(window.getByTestId("sidebar-selection")).toHaveText("");
+
+    await window.keyboard.press("ControlOrMeta+z");
+    await expect(sidebarFolder(window, "Mixed")).toHaveCount(0);
+    expect(await filedIn(window, ["Alpha", "Beta", "Gamma"])).toEqual([null, null, null]);
+    const mindFolders = await (await coreOf(window)).evaluate(async (core) =>
+      (await core.listMinds()).map((each) => each.folderId),
+    );
+    expect(mindFolders).toEqual([null]);
+
+    // An unselected row's menu is for that row alone.
+    await pointAndClick(window, documentRow("Gamma"), { button: "right" });
+    await expect(window.getByTestId("folder.newWith")).toHaveText(/New Folder with this Document/);
+    await window.keyboard.press("Escape");
   } finally {
     await app.close();
   }
@@ -341,7 +429,7 @@ test("in Chinese: “未命名文件夹”, a name typed through an input method
     await expect(window.getByTestId("plus-new-folder")).toContainText("新建文件夹");
     await window.keyboard.press("Escape");
 
-    // With the Documents checked in the Library, in Chinese too.
+    // With the Documents selected in the Library, in Chinese too.
     await addDocuments(window, await writeTexts("甲", "乙"));
     await window.getByTestId("open-library").click();
     const library = window.getByTestId("library");
@@ -355,10 +443,11 @@ test("in Chinese: “未命名文件夹”, a name typed through an input method
       );
     }
     const bar = library.getByTestId("library-selection");
-    await expect(bar.getByTestId("library-selection-new-folder")).toHaveText(
-      "新建文件夹并放入所选项目",
+    await pointAndClick(window, bar.getByTestId("document-file-menu"));
+    await expect(window.getByTestId("folder.newWith")).toHaveText(
+      /^新建文件夹并放入 2 个文档(⌃⌘N)?$/,
     );
-    await pointAndClick(window, bar.getByTestId("library-selection-new-folder"));
+    await pointAndClick(window, window.getByTestId("folder.newWith"));
     await expect(field).toBeFocused();
     await expect(field).toHaveValue("未命名文件夹");
     await window.keyboard.press("Enter");
@@ -448,7 +537,7 @@ for (const { width, language } of [
   { width: 900, language: "zh-CN" },
   { width: 1600, language: "zh-CN" },
 ] as const) {
-  test(`the name field and the selection bar hold at ${width}px, in ${language === "en" ? "English" : "Chinese"}`, async () => {
+  test(`the name field and the selection menu hold at ${width}px, in ${language === "en" ? "English" : "Chinese"}`, async () => {
     const { app, window } = await launchApp(dataDir);
     try {
       await setWindowSize(app, window, width, 760);
@@ -485,15 +574,18 @@ for (const { width, language } of [
         );
       }
       const bar = library.getByTestId("library-selection");
-      const button = bar.getByTestId("library-selection-new-folder");
-      await expect(button).toHaveText(
-        language === "en" ? "New Folder with these" : "新建文件夹并放入所选项目",
+      await pointAndClick(window, bar.getByTestId("document-file-menu"));
+      const entry = window.getByTestId("folder.newWith");
+      await expect(entry).toHaveText(
+        language === "en"
+          ? /^New Folder with 2 Documents(⌃⌘N)?$/
+          : /^新建文件夹并放入 2 个文档(⌃⌘N)?$/,
       );
-      // Nothing sticks out of the bar, and the label stays on one line.
-      await inside(bar.getByTestId("library-selection-clear"), bar);
-      const box = await button.boundingBox();
+      const box = await entry.boundingBox();
       expect(box?.height).toBeLessThan(40);
-      await pointAndClick(window, button);
+      await motionSettled(window);
+      await screenshot(window, `new-folder-selection-menu-${language}-${width}`);
+      await pointAndClick(window, entry);
       await expect(field).toBeFocused();
       await inside(field, sidebar);
       await screenshot(window, `new-folder-with-these-${language}-${width}`);

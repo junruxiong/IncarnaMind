@@ -122,11 +122,31 @@ export const child = (node: XmlElement, name: string): XmlElement | undefined =>
 
 /** Every descendant element with this name, in document order. */
 export function descendants(node: XmlElement, name: string, into: XmlElement[] = []): XmlElement[] {
-  for (const element of elements(node)) {
-    if (is(element, name)) into.push(element);
-    descendants(element, name, into);
-  }
+  for (const element of walk(node)) if (is(element, name)) into.push(element);
   return into;
+}
+
+/**
+ * Every element under a node, in document order, not going inside those
+ * `inside` refuses. A stack, not recursion: a file can nest thousands deep (a
+ * table in a cell of a table…).
+ */
+export function* walk(
+  node: XmlElement,
+  inside: (element: XmlElement) => boolean = () => true,
+): Generator<XmlElement> {
+  const stack: XmlElement[] = [];
+  const enter = (parent: XmlElement) => {
+    const children = elements(parent);
+    for (let index = children.length - 1; index >= 0; index--) {
+      stack.push(children[index] as XmlElement);
+    }
+  };
+  enter(node);
+  for (let element = stack.pop(); element; element = stack.pop()) {
+    yield element;
+    if (inside(element)) enter(element);
+  }
 }
 
 /** All the text under a node, joined. */
