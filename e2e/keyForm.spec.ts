@@ -67,6 +67,11 @@ test("at 900px high the key form shows provider, key, Model and its button witho
       await expect(form.getByTestId("provider-key-link")).toBeVisible();
       await expect(form.getByTestId("provider-use-key")).toBeInViewport({ ratio: 1 });
       await expect(form.getByTestId("provider-model")).toBeInViewport({ ratio: 1 });
+      if (process.env.INCARNAMIND_SCREENSHOTS) {
+        await window.screenshot({
+          path: `${process.env.INCARNAMIND_SCREENSHOTS}/key-form-900-${value}.png`,
+        });
+      }
     }
   } finally {
     await app.close();
