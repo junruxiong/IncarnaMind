@@ -61,12 +61,12 @@ const NO_ROOM_FOR_RESULT =
 const CUT_RESULT = "\n…(the rest doesn't fit in your context)";
 
 /**
- * The request's Question context, fitted, and its estimated size, and how much
- * of the Mind read with the Question it kept when that had to be cut; or why
- * it can't fit.
+ * The request's Question context, fitted, and its estimated size, and the
+ * share of the Mind read with the Question it kept when that had to be cut
+ * (0: none of it); or why it can't fit.
  */
 export type Fitted =
-  | { ok: true; messages: AnswerMessage[]; estimated: number; mindCut?: "part" | "none" }
+  | { ok: true; messages: AnswerMessage[]; estimated: number; mindCut?: number }
   | { ok: false; error: ProviderError };
 
 export interface FitRequest {
@@ -176,28 +176,22 @@ export function createWindowBudget(
         return { ok: false, error: tooLong(fixed + question + window.outputTokens) };
       const forContext = Math.max(question, room - (request.reserve ?? 0));
       const overhead = MESSAGE_TOKENS * request.messages.length;
-      const given = request.mind;
-      let mindCut: "part" | "none" | undefined;
-      const mind = given && {
-        text: given.text,
-        cut: (tokens: number) => {
-          const text = given.cut(tokens);
-          mindCut = text ? "part" : "none";
-          return text;
-        },
-      };
+      let mindCut: number | undefined;
       const messages = fitQuestionContext(
         request.messages,
         request.question,
         Math.floor((forContext - overhead) / current),
-        mind,
+        request.mind,
+        (kept) => {
+          mindCut = kept.text ? kept.share : 0;
+        },
       );
       if (!messages) return { ok: false, error: tooLong(fixed + question + window.outputTokens) };
       return {
         ok: true,
         messages,
         estimated: fixed + messagesTokens(messages),
-        ...(mindCut && { mindCut }),
+        ...(mindCut !== undefined && { mindCut }),
       };
     },
 
