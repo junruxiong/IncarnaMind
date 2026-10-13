@@ -47,7 +47,7 @@ import {
 export interface ClaimCheckDependencies {
   engine: AnswerEngine;
   evidence: Pick<Evidence, "search">;
-  documents: Pick<AnswerDocuments, "citationSource" | "pageTexts"> & {
+  documents: Pick<AnswerDocuments, "citationSource" | "pageTexts" | "documentDate"> & {
     searchableCount(documentIds: readonly string[] | null): number;
     searchableLanguages(documentIds: readonly string[] | null): DocumentLanguage[];
   };
@@ -105,6 +105,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       citationSource: (passageId) => deps.documents.citationSource(passageId),
       pageTexts: (documentId, contentHash, from, to) =>
         deps.documents.pageTexts(documentId, contentHash, from, to),
+      documentDate: (documentId) => deps.documents.documentDate(documentId),
     };
     const session = createCitationSession(scoped, { onRecord: () => undefined });
     const tools: AnswerTools = {

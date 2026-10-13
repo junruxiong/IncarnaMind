@@ -7,6 +7,7 @@ import type { Document, DocumentGroupAssignment, LibraryGroup } from "../../core
 import type { Language } from "../../core/language";
 import { displayName } from "../../shared/documentNames";
 import type { MessageKey, MessageParams } from "../../shared/i18n";
+import { modelName } from "../../shared/modelName";
 import { type LibraryFacet, type LibraryStatus, libraryStatus } from "./libraryFilters";
 
 type Translate = (key: MessageKey, params?: MessageParams) => string;
@@ -189,7 +190,11 @@ export function organizeModel(
         : model.reason === "unavailable"
           ? "library.route.unavailable"
           : null;
-  return [model.id, t(model.images ? "library.usedPages" : "library.usedText"), route && t(route)]
+  return [
+    modelName(model.id),
+    t(model.images ? "library.usedPages" : "library.usedText"),
+    route && t(route),
+  ]
     .filter(Boolean)
     .join(" · ");
 }
