@@ -839,7 +839,8 @@ export function createLayouts(deps: LayoutDependencies) {
       const id = parseWindowId(windowId);
       const change = parseLayoutChange(input);
       if (change.type === "open" && change.item.kind === "mind") {
-        if (!deps.mindExists(change.item.mindId)) throw new NotFoundError("That Mind isn't there.");
+        if (!deps.mindExists(change.item.mindId))
+          throw new NotFoundError({ key: "error.mind.notFound" });
       }
       const state = stateOf(id);
       state.apply(change, exists);
