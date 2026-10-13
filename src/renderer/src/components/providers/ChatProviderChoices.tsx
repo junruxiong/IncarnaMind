@@ -2,6 +2,7 @@ import { type ReactNode, useId } from "react";
 import type { ChatProvider, ChatProviderKind } from "../../../../core/api";
 import { keyProviderGroups } from "../../../../core/providers/catalog/providers";
 import { useT } from "../../i18n";
+import { OnThisComputer } from "../OnThisComputer";
 import {
   buttonStyle,
   choiceListClass,
@@ -100,9 +101,9 @@ export function ChatProviderChoices(props: ChatProviderChoicesProps) {
         <span className="flex min-w-0 flex-col gap-1">
           <span className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
             <span className={choiceTitleClass}>{t("providers.ollama.title")}</span>
-            <span className="text-label font-semibold text-success">
+            <OnThisComputer className="text-label font-semibold">
               {t("providers.choice.local")}
-            </span>
+            </OnThisComputer>
           </span>
           <span data-testid="ollama-status" className={choiceTextClass}>
             {ollamaDescription(ollama, t)}

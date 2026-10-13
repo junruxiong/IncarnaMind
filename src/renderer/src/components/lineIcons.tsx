@@ -297,6 +297,16 @@ export function SidebarLineIcon(props: IconProps) {
   );
 }
 
+/** This computer, for what stays on it: a laptop. */
+export function ComputerLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <rect x="4.5" y="5" width="15" height="10.5" rx="1.75" />
+      <path d="M2.75 19h18.5" />
+    </LineIcon>
+  );
+}
+
 /** Recording a meeting, as an action ("Record a meeting", "Start recording"): a ring and a dot. */
 export function RecordingLineIcon(props: IconProps) {
   return (
