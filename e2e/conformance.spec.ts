@@ -644,8 +644,13 @@ const STAGES: Record<Staged, Stage> = {
       }),
     async show({ window }, key) {
       await pointAndClick(window, window.getByTestId("open-library"));
-      await pointAndClick(window, window.getByTestId("library-recently-deleted"));
-      await expect(window.getByTestId("recently-deleted")).toBeVisible();
+      // Recently deleted is a folded section at the foot of the Library's page.
+      const heading = window.getByTestId("deleted-heading");
+      await expect(heading).toBeVisible();
+      if ((await heading.getAttribute("aria-expanded")) !== "true") {
+        await pointAndClick(window, heading);
+      }
+      await expect(heading).toHaveAttribute("aria-expanded", "true");
       return key;
     },
   },
