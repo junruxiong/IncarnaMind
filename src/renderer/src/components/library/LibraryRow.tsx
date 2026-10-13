@@ -4,7 +4,8 @@ import { displayName, sourceOf } from "../../../../shared/documentNames";
 import { missingDetails } from "../../../../shared/references";
 import { useLanguage, useT } from "../../i18n";
 import { FORMAT_LABELS } from "../../libraryFilters";
-import { addedLabel } from "../../libraryPage";
+import { addedLabel, foundLine, type SearchMatch } from "../../libraryPage";
+import { atPassage, passagePlace } from "../../palette";
 import { missingList } from "../../referenceEditing";
 import { useSelectable } from "../../selection";
 import { useAppStore } from "../../store";
@@ -15,7 +16,8 @@ import { CiteAsPanel } from "../CiteAsPanel";
 import { DocumentStatusLabel } from "../DocumentsSection";
 import { InlineName } from "../InlineName";
 import { LibrarySelectBox } from "../LibrarySelection";
-import { DocumentLineIcon } from "../lineIcons";
+import { DocumentLineIcon, FolderLineIcon } from "../lineIcons";
+import { Marked } from "../Marked";
 import { ObjectMenu, useObjectMenu } from "../ObjectMenu";
 import { rowActionButtonClass } from "../sidebarRows";
 import { ReviewRing } from "../TagColour";
@@ -82,12 +84,18 @@ export const LibraryRow = memo(function LibraryRow({
   doc,
   suggestedIn,
   notSorted,
+  match,
+  path,
 }: {
   doc: Document;
   /** The Suggested Folder it waits in, if Organize suggested one. */
   suggestedIn: string | null;
   /** Why Organize couldn't sort it, if it couldn't. */
   notSorted: string | null;
+  /** How it matches the search, while there is one. */
+  match: SearchMatch | null;
+  /** Its Folder, shown under it while searching. */
+  path: string | null;
 }) {
   const t = useT();
   const language = useLanguage();
@@ -98,11 +106,14 @@ export const LibraryRow = memo(function LibraryRow({
   const citeToggle = useRef<HTMLButtonElement>(null);
   const citePanelId = useId();
   const objectMenu = useObjectMenu({ kind: "document", id: doc.id });
+  const inside = match?.text ?? null;
+  const foundAt = inside ? passagePlace(doc.kind, inside, t) : "";
+  const line = inside ? foundLine(inside) : null;
   const select = useSelectable({ kind: "document", id: doc.id }, "library", () =>
     useAppStore
       .getState()
       .openDocument(
-        { documentId: doc.id },
+        { documentId: doc.id, ...(inside && atPassage(inside)) },
         { as: "library", ...(place && { from: place.groupId }) },
       ),
   );
@@ -152,65 +163,92 @@ export const LibraryRow = memo(function LibraryRow({
       <div className="flex min-h-[39px] items-center gap-4 pr-1.5 pl-3">
         <div className="flex min-w-0 flex-1 items-center">
           <span aria-hidden="true" className="w-5 shrink-0" />
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            {rename.renaming ? (
-              <span className="flex min-w-0 flex-1 items-center gap-2">
-                <DocumentLineIcon kind={doc.kind} className="size-4 shrink-0 text-ink-meta" />
-                <InlineName
-                  value={doc.name}
-                  label={t("documents.renameLabel", { name: doc.name })}
-                  {...rename.field((next) => renameDocument(doc.id, next))}
-                />
+          <div className={`min-w-0 flex-1 ${match ? "py-1.5" : ""}`}>
+            <div className="flex min-w-0 items-center gap-2">
+              {rename.renaming ? (
+                <span className="flex min-w-0 flex-1 items-center gap-2">
+                  <DocumentLineIcon kind={doc.kind} className="size-4 shrink-0 text-ink-meta" />
+                  <InlineName
+                    value={doc.name}
+                    label={t("documents.renameLabel", { name: doc.name })}
+                    {...rename.field((next) => renameDocument(doc.id, next))}
+                  />
+                </span>
+              ) : (
+                <button
+                  {...rename.nameProps}
+                  type="button"
+                  {...TREE_ROW}
+                  data-row-main=""
+                  title={name === source ? name : `${name}\n${source}`}
+                  className="flex min-w-0 items-center gap-2 text-left focus-visible:outline-0"
+                >
+                  <DocumentLineIcon kind={doc.kind} className="size-4 shrink-0 text-ink-meta" />
+                  <span
+                    data-testid="library-document-name"
+                    className="min-w-0 truncate text-ui text-ink"
+                  >
+                    {match ? <Marked text={name} ranges={match.ranges} /> : name}
+                  </span>
+                </button>
+              )}
+              {foundAt && (
+                <span
+                  data-testid="library-found-place"
+                  className="shrink-0 text-[12px] text-ink-meta"
+                >
+                  {foundAt}
+                </span>
+              )}
+              <span className="contents">
+                <DocumentStatusLabel item={doc} />
+                {notSorted !== null && (
+                  <span
+                    data-testid="library-not-sorted"
+                    title={t("library.notSorted.title", { reason: notSorted })}
+                    className="shrink-0 text-label font-semibold text-ink-meta"
+                  >
+                    {t("library.notSorted")}
+                  </span>
+                )}
+                {suggestedIn !== null && (
+                  <span
+                    data-testid="library-suggested"
+                    title={t("library.suggested.title", { folder: suggestedIn })}
+                    className="inline-flex shrink-0 items-center gap-1 text-label font-semibold text-review"
+                  >
+                    <ReviewRing />
+                    {t("library.suggested")}
+                  </span>
+                )}
               </span>
-            ) : (
-              <button
-                {...rename.nameProps}
-                type="button"
-                {...TREE_ROW}
-                data-row-main=""
-                title={name === source ? name : `${name}\n${source}`}
-                className="flex min-w-0 items-center gap-2 text-left focus-visible:outline-0"
+              {doc.reference && !rename.renaming && (
+                <CiteAsToggle
+                  ref={citeToggle}
+                  document={doc}
+                  record={doc.reference}
+                  panelId={citePanelId}
+                  open={citing !== null}
+                  onToggle={(focus) => setCiting(citing === null ? { focus } : null)}
+                />
+              )}
+            </div>
+            {line && (
+              <p
+                data-testid="library-found-text"
+                className="truncate pl-6 text-[13px] leading-5 text-ink-secondary"
               >
-                <DocumentLineIcon kind={doc.kind} className="size-4 shrink-0 text-ink-meta" />
-                <span
-                  data-testid="library-document-name"
-                  className="min-w-0 truncate text-ui text-ink"
-                >
-                  {name}
-                </span>
-              </button>
+                <Marked text={line.text} ranges={line.ranges} />
+              </p>
             )}
-            <span className="contents">
-              <DocumentStatusLabel item={doc} />
-              {notSorted !== null && (
-                <span
-                  data-testid="library-not-sorted"
-                  title={t("library.notSorted.title", { reason: notSorted })}
-                  className="shrink-0 text-label font-semibold text-ink-meta"
-                >
-                  {t("library.notSorted")}
-                </span>
-              )}
-              {suggestedIn !== null && (
-                <span
-                  data-testid="library-suggested"
-                  title={t("library.suggested.title", { folder: suggestedIn })}
-                  className="inline-flex shrink-0 items-center gap-1 text-label font-semibold text-review"
-                >
-                  <ReviewRing />
-                  {t("library.suggested")}
-                </span>
-              )}
-            </span>
-            {doc.reference && !rename.renaming && (
-              <CiteAsToggle
-                ref={citeToggle}
-                document={doc}
-                record={doc.reference}
-                panelId={citePanelId}
-                open={citing !== null}
-                onToggle={(focus) => setCiting(citing === null ? { focus } : null)}
-              />
+            {path !== null && (
+              <p
+                data-testid="library-path"
+                className="flex min-w-0 items-center gap-1 pl-6 text-[12px] leading-4 text-ink-meta"
+              >
+                <FolderLineIcon className="size-3 shrink-0" />
+                <span className="truncate">{path}</span>
+              </p>
             )}
           </div>
         </div>

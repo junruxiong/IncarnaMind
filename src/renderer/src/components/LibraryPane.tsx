@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { Document, LibraryGroup } from "../../../core/api";
 import { LIBRARY_DELETED } from "../deletedItems";
+import { errorMessage } from "../errors";
 import { useFindSources } from "../findSources";
 import { useLanguage, useT } from "../i18n";
 import {
@@ -18,15 +19,16 @@ import {
 import { useLibraryFolds } from "../libraryFolds";
 import {
   folderFacet,
-  matchesSearch,
   NOT_IN_A_FOLDER,
   problemOf,
   problemText,
   RECENTLY_DELETED,
-  searchWords,
+  searchMatches,
   sectionShows,
   sectionsOf,
 } from "../libraryPage";
+import { useTextSearch } from "../libraryTextSearch";
+import { queryWords } from "../matcher";
 import { useDeleted } from "../recentlyDeleted";
 import { extendThroughRows, useSelection, useSelectionOrder } from "../selection";
 import { DEFAULT_SORT, sorted } from "../sort";
@@ -99,12 +101,22 @@ export function LibraryPane() {
     () => (tagFilter.length ? { ...facetFilter, tag: tagFilter } : facetFilter),
     [facetFilter, tagFilter],
   );
-  const words = useMemo(() => searchWords(search), [search]);
-  const found = useMemo(() => {
-    if (words.length === 0) return documents;
-    const tagNames = new Map(tags.map((tag) => [tag.id, tag.name]));
-    return documents.filter((doc) => matchesSearch(doc, words, tagNames));
-  }, [documents, words, tags]);
+  const words = useMemo(() => queryWords(search), [search]);
+  const inside = useTextSearch(search);
+  const matches = useMemo(
+    () =>
+      searchMatches(
+        documents,
+        words,
+        new Map(tags.map((tag) => [tag.id, tag.name])),
+        inside.matches,
+      ),
+    [documents, words, tags, inside.matches],
+  );
+  const found = useMemo(
+    () => (matches ? documents.filter((doc) => matches.has(doc.id)) : documents),
+    [documents, matches],
+  );
   const { shown: filtered, options } = useMemo(
     () => filterLibrary<Document>(found, facets, selection),
     [found, facets, selection],
@@ -273,12 +285,27 @@ export function LibraryPane() {
                     key={section.key}
                     section={section}
                     narrowing={narrowing}
+                    matches={matches}
                     suggestedOf={suggestedOf}
                     notSortedOf={notSortedOf}
                   />
                 ))}
               </div>
-              {narrowing && sections.length === 0 && (
+              {inside.failure && (
+                <ProblemLine
+                  role="alert"
+                  testId="library-inside-failed"
+                  className="mt-4"
+                  action={{
+                    label: t("library.inside.retry"),
+                    testId: "library-inside-retry",
+                    onClick: inside.retry,
+                  }}
+                >
+                  {t("library.inside.failed", { reason: errorMessage(inside.failure.error, t) })}
+                </ProblemLine>
+              )}
+              {narrowing && sections.length === 0 && !inside.waiting && (
                 <ProblemLine
                   role="status"
                   testId="library-no-match"
