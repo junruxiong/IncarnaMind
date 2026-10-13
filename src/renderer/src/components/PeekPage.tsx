@@ -8,6 +8,9 @@ import { DocumentLineIcon } from "./lineIcons";
 
 /** The well a peek draws the Document's first page in: the card's width less its padding, and the height the design has. */
 const WELL_PX = { width: PEEK_WIDTH - 2 * PEEK_PADDING, height: 150 } as const;
+/** The page sits this far in from the well's edges, on its own sheet. */
+const INSET_PX = 10;
+const PAGE_PX = { width: WELL_PX.width - 2 * INSET_PX, height: WELL_PX.height - 2 * INSET_PX };
 
 /**
  * The width each kind is laid out at before it is scaled down to the well: a
@@ -36,7 +39,7 @@ export function PeekPage({ document, settled }: { document: Document; settled: b
   const t = useT();
   const fileState = fileStatusLabel(document.fileStatus);
   const laidOutAt = LAID_OUT_AT[document.kind];
-  const scale = WELL_PX.width / laidOutAt;
+  const scale = PAGE_PX.width / laidOutAt;
   const target = useMemo(() => ({ documentId: document.id, request: 1 }), [document.id]);
   const large = !peekDraws(document);
   return (
@@ -62,18 +65,23 @@ export function PeekPage({ document, settled }: { document: Document; settled: b
       ) : (
         settled && (
           <div
-            inert
-            aria-hidden="true"
-            className="peek-view viewer-pane absolute top-0 left-0 flex origin-top-left flex-col overflow-hidden"
-            style={{
-              width: laidOutAt,
-              height: WELL_PX.height / scale,
-              transform: `scale(${scale})`,
-            }}
+            className="absolute overflow-hidden bg-sheet shadow-[0_0_0_1px_var(--color-rule)]"
+            style={{ left: INSET_PX, top: INSET_PX, width: PAGE_PX.width, height: PAGE_PX.height }}
           >
-            <Suspense fallback={null}>
-              <DocumentView key={document.contentHash} document={document} target={target} />
-            </Suspense>
+            <div
+              inert
+              aria-hidden="true"
+              className="peek-view viewer-pane absolute top-0 left-0 flex origin-top-left flex-col overflow-hidden"
+              style={{
+                width: laidOutAt,
+                height: PAGE_PX.height / scale,
+                transform: `scale(${scale})`,
+              }}
+            >
+              <Suspense fallback={null}>
+                <DocumentView key={document.contentHash} document={document} target={target} />
+              </Suspense>
+            </div>
           </div>
         )
       )}

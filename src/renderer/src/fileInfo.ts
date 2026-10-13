@@ -49,8 +49,11 @@ export function fileDate(value: string, language: Language): string {
 }
 
 /** When something was added, as the day it was on this computer. */
-export const addedDate = (iso: string, language: Language): string =>
-  new Intl.DateTimeFormat(language, { dateStyle: "long" }).format(new Date(iso));
+export const addedDate = (
+  iso: string,
+  language: Language,
+  dateStyle: "long" | "medium" = "long",
+): string => new Intl.DateTimeFormat(language, { dateStyle }).format(new Date(iso));
 
 /** A deck's slides or a workbook's sheets, which the Document itself doesn't hold (only a PDF's pages). */
 export interface UnitCount {
