@@ -865,12 +865,13 @@ export function createCore(adapters: CoreAdapters): Core {
     query: string,
     documentIds: readonly string[] | null,
     signal?: AbortSignal,
-    { rerank: reranking = true }: AnswerSearchOptions = {},
+    { rerank: reranking = true, parameters }: AnswerSearchOptions = {},
   ) => {
     const options = {
       signal,
       rerank: reranking ? (adapters.reranker ?? rerank.active()) : undefined,
       documentIds: documentIds ?? undefined,
+      ...(parameters && { parameters }),
     };
     const tuning = adapters.answerSearch;
     return tuning
