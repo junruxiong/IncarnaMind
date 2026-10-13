@@ -12,6 +12,7 @@ import { errorTextClass } from "../ui";
  * default chat model.
  */
 export function useOllama(onSaved: (provider: ChatProvider) => void) {
+  const t = useT();
   const [status, setStatus] = useState<OllamaStatus | null>(null);
   const [pulling, setPulling] = useState(false);
   const [progress, setProgress] = useState<OllamaPullProgress | null>(null);
@@ -39,7 +40,7 @@ export function useOllama(onSaved: (provider: ChatProvider) => void) {
     try {
       onSaved(await core.selectOllama());
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     } finally {
       setPulling(false);
     }

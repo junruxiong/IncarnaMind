@@ -57,6 +57,8 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | quote (of a Citation) | 引文 | "已在第 3 页找到引文", "未找到引文". |
 | Quote (block) | 引述 | The "/" menu's block for quoted text; not a Citation (引用) or its quote (引文). |
 | Location | 位置 | "第 3 页", "第 2 张幻灯片", "第 4–6 行", "§ 标题", a web page's "§ 历史，第 3 段". |
+| Cited page | 引用页面 | The saved picture of what a Citation points at: "打开引用页面". |
+| Source pack | PDF 引用页面合集 | The export of a Mind's cited pages. The name starts with PDF so that "导出为 {format}" keeps its space between Latin and Chinese. |
 | Footnote | 脚注 | As Word, WPS and Feishu. "插入脚注", "脚注 3". |
 | Reference record | 引用信息 | The "Cite as" panel's title too. Its fields: 类型、标题、作者、日期、期刊（出处）、卷、期、页码、出版者、DOI、网址、语言. |
 | Needs details (a reference record) | 信息待补充 | |
@@ -94,6 +96,10 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Unsupported | 无依据 | |
 | Contradicted | 与文档矛盾 | |
 | Needs re-check | 需重新核对 | |
+| Not checked | 未核对 | A claim that wasn't checked: the model declined, its reply couldn't be read, or a limit stopped the run ("未核对：已达花费上限"). |
+| Claim | 说法 | What a check looks at, in an Answer, a Mind or a document someone else wrote. Counted with 条: "核对 24 条说法". Not 论断, an argued conclusion, or 主张, a party's claim in law: neither fits a sentence in a contract or a site report. |
+| Verify (a document) | 核对文档 | The verb is 核对, as for a Citation. |
+| Need a look | 需要留意 | The claims that are unsupported or contradicted: "3 条需要留意". |
 | Mark | 标记 | |
 | Run | 运行 | |
 | Task | 任务 | |

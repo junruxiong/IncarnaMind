@@ -24,8 +24,10 @@ import {
   problemText,
   RECENTLY_DELETED,
   searchWords,
+  sectionShows,
   sectionsOf,
 } from "../libraryPage";
+import { useDeleted } from "../recentlyDeleted";
 import { extendThroughRows, useSelection, useSelectionOrder } from "../selection";
 import { DEFAULT_SORT, sorted } from "../sort";
 import { sortOf, useSort } from "../sortChoices";
@@ -166,7 +168,17 @@ export function LibraryPane() {
           : request;
     setSearch("");
     setFacetFilter({});
-    useLibraryFolds.getState().reveal(key);
+    const { documents, library, setTagFilter } = useAppStore.getState();
+    setTagFilter([]);
+    const shows = sectionShows(
+      key,
+      documents,
+      library?.groups ?? [],
+      library?.assignments ?? [],
+      useDeleted.getState().items?.length ?? null,
+    );
+    // A section that isn't there would be scrolled to whenever it appeared later.
+    if (shows) useLibraryFolds.getState().reveal(key);
     useAppStore.setState({ libraryFilter: "all" });
   }, [request]);
 

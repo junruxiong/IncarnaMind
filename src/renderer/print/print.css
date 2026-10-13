@@ -333,3 +333,83 @@ img {
   padding-left: 2em;
   text-indent: -2em;
 }
+
+/* The source pack (#134): a cover list, then a sheet for each cited page, its quotes washed as the viewer washes a found quote. */
+.pack-caption {
+  margin-bottom: 12pt;
+  font-family: var(--sans);
+  font-size: 10pt;
+  color: var(--ink-meta);
+}
+
+.pack-list td.pack-number,
+.pack-list td.pack-ref {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+  font-family: var(--sans);
+  font-variant-numeric: tabular-nums;
+}
+
+.pack-title {
+  margin: 0 0 8pt;
+  font-size: 12pt;
+}
+
+.pack-numbers,
+.pack-badge {
+  display: inline-block;
+  min-width: 14pt;
+  padding: 0 3pt;
+  box-sizing: border-box;
+  border-radius: 3pt;
+  background: #dcf3e4;
+  color: #166534;
+  font-family: var(--sans);
+  font-size: 8.5pt;
+  font-weight: 700;
+  line-height: 13pt;
+  text-align: center;
+}
+
+.pack-frame {
+  position: relative;
+  width: min(100%, calc(var(--pack-height) * var(--ratio)), calc(var(--pixels) * 1px));
+  outline: 0.75pt solid var(--rule-strong);
+}
+
+.pack-frame img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: none;
+  max-height: none;
+}
+
+.pack-mark {
+  position: absolute;
+  background: #dcf3e4;
+  mix-blend-mode: multiply;
+  box-shadow: 0 0 0 0.5pt #166534;
+}
+
+.pack-frame .pack-badge {
+  position: absolute;
+  right: 100%;
+  margin-right: 3pt;
+}
+
+.pack-note {
+  margin: 6pt 0 0;
+  font-family: var(--sans);
+  font-size: 9.5pt;
+  color: var(--ink-meta);
+}
+
+.pack-problem {
+  color: var(--warning);
+}
+
+.pack-quote {
+  margin: 8pt 0 0;
+}
