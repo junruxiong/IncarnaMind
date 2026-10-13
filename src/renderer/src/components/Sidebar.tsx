@@ -21,6 +21,7 @@ import {
   PlusLineIcon,
   RecordingLineIcon,
   SettingsLineIcon,
+  VerifyLineIcon,
 } from "./lineIcons";
 import { SidebarSelection } from "./SidebarSelection";
 import { SidebarStatus } from "./SidebarStatus";
@@ -136,7 +137,8 @@ function pasteLinks(event: ClipboardEvent<HTMLElement>) {
 
 /**
  * The one "+" menu, the one place to add: New Mind, Import a Word file…,
- * Record a meeting (once Meetings are turned on), Compare Documents…, New Folder,
+ * Record a meeting (once Meetings are turned on), Compare Documents…, Verify
+ * a document…, New Folder,
  * Add Documents…, Add a web page…,
  * Find sources… and Link a folder…. Opened by keyboard or mouse, its items
  * are menu items reached with the arrow keys.
@@ -218,6 +220,16 @@ function PlusMenu() {
         >
           <TableIcon className="size-4 shrink-0 text-ink-meta" />
           <span className="flex-1">{t("command.compareDocuments")}</span>
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          data-testid="plus-verify-document"
+          onClick={choose(() => void commands.run("verify.document").catch(reportError))}
+          className={`${menuItemClass} pl-2`}
+        >
+          <VerifyLineIcon className="size-4 shrink-0 text-ink-meta" />
+          <span className="flex-1">{t("verify.command")}</span>
         </button>
         <button
           type="button"
