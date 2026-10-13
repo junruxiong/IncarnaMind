@@ -136,7 +136,7 @@ function pasteLinks(event: ClipboardEvent<HTMLElement>) {
 
 /**
  * The one "+" menu, the one place to add: New Mind, Import a Word file…,
- * Record a meeting (once Meetings are turned on), Compare Documents…, New Folder…,
+ * Record a meeting (once Meetings are turned on), Compare Documents…, New Folder,
  * Add Documents…, Add a web page…,
  * Find sources… and Link a folder…. Opened by keyboard or mouse, its items
  * are menu items reached with the arrow keys.
@@ -223,11 +223,12 @@ function PlusMenu() {
           type="button"
           role="menuitem"
           data-testid="plus-new-folder"
-          onClick={choose(() => useAppStore.getState().openLibrary("new"))}
+          onClick={choose(() => void commands.run("folder.new").catch(reportError))}
           className={`${menuItemClass} pl-2`}
         >
           <FolderLineIcon className="size-4 shrink-0 text-ink-meta" />
-          <span className="flex-1">{t("sidebar.plus.newFolder")}</span>
+          <span className="flex-1">{t("menu.newFolder")}</span>
+          <span className="pl-4 text-[13px] text-ink-meta">{shortcutLabel("folder.new")}</span>
         </button>
         <div className={menuRuleClass} />
         <button

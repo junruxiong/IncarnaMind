@@ -1,9 +1,10 @@
-import { type KeyboardEvent, type ReactNode, useEffect, useMemo } from "react";
+import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef } from "react";
 import { create } from "zustand";
 import type { Document, LibraryGroup, Mind } from "../../../core/api";
 import { useFolderDrop } from "../folderDrag";
 import { useLanguage, useT } from "../i18n";
 import { currentMindIdOf, currentTabOf } from "../layoutSlice";
+import { useRequests } from "../requests";
 import { sorted } from "../sort";
 import { type SortScope, sortOf, useSort } from "../sortChoices";
 import { documentFields, folderFields, mindFields } from "../sortFields";
@@ -300,6 +301,23 @@ function FolderGroup({
   const rename = useRename<HTMLButtonElement>(`folder:${folder.id}`, () =>
     useFolds.getState().toggle(folder.id),
   );
+  // A Folder just made opens its name field here, once; that first name is part of making it.
+  const asked = useRequests((state) => state.nameFolder === folder.id);
+  const firstName = useRef(false);
+  const startRename = rename.start;
+  useEffect(() => {
+    if (!asked) return;
+    firstName.current = true;
+    useFolds.getState().reveal(folder.id);
+    startRename();
+    useRequests.getState().clear("nameFolder");
+  }, [asked, folder.id, startRename]);
+  const field = rename.field((name) => {
+    const first = firstName.current;
+    firstName.current = false;
+    const { nameNewFolder, renameFolder } = useAppStore.getState();
+    return first ? nameNewFolder(folder.id, name) : renameFolder(folder.id, name);
+  });
   const count = documents.length;
   const t = useT();
   const objectMenu = useObjectMenu({ kind: "folder", id: folder.id });
@@ -336,7 +354,11 @@ function FolderGroup({
               value={folder.name}
               label={t("folder.renameLabel", { name: folder.name })}
               testId="folder-rename-field"
-              {...rename.field((name) => useAppStore.getState().renameFolder(folder.id, name))}
+              {...field}
+              onCancel={() => {
+                firstName.current = false;
+                field.onCancel();
+              }}
             />
           </span>
         ) : (

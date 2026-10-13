@@ -156,8 +156,8 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
   await expect(editor.getByTestId("citation")).toHaveCount(1);
   await newMind(window);
 
-  // A Mind: Open, Open to the side; Export as… (the last format first), Export options…; Move to…;
-  // Rename; then Delete after a rule.
+  // A Mind: Open, Open to the side; Export as… (the last format first), Export options…; Move to…,
+  // New Folder with this Mind; Rename; then Delete after a rule.
   const mind = window.getByTestId("mind-row").first();
   const mindMenu = await sameFromBothWays(
     window,
@@ -181,6 +181,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "skill.fromMind",
     "—",
     "mind.moveTo",
+    "folder.newWith",
     "—",
     "mind.rename",
     "—",
@@ -206,6 +207,8 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "—",
     "document.ask",
     "document.startMind",
+    "—",
+    "folder.newWith",
     "—",
     "document.tags",
     "—",
@@ -236,6 +239,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "folder.open",
     "—",
     "folder.newMind",
+    "folder.new",
     "folder.organize",
     "folder.editDescription",
     "folder.sort",
@@ -425,6 +429,7 @@ test("each item shows its shortcut as the system writes it, and the labels are i
     "引用格式…",
     "做成技能",
     /^移动到…(⇧⌘M|Ctrl\+Shift\+M)$/,
+    /^新建文件夹并放入此 Mind(⌃⌘N)?$/,
     /^重命名F2$/,
     "删除",
   ]);
