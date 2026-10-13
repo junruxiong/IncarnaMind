@@ -170,11 +170,15 @@ const stepOf = (cell: Pick<Cell, "documentId" | "questionId">) =>
 
 const EMPTY_CELL: NodeJSON[] = [{ type: "paragraph" }];
 
-function oneLine(value: unknown, what: string): string {
+function oneLine(
+  value: unknown,
+  what: string,
+  tooLong: "error.comparison.questionTooLong" | "error.comparison.instructionTooLong",
+): string {
   if (typeof value !== "string") throw new InvalidInputError(`${what} must be text.`);
   const line = value.replace(/\s+/g, " ").trim();
   if (line.length > MAX_COMPARISON_TEXT) {
-    throw new InvalidInputError(`${what} is too long: at most ${MAX_COMPARISON_TEXT} characters.`);
+    throw new InvalidInputError({ key: tooLong, values: { max: MAX_COMPARISON_TEXT } });
   }
   return line;
 }
@@ -625,13 +629,15 @@ export function createComparisons(options: ComparisonsOptions) {
       const mindId = options.requireMind(input.mindId);
       if (!Array.isArray(input.questions)) throw new InvalidInputError("questions must be a list.");
       const questions = input.questions
-        .map((each) => oneLine(each, "A Question"))
+        .map((each) => oneLine(each, "A Question", "error.comparison.questionTooLong"))
         .filter((each) => each !== "");
-      if (questions.length === 0) throw new InvalidInputError("Add a Question to compare by.");
+      if (questions.length === 0)
+        throw new InvalidInputError({ key: "error.comparison.noQuestion" });
       if (questions.length > MAX_COMPARISON_QUESTIONS) {
-        throw new InvalidInputError(
-          `A comparison table has at most ${MAX_COMPARISON_QUESTIONS} Questions.`,
-        );
+        throw new InvalidInputError({
+          key: "error.comparison.tooManyQuestions",
+          values: { max: MAX_COMPARISON_QUESTIONS },
+        });
       }
       if (
         !Array.isArray(input.documentIds) ||
@@ -643,16 +649,22 @@ export function createComparisons(options: ComparisonsOptions) {
       const documents = options.documents
         .live([...new Set(input.documentIds as string[])])
         .filter((document) => counted.has(document.id));
-      if (documents.length === 0) throw new InvalidInputError("There are no Documents to compare.");
+      if (documents.length === 0)
+        throw new InvalidInputError({ key: "error.comparison.noDocuments" });
       if (documents.length > MAX_COMPARISON_DOCUMENTS) {
-        throw new InvalidInputError(
-          `A comparison table has at most ${MAX_COMPARISON_DOCUMENTS} Documents.`,
-        );
+        throw new InvalidInputError({
+          key: "error.comparison.tooManyDocuments",
+          values: { max: MAX_COMPARISON_DOCUMENTS },
+        });
       }
       const instruction =
         input.instruction === undefined || input.instruction === null
           ? ""
-          : oneLine(input.instruction, "What else the table should show");
+          : oneLine(
+              input.instruction,
+              "What else the table should show",
+              "error.comparison.instructionTooLong",
+            );
       const afterBlockId = typeof input.afterBlockId === "string" ? input.afterBlockId : null;
 
       const ready = await readyModel(parseModel(input.model));
@@ -706,7 +718,7 @@ export function createComparisons(options: ComparisonsOptions) {
       const mindId = options.requireMind(ref.mindId);
       const picked = content.read(mindId, (blocks) => {
         const table = tableIn(blocks, ref.tableId);
-        if (!table) throw new NotFoundError("That comparison table isn't in this Mind.");
+        if (!table) throw new NotFoundError({ key: "error.comparison.notFound" });
         const providerId = table.getAttribute("providerId");
         const modelId = table.getAttribute("modelId");
         return typeof providerId === "string" && typeof modelId === "string"

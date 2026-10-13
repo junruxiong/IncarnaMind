@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { type CitationStyleId, isCitationStyleId } from "../../shared/citationStyles";
+import { wordingOf } from "../../shared/errorWording";
 import { translate } from "../../shared/i18n";
 import { supportsLibraryImages } from "../../shared/libraryModels";
 import { libraryPresetKeys } from "../../shared/libraryPresets";
@@ -56,6 +57,7 @@ interface AssignmentRow {
   request_id: string;
   error_kind: ProviderError["kind"] | null;
   error_message: string | null;
+  error_wording: string | null;
   classification_model: string | null;
 }
 interface DocumentRow {
@@ -77,6 +79,15 @@ const toGroup = ({ counts_own_files, ...row }: GroupRow): LibraryGroup => ({
   countsOwnFiles: counts_own_files === 1,
 });
 
+const errorOf = (row: AssignmentRow): ProviderError => {
+  const wording = row.error_wording === null ? null : wordingOf(row.error_wording);
+  return {
+    kind: row.error_kind ?? "unknown",
+    message: row.error_message ?? "",
+    ...(wording && { wording }),
+  };
+};
+
 /** A stored assignment as the API gives it. */
 const assignmentOf = (row: AssignmentRow): DocumentGroupAssignment => ({
   documentId: row.document_id,
@@ -84,7 +95,7 @@ const assignmentOf = (row: AssignmentRow): DocumentGroupAssignment => ({
   source: row.source,
   suggested: row.suggested === 1,
   status: row.status,
-  error: row.error_kind ? { kind: row.error_kind, message: row.error_message ?? "" } : null,
+  error: row.error_kind ? errorOf(row) : null,
   model: row.classification_model
     ? (JSON.parse(row.classification_model) as ClassificationModel)
     : null,
@@ -271,8 +282,15 @@ export function createLibrary(options: {
   };
   const state = (id: string, status: ClassificationStatus, error?: ProviderError) => {
     db.run(
-      "UPDATE document_groups SET status = ?, error_kind = ?, error_message = ?, updated_at = ? WHERE document_id = ? AND deleted_at IS NULL",
-      [status, error?.kind ?? null, error?.message ?? null, now(), id],
+      "UPDATE document_groups SET status = ?, error_kind = ?, error_message = ?, error_wording = ?, updated_at = ? WHERE document_id = ? AND deleted_at IS NULL",
+      [
+        status,
+        error?.kind ?? null,
+        error?.message ?? null,
+        error?.wording ? JSON.stringify(error.wording) : null,
+        now(),
+        id,
+      ],
     );
     tagState(id, status, error);
     options.tagged([id]);
@@ -290,7 +308,7 @@ export function createLibrary(options: {
     const existing = assignment(doc.id);
     if (existing) {
       db.run(
-        "UPDATE document_groups SET group_id = ?, source = ?, suggested = ?, status = ?, content_hash = ?, request_id = ?, error_kind = NULL, error_message = NULL, updated_at = ?, classification_model = ? WHERE document_id = ? AND deleted_at IS NULL",
+        "UPDATE document_groups SET group_id = ?, source = ?, suggested = ?, status = ?, content_hash = ?, request_id = ?, error_kind = NULL, error_message = NULL, error_wording = NULL, updated_at = ?, classification_model = ? WHERE document_id = ? AND deleted_at IS NULL",
         [
           groupId,
           source,
@@ -647,13 +665,12 @@ export function createLibrary(options: {
     restore(id: string): { minds: string[]; conversations: string[] } {
       const row = db.get<{ name: string }>("SELECT name FROM library_groups WHERE id = ?", [id]);
       if (!row) throw new NotFoundError({ key: "error.folder.notFound" });
-      const language = settings.get().language;
       if (groups().some((item) => sameName(item.name, row.name)))
-        throw new InvalidInputError(
-          translate(language, "restore.error.folderNameTaken", { name: row.name }),
-        );
-      if (groups().length >= 100)
-        throw new InvalidInputError(translate(language, "restore.error.folderLimit"));
+        throw new InvalidInputError({
+          key: "error.restore.folderNameTaken",
+          values: { name: row.name },
+        });
+      if (groups().length >= 100) throw new InvalidInputError({ key: "error.restore.folderLimit" });
       const at = now();
       db.run("UPDATE library_groups SET deleted_at = NULL, updated_at = ? WHERE id = ?", [at, id]);
       db.run(
@@ -711,13 +728,13 @@ export function createLibrary(options: {
             !isChatModelChoice(selected.choice) ||
             !options.providerExists(selected.choice.providerId)
           )
-            throw new InvalidInputError("Choose a connected provider and a model.");
+            throw new InvalidInputError({ key: "error.library.classifierModel" });
         } else if (selected.kind === "auto") {
           if (typeof selected.baseUrl !== "string")
             throw new InvalidInputError("Enter the local Ollama server.");
           selected.baseUrl = normalizeBaseUrl(selected.baseUrl);
           if (serviceForUrl(selected.baseUrl as string))
-            throw new InvalidInputError("Automatic classification must run on this computer.");
+            throw new InvalidInputError({ key: "error.library.autoNotLocal" });
         } else if (selected.kind === "ollama") {
           if (
             typeof selected.baseUrl !== "string" ||
@@ -725,7 +742,7 @@ export function createLibrary(options: {
             !selected.modelId.trim() ||
             selected.modelId.length > 200
           )
-            throw new InvalidInputError("Enter the local server and decision model.");
+            throw new InvalidInputError({ key: "error.library.localModelMissing" });
           if (selected.usePageImages !== undefined && typeof selected.usePageImages !== "boolean")
             throw new InvalidInputError("Choose whether to include PDF page images.");
           selected.modelId = selected.modelId.trim();
@@ -733,7 +750,7 @@ export function createLibrary(options: {
             throw new InvalidInputError("PDF page images currently require local Clef-Flash.");
           selected.baseUrl = normalizeBaseUrl(selected.baseUrl);
           if (serviceForUrl(selected.baseUrl as string))
-            throw new InvalidInputError("The Ollama decision model must run on this computer.");
+            throw new InvalidInputError({ key: "error.library.ollamaNotLocal" });
         } else if (selected.kind !== "jev")
           throw new InvalidInputError("Choose a supported classifier.");
       }
@@ -750,8 +767,8 @@ export function createLibrary(options: {
     },
     classify(input: unknown) {
       if (!getSettings().classifier)
-        throw new InvalidInputError("Choose a classification model first.");
-      if (groups().length === 0) throw new InvalidInputError("Create or choose folders first.");
+        throw new InvalidInputError({ key: "error.library.noClassifier" });
+      if (groups().length === 0) throw new InvalidInputError({ key: "error.library.noFolders" });
       if (
         input !== undefined &&
         (!Array.isArray(input) || !input.every((id) => typeof id === "string" && id !== ""))
@@ -799,13 +816,12 @@ export function createLibrary(options: {
     /** See `CoreApi.restoreAssignment`. */
     restoreAssignment(id: unknown, input: unknown) {
       const previous = parsePreviousAssignment(input);
-      const language = settings.get().language;
       let doc: DocumentRow;
       try {
         doc = document(id);
       } catch (error) {
         if (!(error instanceof NotFoundError)) throw error;
-        throw new NotFoundError(translate(language, "restore.error.documentGone"));
+        throw new NotFoundError({ key: "error.restore.documentGone" });
       }
       if (previous?.groupId) {
         const name = db.get<{ name: string }>(
@@ -813,7 +829,7 @@ export function createLibrary(options: {
           [previous.groupId],
         )?.name;
         if (name !== undefined)
-          throw new NotFoundError(translate(language, "restore.error.folderGone", { name }));
+          throw new NotFoundError({ key: "error.restore.folderGone", values: { name } });
         group(previous.groupId);
       }
       if (!previous) {
@@ -832,8 +848,13 @@ export function createLibrary(options: {
         write(doc, previous.groupId, previous.source, status, previous.model, previous.suggested);
         if (previous.error)
           db.run(
-            "UPDATE document_groups SET error_kind = ?, error_message = ? WHERE document_id = ? AND deleted_at IS NULL",
-            [previous.error.kind, previous.error.message, doc.id],
+            "UPDATE document_groups SET error_kind = ?, error_message = ?, error_wording = ? WHERE document_id = ? AND deleted_at IS NULL",
+            [
+              previous.error.kind,
+              previous.error.message,
+              previous.error.wording ? JSON.stringify(previous.error.wording) : null,
+              doc.id,
+            ],
           );
         if (status === "pending" || status === "waiting") tagState(doc.id, status);
       });

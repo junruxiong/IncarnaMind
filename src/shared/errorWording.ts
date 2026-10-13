@@ -25,7 +25,7 @@ export function takeWording(text: string): { sentence: string; wording: ErrorWor
   return { sentence: text.slice(0, at), wording: wordingOf(text.slice(at + TAG.length)) };
 }
 
-function wordingOf(json: string): ErrorWording | null {
+export function wordingOf(json: string): ErrorWording | null {
   let value: unknown;
   try {
     value = JSON.parse(json);

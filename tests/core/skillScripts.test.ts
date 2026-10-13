@@ -359,11 +359,11 @@ describe("Running a Skill's scripts", { timeout: 30_000 }, () => {
 
     // Without the warning confirmed, "always run" is refused, and the run still waits.
     await expect(core.respondToApproval(request.requestId, "always-allow")).rejects.toThrow(
-      /riskAccepted/,
+      /Confirm the risk warning/,
     );
     await expect(
       core.respondToApproval(request.requestId, "always-allow", { riskAccepted: false }),
-    ).rejects.toThrow(/riskAccepted/);
+    ).rejects.toThrow(/Confirm the risk warning/);
     expect(await core.listApprovalRequests()).toEqual([request]);
     expect(await core.listApprovalPolicies()).toEqual([]);
     expect(existsSync(log)).toBe(false);

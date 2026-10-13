@@ -74,12 +74,7 @@ import {
 } from "./files";
 import { isPackageKind, packageSizeError } from "./formats/zip";
 import { keywordText } from "./keywords";
-import {
-  createLibrary,
-  FORGET_FILE_IDENTITY,
-  type LibraryHooks,
-  type LibraryOptions,
-} from "./library";
+import { createLibrary, FORGET_FILE_IDENTITY, type LibraryHooks } from "./library";
 import type { PageText } from "./passages";
 import {
   CURRENT_SINCE,
@@ -405,8 +400,6 @@ export interface DocumentsOptions {
     retryMs: number;
     detectDataless: boolean;
   };
-  /** Says something to the User, in their language: why locating a Linked folder was refused. */
-  say: LibraryOptions["say"];
   reportError?: (error: unknown) => void;
 }
 
@@ -1217,7 +1210,6 @@ export function createDocuments(options: DocumentsOptions) {
     db,
     now,
     dataDir,
-    say: options.say,
     folders: options.folders,
     watch: options.linkedFolders.watch,
     stat: options.linkedFolders.stat,

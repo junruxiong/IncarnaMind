@@ -251,9 +251,9 @@ export function createJevTagging(options: {
      */
     async prepare(): Promise<TagClassifier> {
       const jev = stored();
-      if (!jev) throw new TaggingNotReadyError("Jev isn't set up.");
+      if (!jev) throw new TaggingNotReadyError({ key: "error.tagging.jevNotSetUp" });
       const apiKey = await secrets.tryGet(KEY_NAME);
-      if (!apiKey) throw new TaggingNotReadyError("The Jev key can't be read on this device.");
+      if (!apiKey) throw new TaggingNotReadyError({ key: "error.tagging.jevKeyUnreadable" });
       const service = serviceOf(jev.endpoint);
       if (service) await consent.ensure("tagging", service);
       return {
@@ -278,9 +278,9 @@ export function createJevTagging(options: {
     /** Reuses the saved connection with the Library's separate consent. */
     async prepareGroups() {
       const jev = stored();
-      if (!jev) throw new TaggingNotReadyError("Jev isn't set up.");
+      if (!jev) throw new TaggingNotReadyError({ key: "error.tagging.jevNotSetUp" });
       const apiKey = await secrets.tryGet(KEY_NAME);
-      if (!apiKey) throw new TaggingNotReadyError("The Jev key can't be read on this device.");
+      if (!apiKey) throw new TaggingNotReadyError({ key: "error.tagging.jevKeyUnreadable" });
       const service = serviceOf(jev.endpoint);
       if (service) await consent.ensure("classification", service);
       return decisionGroupClassifier({

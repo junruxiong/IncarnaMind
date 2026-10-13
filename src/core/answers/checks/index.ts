@@ -118,7 +118,10 @@ function parseClaim(input: unknown) {
   const claim = typeof input.claim === "string" ? input.claim.trim() : "";
   if (claim === "") throw new InvalidInputError("A claim to check must be some text.");
   if (claim.length > MAX_CLAIM_CHARACTERS)
-    throw new InvalidInputError("The claim is too long to check.");
+    throw new InvalidInputError({
+      key: "error.check.claimTooLong",
+      values: { max: MAX_CLAIM_CHARACTERS },
+    });
   const cited = Array.isArray(input.cited)
     ? input.cited.flatMap((each: unknown) =>
         isRecord(each) && typeof each.quote === "string"
@@ -359,11 +362,9 @@ export function createChecks(options: ChecksOptions) {
       if (!ready.ok) {
         const { result } = ready;
         if (result.kind === "not-ready") throw new ChatNotReadyError(result.readiness);
-        throw new InvalidInputError(
-          result.kind === "local-mode"
-            ? "Local mode is on, and the model isn't on this computer."
-            : "The User declined sending the claim to the model's service.",
-        );
+        throw new InvalidInputError({
+          key: result.kind === "local-mode" ? "error.check.localMode" : "error.check.declined",
+        });
       }
       const scope = options.evidence.scope(
         parsed.scope ? options.resolveScope(parsed.scope) : null,

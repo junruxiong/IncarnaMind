@@ -16,7 +16,6 @@
  */
 import { randomUUID } from "node:crypto";
 import * as Y from "yjs";
-import type { MessageKey } from "../../shared/i18n";
 import { resolveProposals } from "../../shared/proposals";
 import { addCitedUnits, addCitedVersions, type CitedUnits } from "../answers/citedVersions";
 import {
@@ -53,7 +52,6 @@ export interface CheckpointsOptions {
   stopAnswer(mindId: string, answerId: string): void;
   /** Marks the Mind's Answers left "streaming" with nothing writing them as stopped. */
   settleAnswers(mindId: string): void;
-  say(key: MessageKey): string;
   reportError(error: unknown): void;
 }
 
@@ -117,7 +115,7 @@ export function createCheckpoints(options: CheckpointsOptions) {
       "SELECT data FROM mind_checkpoints WHERE id = ? AND mind_id = ? AND deleted_at IS NULL",
       [parseId(checkpointId, "A Checkpoint"), mindId],
     );
-    if (!row) throw new NotFoundError(options.say("history.error.gone"));
+    if (!row) throw new NotFoundError({ key: "error.history.gone" });
     return docOf(row.data);
   };
 

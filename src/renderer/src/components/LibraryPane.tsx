@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { Document, LibraryGroup } from "../../../core/api";
 import { LIBRARY_DELETED } from "../deletedItems";
+import { providerErrorText } from "../errors";
 import { useFindSources } from "../findSources";
 import { useLanguage, useT } from "../i18n";
 import {
@@ -151,9 +152,10 @@ export function LibraryPane() {
   const notSortedOf = useCallback(
     (documentId: string) => {
       const item = assignments.get(documentId);
-      return item?.status === "failed" ? (item.error?.message ?? "") : null;
+      if (item?.status !== "failed") return null;
+      return item.error ? providerErrorText(item.error, t) : "";
     },
-    [assignments],
+    [assignments, t],
   );
   const problem = useMemo(() => problemOf(documents), [documents]);
 

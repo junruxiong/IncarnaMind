@@ -120,9 +120,7 @@ export function createUsageData(options: {
     setEnabled(on: boolean): void {
       if (!sender) throw new InvalidInputError("This copy of IncarnaMind can't send usage data.");
       if (on && localOnly()) {
-        throw new InvalidInputError(
-          'Usage data stays off while "Keep everything on this computer" is on.',
-        );
+        throw new InvalidInputError({ key: "error.privacy.usageDataLocalMode" });
       }
       if (!on) {
         // Stop first: nothing more goes out, and what is queued is dropped.

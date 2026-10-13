@@ -524,7 +524,7 @@ describe("Approval policies", { timeout: 30_000 }, () => {
     await expect(core.setApprovalPolicy({ subject, policy: "ask" })).rejects.toThrow(/always ask/);
     // "Always run" only after the User has confirmed the warning.
     await expect(core.setApprovalPolicy({ subject, policy: "always" })).rejects.toThrow(
-      /riskAccepted/,
+      /Confirm the risk warning/,
     );
     expect(await core.listApprovalPolicies()).toEqual([]);
     expect(

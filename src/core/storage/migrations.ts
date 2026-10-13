@@ -1624,6 +1624,15 @@ export const migrations: readonly Migration[] = [
         WHERE deleted_at IS NULL;
     `,
   },
+  {
+    version: 85,
+    description: "Organize: a waiting or failed Document's problem as a wording (#654)",
+    sql: `
+      -- The problem in error_message as a key of the dictionary and its values (JSON), so the
+      -- window says it in the interface language; NULL when the core gave only its sentence.
+      ALTER TABLE document_groups ADD COLUMN error_wording TEXT;
+    `,
+  },
 ];
 
 /**

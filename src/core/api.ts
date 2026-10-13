@@ -34,6 +34,7 @@ import type { CitationForm, CitationStyleId } from "../shared/citationStyles";
 import type { FormulaInput, FormulaLiteral, ResultUnit, ShowAs } from "../shared/formula";
 import type { TagColour } from "../shared/tagColours";
 import type { Anchor, UnitKind, UnitLabel } from "../shared/units";
+import type { ErrorWording } from "./errors";
 import type { Language, LanguagePreference } from "./language";
 
 export interface Mind {
@@ -3084,6 +3085,8 @@ export interface ProviderError {
   kind: ProviderErrorKind;
   /** The provider's own message, for details. */
   message: string;
+  /** The message as a key of the dictionary, when the core worded it, to say in the interface language. */
+  wording?: ErrorWording;
   /** "plan-limit": when the plan's limit resets (ISO 8601), when the provider says. */
   resetsAt?: string;
 }

@@ -214,7 +214,10 @@ describe("automatic local classification", () => {
         expect((await core.getLibrary()).assignments[0]).toMatchObject({
           status: "waiting",
           groupId: null,
-          error: { message: expect.stringContaining("Install clef-flash") },
+          error: {
+            message: expect.stringContaining("Install clef-flash"),
+            wording: { key: "error.tagging.needsPageImages" },
+          },
         }),
       { timeout: 10_000 },
     );
