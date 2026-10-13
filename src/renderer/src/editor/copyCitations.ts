@@ -8,7 +8,7 @@ import { Plugin } from "@tiptap/pm/state";
 import type { SourceContext } from "../../../shared/sources";
 import { languageNow } from "../i18n";
 import { useAppStore } from "../store";
-import { addFootnotes, citationsIn, textWithSources } from "./copyNotes";
+import { addFootnotes, citationsIn, textWithSources, wordFootnoteHtml } from "./copyNotes";
 
 function sourceContext(): SourceContext {
   return { language: languageNow(), documents: useAppStore.getState().documents };
@@ -22,6 +22,23 @@ export const CopyCitations = Extension.create({
   addProseMirrorPlugins() {
     return [
       new Plugin({
+        // After the editor's own copy and cut handlers, which set the HTML: Word's conditional
+        // blocks can't be made in the DOM, so they are written into the string.
+        view: (view) => {
+          const rewrite = (event: Event) => {
+            const data = (event as ClipboardEvent).clipboardData;
+            const html = data?.getData("text/html");
+            if (data && html) data.setData("text/html", wordFootnoteHtml(html));
+          };
+          view.dom.addEventListener("copy", rewrite);
+          view.dom.addEventListener("cut", rewrite);
+          return {
+            destroy: () => {
+              view.dom.removeEventListener("copy", rewrite);
+              view.dom.removeEventListener("cut", rewrite);
+            },
+          };
+        },
         props: {
           clipboardSerializer: (() => {
             const base = DOMSerializer.fromSchema(this.editor.schema);
