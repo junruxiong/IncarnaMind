@@ -8,18 +8,18 @@ import { flushSync } from "react-dom";
  * The row's chips and its "+N" are the `[data-tag-chip]` and `[data-tag-more]`
  * in it; `total` is how many Tags the Document has.
  */
-export function useFittingChips(total: number, most: number, enabled: boolean) {
+export function useFittingChips(total: number, most: number) {
   const row = useRef<HTMLDivElement>(null);
   const [shown, setShown] = useState(most);
 
   // After every render, so a rename or another language is measured too.
   useLayoutEffect(() => {
-    if (enabled && row.current) setShown(foldToFit(row.current, total, most));
+    if (row.current) setShown(foldToFit(row.current, total, most));
   });
 
   useEffect(() => {
     const room = row.current?.parentElement;
-    if (!enabled || !room) return;
+    if (!room) return;
     const observer = new ResizeObserver(() => {
       if (row.current) {
         const fits = foldToFit(row.current, total, most);
@@ -28,7 +28,7 @@ export function useFittingChips(total: number, most: number, enabled: boolean) {
     });
     observer.observe(room);
     return () => observer.disconnect();
-  }, [enabled, total, most]);
+  }, [total, most]);
 
   return { row, shown: Math.min(shown, total, most) };
 }
