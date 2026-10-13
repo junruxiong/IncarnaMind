@@ -10,6 +10,7 @@ import {
   launchApp,
   newMind,
   pointAndClick,
+  pointAt,
   removeDataFolder,
   slideSelect,
   useLocalChatModel,
@@ -122,6 +123,10 @@ test("an Answer added to a note is AI text until typed over or marked as mine, b
   // By keyboard: selected with the keys, ⌘/ into the menu, up from Edit with AI at its foot.
   const last = editor.locator(":scope > p", { hasText: "That is all." });
   await clickEndOf(window, last);
+  // Resting on added text opens its origin card a moment later, and the card would take the
+  // Esc below first: the pointer goes to the User's own line, where none opens.
+  await pointAt(window, own);
+  await expect(window.getByTestId("origin-card")).toHaveCount(0);
   for (let index = 0; index < "all.".length; index++) {
     await window.keyboard.press("Shift+ArrowLeft");
   }
