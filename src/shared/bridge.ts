@@ -78,6 +78,8 @@ export interface FilesBridge {
    * if the User cancelled.
    */
   pickWordFile(): Promise<string | null>;
+  /** As `pickWordFile`, for a PDF to verify (see `CoreApi.verifyDocument`). */
+  pickPdfFile(): Promise<string | null>;
   /**
    * Shows a Linked folder selected in the system's file manager (Finder,
    * Explorer). Rejects for an unknown Linked folder, or one that can't be
@@ -141,6 +143,7 @@ export const FILES_CHANNELS = {
   pickDocuments: "files:pickDocuments",
   pickReferenceFile: "files:pickReferenceFile",
   pickWordFile: "files:pickWordFile",
+  pickPdfFile: "files:pickPdfFile",
   showLinkedFolder: "files:showLinkedFolder",
   logError: "files:logError",
   /** From the page: the sidebar is hidden (true) or shown (false), for the View menu's label. */
