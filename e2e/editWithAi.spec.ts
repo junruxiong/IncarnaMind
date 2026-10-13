@@ -10,6 +10,7 @@ import {
   askInAssistant,
   createDataFolder,
   dismissChatSetup,
+  focusEditor,
   launchApp,
   newMind,
   pointAndClick,
@@ -451,7 +452,7 @@ test("copying a paragraph with changes waiting gives the text as it stands, in p
 
   // What Copy would put on the clipboard for the whole paragraph, by type.
   const copyParagraph = async () => {
-    await editor.focus();
+    await focusEditor(window, editor);
     await window.keyboard.press("ControlOrMeta+a");
     return editor.evaluate((dom) => {
       const data = new DataTransfer();
@@ -480,7 +481,7 @@ test("copying a paragraph with changes waiting gives the text as it stands, in p
   await expect(note).toHaveText("The tides here are powerful and really regular.");
 
   // Shorten drops "really": waiting, the copy still has it; accepted, it doesn't.
-  await editor.focus();
+  await focusEditor(window, editor);
   await window.keyboard.press("ArrowRight");
   await selectWords(window, note, "The tides here are powerful and really regular.");
   await pointAndClick(window, window.getByTestId("selection-action-shorten"));

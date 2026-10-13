@@ -6,7 +6,7 @@ import { MEETING_AUDIO_KEPT_MS } from "../../src/core/api";
 import { createFakeEmbedder } from "../../src/core/embedding/fake";
 import { listParts, meetingFolder } from "../../src/core/meetings/audioFiles";
 import { createFakeCapture, type FakeCaptureOptions } from "../../src/core/meetings/fakeCapture";
-import { createTempDataFolder, manualClock, nextEvent, startCore } from "../helpers/core";
+import { createTempDataFolder, manualClock, nextEvent, nextTurn, startCore } from "../helpers/core";
 import { createSourceFolder, waitForProcessing, writeSourceFile } from "../helpers/documents";
 
 const SECOND = 1000;
@@ -416,7 +416,8 @@ describe("What a Meeting needs", () => {
       "# Tides\n\nHigh water.",
     );
     const { documents } = await core.addDocuments([file]);
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    // The processor starts a queued Document on the next microtask, if nothing holds it back.
+    await nextTurn();
     expect((await core.listDocuments()).map((each) => each.status)).toEqual(["queued"]);
 
     await core.pauseMeeting(id);
@@ -458,15 +459,16 @@ describe("What a Meeting needs", () => {
       paragraphs.join("\n\n"),
     );
     const { documents } = await core.addDocuments([file]);
-    await vi.waitFor(() => expect(gate).toBeNull());
+    await vi.waitFor(() => expect(gate).toBeNull(), { timeout: 10_000 });
 
     const { id } = await core.createMeeting();
     await core.startMeeting({ meetingId: id });
     release();
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    // Waiting its turn again, first in line: it leaves the embedder once the Passage in hand is done.
+    await vi.waitFor(async () => expect((await core.listDocuments())[0]?.status).toBe("queued"), {
+      timeout: 10_000,
+    });
     expect(embedded).toHaveLength(1);
-    // Waiting its turn again, first in line.
-    expect((await core.listDocuments())[0]?.status).toBe("queued");
 
     await core.stopMeeting(id);
     const [ready] = await waitForProcessing(core, [documents[0]?.id ?? ""]);

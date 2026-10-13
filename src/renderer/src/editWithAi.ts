@@ -395,10 +395,13 @@ export function resolveProposalsIn(
   if (accepting) {
     core.saveCheckpoint(mindId, "accept").catch(useAppStore.getState().reportError);
   }
+  const picked = pendingIn(editor.state).filter((each) => ids === "all" || ids.includes(each.id));
   const resolved = resolveInEditor(editor, ids === "all" ? ids : new Set(ids), outcome);
   if (resolved.length === 0) {
     // Only changes out of date were picked: they can't be accepted, and the User hears why.
-    if (outcome === "accept") speak(mindId, t("proposal.cantAccept"));
+    const theirs = picked.length > 0 && picked.every((each) => each.theirs);
+    if (outcome === "accept")
+      speak(mindId, t(theirs ? "proposal.cantAccept.theirs" : "proposal.cantAccept"));
     return;
   }
   const doc = editorDoc(editor);

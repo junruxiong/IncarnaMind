@@ -157,10 +157,9 @@ test("with a crash-report address, crash reports are off until opted in, scrubbe
     await expect(crashReports).not.toBeChecked();
     await expect(privacy.getByTestId("crash-reports")).toContainText("removed first");
 
-    // Off by default: nothing is sent.
+    // Off by default: nothing is sent. The first report that arrives, once opted in, is the
+    // barrier: anything sent before it is already there to be seen.
     await failInMainProcess("before opting in");
-    await window.waitForTimeout(1_000);
-    expect(sentry.events).toEqual([]);
 
     // Opted in: reports arrive, scrubbed.
     await crashReports.check();
@@ -175,9 +174,10 @@ test("with a crash-report address, crash reports are off until opted in, scrubbe
       .toBeGreaterThan(0);
     const [event] = sentry.events;
     expect(event).toContain("after opting in: couldn't index [path]");
-    for (const leak of [dataDir, "Divorce", "Quarterly", "before opting in"]) {
+    for (const leak of [dataDir, "Divorce", "Quarterly"]) {
       expect(event).not.toContain(leak);
     }
+    expect(sentry.events.join("\n")).not.toContain("before opting in");
     const parsed = JSON.parse(event ?? "{}");
     expect(parsed).not.toHaveProperty("user");
     expect(parsed).not.toHaveProperty("server_name");
@@ -196,13 +196,21 @@ test("with a crash-report address, crash reports are off until opted in, scrubbe
       "NormalizePaths",
     ]);
 
-    // Opted out: nothing more is sent.
+    // Opted out: nothing more is sent. Opting in again and waiting for its report is the barrier.
     await crashReports.uncheck();
     await expect(crashReports).not.toBeChecked();
-    const sent = sentry.events.length;
     await failInMainProcess("after opting out");
-    await window.waitForTimeout(1_500);
-    expect(sentry.events.slice(sent).join("\n")).not.toContain("after opting out");
+    await crashReports.check();
+    await expect
+      .poll(
+        async () => {
+          await failInMainProcess("opted in again");
+          return sentry.events.filter((each) => each.includes("opted in again")).length;
+        },
+        { timeout: 15_000, intervals: [500] },
+      )
+      .toBeGreaterThan(0);
+    expect(sentry.events.join("\n")).not.toContain("after opting out");
     await app.close();
   } finally {
     sentry.server.closeAllConnections();

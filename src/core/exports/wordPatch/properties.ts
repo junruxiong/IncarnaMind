@@ -222,3 +222,8 @@ export function runPropertiesFor(rPr: string, to: TextMarks, linkStyle: string |
   }
   return properties.toXml();
 }
+
+/** Run properties for new text: without someone's change to the format of the text they were for. */
+export function withoutFormatChange(rPr: string): string {
+  return rPr.includes("w:rPrChange") ? Properties.run(rPr).remove("w:rPrChange").toXml() : rPr;
+}
