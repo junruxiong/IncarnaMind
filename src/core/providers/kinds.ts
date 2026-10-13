@@ -105,15 +105,13 @@ export function normalizeBaseUrl(raw: string): string {
   try {
     url = new URL(raw.trim());
   } catch {
-    throw new InvalidInputError(`"${raw}" isn't a valid server URL.`);
+    throw new InvalidInputError({ key: "error.provider.urlInvalid", values: { url: raw } });
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new InvalidInputError("The server URL must start with http:// or https://.");
+    throw new InvalidInputError({ key: "error.provider.urlScheme" });
   }
   if (url.username || url.password || url.search || url.hash) {
-    throw new InvalidInputError(
-      "The server URL can't contain a user name, password, query or fragment. Put an API key in the key field.",
-    );
+    throw new InvalidInputError({ key: "error.provider.urlExtras" });
   }
   return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
 }
@@ -130,7 +128,7 @@ export function baseUrlFor(kind: ChatProviderKind, raw: unknown): string | null 
     return null;
   }
   if (!given) {
-    if (rule === "required") throw new InvalidInputError("Enter the server's URL.");
+    if (rule === "required") throw new InvalidInputError({ key: "error.provider.urlMissing" });
     return defaultOllamaUrl();
   }
   return normalizeBaseUrl(given);

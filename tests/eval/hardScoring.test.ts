@@ -659,6 +659,7 @@ describe("The hard tier's Citations per difficulty", () => {
       citations: {
         run: { model: "test/model", service: null } as CitationRun,
         byDifficulty: { unanswerable },
+        rules: [],
       },
     }).split("\n");
     expect(markdown).toContain("| **Answered without a Citation** | 3/4 (75%) |");
