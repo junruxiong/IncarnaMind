@@ -221,6 +221,11 @@ export function ConnectorForm({
         <SecretStorageNotice status={secretStorage} onAccept={() => void acceptPlainText()} />
       )}
 
+      {!editing && (
+        <p data-testid="connector-sends" className={hintClass}>
+          {t("connectors.form.sends")}
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <button type="submit" disabled={busy || invalid || blocked} className={primaryButtonClass}>
           {editing

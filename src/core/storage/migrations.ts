@@ -1624,6 +1624,17 @@ export const migrations: readonly Migration[] = [
         WHERE deleted_at IS NULL;
     `,
   },
+  {
+    // 85 and 86 are held by work in progress.
+    version: 87,
+    description: "A data flow allowed when the User chose its service says so (ADR-0022, #718)",
+    sql: `
+      -- 1: the flow was allowed when the User chose the service, where a line said what goes
+      -- (first-run setup, Settings, a plan sign-in); 0: allowed in a dialog or in Settings ›
+      -- Privacy, as every decision made before this. A declined flow is always 0.
+      ALTER TABLE data_flow_consents ADD COLUMN chosen INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
 ];
 
 /**

@@ -100,12 +100,10 @@ test("a Tool that may change something pauses the Answer with an approval card: 
   await expect(answer).toHaveAttribute("data-status", "streaming");
   await expect(answer.getByTestId("answer-writing")).toHaveText("Waiting for your approval");
 
-  // Allow once: the call goes ahead (after the Connector's data-flow consent), and the Answer finishes.
+  // Allow once: the call goes ahead, and the Answer finishes. Connecting Tides allowed its Tool
+  // calls (ADR-0022): nothing asks to send.
   await card.getByTestId("approval-allow-once").click();
   await expect(card).toHaveCount(0);
-  const consent = window.getByTestId("consent-dialog");
-  await expect(consent).toContainText("Send data to Tides?");
-  await consent.getByTestId("consent-allow").click();
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(answer).toContainText("book_boat said: Booked a boat trip from Dover.");
   await expect(answer).toContainText("That is all.");
@@ -179,9 +177,6 @@ test("in a Mind holding imported text, a write the User always allows asks, says
   const denyBox = await deny.boundingBox();
   expect(allowBox && denyBox && allowBox.x < denyBox.x).toBe(true);
   await pointAndClick(window, allow);
-  const consent = window.getByTestId("consent-dialog");
-  await expect(consent).toContainText("Send data to Tides?");
-  await pointAndClick(window, consent.getByTestId("consent-allow"));
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(answer).toContainText("book_boat said: Booked a boat trip from Dover.");
   await expect(answer.getByTestId("answer-connector-call")).toHaveAttribute(

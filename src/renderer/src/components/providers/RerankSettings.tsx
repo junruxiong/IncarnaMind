@@ -380,6 +380,11 @@ function RerankForm({
         </>
       )}
 
+      {!builtIn && (
+        <p data-testid="rerank-sends" className={hintClass}>
+          {t("rerank.settings.sends", { service: t(`rerank.kind.${kind}`) })}
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="submit"
@@ -403,7 +408,7 @@ function RerankForm({
         </button>
       </div>
 
-      {test && <TestResult result={test} onRetry={() => void run("testing")} />}
+      {test && <TestResult result={test} />}
       {error && (
         <p role="alert" className={errorTextClass}>
           {error}

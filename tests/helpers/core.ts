@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { onTestFinished } from "vitest";
 import {
+  CHOSEN_PROVIDER_FLOWS,
+  type ChatProvider,
   type Core,
   type CoreAdapters,
   type CoreEventName,
@@ -11,6 +13,7 @@ import {
   createCore,
   DATABASE_FILE,
   type Keychain,
+  type SaveChatProviderInput,
   type SecretProtection,
 } from "../../src/core";
 import { createFakeEmbedder } from "../../src/core/embedding/fake";
@@ -175,4 +178,20 @@ export function nextEvent<E extends CoreEventName>(core: Core, event: E): Promis
       resolve(payload);
     });
   });
+}
+
+/**
+ * Saves a chat provider as it was left when choosing it wasn't yet the
+ * consent (ADR-0022): nothing allowed or declined, so each flow's first send asks.
+ */
+export async function saveProviderUnasked(
+  core: Core,
+  input: SaveChatProviderInput,
+): Promise<ChatProvider> {
+  const provider = await core.saveChatProvider(input);
+  const service = (await core.listChatProviders()).find((each) => each.id === provider.id)?.service;
+  if (service) {
+    for (const flow of CHOSEN_PROVIDER_FLOWS) await core.revokeConsent(flow, service.id);
+  }
+  return provider;
 }

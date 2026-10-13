@@ -59,11 +59,12 @@ describe("Chat providers", () => {
     expect(await core.listChatProviders()).toEqual([provider]);
     const chatModel = { providerId: provider.id, modelId: "gpt-5.4-mini" };
     expect((await settingsChanged).user.chatModel).toEqual(chatModel);
+    // Choosing it allowed sending to it (ADR-0022): the first Question asks nothing.
     expect(await readinessChanged).toEqual({
       ready: true,
       provider,
       modelId: "gpt-5.4-mini",
-      consent: "needed",
+      consent: "accepted",
     });
   });
 
@@ -161,7 +162,7 @@ describe("Chat providers", () => {
       hasApiKey: false,
       service: { id: "https://api.deepseek.com", name: "api.deepseek.com" },
     });
-    expect(await core.getChatReadiness()).toMatchObject({ ready: true, consent: "needed" });
+    expect(await core.getChatReadiness()).toMatchObject({ ready: true, consent: "accepted" });
   });
 
   test("a server on this computer sends nothing out, so it needs no consent", async () => {

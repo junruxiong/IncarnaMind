@@ -706,11 +706,8 @@ describe("The chat flow with Skill scripts", { timeout: 30_000 }, () => {
       createChatModel: scriptedModels(scriptedModel(() => ({ text: "OK" }))).createChatModel,
       processes: scriptProcesses(),
     });
+    // Choosing the provider allows the chat flow as it was: without Tool results.
     await core.saveChatProvider({ kind: "openai", apiKey: "sk-test", modelId: "gpt-5.4-mini" });
-    const first = nextEvent(core, "consent.requested");
-    const tested = core.testChatConnection({ kind: "openai", modelId: "gpt-5.4-mini" });
-    await core.respondToConsent((await first).requestId, true);
-    await tested;
     expect(await core.getChatReadiness()).toMatchObject({ consent: "accepted" });
     const sends = async () =>
       (await core.listDataFlows()).find((status) => status.flow.id === "chat")?.flow.sends;
