@@ -7,6 +7,7 @@ import type {
   EmbeddingSettings,
   Examples,
   Folder,
+  FolderMove,
   GettingStarted,
   KeptCitationText,
   LayoutChange,
@@ -51,11 +52,15 @@ import {
   foldersMovedFrom,
   itemsOf,
   type MoveItems,
+  madeMessage,
   movedLocally,
   moveMessage,
   moveName,
   undoMoves,
 } from "./moves";
+import { untitledFolderName } from "./newFolder";
+import { useNotices } from "./notices";
+import { useRequests } from "./requests";
 import { resolveSettingsPage, type SettingsPage } from "./settingsPages";
 import { type Undoable, UndoRefused, useUndo } from "./undo";
 
@@ -106,8 +111,6 @@ interface AppState extends LayoutSlice {
   settings: Settings | null;
   /** Whether Questions can be asked. Set once loaded, then follows the core's event. */
   chatReadiness: ChatReadiness | null;
-  /** The last action that failed, shown until dismissed. */
-  actionError: string | null;
   /** Most recently added first. */
   documents: Document[];
   /**
@@ -148,7 +151,7 @@ interface AppState extends LayoutSlice {
   tagFilter: readonly string[];
   tagsDialogOpen: boolean;
   library: LibrarySnapshot | null;
-  /** What the Library shows: "all", "unsorted", "new" (the new-Folder form), a Folder's id, or `LIBRARY_DELETED`. */
+  /** What the Library shows: "all", "unsorted", a Folder's id, or `LIBRARY_DELETED`. */
   libraryFilter: string;
   refreshLibrary(): Promise<void>;
   /**
@@ -190,6 +193,15 @@ interface AppState extends LayoutSlice {
    * The sidebar's drag and drop and "Move to…" share it.
    */
   moveToFolder(items: MoveItems, folderId: string | null): Promise<void>;
+  /**
+   * Makes "Untitled Folder" (numbered if that is taken) and asks the sidebar to
+   * open its name field. With `items`, the Minds and Documents go into it at
+   * once. One step to undo, with its first name (`nameNewFolder`). Resolves to
+   * the Folder's id, or null if it couldn't be made.
+   */
+  createFolder(items?: MoveItems): Promise<string | null>;
+  /** Names the Folder just made: part of making it, so one Undo takes both back. */
+  nameNewFolder(folderId: string, name: string): Promise<void>;
   /** Renames a Folder, keeping its description. */
   renameFolder(folderId: string, name: string): Promise<void>;
   /** Changes a Folder's name, description or evidence choice, with Undo. Throws what the core throws. */
@@ -255,7 +267,6 @@ interface AppState extends LayoutSlice {
   updateSettings(patch: SettingsPatch): Promise<void>;
   /** Changes pane widths on screen only, e.g. while dragging a divider. */
   previewLayout(layout: Partial<DeviceSettings>): void;
-  dismissActionError(): void;
   /**
    * Adds picked files as Documents. Files already in IncarnaMind, and those
    * it can't take, are named in the footer, once.
@@ -462,7 +473,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     try {
       await action();
     } catch (error) {
-      set({ actionError: errorMessage(error) });
+      useNotices.getState().showError(error);
     }
   };
   const push = (change: Undoable) => useUndo.getState().push(change);
@@ -485,6 +496,20 @@ export const useAppStore = create<AppState>()((set, get) => {
       },
     });
   };
+
+  /** Takes a move back: each Mind and conversation to where it was, each Document's assignment as it was. */
+  const putBack = async (done: FolderMove, names: ReadonlyMap<string, string>) => {
+    refuseIfDeleted(foldersMovedFrom(done), names);
+    for (const back of undoMoves(done)) await move(back.items, back.folderId);
+    for (const document of done.documents)
+      await core.restoreAssignment(document.id, document.previous);
+  };
+
+  /**
+   * The Folder made last, until it is named: its first name is part of making
+   * it, so that replaces its step and one Undo takes both back.
+   */
+  let justMade: { id: string; step: Undoable; stepNamed(name: string): Undoable } | null = null;
 
   /** A Mind renamed from `before`, with Undo, if its title changed. */
   const offerRename = (mind: Mind, before: string) => {
@@ -615,14 +640,13 @@ export const useAppStore = create<AppState>()((set, get) => {
   };
 
   return {
-    ...createLayoutSlice(set, get, (error) => set({ actionError: errorMessage(error) })),
+    ...createLayoutSlice(set, get, (error) => useNotices.getState().showError(error)),
     status: { kind: "loading" },
     minds: [],
     titleToFocus: null,
     pickingDocuments: false,
     settings: null,
     chatReadiness: null,
-    actionError: null,
     documents: [],
     keptCitationTexts: [],
     skippedFiles: [],
@@ -651,7 +675,6 @@ export const useAppStore = create<AppState>()((set, get) => {
         library,
         ...(get().libraryFilter !== "all" &&
         get().libraryFilter !== "unsorted" &&
-        get().libraryFilter !== "new" &&
         get().libraryFilter !== LIBRARY_DELETED &&
         !library.groups.some((g) => g.id === get().libraryFilter)
           ? { libraryFilter: "all" }
@@ -819,17 +842,67 @@ export const useAppStore = create<AppState>()((set, get) => {
         push({
           message,
           name: moveName(t, moving, { minds, documents }),
-          undo: async () => {
-            refuseIfDeleted(foldersMovedFrom(done), names);
-            for (const back of undoMoves(done)) await move(back.items, back.folderId);
-            for (const document of done.documents)
-              await core.restoreAssignment(document.id, document.previous);
-          },
+          undo: () => putBack(done, names),
           redo: async () => {
             if (folderId !== null) refuseIfDeleted([folderId], names);
             done = await move(moving, folderId);
           },
         });
+      }),
+
+    createFolder: async (items) => {
+      let madeId: string | null = null;
+      await attempt(async () => {
+        const { minds, documents, library } = get();
+        const name = untitledFolderName(
+          t,
+          (library?.groups ?? []).map((group) => group.name),
+        );
+        const folder = await core.createLibraryGroup({ name, description: "" });
+        await get().refreshLibrary();
+        const chosen = items ? itemsOf(items) : null;
+        const going =
+          chosen && chosen.mindIds.length + chosen.documentIds.length > 0 ? chosen : null;
+        let done = going ? await move(going, folder.id) : null;
+        const names = new Map(library?.groups.map((group) => [group.id, group.name]));
+        const stepNamed = (shown: string): Undoable => ({
+          message: madeMessage(t, shown, going, { minds, documents }),
+          name: t("undo.name.newFolder"),
+          undo: async () => {
+            if (done) await putBack(done, names);
+            await core.deleteLibraryGroup(folder.id);
+            await get().refreshLibrary();
+          },
+          redo: async () => {
+            await core.restore([{ kind: "folder", id: folder.id }]);
+            await get().refreshLibrary();
+            if (going) done = await move(going, folder.id);
+          },
+        });
+        const step = stepNamed(name);
+        justMade = { id: folder.id, step, stepNamed };
+        push(step);
+        useRequests.getState().ask({ nameFolder: folder.id });
+        madeId = folder.id;
+      });
+      return madeId;
+    },
+
+    nameNewFolder: (folderId, name) =>
+      attempt(async () => {
+        const folder = get().library?.groups.find((group) => group.id === folderId);
+        const trimmed = name.trim();
+        if (!folder || !trimmed || trimmed === folder.name) return;
+        const made = justMade;
+        if (made?.id !== folderId || useUndo.getState().done.at(-1) !== made.step) {
+          await get().editFolder(folderId, { name: trimmed, description: folder.description });
+          return;
+        }
+        await core.updateLibraryGroup(folderId, { name: trimmed, description: folder.description });
+        await get().refreshLibrary();
+        justMade = null;
+        useUndo.getState().withdraw(made.step);
+        push(made.stepNamed(trimmed));
       }),
 
     renameFolder: (folderId, name) =>
@@ -960,7 +1033,7 @@ export const useAppStore = create<AppState>()((set, get) => {
       }),
 
     reportError(error) {
-      set({ actionError: errorMessage(error) });
+      useNotices.getState().showError(error);
     },
 
     openDocument(location, how = { as: "list" }) {
@@ -1014,10 +1087,6 @@ export const useAppStore = create<AppState>()((set, get) => {
     previewLayout(layout) {
       const { settings } = get();
       if (settings) set({ settings: { ...settings, device: { ...settings.device, ...layout } } });
-    },
-
-    dismissActionError() {
-      set({ actionError: null });
     },
 
     addDocuments: (picked) =>

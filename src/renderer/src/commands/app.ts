@@ -23,6 +23,7 @@ import { footnoteCommands } from "./footnotes";
 import { citationHandle, findHandle, sidebarHandle } from "./handles";
 import { linkCommands } from "./links";
 import { meetingCommands } from "./meetings";
+import { newFolderCommands } from "./newFolder";
 import {
   answerCommands,
   citationCommands,
@@ -32,11 +33,13 @@ import {
   mindCommands,
   tagCommands,
 } from "./objects";
+import { paletteCommands } from "./palette";
 import { proposalCommands } from "./proposals";
 import { sortCommands } from "./sort";
 import "./objectMenus";
 import { type Command, type CommandContext, commands, fromMenu } from "./registry";
 import { selectionCommands } from "./selection";
+import { settingsPageCommands } from "./settings";
 import { tableCommands } from "./tables";
 import { tabCommands } from "./tabs";
 import { onlyOne } from "./targets";
@@ -91,6 +94,7 @@ const appCommands: readonly Command[] = [
   ...mindCommands,
   ...documentCommands,
   ...folderCommands,
+  ...newFolderCommands,
   ...tagCommands,
   ...linkedFolderCommands,
   ...deletedCommands,
@@ -111,6 +115,8 @@ const appCommands: readonly Command[] = [
     reversible: true,
     run: () => useAppStore.getState().openSettings(),
   },
+  ...settingsPageCommands,
+  ...paletteCommands,
   {
     id: "chatgpt.continue",
     label: "chatgpt.continue",

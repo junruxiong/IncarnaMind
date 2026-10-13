@@ -2,7 +2,6 @@ import { type FormEvent, useCallback, useEffect, useId, useState } from "react";
 import type { ChatGptPlanModel, ChatProvider } from "../../../../core/api";
 import { core } from "../../core";
 import { formatSpent } from "../../cost";
-import { errorMessage } from "../../errors";
 import { useLanguage, useT } from "../../i18n";
 import { useAppStore } from "../../store";
 import { useCostSummary } from "../SpendingCapSettings";
@@ -75,7 +74,7 @@ export function ChatModelSettings() {
     try {
       await core.deleteChatProvider(current.id);
     } catch (failure) {
-      useAppStore.setState({ actionError: errorMessage(failure) });
+      useAppStore.getState().reportError(failure);
     }
   };
 

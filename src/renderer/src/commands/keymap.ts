@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { CommandId } from "../../../shared/commands";
+import type { CommandId, ShortcutKeys } from "../../../shared/commands";
 import { files } from "../core";
 import type { ObjectRef } from "../objects";
 import { useAppStore } from "../store";
@@ -77,6 +77,7 @@ export function runShortcut(
   for (const command of commands.all()) {
     const shortcut = command.shortcut;
     if (!shortcut || (objectsOnly && !command.appliesTo)) continue;
+    if (shortcut.macOnly && !isMac) continue;
     const keys = [
       keysOn(shortcut.keys, isMac),
       ...(!isMac && shortcut.alsoOther ? [shortcut.alsoOther] : []),
@@ -119,15 +120,25 @@ export function useKeymap(): void {
   }, []);
 }
 
+/** Whether a key pressed is a command's shortcut, for a place that takes the keys itself. */
+export function pressesShortcut(id: CommandId, event: KeyboardEvent): boolean {
+  const shortcut = commands.get(id)?.shortcut;
+  return shortcut !== undefined && pressed(keysOn(shortcut.keys, isMac), event, isMac);
+}
+
+/** Keys as this system writes them. */
+export const keysHere = (keys: ShortcutKeys): string => keysLabel(keysOn(keys, isMac), isMac);
+
 /** A command's shortcut as this system writes it, for tooltips and menus. */
 export function shortcutLabel(id: CommandId): string {
   const shortcut = commands.get(id)?.shortcut;
   if (!shortcut) throw new Error(`The command ${id} has no shortcut.`);
-  return keysLabel(keysOn(shortcut.keys, isMac), isMac);
+  return keysHere(shortcut.keys);
 }
 
 /** The keys a menu shows beside a command: its shortcut, or the keys its row takes, as this system writes them. */
 export function menuKeysLabel(command: Command): string | null {
+  if (command.shortcut?.macOnly && !isMac) return null;
   const keys = command.shortcut?.keys ?? command.rowKeys;
   return keys ? keysLabel(keysOn(keys, isMac), isMac) : null;
 }
