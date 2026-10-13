@@ -323,6 +323,22 @@ describe("Continue with ChatGPT", () => {
     await expect(fetch(redirect)).rejects.toThrow();
   });
 
+  test("a waiting sign-in's page can be opened again, and nothing is opened when none waits", async () => {
+    const { core, browser } = await setUp();
+    expect(await core.reopenChatGptSignIn()).toBe(false);
+    browser.behaviour = "ignore";
+
+    const result = core.signInToChatGpt();
+    await expect.poll(() => browser.opened).toHaveLength(1);
+    expect(await core.reopenChatGptSignIn()).toBe(true);
+
+    expect(browser.opened).toHaveLength(2);
+    expect(browser.opened[1]).toBe(browser.opened[0]);
+    await core.cancelChatGptSignIn();
+    await result;
+    expect(await core.reopenChatGptSignIn()).toBe(false);
+  });
+
   test("starting again replaces a sign-in still waiting, e.g. after the User closed the tab", async () => {
     const { core, browser } = await setUp();
     browser.behaviour = "ignore";
