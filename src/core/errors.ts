@@ -1,3 +1,4 @@
+import { type MessageKey, type MessageParams, translate } from "../shared/i18n";
 import type {
   ChatReadiness,
   DataFlow,
@@ -6,13 +7,35 @@ import type {
   SecretProtection,
 } from "./api";
 
+/** What an error says to the User: a key of the dictionary (src/shared/i18n) and its values. */
+export interface ErrorWording {
+  key: MessageKey;
+  values?: MessageParams;
+}
+
+/**
+ * An error the window says in the interface language (#627). Given a wording, its message is the
+ * wording's English, which the log and a notice's Details keep; given a sentence, the window shows
+ * that sentence as it is.
+ */
+export class TranslatableError extends Error {
+  readonly wording: ErrorWording | null;
+  constructor(message: string | ErrorWording, options?: ErrorOptions) {
+    super(
+      typeof message === "string" ? message : translate("en", message.key, message.values),
+      options,
+    );
+    this.wording = typeof message === "string" ? null : message;
+  }
+}
+
 /** Thrown when a caller of the core's public interface passes malformed input. */
-export class InvalidInputError extends Error {
+export class InvalidInputError extends TranslatableError {
   override name = "InvalidInputError";
 }
 
 /** Thrown when a caller names something that doesn't exist or has been deleted. */
-export class NotFoundError extends Error {
+export class NotFoundError extends TranslatableError {
   override name = "NotFoundError";
 }
 
@@ -20,7 +43,7 @@ export class NotFoundError extends Error {
  * Thrown when something would write to a Mind this version may only read: a
  * newer version wrote its content, or it is of a kind this version doesn't know.
  */
-export class MindReadOnlyError extends Error {
+export class MindReadOnlyError extends TranslatableError {
   override name = "MindReadOnlyError";
 }
 
@@ -35,41 +58,39 @@ export class DataFromNewerVersionError extends Error {
 }
 
 /** Thrown when a secret can't be stored safely on this device (see `getSecretStorage`). */
-export class SecretStorageError extends Error {
+export class SecretStorageError extends TranslatableError {
   override name = "SecretStorageError";
   constructor(readonly protection: SecretProtection) {
-    super(
-      protection === "plain-text"
-        ? "No keyring is running, so API keys would be stored in plain text. Start GNOME Keyring or KWallet, or accept plain-text storage in Settings."
-        : "This system can't encrypt API keys, so they can't be saved.",
-    );
+    super({
+      key: protection === "plain-text" ? "error.secrets.plainText" : "error.secrets.unencrypted",
+    });
   }
 }
 
 /** Thrown when the User declined a data flow: nothing was sent. */
-export class ConsentDeclinedError extends Error {
+export class ConsentDeclinedError extends TranslatableError {
   override name = "ConsentDeclinedError";
   constructor(readonly flow: DataFlow) {
-    super(`You declined sending data to ${flow.service.name}, so nothing was sent.`);
+    super({ key: "error.consent.declined", values: { service: flow.service.name } });
   }
 }
 
 /** Thrown when the User didn't choose where new files go: nothing was saved. */
-export class FileWriteCancelledError extends Error {
+export class FileWriteCancelledError extends TranslatableError {
   override name = "FileWriteCancelledError";
   constructor() {
-    super("You didn't choose where to save new files, so nothing was saved.");
+    super({ key: "error.files.notChosen" });
   }
 }
 
 /** Thrown when a new file would go inside a Linked folder the User said IncarnaMind may not add files to. */
-export class LinkedFolderWritesDeclinedError extends Error {
+export class LinkedFolderWritesDeclinedError extends TranslatableError {
   override name = "LinkedFolderWritesDeclinedError";
   constructor(
     readonly linkedFolderId: string,
     readonly linkedFolderPath: string,
   ) {
-    super("You said IncarnaMind may not add files to this Linked folder, so nothing was saved.");
+    super({ key: "error.files.linkedFolderDeclined" });
   }
 }
 

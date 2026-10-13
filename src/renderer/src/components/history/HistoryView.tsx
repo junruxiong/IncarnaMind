@@ -68,7 +68,7 @@ function History({ mindId, onClose }: { mindId: string; onClose(): void }) {
         );
         setRight((chosen) => (kept(chosen) ? chosen : null));
       },
-      (error: unknown) => setProblem(errorMessage(error)),
+      (error: unknown) => setProblem(errorMessage(error, translateNow)),
     );
   }, [mindId]);
 
@@ -91,7 +91,7 @@ function History({ mindId, onClose }: { mindId: string; onClose(): void }) {
         setProblem(null);
       },
       (error: unknown) => {
-        if (request === asked.current) setProblem(errorMessage(error));
+        if (request === asked.current) setProblem(errorMessage(error, translateNow));
       },
     );
   }, [mindId, left, right]);
@@ -152,7 +152,7 @@ function History({ mindId, onClose }: { mindId: string; onClose(): void }) {
       });
       onClose();
     } catch (error) {
-      setProblem(errorMessage(error));
+      setProblem(errorMessage(error, translateNow));
     } finally {
       setRestoring(false);
     }

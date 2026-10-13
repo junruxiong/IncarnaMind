@@ -9,6 +9,7 @@ import type {
 } from "../../core/api";
 import { core } from "./core";
 import { errorMessage } from "./errors";
+import { translateNow } from "./i18n";
 import { useAppStore } from "./store";
 
 /** Why asking a Question didn't go ahead, shown with it until the next try. */
@@ -54,7 +55,8 @@ export function settleAsk(
   useAnswers.setState((state) => {
     const blocked = { ...state.blocked };
     delete blocked[key];
-    if (error !== undefined) blocked[key] = { kind: "error", message: errorMessage(error) };
+    if (error !== undefined)
+      blocked[key] = { kind: "error", message: errorMessage(error, translateNow) };
     else if (result && !result.asked) {
       blocked[key] =
         result.reason === "not-ready"
