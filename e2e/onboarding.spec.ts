@@ -100,10 +100,10 @@ test("a first run opens on the example Mind: its Answer is written in advance, i
     window.locator('[data-testid="get-started-step"][data-step="citation"] [data-done]'),
   ).toContainText("Check a Citation in the example");
 
-  // Moving on to a Mind of one's own: the chat setup is offered then.
+  // Moving on to a Mind of one's own asks for no model: that waits for the first own Question.
   await window.keyboard.press("Escape");
   await pointAndClick(window, pane.getByTestId("example-add-own"));
-  await expect(window.getByTestId("chat-setup")).toBeVisible();
+  await expect(window.getByTestId("chat-setup")).toHaveCount(0);
 });
 
 test("removing the examples deletes the example Mind, its Documents and the copies of their files, and they aren't made again", async () => {

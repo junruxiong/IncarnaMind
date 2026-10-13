@@ -511,13 +511,7 @@ test("an Answer that waits for the User's approval shows an amber dot on the ass
 test("first run and every Settings page", async () => {
   test.skip(!SCREENSHOTS, "Only takes screenshots: set INCARNAMIND_SCREENSHOTS to a folder.");
   const { app, window } = await launchApp(dataDir);
-  const setup = window.getByTestId("chat-setup");
-  await expect(setup).toBeVisible();
   await screenshot(window, "first-run");
-  await setup.getByTestId("chat-choice-api-key").check();
-  await screenshot(window, "first-run-api-key");
-  await setup.getByTestId("chat-setup-later").click();
-  await expect(setup).toBeHidden();
 
   await window.getByRole("button", { name: "Settings" }).click();
   const settings = window.getByTestId("settings");
