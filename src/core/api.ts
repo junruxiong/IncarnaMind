@@ -3351,6 +3351,8 @@ export interface TaskShown {
 /** A large run to estimate: so many items (a comparison table's cells, verify's sentences…), each about an Answer. */
 export interface RunEstimateInput {
   items: number;
+  /** The web searches it makes (#128), each billed by the model's provider, on top of its items. */
+  searches?: number;
   /** The model it would use; the default model when left out. */
   model?: ChatModelChoice;
 }

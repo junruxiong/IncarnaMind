@@ -750,6 +750,29 @@ describe("The estimate before a large run", () => {
     expect(estimate.tokens).toBeGreaterThan(tokens);
   });
 
+  test("a run's web searches add their provider's fee and the pages it reads, and only where the provider searches", async () => {
+    const { core } = await cloudCore(reportingModel([{ input: 0, output: 0 }]));
+    const without = await core.estimateRun({ items: 9 });
+    const searching = await core.estimateRun({ items: 9, searches: 4 });
+    if (without.billing !== "per-token" || searching.billing !== "per-token") {
+      throw new Error("Not billed per token.");
+    }
+    const price = catalogFacts("anthropic", HAIKU)?.price;
+    if (!price) throw new Error("No Haiku price.");
+    const pages = costOf({ inputTokens: 30_000 }, price, new Date("2026-10-12T09:00:00.000Z"));
+    expect((searching.cost?.amount ?? 0) - (without.cost?.amount ?? 0)).toBeCloseTo(
+      4 * (0.01 + pages),
+      6,
+    );
+    expect(searching.tokens - without.tokens).toBe(4 * 30_000);
+
+    const local = await cloudCore(reportingModel([{ input: 0, output: 0 }]), {
+      kind: "ollama",
+      modelId: "local-model",
+    });
+    expect(await local.core.estimateRun({ items: 9, searches: 4 })).toEqual({ billing: "free" });
+  });
+
   test("under a cap, it says how much of the month is used", async () => {
     const { core } = await cloudCore(reportingModel([{ input: 1_000, output: 100 }]));
     await request(core);

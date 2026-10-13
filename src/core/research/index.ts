@@ -40,7 +40,13 @@ import type {
   StartResearchInput,
   Task,
 } from "../api";
-import { ChatNotReadyError, ConsentDeclinedError, InvalidInputError, isRecord } from "../errors";
+import {
+  ChatNotReadyError,
+  ConsentDeclinedError,
+  type ErrorWording,
+  InvalidInputError,
+  isRecord,
+} from "../errors";
 import type { PreparedChatModel } from "../providers/chat";
 import { classifyProviderError } from "../providers/providerErrors";
 import type { StepRecord } from "../runs/journal";
@@ -108,11 +114,12 @@ export interface ResearchOptions {
   say(key: MessageKey, params?: MessageParams): string;
 }
 
-function text(value: unknown, what: string, max: number): string {
-  if (typeof value !== "string") throw new InvalidInputError(`${what} must be text.`);
-  const line = value.replace(/\s+/g, " ").trim();
-  if (line === "") throw new InvalidInputError(`${what} is empty.`);
-  if (line.length > max) throw new InvalidInputError(`${what} is longer than ${max} characters.`);
+/** Text on one line, not empty and at most `max` characters; else `wording` says so. */
+function text(value: unknown, wording: ErrorWording["key"], max: number): string {
+  const line = typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+  if (line === "" || line.length > max) {
+    throw new InvalidInputError({ key: wording, values: { max } });
+  }
   return line;
 }
 
@@ -125,31 +132,36 @@ function parseModel(value: unknown): ChatModelChoice | null {
     value.providerId === "" ||
     value.modelId === ""
   ) {
-    throw new InvalidInputError("model must be a provider and a model.");
+    throw new InvalidInputError({ key: "error.research.model" });
   }
   return { providerId: value.providerId, modelId: value.modelId };
 }
 
 function parseSources(value: unknown): ResearchSources {
-  if (!isRecord(value) || typeof value.web !== "boolean" || typeof value.library !== "boolean") {
-    throw new InvalidInputError("sources must say whether to search the web and the Library.");
-  }
-  if (!value.web && !value.library) {
-    throw new InvalidInputError("Research needs the web, the Library or both.");
+  if (
+    !isRecord(value) ||
+    typeof value.web !== "boolean" ||
+    typeof value.library !== "boolean" ||
+    (!value.web && !value.library)
+  ) {
+    throw new InvalidInputError({ key: "error.research.sources" });
   }
   return { web: value.web, library: value.library };
 }
 
 function parseSteps(value: unknown): string[] {
-  if (!Array.isArray(value)) throw new InvalidInputError("A plan's steps must be a list.");
-  const steps = value
-    .map((step) => (typeof step === "string" ? step.replace(/\s+/g, " ").trim() : step))
-    .filter((step) => step !== "");
-  if (steps.length === 0) throw new InvalidInputError("A plan needs a step.");
-  if (steps.length > MAX_RESEARCH_STEPS) {
-    throw new InvalidInputError(`A plan has at most ${MAX_RESEARCH_STEPS} steps.`);
+  const steps = Array.isArray(value)
+    ? value
+        .map((step) => (typeof step === "string" ? step.replace(/\s+/g, " ").trim() : step))
+        .filter((step) => step !== "")
+    : [];
+  if (steps.length === 0 || steps.length > MAX_RESEARCH_STEPS) {
+    throw new InvalidInputError({
+      key: "error.research.steps",
+      values: { max: MAX_RESEARCH_STEPS },
+    });
   }
-  return steps.map((step) => text(step, "A step", MAX_RESEARCH_STEP));
+  return steps.map((step) => text(step, "error.research.step", MAX_RESEARCH_STEP));
 }
 
 function parseTarget(value: unknown): ResearchTarget {
@@ -157,7 +169,7 @@ function parseTarget(value: unknown): ResearchTarget {
   if (isRecord(value) && typeof value.mindId === "string" && value.mindId !== "") {
     return { mindId: value.mindId };
   }
-  throw new InvalidInputError("writeInto must be a Mind or a new Mind.");
+  throw new InvalidInputError({ key: "error.research.target" });
 }
 
 function inputOf(input: unknown): ResearchInput | null {
@@ -430,15 +442,15 @@ export function createResearch(options: ResearchOptions) {
     taskKind,
 
     async plan(given: PlanResearchInput): Promise<ResearchPlanResult> {
-      if (!isRecord(given)) throw new InvalidInputError("Planning needs a topic.");
+      if (!isRecord(given)) throw new InvalidInputError({ key: "error.research.plan" });
       options.requireMind(given.mindId);
-      const topic = text(given.topic, "The topic", MAX_RESEARCH_TOPIC);
+      const topic = text(given.topic, "error.research.topic", MAX_RESEARCH_TOPIC);
       const sources = parseSources(given.sources);
       const model = parseModel(given.model);
       const change = isRecord(given.change)
         ? {
             steps: parseSteps(given.change.steps),
-            text: text(given.change.text, "The change", MAX_RESEARCH_TOPIC),
+            text: text(given.change.text, "error.research.change", MAX_RESEARCH_TOPIC),
           }
         : null;
       const ready = await readyModel(model);
@@ -474,12 +486,12 @@ export function createResearch(options: ResearchOptions) {
 
     async start(given: StartResearchInput): Promise<ResearchStartResult> {
       if (!isRecord(given) || !isRecord(given.plan)) {
-        throw new InvalidInputError("Research needs a topic and a plan.");
+        throw new InvalidInputError({ key: "error.research.plan" });
       }
       const mindId = options.requireMind(given.mindId);
-      const topic = text(given.topic, "The topic", MAX_RESEARCH_TOPIC);
+      const topic = text(given.topic, "error.research.topic", MAX_RESEARCH_TOPIC);
       const plan: ResearchPlan = {
-        title: text(given.plan.title, "The plan's title", MAX_RESEARCH_STEP),
+        title: text(given.plan.title, "error.research.step", MAX_RESEARCH_STEP),
         steps: parseSteps(given.plan.steps),
       };
       const sources = parseSources(given.sources);

@@ -2262,16 +2262,24 @@ export function createCore(adapters: CoreAdapters): Core {
     getCostSummary: async () => meter.summary(),
     estimateRun: async (input) => {
       if (!isRecord(input)) throw new InvalidInputError("estimateRun expects an object.");
-      const { items, model } = input;
+      const { items, model, searches = 0 } = input;
       if (typeof items !== "number" || !Number.isInteger(items) || items < 0 || items > 100_000) {
         throw new InvalidInputError("items must be a whole number from 0 to 100,000.");
       }
       if (model !== undefined && !isChatModelChoice(model)) {
         throw new InvalidInputError("model must be a provider and a model.");
       }
+      if (
+        typeof searches !== "number" ||
+        !Number.isInteger(searches) ||
+        searches < 0 ||
+        searches > 1_000
+      ) {
+        throw new InvalidInputError({ key: "error.estimate.searches", values: { max: 1_000 } });
+      }
       const metered = chat.metered(model);
       if (!metered) throw new InvalidInputError("There is no model to estimate for.");
-      return meter.estimate(metered, items);
+      return meter.estimate(metered, items, searches);
     },
     compareDocuments: (input) => comparisons.compareDocuments(input),
     fillComparisonTable: (input) => comparisons.fillComparisonTable(input),

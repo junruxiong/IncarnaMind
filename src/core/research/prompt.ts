@@ -17,7 +17,8 @@ export const PLAN_INSTRUCTIONS = [
   "1. a step",
   "2. a step",
   "",
-  "- Give 3 to 5 steps in the order to take them, each one short line that says what to look for, read or compare.",
+  "- Give 3 to 5 steps in the order to take them, each one short line of about 12 words that says what to look for, read or compare.",
+  '- The User reads the plan: call their own Documents "the Library".',
   "- Leave out writing the draft and saving the pages: those come last on their own.",
   "- Write in the language the topic is written in.",
 ].join("\n");
@@ -29,12 +30,19 @@ const where = (sources: ResearchSources) =>
       ? "the web"
       : "the User's Documents";
 
+const library = (sources: ResearchSources) =>
+  sources.web && sources.library
+    ? "the web and the Library"
+    : sources.web
+      ? "the web"
+      : "the Library";
+
 export function planPrompt(
   topic: string,
   sources: ResearchSources,
   change: { steps: readonly string[]; text: string } | null,
 ): string {
-  const lines = [`It will search ${where(sources)}.`, "", `Topic: ${topic}`];
+  const lines = [`It will search ${library(sources)}.`, "", `Topic: ${topic}`];
   if (change) {
     lines.push(
       "",
