@@ -13,7 +13,13 @@ import { randomUUID } from "node:crypto";
 import * as Y from "yjs";
 import { asGenerated } from "../shared/aiText";
 import { parseOrigin, removeOrigins, setOrigins } from "../shared/blockOrigins";
-import { parseNoteBlocks, recheckCitations, textLength, withoutIds } from "../shared/noteBlocks";
+import {
+  citedTables,
+  parseNoteBlocks,
+  recheckCitations,
+  textLength,
+  withoutIds,
+} from "../shared/noteBlocks";
 import { proposalRequestOf, recordProposalRequest } from "../shared/proposals";
 import { createElement, type NodeJSON, textAttribute, topLevelBlocks } from "./answers/blocks";
 import {
@@ -69,7 +75,9 @@ export function createNoteAdding(options: NoteAddingOptions) {
       if (input.origin && !origin) throw new InvalidInputError("That isn't a Block's origin.");
       const model: ChatModelChoice | null = isChatModelChoice(input.model) ? input.model : null;
       const proposed = input.proposed === true;
-      const blocks = asGenerated(await recheckCitations(withoutIds(parsed), options.recheck));
+      const blocks = asGenerated(
+        await recheckCitations(citedTables(withoutIds(parsed)), options.recheck),
+      );
       const request = randomUUID();
 
       const blockIds = content.edit(mindId, (note) => {

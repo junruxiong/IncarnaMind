@@ -16,7 +16,9 @@
  * asks "by quarter" (按季度) gets a table of quarterly figures, its marker in each cell
  * but the last, to chart (#436); "分季度" gets the same in Chinese, in 万元, and
  * "in millions" each figure as "$289.4 million"; one that asks for "four columns" gets a
- * table of four, wider than the assistant (#612).
+ * table of four, wider than the assistant (#612); one with "cited below" (or 引用在下) gets a
+ * table whose one Citation stands in a paragraph under it, and one with "framed" (or 带说明)
+ * gets a lead-in before its content and a closing note after it (#702).
  * One that asks how much something grew (增长) has the growth from the first
  * two numbers of its quote calculated, and writes it with its marker.
  * Before its search it reasons, a line that quotes the Question, as a model
@@ -152,6 +154,26 @@ const wideTableAnswer = (marker: string) =>
     "",
     "That is all.",
   ].join("\n");
+
+/** A Question whose table is cited under it, and one that is framed by a lead-in and a closing note (#702). */
+const CITED_BELOW = /\bcited below\b|引用在下/i;
+const FRAMED = /\bframed\b|带说明/i;
+
+/** The table whose one Citation stands under it, in Chinese or English, with the framing if asked. */
+function citedBelowAnswer(question: string, marker: string): string {
+  const chinese = /\p{Script=Han}/u.test(question);
+  const table = chinese
+    ? ["| 季度 | 收入 |", "|:--|--:|", "| 一季度 | 289.4 |", "| 二季度 | 301.2 |"]
+    : ["| Quarter | Revenue |", "|:--|--:|", "| Q1 | 289.4 |", "| Q2 | 301.2 |"];
+  const framed = FRAMED.test(question);
+  return [
+    ...(framed ? [chinese ? "以下是草稿：" : "Here is a draft:", ""] : []),
+    ...table,
+    "",
+    ...(CITED_BELOW.test(question) ? [marker, ""] : []),
+    ...(framed ? [chinese ? "注：以上仅为草稿。" : "Note: this is only a draft."] : []),
+  ].join("\n");
+}
 
 /** A Question that asks for four columns. */
 const FOUR_COLUMNS = /\bfour columns\b/i;
@@ -680,11 +702,13 @@ function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
         )
       : FOUR_COLUMNS.test(question)
         ? wideTableAnswer(recorded[0] ?? "")
-        : AS_A_TABLE.test(question)
-          ? tableAnswer(recorded.join(" "))
-          : recorded.length > 1
-            ? `Your Documents answer this ${recorded.join(" ")}.\n\nThat is all.`
-            : CITED_ANSWER;
+        : CITED_BELOW.test(question) || FRAMED.test(question)
+          ? citedBelowAnswer(question, recorded[0] ?? "")
+          : AS_A_TABLE.test(question)
+            ? tableAnswer(recorded.join(" "))
+            : recorded.length > 1
+              ? `Your Documents answer this ${recorded.join(" ")}.\n\nThat is all.`
+              : CITED_ANSWER;
   return { text: skill ? `Following the Skill ${skill}.\n\n${answer}` : answer };
 }
 
