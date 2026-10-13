@@ -40,7 +40,7 @@ export function ConnectorImport({ onDone }: { onDone(): void }) {
     try {
       setPreview(await core.previewConnectorImport(text));
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     }
   };
 
@@ -64,7 +64,7 @@ export function ConnectorImport({ onDone }: { onDone(): void }) {
       await core.importConnectors(json);
       onDone();
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     } finally {
       setBusy(false);
     }
@@ -74,7 +74,7 @@ export function ConnectorImport({ onDone }: { onDone(): void }) {
     try {
       setSecretStorage(await core.acceptPlainTextSecretStorage());
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     }
   };
 

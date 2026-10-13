@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { Document } from "../../../core/api";
 import { useT } from "../i18n";
 import { TagLineIcon } from "./lineIcons";
@@ -12,10 +13,13 @@ export function SelectionTags({
   documents,
   testId,
   className = buttonStyle("secondary", "sm"),
+  keys,
 }: {
   documents: readonly Document[];
   testId: string;
   className?: string;
+  /** The keys that open it, shown after its name. */
+  keys?: ReactNode;
 }) {
   const t = useT();
   const popover = useTagPopover();
@@ -31,6 +35,7 @@ export function SelectionTags({
       >
         <TagLineIcon className="size-3.5" />
         {t("library.selected.tags")}
+        {keys}
       </button>
       <div
         {...popover.popoverProps}

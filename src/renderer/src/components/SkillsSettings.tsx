@@ -83,7 +83,7 @@ export function SkillsSettings() {
     try {
       path = await pickSkill(kind);
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
       return;
     }
     if (!path) return;
@@ -95,7 +95,7 @@ export function SkillsSettings() {
       if (check.ok) setPreview(check.preview);
       else setError(check.error);
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     } finally {
       setBusy(null);
     }
@@ -108,7 +108,7 @@ export function SkillsSettings() {
       setPreview(null);
     } catch (failure) {
       setPreview(null);
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     } finally {
       setBusy(null);
     }
@@ -124,7 +124,7 @@ export function SkillsSettings() {
     try {
       setEditing({ kind: "edit", skill, draft: await core.getSkillDraft(skill.id) });
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     }
   };
 
@@ -144,7 +144,7 @@ export function SkillsSettings() {
       }
       // "cancelled": the User didn't choose where new files go, so nothing was saved.
     } catch (failure) {
-      setExported({ kind: "failed", message: errorMessage(failure) });
+      setExported({ kind: "failed", message: errorMessage(failure, t) });
     }
   };
 
