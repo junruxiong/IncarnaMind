@@ -113,6 +113,32 @@ function readingRules(cite: boolean): string {
   ].join("\n");
 }
 
+/** A Passage's Document and its date, as `formatPassages` (./citations) writes them. */
+const DATED_PASSAGE = /<passage id="[^"]*" document="([^"]*)" date="([^"]+)"/g;
+
+/**
+ * A reminder after Passages that come from Documents of different dates
+ * (#660): GPT-6 Luna, told the rule in its instructions, still gave only the
+ * newer Document's figure when a search handed it both. It names each dated
+ * Document with its date, newest first; empty when fewer than two dates differ.
+ * Without its line on passing mentions, Luna took "the other five Functions"
+ * in NIST CSF 2.0 for the Core's count.
+ */
+export function datedDocumentsNote(passages: string): string {
+  const dates = new Map<string, string>();
+  for (const [, document, date] of passages.matchAll(DATED_PASSAGE)) {
+    if (document !== undefined && date !== undefined && !dates.has(document)) {
+      dates.set(document, date);
+    }
+  }
+  if (new Set(dates.values()).size < 2) return "";
+  const listed = [...dates]
+    .sort(([, a], [, b]) => b.localeCompare(a))
+    .map(([document, date]) => `"${document}" (${date})`)
+    .join(", ");
+  return `These Passages come from Documents of different dates: ${listed}. Take each Document's figure only from a sentence that states it for that Document, never from a passing mention. Where they give different figures for the same thing, lead with the newer Document, then write one sentence naming the older one, its date and its figure, with a Citation.`;
+}
+
 const RECORD =
   'the Passage\'s id, where the quote is, and a short quote copied exactly from the Passage, without its marks. Where: the page, slide, section, or rows or lines the quote is in, or two in a row, written as the Passage names them (its pages or location, and marks where each new one starts, like [p. 4], [slide 4], [§ 2.1 Sensitivity], [Revenue, rows 2–41] or [lines 51–100]; name rows or lines more narrowly when you can, e.g. "Revenue, rows 12–14")';
 
@@ -189,6 +215,8 @@ export function documentInstructions(
   calculate = false,
 ): string {
   const documents = `${listed.total} Document${listed.total === 1 ? "" : "s"}`;
+  const note = datedDocumentsNote(passages);
+  const dated = note ? [note] : [];
   const added = `${scoped ? `The User limited this Question to ${documents} of theirs` : `The User has added ${documents}`} (PDF, Word, PowerPoint, Excel, CSV, text and Markdown files).`;
   switch (mode) {
     case "no-documents":
@@ -214,6 +242,7 @@ export function documentInstructions(
         "",
         "Passages found in the User's Documents for this Question:",
         passages,
+        ...dated,
         "",
         // The example's location is a placeholder: a small model copied a real-looking one ("p. 3") as its own (#67).
         calculate
@@ -233,6 +262,7 @@ export function documentInstructions(
         "",
         "Passages found in the User's Documents for this Question:",
         passages,
+        ...dated,
         "",
         "Use them where they help. Don't write citation markers or a list of sources.",
         notCovered(false),

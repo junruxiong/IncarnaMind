@@ -1,3 +1,4 @@
+import { dialogOrMenuOpen } from "../escapeDismiss";
 import { type SelectSurface, selectedOn, useSelection } from "../selection";
 import { typesText } from "../undo";
 import { type Command, type CommandContext, fromMenu } from "./registry";
@@ -34,9 +35,10 @@ export const selectionCommands: readonly Command[] = [
     palette: false,
     group: "edit",
     reversible: true,
+    // Not while a picker or menu is open, even one drawn from a selected row: Esc closes that first.
     when: (ctx) => {
       const surface = surfaceOf(ctx);
-      return surface !== null && selectedOn(surface).length > 0;
+      return surface !== null && selectedOn(surface).length > 0 && !dialogOrMenuOpen();
     },
     run(ctx) {
       useSelection.getState().clear(surfaceOf(ctx) ?? undefined);

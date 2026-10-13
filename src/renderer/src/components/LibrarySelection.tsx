@@ -5,6 +5,7 @@ import type { CommandId } from "../../../shared/commands";
 import { keysHere, menuKeysLabel } from "../commands/keymap";
 import { buildMenu, type MenuItem } from "../commands/menus";
 import { type CommandContext, commands, menuLabelOf } from "../commands/registry";
+import { dialogOrMenuOpen } from "../escapeDismiss";
 import { useT } from "../i18n";
 import type { ObjectRef } from "../objects";
 import { useSelectedOn, useSelection } from "../selection";
@@ -139,7 +140,8 @@ export function LibrarySelectionBar({ shownIds }: { shownIds: readonly string[] 
       aria-label={t("library.selected", { count: items.length })}
       data-testid="library-selection"
       onKeyDown={(event) => {
-        if (event.key !== "Escape" || event.defaultPrevented) return;
+        // A picker or menu that is open, such as the bar's Tags picker, closes first.
+        if (event.key !== "Escape" || event.defaultPrevented || dialogOrMenuOpen()) return;
         event.preventDefault();
         useSelection.getState().clear("library");
       }}
