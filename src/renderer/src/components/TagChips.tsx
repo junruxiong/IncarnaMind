@@ -20,6 +20,7 @@ import {
   tagPopoverClass,
   useTagPopover,
 } from "./TagPicker";
+import { useFittingChips } from "./useFittingChips";
 
 /** How many chips a row, or the viewer's header, shows before "+N": they stay one line. */
 const VISIBLE_CHIPS = { row: 3, header: 2 } as const;
@@ -45,16 +46,19 @@ export function DocumentTagChips({
   const tagFilter = useAppStore((state) => state.tagFilter);
   const popover = useTagPopover();
   const chips = chipsOf(document.tags, tags);
-  const shown = chips.slice(0, VISIBLE_CHIPS[variant]);
-  const hidden = chips.slice(VISIBLE_CHIPS[variant]);
+  // The header shows what its room holds, up to the most it lists: the rest fold into "+N".
+  const fitting = useFittingChips(chips.length, VISIBLE_CHIPS.header, header);
+  const listed = chips.slice(0, VISIBLE_CHIPS[variant]);
+  const hidden = chips.slice(header ? fitting.shown : VISIBLE_CHIPS[variant]);
   const label = pickerLabel(t, [document]);
   return (
     <div
+      ref={fitting.row}
       data-testid="document-tags"
       data-variant={variant}
-      className={`flex min-w-0 items-center gap-1 ${header ? "viewer-tags shrink" : "h-8"}`}
+      className={`flex items-center gap-1 ${header ? "viewer-tags" : "h-8 min-w-0"}`}
     >
-      {shown.map(({ tag, link }) => (
+      {listed.map(({ tag, link }) => (
         <TagChip
           key={tag.id}
           document={document}
@@ -64,9 +68,10 @@ export function DocumentTagChips({
           filters={!header}
         />
       ))}
-      {hidden.length > 0 && (
+      {(hidden.length > 0 || (header && chips.length > 0)) && (
         <button
           type="button"
+          data-tag-more=""
           data-testid="tag-chip-more"
           title={t("tags.chip.more", {
             count: hidden.length,
@@ -147,6 +152,7 @@ function TagChip({
   const review = link.needsReview;
   return (
     <span
+      data-tag-chip=""
       data-testid="tag-chip"
       data-tag-id={tag.id}
       data-source={link.source}

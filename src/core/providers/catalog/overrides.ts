@@ -44,6 +44,15 @@ const KIMI = { temperature: false, forcedToolChoice: false } as const;
 const GLM = { structuredOutput: "json_object", forcedToolChoice: false } as const;
 
 export const OVERRIDES: CatalogOverrides = {
+  cannotAnswer: {
+    openai: {
+      // Background research through the Responses API, not a chat: https://platform.openai.com/docs/guides/deep-research
+      "o3-deep-research": "deep-research",
+      "o4-mini-deep-research": "deep-research",
+      // Drives a computer through the Responses API's computer tool: https://platform.openai.com/docs/guides/tools-computer-use
+      "computer-use-preview": "computer-use",
+    },
+  },
   providers: {
     // Measured using the calculate Tool well (#438: Claude Haiku 5.5, GPT-6 Luna); the ChatGPT plan
     // serves OpenAI's models. Every other provider stays off until the evaluation (#441) says.

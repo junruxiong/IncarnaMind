@@ -7,12 +7,14 @@ const DEFAULT_EXPORT = {
   format: "docx",
   docx: { includeQuestions: false },
   pdf: { includeQuestions: false },
+  html: { includeQuestions: false },
 } as const;
 
 const PDF_EXPORT = {
   format: "pdf",
   docx: { includeQuestions: false },
   pdf: { includeQuestions: true },
+  html: { includeQuestions: false },
 } as const;
 
 describe("Settings", () => {

@@ -15,7 +15,7 @@
  * catalog knows them, their capabilities are unknown. What the catalog says
  * gives way to what the User set and what the server reports (see ../capabilities).
  */
-import type { ChatProviderKind } from "../../api";
+import type { CannotAnswerReason, ChatProviderKind, OtherModel } from "../../api";
 import generated from "./models.json";
 import { OVERRIDES } from "./overrides";
 import type { CatalogModel, GeneratedProviderModels, ModelFacts } from "./types";
@@ -94,6 +94,51 @@ export function catalogFacts(
 export function isNonChatModel(providerId: string | null | undefined, modelId: string): boolean {
   const ids = providerId ? NON_CHAT.get(providerId) : undefined;
   return !!ids && (ids.has(modelId) || ids.has(withoutDateSuffix(modelId)));
+}
+
+const CANNOT_ANSWER = new Map(
+  Object.entries(GENERATED.providers).map(([providerId, { cannotAnswer }]) => [
+    providerId,
+    new Map<string, CannotAnswerReason>([
+      ...Object.entries(cannotAnswer ?? {}),
+      ...Object.entries(OVERRIDES.cannotAnswer[providerId] ?? {}),
+    ]),
+  ]),
+);
+
+/** Which API other than chat a model needs, when a source says; a dated snapshot has its model's. */
+export function cannotAnswerReason(
+  providerId: string | null | undefined,
+  modelId: string,
+): CannotAnswerReason | undefined {
+  const reasons = providerId ? CANNOT_ANSWER.get(providerId) : undefined;
+  return reasons?.get(modelId) ?? reasons?.get(withoutDateSuffix(modelId));
+}
+
+/**
+ * Where the catalog puts a listed id: in the menu by default (undefined), or
+ * under Other models. In the menu: a chat model it knows by that id (or a
+ * dated snapshot of one, when `listed` doesn't also have the model itself)
+ * that isn't deprecated. A provider the catalog has no models for (a server
+ * the User gives) offers everything it lists. `shuttingDown`: the provider
+ * has announced the model's end.
+ */
+export function otherModel(
+  providerId: string,
+  modelId: string,
+  listed: ReadonlySet<string>,
+  shuttingDown = false,
+): Omit<OtherModel, "id"> | undefined {
+  const models = MODELS.get(providerId);
+  if (!models) return undefined;
+  const reason = cannotAnswerReason(providerId, modelId);
+  if (reason) return { why: "cannot-answer", reason };
+  const known = models.get(modelId);
+  const base = withoutDateSuffix(modelId);
+  const snapshot = !known && listed.has(base) && models.has(base);
+  const model = known ?? (snapshot ? undefined : models.get(base));
+  if (snapshot || shuttingDown || model?.status === "deprecated") return { why: "older" };
+  return model ? undefined : { why: "unknown" };
 }
 
 /**
