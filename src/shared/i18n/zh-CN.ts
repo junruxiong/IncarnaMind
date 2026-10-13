@@ -1751,6 +1751,8 @@ export const zhCN = {
   "composer.model.via.localMac": "在这台 Mac 上运行",
   "composer.model.via.cloud": "云端，在 ollama.com 运行",
   "composer.model.loading": "正在查找模型…",
+  "composer.model.search": "搜索模型",
+  "composer.model.noMatch": "没有匹配的模型。",
   "composer.model.default": "新 Mind 的默认模型：{model}",
   "composer.model.defaultUnset": "还没有默认模型",
   "models.other.title": "其他模型",
