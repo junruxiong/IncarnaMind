@@ -156,6 +156,25 @@ function useMindDocument(mindId: string): OpenedDocument | null {
   return opened;
 }
 
+const MIND_EXPLAINED_KEY = "incarnamind.mindExplained";
+
+/** Whether the sentence saying what a Mind is has been shown and written past (#721). */
+function mindExplained(): boolean {
+  try {
+    return localStorage.getItem(MIND_EXPLAINED_KEY) === "1";
+  } catch {
+    return true;
+  }
+}
+
+function rememberMindExplained(): void {
+  try {
+    localStorage.setItem(MIND_EXPLAINED_KEY, "1");
+  } catch {
+    // Without storage the sentence shows again next time, which does no harm.
+  }
+}
+
 /** The open Mind's Blocks, edited with Tiptap and saved through the core as they change. */
 export function MindEditor({ mindId }: { mindId: string }) {
   const opened = useMindDocument(mindId);
@@ -273,13 +292,16 @@ function MindEditorView({
   // A Meeting's empty Mind waits for the agenda (as in Granola), with no Question to ask yet.
   const isMeeting = useMeetingOf(mindId) !== undefined;
   // The example Mind invites a Question of one's own at its end.
+  const [explained, setExplained] = useState(mindExplained);
   const hintText = (place: HintPlace): HintText => {
     if (place === "empty" && isMeeting) {
       return { before: t("meetings.hint.agenda"), ask: "", after: "" };
     }
     const key =
       place === "empty"
-        ? "editor.hint.empty"
+        ? explained
+          ? "editor.hint.empty"
+          : "editor.hint.first"
         : isExample
           ? "editor.hint.example"
           : "editor.hint.afterAnswer";
@@ -596,6 +618,15 @@ function MindEditorView({
     editor,
     selector: ({ editor: current }) => isEmptyMind(current.state.doc),
   });
+  // The first empty Mind says what a Mind is until something is written in it, and never again (#721).
+  const wasEmpty = useRef(empty);
+  useEffect(() => {
+    if (wasEmpty.current && !empty && !explained) {
+      rememberMindExplained();
+      setExplained(true);
+    }
+    wasEmpty.current = empty;
+  }, [empty, explained]);
   const findShown = useMindTools((state) => state.findMindId === mindId);
   const outlineShown = useMindTools((state) => state.outlineMindId === mindId);
   const guide = useGettingStarted() !== null && empty && !isExample && !readOnly;

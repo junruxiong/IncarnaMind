@@ -460,6 +460,7 @@ describe("changing a Linked folder", () => {
     layout: "tree" as const,
     progress: { files: 0, indexed: 0 },
     onlineOnly: { files: 0, bytes: 0, downloading: false },
+    unsupportedFiles: 0,
     createdAt: "",
     updatedAt: "",
   };
