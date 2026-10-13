@@ -60,6 +60,7 @@ import { type CitedPages, type CitedPlace, createCitedPages } from "./citedPages
 import { COMPARISON_TASK, createComparisons } from "./comparisons";
 import { createConnectors } from "./connectors";
 import { connectorDirectory } from "./connectors/directory";
+import { createConnectorRegistry, REGISTRY, REGISTRY_SENDS } from "./connectors/registry";
 import { createConsent, type DataFlowRegistry } from "./consent";
 import { createConversations } from "./conversations";
 import { createMeter } from "./cost/meter";
@@ -1704,6 +1705,17 @@ export function createCore(adapters: CoreAdapters): Core {
   // Connectors that are on start with the app.
   connectors.startAll();
   const directory = connectorDirectory(adapters.connectorDirectory);
+  const registry = createConnectorRegistry({
+    baseUrl: adapters.connectorRegistryUrl ?? REGISTRY.id,
+    consent,
+    localOnly: () => embedding.localOnly(),
+  });
+  // Asked only once the User searches, as Find sources' providers are.
+  consent.registry.register({
+    id: "connector-registry",
+    sends: REGISTRY_SENDS,
+    services: async () => [],
+  });
   const layouts = createLayouts({
     readValue: (key) => settings.readDeviceValue(key),
     writeValue: (key, value) => settings.writeDeviceValue(key, value),
@@ -2522,6 +2534,7 @@ export function createCore(adapters: CoreAdapters): Core {
       if (!entry) throw new NotFoundError({ key: "error.connector.notInDirectory" });
       return connectors.addFromDirectory(entry, client);
     },
+    searchConnectorRegistry: (query) => registry.search(query),
     previewConnectorImport: async (json) => connectors.previewImport(json),
     importConnectors: (json) => connectors.import(json),
 
