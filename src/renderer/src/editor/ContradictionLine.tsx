@@ -7,8 +7,9 @@ import {
   dismissContradictions,
   useContradictionLine,
 } from "../contradictions";
-import { formatMoney, runStopText } from "../cost";
+import { formatMoney } from "../cost";
 import { useLanguage, useT } from "../i18n";
+import { contradictionOutcomeText } from "./contradictionOutcome";
 
 /**
  * Contradiction watch's line under the Mind's title (#112), beside its
@@ -21,15 +22,7 @@ export function ContradictionLine({ doc, mindId }: { doc: Y.Doc; mindId: string 
   const language = useLanguage();
   const shown = useContradictionLine(doc, mindId);
   const format = (value: number) => new Intl.NumberFormat(language).format(value);
-
-  const outcome = (run: ContradictionCheckOutcome) => {
-    const counts = { count: format(run.claims), contradicted: format(run.contradicted) };
-    const said =
-      run.contradicted > 0
-        ? t("contradictions.found", counts)
-        : t(run.claims === 1 ? "contradictions.none.one" : "contradictions.none", counts);
-    return run.stop ? `${said} · ${runStopText(run.stop, t, language)}` : said;
-  };
+  const outcome = (run: ContradictionCheckOutcome) => contradictionOutcomeText(run, t, language);
 
   if (shown?.kind === "asking") {
     return (
