@@ -36,8 +36,9 @@ jobs:
       - run: npm run lint
       - run: npm test
 
-  # The Word corpus (eval/word/README.md): every file opens in LibreOffice headless. Not a required
-  # check; it installs LibreOffice, which the other jobs don't need.
+  # The Word corpus (eval/word/README.md): every file, and its export back into itself after an
+  # edit, opens in LibreOffice headless. Not a required check; it installs LibreOffice, which the
+  # other jobs don't need.
   word-corpus:
     name: Word corpus opens in LibreOffice
     runs-on: ubuntu-latest
@@ -57,6 +58,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libreoffice-writer
       - run: npm run eval:word
+        env:
+          INCARNAMIND_WORD_PDFS: ${{ runner.temp }}/word-exports
+      # How LibreOffice draws each edited export, for a person to look at.
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: word-exports
+          path: ${{ runner.temp }}/word-exports
+          retention-days: 7
+          if-no-files-found: ignore
 
   # Every pull request runs the smoke test on Linux, where runners are plentiful; macOS runs
   # it every night (nightly.yml), for what only macOS has, such as the traffic lights.
