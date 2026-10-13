@@ -18,6 +18,7 @@ import {
 import { Generated } from "./aiText";
 import { Chart } from "./chartSchema";
 import { Citation } from "./citationSchema";
+import { ClaimCheck } from "./claimChecks";
 import { lowlight } from "./codeLanguages";
 import { ComparisonCell, ComparisonRow, ComparisonTable } from "./comparisonSchema";
 import { DocumentChip } from "./documentChipSchema";
@@ -89,6 +90,7 @@ export interface NoteSchemaOptions {
  * import kept as it is, and its inline pictures (#104, see `wordSchema`).
  * Proposals the AI made, waiting for the User (see `proposalSchema`).
  * AI text, the words the AI wrote that the User hasn't made their own (see `aiText`).
+ * The checks of the User's own sentences, on their text (see `claimChecks`).
  * Every Block and every footnote has a UUID. The editor adds its interface on
  * top (collaboration, menus, the drag handle, smart typography); tests use
  * this alone.
@@ -164,6 +166,7 @@ export function noteExtensions({
     ProposalDelete,
     ProposalAttributes,
     Generated,
+    ClaimCheck,
     UniqueID.configure({
       attributeName: BLOCK_ID_ATTRIBUTE,
       types: [...BLOCK_TYPES, FOOTNOTE_NODE],

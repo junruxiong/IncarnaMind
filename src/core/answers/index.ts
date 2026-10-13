@@ -136,8 +136,12 @@ import {
 import {
   conversationContext,
   conversationContextOf,
+  estimateTokens,
+  MIND_TOKEN_LIMIT,
+  type MindCut,
   type MindReading,
   type MindSection,
+  QUESTION_CONTEXT_TOKEN_BUDGET,
   type QuestionContext,
   questionContextOf,
   type RequestMind,
@@ -223,8 +227,21 @@ interface WrittenAnswer {
 interface MindToRead {
   mindId: string;
   reading: MindReading;
-  /** What of it the Question context holds. */
+  /** What of it the Question context holds, before the model is known: at most `MIND_TOKEN_LIMIT` tokens. */
   section: MindSection;
+}
+
+/**
+ * How much of a Mind a Question in the assistant reads whole (#564): a
+ * quarter of a cloud model's window, at most `MIND_TOKEN_LIMIT` tokens; for a
+ * model in Ollama, as much as its own window holds once the rest of the
+ * request is in (see ./window); the old Question context budget when the
+ * model's window isn't known.
+ */
+function mindLimit(prepared: PreparedChatModel): number {
+  if (!prepared.window) return QUESTION_CONTEXT_TOKEN_BUDGET;
+  if (prepared.provider.kind === "ollama") return MIND_TOKEN_LIMIT;
+  return Math.min(MIND_TOKEN_LIMIT, Math.floor(prepared.window.tokens / 4));
 }
 
 /** What Answers need of the assistant's conversations (see ../conversations). */
@@ -589,9 +606,18 @@ export function createAnswers(options: AnswersOptions) {
     contextReasons: readonly ThirdPartyReason[];
     /**
      * The Mind a Question in a conversation reads (#544): what the Answer records of it,
-     * and what its request holds of it. Absent: none.
+     * what its request holds of it and what share of it that is, and the same Question
+     * with no more of it than `tokens` tokens (null when it already holds no more), for
+     * a model that reads less of it (`mindLimit`). Absent: none.
      */
-    mind?: { read: AnswerRead | null; request: RequestMind } | null;
+    mind?: {
+      read: AnswerRead | null;
+      request: RequestMind;
+      share: number;
+      within(
+        tokens: number,
+      ): { context: QuestionContext; request: RequestMind; share: number } | null;
+    } | null;
     /**
      * An Answer for an outside agent (#351), or a comparison table's cell
      * (#98): no window hears of it (it is in no Mind or conversation), and it
@@ -630,6 +656,10 @@ export function createAnswers(options: AnswersOptions) {
       : (contextReasons[0]?.source ?? null);
     /** What the Answer records of the Mind it read: less once the model's window cut it. */
     let read = input.mind?.read ?? null;
+    /** How much of the Mind its request holds, from 0 to 1. */
+    let readShare = input.mind?.share ?? 1;
+    let { messages } = context;
+    let mindRequest = input.mind?.request;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let finished = false;
     let support: CitationSupport | null = null;
@@ -672,6 +702,7 @@ export function createAnswers(options: AnswersOptions) {
           summary && reasoningStartedAt !== null
             ? { summary, ms: Math.max(0, thoughtUntil - reasoningStartedAt) }
             : null,
+        ...(read?.partial && { readShare }),
       };
     };
     let skills: SkillSession | null = null;
@@ -1145,6 +1176,13 @@ export function createAnswers(options: AnswersOptions) {
         return;
       }
       calculating = offersCalculate(prepared.capabilities);
+      const within = input.mind?.within(mindLimit(prepared));
+      if (within) {
+        ({ messages } = within.context);
+        mindRequest = within.request;
+        readShare = within.share;
+        if (read) read = within.request.text ? { ...read, partial: true } : null;
+      }
       // Stopped while waiting, e.g. for consent: send nothing.
       if (finished) return;
       if (consenting) {
@@ -1301,8 +1339,8 @@ export function createAnswers(options: AnswersOptions) {
           ]
             .filter(Boolean)
             .join("\n\n"),
-        messages: context.messages,
-        ...(input.mind && { mind: input.mind.request }),
+        messages,
+        ...(mindRequest && { mind: mindRequest }),
         question: context.question,
         model: prepared.model,
         documents,
@@ -1336,7 +1374,8 @@ export function createAnswers(options: AnswersOptions) {
             placedMarkers += event.count;
             break;
           case "mind-cut":
-            if (read) read = event.kept === "none" ? null : { ...read, partial: true };
+            if (read) read = event.share === 0 ? null : { ...read, partial: true };
+            readShare = event.share;
             writeSoon();
             break;
           case "quotes-retried":
@@ -1578,12 +1617,16 @@ export function createAnswers(options: AnswersOptions) {
    * The Mind a Question in a conversation reads (#544): the one it was asked from, as it
    * is now, where the User was in it first; null when there is none it can read.
    */
-  function mindToRead(mindId: string | null, focus: MindFocus | null): MindToRead | null {
+  function mindToRead(
+    mindId: string | null,
+    focus: MindFocus | null,
+    question: string,
+  ): MindToRead | null {
     if (mindId === null) return null;
     const name = options.readableMindName(mindId);
     if (name === null) return null;
     const reading = content.peek(mindId, (blocks) => readMind(blocks, name, focus));
-    return { mindId, reading, section: reading.section() };
+    return { mindId, reading, section: reading.section(MIND_TOKEN_LIMIT, question) };
   }
 
   /** What an Answer records of the Mind it reads; null when none of it fits. */
@@ -1604,8 +1647,23 @@ export function createAnswers(options: AnswersOptions) {
     mind: MindToRead | null,
   ): ConversationAskResult {
     const { conversation, question, answer } = turn;
+    // A long Mind is cut to what the conversation's Questions are about, the earlier ones too: a
+    // follow-up keeps the part the first one found, and so the same start for the prompt cache.
+    const asking = [
+      ...turn.earlier.flatMap((message) => (message.kind === "question" ? [message.text] : [])),
+      question.text,
+    ].join("\n");
+    const section =
+      mind && turn.earlier.length > 0
+        ? mind.reading.section(MIND_TOKEN_LIMIT, asking)
+        : mind?.section;
     const { context, origins } = conversationContextOf(turn.earlier, question.text, {
-      mind: mind?.section.text,
+      mind: section,
+    });
+    const requestOf = (reading: MindReading, kept: MindCut): RequestMind => ({
+      text: kept.text,
+      selection: kept.selection,
+      cut: (tokens) => reading.section(tokens, asking),
     });
     start({
       home: conversationHome(conversation.id, answer.id),
@@ -1614,18 +1672,28 @@ export function createAnswers(options: AnswersOptions) {
       model: ready.model,
       context,
       contextReasons: [
-        ...(mind?.section.origins ?? []).map((source) => ({ via: "mind" as const, source })),
+        ...(section?.origins ?? []).map((source) => ({ via: "mind" as const, source })),
         ...origins.map((source) => ({ via: "context" as const, source })),
       ],
-      ...(mind && {
-        mind: {
-          read: readOf(mind),
-          request: {
-            text: mind.section.text,
-            cut: (tokens: number) => mind.reading.section(tokens).text,
+      ...(mind &&
+        section && {
+          mind: {
+            read: readOf(mind),
+            request: requestOf(mind.reading, section),
+            share: section.share,
+            within: (tokens: number) => {
+              if (estimateTokens(section.text) + estimateTokens(section.selection) <= tokens)
+                return null;
+              const smaller = mind.reading.section(tokens, asking);
+              return {
+                context: conversationContextOf(turn.earlier, question.text, { mind: smaller })
+                  .context,
+                request: requestOf(mind.reading, smaller),
+                share: smaller.share,
+              };
+            },
           },
-        },
-      }),
+        }),
       documentIds,
       emptyScope,
       forcedSkill: question.forcedSkill,
@@ -1651,7 +1719,11 @@ export function createAnswers(options: AnswersOptions) {
     return { context, documentIds, emptyScope };
   };
 
-  async function ask(mindIdInput: unknown, questionIdInput: unknown): Promise<AskResult> {
+  async function ask(
+    mindIdInput: unknown,
+    questionIdInput: unknown,
+    beforeWriting?: (mindId: string) => void,
+  ): Promise<AskResult> {
     const mindId = options.requireMind(mindIdInput);
     const questionId = parseId(questionIdInput, "A Question id");
 
@@ -1671,6 +1743,7 @@ export function createAnswers(options: AnswersOptions) {
     const current = content.read(mindId, (blocks) => answerFor(blocks, questionId));
     const currentId = current && textAttribute(current, BLOCK_ID_ATTRIBUTE);
     if (currentId) active.get(currentId)?.finish({ status: "stopped" });
+    beforeWriting?.(mindId);
 
     /** What the Answer is written from: its Question context and Search scope, as they are now. */
     type Asked = {
@@ -1749,7 +1822,8 @@ export function createAnswers(options: AnswersOptions) {
       return ask(input.mindId, input.questionId);
     },
 
-    regenerate(input: unknown): Promise<AskResult> {
+    /** `beforeWriting` runs once the Answer can be written again, just before it is. */
+    regenerate(input: unknown, beforeWriting?: (mindId: string) => void): Promise<AskResult> {
       if (!isRecord(input)) throw new InvalidInputError("regenerateAnswer expects an object.");
       const mindId = options.requireMind(input.mindId);
       const answerId = parseId(input.answerId, "An Answer id");
@@ -1762,7 +1836,7 @@ export function createAnswers(options: AnswersOptions) {
         }
         return id;
       });
-      return ask(mindId, questionId);
+      return ask(mindId, questionId, beforeWriting);
     },
 
     stop(input: unknown): void {
@@ -1784,7 +1858,9 @@ export function createAnswers(options: AnswersOptions) {
       // From here on nothing awaits, so the conversation and the Mind can't change underneath.
       const { documentIds, emptyScope } = scopeNow(question.scope);
       // No model writes an Answer that says the Search scope is empty, and it reads nothing.
-      const mind = emptyScope ? null : mindToRead(question.mind?.id ?? null, question.focus);
+      const mind = emptyScope
+        ? null
+        : mindToRead(question.mind?.id ?? null, question.focus, question.text);
       const turn = options.conversations.add(
         question,
         emptyScope ? null : ready.model,
@@ -1802,7 +1878,9 @@ export function createAnswers(options: AnswersOptions) {
       const { documentIds, emptyScope } = scopeNow(question.scope);
       const from = question.askedFrom;
       const mind =
-        emptyScope || !from || from.deleted ? null : mindToRead(from.mindId, question.focus);
+        emptyScope || !from || from.deleted
+          ? null
+          : mindToRead(from.mindId, question.focus, question.text);
       const turn = options.conversations.restartAnswer(
         answerId,
         emptyScope ? null : ready.model,

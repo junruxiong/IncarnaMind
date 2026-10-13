@@ -76,6 +76,7 @@
     "@tiptap/starter-kit": "3.31.4",
     "@tiptap/suggestion": "3.31.4",
     "@tiptap/y-tiptap": "3.0.9",
+    "@xmldom/xmldom": "0.9.12",
     "ai": "7.0.129",
     "ajv": "8.20.0",
     "cross-spawn": "7.0.6",

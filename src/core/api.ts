@@ -130,8 +130,11 @@ export interface CreateMindInput {
  * - 17: comparison tables (#98): `COMPARISON_TABLE_NODE`, `COMPARISON_ROW_NODE`
  *   and `COMPARISON_CELL_NODE`. Older content is version 17 content as it is:
  *   nothing is rewritten.
+ * - 18: checks of the User's own sentences (#96): the `claimCheck` mark on a
+ *   sentence's text, which holds its result (see `CLAIM_CHECK_MARK`). Older
+ *   content is version 18 content as it is: nothing is rewritten.
  */
-export const CONTENT_SCHEMA_VERSION = 17;
+export const CONTENT_SCHEMA_VERSION = 18;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -297,6 +300,16 @@ export const PROPOSAL_ATTRIBUTE = "proposal";
  */
 export const GENERATED_MARK = "generated";
 
+/**
+ * A check of a sentence the User wrote (#96): Find support or Check against
+ * Documents put this mark on the sentence's text, with the result as its
+ * attributes (`ClaimCheckAttributes`). It isn't inclusive, so words typed
+ * after the sentence aren't under it. Whether it still holds is worked out
+ * from what it records (`claimCheckShown` in src/shared/claimChecks.ts).
+ * Readers and exports treat it as no mark.
+ */
+export const CLAIM_CHECK_MARK = "claimCheck";
+
 /** Which Proposal a mark or attribute belongs to. */
 export interface ProposalRef {
   /** The Proposal's random UUID: what is accepted or rejected on its own. */
@@ -357,6 +370,114 @@ export interface ProposalMaker {
   modelId: string;
   /** ISO 8601, UTC. */
   createdAt: string;
+}
+
+/**
+ * Why a Checkpoint (CONTEXT.md) was saved: just before an AI change
+ * (accepting changes, Regenerate, Enhance, a comparison table going in,
+ * accepting someone else's changes from a Word file), just before restoring
+ * another one, or once the Mind had been left alone for
+ * `CHECKPOINT_IDLE_MS` ("idle"). Only idle ones thin out as they age (all for
+ * a day, then one an hour for a week, one a day for 90 days, then one a
+ * week); the others are kept for good.
+ */
+export const CHECKPOINT_REASONS = [
+  "accept",
+  "regenerate",
+  "enhance",
+  "compare",
+  "others",
+  "restore",
+  "idle",
+] as const;
+export type CheckpointReason = (typeof CHECKPOINT_REASONS)[number];
+
+/** How long a Mind goes unchanged before an idle Checkpoint is saved. */
+export const CHECKPOINT_IDLE_MS = 5 * 60_000;
+
+/** A saved copy of a Mind (CONTEXT.md, Checkpoint). Its content stays in the core. */
+export interface Checkpoint {
+  id: string;
+  mindId: string;
+  reason: CheckpointReason;
+  /** When it was saved (ISO 8601, UTC). */
+  createdAt: string;
+}
+
+/** A Mind's Checkpoints, as History lists them. */
+export interface CheckpointList {
+  /** Newest first. */
+  checkpoints: Checkpoint[];
+  /** The Checkpoint that holds the Mind exactly as it is now, if one does: only the newest can. */
+  current: string | null;
+}
+
+/** Two versions of a Mind to compare: a Checkpoint, and another one or (`to` null) the Mind now. */
+export interface CompareCheckpointsInput {
+  mindId: string;
+  from: string;
+  to: string | null;
+}
+
+/** Whether a part of a version is in both, only in the earlier one, or only in the later one. */
+export type ComparedChange = "same" | "removed" | "added";
+
+/**
+ * A part of a Block as History compares it: words, a Citation (named by its
+ * Document and Location), or a footnote the User wrote (its text). Marks such
+ * as bold aren't compared.
+ */
+export type ComparedPart =
+  | { kind: "text"; text: string; change: ComparedChange }
+  | { kind: "citation"; work: CitedWork; change: ComparedChange }
+  | { kind: "footnote"; text: string; change: ComparedChange };
+
+/**
+ * A Block of one version, as History shows it. An Answer is its Blocks; a list
+ * is its items; a table or a chart is its text, row by row (a line each, its
+ * cells split by " · "). Empty paragraphs aren't compared.
+ */
+export interface ComparedBlock {
+  kind:
+    | "paragraph"
+    | "heading"
+    | "question"
+    | "item"
+    | "quote"
+    | "code"
+    | "math"
+    | "rule"
+    | "table"
+    | "chart"
+    | "image";
+  /** A heading's level, from 1; a list item's depth, from 1; else 0. */
+  level: number;
+  /** A list item's bullet ("•") or number ("3."); "" for anything else, a later paragraph of an item too. */
+  marker: string;
+  parts: ComparedPart[];
+}
+
+/**
+ * One row of a comparison: a Block of the earlier version beside its
+ * counterpart in the later one. A Block only one version has leaves the other
+ * side null. `changed` rows are those whose sides differ.
+ */
+export interface ComparisonRow {
+  left: ComparedBlock | null;
+  right: ComparedBlock | null;
+  changed: boolean;
+}
+
+/** Two versions of a Mind side by side, in the order of their Blocks. */
+export interface MindComparison {
+  rows: ComparisonRow[];
+  /** How many rows changed: none when the two versions read the same. */
+  changes: number;
+}
+
+/** What restoring a Checkpoint did: it saved the Mind as it was, which restoring takes the restore back. */
+export interface RestoredCheckpoint {
+  before: Checkpoint;
 }
 
 /**
@@ -922,6 +1043,35 @@ export interface WordSource {
   n: string;
   p?: string;
   f: string;
+}
+
+/**
+ * Something exporting a Mind back into its Word file can't keep (#105), said
+ * before the file is saved:
+ * - "comment": someone's comment on text the User deleted;
+ * - "change": someone's tracked change in text the User deleted;
+ * - "copy": a copy of something kept from Word, written as its text;
+ * - "edit": an edit next to a field, which is written as it was;
+ * - "signature": the file's digital signature, which no longer matches once it changes.
+ */
+export interface WordExportLoss {
+  /** The same for the same thing at the next export, so going ahead applies to what the User saw. */
+  key: string;
+  kind: "comment" | "change" | "copy" | "edit" | "signature";
+  /** Whose comment or change it is. */
+  author: string | null;
+  /** Its text, shortened; "" for none. */
+  text: string;
+}
+
+/** What exporting a Mind imported from a Word file does with the original (#105). */
+export interface WordExportReport {
+  /** What can't be kept: the User sees it before the file is saved. */
+  notKept: WordExportLoss[];
+  /** Parts of the package IncarnaMind doesn't know, kept as they are. */
+  unknownParts: string[];
+  /** The header and the footer, kept in the file though their Blocks were deleted from the Mind. */
+  keptFurniture: ("header" | "footer")[];
 }
 
 /**
@@ -3417,6 +3567,166 @@ export type EditWithAiResult =
   /** The model failed, or gave nothing back. */
   | { kind: "failed"; error: ProviderError };
 
+/**
+ * The checks of the User's own sentences (#96). Both check each sentence's
+ * claim against the Documents: Find support looks for a Passage that backs
+ * it; Check against Documents does the same for a sentence that already has
+ * Citations, telling the model what they quote, so the claim is checked and
+ * not only the quote.
+ */
+export const claimCheckActions = ["find-support", "check-against-documents"] as const;
+export type ClaimCheckAction = (typeof claimCheckActions)[number];
+
+/** What a claim check found (CONTEXT.md: supported, unsupported, contradicted). */
+export type ClaimVerdict = "supported" | "unsupported" | "contradicted";
+
+/**
+ * Why a sentence wasn't checked. It is never shown as supported.
+ * - "refused": the model declined to check it.
+ * - "malformed": its reply held no verdict that could be read.
+ * - "empty": its reply was empty.
+ * - "no-evidence": it gave a verdict, but no quote the Citation check finds in the Passage it named.
+ * - "rate-limit": the model's service refused more requests for now.
+ * - "cost-cap": it could pass the monthly cap, so nothing was sent.
+ * - "plan-limit": the plan's usage limit is reached.
+ * - "failed": the model or its service failed otherwise (`detail` says how).
+ * - "stopped": the User stopped the check, or IncarnaMind quit, before this sentence was checked.
+ */
+export type ClaimCheckFailure =
+  | "refused"
+  | "malformed"
+  | "empty"
+  | "no-evidence"
+  | "rate-limit"
+  | "cost-cap"
+  | "plan-limit"
+  | "failed"
+  | "stopped";
+
+/** A Document version a check read, which it no longer holds for once the Document changes. */
+export interface CheckedVersion {
+  documentId: string;
+  contentHash: string;
+}
+
+/** A Document left out of a check's evidence that matched (#80): the result names it, with Count it. */
+export interface LeftOutDocument {
+  documentId: string;
+  documentName: string;
+  reason: EvidenceExclusion;
+}
+
+/** What one claim check found: the claim-check function's result (`checkClaim`). */
+export type ClaimCheckResult =
+  | {
+      verdict: ClaimVerdict;
+      /**
+       * For "supported" and "contradicted": the Passage that decides it, as a
+       * Citation whose quote the Citation check found. Null for "unsupported".
+       */
+      evidence: Citation | null;
+      /** For "supported" and "contradicted": what the Document says, in one plain sentence. */
+      says: string | null;
+      /** The versions of the Documents it read, each once. */
+      versions: CheckedVersion[];
+      excluded: LeftOutDocument[];
+    }
+  | {
+      verdict: "not-checked";
+      reason: ClaimCheckFailure;
+      /** "failed": the provider's message. */
+      detail: string | null;
+      versions: CheckedVersion[];
+      excluded: LeftOutDocument[];
+    };
+
+/** What the claim-check function checks (`checkClaim`). */
+export interface CheckClaimInput {
+  /** The sentence, or claim, to check: the User's own words. */
+  claim: string;
+  /** The paragraph it is in, for what its words refer to. */
+  context?: string;
+  /** What the sentence already cites, for Check against Documents: each Citation's Document and quote. */
+  cited?: { documentName: string; quote: string }[];
+  /** Where to look. None: every Document. */
+  scope?: SearchScope | null;
+  /** The document being checked, which is never its own evidence (#97). */
+  checked?: CheckedDocument;
+  /** The model to check with; none, or null, the default chat model. */
+  model?: ChatModelChoice | null;
+}
+
+/**
+ * Where a sentence's check searched: the Mind's Folder (null for a Mind in
+ * none, which searches every Document), or every Document because the User
+ * asked ("Search all Documents"). A Mind moved to another Folder since needs
+ * its sentences checked again; one the User widened doesn't.
+ */
+export interface ClaimCheckScope {
+  folderId: string | null;
+  widened: boolean;
+}
+
+/**
+ * A sentence's check, as its `CLAIM_CHECK_MARK` stores it in the Mind: the
+ * result and what it was made from, so it is known to need a re-check once
+ * the sentence, a Document it read or the Mind's Folder changes.
+ */
+export interface ClaimCheckAttributes {
+  /** The result's random UUID: checking the sentence again gives it a new one. */
+  id: string;
+  /** The `checkSentences` request that made it. A "checking" mark of a request that ended was stopped. */
+  request: string;
+  action: ClaimCheckAction;
+  state: "checking" | ClaimVerdict | "not-checked";
+  /** "not-checked": why. */
+  reason: ClaimCheckFailure | null;
+  /** "failed": the provider's message. */
+  detail: string | null;
+  /** The sentence as it was checked: an inline node as U+FFFC, a line break as "\n". */
+  text: string;
+  /** "supported" and "contradicted": the Passage that decides it, as a Citation found. */
+  evidence: CitationAttributes | null;
+  /** "supported" and "contradicted": what the Document says, in one plain sentence. */
+  says: string | null;
+  scope: ClaimCheckScope;
+  versions: CheckedVersion[];
+  excluded: LeftOutDocument[];
+  /** When it was checked, or started. ISO 8601, UTC. */
+  checkedAt: string;
+}
+
+export interface CheckSentencesInput {
+  /** Chosen by the caller, so it can stop the request (`cancelCheck`). */
+  requestId: string;
+  mindId: string;
+  /** Where the selection starts, and where it ends: each sentence it touches is checked, whole. */
+  from: TextPlace;
+  to: TextPlace;
+  action: ClaimCheckAction;
+  /** Search every Document, not the Mind's Folder ("Search all Documents"). */
+  allDocuments?: boolean;
+  /** The model to use: the Mind's own; none, or null, the default chat model. */
+  model?: ChatModelChoice | null;
+}
+
+/** What `checkSentences` did. */
+export type CheckSentencesResult =
+  /** Each sentence has its mark: `checked` of them with a verdict, the rest not checked. */
+  | { kind: "checked"; sentences: number; checked: number }
+  /** Nothing was sent: the model can't be used now, and `readiness` says why. */
+  | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
+  /** Nothing was sent: local mode is on, and the model isn't on this computer. */
+  | { kind: "local-mode" }
+  /** Nothing was sent: the scope holds no Document with text to check against. */
+  | { kind: "no-documents"; folderId: string | null }
+  /** The selection holds no sentence to check, or isn't in the Mind any more. */
+  | { kind: "nothing" }
+  /** Nothing was sent: the selection holds changes still waiting. */
+  | { kind: "has-proposals" }
+  /** The User stopped it (`cancelCheck`): the sentences not checked yet say "stopped". */
+  | { kind: "cancelled" };
+
 /** What asking a Question (or regenerating its Answer) did. */
 export type AskResult =
   /** The Answer is being written into the Mind, right after its Question. */
@@ -3507,6 +3817,11 @@ export interface AnswerSteps {
    * Null when the model gave no summary. Raw chain of thought is never kept.
    */
   reasoning: { summary: string; ms: number } | null;
+  /**
+   * How much of the Mind it read (`ConversationAnswer.read`) it read, from 0
+   * to 1, when that was part of it (#564).
+   */
+  readShare?: number;
 }
 
 /** A Tool call of an Answer started, or finished (see `call.status`). */
@@ -4244,6 +4559,10 @@ export type DataKind = (typeof dataKinds)[number];
  *   local mode.
  * - "edits": when the User asks Edit with AI (#93), the text they selected
  *   and the paragraphs it is in, to the chat model's provider. None in local mode.
+ * - "checks": when the User asks Find support or Check against Documents
+ *   (#96), each sentence they selected, with its paragraph and what it cites,
+ *   and the Passages the check's searches find, to the chat model's provider.
+ *   None in local mode.
  * - "agents": what an outside agent reads (#351), to that agent, which sends
  *   it on to the AI model it uses, out of IncarnaMind's sight: one service
  *   per pairing ("agent:<id>"), named as the User named the agent. Passages
@@ -4264,6 +4583,7 @@ export const dataFlowIds = [
   "reference-lookup",
   "find-sources",
   "edits",
+  "checks",
   "agents",
   "web-search",
 ] as const;
@@ -5046,6 +5366,12 @@ export interface ExportMindOptions {
    * deliverable leaves the working material out.
    */
   includeQuestions?: boolean;
+  /**
+   * For a Mind imported from a Word file, exported to Word (#105): the keys of
+   * what can't be kept (`WordExportLoss.key`) that the User has seen and
+   * exports anyway. `saveMindExport` saves nothing while anything else can't be kept.
+   */
+  accept?: string[];
 }
 
 /** What exporting a Mind will write, for the User to see before the file is written. */
@@ -5072,12 +5398,22 @@ export interface MindExportPreview {
 export interface MindExport extends MindExportPreview {
   /** The file's contents: UTF-8 text for Markdown and HTML, a ZIP package for .docx, a PDF for PDF. */
   data: Uint8Array;
+  /** For a Mind imported from a Word file, exported back into it: what it kept and couldn't keep. */
+  word: WordExportReport | null;
 }
 
 /** What `saveMindExport` did. */
 export type SavedMindExport =
   /** Saved, with what it holds, so the result line can say how many quotes weren't found. */
-  | ({ status: "saved"; file: SavedFile } & Omit<MindExportPreview, "fileName">)
+  | ({ status: "saved"; file: SavedFile; word: WordExportReport | null } & Omit<
+      MindExportPreview,
+      "fileName"
+    >)
+  /**
+   * Not saved: a Mind imported from Word can't keep something in its file
+   * (`WordExportReport.notKept`) the User hasn't accepted (`ExportMindOptions.accept`).
+   */
+  | { status: "review"; word: WordExportReport }
   | Exclude<SavedExport, { status: "saved" }>;
 
 /** What saving an export did: a Skill's zip (`saveSkillExport`), and the base of a Mind's. */
@@ -5793,6 +6129,37 @@ export interface CoreApi {
   closeMind(mindId: string): Promise<void>;
 
   /**
+   * Saves a Checkpoint of the Mind as it is now (#113), and returns it. Call
+   * it just before an AI change goes into the Mind, with why: accepting
+   * changes, Regenerate, Enhance, inserting a comparison table ("compare"), or
+   * accepting someone else's changes ("others"). The renderer may call it
+   * without waiting, right before sending the change: calls are taken in
+   * order. When the Mind hasn't changed since its last Checkpoint, deletions
+   * included, nothing new is saved and that one is returned; an idle one is
+   * kept for good from then on. Its Citations' Document versions keep their
+   * text for as long as it is kept. Throws NotFoundError for an unknown or
+   * deleted Mind.
+   */
+  saveCheckpoint(mindId: string, reason: CheckpointReason): Promise<Checkpoint>;
+  /** A Mind's Checkpoints, newest first, and which holds it as it is now. */
+  listCheckpoints(mindId: string): Promise<CheckpointList>;
+  /**
+   * Compares a Checkpoint with another one, or with the Mind now, Block by
+   * Block and word by word. Throws NotFoundError for a Checkpoint that isn't
+   * one of the Mind's, or is no longer kept.
+   */
+  compareCheckpoints(input: CompareCheckpointsInput): Promise<MindComparison>;
+  /**
+   * Brings a Checkpoint's Blocks back as a new change to the Mind, after
+   * saving one of the Mind as it is ("restore"): nothing is overwritten, and
+   * both stay in History. Proposals that were waiting in it don't come back,
+   * so it reads as `compareCheckpoints` showed it. Restoring the `before` it
+   * returns takes it back.
+   * Throws MindReadOnlyError for a Mind a newer version wrote.
+   */
+  restoreCheckpoint(mindId: string, checkpointId: string): Promise<RestoredCheckpoint>;
+
+  /**
    * Asks a Question in the assistant (ADR-0017): adds it to the conversation, or starts
    * a conversation with it, and the Answer streams into the conversation ("answer.*"
    * events with its `conversationId`, and each write as "conversation.message"). The
@@ -6367,6 +6734,25 @@ export interface CoreApi {
   regenerateProposal(input: RegenerateProposalInput): Promise<EditWithAiResult>;
   /** Stops an Edit with AI request: it gives "cancelled". Stopping one that ended does nothing. */
   cancelEdit(requestId: string): Promise<void>;
+  /**
+   * Find support and Check against Documents (#96): checks each sentence the
+   * selection touches against the Mind's Folder (or every Document), one at a
+   * time, with `checkClaim`. Each sentence gets a `CLAIM_CHECK_MARK` at once,
+   * "checking", then its result, pushed as a "mind.update" like any edit.
+   * Sends on the "checks" flow once the User allows it for the model's
+   * service; in local mode only a model on this computer is used.
+   */
+  checkSentences(input: CheckSentencesInput): Promise<CheckSentencesResult>;
+  /** Stops a `checkSentences` request: it gives "cancelled". Stopping one that ended does nothing. */
+  cancelCheck(requestId: string): Promise<void>;
+  /**
+   * The claim-check function (#96): checks one claim against the Documents
+   * in a check Run, which is offered the Documents' search and `cite` only
+   * (ADR-0013), searching as `searchEvidence` does. A model that refuses,
+   * fails or gives no verdict leaves it "not-checked" with the reason.
+   * Sends on the "checks" flow, as `checkSentences` does.
+   */
+  checkClaim(input: CheckClaimInput): Promise<ClaimCheckResult>;
 
   getSecretStorage(): Promise<SecretStorageStatus>;
   /** The User accepts storing keys without keyring protection on this device. */
@@ -6842,6 +7228,8 @@ export interface CoreEvents {
   "examples.changed": Examples;
   /** A Mind's content changed. Clients editing that Mind apply the update to their `Y.Doc`. */
   "mind.update": MindUpdate;
+  /** A Mind's Checkpoints changed: one was saved, kept for good, or thinned out. Read `listCheckpoints` again. */
+  "checkpoints.changed": { mindId: string };
   /**
    * A Document was added or restored, or its processing status (or embedding
    * progress) changed, or its creation date, title or reference record was read
@@ -7029,6 +7417,10 @@ const methods: Record<CoreApiMethod, true> = {
   openMind: true,
   applyMindUpdate: true,
   closeMind: true,
+  saveCheckpoint: true,
+  listCheckpoints: true,
+  compareCheckpoints: true,
+  restoreCheckpoint: true,
   askInConversation: true,
   regenerateConversationAnswer: true,
   stopConversationAnswer: true,
@@ -7124,6 +7516,9 @@ const methods: Record<CoreApiMethod, true> = {
   editWithAi: true,
   regenerateProposal: true,
   cancelEdit: true,
+  checkSentences: true,
+  cancelCheck: true,
+  checkClaim: true,
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,
   detectOllama: true,
