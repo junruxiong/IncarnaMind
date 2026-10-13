@@ -24,7 +24,7 @@ import type { EvalLanguage, EvalQuestion } from "../../lib/evaluationSet";
 import type { Library } from "../../lib/library";
 import type { Log } from "../../lib/log";
 import { flagsPremise, newerLeads, opening } from "./answerRules";
-import { type Manifest, siblingsOf } from "./manifest";
+import { type Manifest, siblingsOf, withTranslations } from "./manifest";
 import { DIFFICULTIES, type Difficulty, type HardQuestion } from "./questions";
 
 export interface DifficultyCitations extends GroupSummary {
@@ -71,11 +71,13 @@ export interface HardCitations {
 /**
  * What the Answer rules find in an Answer, for a false-premise or disagreeing
  * Question; null for any other. `documentName`: a Document's name, by its key.
+ * A Citation of the newer Document's translation counts as one of it.
  */
 export function answerRuleResult(
   answer: Pick<AnswerRecord, "questionId" | "text" | "citations">,
   question: HardQuestion,
   documentName: (key: string) => string | undefined,
+  manifest: Pick<Manifest, "documents">,
 ): AnswerRuleResult | null {
   const base = { questionId: answer.questionId, opening: opening(answer.text) };
   if (question.difficulty === "false-premise") {
@@ -88,8 +90,8 @@ export function answerRuleResult(
   }
   if (question.difficulty === "disagreeing" && question.newer && question.older) {
     const { leads, namesOlder } = newerLeads(answer.text, question.newer, question.older);
-    const newer = documentName(question.newer.document);
-    const citesNewer = answer.citations.some((citation) => citation.documentName === newer);
+    const newer = new Set(withTranslations(manifest, question.newer.document).map(documentName));
+    const citesNewer = answer.citations.some((citation) => newer.has(citation.documentName));
     return { ...base, difficulty: "disagreeing", followed: leads && citesNewer, namesOlder };
   }
   return null;
@@ -148,7 +150,7 @@ export function summariseDifficulty(
       declinesByLanguage[answer.language].answers++;
       if (answer.declines) declinesByLanguage[answer.language].declines++;
     }
-    const rule = answerRuleResult(answer, question, documentName);
+    const rule = answerRuleResult(answer, question, documentName, manifest);
     if (rule?.difficulty === "false-premise" && rule.followed) premiseFlagged++;
     if (rule?.difficulty === "disagreeing") {
       if (rule.followed) leading++;
@@ -203,7 +205,7 @@ export async function runHardCitations(
   }
   const rules = run.answers.flatMap((answer) => {
     const question = byId.get(answer.questionId);
-    const rule = question ? answerRuleResult(answer, question, documentName) : null;
+    const rule = question ? answerRuleResult(answer, question, documentName, manifest) : null;
     return rule ? [rule] : [];
   });
   // The hard tier never gates: the gating set's targets don't apply.

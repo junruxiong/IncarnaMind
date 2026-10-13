@@ -7,6 +7,7 @@
 import { describe, expect, test } from "vitest";
 import { flagsPremise, newerLeads } from "../../eval/hard/lib/answerRules";
 import { answerRuleResult, summariseDifficulty } from "../../eval/hard/lib/citations";
+import type { HardDocument } from "../../eval/hard/lib/manifest";
 import type { HardQuestion } from "../../eval/hard/lib/questions";
 import type { AnswerRecord, CitationRecord } from "../../eval/lib/citations";
 
@@ -148,8 +149,15 @@ describe("Counting the Answer rules", () => {
     ["fp", premise],
     ["dis", disagreeing],
   ]);
-  const library = { documents: [] };
-  const names = (key: string) => ({ r23: "Report 2023", r22: "Report 2022" })[key];
+  const library = {
+    documents: [
+      { key: "r23" },
+      { key: "r23-zh", translationOf: "r23" },
+      { key: "r22" },
+    ] as HardDocument[],
+  };
+  const names = (key: string) =>
+    ({ r23: "Report 2023", "r23-zh": "报告 2023", r22: "Report 2022" })[key];
 
   test("per difficulty: the premise flagged, the newer source leading and cited, the older named", () => {
     expect(
@@ -175,17 +183,23 @@ describe("Counting the Answer rules", () => {
             cited("Report 2022"),
             cited("Report 2023"),
           ]),
+          answer("dis", "12 million, from its translation.", [cited("报告 2023")]),
         ],
         questions,
         names,
         library,
       ),
-    ).toMatchObject({ answers: 4, newerLeads: 2, namesOlder: 3 });
+    ).toMatchObject({ answers: 5, newerLeads: 3, namesOlder: 3 });
   });
 
   test("each Answer's result keeps how it opens, for a reviewer", () => {
     expect(
-      answerRuleResult(answer("fp", "# Revenue\n\nIt didn't fall.\n\nMore."), premise, names),
+      answerRuleResult(
+        answer("fp", "# Revenue\n\nIt didn't fall.\n\nMore."),
+        premise,
+        names,
+        library,
+      ),
     ).toEqual({
       questionId: "fp",
       difficulty: "false-premise",
@@ -194,7 +208,7 @@ describe("Counting the Answer rules", () => {
       opening: "It didn't fall.",
     });
     expect(
-      answerRuleResult(answer("x", "Text."), { ...premise, difficulty: "easy" }, names),
+      answerRuleResult(answer("x", "Text."), { ...premise, difficulty: "easy" }, names, library),
     ).toBeNull();
   });
 });
