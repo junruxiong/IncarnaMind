@@ -976,6 +976,7 @@ export function createCore(adapters: CoreAdapters): Core {
       citationSource: (passageId) => documents.citationSource(passageId),
       pageTexts: (documentId, contentHash, from, to) =>
         documents.pageTexts(documentId, contentHash, from, to),
+      documentDate: (documentId) => documents.documentDate(documentId),
     },
     toolProviders: [
       { kind: "connector", tools: (signal) => connectors.tools(signal) },
@@ -1202,6 +1203,7 @@ export function createCore(adapters: CoreAdapters): Core {
       citationSource: (passageId) => documents.citationSource(passageId),
       pageTexts: (documentId, contentHash, from, to) =>
         documents.pageTexts(documentId, contentHash, from, to),
+      documentDate: (documentId) => documents.documentDate(documentId),
     },
     engine: answerEngine,
     retention,
@@ -1233,6 +1235,7 @@ export function createCore(adapters: CoreAdapters): Core {
     citationStyle: (mindId) => mindCitationStyle(mindId).style,
     bibliography: (mindId) => content.readSettings(mindId, bibliographyShown),
     formatCitations: (request) => citationStyles.format(request),
+    citedPage: (citation) => citedPages.image(citation),
     printer: adapters.printer ?? null,
     paper: () => paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages())),
     ...(adapters.pictures && { pictures: adapters.pictures }),
@@ -1240,6 +1243,8 @@ export function createCore(adapters: CoreAdapters): Core {
     log: adapters.log ?? silentLogger,
     now,
   });
+  const ownFileOf = (options: ExportMindOptions): OwnFileKind =>
+    options.format === "source-pack" ? "source-pack" : "export";
   /** Usage data: which format, and whether Questions went with it. */
   const recordExport = (options: ExportMindOptions) =>
     usageData.record({
@@ -1286,9 +1291,10 @@ export function createCore(adapters: CoreAdapters): Core {
     name: string,
     data: Uint8Array,
     after: () => void = () => undefined,
+    ownFile: OwnFileKind = "export",
   ): Promise<SavedExport> => {
     try {
-      const file = await outputs.save({ name, data, ownFile: "export" });
+      const file = await outputs.save({ name, data, ownFile });
       after();
       return { status: "saved", file };
     } catch (error) {
@@ -2549,7 +2555,7 @@ export function createCore(adapters: CoreAdapters): Core {
     exportMind: async (mindId, options) => {
       const exported = await mindExports.export(mindId, options);
       // The host saves these bytes as a file: IncarnaMind's, wherever it goes.
-      recordOwnFile(exported.data, "export");
+      recordOwnFile(exported.data, ownFileOf(options));
       recordExport(options);
       return exported;
     },
@@ -2558,7 +2564,12 @@ export function createCore(adapters: CoreAdapters): Core {
       // What a Word file can't keep is said before anything is saved (#105).
       const accepted = new Set(Array.isArray(options?.accept) ? options.accept : []);
       if (word?.notKept.some((loss) => !accepted.has(loss.key))) return { status: "review", word };
-      const saved = await saveExport(fileName, data, () => recordExport(options));
+      const saved = await saveExport(
+        fileName,
+        data,
+        () => recordExport(options),
+        ownFileOf(options),
+      );
       return saved.status === "saved" ? { ...saved, ...counts, word } : saved;
     },
     saveSkillExport: async (skillId) => {
