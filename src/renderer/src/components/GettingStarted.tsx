@@ -175,7 +175,7 @@ export function GetStartedCard() {
         type="button"
         data-testid="onboarding-groups"
         className={`${buttonStyle("ghost", "sm")} mt-1 justify-start`}
-        onClick={() => useAppStore.getState().openLibrary()}
+        onClick={() => useAppStore.getState().openLibrary("starters")}
       >
         {t("library.chooseStarters")}
       </button>

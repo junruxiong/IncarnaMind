@@ -1,5 +1,10 @@
 import { create } from "zustand";
-import type { ExportFormat, ExportMindOptions, ExportPreferences } from "../../core/api";
+import type {
+  ExportFormat,
+  ExportMindOptions,
+  ExportPreferences,
+  WordExportReport,
+} from "../../core/api";
 import type { MessageKey } from "../../shared/i18n";
 import { core } from "./core";
 import { errorMessage } from "./errors";
@@ -51,7 +56,11 @@ export type ExportResult =
       path: string;
       name: string;
       unverified: number;
+      /** The header and footer kept in a Word file though deleted from the Mind (#105). */
+      kept: ("header" | "footer")[];
     }
+  /** Not saved yet: what a Word file can't keep, for the User to see first (#105). */
+  | { mindId: string; state: "review"; format: ExportFormat; word: WordExportReport }
   | { mindId: string; state: "failed"; format: ExportFormat; message: string }
   /** A source pack of a Mind with no Citations: nothing to make, and nothing went wrong. */
   | { mindId: string; state: "empty"; format: ExportFormat }
@@ -75,12 +84,14 @@ export const useExports = create<{
  * Exports a Mind into the Output location (the first save asks where that is), in `format` or
  * the last one, which it becomes; the result line says how it went. `first` fixes what stopped
  * the last try (another Output location, allowing a Linked folder), unless it returns false.
+ * `accept` is what a Word file can't keep that the User has seen and exports anyway (#105).
  * Nothing starts while the same Mind is still exporting: a held ⇧⌘E makes one file.
  */
 export async function exportMind(
   mindId: string,
   format?: ExportFormat,
   first?: () => Promise<boolean>,
+  accept?: readonly string[],
 ): Promise<void> {
   const { result } = useExports.getState();
   if (result?.mindId === mindId && result.state === "saving") return;
@@ -111,7 +122,10 @@ export async function exportMind(
       settle(null);
       return;
     }
-    const saved = await core.saveMindExport(mindId, optionsFor(chosen, preferences));
+    const saved = await core.saveMindExport(mindId, {
+      ...optionsFor(chosen, preferences),
+      ...(accept && { accept: [...accept] }),
+    });
     if (saved.status === "saved") {
       settle({
         mindId,
@@ -120,7 +134,10 @@ export async function exportMind(
         path: saved.file.path,
         name: saved.file.name,
         unverified: saved.unverifiedCitations,
+        kept: saved.word?.keptFurniture ?? [],
       });
+    } else if (saved.status === "review") {
+      settle({ mindId, state: "review", format: chosen, word: saved.word });
     } else if (saved.status === "not-allowed") {
       settle({
         mindId,
