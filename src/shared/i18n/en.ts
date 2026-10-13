@@ -2369,6 +2369,7 @@ export const en = {
   "error.startup.newer.download": "Download the latest version",
   "error.startup.newer.quit": "Quit",
 
+  "error.connector.notInDirectory": "That Connector isn't in the directory.",
   "error.document.notFound": "There is no such Document.",
   "error.document.gone": "That Document no longer exists.",
   "error.document.nameEmpty": "A Document's name can't be empty.",

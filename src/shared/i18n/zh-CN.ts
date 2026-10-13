@@ -2277,6 +2277,7 @@ export const zhCN = {
   "error.startup.newer.download": "下载最新版本",
   "error.startup.newer.quit": "退出",
 
+  "error.connector.notInDirectory": "目录里没有这个连接器。",
   "error.document.notFound": "找不到这个文档。",
   "error.document.gone": "这个文档已不存在。",
   "error.document.nameEmpty": "文档名称不能为空。",

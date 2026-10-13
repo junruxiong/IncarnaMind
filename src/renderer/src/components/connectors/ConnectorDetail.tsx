@@ -122,7 +122,7 @@ export function ConnectorDetail({
       // A sign-in that didn't work says why under the Connector's state.
       if (result.ok) setJustConnected(true);
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     } finally {
       setConnecting(false);
     }
