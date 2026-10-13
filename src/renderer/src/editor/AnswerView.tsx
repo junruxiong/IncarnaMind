@@ -569,7 +569,7 @@ function ScriptApprovalCard({
               type="button"
               data-testid="always-run-confirm"
               onClick={() => respond(request.requestId, "always-allow", { riskAccepted: true })}
-              className="approval-button approval-button--primary"
+              className="approval-button"
             >
               {t("scripts.alwaysRun.confirm", params)}
             </button>
