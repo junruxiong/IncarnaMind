@@ -685,6 +685,7 @@ export class DocumentPatch {
         pPrChanged: pPr !== basePPr,
         fallbackRun: rPr,
         scope,
+        track: !counterpart.pending.inserted,
       },
       {
         ...this.context,

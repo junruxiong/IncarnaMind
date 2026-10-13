@@ -322,6 +322,29 @@ describe("an edited paragraph", () => {
 describe("the User's edits as tracked changes (#107)", () => {
   const tracking = { format: "docx", trackChanges: true } as const;
 
+  test("a paragraph a change still waiting adds is IncarnaMind's insertion, its words too, with the User's edits tracked", async () => {
+    const { core, mindId, client } = await setUp({ body: paragraph("Kept.") });
+    editMind(client, (blocks) => [
+      ...blocks,
+      {
+        type: "paragraph",
+        attrs: { proposal: { id: "c1", request: "r1", kind: "insert" } },
+        content: [text("Proposed.")],
+      },
+    ]);
+    await client.settled();
+
+    const document =
+      unzip((await core.exportMind(mindId, tracking)).data)
+        .get("word/document.xml")
+        ?.toString("utf8") ?? "";
+
+    expect(document).toMatch(
+      /<w:p><w:pPr><w:rPr><w:ins w:id="\d+" w:author="IncarnaMind"\/><\/w:rPr><\/w:pPr><w:ins w:id="\d+" w:author="IncarnaMind"><w:r><w:t xml:space="preserve">Proposed.<\/w:t><\/w:r><\/w:ins><\/w:p>/,
+    );
+    expect(document).not.toContain('w:author="Priya Raman"');
+  });
+
   test("a changed word is the User's deletion and insertion, under their name, in the run's own format; off, it is written plainly", async () => {
     const { core, mindId, client } = await setUp({
       body: paragraph(run("Rent is due monthly.", { font: "Georgia" })),

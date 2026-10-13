@@ -268,6 +268,11 @@ export interface ParagraphInput {
   fallbackRun: string;
   /** Where the paragraph is written: the namespaces in scope there. */
   scope: Namespaces;
+  /**
+   * Whether the User's edits in it are tracked as theirs: not in a paragraph
+   * a change still waiting adds, whose words are IncarnaMind's.
+   */
+  track: boolean;
 }
 
 /** A child of the paragraph, or several a field spans, written as one. */
@@ -456,8 +461,8 @@ export function writeParagraph(
             : []),
           ...(token.pending.deleted ? [review.pending("delete", token.pending.deleted)] : []),
         ];
-  const userInsert = review.user("insert");
-  const userDelete = review.user("delete");
+  const userInsert = input.track ? review.user("insert") : null;
+  const userDelete = input.track ? review.user("delete") : null;
 
   for (const each of aligned) {
     if (each.step === "delete") {
