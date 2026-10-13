@@ -48,6 +48,18 @@ async function dockAs(window: Page, dock: Dock) {
 const leftOf = async (target: Locator) =>
   await target.evaluate((el) => el.getBoundingClientRect().left);
 
+/** The tray's approval buttons stand on one row: their tops are equal. */
+async function expectButtonsOnOneRow(window: Page, name: string) {
+  const tops = await window
+    .getByTestId("task-tray")
+    .locator(".approval-actions button")
+    .evaluateAll((buttons) =>
+      buttons.map((button) => Math.round(button.getBoundingClientRect().top)),
+    );
+  expect(tops.length, `${name}: the approval's buttons`).toBeGreaterThan(1);
+  expect(new Set(tops).size, `${name}: one row`).toBe(1);
+}
+
 /** The x of each thing that should sit on the edge, with the panel's own. */
 async function edges(window: Page) {
   const assistant = window.getByTestId("assistant");
@@ -100,6 +112,8 @@ test("the header, the thread, the Task tray and the composer share one left edge
 
   for (const dock of DOCKS) {
     await dockAs(window, dock);
+    // In the 320px assistant, docked on the right, the buttons of the ask don't wrap.
+    if (dock === "right") await expectButtonsOnOneRow(window, "English");
     const { panel, ...found } = await edges(window);
     for (const [name, x] of Object.entries(found)) {
       expect(Math.abs(x - found.composer), `${name} at ${dock}`).toBeLessThanOrEqual(1);
@@ -127,6 +141,7 @@ test("the header, the thread, the Task tray and the composer share one left edge
   // In Chinese the same.
   await dockAs(window, "right");
   await setLanguage(window, "zh-CN");
+  await expectButtonsOnOneRow(window, "Chinese");
   const { panel: _panel, ...chinese } = await edges(window);
   for (const [name, x] of Object.entries(chinese)) {
     expect(Math.abs(x - chinese.composer), `${name} in Chinese`).toBeLessThanOrEqual(1);
