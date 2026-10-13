@@ -28,6 +28,37 @@ export const DOCUMENT_EXTENSIONS: Readonly<Record<DocumentKind, readonly string[
   transcript: ["vtt"],
 };
 
+/**
+ * Document formats IncarnaMind doesn't read yet, by extension: a file with one
+ * is left out of a search, and says so (#740). Other kinds of file (pictures,
+ * programs, mail) aren't Documents, and aren't named.
+ */
+export const UNREAD_FORMATS: ReadonlySet<string> = new Set([
+  ".doc",
+  ".dot",
+  ".docm",
+  ".xls",
+  ".xlt",
+  ".xlsm",
+  ".xlsb",
+  ".ppt",
+  ".pot",
+  ".pps",
+  ".pptm",
+  ".wps",
+  ".et",
+  ".dps",
+  ".caj",
+  ".rtf",
+  ".odt",
+  ".ods",
+  ".odp",
+  ".pages",
+  ".numbers",
+  ".key",
+  ".wpd",
+]);
+
 const KINDS: ReadonlyMap<string, DocumentKind> = new Map(
   Object.entries(DOCUMENT_EXTENSIONS).flatMap(([kind, extensions]) =>
     extensions.map((extension) => [`.${extension}`, kind as DocumentKind] as const),
@@ -144,9 +175,11 @@ export interface WalkOptions {
   detectDataless: boolean;
 }
 
-/** What `walk` found: supported files, and the folders it went through. */
+/** What `walk` found: supported files, files of formats not read, and the folders it went through. */
 export interface WalkResult {
   files: FoundFile[];
+  /** Files in a format IncarnaMind doesn't read (`UNREAD_FORMATS`): their absolute paths. */
+  unsupported: string[];
   /** Absolute paths of the folders walked, `start` included if it is one. */
   folders: string[];
 }
@@ -158,7 +191,7 @@ export interface WalkResult {
  * Rejects only if `start` itself can't be read, e.g. it is gone.
  */
 export async function walk(start: string, options: WalkOptions): Promise<WalkResult> {
-  const result: WalkResult = { files: [], folders: [] };
+  const result: WalkResult = { files: [], unsupported: [], folders: [] };
   const consider = async (path: string, stats?: Stats): Promise<void> => {
     const name = basename(path);
     const stubTarget = iCloudStubTarget(name);
@@ -193,7 +226,10 @@ export async function walk(start: string, options: WalkOptions): Promise<WalkRes
     }
     if (!info.isFile()) return;
     const kind = kindOf(path);
-    if (!kind) return;
+    if (!kind) {
+      if (UNREAD_FORMATS.has(extname(path).toLowerCase())) result.unsupported.push(path);
+      return;
+    }
     result.files.push({
       path,
       kind,

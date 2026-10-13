@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type * as Y from "yjs";
-import type { WordAtomKind, WordImportReport } from "../../../core/api";
+import type { KeptChangeKind, WordAtomKind, WordImportReport } from "../../../core/api";
 import {
   layoutNotShown,
   observeWordFile,
@@ -28,7 +28,7 @@ export function useWordFile(doc: Y.Doc) {
   return state;
 }
 
-/** What the import made editable and what it kept as is, by count, for the line's tooltip. */
+/** What the import made editable and what it kept as is, someone's changes too (#108), by count, for the line's tooltip. */
 function reportLines(
   report: WordImportReport,
   t: ReturnType<typeof useT>,
@@ -47,9 +47,13 @@ function reportLines(
     .map(([kind, count]) =>
       t("wordImport.count.kept", { kind: wordAtomName({ kind, info: null }), count }),
     );
+  const keptChanges = Object.entries(report.keptChanges ?? {})
+    .filter((entry): entry is [KeptChangeKind, number] => (entry[1] ?? 0) > 0)
+    .map(([kind, count]) => t(`wordImport.keptChange.${kind}`, { count }));
   return [
     editable.length > 0 ? t("wordImport.report.editable", { list: list(editable) }) : "",
     kept.length > 0 ? t("wordImport.report.kept", { list: list(kept) }) : "",
+    keptChanges.length > 0 ? t("wordImport.report.keptChanges", { list: list(keptChanges) }) : "",
   ].filter(Boolean);
 }
 
