@@ -146,7 +146,7 @@ export type ReadResult =
 const stringOf = (value: unknown) => (typeof value === "string" ? value : "");
 
 /** The paragraphs and headings of the Mind, in order, at any depth, with whether an Answer being written holds them. */
-function textBlocks(blocks: Y.XmlFragment): { element: Y.XmlElement; busy: boolean }[] {
+export function textBlocks(blocks: Y.XmlFragment): { element: Y.XmlElement; busy: boolean }[] {
   const found: { element: Y.XmlElement; busy: boolean }[] = [];
   const visit = (parent: Y.XmlFragment | Y.XmlElement, busy: boolean) => {
     for (const child of parent.toArray()) {
@@ -174,7 +174,7 @@ function inProposal(element: Y.XmlElement): boolean {
 }
 
 /** An element's children with where each starts in its text, an inline node counting as one. */
-function layout(element: Y.XmlElement) {
+export function layout(element: Y.XmlElement) {
   let at = 0;
   return element.toArray().flatMap((node) => {
     if (!(node instanceof Y.XmlText || node instanceof Y.XmlElement)) return [];
