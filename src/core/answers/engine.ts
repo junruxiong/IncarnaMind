@@ -106,6 +106,7 @@ import { earlierContext, type RequestMind } from "./context";
 import { retryFigures } from "./figureRetry";
 import { missingMarkerEvents, textEdits } from "./markerPlacement";
 import {
+  datedDocumentsNote,
   SEARCH_QUERY_INSTRUCTIONS,
   searchQueryPrompt,
   TRANSLATE_QUERY_INSTRUCTIONS,
@@ -1195,7 +1196,9 @@ export function documentTools(
         for (const source of found.thirdParty ?? []) readThirdParty?.(source);
         const result = hooks.fit(found);
         hooks.searched(toolCallId, result.passageCount, found.passageIds);
-        return result.text;
+        // Named from the Passages that fit, so it never names a Document the model wasn't handed.
+        const note = datedDocumentsNote(result.text);
+        return note ? `${result.text}\n\n${note}` : result.text;
       },
     },
     cite: {

@@ -63,6 +63,11 @@ export function DeletedSection() {
     reload();
     return watchDeleted(reload);
   }, []);
+  // Asked for before the list was read, and nothing is there: nothing to bring into view.
+  useEffect(() => {
+    const folds = useLibraryFolds.getState();
+    if (items?.length === 0 && folds.revealing === RECENTLY_DELETED) folds.revealed();
+  }, [items]);
   // The selection keeps only what is still listed.
   useEffect(() => {
     if (!items) return;
