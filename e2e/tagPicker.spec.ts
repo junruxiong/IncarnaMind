@@ -11,6 +11,7 @@ import {
   launchApp,
   removeDataFolder,
   setWindowSize,
+  tabTo,
 } from "./app";
 
 /*
@@ -203,7 +204,11 @@ test("Tags are added, created and removed with the keyboard, on one Document and
       "none",
     );
     await screenshot(window, "picker-bulk");
+    // Esc with the focus back on the bar's button closes the picker, and leaves the selection.
+    await tabTo(window, bar.getByTestId("library-selection-tags"));
     await window.keyboard.press("Escape");
+    await expect(bulk).toBeHidden();
+    await expect(bar).toContainText("2 selected");
     await expect(q1.getByTestId("tag-chip")).toHaveText(["Report"]);
     await expect(q2.getByTestId("tag-chip")).toHaveText(["Report"]);
     await expect(chips).toHaveText(["Invoice"]);
