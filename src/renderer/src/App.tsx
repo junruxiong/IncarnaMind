@@ -7,10 +7,12 @@ import { AddWebPageDialog } from "./components/AddWebPageDialog";
 import { AppShell, useRememberSidebarWidth } from "./components/AppShell";
 import { Workbench } from "./components/assistant/Workbench";
 import { CitationStylePickerHost } from "./components/CitationStylePicker";
+import { CommandPalette } from "./components/CommandPalette";
 import { ConsentDialog } from "./components/ConsentDialog";
 import { ErrorNotices } from "./components/ErrorNotices";
 import { DropOverlay, useFileDrop } from "./components/FileDrop";
 import { FileWriteDialog } from "./components/FileWriteDialog";
+import { HistoryView } from "./components/history/HistoryView";
 import { InfoPanel } from "./components/InfoPanel";
 import { MeetingNoticeDialog } from "./components/MeetingNoticeDialog";
 import { ChatGptWelcomeDialog } from "./components/providers/ChatGptSignIn";
@@ -259,7 +261,9 @@ function Workspace() {
           cardOverlay={fileDrop.active && fileDrop.links ? <DropOverlay links /> : null}
         />
         <TabNoticeLine />
+        <CommandPalette />
         <SettingsDialog />
+        <HistoryView />
         <TagsDialog />
         <RequestedDialogs />
         <SortMenu />

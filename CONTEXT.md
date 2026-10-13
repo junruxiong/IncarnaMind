@@ -198,7 +198,7 @@ The words the AI wrote into a Mind that the User hasn't made their own: in Answe
 _Avoid_: AI content, machine text
 
 **Checkpoint**:
-A saved copy of a Mind as it was just before an AI change, which the User can compare with another Checkpoint or restore from. Restoring one comes back as a Proposal, not as an overwrite.
+A saved copy of a Mind as it was just before an AI change, or after a pause in writing, which the User can compare, in the Mind's History, with another Checkpoint or with the Mind now, and restore from. Restoring one brings its content back as a new change, after a Checkpoint of the Mind as it is: nothing is overwritten, and Undo takes it back.
 _Avoid_: snapshot, version, backup, undo
 
 **Recently deleted**:

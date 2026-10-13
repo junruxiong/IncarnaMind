@@ -15,6 +15,15 @@ export interface XmlElement {
   name: string;
   attrs: Record<string, string>;
   children: XmlNode[];
+  /**
+   * Where the element is in the text it was parsed from, in UTF-16 code
+   * units: its "<", the end of its start tag, and the end of its end tag (of
+   * its start tag, if it closes itself). Writing back into the text (#105)
+   * splices by them.
+   */
+  start?: number;
+  openEnd?: number;
+  end?: number;
 }
 
 export type XmlNode = XmlElement | string;
@@ -79,6 +88,7 @@ export function parseXml(xml: string): XmlElement {
       if (tag[0] === "/") {
         const name = tag.slice(1).trim();
         if (top().name !== name) throw broken(`a mismatched </${name}>.`);
+        top().end = at;
         stack.pop();
         continue;
       }
@@ -92,7 +102,7 @@ export function parseXml(xml: string): XmlElement {
           attrs[match[1] as string] = decodeEntities(match[2] ?? match[3] ?? "");
         }
       }
-      const element: XmlElement = { name, attrs, children: [] };
+      const element: XmlElement = { name, attrs, children: [], start: lt, openEnd: at, end: at };
       top().children.push(element);
       if (!selfClosing) stack.push(element);
     }

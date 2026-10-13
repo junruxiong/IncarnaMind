@@ -32,6 +32,16 @@ export function PlusLineIcon(props: IconProps) {
   );
 }
 
+/** Search: a magnifier. */
+export function SearchLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="m20 20-4.35-4.35" />
+    </LineIcon>
+  );
+}
+
 /** A Mind: a notebook. */
 export function MindLineIcon(props: IconProps) {
   return (
@@ -195,6 +205,15 @@ export function MoreLineIcon(props: IconProps) {
       <circle cx="5" cy="12" r="1" fill="currentColor" />
       <circle cx="12" cy="12" r="1" fill="currentColor" />
       <circle cx="19" cy="12" r="1" fill="currentColor" />
+    </LineIcon>
+  );
+}
+
+/** Dropping files in: an arrow down onto a line. */
+export function DropLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />
     </LineIcon>
   );
 }
@@ -421,6 +440,16 @@ export function HistoryLineIcon(props: IconProps) {
       <path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3" />
       <path d="M4.5 4.5V9H9" />
       <path d="M12 8.5V12l2.5 1.5" />
+    </LineIcon>
+  );
+}
+
+/** Restore: an arrow coming round to where it started. */
+export function RestoreLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M4 12a8 8 0 1 0 2.3-5.6" />
+      <path d="M4 4v4h4" />
     </LineIcon>
   );
 }

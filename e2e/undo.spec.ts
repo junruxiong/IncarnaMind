@@ -219,12 +219,28 @@ test("Documents: renamed, moved, tagged and deleted, each back with ⌘Z and aga
   await redo(window);
   await expect.poll(names).toEqual(["Ferries", "Tide tables"]);
 
-  // Moved into a Folder, from the Library.
+  // Moved into a Folder with Move to…, from its row's ⋯ in the Library.
   await pointAndClick(window, window.getByTestId("open-library"));
   const library = window.getByTestId("library");
-  await library
-    .getByRole("combobox", { name: "Folder for Tide tables", exact: true })
-    .selectOption({ label: "Finance" });
+  const tideRow = library
+    .getByTestId("library-document")
+    .filter({ has: window.getByRole("button", { name: "Tide tables", exact: true }) });
+  await tideRow.hover();
+  await pointAndClick(window, tideRow.getByTestId("document-file-menu"));
+  await pointAndClick(
+    window,
+    window
+      .getByTestId("document-file-actions")
+      .filter({ visible: true })
+      .getByTestId("document.moveTo"),
+  );
+  await pointAndClick(
+    window,
+    window
+      .getByTestId("move-to-picker")
+      .getByTestId("move-to-option")
+      .filter({ hasText: "Finance" }),
+  );
   await expect(undoLine(window).getByTestId("undo-message")).toHaveText(
     "Moved “Tide tables” to Finance",
   );
@@ -312,12 +328,12 @@ test("Tags: renamed, recoloured, merged and deleted in Manage Tags, each back wi
     );
   const labTags = () =>
     read(window, async (core) => (await core.listDocuments())[0]?.tags.map((link) => link.tagId));
-  await pointAndClick(window, window.getByTestId("open-library"));
-  const library = window.getByTestId("library");
   const dialog = window.getByTestId("tags-dialog");
   const row = (id: string) => dialog.locator(`[data-testid="tag-row"][data-tag-id="${id}"]`);
+  // Manage Tags, from the sidebar's Tags menu.
   const manage = async () => {
-    await pointAndClick(window, library.getByRole("button", { name: "Manage tags" }));
+    await pointAndClick(window, window.getByTestId("tag-filter-menu"));
+    await pointAndClick(window, window.getByTestId("manage-tags"));
     await expect(dialog).toBeVisible();
   };
   const done = async () => {
