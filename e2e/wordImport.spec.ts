@@ -16,15 +16,19 @@ import {
   wordFile,
 } from "../tests/helpers/word";
 import {
+  closeSettings,
   coreOf,
   createDataFolder,
   dismissChatSetup,
   interceptOpenDialog,
   launchApp,
   motionSettled,
+  openSettings,
+  pointAndClick,
   removeDataFolder,
   setLanguage,
   setWindowSize,
+  tabMenu,
   useOutputLocation,
 } from "./app";
 
@@ -286,7 +290,7 @@ test("a Word file dropped on a Mind opens the import screen, which can add it as
   await expect(window.getByTestId("sidebar")).toContainText("Dropped memo");
 });
 
-test("Export writes back into the Word file: what it can't keep is said first, Export anyway saves it, the rest as it was", async () => {
+test("Export writes back into the Word file: the User's edits tracked under their name, or, untracked, what it can't keep said first", async () => {
   const kept = paragraph("Keep this paragraph as it is.", { paraId: "0A0B0C0D" });
   const comment = commented(0, "Marcus Hale", "Is spring realistic?", run("spring 2027"));
   const path = join(files, "Memo.docx");
@@ -303,12 +307,24 @@ test("Export writes back into the Word file: what it can't keep is said first, E
   );
   const { app, window } = await launchApp(dataDir, { home });
   await dismissChatSetup(window);
-  await interceptOpenDialog(app, path);
-  const dialog = await importFromMenu(window);
-  await dialog.getByTestId("word-import-confirm").click();
   const output = join(files, "Exports");
   await mkdir(output);
   await useOutputLocation(window, output);
+
+  // The name the User's edits go under, set once in Settings › General.
+  const settings = await openSettings(window, "general");
+  const name = settings.getByTestId("author-name");
+  await expect(name).not.toHaveValue("");
+  await name.fill("Priya Raman");
+  await name.press("Enter");
+  await expect(name).toHaveValue("Priya Raman");
+  await settings.getByTestId("author-name-settings").scrollIntoViewIfNeeded();
+  await screenshot(window, "settings-your-name");
+  await closeSettings(window);
+
+  await interceptOpenDialog(app, path);
+  const dialog = await importFromMenu(window);
+  await dialog.getByTestId("word-import-confirm").click();
 
   // The paragraph with the comment goes.
   const editor = window.getByTestId("mind-editor");
@@ -321,16 +337,48 @@ test("Export writes back into the Word file: what it can't keep is said first, E
   await window.keyboard.press("Backspace");
   await expect(editor).not.toContainText("First sales in");
 
-  // Export says what the file can't keep before anything is saved.
-  await window.getByTestId("export-mind").click();
+  // The sheet: the User's edits tracked, on for a Word file, under their name.
+  await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.exportOptions"));
+  const sheet = window.getByTestId("export-dialog");
+  const track = sheet.getByTestId("export-track-changes");
+  await expect(track).toBeChecked();
+  await expect(sheet).toContainText(
+    "Your edits since the import, as tracked changes by Priya Raman. Your name is in Settings › General.",
+  );
+  await motionSettled(window);
+  await screenshot(window, "word-export-options");
+  await window.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+
+  // Export: the deleted paragraph stays as Priya's deletion, the comment with it; nothing to say first.
   const result = window.getByTestId("export-result");
+  await window.getByTestId("export-mind").click();
+  await expect(result.getByTestId("export-done")).toHaveText("Saved Memo.docx");
+  const tracked =
+    unzip(await readFile(join(output, "Memo.docx")))
+      .get("word/document.xml")
+      ?.toString("utf8") ?? "";
+  expect(tracked).toContain(kept);
+  expect(tracked).toMatch(
+    /<w:del w:id="\d+" w:author="Priya Raman" w:date="[^"]+"><w:r><w:delText xml:space="preserve">First sales in <\/w:delText>/,
+  );
+  expect(tracked).toContain('<w:commentRangeStart w:id="0"/>');
+  await pointAndClick(window, result.getByTestId("export-dismiss"));
+
+  // Untracked, the file can't keep the comment: that is said before anything is saved.
+  await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.exportOptions"));
+  await track.click();
+  await expect(track).not.toBeChecked();
+  await sheet.getByTestId("export-save").click();
+  await expect(sheet).toBeHidden();
+  await window.getByTestId("export-mind").click();
   await expect(result.getByTestId("export-review")).toHaveText(
     "1 thing in the Word file can't be kept: Marcus Hale's comment “Is spring realistic?” is on text you deleted · Export anyway",
   );
   await expect(result.getByTestId("export-review-items")).toHaveText(
     "Marcus Hale's comment “Is spring realistic?” is on text you deleted",
   );
-  expect(await readdir(output)).toEqual([]);
+  expect(await readdir(output)).toEqual(["Memo.docx"]);
   await motionSettled(window);
   await screenshot(window, "word-export-review");
   // A narrow window: the line and its list wrap by word, inside the tab.
@@ -350,11 +398,11 @@ test("Export writes back into the Word file: what it can't keep is said first, E
 
   // Export anyway: saved, the paragraph kept byte for byte, the comment's marks gone with its text.
   await result.getByTestId("export-anyway").click();
-  await expect(result.getByTestId("export-done")).toHaveText("Saved Memo.docx");
+  await expect(result.getByTestId("export-done")).toHaveText("Saved Memo 2.docx");
   await motionSettled(window);
   await screenshot(window, "word-export-saved");
   const document =
-    unzip(await readFile(join(output, "Memo.docx")))
+    unzip(await readFile(join(output, "Memo 2.docx")))
       .get("word/document.xml")
       ?.toString("utf8") ?? "";
   expect(document).toContain(kept);

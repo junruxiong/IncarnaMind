@@ -1,0 +1,143 @@
+/**
+ * Verify (#97), the window's side. "Verify a document…" (the + menu, ⌘K)
+ * takes a PDF, whose Mind opens with the PDF beside it and has its claims
+ * found. The line under the Mind's title then checks them (editor/VerifyLine).
+ * One run goes at a time: asking again while one runs shows its Mind.
+ */
+
+import type * as Y from "yjs";
+import { create } from "zustand";
+import type { FindClaimsResult, VerifyClaimsResult } from "../../core/api";
+import { mindModelOf } from "../../shared/mindModel";
+import { core, files } from "./core";
+import { translateNow } from "./i18n";
+import { currentMindIdOf } from "./layoutSlice";
+import { useAppStore } from "./store";
+
+/** How a Mind's last run ended, when it says something: why it gave nothing, or what it checked. */
+export type VerifyOutcome =
+  | Exclude<FindClaimsResult, { kind: "found" | "cancelled" | "busy" }>
+  | Extract<VerifyClaimsResult, { kind: "checked" }>
+  | { kind: "error"; message: string };
+
+interface VerifyState {
+  /** The run going: in which Mind, and whether it finds or checks the claims. */
+  running: { mindId: string; requestId: string; phase: "finding" | "checking" } | null;
+  /** By Mind: how its last run ended. */
+  outcomes: Readonly<Record<string, VerifyOutcome>>;
+}
+
+export const useVerify = create<VerifyState>()(() => ({ running: null, outcomes: {} }));
+
+const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+function settle(mindId: string, outcome: VerifyOutcome | null) {
+  useVerify.setState((state) => {
+    const outcomes = { ...state.outcomes };
+    if (outcome) outcomes[mindId] = outcome;
+    else delete outcomes[mindId];
+    return { running: null, outcomes };
+  });
+}
+
+/** Shows the Mind a run is going in. */
+function showMind(mindId: string) {
+  const { minds, showNewMind } = useAppStore.getState();
+  const mind = minds.find((each) => each.id === mindId);
+  if (mind) void showNewMind(mind);
+}
+
+/**
+ * Runs one step of a Mind's verify, the only one going: another asked for
+ * while it runs shows its Mind instead.
+ */
+async function runStep<R extends FindClaimsResult | VerifyClaimsResult>(
+  mindId: string,
+  phase: "finding" | "checking",
+  step: (requestId: string) => Promise<R>,
+): Promise<void> {
+  const going = useVerify.getState().running;
+  if (going) {
+    showMind(going.mindId);
+    return;
+  }
+  const requestId = crypto.randomUUID();
+  useVerify.setState({ running: { mindId, requestId, phase } });
+  let result: R;
+  try {
+    result = await step(requestId);
+  } catch (error) {
+    settle(mindId, { kind: "error", message: messageOf(error) });
+    return;
+  }
+  if (result.kind === "busy") {
+    useVerify.setState({ running: null });
+    showMind(result.mindId);
+  } else if (result.kind === "found" || result.kind === "cancelled") settle(mindId, null);
+  else settle(mindId, result);
+}
+
+/** Has the core find the Mind's claims, with its own model, if it has one. */
+export const findClaims = (mindId: string, doc: Y.Doc | null) =>
+  runStep(mindId, "finding", (requestId) =>
+    core.findClaims({ requestId, mindId, model: doc && mindModelOf(doc) }),
+  );
+
+/** Checks the Mind's claims against its Folder, or every Document. */
+export const checkClaims = (mindId: string, doc: Y.Doc, allDocuments = false) =>
+  runStep(mindId, "checking", (requestId) =>
+    core.verifyClaims({ requestId, mindId, allDocuments, model: mindModelOf(doc) }),
+  );
+
+/** Forgets how the Mind's last run ended, once its problem is dealt with. */
+export const dismissVerifyOutcome = (mindId: string) => {
+  const outcomes = { ...useVerify.getState().outcomes };
+  delete outcomes[mindId];
+  useVerify.setState({ outcomes });
+};
+
+/** Stops the run going in the Mind: the claims not checked yet say "stopped". */
+export function stopVerify(mindId: string): void {
+  const running = useVerify.getState().running;
+  if (running?.mindId === mindId) void core.cancelCheck(running.requestId);
+}
+
+/** Opens the document a Mind verifies beside it, at a page. */
+export function openVerified(documentId: string, page?: number): void {
+  const { layout, openDocument } = useAppStore.getState();
+  openDocument(
+    { documentId, ...(page !== undefined && { pageFrom: page, pageTo: page }) },
+    { as: "citation", stay: true, ...(layout && { from: layout.focusedGroupId }) },
+  );
+}
+
+/**
+ * "Verify a document…": the PDF the User picks becomes a Mind in the Folder of
+ * the Mind in front, once its text is read; the Mind opens with the PDF beside
+ * it, and its claims are found. While a run goes, its Mind is shown instead.
+ */
+export async function verifyDocument(): Promise<void> {
+  const going = useVerify.getState().running;
+  if (going) {
+    showMind(going.mindId);
+    return;
+  }
+  const path = await files.pickPdfFile();
+  if (!path) return;
+  const { layout, minds, reportError, showNewMind } = useAppStore.getState();
+  const inFront = currentMindIdOf(layout);
+  const folderId = minds.find((each) => each.id === inFront)?.folderId ?? null;
+  try {
+    const made = await core.verifyDocument({ path, folderId });
+    if (!made.ok) {
+      reportError(new Error(translateNow(`verify.refused.${made.reason}`)));
+      return;
+    }
+    await showNewMind(made.mind);
+    openVerified(made.documentId);
+    // A new Mind follows the default model.
+    await findClaims(made.mind.id, null);
+  } catch (error) {
+    reportError(error);
+  }
+}
