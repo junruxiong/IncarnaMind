@@ -2688,6 +2688,9 @@ export const zhCN = {
   // Onboarding: the example Mind, the "Get started" checklist and the three steps.
   "editor.hint.empty": "开始写作，或{ask}",
   "editor.hint.empty.ask": "按 {shortcut} 提问…",
+  "editor.hint.first": "Mind 是你写作的页面，也可以在这里就你的文档提问，每条引文都会核对。{ask}",
+  "editor.hint.first.ask": "按 {shortcut} 提问。",
+  "tabs.new.about": "新建 Mind：写作并就文档提问的页面（{shortcut}）",
   "editor.hint.afterAnswer": "继续写作，或{ask}",
   "editor.hint.afterAnswer.ask": "按 {shortcut} 继续提问",
   "editor.hint.example": "试一试：在这里写一行，或{ask}",
@@ -2696,7 +2699,7 @@ export const zhCN = {
   "examples.banner.label": "关于这个示例",
   "examples.banner.title": "这是一个示例 Mind。",
   "examples.banner.body":
-    "你可以像在普通文档里一样在这里写作，并就你的文档提问；回答中的每个说法都链接到出处所在的页面。点击勾号查看引文，绿色表示找到了这段引文。",
+    "Mind 是你写作的页面，也可以在这里就你的文档提问，每条引文都会核对。你可以像在普通文档里一样在这里写作，并就你的文档提问；回答中的每个说法都链接到出处所在的页面。点击勾号查看引文，绿色表示找到了这段引文。",
   "examples.banner.addOwn": "添加你的文档或应用",
   "examples.banner.remove": "移除示例",
   "examples.answer": "预先写好的示例回答，无需模型即可体验",
