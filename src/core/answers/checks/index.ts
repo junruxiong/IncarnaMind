@@ -23,6 +23,7 @@
  */
 import { randomUUID } from "node:crypto";
 import type * as Y from "yjs";
+import { judgesUnreliably } from "../../../shared/smallModel";
 import {
   type ChatModelChoice,
   type ChatReadiness,
@@ -347,7 +348,12 @@ export function createChecks(options: ChecksOptions) {
       settleStopped(mindId, input.requestId);
       return { kind: "cancelled" };
     }
-    return { kind: "checked", sentences: queued.length, checked };
+    return {
+      kind: "checked",
+      sentences: queued.length,
+      checked,
+      smallModel: judgesUnreliably(ready.prepared),
+    };
   }
 
   const verify = createVerify({
