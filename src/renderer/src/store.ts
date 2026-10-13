@@ -84,10 +84,14 @@ export interface ViewerTarget extends DocumentLocation {
  * - "list": from the sidebar, ⌘K or a test, as a preview beside the Mind;
  * - "library": from a Library row in group `from`, as a preview to its right;
  * - "here": a normal tab in group `from` (⌘-click in the Library).
+ *
+ * A Document already open goes to its tab, in any group. `keep`, for
+ * "citation": a preview there is kept (Open the page, in a Citation's card).
  */
 export interface OpenDocumentHow {
   as: "citation" | "list" | "library" | "here";
   from?: string;
+  keep?: boolean;
 }
 
 interface AppState extends LayoutSlice {
@@ -965,6 +969,7 @@ export const useAppStore = create<AppState>()((set, get) => {
       const at = Object.keys(place).length > 0 ? { place } : {};
       // A merged window shows one group: what opens to the side comes to the front.
       const merged = groupsMerged();
+      const keep = how.keep ? { keep: true } : {};
       const change: LayoutChange =
         how.as === "here"
           ? {
@@ -980,6 +985,7 @@ export const useAppStore = create<AppState>()((set, get) => {
                 type: "open",
                 item,
                 ...at,
+                ...keep,
                 preview: true,
                 where: { in: "side", ...(how.from && { from: how.from }) },
                 focus: merged,
