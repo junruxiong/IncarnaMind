@@ -349,8 +349,8 @@ export const MIND_PROPOSAL_REQUESTS_FIELD = "proposalRequests";
  * so a change can be made again (regenerated) once it is out of date;
  * Regenerate of an Answer the User had edited (#94); an Answer from the
  * assistant added to a new Mind, as changes to accept (#201); or Compare
- * Documents, whose comparison table is one change (#98). The assistant
- * (#202) and Enhance (#114) add theirs.
+ * Documents, whose comparison table is one change (#98); or a Research
+ * Task's cited draft (#130). The assistant (#202) and Enhance (#114) add theirs.
  */
 export type ProposalRequest =
   | (ProposalMaker & {
@@ -362,7 +362,8 @@ export type ProposalRequest =
     })
   | (ProposalMaker & { source: "answer"; answerId: string })
   | (ProposalMaker & { source: "answer-added" })
-  | (ProposalMaker & { source: "comparison-table"; tableId: string });
+  | (ProposalMaker & { source: "comparison-table"; tableId: string })
+  | (ProposalMaker & { source: "research"; taskId: string });
 
 /** The model that made a request's Proposals, and when. */
 export interface ProposalMaker {
@@ -3262,6 +3263,11 @@ export interface Task {
   blockId: string | null;
   /** What the User asked it, in their words (a Research Task's topic): its Question in the thread. */
   question: string | null;
+  /**
+   * Where Review opens when it isn't the Task's own place: the Mind it wrote
+   * into, at the first change it proposed there (a Research Task's draft).
+   */
+  review: { mindId: string; proposalId: string | null } | null;
   status: TaskStatus;
   pausedReason: TaskPausedReason | null;
   /** "plan-limit": when the plan's limit resets (ISO 8601), when the provider says. */

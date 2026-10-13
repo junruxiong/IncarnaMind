@@ -10,6 +10,7 @@ const task = (id: string, patch: Partial<Task>): Task => ({
   mindId: "mind",
   blockId: "table",
   question: null,
+  review: null,
   status: "running",
   pausedReason: null,
   resetsAt: null,

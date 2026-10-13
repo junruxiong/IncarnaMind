@@ -12,6 +12,7 @@ import {
   setCitationStyle,
 } from "../shared/mindCitationStyle";
 import { mindModelOf } from "../shared/mindModel";
+import { mindName } from "../shared/naming";
 import { paperFor } from "../shared/printDocument";
 import { RESEARCH_TASK } from "../shared/research";
 import { logActivity, silentLogger } from "./activityLog";
@@ -160,7 +161,7 @@ import { createPace, realTimers } from "./sources/pace";
 import { createSourceProviders, sourceKeySecret } from "./sources/providers";
 import { migrate, openDatabase } from "./storage";
 import { createSuggestions } from "./suggestions";
-import { createTags } from "./tags";
+import { createTags, tagsOfDocument } from "./tags";
 import { chatClassifier } from "./tags/classify";
 import { createJevTagging } from "./tags/jev";
 import { createTagger, TAGGING_FLOW_SENDS } from "./tags/tagger";
@@ -1112,8 +1113,66 @@ export function createCore(adapters: CoreAdapters): Core {
         events.emit("task.shown", { taskId: task.id, mindId: task.mindId, blockId: task.blockId }),
     );
   };
+  /** A new Mind, as New Mind makes it: in its Folder's citation style (#289). */
+  const makeMind = (input: unknown): Mind => {
+    const parsed = parseCreateMindInput(input);
+    if (parsed.folderId !== null) library.folder(parsed.folderId);
+    const mind = minds.create(parsed);
+    const style = parsed.folderId === null ? null : library.citationStyle(parsed.folderId);
+    if (style !== null) {
+      content.editSettings(mind.id, (mindSettings) => setCitationStyle(mindSettings, style));
+    }
+    mindsChanged();
+    usageData.record({ event: "mind_created", fields: {} });
+    return mind;
+  };
   const research = createResearch({
     requireMind: (mindId) => writableMind(mindId).id,
+    mindExists,
+    mindName: (mindId) => (mindExists(mindId) ? mindName(minds.get(mindId)) || null : null),
+    folderOfMind: (mindId) => (mindExists(mindId) ? minds.get(mindId).folderId : null),
+    createMind: (title, folderId) => makeMind({ title, folderId }).id,
+    documents: {
+      webPagesSince: (ids, since) =>
+        documents
+          .getMany(ids)
+          .filter((document) => document.kind === "web" && document.createdAt >= since)
+          .map((document) => ({ id: document.id, name: document.name })),
+      live: (ids) => documents.getMany(ids).map((document) => document.id),
+    },
+    library: {
+      folderExists: (folderId) => library.folders().some((folder) => folder.id === folderId),
+      folderNames: () => library.folders().map((folder) => folder.name),
+      createFolder: (name, description) => library.create({ name, description }).id,
+      file: (documentIds, folderId) => {
+        db.transaction(() => library.move(documentIds, folderId));
+        library.moved([...documentIds]);
+      },
+    },
+    tags: {
+      list: () => tags.list().map((tag) => ({ id: tag.id, name: tag.name })),
+      create: (name, description) => {
+        const tag = tags.create({ name, description });
+        tagsChanged();
+        return tag.id;
+      },
+      apply: (documentId, tagIds) => {
+        const kept = tagsOfDocument(db, documentId)
+          .filter((link) => link.source === "automatic")
+          .map((link) => link.tagId);
+        const decided = [...new Set([...kept, ...tagIds])].map((tagId) => ({
+          tagId,
+          confidence: null,
+          needsReview: false,
+        }));
+        if (tags.applyAutomatic(documentId, decided)) announceTagged([documentId]);
+      },
+    },
+    notes: {
+      propose: (mindId, blocks, request, made) => noteAdding.propose(mindId, blocks, request, made),
+    },
+    now: () => adapters.now?.() ?? new Date(),
+    reportError: (error) => console.error(error),
     chat: {
       providerExists: (providerId) => chat.exists(providerId),
       readiness: (choice) => chat.readiness(choice),
@@ -1943,19 +2002,7 @@ export function createCore(adapters: CoreAdapters): Core {
 
   // Async on purpose: the renderer reaches these over IPC, and a future hosted core may be remote.
   return {
-    createMind: async (input) => {
-      const parsed = parseCreateMindInput(input);
-      if (parsed.folderId !== null) library.folder(parsed.folderId);
-      const mind = minds.create(parsed);
-      // It starts in the style last chosen for a Mind in its Folder, as its own choice (#289).
-      const style = parsed.folderId === null ? null : library.citationStyle(parsed.folderId);
-      if (style !== null) {
-        content.editSettings(mind.id, (mindSettings) => setCitationStyle(mindSettings, style));
-      }
-      mindsChanged();
-      usageData.record({ event: "mind_created", fields: {} });
-      return mind;
-    },
+    createMind: async (input) => makeMind(input),
     checkWordFile: async (path) => wordImports.check(path),
     importWordFile: async (input) => wordImports.import(input),
     listMinds: async () => minds.list(),

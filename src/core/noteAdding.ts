@@ -14,7 +14,7 @@ import * as Y from "yjs";
 import { asGenerated } from "../shared/aiText";
 import { parseOrigin, removeOrigins, setOrigins } from "../shared/blockOrigins";
 import { parseNoteBlocks, recheckCitations, textLength, withoutIds } from "../shared/noteBlocks";
-import { proposalRequestOf, recordProposalRequest } from "../shared/proposals";
+import { pendingProposals, proposalRequestOf, recordProposalRequest } from "../shared/proposals";
 import { createElement, type NodeJSON, textAttribute, topLevelBlocks } from "./answers/blocks";
 import {
   type AddedToNote,
@@ -23,6 +23,7 @@ import {
   type CitationRecheck,
   PROPOSAL_ATTRIBUTE,
   type ProposalAttribute,
+  type ProposalRequest,
   type RecheckCitationInput,
   type RecordAiUseInput,
 } from "./api";
@@ -42,6 +43,32 @@ export interface NoteAddingOptions {
 
 const isEmptyLine = (block: Y.XmlElement | undefined) =>
   block?.nodeName === "paragraph" && block.length === 0;
+
+/** Blocks as changes to accept, each its own, all one request's. */
+const asProposals = (blocks: readonly NodeJSON[], request: string): NodeJSON[] =>
+  blocks.map(
+    (block) =>
+      ({
+        ...block,
+        attrs: {
+          ...block.attrs,
+          [PROPOSAL_ATTRIBUTE]: {
+            id: randomUUID(),
+            request,
+            kind: "insert",
+          } satisfies ProposalAttribute,
+        },
+      }) as NodeJSON,
+  );
+
+/** Puts Blocks at the note's end, in place of its empty last line, as a Question asked there would be; returns their ids. */
+function appendBlocks(note: Y.XmlFragment, blocks: readonly NodeJSON[]): string[] {
+  const elements = blocks.map((block) => createElement(block));
+  const last = topLevelBlocks(note).at(-1);
+  if (isEmptyLine(last) && note.get(note.length - 1) === last) note.delete(note.length - 1, 1);
+  note.insert(note.length, elements);
+  return elements.map((element) => textAttribute(element, BLOCK_ID_ATTRIBUTE) ?? "");
+}
 
 function parseBlockIds(value: unknown): string[] {
   if (
@@ -73,30 +100,10 @@ export function createNoteAdding(options: NoteAddingOptions) {
       const request = randomUUID();
 
       const blockIds = content.edit(mindId, (note) => {
-        const elements = blocks.map((block) =>
-          createElement(
-            proposed
-              ? ({
-                  ...block,
-                  attrs: {
-                    ...block.attrs,
-                    [PROPOSAL_ATTRIBUTE]: {
-                      id: randomUUID(),
-                      request,
-                      kind: "insert",
-                    } satisfies ProposalAttribute,
-                  },
-                } as NodeJSON)
-              : (block as NodeJSON),
-          ),
+        const ids = appendBlocks(
+          note,
+          proposed ? asProposals(blocks as NodeJSON[], request) : (blocks as NodeJSON[]),
         );
-        // At the end: in place of its empty last line, as a Question asked there would be.
-        const last = topLevelBlocks(note).at(-1);
-        if (isEmptyLine(last) && note.get(note.length - 1) === last) {
-          note.delete(note.length - 1, 1);
-        }
-        note.insert(note.length, elements);
-        const ids = elements.map((element) => textAttribute(element, BLOCK_ID_ATTRIBUTE) ?? "");
         const doc = note.doc;
         if (doc && origin) setOrigins(doc, ids, origin);
         if (doc && proposed && model && !proposalRequestOf(doc, request)) {
@@ -123,6 +130,35 @@ export function createNoteAdding(options: NoteAddingOptions) {
         ]);
       }
       return { mindId, blockIds };
+    },
+
+    /**
+     * Puts a Task's cited Blocks at the Mind's end as changes to accept, one
+     * a Block, under `request`, their Citations checked again. Once only: a
+     * Task that goes on after a quit finds them there and adds nothing.
+     * Returns the first change's id and how many there are.
+     */
+    async propose(
+      mindId: string,
+      given: readonly NodeJSON[],
+      request: string,
+      made: ProposalRequest,
+    ): Promise<{ proposalId: string; changes: number }> {
+      const blocks = asProposals(
+        asGenerated(await recheckCitations(withoutIds(given), options.recheck)),
+        request,
+      );
+      return content.edit(mindId, (note) => {
+        const doc = note.doc;
+        if (doc && proposalRequestOf(doc, request)) {
+          const mine = pendingProposals(note).filter((each) => each.request === request);
+          return { proposalId: mine[0]?.id ?? "", changes: mine.length };
+        }
+        appendBlocks(note, blocks);
+        if (doc) recordProposalRequest(doc, request, made);
+        const first = blocks[0]?.attrs?.[PROPOSAL_ATTRIBUTE] as ProposalAttribute | undefined;
+        return { proposalId: first?.id ?? "", changes: blocks.length };
+      });
     },
 
     undo(input: unknown): void {

@@ -309,6 +309,9 @@ export function proposalRequestOf(doc: Y.Doc, request: string): ProposalRequest 
   if (source === "comparison-table") {
     return isText(record.tableId) ? { ...made, source, tableId: record.tableId } : null;
   }
+  if (source === "research") {
+    return isText(record.taskId) ? { ...made, source, taskId: record.taskId } : null;
+  }
   if (source !== "edit-with-ai") return null;
   const action = editActions.find((each) => each === record.action);
   return {
@@ -325,8 +328,9 @@ export function proposalRequestOf(doc: Y.Doc, request: string): ProposalRequest 
  * Blocks holding it. A Proposal that only removed words wrote nothing, and
  * one from an Answer's Regenerate stays in its Answer, which isn't recorded
  * (an Answer in a Mind is the AI's as it is). An Answer from the assistant
- * made into a new Mind (#201) is recorded as an Answer added, and a
- * comparison table (#98) as one accepted.
+ * made into a new Mind (#201) is recorded as an Answer added, a comparison
+ * table (#98) as one accepted, and a Research Task's draft (#130) as the
+ * assistant's change accepted.
  */
 export function aiUseOfAccepted(
   doc: Y.Doc,
@@ -347,7 +351,9 @@ export function aiUseOfAccepted(
               ? "answer-added"
               : made?.source === "comparison-table"
                 ? "comparison-table-accepted"
-                : "edit-with-ai-accepted",
+                : made?.source === "research"
+                  ? "assistant-change-accepted"
+                  : "edit-with-ai-accepted",
           providerId: made?.providerId ?? null,
           modelId: made?.modelId ?? null,
           characters: proposal.characters,
