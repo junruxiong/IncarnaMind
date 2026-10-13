@@ -282,11 +282,16 @@ describe("The reranking channel", () => {
 
   test("when the process stops, pending requests fail and the next load starts a new one", async () => {
     let release = () => {};
+    let reachedModel = () => {};
+    const reached = new Promise<void>((resolve) => {
+      reachedModel = resolve;
+    });
     const slow: CrossEncoder = {
       load: async () => ({ device: "cpu" }),
       score: (_query, texts) =>
         new Promise((resolve) => {
           release = () => resolve(texts.map(() => 0));
+          reachedModel();
         }),
       close: () => {},
     };
@@ -295,7 +300,7 @@ describe("The reranking channel", () => {
     await crossEncoder.load(FILES);
 
     const scoring = crossEncoder.score("q", ["t"]);
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await reached;
     link.crash(1);
     await expect(scoring).rejects.toThrow(/stopped \(exit code 1\)/);
     release();

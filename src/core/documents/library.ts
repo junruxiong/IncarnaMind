@@ -38,7 +38,7 @@
 import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { open, realpath, rm } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, sep } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, sep } from "node:path";
 import type { MessageKey, MessageParams } from "../../shared/i18n";
 import type {
   DocumentKind,
@@ -47,6 +47,7 @@ import type {
   LinkedFolderPreview,
   LinkedFolderStatus,
   SkippedFile,
+  UnsupportedFile,
 } from "../api";
 import { InvalidInputError, NotFoundError } from "../errors";
 import { type Folders, folderIdFor } from "../folders";
@@ -366,6 +367,8 @@ export function createLibrary(options: LibraryOptions) {
   const statuses = new Map<string, Exclude<LinkedFolderStatus, "paused">>();
   /** Each Linked folder's cloud placeholders: path to size. */
   const onlineOnly = new Map<string, Map<string, number>>();
+  /** Each Linked folder's files in a format not read (#740): their absolute paths. */
+  const unsupported = new Map<string, Set<string>>();
   /** Linked folders whose placeholders the User asked to download: read in their next whole pass. */
   const downloading = new Set<string>();
   /** Files found but not yet added in the pass under way, per Linked folder: counted in its progress. */
@@ -429,6 +432,7 @@ export function createLibrary(options: LibraryOptions) {
         indexed: counts?.indexed ?? 0,
       },
       onlineOnly: { files: placeholders.size, bytes, downloading: downloading.has(row.id) },
+      unsupportedFiles: unsupported.get(row.id)?.size ?? 0,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -1233,11 +1237,14 @@ export function createLibrary(options: LibraryOptions) {
       const ignore = ignoreOf(row);
       const placeholders = onlineOnly.get(row.id) ?? new Map<string, number>();
       onlineOnly.set(row.id, placeholders);
+      const notRead = unsupported.get(row.id) ?? new Set<string>();
+      unsupported.set(row.id, notRead);
       for (const part of parts) {
         for (const document of documentsUnder(part)) known.set(document.path, document);
         let files: FoundFile[] = [];
+        let unread: string[] = [];
         try {
-          ({ files } = await walk(part, {
+          ({ files, unsupported: unread } = await walk(part, {
             root: row.path,
             ignore,
             detectDataless: options.detectDataless,
@@ -1246,6 +1253,8 @@ export function createLibrary(options: LibraryOptions) {
           // Gone: whatever was indexed there is gone too.
         }
         for (const path of placeholders.keys()) if (isInside(part, path)) placeholders.delete(path);
+        for (const path of notRead) if (isInside(part, path)) notRead.delete(path);
+        for (const path of unread) notRead.add(path);
         for (const file of files) {
           if (!file.onlineOnly || known.has(file.path)) {
             // A known Document's placeholder isn't read either (see `checkKnown`).
@@ -1424,8 +1433,21 @@ export function createLibrary(options: LibraryOptions) {
     return row;
   };
 
+  /** The files in a format not read (#740), in the Linked folders still there, with where each is. */
+  const unsupportedFiles = (): UnsupportedFile[] =>
+    liveFolders().flatMap((row) =>
+      [...(unsupported.get(row.id) ?? [])].sort().map((path) => ({
+        path,
+        name: basename(path),
+        extension: extname(path).toLowerCase(),
+        linkedFolderId: row.id,
+        relativeFolder: parentOf(relativePath(row.path, path)),
+      })),
+    );
+
   return {
     list,
+    unsupportedFiles,
 
     /** Starts watching every Linked folder, and reconciles everything with the disk. */
     start(): void {
@@ -1518,6 +1540,7 @@ export function createLibrary(options: LibraryOptions) {
           stopWatcher(inner.id);
           statuses.delete(inner.id);
           onlineOnly.delete(inner.id);
+          unsupported.delete(inner.id);
           db.run("UPDATE linked_folders SET deleted_at = ?, updated_at = ? WHERE id = ?", [
             at,
             at,
@@ -1560,6 +1583,7 @@ export function createLibrary(options: LibraryOptions) {
       });
       statuses.delete(row.id);
       onlineOnly.delete(row.id);
+      unsupported.delete(row.id);
       downloading.delete(row.id);
       for (const path of unreadable) if (isInside(row.path, path)) unreadable.delete(path);
       watchSingles(); // a file added on its own inside it is watched by itself now
@@ -1623,6 +1647,7 @@ export function createLibrary(options: LibraryOptions) {
         });
         stopWatcher(row.id);
         onlineOnly.delete(row.id);
+        unsupported.delete(row.id);
         for (const file of unreadable) if (isInside(row.path, file)) unreadable.delete(file);
       }
       statuses.set(row.id, "scanning");

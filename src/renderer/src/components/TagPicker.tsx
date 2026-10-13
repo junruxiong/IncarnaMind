@@ -20,6 +20,7 @@ import { actionFor, pickerOptions, type TagOnDocuments, tagsOnDocuments } from "
 import { useUndo } from "../undo";
 import { CheckLineIcon, CloseLineIcon, PlusLineIcon, SparkLineIcon } from "./lineIcons";
 import { ReviewRing, TagDot, tagChipColour } from "./TagColour";
+import { TypingTextarea } from "./TypingTextarea";
 import { buttonStyle, errorTextClass, hintClass, inputClass, menuRuleClass } from "./ui";
 
 const GAP_PX = 4;
@@ -602,7 +603,7 @@ function DescribeTag({
       </p>
       <label className="block text-[13px] leading-5 text-ink-secondary">
         {t("tags.picker.descriptionLabel")}
-        <textarea
+        <TypingTextarea
           data-picker-field
           data-testid="tag-describe-input"
           // biome-ignore lint/a11y/noAutofocus: the form replaces the list the focus was in.

@@ -28,6 +28,16 @@ export function documentsToMove(documentId: string): string[] {
   return chosen.includes(documentId) ? chosen : [documentId];
 }
 
+/** The focus follows a Document moved to its row in the section it went to, if that shows it. */
+function focusRowOf(documentId: string | undefined): void {
+  if (!documentId) return;
+  document
+    .querySelector<HTMLElement>(
+      `[data-surface="library"] [data-document-id="${CSS.escape(documentId)}"] [data-row-main]`,
+    )
+    ?.focus();
+}
+
 /**
  * The Library page's "Move to…" for Documents: the shared Folder picker, beside
  * what asked for it. Choosing a Folder moves them all, with the undo line.
@@ -49,9 +59,16 @@ export function DocumentMoveTo() {
       anchor={request?.anchor ?? null}
       name={one ? displayName(one) : t("library.count", { count: ids.length })}
       current={folders.size === 1 ? (current ?? null) : undefined}
-      onChoose={(folderId) =>
-        void useAppStore.getState().moveToFolder({ documentIds: [...ids] }, folderId)
-      }
+      onChoose={(folderId) => {
+        // From a row, the focus goes with what it moved; from the selection's bar, it stays there.
+        const fromRow = request?.anchor.closest("[data-document-id]") != null;
+        void useAppStore
+          .getState()
+          .moveToFolder({ documentIds: [...ids] }, folderId)
+          .then(() => {
+            if (fromRow) requestAnimationFrame(() => focusRowOf(only));
+          });
+      }}
       onClose={() => useDocumentMove.getState().hide()}
     />
   );

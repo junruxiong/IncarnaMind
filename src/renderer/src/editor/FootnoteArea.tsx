@@ -3,7 +3,7 @@ import { TextSelection } from "@tiptap/pm/state";
 import { type Editor, useEditorState } from "@tiptap/react";
 import { useRef } from "react";
 import type { CitationAttributes } from "../../../core/api";
-import { citationSource, citationState } from "../../../shared/citations";
+import { citationSource, citationState, withShownName } from "../../../shared/citations";
 import { noteOfCitation, useMindFormatting } from "../citationFormatting";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
@@ -127,7 +127,7 @@ function CitationRow({ editor, row }: { editor: Editor; row: Extract<Row, { kind
   const kept = useAppStore((state) => state.keptCitationTexts);
   const { attributes } = row;
   const state = citationState(attributes, documents, kept);
-  const source = citationSource(attributes, t).text;
+  const source = citationSource(withShownName(attributes, documents), t).text;
   // In a note style, the note as the style writes it (#289), once it is formatted.
   const formatting = useMindFormatting(useMindId());
   const note = noteOfCitation(editor.state, formatting, row.key);

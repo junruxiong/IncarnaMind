@@ -19,6 +19,7 @@ import {
   pointAndClick,
   pointAt,
   removeDataFolder,
+  saveProviderUnasked,
   setWindowSize,
   useLocalChatModel,
 } from "./app";
@@ -107,6 +108,16 @@ const bridge = (window: Page) => ({
         (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.setLocalOnly(value),
       on,
     ),
+  /** The last Answer the core keeps in the only conversation: its status and its Markdown. */
+  storedAnswer: () =>
+    window.evaluate(async () => {
+      const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      const [conversation] = await core.listConversations();
+      if (!conversation) throw new Error("The core keeps no conversation.");
+      const { messages } = await core.getConversation(conversation.id);
+      const answer = messages.filter((message) => message.kind === "answer").at(-1);
+      return answer?.kind === "answer" ? { status: answer.status, text: answer.text } : null;
+    }),
 });
 
 /** The scripted Answer repeats the Question: a long one keeps it streaming for a few seconds. */
@@ -294,9 +305,12 @@ test("Stop keeps what streamed, and Regenerate writes the Answer again", async (
   await expect(answer.getByTestId("answer-stopped")).toHaveText("Stopped");
   await expect.poll(() => opacityOf(answer.getByTestId("answer-actions"))).toBe(1);
   await expect(composer.getByTestId("composer-live")).toContainText("The Answer was stopped.");
-  // What streamed stays: a moment later it is still all there is.
-  await window.waitForTimeout(800);
+  // What streamed stays, on the screen and in what the core keeps.
   await expect(answer.locator(".assistant-answer-text")).toHaveText(kept ?? "");
+  const stored = await bridge(window).storedAnswer();
+  expect(stored?.status).toBe("stopped");
+  expect(stored?.text).toContain("scripted");
+  expect(stored?.text).not.toContain("That is all.");
   await screenshot(window, "answer-stopped-en");
 
   // Regenerate, at the end of its steps, writes it again in full, in its place.
@@ -809,13 +823,12 @@ test("in Chinese: the composer with a Search scope and a Skill chosen from its p
 test("after the consent dialog closes, the caret is back in the composer, and both Answers are in the assistant, the Mind as it was", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
-  // A model on a server elsewhere, so the first Question asks to send first. The scripted model answers.
-  await window.evaluate(async () => {
-    await (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.saveChatProvider({
-      kind: "openai-compatible",
-      baseUrl: "https://llm.example.com/v1",
-      modelId: "example-model",
-    });
+  // A model on a server elsewhere, chosen before choosing was the consent (ADR-0022), so the
+  // first Question asks to send first. The scripted model answers.
+  await saveProviderUnasked(window, {
+    kind: "openai-compatible",
+    baseUrl: "https://llm.example.com/v1",
+    modelId: "example-model",
   });
   await pointAndClick(window, window.getByTestId("plus-menu"));
   await pointAndClick(window, window.getByTestId("plus-new-mind"));

@@ -204,6 +204,39 @@ describe("Proposals in the editor", () => {
     expect(pendingIn(note.state).map((each) => each.id)).toEqual(["a", "b"]);
   });
 
+  test("someone's change from a Word file is theirs, drawn apart from the assistant's", () => {
+    const theirs = { id: "word:w:ins#4", request: "word:w:ins#4" };
+    const note = noteWith([
+      {
+        type: "paragraph",
+        attrs: { id: "p1" },
+        content: [
+          text("Notice is "),
+          text("three months", [{ type: "proposalInsert", attrs: theirs }]),
+          text(" in "),
+          text("writing", [removed("a")]),
+          text("."),
+        ],
+      },
+      {
+        type: "paragraph",
+        attrs: {
+          id: "p2",
+          [PROPOSAL_ATTRIBUTE]: { id: "word:w:ins#9", request: "word:w:ins#9", kind: "insert" },
+        },
+        content: [text("Pets are allowed.")],
+      },
+    ]);
+
+    expect(pendingIn(note.state).map((each) => [each.id, each.theirs])).toEqual([
+      ["word:w:ins#4", true],
+      ["a", false],
+      ["word:w:ins#9", true],
+    ]);
+    const drawn = proposalReviewKey.getState(note.state)?.decorations.find().map(classOf);
+    expect(drawn).toEqual(["proposal-node proposal-node--insert proposal-theirs"]);
+  });
+
   test("text the AI is working on stays marked as the User writes before it", () => {
     const note = noteWith([
       { type: "paragraph", attrs: { id: "p1" }, content: [text("Spring tides are high.")] },

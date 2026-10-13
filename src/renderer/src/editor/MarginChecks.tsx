@@ -3,7 +3,7 @@ import type { Editor } from "@tiptap/react";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import type * as Y from "yjs";
 import type { CitationAttributes, CitationCheck } from "../../../core/api";
-import { badgeMessage, citationState } from "../../../shared/citations";
+import { badgeMessage, citationState, withShownName } from "../../../shared/citations";
 import { useT } from "../i18n";
 import { motionMode, subscribeMotion } from "../motion";
 import { useAppStore } from "../store";
@@ -151,7 +151,7 @@ export function MarginChecks({
       if (known?.number === number) return known;
       const { t: translate, documents: live, kept: keptTexts } = inputs.current;
       const state = citationState(attributes, live, keptTexts);
-      const badge = badgeMessage(state, attributes, translate);
+      const badge = badgeMessage(state, withShownName(attributes, live), translate);
       const description = {
         number,
         check: state.check,

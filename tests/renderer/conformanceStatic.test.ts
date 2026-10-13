@@ -185,8 +185,6 @@ describe("a question about deleting", () => {
   // `reversible: { confirm }`, whose text and question share a key prefix
   // (`deleted.confirm.*`, `linkedFolders.unlink.*`).
   const KNOWN: Record<string, string> = {
-    "meetings.audio.confirm":
-      "deleting a Meeting's audio asks, but it is no command: no ⌘K entry, not in the registry (#609)",
     "wordImport.sectionBreak.title":
       "deleting a Word section break asks, though the note's ⌘Z takes it back (#637)",
   };

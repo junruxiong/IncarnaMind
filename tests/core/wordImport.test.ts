@@ -17,6 +17,7 @@ import {
   type WordRefusalReason,
 } from "../../src/core";
 import { WORD_PACKAGES_FOLDER } from "../../src/core/wordImports";
+import { pendingProposals, proposalRequestOf } from "../../src/shared/proposals";
 import {
   wordFileOf,
   wordFingerprint,
@@ -26,7 +27,7 @@ import {
 } from "../../src/shared/wordFiles";
 import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
-import { readMind } from "../helpers/minds";
+import { readMind, shownWithChanges } from "../helpers/minds";
 import { encryptedOfficeFile, legacyOfficeFile } from "../helpers/office";
 import {
   commented,
@@ -349,7 +350,7 @@ describe("a Word file becomes a Mind", () => {
     }
   });
 
-  test("bookmarks and section breaks are invisible marks, and comments and someone else's tracked changes are kept read-only", async () => {
+  test("bookmarks and section breaks are invisible marks, comments are kept read-only, and someone else's tracked changes wait to be accepted or rejected, with their author and date", async () => {
     const dataDir = await createTempDataFolder();
     const core = startCore(dataDir);
     const comment = commented(0, "Marcus Hale", "We can't accept this.", run("vacant possession"));
@@ -383,20 +384,30 @@ describe("a Word file becomes a Mind", () => {
       ["range", "", null],
       ["range", "", null],
       ["comment", "", { author: "Marcus Hale", date: "2026-10-02T09:00:00Z" }],
-      ["insertion", " in full", { author: "Priya Nair", date: "2026-10-02T09:00:00Z" }],
-      ["deletion", " substantially", { author: "Priya Nair", date: "2026-10-02T09:00:00Z" }],
       ["pageBreak", "", null],
       ["sectionBreak", "", null],
     ]);
     const commentAtom = atomsOf(client).find((atom) => atom.kind === "comment");
     expect(commentAtom?.text).toBe("We can't accept this.");
 
-    // Read as Word shows the final text: the insertion in, the deletion out, no comment in the text.
+    // The bookmark, the comment's range and its mark are invisible marks (U+FFFC here).
+    expect(shownWithChanges(client)[1]).toBe(
+      "\uFFFCGives up \uFFFCvacant possession\uFFFC\uFFFC{+ in full+}[- substantially-].",
+    );
+    const changes = pendingProposals(client.blocks).map((change) =>
+      proposalRequestOf(client.doc, change.request),
+    );
+    expect(changes).toEqual([
+      { source: "word-change", author: "Priya Nair", date: "2026-10-02T09:00:00Z" },
+      { source: "word-change", author: "Priya Nair", date: "2026-10-02T09:00:00Z" },
+    ]);
+
+    // Until it is accepted, a change isn't the Mind's text, as with the AI's; no comment is in it either.
     const markdown = new TextDecoder().decode(
       (await core.exportMind(mindId, { format: "markdown" })).data,
     );
-    expect(markdown).toContain("Gives up vacant possession in full.");
-    expect(markdown).not.toContain("substantially");
+    expect(markdown).toContain("Gives up vacant possession substantially.");
+    expect(markdown).not.toContain("in full");
     expect(markdown).not.toContain("We can't accept");
     expect(wordReportOf(client.doc)).toMatchObject({ changes: 2, comments: 1, sections: 2 });
   });

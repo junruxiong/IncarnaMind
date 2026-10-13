@@ -331,7 +331,12 @@ describe("exporting a Mind to HTML", () => {
       user: {
         exportOptions: {
           format: "html",
-          docx: { includeQuestions: false },
+          docx: {
+            includeQuestions: false,
+            trackChanges: true,
+            markAiText: true,
+            commentFailedChecks: true,
+          },
           pdf: { includeQuestions: false },
           html: { includeQuestions: true },
         },

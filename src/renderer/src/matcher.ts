@@ -76,7 +76,8 @@ function find(text: string, word: string): { at: number; atStart: boolean } {
   return { at: first, atStart: false };
 }
 
-function joined(ranges: TextRange[]): TextRange[] {
+/** Ranges in order, those that touch or overlap made one. */
+export function joinRanges(ranges: TextRange[]): TextRange[] {
   ranges.sort((a, b) => a.start - b.start || a.end - b.end);
   const out: TextRange[] = [];
   for (const range of ranges) {
@@ -112,5 +113,5 @@ export function matchName(words: readonly string[], name: string): NameMatch | n
           ? 2
           : 1;
   // Of names that match alike, the shorter is the closer match.
-  return { score: kind * 1000 - Math.min(folded.text.length, 999), ranges: joined(ranges) };
+  return { score: kind * 1000 - Math.min(folded.text.length, 999), ranges: joinRanges(ranges) };
 }
