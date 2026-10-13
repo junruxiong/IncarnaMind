@@ -100,3 +100,77 @@ test("a request for a new note makes a Mind beside the one in focus, its text as
   await expect(timeline.getByTestId("answer-mind-call")).toHaveText(/新建了“田野计划” · 2 处修订/);
   await screenshot(window, "assistant-made-mind-zh");
 });
+
+test("the card lists each Mind changed: Open shows the change, Reject all removes the new Mind and its tab, Undo brings both back, Accept all keeps them", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setLanguage(window, "en");
+  await setWindowSize(app, window, 1440, 900);
+  await writeMind(window, "Project plan", ["Hire a designer."]);
+  await writeMind(window, "Q3 review", ["The quarter was good."]);
+
+  const answer = await askInAssistant(
+    window,
+    "Add Ship the beta in May to Project plan and make a new note called Fieldwork plan",
+  );
+  const card = answer.getByTestId("mind-changes");
+  await expect(card.getByTestId("mind-changes-title")).toHaveText("2 Minds changed");
+  const rows = card.getByTestId("mind-changes-row");
+  await expect(rows.nth(0)).toContainText("Edited: Project plan· 1 change");
+  await expect(rows.nth(1)).toContainText("Created: Fieldwork plan· 2 changes");
+  await screenshot(window, "card-two-minds");
+
+  await pointAndClick(window, rows.nth(0).getByTestId("mind-changes-open"));
+  await expect(window.getByTestId("mind-title")).toHaveValue("Project plan");
+  await expect(window.getByTestId("proposals-count")).toHaveText("1 change from the assistant");
+
+  await pointAndClick(window, card.getByTestId("mind-changes-reject-all"));
+  const made = window.getByTestId("mind-tab").filter({ hasText: "Fieldwork plan" });
+  await expect(made).toHaveCount(0);
+  await expect(rows.nth(0)).toContainText("· none waiting");
+  await expect(rows.nth(1)).toContainText("Removed: Fieldwork plan");
+  await expect(window.getByTestId("proposals-bar")).toHaveCount(0);
+  await expect(answer.getByTestId("answer-added")).toContainText("Rejected 3 changes");
+
+  await pointAndClick(window, answer.getByTestId("answer-added-undo"));
+  await expect(rows.nth(1)).toContainText("Created: Fieldwork plan· 2 changes");
+  await expect(made).toHaveCount(1);
+  await expect(rows.nth(0)).toContainText("· 1 change");
+
+  await pointAndClick(window, card.getByTestId("mind-changes-accept-all"));
+  await expect(rows.nth(0)).toContainText("· none waiting");
+  await expect(card.getByTestId("mind-changes-accept-all")).toHaveCount(0);
+  await pointAndClick(window, rows.nth(0).getByTestId("mind-changes-open"));
+  await expect(window.getByTestId("mind-editor").locator("p")).toHaveText([
+    "Hire a designer.",
+    "Ship the beta in May",
+  ]);
+});
+
+test("one Mind changed: the card says how many changes wait there, Review goes to the first, Accept all applies them, and ⌘Z takes them back", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setLanguage(window, "zh-CN");
+  await setWindowSize(app, window, 900, 760);
+  await writeMind(window, "第三季度", ["销售非常好，利润真的很高。"]);
+
+  const answer = await askInAssistant(window, "把这段缩短");
+  const card = answer.getByTestId("mind-changes");
+  await expect(card.getByTestId("mind-changes-title")).toHaveText("“第三季度”中有 2 处修订");
+  await expect(card.getByTestId("mind-changes-row")).toHaveCount(0);
+  await screenshot(window, "card-one-mind-zh");
+
+  await pointAndClick(window, card.getByTestId("mind-changes-review"));
+  await expect(window.getByTestId("mind-editor")).toBeFocused();
+
+  await pointAndClick(window, card.getByTestId("mind-changes-accept-all"));
+  const editor = window.getByTestId("mind-editor");
+  await expect(editor.locator("p")).toHaveText(["销售好，利润很高。"]);
+  await expect(card.getByTestId("mind-changes-title")).toHaveText("“第三季度”中没有待处理的修订");
+
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(card.getByTestId("mind-changes-title")).toHaveText("“第三季度”中有 2 处修订");
+  await expect(window.getByTestId("proposals-count")).toHaveText("来自助手的 2 处修订");
+});
