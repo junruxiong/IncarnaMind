@@ -29,6 +29,7 @@ import type { ChatModelFactory } from "./providers/models";
 import type { OllamaModels } from "./providers/ollamaModels";
 import type { RerankingModelFactory } from "./providers/rerank";
 import type { RunEngine } from "./runs/engine";
+import type { TaskKind } from "./runs/tasks";
 import type { PaceTimers } from "./sources/pace";
 import type { SourceProviderUrls } from "./sources/providers";
 import type { PublicFetchOptions } from "./tools/web/fetcher";
@@ -115,6 +116,24 @@ export interface Keychain {
   /** Throws if secrets can't be encrypted, or if they would be plain text and `allowPlainText` wasn't called. */
   set(name: string, secret: string): Promise<void>;
   delete(name: string): Promise<void>;
+}
+
+/**
+ * The system's notifications. The host knows which windows are in front;
+ * the core knows what each shows, so it decides, through `onScreen`, whether
+ * the User is already looking at what a notification is about.
+ */
+export interface SystemNotifications {
+  /**
+   * Shows `note`, unless `onScreen` says the windows in front (by their ids)
+   * show what it is about. A click brings a window to the front, then calls
+   * `onClick`.
+   */
+  show(
+    note: { title: string; body: string },
+    onScreen: (windowIds: readonly string[]) => boolean,
+    onClick: () => void,
+  ): void;
 }
 
 /** Opens a URL in the User's default browser, e.g. for a Connector's OAuth sign-in. */
@@ -801,6 +820,13 @@ export interface CoreAdapters {
    * plugs in here, and must pass the same contract suite.
    */
   runEngine?: RunEngine;
+  /**
+   * Shows a Task's system notification (#126) when the User isn't looking
+   * at its Mind. Absent: Tasks notify nobody.
+   */
+  notifications?: SystemNotifications;
+  /** Kinds of Task the host adds to the core's own (`Core.startTask`): a test build's scripted one. */
+  taskKinds?: readonly TaskKind[];
   /**
    * Builds embedding models for the providers the User can choose instead of
    * the built-in model. Defaults to the AI SDK providers; tests pass AI SDK
