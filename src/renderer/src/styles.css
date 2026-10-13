@@ -5520,6 +5520,180 @@
       display: none;
     }
   }
+  /*
+   * The Task tray (#126; DESIGN.md, Task tray): joined to the top of the
+   * composer, its width, sharing its edge. 32px rows, then the one ask, its
+   * buttons pinned at the bottom while the rest scrolls.
+   */
+  .task-tray {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--color-rule);
+    border-bottom: 0;
+    border-radius: 10px 10px 0 0;
+    background: var(--color-sheet);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--color-ink);
+  }
+  .task-tray + .composer {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+  }
+  .task-rows {
+    flex: 0 1 auto;
+    min-height: 32px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .task-row {
+    &[data-shown] {
+      background: var(--color-frame);
+    }
+    & + & {
+      border-top: 1px solid var(--color-rule);
+    }
+  }
+  .task-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 32px;
+    padding: 2px 4px 2px 10px;
+  }
+  .task-controls {
+    margin-top: -4px;
+  }
+  .task-dot {
+    width: 6px;
+    height: 6px;
+    flex-shrink: 0;
+    border-radius: 9999px;
+    background: var(--color-accent);
+    animation: mind-pulse 1.6s ease-in-out infinite;
+  }
+  .task-dot--attention {
+    background: var(--color-attention);
+    animation: none;
+  }
+  .task-dot--idle {
+    background: var(--color-ink-placeholder);
+    animation: none;
+  }
+  .task-done-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    color: var(--color-success);
+  }
+  .task-name {
+    flex-shrink: 0;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .task-step {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--color-ink-secondary);
+  }
+  .task-time {
+    flex-shrink: 0;
+    font-size: 12px;
+    white-space: nowrap;
+    color: var(--color-ink-meta);
+  }
+  .task-button {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    color: var(--color-ink-meta);
+
+    &:hover {
+      background: var(--color-chip);
+      color: var(--color-ink);
+    }
+  }
+  .task-link {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-accent);
+    text-underline-offset: 2px;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+  .task-details {
+    padding: 0 10px 8px 22px;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  /* The ask scrolls inside its card, so its buttons stay pinned at the card's foot. */
+  .task-ask {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    padding: 8px 8px 10px;
+    border-top: 1px solid var(--color-rule);
+
+    .approval-card {
+      flex: 0 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+    .approval-head {
+      padding: 10px;
+    }
+    .approval-title {
+      font-size: 14px;
+      line-height: 20px;
+    }
+    .approval-details {
+      padding: 10px;
+    }
+    .approval-explanation {
+      margin-left: 0;
+    }
+    .approval-actions {
+      position: sticky;
+      bottom: 0;
+      gap: 4px;
+      padding: 8px 10px;
+      border-radius: 0 0 8px 8px;
+      background: var(--color-sheet);
+    }
+    .approval-button {
+      padding: 0 8px;
+    }
+    .approval-button--primary {
+      padding: 0 10px;
+    }
+  }
+  .task-ask-count {
+    flex: none;
+    margin-bottom: 6px;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  .approval-keys {
+    margin-left: 4px;
+    font-size: 11px;
+    font-weight: 400;
+    opacity: 0.75;
+  }
   .assistant-no-mind {
     display: flex;
     flex: none;
@@ -6714,10 +6888,10 @@
   .comparison-cell:not([data-status="done"]) > .comparison-cell-content {
     display: none;
   }
-  .comparison-table[data-filling]
+  .comparison-table:is([data-filling], [data-waiting])
     .comparison-cell:is([data-status="waiting"], [data-status="writing"])
     > .comparison-cell-running,
-  .comparison-table:not([data-filling])
+  .comparison-table:not([data-filling], [data-waiting])
     .comparison-cell:is([data-status="waiting"], [data-status="writing"])
     > .comparison-cell-stopped,
   .comparison-cell[data-status="failed"] > .comparison-cell-problem {
@@ -7060,7 +7234,8 @@
 :root:not([data-motion="on"]) :is(.margin-check-icon, .margin-check--reveal),
 :root:not([data-motion="on"]) :is(.citation-marker-icon, .edit-pending-dot),
 :root:not([data-motion="on"]) .answer-writing::before,
-:root:not([data-motion="on"]) .answer-steps-dot {
+:root:not([data-motion="on"]) .answer-steps-dot,
+:root:not([data-motion="on"]) .task-dot {
   animation: none;
 }
 /* Washed while it lasts, with no fade. */
