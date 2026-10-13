@@ -2858,6 +2858,10 @@ export const en = {
   // Onboarding: the example Mind, the "Get started" checklist and the three steps.
   "editor.hint.empty": "Start writing, or {ask}",
   "editor.hint.empty.ask": "press {shortcut} to ask a Question…",
+  "editor.hint.first":
+    "A Mind is a page where you write, and ask your Documents with every quote checked. {ask}",
+  "editor.hint.first.ask": "Press {shortcut} to ask.",
+  "tabs.new.about": "New Mind: a page to write in and ask your Documents ({shortcut})",
   "editor.hint.afterAnswer": "Keep writing, or {ask}",
   "editor.hint.afterAnswer.ask": "press {shortcut} to ask a follow-up",
   "editor.hint.example": "Try it: write a line here, or {ask}",
@@ -2866,7 +2870,7 @@ export const en = {
   "examples.banner.label": "About this example",
   "examples.banner.title": "This is an example Mind.",
   "examples.banner.body":
-    "You write here like in any document, ask Questions about your Documents, and every claim in an Answer links to the page it came from. Click a check to see the quote; green means it was found.",
+    "A Mind is a page where you write, and ask your Documents with every quote checked. You write here like in any document, ask Questions about your Documents, and every claim in an Answer links to the page it came from. Click a check to see the quote; green means it was found.",
   "examples.banner.addOwn": "Add your Documents or apps",
   "examples.banner.remove": "Remove the examples",
   "examples.answer": "Example Answer, written in advance: no model needed to try it",
