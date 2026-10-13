@@ -5544,7 +5544,16 @@ export interface ExportPreferences {
   docx: WordExportPreferences;
   pdf: { includeQuestions: boolean };
   html: { includeQuestions: boolean };
+  /** How a PDF, an HTML file or Markdown shows someone's changes still waiting (#734). Absent: shown. */
+  theirChanges?: TheirChangesShown;
 }
+
+/**
+ * How an export other than Word's shows someone's changes from a Word file
+ * still waiting (#734): marked as changes, with who made each and when, or
+ * as if every one were accepted. A Word file keeps them as tracked changes.
+ */
+export type TheirChangesShown = "shown" | "accepted";
 
 /** A Word export's own choices (#107), each on until the User turns it off (see `ExportMindOptions`). */
 export interface WordExportPreferences {
@@ -5577,6 +5586,8 @@ export interface ExportMindOptions {
   trackChanges?: boolean;
   /** Word only: AI text gets a comment by IncarnaMind, "Written by IncarnaMind". Absent: off. */
   markAiText?: boolean;
+  /** PDF, HTML and Markdown: how someone's changes still waiting are shown (#734). Absent: shown. */
+  theirChanges?: TheirChangesShown;
   /**
    * Word only: a Citation whose check failed (its quote wasn't found, or its
    * claim is unsupported or contradicted) gets a comment by IncarnaMind
@@ -5605,6 +5616,8 @@ export interface MindExportPreview {
   questions: number;
   /** The Mind was imported from a Word file, which a Word export writes back into (#105). */
   fromWord: boolean;
+  /** Someone's changes from that Word file still waiting (#734), shown or accepted as `theirChanges` says. */
+  theirChanges: number;
 }
 
 /** A Mind exported as a file, for the host to save where the User chooses. */
@@ -5620,7 +5633,7 @@ export type SavedMindExport =
   /** Saved, with what it holds, so the result line can say how many quotes weren't found. */
   | ({ status: "saved"; file: SavedFile; word: WordExportReport | null } & Omit<
       MindExportPreview,
-      "fileName" | "fromWord"
+      "fileName" | "fromWord" | "theirChanges"
     >)
   /**
    * Not saved: a Mind imported from Word can't keep something in its file

@@ -159,7 +159,7 @@ export class DocumentPatch {
       return typeof id === "string" ? (ids.get(id) ?? null) : null;
     };
     this.baseReading = {
-      stale: new Set(),
+      skips: () => false,
       made: (request) => madeBy(base.structure.changes.get(request) ?? null),
     };
     this.collect(

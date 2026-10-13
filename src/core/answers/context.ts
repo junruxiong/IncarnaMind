@@ -270,7 +270,8 @@ function readText(block: Y.XmlElement, piece: Piece): string {
  * Reads a Mind for a Question asked beside it in the assistant (#544), as a
  * Question in the Mind reads the Blocks above it (`pieceOf`): Notes the User
  * excluded stay out, earlier Answers keep their Citations as plain references,
- * and Proposals still waiting aren't read. `focus` is where the User is in it:
+ * the AI's Proposals still waiting aren't read, and someone's changes from a
+ * Word file are read as changes (#734). `focus` is where the User is in it:
  * the text they selected is read first, unless it is in a Note they excluded.
  */
 export function readMind(

@@ -6,9 +6,13 @@
  * are in the body. Maths is typeset (MathML); what KaTeX can't read stays LaTeX. Everything
  * from the Mind is escaped: the page shows text, never markup it was given. The HTML export
  * (./html) is the same document, its markers are links to the notes (`linkNotes`).
+ * Someone's changes from a Word file still waiting are marked as Word prints
+ * them, inserted words underlined and deleted ones struck, each with a note of
+ * who made it and when (#734).
  */
 import type { StyledRun } from "../api";
 import { type Block, type Footnote, type Inline, type Marks, tableLayout } from "../mindText";
+import { changedContent, changeEnding, changeSpans } from "../shownChanges";
 import type { ExportLabels } from "./labels";
 import { latexToMathMl } from "./math";
 
@@ -143,13 +147,13 @@ class PrintWriter {
   private block(block: Block): string {
     switch (block.kind) {
       case "paragraph":
-        return `<p>${this.inline(block.content)}</p>`;
+        return `<p>${this.inline(changedContent(block))}</p>`;
       case "heading": {
         const level = Math.min(block.level + 1, 6);
-        return `<h${level}>${this.inline(block.content)}</h${level}>`;
+        return `<h${level}>${this.inline(changedContent(block))}</h${level}>`;
       }
       case "question":
-        return `<p class="question"><span class="question-label">${escapeHtml(this.labels.question)}</span> ${this.inline(block.content)}</p>`;
+        return `<p class="question"><span class="question-label">${escapeHtml(this.labels.question)}</span> ${this.inline(changedContent(block))}</p>`;
       case "code":
         return `<pre><code>${escapeHtml(block.code)}</code></pre>`;
       case "math":
@@ -232,8 +236,25 @@ class PrintWriter {
     return `<table>${body}</table>`;
   }
 
-  /** Inline content: text with its marks, maths, footnote markers and breaks. */
+  /** Inline content, someone's changes in it marked, each with a note of who made it and when. */
   inline(content: readonly Inline[], inNote = false): string {
+    const spans = changeSpans(content);
+    return spans
+      .map(({ change, content: part }, at) => {
+        const html = this.marked(part, inNote);
+        if (!change) return html;
+        const tag = change.kind === "insert" ? "ins" : "del";
+        const marked = `<${tag} class="change">${html}</${tag}>`;
+        const ended = changeEnding(spans, at);
+        if (!ended) return marked;
+        const note = escapeHtml(this.labels.change(ended));
+        return inNote ? `${marked} (${note})` : marked + this.marker(note);
+      })
+      .join("");
+  }
+
+  /** Inline content: text with its marks, maths, footnote markers and breaks. */
+  private marked(content: readonly Inline[], inNote: boolean): string {
     let html = "";
     for (const item of content) {
       switch (item.kind) {

@@ -25,6 +25,7 @@ const PDF_EXPORT = {
   docx: { ...DEFAULT_WORD, markAiText: false },
   pdf: { includeQuestions: true },
   html: { includeQuestions: false },
+  theirChanges: "accepted",
 } as const;
 
 describe("Settings", () => {
@@ -259,6 +260,10 @@ describe("Settings", () => {
     {
       name: "export options whose Questions switch isn't true or false",
       patch: { user: { exportOptions: { ...DEFAULT_EXPORT, pdf: { includeQuestions: "yes" } } } },
+    },
+    {
+      name: "a way to show someone's changes that isn't one",
+      patch: { user: { exportOptions: { ...DEFAULT_EXPORT, theirChanges: "hidden" } } },
     },
     {
       name: "a default model without a model",
