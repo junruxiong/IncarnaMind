@@ -1415,6 +1415,8 @@ export const en = {
     "Plus or Pro · No key needed · Your Questions go to OpenAI under your ChatGPT account.",
   "setup.deepseek.use": "Paste a DeepSeek key",
   "setup.deepseek.line": "Your Questions go to DeepSeek, under your own key.",
+  "setup.how": "How do I get one?",
+  "setup.getOllama": "Get Ollama",
   "setup.other": "Other ways",
   "setup.way.key": "Paste a key",
   "setup.way.key.line": "From Anthropic, OpenAI, Google, DeepSeek and more.",
