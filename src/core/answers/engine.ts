@@ -106,6 +106,7 @@ import { earlierContext, type RequestMind } from "./context";
 import { retryFigures } from "./figureRetry";
 import { missingMarkerEvents, textEdits } from "./markerPlacement";
 import {
+  datedDocumentsNote,
   SEARCH_QUERY_INSTRUCTIONS,
   searchQueryPrompt,
   TRANSLATE_QUERY_INSTRUCTIONS,
@@ -505,7 +506,7 @@ const listed = (items: readonly string[]) =>
  */
 export function searchToolDescription(languages: readonly DocumentLanguage[]): string {
   const base =
-    "Search the User's Documents. Returns the Passages that best match, each with an id, its Document and where it is (pages, slides, sections, rows or lines). The search sees only the query, not the conversation: write it to stand on its own.";
+    "Search the User's Documents. Returns the Passages that best match, each with an id, its Document, the Document's date when known, and where it is (pages, slides, sections, rows or lines). The search sees only the query, not the conversation: write it to stand on its own.";
   if (languages.length === 0) return base;
   const names = languages.map((each) =>
     languages.length > 1 ? `${each.language} (${each.documents})` : each.language,
@@ -1195,7 +1196,9 @@ export function documentTools(
         for (const source of found.thirdParty ?? []) readThirdParty?.(source);
         const result = hooks.fit(found);
         hooks.searched(toolCallId, result.passageCount, found.passageIds);
-        return result.text;
+        // Named from the Passages that fit, so it never names a Document the model wasn't handed.
+        const note = datedDocumentsNote(result.text);
+        return note ? `${result.text}\n\n${note}` : result.text;
       },
     },
     cite: {

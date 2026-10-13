@@ -84,7 +84,7 @@ export function SkillEditor({
       setProblem(result.problem);
       (FIELD_OF[result.problem] === "steps" ? steps : name).current?.focus();
     } catch (error) {
-      setFailure(errorMessage(error));
+      setFailure(errorMessage(error, t));
     } finally {
       setSaving(false);
     }

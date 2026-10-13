@@ -180,7 +180,7 @@ const ollamaFacts = (profile: OllamaModelProfile): ModelFactsLayer => ({
 
 function parseModelId(value: unknown): string {
   if (typeof value !== "string" || value.trim() === "" || value.length > 500) {
-    throw new InvalidInputError("Enter a model name.");
+    throw new InvalidInputError({ key: "error.provider.modelMissing" });
   }
   return value.trim();
 }
@@ -496,9 +496,10 @@ export function createChat(options: {
           ? existing !== undefined && (await secrets.tryGet(keyName(id))) !== null
           : apiKey !== null;
       if (requiresApiKey(server.kind) && !keyAfterSave) {
-        throw new InvalidInputError(
-          `Enter an API key for ${displayName(server.kind, server.baseUrl)}.`,
-        );
+        throw new InvalidInputError({
+          key: "error.provider.keyMissing",
+          values: { provider: displayName(server.kind, server.baseUrl) },
+        });
       }
 
       if (typeof apiKey === "string") await secrets.set(keyName(id), apiKey);
@@ -732,9 +733,10 @@ export function createChat(options: {
         if (saved) apiKey = await secrets.tryGet(keyName(saved.id));
       }
       if (requiresApiKey(server.kind) && !apiKey) {
-        throw new InvalidInputError(
-          `Enter an API key for ${displayName(server.kind, server.baseUrl)}.`,
-        );
+        throw new InvalidInputError({
+          key: "error.provider.keyMissing",
+          values: { provider: displayName(server.kind, server.baseUrl) },
+        });
       }
       if (server.kind === "chatgpt" && !(await chatGpt.hasSignIn())) {
         return {

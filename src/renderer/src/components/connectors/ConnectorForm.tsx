@@ -99,7 +99,7 @@ export function ConnectorForm({
       }
       onDone();
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     } finally {
       setBusy(false);
     }
@@ -109,7 +109,7 @@ export function ConnectorForm({
     try {
       setSecretStorage(await core.acceptPlainTextSecretStorage());
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     }
   };
 

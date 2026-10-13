@@ -12,6 +12,7 @@ import {
 import type * as Y from "yjs";
 import type { AnswerPlace, SearchScope } from "../../../core/api";
 import { mindModelOf } from "../../../shared/mindModel";
+import { mindName } from "../../../shared/naming";
 import { hasSearchScope, type ScopeKind, scopeIds } from "../../../shared/searchScope";
 import { useAnswers } from "../answers";
 import { shortcutLabel } from "../commands/keymap";
@@ -48,9 +49,10 @@ import { AskProblem } from "./AskProblem";
 import { EditStatus } from "./EditStatus";
 import { AskArrowIcon, CollapseIcon, ExpandIcon, RemoveIcon } from "./icons";
 import { ModelChip } from "./ModelChip";
-import { mindFocusOf } from "./mindFocus";
+import { useMindSelection } from "./mindSelection";
 import { PasteChip, usePasteLabel } from "./PasteChip";
 import { SkillChip } from "./QuestionView";
+import { QuoteChip } from "./QuoteChip";
 import { ScopeChips } from "./ScopeChips";
 import { type ChoiceListHandle, ScopeChoiceList } from "./ScopePicker";
 import { SkillChoiceList } from "./SkillChoiceList";
@@ -168,6 +170,11 @@ export function Composer({
   const skill = draft.skill ? skills.find((each) => each.name === draft.skill) : undefined;
   /** The selection the composer is saying what to change in (Edit with AI…, ⌘J with a selection). */
   const editing = useEdits((state) => state.editing[key]);
+  const selection = useMindSelection(mind, editing !== undefined);
+  const mindTitle = useAppStore((state) => {
+    const own = state.minds.find((each) => each.id === mindId);
+    return (own && mindName(own)) || t("mind.untitled");
+  });
 
   const update = (change: Partial<Draft>) => useComposer.getState().update(key, change);
   /** Keeps the scope the User chose; the Mind's own follows it to another Folder. */
@@ -184,12 +191,15 @@ export function Composer({
     const style = getComputedStyle(rowElement);
     const fieldStyle = getComputedStyle(element);
     const gap = Number.parseFloat(style.columnGap) || 0;
-    const skillElement = rowElement.querySelector<HTMLElement>(".question-skill");
+    const chips = Array.from(rowElement.querySelectorAll<HTMLElement>(".question-skill")).reduce(
+      (width, chip) => width + chip.offsetWidth + gap,
+      0,
+    );
     const room =
       rowElement.clientWidth -
       Number.parseFloat(style.paddingLeft) -
       Number.parseFloat(style.paddingRight) -
-      (skillElement ? skillElement.offsetWidth + gap : 0) -
+      chips -
       (controls.current?.offsetWidth ?? 0) -
       gap -
       Number.parseFloat(fieldStyle.paddingLeft);
@@ -410,12 +420,15 @@ export function Composer({
     const asked = await askInAssistant({
       mindId,
       text,
-      focus: !mind || mind.editor.isDestroyed ? null : mindFocusOf(mind.editor.state),
+      focus: selection.focus(),
       scope: composerScope(current, folderId),
       model: mind ? mindModelOf(mind.doc) : useComposer.getState().modelWithoutMind,
       forcedSkill: current.skill,
     });
-    if (asked) return;
+    if (asked) {
+      selection.asked();
+      return;
+    }
     // Not asked: its words come back here, unless the User has typed anew meanwhile.
     const now = useComposer.getState().draft(key);
     if (now.text === "" && now.pastes.length === 0) {
@@ -438,6 +451,18 @@ export function Composer({
         event.preventDefault();
         return;
       }
+    }
+    if (
+      event.key === "Backspace" &&
+      selection.quote !== "" &&
+      draft.text === "" &&
+      event.currentTarget.selectionStart === 0 &&
+      event.currentTarget.selectionEnd === 0
+    ) {
+      // As in a recipient field, Backspace at the start takes the last chip away.
+      event.preventDefault();
+      selection.leaveOut();
+      return;
     }
     if (event.key === "Enter" && !event.shiftKey && !event.altKey && !isCommand(event)) {
       event.preventDefault();
@@ -566,6 +591,19 @@ export function Composer({
               />
             ))}
           </div>
+        )}
+        {selection.quote !== "" && (
+          <QuoteChip
+            testId="composer-selection"
+            quote={selection.quote}
+            from={mindTitle}
+            removeLabel={t("composer.selection.drop")}
+            onShow={selection.show}
+            onRemove={() => {
+              selection.leaveOut();
+              field.current?.focus();
+            }}
+          />
         )}
         {editing && (
           <span
