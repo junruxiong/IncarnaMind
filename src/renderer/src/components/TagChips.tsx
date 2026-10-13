@@ -22,8 +22,8 @@ import {
 } from "./TagPicker";
 import { useFittingChips } from "./useFittingChips";
 
-/** How many chips a row, or the viewer's header, shows before "+N": they stay one line. */
-const VISIBLE_CHIPS = { row: 3, header: 2 } as const;
+/** How many chips a row, or the viewer's header, shows before "+N": they stay one line. A peek shows them all. */
+const VISIBLE_CHIPS = { row: 3, header: 2, peek: Number.POSITIVE_INFINITY } as const;
 
 /**
  * A Document's Tags on its Library row, on one line: the first few as chips
@@ -32,13 +32,14 @@ const VISIBLE_CHIPS = { row: 3, header: 2 } as const;
  * button that opens the Tag picker. Clicking a chip filters the Library by it.
  * In the viewer's header (`variant="header"`) the chips only show, the
  * picker's button always shows, and a narrow viewer keeps only the button.
+ * In a peek (`variant="peek"`) the chips only show and wrap, and "+ Add tags" always shows.
  */
 export function DocumentTagChips({
   document,
   variant = "row",
 }: {
   document: Document;
-  variant?: "row" | "header";
+  variant?: "row" | "header" | "peek";
 }) {
   const header = variant === "header";
   const t = useT();
@@ -46,6 +47,7 @@ export function DocumentTagChips({
   const tagFilter = useAppStore((state) => state.tagFilter);
   const popover = useTagPopover();
   const chips = chipsOf(document.tags, tags);
+  const addsInWords = variant === "peek" || (!header && chips.length === 0);
   // The header shows what its room holds, up to the most it lists: the rest fold into "+N".
   const fitting = useFittingChips(chips.length, VISIBLE_CHIPS.header, header);
   const listed = chips.slice(0, VISIBLE_CHIPS[variant]);
@@ -56,7 +58,9 @@ export function DocumentTagChips({
       ref={fitting.row}
       data-testid="document-tags"
       data-variant={variant}
-      className={`flex items-center gap-1 ${header ? "viewer-tags" : "h-8 min-w-0"}`}
+      className={`flex items-center gap-1 ${
+        header ? "viewer-tags" : variant === "peek" ? "min-w-0 flex-wrap" : "h-8 min-w-0"
+      }`}
     >
       {listed.map(({ tag, link }) => (
         <TagChip
@@ -65,7 +69,7 @@ export function DocumentTagChips({
           tag={tag}
           link={link}
           filtered={tagFilter.includes(tag.id)}
-          filters={!header}
+          filters={variant === "row"}
         />
       ))}
       {(hidden.length > 0 || (header && chips.length > 0)) && (
@@ -96,14 +100,14 @@ export function DocumentTagChips({
         className={
           header
             ? "viewer-icon-button"
-            : chips.length === 0
+            : addsInWords
               ? "h-6 shrink-0 rounded-sm px-1.5 text-[12px] text-ink-meta hover:bg-hover hover:text-ink"
               : "inline-flex size-6 shrink-0 items-center justify-center rounded-sm text-ink-meta opacity-0 group-hover/row:opacity-100 hover:bg-hover hover:text-ink focus-visible:opacity-100 aria-expanded:opacity-100"
         }
       >
         {header ? (
           <TagLineIcon className="size-4" />
-        ) : chips.length === 0 ? (
+        ) : addsInWords ? (
           t("library.addTags")
         ) : (
           <PencilLineIcon className="size-3.5" />

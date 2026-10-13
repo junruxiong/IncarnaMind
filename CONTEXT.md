@@ -145,6 +145,10 @@ _Avoid_: cluster, category, collection, group
 The view of all of a User's Documents, organised into Folders with visible Tags. Users can search names or Tags, manage Folders, and organise Documents automatically or correct them by hand; manual choices are kept.
 _Avoid_: archive, index, vault
 
+**Peek**:
+A quick preview of a Document beside the list, opened with Space on its row in the sidebar or the Library, without opening the viewer: its first page, slide or sheet drawn small, its facts, and its Tags and Folder, which can be changed there. ↑ and ↓ move it to the next or previous Document; Space or Esc closes it, and Enter opens the Document in the viewer. It floats over the window and never replaces the Mind.
+_Avoid_: Quick Look, preview (a preview Tab is another thing), hover card
+
 ### Tools
 
 **Tool**:
