@@ -33,12 +33,14 @@ import {
   mindCommands,
   tagCommands,
 } from "./objects";
+import { paletteCommands } from "./palette";
 import { peekCommands } from "./peek";
 import { proposalCommands } from "./proposals";
 import { sortCommands } from "./sort";
 import "./objectMenus";
 import { type Command, type CommandContext, commands, fromMenu } from "./registry";
 import { selectionCommands } from "./selection";
+import { settingsPageCommands } from "./settings";
 import { tableCommands } from "./tables";
 import { tabCommands } from "./tabs";
 import { onlyOne } from "./targets";
@@ -113,6 +115,8 @@ const appCommands: readonly Command[] = [
     reversible: true,
     run: () => useAppStore.getState().openSettings(),
   },
+  ...settingsPageCommands,
+  ...paletteCommands,
   {
     id: "chatgpt.continue",
     label: "chatgpt.continue",
