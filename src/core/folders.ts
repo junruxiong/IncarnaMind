@@ -92,7 +92,7 @@ export function createFolders(db: Database, now: () => string) {
       `SELECT ${COLUMNS} FROM folders WHERE id = ? AND deleted_at IS NULL`,
       [parseFolderId(folderId)],
     );
-    if (!row) throw new NotFoundError("That Folder doesn't exist or has been deleted.");
+    if (!row) throw new NotFoundError({ key: "error.folder.notFound" });
     return toFolder(row);
   };
 

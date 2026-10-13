@@ -119,7 +119,7 @@ test("Other models: grouped by why, ticked into the model menu, with a wrong tic
     await expect.poll(ids).toEqual(order);
     const group = (name: string) => other.getByRole("group", { name });
     await expect(group("Not known to IncarnaMind")).toContainText("May not work");
-    await expect(group("Older models")).toContainText("GPT-4 Turbo");
+    await expect(group("Older models").getByTestId("other-model")).toHaveText("GPT-4 Turbo");
     const cannot = group("Can’t answer Questions here");
     await expect(cannot.getByRole("checkbox")).toHaveCount(0);
     await expect(cannot).toContainText("Completions only");
@@ -179,6 +179,9 @@ test("Other models: grouped by why, ticked into the model menu, with a wrong tic
     await expect(otherZh.getByRole("group", { name: "无法在这里回答问题" })).toContainText(
       "仅支持文本补全",
     );
+    await expect(
+      otherZh.getByRole("group", { name: "旧型号" }).getByTestId("other-model"),
+    ).toHaveText("GPT-4 Turbo");
     await screenshot(window, "other-models-open-zh");
     await otherZh.getByTestId("other-models-toggle").click();
     await screenshot(window, "other-models-collapsed-zh");
