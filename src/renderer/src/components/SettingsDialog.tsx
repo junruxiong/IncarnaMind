@@ -42,7 +42,7 @@ const languageOptions: readonly { value: LanguagePreference; label: MessageKey }
   { value: "zh-CN", label: "settings.language.zh-CN" },
 ];
 
-const REPOSITORY_URL = "https://github.com/junruxiong/IncarnaMind";
+const REPOSITORY_URL = "https://github.com/IncarnaMind/IncarnaMind";
 
 /**
  * Settings, in a native modal <dialog>: a list of pages on the frame on the
