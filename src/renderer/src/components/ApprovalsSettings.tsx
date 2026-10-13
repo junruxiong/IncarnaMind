@@ -54,7 +54,9 @@ export function ApprovalsSettings() {
                 ? t("approvals.policy.alwaysRun")
                 : policy.policy === "always"
                   ? t("approvals.policy.always")
-                  : t("approvals.policy.ask");
+                  : policy.policy === "off"
+                    ? t("approvals.policy.off")
+                    : t("approvals.policy.ask");
             return (
               <li
                 key={policy.id}

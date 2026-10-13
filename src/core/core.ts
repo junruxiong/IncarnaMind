@@ -987,7 +987,19 @@ export function createCore(adapters: CoreAdapters): Core {
       documentDate: (documentId) => documents.documentDate(documentId),
     },
     toolProviders: [
-      { kind: "connector", tools: (signal) => connectors.tools(signal) },
+      {
+        kind: "connector",
+        tools: async (signal) =>
+          (await connectors.tools(signal)).filter(
+            (tool) =>
+              tool.provider.kind !== "connector" ||
+              !approvals.turnedOff({
+                kind: "tool",
+                connectorId: tool.provider.id,
+                tool: tool.providerTool,
+              }),
+          ),
+      },
       { kind: "sources", tools: async () => sources.tools() },
     ],
     connectorsNeedingSignIn: () => connectors.needingSignIn(),

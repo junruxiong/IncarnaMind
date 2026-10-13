@@ -139,7 +139,19 @@
     },
     "subscription": "free",
     "url": "https://pubmed.mcp.claude.com/mcp",
-    "signIn": "none"
+    "signIn": "none",
+    "tools": [
+      { "title": { "en": "Search articles", "zh-CN": "搜索文章" }, "changes": false },
+      { "title": { "en": "Get article metadata", "zh-CN": "获取文章元数据" }, "changes": false },
+      { "title": { "en": "Find related articles", "zh-CN": "查找相关文章" }, "changes": false },
+      {
+        "title": { "en": "Look up articles by citation", "zh-CN": "按引用信息查找文章" },
+        "changes": false
+      },
+      { "title": { "en": "Convert article IDs", "zh-CN": "转换文章 ID" }, "changes": false },
+      { "title": { "en": "Get full-text articles", "zh-CN": "获取全文" }, "changes": false },
+      { "title": { "en": "Get copyright status", "zh-CN": "获取版权状态" }, "changes": false }
+    ]
   },
   {
     "id": "clinical-trials",
@@ -149,7 +161,21 @@
     "summary": { "en": "Trials and their results", "zh-CN": "临床试验及其结果" },
     "subscription": "free",
     "url": "https://hcls.mcp.claude.com/clinical_trials/mcp",
-    "signIn": "none"
+    "signIn": "none",
+    "tools": [
+      { "title": { "en": "Search clinical trials", "zh-CN": "搜索临床试验" }, "changes": false },
+      { "title": { "en": "Get trial details", "zh-CN": "获取试验详情" }, "changes": false },
+      {
+        "title": { "en": "Search trials by sponsor", "zh-CN": "按申办方搜索试验" },
+        "changes": false
+      },
+      { "title": { "en": "Search investigators", "zh-CN": "搜索研究者" }, "changes": false },
+      { "title": { "en": "Analyze trial endpoints", "zh-CN": "分析试验终点" }, "changes": false },
+      {
+        "title": { "en": "Search by eligibility criteria", "zh-CN": "按入选标准搜索试验" },
+        "changes": false
+      }
+    ]
   },
   {
     "id": "slack",

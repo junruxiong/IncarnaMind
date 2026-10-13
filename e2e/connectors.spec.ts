@@ -79,7 +79,9 @@ test("a local Connector added in Settings starts and reaches ready, and turning 
   // Privacy page lists, and revoking it there goes back to the default.
   const approvals = window.getByTestId("approvals-settings");
   await showSettingsPage(window, "privacy");
-  await expect(approvals).toContainText("No Tool is set to always allow or to ask every time.");
+  await expect(approvals).toContainText(
+    "No Tool is set to always allow, to ask every time or to stay off.",
+  );
   await showSettingsPage(window, "connectors");
   await lookup.getByText("Ask every time").click();
   await expect(lookup).toHaveAttribute("data-asks", "true");
@@ -93,6 +95,14 @@ test("a local Connector added in Settings starts and reaches ready, and turning 
   await showSettingsPage(window, "connectors");
   await expect(lookup).toHaveAttribute("data-asks", "false");
   await expect(lookup.getByRole("radio", { name: "Always allow" })).toBeChecked();
+
+  // A Tool turned off isn't offered to Answers; the Privacy page lists it too.
+  await book.getByText("Off", { exact: true }).click();
+  await expect(book).toHaveAttribute("data-off", "true");
+  await showSettingsPage(window, "privacy");
+  await expect(policy).toContainText("Tides · book_boat");
+  await expect(policy.getByTestId("approval-policy-value")).toHaveText("Off");
+  await showSettingsPage(window, "connectors");
 
   // Back on the list, where the focus was, it is under Connected; Manage opens its page again.
   await page.getByTestId("connectors-back").click();
@@ -180,6 +190,10 @@ test("a reviewed Connector in the directory connects in one click, signing in in
         subscription: { product: "Wiki Pro" },
         url: fake.url,
         signIn: "browser",
+        tools: [
+          { title: { en: "Search the wiki", "zh-CN": "搜索维基" }, changes: false },
+          { title: { en: "Edit a wiki page", "zh-CN": "编辑维基页面" }, changes: true },
+        ],
       },
     ]),
   );
@@ -216,6 +230,12 @@ test("a reviewed Connector in the directory connects in one click, signing in in
       "Sign in with Wiki in your browser; you need a Wiki Pro subscription.",
     );
     await expect(page.getByTestId("connectors-back")).toBeFocused();
+    // Its Tools as reviewed, before connecting: what each does, with no choice yet.
+    const reviewed = page.getByTestId("connector-reviewed-tool");
+    await expect(reviewed).toHaveCount(2);
+    await expect(reviewed.first()).toContainText("Search the wiki");
+    await expect(reviewed.first()).toContainText("Reads");
+    await expect(reviewed.last()).toContainText("May change things");
     expect(fake.requests).toEqual([]);
 
     await acceptPlainTextKeys(window);
