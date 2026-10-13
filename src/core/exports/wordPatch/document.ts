@@ -12,6 +12,8 @@
  * they deleted stays where it was, as their deletion, and what they added or
  * moved goes in as their insertion; a table's rows likewise, and a
  * paragraph's properties they changed with what they were (`w:pPrChange`).
+ * Someone's changes from the file still waiting stay as they were there
+ * (#108); one the User accepted or rejected leaves no trace.
  */
 import type { NodeJSON } from "../../../shared/blockJson";
 import { readWordAtom, wordAtomText } from "../../../shared/wordFiles";
@@ -19,7 +21,16 @@ import type { WordAtomKind, WordExportLoss } from "../../api";
 import type { WordDocument } from "../../documents/formats/docxImport";
 import type { Relationship } from "../../documents/formats/docxPackage";
 import { child, elements, walk, type XmlElement } from "../../documents/formats/xml";
-import { type Block, type ReviewReading, type TableCell, tableLayout } from "../../mindText";
+import {
+  type Block,
+  isWordChange,
+  madeBy,
+  type Pendings,
+  type ReviewReading,
+  samePendings,
+  type TableCell,
+  tableLayout,
+} from "../../mindText";
 import { type DocxWriter, piecesOf, WRITER_NAMESPACES } from "../docx";
 import { dateAttribute, escapeXml, type WordIds } from "../wordml";
 import {
@@ -37,10 +48,11 @@ import {
   type ParagraphContext,
   sourceOf,
   type Token,
+  withWordChanges,
   writeParagraph,
 } from "./paragraph";
 import type { DocumentStyles, PatchTarget } from "./parts";
-import { Properties } from "./properties";
+import { Properties, withoutFormatChange } from "./properties";
 import {
   appendInside,
   applySplices,
@@ -125,6 +137,8 @@ export class DocumentPatch {
   private readonly parents: Map<XmlElement, XmlElement>;
   private readonly based = new Map<string, Based>();
   private readonly baseKey: (node: NodeJSON) => string | null;
+  /** Someone's changes in the file as imported (#108), which are never out of date there. */
+  private readonly baseReading: ReviewReading;
   readonly losses: WordExportLoss[] = [];
   /** The numId each list of the Mind is written with, once it has one. */
   private readonly lists = new Map<NodeJSON, number>();
@@ -144,13 +158,18 @@ export class DocumentPatch {
       const id = node.attrs?.id;
       return typeof id === "string" ? (ids.get(id) ?? null) : null;
     };
+    this.baseReading = {
+      stale: new Set(),
+      made: (request) => madeBy(base.structure.changes.get(request) ?? null),
+    };
     this.collect(
-      counterpartsOf(base.structure.blocks, this.baseKey),
+      this.baseOf(base.structure.blocks),
       this.baseKey,
       (counterpart) => {
         const element = counterpart.key ? base.places.get(counterpart.key) : undefined;
         if (counterpart.key && element) this.based.set(counterpart.key, { counterpart, element });
       },
+      this.baseReading,
     );
     this.collect(
       counterpartsOf(input.current, input.currentKey, input.reading),
@@ -204,19 +223,32 @@ export class DocumentPatch {
     return counterpartsOf(blocks, this.input.currentKey, this.input.reading);
   }
 
+  /** The counterparts in some of the Blocks as imported, with someone's changes in the file. */
+  private baseOf(blocks: readonly NodeJSON[]): Counterpart[] {
+    return counterpartsOf(blocks, this.baseKey, this.baseReading);
+  }
+
   /**
    * A counterpart's XML with the tracked changes made to it as a whole:
-   * what changes still waiting do to it, and, when `added` (it is new, or
-   * moved here) and the User's edits are tracked, their insertion.
+   * what changes still waiting do to it, but someone's it had in the file,
+   * which its XML keeps; and, when `added` (it is new, or moved here) and the
+   * User's edits are tracked, their insertion.
    */
   private tracked(xml: string, counterpart: Counterpart, added: boolean): string {
     const { review, ids } = this.input;
-    const { inserted, deleted } = counterpart.pending;
+    const based = counterpart.key ? this.based.get(counterpart.key) : undefined;
+    const was = based?.counterpart.pending ?? {};
+    const inserted =
+      counterpart.pending.inserted?.id === was.inserted?.id
+        ? undefined
+        : counterpart.pending.inserted;
+    const deleted =
+      counterpart.pending.deleted?.id === was.deleted?.id ? undefined : counterpart.pending.deleted;
     let out = xml;
     if (deleted) out = trackBlocks(out, review.pending("delete", deleted), ids);
     if (inserted) out = trackBlocks(out, review.pending("insert", inserted), ids);
     const user = review.user("insert");
-    if (added && user && !inserted) out = trackBlocks(out, user, ids);
+    if (added && user && !counterpart.pending.inserted) out = trackBlocks(out, user, ids);
     return out;
   }
 
@@ -288,11 +320,10 @@ export class DocumentPatch {
           yield { key: counterpart.node, authorship: "own" };
           continue;
         }
-        const tokens = this.input.tokensOf(counterpart.node);
-        const before = based
-          ? baseTokens(based.counterpart.node.content ?? [], this.input.base.origins)
-          : [];
-        for (const each of alignTokens(before, tokens)) {
+        const tokens = based
+          ? withWordChanges(this.input.tokensOf(counterpart.node), counterpart.pending)
+          : this.input.tokensOf(counterpart.node);
+        for (const each of alignTokens(based ? this.baseTokensOf(based) : [], tokens)) {
           if (each.step === "delete" || each.step === "proposed") continue;
           const token = tokens[each.y] as Token;
           const authorship: Authorship =
@@ -357,7 +388,7 @@ export class DocumentPatch {
     const splices = this.container({
       element: body,
       contentStart: body.openEnd ?? startOf(body),
-      base: counterpartsOf(this.input.base.structure.blocks, this.baseKey),
+      base: this.baseOf(this.input.base.structure.blocks),
       current,
       extra: [],
     });
@@ -425,10 +456,15 @@ export class DocumentPatch {
       const based = this.based.get(key) as Based;
       // A kept-as-is Block the Mind moved is the same element: it can't be both here and there.
       const moved = seen.has(key);
+      // Someone's insertion of it rejected, or deletion accepted, leaves no trace.
+      const resolved = !moved && hasWordChange(based.counterpart.pending);
       splices.push({
         from: startOf(based.element),
         to: endOf(based.element),
-        text: moved && based.counterpart.kind === "kept" ? "" : this.removed(based, moved),
+        text:
+          (moved && based.counterpart.kind === "kept") || resolved
+            ? ""
+            : this.removed(based, moved),
       });
     }
 
@@ -593,10 +629,14 @@ export class DocumentPatch {
     return this.newXml(this.input.writer.render(blocks), scope);
   }
 
-  /** Whether an imported paragraph must be written again: edited, moved in or out of a list, or holding what goes. */
+  /**
+   * Whether an imported paragraph must be written again: edited, changed as a
+   * whole by a change still waiting that it didn't have in the file, moved in
+   * or out of a list, or holding what goes.
+   */
   private needsWriting(counterpart: Counterpart, based: Based): boolean {
     return (
-      hasPending(counterpart) ||
+      !samePendings(counterpart.pending, based.counterpart.pending) ||
       this.input.edited(counterpart.node) ||
       this.forced.has(based.element) ||
       !sameList(counterpart.list, based.counterpart.list) ||
@@ -664,7 +704,10 @@ export class DocumentPatch {
         source: null,
       }));
     });
-    const basePPr = based ? this.pPrOf(based.element) : "";
+    const filePPr = based ? this.pPrOf(based.element) : "";
+    const basePPr = based
+      ? resolvedMark(filePPr, based.counterpart.pending, counterpart.pending)
+      : "";
     const properties = this.paragraphProperties(counterpart, based, references, basePPr);
     const { rPr } = properties;
     const user = this.input.review.user("insert");
@@ -674,15 +717,10 @@ export class DocumentPatch {
         : properties.pPr;
     const { xml, lost } = writeParagraph(
       {
-        base: based
-          ? {
-              element: based.element,
-              tokens: baseTokens(based.counterpart.node.content ?? [], this.input.base.origins),
-            }
-          : null,
-        current: tokens,
+        base: based ? { element: based.element, tokens: this.baseTokensOf(based) } : null,
+        current: based ? withWordChanges(tokens, counterpart.pending) : tokens,
         pPr,
-        pPrChanged: pPr !== basePPr,
+        pPrChanged: pPr !== filePPr,
         fallbackRun: rPr,
         scope,
         track: !counterpart.pending.inserted,
@@ -703,6 +741,14 @@ export class DocumentPatch {
       });
     }
     return xml;
+  }
+
+  /** A paragraph's text as imported, with someone's changes to it in the file. */
+  private baseTokensOf(based: Based): Token[] {
+    return withWordChanges(
+      baseTokens(based.counterpart.node.content ?? [], this.input.base.origins, this.baseReading),
+      based.counterpart.pending,
+    );
   }
 
   /** A paragraph's new properties that say what they were before the User changed them (`w:pPrChange`). */
@@ -857,7 +903,7 @@ export class DocumentPatch {
       const run = this.input.base.origins.get(node);
       const rPr = run ? child(run, "w:rPr") : undefined;
       if (!run || this.inHyperlink(run)) continue;
-      return rPr ? sliceOf(this.text, rPr) : "";
+      return rPr ? withoutFormatChange(sliceOf(this.text, rPr)) : "";
     }
     return runOfMark(Properties.paragraph(this.pPrOf(based.element)).get("w:rPr"));
   }
@@ -964,7 +1010,7 @@ export class DocumentPatch {
     return this.container({
       element: tc,
       contentStart: tcPr ? endOf(tcPr) : (tc.openEnd ?? startOf(tc)),
-      base: counterpartsOf(baseCell.content ?? [], this.baseKey),
+      base: this.baseOf(baseCell.content ?? []),
       current: this.currentOf(cell.content ?? []),
       extra: this.input.base.merged.get(baseCell) ?? [],
     });
@@ -1280,6 +1326,30 @@ class CellProperties {
 /** Whether changes still waiting add or remove a counterpart as a whole. */
 const hasPending = (counterpart: Counterpart) =>
   counterpart.pending.inserted !== undefined || counterpart.pending.deleted !== undefined;
+
+/** Whether someone's change from the file adds or removes something as a whole (#108). */
+const hasWordChange = (pending: Pendings) =>
+  isWordChange(pending.inserted) || isWordChange(pending.deleted);
+
+/**
+ * A paragraph's properties without the mark of someone's change to the whole
+ * paragraph (#108) that the User accepted or rejected since.
+ */
+function resolvedMark(pPr: string, was: Pendings, now: Pendings): string {
+  const names = [
+    ...(isWordChange(was.inserted) && was.inserted.id !== now.inserted?.id ? ["w:ins"] : []),
+    ...(isWordChange(was.deleted) && was.deleted.id !== now.deleted?.id ? ["w:del"] : []),
+  ];
+  const properties = Properties.paragraph(pPr);
+  const rPr = properties.get("w:rPr");
+  if (names.length === 0 || !rPr) return pPr;
+  const run = Properties.run(rPr)
+    .remove(...names)
+    .toXml();
+  if (run) properties.set("w:rPr", run);
+  else properties.remove("w:rPr");
+  return properties.toXml();
+}
 
 const sameList = (a: ListPlace | null, b: ListPlace | null): boolean =>
   (a === null && b === null) ||
