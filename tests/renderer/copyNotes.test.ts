@@ -1,7 +1,13 @@
 import { getSchema, type JSONContent } from "@tiptap/core";
+import { parseHTML } from "linkedom";
 import { describe, expect, test } from "vitest";
 import { CITATION_NODE, FOOTNOTE_NODE } from "../../src/core/api";
-import { citationsIn, textWithSources } from "../../src/renderer/src/editor/copyNotes";
+import {
+  addFootnotes,
+  citationsIn,
+  textWithSources,
+  wordFootnoteHtml,
+} from "../../src/renderer/src/editor/copyNotes";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
 
 const schema = getSchema(noteExtensions());
@@ -54,5 +60,42 @@ describe("copying Citations as text", () => {
     const fragment = fragmentOf(paragraph(text("Claim"), footnote, cite(2)));
     expect(citationsIn(fragment)).toHaveLength(1);
     expect(textWithSources(fragment, schema, context)).toContain("Claim^[See [Tides, p. 9]][1]");
+  });
+});
+
+describe("copying Citations as Word footnotes", () => {
+  const copied = () => {
+    const { document } = parseHTML("<!doctype html><html><body></body></html>");
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<p>Spring tides<span data-type="citation"></span></p><p>Neap tides<span data-type="citation"></span></p>';
+    const citations = citationsIn(
+      fragmentOf(paragraph(text("a"), cite(2)), paragraph(text("b"), cite(5))),
+    );
+    addFootnotes(root, citations, context);
+    return wordFootnoteHtml(root.innerHTML);
+  };
+
+  test("each marker is Word's own footnote number, with the visible [n] in a block Word skips", () => {
+    const html = copied();
+    for (const number of [1, 2]) {
+      expect(html).toContain(
+        `<span style="mso-special-character:footnote"><![if !supportFootnotes]><span class="MsoFootnoteReference">[${number}]</span><![endif]></span>`,
+      );
+    }
+    // Both ends of each footnote: the reference in the text and the mark opening its note.
+    expect(html.match(/mso-special-character:footnote/g)).toHaveLength(4);
+    expect(html.match(/<!\[if !supportFootnotes\]>/g)).toHaveLength(4);
+    expect(html.match(/<!\[endif\]>/g)).toHaveLength(4);
+    expect(html).toContain("mso-footnote-id:ftn1");
+    expect(html).toContain("mso-footnote-id:ftn2");
+  });
+
+  test("the footnote list and its Sources stay, and no fixed mark is left as a comment", () => {
+    const html = copied();
+    expect(html).toContain("mso-element:footnote-list");
+    expect(html).toContain("Tides, p. 2");
+    expect(html).toContain("Tides, p. 5");
+    expect(html).not.toContain("<!--");
   });
 });
