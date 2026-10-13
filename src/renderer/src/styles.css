@@ -5382,6 +5382,143 @@
   }
 
   /*
+   * A Task's progress in the thread (D189; DESIGN.md, Task progress in the
+   * thread): its head (dot, name, how far), a 3px bar, its latest steps with
+   * their marks, then quiet text actions.
+   */
+  .task-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    margin: 4px 0 8px;
+    font-size: var(--text-ui);
+    line-height: var(--text-ui--line-height);
+    color: var(--color-ink);
+  }
+  .task-progress-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .task-progress-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-weight: 600;
+  }
+  .task-progress-meta {
+    flex-shrink: 0;
+    font-size: 12.5px;
+    line-height: 18px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    color: var(--color-ink-meta);
+  }
+  .task-progress-bar {
+    height: 3px;
+    overflow: hidden;
+    border-radius: 2px;
+    background: var(--color-rule);
+
+    > span {
+      display: block;
+      height: 100%;
+      border-radius: 2px;
+      background: var(--color-accent);
+    }
+  }
+  .task-progress-more {
+    align-self: flex-start;
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--color-ink-meta);
+
+    &:hover {
+      color: var(--color-ink);
+    }
+  }
+  .task-progress-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .task-progress-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+  .task-progress-mark,
+  .task-progress-check {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 20px;
+  }
+  .task-progress-check {
+    height: 14px;
+    margin-top: 3px;
+    color: var(--color-success);
+  }
+  .task-progress-mark--failed {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--color-warning);
+  }
+  .task-progress-details {
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  .task-progress-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 6px;
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink-secondary);
+
+    &:empty {
+      display: none;
+    }
+  }
+  .task-progress-action {
+    border-radius: 4px;
+    color: var(--color-ink-secondary);
+
+    &:hover {
+      color: var(--color-ink);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 1px;
+    }
+  }
+  .task-progress-action--strong {
+    font-weight: 600;
+    color: var(--color-accent);
+
+    &:hover {
+      color: var(--color-accent-strong);
+    }
+  }
+  .task-progress-dot {
+    color: var(--color-ink-placeholder);
+  }
+
+  /*
    * An Answer's steps (#391; DESIGN.md, Answer › In the assistant): one
    * 14/20 line, folded; the live step with its dot while it is written; and,
    * unfolded, a timeline whose 16px icons a 1px rule joins. Folding and the
@@ -5792,9 +5929,10 @@
     }
   }
   /*
-   * The Task tray (#126; DESIGN.md, Task tray): joined to the top of the
-   * composer, its width, sharing its edge. 32px rows, then the one ask, its
-   * buttons pinned at the bottom while the rest scrolls.
+   * The Task tray (#126, narrowed by D189; DESIGN.md, Task tray): joined to
+   * the top of the composer, its width, sharing its edge: the plan card, the
+   * one ask, its buttons pinned at the bottom while the rest scrolls, and
+   * queued messages, each section ruled from the one above it.
    */
   .task-tray {
     display: flex;
@@ -5812,30 +5950,6 @@
   .task-tray + .composer {
     border-top-left-radius: 0;
     border-top-right-radius: 0;
-  }
-  .task-rows {
-    flex: 0 1 auto;
-    min-height: 32px;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-  .task-row {
-    &[data-shown] {
-      background: var(--color-frame);
-    }
-    & + & {
-      border-top: 1px solid var(--color-rule);
-    }
-  }
-  .task-line {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 32px;
-    padding: 2px 4px 2px 10px;
-  }
-  .task-controls {
-    margin-top: -4px;
   }
   .task-dot {
     width: 6px;
@@ -5881,62 +5995,6 @@
     margin-top: 2px;
     color: var(--color-success);
   }
-  .task-done-icon {
-    width: 14px;
-    height: 14px;
-    flex-shrink: 0;
-    color: var(--color-success);
-  }
-  .task-name {
-    flex-shrink: 0;
-    font-weight: 600;
-    white-space: nowrap;
-  }
-  .task-step {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    color: var(--color-ink-secondary);
-  }
-  .task-time {
-    flex-shrink: 0;
-    font-size: 12px;
-    white-space: nowrap;
-    color: var(--color-ink-meta);
-  }
-  .task-button {
-    display: flex;
-    flex-shrink: 0;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    border-radius: 4px;
-    color: var(--color-ink-meta);
-
-    &:hover {
-      background: var(--color-chip);
-      color: var(--color-ink);
-    }
-  }
-  .task-link {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--color-accent);
-    text-underline-offset: 2px;
-
-    &:hover {
-      text-decoration: underline;
-    }
-  }
-  .task-details {
-    padding: 0 10px 8px 22px;
-    font-size: 12px;
-    line-height: 16px;
-    color: var(--color-ink-meta);
-  }
   /* The ask scrolls inside its card, so its buttons stay pinned at the card's foot. */
   .task-ask {
     display: flex;
@@ -5944,8 +6002,10 @@
     flex-direction: column;
     min-height: 0;
     padding: 8px 8px 10px;
-    border-top: 1px solid var(--color-rule);
 
+    & + * {
+      border-top: 1px solid var(--color-rule);
+    }
     .approval-card {
       flex: 0 1 auto;
       min-height: 0;

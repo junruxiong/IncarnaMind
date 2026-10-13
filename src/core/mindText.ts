@@ -29,7 +29,8 @@
  *   a heading is level 1, a list starts at 1, a text attribute is "".
  *
  * Proposals still waiting (see `PROPOSAL_INSERT_MARK`) aren't the Mind's text
- * yet: what one adds is left out, and what one removes is read as it is.
+ * yet: what one adds is left out, and what one removes is read as it is. A
+ * Word export reads them too, for review (`ReadOptions.review`, #107).
  */
 import * as Y from "yjs";
 import { type ChartAttributes, chartSources, chosenSeries, readChart } from "../shared/charts";
@@ -38,7 +39,12 @@ import { type MessageKey, type MessageParams, translate } from "../shared/i18n";
 import { citationLocation } from "../shared/locations";
 import type { TableAlign } from "../shared/markdownTables";
 import { cutTitle } from "../shared/naming";
-import { readProposalAttribute } from "../shared/proposals";
+import {
+  outOfDateProposals,
+  proposalRequestOf,
+  readProposalAttribute,
+  readProposalRef,
+} from "../shared/proposals";
 import { readWordAtom, wordAtomText } from "../shared/wordFiles";
 import {
   ANSWER_BLOCK,
@@ -49,7 +55,9 @@ import {
   COMPARISON_TABLE_NODE,
   DOCUMENT_CHIP_NODE,
   FOOTNOTE_NODE,
+  GENERATED_MARK,
   PROPOSAL_ATTRIBUTE,
+  PROPOSAL_DELETE_MARK,
   PROPOSAL_INSERT_MARK,
   QUESTION_BLOCK,
   type StyledRun,
@@ -76,6 +84,35 @@ export interface Footnote {
   unverified: boolean;
   /** A web page's address, which `source` names: a format with links makes it one. */
   link?: string;
+  /** Its check failed, which a Word file can say in a comment (#107). */
+  failed?: FailedCheck;
+}
+
+/** How a Citation's check failed (#107). */
+export interface FailedCheck {
+  check: "not-found" | "unsupported" | "contradicted";
+  /** The quote the check looked for. */
+  quote: string | null;
+  /** What the evidence says, when the check of the claim has a line on it. */
+  verdict: string | null;
+}
+
+/** Part of a change still waiting to be accepted (a Proposal), read for review (#107). */
+export interface Pending {
+  /** The Proposal it is part of. */
+  id: string;
+  /** When it was asked for, ISO 8601; null when the Mind doesn't say. */
+  at: string | null;
+}
+
+/**
+ * What changes still waiting do to some content, read for review
+ * (`ReadOptions.review`): it is what one adds, or what one removes, or both
+ * (words one adds that another removes).
+ */
+export interface Pendings {
+  inserted?: Pending;
+  deleted?: Pending;
 }
 
 export interface Image {
@@ -83,8 +120,14 @@ export interface Image {
   alt: string;
 }
 
-export type Inline =
-  | { kind: "text"; text: string; marks: Marks }
+export type Inline = (
+  | {
+      kind: "text";
+      text: string;
+      marks: Marks;
+      /** AI text (`GENERATED_MARK`), when read for review. */
+      ai?: true;
+    }
   | { kind: "math"; latex: string }
   | { kind: "break" }
   | { kind: "citation"; footnote: Footnote; work: CitedWork }
@@ -98,7 +141,16 @@ export type Inline =
    * Citations written in a citation style (#289) by the exports (./exports/citations), never
    * read from a Mind: one Citation, or several side by side, in the text, or as a note.
    */
-  | { kind: "cite"; runs: StyledRun[]; note: boolean; unverified: boolean };
+  | {
+      kind: "cite";
+      runs: StyledRun[];
+      note: boolean;
+      unverified: boolean;
+      /** The footnotes of its Citations whose check failed. */
+      failed?: Footnote[];
+    }
+) &
+  Pendings;
 
 /** A Bibliography entry, as a citation style writes it: its number set apart, if any, then its text. */
 export interface BibliographyItem {
@@ -128,7 +180,7 @@ export interface TableSlot {
   continued: boolean;
 }
 
-export type Block =
+export type Block = (
   | { kind: "paragraph"; content: Inline[] }
   | { kind: "heading"; level: number; content: Inline[] }
   | { kind: "code"; language: string; code: string }
@@ -154,7 +206,9 @@ export type Block =
     }
   | { kind: "question"; content: Inline[] }
   /** The Bibliography a citation style adds at the end of an export (./exports/citations). */
-  | { kind: "bibliography"; heading: string; items: BibliographyItem[]; hangingIndent: boolean };
+  | { kind: "bibliography"; heading: string; items: BibliographyItem[]; hangingIndent: boolean }
+) &
+  Pendings;
 
 export interface ReadOptions {
   includeQuestions: boolean;
@@ -179,7 +233,57 @@ export interface ReadOptions {
   comparisonText?(key: MessageKey, params?: MessageParams): string;
   /** Whether a Document was deleted: its comparison table row says its source was removed. */
   documentRemoved?(documentId: string): boolean;
+  /**
+   * Read for a Word file's review (#107, see `reviewReading`): what changes still
+   * waiting add is read too, and each part of one is marked (`Pendings`), and
+   * AI text is marked `ai`. One out of date is read as if it weren't there,
+   * as accepting every change leaves it. Absent everywhere else: a change's
+   * words aren't the Mind's until it is accepted.
+   */
+  review?: ReviewReading;
+  /** Set by the reader in an Answer from before AI text was marked, which is the AI's as a whole. */
+  wholeAnswerAi?: boolean;
 }
+
+/** What reading for review needs to know of a Mind's changes (`reviewReading`). */
+export interface ReviewReading {
+  /** The changes out of date, by id. */
+  stale: ReadonlySet<string>;
+  /** When a request's changes were asked for, ISO 8601; null when the Mind doesn't say. */
+  at(request: string): string | null;
+}
+
+/** What a Mind's Blocks need for reading them for review (`ReadOptions.review`). */
+export function reviewReading(blocks: Y.XmlFragment): ReviewReading {
+  const { doc } = blocks;
+  return {
+    stale: outOfDateProposals(blocks),
+    at: (request) => (doc ? (proposalRequestOf(doc, request)?.createdAt ?? null) : null),
+  };
+}
+
+/** The change a mark's or an attribute's value is part of, read for review; none if it is out of date. */
+function pendingIn(value: unknown, options: ReadOptions): Pending | undefined {
+  const { review } = options;
+  const ref = review ? readProposalRef(value) : null;
+  if (!review || !ref || review.stale.has(ref.id)) return undefined;
+  return { id: ref.id, at: review.at(ref.request) };
+}
+
+/**
+ * What a change does to an element: null for one it adds that isn't read
+ * (never, read for review, unless it is out of date).
+ */
+function changeOf(element: Y.XmlElement, options: ReadOptions): Pendings | null {
+  const attribute = readProposalAttribute(element.getAttribute(PROPOSAL_ATTRIBUTE));
+  if (!attribute) return {};
+  const pending = pendingIn(attribute, options);
+  if (attribute.kind === "insert") return pending ? { inserted: pending } : null;
+  return pending ? { deleted: pending } : {};
+}
+
+const withChange = <T extends object>(items: T[], change: Pendings): T[] =>
+  change.inserted || change.deleted ? items.map((item) => ({ ...item, ...change })) : items;
 
 /** A stretch of text with one set of marks, as `Y.XmlText.toDelta()` gives it. */
 interface Run {
@@ -200,7 +304,8 @@ export function readBlocks(parent: Y.XmlFragment | Y.XmlElement, options: ReadOp
  * Answer as its Blocks, and none for a Question that `includeQuestions` leaves out.
  */
 export function readBlock(element: Y.XmlElement, options: ReadOptions): Block[] {
-  return proposedOnly(element) ? [] : readBlockElement(element, options);
+  const change = changeOf(element, options);
+  return change ? withChange(readBlockElement(element, options), change) : [];
 }
 
 /** The first stretch of text in an element: a list's first item, not all its items run together. */
@@ -282,7 +387,8 @@ function readChildren(
   const blocks: Block[] = [];
   for (const child of children) {
     if (child instanceof Y.XmlElement) {
-      if (!proposedOnly(child)) blocks.push(...readBlockElement(child, options));
+      const change = changeOf(child, options);
+      if (change) blocks.push(...withChange(readBlockElement(child, options), change));
     } else if (child instanceof Y.XmlText) {
       // Text straight in a Block container: keep it as a paragraph.
       const content = readInline([child], options);
@@ -336,7 +442,11 @@ function readBlockElement(element: Y.XmlElement, options: ReadOptions): Block[] 
       const items = element
         .toArray()
         .filter((item): item is Y.XmlElement => item instanceof Y.XmlElement)
-        .map((item) => readChildren(item.toArray(), options));
+        .flatMap((item) => {
+          if (!options.review) return [readChildren(item.toArray(), options)];
+          const change = changeOf(item, options);
+          return change ? [withChange(readChildren(item.toArray(), options), change)] : [];
+        });
       return [{ kind: "list", ordered, start, items }];
     }
     case "blockquote":
@@ -367,7 +477,13 @@ function readBlockElement(element: Y.XmlElement, options: ReadOptions): Block[] 
         ? [{ kind: "question", content: readInline(element.toArray(), options) }]
         : [];
     case ANSWER_BLOCK:
-      return readChildren(element.toArray(), options);
+      return readChildren(
+        element.toArray(),
+        options.review &&
+          (element.getAttributes() as Record<string, unknown>).generatedMarks !== true
+          ? { ...options, wholeAnswerAi: true }
+          : options,
+      );
     default:
       // A node type this version doesn't know: its Blocks, or its text.
       if (hasBlockChildren(element)) return readChildren(element.toArray(), options);
@@ -571,75 +687,96 @@ function readInline(
   for (const child of children) {
     if (child instanceof Y.XmlText) {
       for (const run of child.toDelta() as Run[]) {
-        if (run.attributes && PROPOSAL_INSERT_MARK in run.attributes) continue;
+        const attributes = run.attributes ?? {};
+        const inserted = pendingIn(attributes[PROPOSAL_INSERT_MARK], options);
+        if (PROPOSAL_INSERT_MARK in attributes && !inserted) continue;
         if (typeof run.insert === "string" && run.insert !== "") {
-          content.push({ kind: "text", text: run.insert, marks: marksOf(run.attributes) });
+          const deleted = pendingIn(attributes[PROPOSAL_DELETE_MARK], options);
+          const ai =
+            options.review !== undefined &&
+            (options.wholeAnswerAi === true || GENERATED_MARK in attributes);
+          content.push({
+            kind: "text",
+            text: run.insert,
+            marks: marksOf(run.attributes),
+            ...(ai && { ai: true }),
+            ...(inserted && { inserted }),
+            ...(deleted && { deleted }),
+          });
         }
       }
     } else if (child instanceof Y.XmlElement) {
-      if (proposedOnly(child)) continue;
-      switch (child.nodeName) {
-        case "inlineMath":
-          content.push({ kind: "math", latex: stringAttribute(child, "latex") });
-          break;
-        case "hardBreak":
-          content.push({ kind: "break" });
-          break;
-        case "image":
-          content.push({ kind: "image", image: readImage(child) });
-          break;
-        case WORD_ATOM_NODE: {
-          const atom = readWordAtom(child.getAttributes() as Record<string, unknown>);
-          // A Word file's footnote reads as a footnote, as one the User wrote does.
-          if ((atom.kind === "footnote" || atom.kind === "endnote") && !inFootnote && atom.text) {
-            if (options.trimBeforeFootnote ?? options.trimBeforeCitation)
-              trimTrailingSpace(content);
-            content.push({
-              kind: "footnote",
-              content: [{ kind: "text", text: atom.text, marks: NO_MARKS }],
-            });
-            break;
-          }
-          const text = wordAtomText(atom);
-          if (text) content.push({ kind: "text", text, marks: NO_MARKS });
-          break;
-        }
-        case CITATION_NODE: {
-          if (options.trimBeforeCitation && !inFootnote) trimTrailingSpace(content);
-          const attributes = child.getAttributes() as Record<string, unknown>;
-          content.push({
-            kind: "citation",
-            footnote: options.footnote(attributes),
-            work: citedWork(attributes),
-          });
-          break;
-        }
-        case FOOTNOTE_NODE: {
-          // A footnote in a footnote, which the editor never makes, is read as its text.
-          if (inFootnote) {
-            const text = plainText(child, true);
-            if (text) content.push({ kind: "text", text, marks: NO_MARKS });
-            break;
-          }
-          if (options.trimBeforeFootnote ?? options.trimBeforeCitation) trimTrailingSpace(content);
-          content.push({ kind: "footnote", content: readInline(child.toArray(), options, true) });
-          break;
-        }
-        case DOCUMENT_CHIP_NODE: {
-          // A Document the User named: its name, as text.
-          const name = stringAttribute(child, "name");
-          if (name) content.push({ kind: "text", text: name, marks: NO_MARKS });
-          break;
-        }
-        default: {
-          // Inline content this version doesn't know: its text.
-          const text = plainText(child);
-          if (text) content.push({ kind: "text", text, marks: NO_MARKS });
-        }
-      }
+      const change = changeOf(child, options);
+      if (change) readInlineElement(child, options, inFootnote, content, change);
     }
   }
   return content;
+}
+
+/** An inline node, read into `content`, with what a change still waiting does to it. */
+function readInlineElement(
+  child: Y.XmlElement,
+  options: ReadOptions,
+  inFootnote: boolean,
+  content: Inline[],
+  change: Pendings,
+): void {
+  const add = (inline: Inline) => content.push({ ...inline, ...change });
+  switch (child.nodeName) {
+    case "inlineMath":
+      add({ kind: "math", latex: stringAttribute(child, "latex") });
+      break;
+    case "hardBreak":
+      add({ kind: "break" });
+      break;
+    case "image":
+      add({ kind: "image", image: readImage(child) });
+      break;
+    case WORD_ATOM_NODE: {
+      const atom = readWordAtom(child.getAttributes() as Record<string, unknown>);
+      // A Word file's footnote reads as a footnote, as one the User wrote does.
+      if ((atom.kind === "footnote" || atom.kind === "endnote") && !inFootnote && atom.text) {
+        if (options.trimBeforeFootnote ?? options.trimBeforeCitation) trimTrailingSpace(content);
+        add({ kind: "footnote", content: [{ kind: "text", text: atom.text, marks: NO_MARKS }] });
+        break;
+      }
+      const text = wordAtomText(atom);
+      if (text) add({ kind: "text", text, marks: NO_MARKS });
+      break;
+    }
+    case CITATION_NODE: {
+      if (options.trimBeforeCitation && !inFootnote) trimTrailingSpace(content);
+      const attributes = child.getAttributes() as Record<string, unknown>;
+      add({
+        kind: "citation",
+        footnote: options.footnote(attributes),
+        work: citedWork(attributes),
+      });
+      break;
+    }
+    case FOOTNOTE_NODE: {
+      // A footnote in a footnote, which the editor never makes, is read as its text.
+      if (inFootnote) {
+        const text = plainText(child, true);
+        if (text) add({ kind: "text", text, marks: NO_MARKS });
+        break;
+      }
+      if (options.trimBeforeFootnote ?? options.trimBeforeCitation) trimTrailingSpace(content);
+      add({ kind: "footnote", content: readInline(child.toArray(), options, true) });
+      break;
+    }
+    case DOCUMENT_CHIP_NODE: {
+      // A Document the User named: its name, as text.
+      const name = stringAttribute(child, "name");
+      if (name) add({ kind: "text", text: name, marks: NO_MARKS });
+      break;
+    }
+    default: {
+      // Inline content this version doesn't know: its text.
+      const text = plainText(child);
+      if (text) add({ kind: "text", text, marks: NO_MARKS });
+    }
+  }
 }
 
 /** What a citation style needs of a Citation: its Document, its Location and the version quoted. */

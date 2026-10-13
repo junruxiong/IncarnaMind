@@ -19,8 +19,9 @@ import {
  * read to its end is still read to its end after the assistant docks at the
  * bottom, floats, folds and unfolds, and after the window narrows to 900px,
  * so the latest Answer's last lines and its Copy · Add to note are never left
- * under the composer; a Task waiting in its tray, which shortens the thread, is
- * kept up with too. A conversation
+ * under the composer; a Task starting, its progress at the thread's end and
+ * its ask in the tray shortening the thread (D189), is kept up with too. A
+ * conversation
  * scrolled up keeps the turn at its top where it was. The checks are
  * relations to the thread's box. Set INCARNAMIND_SCREENSHOTS to a folder to
  * also save screenshots.
@@ -145,14 +146,15 @@ test("scrolled up to an older turn, the same turn stays in view after the same c
   await app.close();
 });
 
-test("a Task starting in the tray, which shortens the thread, leaves the latest Answer's actions in view, on the right and floating", async () => {
+test("a Task starting, its progress at the thread's end and its ask in the tray, leaves that end in view, on the right and floating", async () => {
   test.setTimeout(150_000);
   const { window } = await start({ task: true });
-  const actions = assistantAnswers(window).last().getByTestId("answer-copy");
-  await expect.poll(() => inThread(window, actions), { message: "the tray shown" }).toBe(true);
+  // The thread's end is now the Task's progress, after the latest Answer.
+  const end = window.getByTestId("assistant-thread").getByTestId("task-progress-actions");
+  await expect.poll(() => inThread(window, end), { message: "the tray shown" }).toBe(true);
   for (const place of ["float", "right"] as const) {
     await placeAs(window, place);
-    await expect.poll(() => inThread(window, actions), { message: `at ${place}` }).toBe(true);
+    await expect.poll(() => inThread(window, end), { message: `at ${place}` }).toBe(true);
   }
   if (SCREENSHOTS) {
     await window

@@ -81,6 +81,8 @@ jobs:
           # -alpha and -beta included, asks first.
           MAIN_VITE_TESTER_BUILD: ${{ contains(github.ref_name, '-tester') && '1' || '' }}
 
+      # The three packaging steps build into dist/ and upload nothing: the upload is the last
+      # step, once the package check has passed.
       # Signs with the Developer ID certificate and notarizes when the secrets exist.
       # Without the certificate, the app is ad-hoc signed instead: it still opens (see the
       # README), but it can't update itself, and the job still succeeds.
@@ -103,6 +105,10 @@ jobs:
           signing=""
           if [ -z "$CSC_LINK" ]; then
             echo "::warning title=Unsigned macOS build::No CSC_LINK secret, so the macOS app is ad-hoc signed and not notarized. It can't update itself."
+            # A missing secret still arrives as an empty variable, and electron-builder reads an
+            # empty CSC_LINK as a path: the checkout folder, "not a file".
+            unset CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID \
+              APPLE_API_KEY_P8 APPLE_API_KEY_ID APPLE_API_ISSUER
             export CSC_IDENTITY_AUTO_DISCOVERY=false
             signing="-c.mac.identity=- -c.mac.notarize=false"
           else
@@ -121,23 +127,39 @@ jobs:
           mkdir -p node_modules/sherpa-onnx-darwin-x64
           tar -xzf "$RUNNER_TEMP/sherpa-onnx-darwin-x64-$version.tgz" -C node_modules/sherpa-onnx-darwin-x64 --strip-components 1
           # $signing is unquoted on purpose: it holds zero or two arguments.
-          npx electron-builder --mac --arm64 --x64 --publish always $signing
+          npx electron-builder --mac --arm64 --x64 --publish never $signing
 
       # Windows is unsigned in v1 (SmartScreen warns, see the README); Linux needs no signing.
       - name: Package and publish (Windows)
         if: runner.os == 'Windows'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --win --x64 --publish always
+        run: npx electron-builder --win --x64 --publish never
 
       - name: Package and publish (Linux)
         if: runner.os == 'Linux'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --linux --x64 --publish always
+        run: npx electron-builder --linux --x64 --publish never
 
       # Fails the job when app.asar holds anything but out/, node_modules/ and package.json
       # (sources, tests, sample data), or when an app.asar or an installer is over its size
       # budget. The budgets are in scripts/check-package.mjs.
       - name: Check the package contents and sizes
         run: npm run check:package
+
+      # What electron-builder would have published: the installers, their blockmaps and the
+      # latest*.yml files auto-update reads (not builder-debug.yml), to the draft made above.
+      - name: Upload to the draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          shopt -s nullglob
+          files=(dist/*.dmg dist/*.zip dist/*.exe dist/*.AppImage dist/*.blockmap dist/latest*.yml)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::Nothing to upload in dist/."
+            exit 1
+          fi
+          printf '%s\n' "${files[@]}"
+          gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
