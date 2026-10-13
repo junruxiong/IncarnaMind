@@ -138,6 +138,19 @@ A figure in an Answer is written as reports write it, with no space between the 
 | times (a multiple) | 倍 | "4.00倍". |
 | yes / no (what a comparison gives) | 是 / 否 | |
 
+### Dates and times
+
+A date in a string is a `{date}` or `{time}` parameter, written by `src/shared/dates.ts`, never by a string or by code of its own: "会议，{date}", "{time} 后可重试". The module gives each language one style, and a test fails on a date built by hand elsewhere.
+
+| Kind | English | Chinese |
+|---|---|---|
+| Day | 12 October | 10月12日 |
+| Date | 12 Oct 2026 | 2026年10月12日 |
+| Date and time | 12 Oct 2026, 15:20 | 2026年10月12日 15:20 |
+| Time | 15:20 | 15:20 |
+
+The year is left out when it is this year, except in a Date, and a time today is the time alone. The clock has 24 hours ("15:20"), and 12 when the system asks for it ("下午3:20"). A weekday goes before the date in English ("Friday 9 Oct") and after it in Chinese ("10月9日星期五").
+
 ### Models and settings
 
 | English | Chinese | Notes |
