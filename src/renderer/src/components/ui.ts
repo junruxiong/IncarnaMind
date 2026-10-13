@@ -62,8 +62,8 @@ export const noticeClass =
 /** What went wrong, in words. */
 export const errorTextClass = "text-[13px] leading-5 break-words text-danger";
 
-/** Something that worked, e.g. a connection test. */
-export const successTextClass = "text-[13px] leading-5 text-success";
+/** Something that worked, e.g. a connection test: in ink, as green is for Citation checks. */
+export const successTextClass = "text-[13px] leading-5 text-ink-secondary";
 
 // Dialogs ------------------------------------------------------------------
 
