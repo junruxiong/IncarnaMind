@@ -154,7 +154,7 @@ test("the header, the thread, the Task tray and the composer share one left edge
     // Where a scrollbar takes room (Linux), the thread's content, and the bubble, end that much sooner.
     const bubbleRight = await window.getByTestId("assistant-thread").evaluate((thread) => {
       const bubble = [...thread.querySelectorAll(".assistant-question-bubble")].at(-1);
-      const scrollbar = thread.offsetWidth - thread.clientWidth;
+      const scrollbar = thread.getBoundingClientRect().width - thread.clientWidth;
       return (bubble?.getBoundingClientRect().right ?? 0) + scrollbar;
     });
     expect(Math.abs(bubbleRight - box.right)).toBeLessThanOrEqual(1);
