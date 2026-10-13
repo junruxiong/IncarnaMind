@@ -38,7 +38,7 @@ export class SourceError extends Error {
 }
 
 /** How IncarnaMind names itself to the services it asks, so their operators can reach the project. */
-export const SOURCE_USER_AGENT = "IncarnaMind (https://github.com/junruxiong/IncarnaMind)";
+export const SOURCE_USER_AGENT = "IncarnaMind (https://github.com/IncarnaMind/IncarnaMind)";
 
 /**
  * For an open copy on a publisher's or a repository's own site, which may
