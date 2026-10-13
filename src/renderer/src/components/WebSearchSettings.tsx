@@ -1,4 +1,5 @@
 import { useId } from "react";
+import { modelName } from "../../../shared/modelName";
 import { searchesTheWeb } from "../../../shared/webSearch";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
@@ -34,7 +35,7 @@ export function WebSearchSettings() {
     ? t("web.settings.localMode")
     : provider && model
       ? t(searchesTheWeb(provider.kind) ? "web.settings.supported" : "web.settings.unsupported", {
-          model,
+          model: modelName(model, { kind: provider.kind, endpoint: provider.endpoint }),
           provider: providerLabel(provider, t),
         })
       : null;

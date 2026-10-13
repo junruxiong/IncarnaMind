@@ -89,6 +89,12 @@ function placeOf(citation: CitationFields): Place | null {
   };
 }
 
+/** What one saved page is for: Citations with the same key share it. Null if a Citation can't have one. */
+export function citedPageKey(citation: CitationFields): string | null {
+  const place = placeOf(citation);
+  return place?.contentHash && place.area !== null ? JSON.stringify(place) : null;
+}
+
 function parseArea(stored: string): PageArea {
   const value: unknown = JSON.parse(stored);
   if (isRecord(value)) {
