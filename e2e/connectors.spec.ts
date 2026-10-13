@@ -45,7 +45,7 @@ test("a local Connector added in Settings starts and reaches ready, and turning 
   const connector = section.getByTestId("connector");
   await expect(connector).toHaveCount(1);
   await expect(connector).toHaveAttribute("data-state", "ready", { timeout: 30_000 });
-  await expect(connector.getByTestId("connector-state")).toHaveText("Ready");
+  await expect(connector.getByTestId("connector-state")).toHaveText("Connected");
   await expect(connector).toContainText(TIDE_SERVER);
 
   // Just added, its Tools are listed unfolded: which claim to be read-only, and which ask first.
@@ -143,7 +143,7 @@ test("a remote Connector added by URL needs a sign-in, which goes through the br
     expect(await page.text()).toContain("Signed in to Wiki");
 
     await expect(connector).toHaveAttribute("data-state", "ready");
-    await expect(connector.getByTestId("connector-state")).toHaveText("Ready");
+    await expect(connector.getByTestId("connector-state")).toHaveText("Connected");
     await expect(connector.getByTestId("connector-sign-out")).toBeVisible();
     await expect(connector.getByText("2 Tools")).toBeVisible();
     await app.close();
