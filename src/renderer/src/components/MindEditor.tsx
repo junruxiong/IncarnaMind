@@ -48,6 +48,7 @@ import { HeldSelection } from "../editor/heldSelection";
 import { LinkBubble } from "../editor/LinkBubble";
 import { MarginChecks } from "../editor/MarginChecks";
 import { MathEditing, MathEditor } from "../editor/MathEditor";
+import { MindCheckAsk } from "../editor/MindCheckLine";
 import { MindOutline } from "../editor/MindOutline";
 import { MeetingNotes } from "../editor/meetingNotes";
 import {
@@ -645,6 +646,7 @@ function MindEditorView({
               <WordCount editor={editor} doc={doc}>
                 <NoteHealth editor={editor} doc={doc} mindId={mindId} />
                 <ContradictionLine doc={doc} mindId={mindId} />
+                <MindCheckAsk mindId={mindId} />
               </WordCount>
             )}
           </>,

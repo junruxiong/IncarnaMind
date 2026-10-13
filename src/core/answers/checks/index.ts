@@ -55,6 +55,7 @@ import type { PreparedChatModel } from "../../providers/chat";
 import { parseSearchScope } from "../../scope";
 import type { AnswerEngine } from "../engine";
 import { type ClaimCheckDependencies, createClaimCheck } from "./claimCheck";
+import { createMindCheck } from "./mindCheck";
 import { markedSentences, markSentence, selectedSentences, updateCheck } from "./sentences";
 import { createVerify, type VerifyOptions } from "./verify";
 import { createContradictionWatch, type WatchOptions } from "./watch";
@@ -418,6 +419,19 @@ export function createChecks(options: ChecksOptions) {
     track,
   });
 
+  const mindCheck = createMindCheck({
+    ...options,
+    documentVersions: options.watch.documentVersions,
+    prepare,
+    scopeOf: (mindId, allDocuments) => scopeOf(mindId, allDocuments),
+    isRunning: (requestId) => running.has(requestId),
+    claimCheck,
+    withResult,
+    retainEvidence,
+    settleStopped,
+    track,
+  });
+
   return {
     ...verify,
 
@@ -456,6 +470,10 @@ export function createChecks(options: ChecksOptions) {
         model: parseModel(input.model),
       });
     },
+
+    planMindCheck: async (mindId: unknown, mode: unknown) => mindCheck.planMindCheck(mindId, mode),
+
+    checkMind: (input: unknown) => mindCheck.checkMind(input),
 
     /** A Document's status changed: a new version has its Folder's Minds checked for contradictions. */
     documentChanged: (document: Document) => watch.documentChanged(document),

@@ -1226,6 +1226,12 @@
       outline-offset: 1px;
     }
   }
+  /* When the whole Mind was last checked (#737): text, not a part to go to. */
+  .mind-health-when {
+    padding: 0 3px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
   .mind-health-icon {
     box-sizing: border-box;
     width: 12px;

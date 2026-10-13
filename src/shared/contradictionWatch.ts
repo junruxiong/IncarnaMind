@@ -29,7 +29,8 @@ function moneyOf(value: unknown): Money | null {
   return currency ? { currency, amount: value.amount } : null;
 }
 
-function stopOf(value: unknown): RunStop | null {
+/** A run's stop as a record stored it; null for none, or one this version can't read. */
+export function stopOf(value: unknown): RunStop | null {
   if (!isRecord(value)) return null;
   if (value.reason === "cost-cap") return { reason: "cost-cap" };
   if (value.reason === "plan-limit") {
