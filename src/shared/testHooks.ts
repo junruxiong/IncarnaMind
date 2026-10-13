@@ -21,6 +21,19 @@ export interface TestHooks {
    * does, once their paths are known: a test can't drop a folder.
    */
   addPaths(paths: string[]): Promise<void>;
+  /**
+   * The command registry as plain data, for the conformance spec (e2e/conformance.spec.ts):
+   * the menu groups in order, each kind's menu as command IDs with their sections, and what
+   * each command is.
+   */
+  registry(): {
+    groups: readonly string[];
+    menus: Record<string, { id: string; section: number }[]>;
+    commands: Record<
+      string,
+      { group: string; reversible: boolean; destructive: boolean; renames: boolean }
+    >;
+  };
   /** How many animations are running, leaving copies of closed menus included: settled at 0. */
   motionRunning(): number;
   /** Plays every animation at this speed (0.25: four times slower), so a test can act during one. */
