@@ -1418,7 +1418,6 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
-    // 74 is reserved by work in progress.
     version: 75,
     description: "Word files imported as Minds keep their original package (#104)",
     sql: `
@@ -1440,6 +1439,107 @@ export const migrations: readonly Migration[] = [
       ) STRICT;
       CREATE INDEX word_packages_by_mind ON word_packages (mind_id) WHERE deleted_at IS NULL;
       CREATE INDEX word_packages_by_sha256 ON word_packages (sha256) WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    // 76 to 79 are reserved by work in progress.
+    version: 80,
+    description: "Models the User added to a provider's model menu (#513)",
+    sql: `
+      -- A model id the catalog does not offer in the menu by default (an unknown, deprecated or
+      -- other-API id), that the User put there from Settings → Models → Other models.
+      CREATE TABLE chat_menu_models (
+        id TEXT PRIMARY KEY NOT NULL,
+        provider_id TEXT NOT NULL,
+        model_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX chat_menu_models_by_model ON chat_menu_models (provider_id, model_id)
+        WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    version: 81,
+    description: "Tasks keep a journal that survives a force-quit, and schedules (#126)",
+    sql: `
+      -- One row per Task: a Run that goes on in the background (src/core/runs/tasks.ts). kind
+      -- names what runs it ('comparison'…), checked in code, so a kind a newer version adds is
+      -- left alone; input is what it runs, its kind's JSON. status: 'running' | 'paused' |
+      -- 'done' | 'stopped' | 'failed'. paused_reason: 'user' | 'closed' | 'cost-cap' |
+      -- 'plan-limit' | 'not-ready'; resets_at: when a plan's limit resets. ask: what it waits
+      -- for the User to answer (JSON), NULL for nothing; asks: how many times it has asked.
+      -- progress: its items settled and in all (JSON). problem: why it failed.
+      -- A Task left 'running' by a quit or a crash is settled at the next start.
+      CREATE TABLE runs (
+        id TEXT PRIMARY KEY NOT NULL,
+        kind TEXT NOT NULL,
+        mind_id TEXT,
+        input TEXT NOT NULL DEFAULT '{}',
+        status TEXT NOT NULL,
+        paused_reason TEXT,
+        resets_at TEXT,
+        ask TEXT,
+        asks INTEGER NOT NULL DEFAULT 0,
+        progress TEXT,
+        problem TEXT,
+        schedule_id TEXT,
+        started_at TEXT NOT NULL,
+        finished_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX runs_unfinished ON runs (status)
+        WHERE deleted_at IS NULL AND finished_at IS NULL;
+      CREATE INDEX runs_by_finished_at ON runs (finished_at)
+        WHERE deleted_at IS NULL AND finished_at IS NOT NULL;
+
+      -- The journal: one row per step of a Task, written as started before the step runs and as
+      -- completed after, each with the database synced to disk (synchronous=FULL). key names the
+      -- step within its Task, the same on every attempt. effect: what the step changes outside
+      -- this database (a file it writes, a Connector's Tool it calls), as JSON, so that after a
+      -- crash its outcome is checked before anything is done again; NULL for none. status:
+      -- 'started' | 'completed' | 'failed' | 'skipped'; result: its kind's JSON. No foreign
+      -- keys: a later sync may bring a step before its Task.
+      CREATE TABLE run_steps (
+        id TEXT PRIMARY KEY NOT NULL,
+        run_id TEXT NOT NULL,
+        key TEXT NOT NULL,
+        effect TEXT,
+        status TEXT NOT NULL,
+        result TEXT,
+        attempts INTEGER NOT NULL DEFAULT 1,
+        started_at TEXT NOT NULL,
+        completed_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX run_steps_by_key ON run_steps (run_id, key) WHERE deleted_at IS NULL;
+
+      -- Tasks that start by themselves (#147): what to run (template: a kind and its input, as
+      -- JSON), when (trigger, JSON), the Mind it writes into, what it has seen so far (cursor),
+      -- and when it runs next. Nothing writes one yet.
+      CREATE TABLE schedules (
+        id TEXT PRIMARY KEY NOT NULL,
+        kind TEXT NOT NULL,
+        template TEXT NOT NULL DEFAULT '{}',
+        trigger TEXT NOT NULL DEFAULT '{}',
+        mind_id TEXT,
+        cursor TEXT,
+        paused_at TEXT,
+        next_run_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+
+      -- The Task a model request was made for, so a Task's cost can be told; NULL for the rest.
+      ALTER TABLE model_requests ADD COLUMN run_id TEXT;
+      CREATE INDEX model_requests_by_run ON model_requests (run_id)
+        WHERE run_id IS NOT NULL AND deleted_at IS NULL;
     `,
   },
 ];

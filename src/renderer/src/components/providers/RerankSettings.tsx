@@ -65,7 +65,7 @@ export function RerankSettingsSection() {
     try {
       setRerank(await action());
     } catch (failure) {
-      useAppStore.setState({ actionError: errorMessage(failure) });
+      useAppStore.getState().reportError(failure);
     }
   };
 

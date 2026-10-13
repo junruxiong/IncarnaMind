@@ -3034,6 +3034,92 @@ export interface ComparisonFilling extends ComparisonTableRef {
   filling: boolean;
 }
 
+/**
+ * Where a Task (CONTEXT.md, #126) is:
+ * - "running": doing its steps, or waiting for its turn behind an Answer or a
+ *   recording; with an `ask`, waiting for the User;
+ * - "paused": waiting until it is resumed (`pausedReason` says why);
+ * - "done", "stopped" (by the User, or its table or Mind went) or "failed":
+ *   finished, kept in Recent for 7 days.
+ */
+export type TaskStatus = "running" | "paused" | "done" | "stopped" | "failed";
+
+/**
+ * Why a Task is paused: the User paused it; IncarnaMind was closed while it
+ * waited for the User; the monthly cap or a plan's limit stopped it; or its
+ * model can't be used now (a key removed, local mode). All but "user" need
+ * the User to act.
+ */
+export type TaskPausedReason = "user" | "closed" | "cost-cap" | "plan-limit" | "not-ready";
+
+/**
+ * A step of a Task that changes something outside IncarnaMind's database,
+ * journalled before and after it runs, so that after a crash its outcome is
+ * checked before anything is done again: a whole file written (the SHA-256
+ * of what it writes, and of what was there before, null for no file), or a
+ * call of a Connector's Tool, which IncarnaMind can't check afterwards.
+ */
+export type TaskEffect =
+  | { kind: "file-write"; path: string; sha256: string; previous: string | null }
+  | { kind: "connector"; connectorId: string; connectorName: string; tool: string };
+
+/**
+ * What a Task waits for the User to answer, one at a time:
+ * - "approval": a call that asks first; the request itself is among
+ *   `listApprovalRequests` with this Task's `taskId`, answered with
+ *   `respondToApproval`, and asked again if IncarnaMind was closed meanwhile;
+ * - "unknown-outcome": IncarnaMind was closed in the middle of an Effect and
+ *   can't tell whether it happened; `answerTaskAsk` does it again or skips it.
+ * `number` counts the Task's asks so far, this one included.
+ */
+export type TaskAsk =
+  | { kind: "approval"; stepKey: string; number: number }
+  | { kind: "unknown-outcome"; stepKey: string; number: number; effect: TaskEffect };
+
+/** How far a Task is: so many of its items settled, of so many. */
+export interface TaskProgress {
+  done: number;
+  total: number;
+}
+
+/**
+ * A Task (CONTEXT.md): a Run that goes on in the background and keeps its
+ * place when IncarnaMind is quit. Its journal (`runs`, `run_steps`) records
+ * each step as started and completed.
+ */
+export interface Task {
+  id: string;
+  /** What runs it: "comparison" fills a comparison table. A kind this version doesn't know stays as it is. */
+  kind: string;
+  /** The Mind it works in, if any. */
+  mindId: string | null;
+  /** The Block in that Mind it works on (a comparison table), if any: where opening it goes. */
+  blockId: string | null;
+  status: TaskStatus;
+  pausedReason: TaskPausedReason | null;
+  /** "plan-limit": when the plan's limit resets (ISO 8601), when the provider says. */
+  resetsAt: string | null;
+  ask: TaskAsk | null;
+  progress: TaskProgress | null;
+  /** "failed": why, as a `ProviderErrorKind` or another short kind. */
+  problem: string | null;
+  /** What its model requests have cost, settled and reserved; null with none billed. */
+  cost: Money | null;
+  startedAt: string;
+  finishedAt: string | null;
+  updatedAt: string;
+}
+
+/** What answering a Task's "unknown-outcome" ask does: the step again, or on without it. */
+export type TaskAskAnswer = "redo" | "skip";
+
+/** Open a Task's place: its Mind, with its row in the tray (`showTask`, a notification's click). */
+export interface TaskShown {
+  taskId: string;
+  mindId: string | null;
+  blockId: string | null;
+}
+
 /** A large run to estimate: so many items (a comparison table's cells, verify's sentences…), each about an Answer. */
 export interface RunEstimateInput {
   items: number;
@@ -3097,14 +3183,44 @@ export type ChatReadiness =
       modelId: string;
     };
 
+/**
+ * Why a listed model isn't in the menu by default: "unknown" (the catalog
+ * doesn't know it), "older" (deprecated, or on its way out), or
+ * "cannot-answer" (it needs another API than chat, for `reason`; it can't be
+ * added).
+ */
+export interface OtherModel {
+  id: string;
+  why: "unknown" | "older" | "cannot-answer";
+  reason?: CannotAnswerReason;
+}
+
+/** Which API, other than chat, a model needs. */
+export type CannotAnswerReason = "completion" | "audio" | "deep-research" | "computer-use";
+
+export interface SetChatModelInMenuInput {
+  providerId: string;
+  modelId: string;
+  inMenu: boolean;
+}
+
 /** A saved chat provider and the models a Question's model picker offers on it. */
 export interface ChatModelGroup {
   provider: ChatProvider;
   /**
-   * Model ids: the models the provider lists, when it can be asked, and always
-   * the default model if it is on this provider. The default comes first.
+   * Model ids in the menu: the default model if it is on this provider, first;
+   * then the provider's role models, then the rest of the catalog's current chat
+   * models it lists (every model a server lists, for Ollama and other servers),
+   * then those the User added.
    */
   models: string[];
+  /**
+   * What the provider lists that the menu leaves out (see `OtherModel`), for
+   * Settings → Models → Other models, including ids the User has added.
+   */
+  other: OtherModel[];
+  /** The ids in `models` that the User added from `other`; "In the menu" is on for them. */
+  added: string[];
   /**
    * The ids in `models` whose capabilities are unknown: neither the catalog
    * nor the provider says what they can do. They still work; an Answer finds
@@ -4719,7 +4835,10 @@ export type ApprovalRequest = ToolApprovalRequest | SkillScriptApprovalRequest;
 
 interface ApprovalRequestBase extends AnswerPlace {
   requestId: string;
+  /** The Answer whose call this is; for a Task's call, the Task's id, as `taskId`. */
   answerId: string;
+  /** A Task's call (#126): it waits in the Task's row in the tray, and outlasts a quit. */
+  taskId?: string;
   /** The call's id among the Answer's `toolCalls`. */
   toolCallId: string;
   /** What the call can do, as its Tool declares it: why it asks. */
@@ -6082,6 +6201,11 @@ export interface CoreApi {
    */
   listChatModels(): Promise<ChatModelGroup[]>;
   /**
+   * Puts a model id in a provider's model menu, or takes an id the User added
+   * back out. Any id can be added, listed by the provider or not.
+   */
+  setChatModelInMenu(input: SetChatModelInMenuInput): Promise<void>;
+  /**
    * This month's cost so far, for Settings: what requests billed per token
    * cost, settled and still reserved, and each provider's use. Recorded on
    * this computer only.
@@ -6114,6 +6238,26 @@ export interface CoreApi {
   stopComparisonTable(input: ComparisonTableRef): Promise<void>;
   /** The comparison tables whose cells are being filled now. */
   listFillingComparisons(): Promise<ComparisonTableRef[]>;
+
+  /**
+   * Tasks (#126): those not finished, then those finished in the last 7 days,
+   * most recent first ("task.changed" as each changes). A comparison table
+   * fills as a Task: closing its Mind or quitting doesn't stop it, and it
+   * goes on when IncarnaMind starts again.
+   */
+  listTasks(): Promise<Task[]>;
+  /**
+   * Pauses a running Task where it is: a step being done (a cell being
+   * written) stops and is done again when it resumes, and what it asked is
+   * asked again then. A file or Connector change under way finishes first.
+   */
+  pauseTask(taskId: string): Promise<Task>;
+  /** Resumes a paused Task from where it stopped. A Task waiting for an answer resumes once answered. */
+  resumeTask(taskId: string): Promise<Task>;
+  /** Stops a Task for good: what it did stays, and what it waits for is withdrawn. */
+  stopTask(taskId: string): Promise<Task>;
+  /** Answers a Task's "unknown-outcome" ask: do the step again, or go on without it. */
+  answerTaskAsk(taskId: string, answer: TaskAskAnswer): Promise<Task>;
 
   /**
    * Asks a Question: its Answer is written into the Mind right after it, as the
@@ -6787,6 +6931,10 @@ export interface CoreEvents {
   "answer.failed": AnswerFailed;
   /** A comparison table's cells started or stopped being filled. */
   "comparison.filling": ComparisonFilling;
+  /** A Task started, moved on, waits for the User, paused, resumed or finished. */
+  "task.changed": Task;
+  /** A Task's notification was clicked: the window opens its Mind, with its row in the tray. */
+  "task.shown": TaskShown;
   /** The User accepted a suggestion into a Mind (see `acceptSuggestion`). */
   "suggestion.accepted": SuggestionAccepted;
   /**
@@ -6905,12 +7053,18 @@ const methods: Record<CoreApiMethod, true> = {
   testChatConnection: true,
   getChatReadiness: true,
   listChatModels: true,
+  setChatModelInMenu: true,
   getCostSummary: true,
   estimateRun: true,
   compareDocuments: true,
   fillComparisonTable: true,
   stopComparisonTable: true,
   listFillingComparisons: true,
+  listTasks: true,
+  pauseTask: true,
+  resumeTask: true,
+  stopTask: true,
+  answerTaskAsk: true,
   askQuestion: true,
   regenerateAnswer: true,
   stopAnswer: true,

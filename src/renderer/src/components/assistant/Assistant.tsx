@@ -31,6 +31,7 @@ import {
   HistoryLineIcon,
   PlusLineIcon,
 } from "../lineIcons";
+import { TaskTray } from "../TaskTray";
 import { AssistantMenu } from "./AssistantMenu";
 import { ConversationThread } from "./ConversationThread";
 import { HistoryPopover } from "./HistoryPopover";
@@ -297,6 +298,7 @@ function AssistantMain({
         <ConversationThread focusedMindId={mind?.mindId ?? null} />
       </div>
       <div ref={onComposerSlot} data-testid="assistant-composer" className="assistant-composer">
+        {mind && <TaskTray mindId={mind.mindId} />}
         <Composer mind={mind} />
       </div>
     </div>
