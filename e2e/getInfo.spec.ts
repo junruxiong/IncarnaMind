@@ -80,6 +80,8 @@ const documentsOf = (window: Page) =>
 
 /** Moves the mouse onto a menu item in small steps, as a person does, and clicks it. */
 async function slideClick(window: Page, target: Locator): Promise<void> {
+  // A long menu scrolls in a short window: the item is brought into view first.
+  await target.scrollIntoViewIfNeeded();
   const box = await target.boundingBox();
   if (!box) throw new Error("The item isn't visible.");
   await window.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 8 });
