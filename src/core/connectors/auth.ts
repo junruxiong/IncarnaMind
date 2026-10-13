@@ -53,7 +53,7 @@ const SHARED_REFRESH_MS = 30_000;
 const UNUSED_REDIRECT = "http://127.0.0.1/callback";
 
 const CLIENT_NAME = "IncarnaMind";
-const CLIENT_URI = "https://github.com/junruxiong/IncarnaMind";
+const CLIENT_URI = "https://github.com/IncarnaMind/IncarnaMind";
 
 /** The server requires a sign-in that IncarnaMind doesn't have on this device. */
 export class SignInRequiredError extends Error {

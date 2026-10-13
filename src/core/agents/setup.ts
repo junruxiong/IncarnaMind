@@ -121,8 +121,8 @@ function bundleManifest(launch: AgentLaunch, version: string, description: strin
     display_name: "IncarnaMind",
     version,
     description,
-    author: { name: "IncarnaMind", url: "https://github.com/junruxiong/IncarnaMind" },
-    homepage: "https://github.com/junruxiong/IncarnaMind",
+    author: { name: "IncarnaMind", url: "https://github.com/IncarnaMind/IncarnaMind" },
+    homepage: "https://github.com/IncarnaMind/IncarnaMind",
     license: "Apache-2.0",
     server: {
       type: "node",
