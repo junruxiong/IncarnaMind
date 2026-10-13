@@ -7102,6 +7102,8 @@ export interface CoreApi {
   signInToChatGpt(input?: { anotherAccount?: boolean }): Promise<ChatGptSignInResult>;
   /** Stops waiting for a browser sign-in. */
   cancelChatGptSignIn(): Promise<void>;
+  /** Opens the waiting sign-in's page in the browser again; false when none is waiting. */
+  reopenChatGptSignIn(): Promise<boolean>;
   /**
    * Ends the ChatGPT sign-in at OpenAI and deletes its tokens from this
    * device. A saved ChatGPT provider then needs a new sign-in.
@@ -7870,6 +7872,7 @@ const methods: Record<CoreApiMethod, true> = {
   getChatGptPlan: true,
   signInToChatGpt: true,
   cancelChatGptSignIn: true,
+  reopenChatGptSignIn: true,
   signOutOfChatGpt: true,
   listDataFlows: true,
   listConsentRequests: true,

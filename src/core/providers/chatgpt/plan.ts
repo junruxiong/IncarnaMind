@@ -156,6 +156,7 @@ export function createChatGptPlan(options: {
     },
 
     cancelSignIn: () => signIn.cancelSignIn(),
+    reopenSignInPage: () => signIn.reopenSignInPage(),
 
     async signOut(): Promise<ChatGptSignOutResult> {
       const { revoked } = await signIn.signOut();

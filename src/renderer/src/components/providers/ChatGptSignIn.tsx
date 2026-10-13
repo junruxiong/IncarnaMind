@@ -143,6 +143,21 @@ export function useContinueWithChatGpt(
   };
 }
 
+/** How long a sign-in waits before it says it can be opened again, as a line and not an error. */
+export const SIGN_IN_PATIENCE_MS = 5 * 60 * 1000;
+
+/** True once a sign-in has waited `SIGN_IN_PATIENCE_MS`. */
+function useLate(waiting: boolean): boolean {
+  const [late, setLate] = useState(false);
+  useEffect(() => {
+    setLate(false);
+    if (!waiting) return;
+    const timer = setTimeout(() => setLate(true), SIGN_IN_PATIENCE_MS);
+    return () => clearTimeout(timer);
+  }, [waiting]);
+  return late;
+}
+
 /**
  * What a "Continue with ChatGPT" shows while it waits or after it failed: the
  * browser hint with Cancel, or the failure in plain words with its one action
@@ -157,19 +172,31 @@ export function ChatGptSignInState({
   retry?: boolean;
 }) {
   const t = useT();
+  const late = useLate(sign.waiting);
   if (sign.waiting) {
+    const link = "font-semibold text-accent underline-offset-2 hover:underline";
     return (
-      <p className="flex flex-wrap items-center gap-x-2 text-[13px] leading-5 text-ink-secondary">
-        <span>{t("chatgpt.signingIn")}</span>
-        <button
-          type="button"
-          data-testid="chatgpt-cancel"
-          onClick={sign.cancel}
-          className="font-semibold text-accent underline-offset-2 hover:underline"
-        >
-          {t("chatgpt.cancel")}
-        </button>
-      </p>
+      <div className="flex flex-col gap-1 text-[13px] leading-5 text-ink-secondary">
+        <p className="flex flex-wrap items-center gap-x-2">
+          {late ? (
+            <span data-testid="chatgpt-late">{t("chatgpt.late")}</span>
+          ) : (
+            <span>{t("chatgpt.signingIn")}</span>
+          )}
+          <button
+            type="button"
+            data-testid="chatgpt-reopen"
+            onClick={() => void core.reopenChatGptSignIn()}
+            className={link}
+          >
+            {t("chatgpt.reopen")}
+          </button>
+          <button type="button" data-testid="chatgpt-cancel" onClick={sign.cancel} className={link}>
+            {t("chatgpt.cancel")}
+          </button>
+        </p>
+        <p className="text-ink-meta">{t("chatgpt.nothingExtra")}</p>
+      </div>
     );
   }
   const { failure, failureText } = sign;

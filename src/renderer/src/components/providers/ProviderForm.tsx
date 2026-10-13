@@ -12,15 +12,12 @@ import {
   KEY_PROVIDER_KINDS,
   keyProviderGroups,
 } from "../../../../core/providers/catalog/providers";
+import { modelName } from "../../../../shared/modelName";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
-import { useGap, useLanguage, useT } from "../../i18n";
-import { ChevronDownLineIcon } from "../lineIcons";
+import { useLanguage, useT } from "../../i18n";
 import {
   buttonClass,
-  choiceListClass,
-  compactChoiceRadioClass,
-  compactChoiceRowClass,
   errorTextClass,
   fieldLabelClass,
   hintClass,
@@ -42,6 +39,20 @@ const suggestedModel = (kind: FormKind): string => catalogProviderOfKind(kind)?.
 const isSuggestion = (model: string) =>
   KEY_PROVIDER_KINDS.some((kind) => suggestedModel(kind) === model);
 
+/** The providers shown as one row of choices; the rest are under "More…". */
+const ROW: readonly FormKind[] = ["anthropic", "openai", "google", "deepseek", "qwen"];
+
+/** The "Another model…" choice of the model list. */
+const OTHER_MODEL = "\u0000other";
+
+/** A provider's current models from our own list: the recommended one first, then its other roles. */
+function modelChoices(kind: FormKind): string[] {
+  const roles = catalogProviderOfKind(kind)?.roles;
+  return [...new Set([roles?.answers, roles?.strongest, roles?.quickTasks])].filter(
+    (id): id is string => id !== undefined,
+  );
+}
+
 const sameServer = (provider: ChatProvider, kind: FormKind, endpoint: string, baseUrl: string) =>
   provider.kind === kind &&
   (kind === "openai-compatible"
@@ -56,26 +67,30 @@ export function ProviderForm({
   providers,
   onSaved,
   withMoreProviders = false,
+  initialKind,
 }: {
   /** Saved providers, to tell the User when a key is already stored. */
   providers: readonly ChatProvider[];
   onSaved(provider: ChatProvider): void;
   /** Settings lists the best-effort providers too, under "More providers"; first run only the first-class ones. */
   withMoreProviders?: boolean;
+  /** The provider chosen when the form opens: the one the User came from. DeepSeek in Chinese, else Anthropic. */
+  initialKind?: FormKind;
 }) {
   const t = useT();
   const id = useId();
   const language = useLanguage();
-  const gap = useGap();
-  const [kind, setKind] = useState<FormKind | null>(null);
+  const first: FormKind = initialKind ?? (language === "zh-CN" ? "deepseek" : "anthropic");
+  const [kind, setKind] = useState<FormKind | null>(first);
+  const [otherModel, setOtherModel] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   /** The region of a provider that has several; its first otherwise. */
   const [endpointId, setEndpointId] = useState("");
   const key = useProviderKey();
   const { apiKey } = key;
   const [baseUrl, setBaseUrl] = useState("");
-  const [modelId, setModelId] = useState("");
-  const [busy, setBusy] = useState<"testing" | "saving" | null>(null);
+  const [modelId, setModelId] = useState(suggestedModel(first));
+  const [busy, setBusy] = useState<"saving" | null>(null);
   const [test, setTest] = useState<ConnectionTestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [secretStorage, setSecretStorage] = useState<SecretStorageStatus | null>(null);
@@ -89,8 +104,6 @@ export function ProviderForm({
   );
   const catalog = kind ? catalogProviderOfKind(kind) : undefined;
   const words = language === "zh-CN" ? "zh" : "en";
-  const summary = catalog?.dataUse.summary[words] ?? "";
-  const planCredits = catalog?.planCredits?.[words] ?? "";
   const endpoint = catalog ? endpointOf(catalog, endpointId) : undefined;
   const saved = kind
     ? providers.find((each) => sameServer(each, kind, endpoint?.id ?? "", baseUrl))
@@ -104,17 +117,24 @@ export function ProviderForm({
     (kind !== "openai-compatible" || baseUrl.trim() !== "") &&
     (!keyRequired || hasKey);
 
-  const radio = (option: FormKind) => (
-    <label key={option} className={compactChoiceRowClass}>
+  const chip = (option: FormKind) => (
+    <label
+      key={option}
+      className={`inline-flex h-8 cursor-pointer items-center rounded-md border px-3 text-ui has-[:checked]:border-ink has-[:checked]:bg-wash has-[:focus-visible]:outline-2 ${
+        kind === option ? "border-ink font-semibold text-ink" : "border-rule text-ink-secondary"
+      }`}
+    >
       <input
         type="radio"
         name={`${id}-kind`}
         value={option}
         checked={kind === option}
         onChange={() => choose(option)}
-        className={compactChoiceRadioClass}
+        className="sr-only"
       />
-      {t(`providers.kind.${option}`)}
+      {option === "qwen" || option === "deepseek"
+        ? t(`providers.kind.short.${option}`)
+        : t(`providers.kind.${option}`)}
     </label>
   );
 
@@ -142,20 +162,22 @@ export function ProviderForm({
     };
   };
 
-  const run = async (action: "testing" | "saving") => {
+  /** One button: the key is tested as it saves, and a failure stays here, in plain words. */
+  const run = async () => {
     const request = input();
     if (!request) return;
-    setBusy(action);
+    setBusy("saving");
     setError(null);
-    if (action === "testing") setTest(null);
+    setTest(null);
     try {
-      if (action === "testing") {
-        setTest(await core.testChatConnection(request));
-      } else {
-        const provider = await core.saveChatProvider(request);
-        key.clear();
-        onSaved(provider);
+      const result = await core.testChatConnection(request);
+      if (!result.ok) {
+        setTest(result);
+        return;
       }
+      const provider = await core.saveChatProvider(request);
+      key.clear();
+      onSaved(provider);
     } catch (failure) {
       setError(errorMessage(failure, t));
     } finally {
@@ -165,7 +187,7 @@ export function ProviderForm({
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    void run("saving");
+    void run();
   };
 
   const acceptPlainText = async () => {
@@ -176,75 +198,66 @@ export function ProviderForm({
     }
   };
 
+  const siteOf = (url: string | undefined) => {
+    try {
+      return url ? new URL(url).host : "";
+    } catch {
+      return "";
+    }
+  };
+  const site = siteOf(endpoint?.keyUrl ?? catalog?.keyUrl);
+  const providerName = kind ? t(`providers.kind.${kind}`) : "";
+  const choices = kind && kind !== "openai-compatible" ? modelChoices(kind) : [];
+  const recommended = choices[0];
+  const shownName = (id: string) =>
+    modelName(id, { kind: kind ?? undefined, endpoint: endpoint?.id });
+  const typedModel = kind === "openai-compatible" || otherModel || choices.length === 0;
+  const rowKinds = ROW.filter((each) => main.includes(each) || more.includes(each));
+  const underMore = [...main, ...more].filter((each) => !rowKinds.includes(each));
+
   return (
     <form data-testid="provider-form" onSubmit={submit} className="flex flex-col gap-3">
       <fieldset>
         <legend className={`mb-1.5 ${fieldLabelClass}`}>{t("providers.form.label")}</legend>
-        <div className={`${choiceListClass} bg-sheet`}>
-          {main.map(radio)}
-          {withMoreProviders && more.length > 0 && (
-            <>
-              <button
-                type="button"
-                data-testid="provider-more-toggle"
-                aria-expanded={moreOpen}
-                aria-controls={`${id}-more`}
-                onClick={() => setMoreOpen((open) => !open)}
-                className={`${compactChoiceRowClass} w-full justify-between text-left font-semibold`}
-              >
-                {t("providers.form.more")}
-                <ChevronDownLineIcon
-                  className={`size-3 shrink-0 text-ink-meta ${moreOpen ? "rotate-180" : ""}`}
-                />
-              </button>
-              {moreOpen && (
-                <div id={`${id}-more`} data-testid="provider-more">
-                  {more.map(radio)}
-                </div>
-              )}
-            </>
+        <div className="flex flex-wrap gap-1.5">
+          {[...rowKinds, ...(moreOpen ? underMore : [])].map(chip)}
+          {underMore.length > 0 && !moreOpen && (
+            <button
+              type="button"
+              data-testid="provider-more-toggle"
+              aria-expanded={moreOpen}
+              onClick={() => setMoreOpen(true)}
+              className={`${buttonClass} h-8`}
+            >
+              {t("providers.form.moreShort")}
+            </button>
           )}
         </div>
       </fieldset>
 
       {kind && (
         <>
-          {catalog && (
-            <div className="flex flex-col gap-1" data-testid="provider-facts">
-              {/* Where the data goes and what the provider does with it, before a key is pasted. */}
-              <p className={hintClass}>
-                <span className="font-semibold text-ink">{t("providers.form.dataUse")}</span>
-                {gap(t("providers.form.dataUse"), summary)}
-                {summary}
-              </p>
-            </div>
-          )}
-
           {catalog && catalog.endpoints.length > 1 && (
-            <fieldset>
-              <legend className={`mb-1.5 ${fieldLabelClass}`}>{t("providers.form.region")}</legend>
-              <div className={`${choiceListClass} bg-sheet`}>
+            <label className={fieldLabelClass}>
+              {t("providers.form.region")}
+              <select
+                value={endpoint?.id ?? ""}
+                onChange={(event) => {
+                  // A key belongs to its region: it is never sent to another.
+                  key.clear();
+                  setEndpointId(event.target.value);
+                  setTest(null);
+                  setError(null);
+                }}
+                className={inputClass}
+              >
                 {catalog.endpoints.map((option) => (
-                  <label key={option.id} className={compactChoiceRowClass}>
-                    <input
-                      type="radio"
-                      name={`${id}-region`}
-                      value={option.id}
-                      checked={endpoint?.id === option.id}
-                      onChange={() => {
-                        // A key belongs to its region: it is never sent to another.
-                        if (endpoint?.id !== option.id) key.clear();
-                        setEndpointId(option.id);
-                        setTest(null);
-                        setError(null);
-                      }}
-                      className={compactChoiceRadioClass}
-                    />
-                    {option.label[language === "zh-CN" ? "zh" : "en"]}
-                  </label>
+                  <option key={option.id} value={option.id}>
+                    {option.label[words]}
+                  </option>
                 ))}
-              </div>
-            </fieldset>
+              </select>
+            </label>
           )}
 
           {kind === "openai-compatible" && (
@@ -282,77 +295,81 @@ export function ProviderForm({
                 href={endpoint?.keyUrl ?? catalog?.keyUrl}
                 target="_blank"
                 rel="noreferrer"
+                data-testid="provider-key-link"
                 className={`${hintClass} underline`}
               >
-                {t("providers.form.getKey")} ↗
+                {t("providers.form.whereKey")} ↗
               </a>
             )}
           </label>
-
-          {catalog?.keyGuide && (
-            // First-class providers only (ADR-0019): a few steps, the provider's own page has the screens.
-            <details data-testid="provider-key-guide" className="-mt-2 text-ui text-ink-secondary">
-              <summary className="cursor-pointer font-semibold text-ink">
-                {t("providers.form.keyGuide")}
-              </summary>
-              <ol className="mt-1.5 list-decimal pl-5">
-                {catalog.keyGuide.map((step) => (
-                  <li key={step.en}>{step[language === "zh-CN" ? "zh" : "en"]}</li>
-                ))}
-              </ol>
-            </details>
-          )}
-
-          {catalog?.planCredits && (
-            // Which of the provider's own plans pay for a key, in its words (#122).
-            <p data-testid="provider-plan-credits" className={`-mt-2 ${hintClass}`}>
-              {planCredits}
-              {gap(planCredits, t("providers.form.planCredits"))}
-              <a
-                href={catalog.planCredits.url}
-                target="_blank"
-                rel="noreferrer"
-                className="underline"
-              >
-                {t("providers.form.planCredits")} ↗
-              </a>
-            </p>
-          )}
 
           {secretStorage && !secretStorage.canSave && (
             <SecretStorageNotice status={secretStorage} onAccept={() => void acceptPlainText()} />
           )}
 
-          <label className={fieldLabelClass}>
-            {t("providers.form.model")}
-            <input
-              required
-              value={modelId}
-              onChange={(event) => setModelId(event.target.value)}
-              spellCheck={false}
-              className={inputClass}
-            />
-          </label>
+          {typedModel ? (
+            <label className={fieldLabelClass}>
+              {t("providers.form.model")}
+              <input
+                required
+                value={modelId}
+                onChange={(event) => setModelId(event.target.value)}
+                spellCheck={false}
+                data-testid="provider-model-text"
+                className={inputClass}
+              />
+            </label>
+          ) : (
+            <label className={fieldLabelClass}>
+              {t("providers.form.model")}
+              <select
+                data-testid="provider-model"
+                value={choices.includes(modelId) ? modelId : OTHER_MODEL}
+                onChange={(event) => {
+                  if (event.target.value === OTHER_MODEL) {
+                    setOtherModel(true);
+                    setModelId("");
+                  } else setModelId(event.target.value);
+                  setTest(null);
+                  setError(null);
+                }}
+                className={inputClass}
+              >
+                {choices.map((id) => (
+                  <option key={id} value={id} title={id}>
+                    {shownName(id)}
+                  </option>
+                ))}
+                <option value={OTHER_MODEL}>{t("providers.form.anotherModel")}</option>
+              </select>
+              {recommended && modelId === recommended && (
+                <span data-testid="provider-model-reason" className={hintClass}>
+                  {t("providers.form.recommended", { model: shownName(recommended) })}
+                </span>
+              )}
+            </label>
+          )}
 
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="submit"
+              data-testid="provider-use-key"
               disabled={!complete || keyBlocked || busy !== null}
               className={primaryButtonClass}
             >
-              {busy === "saving" ? t("providers.form.saving") : t("providers.form.save")}
-            </button>
-            <button
-              type="button"
-              disabled={!complete || busy !== null}
-              onClick={() => void run("testing")}
-              className={buttonClass}
-            >
-              {busy === "testing" ? t("providers.form.testing") : t("providers.form.test")}
+              {busy ? t("providers.form.checking") : t("providers.form.useKey")}
             </button>
           </div>
 
-          {test && <TestResult result={test} onRetry={() => void run("testing")} />}
+          {test && !test.ok && (
+            <TestResult
+              result={test}
+              onRetry={() => void run()}
+              {...(test.error.kind === "auth" && site
+                ? { authLine: t("providers.form.badKey", { provider: providerName, site }) }
+                : {})}
+            />
+          )}
           {error && (
             <p role="alert" className={errorTextClass}>
               {error}
@@ -404,9 +421,12 @@ async function forgetLatestDecline(): Promise<void> {
 export function TestResult({
   result,
   onRetry,
+  authLine,
 }: {
   result: ConnectionTestResult;
   onRetry?: () => void;
+  /** Says a refused key in the provider's own terms, in place of the general line. */
+  authLine?: string;
 }) {
   const t = useT();
   if (result.ok) {
@@ -418,7 +438,7 @@ export function TestResult({
   }
   return (
     <div data-testid="connection-test" role="alert" className={errorTextClass}>
-      <p>{t(testErrorKey(result.error.kind))}</p>
+      <p>{authLine ?? t(testErrorKey(result.error.kind))}</p>
       {/* The provider's own words help with its errors; a declined consent needs none. */}
       {result.error.message && result.error.kind !== "consent-declined" && (
         <p className="mt-1 text-[12px] leading-[18px] break-words text-ink-meta">
