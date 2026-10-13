@@ -133,8 +133,13 @@ export interface CreateMindInput {
  * - 18: checks of the User's own sentences (#96): the `claimCheck` mark on a
  *   sentence's text, which holds its result (see `CLAIM_CHECK_MARK`). Older
  *   content is version 18 content as it is: nothing is rewritten.
+ * - 20: someone's tracked changes in an imported Word file, as Proposals
+ *   (#108): their requests are `WordChangeRequest`s, which name the change's
+ *   author and date. A version before 20 would take them for the
+ *   assistant's, and count what accepting one keeps as AI text. Older
+ *   content is version 20 content as it is: nothing is rewritten.
  */
-export const CONTENT_SCHEMA_VERSION = 18;
+export const CONTENT_SCHEMA_VERSION = 20;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -362,7 +367,25 @@ export type ProposalRequest =
     })
   | (ProposalMaker & { source: "answer"; answerId: string })
   | (ProposalMaker & { source: "answer-added" })
-  | (ProposalMaker & { source: "comparison-table"; tableId: string });
+  | (ProposalMaker & { source: "comparison-table"; tableId: string })
+  | WordChangeRequest;
+
+/** The start of the id of someone's tracked change imported from a Word file (`WordChangeRequest`). */
+export const WORD_CHANGE_ID = "word:";
+
+/**
+ * Someone's tracked change in a Word file, imported as a Proposal (#108):
+ * who made it and when, as the file says. Its Proposal's id is "word:" and
+ * the place of the change's element in the main part ("word:w:del#4"), the
+ * same each time the file is read, so export finds it in the file again.
+ */
+export interface WordChangeRequest {
+  source: "word-change";
+  /** The author the file names; null when it names none. */
+  author: string | null;
+  /** When it was made, ISO 8601; null when the file doesn't say. */
+  date: string | null;
+}
 
 /** The model that made a request's Proposals, and when. */
 export interface ProposalMaker {
@@ -999,7 +1022,22 @@ export interface WordImportReport {
   changes: number;
   comments: number;
   sections: number;
+  /**
+   * Someone's tracked changes that can't be accepted or rejected here, by
+   * kind: they stay in the file as they are, for Word to resolve (#108).
+   * Absent on reports from before #108.
+   */
+  keptChanges?: Partial<Record<KeptChangeKind, number>>;
 }
+
+/**
+ * A kind of tracked change a Word import keeps as is (#108): a change to a
+ * run's or a paragraph's formatting, a paragraph mark added or removed
+ * without its paragraph's text, a move, a table row's or cell's change, or
+ * an insertion or deletion holding more than text (a field, a picture, a
+ * note's mark).
+ */
+export type KeptChangeKind = "format" | "paragraphMark" | "move" | "row" | "cell" | "content";
 
 /**
  * The name of the Y.Map, beside the Blocks of a Mind imported from a Word
