@@ -142,8 +142,6 @@ interface AppState extends LayoutSlice {
    * of them (`NEEDS_REVIEW` stands for a Tag awaiting review). Empty: all.
    */
   tagFilter: readonly string[];
-  /** The Library's Documents the User selected, e.g. to tag them at once. */
-  selectedDocuments: ReadonlySet<string>;
   tagsDialogOpen: boolean;
   library: LibrarySnapshot | null;
   /** What the Library shows: "all", "unsorted", "new" (the new-Folder form), a Folder's id, or `LIBRARY_DELETED`. */
@@ -330,9 +328,6 @@ interface AppState extends LayoutSlice {
   removeTagFromDocuments(documentIds: readonly string[], tagId: string): Promise<void>;
   /** Creates a Tag; the list follows the core's event. Throws what the core throws. */
   createTag(name: string, description?: string): Promise<Tag>;
-  /** Selects Documents in the Library, or deselects them. */
-  selectDocuments(documentIds: readonly string[], selected: boolean): void;
-  clearSelection(): void;
   /** Recomputes the automatic Tags of these Documents, or of all of them. */
   retagDocuments(documentIds?: string[]): Promise<void>;
   openTagsDialog(): void;
@@ -639,7 +634,6 @@ export const useAppStore = create<AppState>()((set, get) => {
     linkQueue: [],
     tags: [],
     tagFilter: [],
-    selectedDocuments: new Set(),
     tagsDialogOpen: false,
     library: null,
     libraryFilter: "all",
@@ -661,11 +655,7 @@ export const useAppStore = create<AppState>()((set, get) => {
       });
     },
     openLibrary: (filter = "all", options) => {
-      set((state) => ({
-        libraryFilter: filter,
-        // Another Folder: what was selected in this one isn't in view any more.
-        ...(filter !== state.libraryFilter && { selectedDocuments: new Set<string>() }),
-      }));
+      set({ libraryFilter: filter });
       void get().changeLayout({
         type: "open",
         item: { kind: "library" },
@@ -1228,19 +1218,6 @@ export const useAppStore = create<AppState>()((set, get) => {
             ),
       }));
       return tag;
-    },
-
-    selectDocuments(documentIds, selected) {
-      const next = new Set(get().selectedDocuments);
-      for (const id of documentIds) {
-        if (selected) next.add(id);
-        else next.delete(id);
-      }
-      set({ selectedDocuments: next });
-    },
-
-    clearSelection() {
-      if (get().selectedDocuments.size > 0) set({ selectedDocuments: new Set() });
     },
 
     retagDocuments: (documentIds) =>
