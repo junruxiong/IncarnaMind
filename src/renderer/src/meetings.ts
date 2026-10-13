@@ -4,6 +4,7 @@ import type { AudioSource, Meeting, Settings } from "../../core/api";
 import { meetingTimeAt } from "../../shared/blockTimes";
 import { core } from "./core";
 import { errorMessage } from "./errors";
+import { translateNow } from "./i18n";
 import { useAppStore } from "./store";
 
 interface MeetingsState {
@@ -46,7 +47,9 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
     try {
       await action();
     } catch (error) {
-      set((state) => ({ problems: { ...state.problems, [meetingId]: errorMessage(error) } }));
+      set((state) => ({
+        problems: { ...state.problems, [meetingId]: errorMessage(error, translateNow) },
+      }));
     }
   };
 

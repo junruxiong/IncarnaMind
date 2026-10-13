@@ -49,10 +49,10 @@ async function libraryWithADocument(window: Page): Promise<Locator> {
 }
 
 /** Renames the Document to a name the core refuses as too long. */
-async function renameTooLong(window: Page, row: Locator): Promise<void> {
+async function renameTooLong(window: Page, row: Locator, length = 501): Promise<void> {
   await row.locator("[data-row-main]").focus();
   await window.keyboard.press("F2");
-  await row.getByRole("textbox").fill("x".repeat(501));
+  await row.getByRole("textbox").fill("x".repeat(length));
   await window.keyboard.press("Enter");
 }
 
@@ -236,6 +236,37 @@ for (const { width, label } of [
       expect(await notice.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
         true,
       );
+    } finally {
+      await app.close();
+    }
+  });
+}
+
+for (const width of [900, 1600]) {
+  test(`in Chinese, a Document's name that is too long is refused in Chinese, with the English sentence under Details, at ${width}px`, async () => {
+    const { app, window } = await launchApp(dataDir);
+    try {
+      await setWindowSize(app, window, width, 700);
+      await setLanguage(window, "zh-CN");
+      await dismissChatSetup(window);
+      const row = await libraryWithADocument(window);
+      await renameTooLong(window, row, 600);
+
+      // The core's own sentence in the interface language (#627): nothing it says is English.
+      const notice = window.getByTestId("error-notice");
+      await expect(notice.getByTestId("error-notice-message")).toHaveText(
+        "无法完成操作：文档名称不能超过 500 个字符。",
+      );
+      await expect(notice.getByTestId("error-notice-dismiss")).toHaveText("关闭");
+      const details = notice.getByTestId("error-notice-details");
+      await expect(details.locator("summary")).toHaveText("详情");
+
+      // Details keeps the English sentence, for a bug report.
+      await details.getByText("详情").click();
+      await expect(details).toContainText("core:renameDocument");
+      await expect(details).toContainText(`InvalidInputError: ${TOO_LONG}`);
+      await expect(details).not.toContainText("wording");
+      await screenshot(window, `notice-zh-document-name-${width}`);
     } finally {
       await app.close();
     }

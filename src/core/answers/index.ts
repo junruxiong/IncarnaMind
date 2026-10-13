@@ -1657,9 +1657,9 @@ export function createAnswers(options: AnswersOptions) {
 
     const { picked, forcedSkill } = content.read(mindId, (blocks) => {
       const found = findBlock(blocks, QUESTION_BLOCK, questionId);
-      if (!found) throw new NotFoundError("That Question isn't in this Mind.");
+      if (!found) throw new NotFoundError({ key: "error.question.notInMind" });
       if (plainText(found.element).trim() === "") {
-        throw new InvalidInputError("Write the Question before asking it.");
+        throw new InvalidInputError({ key: "error.question.empty" });
       }
       return { picked: pickedModel(found.element), forcedSkill: forcedSkillOf(found.element) };
     });
@@ -1683,7 +1683,7 @@ export function createAnswers(options: AnswersOptions) {
       mindId,
       (blocks): { answerId: string; edited: boolean } & Asked => {
         const question = findBlock(blocks, QUESTION_BLOCK, questionId);
-        if (!question) throw new NotFoundError("That Question isn't in this Mind.");
+        if (!question) throw new NotFoundError({ key: "error.question.notInMind" });
         const { context, origins } = questionContextOf(blocks, question.index);
         const asked = {
           ...askedWith(context, question.element),
@@ -1758,7 +1758,7 @@ export function createAnswers(options: AnswersOptions) {
         if (!found) throw new NotFoundError("That Answer isn't in this Mind.");
         const id = textAttribute(found.element, "questionId");
         if (!id || !findBlock(blocks, QUESTION_BLOCK, id)) {
-          throw new NotFoundError("The Question of this Answer has been deleted.");
+          throw new NotFoundError({ key: "error.answer.questionGone" });
         }
         return id;
       });

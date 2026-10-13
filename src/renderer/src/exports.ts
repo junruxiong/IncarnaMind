@@ -3,6 +3,7 @@ import type { ExportFormat, ExportMindOptions, ExportPreferences } from "../../c
 import type { MessageKey } from "../../shared/i18n";
 import { core } from "./core";
 import { errorMessage } from "./errors";
+import { translateNow } from "./i18n";
 import { folderName } from "./linkedFolders";
 import { useAppStore } from "./store";
 
@@ -118,7 +119,12 @@ export async function exportMind(
       settle(null);
     }
   } catch (failure) {
-    settle({ mindId, state: "failed", format: chosen, message: errorMessage(failure) });
+    settle({
+      mindId,
+      state: "failed",
+      format: chosen,
+      message: errorMessage(failure, translateNow),
+    });
   }
 }
 
