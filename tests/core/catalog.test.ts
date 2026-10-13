@@ -29,6 +29,7 @@ import {
   KEY_PROVIDER_KINDS,
   keyProviderGroups,
 } from "../../src/core/providers/catalog/providers";
+import { KNOWN_PLAN_MODELS } from "../../src/core/providers/chatgpt/planEndpoint";
 import {
   baseUrlFor,
   endpointUrl,
@@ -117,6 +118,18 @@ describe("The provider catalog", () => {
       const yuan = provider.id === "deepseek" || provider.endpoints[0]?.id === "cn";
       expect(model(answers).price?.currency, provider.id).toBe(yuan ? "CNY" : "USD");
     }
+  });
+
+  test("Claude Haiku 5.5 and GPT-6 Luna answer by default, the strongest models stay in the menu, and the ChatGPT plan keeps its best model first", () => {
+    expect(catalogProvider("anthropic")?.roles).toMatchObject({
+      answers: "claude-haiku-5-5",
+      strongest: "claude-fable-5-1",
+    });
+    expect(catalogProvider("openai")?.roles).toMatchObject({
+      answers: "gpt-6-luna",
+      strongest: "gpt-6-astra",
+    });
+    expect(KNOWN_PLAN_MODELS[0]?.id).toBe("gpt-6.1-sol");
   });
 
   test("the generated facts cover the hosted providers, with unique ids, and their sources' licences ship with the app", async () => {
