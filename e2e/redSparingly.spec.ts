@@ -76,7 +76,6 @@ test("a refused key and a variable with no name read in ink after the amber mark
     await form.getByRole("radio", { name: "OpenAI", exact: true }).check();
     await form.getByLabel(/^API key/).fill("sk-wrong-key");
     await form.getByRole("button", { name: "Test connection" }).click();
-    await window.getByTestId("consent-allow").click();
     const refused = form.getByTestId("connection-test");
     await expect(refused).toContainText("The key was refused");
     await expectProblem(refused);
