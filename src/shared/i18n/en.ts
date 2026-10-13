@@ -1601,6 +1601,9 @@ export const en = {
   "consent.flow.reference-lookup": "Reference look-up",
   "consent.flow.reference-lookup.purpose": "fill in a Document's details for citing it",
   "consent.data.identifiers": "The Document's DOI or arXiv ID, and nothing else of it",
+  "consent.flow.connector-registry": "Connector search",
+  "consent.flow.connector-registry.purpose": "find community connectors in the MCP Registry",
+  "consent.data.connector-search": "What you type in the Connectors search, and nothing else",
   "consent.flow.find-sources": "Find sources",
   "consent.flow.find-sources.purpose": "find papers and other sources, and add the ones you choose",
   "consent.data.search-terms": "What you search for: the words and filters, such as years",
@@ -2633,7 +2636,30 @@ export const en = {
   "connectors.settings.title": "Connectors",
   "connectors.directory.intro":
     "Services the assistant can look things up in. Nothing of yours goes to one until you agree, and it asks before it changes anything there.",
-  "connectors.directory.search": "Search connectors",
+  "connectors.directory.search": "Search connectors and the MCP Registry",
+  "connectors.registry.title": "From the MCP Registry",
+  "connectors.registry.badge": "Community · not reviewed",
+  "connectors.registry.note":
+    "Searched only because you typed. Community connectors haven't been reviewed; check what they can do before you connect one.",
+  "connectors.registry.searching": "Searching the MCP Registry…",
+  "connectors.registry.none": "Nothing in the MCP Registry matches “{query}”.",
+  "connectors.registry.failed.local-mode": "Local mode is on, so the MCP Registry isn't searched.",
+  "connectors.registry.failed.declined":
+    "You chose not to send your search to the MCP Registry. You can change that in Privacy.",
+  "connectors.registry.failed.unreachable":
+    "The MCP Registry can't be reached. Check your connection and try again.",
+  "connectors.registry.failed.service-error":
+    "The MCP Registry didn't answer as expected. Try again later.",
+  "connectors.registry.retry": "Try again",
+  "connectors.registry.privacy": "Privacy",
+  "connectors.registry.by": "Published as {publisher}",
+  "connectors.registry.remote": "Runs on its own server: {url}",
+  "connectors.registry.local": "Runs on this computer: {command}",
+  "connectors.registry.add": "Add",
+  "connectors.registry.setUp": "Set up…",
+  "connectors.registry.link": "Read about it",
+  "connectors.registry.cannot":
+    "IncarnaMind can't run this one by itself. Read about it to see how it's set up.",
   "connectors.directory.connected": "Connected",
   "connectors.directory.browse": "Browse",
   "connectors.directory.group.files": "Where your files are",
