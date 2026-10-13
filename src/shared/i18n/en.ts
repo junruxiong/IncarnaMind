@@ -563,6 +563,8 @@ export const en = {
   "health.recheck.other": "{count} need re-check",
   "health.notChecked": "{count} not checked",
   "health.next": "{part}: go to the next",
+  "checks.smallModel":
+    "This model is small, so its verdicts may be wrong. A larger model checks more reliably.",
   "checks.running.find-support": "Finding support…",
   "checks.running.check-against-documents": "Checking against Documents…",
   "checks.running.contradiction-watch": "Checking cited claims for contradictions…",
