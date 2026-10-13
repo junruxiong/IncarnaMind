@@ -369,12 +369,15 @@ export function CallRow({ call }: { call: AnswerToolCall }) {
   return <ScriptCall call={call} />;
 }
 
-/** The approval card for a request: a Connector's Tool, or a Skill script. */
-export function ApprovalCard({ request }: { request: ApprovalRequest }) {
+/**
+ * The approval card for a request: a Connector's Tool, or a Skill script.
+ * `keys`: the shortcut that allows it once, shown on its button (the Task tray's ⌘↵).
+ */
+export function ApprovalCard({ request, keys }: { request: ApprovalRequest; keys?: string }) {
   return request.subject.kind === "skill-script" ? (
-    <ScriptApprovalCard request={request as SkillScriptApprovalRequest} />
+    <ScriptApprovalCard request={request as SkillScriptApprovalRequest} keys={keys} />
   ) : (
-    <ToolApprovalCard request={request as ToolApprovalRequest} />
+    <ToolApprovalCard request={request as ToolApprovalRequest} keys={keys} />
   );
 }
 
@@ -401,7 +404,7 @@ function TitleWithCode({ title, code }: { title: string; code: string }) {
  * when its Answer had read third-party text: "Always allow" wouldn't cover
  * such a call, so it isn't offered. The Answer waits meanwhile.
  */
-function ToolApprovalCard({ request }: { request: ToolApprovalRequest }) {
+function ToolApprovalCard({ request, keys }: { request: ToolApprovalRequest; keys?: string }) {
   const t = useT();
   const respond = useApprovals((state) => state.respond);
   const titleId = useId();
@@ -445,6 +448,7 @@ function ToolApprovalCard({ request }: { request: ToolApprovalRequest }) {
           className="approval-button approval-button--primary"
         >
           {t("approvals.card.allowOnce")}
+          {keys && <span className="approval-keys">{keys}</span>}
         </button>
         {!thirdParty && (
           <button
@@ -479,7 +483,13 @@ function ToolApprovalCard({ request }: { request: ToolApprovalRequest }) {
  * third-party text. "Always run" first shows a warning in the last section,
  * which must be confirmed. The Answer waits meanwhile.
  */
-function ScriptApprovalCard({ request }: { request: SkillScriptApprovalRequest }) {
+function ScriptApprovalCard({
+  request,
+  keys,
+}: {
+  request: SkillScriptApprovalRequest;
+  keys?: string;
+}) {
   const t = useT();
   const respond = useApprovals((state) => state.respond);
   const sandboxed = useAppStore((state) => state.settings?.scriptSandbox === "os");
@@ -581,6 +591,7 @@ function ScriptApprovalCard({ request }: { request: SkillScriptApprovalRequest }
             className="approval-button approval-button--primary"
           >
             {t("scripts.card.allowOnce")}
+            {keys && <span className="approval-keys">{keys}</span>}
           </button>
           {!asksAfterThirdParty(request) && (
             <button
