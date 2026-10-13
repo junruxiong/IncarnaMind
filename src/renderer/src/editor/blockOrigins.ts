@@ -11,7 +11,8 @@ import { BLOCK_ID_ATTRIBUTE } from "./noteSchema";
 /**
  * Notes added from an Answer in the assistant (#201) keep a link back to it
  * (src/shared/blockOrigins.ts). Here the editor knows them, for the Block
- * menu and ⌘K ("Open the source conversation", `originOf`); just added, they are washed for a moment (`flashBlocks`,
+ * menu and ⌘K ("Open the source conversation", `originOf`); just added,
+ * they are washed for a moment (`flashBlocks`,
  * DESIGN.md: "a brief wash on text just added"), so the eye finds them.
  */
 export interface BlockOriginsOptions {

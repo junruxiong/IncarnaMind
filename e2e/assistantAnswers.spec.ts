@@ -332,6 +332,12 @@ test("an Answer goes to another Mind through the ▾, and to a new Mind as chang
   await expect(window.getByRole("alert")).toContainText(
     "来自对话“When do spring tides happen”，已移到回收站",
   );
+
+  // The notice's one action puts the conversation back and opens it at the Answer.
+  const restore = window.getByTestId("error-notice-action");
+  await expect(restore).toHaveText("恢复");
+  await pointAndClick(window, restore);
+  await expect(assistantAnswers(window)).toHaveCount(1);
   await app.close();
 });
 
