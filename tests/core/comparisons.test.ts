@@ -270,6 +270,8 @@ describe("Compare Documents", () => {
 
     expect(outline(client)).toEqual(["paragraph", "comparisonTable", "paragraph"]);
     expect(tableIn(client).proposal).toMatchObject({ kind: "insert" });
+    const [before] = (await core.listCheckpoints(mind.id)).checkpoints;
+    expect(before?.reason).toBe("compare");
     // Waiting, it isn't the Mind's yet: an export or Question context leaves it out.
     const read = () =>
       readBlocks(client.blocks, {

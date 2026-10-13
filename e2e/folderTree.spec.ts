@@ -238,6 +238,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
       /^Export as HTML$/,
       /^Export as Markdown \(\.md\)$/,
       /^Export options…$/,
+      /^History$/,
       /^Citation style…$/,
       /^Make this a Skill$/,
       /^Move to…(⇧⌘M|Ctrl\+Shift\+M)$/,
@@ -267,8 +268,8 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     await expect(notInAFolder(window).getByTestId("mind-list-item")).toHaveText("Shortlist");
     await expect(undoLine.getByTestId("undo-message")).toHaveCount(0);
 
-    // By the keyboard alone: Tab to the row's ⋯, Enter, down past Outline, the exports, Citation style… and
-    // Make this a Skill to Move to…, type, Enter.
+    // By the keyboard alone: Tab to the row's ⋯, Enter, down past Outline, the exports, History,
+    // Citation style… and Make this a Skill to Move to…, type, Enter.
     await shortlist.getByTestId("mind-list-item").focus();
     await window.keyboard.press("Tab");
     await expect(shortlist.getByTestId("mind-menu")).toBeFocused();
