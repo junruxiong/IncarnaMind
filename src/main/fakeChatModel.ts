@@ -70,6 +70,10 @@
  *
  * Make this a Skill (`fakeSkillDraft`): a draft whose "when to use it" and first
  * step quote the Mind's last Question, so a test sees that the Mind was read.
+ *
+ * Find support and Check against Documents (`checkReply`): a sentence that shares
+ * three words with a Passage's line is supported, or contradicted when it has a
+ * number the line doesn't; otherwise unsupported.
  */
 import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
@@ -506,6 +510,7 @@ function scriptNamed(
  */
 function nextReply(prompt: Prompt, tools: readonly OfferedTool[]): Reply {
   const names = tools.map((tool) => tool.name);
+  if (CHECK_RUN.test(systemOf(prompt))) return checkReply(prompt);
   const question = lastQuestion(prompt);
   if (/blank reply/i.test(question)) return { text: "" };
   /** What the calls made first said, in order. */
@@ -832,6 +837,49 @@ function fakeStructuredOutput(options: GenerateOptions): string {
     });
   }
   return JSON.stringify({ tags: fakeTags(options.prompt, offeredTags(options)) });
+}
+
+/** A check Run's instructions (#96, src/core/answers/checks/prompt.ts). */
+const CHECK_RUN = /^You check one sentence the User wrote against the User's Documents/m;
+
+/** Words that decide a check: those of four letters or more, and every number. */
+const checkWords = (text: string): string[] => [
+  ...(text.toLowerCase().match(/[a-z]{4,}|\d+(?:[.,]\d+)?/g) ?? []),
+];
+
+/**
+ * A check of one sentence (#96): it searches for the sentence, then takes the
+ * Passage line that shares the most words with it. Three shared words or more
+ * support it, unless the sentence has a number the line doesn't while the
+ * line has numbers: that contradicts it. Fewer leave it unsupported. A
+ * sentence with "blank reply" gets an empty reply, and one with "refuse" a refusal.
+ */
+function checkReply(prompt: Prompt): Reply {
+  const sentence = /<sentence>\n([\s\S]*?)\n<\/sentence>/.exec(lastUserText(prompt))?.[1] ?? "";
+  if (/blank reply/i.test(sentence)) return { text: "" };
+  if (/\brefuse\b/i.test(sentence)) return { text: "I'm sorry, I can't help with that." };
+  const searched = toolResults(prompt, "search_documents").at(-1);
+  if (searched === undefined) return { tool: "search_documents", input: { query: sentence } };
+  const words = checkWords(sentence);
+  let best: { record: Record<string, unknown>; line: string; shared: number } | null = null;
+  for (const passage of passagesIn(searched)) {
+    const found = recordFor(passage, sentence, 1);
+    const line = typeof found?.record.quote === "string" ? found.record.quote : "";
+    const shared = checkWords(line).filter((word) => words.includes(word)).length;
+    if (found && (!best || shared > best.shared)) best = { record: found.record, line, shared };
+  }
+  if (!best || best.shared < 3) return { text: "Verdict: unsupported" };
+  const lineNumbers = checkWords(best.line).filter((word) => /\d/.test(word));
+  const contradicted =
+    lineNumbers.length > 0 && words.some((word) => /\d/.test(word) && !lineNumbers.includes(word));
+  if (toolResults(prompt, "cite").length === 0) {
+    return { tool: "cite", input: { citations: [best.record] } };
+  }
+  return {
+    text: contradicted
+      ? `Verdict: contradicted\nThe Document says: ${best.line} [^1]`
+      : `Verdict: supported\nThe Document says so [^1].`,
+  };
 }
 
 /** The scripted reply to a request, as it streams: its reasoning, then a Tool call or its Answer. */
