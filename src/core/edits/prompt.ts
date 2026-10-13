@@ -2,7 +2,8 @@
  * What Edit with AI asks the model (#93), and how its reply is read. The
  * model sees the selected passage with its Citations and footnotes as
  * numbered markers ("[1]", "[^1]") and each heading, list item and quote with
- * its paragraph mark ("## ", "- ", "1. ", "> "), the paragraphs around it for meaning, the
+ * its paragraph mark ("## ", "- ", "1. ", "> "), text that only looks like
+ * one escaped ("\1. "), the paragraphs around it for meaning, the
  * words just before and after it when it is part of a sentence (#94: a
  * change made again is often a few words), and the task; it gives back the
  * passage's new text, which ../proposals/write compares with the old.
@@ -21,6 +22,7 @@ export const EDIT_INSTRUCTIONS = [
   "- Keep each formula written as $…$ exactly as it is.",
   "- Keep the passage's paragraphs apart with a blank line. Don't join or split them unless the task asks for it.",
   "- A paragraph that starts with #, ## or ### is a heading, one with - a bullet, 1. a numbered item, > a quote; one with none is plain text. Start each of yours the same way, so a heading stays a heading and an item an item, unless the task asks otherwise.",
+  "- A backslash before such a mark, as in \\1. Background, makes it plain text: keep the backslash.",
   "- Write in the passage's language, unless the task is to translate it.",
   "- Change only what the task asks for. Keep names, numbers and facts as they are.",
 ].join("\n");
