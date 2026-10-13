@@ -66,6 +66,7 @@ export function AnswerSteps({
   const phase = useAnswers((state) => state.phases[answer.id]);
   const askedFrom = question?.askedFrom ?? null;
   const meeting = useAskedInMeeting(question);
+  const selection = (question?.focus?.selection ?? "").trim() !== "";
   const scopeOf = useStepsScopeOf(question);
   const [open, setOpen] = useState(false);
   // Written again, it starts folded.
@@ -73,7 +74,7 @@ export function AnswerSteps({
   if (streaming) {
     return <LiveLine step={liveStep({ answer, phase, waitingForApproval })} scope={scopeOf(0)} />;
   }
-  const line = foldedLine({ answer, askedFrom, meeting });
+  const line = foldedLine({ answer, askedFrom, meeting, selection });
   if (!line) return null;
   return (
     <div className="answer-steps">
@@ -86,7 +87,7 @@ export function AnswerSteps({
       {open && (
         <>
           <Timeline
-            rows={stepRows({ answer, askedFrom, meeting })}
+            rows={stepRows({ answer, askedFrom, meeting, selection })}
             scope={scopeOf(0)}
             onRegenerate={onRegenerate}
           />
@@ -221,15 +222,16 @@ const mindLabel = (t: Translate, mind: AskedFrom) => mind.name || t("mind.untitl
 type MindStep = Extract<FoldedLine, { kind: "read" | "asked" }>;
 
 /**
- * "Read “{Mind}”", "Read part of “{Mind}”" when it was cut to fit, or "Asked from
- * {Mind}"; with `name` where the Mind's name goes.
+ * "Read “{Mind}”", "Read your selection in “{Mind}”" when the Question was about
+ * one, "Read part of “{Mind}”" when it was cut to fit, or "Asked from {Mind}"; with `name` where the Mind's name goes.
  */
 function mindStepText(t: Translate, step: MindStep, name = mindLabel(t, step.mind)): string {
   if (step.kind === "asked") {
     return step.mind.deleted ? t("steps.asked.deleted") : t("steps.asked", { mind: name });
   }
   if (step.mind.deleted) return t("steps.read.deleted");
-  return t(step.mind.partial ? "steps.read.part" : "steps.read", { mind: name });
+  if (step.mind.partial) return t("steps.read.part", { mind: name });
+  return t(step.selection ? "steps.read.selection" : "steps.read", { mind: name });
 }
 
 /** A share read as a whole percent, at least 1 and at most 99: "about 40%" is part, never none or all. */
