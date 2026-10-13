@@ -1,12 +1,17 @@
-import type { MessageKey } from "../../shared/i18n";
+import type { ErrorWording } from "../../core/errors";
+import { takeWording } from "../../shared/errorWording";
+import type { MessageKey, MessageParams } from "../../shared/i18n";
 
 /**
- * What a failure says, split three ways: the core's own sentence for the User, plain words when the
- * sentence is the system's code, and the technical text for a "Details" disclosure.
+ * What a failure says, split four ways: the core's own sentence, its wording for the interface
+ * language, plain words when the sentence is the system's code, and the technical text for a
+ * "Details" disclosure.
  */
 export interface ErrorDescription {
   /** The sentence the error carries, without Electron's wrapping, its class name or a stack. */
   message: string;
+  /** The sentence as a key of the dictionary, when the core gave one (#627). */
+  wording: ErrorWording | null;
   /** Plain words, in the dictionary, for a failure of the system's (a full disk, a name too long). */
   reason: MessageKey | null;
   /**
@@ -44,13 +49,18 @@ export function describeError(error: unknown): ErrorDescription {
   const inner = wrapped ? (wrapped[2] ?? "") : text;
   const named = CLASS_NAME.exec(inner);
   const className = named ? named[1] : error instanceof Error ? error.name : null;
-  const message = (named ? (named[2] ?? "") : inner).replace(STACK_FROM, "").trim();
+  const { sentence, wording } = takeWording(named ? (named[2] ?? "") : inner);
+  const message = sentence.replace(STACK_FROM, "").trim();
   const reason = SYSTEM_REASONS.find(([code]) => code.test(message))?.[1] ?? null;
   const said = `${className || "Error"}: ${message}`;
-  return { message, reason, detail: wrapped?.[1] ? `${wrapped[1]}\n${said}` : said };
+  return { message, wording, reason, detail: wrapped?.[1] ? `${wrapped[1]}\n${said}` : said };
 }
 
-/** The sentence of an error from the core, for a line that has no room for more. */
-export function errorMessage(error: unknown): string {
-  return describeError(error).message;
+/** What an error from the core says, in the interface language, for a line that has no room for more. */
+export function errorMessage(
+  error: unknown,
+  t: (key: MessageKey, params?: MessageParams) => string,
+): string {
+  const { message, wording } = describeError(error);
+  return wording ? t(wording.key, wording.values) : message;
 }
