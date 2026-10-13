@@ -36,6 +36,7 @@ import { sortOf, useSort } from "../sortChoices";
 import { documentFields, folderFields } from "../sortFields";
 import { useAppStore } from "../store";
 import { moveThroughRows } from "../treeKeys";
+import { useUnreadFiles } from "../unreadFiles";
 import { FindSourcesPanel } from "./FindSourcesPanel";
 import { LibrarySelectionBar } from "./LibrarySelection";
 import { DeletedSection } from "./library/DeletedSection";
@@ -47,6 +48,7 @@ import { LibraryHeader } from "./library/LibraryHeader";
 import { LibrarySection } from "./library/LibrarySection";
 import { ProblemLine } from "./ProblemLine";
 import { ReferenceImportPanel } from "./ReferenceImportPanel";
+import { UnreadFilesLine } from "./UnreadFilesLine";
 
 const NO_GROUPS: readonly LibraryGroup[] = [];
 
@@ -170,6 +172,8 @@ export function LibraryPane() {
     [assignments, t],
   );
   const problem = useMemo(() => problemOf(documents), [documents]);
+  // Files in the Linked folders that aren't Documents because their format isn't read yet (#740).
+  const unreadFormats = useUnreadFiles(null).filter((file) => file.reason === "format");
 
   // A Folder, Not in a Folder or Recently deleted asked for (from the sidebar, a menu or ⌘K): its section opens and comes into view.
   useEffect(() => {
@@ -280,6 +284,7 @@ export function LibraryPane() {
                   {problemText(problem, t)}
                 </ProblemLine>
               )}
+              <UnreadFilesLine files={unreadFormats} testId="library-unread" className="mt-1" />
               {/* biome-ignore lint/a11y/useSemanticElements: sections of rows laid out as columns, not a table. */}
               <div
                 ref={grid}

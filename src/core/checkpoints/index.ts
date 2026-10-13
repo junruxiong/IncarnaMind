@@ -31,6 +31,7 @@ import {
   type MindComparison,
   RECENTLY_DELETED_DAYS,
   type RestoredCheckpoint,
+  WORD_CHANGE_ID,
 } from "../api";
 import type { RetainVersion, VersionRetention } from "../documents/retention";
 import { InvalidInputError, isRecord, MindReadOnlyError, NotFoundError } from "../errors";
@@ -266,8 +267,9 @@ export function createCheckpoints(options: CheckpointsOptions) {
         content.edit(mindId, (blocks) => {
           blocks.delete(0, blocks.length);
           blocks.insert(0, restored);
-          // As History showed it: without the changes still waiting in it then.
-          resolveProposals(blocks, () => true, "reject");
+          // As History showed it: without the changes still waiting in it then, but someone's
+          // from the Word file it was imported from, which stay theirs to resolve (#108).
+          resolveProposals(blocks, (change) => !change.id.startsWith(WORD_CHANGE_ID), "reject");
         });
         // One that was being written when the Checkpoint was saved comes back stopped.
         options.settleAnswers(mindId);

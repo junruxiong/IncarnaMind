@@ -12,7 +12,7 @@ import {
 import { EXAMPLE_SETS } from "../../src/core/exampleSets";
 import type { Language } from "../../src/core/language";
 import { createTempDataFolder, startCore } from "../helpers/core";
-import { connectToMind } from "../helpers/mindClient";
+import { appendParagraph, connectToMind } from "../helpers/mindClient";
 import { readMind } from "../helpers/minds";
 
 /** The example Documents the app ships. */
@@ -164,6 +164,62 @@ describe("the example Mind", { timeout: 30_000 }, () => {
       linkedFolderId: null,
       answerId: null,
     });
+  });
+});
+
+describe("the example Mind follows the interface language (#709)", { timeout: 60_000 }, () => {
+  const foundIn = async (core: Core, mindId: string, quoteStart: string) =>
+    vi.waitFor(
+      async () => {
+        const citations = citationsOf(await exampleMind(core, mindId));
+        expect(citations.map((each) => each.check)).toEqual(["found", "found"]);
+        expect(String(citations[0]?.quote)).toContain(quoteStart);
+      },
+      { timeout: 20_000, interval: 100 },
+    );
+
+  // protects=an example nobody changed is swapped, in place, for the same one in the new language, with its Documents, and back again; fails_when=the Mind stays in the old language, is replaced by a new Mind, keeps the old Documents, or a Citation isn't found; no_claim=the interface's own words.
+  test("an untouched example becomes the other language's, in place, and back", async () => {
+    const { core, dataDir } = await startWithExamples("en");
+    const made = await core.createExamples();
+    await foundIn(core, made.mindId as string, "Tea drinking");
+
+    await core.updateSettings({ user: { language: "zh-CN" } });
+    await vi.waitFor(async () => {
+      expect((await core.listMinds()).map((mind) => mind.title)).toEqual([
+        EXAMPLE_SETS.tea["zh-CN"].title,
+      ]);
+    });
+    const doc = await exampleMind(core, made.mindId as string);
+    expect(doc.child(1).textContent).toBe(EXAMPLE_SETS.tea["zh-CN"].question);
+    await foundIn(
+      core,
+      made.mindId as string,
+      EXAMPLE_SETS.tea["zh-CN"].quotes[0]?.quote.slice(0, 6) ?? "",
+    );
+    expect((await core.listMinds()).length).toBe(1);
+    expect((await core.listLinkedFolders()).length).toBe(1);
+    await expect(access(join(dataDir, "Examples"))).rejects.toThrow();
+    expect((await readdir(join(dataDir, "示例文档"))).length).toBeGreaterThan(1);
+
+    await core.updateSettings({ user: { language: "en" } });
+    await vi.waitFor(async () => {
+      expect((await core.listMinds()).map((mind) => mind.title)).toEqual(["Where tea comes from"]);
+    });
+    await foundIn(core, made.mindId as string, "Tea drinking");
+    await expect(access(join(dataDir, "示例文档"))).rejects.toThrow();
+  });
+
+  // protects=an example the User wrote in or changed keeps its language and its Documents; fails_when=it is replaced and their words are lost; no_claim=none beyond protects.
+  test("an example the User changed stays as it is", async () => {
+    const { core } = await startWithExamples("en");
+    const made = await core.createExamples();
+    const client = await connectToMind(core, made.mindId as string);
+    appendParagraph(client, "My own note.");
+    await client.settled();
+    await core.updateSettings({ user: { language: "zh-CN" } });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect((await core.listMinds()).map((mind) => mind.title)).toEqual(["Where tea comes from"]);
   });
 });
 
