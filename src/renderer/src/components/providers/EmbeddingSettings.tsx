@@ -296,7 +296,7 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
     try {
       setTest(await core.testEmbeddingConnection(input()));
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     } finally {
       setBusy(null);
     }
@@ -311,7 +311,7 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
       key.clear();
       onDone();
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     } finally {
       setBusy(null);
     }
@@ -326,7 +326,7 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
     try {
       setSecretStorage(await core.acceptPlainTextSecretStorage());
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     }
   };
 

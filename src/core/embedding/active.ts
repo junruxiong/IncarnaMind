@@ -416,9 +416,7 @@ export function createActiveEmbedding(options: {
 
   function refuseCloudInLocalMode(service: ExternalService | null): void {
     if (service && localOnly()) {
-      throw new InvalidInputError(
-        "Local mode is on: Document search keeps everything on this computer. Turn it off in Settings to use a cloud embedding provider.",
-      );
+      throw new InvalidInputError({ key: "error.provider.embeddingLocalMode" });
     }
   }
 
@@ -537,7 +535,10 @@ export function createActiveEmbedding(options: {
       refuseCloudInLocalMode(service);
       const apiKey = await keyFor(parsed);
       if (!apiKey && embeddingKeyRequired(choice.kind)) {
-        throw new InvalidInputError(`Enter an API key for ${embeddingProviderName(choice)}.`);
+        throw new InvalidInputError({
+          key: "error.provider.keyMissing",
+          values: { provider: embeddingProviderName(choice) },
+        });
       }
       // Nothing changes unless the User accepts sending their Documents' text there.
       if (service) await consent.ensure("embeddings", service);
@@ -589,7 +590,10 @@ export function createActiveEmbedding(options: {
       refuseCloudInLocalMode(service);
       const apiKey = await keyFor(parsed);
       if (!apiKey && embeddingKeyRequired(choice.kind)) {
-        throw new InvalidInputError(`Enter an API key for ${embeddingProviderName(choice)}.`);
+        throw new InvalidInputError({
+          key: "error.provider.keyMissing",
+          values: { provider: embeddingProviderName(choice) },
+        });
       }
       try {
         if (service) await consent.ensure("embeddings", service);

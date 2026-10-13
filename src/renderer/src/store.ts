@@ -570,7 +570,7 @@ export const useAppStore = create<AppState>()((set, get) => {
       if (get().linking?.path === path) set({ linking: { path, preview, error: null } });
     } catch (error) {
       if (get().linking?.path === path) {
-        set({ linking: { path, preview: null, error: errorMessage(error) } });
+        set({ linking: { path, preview: null, error: errorMessage(error, t) } });
       }
     }
   };
@@ -761,7 +761,7 @@ export const useAppStore = create<AppState>()((set, get) => {
         await get().refreshLibrary();
         tickIndexed(connectors.length);
       } catch (error) {
-        set({ status: { kind: "failed", message: errorMessage(error) } });
+        set({ status: { kind: "failed", message: errorMessage(error, t) } });
       }
     },
 

@@ -116,10 +116,10 @@ export interface CheckScope {
 }
 
 function parseRequest(input: unknown) {
-  if (!isRecord(input)) throw new InvalidInputError("A verify request expects an object.");
+  if (!isRecord(input)) throw new InvalidInputError({ key: "error.verify.request" });
   const { requestId } = input;
   if (typeof requestId !== "string" || requestId === "") {
-    throw new InvalidInputError("A verify request needs a request id.");
+    throw new InvalidInputError({ key: "error.verify.request" });
   }
   return {
     requestId,
@@ -168,7 +168,7 @@ export function createVerify(options: VerifyOptions) {
 
   const verificationOf = (mindId: string): Verification => {
     const verification = content.readSettings(mindId, readVerification);
-    if (!verification) throw new InvalidInputError("This Mind doesn't verify a document.");
+    if (!verification) throw new InvalidInputError({ key: "error.verify.notVerifying" });
     return verification;
   };
 
@@ -363,10 +363,10 @@ export function createVerify(options: VerifyOptions) {
 
   return {
     async verifyDocument(input: unknown): Promise<VerifyDocumentResult> {
-      if (!isRecord(input)) throw new InvalidInputError("verifyDocument expects an object.");
+      if (!isRecord(input)) throw new InvalidInputError({ key: "error.verify.request" });
       const { path } = input;
       if (typeof path !== "string" || path.trim() === "") {
-        throw new InvalidInputError("The document's path must be a non-empty string.");
+        throw new InvalidInputError({ key: "error.verify.noPath" });
       }
       const folderId = parseFolderChoice(input.folderId);
       if (folderId !== null) options.requireFolder(folderId);
