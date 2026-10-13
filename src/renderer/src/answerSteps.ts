@@ -41,8 +41,8 @@ export type StepRow =
   | { kind: "reasoning"; model: string; summary: string; seconds: number }
   /** A model that gave no reasoning summary, and how long the Answer took when that is known. */
   | { kind: "answered"; model: string; seconds: number | null }
-  /** The Mind the Answer read, all of it or part of it. */
-  | { kind: "read"; mind: MindRead }
+  /** The Mind the Answer read, all of it or part of it: `share` of it (#564), when part and known. */
+  | { kind: "read"; mind: MindRead; share: number | null }
   /** The Mind it was asked from, which it didn't read. */
   | { kind: "asked"; mind: AskedFrom }
   /** One search, or several in a row, with the sources their Citations point to. */
@@ -68,7 +68,7 @@ export type FoldedLine =
   | { kind: "searched"; sources: number; extraScopes: number }
   | { kind: "searched-web"; sources: number }
   | { kind: "listened"; sources: number }
-  | { kind: "read"; mind: MindRead }
+  | { kind: "read"; mind: MindRead; share: number | null }
   | { kind: "asked"; mind: AskedFrom }
   | { kind: "answered"; model: string };
 
@@ -127,14 +127,19 @@ const placeOf = (citation: MarkedCitation) =>
 /** The Mind the Answer read, or the one it was asked from and didn't read. */
 const mindRow = ({ answer, askedFrom }: StepsInput) =>
   answer.read
-    ? ({ kind: "read", mind: answer.read } as const)
+    ? ({
+        kind: "read",
+        mind: answer.read,
+        share: answer.read.partial ? (answer.steps?.readShare ?? null) : null,
+      } as const)
     : askedFrom
       ? ({ kind: "asked", mind: askedFrom } as const)
       : null;
 
 /**
  * The rows of the unfolded timeline, in order: the model's reasoning (or
- * who answered), the Mind read, unless the folded line already says so, the
+ * who answered), the Mind read, unless the folded line already says so and
+ * there is no share of it to say (#564), the
  * searches and other calls in the order they started (searches in a row as
  * one, a failed one where it happened), the figures calculated, and the check
  * of the Citations last. A call still waiting for the User has no row: its
@@ -146,7 +151,8 @@ export function stepRows(input: StepsInput): StepRow[] {
   const first = modelRow(answer);
   if (first) rows.push(first);
   const mind = mindRow(input);
-  if (mind && foldedLine(input)?.kind !== mind.kind) rows.push(mind);
+  const shared = mind?.kind === "read" && mind.share !== null;
+  if (mind && (shared || foldedLine(input)?.kind !== mind.kind)) rows.push(mind);
 
   const searches: Extract<StepRow, { kind: "search" }>[] = [];
   const skills = new Map<string, Extract<StepRow, { kind: "skill" }>>();

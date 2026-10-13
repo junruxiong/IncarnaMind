@@ -2778,6 +2778,7 @@ export const zhCN = {
   "steps.sources.none": "没有来源",
   "steps.read": "读了“{mind}”",
   "steps.read.part": "读了“{mind}”的一部分",
+  "steps.read.share": "约 {percent}%",
   "steps.read.deleted": "读了一个已删除的 Mind",
   "steps.asked": "从“{mind}”提问",
   "steps.asked.deleted": "从一个已删除的 Mind 提问",
