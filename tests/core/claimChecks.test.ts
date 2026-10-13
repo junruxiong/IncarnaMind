@@ -39,6 +39,8 @@ interface Plan {
   says?: string;
   /** Its reply instead, once it has searched. */
   reply?: ScriptedReply;
+  /** What it says when asked to confirm a contradiction it found. */
+  judgement?: "conflict" | "same" | "neither";
 }
 
 const PLANS: Record<string, Plan> = {
@@ -102,7 +104,14 @@ function checkingModel(
         text: `Verdict: ${plan.verdict}${plan.says ? `\n${plan.says} [^1]` : ""}`,
       };
     },
-    { generate: () => ({ text: evidence }) },
+    {
+      // Asked to confirm a contradiction, it judges as the sentence's plan says; else it gives `evidence`.
+      generate: (call) => {
+        if (!call.system.startsWith("Compare a sentence")) return { text: evidence };
+        const sentence = /<sentence>\n([\s\S]*?)\n<\/sentence>/.exec(call.prompt)?.[1] ?? "";
+        return { text: plans[sentence]?.judgement ?? "conflict" };
+      },
+    },
   );
 }
 
@@ -220,6 +229,7 @@ describe("Find support", () => {
     "P1 is about spring tides, not penguins.\n\nVerdict: unsupported",
     "Unsupported. No Passage mentions penguins.",
     '{"verdict": "unsupported"}',
+    "Verdict: contradicted\nP1 is about another harbour, so it doesn't bear on this.\nVerdict: unsupported",
   ])("reads the verdict however the model words it: %j", async (reply) => {
     const plans = { [UNSUPPORTED]: { reply: { text: reply } } };
     const { core, client, check } = await mindWith([UNSUPPORTED], checkingModel(plans));
@@ -289,6 +299,24 @@ describe("One claim check", () => {
     expect((await shownChecks(core, client)).map((each) => each.check.action)).toEqual([
       "check-against-documents",
     ]);
+  });
+
+  test("a contradiction counts only once the sentence and its quote, judged alone, conflict", async () => {
+    const near = { ...PLANS[CONTRADICTED], judgement: "neither" as const };
+    const { core, client, check } = await mindWith(
+      [CONTRADICTED],
+      checkingModel({ [CONTRADICTED]: near }),
+    );
+    await check();
+    expect((await shownChecks(core, client))[0]?.shown).toEqual({ state: "unsupported" });
+
+    const same = { ...PLANS[CONTRADICTED], judgement: "same" as const };
+    const again = await mindWith([CONTRADICTED], checkingModel({ [CONTRADICTED]: same }));
+    await again.check();
+    expect((await shownChecks(again.core, again.client))[0]).toMatchObject({
+      shown: { state: "supported" },
+      check: { evidence: { quote: "Harbours publish the times of high water every year." } },
+    });
   });
 
   test("checkClaim is the same check, for a claim outside a Mind", async () => {
