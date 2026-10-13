@@ -6107,7 +6107,7 @@
   }
   .research-plan-body {
     display: flex;
-    flex: 0 1 auto;
+    flex: 1 1 auto;
     flex-direction: column;
     gap: 8px;
     min-height: 0;
@@ -6115,12 +6115,16 @@
     overscroll-behavior: contain;
     padding: 12px 12px 4px;
   }
+  /* At the foot of the steps as they scroll, so Sources and Write into stay in view while there is room. */
   .research-plan-settings {
+    position: sticky;
+    bottom: 0;
     display: flex;
-    flex: none;
     flex-direction: column;
     gap: 8px;
-    padding: 4px 12px 0;
+    margin-top: auto;
+    padding-top: 4px;
+    background: var(--color-sheet);
   }
   .research-plan-kind {
     display: flex;

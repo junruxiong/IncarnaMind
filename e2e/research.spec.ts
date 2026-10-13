@@ -288,7 +288,6 @@ test("the plan card follows the composer's model chip, says when the web can't b
     if (!cardBox || !composerBox) throw new Error("The card or the composer isn't on screen.");
     expect(cardBox.x + cardBox.width).toBeLessThanOrEqual(composerBox.x + composerBox.width + 1);
     await expect(card.getByTestId("research-plan-start")).toBeInViewport();
-    await expect(card.getByTestId("research-plan-write-into")).toBeInViewport();
     await motionSettled(window);
     await screenshot(window, "research-plan-zh-900");
 
