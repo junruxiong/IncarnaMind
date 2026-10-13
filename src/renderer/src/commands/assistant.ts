@@ -2,7 +2,7 @@ import type { AssistantDock, ConversationAnswer } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
 import { addAnswer } from "../addToNote";
 import { answerBlocks, hasText } from "../answerBlocks";
-import { copyAnswer, selectedNotes } from "../answerEditors";
+import { copyAnswer, notesToAdd } from "../answerEditors";
 import { shownDock } from "../assistantPlace";
 import { useComposer } from "../composer";
 import {
@@ -98,10 +98,6 @@ const keepable = (answer: ConversationAnswer | undefined): answer is Conversatio
 const noAnswer = (): true | { reason: MessageKey } =>
   keepable(answerInFocus()) ? true : { reason: "assistant.lastToNewMind.unavailable" };
 
-/** What to add of an Answer: what is selected in it, or all of it. */
-const notesOf = (answer: ConversationAnswer) =>
-  selectedNotes(answer.id) ?? answerBlocks({ ...answer, status: "done" });
-
 /**
  * ⌘⇧A: adds the Answer in focus, or the newest, to the Mind in focus, as its
  * Add to note does; with no Mind in focus, its ▾ opens to choose one.
@@ -119,7 +115,7 @@ function addAnswerInFocus(): void {
   }
   const conversation = conversationById(answer.conversationId);
   void addAnswer(
-    { answer, conversation, blocks: notesOf(answer) },
+    { answer, conversation, blocks: notesToAdd(answer) },
     {
       kind: "mind",
       mindId: item.mindId,
@@ -132,10 +128,7 @@ function lastToNewMind(): void {
   const answer = lastAnswer();
   if (!keepable(answer)) return;
   const conversation = conversationById(answer.conversationId);
-  void addAnswer(
-    { answer, conversation, blocks: answerBlocks({ ...answer, status: "done" }) },
-    { kind: "new" },
-  );
+  void addAnswer({ answer, conversation, blocks: notesToAdd(answer) }, { kind: "new" });
 }
 
 const conversationEmpty = (): true | { reason: MessageKey } =>

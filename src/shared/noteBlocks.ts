@@ -145,3 +145,97 @@ export function textLength(blocks: readonly NodeJSON[]): number {
         : 1;
   return blocks.reduce((sum, block) => sum + length(block), 0);
 }
+
+const textOf = (node: NodeJSON): string =>
+  node.type === "text" ? (node.text ?? "") : (node.content ?? []).map(textOf).join("");
+
+const holdsCitation = (node: NodeJSON): boolean =>
+  node.type === CITATION_NODE || (node.content ?? []).some(holdsCitation);
+
+/** A paragraph of Citations and nothing else but spaces and punctuation. */
+const isCitationsOnly = (block: NodeJSON): boolean =>
+  block.type === "paragraph" &&
+  (block.content ?? []).some((child) => child.type === CITATION_NODE) &&
+  (block.content ?? []).every(
+    (child) =>
+      child.type === CITATION_NODE ||
+      (child.type === "text" && /^[\s.,;，。；]*$/u.test(child.text ?? "")),
+  );
+
+/**
+ * A table's Citation, written under it as a paragraph of its own, goes onto the
+ * table's cells that hold a figure or words after the first column, so the
+ * Citation stays with the table (a chart made from it reads them there, and the
+ * Mind doesn't count the table as having none). A table whose cells carry
+ * Citations already is left as it is.
+ */
+export function citedTables(blocks: readonly NodeJSON[]): NodeJSON[] {
+  const out: NodeJSON[] = [];
+  for (const block of blocks) {
+    const table = out.at(-1);
+    if (table?.type !== "table" || !isCitationsOnly(block) || holdsCitation(table)) {
+      out.push(block);
+      continue;
+    }
+    const citations = (block.content ?? []).filter((child) => child.type === CITATION_NODE);
+    out[out.length - 1] = {
+      ...table,
+      content: (table.content ?? []).map((row, rowIndex) => ({
+        ...row,
+        content: (row.content ?? []).map((cell, cellIndex) => {
+          const [paragraph] = cell.content ?? [];
+          if (rowIndex === 0 || cellIndex === 0 || cell.type !== "tableCell") return cell;
+          if (!paragraph || paragraph.type !== "paragraph" || textOf(paragraph).trim() === "") {
+            return cell;
+          }
+          return {
+            ...cell,
+            content: [
+              { ...paragraph, content: [...(paragraph.content ?? []), ...citations] },
+              ...(cell.content ?? []).slice(1),
+            ],
+          };
+        }),
+      })),
+    };
+  }
+  return out;
+}
+
+const LEAD_IN =
+  /^(?:(?:sure|certainly|of course|okay|ok)\b|here(?:'s| is| are)\b|below (?:is|are)\b|以下是|下面是|好的|当然|这是|这里是|如下)/iu;
+const CLOSING_NOTE =
+  /^(?:(?:note|notes|please note|n\.b\.|i hope|hope this|let me know|feel free)\b|注[：:]|备注|说明[：:]|希望|如需|如果需要|如有)/iu;
+const CONTENT_BLOCKS = new Set(["table", "bulletList", "orderedList", "heading", "codeBlock"]);
+
+/**
+ * An Answer's content without its framing, for Add to note: the model's
+ * lead-in before the content ("Here is a draft:", "以下是…：") and its closing
+ * note after it ("Note: …", "注：…"), when they hold no Citation and the
+ * Answer has more than the one paragraph. What the User selected is added as it
+ * is: this is for a whole Answer.
+ */
+export function withoutFraming(blocks: readonly NodeJSON[]): NodeJSON[] {
+  let kept = [...blocks];
+  const first = kept[0];
+  const next = kept[1];
+  if (
+    first?.type === "paragraph" &&
+    next &&
+    !holdsCitation(first) &&
+    (LEAD_IN.test(textOf(first).trim()) ||
+      (/[:：]\s*$/u.test(textOf(first)) && CONTENT_BLOCKS.has(next.type)))
+  ) {
+    kept = kept.slice(1);
+  }
+  const last = kept.at(-1);
+  if (
+    last?.type === "paragraph" &&
+    kept.length > 1 &&
+    !holdsCitation(last) &&
+    CLOSING_NOTE.test(textOf(last).trim())
+  ) {
+    kept = kept.slice(0, -1);
+  }
+  return kept;
+}
