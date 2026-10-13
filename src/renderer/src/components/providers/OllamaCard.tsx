@@ -3,6 +3,7 @@ import type { ChatProvider, OllamaPullProgress, OllamaStatus } from "../../../..
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
+import { ProblemMark } from "../ProblemLine";
 import { errorTextClass } from "../ui";
 
 /**
@@ -89,6 +90,7 @@ export function OllamaProgress({ ollama }: { ollama: Ollama }) {
       )}
       {error && (
         <p role="alert" className={errorTextClass}>
+          <ProblemMark />
           {error}
         </p>
       )}

@@ -3,6 +3,7 @@ import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom";
 import { findHandle, useHandle } from "../commands/handles";
 import { ChevronDownLineIcon, ChevronUpLineIcon, CloseLineIcon } from "../components/lineIcons";
+import { ProblemMark } from "../components/ProblemLine";
 import { useT } from "../i18n";
 import { useMindTools } from "../mindTools";
 import { clearFind, findStateOf, setFindQuery, stepFind } from "./findInMind";
@@ -137,6 +138,7 @@ export function FindBar({ editor, onClose }: { editor: Editor; onClose(): void }
         aria-live="polite"
         className={`find-count ${count === 0 && query !== "" ? "find-count--none" : ""}`}
       >
+        {count === 0 && query !== "" && <ProblemMark />}
         {status}
       </span>
       <button

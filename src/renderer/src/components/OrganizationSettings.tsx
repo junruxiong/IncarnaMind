@@ -5,6 +5,7 @@ import { core } from "../core";
 import { errorMessage as messageOf } from "../errors";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
+import { ProblemMark } from "./ProblemLine";
 import { buttonStyle, errorTextClass, fieldLabelClass, inputClass, sectionNoteClass } from "./ui";
 
 type Action = (work: () => Promise<unknown>) => Promise<boolean>;
@@ -36,6 +37,7 @@ export function OrganizationSettings() {
       <p className={sectionNoteClass}>{t("library.settingsIntro")}</p>
       {error && (
         <p role="alert" className={errorTextClass}>
+          <ProblemMark />
           {error}
         </p>
       )}
@@ -136,6 +138,7 @@ function ClassifierForm({
       <p className="mb-3 text-[13px] text-ink-meta">{t("library.modelHint")}</p>
       {loadError && (
         <p role="alert" className={errorTextClass}>
+          <ProblemMark />
           {loadError}
         </p>
       )}

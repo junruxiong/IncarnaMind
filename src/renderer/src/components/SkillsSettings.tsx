@@ -15,7 +15,7 @@ import { useT } from "../i18n";
 import { formatSize, pickSkill, skillDescription } from "../skills";
 import { useAppStore } from "../store";
 import { ExportLineIcon, MoreLineIcon, PlusLineIcon } from "./lineIcons";
-import { ProblemLine } from "./ProblemLine";
+import { ProblemLine, ProblemMark } from "./ProblemLine";
 import { SkillEditor } from "./SkillEditor";
 import {
   buttonClass,
@@ -493,13 +493,13 @@ function SkillRow({
     menu.close();
     action();
   };
-  const item = (testId: string, text: string, action: () => void, className = "") => (
+  const item = (testId: string, text: string, action: () => void) => (
     <button
       type="button"
       role="menuitem"
       data-testid={testId}
       onClick={choose(action)}
-      className={`${menuItemClass} pl-2 ${className}`}
+      className={`${menuItemClass} pl-2`}
     >
       {text}
     </button>
@@ -550,14 +550,9 @@ function SkillRow({
                   void duplicateSkill(skill.id);
                 })}
               <div className={menuRuleClass} />
-              {item(
-                "skill-remove",
-                t("skills.settings.remove"),
-                () => {
-                  void removeSkill(skill.id);
-                },
-                "text-danger",
-              )}
+              {item("skill-remove", t("skills.settings.remove"), () => {
+                void removeSkill(skill.id);
+              })}
             </>
           )}
         </div>
@@ -663,6 +658,7 @@ function ImportError({ error }: { error: SkillImportError | string }) {
   if (typeof error === "string") {
     return (
       <p role="alert" data-testid="skill-import-error" className={errorTextClass}>
+        <ProblemMark />
         {t("error.action", { message: error })}
       </p>
     );
@@ -682,9 +678,12 @@ function ImportError({ error }: { error: SkillImportError | string }) {
       role="alert"
       data-testid="skill-import-error"
       data-kind={error.kind}
-      className="flex flex-col gap-1 text-[13px] leading-5 text-danger"
+      className="flex flex-col gap-1 text-[13px] leading-5 text-ink"
     >
-      <p>{message}</p>
+      <p>
+        <ProblemMark />
+        {message}
+      </p>
       <details className="text-[12px] text-ink-meta">
         <summary className="cursor-pointer">{t("skills.error.details")}</summary>
         <p className="mt-1 break-words">{error.message}</p>

@@ -110,7 +110,6 @@ export const mindCommands: readonly Command[] = [
     id: "mind.delete",
     label: "mind.deleteAction",
     group: "danger",
-    destructive: true,
     appliesTo: ["mind", "tab"],
     when: (ctx) => onlyOne(ctx) && ofMind(ctx),
     reversible: true,
@@ -240,7 +239,6 @@ export const documentCommands: readonly Command[] = [
               : "documents.deleteAction",
           ),
     group: "danger",
-    destructive: true,
     appliesTo: ["document"],
     reversible: true,
     async run(ctx) {
@@ -320,7 +318,6 @@ export const folderCommands: readonly Command[] = [
     id: "folder.delete",
     label: "folder.delete",
     group: "danger",
-    destructive: true,
     appliesTo: ["folder"],
     reversible: true,
     async run(ctx) {
@@ -361,7 +358,6 @@ export const tagCommands: readonly Command[] = [
     id: "tag.delete",
     label: "tag.delete",
     group: "danger",
-    destructive: true,
     appliesTo: ["tag"],
     reversible: true,
     run: (ctx) => deleteTag(idsOf(ctx, "tag")[0] ?? "").catch(reportError),
@@ -477,7 +473,6 @@ export const linkedFolderCommands: readonly Command[] = [
     id: "linkedFolder.unlink",
     label: "linkedFolders.unlinkAction",
     group: "danger",
-    destructive: true,
     appliesTo: ["linkedFolder"],
     reversible: { confirm: "linkedFolders.unlink.body" },
     run(ctx) {

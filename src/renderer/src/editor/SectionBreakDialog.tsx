@@ -1,12 +1,12 @@
 import { useId } from "react";
 import {
   buttonClass,
-  dangerButtonClass,
   dialogActionsClass,
   dialogBodyClass,
   dialogClass,
   dialogTextClass,
   dialogTitleClass,
+  primaryButtonClass,
 } from "../components/ui";
 import { useModal } from "../components/useModal";
 import { useT } from "../i18n";
@@ -51,7 +51,7 @@ export function SectionBreakDialog({
               onClose();
               run?.();
             }}
-            className={dangerButtonClass}
+            className={primaryButtonClass}
           >
             {t("wordImport.sectionBreak.delete")}
           </button>

@@ -224,7 +224,6 @@ const appCommands: readonly Command[] = [
     label: "editor.block.delete",
     shortcut: { keys: "CmdOrCtrl+Shift+Backspace" },
     group: "danger",
-    destructive: true,
     appliesTo: ["block", "answer", "chart"],
     // The note's own undo (⌘Z) brings it back.
     reversible: true,

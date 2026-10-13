@@ -20,7 +20,7 @@ import { useIsExampleAnswer } from "../components/GettingStarted";
 import { PlugIcon, ScriptIcon, SkillIcon, StopIcon } from "../components/icons";
 import { DocumentLineIcon, FindSourcesLineIcon } from "../components/lineIcons";
 import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
-import { ProblemLine } from "../components/ProblemLine";
+import { ProblemLine, ProblemMark } from "../components/ProblemLine";
 import { core } from "../core";
 import { formatResetTime } from "../cost";
 import { useFindSources } from "../findSources";
@@ -558,6 +558,7 @@ function ScriptApprovalCard({
           className="approval-actions approval-warning"
         >
           <p id={warningId} className="approval-warning-title">
+            <ProblemMark />
             {t("scripts.alwaysRun.title", params)}
           </p>
           <p className="approval-warning-body">
@@ -568,7 +569,7 @@ function ScriptApprovalCard({
               type="button"
               data-testid="always-run-confirm"
               onClick={() => respond(request.requestId, "always-allow", { riskAccepted: true })}
-              className="approval-button approval-button--danger"
+              className="approval-button approval-button--primary"
             >
               {t("scripts.alwaysRun.confirm", params)}
             </button>
@@ -704,6 +705,7 @@ function ScriptCall({ call }: { call: AnswerToolCall }) {
           </pre>
           {run?.error && (
             <p data-testid="answer-script-error" className="answer-call-error">
+              <ProblemMark />
               {run.error}
             </p>
           )}
@@ -976,7 +978,13 @@ export function SkillRow({ name, use, reads }: SkillUse) {
       className={`answer-call ${status === "failed" ? "answer-call--failed" : ""}`}
     >
       <p className="answer-call-summary answer-call-summary--static">
-        <SkillIcon className={`answer-call-icon ${status === "running" ? "animate-pulse" : ""}`} />
+        {status === "failed" ? (
+          <ProblemMark className="" />
+        ) : (
+          <SkillIcon
+            className={`answer-call-icon ${status === "running" ? "animate-pulse" : ""}`}
+          />
+        )}
         <span className="answer-call-text">{summary}</span>
         {use?.forced && <span className="answer-call-note"> · {t("skills.answer.forced")}</span>}
       </p>

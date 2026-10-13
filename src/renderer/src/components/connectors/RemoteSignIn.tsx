@@ -4,6 +4,7 @@ import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
+import { ProblemMark } from "../ProblemLine";
 import { buttonStyle, fieldLabelClass, hintClass, inputClass, noticeClass } from "../ui";
 
 /** A text button inside a line, e.g. "Sign out". */
@@ -71,7 +72,8 @@ export function RemoteSignIn({ connector }: { connector: RemoteConnector }) {
             : t("remoteConnectors.signIn.required")}
         </p>
         {signIn.error && (
-          <p role="alert" data-testid="connector-sign-in-error" className="mt-1 text-danger">
+          <p role="alert" data-testid="connector-sign-in-error" className="mt-1 text-ink">
+            <ProblemMark />
             {t(`remoteConnectors.signIn.error.${signIn.error.kind}`)}
           </p>
         )}
@@ -207,7 +209,8 @@ function ClientForm({
         )}
       </div>
       {error && (
-        <p role="alert" className="text-[12px] leading-[18px] text-danger">
+        <p role="alert" className="text-[12px] leading-[18px] text-ink">
+          <ProblemMark />
           {error}
         </p>
       )}

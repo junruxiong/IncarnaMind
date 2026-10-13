@@ -45,6 +45,7 @@ import { LibraryMoreMenu } from "./LibraryMoreMenu";
 import { LibrarySelectBox, LibrarySelectionBar } from "./LibrarySelection";
 import { DocumentLineIcon, SettingsLineIcon } from "./lineIcons";
 import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
+import { ProblemMark } from "./ProblemLine";
 import { RecentlyDeleted } from "./RecentlyDeleted";
 import { ReferenceImportPanel } from "./ReferenceImportPanel";
 import { SORT_KEY_LABELS } from "./SortMenu";
@@ -346,6 +347,7 @@ function LibrarySheet() {
           <ReferenceImportPanel />
           {error && (
             <p role="alert" className={`${errorTextClass} mb-4`}>
+              <ProblemMark />
               {error}
             </p>
           )}
@@ -626,7 +628,12 @@ const LibraryRow = memo(function LibraryRow({
                     : ""}
             </p>
           )}
-          {item?.error && <p className={`${errorTextClass} mt-1`}>{item.error.message}</p>}
+          {item?.error && (
+            <p className={`${errorTextClass} mt-1`}>
+              <ProblemMark />
+              {item.error.message}
+            </p>
+          )}
         </details>
       </div>
       <select

@@ -1,6 +1,7 @@
 import { useDismissOnEscape } from "../escapeDismiss";
 import { useT } from "../i18n";
 import { type ErrorNotice as ErrorNoticeState, useNotices } from "../notices";
+import { ProblemMark } from "./ProblemLine";
 import { buttonStyle } from "./ui";
 
 /**
@@ -30,8 +31,9 @@ function Notice({ notice }: { notice: ErrorNoticeState }) {
     <div
       role="alert"
       data-testid="error-notice"
-      className="flex items-start gap-3 rounded-lg bg-sheet py-2.5 pr-2.5 pl-4 text-[13px] leading-5 text-danger shadow-popover"
+      className="flex items-start gap-3 rounded-lg bg-sheet py-2.5 pr-2.5 pl-4 text-[13px] leading-5 text-ink shadow-popover"
     >
+      <ProblemMark className="mt-[7px] -mr-1.5" />
       <div className="min-w-0 flex-1 py-1">
         {/* A long one is cut here and kept whole under Details. */}
         <p data-testid="error-notice-message" title={line} className="line-clamp-4 break-words">
