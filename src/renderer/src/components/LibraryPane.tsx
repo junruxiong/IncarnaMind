@@ -36,7 +36,7 @@ import { FindSourcesPanel } from "./FindSourcesPanel";
 import { LibrarySelectionBar } from "./LibrarySelection";
 import { DeletedSection } from "./library/DeletedSection";
 import { DocumentMoveTo } from "./library/DocumentMoveTo";
-import { FolderForm, StarterFolders } from "./library/FolderForm";
+import { StarterFolders } from "./library/FolderForm";
 import { LibraryBar } from "./library/LibraryBar";
 import { LibraryEmpty } from "./library/LibraryEmpty";
 import { LibraryHeader } from "./library/LibraryHeader";
@@ -49,8 +49,8 @@ const NO_GROUPS: readonly LibraryGroup[] = [];
 /** The Library's one order for every section, remembered on this computer. */
 const SORT_SCOPE = "library:all" as const;
 
-/** What `openLibrary` asked for that is a form at the top, not a section to show. */
-const FORMS = ["all", "new", "starters"];
+/** What `openLibrary` asked for that is not a section to show. */
+const FORMS = ["all", "starters"];
 
 /**
  * The Library tab (#240): one page of every Document, grouped by Folder, as a
@@ -198,7 +198,6 @@ export function LibraryPane() {
           />
           {findingSources && <FindSourcesPanel />}
           <ReferenceImportPanel />
-          {request === "new" && <FolderForm group="new" close={closeForm} className="mt-4" />}
           {request === "starters" && <StarterFolders close={closeForm} />}
           {!snapshot ? (
             <p role="status" className="mt-6 text-[13px] text-ink-meta">

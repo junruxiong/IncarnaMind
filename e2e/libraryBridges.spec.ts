@@ -5,6 +5,7 @@ import type { CoreBridge } from "../src/core/api";
 import {
   assistantAnswers,
   useLocalChatModel as connectLocalChatModel,
+  coreOf,
   createDataFolder,
   dismissChatSetup,
   expectReadyDocuments,
@@ -64,16 +65,15 @@ async function screenshot(window: Page, name: string): Promise<void> {
 async function libraryWithFolder(app: Parameters<typeof linkFolderFromSidebar>[0], window: Page) {
   await linkFolderFromSidebar(app, window, sources);
   await expectReadyDocuments(window, 5);
-  await window.evaluate(async (name) => {
-    const api = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-    const folder = await api.createLibraryGroup({
+  await (await coreOf(window)).evaluate(async (core, name) => {
+    const folder = await core.createLibraryGroup({
       name,
       description: "Tides, harbours and estuaries",
     });
-    const documentIds = (await api.listDocuments())
+    const documentIds = (await core.listDocuments())
       .filter((doc) => doc.kind !== "csv")
       .map((doc) => doc.id);
-    await api.moveToFolder({ documentIds, folderId: folder.id });
+    await core.moveToFolder({ documentIds, folderId: folder.id });
   }, FOLDER);
   await window.getByTestId("open-library").click();
   const library = window.getByTestId("library");

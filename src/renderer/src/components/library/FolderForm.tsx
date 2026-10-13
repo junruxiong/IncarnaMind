@@ -29,15 +29,15 @@ function useLibraryAction() {
 }
 
 /**
- * A Folder's name, description and evidence choice (#80), for a new Folder
- * or one being edited from its ⋯ (Edit description…).
+ * A Folder's name, description and evidence choice (#80), edited from its ⋯
+ * (Edit description…).
  */
 export function FolderForm({
   group,
   close,
   className = "",
 }: {
-  group: LibraryGroup | "new";
+  group: LibraryGroup;
   close(): void;
   className?: string;
 }) {
@@ -47,11 +47,9 @@ export function FolderForm({
   useEffect(() => {
     nameInput.current?.focus();
   }, []);
-  const [name, setName] = useState(group === "new" ? "" : group.name);
-  const [description, setDescription] = useState(group === "new" ? "" : group.description);
-  const [countsOwnFiles, setCountsOwnFiles] = useState(
-    group === "new" ? false : group.countsOwnFiles,
-  );
+  const [name, setName] = useState(group.name);
+  const [description, setDescription] = useState(group.description);
+  const [countsOwnFiles, setCountsOwnFiles] = useState(group.countsOwnFiles);
   // Settings counts IncarnaMind's files everywhere: there's nothing for a folder to switch.
   const leftOut = useAppStore((state) => state.settings?.user.leaveOutOwnFiles ?? true);
   return (
@@ -66,9 +64,7 @@ export function FolderForm({
       onSubmit={(event) => {
         event.preventDefault();
         void act(async () => {
-          const input = { name, description, countsOwnFiles };
-          if (group === "new") await core.createLibraryGroup(input);
-          else await useAppStore.getState().editFolder(group.id, input);
+          await useAppStore.getState().editFolder(group.id, { name, description, countsOwnFiles });
           close();
         });
       }}
