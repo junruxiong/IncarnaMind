@@ -36,6 +36,17 @@ export function placePeek(
   };
 }
 
+/**
+ * The largest file, in bytes, whose first page a peek draws. Every kind but a PDF
+ * (which pdf.js streams a page at a time) is read and laid out whole, as the
+ * viewer does, which a peek asks of a small file only: a large one shows its icon.
+ */
+export const DRAWN_UP_TO_BYTES = 2 * 1024 * 1024;
+
+/** Whether a peek draws this Document's first page, or only shows its kind. */
+export const peekDraws = (document: { kind: string; size: number }): boolean =>
+  document.kind === "pdf" || document.size <= DRAWN_UP_TO_BYTES;
+
 /** The row after (`1`) or before (`-1`) this one in a list, if there is one. */
 export function neighbour<T>(rows: readonly T[], from: T, step: 1 | -1): T | undefined {
   const at = rows.indexOf(from);

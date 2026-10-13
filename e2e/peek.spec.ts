@@ -17,6 +17,7 @@ import {
   setLanguage,
   setWindowSize,
   showSourceLocations,
+  turnOnEmbeddings,
 } from "./app";
 
 /*
@@ -392,6 +393,74 @@ test("a 300-page PDF is peeked at by its first pages alone, not drawn whole", as
   }
 });
 
+test("Peek is in the row's menu with Space beside it, and the keys of the peek work from there", async () => {
+  const paths = await writeTexts(["Alpha", "Bravo"]);
+  const { app, window } = await start();
+  try {
+    await addAndShow(window, sidebar, paths);
+    const names = await sidebar.names(window);
+    const row = sidebar.row(window, names[0] as string);
+    await sidebar.main(row).focus();
+    await window.keyboard.press("Shift+F10");
+    const item = row.getByTestId("document.peek");
+    await expect(item).toContainText("Peek");
+    await expect(item).toContainText("Space");
+    await item.click();
+    const peekName = peekOf(window).getByTestId("peek-name");
+    await expect(peekName).toHaveText(names[0] as string);
+    await expect(sidebar.main(row)).toBeFocused();
+    await window.keyboard.press("ArrowDown");
+    await expect(peekName).toHaveText(names[1] as string);
+  } finally {
+    await app.close();
+  }
+});
+
+test("a Document still being read shows its progress in the peek, which goes once it is ready", async () => {
+  const path = join(sources, "Scaling laws.txt");
+  await writeFile(
+    path,
+    Array.from(
+      { length: 4000 },
+      (_, index) => `Line ${index}: test loss falls as a power law in model size and data.`,
+    ).join("\n"),
+  );
+  const { app, window } = await start();
+  try {
+    await turnOnEmbeddings(window);
+    await window.getByTestId("add-documents-input").setInputFiles([path]);
+    const row = sidebar.row(window, "Scaling laws");
+    await expect(row).toHaveAttribute("data-status", "embedding");
+    await sidebar.main(row).focus();
+    await window.keyboard.press("Space");
+    const peek = peekOf(window);
+    await expect(peek.getByTestId("peek-name")).toHaveText("Scaling laws");
+    await expect(peek.getByTestId("peek-status")).toContainText("Embedding…");
+    await expect(row).toHaveAttribute("data-status", "ready", { timeout: 30_000 });
+    await expect(peek.getByTestId("peek-status")).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+});
+
+test("a large file shows its kind in the peek instead of being read whole", async () => {
+  const path = join(sources, "Logbook.txt");
+  await writeFile(path, `${"Spring tides come twice a month.\n".repeat(100_000)}`);
+  const { app, window } = await start();
+  try {
+    await addAndShow(window, sidebar, [path]);
+    await sidebar.main(sidebar.row(window, "Logbook")).focus();
+    await window.keyboard.press("Space");
+    const peek = peekOf(window);
+    await expect(peek.getByTestId("peek-name")).toHaveText("Logbook");
+    await expect(peek.getByTestId("peek-kind")).toContainText(/MB/);
+    await expect(peek.getByTestId("peek-page")).toHaveAttribute("data-state", "large");
+    await expect(peek.getByTestId("viewer-text")).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+});
+
 test("in the sidebar, ↓ passes over the Folders and Minds between two Documents", async () => {
   const paths = await writeTexts(["Alpha", "Bravo"]);
   const { app, window } = await start();
@@ -407,8 +476,9 @@ test("in the sidebar, ↓ passes over the Folders and Minds between two Document
     const ocean = window.getByTestId("library-folder").filter({ hasText: "Ocean" });
     await ocean.getByTestId("folder-row").focus();
     await window.keyboard.press("Enter");
+    // Alpha is listed in the Folder once the move has reached the sidebar.
+    await expect(ocean.getByTestId("document-list-item")).toHaveCount(1);
     const alpha = sidebar.row(window, "Alpha");
-    await expect(alpha).toBeVisible();
     await sidebar.main(alpha).focus();
     await window.keyboard.press("Space");
     const peekName = peekOf(window).getByTestId("peek-name");
