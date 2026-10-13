@@ -13,6 +13,7 @@ import { useWordImport } from "../wordImport";
 import { assistantCommands } from "./assistant";
 import { bibliographyCommands } from "./bibliography";
 import { chartCommands } from "./charts";
+import { comparisonCommands } from "./comparisons";
 import { deletedCommands } from "./deleted";
 import { editCommands } from "./edit";
 import { evidenceCommands } from "./evidence";
@@ -97,6 +98,7 @@ const appCommands: readonly Command[] = [
   ...sortCommands,
   ...fileCommands,
   ...evidenceCommands,
+  ...comparisonCommands,
   ...exportCommands,
   {
     ...fromMenu("settings.open"),

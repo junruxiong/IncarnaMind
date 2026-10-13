@@ -6108,6 +6108,555 @@
     line-height: 16px;
     color: var(--color-ink-meta);
   }
+
+  /*
+   * A comparison table (#98; DESIGN.md, Comparison table): the measure wide,
+   * ruled like a table, a row per Document and a column per Question. Its
+   * cells are a grid whose rows and cells' own boxes step aside (`display:
+   * contents`), so the Document column can stick as the table scrolls
+   * sideways. Expanded, it fills the Mind's card where it is.
+   */
+  .comparison-table {
+    position: relative;
+    margin: 4px 0 24px;
+    font-family: var(--font-sans);
+  }
+  .comparison-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 28px;
+    margin-bottom: 6px;
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--color-ink-meta);
+    user-select: none;
+  }
+  .comparison-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    strong {
+      font-weight: 600;
+      color: var(--color-ink);
+    }
+  }
+  .comparison-progress,
+  .comparison-proposal {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 6px;
+  }
+  .comparison-head-end {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+  }
+  .comparison-action,
+  .comparison-back,
+  .comparison-add-question {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 4px;
+    height: 26px;
+    padding: 0 6px;
+    border-radius: 6px;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-ink-secondary);
+
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+  }
+  .comparison-action--accept {
+    color: var(--color-accent);
+  }
+  .comparison-back kbd {
+    margin-left: 2px;
+    padding: 0 4px;
+    border: 1px solid var(--color-rule);
+    border-radius: 4px;
+    font-family: var(--font-sans);
+    font-size: 11px;
+    line-height: 16px;
+    font-weight: 500;
+    color: var(--color-ink-meta);
+  }
+  .comparison-expand {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    color: var(--color-ink-meta);
+
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+  }
+  .comparison-problem {
+    margin: -2px 0 6px;
+  }
+  .comparison-frame {
+    position: relative;
+  }
+  /*
+   * "+ Question" stands beside the heading row, outside the table, where the card leaves
+   * the margin room for it; otherwise, and expanded, in the title line.
+   */
+  .comparison-add-question--side {
+    position: absolute;
+    top: 6px;
+    left: calc(100% + 8px);
+    display: none;
+    color: var(--color-ink-meta);
+  }
+  @container mind (width >= 1240px) {
+    .comparison-table:not([data-expanded]) {
+      .comparison-add-question--side {
+        display: inline-flex;
+      }
+      .comparison-add-question--head {
+        display: none;
+      }
+    }
+  }
+  .comparison-scroll {
+    display: grid;
+    grid-template-columns: minmax(132px, 168px) repeat(
+        var(--comparison-columns),
+        minmax(156px, 1fr)
+      );
+    overflow-x: auto;
+    border: 1px solid var(--color-rule);
+    border-radius: 8px;
+    background: var(--color-sheet);
+  }
+  .comparison-head-row,
+  .comparison-rows,
+  .comparison-rows > [data-node-view-content-react],
+  .comparison-row,
+  .comparison-row-cells {
+    display: contents;
+  }
+  .comparison-corner,
+  .comparison-question,
+  .comparison-document,
+  .comparison-cell {
+    min-width: 0;
+    padding: 9px 12px;
+    border-right: 1px solid var(--color-rule);
+    border-bottom: 1px solid var(--color-rule);
+  }
+  .comparison-corner,
+  .comparison-question {
+    background: var(--color-frame);
+    font-size: 13px;
+    line-height: 18px;
+    font-weight: 600;
+    color: var(--color-ink-secondary);
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+  .comparison-question--new input {
+    width: 100%;
+    margin: -3px -6px;
+    padding: 2px 6px;
+    border: 1px solid var(--color-accent);
+    border-radius: 4px;
+    background: var(--color-sheet);
+    font: inherit;
+    color: var(--color-ink);
+    outline: none;
+  }
+  /* The Document column stays as the table scrolls sideways. */
+  .comparison-corner,
+  .comparison-document {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+  }
+  .comparison-document {
+    display: flex;
+    flex-direction: column;
+    background: var(--color-sheet);
+    font-size: 13px;
+    line-height: 20px;
+    font-weight: 600;
+    color: var(--color-ink);
+    user-select: none;
+  }
+  .comparison-document-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .comparison-document-removed {
+    font-weight: 400;
+    color: var(--color-warning);
+  }
+  .comparison-row[data-removed="true"] .comparison-document-name {
+    color: var(--color-ink-meta);
+  }
+  .comparison-question:last-child,
+  .comparison-cell:last-child {
+    border-right: 0;
+  }
+  .comparison-row:last-child > .comparison-document,
+  .comparison-row:last-child > .comparison-row-cells > .comparison-cell {
+    border-bottom: 0;
+  }
+  .comparison-cell {
+    position: relative;
+    font-family: var(--font-serif);
+    font-size: 15px;
+    line-height: 24px;
+    color: var(--color-ink);
+
+    > .comparison-cell-content > * + * {
+      margin-top: 6px;
+    }
+    > .comparison-cell-content p {
+      margin: 0;
+    }
+  }
+  /* Its text, or what it says in its place: never an empty cell. */
+  .comparison-cell-running,
+  .comparison-cell-stopped,
+  .comparison-cell-problem {
+    display: none;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 24px;
+    color: var(--color-ink-meta);
+  }
+  .comparison-cell:not([data-status="done"]) > .comparison-cell-content {
+    display: none;
+  }
+  .comparison-table[data-filling]
+    .comparison-cell:is([data-status="waiting"], [data-status="writing"])
+    > .comparison-cell-running,
+  .comparison-table:not([data-filling])
+    .comparison-cell:is([data-status="waiting"], [data-status="writing"])
+    > .comparison-cell-stopped,
+  .comparison-cell[data-status="failed"] > .comparison-cell-problem {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  /* On the reason's first line, however many it takes. */
+  .comparison-cell-mark {
+    flex: none;
+    margin-top: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    background: var(--color-warning-wash);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-warning);
+  }
+  /* In a cell, a Citation's check shows in its marker, as when the margin folds away. */
+  .comparison-cell
+    .citation-marker:is([data-check="not-found"], [data-check="unsupported"])
+    .citation-marker-icon {
+    display: block;
+  }
+  /*
+   * Waiting as a change, it is drawn as one Block added: an accent edge, not every word
+   * underlined. The change's class lands on the element around the table's own.
+   */
+  .mind-editor .proposal-node--insert:has(> [data-comparison-table]) {
+    text-decoration: none;
+    color: inherit;
+
+    .comparison-scroll {
+      border-color: var(--color-accent);
+      box-shadow: inset 3px 0 0 var(--color-accent);
+    }
+    .citation-marker {
+      box-shadow: none;
+    }
+  }
+  .comparison-table.ProseMirror-selectednode .comparison-scroll {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -1px;
+  }
+  /* Expanded: the card holds the table, its heading row and Document column held as it scrolls. */
+  /* Above the bar of changes, which sticks at the Mind's top. */
+  .comparison-table[data-expanded] {
+    position: relative;
+    z-index: 6;
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    background: var(--color-sheet);
+
+    .comparison-head {
+      gap: 8px;
+      min-height: 44px;
+      margin: 0;
+      padding: 0 12px 0 16px;
+      border-bottom: 1px solid var(--color-rule);
+    }
+    .comparison-frame {
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+    .comparison-scroll {
+      height: 100%;
+      overflow: auto;
+      align-content: start;
+      border: 0;
+      border-radius: 0;
+    }
+    .comparison-corner,
+    .comparison-question {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+    .comparison-corner {
+      z-index: 3;
+    }
+  }
+
+  /* The Compare Documents sheet, docked at the foot of the Mind in its column's measure. */
+  /* Its gutter as the note's, which keeps room for a scrollbar, so the two measures line up. */
+  .compare-sheet-dock {
+    container: mind / inline-size;
+    flex: none;
+    overflow: hidden;
+    scrollbar-gutter: stable;
+  }
+  .compare-sheet-dock:empty {
+    display: none;
+  }
+  .compare-sheet {
+    margin-bottom: 16px;
+    border: 1px solid var(--color-rule-strong);
+    border-radius: 12px;
+    background: var(--color-sheet);
+    font-family: var(--font-sans);
+    font-size: var(--text-ui);
+    line-height: var(--text-ui--line-height);
+    color: var(--color-ink);
+  }
+  .compare-sheet-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+    gap: 24px;
+    padding: 14px 16px 12px;
+    border-bottom: 1px solid var(--color-rule);
+  }
+  .compare-sheet-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 24px;
+    margin-bottom: 6px;
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 600;
+    color: var(--color-ink-secondary);
+  }
+  .compare-sheet-count {
+    flex: none;
+    font-weight: 400;
+    color: var(--color-ink-meta);
+  }
+  .compare-sheet-source {
+    display: inline-flex;
+    min-width: 0;
+    align-items: center;
+    gap: 4px;
+    margin-left: -4px;
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-weight: 600;
+
+    &:hover,
+    &[aria-expanded="true"] {
+      background: var(--color-hover);
+    }
+  }
+  .compare-sheet-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 16px;
+    max-height: 168px;
+    overflow-y: auto;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .compare-sheet-document {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+    height: 28px;
+    cursor: default;
+
+    input {
+      flex: none;
+      width: 15px;
+      height: 15px;
+      accent-color: var(--color-ink);
+    }
+  }
+  .compare-sheet-question-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .compare-sheet-question {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 28px;
+    border-bottom: 1px solid var(--color-rule);
+
+    input {
+      flex: 1 1 auto;
+      min-width: 0;
+      border: 0;
+      background: transparent;
+      font: inherit;
+      color: var(--color-ink);
+      outline: none;
+    }
+    input::placeholder {
+      color: var(--color-ink-placeholder);
+    }
+    &:focus-within {
+      border-bottom-color: var(--color-accent);
+    }
+  }
+  .compare-sheet-number {
+    flex: none;
+    width: 12px;
+    font-size: 12px;
+    color: var(--color-ink-meta);
+  }
+  .compare-sheet-remove {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    color: var(--color-ink-meta);
+    opacity: 0;
+
+    .compare-sheet-question:is(:hover, :focus-within) > & {
+      opacity: 1;
+    }
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+  }
+  .compare-sheet-add {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    margin-left: -4px;
+    padding: 0 4px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: var(--color-ink-secondary);
+
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+  }
+  .compare-sheet-instruction {
+    display: block;
+    width: 100%;
+    height: 40px;
+    padding: 0 16px;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    color: var(--color-ink);
+    outline: none;
+
+    &::placeholder {
+      color: var(--color-ink-placeholder);
+    }
+  }
+  .compare-sheet-problem {
+    padding: 0 16px 4px;
+  }
+  .compare-sheet-foot {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 8px 8px 12px;
+  }
+  .compare-sheet-chip {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 6px;
+    height: 26px;
+    padding: 0 4px 0 8px;
+    border: 1px solid var(--color-rule);
+    border-radius: 6px;
+    background: var(--color-frame);
+    font-size: 13px;
+    font-weight: 600;
+
+    button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      color: var(--color-ink-meta);
+    }
+    button:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+  }
+  .compare-sheet-note {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    color: var(--color-ink-meta);
+  }
+  @container mind (width < 760px) {
+    .compare-sheet-body {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 14px;
+    }
+    .compare-sheet-list {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
 }
 
 @keyframes mind-pulse {
