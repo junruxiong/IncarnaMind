@@ -7,7 +7,7 @@ import { ANSWER_TEMPERATURE, answerTemperature } from "../../src/core/answers/en
 import { asGenerated } from "../../src/shared/aiText";
 import { pendingProposals, proposalRequestOf } from "../../src/shared/proposals";
 import { askAndFinish, setUpWithDocuments } from "../helpers/citations";
-import { createTempDataFolder, nextEvent, startCore } from "../helpers/core";
+import { createTempDataFolder, nextEvent, nextTurn, startCore } from "../helpers/core";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
 import {
   answerIn,
@@ -724,8 +724,8 @@ describe("When Questions can't be answered", () => {
     expect(answerIn(writer, answerId).attrs.status).toBe("stopped");
 
     await core.respondToConsent(request.requestId, true);
-    await vi.waitFor(() => expect(models.specs).toHaveLength(1));
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await vi.waitFor(() => expect(models.specs).toHaveLength(1), { timeout: 10_000 });
+    await nextTurn();
     expect(model.doStreamCalls).toEqual([]);
     expect(answerIn(writer, answerId).attrs.status).toBe("stopped");
   });
