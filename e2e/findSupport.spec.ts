@@ -173,7 +173,7 @@ test("In Chinese and a narrow window: Check against Documents marks a contradict
 
   await slideSelect(window, line, "Harbours publish", { line, words: "blank reply." });
   const menu = window.getByTestId("selection-menu");
-  await expect(menu.getByTestId("selection-action-find-support")).toHaveText("查找依据");
+  await expect(menu.getByTestId("selection-action-find-support")).toHaveText("查找出处");
   await expect(menu.getByTestId("selection-action-check-against-documents")).toHaveText(
     "对照文档核对",
   );
