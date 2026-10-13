@@ -1992,7 +1992,7 @@ export function createCore(adapters: CoreAdapters): Core {
     getConversation: async (conversationId) => conversations.content(conversationId),
     searchConversations: async (query) => conversations.search(query),
     searchMinds: async (query) => mindIndex.search(query),
-    searchDocumentText: async (query) => documents.searchText(query),
+    searchDocumentText: async (query, options) => documents.searchText(query, options),
     renameConversation: async (conversationId, title) => {
       const conversation = conversations.rename(conversationId, title);
       conversationsChanged();
