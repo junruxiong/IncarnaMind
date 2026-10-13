@@ -5,7 +5,7 @@ import { type MessageKey, type MessageParams, translate } from "../../src/shared
 
 /*
  * What the next Question reads and searches, which an empty conversation says
- * (#253, #258, #391, #544), and what a Question searched, in its Answer's
+ * (#253, #258, #391, #544, #621), and what a Question searched, in its Answer's
  * steps (#391); in English and Chinese.
  */
 
@@ -21,9 +21,16 @@ const chip = (name: string | null, deleted = false): ScopeChip => ({
 });
 
 describe("what the next Question reads and searches", () => {
-  test("with no Mind in view, it searches All Documents", () => {
-    expect(readsLine(en, null, [chip("Thesis")])).toBe("Searches All Documents");
+  test("with no Mind in focus, it searches All Documents, or what the composer chose", () => {
+    expect(readsLine(en, null, [])).toBe("Searches All Documents");
     expect(readsLine(zh, null, [])).toBe("搜索全部文档");
+    expect(readsLine(en, null, [chip(null, true)])).toBe("Searches All Documents");
+    expect(readsLine(en, null, [chip("Thesis")])).toBe("Searches “Thesis”");
+    expect(readsLine(zh, null, [chip("论文")])).toBe("搜索“论文”");
+    expect(readsLine(en, null, [chip("Thesis"), chip("Leeds data")])).toBe(
+      "Searches “Thesis” and 1 more",
+    );
+    expect(readsLine(zh, null, [chip("论文"), chip("数据")])).toBe("搜索“论文”等 2 项");
   });
 
   test("a Mind and its Folder", () => {

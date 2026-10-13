@@ -6,7 +6,7 @@ import { answerBlocks } from "../../answerBlocks";
 import { selectedNotes } from "../../answerEditors";
 import { readsLine, stepsScope } from "../../assistantContext";
 import { readMindHandle } from "../../commands/handles";
-import { composerScope, useComposer } from "../../composer";
+import { composerScope, NO_MIND, useComposer } from "../../composer";
 import {
   conversationLabel,
   stopWriting,
@@ -103,7 +103,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
   }, [sought, messages]);
 
   const add = (answer: ConversationAnswer, target: AddTarget, blocks = notesOf(answer)) =>
-    void addAnswer({ answer, conversation, blocks }, target);
+    void addAnswer({ answer, conversation, blocks }, target, focusedMindId === null);
   const keeping: AnswerKeeping = {
     focusedMindName,
     add(answer) {
@@ -232,19 +232,19 @@ function QuestionBubble({ question, text }: { question?: ConversationQuestion; t
   );
 }
 
-/** What the next Question searches: the Search scope of the composer of the Mind in focus; none with no Mind. */
+/** What the next Question searches: the Search scope of the composer of the Mind in focus, or of the composer with none. */
 function useNextScope(mindId: string | null): ScopeChip[] {
   const mind = useAppStore((state) => state.minds.find((each) => each.id === mindId));
-  const draft = useComposer((state) => (mindId ? state.drafts[mindId] : undefined));
+  const draft = useComposer((state) => state.drafts[mindId ?? NO_MIND]);
   const folders = useAppStore((state) => state.folders);
   const groups = useAppStore((state) => state.library?.groups);
   const deletedGroups = useAppStore((state) => state.library?.deletedGroups);
   const tags = useAppStore((state) => state.tags);
   const documents = useAppStore((state) => state.documents);
-  if (!mind) return [];
+  if (mindId !== null && !mind) return [];
   const scope = composerScope(
     draft ?? { text: "", scope: null, skill: null, pastes: [] },
-    mind.folderId,
+    mind?.folderId ?? null,
   );
   return scopeChips({ folders, groups, deletedGroups, tags, documents }, scope);
 }

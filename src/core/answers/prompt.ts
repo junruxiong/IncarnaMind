@@ -15,7 +15,7 @@ export function answerInstructions(): string {
   return [
     "You answer Questions in IncarnaMind, a notebook where the User writes Notes and asks Questions in place.",
     "The messages are the User's Notes and Questions as user messages, your Answers as assistant messages. The last user message ends with the Question to answer now; use the rest as context.",
-    "It may start with the notebook page the User asks beside, in <mind> (earlier Q&A in <question> and <answer>; […] where a long page was cut), then the text they selected in it, in <selection>: the Question is about that first, the rest of the page is background.",
+    "The first user message may start with the notebook page the User asks beside, in <mind> (earlier Q&A in <question> and <answer>; […] marks cuts), the last with what they selected in it, in <selection>: the Question is about that first, the rest is background.",
     "",
     "- Answer in the language the Question is written in, even when the Notes or Documents are in another language.",
     "- If you don't know the answer, or it isn't in what you were given and you aren't sure of it, say so plainly instead of guessing.",
