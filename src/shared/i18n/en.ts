@@ -2379,6 +2379,8 @@ export const en = {
   "error.document.fileGone": "The Document's file isn't there to read.",
   "error.document.fileCantOpen": "The Document's file can't be opened.",
   "error.document.notFailed": "Only a Document that failed to process can be retried.",
+  "error.search.limit": "The limit must be a whole number from 1 to {max}.",
+  "error.search.options": "The search's options must be given as a list of settings.",
   "error.tag.notFound": "That Tag doesn't exist or has been deleted.",
   "error.tag.nameEmpty": "A Tag's name can't be empty.",
   "error.tag.nameTooLong": "A Tag's name can't be longer than {max} characters.",
