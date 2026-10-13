@@ -373,6 +373,114 @@ export interface ProposalMaker {
 }
 
 /**
+ * Why a Checkpoint (CONTEXT.md) was saved: just before an AI change
+ * (accepting changes, Regenerate, Enhance, a comparison table going in,
+ * accepting someone else's changes from a Word file), just before restoring
+ * another one, or once the Mind had been left alone for
+ * `CHECKPOINT_IDLE_MS` ("idle"). Only idle ones thin out as they age (all for
+ * a day, then one an hour for a week, one a day for 90 days, then one a
+ * week); the others are kept for good.
+ */
+export const CHECKPOINT_REASONS = [
+  "accept",
+  "regenerate",
+  "enhance",
+  "compare",
+  "others",
+  "restore",
+  "idle",
+] as const;
+export type CheckpointReason = (typeof CHECKPOINT_REASONS)[number];
+
+/** How long a Mind goes unchanged before an idle Checkpoint is saved. */
+export const CHECKPOINT_IDLE_MS = 5 * 60_000;
+
+/** A saved copy of a Mind (CONTEXT.md, Checkpoint). Its content stays in the core. */
+export interface Checkpoint {
+  id: string;
+  mindId: string;
+  reason: CheckpointReason;
+  /** When it was saved (ISO 8601, UTC). */
+  createdAt: string;
+}
+
+/** A Mind's Checkpoints, as History lists them. */
+export interface CheckpointList {
+  /** Newest first. */
+  checkpoints: Checkpoint[];
+  /** The Checkpoint that holds the Mind exactly as it is now, if one does: only the newest can. */
+  current: string | null;
+}
+
+/** Two versions of a Mind to compare: a Checkpoint, and another one or (`to` null) the Mind now. */
+export interface CompareCheckpointsInput {
+  mindId: string;
+  from: string;
+  to: string | null;
+}
+
+/** Whether a part of a version is in both, only in the earlier one, or only in the later one. */
+export type ComparedChange = "same" | "removed" | "added";
+
+/**
+ * A part of a Block as History compares it: words, a Citation (named by its
+ * Document and Location), or a footnote the User wrote (its text). Marks such
+ * as bold aren't compared.
+ */
+export type ComparedPart =
+  | { kind: "text"; text: string; change: ComparedChange }
+  | { kind: "citation"; work: CitedWork; change: ComparedChange }
+  | { kind: "footnote"; text: string; change: ComparedChange };
+
+/**
+ * A Block of one version, as History shows it. An Answer is its Blocks; a list
+ * is its items; a table or a chart is its text, row by row (a line each, its
+ * cells split by " · "). Empty paragraphs aren't compared.
+ */
+export interface ComparedBlock {
+  kind:
+    | "paragraph"
+    | "heading"
+    | "question"
+    | "item"
+    | "quote"
+    | "code"
+    | "math"
+    | "rule"
+    | "table"
+    | "chart"
+    | "image";
+  /** A heading's level, from 1; a list item's depth, from 1; else 0. */
+  level: number;
+  /** A list item's bullet ("•") or number ("3."); "" for anything else, a later paragraph of an item too. */
+  marker: string;
+  parts: ComparedPart[];
+}
+
+/**
+ * One row of a comparison: a Block of the earlier version beside its
+ * counterpart in the later one. A Block only one version has leaves the other
+ * side null. `changed` rows are those whose sides differ.
+ */
+export interface ComparisonRow {
+  left: ComparedBlock | null;
+  right: ComparedBlock | null;
+  changed: boolean;
+}
+
+/** Two versions of a Mind side by side, in the order of their Blocks. */
+export interface MindComparison {
+  rows: ComparisonRow[];
+  /** How many rows changed: none when the two versions read the same. */
+  changes: number;
+}
+
+/** What restoring a Checkpoint did: it saved the Mind as it was, which restoring takes the restore back. */
+export interface RestoredCheckpoint {
+  before: Checkpoint;
+}
+
+/**
  * The node types of a Note: any top-level Block that isn't a Question or an
  * Answer. Answers hold the same types, nested.
  */
@@ -935,6 +1043,35 @@ export interface WordSource {
   n: string;
   p?: string;
   f: string;
+}
+
+/**
+ * Something exporting a Mind back into its Word file can't keep (#105), said
+ * before the file is saved:
+ * - "comment": someone's comment on text the User deleted;
+ * - "change": someone's tracked change in text the User deleted;
+ * - "copy": a copy of something kept from Word, written as its text;
+ * - "edit": an edit next to a field, which is written as it was;
+ * - "signature": the file's digital signature, which no longer matches once it changes.
+ */
+export interface WordExportLoss {
+  /** The same for the same thing at the next export, so going ahead applies to what the User saw. */
+  key: string;
+  kind: "comment" | "change" | "copy" | "edit" | "signature";
+  /** Whose comment or change it is. */
+  author: string | null;
+  /** Its text, shortened; "" for none. */
+  text: string;
+}
+
+/** What exporting a Mind imported from a Word file does with the original (#105). */
+export interface WordExportReport {
+  /** What can't be kept: the User sees it before the file is saved. */
+  notKept: WordExportLoss[];
+  /** Parts of the package IncarnaMind doesn't know, kept as they are. */
+  unknownParts: string[];
+  /** The header and the footer, kept in the file though their Blocks were deleted from the Mind. */
+  keptFurniture: ("header" | "footer")[];
 }
 
 /**
@@ -5222,6 +5359,12 @@ export interface ExportMindOptions {
    * deliverable leaves the working material out.
    */
   includeQuestions?: boolean;
+  /**
+   * For a Mind imported from a Word file, exported to Word (#105): the keys of
+   * what can't be kept (`WordExportLoss.key`) that the User has seen and
+   * exports anyway. `saveMindExport` saves nothing while anything else can't be kept.
+   */
+  accept?: string[];
 }
 
 /** What exporting a Mind will write, for the User to see before the file is written. */
@@ -5248,12 +5391,22 @@ export interface MindExportPreview {
 export interface MindExport extends MindExportPreview {
   /** The file's contents: UTF-8 text for Markdown and HTML, a ZIP package for .docx, a PDF for PDF. */
   data: Uint8Array;
+  /** For a Mind imported from a Word file, exported back into it: what it kept and couldn't keep. */
+  word: WordExportReport | null;
 }
 
 /** What `saveMindExport` did. */
 export type SavedMindExport =
   /** Saved, with what it holds, so the result line can say how many quotes weren't found. */
-  | ({ status: "saved"; file: SavedFile } & Omit<MindExportPreview, "fileName">)
+  | ({ status: "saved"; file: SavedFile; word: WordExportReport | null } & Omit<
+      MindExportPreview,
+      "fileName"
+    >)
+  /**
+   * Not saved: a Mind imported from Word can't keep something in its file
+   * (`WordExportReport.notKept`) the User hasn't accepted (`ExportMindOptions.accept`).
+   */
+  | { status: "review"; word: WordExportReport }
   | Exclude<SavedExport, { status: "saved" }>;
 
 /** What saving an export did: a Skill's zip (`saveSkillExport`), and the base of a Mind's. */
@@ -5967,6 +6120,37 @@ export interface CoreApi {
    * Mind's stored updates and free its memory. Editing the Mind again is fine.
    */
   closeMind(mindId: string): Promise<void>;
+
+  /**
+   * Saves a Checkpoint of the Mind as it is now (#113), and returns it. Call
+   * it just before an AI change goes into the Mind, with why: accepting
+   * changes, Regenerate, Enhance, inserting a comparison table ("compare"), or
+   * accepting someone else's changes ("others"). The renderer may call it
+   * without waiting, right before sending the change: calls are taken in
+   * order. When the Mind hasn't changed since its last Checkpoint, deletions
+   * included, nothing new is saved and that one is returned; an idle one is
+   * kept for good from then on. Its Citations' Document versions keep their
+   * text for as long as it is kept. Throws NotFoundError for an unknown or
+   * deleted Mind.
+   */
+  saveCheckpoint(mindId: string, reason: CheckpointReason): Promise<Checkpoint>;
+  /** A Mind's Checkpoints, newest first, and which holds it as it is now. */
+  listCheckpoints(mindId: string): Promise<CheckpointList>;
+  /**
+   * Compares a Checkpoint with another one, or with the Mind now, Block by
+   * Block and word by word. Throws NotFoundError for a Checkpoint that isn't
+   * one of the Mind's, or is no longer kept.
+   */
+  compareCheckpoints(input: CompareCheckpointsInput): Promise<MindComparison>;
+  /**
+   * Brings a Checkpoint's Blocks back as a new change to the Mind, after
+   * saving one of the Mind as it is ("restore"): nothing is overwritten, and
+   * both stay in History. Proposals that were waiting in it don't come back,
+   * so it reads as `compareCheckpoints` showed it. Restoring the `before` it
+   * returns takes it back.
+   * Throws MindReadOnlyError for a Mind a newer version wrote.
+   */
+  restoreCheckpoint(mindId: string, checkpointId: string): Promise<RestoredCheckpoint>;
 
   /**
    * Asks a Question in the assistant (ADR-0017): adds it to the conversation, or starts
@@ -7037,6 +7221,8 @@ export interface CoreEvents {
   "examples.changed": Examples;
   /** A Mind's content changed. Clients editing that Mind apply the update to their `Y.Doc`. */
   "mind.update": MindUpdate;
+  /** A Mind's Checkpoints changed: one was saved, kept for good, or thinned out. Read `listCheckpoints` again. */
+  "checkpoints.changed": { mindId: string };
   /**
    * A Document was added or restored, or its processing status (or embedding
    * progress) changed, or its creation date, title or reference record was read
@@ -7224,6 +7410,10 @@ const methods: Record<CoreApiMethod, true> = {
   openMind: true,
   applyMindUpdate: true,
   closeMind: true,
+  saveCheckpoint: true,
+  listCheckpoints: true,
+  compareCheckpoints: true,
+  restoreCheckpoint: true,
   askInConversation: true,
   regenerateConversationAnswer: true,
   stopConversationAnswer: true,
