@@ -7,7 +7,9 @@
  * - Into the Mind the assistant reads, open in its editor: at its cursor, or
  *   at its end, through the editor, as one step of its Undo, so ⌘Z in the
  *   note takes it back too.
- * - Into another Mind: at its end, through the core.
+ * - Into another Mind: at its end, through the core. With no Mind in focus
+ *   (`openIt`), it is shown too, in a new tab beside the focused one if it isn't open,
+ *   never replacing it.
  * - Into a new Mind: made from the Answer, named as the conversation, in its
  *   Folder, opened in a new tab beside the focused one, the Answer waiting
  *   there as changes to accept or reject.
@@ -129,7 +131,7 @@ async function addToReadMind(added: AddedAnswer, mindId: string): Promise<boolea
 }
 
 /** Into a Mind that isn't the one the assistant reads, at its end, through the core. */
-async function addToOtherMind(added: AddedAnswer, mindId: string): Promise<void> {
+async function addToOtherMind(added: AddedAnswer, mindId: string, openIt: boolean): Promise<void> {
   const { blockIds } = await core.addToNote({
     mindId,
     blocks: added.blocks,
@@ -141,7 +143,16 @@ async function addToOtherMind(added: AddedAnswer, mindId: string): Promise<void>
     undo: () => core.undoAddToNote({ mindId, blockIds }),
     shownAt: answerUndoPlace(added.answer.id),
   });
+  if (openIt) await openBeside(mindId);
 }
+
+/** Shows a Mind where it is open, else in a new tab beside the focused one. */
+const openBeside = (mindId: string) =>
+  useAppStore.getState().changeLayout({
+    type: "open",
+    item: { kind: "mind", mindId },
+    where: { in: "place" },
+  });
 
 /**
  * Into a new Mind: named as the conversation, in its Folder, the Answer in it
@@ -161,11 +172,7 @@ async function addToNewMind(added: AddedAnswer): Promise<void> {
     model: added.answer.model,
     proposed: true,
   });
-  await useAppStore.getState().changeLayout({
-    type: "open",
-    item: { kind: "mind", mindId: mind.id },
-    where: { in: "group" },
-  });
+  await openBeside(mind.id);
   useUndo.getState().push({
     message: t("answer.addedToNew", { mind: mindName(mind) || title }),
     undo: () => core.deleteMind(mind.id),
@@ -173,13 +180,20 @@ async function addToNewMind(added: AddedAnswer): Promise<void> {
   });
 }
 
-/** Adds an Answer to a Mind or a new Mind (see the module's comment). */
-export async function addAnswer(added: AddedAnswer, target: AddTarget): Promise<void> {
+/**
+ * Adds an Answer to a Mind or a new Mind (see the module's comment). `openIt`:
+ * no Mind is in focus, so a Mind chosen from the list is opened too.
+ */
+export async function addAnswer(
+  added: AddedAnswer,
+  target: AddTarget,
+  openIt = false,
+): Promise<void> {
   if (added.blocks.length === 0) return;
   try {
     if (target.kind === "new") await addToNewMind(added);
     else if (!(await addToReadMind(added, target.mindId))) {
-      await addToOtherMind(added, target.mindId);
+      await addToOtherMind(added, target.mindId, openIt);
     }
   } catch (error) {
     useAppStore.getState().reportError(error);

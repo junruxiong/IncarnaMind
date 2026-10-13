@@ -64,7 +64,14 @@
  * never cited. With Skills or Connector Tools but no Documents, the loop runs with
  * those alone; a model that can't call Tools answers without.
  */
-import { generateText, jsonSchema, Output, parsePartialJson, streamText } from "ai";
+import {
+  generateText,
+  jsonSchema,
+  type ModelMessage,
+  Output,
+  parsePartialJson,
+  streamText,
+} from "ai";
 import type {
   AnswerPhase,
   CitationSupport,
@@ -77,7 +84,7 @@ import type {
 import { ONE_SEARCH_PARAMETERS, type SearchToolParameters } from "../documents/searchTool";
 import { detectLanguage } from "../documents/textLanguage";
 import type { ChatLanguageModel, ContextWindow } from "../providers/models";
-import { cacheProviderOptions, tokenUsageOf } from "../providers/promptCache";
+import { cacheProviderOptions, stablePrefixOptions, tokenUsageOf } from "../providers/promptCache";
 import {
   classifyProviderError,
   contextOverflow,
@@ -112,6 +119,12 @@ export interface AnswerMessage {
   role: "user" | "assistant";
   /** Markdown. */
   content: string;
+  /**
+   * The length of the start of `content` that the next Question's request
+   * repeats as it is: the Mind read with it (#564), which a provider's prompt
+   * cache keeps (see ../providers/promptCache).
+   */
+  stablePrefix?: number;
 }
 
 /** A Citation record, as the model gives it for one marker. */
@@ -366,8 +379,8 @@ export type AnswerEngineEvent =
     }
   /** The engine put in `count` Citation markers the model left out of its text (see ./markerPlacement). */
   | { type: "markers-placed"; count: number }
-  /** The model's window holds only part of the Mind read with the Question, or none of it. */
-  | { type: "mind-cut"; kept: "part" | "none" }
+  /** The model's window holds only part of the Mind read with the Question: this share of it (0: none). */
+  | { type: "mind-cut"; share: number }
   /** The model was asked once more for exact quotes (see ./quoteRetry), and what that gave. */
   | { type: "quotes-retried"; retry: QuoteRetry }
   /** The model was asked once more for the figures it gave that couldn't be worked out (see ./figureRetry). */
@@ -943,7 +956,7 @@ function createWritingEngine(options: AiSdkAnswerEngineOptions): AnswerEngine {
             yield { type: "failed", error: fit.error };
             return;
           }
-          if (fit.mindCut) yield { type: "mind-cut", kept: fit.mindCut };
+          if (fit.mindCut !== undefined) yield { type: "mind-cut", share: fit.mindCut };
           const sized = { ...request, messages: fit.messages };
           const window: Sized = {
             estimated: fit.estimated,
@@ -1226,10 +1239,22 @@ export function documentTools(
 /** What a call the gate lets through gets: it runs. */
 const RUN: GateDecision = { run: true };
 
+/** Messages of Question context as the AI SDK takes them, a stable start marked for the prompt cache. */
+const modelMessages = (messages: readonly AnswerMessage[]): ModelMessage[] =>
+  messages.map(({ role, content, stablePrefix }) =>
+    role === "user" && stablePrefix
+      ? { role, content, providerOptions: stablePrefixOptions(stablePrefix) }
+      : { role, content },
+  );
+
 /** A message of Question context as a Run's. */
 const runMessage = (message: AnswerMessage): RunMessage =>
   message.role === "user"
-    ? { role: "user", text: message.content }
+    ? {
+        role: "user",
+        text: message.content,
+        ...(message.stablePrefix && { stablePrefix: message.stablePrefix }),
+      }
     : { role: "assistant", text: message.content, toolCalls: [] };
 
 /**
@@ -1369,7 +1394,7 @@ async function* toolLoop(
       yield { type: "failed", error: fit.error };
       return;
     }
-    if (fit.mindCut) yield { type: "mind-cut", kept: fit.mindCut };
+    if (fit.mindCut !== undefined) yield { type: "mind-cut", share: fit.mindCut };
     ({ messages, estimated } = fit);
     const account = budget.loop(fit.estimated);
     loop = account;
@@ -1559,7 +1584,7 @@ async function* structured(
   const result = streamText({
     model: request.model,
     instructions,
-    messages: request.messages,
+    messages: modelMessages(request.messages),
     temperature,
     providerOptions: cacheProviderOptions(request.cacheKey),
     output: Output.object({
@@ -1668,7 +1693,7 @@ async function* plain(
     const result = streamText({
       model: request.model,
       instructions,
-      messages: request.messages,
+      messages: modelMessages(request.messages),
       temperature,
       providerOptions: cacheProviderOptions(request.cacheKey),
       abortSignal: signal,

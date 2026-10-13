@@ -26,14 +26,14 @@ import { ConnectorImport } from "./ConnectorImport";
 import { commandLine } from "./commandLine";
 import { RemoteSignIn } from "./RemoteSignIn";
 
-/** A state's dot: working (blue), waiting for the User (amber), ready (green), failed (red). */
+/** A state's dot: working (blue), or waiting for the User (amber). Green and red are for checks only. */
 const stateDot: Record<ConnectorState, string | null> = {
   off: null,
   connecting: "bg-accent",
   "signing-in": "bg-accent",
   "needs-sign-in": "bg-attention",
-  ready: "bg-success",
-  error: "bg-danger",
+  ready: null,
+  error: "bg-attention",
 };
 
 /** A state's name: remote Connectors' own states are under `remoteConnectors.`. */
@@ -182,11 +182,7 @@ function ConnectorRow({
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6">
         <span className={`min-w-0 truncate ${rowTitleClass}`}>{name}</span>
         <span className="flex items-center gap-3">
-          <span
-            className={`flex items-center gap-1.5 text-[13px] leading-5 ${
-              connector.state === "error" ? "text-danger" : "text-ink-meta"
-            }`}
-          >
+          <span className="flex items-center gap-1.5 text-[13px] leading-5 text-ink-meta">
             {dot && <span aria-hidden="true" className={`size-1.5 rounded-full ${dot}`} />}
             <span data-testid="connector-state">{t(stateKey(connector.state))}</span>
           </span>
@@ -276,7 +272,7 @@ function ErrorNotice({ error, onRetry }: { error: ConnectorError; onRetry(): voi
       role="alert"
       data-testid="connector-error"
       data-error-kind={error.kind}
-      className="mt-1 flex flex-col gap-1.5 text-[13px] leading-5 text-danger"
+      className="mt-1 flex flex-col gap-1.5 text-[13px] leading-5 text-ink"
     >
       <p className="break-words">{message}</p>
       <div className="flex flex-wrap items-center gap-2 text-[12px]">
