@@ -5,7 +5,7 @@
  * is printed by the host's `Printer`, from the HTML made here; an HTML file is that same
  * HTML, whole.
  */
-import type * as Y from "yjs";
+import * as Y from "yjs";
 import { layoutChart } from "../../shared/chartLayout";
 import { chartSvg } from "../../shared/chartSvg";
 import { seriesName } from "../../shared/charts";
@@ -21,6 +21,7 @@ import type { Translate } from "../../shared/locations";
 import { mindName } from "../../shared/naming";
 import type { PrintPaper } from "../../shared/printDocument";
 import type { SourceDocument } from "../../shared/sources";
+import { wordFileOf, wordImportProgressOf } from "../../shared/wordFiles";
 import type { Logger, Pictures, Printer } from "../adapters";
 import {
   type CitationAttributes,
@@ -30,14 +31,23 @@ import {
   type ExportMindOptions,
   type FormattedCitations,
   type KeptCitationText,
+  MIND_CONTENT_FIELD,
   type Mind,
   type MindExport,
   type MindExportPreview,
+  type WordFileInfo,
 } from "../api";
 import { InvalidInputError, isRecord } from "../errors";
 import { safeFileName } from "../fileNames";
 import type { Language } from "../language";
-import { type Block, countQuestions, type Footnote, footnotesIn, readBlocks } from "../mindText";
+import {
+  type Block,
+  countQuestions,
+  type Footnote,
+  footnotesIn,
+  type ReadOptions,
+  readBlocks,
+} from "../mindText";
 import { addSources, styleCitations } from "./citations";
 import { renderDocx } from "./docx";
 import { renderHtml } from "./html";
@@ -45,6 +55,7 @@ import { exportLabels } from "./labels";
 import { renderMarkdown } from "./markdown";
 import { unifyIdeographs } from "./pdfUnicode";
 import { renderPrintHtml } from "./printHtml";
+import { exportWordPatch } from "./wordPatch";
 
 /** What a footnote needs of a live Document: a web page's site, address and fetch dates. */
 type LiveDocument = SourceDocument;
@@ -72,6 +83,8 @@ export interface ExportsDependencies {
   paper(): PrintPaper;
   /** Draws charts' pictures for Word; without it, a chart goes into Word as its table. */
   pictures?: Pictures;
+  /** The package a Mind was imported from, kept by its SHA-256 (#104); throws if it is gone. */
+  wordPackage(sha256: string): Promise<Uint8Array>;
   log: Logger;
   now(): string;
 }
@@ -91,7 +104,11 @@ const EXTENSIONS: Readonly<Record<ExportFormat, string>> = {
 /** What an export holds, read once for both its preview and its file. */
 interface Prepared {
   format: ExportFormat;
+  mindId: string;
   title: string;
+  readOptions: ReadOptions;
+  /** The Word file the Mind was imported from, and whether its import is still going. */
+  word: { file: WordFileInfo; importing: boolean } | null;
   blocks: Block[];
   preview: MindExportPreview;
   language: Language;
@@ -115,17 +132,25 @@ export function createExports(deps: ExportsDependencies) {
     const trimBeforeCitation = style.form === "numbered";
 
     const live = new Set(documents.map((document) => document.id));
-    const { blocks, questions } = deps.read(mind.id, (fragment) => ({
-      blocks: readBlocks(fragment, {
-        includeQuestions,
-        footnote,
-        trimBeforeCitation,
-        trimBeforeFootnote: true,
-        comparisonText: (key, params) => translate(language, key, params),
-        documentRemoved: (documentId) => !live.has(documentId),
-      }),
-      questions: countQuestions(fragment),
-    }));
+    const readOptions: ReadOptions = {
+      includeQuestions,
+      footnote,
+      trimBeforeCitation,
+      trimBeforeFootnote: true,
+      comparisonText: (key, params) => translate(language, key, params),
+      documentRemoved: (documentId) => !live.has(documentId),
+    };
+    const { blocks, questions, word } = deps.read(mind.id, (fragment) => {
+      const file = fragment.doc ? wordFileOf(fragment.doc) : null;
+      return {
+        blocks: readBlocks(fragment, readOptions),
+        questions: countQuestions(fragment),
+        word: file && {
+          file,
+          importing: fragment.doc !== null && wordImportProgressOf(fragment.doc) !== null,
+        },
+      };
+    });
     const footnotes = footnotesIn(blocks);
     const preview: MindExportPreview = {
       fileName: `${safeFileName(mindName(mind) || translate(language, "mind.untitled"), "Mind")}.${EXTENSIONS[format]}`,
@@ -135,7 +160,10 @@ export function createExports(deps: ExportsDependencies) {
     };
     return {
       format,
+      mindId: mind.id,
       title: mind.title,
+      readOptions,
+      word,
       blocks,
       preview,
       language,
@@ -156,6 +184,7 @@ export function createExports(deps: ExportsDependencies) {
       if (format === "pdf" && !deps.printer) {
         throw new Error("This copy of IncarnaMind can't make PDFs.");
       }
+      if (format === "docx" && prepared.word) return exportIntoWord(prepared, prepared.word);
       const blocks =
         style.form !== "numbered"
           ? await styleCitations(prepared.blocks, style, deps.formatCitations)
@@ -199,9 +228,45 @@ export function createExports(deps: ExportsDependencies) {
         });
         data = unifyIdeographs(printed);
       }
-      return { ...preview, data };
+      return { ...preview, data, word: null };
     },
   };
+
+  /** A Mind imported from a Word file, written back into that file (#105). */
+  async function exportIntoWord(
+    prepared: Prepared,
+    word: NonNullable<Prepared["word"]>,
+  ): Promise<MindExport> {
+    if (word.importing) throw new Error("This Mind is still being imported from its Word file.");
+    const { language, style, documents } = prepared;
+    // A copy of the Mind as it is now: typing while the file is written doesn't change it.
+    const state = deps.read(prepared.mindId, (blocks) =>
+      blocks.doc ? Y.encodeStateAsUpdate(blocks.doc) : null,
+    );
+    const doc = new Y.Doc();
+    try {
+      if (state) Y.applyUpdate(doc, state);
+      const { data, report } = await exportWordPatch({
+        bytes: await deps.wordPackage(word.file.sha256),
+        blocks: doc.getXmlFragment(MIND_CONTENT_FIELD),
+        readOptions: prepared.readOptions,
+        labels: exportLabels(language),
+        style,
+        bibliography: prepared.bibliography,
+        bibliographyHeading: translate(language, "bibliography.title"),
+        sources: { language, documents },
+        formatCitations: deps.formatCitations,
+        withPictures: (blocks) => withPictures(blocks, language, deps),
+      });
+      deps.log.info("export.word", {
+        notKept: report.notKept.length,
+        unknownParts: report.unknownParts.length,
+      });
+      return { ...prepared.preview, data, word: report };
+    } finally {
+      doc.destroy();
+    }
+  }
 }
 
 /** A picture that can't be drawn leaves the chart's table, and the log says why. */
@@ -266,17 +331,24 @@ async function withPictures(
 
 function parseExportOptions(input: unknown): Required<ExportMindOptions> {
   if (!isRecord(input)) throw new InvalidInputError("Export options must be an object.");
-  const { format, includeQuestions } = input;
+  const { format, includeQuestions, accept } = input;
   if (!EXPORT_FORMATS.some((each) => each === format)) {
     throw new InvalidInputError('The export format must be "markdown", "docx", "pdf" or "html".');
   }
   if (includeQuestions !== undefined && typeof includeQuestions !== "boolean") {
     throw new InvalidInputError("includeQuestions must be true or false.");
   }
+  if (
+    accept !== undefined &&
+    !(Array.isArray(accept) && accept.every((key) => typeof key === "string"))
+  ) {
+    throw new InvalidInputError("accept must be a list of what can't be kept.");
+  }
   // Markdown is an archive, so it keeps Questions; the others are deliverables, so they don't.
   return {
     format: format as ExportFormat,
     includeQuestions: includeQuestions ?? format === "markdown",
+    accept: accept ?? [],
   };
 }
 

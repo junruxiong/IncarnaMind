@@ -925,6 +925,35 @@ export interface WordSource {
 }
 
 /**
+ * Something exporting a Mind back into its Word file can't keep (#105), said
+ * before the file is saved:
+ * - "comment": someone's comment on text the User deleted;
+ * - "change": someone's tracked change in text the User deleted;
+ * - "copy": a copy of something kept from Word, written as its text;
+ * - "edit": an edit next to a field, which is written as it was;
+ * - "signature": the file's digital signature, which no longer matches once it changes.
+ */
+export interface WordExportLoss {
+  /** The same for the same thing at the next export, so going ahead applies to what the User saw. */
+  key: string;
+  kind: "comment" | "change" | "copy" | "edit" | "signature";
+  /** Whose comment or change it is. */
+  author: string | null;
+  /** Its text, shortened; "" for none. */
+  text: string;
+}
+
+/** What exporting a Mind imported from a Word file does with the original (#105). */
+export interface WordExportReport {
+  /** What can't be kept: the User sees it before the file is saved. */
+  notKept: WordExportLoss[];
+  /** Parts of the package IncarnaMind doesn't know, kept as they are. */
+  unknownParts: string[];
+  /** The header and the footer, kept in the file though their Blocks were deleted from the Mind. */
+  keptFurniture: ("header" | "footer")[];
+}
+
+/**
  * Where a Citation's check stands. The check compares the model's quote with
  * the text of the cited Units (its Location: one or two pages, slides,
  * sections, blocks of rows or of lines; see src/shared/units.ts), once, when
@@ -4893,6 +4922,12 @@ export interface ExportMindOptions {
    * deliverable leaves the working material out.
    */
   includeQuestions?: boolean;
+  /**
+   * For a Mind imported from a Word file, exported to Word (#105): the keys of
+   * what can't be kept (`WordExportLoss.key`) that the User has seen and
+   * exports anyway. `saveMindExport` saves nothing while anything else can't be kept.
+   */
+  accept?: string[];
 }
 
 /** What exporting a Mind will write, for the User to see before the file is written. */
@@ -4919,12 +4954,22 @@ export interface MindExportPreview {
 export interface MindExport extends MindExportPreview {
   /** The file's contents: UTF-8 text for Markdown and HTML, a ZIP package for .docx, a PDF for PDF. */
   data: Uint8Array;
+  /** For a Mind imported from a Word file, exported back into it: what it kept and couldn't keep. */
+  word: WordExportReport | null;
 }
 
 /** What `saveMindExport` did. */
 export type SavedMindExport =
   /** Saved, with what it holds, so the result line can say how many quotes weren't found. */
-  | ({ status: "saved"; file: SavedFile } & Omit<MindExportPreview, "fileName">)
+  | ({ status: "saved"; file: SavedFile; word: WordExportReport | null } & Omit<
+      MindExportPreview,
+      "fileName"
+    >)
+  /**
+   * Not saved: a Mind imported from Word can't keep something in its file
+   * (`WordExportReport.notKept`) the User hasn't accepted (`ExportMindOptions.accept`).
+   */
+  | { status: "review"; word: WordExportReport }
   | Exclude<SavedExport, { status: "saved" }>;
 
 /** What saving an export did: a Skill's zip (`saveSkillExport`), and the base of a Mind's. */

@@ -86,9 +86,15 @@ export interface WordDocument {
   structure: WordStructure;
   text: string;
   root: XmlElement;
-  places: ReadonlyMap<string, XmlElement>;
+  places: Places;
   origins: ReadonlyMap<NodeJSON, XmlElement>;
   merged: ReadonlyMap<NodeJSON, readonly XmlElement[]>;
+}
+
+/** Elements by their place ("w:p#12"), and each element's place. */
+export interface Places {
+  get(place: string): XmlElement | undefined;
+  placeOf(element: XmlElement): string | null;
 }
 
 export async function readWordDocument(
@@ -390,7 +396,8 @@ const paragraphNode = (type: "paragraph" | "heading", attrs: Record<string, unkn
 
 class Reader {
   private readonly ordinals = new Map<XmlElement, number>();
-  private readonly places = new Map<string, XmlElement>();
+  /** Each element name's elements, in document order: a place's element is at its number. */
+  private readonly byName = new Map<string, XmlElement[]>();
   private readonly origins = new Map<NodeJSON, XmlElement>();
   private readonly merged = new Map<NodeJSON, XmlElement[]>();
   /** The run whose content is being read. */
@@ -519,7 +526,9 @@ class Reader {
       const count = counts.get(element.name) ?? 0;
       counts.set(element.name, count + 1);
       this.ordinals.set(element, count);
-      this.places.set(`${element.name}#${count}`, element);
+      const named = this.byName.get(element.name);
+      if (named) named.push(element);
+      else this.byName.set(element.name, [element]);
       if (element.name === "w:p") {
         const paraId = element.attrs["w14:paraId"];
         if (paraId && paraIds.has(paraId)) this.duplicateParaIds.add(paraId);
@@ -579,7 +588,18 @@ class Reader {
       structure: this.read(),
       text: this.documentText,
       root: this.document,
-      places: this.places,
+      places: {
+        get: (place) => {
+          const at = place.lastIndexOf("#");
+          return at < 0
+            ? undefined
+            : this.byName.get(place.slice(0, at))?.[Number(place.slice(at + 1))];
+        },
+        placeOf: (element) => {
+          const ordinal = this.ordinals.get(element);
+          return ordinal === undefined ? null : `${element.name}#${ordinal}`;
+        },
+      },
       origins: this.origins,
       merged: this.merged,
     };
@@ -1039,7 +1059,8 @@ class Reader {
   }
 
   private text(text: string, marks: MarkJSON[], out: NodeJSON[]): void {
-    if (text) this.fromRun(marks.length > 0 ? { type: "text", text, marks } : { type: "text", text }, out);
+    if (text)
+      this.fromRun(marks.length > 0 ? { type: "text", text, marks } : { type: "text", text }, out);
   }
 
   /** Text or a line break, recorded with the run it was read from. */

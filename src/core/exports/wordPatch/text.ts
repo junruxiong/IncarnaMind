@@ -22,9 +22,7 @@ export function applySplices(text: string, splices: readonly Splice[]): string {
     .map((splice, index) => ({ ...splice, index }))
     .sort(
       (a, b) =>
-        a.from - b.from ||
-        Number(a.from !== a.to) - Number(b.from !== b.to) ||
-        a.index - b.index,
+        a.from - b.from || Number(a.from !== a.to) - Number(b.from !== b.to) || a.index - b.index,
     );
   let out = "";
   let at = 0;
@@ -58,6 +56,19 @@ export const closeTag = (element: XmlElement): string => `</${element.name}>`;
 export function innerOf(text: string, element: XmlElement): string {
   if (selfClosing(element)) return "";
   return text.slice(element.openEnd ?? 0, endOf(element) - closeTag(element).length);
+}
+
+/** A splice that adds XML at the end of an element's content, opening one that closes itself. */
+export function appendInside(text: string, element: XmlElement, xml: string): Splice {
+  if (selfClosing(element)) {
+    return {
+      from: startOf(element),
+      to: endOf(element),
+      text: `${openTag(text, element)}${xml}${closeTag(element)}`,
+    };
+  }
+  const at = endOf(element) - closeTag(element).length;
+  return { from: at, to: at, text: xml };
 }
 
 /** Each element's parent, below `root`. */
@@ -127,7 +138,9 @@ export function rescoped(xml: string, here: Namespaces, there: Namespaces): stri
   let out = "";
   let at = 0;
   let depth = 0;
-  for (const match of xml.matchAll(/<(\/?)([A-Za-z_][\w:.-]*)((?:[^>"']|"[^"]*"|'[^']*')*?)(\/?)>/g)) {
+  for (const match of xml.matchAll(
+    /<(\/?)([A-Za-z_][\w:.-]*)((?:[^>"']|"[^"]*"|'[^']*')*?)(\/?)>/g,
+  )) {
     const [whole, closing, name, rest, closes] = match;
     const index = match.index;
     if (closing) {
