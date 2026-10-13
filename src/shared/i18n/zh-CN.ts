@@ -548,6 +548,7 @@ export const zhCN = {
   "health.recheck.other": "{count} 句需重新核对",
   "health.notChecked": "{count} 句未核对",
   "health.next": "{part}：转到下一处",
+  "checks.smallModel": "这个模型较小，核对结论可能不准。换更大的模型会更可靠。",
   "checks.running.find-support": "正在查找依据…",
   "checks.running.check-against-documents": "正在对照文档核对…",
   "checks.stop": "停止",

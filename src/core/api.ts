@@ -3733,8 +3733,12 @@ export interface CheckSentencesInput {
 
 /** What `checkSentences` did. */
 export type CheckSentencesResult =
-  /** Each sentence has its mark: `checked` of them with a verdict, the rest not checked. */
-  | { kind: "checked"; sentences: number; checked: number }
+  /**
+   * Each sentence has its mark: `checked` of them with a verdict, the rest not
+   * checked. `smallModel`: a model on this computer too small to judge
+   * reliably made the verdicts (#680), so they carry a notice.
+   */
+  | { kind: "checked"; sentences: number; checked: number; smallModel: boolean }
   /** Nothing was sent: the model can't be used now, and `readiness` says why. */
   | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
   /** Nothing was sent: local mode is on, and the model isn't on this computer. */
