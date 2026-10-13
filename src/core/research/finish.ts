@@ -154,7 +154,7 @@ async function tagPages(
         pages.map((page) => page.name),
         existing.map((tag) => tag.name),
       ),
-      maxOutputTokens: 256,
+      maxOutputTokens: 1_024,
       maxRetries: 1,
       abortSignal: AbortSignal.any([signal, AbortSignal.timeout(TAG_TIMEOUT_MS)]),
     });

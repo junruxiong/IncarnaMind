@@ -8,7 +8,7 @@ import { useLanguage, useT } from "../../i18n";
 import type { Translate } from "../../objects";
 import { useAppStore } from "../../store";
 import { needsYou } from "../../taskGroups";
-import { pauseTask, resumeTask, showTask, stopTask, useTasks } from "../../tasks";
+import { pauseTask, resumeTask, reviewTask, stopTask, useTasks } from "../../tasks";
 import { stepLine, taskName } from "../../taskText";
 import { CheckLineIcon } from "../lineIcons";
 
@@ -180,7 +180,7 @@ export function TaskProgress({
         key: "review",
         testId: "review",
         label: t("task.action.review"),
-        onClick: () => showTask(task),
+        onClick: () => reviewTask(task),
         strong: true,
       });
     }
