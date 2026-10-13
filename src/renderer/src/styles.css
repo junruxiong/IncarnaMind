@@ -5300,8 +5300,8 @@
     height: 24px;
     padding: 0 7px 0 6px;
     border-radius: 6px;
-    font-weight: 600;
-    color: var(--color-ink-secondary);
+    font-weight: 400;
+    color: var(--color-ink-meta);
 
     &:hover {
       background: var(--color-hover);
