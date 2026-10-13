@@ -16,6 +16,7 @@ import { chooseOutputLocation } from "../outputFiles";
 import { saveFailureReason } from "../problems";
 import { CloseLineIcon, ExportLineIcon } from "./lineIcons";
 import { type ProblemAction, ProblemLine } from "./ProblemLine";
+import { WordExportReview } from "./WordExportReview";
 
 /** How long a plain "Saved …" stays, unless the pointer or the focus is on it. */
 const SAVED_SHOWN_MS = 10_000;
@@ -89,7 +90,11 @@ function ResultBody({
   const dismiss = useExports((state) => state.dismiss);
   const [error, setError] = useState<string | null>(null);
   const held = useHeld(line);
-  const plain = result.state === "saved" && result.unverified === 0 && error === null;
+  const plain =
+    result.state === "saved" &&
+    result.unverified === 0 &&
+    result.kept.length === 0 &&
+    error === null;
 
   useEffect(() => {
     if (!plain || held) return;
@@ -196,8 +201,21 @@ function ResultBody({
                   : t("export.unverified.line.other", { count: result.unverified })}
               </ProblemLine>
             )}
+            {result.kept.length > 0 && (
+              <ProblemLine role="status" testId="export-kept">
+                {result.kept.length > 1
+                  ? t("export.word.kept.both")
+                  : t(
+                      result.kept[0] === "header"
+                        ? "export.word.kept.header"
+                        : "export.word.kept.footer",
+                    )}
+              </ProblemLine>
+            )}
             {error && <ProblemLine testId="export-problem">{error}</ProblemLine>}
           </>
+        ) : result.state === "review" ? (
+          <WordExportReview result={result} />
         ) : (
           <ProblemLine testId="export-problem" action={fix()} className="py-1">
             {t("export.failed.save", {

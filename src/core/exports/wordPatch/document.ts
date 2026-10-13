@@ -161,6 +161,7 @@ export class DocumentPatch {
           ? `<w:hyperlink w:anchor="${escapeXml(href.slice(1))}" w:history="1">`
           : `<w:hyperlink r:id="${input.target.link(href, false)}" w:history="1">`,
       linkStyle: styles.find("character", "Hyperlink"),
+      addLinkStyle: () => styles.id("hyperlink"),
     };
   }
 

@@ -236,8 +236,13 @@ export async function checkExport(bytes: Uint8Array): Promise<ExportCheck> {
     if (missing.length > 0)
       return { ok: false, detail: `left out ${missing.join(", ")}`, exported: result.data };
 
-    // Every other paragraph and table of the body is as it was, in order.
+    // Every other paragraph and table of the body is as it was, in order, and so is everything
+    // before the body: the root's namespaces, mc:Ignorable among them, are never pruned.
     const main = new TextDecoder().decode(exported.get(pkg.part));
+    const head = (xml: string) => xml.slice(0, xml.search(/<(?:[\w.-]+:)?body[\s>]/));
+    if (head(main) !== head(new TextDecoder().decode(original.get(pkg.part)))) {
+      return { ok: false, detail: "the document's start changed", exported: result.data };
+    }
     let at = 0;
     let kept = 0;
     for (const piece of await bodyPieces(bytes, edited)) {

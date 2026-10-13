@@ -46,6 +46,8 @@ interface Step {
 }
 
 const soffice = findLibreOffice();
+/** Where to keep a PDF of each edited export, for a person to look at (CI uploads them). */
+const keepPdfs = process.env.INCARNAMIND_WORD_PDFS;
 const required = process.env.INCARNAMIND_WORD_REQUIRE_LIBREOFFICE === "1";
 const wanted = process.env.INCARNAMIND_WORD_SET ?? "core";
 
@@ -98,7 +100,10 @@ const STEPS: Step[] = [
       try {
         const path = join(folder, basename(subject.path));
         writeFileSync(path, data);
-        const result = await convertToPdf(soffice, path);
+        const keep = keepPdfs
+          ? join(keepPdfs, subject.name.replace(/\.docx$/i, ".pdf"))
+          : undefined;
+        const result = await convertToPdf(soffice, path, keep);
         return result.opened
           ? { ok: true, detail: `${result.pdfBytes} bytes of PDF` }
           : { ok: false, detail: result.problem ?? "did not open" };

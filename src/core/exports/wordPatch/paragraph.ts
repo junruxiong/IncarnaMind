@@ -154,6 +154,8 @@ export interface ParagraphContext {
   newLink(href: string): string;
   /** The id of the character style links are in, if the document has one. */
   linkStyle: string | null;
+  /** The id of that style, added to the document if it hasn't one: for a new link. */
+  addLinkStyle(): string;
 }
 
 export interface ParagraphInput {
@@ -524,7 +526,7 @@ class RunWriter {
   }
 
   private addText(token: Token, formatRun: XmlElement | null): void {
-    const { text, hrefOf, linkStyle, newLink } = this.context;
+    const { text, hrefOf, linkStyle, addLinkStyle, newLink } = this.context;
     const original = this.wrappersOf(formatRun);
     const inheritedLink =
       original
@@ -554,7 +556,8 @@ class RunWriter {
         : ""
       : this.input.fallbackRun;
     const linkChanged = token.marks.link !== inheritedLink;
-    const rPr = runPropertiesFor(baseRPr, token.marks, linkChanged ? linkStyle : null);
+    const style = !linkChanged ? null : token.marks.link ? addLinkStyle() : linkStyle;
+    const rPr = runPropertiesFor(baseRPr, token.marks, style);
     const startTag = formatRun ? openTag(text, formatRun) : "<w:r>";
     const key = `${startTag}\u0000${rPr}`;
     if (this.run?.key !== key) {

@@ -1,6 +1,7 @@
-import { writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import { unzip } from "../tests/helpers/docx";
 import {
   commented,
   field,
@@ -22,6 +23,8 @@ import {
   launchApp,
   motionSettled,
   removeDataFolder,
+  setLanguage,
+  useOutputLocation,
 } from "./app";
 
 /*
@@ -280,4 +283,75 @@ test("a Word file dropped on a Mind opens the import screen, which can add it as
   await dialog.getByTestId("word-import-as-document").click();
   await expect(dialog).toBeHidden();
   await expect(window.getByTestId("sidebar")).toContainText("Dropped memo");
+});
+
+test("Export writes back into the Word file: what it can't keep is said first, Export anyway saves it, the rest as it was", async () => {
+  const kept = paragraph("Keep this paragraph as it is.", { paraId: "0A0B0C0D" });
+  const comment = commented(0, "Marcus Hale", "Is spring realistic?", run("spring 2027"));
+  const path = join(files, "Memo.docx");
+  await writeFile(
+    path,
+    wordFile({
+      body: [
+        kept,
+        paragraph(`${run("First sales in ")}${comment.inline}${run(".")}`),
+        paragraph("The end."),
+      ].join(""),
+      comments: comment.comment,
+    }),
+  );
+  const { app, window } = await launchApp(dataDir, { home });
+  await dismissChatSetup(window);
+  await interceptOpenDialog(app, path);
+  const dialog = await importFromMenu(window);
+  await dialog.getByTestId("word-import-confirm").click();
+  const output = join(files, "Exports");
+  await mkdir(output);
+  await useOutputLocation(window, output);
+
+  // The paragraph with the comment goes.
+  const editor = window.getByTestId("mind-editor");
+  const commentedParagraph = editor.locator("p", { hasText: "First sales in" });
+  await commentedParagraph.click({ clickCount: 3 });
+  await expect
+    .poll(() => window.evaluate(() => getSelection()?.toString()))
+    .toContain("First sales in");
+  await window.keyboard.press("Backspace");
+  await window.keyboard.press("Backspace");
+  await expect(editor).not.toContainText("First sales in");
+
+  // Export says what the file can't keep before anything is saved.
+  await window.getByTestId("export-mind").click();
+  const result = window.getByTestId("export-result");
+  await expect(result.getByTestId("export-review")).toHaveText(
+    "1 thing in the Word file can't be kept · Export anyway",
+  );
+  await expect(result.getByTestId("export-review-items")).toHaveText(
+    "Marcus Hale's comment “Is spring realistic?” is on text you deleted",
+  );
+  expect(await readdir(output)).toEqual([]);
+  await motionSettled(window);
+  await screenshot(window, "word-export-review");
+  await setLanguage(window, "zh-CN");
+  await expect(result.getByTestId("export-review")).toHaveText(
+    "Word 文件中有 1 处无法保留 · 仍然导出",
+  );
+  await motionSettled(window);
+  await screenshot(window, "word-export-review-zh");
+  await setLanguage(window, "en");
+
+  // Export anyway: saved, the paragraph kept byte for byte, the comment's marks gone with its text.
+  await result.getByTestId("export-anyway").click();
+  await expect(result.getByTestId("export-done")).toHaveText("Saved Memo.docx");
+  await motionSettled(window);
+  await screenshot(window, "word-export-saved");
+  const document =
+    unzip(await readFile(join(output, "Memo.docx")))
+      .get("word/document.xml")
+      ?.toString("utf8") ?? "";
+  expect(document).toContain(kept);
+  expect(document).toContain("The end.");
+  expect(document).not.toContain("First sales in");
+  expect(document).not.toContain("comment");
+  await app.close();
 });
