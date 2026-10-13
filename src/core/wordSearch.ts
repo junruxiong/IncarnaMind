@@ -39,35 +39,49 @@ interface Token {
   end: number;
 }
 
-/** The words of `text`, folded as the index folds them, each with where it is. */
-function tokensOf(text: string): Token[] {
-  const tokens: Token[] = [];
+/** The words of `text`, folded as the index folds them, each with where it is, read as asked for. */
+function* tokensOf(text: string): Generator<Token> {
   for (const segment of segmenter.segment(text)) {
     if (!segment.isWordLike) continue;
     const start = segment.index;
     const end = start + segment.segment.length;
     // Folding can split a word in two ("聯合國大會" reads as "联合国 大会"): both point at it.
     for (const word of keywordText(segment.segment).split(" ")) {
-      if (word) tokens.push({ word: withoutAccents(word), start, end });
+      if (word) yield { word: withoutAccents(word), start, end };
     }
   }
-  return tokens;
 }
 
-/** Where the terms are in `text`, in order, overlapping ones joined. */
-export function findTerms(text: string, terms: readonly (readonly string[])[]): TextRange[] {
-  const tokens = tokensOf(text);
+/**
+ * Where the terms are in `text`, in order, overlapping ones joined. With
+ * `within`, only those that end at most that many characters after the first
+ * one found starts: the rest of the text isn't read, which an excerpt of a
+ * long Passage needs (#240).
+ */
+export function findTerms(
+  text: string,
+  terms: readonly (readonly string[])[],
+  within = Number.POSITIVE_INFINITY,
+): TextRange[] {
+  const tokens: Token[] = [];
   const found: TextRange[] = [];
-  for (const term of terms) {
-    const last = term.length - 1;
-    for (let at = 0; at + last < tokens.length; at++) {
-      const matches = term.every((word, index) => {
-        const token = tokens[at + index]?.word ?? "";
-        return index === last ? token.startsWith(word) : token === word;
-      });
-      const first = tokens[at];
-      const end = tokens[at + last];
-      if (matches && first && end) found.push({ start: first.start, end: end.end });
+  let first = Number.POSITIVE_INFINITY;
+  for (const token of tokensOf(text)) {
+    if (token.start > first + within) break;
+    tokens.push(token);
+    const at = tokens.length - 1;
+    for (const term of terms) {
+      const from = at - (term.length - 1);
+      const matches =
+        from >= 0 &&
+        term.every((word, index) => {
+          const seen = tokens[from + index]?.word ?? "";
+          return index === term.length - 1 ? seen.startsWith(word) : seen === word;
+        });
+      const start = tokens[from]?.start;
+      if (!matches || start === undefined) continue;
+      found.push({ start, end: token.end });
+      first = Math.min(first, start);
     }
   }
   found.sort((a, b) => a.start - b.start || a.end - b.end);
@@ -94,7 +108,7 @@ export function excerptOf(
   text: string,
   terms: readonly (readonly string[])[],
 ): { excerpt: string; highlights: TextRange[] } {
-  const ranges = findTerms(text, terms);
+  const ranges = findTerms(text, terms, EXCERPT_LENGTH);
   const first = ranges[0]?.start ?? 0;
   let start = first <= EXCERPT_BEFORE ? 0 : wholeCharacter(text, first - EXCERPT_BEFORE);
   // Not in the middle of a word, where words are split by spaces.

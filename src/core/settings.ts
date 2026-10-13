@@ -12,6 +12,7 @@ import {
   type Settings,
   SKILL_SCRIPT_LIMITS,
   type UserSettings,
+  type WordExportPreferences,
 } from "./api";
 import { InvalidInputError, isRecord } from "./errors";
 import { isLanguagePreference, resolveLanguage } from "./language";
@@ -51,6 +52,15 @@ const hasOnly = (value: unknown, keys: readonly string[]): value is Record<strin
 const isQuestionsOption = (value: unknown) =>
   hasOnly(value, ["includeQuestions"]) && isBoolean(value.includeQuestions);
 
+const WORD_CHOICES = ["trackChanges", "markAiText", "commentFailedChecks"] as const;
+
+/** Word's choices of #107 came later: choices saved before them have none, and read as the defaults. */
+const isWordOption = (value: unknown) =>
+  isQuestionsOption(value) ||
+  (hasOnly(value, ["includeQuestions", ...WORD_CHOICES]) &&
+    isBoolean(value.includeQuestions) &&
+    WORD_CHOICES.every((choice) => isBoolean(value[choice])));
+
 /** HTML came after the others: choices saved before it have no `html`, and read as the default. */
 const isExportPreferences = (value: unknown): value is ExportPreferences =>
   isRecord(value) &&
@@ -58,8 +68,15 @@ const isExportPreferences = (value: unknown): value is ExportPreferences =>
     ? hasOnly(value, ["format", "docx", "pdf", "html"]) && isQuestionsOption(value.html)
     : hasOnly(value, ["format", "docx", "pdf"])) &&
   EXPORT_FORMATS.some((format) => format === value.format) &&
-  isQuestionsOption(value.docx) &&
+  isWordOption(value.docx) &&
   isQuestionsOption(value.pdf);
+
+/** The Word choices on by default (#107), so a file says what IncarnaMind changed and wrote. */
+const WORD_DEFAULTS: Omit<WordExportPreferences, "includeQuestions"> = {
+  trackChanges: true,
+  markAiText: true,
+  commentFailedChecks: true,
+};
 /** A cap of up to a million a month, in dollars or yuan. */
 const isMonthlyCap = (value: unknown): value is MonthlyCap =>
   isRecord(value) &&
@@ -81,10 +98,11 @@ const userScope: Scope<UserSettings> = {
     // Word is the deliverable most asked for; the deliverables leave the Questions out.
     exportOptions: {
       format: "docx",
-      docx: { includeQuestions: false },
+      docx: { includeQuestions: false, ...WORD_DEFAULTS },
       pdf: { includeQuestions: false },
       html: { includeQuestions: false },
     },
+    authorName: null,
     monthlyCap: null,
     webSearch: false,
   },
@@ -95,6 +113,7 @@ const userScope: Scope<UserSettings> = {
     suggestWhileWriting: isBoolean,
     leaveOutOwnFiles: isBoolean,
     exportOptions: isExportPreferences,
+    authorName: (value): value is string | null => value === null || isNonBlankText(value),
     monthlyCap: (value): value is MonthlyCap | null => value === null || isMonthlyCap(value),
     webSearch: isBoolean,
   },
@@ -227,17 +246,20 @@ export function createSettings(
   systemLanguages: () => readonly string[],
   scriptSandbox: SandboxLevel,
   meetingAudio: Settings["meetingAudio"] = "none",
+  systemUserName: () => string = () => "",
 ) {
   const get = (): Settings => {
     const user = read(db, userScope);
     const stored: Partial<ExportPreferences> = user.exportOptions;
     user.exportOptions = {
       ...user.exportOptions,
+      docx: { ...WORD_DEFAULTS, ...user.exportOptions.docx },
       html: stored.html ?? { includeQuestions: false },
     };
     const device = read(db, deviceScope);
     const language = resolveLanguage(user.language, systemLanguages());
-    return { user, device, language, scriptSandbox, meetingAudio };
+    const author = user.authorName ?? systemUserName().trim();
+    return { user, device, language, scriptSandbox, meetingAudio, author };
   };
 
   return {

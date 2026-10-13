@@ -477,12 +477,16 @@ describe("Scanned pages are read on this computer (#397)", { timeout: 60_000 }, 
     await midway;
     await core.setLinkedFolderPaused(linked.id, true);
     const readWhenPaused = read.length;
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    // The processor takes one job at a time, in the order queued: once a Document added now is
+    // ready, the scan has stopped, or would have read all its pages.
+    await addAndProcess(core, [
+      await writeSourceFile(await createSourceFolder(), "Control.md", "Nothing to do with it."),
+    ]);
     // At most the page under way when it was paused is read after.
     expect(read.length).toBeLessThanOrEqual(readWhenPaused + 1);
 
     await core.setLinkedFolderPaused(linked.id, false);
-    const [document] = await core.listDocuments();
+    const document = (await core.listDocuments()).find((each) => each.name === "Minutes");
     const [done] = await waitForProcessing(core, [document?.id as string]);
     expect(done?.status).toBe("ready");
     // The pages read before the pause weren't read again; only the one under way could be.

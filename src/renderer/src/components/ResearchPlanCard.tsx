@@ -36,6 +36,7 @@ import {
 } from "./lineIcons";
 import { ProblemLine } from "./ProblemLine";
 import { ReadinessLine } from "./providers/ChatReadinessNotice";
+import { TypingTextarea } from "./TypingTextarea";
 import { buttonStyle, menuClass, menuItemClass } from "./ui";
 import { usePopoverMenu } from "./usePopoverMenu";
 
@@ -135,7 +136,7 @@ export function ResearchPlanCard({ mindId }: { mindId: string }) {
                 <span aria-hidden="true" className="research-plan-number">
                   {index + 1}.
                 </span>
-                <textarea
+                <TypingTextarea
                   ref={(field) => {
                     fields.current[index] = field;
                   }}
@@ -186,34 +187,36 @@ export function ResearchPlanCard({ mindId }: { mindId: string }) {
             {t("research.plan.addStep")}
           </button>
         )}
-      </div>
-      <div className="research-plan-settings">
-        <div className="research-plan-row">
-          <span className="research-plan-label">{t("research.plan.sources")}</span>
-          <div className="research-plan-sources">
-            <SourceToggle
-              testId="research-plan-web"
-              label={t("research.plan.web")}
-              pressed={searchesWeb}
-              disabled={web !== "ready"}
-              onToggle={() =>
-                updatePlan(mindId, { sources: { ...card.sources, web: !card.sources.web } })
-              }
-            />
-            <SourceToggle
-              testId="research-plan-library"
-              label={t("research.plan.library")}
-              pressed={card.sources.library}
-              onToggle={() =>
-                updatePlan(mindId, { sources: { ...card.sources, library: !card.sources.library } })
-              }
-            />
+        <div className="research-plan-settings">
+          <div className="research-plan-row">
+            <span className="research-plan-label">{t("research.plan.sources")}</span>
+            <div className="research-plan-sources">
+              <SourceToggle
+                testId="research-plan-web"
+                label={t("research.plan.web")}
+                pressed={searchesWeb}
+                disabled={web !== "ready"}
+                onToggle={() =>
+                  updatePlan(mindId, { sources: { ...card.sources, web: !card.sources.web } })
+                }
+              />
+              <SourceToggle
+                testId="research-plan-library"
+                label={t("research.plan.library")}
+                pressed={card.sources.library}
+                onToggle={() =>
+                  updatePlan(mindId, {
+                    sources: { ...card.sources, library: !card.sources.library },
+                  })
+                }
+              />
+            </div>
           </div>
-        </div>
-        <WebLine reach={web} model={model} />
-        <div className="research-plan-row">
-          <span className="research-plan-label">{t("research.plan.writeInto")}</span>
-          <WriteInto mindId={mindId} card={card} />
+          <WebLine reach={web} model={model} />
+          <div className="research-plan-row">
+            <span className="research-plan-label">{t("research.plan.writeInto")}</span>
+            <WriteInto mindId={mindId} card={card} />
+          </div>
         </div>
       </div>
       <PlanProblem mindId={mindId} card={card} model={chosen} />

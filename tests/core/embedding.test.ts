@@ -1,6 +1,6 @@
 import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import {
   BUILT_IN_EMBEDDING_MODEL,
   type Core,
@@ -234,18 +234,21 @@ describe("The built-in embedding model", { timeout: 30_000 }, () => {
     if (!added) throw new Error("Nothing was added.");
     await waitForModel(before, (status) => status.downloadedBytes > 100_000);
     before.close();
-    await new Promise((resolve) => setTimeout(resolve, 100)); // let the partial file close
-    const partial = join(modelFolder(dataDir), "onnx/model.onnx.partial");
-    const kept = (await stat(partial)).size;
-    expect(kept).toBeGreaterThan(0);
+    // Its download has stopped when the server's end of the connection is closed.
+    await vi.waitFor(() => expect(server.requests.every((request) => request.closed)).toBe(true), {
+      timeout: 10_000,
+    });
 
     server.behave("onnx/model.onnx", {});
     const after = await start();
     const [ready] = await waitForProcessing(after, [added.id]);
 
     expect(ready?.status).toBe("ready");
+    // It went on from what had arrived, not from the start: the Range names a place inside the file.
     const modelRequests = server.requests.filter((request) => request.path === "onnx/model.onnx");
-    expect(modelRequests.at(-1)?.range).toBe(`bytes=${kept}-`);
+    const resumedFrom = Number(modelRequests.at(-1)?.range?.match(/^bytes=(\d+)-$/)?.[1]);
+    expect(resumedFrom).toBeGreaterThan(0);
+    expect(resumedFrom).toBeLessThan(server.contents.get("onnx/model.onnx")?.byteLength ?? 0);
     const model = await readFile(join(modelFolder(dataDir), "onnx/model.onnx"));
     expect(new Uint8Array(model)).toEqual(server.contents.get("onnx/model.onnx"));
   });

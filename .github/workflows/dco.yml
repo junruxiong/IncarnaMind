@@ -2,6 +2,7 @@ name: Sign-off
 
 on:
   pull_request:
+  merge_group:
 
 permissions:
   contents: read
@@ -16,8 +17,8 @@ jobs:
           fetch-depth: 0
       - name: Check each commit for a Signed-off-by line
         env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-          HEAD: ${{ github.event.pull_request.head.sha }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
         run: |
           missing=0
           for c in $(git rev-list --no-merges "$BASE..$HEAD"); do

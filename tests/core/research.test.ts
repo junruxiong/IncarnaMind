@@ -19,7 +19,7 @@ import {
   type Task,
 } from "../../src/core";
 import { openDatabase } from "../../src/core/storage";
-import { pendingProposals } from "../../src/shared/proposals";
+import { aiUseOfAccepted, pendingProposals, resolveProposals } from "../../src/shared/proposals";
 import { shownPassages } from "../helpers/citations";
 import {
   createMemoryKeychain,
@@ -346,6 +346,15 @@ describe("Research", { timeout: 30_000 }, () => {
     expect(changes.texts).toEqual(["Notes on “How did tea reach Europe?”: the sources say so."]);
     expect(changes.checks).toEqual(["found"]);
     expect(done.review).toEqual({ mindId: mind.id, proposalId: changes.ids[0] });
+    // Accepted, it is recorded as the assistant's change, with the model that wrote it.
+    const client = await connectToMind(core, mind.id);
+    let accepted: ReturnType<typeof resolveProposals> = [];
+    client.doc.transact(() => {
+      accepted = resolveProposals(client.blocks, () => true, "accept");
+    });
+    expect(aiUseOfAccepted(client.doc, mind.id, accepted, new Date().toISOString())).toEqual([
+      expect.objectContaining({ kind: "assistant-change-accepted", modelId: "claude-haiku-5-5" }),
+    ]);
     const [row] = queryDatabase<{ result: string }>(
       dataDir,
       "SELECT result FROM run_steps WHERE run_id = ? AND key = 'step:0'",

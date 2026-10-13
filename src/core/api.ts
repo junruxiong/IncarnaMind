@@ -133,8 +133,13 @@ export interface CreateMindInput {
  * - 18: checks of the User's own sentences (#96): the `claimCheck` mark on a
  *   sentence's text, which holds its result (see `CLAIM_CHECK_MARK`). Older
  *   content is version 18 content as it is: nothing is rewritten.
+ * - 20: someone's tracked changes in an imported Word file, as Proposals
+ *   (#108): their requests are `WordChangeRequest`s, which name the change's
+ *   author and date. A version before 20 would take them for the
+ *   assistant's, and count what accepting one keeps as AI text. Older
+ *   content is version 20 content as it is: nothing is rewritten.
  */
-export const CONTENT_SCHEMA_VERSION = 18;
+export const CONTENT_SCHEMA_VERSION = 20;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -363,7 +368,25 @@ export type ProposalRequest =
   | (ProposalMaker & { source: "answer"; answerId: string })
   | (ProposalMaker & { source: "answer-added" })
   | (ProposalMaker & { source: "comparison-table"; tableId: string })
-  | (ProposalMaker & { source: "research"; taskId: string });
+  | (ProposalMaker & { source: "research"; taskId: string })
+  | WordChangeRequest;
+
+/** The start of the id of someone's tracked change imported from a Word file (`WordChangeRequest`). */
+export const WORD_CHANGE_ID = "word:";
+
+/**
+ * Someone's tracked change in a Word file, imported as a Proposal (#108):
+ * who made it and when, as the file says. Its Proposal's id is "word:" and
+ * the place of the change's element in the main part ("word:w:del#4"), the
+ * same each time the file is read, so export finds it in the file again.
+ */
+export interface WordChangeRequest {
+  source: "word-change";
+  /** The author the file names; null when it names none. */
+  author: string | null;
+  /** When it was made, ISO 8601; null when the file doesn't say. */
+  date: string | null;
+}
 
 /** The model that made a request's Proposals, and when. */
 export interface ProposalMaker {
@@ -1000,7 +1023,22 @@ export interface WordImportReport {
   changes: number;
   comments: number;
   sections: number;
+  /**
+   * Someone's tracked changes that can't be accepted or rejected here, by
+   * kind: they stay in the file as they are, for Word to resolve (#108).
+   * Absent on reports from before #108.
+   */
+  keptChanges?: Partial<Record<KeptChangeKind, number>>;
 }
+
+/**
+ * A kind of tracked change a Word import keeps as is (#108): a change to a
+ * run's or a paragraph's formatting, a paragraph mark added or removed
+ * without its paragraph's text, a move, a table row's or cell's change, or
+ * an insertion or deletion holding more than text (a field, a picture, a
+ * note's mark).
+ */
+export type KeptChangeKind = "format" | "paragraphMark" | "move" | "row" | "cell" | "content";
 
 /**
  * The name of the Y.Map, beside the Blocks of a Mind imported from a Word
@@ -1193,7 +1231,7 @@ export type CitationLocation =
 export interface CitationAttributes {
   passageId: string | null;
   documentId: string | null;
-  /** The Document's display name when the Citation was made. */
+  /** The Document's name when the Citation was made: shown only when the Document can't be found (see `shownDocumentName`). */
   documentName: string | null;
   /**
    * The version of the Document the Citation quotes: the SHA-256 of its file
@@ -1374,6 +1412,11 @@ export interface UserSettings {
   leaveOutOwnFiles: boolean;
   /** How Export and ⇧⌘E export a Mind: the choices last saved in Export options (#100). */
   exportOptions: ExportPreferences;
+  /**
+   * The name the User's edits go under as tracked changes in a Word file
+   * (#107), or null: the name the computer knows them by (`Settings.author`).
+   */
+  authorName: string | null;
   /** The monthly cap on models billed per token: off (null) by default. */
   monthlyCap: MonthlyCap | null;
   /**
@@ -1482,6 +1525,11 @@ export interface Settings {
    * the microphone only (Linux, for now); "none": nothing (no capture).
    */
   meetingAudio: "both" | "microphone" | "none";
+  /**
+   * The name the User's edits go under as tracked changes in a Word file
+   * (#107): `UserSettings.authorName`, or the name the computer knows them by.
+   */
+  author: string;
 }
 
 export interface SettingsPatch {
@@ -2647,10 +2695,49 @@ export interface LinkedFolder {
    * download it. `downloadOnlineOnlyFiles` downloads and indexes them.
    */
   onlineOnly: { files: number; bytes: number; downloading: boolean };
+  /** Files in it in a format IncarnaMind doesn't read (.doc, .xls, .ppt, .wps, .caj…), found at its last look: not Documents (#740). */
+  unsupportedFiles: number;
   /** ISO 8601, UTC. */
   createdAt: string;
   /** ISO 8601, UTC. */
   updatedAt: string;
+}
+
+/** A file in a Linked folder in a format IncarnaMind doesn't read: it is left out of every search (#740). */
+export interface UnsupportedFile {
+  /** Absolute. */
+  path: string;
+  /** The file's name, with its extension. */
+  name: string;
+  /** Lower case, with the dot: ".xls". */
+  extension: string;
+  linkedFolderId: string;
+  /** The folder it is in, relative to its Linked folder: "" at the top. */
+  relativeFolder: string;
+}
+
+/**
+ * Why a file in a search's scope wasn't read, and what the User can do:
+ * - "format": a format not read yet (.doc, .xls, .ppt, .wps, .caj…): convert it;
+ * - "scan": a scan with no text yet: it needs text recognition;
+ * - "password": password-protected: remove the password;
+ * - "damaged": the file is broken, or couldn't be read;
+ * - "too-large": too large to open;
+ * - "pages": a scan some of whose pages haven't been read yet.
+ */
+export type UnreadReason = "format" | "scan" | "password" | "damaged" | "too-large" | "pages";
+
+/** A file in a Search scope that couldn't be read, with why (#740). */
+export interface UnreadFile {
+  /** The Document's id, or the file's path for a file in a format not read. */
+  id: string;
+  /** The file's name, with its extension. */
+  name: string;
+  reason: UnreadReason;
+  /** For "format": its extension, lower case with the dot. Null otherwise. */
+  extension: string | null;
+  /** The Document, or null for a file in a format not read. */
+  documentId: string | null;
 }
 
 /**
@@ -4675,6 +4762,7 @@ export const dataKinds = [
   "answers",
   "web-searches",
   "verified-document",
+  "connector-search",
 ] as const;
 
 export type DataKind = (typeof dataKinds)[number];
@@ -4719,6 +4807,9 @@ export type DataKind = (typeof dataKinds)[number];
  * - "web-search": what an Answer searches the web for, written by the model
  *   from the Question, to the provider of the model it is asked with, whose
  *   own web search runs it (#128). None in local mode.
+ * - "connector-registry": the words the User types in Settings › Connectors'
+ *   search, to the official MCP Registry, which finds community Connectors
+ *   (#148). Asked the first time they search; none in local mode.
  */
 export const dataFlowIds = [
   "chat",
@@ -4734,9 +4825,23 @@ export const dataFlowIds = [
   "checks",
   "agents",
   "web-search",
+  "connector-registry",
 ] as const;
 
 export type DataFlowId = (typeof dataFlowIds)[number];
+
+/**
+ * The flows choosing the chat model's provider allows (ADR-0022): everything
+ * that sends to it, as the line above "Use this provider" says.
+ */
+export const CHOSEN_PROVIDER_FLOWS: readonly DataFlowId[] = [
+  "chat",
+  "edits",
+  "checks",
+  "suggestions",
+  "tagging",
+  "classification",
+];
 
 /** Data leaving this computer: what one flow sends to one service. */
 export interface DataFlow {
@@ -4763,6 +4868,11 @@ export interface DataFlowStatus {
    * "not-asked" when they allowed the flow before it started sending more.
    */
   decidedAt: string | null;
+  /**
+   * Allowed when the User chose the service, where a line said what goes to
+   * it (ADR-0022), rather than in a dialog or in Settings › Privacy.
+   */
+  chosen: boolean;
 }
 
 /** A registered external data flow, for the Privacy page: what it sends, and where. */
@@ -5246,6 +5356,97 @@ export interface ConnectorImportResult {
   skipped: ConnectorImportEntry[];
 }
 
+/** Words in each interface language, for data shipped beside the code, such as the Connectors directory. */
+export type LocalizedText = Record<Language, string>;
+
+/**
+ * The directory's groups, by use, in the order Settings › Connectors shows
+ * them: where the User's files are, financial data, legal research, medicine
+ * and research, and work.
+ */
+export const connectorDirectoryGroups = [
+  "files",
+  "financial-data",
+  "legal-research",
+  "medicine-and-research",
+  "work",
+] as const;
+export type ConnectorDirectoryGroup = (typeof connectorDirectoryGroups)[number];
+
+/**
+ * How a Connector in the directory signs in:
+ * - "browser": in the User's browser, IncarnaMind registering itself with the service;
+ * - "own-app": in the browser too, but the service registers only the apps it
+ *   knows: the User registers an OAuth app with it and enters its client ID
+ *   (`ConnectorClientInput`) before signing in;
+ * - "none": it needs no sign-in.
+ */
+export type ConnectorDirectorySignIn = "browser" | "own-app" | "none";
+
+/**
+ * A remote Connector IncarnaMind has reviewed, listed in Settings ›
+ * Connectors before the User connects it. The list ships with the app as
+ * data (src/core/connectors/directory.json).
+ */
+export interface ConnectorDirectoryEntry {
+  /** Stable across versions of the list, e.g. "factset". */
+  id: string;
+  /** The service's name, which the Connector takes when it is added, e.g. "FactSet". */
+  name: string;
+  /** Who runs the server, e.g. "FactSet". */
+  publisher: string;
+  group: ConnectorDirectoryGroup;
+  /** One line on what it reads. */
+  summary: LocalizedText;
+  /**
+   * What the User needs from the service: their own subscription to a
+   * product (`{ product: "FactSet" }`), nothing ("free"), or null when that
+   * depends on their account, e.g. a free tier.
+   */
+  subscription: { product: string } | "free" | null;
+  /** Its MCP endpoint, an https URL. A Connector at this URL is this entry, connected. */
+  url: string;
+  signIn: ConnectorDirectorySignIn;
+  /** Listed only in these interface languages, e.g. a service for Chinese Users. Absent: in every language. */
+  languages?: Language[];
+}
+
+/** How a community server from the MCP Registry runs on this computer: its package, through npx or uvx. */
+export interface ConnectorRegistryCommand {
+  command: string;
+  args: string[];
+  /** The environment variables it reads, e.g. an API key, for the User to fill in. */
+  env: string[];
+}
+
+/** A community server found in the official MCP Registry. Not reviewed by IncarnaMind. */
+export interface ConnectorRegistryServer {
+  /** Its name in the Registry, e.g. "io.github.example/zotero-mcp". */
+  id: string;
+  /** Its title, or else its name's last part. */
+  name: string;
+  /** Who published it: its name's namespace, e.g. "io.github.example". */
+  publisher: string;
+  description: string;
+  /** Its MCP endpoint, when it runs remotely at an https URL IncarnaMind can use as it is. */
+  url: string | null;
+  /** How it runs on this computer, when it has a package IncarnaMind can start. */
+  command: ConnectorRegistryCommand | null;
+  /** Its website or repository, to read about it. */
+  link: string | null;
+}
+
+/**
+ * A search of the MCP Registry: the servers found, or why nothing was:
+ * - "local-mode": Local mode is on, so nothing was sent;
+ * - "declined": the User declined sending their search to the Registry;
+ * - "unreachable": it couldn't be reached, e.g. no network;
+ * - "service-error": it answered with an error, or something IncarnaMind can't read.
+ */
+export type ConnectorRegistrySearch =
+  | { outcome: "found"; servers: ConnectorRegistryServer[] }
+  | { outcome: "failed"; reason: "local-mode" | "declined" | "unreachable" | "service-error" };
+
 // ---------------------------------------------------------------------------
 // Approvals (#38)
 
@@ -5503,9 +5704,17 @@ export type ExportFormat = (typeof EXPORT_FORMATS)[number];
  */
 export interface ExportPreferences {
   format: ExportFormat;
-  docx: { includeQuestions: boolean };
+  docx: WordExportPreferences;
   pdf: { includeQuestions: boolean };
   html: { includeQuestions: boolean };
+}
+
+/** A Word export's own choices (#107), each on until the User turns it off (see `ExportMindOptions`). */
+export interface WordExportPreferences {
+  includeQuestions: boolean;
+  trackChanges: boolean;
+  markAiText: boolean;
+  commentFailedChecks: boolean;
 }
 
 export interface ExportMindOptions {
@@ -5522,6 +5731,21 @@ export interface ExportMindOptions {
    * exports anyway. `saveMindExport` saves nothing while anything else can't be kept.
    */
   accept?: string[];
+  /**
+   * Word only (#107): for a Mind imported from a Word file, the User's edits
+   * since the import go in as tracked changes under their name
+   * (`Settings.author`). Changes still waiting to be accepted always go into
+   * a Word file as tracked changes by IncarnaMind. Absent: off.
+   */
+  trackChanges?: boolean;
+  /** Word only: AI text gets a comment by IncarnaMind, "Written by IncarnaMind". Absent: off. */
+  markAiText?: boolean;
+  /**
+   * Word only: a Citation whose check failed (its quote wasn't found, or its
+   * claim is unsupported or contradicted) gets a comment by IncarnaMind
+   * saying so. Absent: off.
+   */
+  commentFailedChecks?: boolean;
 }
 
 /** What exporting a Mind will write, for the User to see before the file is written. */
@@ -5542,6 +5766,8 @@ export interface MindExportPreview {
   unverifiedCitations: number;
   /** The Question Blocks in the Mind, whether the export includes them or not. */
   questions: number;
+  /** The Mind was imported from a Word file, which a Word export writes back into (#105). */
+  fromWord: boolean;
 }
 
 /** A Mind exported as a file, for the host to save where the User chooses. */
@@ -5557,7 +5783,7 @@ export type SavedMindExport =
   /** Saved, with what it holds, so the result line can say how many quotes weren't found. */
   | ({ status: "saved"; file: SavedFile; word: WordExportReport | null } & Omit<
       MindExportPreview,
-      "fileName"
+      "fileName" | "fromWord"
     >)
   /**
    * Not saved: a Mind imported from Word can't keep something in its file
@@ -6346,11 +6572,12 @@ export interface CoreApi {
    */
   searchMinds(query: string): Promise<MindTextMatch[]>;
   /**
-   * ⌘K's "In your Documents": live Documents whose Passages hold every word of `query`, as
-   * `searchMinds` reads it, best match first, one Passage each, at most 20. Keyword search over
-   * the Passage index, whatever the embedding settings.
+   * ⌘K's "In your Documents" and the Library's search: live Documents whose Passages hold every
+   * word of `query`, as `searchMinds` reads it, best match first, one Passage each, at most
+   * `limit` (20 unless asked; InvalidInputError outside 1 to 200). Keyword search over the
+   * Passage index, whatever the embedding settings.
    */
-  searchDocumentText(query: string): Promise<DocumentTextMatch[]>;
+  searchDocumentText(query: string, options?: { limit?: number }): Promise<DocumentTextMatch[]>;
   /**
    * Gives a conversation the title the User typed (trimmed; empty goes back to its own
    * name) and returns it. A name the conversation gives itself never replaces it.
@@ -6504,6 +6731,13 @@ export interface CoreApi {
   addLinkedFolder(path: string, options?: AddDocumentsOptions): Promise<AddedLinkedFolder>;
   /** The Linked folders, in path order. */
   listLinkedFolders(): Promise<LinkedFolder[]>;
+  /**
+   * The files in a Search scope that couldn't be read, and why (#740): its
+   * Documents with no text, password-protected or damaged, and the files in
+   * its Linked folders in a format not read. A scope of none (null) is every
+   * Document. Empty when everything in it was read.
+   */
+  listUnreadFiles(scope?: SearchScope | null): Promise<UnreadFile[]>;
   /**
    * Points a Linked folder at where it is on this computer now, after it was
    * moved or renamed, or when the data folder is opened on another computer
@@ -7158,6 +7392,21 @@ export interface CoreApi {
   previewConnectorImport(json: string): Promise<ConnectorImportEntry[]>;
   /** Adds every server of an `mcpServers` configuration that the preview marks "add". */
   importConnectors(json: string): Promise<ConnectorImportResult>;
+  /** The reviewed Connectors of Settings › Connectors' Browse, in the directory's order. Reads nothing from the network. */
+  listConnectorDirectory(): Promise<ConnectorDirectoryEntry[]>;
+  /**
+   * Adds a directory entry as a remote Connector named as the service, and
+   * starts it, as `addConnector` does, with the User's OAuth app for an
+   * "own-app" entry. A Connector already at the entry's URL is returned
+   * instead, turned on.
+   */
+  addConnectorFromDirectory(entryId: string, client?: ConnectorClientInput): Promise<Connector>;
+  /**
+   * Searches the official MCP Registry for community servers matching what
+   * the User typed (two letters or more), asking them the first time
+   * ("connector-registry" flow). Nothing is sent in Local mode.
+   */
+  searchConnectorRegistry(query: string): Promise<ConnectorRegistrySearch>;
 
   /**
    * The User's approval policies, for the approvals page: every Tool always
@@ -7640,6 +7889,7 @@ const methods: Record<CoreApiMethod, true> = {
   previewLinkedFolder: true,
   addLinkedFolder: true,
   listLinkedFolders: true,
+  listUnreadFiles: true,
   locateLinkedFolder: true,
   removeLinkedFolder: true,
   listKeptCitationTexts: true,
@@ -7782,6 +8032,9 @@ const methods: Record<CoreApiMethod, true> = {
   setConnectorClient: true,
   previewConnectorImport: true,
   importConnectors: true,
+  listConnectorDirectory: true,
+  addConnectorFromDirectory: true,
+  searchConnectorRegistry: true,
   listApprovalPolicies: true,
   setApprovalPolicy: true,
   revokeApprovalPolicy: true,

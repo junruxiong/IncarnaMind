@@ -10,7 +10,14 @@ import * as Y from "yjs";
 import type { MarkJSON, NodeJSON } from "../../../shared/blockJson";
 import { readProposalAttribute } from "../../../shared/proposals";
 import { readWordAtom } from "../../../shared/wordFiles";
-import { ANSWER_BLOCK, PROPOSAL_ATTRIBUTE, PROPOSAL_INSERT_MARK, WORD_BLOCK_NODE } from "../../api";
+import {
+  ANSWER_BLOCK,
+  PROPOSAL_ATTRIBUTE,
+  PROPOSAL_DELETE_MARK,
+  PROPOSAL_INSERT_MARK,
+  WORD_BLOCK_NODE,
+} from "../../api";
+import { type Pendings, pendingOf, type ReviewReading } from "../../mindText";
 
 /** The formatting of text the export writes: the editor's marks, and its link. */
 export interface TextMarks {
@@ -56,19 +63,36 @@ export const sameMarks = (a: TextMarks, b: TextMarks): boolean =>
   a.code === b.code &&
   a.link === b.link;
 
+/** What changes still waiting do to a node as a whole: its `proposal` attribute. */
+export function nodePendings(node: NodeJSON, review: ReviewReading | undefined): Pendings {
+  const attribute = readProposalAttribute(node.attrs?.[PROPOSAL_ATTRIBUTE]);
+  const pending = attribute ? pendingOf(attribute, review) : undefined;
+  if (!attribute || !pending) return {};
+  return attribute.kind === "insert" ? { inserted: pending } : { deleted: pending };
+}
+
+/** What changes still waiting do to a text node: its marks. */
+export function textPendings(node: NodeJSON, review: ReviewReading | undefined): Pendings {
+  const attrsOf = (type: string) => node.marks?.find((mark) => mark.type === type)?.attrs;
+  const inserted = pendingOf(attrsOf(PROPOSAL_INSERT_MARK), review);
+  const deleted = pendingOf(attrsOf(PROPOSAL_DELETE_MARK), review);
+  return { ...(inserted && { inserted }), ...(deleted && { deleted }) };
+}
+
 /**
  * A Mind's node as JSON, as the Mind reads it: what a Proposal adds, which
- * isn't the Mind's until it is accepted, is left out (ADR-0003). `elements`
+ * isn't the Mind's until it is accepted, is left out (ADR-0003), unless read
+ * for review (#107), when only what a change out of date adds is. `elements`
  * maps each node back to its element, for what reads the Mind's own way
  * (Citations, footnotes).
  */
 export function mindJson(
   element: Y.XmlElement,
   elements: Map<NodeJSON, Y.XmlElement>,
+  review?: ReviewReading,
 ): NodeJSON | null {
-  if (readProposalAttribute(element.getAttribute(PROPOSAL_ATTRIBUTE))?.kind === "insert") {
-    return null;
-  }
+  const attribute = readProposalAttribute(element.getAttribute(PROPOSAL_ATTRIBUTE));
+  if (attribute?.kind === "insert" && !pendingOf(attribute, review)) return null;
   const content: NodeJSON[] = [];
   for (const child of element.toArray()) {
     if (child instanceof Y.XmlText) {
@@ -77,7 +101,11 @@ export function mindJson(
         attributes?: Record<string, unknown>;
       }[]) {
         const attributes = run.attributes ?? {};
-        if (PROPOSAL_INSERT_MARK in attributes) continue;
+        if (
+          PROPOSAL_INSERT_MARK in attributes &&
+          !pendingOf(attributes[PROPOSAL_INSERT_MARK], review)
+        )
+          continue;
         if (typeof run.insert !== "string" || run.insert === "") continue;
         const marks: MarkJSON[] = Object.entries(attributes).map(([type, value]) =>
           value && typeof value === "object"
@@ -87,7 +115,7 @@ export function mindJson(
         content.push({ type: "text", text: run.insert, ...(marks.length > 0 && { marks }) });
       }
     } else if (child instanceof Y.XmlElement) {
-      const node = mindJson(child, elements);
+      const node = mindJson(child, elements, review);
       if (node) content.push(node);
     }
   }
@@ -117,6 +145,17 @@ export interface Counterpart {
   /** The place of its XML ("w:p#12"); null for content the document didn't have. */
   key: string | null;
   list: ListPlace | null;
+  /** What changes still waiting do to it as a whole, or to what holds it (#107). */
+  pending: Pendings;
+  /** It is in an Answer from before AI text was marked, which is the AI's as a whole. */
+  wholeAi: boolean;
+}
+
+/** How counterparts are read: with what changes still waiting do (#107), and inside what. */
+interface Within {
+  review?: ReviewReading;
+  pending: Pendings;
+  wholeAi: boolean;
 }
 
 const LISTS = new Set(["bulletList", "orderedList", "taskList"]);
@@ -134,10 +173,27 @@ export const isFurniture = (node: NodeJSON): boolean =>
 export function counterpartsOf(
   blocks: readonly NodeJSON[],
   keyOf: (node: NodeJSON) => string | null,
-  list: ListPlace | null = null,
-  into: Counterpart[] = [],
+  review?: ReviewReading,
+): Counterpart[] {
+  return collect(blocks, keyOf, null, [], {
+    ...(review && { review }),
+    pending: {},
+    wholeAi: false,
+  });
+}
+
+function collect(
+  blocks: readonly NodeJSON[],
+  keyOf: (node: NodeJSON) => string | null,
+  list: ListPlace | null,
+  into: Counterpart[],
+  within: Within,
 ): Counterpart[] {
   for (const node of blocks) {
+    const inner: Within = {
+      ...within,
+      pending: { ...within.pending, ...nodePendings(node, within.review) },
+    };
     if (LISTS.has(node.type)) {
       const place = (depth: number): ListPlace => ({
         list: node,
@@ -146,14 +202,18 @@ export function counterpartsOf(
       });
       const depth = list ? list.depth + 1 : 0;
       for (const item of node.content ?? []) {
-        counterpartsOf(item.content ?? [], keyOf, place(depth), into);
+        collect(item.content ?? [], keyOf, place(depth), into, {
+          ...inner,
+          pending: { ...inner.pending, ...nodePendings(item, within.review) },
+        });
       }
     } else if (node.type === ANSWER_BLOCK) {
-      counterpartsOf(node.content ?? [], keyOf, list, into);
+      const older = within.review !== undefined && node.attrs?.generatedMarks !== true;
+      collect(node.content ?? [], keyOf, list, into, { ...inner, wholeAi: inner.wholeAi || older });
     } else if (node.type === WORD_BLOCK_NODE) {
       if (isFurniture(node)) continue;
       const source = readWordAtom(node.attrs ?? {}).source;
-      into.push({ node, kind: "kept", key: source, list });
+      into.push({ node, kind: "kept", key: source, list, pending: inner.pending, wholeAi: false });
     } else {
       const key = keyOf(node);
       const kind: CounterpartKind = PARAGRAPHS.has(node.type)
@@ -161,7 +221,14 @@ export function counterpartsOf(
         : node.type === "table"
           ? "table"
           : "other";
-      into.push({ node, kind, key: kind === "other" ? null : key, list });
+      into.push({
+        node,
+        kind,
+        key: kind === "other" ? null : key,
+        list,
+        pending: inner.pending,
+        wholeAi: inner.wholeAi,
+      });
     }
   }
   return into;

@@ -4,6 +4,7 @@ import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import {
   addDocuments,
+  afterEditorFocus,
   assistantAnswers,
   createDataFolder,
   dismissChatSetup,
@@ -383,8 +384,8 @@ test("find in the Mind works while an Answer streams into the assistant, and cou
   // Writing in the Mind meanwhile is counted as it is written.
   await window.keyboard.press("Escape");
   await expect(editor).toBeFocused();
+  await afterEditorFocus(window);
   await window.keyboard.press("End");
-  await window.evaluate(() => new Promise((done) => requestAnimationFrame(() => done(null))));
   await window.keyboard.type(" Tides again.");
   await window.keyboard.press("ControlOrMeta+F");
   await window.keyboard.type("tides");

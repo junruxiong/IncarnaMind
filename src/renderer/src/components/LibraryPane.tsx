@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { Document, LibraryGroup } from "../../../core/api";
 import { LIBRARY_DELETED } from "../deletedItems";
+import { errorMessage } from "../errors";
 import { useFindSources } from "../findSources";
 import { useLanguage, useT } from "../i18n";
 import {
@@ -18,15 +19,16 @@ import {
 import { useLibraryFolds } from "../libraryFolds";
 import {
   folderFacet,
-  matchesSearch,
   NOT_IN_A_FOLDER,
   problemOf,
   problemText,
   RECENTLY_DELETED,
-  searchWords,
+  searchMatches,
   sectionShows,
   sectionsOf,
 } from "../libraryPage";
+import { useTextSearch } from "../libraryTextSearch";
+import { queryWords } from "../matcher";
 import { useDeleted } from "../recentlyDeleted";
 import { extendThroughRows, useSelection, useSelectionOrder } from "../selection";
 import { DEFAULT_SORT, sorted } from "../sort";
@@ -34,6 +36,7 @@ import { sortOf, useSort } from "../sortChoices";
 import { documentFields, folderFields } from "../sortFields";
 import { useAppStore } from "../store";
 import { moveThroughRows } from "../treeKeys";
+import { useUnreadFiles } from "../unreadFiles";
 import { FindSourcesPanel } from "./FindSourcesPanel";
 import { LibrarySelectionBar } from "./LibrarySelection";
 import { DeletedSection } from "./library/DeletedSection";
@@ -45,6 +48,7 @@ import { LibraryHeader } from "./library/LibraryHeader";
 import { LibrarySection } from "./library/LibrarySection";
 import { ProblemLine } from "./ProblemLine";
 import { ReferenceImportPanel } from "./ReferenceImportPanel";
+import { UnreadFilesLine } from "./UnreadFilesLine";
 
 const NO_GROUPS: readonly LibraryGroup[] = [];
 
@@ -76,6 +80,7 @@ export function LibraryPane() {
   /** The format, year, status and Folder filters' choices; the Tags filter is the store's, shared with the sidebar. */
   const [facetFilter, setFacetFilter] = useState<FilterSelection>({});
   const field = useRef<HTMLInputElement>(null);
+  const grid = useRef<HTMLDivElement>(null);
 
   const groups = snapshot?.groups ?? NO_GROUPS;
   const assignments = useMemo(
@@ -99,12 +104,22 @@ export function LibraryPane() {
     () => (tagFilter.length ? { ...facetFilter, tag: tagFilter } : facetFilter),
     [facetFilter, tagFilter],
   );
-  const words = useMemo(() => searchWords(search), [search]);
-  const found = useMemo(() => {
-    if (words.length === 0) return documents;
-    const tagNames = new Map(tags.map((tag) => [tag.id, tag.name]));
-    return documents.filter((doc) => matchesSearch(doc, words, tagNames));
-  }, [documents, words, tags]);
+  const words = useMemo(() => queryWords(search), [search]);
+  const inside = useTextSearch(search);
+  const matches = useMemo(
+    () =>
+      searchMatches(
+        documents,
+        words,
+        new Map(tags.map((tag) => [tag.id, tag.name])),
+        inside.matches,
+      ),
+    [documents, words, tags, inside.matches],
+  );
+  const found = useMemo(
+    () => (matches ? documents.filter((doc) => matches.has(doc.id)) : documents),
+    [documents, matches],
+  );
   const { shown: filtered, options } = useMemo(
     () => filterLibrary<Document>(found, facets, selection),
     [found, facets, selection],
@@ -156,6 +171,8 @@ export function LibraryPane() {
     [assignments],
   );
   const problem = useMemo(() => problemOf(documents), [documents]);
+  // Files in the Linked folders that aren't Documents because their format isn't read yet (#740).
+  const unreadFormats = useUnreadFiles(null).filter((file) => file.reason === "format");
 
   // A Folder, Not in a Folder or Recently deleted asked for (from the sidebar, a menu or ⌘K): its section opens and comes into view.
   useEffect(() => {
@@ -206,6 +223,13 @@ export function LibraryPane() {
             count={documents.length}
             search={search}
             onSearch={setSearch}
+            onDown={() =>
+              // The first Document found, as Finder's first result; the first head when none is open.
+              (
+                grid.current?.querySelector<HTMLElement>("[data-document-id] [data-row-main]") ??
+                grid.current?.querySelector<HTMLElement>("[data-tree-row]")
+              )?.focus()
+            }
             field={field}
           />
           {findingSources && <FindSourcesPanel />}
@@ -259,13 +283,26 @@ export function LibraryPane() {
                   {problemText(problem, t)}
                 </ProblemLine>
               )}
+              <UnreadFilesLine files={unreadFormats} testId="library-unread" className="mt-1" />
               {/* biome-ignore lint/a11y/useSemanticElements: sections of rows laid out as columns, not a table. */}
               <div
+                ref={grid}
                 role="grid"
                 aria-multiselectable="true"
                 aria-label={t("library.sections")}
                 onKeyDown={(event) => {
-                  if (!moveThroughRows(event)) extendThroughRows(event, "library");
+                  if (moveThroughRows(event) || extendThroughRows(event, "library")) return;
+                  // ↑ on the first row goes back to the search, as ↓ came from it.
+                  const plain =
+                    !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey;
+                  if (
+                    event.key === "ArrowUp" &&
+                    plain &&
+                    event.target === grid.current?.querySelector("[data-tree-row]")
+                  ) {
+                    event.preventDefault();
+                    field.current?.focus();
+                  }
                 }}
               >
                 {sections.map((section) => (
@@ -273,12 +310,27 @@ export function LibraryPane() {
                     key={section.key}
                     section={section}
                     narrowing={narrowing}
+                    matches={matches}
                     suggestedOf={suggestedOf}
                     notSortedOf={notSortedOf}
                   />
                 ))}
               </div>
-              {narrowing && sections.length === 0 && (
+              {inside.failure && (
+                <ProblemLine
+                  role="alert"
+                  testId="library-inside-failed"
+                  className="mt-4"
+                  action={{
+                    label: t("library.inside.retry"),
+                    testId: "library-inside-retry",
+                    onClick: inside.retry,
+                  }}
+                >
+                  {t("library.inside.failed", { reason: errorMessage(inside.failure.error, t) })}
+                </ProblemLine>
+              )}
+              {narrowing && sections.length === 0 && !inside.waiting && (
                 <ProblemLine
                   role="status"
                   testId="library-no-match"

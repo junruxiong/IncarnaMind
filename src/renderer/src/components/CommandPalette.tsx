@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { DocumentTextMatch, MindTextMatch, TextRange } from "../../../core/api";
+import type { DocumentTextMatch, MindTextMatch } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
 import { keysHere, pressesShortcut } from "../commands/keymap";
 import { commands } from "../commands/registry";
@@ -34,6 +34,7 @@ import {
 } from "../palette";
 import { useAppStore } from "../store";
 import { DocumentLineIcon, FolderLineIcon, MindLineIcon, SearchLineIcon } from "./lineIcons";
+import { Marked } from "./Marked";
 import { TagDot } from "./TagColour";
 
 /** How long typing pauses before the words inside are searched for. */
@@ -290,24 +291,6 @@ function Key({ children }: { children: ReactNode }) {
       {children}
     </kbd>
   );
-}
-
-/** Text with the words found in it in bold. */
-function Marked({ text, ranges }: { text: string; ranges: readonly TextRange[] }) {
-  const parts: ReactNode[] = [];
-  let at = 0;
-  for (const range of ranges) {
-    if (range.start < at) continue;
-    if (range.start > at) parts.push(text.slice(at, range.start));
-    parts.push(
-      <b key={range.start} className="font-semibold text-ink">
-        {text.slice(range.start, range.end)}
-      </b>,
-    );
-    at = range.end;
-  }
-  parts.push(text.slice(at));
-  return <>{parts}</>;
 }
 
 function ItemIcon({ item }: { item: PaletteItem }) {
