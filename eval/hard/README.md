@@ -162,6 +162,21 @@ Keyword + rerank at the top 8 and 10 is 135 and 143 of 180. The search Tool's fi
 
 ## Results
 
+### 2026-10-13: a note on Documents of different dates (#660)
+
+The 10 disagreeing Questions, twice each (20 Answers per cell), as above: before is #548's rules alone, after adds the note the search Tool appends when the Passages it hands come from Documents of different dates. "Handed both": Answers whose searches handed the model the newer and the older Document (or a translation of either).
+
+| | Haiku 5.5 before | Haiku 5.5 after | GPT-6 Luna before | GPT-6 Luna after |
+|---|---|---|---|---|
+| Newer source leads, cited | 18/20 | 18/20 | 15/20 | 16/20 |
+| Names the older one too | 16/20 | 17/20 | 6/20 | **11/20** |
+| Handed both, then led and named the older | 16 of 18 | 17 of 18 | 4 of 15 | **9 of 17** |
+| Quotes found | 45 of 45 | 48 of 48 | 23 of 23 | 35 of 36 |
+
+- Luna now names the older Document in about half its Answers that were handed both. The rest still give only the newer figure.
+- Luna's quote not found cites page 9 of the December 2024 China Economic Update for a sentence on page 8.
+- The note can't fix a misread: twice Luna gave CSF 2.0 five Functions, then named CSF 1.1's five as the older figure.
+
 ### 2026-10-13: the Answer rules (#548), before and after
 
 The Citation part only, with the library added as by default (embeddings off) and no retrieval modes, at `main` 3125b9cd without and with the rules and the Passages' dates. "Before" asked 60 Questions: 5 of each earlier difficulty, spread evenly through each, and the 20 new ones, asked a second time. "After" asked all 25 unanswerable Questions once and the 20 new ones twice, so each cell of the new difficulties counts 20 Answers. Scored with the rules in `lib/answerRules.ts` as committed, from each run's `report.json`. An Apple M2 Max with other work running.
