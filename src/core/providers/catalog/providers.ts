@@ -58,7 +58,7 @@ const PROVIDERS = [
       },
     },
     roles: {
-      answers: "claude-sonnet-5-5",
+      answers: "claude-haiku-5-5",
       strongest: "claude-fable-5-1",
       quickTasks: "claude-haiku-5-5",
       images: "claude-sonnet-5-5",
@@ -114,7 +114,7 @@ const PROVIDERS = [
       reasoningSummary: { options: { openai: { reasoningSummary: "auto" } } },
     },
     roles: {
-      answers: "gpt-6.1-sol",
+      answers: "gpt-6-luna",
       strongest: "gpt-6-astra",
       quickTasks: "gpt-6-luna",
       images: "gpt-6.1-sol",

@@ -52,7 +52,21 @@ A file moved and edited where IncarnaMind didn't see it (while it was closed, or
 
 - **On the same disk** a file keeps its identity there while it is moved or edited in place: its device, file number and creation time, read with Node's `stat` on macOS, Windows and Linux. The creation time tells a file from a later one given the same number after a delete. A Document whose file went with that identity is the file's.
 - **From another disk**, which gives the file a new number, it is the one Document whose file went in this pass or was found missing in the last, on another disk, with the file's name, a size within 10% (16 KB for small files) and an older modified time, provided no other new file in the pass has that name.
-- **Never a guess.** Two Documents that fit, or none, leave the file a new Document, as before. A Save As copy, a Duplicate, a second link to the same file and a file given a deleted file's number stay separate Documents. A file system without file numbers or creation times falls back to the content alone, and so does a file an editor saved by replacing it with a new one while IncarnaMind didn't see it, since that gives it a new number.
+- **Never a guess.** Two Documents that fit, or none, leave the file a new Document, as before. A Save As copy, a Duplicate, a second link to the same file and a file given a deleted file's number stay separate Documents. A file system without file numbers or creation times, and a file an editor saved by replacing it with a new one while IncarnaMind didn't see it, which gives it a new number, were left to the content alone; the next amendment finds them by their name.
 - The file found is a new version of its Document (ADR-0010): it is processed again, keeps its id, Tags, Folder and Citations, and the Citations of the old version keep its text and say the Document changed after they were cited.
 
 **Migration 68** stores the identity beside `path`, in `documents.file_device`, `file_number` and `file_created_ns` (decimal text, since Windows' file numbers don't fit a JavaScript number). Like `path`, they are this computer's: filled in the next time each file is seen, forgotten when a Document's path is pointed somewhere else (Locate folder…, a moved data folder), and never carried by a sync.
+
+## Amendment: a file an editor saved by replacing it (2026-10-13, #604)
+
+Word and Pages save a .docx by writing a new file and putting it in place of the old one, so a file moved and then saved has a new file number, and the rule above missed it: it came back as a new Document without its Tags. Measured on macOS: Word keeps the old file's creation time, to the nanosecond; Pages keeps nothing. Both made the file much larger (3,559 to 12,855 bytes, 3,552 to 7,723).
+
+When a file's content and its identity on its disk match no Document, it is now taken for the one Document whose file went in this pass, or was found missing in the last, with the file's name and extension, on the same disk:
+
+- **The creation time kept** (Word): the Document whose file had the same device and creation time. It holds even when another new file has the name.
+- **Nothing kept** (Pages and others): the Document with an older modified time, if no other new file in the pass has the name. **No size bound** on the same disk: a bound tight enough to tell two files apart turns away real saves, which can make a file four times larger, and a loose one adds nothing to the name, the disk and the old file being gone. From another disk, the size bound above still holds.
+- **Exactly one candidate**, never a live file: two Documents that fit leave the file a new Document, as does a Document whose file is still there.
+
+The Document keeps its id, Tags, Citations and Folder membership; its path, Folder and content hash change, and the new version is processed.
+
+**What these clues can't tell apart, and so now count as the same Document:** a Save As under the same name into another folder, with the original deleted before IncarnaMind looks; a different file given a deleted file's name elsewhere on the disk. **Still new Documents:** a Finder Duplicate ("name copy") and a Save As under a new name, a file whose name changed as it was edited, a file while its original is still there, any file when two Documents or two new files share its name and no creation time decides, and a Document found missing before the last pass. A file system without file numbers or creation times is matched by the name too, the same way.
