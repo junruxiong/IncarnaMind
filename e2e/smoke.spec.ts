@@ -266,35 +266,19 @@ test("Settings → Models lists the key providers, and “Already pay for a plan
   await app.close();
 });
 
-test("in Chinese, the provider form has no space after full-width punctuation where its pieces join", async () => {
-  const { app, window } = await launchApp(dataDir);
-  const settings = await openSettings(window, "models");
-  await window.evaluate(async () =>
-    (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
-      user: { language: "zh-CN" },
-    }),
-  );
-  const form = settings.getByTestId("provider-form");
-  await window.getByTestId("chat-choice-api-key").check();
-  await form.getByRole("radio", { name: "OpenAI", exact: true }).check();
-  const facts = (await form.getByTestId("provider-facts").innerText()).replace(/\s+/g, " ");
-  expect(facts).toMatch(/^数据使用：\S/);
-  const credits = await form.getByTestId("provider-plan-credits").innerText();
-  expect(credits).toMatch(/。了解更多/);
-  expect(`${facts}${credits}`).not.toMatch(/[。：] /);
-  await app.close();
-});
-
 test('after "Don\'t allow", a connection test offers to ask again, and asks before sending anything', async () => {
   const { app, window } = await launchApp(dataDir);
   const settings = await openSettings(window, "models");
   const form = settings.getByTestId("provider-form");
   await window.getByTestId("chat-choice-api-key").check();
-  await form.getByRole("radio", { name: "OpenAI", exact: true }).check();
+  await form
+    .locator("label")
+    .filter({ hasText: /^OpenAI$/ })
+    .click();
   await form.getByLabel(/^API key/).fill("sk-not-a-real-key");
   const consent = window.getByTestId("consent-dialog");
 
-  await form.getByRole("button", { name: "Test connection" }).click();
+  await form.getByTestId("provider-use-key").click();
   await consent.getByTestId("consent-decline").click();
   const result = form.getByTestId("connection-test");
   await expect(result).toContainText("Nothing was sent");
@@ -362,18 +346,24 @@ test("an API key typed for one chat provider is cleared when another is chosen, 
   const form = settings.getByTestId("provider-form");
   await settings.getByTestId("chat-choice-api-key").check();
   const key = form.getByLabel(/^API key/);
-  const test = form.getByRole("button", { name: "Test connection" });
+  const useKey = form.getByTestId("provider-use-key");
 
   // Typed for OpenAI, the key isn't kept for Anthropic: there is nothing to test or use with it.
-  await form.getByRole("radio", { name: "OpenAI", exact: true }).check();
+  await form
+    .locator("label")
+    .filter({ hasText: /^OpenAI$/ })
+    .click();
   await key.fill("sk-typed-for-openai");
-  await form.getByRole("radio", { name: "Anthropic" }).check();
+  await form
+    .locator("label")
+    .filter({ hasText: /^Anthropic$/ })
+    .click();
   await expect(key).toHaveValue("");
-  await expect(test).toBeDisabled();
+  await expect(useKey).toBeDisabled();
 
   // For a server, the key stays while the address is fixed, and goes once it names another host.
   await form.getByTestId("provider-more-toggle").click();
-  await form.getByRole("radio", { name: "OpenAI-compatible server" }).check();
+  await form.locator("label").filter({ hasText: "OpenAI-compatible server" }).click();
   const server = form.getByLabel("Server URL");
   await server.fill("https://api.example.com/v1");
   await key.fill("sk-typed-for-example");

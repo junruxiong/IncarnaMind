@@ -53,7 +53,7 @@ export function ModelSetupCard() {
     <section
       data-testid="model-setup"
       aria-labelledby="model-setup-title"
-      className="flex max-h-[70vh] flex-col gap-3 overflow-y-auto px-4 py-3"
+      className="flex max-h-[85vh] flex-col gap-3 overflow-y-auto px-4 py-3"
     >
       <div className="flex flex-col gap-1">
         <h2 id="model-setup-title" className="text-[15px] leading-6 font-semibold text-ink">
@@ -94,47 +94,62 @@ export function ModelSetupCard() {
           {t("setup.other")}
         </summary>
         <div className="mt-2 flex flex-col gap-2">
-          {chinese ? (
+          {view === null || view === "deepseek" ? (
             <>
-              <Way
-                testId="way-key"
-                title={t("setup.way.key")}
-                line={t("setup.way.key.line")}
-                onClick={() => open("key")}
-              />
-              <Way
-                testId="way-local"
-                title={t("setup.way.local")}
-                line={t("setup.way.local.line")}
-                onClick={() => open("local")}
-              />
-              <Way
-                testId="way-chatgpt"
-                title={t("setup.way.chatgpt")}
-                line={t("setup.way.chatgpt.line")}
-                onClick={() => open("chatgpt")}
-              />
+              {chinese ? (
+                <>
+                  <Way
+                    testId="way-key"
+                    title={t("setup.way.key")}
+                    line={t("setup.way.key.line")}
+                    onClick={() => open("key")}
+                  />
+                  <Way
+                    testId="way-local"
+                    title={t("setup.way.local")}
+                    line={t("setup.way.local.line")}
+                    onClick={() => open("local")}
+                  />
+                  <Way
+                    testId="way-chatgpt"
+                    title={t("setup.way.chatgpt")}
+                    line={t("setup.way.chatgpt.line")}
+                    onClick={() => open("chatgpt")}
+                  />
+                </>
+              ) : (
+                <>
+                  <Way
+                    testId="way-key"
+                    title={t("setup.way.key")}
+                    line={t("setup.way.key.line")}
+                    onClick={() => open("key")}
+                  />
+                  <Way
+                    testId="way-local"
+                    title={t("setup.way.local")}
+                    line={t("setup.way.local.line")}
+                    onClick={() => open("local")}
+                  />
+                </>
+              )}
+              {!chinese && <ClaudeWay />}
             </>
           ) : (
             <>
-              <Way
-                testId="way-key"
-                title={t("setup.way.key")}
-                line={t("setup.way.key.line")}
-                onClick={() => open("key")}
-              />
-              <Way
-                testId="way-local"
-                title={t("setup.way.local")}
-                line={t("setup.way.local.line")}
-                onClick={() => open("local")}
-              />
+              <button
+                type="button"
+                data-testid="setup-back"
+                onClick={() => setView(null)}
+                className="self-start text-[13px] font-semibold text-accent underline-offset-2 hover:underline"
+              >
+                ‹ {t("setup.other")}
+              </button>
+              {view === "key" && <ProviderForm providers={providers} onSaved={() => undefined} />}
+              {view === "local" && <LocalWay ollama={ollama} />}
+              {view === "chatgpt" && <ChatGptWay />}
             </>
           )}
-          {view === "key" && <ProviderForm providers={providers} onSaved={() => undefined} />}
-          {view === "local" && <LocalWay ollama={ollama} />}
-          {view === "chatgpt" && <ChatGptWay />}
-          {!chinese && <ClaudeWay />}
         </div>
       </details>
 
