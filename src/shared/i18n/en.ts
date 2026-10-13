@@ -1127,8 +1127,6 @@ export const en = {
   "tags.colour.purple": "Purple",
   "tags.colour.gray": "Grey",
   "tags.filter.review": "Needs review",
-  "tags.chip.filter": "Show only Documents tagged {tag}",
-  "tags.chip.unfilter": "Stop filtering by {tag}",
   "tags.chip.more": "{count} more: {names}",
   "tags.marks": "Tags: {names}",
   "tags.chip.reviewTitle":
@@ -1147,6 +1145,7 @@ export const en = {
   "tags.picker.back": "Back",
   "tags.picker.none": "No Tags match.",
   "tags.picker.hint": "Enter adds · Backspace removes",
+  "tags.picker.keys": "↵ adds or removes · ⌫ removes the last · {undo} undoes · Esc closes",
   "tags.picker.some": "on {count} of {total}",
   "tags.picker.remove": "Remove {tag}",
   "tags.picker.automatic": "automatic",
