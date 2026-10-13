@@ -10,6 +10,7 @@ import {
   dismissChatSetup,
   documentIdOf,
   launchApp,
+  leaveText,
   newMind,
   openDocumentMenu,
   openDocumentTags,
@@ -59,15 +60,6 @@ const documentRow = async (window: Page, name: string) =>
   window.locator(
     `[data-testid="document-list-item"][data-document-id="${await documentIdOf(window, name)}"]`,
   );
-
-/** Clicks the empty foot of the sidebar's tree, where ⌘Z goes to the app's changes. */
-async function leaveText(window: Page): Promise<void> {
-  const box = await window.getByTestId("sidebar-tree").boundingBox();
-  if (!box) throw new Error("The sidebar isn't showing.");
-  await window.mouse.move(box.x + box.width / 2, box.y + box.height - 8, { steps: 8 });
-  await window.mouse.down();
-  await window.mouse.up();
-}
 
 const undo = (window: Page) => window.keyboard.press("ControlOrMeta+z");
 const redo = (window: Page) => window.keyboard.press("ControlOrMeta+Shift+z");

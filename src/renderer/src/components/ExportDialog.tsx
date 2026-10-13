@@ -109,7 +109,7 @@ function SaveToRow() {
       const next = await chooseOutputLocation();
       if (next) setOutput(next);
     } catch (failure) {
-      setProblem(errorMessage(failure));
+      setProblem(errorMessage(failure, t));
     }
   };
   const location = output?.location ?? null;
@@ -206,7 +206,7 @@ function ExportOptionsForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
       useAppStore.setState({ settings });
       onDone();
     } catch (failure) {
-      setProblem(errorMessage(failure));
+      setProblem(errorMessage(failure, t));
     } finally {
       setSaving(false);
     }
