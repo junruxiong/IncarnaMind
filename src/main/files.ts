@@ -23,7 +23,7 @@ import {
 } from "electron";
 import type { Core } from "../core";
 import { FILES_CHANNELS } from "../shared/bridge";
-import { translate } from "../shared/i18n";
+import { type MessageKey, translate } from "../shared/i18n";
 import { type FileLogger, logsFolder, logWindowError } from "./log";
 import { isEditMenuState, setEditMenu, setMenuSidebarHidden } from "./menu";
 import { rememberPick, startFolder, startNear } from "./pickerFolders";
@@ -213,14 +213,19 @@ export function serveFileActions(
     return picked;
   });
 
-  // The core reads the file and keeps a copy for the Mind; this is only the User choosing it (#104).
-  ipcMain.handle(FILES_CHANNELS.pickWordFile, async (event): Promise<string | null> => {
+  /** One file of a kind, for the core to read: only the User choosing it. */
+  const pickOneFile = async (
+    event: IpcMainInvokeEvent,
+    title: MessageKey,
+    filter: MessageKey,
+    extension: string,
+  ): Promise<string | null> => {
     refuseUnknown(event);
     const { language } = await core.getSettings();
     const openOptions: OpenDialogOptions = {
-      title: translate(language, "wordImport.pick.title"),
+      title: translate(language, title),
       properties: ["openFile"],
-      filters: [{ name: translate(language, "wordImport.pick.filter"), extensions: ["docx"] }],
+      filters: [{ name: translate(language, filter), extensions: [extension] }],
       defaultPath: startFolder(dataDir, "documents", app.getPath("downloads")),
     };
     const window = BrowserWindow.fromWebContents(event.sender);
@@ -230,7 +235,16 @@ export function serveFileActions(
     const picked = canceled ? null : (filePaths[0] ?? null);
     if (picked) rememberPick(dataDir, "documents", picked);
     return picked;
-  });
+  };
+
+  // The core reads the file and keeps a copy for the Mind (#104).
+  ipcMain.handle(FILES_CHANNELS.pickWordFile, (event) =>
+    pickOneFile(event, "wordImport.pick.title", "wordImport.pick.filter", "docx"),
+  );
+  // The core adds it to the Library and makes a Mind of its text (#97).
+  ipcMain.handle(FILES_CHANNELS.pickPdfFile, (event) =>
+    pickOneFile(event, "verify.pick.title", "verify.pick.filter", "pdf"),
+  );
 
   // Only a folder the User linked: its path comes from the core's list, never from the page.
   ipcMain.handle(FILES_CHANNELS.showLinkedFolder, async (event, linkedFolderId: unknown) => {

@@ -4575,6 +4575,7 @@ export const dataKinds = [
   "scoped-minds",
   "answers",
   "web-searches",
+  "verified-document",
 ] as const;
 
 export type DataKind = (typeof dataKinds)[number];

@@ -58,7 +58,7 @@ import { createVerify, type VerifyOptions } from "./verify";
  * What the "checks" flow sends: the sentences checked, with their paragraphs,
  * the Passages found, and a verified document's sentences, to find its claims (#97).
  */
-export const CHECKS_FLOW_SENDS = ["selection", "passages", "document-text"] as const;
+export const CHECKS_FLOW_SENDS = ["selection", "passages", "verified-document"] as const;
 
 /** The longest claim one check takes, in characters: a sentence, not a page. */
 const MAX_CLAIM_CHARACTERS = 2_000;

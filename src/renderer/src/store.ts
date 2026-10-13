@@ -97,6 +97,8 @@ export interface OpenDocumentHow {
   as: "citation" | "list" | "library" | "here";
   from?: string;
   keep?: boolean;
+  /** "citation": a tab of its own, not a preview the next Citation opened replaces; the focus stays. */
+  stay?: boolean;
 }
 
 interface AppState extends LayoutSlice {
@@ -1061,9 +1063,9 @@ export const useAppStore = create<AppState>()((set, get) => {
                 item,
                 ...at,
                 ...keep,
-                preview: true,
+                preview: !how.stay,
                 where: { in: "side", ...(how.from && { from: how.from }) },
-                focus: merged,
+                focus: merged && !how.stay,
               };
       void get().changeLayout(change);
     },
