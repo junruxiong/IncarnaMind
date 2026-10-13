@@ -2879,7 +2879,7 @@ export interface EmbeddingSettings {
    * "Keep everything on this computer": only embedding providers on this
    * computer can be chosen, and search results aren't reranked by a cloud
    * service. Turned on in Settings, or by choosing local models with one
-   * click (`selectOllama`).
+   * click (`selectOllama`, when the User asks for it).
    */
   localOnly: boolean;
   /** Set while Documents are embedded again after a switch. */
@@ -3714,8 +3714,12 @@ export interface CheckSentencesInput {
 
 /** What `checkSentences` did. */
 export type CheckSentencesResult =
-  /** Each sentence has its mark: `checked` of them with a verdict, the rest not checked. */
-  | { kind: "checked"; sentences: number; checked: number }
+  /**
+   * Each sentence has its mark: `checked` of them with a verdict, the rest not
+   * checked. `smallModel`: a model on this computer too small to judge
+   * reliably made the verdicts (#680), so they carry a notice.
+   */
+  | { kind: "checked"; sentences: number; checked: number; smallModel: boolean }
   /** Nothing was sent: the model can't be used now, and `readiness` says why. */
   | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
   /** Nothing was sent: local mode is on, and the model isn't on this computer. */
@@ -4490,6 +4494,11 @@ export interface SelectOllamaInput {
   baseUrl?: string;
   /** Defaults to the recommended model. */
   model?: string;
+  /**
+   * "Also keep everything on this computer": Local mode is turned on or off
+   * to match. Left out, Local mode stays as it was.
+   */
+  localOnly?: boolean;
 }
 
 export interface OllamaPullProgress {
