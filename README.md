@@ -15,11 +15,11 @@
   <a href="#download"><b>Download</b></a> ·
   <a href="#what-you-can-do">What you can do</a> ·
   <a href="#your-files-stay-yours">Privacy</a> ·
-  <a href="https://github.com/junruxiong/IncarnaMind/discussions">Discussions</a>
+  <a href="https://github.com/IncarnaMind/IncarnaMind/discussions">Discussions</a>
   <br><br>
   <img alt="Desktop app for macOS, Windows and Linux" src="https://img.shields.io/badge/macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-desktop%20app-17191C">
-  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/github/license/junruxiong/IncarnaMind?color=17191C"></a>
-  <!-- After the first release, add: <a href="https://github.com/junruxiong/IncarnaMind/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/junruxiong/IncarnaMind?color=17191C"></a> -->
+  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/github/license/IncarnaMind/IncarnaMind?color=17191C"></a>
+  <!-- After the first release, add: <a href="https://github.com/IncarnaMind/IncarnaMind/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/IncarnaMind/IncarnaMind?color=17191C"></a> -->
 </p>
 
 <p align="center"><img src="docs/images/demo.gif" width="880" alt="Eight screens in turn: a Mind with the assistant beside it, its Answer's citations checked; the Answer's steps unfolded, showing what it searched and the sources it used; a Citation opened beside the note with the quote highlighted on the PDF page; the assistant's change waiting in a Mind to accept or reject; the Library with every Document, Folders and Tags; three groups of tabs side by side; a meeting written in a Mind while the assistant answers from the live transcript; and the app in Chinese."></p>
@@ -30,10 +30,10 @@
 
 ## Download
 
-**IncarnaMind isn't released yet.** Once it is, the [Releases page](https://github.com/junruxiong/IncarnaMind/releases) will have installers for macOS (Apple silicon and Intel), Windows and Linux. To hear when, [leave your e-mail](https://tally.so/r/rjN2jL?ref=readme) or click **Watch → Custom → Releases** at the top of this page. To try it now, run it from source with Node.js 24 or newer:
+**IncarnaMind isn't released yet.** Once it is, the [Releases page](https://github.com/IncarnaMind/IncarnaMind/releases) will have installers for macOS (Apple silicon and Intel), Windows and Linux. To hear when, [leave your e-mail](https://tally.so/r/rjN2jL?ref=readme) or click **Watch → Custom → Releases** at the top of this page. To try it now, run it from source with Node.js 24 or newer:
 
 ```shell
-git clone https://github.com/junruxiong/IncarnaMind.git && cd IncarnaMind
+git clone https://github.com/IncarnaMind/IncarnaMind.git && cd IncarnaMind
 npm install && npm run dev
 ```
 
@@ -98,15 +98,15 @@ There's no account and no IncarnaMind server. Your Minds and the search index st
 
 ## Coming next
 
-Planned, not available yet, with no dates (see the [roadmap](https://github.com/junruxiong/IncarnaMind/issues/74)): asking during a meeting, with answers that cite its live transcript; the assistant editing your Minds, each change waiting for you to accept it; Word files opened and exported back with tracked changes; your drafts, and other people's documents, checked against your files; comparison tables across documents; and research Tasks that run in the background.
+Planned, not available yet, with no dates (see the [roadmap](https://github.com/IncarnaMind/IncarnaMind/issues/74)): asking during a meeting, with answers that cite its live transcript; the assistant editing your Minds, each change waiting for you to accept it; Word files opened and exported back with tracked changes; your drafts, and other people's documents, checked against your files; comparison tables across documents; and research Tasks that run in the background.
 
 ## Contributing
 
-Code, testing with your own documents, translations and ideas are all welcome: start with [CONTRIBUTING.md](CONTRIBUTING.md), [open an issue](https://github.com/junruxiong/IncarnaMind/issues/new/choose) or ask in [Discussions](https://github.com/junruxiong/IncarnaMind/discussions).
+Code, testing with your own documents, translations and ideas are all welcome: start with [CONTRIBUTING.md](CONTRIBUTING.md), [open an issue](https://github.com/IncarnaMind/IncarnaMind/issues/new/choose) or ask in [Discussions](https://github.com/IncarnaMind/IncarnaMind/discussions).
 
 ## History
 
-IncarnaMind began in 2023 as a Python command-line tool for chatting with your PDFs, starred by about 800 of you, and was rebuilt in 2026 as a desktop app around one idea: an answer from your files is only useful if you can check it. The old tool lives on at the [`v1-python-cli`](https://github.com/junruxiong/IncarnaMind/tree/v1-python-cli) tag. Thank you for sticking around, and if IncarnaMind is useful to you, a star helps other people find it.
+IncarnaMind began in 2023 as a Python command-line tool for chatting with your PDFs, starred by about 800 of you, and was rebuilt in 2026 as a desktop app around one idea: an answer from your files is only useful if you can check it. The old tool lives on at the [`v1-python-cli`](https://github.com/IncarnaMind/IncarnaMind/tree/v1-python-cli) tag. Thank you for sticking around, and if IncarnaMind is useful to you, a star helps other people find it.
 
 <details>
 <summary>Citing IncarnaMind</summary>
@@ -114,7 +114,7 @@ IncarnaMind began in 2023 as a Python command-line tool for chatting with your P
 ```bibtex
 @misc{IncarnaMind2023, author = {Junru Xiong}, title = {IncarnaMind}, year = {2023},
   publisher = {GitHub}, journal = {GitHub Repository},
-  howpublished = {\url{https://github.com/junruxiong/IncarnaMind}}}
+  howpublished = {\url{https://github.com/IncarnaMind/IncarnaMind}}}
 ```
 
 </details>
