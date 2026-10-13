@@ -230,6 +230,7 @@ test("A supported sentence's card names the Document as it is named now, after a
   await pointAndClick(window, card.getByTestId("claim-open"));
   const viewerTitle = window.getByTestId("viewer-title");
   await expect(viewerTitle).toHaveText("Tides");
+  await expect(window.getByTestId("pdf-page-number")).toHaveValue("2");
   await viewerTitle.dblclick();
   const field = window.getByTestId("viewer-title-rename");
   await expect(field).toBeFocused();
