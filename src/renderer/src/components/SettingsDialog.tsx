@@ -2,7 +2,6 @@ import { type ReactNode, useEffect, useState } from "react";
 import type { LanguagePreference } from "../../../core/language";
 import type { MessageKey } from "../../../shared/i18n";
 import { files } from "../core";
-import { errorMessage } from "../errors";
 import { useT } from "../i18n";
 import { type SettingsPage, settingsPages } from "../settingsPages";
 import { recordUsage, useAppStore } from "../store";
@@ -19,6 +18,7 @@ import { ChatGptPlanSettings } from "./providers/ChatGptPlanSettings";
 import { ChatModelSettings } from "./providers/ChatModelSettings";
 import { EmbeddingSettingsSection } from "./providers/EmbeddingSettings";
 import { JevSettingsSection } from "./providers/JevSettings";
+import { OtherModelsSettings } from "./providers/OtherModelsSettings";
 import { RerankSettingsSection } from "./providers/RerankSettings";
 import { SkillScriptsSettings, SkillsSettings } from "./SkillsSettings";
 import { SpendingCapSettings } from "./SpendingCapSettings";
@@ -172,6 +172,7 @@ function PageContent({ page }: { page: SettingsPage }) {
           <Titled title="providers.settings.title">
             <ChatModelSettings />
           </Titled>
+          <OtherModelsSettings />
           <ChatGptPlanSettings />
           <JevSettingsSection />
           <Titled title="library.settingsTitle" testId="organization-settings">
@@ -288,7 +289,7 @@ function DataFolderSettings() {
   const t = useT();
   const open = (folder: Promise<void>) =>
     folder.catch((failure: unknown) => {
-      useAppStore.setState({ actionError: errorMessage(failure) });
+      useAppStore.getState().reportError(failure);
     });
   return (
     <section data-testid="data-folder-settings">
