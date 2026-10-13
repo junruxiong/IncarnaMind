@@ -203,15 +203,18 @@ export function citedTables(blocks: readonly NodeJSON[]): NodeJSON[] {
 }
 
 const LEAD_IN =
-  /^(?:(?:sure|certainly|of course|okay|ok)\b|here(?:'s| is| are)\b|below (?:is|are)\b|以下是|下面是|好的|当然|这是|这里是|如下)/iu;
+  /^(?:(?:sure|certainly|of course|okay|ok)\b|here(?:'s| is| are)\b|below (?:is|are)\b|以下是|下面是|好的|当然|如下)/iu;
 const CLOSING_NOTE =
   /^(?:(?:note|notes|please note|n\.b\.|i hope|hope this|let me know|feel free)\b|注[：:]|备注|说明[：:]|希望|如需|如果需要|如有)/iu;
+/** A figure or a bracketed unit, "(GBP m)": framing that says something about the content stays. */
+const SAYS_SOMETHING =
+  /\d|[(（][^)）]+[)）]|\b(?:figures?|currency|units?|thousands?|millions?|billions?|[A-Z]{3})\b|[%％万亿元]/u;
 const CONTENT_BLOCKS = new Set(["table", "bulletList", "orderedList", "heading", "codeBlock"]);
 
 /**
  * An Answer's content without its framing, for Add to note: the model's
  * lead-in before the content ("Here is a draft:", "以下是…：") and its closing
- * note after it ("Note: …", "注：…"), when they hold no Citation and the
+ * note after it ("Note: …", "注：…"), when they hold no Citation, figure or bracketed unit and the
  * Answer has more than the one paragraph. What the User selected is added as it
  * is: this is for a whole Answer.
  */
@@ -223,6 +226,7 @@ export function withoutFraming(blocks: readonly NodeJSON[]): NodeJSON[] {
     first?.type === "paragraph" &&
     next &&
     !holdsCitation(first) &&
+    !SAYS_SOMETHING.test(textOf(first)) &&
     (LEAD_IN.test(textOf(first).trim()) ||
       (/[:：]\s*$/u.test(textOf(first)) && CONTENT_BLOCKS.has(next.type)))
   ) {
@@ -233,6 +237,7 @@ export function withoutFraming(blocks: readonly NodeJSON[]): NodeJSON[] {
     last?.type === "paragraph" &&
     kept.length > 1 &&
     !holdsCitation(last) &&
+    !SAYS_SOMETHING.test(textOf(last)) &&
     CLOSING_NOTE.test(textOf(last).trim())
   ) {
     kept = kept.slice(0, -1);

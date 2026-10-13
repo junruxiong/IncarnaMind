@@ -20,6 +20,13 @@ describe("withoutFraming", () => {
     ]);
     expect(withoutFraming([p("以下是草稿："), table, p("注：以上仅为草稿。")])).toEqual([table]);
   });
+  test("keeps framing that says something: units, figures, and a sentence that starts 这是", () => {
+    const units = p("Revenue and operating profit, FY2020–24 (GBP m):");
+    const note = p("Note: figures in GBP millions.");
+    expect(withoutFraming([units, table, note])).toEqual([units, table, note]);
+    const real = p("这是公司首次亏损");
+    expect(withoutFraming([real, table])).toEqual([real, table]);
+  });
   test("keeps a lone paragraph, a Citation-bearing one and ordinary prose", () => {
     expect(withoutFraming([p("Here is a draft")])).toEqual([p("Here is a draft")]);
     const cited = { type: "paragraph", content: [{ type: "text", text: "Note: " }, citation] };
