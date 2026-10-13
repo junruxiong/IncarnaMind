@@ -376,9 +376,7 @@ export function createContradictionWatch(options: WatchOptions) {
       const { requestId, mindId } = input;
       const ready = plan(mindId);
       if (ready.kind !== "ready") return ready;
-      const model = await options.prepare(
-        input.model ?? modelOf(mindId) ?? options.defaultModel(),
-      );
+      const model = await options.prepare(input.model ?? modelOf(mindId) ?? options.defaultModel());
       if (!model.ok) return model.result;
       const tracked = options.track(requestId, mindId);
       try {
