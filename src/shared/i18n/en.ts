@@ -1801,6 +1801,8 @@ export const en = {
   "composer.model.via.localMac": "on this Mac",
   "composer.model.via.cloud": "cloud, on ollama.com",
   "composer.model.loading": "Looking for models…",
+  "composer.model.search": "Search models",
+  "composer.model.noMatch": "No model matches.",
   "composer.model.default": "Default for new Minds: {model}",
   "composer.model.defaultUnset": "No default model yet",
   "models.other.title": "Other models",
