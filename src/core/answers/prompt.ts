@@ -90,8 +90,15 @@ export function signInNeededInstructions(connectorNames: readonly string[]): str
   return `The User's ${plural ? "Connectors" : "Connector"} ${names} ${plural ? "need" : "needs"} the User to sign in again (in Settings → Connectors), so ${plural ? "their" : "its"} Tools can't be used for this Answer. If the Question needs ${plural ? "them" : "it"}, say so in one short sentence, then answer as well as you can without ${plural ? "them" : "it"}.`;
 }
 
-const NOT_COVERED =
-  "If the Documents don't cover the Question, say so plainly, then answer from your own knowledge if you can, without markers.";
+/**
+ * What the Documents don't answer is said, and left there (#548): in an app
+ * where claims carry Citations, a figure from the model's own knowledge reads
+ * as one from the User's Documents. General knowledge only for a general
+ * Question, labelled, and without figures. `cite`: the Answer cites with markers.
+ */
+function notCovered(cite: boolean): string {
+  return `If the Documents don't cover the Question, say so plainly. You may add what the Passages do say that comes closest${cite ? ", cited" : ""}, then stop: never fill the gap from your own knowledge, so no figure, date or name that isn't in a Passage. Only a general Question that isn't about the User's Documents (a concept or a method) may be answered from your own knowledge, in a paragraph that starts "Not from your Documents:" ("以下内容不是来自你的文档："), with no figures${cite ? " and no markers" : ""}.`;
+}
 
 /**
  * A premise the Passages don't support, and Passages that disagree (#548):
@@ -102,7 +109,7 @@ function readingRules(cite: boolean): string {
   const marker = (n: number) => (cite ? `[^${n}]` : "");
   return [
     `- If the Question takes for granted what the Passages don't say (an approval, a date, a figure, a cause), say so first, in one plain sentence, then answer from what they say: "The Documents don't record a Board approval; the 14 May memo asks for one." / "文档中没有董事会批准的记录；5 月 14 日的备忘录是在申请批准。"`,
-    `- If Passages disagree, lead with the newer Document by its date (a Passage's date is its Document's: the date it states, else when its file last changed)${cite ? " and cite it" : ""}, then name the older one, what it says and its date in one sentence${cite ? ", cited too" : ""}: "Report outages over 4 hours (memo, May 2025)${marker(1)}; the older handbook (2024) says 6${marker(2)}." / "2025 年 5 月的备忘录要求报告超过 4 小时的停电${marker(1)}；较早的 2024 年手册写的是 6 小时${marker(2)}。" Say "probably" (可能) only when neither is dated or newer.`,
+    `- If Passages from different Documents disagree, or give different figures for the same thing (one updates the other), lead with the newer Document by its date (a Passage's date is its Document's: the date it states, else when its file last changed)${cite ? " and cite it" : ""}. Then write one sentence naming the older Document, its date and its figure${cite ? ", with a Citation" : ""}; never leave it out: "Report outages over 4 hours (memo, May 2025)${marker(1)}. The older handbook (January 2024) says 6 hours${marker(2)}." / "2025 年 5 月的备忘录要求报告超过 4 小时的停电${marker(1)}。较早的手册（2024 年 1 月）写的是 6 小时${marker(2)}。" Say "probably" (可能) only when neither is dated or newer.`,
   ].join("\n");
 }
 
@@ -196,7 +203,7 @@ export function documentInstructions(
         UNBROKEN_QUOTE,
         "- In the Answer, put the marker as [^1] right after each claim it supports, in a table's cell too. Use only markers you recorded, and add no list of sources.",
         "- Write nothing before your Tool calls: only the Answer, after them.",
-        NOT_COVERED,
+        notCovered(true),
         readingRules(true),
         ...(calculate ? ["", CALCULATE] : []),
       ].join("\n");
@@ -216,7 +223,7 @@ export function documentInstructions(
         `- citations: one record for each marker: ${RECORD}.`,
         UNBROKEN_QUOTE,
         ...(calculate ? [CALCULATIONS] : []),
-        NOT_COVERED,
+        notCovered(true),
         readingRules(true),
       ].join("\n");
     case "none":
@@ -228,7 +235,7 @@ export function documentInstructions(
         passages,
         "",
         "Use them where they help. Don't write citation markers or a list of sources.",
-        "If the Passages don't cover the Question, say so plainly, then answer from your own knowledge if you can.",
+        notCovered(false),
         readingRules(false),
       ].join("\n");
   }
