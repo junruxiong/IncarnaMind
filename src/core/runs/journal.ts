@@ -1,5 +1,5 @@
 /**
- * The Task journal (#126, migration 76): each Task's row in `runs` and its
+ * The Task journal (#126, migration 81): each Task's row in `runs` and its
  * steps in `run_steps`, in SQLite with `synchronous=FULL`, so what is
  * written here is on disk before the step it records goes on. Every write is
  * its own transaction: a force-quit leaves the journal as the last write did.

@@ -21,6 +21,7 @@ import { PlugIcon, ScriptIcon, SkillIcon, StopIcon } from "../components/icons";
 import { DocumentLineIcon, FindSourcesLineIcon } from "../components/lineIcons";
 import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
 import { ProblemLine } from "../components/ProblemLine";
+import { core } from "../core";
 import { formatResetTime } from "../cost";
 import { useFindSources } from "../findSources";
 import { useLanguage, useT } from "../i18n";
@@ -230,6 +231,14 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
   );
 }
 
+/** Failures that can come of a model that can't answer, rather than of the connection. */
+const WRONG_MODEL: ReadonlySet<ProviderErrorKind> = new Set([
+  "model",
+  "provider",
+  "no-answer",
+  "unknown",
+]);
+
 /** A failed Answer, under what was written of it: one line, and the one thing that can fix it. */
 export function AnswerError({
   kind,
@@ -256,11 +265,28 @@ export function AnswerError({
   );
   // Whose plan it was decides where its usage is managed.
   useEffect(() => {
-    if (kind === "plan-limit") useAnswers.getState().loadModels();
+    if (kind === "plan-limit" || WRONG_MODEL.has(kind)) useAnswers.getState().loadModels();
   }, [kind]);
+  // A model the User added to the menu that then failed: one click takes it back out.
+  const added = useAnswers((state) =>
+    state.models?.some(
+      (group) =>
+        group.provider.id === providerId && modelId !== null && group.added.includes(modelId),
+    ),
+  );
+  const removeFromMenu =
+    added && WRONG_MODEL.has(kind) && providerId && modelId
+      ? () => {
+          void core.setChatModelInMenu({ providerId, modelId, inMenu: false }).then(() => {
+            useAnswers.setState({ models: null });
+            useAnswers.getState().loadModels();
+          });
+        }
+      : undefined;
   const { line, fix } = answerProblem(kind, provider);
-  const action =
-    fix.kind === "settings"
+  const action = removeFromMenu
+    ? { label: t("answer.error.removeFromMenu"), onClick: removeFromMenu }
+    : fix.kind === "settings"
       ? { label: t(fix.label), onClick: () => onOpenSettings(fix.page) }
       : fix.kind === "sign-in"
         ? {
@@ -288,6 +314,7 @@ export function AnswerError({
         className="mt-1 select-none"
       >
         {t(line, { model: modelId ?? t("answer.error.thisModel") })}
+        {removeFromMenu && kind !== "model" && ` · ${modelId}`}
         {kind === "plan-limit" && resetsAt && (
           <>
             <span aria-hidden="true"> · </span>

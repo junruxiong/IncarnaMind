@@ -292,6 +292,7 @@
           }
         }
       ],
+      "cannotAnswer": {},
       "nonChat": []
     },
     "openai": {
@@ -1072,6 +1073,19 @@
           "status": "deprecated"
         }
       ],
+      "cannotAnswer": {
+        "babbage-002": "completion",
+        "davinci-002": "completion",
+        "ft:babbage-002": "completion",
+        "ft:davinci-002": "completion",
+        "gpt-3.5-turbo-instruct": "completion",
+        "gpt-3.5-turbo-instruct-0914": "completion",
+        "gpt-audio": "audio",
+        "gpt-audio-1.5": "audio",
+        "gpt-audio-2025-08-28": "audio",
+        "gpt-audio-mini": "audio",
+        "gpt-audio-mini-2025-12-15": "audio"
+      },
       "nonChat": [
         "chatgpt-image-latest",
         "gpt-4o-mini-realtime-preview-2024-12-17",
@@ -1418,6 +1432,7 @@
           "maxOutput": 32768
         }
       ],
+      "cannotAnswer": {},
       "nonChat": [
         "deep-research-max-preview-04-2026",
         "deep-research-preview-04-2026",
@@ -7536,6 +7551,7 @@
           }
         }
       ],
+      "cannotAnswer": {},
       "nonChat": [
         "google/gemini-2.5-flash-image",
         "google/gemini-3-pro-image",
@@ -8191,6 +8207,7 @@
           }
         }
       ],
+      "cannotAnswer": {},
       "nonChat": [
         "codestral-embed",
         "codestral-embed-2505",
@@ -8353,6 +8370,7 @@
           }
         }
       ],
+      "cannotAnswer": {},
       "nonChat": [
         "grok-imagine-image",
         "grok-imagine-image-2.0",
@@ -8419,6 +8437,7 @@
           "maxOutput": 393216
         }
       ],
+      "cannotAnswer": {},
       "nonChat": []
     },
     "qwen": {
@@ -9298,6 +9317,7 @@
           "maxOutput": 1024
         }
       ],
+      "cannotAnswer": {},
       "nonChat": [
         "qwen-image-2.0",
         "qwen-image-2.0-pro",
@@ -10121,6 +10141,7 @@
           }
         }
       ],
+      "cannotAnswer": {},
       "nonChat": [
         "qwen-image-2.0",
         "qwen-image-2.0-pro",
@@ -10182,6 +10203,7 @@
           "maxOutput": 1048576
         }
       ],
+      "cannotAnswer": {},
       "nonChat": []
     },
     "kimi/intl": {
@@ -10255,6 +10277,7 @@
           }
         }
       ],
+      "cannotAnswer": {},
       "nonChat": []
     },
     "glm": {
@@ -10435,6 +10458,7 @@
           "maxOutput": 131072
         }
       ],
+      "cannotAnswer": {},
       "nonChat": []
     },
     "glm/intl": {
@@ -10732,6 +10756,7 @@
           }
         }
       ],
+      "cannotAnswer": {},
       "nonChat": []
     },
     "siliconflow": {
@@ -11212,6 +11237,7 @@
           "maxOutput": 262000
         }
       ],
+      "cannotAnswer": {},
       "nonChat": []
     },
     "siliconflow/intl": {
@@ -12148,6 +12174,7 @@
           }
         }
       ],
+      "cannotAnswer": {},
       "nonChat": []
     }
   }

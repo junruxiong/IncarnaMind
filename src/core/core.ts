@@ -2166,6 +2166,7 @@ export function createCore(adapters: CoreAdapters): Core {
     testChatConnection: (input) => loggingTest("chat")(chat.test(input)),
     getChatReadiness: () => chat.readiness(),
     listChatModels: () => chat.listModels(),
+    setChatModelInMenu: async (input) => chat.setInMenu(input),
     getCostSummary: async () => meter.summary(),
     estimateRun: async (input) => {
       if (!isRecord(input)) throw new InvalidInputError("estimateRun expects an object.");
