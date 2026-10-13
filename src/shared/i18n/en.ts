@@ -2589,6 +2589,8 @@ export const en = {
   "connectors.directory.what": "What it can do",
   "connectors.directory.what.before":
     "Its Tools show here once it's connected, each with whether it asks before it runs.",
+  "connectors.directory.what.listed":
+    "These are its Tools as IncarnaMind reviewed them. Once it's connected, you choose which of them ask first or are off.",
   "connectors.directory.tool.reads": "Reads",
   "connectors.directory.tool.changes": "May change things",
   "connectors.directory.where": "Where your data goes",
@@ -2627,7 +2629,7 @@ export const en = {
   "connectors.error.failed": "It couldn't be connected.",
   "connectors.tools.none": "No Tools",
   "connectors.tools.note":
-    "A Connector says which of its Tools only read; IncarnaMind can't check that. Those run without asking, and the others ask before each call. Change either here.",
+    "A Connector says which of its Tools only read; IncarnaMind can't check that. Those run without asking, and the others ask before each call. Change either here, or turn a Tool off so Answers don't use it.",
   "connectors.form.name": "Name",
   "connectors.form.command": "Command",
   "connectors.form.commandHint":
@@ -2746,16 +2748,18 @@ export const en = {
   "approvals.tools.select": "When an Answer calls {tool}",
   "approvals.tools.ask": "Ask every time",
   "approvals.tools.always": "Always allow",
+  "approvals.tools.off": "Off",
   "approvals.settings.title": "Approvals",
   "approvals.settings.body":
-    "Tools that may change something, and Skill scripts, ask before each run. Here is every Tool you always allow or set to ask every time, and every Skill whose scripts always run. Revoke one to go back to the default.",
+    "Tools that may change something, and Skill scripts, ask before each run. Here is every Tool you always allow, set to ask every time or turned off, and every Skill whose scripts always run. Revoke one to go back to the default.",
   "approvals.settings.empty":
-    "No Tool is set to always allow or to ask every time. No Skill's scripts always run.",
+    "No Tool is set to always allow, to ask every time or to stay off. No Skill's scripts always run.",
   "approvals.settings.revoke": "Revoke",
   "approvals.settings.revokeLabel": "Revoke the setting for {name}",
   "approvals.settings.skillScripts": "Scripts of {skill}",
   "approvals.policy.always": "Always allow",
   "approvals.policy.ask": "Ask every time",
+  "approvals.policy.off": "Off",
   "approvals.policy.alwaysRun": "Always run",
 
   // Onboarding: the example Mind, the "Get started" checklist and the three steps.

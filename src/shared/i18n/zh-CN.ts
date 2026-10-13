@@ -2486,6 +2486,8 @@ export const zhCN = {
   "connectors.directory.try": "在助手里试试",
   "connectors.directory.what": "它能做什么",
   "connectors.directory.what.before": "连接后，这里会列出它的工具，以及每个工具运行前是否先问你。",
+  "connectors.directory.what.listed":
+    "这是 IncarnaMind 审核时看到的工具。连接后，你可以选择哪些工具先问你，哪些关闭。",
   "connectors.directory.tool.reads": "只读",
   "connectors.directory.tool.changes": "可能修改内容",
   "connectors.directory.where": "你的数据去哪里",
@@ -2521,7 +2523,7 @@ export const zhCN = {
   "connectors.error.failed": "无法连接。",
   "connectors.tools.none": "没有工具",
   "connectors.tools.note":
-    "连接器会声明哪些工具只读取内容，IncarnaMind 无法核实。这些工具运行前不会询问，其他工具每次调用前都会询问。你可以在这里更改。",
+    "连接器会声明哪些工具只读取内容，IncarnaMind 无法核实。这些工具运行前不会询问，其他工具每次调用前都会询问。你可以在这里更改，也可以关闭某个工具，让回答不再使用它。",
   "connectors.form.name": "名称",
   "connectors.form.command": "命令",
   "connectors.form.commandHint": "启动 MCP 服务器的程序，例如 npx 或 uvx。查找方式与你的终端相同。",
@@ -2628,15 +2630,17 @@ export const zhCN = {
   "approvals.tools.select": "回答调用 {tool} 时",
   "approvals.tools.ask": "每次询问",
   "approvals.tools.always": "始终允许",
+  "approvals.tools.off": "关闭",
   "approvals.settings.title": "批准",
   "approvals.settings.body":
-    "可能修改内容的工具和技能脚本在每次运行前都会询问。这里列出你始终允许或设为每次询问的每个工具，以及脚本始终运行的每个技能。撤销即可恢复默认。",
-  "approvals.settings.empty": "没有设为始终允许或每次询问的工具，也没有脚本始终运行的技能。",
+    "可能修改内容的工具和技能脚本在每次运行前都会询问。这里列出你始终允许、设为每次询问或已关闭的每个工具，以及脚本始终运行的每个技能。撤销即可恢复默认。",
+  "approvals.settings.empty": "没有设为始终允许、每次询问或关闭的工具，也没有脚本始终运行的技能。",
   "approvals.settings.revoke": "撤销",
   "approvals.settings.revokeLabel": "撤销 {name} 的设置",
   "approvals.settings.skillScripts": "{skill} 的脚本",
   "approvals.policy.always": "始终允许",
   "approvals.policy.ask": "每次询问",
+  "approvals.policy.off": "已关闭",
   "approvals.policy.alwaysRun": "始终运行",
   // Onboarding: the example Mind, the "Get started" checklist and the three steps.
   "editor.hint.empty": "开始写作，或{ask}",
