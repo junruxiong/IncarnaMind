@@ -87,7 +87,8 @@ async function edges(window: Page) {
   const answer = window.getByTestId("assistant-answer").first();
   return {
     panel: await leftOf(assistant),
-    header: await leftOf(window.getByTestId("assistant-title").locator("svg").first()),
+    // The title's words: the header has no icon before them (D189).
+    header: await leftOf(window.getByTestId("assistant-title").locator(".truncate")),
     steps: await leftOf(answer.locator(".answer-steps-icon").first()),
     letter: await answer.getByTestId("assistant-answer-text").evaluate((text) => {
       const first = text.querySelector("p") as HTMLElement;

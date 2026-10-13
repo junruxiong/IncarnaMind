@@ -3244,6 +3244,21 @@ export interface TaskProgress {
   total: number;
 }
 
+/** What the User can ask of a Task from its progress in the thread, as its kind allows (D189). */
+export type TaskAction = "plan" | "tell" | "pause" | "stop";
+
+/**
+ * A step of a Task, as its progress shows it: what it does, in the Task's own
+ * words ("Corvane Agreement · Termination notice"), and how it went. "failed":
+ * it ended without its result (a cell with no Answer); "skipped": the User
+ * chose to go on without it.
+ */
+export interface TaskStep {
+  key: string;
+  text: string;
+  status: "running" | "done" | "failed" | "skipped";
+}
+
 /**
  * A Task (CONTEXT.md): a Run that goes on in the background and keeps its
  * place when IncarnaMind is quit. Its journal (`runs`, `run_steps`) records
@@ -3267,6 +3282,12 @@ export interface Task {
   problem: string | null;
   /** What its model requests have cost, settled and reserved; null with none billed. */
   cost: Money | null;
+  /** What its kind lets the User ask of it, whatever it is doing now. */
+  actions: TaskAction[];
+  /** Its latest steps, oldest first (`listTaskSteps` has them all). */
+  steps: TaskStep[];
+  /** How many steps it has started in all. */
+  stepCount: number;
   startedAt: string;
   finishedAt: string | null;
   updatedAt: string;
@@ -3275,7 +3296,7 @@ export interface Task {
 /** What answering a Task's "unknown-outcome" ask does: the step again, or on without it. */
 export type TaskAskAnswer = "redo" | "skip";
 
-/** Open a Task's place: its Mind, with its row in the tray (`showTask`, a notification's click). */
+/** Open a Task's place: its Mind, with its progress in the thread (`showTask`, a notification's click). */
 export interface TaskShown {
   taskId: string;
   mindId: string | null;
@@ -6827,6 +6848,8 @@ export interface CoreApi {
   stopTask(taskId: string): Promise<Task>;
   /** Answers a Task's "unknown-outcome" ask: do the step again, or go on without it. */
   answerTaskAsk(taskId: string, answer: TaskAskAnswer): Promise<Task>;
+  /** Every step of a Task, in the order each first started. */
+  listTaskSteps(taskId: string): Promise<TaskStep[]>;
 
   /**
    * Asks a Question: its Answer is written into the Mind right after it, as the
@@ -7691,6 +7714,7 @@ const methods: Record<CoreApiMethod, true> = {
   resumeTask: true,
   stopTask: true,
   answerTaskAsk: true,
+  listTaskSteps: true,
   askQuestion: true,
   regenerateAnswer: true,
   stopAnswer: true,
