@@ -6,6 +6,7 @@ import { useGap, useT } from "../i18n";
 import { useAppStore } from "../store";
 import { AskIcon, PlugIcon } from "./icons";
 import { ChevronRightLineIcon, CloseLineIcon } from "./lineIcons";
+import { SLOT, Slotted } from "./Slotted";
 import { buttonStyle } from "./ui";
 
 /**
@@ -19,21 +20,6 @@ type StepKey = "citation" | "documents" | "question";
 interface Step {
   key: StepKey;
   done: boolean;
-}
-
-/** Stands in for an element in a translated message, which is split around it. */
-const SLOT = "";
-
-/** A translated message with an element where its `{name}` placeholder was. */
-function Slotted({ message, slot }: { message: string; slot: ReactNode }) {
-  const [before, after] = message.split(SLOT);
-  return (
-    <>
-      {before}
-      {slot}
-      {after}
-    </>
-  );
 }
 
 /**

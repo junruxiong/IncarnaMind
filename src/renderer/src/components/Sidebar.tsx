@@ -95,8 +95,9 @@ export function SidebarHeader({ children }: { children?: ReactNode }) {
   return (
     <header
       data-testid="sidebar-header"
-      // Its rule is inset 8px each side, like the rows: it never meets the sidebar's edge.
-      className="title-bar sidebar-header relative flex h-11 shrink-0 items-center pr-2 after:absolute after:inset-x-2 after:bottom-0 after:h-px after:bg-rule after:content-['']"
+      // Its rule is inset 8px each side, like the rows: it never meets the sidebar's edge. The
+      // 8px on top put its buttons on the card's band, y 8 to 44, so every header shares a line.
+      className="title-bar sidebar-header relative flex h-11 shrink-0 items-center pt-2 pr-2 after:absolute after:inset-x-2 after:bottom-0 after:h-px after:bg-rule after:content-['']"
     >
       <AppMark />
       <SidebarToggle place="header" />
