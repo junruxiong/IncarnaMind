@@ -6,6 +6,7 @@ import { startMoveDrag } from "../folderDrag";
 import { useT } from "../i18n";
 import { currentTabOf } from "../layoutSlice";
 import { useMindStatus } from "../mindStatus";
+import { selectedOn, useSelectable } from "../selection";
 import { useAppStore } from "../store";
 import { isMoveToKey, TREE_ROW } from "../treeKeys";
 import { useRename } from "../useRename";
@@ -19,8 +20,8 @@ import { rowActionsClass, rowButtonClass, rowClass, rowIconClass, rowPadding } f
 /**
  * A Mind in the sidebar's tree, in its Folder (`depth` 1) or Not in a Folder
  * (0): its title, and an amber dot while one of its Answers waits for the
- * User's approval. Clicking opens it (⌘-click or a middle click in a new
- * tab). Enter opens it. It renames in place: double-click it or press F2;
+ * User's approval. Clicking or Enter opens it and selects just it; ⌘-click
+ * and Shift-click select; a middle click opens it in a new tab. It renames in place: double-click it or press F2;
  * Enter saves, Esc cancels, and a blank title changes nothing.
  * It drags onto a Folder; its menu (⋯, or a right-click) and ⇧⌘M offer the
  * same as "Move to…".
@@ -40,15 +41,22 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
   const row = useRef<HTMLLIElement>(null);
   const title = mindName(mind) || t("mind.untitled");
   const objectMenu = useObjectMenu({ kind: "mind", id: mind.id });
+  const select = useSelectable({ kind: "mind", id: mind.id }, "sidebar", () => openMind(mind.id));
+  const lit = isOpen || select.selected;
+  /** The Minds a drag or "Move to…" from this row takes: all those selected, if it is one of them. */
+  const mindIdsHere = () => {
+    const chosen = selectedOn("sidebar").flatMap((each) => (each.kind === "mind" ? [each.id] : []));
+    return chosen.includes(mind.id) ? chosen : [mind.id];
+  };
 
   if (rename.renaming) {
     return (
-      <li className={rowClass(isOpen)} data-testid="mind-row" data-mind-id={mind.id}>
+      <li className={rowClass(lit)} data-testid="mind-row" data-mind-id={mind.id}>
         <span
           className="flex h-full w-full min-w-0 items-center gap-2 pr-1"
           style={rowPadding(depth)}
         >
-          <MindLineIcon className={rowIconClass(isOpen)} />
+          <MindLineIcon className={rowIconClass(lit)} />
           <InlineName
             value={mind.title}
             label={t("mind.renameLabel", { title })}
@@ -69,15 +77,18 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
   };
 
   return (
+    // biome-ignore lint/a11y/useFocusableInteractive: the row's own button takes the focus, and the arrow keys move between them.
     <li
       data-testid="mind-row"
       data-mind-id={mind.id}
       data-folder-id={mind.folderId ?? ""}
+      role="treeitem"
+      {...select.rowProps}
       draggable
-      onDragStart={(event) => startMoveDrag(event, { mindIds: [mind.id] })}
+      onDragStart={(event) => startMoveDrag(event, { mindIds: mindIdsHere() })}
       {...objectMenu.rowProps}
       ref={row}
-      className={rowClass(isOpen)}
+      className={rowClass(lit)}
     >
       <button
         {...rename.nameProps}
@@ -87,8 +98,8 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
         data-mind-id={mind.id}
         aria-current={isOpen ? "page" : undefined}
         title={title}
-        // ⌘-click (Ctrl-click) or a middle click opens it to the side, as in VS Code.
-        onClick={(event) => openMind(mind.id, { side: event.metaKey || event.ctrlKey })}
+        // A click opens it; ⌘-click and Shift-click select (`useSelectable`). A middle click opens it to the side.
+        onClick={select.onClick}
         onMouseDown={(event) => {
           if (event.button === 1) event.preventDefault(); // no autoscroll
         }}
@@ -102,7 +113,7 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
         className={rowButtonClass}
         style={rowPadding(depth)}
       >
-        <MindLineIcon className={rowIconClass(isOpen)} />
+        <MindLineIcon className={rowIconClass(lit)} />
         <span
           data-testid="row-text"
           className={`min-w-0 flex-1 truncate ${mindName(mind) ? "" : "text-ink-meta"}`}
@@ -145,11 +156,16 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
       </div>
       <MoveToPicker
         anchor={moving}
-        name={title}
-        current={mind.folderId}
+        name={
+          moving && mindIdsHere().length > 1
+            ? t("mind.count", { count: mindIdsHere().length })
+            : title
+        }
+        current={moving && mindIdsHere().length > 1 ? undefined : mind.folderId}
         onChoose={(folderId) => {
-          if (folderId !== mind.folderId) {
-            void useAppStore.getState().moveToFolder({ mindIds: [mind.id] }, folderId);
+          const mindIds = mindIdsHere();
+          if (mindIds.length > 1 || folderId !== mind.folderId) {
+            void useAppStore.getState().moveToFolder({ mindIds }, folderId);
           }
         }}
         onClose={() => setMoving(null)}
