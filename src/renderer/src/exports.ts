@@ -10,6 +10,7 @@ import { useAppStore } from "./store";
 export const FORMAT_LABELS: Readonly<Record<ExportFormat, MessageKey>> = {
   docx: "export.format.docx",
   pdf: "export.format.pdf",
+  html: "export.format.html",
   markdown: "export.format.markdown",
 };
 
@@ -18,6 +19,7 @@ const DEFAULT_PREFERENCES: ExportPreferences = {
   format: "docx",
   docx: { includeQuestions: false },
   pdf: { includeQuestions: false },
+  html: { includeQuestions: false },
 };
 
 export const exportPreferences = (): ExportPreferences =>

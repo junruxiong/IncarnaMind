@@ -13,6 +13,7 @@ import { translate } from "../../../shared/i18n";
 import { useCitationFormattingFor, useMindStyleChoice } from "../citationFormatting";
 import { noteHandle, readMindHandle } from "../commands/handles";
 import { shortcutLabel } from "../commands/keymap";
+import { startCompareDocuments, useComparisons } from "../comparisons";
 import { useComposer } from "../composer";
 import { core } from "../core";
 import { AnswerView } from "../editor/AnswerView";
@@ -24,10 +25,12 @@ import { ChartView } from "../editor/ChartView";
 import { CitationStylePrompt } from "../editor/CitationStylePrompt";
 import { CitationView } from "../editor/CitationView";
 import { CodeBlockView } from "../editor/CodeBlockView";
+import { ComparisonTableView } from "../editor/ComparisonTableView";
 import { Composer, type ComposerHandle } from "../editor/Composer";
 import { ConversationLinks } from "../editor/ConversationLinks";
 import { CitationClusters } from "../editor/citationClusters";
 import { CitationNumbers, redrawFootnotes, setCitationForm } from "../editor/citationNumbers";
+import { comparisonCellView, comparisonRowView } from "../editor/comparisonViews";
 import { CopyCitations } from "../editor/copyCitations";
 import { DocumentChipView } from "../editor/DocumentChipView";
 import { DocumentChipKeys } from "../editor/documentChipKeys";
@@ -44,7 +47,12 @@ import { MarginChecks } from "../editor/MarginChecks";
 import { MathEditing, MathEditor } from "../editor/MathEditor";
 import { MindOutline } from "../editor/MindOutline";
 import { MeetingNotes } from "../editor/meetingNotes";
-import { ComposerDockContext, CountSlotContext, MindIdContext } from "../editor/mindContext";
+import {
+  CompareSheetSlotContext,
+  ComposerDockContext,
+  CountSlotContext,
+  MindIdContext,
+} from "../editor/mindContext";
 import { NoteKeymap } from "../editor/noteKeymap";
 import { noteExtensions } from "../editor/noteSchema";
 import { ProposalBars } from "../editor/ProposalBars";
@@ -57,7 +65,7 @@ import { ScopePicker } from "../editor/ScopePicker";
 import { SectionBreakDialog } from "../editor/SectionBreakDialog";
 import { type SelectionAction, SelectionMenu } from "../editor/SelectionMenu";
 import { SlashMenu } from "../editor/SlashMenu";
-import { noteSlashItems, skillSlashItems } from "../editor/slashItems";
+import { compareSlashItem, noteSlashItems, skillSlashItems } from "../editor/slashItems";
 import { Suggestions } from "../editor/suggestions";
 import { TableMenu } from "../editor/TableMenu";
 import { TableKeys } from "../editor/tableCommands";
@@ -74,6 +82,7 @@ import { useMindTools } from "../mindTools";
 import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
 import { askForSuggestion, describeSuggestion } from "../suggestions";
+import { CompareSheet } from "./CompareSheet";
 import { StartGuide, useGettingStarted, useIsExample } from "./GettingStarted";
 import { MineLineIcon, SparkLineIcon } from "./lineIcons";
 import { MindNotice } from "./MindNotice";
@@ -199,6 +208,29 @@ const chartView = ReactNodeViewRenderer(ChartView, {
 });
 
 /**
+ * A comparison table (#98): its title line, heading row and "+ Question" take
+ * their own pointer and keys, so the editor doesn't select or type over them;
+ * its cells are content the editor draws, never typed in.
+ */
+const comparisonViews = {
+  table: ReactNodeViewRenderer(ComparisonTableView, {
+    stopEvent: ({ event }) => {
+      const target = event.target;
+      if (!(target instanceof Element) || !target.closest("[data-comparison-ui]")) return false;
+      if (event.type.startsWith("drag") || event.type === "drop") return false;
+      const undo =
+        event instanceof KeyboardEvent &&
+        (event.metaKey || event.ctrlKey) &&
+        /^[zy]$/i.test(event.key) &&
+        !(target instanceof HTMLInputElement);
+      return !undo;
+    },
+  }),
+  row: comparisonRowView,
+  cell: comparisonCellView,
+};
+
+/**
  * Notes (see `noteExtensions`), Questions and Answers in the Mind's Yjs
  * document, with the slash menu, the "@" picker of a Question's Search scope,
  * the drag handle, the formatting menu, the table menu, smart typography, the LaTeX field,
@@ -224,6 +256,8 @@ function MindEditorView({
   const isExample = useIsExample(mindId);
   const dock = useContext(ComposerDockContext);
   const countSlot = useContext(CountSlotContext);
+  const sheetSlot = useContext(CompareSheetSlotContext);
+  const comparing = useComparisons((state) => state.sheets[mindId] !== undefined);
   const composer = useRef<ComposerHandle>(null);
   /**
    * Whether the Mind's cursor is where Add to note puts an Answer (#201): since
@@ -283,6 +317,7 @@ function MindEditorView({
           citationView,
           footnoteView: footnoteView(() => footnoteLabel.current),
           documentChipView: ReactNodeViewRenderer(DocumentChipView, { as: "span" }),
+          comparisonViews,
           chartView,
           wordAtomView,
           wordBlockView,
@@ -329,7 +364,10 @@ function MindEditorView({
                 useComposer.getState().requestFocus();
               },
             );
-            return place === "question" ? skills : [...noteSlashItems, ...skills];
+            const compare = compareSlashItem(
+              (afterBlockId) => void startCompareDocuments(mindId, afterBlockId),
+            );
+            return place === "question" ? skills : [...noteSlashItems, compare, ...skills];
           },
         }),
         ScopePicker,
@@ -542,6 +580,10 @@ function MindEditorView({
       {dock &&
         !readOnly &&
         createPortal(<Composer ref={composer} mind={{ editor, doc, mindId }} />, dock)}
+      {sheetSlot &&
+        comparing &&
+        !readOnly &&
+        createPortal(<CompareSheet mindId={mindId} doc={doc} editor={editor} />, sheetSlot)}
       {guide && <StartGuide />}
       {!readOnly && <BlockHandle editor={editor} />}
       {!readOnly && <SelectionMenu editor={editor} ai={aiActions} />}
