@@ -22,6 +22,7 @@ const folder = (changes: Partial<Shape> = {}): Shape => ({
   status: "watching",
   progress: { files: 10, indexed: 10 },
   onlineOnly: { files: 0, bytes: 0, downloading: false },
+  unsupportedFiles: 0,
   ...changes,
 });
 
