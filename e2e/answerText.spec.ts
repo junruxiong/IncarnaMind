@@ -1,9 +1,11 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import type { Editor } from "@tiptap/core";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
+  addToNote,
   askInAssistant,
   assistantAnswers,
   useLocalChatModel as connectLocalChatModel,
@@ -11,9 +13,11 @@ import {
   dismissChatSetup,
   launchApp,
   newMind,
+  pointAndClick,
   removeDataFolder,
   setLanguage,
   setWindowSize,
+  stubClipboard,
 } from "./app";
 
 /**
@@ -225,3 +229,33 @@ for (const language of ["en", "zh-CN"] as const) {
     }
   });
 }
+
+test("the marker glue is drawn only: no invisible character is in the Answer, its copy or the note it is added to", async () => {
+  const window = await start("en");
+  await askInAssistant(window, "What do tides do in each Document?");
+  const answer = assistantAnswers(window).nth(0);
+  const JOINER = "\u2060";
+
+  const inDocument = await answer.getByTestId("assistant-answer-text").evaluate((text) => ({
+    shown: text.textContent ?? "",
+    stored: JSON.stringify((text as unknown as { editor: Editor }).editor.getJSON()),
+  }));
+  expect(inDocument.shown).not.toContain(JOINER);
+  expect(inDocument.stored).not.toContain(JOINER);
+
+  const copied = await stubClipboard(window);
+  await pointAndClick(window, answer.getByTestId("answer-copy"));
+  await expect(answer.getByTestId("answer-copy")).toHaveText("Copied");
+  const clipboard = Object.values(await copied());
+  expect(clipboard.length).toBeGreaterThan(0);
+  for (const text of clipboard) expect(text).not.toContain(JOINER);
+
+  await addToNote(window, answer);
+  const note = window.getByTestId("mind-editor");
+  await expect(note.getByTestId("citation")).toHaveCount(4);
+  const noted = await note.evaluate((editor) =>
+    JSON.stringify((editor as unknown as { editor: Editor }).editor.getJSON()),
+  );
+  expect(noted).not.toContain(JOINER);
+  expect(await note.evaluate((editor) => editor.textContent ?? "")).not.toContain(JOINER);
+});
