@@ -67,6 +67,26 @@ const REPORT = buildPdf([
   },
 ]);
 
+/** The report of #577: amounts in 万元, stated only in the table's heading. */
+const CHENGHU = buildPdf([
+  {
+    chineseLines: [
+      "澄湖科技股份有限公司2025年年度报告",
+      "合并利润表",
+      "单位：万元　币种：人民币",
+      "项目 2025年度 2024年度",
+      "营业收入 120,345.67 98,812.40",
+      "营业成本 70,763.25 59,416.08",
+    ],
+  },
+]);
+
+/** #577: an amount asked for in a larger scale than its page's, which the model once converted itself. */
+const IN_ANOTHER_SCALE = [
+  "澄湖科技2025年营业收入同比增长多少？2025年的毛利率是多少？2025年营业收入合计多少亿元？",
+  "What was Acme's revenue in 2025, in billions of dollars?",
+];
+
 const STYLES = [
   `<numFmts count="1"><numFmt numFmtId="164" formatCode="0.0%"/></numFmts>`,
   `<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>`,
@@ -151,6 +171,78 @@ const LIVE: Live[] = [
   },
 ];
 
+/** A core with `live`'s model as its chat model, and `files` added as Documents. */
+async function liveCore(
+  live: Live,
+  files: readonly { name: string; contents: Uint8Array | string }[],
+) {
+  const core = startCore(await createTempDataFolder(), {
+    createChatModel: createAiSdkChatModel,
+    ...(live.kind === "ollama" && {
+      ollamaModels: live.local
+        ? {
+            ...createOllamaModels(),
+            async describe(baseUrl, model) {
+              const profile = await createOllamaModels().describe(baseUrl, model);
+              if (!profile) return null;
+              const numCtx = Math.min(profile.settings.numCtx, 8_192);
+              const outputTokens = outputTokensFor(numCtx, profile.settings.think);
+              return { ...profile, settings: { ...profile.settings, numCtx, outputTokens } };
+            },
+          }
+        : createOllamaModels(),
+    }),
+  });
+  core.on("consent.requested", (asked) => void core.respondToConsent(asked.requestId, true));
+  await core.saveChatProvider({
+    kind: live.kind,
+    ...(live.apiKey && { apiKey: live.apiKey }),
+    modelId: live.model,
+  });
+  if (live.local) await core.setLocalOnly(true);
+  const sources = await createTempDataFolder();
+  await addAndProcess(
+    core,
+    await Promise.all(files.map((file) => writeSourceFile(sources, file.name, file.contents))),
+  );
+  return core;
+}
+
+/** Keeps what a model wrote, when INCARNAMIND_LIVE_REPORT names a file. */
+function keepReport(report: string[]) {
+  onTestFinished(async () => {
+    if (process.env.INCARNAMIND_LIVE_REPORT)
+      await appendFile(process.env.INCARNAMIND_LIVE_REPORT, `${report.join("\n")}\n\n`);
+  });
+}
+
+/** An Answer as the report keeps it: how it ended, what it reads, what it wrote, and its figures. */
+function reported(question: string, answer: ConversationAnswer, seconds: number): string[] {
+  const language = /\p{Script=Han}/u.test(question) ? "zh-CN" : "en";
+  const shown = textOf(answerBlocks(answer)).replace(/\s+/g, " ").trim();
+  const call = answer.toolCalls.find((each) => each.tool === "calculate");
+  return [
+    `### ${question}`,
+    `${answer.status}${answer.errorKind ? ` (${answer.errorKind})` : ""}, ${answer.citationSupport}, ${seconds.toFixed(1)} s, ${answer.citations.length} Citations, ${answer.figures.length} figures${call?.uncalculated ? `, ${call.uncalculated} couldn't be calculated` : ""}`,
+    "",
+    `> ${shown}`,
+    "",
+    `Written: ${answer.text.replace(/\s+/g, " ")}`,
+    "",
+    ...answer.figures.map(
+      (figure) =>
+        `- [=${figure.marker}] ${figure.shown} = ${figure.formula} (${figure.inputs
+          .map(
+            (input) =>
+              `${input.name}: ${input.number.chars}${input.unitStatement ? ` under "${input.unitStatement.citation.quote}"` : ""}${input.cell?.stored != null ? ` (${input.cell.stored} in ${input.cell.ref})` : ""}`,
+          )
+          .join("; ")})${figure.written ? `; the Answer wrote ${figure.written}` : ""}`,
+    ),
+    `- Neither quoted nor calculated: ${uncheckedIn(answer, shown, language).join(", ") || "none"}`,
+    "",
+  ];
+}
+
 /** Asks in a new conversation and waits until its Answer has ended. */
 async function ask(core: Core, text: string) {
   const started = Date.now();
@@ -200,75 +292,50 @@ describe.each(LIVE)("Calculated figures, live: $name", (live) => {
     `${live.name}: Answers that work numbers out give them as calculated figures`,
     { timeout: 1_800_000 },
     async () => {
-      const core = startCore(await createTempDataFolder(), {
-        createChatModel: createAiSdkChatModel,
-        ...(live.kind === "ollama" && {
-          ollamaModels: live.local
-            ? {
-                ...createOllamaModels(),
-                async describe(baseUrl, model) {
-                  const profile = await createOllamaModels().describe(baseUrl, model);
-                  if (!profile) return null;
-                  const numCtx = Math.min(profile.settings.numCtx, 8_192);
-                  const outputTokens = outputTokensFor(numCtx, profile.settings.think);
-                  return { ...profile, settings: { ...profile.settings, numCtx, outputTokens } };
-                },
-              }
-            : createOllamaModels(),
-        }),
-      });
-      core.on("consent.requested", (asked) => void core.respondToConsent(asked.requestId, true));
-      await core.saveChatProvider({
-        kind: live.kind,
-        ...(live.apiKey && { apiKey: live.apiKey }),
-        modelId: live.model,
-      });
-      if (live.local) await core.setLocalOnly(true);
-      const sources = await createTempDataFolder();
-      await addAndProcess(core, [
-        await writeSourceFile(sources, "Acme Annual Report 2025.pdf", ACME),
-        await writeSourceFile(sources, "某公司2025年年度报告.pdf", REPORT),
-        await writeSourceFile(sources, "区域销售.xlsx", SALES),
+      const core = await liveCore(live, [
+        { name: "Acme Annual Report 2025.pdf", contents: ACME },
+        { name: "某公司2025年年度报告.pdf", contents: REPORT },
+        { name: "区域销售.xlsx", contents: SALES },
       ]);
-
       const report: string[] = [`## ${live.name} · ${live.model}`];
-      onTestFinished(async () => {
-        if (process.env.INCARNAMIND_LIVE_REPORT)
-          await appendFile(process.env.INCARNAMIND_LIVE_REPORT, `${report.join("\n")}\n\n`);
-      });
+      keepReport(report);
       let calculated = 0;
       for (const question of QUESTIONS) {
         const { answer, seconds } = await ask(core, question);
-        const language = /\p{Script=Han}/u.test(question) ? "zh-CN" : "en";
-        const shown = textOf(answerBlocks(answer)).replace(/\s+/g, " ").trim();
-        const call = answer.toolCalls.find((each) => each.tool === "calculate");
         calculated += answer.figures.length;
-        report.push(
-          `### ${question}`,
-          `${answer.status}${answer.errorKind ? ` (${answer.errorKind})` : ""}, ${answer.citationSupport}, ${seconds.toFixed(1)} s, ${answer.citations.length} Citations, ${answer.figures.length} figures${call?.uncalculated ? `, ${call.uncalculated} couldn't be calculated` : ""}`,
-          "",
-          `> ${shown}`,
-          "",
-          `Written: ${answer.text.replace(/\s+/g, " ")}`,
-          "",
-          ...answer.figures.map(
-            (figure) =>
-              `- [=${figure.marker}] ${figure.shown} = ${figure.formula} (${figure.inputs
-                .map(
-                  (input) =>
-                    `${input.name}: ${input.number.chars}${input.unitStatement ? ` under "${input.unitStatement.citation.quote}"` : ""}${input.cell?.stored != null ? ` (${input.cell.stored} in ${input.cell.ref})` : ""}`,
-                )
-                .join("; ")})${figure.written ? `; the Answer wrote ${figure.written}` : ""}`,
-          ),
-          `- Neither quoted nor calculated: ${uncheckedIn(answer, shown, language).join(", ") || "none"}`,
-          "",
-        );
+        report.push(...reported(question, answer, seconds));
         expect(answer.status, answer.errorMessage ?? "").toBe("done");
       }
       // Only models the catalog offers calculate get it (ADR-0021); the others answer as before.
       if (live.kind === "anthropic" || live.kind === "openai")
         expect(calculated).toBeGreaterThan(0);
       else expect(calculated).toBe(0);
+    },
+  );
+});
+
+describe.each(LIVE)("An amount asked for in another scale, live: $name (#577)", (live) => {
+  test.skipIf(live.apiKey === undefined)(
+    `${live.name}: 万元 asked for in 亿元, and millions in billions, never come out 10,000 or 1,000 times too small`,
+    { timeout: 600_000 },
+    async () => {
+      const core = await liveCore(live, [
+        { name: "澄湖科技2025年年度报告.pdf", contents: CHENGHU },
+        { name: "Acme Annual Report 2025.pdf", contents: ACME },
+      ]);
+      const report: string[] = [`## #577 · ${live.name} · ${live.model}`];
+      keepReport(report);
+      for (const question of IN_ANOTHER_SCALE) {
+        const { answer, seconds } = await ask(core, question);
+        report.push(...reported(question, answer, seconds));
+        expect(answer.status, answer.errorMessage ?? "").toBe("done");
+        const shown = textOf(answerBlocks(answer));
+        expect(shown).not.toMatch(/(万|亿)元?\s*(万|亿)元|(million|billion)\s+(million|billion)/);
+        for (const figure of answer.figures.filter((each) => typeof each.value === "number"))
+          expect([120_345.67, 1_482_600], figure.formula).not.toContainEqual(
+            expect.closeTo(figure.value as number, 2),
+          );
+      }
     },
   );
 });
