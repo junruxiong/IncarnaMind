@@ -1,6 +1,7 @@
 import { execFile, execFileSync } from "node:child_process";
 import {
   copyFileSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -81,14 +82,16 @@ export function convertToPdf(soffice: string, file: string, keep?: string): Prom
   });
 }
 
-/** A Basic module that opens a file, accepts every tracked change, and saves its text. */
+/**
+ * A Basic module that opens a file, accepts every tracked change, and saves
+ * its text; what went wrong, if anything, goes into the target's ".error".
+ */
 const ACCEPT_MODULE = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE script:module PUBLIC "-//OpenOffice.org//DTD OfficeDocument 1.0//EN" "module.dtd">
-<script:module xmlns:script="http://openoffice.org/2000/script" script:name="Accept" script:language="StarBasic">
+<script:module xmlns:script="http://openoffice.org/2000/script" script:name="Module1" script:language="StarBasic">
 Sub AcceptAll(source As String, target As String)
-  Dim opening(0) As New com.sun.star.beans.PropertyValue
-  opening(0).Name = "Hidden"
-  opening(0).Value = True
+  On Error GoTo Failed
+  Dim opening() As New com.sun.star.beans.PropertyValue
   Dim document As Object
   document = StarDesktop.loadComponentFromURL(ConvertToURL(source), "_blank", 0, opening())
   Dim dispatcher As Object
@@ -102,14 +105,22 @@ Sub AcceptAll(source As String, target As String)
   document.storeToURL(ConvertToURL(target), saving())
   document.close(True)
   StarDesktop.terminate()
+  Exit Sub
+Failed:
+  Dim file As Integer
+  file = FreeFile
+  Open target &amp; ".error" For Output As #file
+  Print #file, "Basic error " &amp; Err &amp; " on line " &amp; Erl &amp; ": " &amp; Error$
+  Close #file
+  StarDesktop.terminate()
 End Sub
 </script:module>
 `;
 
-const library = (kind: "script" | "dialog") =>
-  `<?xml version="1.0" encoding="UTF-8"?>
+const LIBRARY = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE library:library PUBLIC "-//OpenOffice.org//DTD OfficeDocument 1.0//EN" "library.dtd">
-<library:library xmlns:library="http://openoffice.org/2000/library" library:name="Standard" library:readonly="false" library:passwordprotected="false">${kind === "script" ? '\n <library:element library:name="Accept"/>' : ""}
+<library:library xmlns:library="http://openoffice.org/2000/library" library:name="Standard" library:readonly="false" library:passwordprotected="false">
+ <library:element library:name="Module1"/>
 </library:library>
 `;
 
@@ -121,39 +132,56 @@ const libraries = (kind: "script" | "dialog") =>
 </library:libraries>
 `;
 
+const run = (soffice: string, args: string[]) =>
+  new Promise<{ error: Error | null; output: string }>((resolve) => {
+    execFile(soffice, args, { timeout: TIMEOUT_MS }, (error, stdout, stderr) =>
+      resolve({ error, output: `${stdout}${stderr}`.trim() }),
+    );
+  });
+
 /**
  * Opens a .docx in LibreOffice headless, accepts every tracked change in it
- * (#107), and returns its text, a paragraph a line: a Basic macro in a
- * profile of its own, in a temporary folder, does it.
+ * (#107), and returns its text, a paragraph a line: a Basic macro does it, in
+ * a profile of its own in a temporary folder, which LibreOffice makes first.
  */
-export function acceptAllChanges(
+export async function acceptAllChanges(
   soffice: string,
   file: string,
 ): Promise<{ text: string } | { problem: string }> {
   const work = mkdtempSync(join(tmpdir(), "incarnamind-word-accept-"));
-  const basic = join(work, "profile", "user", "basic");
-  mkdirSync(join(basic, "Standard"), { recursive: true });
-  writeFileSync(join(basic, "script.xlc"), libraries("script"));
-  writeFileSync(join(basic, "dialog.xlc"), libraries("dialog"));
-  writeFileSync(join(basic, "Standard", "script.xlb"), library("script"));
-  writeFileSync(join(basic, "Standard", "dialog.xlb"), library("dialog"));
-  writeFileSync(join(basic, "Standard", "Accept.xba"), ACCEPT_MODULE);
-  const target = join(work, "accepted.txt");
-  const args = [
+  const profile = [
     `-env:UserInstallation=file://${join(work, "profile")}`,
     "--headless",
     "--norestore",
-    `macro:///Standard.Accept.AcceptAll("${file}","${target}")`,
   ];
-  return new Promise((resolve) => {
-    execFile(soffice, args, { timeout: TIMEOUT_MS }, (error, _stdout, stderr) => {
-      try {
-        resolve({ text: readFileSync(target, "utf8") });
-      } catch {
-        resolve({ problem: error?.message ?? (stderr.trim() || "no text written") });
-      } finally {
-        rmSync(work, { recursive: true, force: true });
-      }
-    });
-  });
+  try {
+    await run(soffice, [...profile, "--terminate_after_init"]);
+    const basic = join(work, "profile", "user", "basic");
+    const standard = join(basic, "Standard");
+    if (!existsSync(join(standard, "script.xlb"))) {
+      mkdirSync(standard, { recursive: true });
+      writeFileSync(join(basic, "script.xlc"), libraries("script"));
+      writeFileSync(join(basic, "dialog.xlc"), libraries("dialog"));
+      writeFileSync(join(standard, "script.xlb"), LIBRARY);
+      writeFileSync(join(standard, "dialog.xlb"), LIBRARY.replace(/\n <library:element[^>]*>/, ""));
+    }
+    writeFileSync(join(standard, "Module1.xba"), ACCEPT_MODULE);
+    const target = join(work, "accepted.txt");
+    const { error, output } = await run(soffice, [
+      ...profile,
+      `macro:///Standard.Module1.AcceptAll("${file}","${target}")`,
+    ]);
+    if (existsSync(target)) return { text: readFileSync(target, "utf8") };
+    const said = existsSync(`${target}.error`)
+      ? readFileSync(`${target}.error`, "utf8").trim()
+      : "";
+    const basicFiles = existsSync(standard) ? readdirSync(standard).join(", ") : "none";
+    return {
+      problem: [said, output, error?.message, `Standard holds: ${basicFiles}`]
+        .filter(Boolean)
+        .join(" | "),
+    };
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
 }
