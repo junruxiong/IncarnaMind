@@ -9,6 +9,8 @@
  * xmldom before anything is saved: a part that isn't well-formed XML with
  * every prefix bound stops the export, naming the part (WordPartError).
  * What can't be kept is reported (`WordExportReport`), never dropped silently.
+ * Changes still waiting, the User's edits and IncarnaMind's comments go in
+ * for review as the export was asked (../wordReview, #107).
  */
 import { deflateRawSync } from "node:zlib";
 import { DOMParser } from "@xmldom/xmldom";
@@ -38,6 +40,7 @@ import {
 } from "../../mindText";
 import { DocxWriter } from "../docx";
 import type { ExportLabels } from "../labels";
+import { Review, type ReviewChoices } from "../wordReview";
 import { AtomPlan } from "./atoms";
 import { styleWritten, type Written } from "./citations";
 import { DocumentPatch } from "./document";
@@ -45,11 +48,12 @@ import { type Counterpart, counterpartsOf, isFurniture, mindJson } from "./mind"
 import { WordPackageWriter, WordPartError } from "./package";
 import { currentTokens, type Token } from "./paragraph";
 import {
+  DocumentComments,
   DocumentFootnotes,
   DocumentNumbering,
   DocumentStyles,
   PatchTarget,
-  reserveDrawingIds,
+  reserveIds,
 } from "./parts";
 
 export interface WordPatchInput {
@@ -68,6 +72,8 @@ export interface WordPatchInput {
   formatCitations(request: CitationFormatRequest): Promise<FormattedCitations>;
   /** Blocks with their charts' pictures drawn, as the native export draws them. */
   withPictures(blocks: Block[]): Promise<Block[]>;
+  /** What the file says for review (#107). */
+  review: ReviewChoices;
 }
 
 export interface WordPatchResult {
@@ -96,10 +102,11 @@ export async function exportWordPatch(input: WordPatchInput): Promise<WordPatchR
 
   const doc = input.blocks.doc;
   if (!doc || !wordFileOf(doc)) throw new Error("This Mind wasn't imported from a Word file.");
+  const reading = input.readOptions.review;
   const yOf = new Map<NodeJSON, Y.XmlElement>();
   const current = input.blocks
     .toArray()
-    .flatMap((each) => (each instanceof Y.XmlElement ? [mindJson(each, yOf)] : []))
+    .flatMap((each) => (each instanceof Y.XmlElement ? [mindJson(each, yOf, reading)] : []))
     .filter((each): each is NodeJSON => each !== null);
 
   const sourceOf = (node: NodeJSON) => {
@@ -131,13 +138,21 @@ export async function exportWordPatch(input: WordPatchInput): Promise<WordPatchR
     const id = node.attrs?.id;
     return typeof id === "string" ? (baseIds.get(id) ?? null) : null;
   };
-  const plan = new AtomPlan(base.structure.blocks, current, baseKey, currentKey, base.places);
+  const plan = new AtomPlan(
+    base.structure.blocks,
+    current,
+    baseKey,
+    currentKey,
+    base.places,
+    input.review.trackAs !== null,
+  );
 
   // The parts new content goes into.
   const documentRelationships = await writer.relationshipsOf(pkg.part);
   const styles = await DocumentStyles.read(writer, pkg.part, documentRelationships);
   const numbering = await DocumentNumbering.read(writer, pkg.part, documentRelationships);
   const footnotes = await DocumentFootnotes.read(writer, pkg.part, documentRelationships);
+  const comments = await DocumentComments.read(writer, pkg.part, documentRelationships);
   const target = new PatchTarget(
     writer,
     pkg.part,
@@ -147,8 +162,9 @@ export async function exportWordPatch(input: WordPatchInput): Promise<WordPatchR
     numbering,
   );
   footnotes.reserveIds(target.ids);
-  await reserveDrawingIds(writer, target.ids);
-  const docxWriter = new DocxWriter(input.labels, textWidthOf(base.root), target);
+  await reserveIds(writer, target.ids);
+  const review = new Review(input.review, target.ids, input.labels, () => target.styles.comment);
+  const docxWriter = new DocxWriter(input.labels, textWidthOf(base.root), target, review);
 
   // What is written new, read as the native export reads it, then its Citations styled together.
   const options = input.readOptions;
@@ -166,23 +182,29 @@ export async function exportWordPatch(input: WordPatchInput): Promise<WordPatchR
     return element ? plainText(element) : "";
   };
   const written = new Map<NodeJSON, Written>();
+  /** Every paragraph's text now, read once, so what reads it twice sees the same tokens. */
+  const tokens = new Map<NodeJSON, Token[]>();
   const order: Written[] = [];
   const visit = (counterparts: readonly Counterpart[]) => {
     for (const counterpart of counterparts) {
-      if (
-        counterpart.kind === "paragraph" &&
-        (counterpart.key === null || edited(counterpart.node))
-      ) {
+      if (counterpart.kind === "paragraph") {
         const each: Written = {
-          tokens: currentTokens(counterpart.node.content ?? [], specialOf, textOf),
+          tokens: currentTokens(
+            counterpart.node.content ?? [],
+            specialOf,
+            textOf,
+            reading,
+            counterpart.wholeAi,
+          ),
         };
+        tokens.set(counterpart.node, each.tokens ?? []);
+        if (counterpart.key !== null && !edited(counterpart.node)) continue;
         written.set(counterpart.node, each);
         order.push(each);
       } else if (counterpart.kind === "table" && counterpart.key !== null) {
-        if (!edited(counterpart.node)) continue;
         for (const row of counterpart.node.content ?? []) {
           for (const cell of row.content ?? [])
-            visit(counterpartsOf(cell.content ?? [], currentKey));
+            visit(counterpartsOf(cell.content ?? [], currentKey, reading));
         }
       } else if (counterpart.kind === "other" || counterpart.kind === "table") {
         const element = yOf.get(counterpart.node);
@@ -192,7 +214,7 @@ export async function exportWordPatch(input: WordPatchInput): Promise<WordPatchR
       }
     }
   };
-  visit(counterpartsOf(current, currentKey));
+  visit(counterpartsOf(current, currentKey, reading));
   const bibliography = await styleWritten(order, {
     style: input.style,
     bibliography: input.bibliography,
@@ -207,8 +229,13 @@ export async function exportWordPatch(input: WordPatchInput): Promise<WordPatchR
     current,
     currentKey,
     edited,
-    tokensOf: (node): Token[] =>
-      written.get(node)?.tokens ?? currentTokens(node.content ?? [], specialOf, textOf),
+    tokensOf: (node): Token[] => {
+      const known = written.get(node)?.tokens ?? tokens.get(node);
+      if (known) return known;
+      const read = currentTokens(node.content ?? [], specialOf, textOf, reading);
+      tokens.set(node, read);
+      return read;
+    },
     blocksOf: (node) => {
       const known = written.get(node)?.blocks;
       if (known) return known;
@@ -221,6 +248,9 @@ export async function exportWordPatch(input: WordPatchInput): Promise<WordPatchR
     relationships: await relationshipsOf(pkg.zip, pkg.part),
     plan,
     bibliography: await input.withPictures(bibliography),
+    reading,
+    review,
+    ids: target.ids,
   });
   let text: string;
   try {
@@ -234,6 +264,7 @@ export async function exportWordPatch(input: WordPatchInput): Promise<WordPatchR
   if (text !== base.text) writer.set(pkg.part, text);
   footnotes.add(docxWriter.footnotes);
   await footnotes.flush();
+  await comments.flush(review.comments);
   await target.flush();
 
   const report: WordExportReport = {
