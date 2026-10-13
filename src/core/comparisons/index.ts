@@ -597,10 +597,42 @@ export function createComparisons(options: ComparisonsOptions) {
     });
   }
 
+  /** A cell's step in words: its row's Document and its column's Question. */
+  function describeCells(
+    task: { mindId: string | null; input: unknown },
+    keys: readonly string[],
+  ): string[] {
+    const tableId = taskInputOf(task.input)?.tableId;
+    const { mindId } = task;
+    const names = new Map<string, string>();
+    const questions = new Map<string, string>();
+    if (tableId && mindId && options.mindExists(mindId)) {
+      content.read(mindId, (all) => {
+        const table = tableIn(all, tableId);
+        if (!table) return;
+        for (const question of comparisonQuestionsOf(table.getAttributes())) {
+          questions.set(question.id, question.text);
+        }
+        for (const row of elements(table)) {
+          names.set(
+            String(row.getAttribute("documentId") ?? ""),
+            String(row.getAttribute("documentName") ?? ""),
+          );
+        }
+      });
+    }
+    return keys.map((key) => {
+      const [, documentId = "", questionId = ""] = key.split(":");
+      const parts = [names.get(documentId), questions.get(questionId)].filter(Boolean);
+      return parts.length > 0 ? parts.join(" · ") : key;
+    });
+  }
+
   const taskKind: TaskKind = {
     kind: COMPARISON_TASK,
     run: runTask,
     blockOf: (input) => taskInputOf(input)?.tableId ?? null,
+    describeSteps: describeCells,
   };
 
   /** Where the table goes: after the Block named, or before it when it is an empty paragraph. */

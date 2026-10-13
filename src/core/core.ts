@@ -2250,6 +2250,7 @@ export function createCore(adapters: CoreAdapters): Core {
     resumeTask: (taskId) => tasks.resume(taskId),
     stopTask: (taskId) => tasks.stop(taskId),
     answerTaskAsk: (taskId, answer) => tasks.answer(taskId, answer),
+    listTaskSteps: async (taskId) => tasks.listSteps(taskId),
 
     askQuestion: async (input) => answers.ask(input),
     regenerateAnswer: async (input) =>
