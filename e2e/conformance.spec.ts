@@ -44,7 +44,8 @@ import {
  * - rename it by double-click and by F2: Esc cancels, Enter saves, ⌘Z takes it back; and Enter
  *   on the row opens it;
  * - run each reversible command from the menu, then ⌘Z: the core, read through the bridge, holds
- *   what it held before, a change that was made offered Undo, and a delete asked nothing;
+ *   what it held before (what the command made waits in Recently deleted once taken back), a
+ *   change that was made offered Undo, and a delete asked nothing;
  * - an irreversible command asks first and changes nothing until answered.
  *
  * The kinds, the menus and the commands are read from the registry, so a command added to a menu
@@ -194,6 +195,24 @@ async function settled(window: Page, readState: () => Promise<unknown>): Promise
     last = now;
   }
   throw new Error(`The core kept changing: ${last.slice(-600)}`);
+}
+
+/**
+ * Taking back what a command made (a new Folder) deletes it, so it waits in Recently deleted like
+ * anything deleted. The state after ⌘Z, less what waits there now that didn't before: all that was
+ * there before must still be there, and everything else must be as it was.
+ */
+function withoutTakenBack(state: unknown, before: unknown): unknown {
+  const waiting = (of: unknown): { id: string }[] =>
+    typeof of === "object" && of !== null && "deleted" in of && Array.isArray(of.deleted)
+      ? of.deleted
+      : [];
+  if (waiting(state).length === 0 && waiting(before).length === 0) return state;
+  const waited = new Set(waiting(before).map((item) => item.id));
+  return {
+    ...(state as object),
+    deleted: waiting(state).filter((item) => waited.has(item.id)),
+  };
 }
 
 /** ⌘Z where it goes to the app's changes: out of any text; in the note, to the note's own. */
@@ -388,7 +407,10 @@ async function checkCommand(
   else await window.keyboard.press("Escape");
   await expect
     .configure({ soft: true })
-    .poll(() => settled(window, readState), { message: `${commandId}, then ⌘Z`, timeout: 15_000 })
+    .poll(async () => withoutTakenBack(await settled(window, readState), before), {
+      message: `${commandId}, then ⌘Z`,
+      timeout: 15_000,
+    })
     .toEqual(before);
   return "ran";
 }
