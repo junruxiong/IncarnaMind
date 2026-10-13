@@ -141,7 +141,7 @@ function whenShown(editor: Editor, request: string): Promise<PendingProposal | n
 /** A request that threw, as the result the composer shows. */
 const failure = (error: unknown): EditWithAiResult => ({
   kind: "failed",
-  error: { kind: "unknown", message: errorMessage(error) },
+  error: { kind: "unknown", message: errorMessage(error, t) },
 });
 
 /**

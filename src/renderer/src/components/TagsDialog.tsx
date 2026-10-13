@@ -84,7 +84,7 @@ export function TagsDialog() {
       await action();
       return true;
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
       return false;
     }
   };

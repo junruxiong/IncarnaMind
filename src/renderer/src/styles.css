@@ -43,6 +43,8 @@
   --color-accent: #2a5bd7;
   --color-accent-strong: #1e46b0;
   --color-accent-wash: #e7edfb;
+  /* A selection in a field that has lost the focus, as macOS draws one in a window not in front. */
+  --color-selection-inactive: #dde1e7;
   /* Citation checks only (and the same green on a found quote in the viewer). */
   --color-success: #166534;
   --color-success-wash: #dcf3e4;
@@ -3331,6 +3333,33 @@
     max-width: 16rem;
     margin-top: 4px;
   }
+  /* A quote chip: “the words” · where they are from, a click shows the passage. */
+  .composer-quote--passage {
+    padding-left: 0;
+  }
+  .quote-chip-show {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 4px;
+    height: 100%;
+    padding: 0 0 0 6px;
+    border-radius: 4px 0 0 4px;
+    text-align: start;
+
+    &:hover {
+      color: var(--color-ink);
+    }
+  }
+  .quote-chip-words {
+    flex: 0 1 auto;
+    color: var(--color-ink);
+  }
+  .quote-chip-from {
+    flex: 0 100 auto;
+    min-width: 0;
+    color: var(--color-ink-meta);
+  }
 
   /*
    * A suggestion as the User writes (#282): grey text after the caret, then
@@ -4429,6 +4458,12 @@
   .ProseMirror-selectednode .document-chip {
     outline: 2px solid var(--color-accent);
   }
+  .held-selection {
+    background: var(--color-selection-inactive);
+  }
+  .ProseMirror:focus .held-selection {
+    background: transparent;
+  }
   .find-match {
     border-radius: 2px;
     background: rgb(250 204 21 / 0.35);
@@ -5057,6 +5092,18 @@
       border-radius: 4px;
       background: var(--color-rule-strong) padding-box;
     }
+
+    /* The last 12px above the composer fade to the sheet, so text never meets its edge. */
+    &::after {
+      content: "";
+      position: sticky;
+      bottom: 0;
+      display: block;
+      height: 12px;
+      margin-top: -12px;
+      background: linear-gradient(to bottom, transparent, var(--color-sheet));
+      pointer-events: none;
+    }
   }
   .assistant-empty {
     margin: 0;
@@ -5101,6 +5148,20 @@
     color: var(--color-ink);
     white-space: pre-wrap;
     overflow-wrap: break-word;
+  }
+  /* What the Question was about, kept with it: above its words, a rule on its left. */
+  .assistant-question-quote {
+    display: -webkit-box;
+    margin-bottom: 4px;
+    padding-left: 8px;
+    border-left: 2px solid var(--color-rule-strong);
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    overflow: hidden;
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 400;
+    color: var(--color-ink-meta);
   }
   .assistant-question[data-pending] .assistant-question-bubble {
     color: var(--color-ink-secondary);
@@ -5259,8 +5320,8 @@
     height: 24px;
     padding: 0 7px 0 6px;
     border-radius: 6px;
-    font-weight: 600;
-    color: var(--color-ink-secondary);
+    font-weight: 400;
+    color: var(--color-ink-meta);
 
     &:hover {
       background: var(--color-hover);
