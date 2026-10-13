@@ -4,7 +4,12 @@ import type { Document, LibraryGroup } from "../../../../core/api";
 import { core } from "../../core";
 import { useT } from "../../i18n";
 import { useLibraryFolds, useRevealed } from "../../libraryFolds";
-import { FIRST_ROWS, NOT_IN_A_FOLDER, type LibrarySection as Section } from "../../libraryPage";
+import {
+  FIRST_ROWS,
+  NOT_IN_A_FOLDER,
+  type SearchMatch,
+  type LibrarySection as Section,
+} from "../../libraryPage";
 import { useRequests } from "../../requests";
 import { useAppStore } from "../../store";
 import { TREE_ROW } from "../../treeKeys";
@@ -30,11 +35,14 @@ export const quietButtonClass =
 export function LibrarySection({
   section,
   narrowing,
+  matches,
   suggestedOf,
   notSortedOf,
 }: {
   section: Section;
   narrowing: boolean;
+  /** How each Document matches the search, by its id, while there is one. */
+  matches: ReadonlyMap<string, SearchMatch> | null;
   /** The Suggested Folder a Document waits in, by its id, if it waits in one. */
   suggestedOf(documentId: string): string | null;
   /** Why Organize couldn't sort a Document, by its id, if it couldn't. */
@@ -68,6 +76,8 @@ export function LibrarySection({
             doc={doc}
             suggestedIn={suggestedOf(doc.id)}
             notSorted={notSortedOf(doc.id)}
+            match={matches?.get(doc.id) ?? null}
+            path={matches && section.folder ? section.folder.name : null}
           />
         ))}
       {open && listed.length < documents.length && (

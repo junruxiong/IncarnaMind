@@ -286,6 +286,24 @@ export function createJournal(db: Database, now: () => string) {
         .map(toStep);
     },
 
+    /** A Task's latest steps, oldest first, and how many it has. */
+    latestSteps(taskId: string, limit: number): { steps: StepRecord[]; count: number } {
+      const steps = db
+        .all<StepRow>(
+          `SELECT key, effect, status, result, attempts FROM run_steps
+           WHERE run_id = ? AND deleted_at IS NULL ORDER BY started_at DESC, rowid DESC LIMIT ?`,
+          [taskId, limit],
+        )
+        .map(toStep)
+        .reverse();
+      const count =
+        db.get<{ count: number }>(
+          "SELECT count(*) AS count FROM run_steps WHERE run_id = ? AND deleted_at IS NULL",
+          [taskId],
+        )?.count ?? 0;
+      return { steps, count };
+    },
+
     /** Steps started and never settled, those with an Effect only: their outcome isn't known. */
     openEffects(taskId: string): StepRecord[] {
       return db
