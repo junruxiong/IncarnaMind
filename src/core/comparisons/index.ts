@@ -525,16 +525,34 @@ export function createComparisons(options: ComparisonsOptions) {
       .map((document) => ({ documentId: document.id, contentHash: document.contentHash }));
   }
 
-  /** Fills a table as its Task: from where its journal and its cells are. */
+  /**
+   * Fills a table as its Task, from where its journal and its cells are. It
+   * says it fills from the moment the Task starts, before its model is ready,
+   * so a table never looks stopped while its Task goes on.
+   */
   async function runTask(task: TaskRun): Promise<TaskEnd> {
     const input = taskInputOf(task.input);
     const mindId = task.mindId;
     if (!input || !mindId) return { status: "failed", problem: "unknown" };
-    const { tableId } = input;
+    const filling = (on: boolean) =>
+      options.emit("comparison.filling", { mindId, tableId: input.tableId, filling: on });
+    filling(true);
+    try {
+      return await fillAsTask(task, mindId, input);
+    } finally {
+      filling(false);
+    }
+  }
+
+  async function fillAsTask(
+    task: TaskRun,
+    mindId: string,
+    { tableId, providerId, modelId }: ComparisonTaskInput,
+  ): Promise<TaskEnd> {
     const there = () =>
       options.mindExists(mindId) && content.read(mindId, (all) => !!tableIn(all, tableId));
     if (!there()) return { status: "stopped" };
-    const ready = await readyModel({ providerId: input.providerId, modelId: input.modelId });
+    const ready = await readyModel({ providerId, modelId });
     if (!("model" in ready)) return { status: "paused", reason: "not-ready" };
     if (task.signal.aborted) return { status: "stopped" };
     const controller = new AbortController();
@@ -549,7 +567,6 @@ export function createComparisons(options: ComparisonsOptions) {
     };
     fills.set(tableId, fill);
     task.retain(rowVersions(mindId, tableId));
-    options.emit("comparison.filling", { mindId, tableId, filling: true });
     try {
       const stop = await run(fill, tableId);
       if (task.signal.aborted || controller.signal.aborted || !there()) {
@@ -566,7 +583,6 @@ export function createComparisons(options: ComparisonsOptions) {
     } finally {
       task.signal.removeEventListener("abort", abort);
       if (fills.get(tableId) === fill) fills.delete(tableId);
-      options.emit("comparison.filling", { mindId, tableId, filling: false });
     }
   }
 
