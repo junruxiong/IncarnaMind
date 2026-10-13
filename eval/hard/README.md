@@ -159,7 +159,22 @@ The run scores the same Questions as `npm run eval:hard` scores keyword search a
 | **All** | **98/180** | **124/180** | **107/180** |
 
 Keyword + rerank at the top 8 and 10 is 135 and 143 of 180. The search Tool's figure is lower than the reranked top 5 because it hands the model whole windows of three Passages, at most 12 Passages from at most 4 Documents for a one-search Answer (8 until 2026-10-12, and still 8 in the Tool loop), so a Question that needs many Passages (multi-page) can lose some to the limits.
+
 ## Results
+
+### 2026-10-13: the Answer rules (#548), before and after
+
+The Citation part only, with the library added as by default (embeddings off) and no retrieval modes, at `main` 3125b9cd with and without the rules and the Passages' dates. 60 Questions: 5 of each earlier difficulty, spread evenly through each, and the 20 new ones, which were asked a second time, so each cell counts 20 Answers. Scored with the rules in `lib/answerRules.ts` as committed, from each run's `report.json`. An Apple M2 Max with other work running.
+
+| | Haiku 5.5 before | Haiku 5.5 after | GPT-6 Luna before | GPT-6 Luna after |
+|---|---|---|---|---|
+| Premise flagged first | 19/20 | 20/20 | 14/20 | 17/20 |
+| Newer source leads, cited | 17/20 | 17/20 | 13/20 | 16/20 |
+| Names the older one too | 15/20 | 17/20 | 7/20 | 3/20 |
+
+- Claude Haiku 5.5 already flagged the premises and led with the newer source; GPT-6 Luna gains on both. Luna's Answers are short: after the change it mostly gives only the newer figure, and before it often gave the older one alone (five Functions for the NIST CSF Core, 4.8% for China in 2024), which counted as naming the older one.
+- The Lockheed Martin Question fails for both models before and after: their searches don't reach the 10-Ks' headcount Passages.
+- A Passage's date is often its file's creation date, which can differ from the date printed on the page: Haiku called the FDA draft "dated 3 January 2025" (the PDF's metadata) where its cover says it was issued on 7 January.
 
 ### 2026-10-10: the first run
 
