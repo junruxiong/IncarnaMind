@@ -120,17 +120,17 @@ describe("a selection of Documents", () => {
 describe("a selection of Minds", () => {
   const ctx = selectionOf([mind("m"), mind("n")], "sidebar");
 
-  test("is offered Move to, and not what opens, exports or deletes one", () => {
+  test("is offered Move to and New Folder with these, and not what opens, exports or deletes one", () => {
     const here = { "mind.moveTo": () => undefined, "mind.rename": () => undefined };
     const ids = idsIn(buildMenu("mind", { ...ctx, here }));
-    expect(ids).toEqual(["mind.moveTo"]);
+    expect(ids).toEqual(["mind.moveTo", "folder.newWith"]);
   });
 });
 
 describe("a selection of Minds and Documents", () => {
-  test("is offered only what applies to every kind selected", () => {
+  test("is offered only what applies to every kind selected: New Folder with these", () => {
     const ctx = selectionOf([mind("m"), doc("a")], "sidebar");
-    expect(idsIn(buildMenu("document", ctx))).toEqual([]);
-    expect(idsIn(buildMenu("mind", ctx))).toEqual([]);
+    expect(idsIn(buildMenu("document", ctx))).toEqual(["folder.newWith"]);
+    expect(idsIn(buildMenu("mind", ctx))).toEqual(["folder.newWith"]);
   });
 });

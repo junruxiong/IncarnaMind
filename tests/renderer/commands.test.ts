@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from "vitest";
+import { beforeAll, describe, expect, test, vi } from "vitest";
 import { keysForm, keysLabel, keysOn, pressed } from "../../src/renderer/src/commands/keys";
 import {
   COMMAND_GROUPS,
@@ -6,7 +6,9 @@ import {
   type CommandContext,
   commands,
   labelOf,
+  offered,
 } from "../../src/renderer/src/commands/registry";
+import type { ObjectRef } from "../../src/renderer/src/objects";
 import { MENU_COMMANDS, type MenuCommandId } from "../../src/shared/commands";
 import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
 
@@ -122,12 +124,91 @@ describe("every command", () => {
   });
 });
 
+describe("New Folder with these", () => {
+  const selecting = (...refs: [ObjectRef["kind"], string][]): CommandContext => ({
+    selection: refs.map(([kind, id]) => ({ kind, id })),
+    focus: null,
+    surface: "sidebar",
+  });
+  const command = () => {
+    const found = commands.get("folder.newWith");
+    if (!found) throw new Error("There is no New Folder with these.");
+    return found;
+  };
+  const saysIn = (ctx: CommandContext, language: (typeof LANGUAGES)[number]) =>
+    labelOf(command(), ctx, translator(language));
+
+  test("is offered for Documents and Minds, and only when there are some", () => {
+    expect(offered(command(), NOWHERE)).toBe(false);
+    expect(offered(command(), selecting(["document", "a"]))).toBe(true);
+    expect(offered(command(), selecting(["mind", "m"], ["document", "a"]))).toBe(true);
+    expect(offered(command(), selecting(["folder", "f"]))).toBe(false);
+    expect(offered(command(), selecting(["document", "a"], ["tag", "t"]))).toBe(false);
+  });
+
+  test("says how many it takes, in English and in Chinese", () => {
+    const three = selecting(["document", "a"], ["document", "b"], ["document", "c"]);
+    expect(saysIn(NOWHERE, "en")).toBe("New Folder with these");
+    expect(saysIn(selecting(["document", "a"]), "en")).toBe("New Folder with this Document");
+    expect(saysIn(selecting(["mind", "m"]), "en")).toBe("New Folder with this Mind");
+    expect(saysIn(three, "en")).toBe("New Folder with 3 Documents");
+    expect(saysIn(selecting(["mind", "m"], ["mind", "n"]), "en")).toBe("New Folder with 2 Minds");
+    expect(saysIn(selecting(["mind", "m"], ["document", "a"]), "en")).toBe(
+      "New Folder with 2 items",
+    );
+    expect(saysIn(three, "zh-CN")).toBe("新建文件夹并放入 3 个文档");
+    expect(saysIn(selecting(["mind", "m"], ["document", "a"]), "zh-CN")).toBe(
+      "新建文件夹并放入 2 项",
+    );
+  });
+
+  describe("from the keys on a row", () => {
+    const row = (kind: ObjectRef["kind"], id: string, surface: CommandContext["surface"]) => ({
+      selection: [],
+      focus: { kind, id },
+      surface,
+    });
+
+    test("act for the sidebar's selection when it holds the row, and for the row alone when not", async () => {
+      const { useSelection } = await import("../../src/renderer/src/selection");
+      const { useAppStore } = await import("../../src/renderer/src/store");
+      const createFolder = vi.fn(async () => "n");
+      useAppStore.setState({ createFolder });
+      const { choose, toggle } = useSelection.getState();
+      choose("sidebar", { kind: "document", id: "a" });
+      toggle("sidebar", { kind: "mind", id: "m" });
+      toggle("sidebar", { kind: "document", id: "b" });
+
+      expect(saysIn(row("document", "a", "sidebar") as CommandContext, "en")).toBe(
+        "New Folder with 3 items",
+      );
+      expect(saysIn(row("document", "z", "sidebar") as CommandContext, "en")).toBe(
+        "New Folder with this Document",
+      );
+      // The selection belongs to the sidebar: from the Library the row stands alone.
+      expect(saysIn(row("document", "a", "library") as CommandContext, "en")).toBe(
+        "New Folder with this Document",
+      );
+
+      await commands.run("folder.newWith", row("mind", "m", "sidebar") as CommandContext);
+      expect(createFolder).toHaveBeenCalledWith({ mindIds: ["m"], documentIds: ["a", "b"] });
+      // Once its items are in the Folder the selection is spent.
+      expect(useSelection.getState().items).toEqual([]);
+    });
+
+    test("do nothing from a place that isn't a row, or for a Folder", () => {
+      expect(offered(command(), { selection: [], focus: null, surface: "sidebar" })).toBe(false);
+      expect(offered(command(), row("folder", "f", "sidebar"))).toBe(false);
+    });
+  });
+});
+
 describe("shortcuts", () => {
   test.each(SYSTEMS)("no keys are bound twice where both commands can act, on $name", ({ mac }) => {
     const bound = all.filter((command) => command.shortcut);
     const formsOf = (command: Command) => {
       const shortcut = command.shortcut;
-      if (!shortcut) return [];
+      if (!shortcut || (shortcut.macOnly && !mac)) return [];
       const keys = [
         keysOn(shortcut.keys, mac),
         ...(!mac && shortcut.alsoOther ? [shortcut.alsoOther] : []),
@@ -152,7 +233,9 @@ describe("shortcuts", () => {
     ({ mac }) => {
       const text = new Set(TEXT_KEYS.map((keys) => keysForm(keys, mac)));
       for (const command of all) {
-        if (!command.shortcut || command.shortcut.list) continue;
+        if (!command.shortcut || command.shortcut.list || (command.shortcut.macOnly && !mac)) {
+          continue;
+        }
         const form = keysForm(keysOn(command.shortcut.keys, mac), mac);
         // A plain key, or one with Shift, types; a function key doesn't.
         expect(/(meta|ctrl|alt)\+|(^|\+)f\d+$/i.test(form), command.id).toBe(true);
@@ -174,6 +257,16 @@ describe("shortcuts", () => {
       }
     },
   );
+
+  test("New Folder is ⇧⌘N, and New Folder with these is Finder's ⌃⌘N on macOS only", () => {
+    const newFolder = commands.get("folder.new")?.shortcut;
+    const newWith = commands.get("folder.newWith")?.shortcut;
+    expect(newFolder && keysLabel(keysOn(newFolder.keys, true), true)).toBe("⇧⌘N");
+    expect(newFolder && keysLabel(keysOn(newFolder.keys, false), false)).toBe("Ctrl+Shift+N");
+    expect(newFolder?.macOnly).toBeUndefined();
+    expect(newWith && keysLabel(keysOn(newWith.keys, true), true)).toBe("⌃⌘N");
+    expect(newWith?.macOnly).toBe(true);
+  });
 
   test("the application menu's items are commands, with the menu's label and keys", () => {
     for (const id of Object.keys(MENU_COMMANDS) as MenuCommandId[]) {
