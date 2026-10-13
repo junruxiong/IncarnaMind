@@ -7,6 +7,7 @@ import { documentStatusText } from "../documentStatus";
 import { addedDate, fileDate, KIND_LABELS, showFileLabelKey } from "../fileInfo";
 import { useLanguage, useT } from "../i18n";
 import { useInfo } from "../info";
+import { organizeModel, organizeState } from "../libraryPage";
 import {
   fileStatusLabel,
   folderName,
@@ -236,10 +237,11 @@ function DocumentInfo({ document }: { document: Document }) {
   const t = useT();
   const language = useLanguage();
   const tags = useAppStore((state) => state.tags);
+  const assignment = useAppStore((state) =>
+    state.library?.assignments.find((each) => each.documentId === document.id),
+  );
   const folder = useAppStore((state) => {
-    const groupId = state.library?.assignments.find(
-      (each) => each.documentId === document.id,
-    )?.groupId;
+    const groupId = assignment?.groupId;
     return groupId ? state.library?.groups.find((each) => each.id === groupId)?.name : undefined;
   });
   const linkedName = useAppStore((state) => {
@@ -318,6 +320,15 @@ function DocumentInfo({ document }: { document: Document }) {
           {fileState && <span className="block text-ink-meta">{t(fileState.full)}</span>}
           {document.failure?.message && document.status === "failed" && (
             <span className="block text-ink-meta">{document.failure.message}</span>
+          )}
+        </Row>
+        <Row label={t("info.organize")} testId="info-organize">
+          {t(organizeState(assignment))}
+          {assignment?.model && (
+            <span className="block text-ink-meta">{organizeModel(assignment.model, t)}</span>
+          )}
+          {assignment?.error && (
+            <span className="block text-ink-meta">{assignment.error.message}</span>
           )}
         </Row>
       </Rows>

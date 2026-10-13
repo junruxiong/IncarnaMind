@@ -19,6 +19,7 @@ import { agentSocketPath, createAgents } from "./agents";
 import { createAgentSetup, skillInstalled } from "./agents/setup";
 import { createAiUse } from "./aiUse";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
+import { createChecks } from "./answers/checks";
 import { recheckCitation, recheckKept } from "./answers/citations";
 import {
   addCitedUnits,
@@ -51,6 +52,7 @@ import type {
 } from "./api";
 import { createApprovals } from "./approvals";
 import { createBackgroundQueue } from "./backgroundQueue";
+import { createCheckpoints } from "./checkpoints";
 import { createCitationStyles } from "./citationStyles";
 import { type CitedPages, type CitedPlace, createCitedPages } from "./citedPages";
 import { COMPARISON_TASK, createComparisons } from "./comparisons";
@@ -333,6 +335,7 @@ export function createCore(adapters: CoreAdapters): Core {
     events.emit("mind.update", { mindId, update });
     // Only notes the change; what became of AI text is worked out once the Mind is quiet.
     aiUse.contentStored(mindId);
+    checkpoints.edited(mindId);
     mindIndex.contentStored(mindId);
     comparisons.mindChanged(mindId);
     const renamed = minds.setAutoTitle(mindId, content.peek(mindId, firstLineOf));
@@ -447,6 +450,18 @@ export function createCore(adapters: CoreAdapters): Core {
   const privacyChanged = () => events.emit("privacy.changed", privacy.status());
   const platform = process.platform;
   const retention = createVersionRetention(db, now);
+  const checkpoints = createCheckpoints({
+    db,
+    now,
+    content,
+    retention,
+    requireMind: (mindId) => writableMind(mindId).id,
+    changed: (mindId) => events.emit("checkpoints.changed", { mindId }),
+    stopAnswer: (mindId, answerId) => answers.stop({ mindId, answerId }),
+    settleAnswers: (mindId) => answers.settleOrphans(mindId),
+    say: (key) => translate(settings.get().language, key),
+    reportError: (error) => console.error(error),
+  });
   // Background work (automatic tagging, Organize's classification, saving cited pages): one
   // job at a time, giving way to Answers.
   const background = createBackgroundQueue({ reportError: (error) => console.error(error) });
@@ -936,10 +951,12 @@ export function createCore(adapters: CoreAdapters): Core {
     ...(adapters.web && { fetch: adapters.web }),
   });
 
+  const answerEngine =
+    adapters.answerEngine ?? createAiSdkAnswerEngine({ runEngine: adapters.runEngine });
   const answers = createAnswers({
     content,
     events,
-    engine: adapters.answerEngine ?? createAiSdkAnswerEngine({ runEngine: adapters.runEngine }),
+    engine: answerEngine,
     requireMind: (mindId) => writableMind(mindId).id,
     mindExists,
     readableMindName: (mindId) => {
@@ -1028,6 +1045,7 @@ export function createCore(adapters: CoreAdapters): Core {
       searchableCount: (ids) => documents.searchableCount(ids),
     },
     evidence: (ids) => evidence.scope(ids).documentIds ?? [...ids],
+    checkpoint: (mindId) => checkpoints.save(mindId, "compare"),
     tasks: {
       start: (kind, mindId, input) => tasks.start(kind, mindId, input),
       unfinished: () => tasks.unfinished(),
@@ -1162,6 +1180,31 @@ export function createCore(adapters: CoreAdapters): Core {
     consent,
     localOnly: () => embedding.localOnly(),
     recheck: (attributes) => recheckKept(documents, attributes),
+    now: () => adapters.now?.() ?? new Date(),
+  });
+
+  // Find support and Check against Documents (#96): check Runs that can only search and cite.
+  const checks = createChecks({
+    content,
+    requireMind: (mindId) => {
+      writableMind(mindId);
+    },
+    mindFolder: (mindId) => minds.get(mindId).folderId,
+    defaultModel: () => settings.get().user.chatModel,
+    chat,
+    consent,
+    localOnly: () => embedding.localOnly(),
+    resolveScope,
+    evidence,
+    documents: {
+      searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
+      searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
+      citationSource: (passageId) => documents.citationSource(passageId),
+      pageTexts: (documentId, contentHash, from, to) =>
+        documents.pageTexts(documentId, contentHash, from, to),
+    },
+    engine: answerEngine,
+    retention,
     now: () => adapters.now?.() ?? new Date(),
   });
 
@@ -1910,6 +1953,7 @@ export function createCore(adapters: CoreAdapters): Core {
       const access = accessFor(mind.kind, content.contentVersion(mind.id));
       if (access === "read-only") return { mind, access, state: content.storedState(mind.id) };
       answers.settleOrphans(mind.id);
+      checks.settleStale(mind.id);
       return { mind, access, state: content.state(mind.id) };
     },
     applyMindUpdate: async (mindId, update) => {
@@ -1918,6 +1962,10 @@ export function createCore(adapters: CoreAdapters): Core {
     closeMind: async (mindId) => {
       content.close(parseMindId(mindId));
     },
+    saveCheckpoint: async (mindId, reason) => checkpoints.save(mindId, reason),
+    listCheckpoints: async (mindId) => checkpoints.list(mindId),
+    compareCheckpoints: async (input) => checkpoints.compare(input),
+    restoreCheckpoint: async (mindId, checkpointId) => checkpoints.restore(mindId, checkpointId),
     askInConversation: async (input) =>
       answers.askInConversation(conversations.parseQuestion(input)),
     regenerateConversationAnswer: async (input) => answers.regenerateInConversation(input),
@@ -2204,7 +2252,8 @@ export function createCore(adapters: CoreAdapters): Core {
     answerTaskAsk: (taskId, answer) => tasks.answer(taskId, answer),
 
     askQuestion: async (input) => answers.ask(input),
-    regenerateAnswer: async (input) => answers.regenerate(input),
+    regenerateAnswer: async (input) =>
+      answers.regenerate(input, (mindId) => checkpoints.save(mindId, "regenerate")),
     stopAnswer: async (input) => answers.stop(input),
     suggestNext: (request) => suggestions.suggest(request),
     cancelSuggestion: async (requestId) => suggestions.cancel(requestId),
@@ -2213,6 +2262,9 @@ export function createCore(adapters: CoreAdapters): Core {
     editWithAi: (input) => edits.editWithAi(input),
     regenerateProposal: (input) => edits.regenerateProposal(input),
     cancelEdit: async (requestId) => edits.cancel(requestId),
+    checkSentences: (input) => checks.checkSentences(input),
+    cancelCheck: async (requestId) => checks.cancel(requestId),
+    checkClaim: (input) => checks.checkClaim(input),
 
     getSecretStorage: async () => secrets.status(),
     acceptPlainTextSecretStorage: async () => secrets.acceptPlainText(),
@@ -2634,6 +2686,7 @@ export function createCore(adapters: CoreAdapters): Core {
       void webSearch.close().catch((error: unknown) => console.error(error));
       suggestions.stop();
       edits.stopAll();
+      checks.stopAll();
       skillDrafts.stopAll();
       scriptRunner.close();
       approvals.close();
@@ -2651,6 +2704,7 @@ export function createCore(adapters: CoreAdapters): Core {
       rerankingModel.close();
       textRecognitionModel?.close();
       activity.stop();
+      checkpoints.close();
       aiUse.close();
       mindIndex.close();
       events.clear();
