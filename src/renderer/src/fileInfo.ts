@@ -1,5 +1,6 @@
 import type { Document } from "../../core/api";
 import type { Language } from "../../core/language";
+import { formatDate, formatMonth, formatYear } from "../../shared/dates";
 import type { MessageKey } from "../../shared/i18n";
 
 /** What a Document's kind is called, in the words of the Library's filters. */
@@ -38,15 +39,10 @@ export function fileDate(value: string, language: Language): string {
         : value.slice(0, 10);
   const date = new Date(`${day}T00:00:00Z`);
   if (Number.isNaN(date.getTime())) return value;
-  const options: Intl.DateTimeFormatOptions =
-    precision === "year"
-      ? { year: "numeric" }
-      : precision === "month"
-        ? { year: "numeric", month: "long" }
-        : { dateStyle: "long" };
-  return new Intl.DateTimeFormat(language, { ...options, timeZone: "UTC" }).format(date);
+  const format =
+    precision === "year" ? formatYear : precision === "month" ? formatMonth : formatDate;
+  return format(date, language, { timeZone: "UTC" });
 }
 
 /** When something was added, as the day it was on this computer. */
-export const addedDate = (iso: string, language: Language): string =>
-  new Intl.DateTimeFormat(language, { dateStyle: "long" }).format(new Date(iso));
+export const addedDate = (iso: string, language: Language): string => formatDate(iso, language);

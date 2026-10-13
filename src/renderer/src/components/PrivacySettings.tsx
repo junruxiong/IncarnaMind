@@ -6,6 +6,7 @@ import type {
   PrivacySettingsPatch,
   RegisteredDataFlow,
 } from "../../../core/api";
+import { formatDate } from "../../../shared/dates";
 import { core } from "../core";
 import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
@@ -249,9 +250,7 @@ function ServiceDecision({
     decidedAt && !sendsMore
       ? t("privacy.flows.decided", {
           status: label,
-          date: new Intl.DateTimeFormat(language, { dateStyle: "medium" }).format(
-            new Date(decidedAt),
-          ),
+          date: formatDate(decidedAt, language),
         })
       : label;
 

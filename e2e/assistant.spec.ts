@@ -557,6 +557,11 @@ test("moving, resizing and folding it keep the composer's draft, the Mind's scro
   await expect(rows).toHaveCount(2);
   await expect(rows.first()).toContainText("When do neap tides come");
   await expect(rows.last()).toContainText("When do spring tides happen");
+  // Asked today, each shows its time alone, in the one date style.
+  await expect(rows.locator("time")).toHaveText([
+    /^\d{1,2}:\d{2}( [ap]m)?$/,
+    /^\d{1,2}:\d{2}( [ap]m)?$/,
+  ]);
   await window.keyboard.press("Escape");
   await app.close();
 });

@@ -1,5 +1,6 @@
 import type { Money, RunEstimate, RunStop } from "../../core/api";
 import type { Language } from "../../core/language";
+import { formatDateTime } from "../../shared/dates";
 import type { MessageKey, MessageParams } from "../../shared/i18n";
 
 type Translate = (key: MessageKey, params?: MessageParams) => string;
@@ -31,13 +32,7 @@ export function formatSpent(
 
 /** When a plan's limit resets: the time today, else the day and time. */
 export function formatResetTime(iso: string, language: Language, now = new Date()): string {
-  const at = new Date(iso);
-  const sameDay = at.toDateString() === now.toDateString();
-  return new Intl.DateTimeFormat(language, {
-    ...(sameDay ? {} : { month: "short", day: "numeric" }),
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(at);
+  return formatDateTime(iso, language, { now });
 }
 
 /** The line a run stopped at the cap or a plan's limit shows: "Plan limit reached · Try again after 14:30". */

@@ -5,6 +5,7 @@
 
 import type { Document, DocumentGroupAssignment, LibraryGroup } from "../../core/api";
 import type { Language } from "../../core/language";
+import { formatShortDate } from "../../shared/dates";
 import { displayName } from "../../shared/documentNames";
 import type { MessageKey, MessageParams } from "../../shared/i18n";
 import { modelName } from "../../shared/modelName";
@@ -146,21 +147,9 @@ export function problemText(problem: LibraryProblem, t: Translate): string {
   return t(problem.count === 1 ? words.one : words.many, { count: problem.count });
 }
 
-/**
- * When a Document was added, as its row says it: "Oct 9" this year, "Oct 9,
- * 2025" before (in Chinese "10月9日", "2025/10/9").
- */
-export function addedLabel(iso: string, now: Date, language: Language): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  const options: Intl.DateTimeFormatOptions =
-    date.getFullYear() === now.getFullYear()
-      ? { month: "short", day: "numeric" }
-      : language === "zh-CN"
-        ? { year: "numeric", month: "numeric", day: "numeric" }
-        : { year: "numeric", month: "short", day: "numeric" };
-  return new Intl.DateTimeFormat(language, options).format(date);
-}
+/** When a Document was added, as its row says it: "9 Oct" this year, "9 Oct 2025" before. */
+export const addedLabel = (iso: string, now: Date, language: Language): string =>
+  formatShortDate(iso, language, { now });
 
 /** Where Organize is with a Document, in a word, for Get info. */
 export function organizeState(assignment: DocumentGroupAssignment | undefined): MessageKey {

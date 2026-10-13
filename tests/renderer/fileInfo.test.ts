@@ -6,13 +6,14 @@ describe("a file's own date", () => {
   test("is shown at the precision the file gave", () => {
     expect(fileDate("2019", "en")).toBe("2019");
     expect(fileDate("2019-03", "en")).toBe("March 2019");
-    expect(fileDate("2019-03-04", "en")).toBe("March 4, 2019");
+    expect(fileDate("2019-03-04", "en")).toBe("4 Mar 2019");
     expect(fileDate("2019-03-04", "zh-CN")).toBe("2019年3月4日");
+    expect(fileDate("2019-03", "zh-CN")).toBe("2019年3月");
   });
 
   test("is the day the file names, whatever its offset from UTC", () => {
-    expect(fileDate("2019-03-04T23:30:00-08:00", "en")).toBe("March 4, 2019");
-    expect(fileDate("2019-03-04T00:30:00+09:00", "en")).toBe("March 4, 2019");
+    expect(fileDate("2019-03-04T23:30:00-08:00", "en")).toBe("4 Mar 2019");
+    expect(fileDate("2019-03-04T00:30:00+09:00", "en")).toBe("4 Mar 2019");
   });
 
   test("is left as it is when it isn't a date", () => {

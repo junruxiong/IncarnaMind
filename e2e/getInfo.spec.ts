@@ -143,7 +143,7 @@ test("Get info shows what is known of a PDF, a Word file, a spreadsheet and a de
     }
     if (name === "Report") {
       await expect(panel.getByTestId("info-created")).toHaveText(
-        "March 4, 2019 (the file’s own date)",
+        "4 Mar 2019 (the file’s own date)",
       );
       await screenshot(window, "get-info-pdf");
     }

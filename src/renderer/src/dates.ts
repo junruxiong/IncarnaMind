@@ -1,4 +1,5 @@
 import type { Language } from "../../core/language";
+import { formatShortDate, formatTime } from "../../shared/dates";
 import type { MessageKey, MessageParams } from "../../shared/i18n";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -13,16 +14,7 @@ export function dayOf(
   say: (key: MessageKey, params?: MessageParams) => string,
 ): string {
   const days = Math.round((startOfDay(now).getTime() - startOfDay(at).getTime()) / DAY);
-  if (days <= 0) {
-    const time = new Intl.DateTimeFormat(language, { hour: "2-digit", minute: "2-digit" }).format(
-      at,
-    );
-    return say("date.today", { time });
-  }
+  if (days <= 0) return say("date.today", { time: formatTime(at, language) });
   if (days === 1) return say("date.yesterday");
-  return new Intl.DateTimeFormat(language, {
-    day: "numeric",
-    month: "short",
-    ...(at.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
-  }).format(at);
+  return formatShortDate(at, language, { now });
 }
