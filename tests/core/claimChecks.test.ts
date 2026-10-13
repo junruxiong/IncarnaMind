@@ -173,7 +173,7 @@ describe("Find support", () => {
   test("marks each sentence the selection touches with what its check found", async () => {
     const { core, client, check, tides } = await mindWith([SUPPORTED, CONTRADICTED, UNSUPPORTED]);
 
-    expect(await check()).toEqual({ kind: "checked", sentences: 3, checked: 3 });
+    expect(await check()).toEqual({ kind: "checked", sentences: 3, checked: 3, smallModel: false });
 
     const checks = await shownChecks(core, client);
     expect(checks.map((each) => [each.sentence, each.shown])).toEqual([
@@ -210,7 +210,7 @@ describe("Find support", () => {
         from: { blockId: block.attrs.id, offset: inSecond },
         to: { blockId: block.attrs.id, offset: inSecond + 3 },
       }),
-    ).toEqual({ kind: "checked", sentences: 1, checked: 1 });
+    ).toEqual({ kind: "checked", sentences: 1, checked: 1, smallModel: false });
     expect((await shownChecks(core, client)).map((each) => each.sentence)).toEqual([UNSUPPORTED]);
   });
 
@@ -334,7 +334,12 @@ describe("When the model can't check a sentence", () => {
         checkingModel({ [SUPPORTED]: plan }),
       );
 
-      expect(await check()).toEqual({ kind: "checked", sentences: 1, checked: 0 });
+      expect(await check()).toEqual({
+        kind: "checked",
+        sentences: 1,
+        checked: 0,
+        smallModel: false,
+      });
 
       const [checked] = await shownChecks(core, client);
       expect(checked?.shown).toEqual({ state: "not-checked", reason });
@@ -353,7 +358,7 @@ describe("When the model can't check a sentence", () => {
     );
     const { core, client, check } = await mindWith([SUPPORTED], model);
 
-    expect(await check()).toEqual({ kind: "checked", sentences: 1, checked: 1 });
+    expect(await check()).toEqual({ kind: "checked", sentences: 1, checked: 1, smallModel: false });
 
     const [checked] = await shownChecks(core, client);
     expect(checked?.shown).toEqual({ state: "supported" });
