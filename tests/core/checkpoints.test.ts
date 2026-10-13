@@ -476,11 +476,12 @@ describe("Comparing and restoring", () => {
     expect(lines(client)).toEqual(original);
   });
 
-  test("a version saved with changes still waiting comes back as History showed it, without them", async () => {
+  test("a version saved with changes still waiting comes back as History showed it, without them, but someone's from a Word file", async () => {
     const core = startCore(await createTempDataFolder());
     const mind = await core.createMind({ title: "Tides" });
     const client = await connectToMind(core, mind.id);
     const change = { id: "change-1", request: "request-1", target: "x" };
+    const theirs = { id: "word:w:ins#2", request: "word:w:ins#2" };
     writeMind(client, [
       {
         type: "paragraph",
@@ -489,6 +490,14 @@ describe("Comparing and restoring", () => {
           { type: "text", text: "very", marks: [{ type: "proposalDelete", attrs: change }] },
           { type: "text", text: "a bit", marks: [{ type: "proposalInsert", attrs: change }] },
           { type: "text", text: " strong." },
+        ],
+      },
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "Neap tides" },
+          { type: "text", text: " are weak", marks: [{ type: "proposalInsert", attrs: theirs }] },
+          { type: "text", text: "." },
         ],
       },
     ]);
@@ -500,15 +509,16 @@ describe("Comparing and restoring", () => {
     const compared = await core.compareCheckpoints({ mindId: mind.id, from: waiting.id, to: null });
     expect(compared.rows.map((row) => [shown(row.left), shown(row.right)])).toEqual([
       ["The tides are [-very-] strong.", "The tides are {+a bit+} strong."],
+      ["[-Neap tides.-]", null],
     ]);
     await core.restoreCheckpoint(mind.id, waiting.id);
     await client.settled();
-    expect(lines(client)).toEqual(["The tides are very strong."]);
+    expect(lines(client)).toEqual(["The tides are very strong.", "Neap tides are weak."]);
     const marks: string[] = [];
     readMind(client).descendants((node) => {
-      for (const mark of node.marks) marks.push(mark.type.name);
+      for (const mark of node.marks) marks.push(`${mark.type.name}:${node.text}`);
     });
-    expect(marks).toEqual([]);
+    expect(marks).toEqual(["proposalInsert: are weak"]);
   });
 
   test("an Answer that was being written when it was saved comes back stopped", async () => {

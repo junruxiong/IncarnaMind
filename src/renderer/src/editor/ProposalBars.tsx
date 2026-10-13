@@ -2,9 +2,10 @@ import { autoUpdate, computePosition, flip, offset, shift } from "@floating-ui/d
 import { type Editor, isMacOS, posToDOMRect } from "@tiptap/core";
 import { useEditorState } from "@tiptap/react";
 import { type MouseEvent as ReactMouseEvent, useEffect, useLayoutEffect, useRef } from "react";
-import { SparkLineIcon } from "../components/lineIcons";
+import { formatDate } from "../../../shared/dates";
+import { PencilLineIcon, SparkLineIcon } from "../components/lineIcons";
 import { regenerateChange, resolveProposalsIn, speak, useEdits } from "../editWithAi";
-import { useT } from "../i18n";
+import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
 import {
   clearHovered,
@@ -14,6 +15,7 @@ import {
   pendingIn,
   shownProposal,
   sourcesRemoved,
+  theirChange,
 } from "./proposalReview";
 
 /** How long the bar stays once the pointer leaves its change, so it can reach the bar. */
@@ -31,14 +33,16 @@ const spokenText = (text: string) => {
  * Proposals waiting in the Mind (#93), reviewed in place:
  *
  * - at the top of the Mind, while any wait: "3 changes from the assistant ·
- *   Accept all · Reject all", which stays in view as the Mind scrolls;
+ *   Accept all · Reject all", which stays in view as the Mind scrolls, and a
+ *   line of its own for each person's changes from a Word file (#108): "4
+ *   changes from Dana Kim · Accept all · Reject all";
  * - over the change the pointer or the cursor is on, its own bar: "Change 1
- *   of 3 · Accept · Reject" (⌘↵, ⌘⌫), and when it would remove a Citation,
- *   that it does, or when a Document it cites has been deleted, "Source
- *   removed" (#94);
+ *   of 3 · Accept · Reject" (⌘↵, ⌘⌫), with who made someone's change and
+ *   when, and when it would remove a Citation, that it does, or when a
+ *   Document it cites has been deleted, "Source removed" (#94);
  * - under a change out of date, instead of its bar, "Out of date ·
  *   Regenerate · Reject" (drawn by `ProposalReview`; its buttons are handled
- *   here): it can't be accepted;
+ *   here), without Regenerate for someone's: it can't be accepted;
  * - for screen readers, the change the cursor moves into, what it does and
  *   the keys that accept and reject it.
  *
@@ -94,41 +98,108 @@ export function ProposalBars({ editor, mindId }: { editor: Editor; mindId: strin
 /** The second click of a double click: it does nothing more. */
 const repeated = (event: MouseEvent) => event.detail > 1;
 
+/** Changes waiting at the top of the Mind, in a line each: each person's from the file, and the assistant's. */
+interface Group {
+  /** Who made them, for someone's changes from a Word file (null when the file names no one); the assistant's: undefined. */
+  author?: string | null;
+  ids: string[];
+  stale: boolean;
+}
+
 function ProposalsBar({ editor, mindId }: { editor: Editor; mindId: string }) {
   const t = useT();
-  const { ids, stale } = useEditorState({
+  const groups = useEditorState({
     editor,
-    selector: ({ editor: current }) => {
-      const pending = pendingIn(current.state);
-      return {
-        ids: pending.map((each) => each.id),
-        stale: pending.some((each) => each.outOfDate),
-      };
+    selector: ({ editor: current }): Group[] => {
+      const theirs = new Map<string | null, Group>();
+      const assistant: Group = { ids: [], stale: false };
+      for (const each of pendingIn(current.state)) {
+        let group = assistant;
+        if (each.theirs) {
+          const author = theirChange(current, each)?.author ?? null;
+          group = theirs.get(author) ?? { author, ids: [], stale: false };
+          theirs.set(author, group);
+        }
+        group.ids.push(each.id);
+        group.stale ||= each.outOfDate;
+      }
+      return [...theirs.values(), ...(assistant.ids.length > 0 ? [assistant] : [])];
     },
   });
-  if (ids.length === 0) return null;
-  const resolveAll = (outcome: "accept" | "reject") => {
-    resolveProposalsIn(editor, mindId, "all", outcome);
-  };
+  if (groups.length === 0) return null;
   return (
     // biome-ignore lint/a11y/useSemanticElements: a region of the Mind, not a page landmark.
     <div
       role="region"
-      aria-label={t("proposal.region")}
+      aria-label={t(
+        groups.some((group) => group.author !== undefined)
+          ? "proposal.region.review"
+          : "proposal.region",
+      )}
       data-testid="proposals-bar"
       className="proposals-bar"
     >
-      <SparkLineIcon className="proposals-bar-icon" />
-      <span data-testid="proposals-count" className="min-w-0 truncate">
-        {ids.length === 1 ? t("proposal.count.one") : t("proposal.count", { count: ids.length })}
+      {groups.map((group) => (
+        <GroupLine
+          key={group.author === undefined ? "\u0000assistant" : (group.author ?? "\u0000unknown")}
+          group={group}
+          every={groups.length === 1}
+          editor={editor}
+          mindId={mindId}
+        />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * One line of the bar: how many changes, whose, and Accept all · Reject all
+ * for them; for every change the Mind holds as it acts, when the line has
+ * them all (`every`), those an Undo has just brought back too.
+ */
+function GroupLine({
+  group,
+  every,
+  editor,
+  mindId,
+}: {
+  group: Group;
+  every: boolean;
+  editor: Editor;
+  mindId: string;
+}) {
+  const t = useT();
+  const theirs = group.author !== undefined;
+  const name = group.author ?? t("proposal.unknownAuthor");
+  const prefix = theirs ? "their-changes" : "proposals";
+  const count = group.ids.length;
+  const resolveAll = (outcome: "accept" | "reject") => {
+    resolveProposalsIn(editor, mindId, every ? "all" : group.ids, outcome);
+  };
+  return (
+    <div className="proposals-bar-line" data-testid={`${prefix}-line`}>
+      {theirs ? (
+        <PencilLineIcon className="proposals-bar-icon" />
+      ) : (
+        <SparkLineIcon className="proposals-bar-icon" />
+      )}
+      <span data-testid={`${prefix}-count`} className="min-w-0 truncate">
+        {theirs
+          ? count === 1
+            ? t("proposal.theirs.count.one", { name })
+            : t("proposal.theirs.count", { count, name })
+          : count === 1
+            ? t("proposal.count.one")
+            : t("proposal.count", { count })}
       </span>
       <span aria-hidden="true" className="proposal-dot">
         ·
       </span>
       <button
         type="button"
-        data-testid="proposals-accept-all"
-        title={stale ? t("proposal.acceptAll.outOfDate") : undefined}
+        data-testid={`${prefix}-accept-all`}
+        title={group.stale ? t("proposal.acceptAll.outOfDate") : undefined}
+        aria-label={theirs ? t("proposal.theirs.acceptAll", { name }) : undefined}
         onClick={(event) => {
           if (!repeated(event.nativeEvent)) resolveAll("accept");
         }}
@@ -141,7 +212,8 @@ function ProposalsBar({ editor, mindId }: { editor: Editor; mindId: string }) {
       </span>
       <button
         type="button"
-        data-testid="proposals-reject-all"
+        data-testid={`${prefix}-reject-all`}
+        aria-label={theirs ? t("proposal.theirs.rejectAll", { name }) : undefined}
         onClick={(event) => {
           if (!repeated(event.nativeEvent)) resolveAll("reject");
         }}
@@ -153,6 +225,21 @@ function ProposalsBar({ editor, mindId }: { editor: Editor; mindId: string }) {
   );
 }
 
+/** Who made someone's change and when, as the file says: "Dana Kim, 2 Oct 2026". */
+function useMadeBy(made: { author: string | null; date: string | null } | null): string | null {
+  const t = useT();
+  const language = useLanguage();
+  if (!made) return null;
+  const author = made.author ?? t("proposal.unknownAuthor");
+  const date = made.date ? new Date(made.date) : null;
+  if (!date || Number.isNaN(date.getTime())) return author;
+  // The day the file names, not the day it falls on here: Word writes its own clock's time.
+  return t("proposal.madeBy", {
+    author,
+    date: formatDate(date, language, { timeZone: "UTC" }),
+  });
+}
+
 interface Shown {
   id: string;
   index: number;
@@ -161,6 +248,8 @@ interface Shown {
   to: number;
   dropped: number;
   citations: PendingProposal["citations"];
+  /** Who made someone's change, and when; null for the assistant's. */
+  made: { author: string | null; date: string | null } | null;
 }
 
 function ChangeBar({ editor, mindId }: { editor: Editor; mindId: string }) {
@@ -183,9 +272,11 @@ function ChangeBar({ editor, mindId }: { editor: Editor; mindId: string }) {
         to: first.to,
         dropped: proposal.droppedCitations,
         citations: proposal.citations,
+        made: proposal.theirs ? theirChange(current, proposal) : null,
       };
     },
   });
+  const madeBy = useMadeBy(shown?.made ?? null);
   const documents = useAppStore((state) =>
     state.status.kind === "ready" ? state.documents : null,
   );
@@ -276,6 +367,11 @@ function ChangeBar({ editor, mindId }: { editor: Editor; mindId: string }) {
       <span className="change-bar-position">
         {t("proposal.position", { index: shown.index, count: shown.count })}
       </span>
+      {madeBy && (
+        <span data-testid="change-bar-author" className="change-bar-author">
+          {madeBy}
+        </span>
+      )}
       {shown.dropped > 0 && (
         <span data-testid="change-bar-drops" className="change-bar-drops">
           {shown.dropped === 1
@@ -319,8 +415,12 @@ function ChangeBar({ editor, mindId }: { editor: Editor; mindId: string }) {
   );
 }
 
-/** What a change does, in words, for a screen reader. */
-function describe(proposal: PendingProposal, t: ReturnType<typeof useT>): string {
+/** What a change does, in words, for a screen reader; whose, for someone's (`author`). */
+function describe(
+  proposal: PendingProposal,
+  t: ReturnType<typeof useT>,
+  author: string | null,
+): string {
   const removed = spokenText(proposal.removed);
   const added = spokenText(proposal.added);
   const what =
@@ -330,17 +430,15 @@ function describe(proposal: PendingProposal, t: ReturnType<typeof useT>): string
         ? t("proposal.announce.add", { added })
         : t("proposal.announce.remove", { removed });
   const platform = isMacOS() ? "mac" : "other";
-  if (proposal.outOfDate) {
-    return t("proposal.announce.outOfDate", {
-      what,
-      reject: t(`proposal.keys.reject.${platform}`),
-    });
+  const accept = t(`proposal.keys.accept.${platform}`);
+  const reject = t(`proposal.keys.reject.${platform}`);
+  if (author !== null) {
+    return proposal.outOfDate
+      ? t("proposal.announce.theirs.outOfDate", { author, what, reject })
+      : t("proposal.announce.theirs", { author, what, accept, reject });
   }
-  return t("proposal.announce", {
-    what,
-    accept: t(`proposal.keys.accept.${platform}`),
-    reject: t(`proposal.keys.reject.${platform}`),
-  });
+  if (proposal.outOfDate) return t("proposal.announce.outOfDate", { what, reject });
+  return t("proposal.announce", { what, accept, reject });
 }
 
 /** The Mind's polite live region: the change the cursor moves into, and what was accepted or rejected. */
@@ -354,7 +452,12 @@ function Spoken({ editor, mindId }: { editor: Editor; mindId: string }) {
   useEffect(() => {
     if (!focused || editor.isDestroyed) return;
     const proposal = pendingIn(editor.state).find((each) => each.id === focused);
-    if (proposal) speak(mindId, describe(proposal, t));
+    if (!proposal) return;
+    const made = proposal.theirs ? theirChange(editor, proposal) : null;
+    speak(
+      mindId,
+      describe(proposal, t, made ? (made.author ?? t("proposal.unknownAuthor")) : null),
+    );
   }, [focused, editor, mindId, t]);
   return (
     <div role="status" aria-live="polite" data-testid="proposal-spoken" className="sr-only">

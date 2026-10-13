@@ -128,7 +128,7 @@ export function TabStrip({
         type="button"
         data-testid="new-tab"
         aria-label={t("tabs.new", { shortcut: shortcutLabel("tab.new") })}
-        title={t("tabs.new", { shortcut: shortcutLabel("tab.new") })}
+        title={t("tabs.new.about", { shortcut: shortcutLabel("tab.new") })}
         onClick={() => void createMind({ groupId: group.id })}
         className="tab-new"
       >
@@ -292,7 +292,7 @@ function Tab({ tab, groupId, selected, focusedGroup, divider, dragged, drag }: T
             title={title}
             onDone={() => {
               renameTab(null);
-              focusTab(tab.id);
+              focusTab(tab.id, { onlyIfLost: true });
             }}
           />
         ) : (
