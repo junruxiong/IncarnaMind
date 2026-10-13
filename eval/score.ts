@@ -62,8 +62,10 @@ export interface Dump {
   embeddings: "off";
   /** How many keyword candidates each query holds. */
   keywordDepth: number;
-  /** How many of them have a `rerankScore`: what the search Tool hands its reranker. */
+  /** How many of them have a `rerankScore`: the most `--depth` can read. */
   rerankedDepth: number;
+  /** How many the search Tool's reranker reads, with embeddings off: the default `--depth`. Absent in a dump from before it was 20. */
+  toolDepth?: number;
   reranker: { id: string; name: string };
   /** The tag the report splits by first. */
   groupBy: string;
@@ -337,7 +339,7 @@ export function formatScore(score: DumpScore, dump: Dump): string {
   const topKs = score.orders[0]?.byTop.map((entry) => entry.topK) ?? [];
   const width = Math.max(...score.orders.map((order) => order.name.length), 20);
   const lines = [
-    `${score.set}: ${dump.questions.length} Questions, ${dump.keywordDepth} keyword candidates each, reranked by ${dump.reranker.name} (${dump.rerankedDepth} deep), embeddings off`,
+    `${score.set}: ${dump.questions.length} Questions, ${dump.keywordDepth} keyword candidates each, reranked by ${dump.reranker.name} (scores for the first ${dump.rerankedDepth}), embeddings off`,
     `${"".padEnd(width)}  ${topKs.map((topK) => `top ${topK}`.padStart(8)).join("")}`,
     ...score.orders.map(
       (order) =>
@@ -411,7 +413,10 @@ export function main(argv: readonly string[], print: (text: string) => void = co
   const models = scoreFiles.map((file) => parseScores(readFileSync(file, "utf8"), file));
   const results = dumps.map((file) => {
     const dump = parseDump(readFileSync(file, "utf8"), file);
-    const options: ScoreOptions = { depth: depth ?? dump.rerankedDepth, dropNeighbours };
+    const options: ScoreOptions = {
+      depth: depth ?? dump.toolDepth ?? dump.rerankedDepth,
+      dropNeighbours,
+    };
     const orders: Order[] = [
       { kind: "keyword" },
       { kind: "rerank" },

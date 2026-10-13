@@ -14,7 +14,8 @@
  * with "rows" quotes two lines, so a sheet's Citation covers a range of rows; one that
  * asks for it "as a table" gets a Markdown table with its markers in a cell; one that
  * asks "by quarter" (按季度) gets a table of quarterly figures, its marker in each cell
- * but the last, to chart (#436); "分季度" gets the same in Chinese, in 万元.
+ * but the last, to chart (#436); "分季度" gets the same in Chinese, in 万元, and
+ * "in millions" each figure as "$289.4 million".
  * One that asks how much something grew (增长) has the growth from the first
  * two numbers of its quote calculated, and writes it with its marker.
  * Before its search it reasons, a line that quotes the Question, as a model
@@ -22,6 +23,11 @@
  * and writes its Answer word by word, so a test sees each step of the Answer.
  *
  * A Question with "blank reply" in it gets a reply with no text at all.
+ *
+ * A comparison table's cell (#98) cites its Document's line that shares the
+ * most words with the Question and answers with its value ("Termination
+ * notice: 90 days." gives "90 days"), or NOT_FOUND when no line shares one;
+ * a cell whose Question says "busy" is refused with an HTTP 429 the first time.
  *
  * A Question about the User's notes or what they selected ("notes", "selected",
  * 笔记, 选中), asked beside a Mind, gets an Answer that starts by saying what it
@@ -63,6 +69,7 @@
  * Make this a Skill (`fakeSkillDraft`): a draft whose "when to use it" and first
  * step quote the Mind's last Question, so a test sees that the Mind was read.
  */
+import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import type { ChatModelFactory } from "../core";
 import { EXCERPT_END, EXCERPT_START } from "../core/tags/classify";
@@ -126,14 +133,14 @@ const tableAnswer = (markers: string) =>
 const AS_A_TABLE = /\bas a table\b/i;
 
 /** The scripted Answer to a Question that asks for figures by quarter: a table of them, each cited but the last. */
-const figuresAnswer = (marker: string) =>
+const figuresAnswer = (marker: string, written = (figure: string) => figure) =>
   [
     "| Quarter | 2024 | 2025 |",
     "|:--|--:|--:|",
-    `| Q1 | 289.4 ${marker} | 341.5 ${marker} |`,
-    `| Q2 | 301.2 ${marker} | 362.0 ${marker} |`,
-    `| Q3 | 309.8 ${marker} | 377.9 ${marker} |`,
-    `| Q4 | 330.6 ${marker} | 401.2 |`,
+    `| Q1 | ${written("289.4")} ${marker} | ${written("341.5")} ${marker} |`,
+    `| Q2 | ${written("301.2")} ${marker} | ${written("362.0")} ${marker} |`,
+    `| Q3 | ${written("309.8")} ${marker} | ${written("377.9")} ${marker} |`,
+    `| Q4 | ${written("330.6")} ${marker} | ${written("401.2")} |`,
     "",
     "That is all.",
   ].join("\n");
@@ -154,6 +161,7 @@ const chineseFiguresAnswer = (marker: string) =>
 /** A Question that asks for figures by quarter. */
 const BY_QUARTER = /\bby quarter\b|按季度/i;
 const BY_QUARTER_CHINESE = /分季度/;
+const IN_MILLIONS = /\bin millions\b/i;
 
 /** The text of the last user message: the Question, after what it is asked beside. */
 function lastUserText(prompt: Prompt): string {
@@ -525,6 +533,34 @@ function nextReply(prompt: Prompt, tools: readonly OfferedTool[]): Reply {
   return "text" in reply && said.length > 0 ? { text: [...said, reply.text].join("\n\n") } : reply;
 }
 
+/** A comparison table's cell (#98) says so before its Question. */
+const isCell = (prompt: Prompt) => lastUserText(prompt).includes("one cell of a comparison table");
+
+/**
+ * A cell: the line of its Document that shares the most words with the
+ * Question, cited, then its value ("Termination notice: 90 days." gives "90
+ * days"); NOT_FOUND when no line shares a word.
+ */
+function cellReply(prompt: Prompt, question: string): Reply {
+  const searches = toolResults(prompt, "search_documents");
+  if (searches.length === 0) return { tool: "search_documents", input: { query: question } };
+  let best: { record: Record<string, unknown>; shared: number } | null = null;
+  for (const passage of passagesIn(searches.at(-1) ?? "")) {
+    const found = recordFor(passage, question, 1);
+    if (found && (!best || found.shared > best.shared)) best = found;
+  }
+  if (!best || best.shared === 0) return { text: "NOT_FOUND" };
+  if (toolResults(prompt, "cite").length === 0) {
+    return { tool: "cite", input: { citations: [best.record] } };
+  }
+  const quote = String(best.record.quote);
+  const value = (quote.split(": ")[1] ?? quote).replace(/[.。]$/, "");
+  return { text: `${value} [^1]` };
+}
+
+/** The cells whose provider has refused them once already ("busy" in the Question). */
+const refusedOnce = new Set<string>();
+
 /** The scripted provider's web search: it searches once and finds `FOUND_PAGES`, as Anthropic reports them. */
 function searchParts(tool: string, query: string): StreamPart[] {
   return [
@@ -558,6 +594,7 @@ function searchParts(tool: string, query: string): StreamPart[] {
 /** What the model does next, apart from Connector Tools: call a Tool, or stream its Answer. */
 function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
   const question = lastQuestion(prompt);
+  if (tools.includes("search_documents") && isCell(prompt)) return cellReply(prompt, question);
   if (tools.includes("use_skill") && toolResults(prompt, "use_skill").length === 0) {
     const named = skillNamed(prompt, question);
     if (named) return { tool: "use_skill", input: { name: named } };
@@ -606,7 +643,10 @@ function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
   const answer = BY_QUARTER_CHINESE.test(question)
     ? chineseFiguresAnswer(recorded[0] ?? "")
     : BY_QUARTER.test(question)
-      ? figuresAnswer(recorded[0] ?? "")
+      ? figuresAnswer(
+          recorded[0] ?? "",
+          IN_MILLIONS.test(question) ? (figure) => `$${figure} million` : undefined,
+        )
       : AS_A_TABLE.test(question)
         ? tableAnswer(recorded.join(" "))
         : recorded.length > 1
@@ -827,6 +867,19 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
       warnings: [],
     }),
     doStream: async ({ prompt, tools, abortSignal }) => {
+      // A busy provider refuses each "busy" cell's first request once, as an HTTP 429.
+      const cell =
+        isCell(prompt) && /\bbusy\b/i.test(lastQuestion(prompt)) ? lastUserText(prompt) : null;
+      if (cell && !refusedOnce.has(cell)) {
+        refusedOnce.add(cell);
+        throw new APICallError({
+          message: "Too Many Requests",
+          url: "http://127.0.0.1/v1/chat/completions",
+          requestBodyValues: {},
+          statusCode: 429,
+          isRetryable: false,
+        });
+      }
       const search = tools?.find((each) => each.type === "provider");
       const parts = search
         ? searchParts(search.name, lastQuestion(prompt))
