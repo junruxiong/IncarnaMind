@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { ErrorWording } from "../../core/errors";
 import type { MessageKey } from "../../shared/i18n";
 import { describeError } from "./errors";
 
@@ -21,6 +22,8 @@ export interface ErrorNotice {
   id: number;
   /** The core's own sentence. */
   message: string;
+  /** The sentence as a key of the dictionary, which the notice says in the interface language. */
+  wording: ErrorWording | null;
   /** Plain words for a failure of the system's, which replace the sentence. */
   reason: MessageKey | null;
   /** The technical text, for the Details. */
@@ -53,7 +56,7 @@ export function createNotices(clock: Clock = systemClock) {
     errors: [],
     confirmation: null,
     showError(error) {
-      const { message, reason, detail } = describeError(error);
+      const { message, wording, reason, detail } = describeError(error);
       // The same failure twice is one notice: it says it once.
       if (
         get().errors.some(
@@ -62,7 +65,9 @@ export function createNotices(clock: Clock = systemClock) {
       ) {
         return;
       }
-      set((state) => ({ errors: [...state.errors, { id: ++ids, message, reason, detail }] }));
+      set((state) => ({
+        errors: [...state.errors, { id: ++ids, message, wording, reason, detail }],
+      }));
     },
     dismissError(id) {
       set((state) => ({ errors: state.errors.filter((each) => each.id !== id) }));

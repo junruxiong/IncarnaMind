@@ -234,6 +234,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
       /^Outline(⌥⌘L|Ctrl\+Alt\+L)$/,
       /^Export as Word \(\.docx\)(⇧⌘E|Ctrl\+Shift\+E)$/,
       /^Export as PDF$/,
+      /^Export as Source pack \(PDF\)$/,
       /^Export as HTML$/,
       /^Export as Markdown \(\.md\)$/,
       /^Export options…$/,
@@ -274,7 +275,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     await expect(shortlist.getByTestId("mind-menu")).toBeFocused();
     await window.keyboard.press("Enter");
     await expect(actions.getByTestId("mind.open")).toBeFocused();
-    for (let step = 0; step < 11; step++) await window.keyboard.press("ArrowDown");
+    for (let step = 0; step < 12; step++) await window.keyboard.press("ArrowDown");
     await expect(actions.getByTestId("mind.moveTo")).toBeFocused();
     await window.keyboard.press("Enter");
     await expect(picker.getByTestId("move-to-search")).toBeFocused();
