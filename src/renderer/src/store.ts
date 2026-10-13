@@ -194,6 +194,8 @@ interface AppState extends LayoutSlice {
   editFolder(folderId: string, input: LibraryGroupInput): Promise<void>;
   /** Deletes a Folder, with Undo: its Documents and Minds go to Not in a Folder. */
   deleteFolder(folderId: string): Promise<void>;
+  /** Lists a Mind just made and opens it in a new tab after the shown one, in the focused group or `groupId`. */
+  showNewMind(mind: Mind, groupId?: string): Promise<void>;
   /** Called once the new Mind's title has the focus. */
   titleFocused(): void;
   /** Starts a Question at the end of the open Mind, or of a new Mind if none is open. */
@@ -748,19 +750,23 @@ export const useAppStore = create<AppState>()((set, get) => {
           ...(options?.title && { title: options.title }),
           ...(options?.folderId && { folderId: options.folderId }),
         });
-        // The "minds.changed" event may have listed it already.
-        set((state) => ({
-          minds: [mind, ...state.minds.filter((each) => each.id !== mind.id)],
-          ...(options?.startQuestion
+        set(
+          options?.startQuestion
             ? { questionToStart: { mindId: mind.id, scope: options.scope ?? null } }
-            : { titleToFocus: mind.id }),
-        }));
-        await get().changeLayout({
-          type: "open",
-          item: { kind: "mind", mindId: mind.id },
-          where: { in: "group", ...(options?.groupId && { groupId: options.groupId }) },
-        });
+            : { titleToFocus: mind.id },
+        );
+        await get().showNewMind(mind, options?.groupId);
       }),
+
+    showNewMind: async (mind, groupId) => {
+      // The "minds.changed" event may have listed it already.
+      set((state) => ({ minds: [mind, ...state.minds.filter((each) => each.id !== mind.id)] }));
+      await get().changeLayout({
+        type: "open",
+        item: { kind: "mind", mindId: mind.id },
+        where: { in: "group", ...(groupId && { groupId }) },
+      });
+    },
 
     titleFocused: () => set({ titleToFocus: null }),
 
