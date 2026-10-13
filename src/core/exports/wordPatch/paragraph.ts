@@ -15,19 +15,27 @@
  * IncarnaMind's tracked changes, and, when the User's edits are tracked,
  * their words added and removed as theirs, and a format they changed with
  * what it was (`w:rPrChange`). IncarnaMind's comments on AI text start and
- * end where its passages do.
+ * end where its passages do. Someone's change from the file (#108) still
+ * waiting stays as it was there; one accepted or rejected leaves no trace.
  */
 import type { NodeJSON } from "../../../shared/blockJson";
 import { readWordAtom } from "../../../shared/wordFiles";
 import { GENERATED_MARK, IMAGE_NODE, WORD_ATOM_NODE } from "../../api";
 import type { Places } from "../../documents/formats/docxImport";
 import { elements, type XmlElement } from "../../documents/formats/xml";
-import type { Inline, Pendings, ReviewReading } from "../../mindText";
+import {
+  type Inline,
+  isWordChange,
+  type Pending,
+  type Pendings,
+  type ReviewReading,
+  samePendings,
+} from "../../mindText";
 import { diffSteps, splitWords } from "../../proposals/diff";
 import { dateAttribute, escapeXml, type WordIds } from "../wordml";
 import { changeClose, changeTag, type Review, type Tracking, trackInline } from "../wordReview";
 import { marksOf, NO_MARKS, nodePendings, sameMarks, type TextMarks, textPendings } from "./mind";
-import { Properties, runPropertiesFor } from "./properties";
+import { Properties, runPropertiesFor, withoutFormatChange } from "./properties";
 import {
   closeTag,
   endOf,
@@ -104,17 +112,33 @@ export const special = (inline: Inline): Token => ({
 const textTokens = (text: string, marks: TextMarks, run: XmlElement | null) =>
   Array.from(text, (each) => char(each, marks, run));
 
-/** A paragraph's text as the import read it, each character with the run it came from. */
+/**
+ * A paragraph's text as the import read it, each character with the run it
+ * came from, and someone's changes to it in the file (`reading`, #108).
+ */
 export function baseTokens(
   content: readonly NodeJSON[],
   origins: ReadonlyMap<NodeJSON, XmlElement>,
+  reading?: ReviewReading,
 ): Token[] {
   const tokens: Token[] = [];
   for (const node of content) {
     const run = origins.get(node) ?? null;
-    if (node.type === "text") tokens.push(...textTokens(node.text ?? "", marksOf(node.marks), run));
-    else if (node.type === "hardBreak")
-      tokens.push({ ...char("\n", NO_MARKS, run), kind: "break", key: BREAK });
+    if (node.type === "text") {
+      const pending = textPendings(node, reading);
+      tokens.push(
+        ...textTokens(node.text ?? "", marksOf(node.marks), run).map((token) => ({
+          ...token,
+          pending,
+        })),
+      );
+    } else if (node.type === "hardBreak")
+      tokens.push({
+        ...char("\n", NO_MARKS, run),
+        kind: "break",
+        key: BREAK,
+        pending: nodePendings(node, reading),
+      });
     else {
       const source = sourceOf(node);
       if (source) tokens.push(atom(source));
@@ -191,6 +215,32 @@ export function currentTokens(
   return tokens;
 }
 
+/**
+ * Tokens with someone's change to their whole paragraph from the file
+ * (#108): kept as it was there, or resolved, word by word like the others.
+ */
+export function withWordChanges(tokens: Token[], pending: Pendings): Token[] {
+  const inserted = isWordChange(pending.inserted) ? pending.inserted : undefined;
+  const deleted = isWordChange(pending.deleted) ? pending.deleted : undefined;
+  if (!inserted && !deleted) return tokens;
+  return tokens.map((token) =>
+    token.kind === "special"
+      ? token
+      : {
+          ...token,
+          pending: {
+            ...(inserted && { inserted }),
+            ...(deleted && { deleted }),
+            ...token.pending,
+          },
+        },
+  );
+}
+
+/** Someone's changes from the file on a token, as one key. */
+const wordChangesOf = (pending: Pendings) =>
+  `${isWordChange(pending.inserted) ? pending.inserted.id : ""}\u0000${isWordChange(pending.deleted) ? pending.deleted.id : ""}`;
+
 /** One step of a paragraph from its text as imported to its text now, in the order written. */
 export type Aligned =
   /** A base token kept, as current token `y`. */
@@ -203,35 +253,170 @@ export type Aligned =
   | { step: "proposed"; y: number };
 
 /**
- * A paragraph's text as imported and now, aligned word by word. What changes
- * still waiting add isn't the Mind's text yet: it is left out of the
- * comparison, and goes where it is among the rest.
+ * A paragraph's text as imported and now, aligned word by word. What the AI's
+ * changes still waiting add isn't the Mind's text yet: it is left out of the
+ * comparison, and goes where it is among the rest. Someone's from the file
+ * (#108) was in it, and is compared; what one the User resolved since took
+ * away (`resolvedAway`) is removed without being compared.
  */
 export function alignTokens(base: readonly Token[], current: readonly Token[]): Aligned[] {
-  const accepted = current.flatMap((token, index) => (token.pending.inserted ? [] : [index]));
+  const accepted = current.flatMap((token, index) =>
+    token.pending.inserted && !isWordChange(token.pending.inserted) ? [] : [index],
+  );
+  const now = accepted.map((index) => current[index] as Token);
+  const gone = resolvedAway(base, now);
+  const compared = base.flatMap((_, index) => (gone.has(index) ? [] : [index]));
   const steps = diffTokens(
-    base,
-    accepted.map((index) => current[index] as Token),
+    compared.map((index) => base[index] as Token),
+    now,
   );
   const aligned: Aligned[] = [];
   let x = 0;
   let next = 0;
   let written = 0;
+  let removed = 0;
   const proposedBefore = (limit: number) => {
     for (; written < limit; written++) aligned.push({ step: "proposed", y: written });
   };
+  /** Base tokens up to `limit` that are gone, and the one at it, in order. */
+  const reach = (limit: number) => {
+    for (; removed < limit; removed++)
+      if (gone.has(removed)) aligned.push({ step: "delete", x: removed });
+    removed = limit + 1;
+    return limit;
+  };
   for (const step of steps) {
     if (step === "delete") {
-      aligned.push({ step: "delete", x: x++ });
+      aligned.push({ step: "delete", x: reach(compared[x++] as number) });
       continue;
     }
     const y = accepted[next++] as number;
     proposedBefore(y);
     written = y + 1;
-    aligned.push(step === "equal" ? { step: "equal", x: x++, y } : { step: "insert", y });
+    if (step === "equal") aligned.push({ step: "equal", x: reach(compared[x++] as number), y });
+    else aligned.push({ step: "insert", y });
   }
+  reach(base.length);
   proposedBefore(current.length);
   return aligned;
+}
+
+/** How many resolved changes in a paragraph its export weighs one by one when the User edited it too. */
+const GREEDY_CHANGES = 16;
+
+/** Someone's change a base token is part of, resolved since, and whether the token is what it adds. */
+interface Resolved {
+  id: string;
+  adds: boolean;
+}
+
+/**
+ * The base tokens that someone's changes from the file the User accepted or
+ * rejected since took away: an insertion rejected, a deletion accepted. The
+ * Mind no longer says which way each went, so it is read from the text now:
+ * the ways that give it exactly, if any do (`exactly`), else the ways that
+ * leave it nearest: all one way, then change by change.
+ */
+function resolvedAway(base: readonly Token[], now: readonly Token[]): Set<number> {
+  const waiting = new Set<string>();
+  for (const token of now) {
+    for (const each of [token.pending.inserted, token.pending.deleted])
+      if (isWordChange(each)) waiting.add(each.id);
+  }
+  const changeOf = base.map((token): Resolved | null => {
+    const { inserted, deleted } = token.pending;
+    if (isWordChange(inserted) && !waiting.has(inserted.id)) return { id: inserted.id, adds: true };
+    if (isWordChange(deleted) && !waiting.has(deleted.id)) return { id: deleted.id, adds: false };
+    return null;
+  });
+  const ids = new Set(changeOf.flatMap((change) => (change ? [change.id] : [])));
+  if (ids.size === 0) return new Set();
+  const keysNow = now.map((token) => token.key);
+  const exact = exactly(base, changeOf, keysNow);
+  const acceptedIds = exact ?? new Map<string, boolean>();
+  const kept = (index: number) => {
+    const change = changeOf[index];
+    return !change || change.adds === (acceptedIds.get(change.id) ?? true);
+  };
+  if (!exact) {
+    const cost = () =>
+      diffSteps(
+        base.flatMap((token, index) => (kept(index) ? [token.key] : [])),
+        keysNow,
+      ).filter((step) => step !== "equal").length;
+    const all = (accepted: boolean) => {
+      for (const id of ids) acceptedIds.set(id, accepted);
+      return cost();
+    };
+    const allAccepted = all(true);
+    if (all(false) > allAccepted) all(true);
+    // Each change weighed on its own costs two comparisons of the paragraph: only for a few.
+    if (ids.size <= GREEDY_CHANGES) {
+      for (const id of ids) {
+        const was = acceptedIds.get(id) ?? true;
+        const before = cost();
+        acceptedIds.set(id, !was);
+        if (cost() >= before) acceptedIds.set(id, was);
+      }
+    }
+  }
+  return new Set(base.flatMap((_, index) => (kept(index) ? [] : [index])));
+}
+
+/**
+ * Whether each resolved change was accepted, such that the text as imported
+ * becomes the text now exactly; null if no way does (the User edited it too).
+ */
+function exactly(
+  base: readonly Token[],
+  changeOf: readonly (Resolved | null)[],
+  now: readonly string[],
+): Map<string, boolean> | null {
+  /** The base in stretches: text no resolved change has, and each change's own. */
+  const stretches: { id: string | null; from: number; to: number }[] = [];
+  changeOf.forEach((change, index) => {
+    const id = change?.id ?? null;
+    const last = stretches.at(-1);
+    if (last && last.id === id) last.to = index + 1;
+    else stretches.push({ id, from: index, to: index + 1 });
+  });
+  const matches = (from: number, to: number, accepted: boolean | null, at: number) => {
+    let y = at;
+    for (let x = from; x < to; x++) {
+      if (accepted !== null && changeOf[x]?.adds !== accepted) continue;
+      if (now[y] !== (base[x] as Token).key) return -1;
+      y++;
+    }
+    return y;
+  };
+  /** After each stretch, each place in the text now it can end at, with how it got there. */
+  const reached: Map<number, { from: number; accepted: boolean | null }>[] = [];
+  let places = new Map<number, { from: number; accepted: boolean | null }>([
+    [0, { from: 0, accepted: null }],
+  ]);
+  for (const stretch of stretches) {
+    const next = new Map<number, { from: number; accepted: boolean | null }>();
+    for (const at of places.keys()) {
+      for (const accepted of stretch.id === null ? [null] : [true, false]) {
+        const end = matches(stretch.from, stretch.to, accepted, at);
+        if (end >= 0 && !next.has(end)) next.set(end, { from: at, accepted });
+      }
+    }
+    if (next.size === 0) return null;
+    reached.push(next);
+    places = next;
+  }
+  if (!places.has(now.length)) return null;
+  const accepted = new Map<string, boolean>();
+  let at = now.length;
+  for (let index = stretches.length - 1; index >= 0; index--) {
+    const step = reached[index]?.get(at);
+    if (!step) return null;
+    const { id } = stretches[index] as { id: string | null };
+    if (id !== null && step.accepted !== null) accepted.set(id, step.accepted);
+    at = step.from;
+  }
+  return accepted;
 }
 
 /** What writing a paragraph needs of the part it is in. */
@@ -389,7 +574,11 @@ export function writeParagraph(
       const { y } = each;
       baseOf[y] = x;
       const now = current[y] as Token;
-      if (piece && (now.pending.deleted || (isText(was) && !sameMarks(was.marks, now.marks))))
+      if (
+        piece &&
+        (!samePendings(was.pending, now.pending) ||
+          (isText(was) && !sameMarks(was.marks, now.marks)))
+      )
         piece.dirty = true;
       if (isText(was)) {
         formatRun[y] = was.run;
@@ -451,29 +640,36 @@ export function writeParagraph(
       if (!piece.written && piece.tokens.length === 0) verbatim(piece);
     }
   };
-  /** The changes still waiting on a token, outermost first; a special's are the native writer's. */
-  const pendingOf = (token: Token, inserted: boolean): Tracking[] =>
-    token.kind === "special"
-      ? []
-      : [
-          ...(inserted && token.pending.inserted
-            ? [review.pending("insert", token.pending.inserted)]
-            : []),
-          ...(token.pending.deleted ? [review.pending("delete", token.pending.deleted)] : []),
-        ];
+  /**
+   * The changes still waiting on a token, outermost first, but someone's from
+   * the file it still has as it had (`kept`), which stay in the change they are
+   * in there. A special's are the native writer's.
+   */
+  const pendingOf = (token: Token, kept: boolean): Tracking[] => {
+    if (token.kind === "special") return [];
+    const { inserted, deleted } = token.pending;
+    const writes = (pending: Pending | undefined): pending is Pending =>
+      pending !== undefined && !(kept && isWordChange(pending));
+    return [
+      ...(writes(inserted) ? [review.pending("insert", inserted)] : []),
+      ...(writes(deleted) ? [review.pending("delete", deleted)] : []),
+    ];
+  };
   const userInsert = input.track ? review.user("insert") : null;
   const userDelete = input.track ? review.user("delete") : null;
 
   for (const each of aligned) {
     if (each.step === "delete") {
-      // The User's removal, written as theirs when their edits are tracked.
+      // The User's removal, written as theirs when their edits are tracked; someone's change
+      // from the file resolved (an insertion rejected, a deletion accepted) leaves no trace.
       const token = baseList[each.x] as Token;
       const piece = pieceOfToken(each.x);
+      if (isWordChange(token.pending.inserted) || isWordChange(token.pending.deleted)) continue;
       if (!userDelete || !piece || piece.frozen) continue;
       if (token.kind === "atom" && !(token.source && context.removedHere(token.source))) continue;
       passiveBefore(piece.from);
       lastVerbatim = -1;
-      writer.add(token, token.run, [userDelete], null);
+      writer.add(token, token.run, [userDelete], null, "own");
       continue;
     }
     const index = each.y;
@@ -501,17 +697,25 @@ export function writeParagraph(
     if (each.step === "equal") {
       const was = baseList[from] as Token;
       const reformatted = isText(was) && !sameMarks(was.marks, token.marks);
+      const kept = wordChangesOf(was.pending) === wordChangesOf(token.pending);
       writer.add(
         token,
         formatRun[index] ?? null,
-        pendingOf(token, false),
+        pendingOf(token, kept),
         reformatted ? userInsert : null,
+        kept ? "kept" : "own",
       );
-    } else if (each.step === "insert") {
-      const own = userInsert ? [userInsert] : [];
-      writer.add(token, formatRun[index] ?? null, [...own, ...pendingOf(token, false)], null);
     } else {
-      writer.add(token, formatRun[index] ?? null, pendingOf(token, true), null);
+      // Text that is still part of someone's insertion is theirs, wherever the comparison puts it.
+      const own =
+        each.step === "insert" && userInsert && !token.pending.inserted ? [userInsert] : [];
+      writer.add(
+        token,
+        formatRun[index] ?? null,
+        [...own, ...pendingOf(token, false)],
+        null,
+        "borrowed",
+      );
     }
   }
   for (const piece of pieces) {
@@ -578,8 +782,19 @@ function diffTokens(a: readonly Token[], b: readonly Token[]): ReturnType<typeof
 }
 
 /**
- * A wrapper open around runs: an original element (a hyperlink, a smart tag),
- * a new link, or a tracked change, whose start tag takes an id when opened.
+ * How text stands to the run it takes its formatting from: the run's own
+ * text, with someone's changes around it in the file kept or not, or new text
+ * borrowing a neighbour's formatting, without someone's change to it.
+ */
+type RunUse = "kept" | "own" | "borrowed";
+
+/** Someone's tracked changes around runs in the file: kept only around what they still change. */
+const CHANGES = new Set(["w:ins", "w:del", "w:moveFrom", "w:moveTo"]);
+
+/**
+ * A wrapper open around runs: an original element (a hyperlink, a smart tag,
+ * someone's change), a new link, or a tracked change, whose start tag takes
+ * an id when opened.
  */
 interface Wrapper {
   key: XmlElement | Tracking | string;
@@ -591,6 +806,8 @@ interface Wrapper {
 class RunWriter {
   private out = "";
   private open: Wrapper[] = [];
+  /** Someone's changes opened once already: opened again, each takes a new id. */
+  private readonly opened = new Set<XmlElement>();
   private run: {
     key: string;
     rPr: string;
@@ -629,7 +846,18 @@ class RunWriter {
   }
 
   private wrapper(element: XmlElement): Wrapper {
-    const { text } = this.context;
+    const { text, ids } = this.context;
+    if (CHANGES.has(element.name)) {
+      const open = () => {
+        const tag = openTag(text, element);
+        if (!this.opened.has(element)) {
+          this.opened.add(element);
+          return tag;
+        }
+        return tag.replace(/\sw:id="[^"]*"/, ` w:id="${ids.take("annotation")}"`);
+      };
+      return { key: element, open, close: closeTag(element) };
+    }
     const properties = elements(element)
       .filter((each) => /Pr$/.test(each.name) && each.name !== "w:rPr")
       .map((each) => sliceOf(text, each))
@@ -680,6 +908,7 @@ class RunWriter {
     formatRun: XmlElement | null,
     changes: Tracking[],
     formatBy: Tracking | null,
+    use: RunUse,
   ): void {
     const { review, ids } = this.context;
     const before = review.before(token);
@@ -688,7 +917,7 @@ class RunWriter {
       this.out += before;
     }
     if (token.kind === "char" || token.kind === "break")
-      this.addText(token, formatRun, changes, formatBy);
+      this.addText(token, formatRun, changes, formatBy, use);
     else if (token.kind === "atom" && token.source) this.addAtom(token.source, changes);
     else if (token.inline) {
       this.enter([]);
@@ -709,19 +938,22 @@ class RunWriter {
     formatRun: XmlElement | null,
     changes: Tracking[],
     formatBy: Tracking | null,
+    use: RunUse,
   ): void {
     const { text, hrefOf, linkStyle, addLinkStyle, newLink } = this.context;
-    const original = this.wrappersOf(formatRun);
+    const original = this.wrappersOf(formatRun).filter(
+      (each) => use === "kept" || !CHANGES.has(each.name),
+    );
     const inheritedLink =
       original
         .filter((each) => each.name === "w:hyperlink")
         .map(hrefOf)
         .at(-1) ?? null;
-    const kept = original.filter(
+    const around = original.filter(
       (each) => each.name !== "w:hyperlink" || hrefOf(each) === token.marks.link,
     );
-    const wanted = kept.map((each) => this.wrapper(each));
-    const linked = kept.some((each) => each.name === "w:hyperlink");
+    const wanted = around.map((each) => this.wrapper(each));
+    const linked = around.some((each) => each.name === "w:hyperlink");
     if (token.marks.link && !linked) {
       wanted.push({
         key: `link:${token.marks.link}`,
@@ -734,16 +966,19 @@ class RunWriter {
     const rPrElement = formatRun
       ? elements(formatRun).find((each) => each.name === "w:rPr")
       : undefined;
-    const baseRPr = formatRun
+    const ownRPr = formatRun
       ? rPrElement
         ? sliceOf(text, rPrElement)
         : ""
       : this.input.fallbackRun;
+    const baseRPr = use === "borrowed" ? withoutFormatChange(ownRPr) : ownRPr;
     const linkChanged = token.marks.link !== inheritedLink;
     const style = !linkChanged ? null : token.marks.link ? addLinkStyle() : linkStyle;
     const rPr = runPropertiesFor(baseRPr, token.marks, style);
     const startTag = formatRun ? openTag(text, formatRun) : "<w:r>";
-    const deleted = changes.some((each) => each.kind === "delete");
+    const deleted =
+      changes.some((each) => each.kind === "delete") ||
+      original.some((each) => each.name === "w:del");
     const key = `${startTag}\u0000${rPr}\u0000${deleted}\u0000${formatBy ? baseRPr : ""}`;
     if (this.run?.key !== key) {
       this.endRun();

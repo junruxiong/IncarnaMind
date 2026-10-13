@@ -339,6 +339,14 @@ function testConnectorDirectory(): unknown {
 }
 
 /**
+ * Test-only launch flag: where the Connectors search asks the MCP Registry
+ * (#148), a local stand-in, so the smoke tests reach no registry. Only a
+ * test build honours it.
+ */
+const connectorRegistryUrl =
+  import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_CONNECTOR_REGISTRY : undefined;
+
+/**
  * Test-only launch flag: the port of a local server standing in for the web
  * (#128). Web search's fetcher resolves every host to a public address and
  * connects there, its guard still deciding which hosts it reaches, so the
@@ -435,6 +443,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
   const connectorDirectory = testConnectorDirectory();
   return {
     ...(connectorDirectory !== undefined && { connectorDirectory }),
+    ...(connectorRegistryUrl && { connectorRegistryUrl }),
     ...(chatGptStore && { chatGptStore }),
     ...(chatGptPlan && { chatGptPlan }),
     ...(web && { web }),
