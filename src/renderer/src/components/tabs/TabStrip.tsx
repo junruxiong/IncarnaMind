@@ -16,6 +16,7 @@ import {
 } from "../lineIcons";
 import { ObjectMenu, useObjectMenu } from "../ObjectMenu";
 import { SidebarToggle } from "../SidebarToggle";
+import { TasksChip } from "../TasksChip";
 import { GroupMenu, StripButton } from "./TabMenus";
 import { focusTab, splitToTheRight } from "./tabActions";
 import { MeetingTabTime, TabIcon, useTabTitle } from "./tabItems";
@@ -24,7 +25,8 @@ import type { TabDrag } from "./useTabDrag";
 /*
  * A group's tab strip (DESIGN.md, Components: Mind tabs, which now hold
  * everything that opens): the tabs, then "+" for a new Mind in this group,
- * then Export (for a Mind), Split and ⋯. This file is their behaviour and
+ * then the Tasks chip (in the last group's strip), Export (for a Mind), Split
+ * and ⋯. This file is their behaviour and
  * structure; their whole look is the `.tab-strip` block in styles.css.
  */
 
@@ -49,6 +51,7 @@ export function TabStrip({
   const shownId = group.activeTabId;
   const shown = group.tabs.find((tab) => tab.id === shownId);
   const focused = merged || layout?.focusedGroupId === group.id;
+  const last = merged || index === (layout?.groups.length ?? 1) - 1;
 
   // The shown tab stays in sight when there are more tabs than room.
   useEffect(() => {
@@ -132,6 +135,7 @@ export function TabStrip({
         <PlusLineIcon />
       </button>
       <span className="tab-strip-spacer" />
+      {last && <TasksChip />}
       {shown?.item.kind === "mind" && <ExportButton mindId={shown.item.mindId} />}
       {!merged && (
         <span className="tab-split">
