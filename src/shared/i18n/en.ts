@@ -645,6 +645,21 @@ export const en = {
   "proposal.sourceRemoved": "Source removed",
   "proposal.sourceRemoved.why":
     "A Document this change cites has been deleted. Its Citation keeps the quote.",
+  "proposal.region.review": "Changes to review",
+  "proposal.theirs.count": "{count} changes from {name}",
+  "proposal.theirs.count.one": "1 change from {name}",
+  "proposal.theirs.acceptAll": "Accept all changes from {name}",
+  "proposal.theirs.rejectAll": "Reject all changes from {name}",
+  "proposal.unknownAuthor": "Unknown author",
+  "proposal.madeBy": "{author}, {date}",
+  "proposal.outOfDate.why.theirs":
+    "You edited this text after the change was made, so it can't be accepted. Reject it, or finish the edit yourself.",
+  "proposal.announce.theirs":
+    "{author}'s change: {what}. Accept with {accept}, reject with {reject}.",
+  "proposal.announce.theirs.outOfDate":
+    "{author}'s change, out of date: {what}. You edited its text after it was made. Reject it with {reject}.",
+  "proposal.cantAccept.theirs":
+    "This change is out of date: reject it, or finish the edit yourself.",
   "editor.turnInto.label": "Turn into",
   "editor.turnInto.bulletList": "Bulleted list",
   "editor.turnInto.orderedList": "Numbered list",
@@ -3365,6 +3380,13 @@ export const en = {
   "wordImport.count.images": "{count} pictures",
   "wordImport.count.links": "{count} links",
   "wordImport.count.kept": "{kind} ({count})",
+  "wordImport.report.keptChanges": "Changes kept as they are, to accept or reject in Word: {list}.",
+  "wordImport.keptChange.format": "formatting ({count})",
+  "wordImport.keptChange.paragraphMark": "paragraph marks ({count})",
+  "wordImport.keptChange.move": "moves ({count})",
+  "wordImport.keptChange.row": "table rows ({count})",
+  "wordImport.keptChange.cell": "table cells ({count})",
+  "wordImport.keptChange.content": "fields, pictures or notes ({count})",
   "wordImport.sectionBreak.title": "Delete the section break?",
   "wordImport.sectionBreak.body":
     "The pages after it will take the layout of the pages before it: page size, orientation, columns, headers and footers.",
