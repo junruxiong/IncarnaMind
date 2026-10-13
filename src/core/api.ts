@@ -121,8 +121,17 @@ export interface CreateMindInput {
  * - 15: what a Word import keeps as it is (`WORD_ATOM_NODE`, `WORD_BLOCK_NODE`,
  *   #104) and pictures in the text (`IMAGE_NODE`). Older content is version 15
  *   content as it is: nothing is rewritten.
+ * - 16: the rows a cut chart doesn't draw (#503): `cutRows` beside `rows`
+ *   in a chart's `data`, which Show as table lists. An older version keeps
+ *   them while it changes a chart's kind, columns or title, but its Update
+ *   writes the data again without them. Older charts are version 16 content
+ *   as they are: one with no `cutRows` lists the rows it draws, and nothing
+ *   is rewritten.
+ * - 17: comparison tables (#98): `COMPARISON_TABLE_NODE`, `COMPARISON_ROW_NODE`
+ *   and `COMPARISON_CELL_NODE`. Older content is version 17 content as it is:
+ *   nothing is rewritten.
  */
-export const CONTENT_SCHEMA_VERSION = 15;
+export const CONTENT_SCHEMA_VERSION = 17;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -325,8 +334,9 @@ export const MIND_PROPOSAL_REQUESTS_FIELD = "proposalRequests";
 /**
  * What made a request's Proposals: Edit with AI (#93), with what it was asked
  * so a change can be made again (regenerated) once it is out of date;
- * Regenerate of an Answer the User had edited (#94); or an Answer from the
- * assistant added to a new Mind, as changes to accept (#201). The assistant
+ * Regenerate of an Answer the User had edited (#94); an Answer from the
+ * assistant added to a new Mind, as changes to accept (#201); or Compare
+ * Documents, whose comparison table is one change (#98). The assistant
  * (#202) and Enhance (#114) add theirs.
  */
 export type ProposalRequest =
@@ -338,7 +348,8 @@ export type ProposalRequest =
       instruction?: string;
     })
   | (ProposalMaker & { source: "answer"; answerId: string })
-  | (ProposalMaker & { source: "answer-added" });
+  | (ProposalMaker & { source: "answer-added" })
+  | (ProposalMaker & { source: "comparison-table"; tableId: string });
 
 /** The model that made a request's Proposals, and when. */
 export interface ProposalMaker {
@@ -372,6 +383,79 @@ export const QUESTION_BLOCK = "question";
 
 /** The node type of an Answer Block. Its content is rich text (Note node types), which the User can edit. */
 export const ANSWER_BLOCK = "answer";
+
+/**
+ * A comparison table (CONTEXT.md, #98): a top-level Block holding one row per
+ * Document and, in each row, one cell per Question (`ComparisonTableAttributes`).
+ */
+export const COMPARISON_TABLE_NODE = "comparisonTable";
+/** A comparison table's row: one Document (`ComparisonRowAttributes`), its cells in the columns' order. */
+export const COMPARISON_ROW_NODE = "comparisonRow";
+/**
+ * A comparison table's cell: the Answer to its column's Question from its
+ * row's Document alone, Citations and all (Note node types), or why there is
+ * none (`ComparisonCellAttributes`).
+ */
+export const COMPARISON_CELL_NODE = "comparisonCell";
+
+/** A comparison table's column: its Question. */
+export interface ComparisonQuestion {
+  /** A random UUID: what each row's cell for this column names. */
+  id: string;
+  text: string;
+}
+
+/** Attributes of a comparison table's Block, as stored in the Mind's Yjs document. */
+export interface ComparisonTableAttributes {
+  id: string | null;
+  /** Its columns, in order. */
+  questions: ComparisonQuestion[];
+  /** The model its cells are written with; both null: the default model. */
+  providerId: string | null;
+  modelId: string | null;
+  /** What else the User asked the table to show, for every cell; null for nothing. */
+  instruction: string | null;
+}
+
+/** Attributes of a comparison table's row. */
+export interface ComparisonRowAttributes {
+  documentId: string;
+  /** The Document's name when the table was made: shown once the Document is deleted. */
+  documentName: string;
+}
+
+/**
+ * Where a cell is: waiting for its turn, being written, written (its content
+ * is its Answer), or without an Answer (`problem` says why). A cell left
+ * "waiting" or "writing" by a fill that ended (a quit, or the table rejected
+ * and brought back) is stopped: filling the table again writes it.
+ */
+export type ComparisonCellStatus = "waiting" | "writing" | "done" | "failed";
+
+/**
+ * Why a cell has no Answer: its Document doesn't answer the Question
+ * ("not-found"), has no text to search, was deleted, or is a file
+ * IncarnaMind wrote, which checks leave out (#80); or why its model didn't
+ * write one (a `ProviderErrorKind`). "cost-cap" and "plan-limit" stopped the
+ * fill (`RunStop`): the cell wasn't checked.
+ */
+export type ComparisonProblem =
+  | "not-found"
+  | "nothing-to-search"
+  | "source-removed"
+  | "left-out"
+  | ProviderErrorKind;
+
+/** Attributes of a comparison table's cell. */
+export interface ComparisonCellAttributes {
+  questionId: string;
+  status: ComparisonCellStatus;
+  problem: ComparisonProblem | null;
+  /** The provider's own message for a failure, or what the model said when the Document doesn't answer. */
+  message: string | null;
+  /** "plan-limit": when the plan's limit resets (ISO 8601), when the provider says. */
+  resetsAt: string | null;
+}
 
 /**
  * A Note's "include in Question context" flag. Absent (or null) means on, the
@@ -2906,6 +2990,46 @@ export interface CostSummary {
  */
 export type RunStop = { reason: "cost-cap" } | { reason: "plan-limit"; resetsAt: string | null };
 
+/** What Compare Documents makes a comparison table of (#98). */
+export interface CompareDocumentsInput {
+  mindId: string;
+  /** The rows, in order: Documents IncarnaMind wrote that checks leave out are dropped (#80). */
+  documentIds: string[];
+  /** The columns, in order. */
+  questions: string[];
+  /** What else the table should show, for every cell. */
+  instruction?: string | null;
+  /** The model its cells are written with; the default model when left out. */
+  model?: ChatModelChoice | null;
+  /**
+   * The Block it goes after (the one the cursor is in), or before, when that
+   * Block is an empty paragraph, which stays to write on. None: the Mind's end.
+   */
+  afterBlockId?: string | null;
+}
+
+/** A comparison table, by its Mind and its Block's id. */
+export interface ComparisonTableRef {
+  mindId: string;
+  tableId: string;
+}
+
+/**
+ * What asking for a comparison table, or for its cells to be filled, did: it
+ * is in the Mind (a change to accept, the first time) and its cells are being
+ * filled; or nothing was written or sent, because the model can't be used yet
+ * (`readiness` says why) or the User didn't allow it to be sent to.
+ */
+export type ComparisonResult =
+  | { started: true; tableId: string }
+  | { started: false; reason: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
+  | { started: false; reason: "consent-declined" };
+
+/** A comparison table whose cells are being filled ("comparison.filling"). */
+export interface ComparisonFilling extends ComparisonTableRef {
+  filling: boolean;
+}
+
 /** A large run to estimate: so many items (a comparison table's cells, verify's sentences…), each about an Answer. */
 export interface RunEstimateInput {
   items: number;
@@ -4155,6 +4279,8 @@ export const aiUseKinds = [
   "assistant-change-rejected",
   /** A change from Edit with AI accepted (#93). */
   "edit-with-ai-accepted",
+  /** A comparison table from Compare Documents accepted (#98). */
+  "comparison-table-accepted",
 ] as const;
 export type AiUseKind = (typeof aiUseKinds)[number];
 
@@ -5964,6 +6090,27 @@ export interface CoreApi {
   estimateRun(input: RunEstimateInput): Promise<RunEstimate>;
 
   /**
+   * Compare Documents (#98): puts a comparison table into the Mind, one row
+   * per Document and one column per Question, as one change to accept or
+   * reject, and fills its cells, each an Answer from its row's Document alone
+   * with checked Citations ("comparison.filling" while it does). A model off
+   * this computer writes up to 4 cells at once, backing off when its provider
+   * limits requests; one on this computer, one at a time. The monthly cap or a
+   * plan's limit stops the fill, and the cells left say they weren't checked.
+   */
+  compareDocuments(input: CompareDocumentsInput): Promise<ComparisonResult>;
+  /**
+   * Fills a comparison table's cells that have no Answer (`cellToFill`): a
+   * column the editor just added, or cells a fill left (a quit, the monthly
+   * cap, a failure). A fill already going takes them up once its cells are done.
+   */
+  fillComparisonTable(input: ComparisonTableRef): Promise<ComparisonResult>;
+  /** Stops filling a comparison table: cells being written stay as they were. */
+  stopComparisonTable(input: ComparisonTableRef): Promise<void>;
+  /** The comparison tables whose cells are being filled now. */
+  listFillingComparisons(): Promise<ComparisonTableRef[]>;
+
+  /**
    * Asks a Question: its Answer is written into the Mind right after it, as the
    * model streams it ("answer.*" events follow its progress). Asking a Question
    * that already has an Answer writes it again in place. An Answer the User
@@ -6633,6 +6780,8 @@ export interface CoreEvents {
   "answer.citationAdded": AnswerCitationAdded;
   "answer.finished": AnswerFinished;
   "answer.failed": AnswerFailed;
+  /** A comparison table's cells started or stopped being filled. */
+  "comparison.filling": ComparisonFilling;
   /** The User accepted a suggestion into a Mind (see `acceptSuggestion`). */
   "suggestion.accepted": SuggestionAccepted;
   /**
@@ -6753,6 +6902,10 @@ const methods: Record<CoreApiMethod, true> = {
   listChatModels: true,
   getCostSummary: true,
   estimateRun: true,
+  compareDocuments: true,
+  fillComparisonTable: true,
+  stopComparisonTable: true,
+  listFillingComparisons: true,
   askQuestion: true,
   regenerateAnswer: true,
   stopAnswer: true,
