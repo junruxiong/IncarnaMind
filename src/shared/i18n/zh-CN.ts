@@ -3427,6 +3427,8 @@ export const zhCN = {
   "wordImport.from": "来自“{name}”",
   "wordImport.keepsStyles": "导出时保留原有格式",
   "wordImport.from.open": "在旁边打开“{name}”",
+  "wordImport.notAdded": "未能把“{name}”加入资料库，回答无法引用它。",
+  "wordImport.addToLibrary": "加入资料库",
   "wordImport.from.tooltip":
     "从 Word 文件打开。导出时会把你的修改写回原文件，并保留其中的样式、编号、页眉和页脚。",
   "wordImport.progress": "正在导入“{name}” · {percent}%",

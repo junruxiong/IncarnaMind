@@ -76,7 +76,7 @@ import { SmartTypography } from "../editor/typography";
 import { useVerification, VerifyLine } from "../editor/VerifyLine";
 import { wordAtomView, wordBlockView } from "../editor/WordAtomView";
 import { WordCount } from "../editor/WordCount";
-import { useWordFile, WordOrigin } from "../editor/WordOrigin";
+import { OriginalNotAdded, useWordFile, WordOrigin } from "../editor/WordOrigin";
 import { requestEdit, startEditing, TRANSLATE_LANGUAGES } from "../editWithAi";
 import { translateNow, useT } from "../i18n";
 import { markSelectionAsMine } from "../markAsMine";
@@ -638,6 +638,7 @@ function MindEditorView({
         createPortal(
           <>
             <WordOrigin doc={doc} />
+            <OriginalNotAdded mindId={mindId} />
             {verification ? (
               <VerifyLine editor={editor} doc={doc} mindId={mindId} verification={verification} />
             ) : (

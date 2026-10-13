@@ -28,6 +28,10 @@ interface WordImportState {
   importing: boolean;
   /** Why importing refused it, when the file changed after it was read. */
   refusal: WordRefusalReason | null;
+  /** The Minds whose original the Library couldn't take at import, each with its file, to try again. */
+  notAdded: Record<string, string>;
+  /** The Mind whose original is being added again. */
+  retrying: string | null;
   /** "Import a Word file…": the system's open dialog, then the import screen. */
   pick(): Promise<void>;
   /** Opens the import screen on a file. */
@@ -38,6 +42,8 @@ interface WordImportState {
   confirm(): Promise<void>;
   /** For a dropped file: adds it as a Document, as a drop elsewhere would, instead. */
   addAsDocument(): Promise<void>;
+  /** Adds a Mind's original to the Library again, after it couldn't be added at import. */
+  retryOriginal(mindId: string): Promise<void>;
   close(): void;
 }
 
@@ -57,6 +63,8 @@ export const useWordImport = create<WordImportState>()((set, get) => ({
   newVersion: true,
   importing: false,
   refusal: null,
+  notAdded: {},
+  retrying: null,
 
   async pick() {
     const path = await files.pickWordFile();
@@ -105,6 +113,9 @@ export const useWordImport = create<WordImportState>()((set, get) => ({
         return;
       }
       get().close();
+      if (result.originalAdded === false) {
+        set((state) => ({ notAdded: { ...state.notAdded, [result.mind.id]: path } }));
+      }
       await useAppStore.getState().showNewMind(result.mind);
     } catch (error) {
       set({ importing: false });
@@ -116,6 +127,23 @@ export const useWordImport = create<WordImportState>()((set, get) => ({
     const { path } = get();
     get().close();
     if (path) await useAppStore.getState().addPaths([path]);
+  },
+
+  async retryOriginal(mindId) {
+    const path = get().notAdded[mindId];
+    if (path === undefined || get().retrying !== null) return;
+    set({ retrying: mindId });
+    try {
+      const added = await core.addWordOriginal(mindId, path);
+      set((state) => {
+        if (!added) return { retrying: null };
+        const { [mindId]: _added, ...notAdded } = state.notAdded;
+        return { retrying: null, notAdded };
+      });
+    } catch (error) {
+      set({ retrying: null });
+      reportError(error);
+    }
   },
 
   close: () => set({ path: null, check: null, importing: false, refusal: null }),

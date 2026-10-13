@@ -1018,7 +1018,15 @@ export interface ImportWordFileInput {
  * no Mind made.
  */
 export type ImportWordFileResult =
-  | { ok: true; mind: Mind }
+  | {
+      ok: true;
+      mind: Mind;
+      /**
+       * With `addOriginal`: whether the original became a Document. False when the Library
+       * couldn't take it, which the User is told, with a way to try again (`addWordOriginal`).
+       */
+      originalAdded?: boolean;
+    }
   | { ok: false; refusal: WordRefusalReason };
 
 /**
@@ -6424,6 +6432,13 @@ export interface CoreApi {
    * next start). Someone else's document makes every Block third-party text (#78).
    */
   importWordFile(input: ImportWordFileInput): Promise<ImportWordFileResult>;
+  /**
+   * Adds the original of a Mind imported from Word to the Library, in the Mind's Folder,
+   * and links the two, as importing with `addOriginal` does (#720): for when that failed.
+   * Returns whether it was added. Throws NotFoundError for an unknown Mind, and
+   * InvalidInputError for one not imported from Word.
+   */
+  addWordOriginal(mindId: string, path: string): Promise<boolean>;
   /** Minds that are not deleted, most recently updated first. Editing a Mind's content updates it. */
   listMinds(): Promise<Mind[]>;
   /** Changes a Mind's title (trimmed; empty means "Untitled") and returns the Mind. */
@@ -7773,6 +7788,7 @@ const methods: Record<CoreApiMethod, true> = {
   createMind: true,
   checkWordFile: true,
   importWordFile: true,
+  addWordOriginal: true,
   listMinds: true,
   renameMind: true,
   deleteMind: true,

@@ -1133,6 +1133,13 @@
       margin-top: 0;
     }
   }
+  .mind-word-problem {
+    margin: -2px 0 6px;
+
+    + .mind-count {
+      margin-top: 0;
+    }
+  }
 
   /* A Mind made by "Verify a document…" (#97): where its text came from, then where its verify is. */
   .mind-verify {
