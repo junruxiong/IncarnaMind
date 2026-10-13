@@ -979,7 +979,9 @@ export function SkillRow({ name, use, reads }: SkillUse) {
     >
       <p className="answer-call-summary answer-call-summary--static">
         {status === "failed" ? (
-          <ProblemMark className="" />
+          <span className="answer-call-icon flex items-center justify-center">
+            <ProblemMark className="" />
+          </span>
         ) : (
           <SkillIcon
             className={`answer-call-icon ${status === "running" ? "animate-pulse" : ""}`}

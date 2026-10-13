@@ -7,7 +7,12 @@ import { ExclamationIcon } from "../viewer/icons";
  * `className` to place it as a flex item instead.
  */
 export function ProblemMark({ className = "mr-1.5 inline align-[-2px]" }: { className?: string }) {
-  return <ExclamationIcon className={`size-3.5 shrink-0 text-warning ${className}`} />;
+  return (
+    <ExclamationIcon
+      viewBox="10 4 4 17"
+      className={`h-3 w-auto shrink-0 text-warning ${className}`}
+    />
+  );
 }
 
 /** The one action a problem offers. */
