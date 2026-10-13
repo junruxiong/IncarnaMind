@@ -8,9 +8,9 @@ import type { DragEvent } from "react";
  */
 export const DOCUMENT_TYPE = "application/x-incarnamind-document";
 
-/** Starts dragging this Document. */
-export function startDocumentDrag(event: DragEvent, documentId: string): void {
-  event.dataTransfer.setData(DOCUMENT_TYPE, JSON.stringify([documentId]));
+/** Starts dragging these Documents: the one pointed at, or all those selected when it is one of them. */
+export function startDocumentDrag(event: DragEvent, documentIds: readonly string[]): void {
+  event.dataTransfer.setData(DOCUMENT_TYPE, JSON.stringify(documentIds));
   event.dataTransfer.effectAllowed = "link";
 }
 
