@@ -1055,6 +1055,39 @@ export async function pointAt(window: Page, target: Locator): Promise<{ x: numbe
   return point;
 }
 
+/** Presses Tab, or Shift+Tab if `target` comes before the focus, until `target` has the focus. */
+export async function tabTo(window: Page, target: Locator, max = 40): Promise<void> {
+  const key = (await target.evaluate((element) => {
+    const focused = document.activeElement;
+    return (
+      focused !== null &&
+      focused !== document.body &&
+      (focused.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_PRECEDING) !== 0
+    );
+  }))
+    ? "Shift+Tab"
+    : "Tab";
+  for (let step = 0; step < max; step++) {
+    if (await target.evaluate((element) => element === document.activeElement)) return;
+    await window.keyboard.press(key);
+  }
+  await expect(target).toBeFocused();
+}
+
+/** Sets the sidebar's width, as dragging its edge does (165 is the narrowest), and waits for it. */
+export async function setSidebarWidth(window: Page, width: number): Promise<void> {
+  await window.evaluate(
+    (sidebarWidth) =>
+      (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+        device: { sidebarWidth },
+      }),
+    width,
+  );
+  await expect
+    .poll(async () => (await window.getByTestId("sidebar").boundingBox())?.width)
+    .toBeCloseTo(width, 0);
+}
+
 /** The assistant's Answers (#201), in the conversation it shows. */
 export const assistantAnswers = (window: Page) =>
   window.getByTestId("assistant").getByTestId("assistant-answer");
