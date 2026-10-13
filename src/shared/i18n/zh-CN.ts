@@ -1155,7 +1155,7 @@ export const zhCN = {
   "tags.picker.back": "返回",
   "tags.picker.none": "没有匹配的标签。",
   "tags.picker.hint": "Enter 添加 · Backspace 移除",
-  "tags.picker.keys": "↵ 添加或移除 · ⌫ 移除最后一个 · {undo} 撤销 · Esc 关闭",
+  "tags.picker.keys": "Enter 添加或移除 · Backspace 移除最后一个 · {undo} 撤销 · Esc 关闭",
   "tags.picker.some": "{total} 个文档中的 {count} 个",
   "tags.picker.remove": "移除“{tag}”",
   "tags.picker.automatic": "自动",

@@ -31,7 +31,9 @@ export function useTextSearch(search: string): {
   const searching = searchesWords(query);
   const [answer, setAnswer] = useState<Answer | null>(null);
   const latest = useRef(query);
-  latest.current = query;
+  useEffect(() => {
+    latest.current = query;
+  }, [query]);
 
   const ask = useCallback((asked: string) => {
     core.searchDocumentText(asked, { limit: MOST_DOCUMENTS }).then(
