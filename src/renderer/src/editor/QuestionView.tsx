@@ -18,6 +18,7 @@ import { SparkLineIcon } from "../components/lineIcons";
 import { ProblemLine } from "../components/ProblemLine";
 import { ReadinessLine } from "../components/providers/ChatReadinessNotice";
 import { useT } from "../i18n";
+import { useModelNames } from "../modelNames";
 import { useAppStore } from "../store";
 import { ChevronDownSmallIcon, RemoveIcon } from "./icons";
 import { useMindId } from "./mindContext";
@@ -66,6 +67,7 @@ export function QuestionView({ node, editor, updateAttributes }: ReactNodeViewPr
   const modelId = text(node.attrs.modelId);
   const defaultModel = useAppStore((state) => state.settings?.user.chatModel?.modelId ?? null);
   const model = modelId ?? defaultModel;
+  const shown = useModelNames()(model ?? "");
 
   return (
     <NodeViewWrapper
@@ -104,8 +106,8 @@ export function QuestionView({ node, editor, updateAttributes }: ReactNodeViewPr
         <NodeViewContent className="question-text" />
         <span contentEditable={false} data-testid="question-meta" className="question-meta">
           {model && (
-            <span data-testid="question-model" className="question-meta-model">
-              {model}
+            <span data-testid="question-model" className="question-meta-model" title={shown.id}>
+              {shown.name}
             </span>
           )}
           {hasSearchScope(scope) && (
