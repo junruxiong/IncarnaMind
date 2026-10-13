@@ -235,6 +235,26 @@ describe("searching the words in Documents", () => {
       handbookDoc?.id,
     ]);
   });
+  test("returns as many Documents as asked for, 20 unless asked, and refuses a limit outside 1 to 200", async () => {
+    const core = startCore(await createTempDataFolder());
+    const folder = await createSourceFolder();
+    const files = await Promise.all(
+      Array.from({ length: 22 }, (_, n) =>
+        writeSourceFile(folder, `Tide table ${n}.txt`, `Spring tides at the harbour, week ${n}.`),
+      ),
+    );
+    await addAndProcess(core, files);
+
+    expect(await core.searchDocumentText("spring tides")).toHaveLength(20);
+    expect(await core.searchDocumentText("spring tides", { limit: 200 })).toHaveLength(22);
+    expect(await core.searchDocumentText("spring tides", { limit: 3 })).toHaveLength(3);
+    for (const limit of [0, 201, 2.5]) {
+      await expect(core.searchDocumentText("spring tides", { limit })).rejects.toThrow(
+        "The limit must be a whole number from 1 to 200.",
+      );
+    }
+  });
+
   test("leaves out a missing Document, and one long Document doesn't crowd out the others", async () => {
     const core = startCore(await createTempDataFolder());
     const folder = await createSourceFolder();
