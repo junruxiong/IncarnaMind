@@ -24,14 +24,15 @@ const rowTones: Record<RowTone, string> = {
  * an inset rule and weight 600. Its actions (`rowActionsClass`) sit on its
  * right end and take its background. Names of Documents and Folders are a
  * shade darker than the app's own rows. A row's words can't be selected, so
- * a right-click never selects them. `--row-bg` follows
- * its background, for a mark that rings itself in it (a Document's Tag dots).
+ * a right-click never selects them. `--row-bg` is the sheet while selected,
+ * for a mark that rings itself in it (a Document's Tag dots, which step aside
+ * while the row is washed).
  */
 export const rowClass = (selected: boolean, tone: RowTone = "app") =>
   `group relative flex h-7 shrink-0 items-center rounded-md text-ui select-none ${
     selected
       ? "bg-sheet font-semibold text-ink shadow-[inset_0_0_0_1px_var(--color-rule)] [--row-bg:var(--color-sheet)]"
-      : `${rowTones[tone]} hover:bg-hover has-[:focus-visible]:bg-hover hover:[--row-bg:var(--color-hover)] has-[:focus-visible]:[--row-bg:var(--color-hover)]`
+      : `${rowTones[tone]} hover:bg-hover has-[:focus-visible]:bg-hover`
   }`;
 
 /** A name being typed in a row. */
@@ -42,6 +43,19 @@ export const rowInputClass =
 export const rowButtonClass =
   "flex h-full w-full min-w-0 items-center gap-2 rounded-md pr-2 pl-2 text-left focus-visible:-outline-offset-2";
 
+/**
+ * Added to a row's button, so that while the row's actions show its content
+ * ends before them: the name gives way with its "…" instead of running under
+ * them. The room is the actions' own (`rowActionsClass`): 24px a button, 1px
+ * between, 4px and 3px of padding, and the 1px they sit in from the edge.
+ */
+export const clearsActions = {
+  menu: "actions-shown:pr-[32px]",
+  tagsAndMenu: "actions-shown:pr-[57px]",
+  /** A Tag's row, whose menu sits 29px in from the edge, before its chevron. */
+  menuBeforeChevron: "actions-shown:pr-[36px]",
+} as const;
+
 /** A row's 16px icon: muted unless the row is selected. */
 export const rowIconClass = (selected: boolean) =>
   `size-4 shrink-0 ${selected ? "text-ink" : "text-ink-meta"}`;
@@ -49,12 +63,14 @@ export const rowIconClass = (selected: boolean) =>
 /**
  * A row's actions, over its right end: shown while it is pointed at, is
  * reached by keyboard, or has a menu open (a mouse click alone doesn't keep
- * them). They take the row's background, so its end (a status, a chevron)
- * doesn't show through, and sit 1px inside its edge, so a selected row's
- * outline runs unbroken behind them.
+ * them), which is what the `actions-shown:` variant (styles.css) says; the
+ * `row-actions` class is how the variant finds an open menu. They
+ * take the row's background and sit 1px inside its edge, so a selected row's
+ * outline runs unbroken behind them. The row's button keeps its content clear
+ * of them (`clearsActions`).
  */
 export const rowActionsClass =
-  "absolute inset-y-px right-px flex items-center gap-px rounded-r-[5px] bg-inherit pr-[3px] pl-1 opacity-0 group-hover:opacity-100 group-has-[:focus-visible]:opacity-100 has-[[aria-expanded=true]]:opacity-100";
+  "row-actions absolute inset-y-px right-px flex items-center gap-px rounded-r-[5px] bg-inherit pr-[3px] pl-1 opacity-0 actions-shown:opacity-100";
 
 /** A 24px icon button among a row's actions. */
 export const rowActionButtonClass =
