@@ -1,6 +1,7 @@
-import { resolve } from "node:path";
+import { writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { expect, test } from "@playwright/test";
-import { startFakeRemote } from "../tests/helpers/remoteMcp";
+import { type FakeRemote, startFakeRemote } from "../tests/helpers/remoteMcp";
 import {
   acceptPlainTextKeys,
   createDataFolder,
@@ -16,6 +17,19 @@ import {
 /** The tiny MCP server the core tests use: `lookup_tide` is read-only, `book_boat` isn't. */
 const TIDE_SERVER = resolve(__dirname, "../tests/fixtures/mcp-server.mjs");
 
+/** The User approves in the browser, which comes back to the app's loopback redirect. */
+async function approveInBrowser(fake: FakeRemote, authorizeUrl: string | undefined, name: string) {
+  const page = await fetch(fake.approve(authorizeUrl ?? ""), {
+    signal: AbortSignal.timeout(15_000),
+  }).catch((error: unknown) => {
+    throw new Error("The app's loopback redirect didn't answer the approval within 15 s.", {
+      cause: error,
+    });
+  });
+  expect(page.status).toBe(200);
+  expect(await page.text()).toContain(`Signed in to ${name}`);
+}
+
 let dataDir: string;
 test.beforeEach(async () => {
   dataDir = await createDataFolder();
@@ -29,10 +43,11 @@ test("a local Connector added in Settings starts and reaches ready, and turning 
   await dismissChatSetup(window);
 
   await openSettings(window, "connectors");
-  const section = window.getByTestId("connectors-settings");
-  await expect(section).toContainText("No Connectors yet.");
-  await section.getByTestId("connector-add").click();
-  const form = section.getByTestId("connector-form");
+  const page = window.getByTestId("settings-page-connectors");
+  await expect(page.getByTestId("connectors-connected")).toHaveCount(0);
+  await page.getByTestId("connector-add-custom").click();
+  await page.getByRole("tab", { name: "Command" }).click();
+  const form = page.getByTestId("connector-form");
   await form.getByLabel("Name", { exact: true }).fill("Tides");
   // Node, the way the test runs it; the app starts it with the login-shell environment.
   await form.getByLabel(/^Command/).fill(process.execPath);
@@ -42,24 +57,22 @@ test("a local Connector added in Settings starts and reaches ready, and turning 
   await acceptPlainTextKeys(window, form);
   await form.getByRole("button", { name: "Add Connector" }).click();
 
-  const connector = section.getByTestId("connector");
-  await expect(connector).toHaveCount(1);
+  // Added, its page opens: its state, and its Tools, each with what it claims and whether it asks.
+  await expect(page.getByTestId("connector-name")).toHaveText("Tides");
+  await expect(page.getByTestId("connector-detail")).toContainText("Added by you · Not reviewed");
+  const connector = page.getByTestId("connector");
   await expect(connector).toHaveAttribute("data-state", "ready", { timeout: 30_000 });
   await expect(connector.getByTestId("connector-state")).toHaveText("Connected");
   await expect(connector).toContainText(TIDE_SERVER);
-
-  // Just added, its Tools are listed unfolded: which claim to be read-only, and which ask first.
-  const tools = connector.getByTestId("connector-tools");
-  await expect(tools).toHaveAttribute("open", "");
-  await expect(tools.locator("summary")).toHaveText("2 Tools · 1 claims to be read-only");
+  const tools = page.getByTestId("connector-tools");
   const lookup = tools.locator('[data-tool="lookup_tide"]');
   const book = tools.locator('[data-tool="book_boat"]');
   await expect(lookup).toHaveAttribute("data-read-only", "true");
-  await expect(lookup.getByTestId("connector-tool-claim")).toContainText("claims to be read-only");
-  await expect(lookup.getByTestId("connector-tool-approval")).toHaveValue("always");
+  await expect(lookup.getByTestId("connector-tool-claim")).toHaveText("Reads");
+  await expect(lookup.getByRole("radio", { name: "Always allow" })).toBeChecked();
   await expect(book).toHaveAttribute("data-read-only", "false");
-  await expect(book.getByTestId("connector-tool-claim")).toContainText("may change things");
-  await expect(book.getByTestId("connector-tool-approval")).toHaveValue("ask");
+  await expect(book.getByTestId("connector-tool-claim")).toHaveText("May change things");
+  await expect(book.getByRole("radio", { name: "Ask every time" })).toBeChecked();
 
   // The claim is only a hint: the read-only Tool can be switched to ask every time, which the
   // Privacy page lists, and revoking it there goes back to the default.
@@ -67,9 +80,7 @@ test("a local Connector added in Settings starts and reaches ready, and turning 
   await showSettingsPage(window, "privacy");
   await expect(approvals).toContainText("No Tool is set to always allow or to ask every time.");
   await showSettingsPage(window, "connectors");
-  await lookup
-    .getByRole("combobox", { name: "When an Answer calls lookup_tide" })
-    .selectOption("ask");
+  await lookup.getByText("Ask every time").click();
   await expect(lookup).toHaveAttribute("data-asks", "true");
   await showSettingsPage(window, "privacy");
   const policy = approvals.getByTestId("approval-policy");
@@ -80,7 +91,16 @@ test("a local Connector added in Settings starts and reaches ready, and turning 
   await expect(policy).toHaveCount(0);
   await showSettingsPage(window, "connectors");
   await expect(lookup).toHaveAttribute("data-asks", "false");
-  await expect(lookup.getByTestId("connector-tool-approval")).toHaveValue("always");
+  await expect(lookup.getByRole("radio", { name: "Always allow" })).toBeChecked();
+
+  // Back on the list, where the focus was, it is under Connected; Manage opens its page again.
+  await page.getByTestId("connectors-back").click();
+  await expect(page.getByTestId("connector-add-custom")).toBeFocused();
+  const row = page.getByTestId("connected-connector");
+  await expect(row).toHaveCount(1);
+  await expect(row).toContainText("Tides");
+  await expect(row.getByTestId("connected-connector-state")).toHaveText("Connected");
+  await row.getByTestId("connector-manage").click();
 
   // Off: its process stops, and it says so.
   await connector.getByRole("switch", { name: "Use Tides" }).uncheck();
@@ -99,15 +119,14 @@ test("a remote Connector added by URL needs a sign-in, which goes through the br
     await interceptOpenExternal(app);
 
     await openSettings(window, "connectors");
-    const section = window.getByTestId("connectors-settings");
-    await section.getByTestId("connector-add").click();
-    const form = section.getByTestId("connector-form");
-    await form.getByLabel("Remote server (URL)").check();
+    const page = window.getByTestId("settings-page-connectors");
+    await page.getByTestId("connector-add-custom").click();
+    const form = page.getByTestId("connector-form");
     await form.getByLabel("Name", { exact: true }).fill("Wiki");
     await form.getByLabel("Server URL").fill(fake.url);
     await form.getByRole("button", { name: "Add Connector" }).click();
 
-    const connector = section.getByTestId("connector");
+    const connector = page.getByTestId("connector");
     await expect(connector).toHaveAttribute("data-state", "needs-sign-in", { timeout: 15_000 });
     await expect(connector.getByTestId("connector-state")).toHaveText("Needs sign-in");
     await expect(connector.getByTestId("connector-location")).toHaveText(fake.url);
@@ -124,7 +143,7 @@ test("a remote Connector added by URL needs a sign-in, which goes through the br
     // Signing in opens the authorization request and waits for the browser.
     await connector.getByTestId("connector-sign-in").click();
     await expect(connector).toHaveAttribute("data-state", "signing-in");
-    await expect(connector.getByTestId("connector-signing-in")).toContainText(
+    await expect(page.getByTestId("connector-signing-in")).toContainText(
       "Finish signing in in your browser",
     );
     await expect.poll(async () => (await urlsOpened(app)).length).toBe(1);
@@ -132,20 +151,95 @@ test("a remote Connector added by URL needs a sign-in, which goes through the br
     expect(authorizeUrl?.startsWith(`${fake.issuer}/authorize?`)).toBe(true);
 
     // The User approves; the browser comes back to the loopback redirect.
-    const page = await fetch(fake.approve(authorizeUrl ?? ""), {
-      signal: AbortSignal.timeout(15_000),
-    }).catch((error: unknown) => {
-      throw new Error("The app's loopback redirect didn't answer the approval within 15 s.", {
-        cause: error,
-      });
-    });
-    expect(page.status).toBe(200);
-    expect(await page.text()).toContain("Signed in to Wiki");
+    await approveInBrowser(fake, authorizeUrl, "Wiki");
 
     await expect(connector).toHaveAttribute("data-state", "ready");
     await expect(connector.getByTestId("connector-state")).toHaveText("Connected");
     await expect(connector.getByTestId("connector-sign-out")).toBeVisible();
-    await expect(connector.getByText("2 Tools")).toBeVisible();
+    await expect(page.getByTestId("connector-tool")).toHaveCount(2);
+    await app.close();
+  } finally {
+    await fake.close();
+  }
+});
+
+test("a reviewed Connector in the directory connects in one click, signing in in the browser", async () => {
+  const fake = await startFakeRemote();
+  // The directory as shipped would list real services: this one lists the stand-in.
+  const directory = join(dataDir, "directory.json");
+  await writeFile(
+    directory,
+    JSON.stringify([
+      {
+        id: "wiki",
+        name: "Wiki",
+        publisher: "Wiki Inc.",
+        group: "files",
+        summary: { en: "Search the team wiki", "zh-CN": "搜索团队维基" },
+        subscription: { product: "Wiki Pro" },
+        url: fake.url,
+        signIn: "browser",
+      },
+    ]),
+  );
+  try {
+    const { app, window } = await launchApp(dataDir, { connectorDirectory: directory });
+    await dismissChatSetup(window);
+    await interceptOpenExternal(app);
+
+    await openSettings(window, "connectors");
+    const page = window.getByTestId("settings-page-connectors");
+    const group = page.locator('[data-testid="connectors-group"][data-group="files"]');
+    await expect(group).toContainText("Where your files are");
+    const card = group.getByTestId("connector-entry");
+    await expect(card).toContainText("Wiki");
+    await expect(card).toContainText("Search the team wiki");
+    await expect(card).toContainText("Needs your Wiki Pro subscription");
+    // Search finds it; a word nothing has says so.
+    const search = page.getByTestId("connectors-search");
+    await search.fill("zebra");
+    await expect(page).toContainText("No connector matches “zebra”.");
+    await search.fill("wik");
+    await expect(page.getByTestId("connector-entry")).toHaveCount(1);
+    // Looking at the directory reaches no service.
+    expect(fake.requests).toEqual([]);
+
+    await page.getByTestId("connector-entry").click();
+    const detail = page.getByTestId("connector-detail");
+    await expect(page.getByTestId("connector-name")).toHaveText("Wiki");
+    await expect(detail).toContainText(
+      "By Wiki Inc. · Reviewed by IncarnaMind · Needs your Wiki Pro subscription",
+    );
+    await expect(detail).toContainText(
+      "Sign in with Wiki in your browser; you need a Wiki Pro subscription.",
+    );
+    await expect(page.getByTestId("connectors-back")).toBeFocused();
+    expect(fake.requests).toEqual([]);
+
+    await acceptPlainTextKeys(window);
+    await page.getByTestId("connector-connect").click();
+    await expect(page.getByTestId("connector-signing-in")).toContainText(
+      "Finish signing in in your browser",
+    );
+    await expect.poll(async () => (await urlsOpened(app)).length).toBe(1);
+    const [authorizeUrl] = await urlsOpened(app);
+    await approveInBrowser(fake, authorizeUrl, "Wiki");
+
+    const done = page.getByTestId("connector-connected");
+    await expect(done).toContainText("Connected to Wiki.");
+    await expect(page.getByTestId("connector-tool")).toHaveCount(2);
+    await expect(fake.registrations).toHaveLength(1);
+
+    // Try it in the assistant: Settings closes, and the cursor is in the composer.
+    await done.getByRole("button", { name: "Try it in the assistant" }).click();
+    await expect(window.getByTestId("settings")).toBeHidden();
+    await expect(window.getByTestId("composer-input")).toBeFocused();
+
+    // Settings opens again on the list, the Connector under Connected.
+    await openSettings(window, "connectors");
+    const row = page.getByTestId("connected-connector");
+    await expect(row).toContainText("Wiki");
+    await expect(row.getByTestId("connected-connector-state")).toHaveText("Connected");
     await app.close();
   } finally {
     await fake.close();
@@ -156,11 +250,12 @@ test("a whole command line pasted as the command is split into its arguments, an
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await openSettings(window, "connectors");
-  const section = window.getByTestId("connectors-settings");
+  const page = window.getByTestId("settings-page-connectors");
 
   // Pasted whole, the command keeps the program and its arguments go below.
-  await section.getByTestId("connector-add").click();
-  const form = section.getByTestId("connector-form");
+  await page.getByTestId("connector-add-custom").click();
+  await page.getByRole("tab", { name: "Command" }).click();
+  const form = page.getByTestId("connector-form");
   await form.getByLabel("Name", { exact: true }).fill("Tides");
   const command = form.getByLabel(/^Command/);
   await command.fill(`"${process.execPath}" ${TIDE_SERVER}`);
@@ -171,13 +266,14 @@ test("a whole command line pasted as the command is split into its arguments, an
   await form.getByRole("button", { name: "Cancel" }).click();
 
   // A Connector added with a command that isn't there fails; changing its command fixes it.
-  await section.getByTestId("connector-add").click();
+  await page.getByTestId("connector-add-custom").click();
+  await page.getByRole("tab", { name: "Command" }).click();
   await form.getByLabel("Name", { exact: true }).fill("Tides");
   await form.getByLabel(/^Command/).fill("tide-runtime-not-installed");
   await form.getByLabel(/^Environment variables/).fill("TIDE_TOKEN=smoke-secret");
   await acceptPlainTextKeys(window, form);
   await form.getByRole("button", { name: "Add Connector" }).click();
-  const connector = section.getByTestId("connector");
+  const connector = page.getByTestId("connector");
   await expect(connector).toHaveAttribute("data-state", "error", { timeout: 30_000 });
 
   await connector.getByTestId("connector-edit").click();

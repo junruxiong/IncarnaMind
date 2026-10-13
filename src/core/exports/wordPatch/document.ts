@@ -6,6 +6,12 @@
  * one before it. A table keeps its rows and cells and is written into cell by
  * cell, unless rows or columns were added, removed or merged: then it is
  * written again, each row and cell from the one it was, with its properties.
+ *
+ * For review (#107), what changes still waiting add or remove as a whole goes
+ * in as IncarnaMind's tracked change. When the User's edits are tracked, what
+ * they deleted stays where it was, as their deletion, and what they added or
+ * moved goes in as their insertion; a table's rows likewise, and a
+ * paragraph's properties they changed with what they were (`w:pPrChange`).
  */
 import type { NodeJSON } from "../../../shared/blockJson";
 import { readWordAtom, wordAtomText } from "../../../shared/wordFiles";
@@ -13,12 +19,20 @@ import type { WordAtomKind, WordExportLoss } from "../../api";
 import type { WordDocument } from "../../documents/formats/docxImport";
 import type { Relationship } from "../../documents/formats/docxPackage";
 import { child, elements, walk, type XmlElement } from "../../documents/formats/xml";
-import { type Block, type TableCell, tableLayout } from "../../mindText";
-import { type DocxWriter, WRITER_NAMESPACES } from "../docx";
-import { escapeXml } from "../wordml";
+import { type Block, type ReviewReading, type TableCell, tableLayout } from "../../mindText";
+import { type DocxWriter, piecesOf, WRITER_NAMESPACES } from "../docx";
+import { dateAttribute, escapeXml, type WordIds } from "../wordml";
+import {
+  type Authorship,
+  passagesOf,
+  type Review,
+  type Tracking,
+  trackBlocks,
+} from "../wordReview";
 import type { AtomPlan } from "./atoms";
 import { type Counterpart, counterpartsOf, type ListPlace, NO_MARKS } from "./mind";
 import {
+  alignTokens,
   baseTokens,
   type ParagraphContext,
   sourceOf,
@@ -63,6 +77,11 @@ export interface DocumentPatchInput {
   plan: AtomPlan;
   /** The Bibliography a citation style adds, at the end of the document. */
   bibliography: readonly Block[];
+  /** Changes still waiting, as the Mind was read for review (#107). */
+  reading: ReviewReading | undefined;
+  /** IncarnaMind's tracked changes and comments, and the User's tracked edits. */
+  review: Review;
+  ids: WordIds;
 }
 
 /** A counterpart as imported, and the element its XML is. */
@@ -134,7 +153,7 @@ export class DocumentPatch {
       },
     );
     this.collect(
-      counterpartsOf(input.current, input.currentKey),
+      counterpartsOf(input.current, input.currentKey, input.reading),
       input.currentKey,
       (counterpart) => {
         if (!counterpart.list) return;
@@ -143,6 +162,7 @@ export class DocumentPatch {
           counterpart,
         ]);
       },
+      input.reading,
     );
     for (const { counterpart, element } of this.based.values()) {
       if (counterpart.kind !== "paragraph") continue;
@@ -173,7 +193,135 @@ export class DocumentPatch {
           : `<w:hyperlink r:id="${input.target.link(href, false)}" w:history="1">`,
       linkStyle: styles.find("character", "Hyperlink"),
       addLinkStyle: () => styles.id("hyperlink"),
+      ids: input.ids,
+      review: input.review,
+      removedHere: (source) => !input.plan.writtenElsewhere(source),
     };
+  }
+
+  /** The Mind's counterparts in some of its Blocks, read for review. */
+  private currentOf(blocks: readonly NodeJSON[]): Counterpart[] {
+    return counterpartsOf(blocks, this.input.currentKey, this.input.reading);
+  }
+
+  /**
+   * A counterpart's XML with the tracked changes made to it as a whole:
+   * what changes still waiting do to it, and, when `added` (it is new, or
+   * moved here) and the User's edits are tracked, their insertion.
+   */
+  private tracked(xml: string, counterpart: Counterpart, added: boolean): string {
+    const { review, ids } = this.input;
+    const { inserted, deleted } = counterpart.pending;
+    let out = xml;
+    if (deleted) out = trackBlocks(out, review.pending("delete", deleted), ids);
+    if (inserted) out = trackBlocks(out, review.pending("insert", inserted), ids);
+    const user = review.user("insert");
+    if (added && user && !inserted) out = trackBlocks(out, user, ids);
+    return out;
+  }
+
+  /**
+   * What the User deleted, kept where it was as their deletion when their
+   * edits are tracked: without what the Mind writes elsewhere (a field moved
+   * with its paragraph), which can't be in the file twice.
+   */
+  private removed(based: Based, moved: boolean): string {
+    return this.removedCopy(based.element, this.sourcesIn(based.counterpart), moved);
+  }
+
+  /** An element as the User's deletion, without what the Mind writes elsewhere; "" when their edits aren't tracked. */
+  private removedCopy(element: XmlElement, sources: readonly string[], moved: boolean): string {
+    const user = this.input.review.user("delete");
+    if (!user) return "";
+    const start = startOf(element);
+    const ranges: [number, number][] = [];
+    for (const source of sources) {
+      if (!this.input.plan.writtenElsewhere(source)) continue;
+      const [first, last = first] = source
+        .split("..")
+        .map((each) => this.input.base.places.get(each));
+      if (!first || !last || !this.contains(element, first)) continue;
+      ranges.push([startOf(first) - start, endOf(last) - start]);
+    }
+    ranges.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
+    const splices: Splice[] = [];
+    for (const [from, to] of ranges) {
+      const last = splices.at(-1);
+      if (last && from < last.to) continue;
+      splices.push({ from, to, text: "" });
+    }
+    let copy = applySplices(sliceOf(this.text, element), splices);
+    // What moved is written again where it is now, with its paragraphs' ids: those must stay unique.
+    if (moved) copy = copy.replace(/\s(?:w14:paraId|w14:textId)="[^"]*"/g, "");
+    return trackBlocks(copy, user, this.input.ids);
+  }
+
+  /** The sources of what is kept as is in a counterpart as imported, in its cells too. */
+  private sourcesIn(counterpart: Counterpart): string[] {
+    if (counterpart.kind === "paragraph") {
+      return (counterpart.node.content ?? []).flatMap((node) => {
+        const source = sourceOf(node);
+        return source ? [source] : [];
+      });
+    }
+    if (counterpart.kind !== "table") return [];
+    return (counterpart.node.content ?? []).flatMap((row) =>
+      (row.content ?? []).flatMap((cell) =>
+        counterpartsOf(cell.content ?? [], this.baseKey).flatMap((inner) => this.sourcesIn(inner)),
+      ),
+    );
+  }
+
+  /**
+   * The pieces of text written, in document order, for finding AI text's
+   * passages: a paragraph written as it was is the User's; one written again,
+   * its new words by who wrote them; new Blocks as the native writer writes them.
+   */
+  private *pieces(
+    counterparts: readonly Counterpart[],
+  ): Generator<{ key: object; authorship: Authorship }> {
+    for (const counterpart of counterparts) {
+      if (counterpart.pending.inserted) continue;
+      const based = counterpart.key ? this.based.get(counterpart.key) : undefined;
+      if (counterpart.kind === "paragraph") {
+        if (based && !this.needsWriting(counterpart, based)) {
+          yield { key: counterpart.node, authorship: "own" };
+          continue;
+        }
+        const tokens = this.input.tokensOf(counterpart.node);
+        const before = based
+          ? baseTokens(based.counterpart.node.content ?? [], this.input.base.origins)
+          : [];
+        for (const each of alignTokens(before, tokens)) {
+          if (each.step === "delete" || each.step === "proposed") continue;
+          const token = tokens[each.y] as Token;
+          const authorship: Authorship =
+            each.step === "equal"
+              ? "own"
+              : token.kind !== "char"
+                ? "neither"
+                : token.ai
+                  ? "ai"
+                  : /^\s$/u.test(token.char)
+                    ? "neither"
+                    : "own";
+          yield { key: token, authorship };
+        }
+      } else if (counterpart.kind === "table" && based) {
+        if (!this.input.edited(counterpart.node) && !this.forced.has(based.element)) {
+          yield { key: counterpart.node, authorship: "own" };
+          continue;
+        }
+        for (const row of counterpart.node.content ?? []) {
+          for (const cell of row.content ?? [])
+            yield* this.pieces(this.currentOf(cell.content ?? []));
+        }
+      } else if (counterpart.kind === "kept") {
+        yield { key: counterpart.node, authorship: "own" };
+      } else {
+        yield* piecesOf(this.input.blocksOf(counterpart.node));
+      }
+    }
   }
 
   /** Every counterpart, those in tables' cells too. */
@@ -181,13 +329,14 @@ export class DocumentPatch {
     counterparts: readonly Counterpart[],
     keyOf: (node: NodeJSON) => string | null,
     visit: (counterpart: Counterpart) => void,
+    reading?: ReviewReading,
   ): void {
     for (const counterpart of counterparts) {
       visit(counterpart);
       if (counterpart.kind !== "table") continue;
       for (const row of counterpart.node.content ?? []) {
         for (const cell of row.content ?? [])
-          this.collect(counterpartsOf(cell.content ?? [], keyOf), keyOf, visit);
+          this.collect(counterpartsOf(cell.content ?? [], keyOf, reading), keyOf, visit, reading);
       }
     }
   }
@@ -203,15 +352,19 @@ export class DocumentPatch {
   write(): string {
     const body = child(this.input.base.root, "w:body");
     if (!body) return this.text;
+    const current = this.currentOf(this.input.current);
+    this.input.review.mark(passagesOf(this.pieces(current)));
     const splices = this.container({
       element: body,
       contentStart: body.openEnd ?? startOf(body),
       base: counterpartsOf(this.input.base.structure.blocks, this.baseKey),
-      current: counterpartsOf(this.input.current, this.input.currentKey),
+      current,
       extra: [],
     });
     if (this.input.bibliography.length > 0) {
-      const xml = this.newXml(this.input.writer.render(this.input.bibliography));
+      const user = this.input.review.user("insert");
+      const rendered = this.input.writer.render(this.input.bibliography);
+      const xml = this.newXml(user ? trackBlocks(rendered, user, this.input.ids) : rendered);
       const last = elements(body).at(-1);
       splices.push(
         last?.name === "w:sectPr"
@@ -222,10 +375,12 @@ export class DocumentPatch {
     if (selfClosing(body)) {
       // An empty body: what goes into it, in order, inside it.
       const added = splices.map((splice) => splice.text).join("");
-      return applySplices(this.text, [appendInside(this.text, body, added)]);
+      return this.input.review.finish(
+        applySplices(this.text, [appendInside(this.text, body, added)]),
+      );
     }
     splices.push(...this.unwrittenOutside(splices));
-    return applySplices(this.text, splices);
+    return this.input.review.finish(applySplices(this.text, splices));
   }
 
   /** XML the native writer wrote, for where it goes. */
@@ -268,7 +423,13 @@ export class DocumentPatch {
     for (const key of baseKeys) {
       if (keptKeys.has(key)) continue;
       const based = this.based.get(key) as Based;
-      splices.push({ from: startOf(based.element), to: endOf(based.element), text: "" });
+      // A kept-as-is Block the Mind moved is the same element: it can't be both here and there.
+      const moved = seen.has(key);
+      splices.push({
+        from: startOf(based.element),
+        to: endOf(based.element),
+        text: moved && based.counterpart.kind === "kept" ? "" : this.removed(based, moved),
+      });
     }
 
     const inElement = (node: XmlElement) => {
@@ -353,25 +514,46 @@ export class DocumentPatch {
     if (counterpart.kind === "paragraph") {
       if (!this.needsWriting(counterpart, based)) return [];
       return replace(
-        this.paragraphXml(counterpart, based, scopeOf(element, this.parents), references),
+        this.tracked(
+          this.paragraphXml(counterpart, based, scopeOf(element, this.parents), references),
+          counterpart,
+          false,
+        ),
       );
     }
     if (counterpart.kind === "table") {
-      if (!this.input.edited(counterpart.node) && !this.forced.has(element)) return [];
-      return this.table(counterpart, based, true);
+      const pending = hasPending(counterpart);
+      if (!this.input.edited(counterpart.node) && !this.forced.has(element) && !pending) return [];
+      if (!pending) return this.table(counterpart, based, true);
+      const [whole] = this.table(counterpart, based, false);
+      return replace(this.tracked(whole?.text ?? sliceOf(this.text, element), counterpart, false));
     }
     if (counterpart.kind === "kept") {
       const atom = readWordAtom(counterpart.node.attrs ?? {});
       if (atom.source && this.input.plan.writes(atom.source, counterpart.node, atom.kind))
-        return [];
+        return replace(this.tracked(sliceOf(this.text, element), counterpart, false));
       this.input.plan.copied(counterpart.node);
-      return replace(this.newXml(this.input.writer.render(textBlocks(counterpart.node))));
+      return replace(
+        this.tracked(
+          this.newXml(this.input.writer.render(textBlocks(counterpart.node))),
+          counterpart,
+          false,
+        ),
+      );
     }
     return [];
   }
 
   /** A counterpart's XML, written where it wasn't before. */
   private counterpartXml(
+    counterpart: Counterpart,
+    scope: Namespaces,
+    references: () => Reference[],
+  ): string {
+    return this.tracked(this.untrackedXml(counterpart, scope, references), counterpart, true);
+  }
+
+  private untrackedXml(
     counterpart: Counterpart,
     scope: Namespaces,
     references: () => Reference[],
@@ -404,12 +586,17 @@ export class DocumentPatch {
     }
     if (counterpart.kind === "kept")
       return this.newXml(this.input.writer.render(textBlocks(counterpart.node)), scope);
-    return this.newXml(this.input.writer.render(this.input.blocksOf(counterpart.node)), scope);
+    // What changes still waiting do to it as a whole is the counterpart's, tracked once.
+    const blocks = this.input
+      .blocksOf(counterpart.node)
+      .map((block): Block => ({ ...block, inserted: undefined, deleted: undefined }));
+    return this.newXml(this.input.writer.render(blocks), scope);
   }
 
   /** Whether an imported paragraph must be written again: edited, moved in or out of a list, or holding what goes. */
   private needsWriting(counterpart: Counterpart, based: Based): boolean {
     return (
+      hasPending(counterpart) ||
       this.input.edited(counterpart.node) ||
       this.forced.has(based.element) ||
       !sameList(counterpart.list, based.counterpart.list) ||
@@ -478,7 +665,13 @@ export class DocumentPatch {
       }));
     });
     const basePPr = based ? this.pPrOf(based.element) : "";
-    const { pPr, rPr } = this.paragraphProperties(counterpart, based, references, basePPr);
+    const properties = this.paragraphProperties(counterpart, based, references, basePPr);
+    const { rPr } = properties;
+    const user = this.input.review.user("insert");
+    const pPr =
+      user && based && properties.pPr !== basePPr
+        ? this.propertiesChanged(properties.pPr, basePPr, user)
+        : properties.pPr;
     const { xml, lost } = writeParagraph(
       {
         base: based
@@ -492,6 +685,7 @@ export class DocumentPatch {
         pPrChanged: pPr !== basePPr,
         fallbackRun: rPr,
         scope,
+        track: !counterpart.pending.inserted,
       },
       {
         ...this.context,
@@ -509,6 +703,14 @@ export class DocumentPatch {
       });
     }
     return xml;
+  }
+
+  /** A paragraph's new properties that say what they were before the User changed them (`w:pPrChange`). */
+  private propertiesChanged(pPr: string, was: string, by: Tracking): string {
+    const before =
+      Properties.paragraph(was).remove("w:rPr", "w:sectPr", "w:pPrChange").toXml() || "<w:pPr/>";
+    const change = `<w:pPrChange w:id="${this.input.ids.take("annotation")}" w:author="${escapeXml(by.author)}"${dateAttribute(by.date)}>${before}</w:pPrChange>`;
+    return Properties.paragraph(pPr).set("w:pPrChange", change).toXml();
   }
 
   private pPrOf(element: XmlElement): string {
@@ -763,7 +965,7 @@ export class DocumentPatch {
       element: tc,
       contentStart: tcPr ? endOf(tcPr) : (tc.openEnd ?? startOf(tc)),
       base: counterpartsOf(baseCell.content ?? [], this.baseKey),
-      current: counterpartsOf(cell.content ?? [], this.input.currentKey),
+      current: this.currentOf(cell.content ?? []),
       extra: this.input.base.merged.get(baseCell) ?? [],
     });
   }
@@ -841,7 +1043,7 @@ export class DocumentPatch {
       }
     }
     const originOf = (cell: NodeJSON) => {
-      for (const inner of counterpartsOf(cell.content ?? [], this.input.currentKey)) {
+      for (const inner of this.currentOf(cell.content ?? [])) {
         const found = inner.key ? baseCells.get(inner.key) : undefined;
         if (found) return found;
       }
@@ -857,14 +1059,41 @@ export class DocumentPatch {
     const rowWrappers = new Wrapping(text);
     let rowChain: XmlElement[] = [];
 
+    // Each row of the Mind's from the row it was, once; the document's others the User deleted.
+    const rowOrigins = rows.map((row) => {
+      const found = (row.content ?? []).map(originOf).find((each) => each !== null)?.tr ?? null;
+      const tr = found && !used.has(found) ? found : null;
+      if (tr) used.add(tr);
+      return { found, tr };
+    });
+    const baseRows = (based.counterpart.node.content ?? []).flatMap((baseRow) => {
+      const tr = this.input.base.origins.get(baseRow);
+      return tr ? [{ tr, node: baseRow }] : [];
+    });
+    let removedTo = 0;
+    /** The document's rows before `until` that the Mind no longer has, as the User's deletions. */
+    const removedRows = (until: number) => {
+      let removed = "";
+      for (; removedTo < until; removedTo++) {
+        const { tr, node } = baseRows[removedTo] as { tr: XmlElement; node: NodeJSON };
+        if (used.has(tr)) continue;
+        const sources = (node.content ?? []).flatMap((cell) =>
+          counterpartsOf(cell.content ?? [], this.baseKey).flatMap((inner) =>
+            this.sourcesIn(inner),
+          ),
+        );
+        removed += this.removedCopy(tr, sources, false);
+      }
+      return removed;
+    };
+    const userInsert = this.input.review.user("insert");
+
     let xml = openTag(text, element) + (tblPr ? sliceOf(text, tblPr) : "") + gridXml;
     xml += this.keptBetween(element);
     layout.rows.forEach((slots, r) => {
       const row = rows[r] as NodeJSON;
-      const origins = (row.content ?? []).map(originOf);
-      const found = origins.find((each) => each !== null)?.tr ?? null;
-      const tr = found && !used.has(found) ? found : null;
-      if (tr) used.add(tr);
+      const { found, tr } = rowOrigins[r] as { found: XmlElement | null; tr: XmlElement | null };
+      if (tr) xml += removedRows(baseRows.findIndex((each) => each.tr === tr));
       // A new row goes where the row before it is: inside a repeating section, say.
       if (found) rowChain = chainOf(found, element);
       xml += rowWrappers.to(rowChain);
@@ -901,8 +1130,10 @@ export class DocumentPatch {
         if (origin) cellChain = chainOf(origin.tc, origin.tr);
         rowXml += cellWrappers.to(cellChain) + this.rebuiltCell(node, fresh, slot.cell, width);
       }
-      xml += `${rowXml}${cellWrappers.to([])}</w:tr>`;
+      const whole = `${rowXml}${cellWrappers.to([])}</w:tr>`;
+      xml += !tr && userInsert ? trackBlocks(whole, userInsert, this.input.ids) : whole;
     });
+    xml += removedRows(baseRows.length);
     return `${xml}${rowWrappers.to([])}${closeTag(element)}`;
   }
 
@@ -932,7 +1163,7 @@ export class DocumentPatch {
       const from = (own ? endOf(own) : (tc.openEnd ?? start)) - start;
       content = selfClosing(tc) ? "" : patched.slice(from, patched.length - closeTag(tc).length);
     } else {
-      content = counterpartsOf(node.content ?? [], this.input.currentKey)
+      content = this.currentOf(node.content ?? [])
         .map((counterpart) =>
           this.counterpartXml(counterpart, scopeOf(this.input.base.root, this.parents), () => []),
         )
@@ -1045,6 +1276,10 @@ class CellProperties {
     return this.properties.toXml() || "<w:tcPr/>";
   }
 }
+
+/** Whether changes still waiting add or remove a counterpart as a whole. */
+const hasPending = (counterpart: Counterpart) =>
+  counterpart.pending.inserted !== undefined || counterpart.pending.deleted !== undefined;
 
 const sameList = (a: ListPlace | null, b: ListPlace | null): boolean =>
   (a === null && b === null) ||

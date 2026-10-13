@@ -38,6 +38,10 @@ export interface LaunchOptions {
    */
   fakeChat?: boolean;
   /**
+   * Where Ollama is: a local server standing in for it (the app's `OLLAMA_HOST`).
+   */
+  ollama?: string;
+  /**
    * Where crash reports go: a test build offers them only with this, and
    * ignores the DSN a real build is made with. Point it at a local server.
    */
@@ -69,6 +73,11 @@ export interface LaunchOptions {
    * all of them (tests/helpers/sourceServices.ts). A test build honours it.
    */
   sources?: string;
+  /**
+   * A JSON file of Connectors directory entries in place of the list that
+   * ships with the app, e.g. one served by a local stand-in. A test build honours it.
+   */
+  connectorDirectory?: string;
   /**
    * Where the ChatGPT plan signs in and asks: the origin of a local server
    * standing in for OpenAI (tests/helpers/fakeOpenAI.ts). A test build honours it.
@@ -136,12 +145,14 @@ export async function launchApp(
   dataDir: string,
   {
     fakeChat = false,
+    ollama,
     sentryDsn,
     usageData,
     examples = false,
     home,
     referenceLookup,
     sources,
+    connectorDirectory,
     chatGpt,
     keepWindow = false,
     computerSound = "allowed",
@@ -156,6 +167,8 @@ export async function launchApp(
     if (value !== undefined) env[name] = value;
   }
   delete env.ELECTRON_RUN_AS_NODE;
+  delete env.OLLAMA_HOST;
+  if (ollama) env.OLLAMA_HOST = ollama;
   delete env.INCARNAMIND_TEST_SENTRY_DSN;
   delete env.INCARNAMIND_TEST_EXAMPLES;
   delete env.INCARNAMIND_TEST_POSTHOG_KEY;
@@ -164,6 +177,7 @@ export async function launchApp(
   delete env.POSTHOG_CAPTURE_MODE;
   delete env.INCARNAMIND_TEST_REFERENCE_LOOKUP;
   delete env.INCARNAMIND_TEST_SOURCES;
+  delete env.INCARNAMIND_TEST_CONNECTOR_DIRECTORY;
   delete env.INCARNAMIND_TEST_CHATGPT;
   delete env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS;
   delete env.INCARNAMIND_TEST_SCANS;
@@ -184,6 +198,7 @@ export async function launchApp(
   env.HOME = appHome;
   if (referenceLookup) env.INCARNAMIND_TEST_REFERENCE_LOOKUP = referenceLookup;
   if (sources) env.INCARNAMIND_TEST_SOURCES = sources;
+  if (connectorDirectory) env.INCARNAMIND_TEST_CONNECTOR_DIRECTORY = connectorDirectory;
   if (chatGpt) env.INCARNAMIND_TEST_CHATGPT = chatGpt;
   if (scans) env.INCARNAMIND_TEST_SCANS = scans;
   if (web) env.INCARNAMIND_TEST_WEB = String(web);
