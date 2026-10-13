@@ -1373,6 +1373,11 @@ export interface UserSettings {
   leaveOutOwnFiles: boolean;
   /** How Export and ⇧⌘E export a Mind: the choices last saved in Export options (#100). */
   exportOptions: ExportPreferences;
+  /**
+   * The name the User's edits go under as tracked changes in a Word file
+   * (#107), or null: the name the computer knows them by (`Settings.author`).
+   */
+  authorName: string | null;
   /** The monthly cap on models billed per token: off (null) by default. */
   monthlyCap: MonthlyCap | null;
   /**
@@ -1481,6 +1486,11 @@ export interface Settings {
    * the microphone only (Linux, for now); "none": nothing (no capture).
    */
   meetingAudio: "both" | "microphone" | "none";
+  /**
+   * The name the User's edits go under as tracked changes in a Word file
+   * (#107): `UserSettings.authorName`, or the name the computer knows them by.
+   */
+  author: string;
 }
 
 export interface SettingsPatch {
@@ -2879,7 +2889,7 @@ export interface EmbeddingSettings {
    * "Keep everything on this computer": only embedding providers on this
    * computer can be chosen, and search results aren't reranked by a cloud
    * service. Turned on in Settings, or by choosing local models with one
-   * click (`selectOllama`).
+   * click (`selectOllama`, when the User asks for it).
    */
   localOnly: boolean;
   /** Set while Documents are embedded again after a switch. */
@@ -3122,6 +3132,8 @@ export interface ProviderCost {
   spent: Money[];
   /** Tokens of requests to models with no known price: counted here, not toward the cap. */
   unpricedTokens: number;
+  /** Requests a quit cut short with no usage known: counted as costing nothing (#636). */
+  interrupted: number;
 }
 
 /** Settings' month-to-date cost: recorded on this computer, never sent. */
@@ -3751,6 +3763,55 @@ export type CheckSentencesResult =
   | { kind: "has-proposals" }
   /** The User stopped it (`cancelCheck`): the sentences not checked yet say "stopped". */
   | { kind: "cancelled" };
+
+/** A document someone else wrote, to verify claim by claim (#97): the window offers PDFs. */
+export interface VerifyDocumentInput {
+  /** The file's absolute path: any file the Library reads. */
+  path: string;
+  /** The Folder the Mind goes in, and the PDF too if it is new to the Library; none, or null, for none. */
+  folderId?: string | null;
+}
+
+/** What `verifyDocument` did. */
+export type VerifyDocumentResult =
+  /** The Mind holds the document's text, a paragraph to a Block: its claims can be found. */
+  | { ok: true; mind: Mind; documentId: string }
+  /** No Mind was made: the file can't be read, or holds no text (a scan nothing could read). */
+  | { ok: false; reason: "unreadable" | "no-text" };
+
+/** Finding, or checking, the claims of a Mind made by `verifyDocument`. */
+export interface VerifyClaimsInput {
+  /** Chosen by the caller, so it can stop the request (`cancelCheck`). */
+  requestId: string;
+  mindId: string;
+  /** Check against every Document, not the Mind's Folder. */
+  allDocuments?: boolean;
+  /** The model to use: the Mind's own; none, or null, the default chat model. */
+  model?: ChatModelChoice | null;
+}
+
+/** Why finding or checking a document's claims sent nothing. */
+type VerifyRefusal =
+  | Exclude<CheckSentencesResult, { kind: "checked" } | { kind: "has-proposals" }>
+  /** Another document's claims are being found or checked, in that Mind: one run at a time. */
+  | { kind: "busy"; mindId: string };
+
+/** What `findClaims` did. */
+export type FindClaimsResult =
+  /** The Mind records which of its sentences make claims: `claims` of them. */
+  | { kind: "found"; claims: number }
+  /** The model failed, or its reply named no sentences that could be read. */
+  | { kind: "failed"; error: ProviderError }
+  | VerifyRefusal;
+
+/** What `verifyClaims` did. */
+export type VerifyClaimsResult =
+  /**
+   * Each claim has its mark: `checked` of them with a verdict, the rest not
+   * checked. `stop`: the monthly cap or a plan's limit stopped the run, and the
+   * claims after it say so.
+   */
+  { kind: "checked"; claims: number; checked: number; stop: RunStop | null } | VerifyRefusal;
 
 /** What asking a Question (or regenerating its Answer) did. */
 export type AskResult =
@@ -4513,6 +4574,11 @@ export interface SelectOllamaInput {
   baseUrl?: string;
   /** Defaults to the recommended model. */
   model?: string;
+  /**
+   * "Also keep everything on this computer": Local mode is turned on or off
+   * to match. Left out, Local mode stays as it was.
+   */
+  localOnly?: boolean;
 }
 
 export interface OllamaPullProgress {
@@ -4553,6 +4619,7 @@ export const dataKinds = [
   "scoped-minds",
   "answers",
   "web-searches",
+  "verified-document",
 ] as const;
 
 export type DataKind = (typeof dataKinds)[number];
@@ -4586,8 +4653,9 @@ export type DataKind = (typeof dataKinds)[number];
  *   and the paragraphs it is in, to the chat model's provider. None in local mode.
  * - "checks": when the User asks Find support or Check against Documents
  *   (#96), each sentence they selected, with its paragraph and what it cites,
- *   and the Passages the check's searches find, to the chat model's provider.
- *   None in local mode.
+ *   and the Passages the check's searches find, to the chat model's provider;
+ *   when they verify a document (#97), its sentences, to find its claims, then
+ *   each claim with its paragraph and the Passages found. None in local mode.
  * - "agents": what an outside agent reads (#351), to that agent, which sends
  *   it on to the AI model it uses, out of IncarnaMind's sight: one service
  *   per pairing ("agent:<id>"), named as the User named the agent. Passages
@@ -5123,6 +5191,61 @@ export interface ConnectorImportResult {
   skipped: ConnectorImportEntry[];
 }
 
+/** Words in each interface language, for data shipped beside the code, such as the Connectors directory. */
+export type LocalizedText = Record<Language, string>;
+
+/**
+ * The directory's groups, by use, in the order Settings › Connectors shows
+ * them: where the User's files are, financial data, legal research, medicine
+ * and research, and work.
+ */
+export const connectorDirectoryGroups = [
+  "files",
+  "financial-data",
+  "legal-research",
+  "medicine-and-research",
+  "work",
+] as const;
+export type ConnectorDirectoryGroup = (typeof connectorDirectoryGroups)[number];
+
+/**
+ * How a Connector in the directory signs in:
+ * - "browser": in the User's browser, IncarnaMind registering itself with the service;
+ * - "own-app": in the browser too, but the service registers only the apps it
+ *   knows: the User registers an OAuth app with it and enters its client ID
+ *   (`ConnectorClientInput`) before signing in;
+ * - "none": it needs no sign-in.
+ */
+export type ConnectorDirectorySignIn = "browser" | "own-app" | "none";
+
+/**
+ * A remote Connector IncarnaMind has reviewed, listed in Settings ›
+ * Connectors before the User connects it. The list ships with the app as
+ * data (src/core/connectors/directory.json).
+ */
+export interface ConnectorDirectoryEntry {
+  /** Stable across versions of the list, e.g. "factset". */
+  id: string;
+  /** The service's name, which the Connector takes when it is added, e.g. "FactSet". */
+  name: string;
+  /** Who runs the server, e.g. "FactSet". */
+  publisher: string;
+  group: ConnectorDirectoryGroup;
+  /** One line on what it reads. */
+  summary: LocalizedText;
+  /**
+   * What the User needs from the service: their own subscription to a
+   * product (`{ product: "FactSet" }`), nothing ("free"), or null when that
+   * depends on their account, e.g. a free tier.
+   */
+  subscription: { product: string } | "free" | null;
+  /** Its MCP endpoint, an https URL. A Connector at this URL is this entry, connected. */
+  url: string;
+  signIn: ConnectorDirectorySignIn;
+  /** Listed only in these interface languages, e.g. a service for Chinese Users. Absent: in every language. */
+  languages?: Language[];
+}
+
 // ---------------------------------------------------------------------------
 // Approvals (#38)
 
@@ -5380,9 +5503,17 @@ export type ExportFormat = (typeof EXPORT_FORMATS)[number];
  */
 export interface ExportPreferences {
   format: ExportFormat;
-  docx: { includeQuestions: boolean };
+  docx: WordExportPreferences;
   pdf: { includeQuestions: boolean };
   html: { includeQuestions: boolean };
+}
+
+/** A Word export's own choices (#107), each on until the User turns it off (see `ExportMindOptions`). */
+export interface WordExportPreferences {
+  includeQuestions: boolean;
+  trackChanges: boolean;
+  markAiText: boolean;
+  commentFailedChecks: boolean;
 }
 
 export interface ExportMindOptions {
@@ -5399,6 +5530,21 @@ export interface ExportMindOptions {
    * exports anyway. `saveMindExport` saves nothing while anything else can't be kept.
    */
   accept?: string[];
+  /**
+   * Word only (#107): for a Mind imported from a Word file, the User's edits
+   * since the import go in as tracked changes under their name
+   * (`Settings.author`). Changes still waiting to be accepted always go into
+   * a Word file as tracked changes by IncarnaMind. Absent: off.
+   */
+  trackChanges?: boolean;
+  /** Word only: AI text gets a comment by IncarnaMind, "Written by IncarnaMind". Absent: off. */
+  markAiText?: boolean;
+  /**
+   * Word only: a Citation whose check failed (its quote wasn't found, or its
+   * claim is unsupported or contradicted) gets a comment by IncarnaMind
+   * saying so. Absent: off.
+   */
+  commentFailedChecks?: boolean;
 }
 
 /** What exporting a Mind will write, for the User to see before the file is written. */
@@ -5419,6 +5565,8 @@ export interface MindExportPreview {
   unverifiedCitations: number;
   /** The Question Blocks in the Mind, whether the export includes them or not. */
   questions: number;
+  /** The Mind was imported from a Word file, which a Word export writes back into (#105). */
+  fromWord: boolean;
 }
 
 /** A Mind exported as a file, for the host to save where the User chooses. */
@@ -5434,7 +5582,7 @@ export type SavedMindExport =
   /** Saved, with what it holds, so the result line can say how many quotes weren't found. */
   | ({ status: "saved"; file: SavedFile; word: WordExportReport | null } & Omit<
       MindExportPreview,
-      "fileName"
+      "fileName" | "fromWord"
     >)
   /**
    * Not saved: a Mind imported from Word can't keep something in its file
@@ -6223,11 +6371,12 @@ export interface CoreApi {
    */
   searchMinds(query: string): Promise<MindTextMatch[]>;
   /**
-   * ⌘K's "In your Documents": live Documents whose Passages hold every word of `query`, as
-   * `searchMinds` reads it, best match first, one Passage each, at most 20. Keyword search over
-   * the Passage index, whatever the embedding settings.
+   * ⌘K's "In your Documents" and the Library's search: live Documents whose Passages hold every
+   * word of `query`, as `searchMinds` reads it, best match first, one Passage each, at most
+   * `limit` (20 unless asked; InvalidInputError outside 1 to 200). Keyword search over the
+   * Passage index, whatever the embedding settings.
    */
-  searchDocumentText(query: string): Promise<DocumentTextMatch[]>;
+  searchDocumentText(query: string, options?: { limit?: number }): Promise<DocumentTextMatch[]>;
   /**
    * Gives a conversation the title the User typed (trimmed; empty goes back to its own
    * name) and returns it. A name the conversation gives itself never replaces it.
@@ -6782,6 +6931,27 @@ export interface CoreApi {
    * Sends on the "checks" flow, as `checkSentences` does.
    */
   checkClaim(input: CheckClaimInput): Promise<ClaimCheckResult>;
+  /**
+   * Verify (#97): adds a document someone else wrote (a PDF) to the Library,
+   * or finds it there, waits until its text is read, and makes a Mind of that
+   * text, a paragraph to a Block, each Block's page recorded. Its text is the
+   * document being checked: third-party (#78), and never its own evidence.
+   */
+  verifyDocument(input: VerifyDocumentInput): Promise<VerifyDocumentResult>;
+  /**
+   * Has the model name the sentences of a `verifyDocument` Mind that make
+   * claims, and records them in the Mind. Sends the document's sentences on
+   * the "checks" flow, as `checkSentences` does. One verify run at a time.
+   */
+  findClaims(input: VerifyClaimsInput): Promise<FindClaimsResult>;
+  /**
+   * Checks the claims `findClaims` found, as Check against Documents does,
+   * against the Mind's Folder (or every Document), the PDF, its earlier
+   * versions and its copies left out. A cloud model checks a few at once.
+   * Each gets its mark at once, then its result; the monthly cap or a plan's
+   * limit stops the run. `cancelCheck` stops it. One verify run at a time.
+   */
+  verifyClaims(input: VerifyClaimsInput): Promise<VerifyClaimsResult>;
 
   getSecretStorage(): Promise<SecretStorageStatus>;
   /** The User accepts storing keys without keyring protection on this device. */
@@ -7001,6 +7171,15 @@ export interface CoreApi {
   previewConnectorImport(json: string): Promise<ConnectorImportEntry[]>;
   /** Adds every server of an `mcpServers` configuration that the preview marks "add". */
   importConnectors(json: string): Promise<ConnectorImportResult>;
+  /** The reviewed Connectors of Settings › Connectors' Browse, in the directory's order. Reads nothing from the network. */
+  listConnectorDirectory(): Promise<ConnectorDirectoryEntry[]>;
+  /**
+   * Adds a directory entry as a remote Connector named as the service, and
+   * starts it, as `addConnector` does, with the User's OAuth app for an
+   * "own-app" entry. A Connector already at the entry's URL is returned
+   * instead, turned on.
+   */
+  addConnectorFromDirectory(entryId: string, client?: ConnectorClientInput): Promise<Connector>;
 
   /**
    * The User's approval policies, for the approvals page: every Tool always
@@ -7549,6 +7728,9 @@ const methods: Record<CoreApiMethod, true> = {
   checkSentences: true,
   cancelCheck: true,
   checkClaim: true,
+  verifyDocument: true,
+  findClaims: true,
+  verifyClaims: true,
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,
   detectOllama: true,
@@ -7620,6 +7802,8 @@ const methods: Record<CoreApiMethod, true> = {
   setConnectorClient: true,
   previewConnectorImport: true,
   importConnectors: true,
+  listConnectorDirectory: true,
+  addConnectorFromDirectory: true,
   listApprovalPolicies: true,
   setApprovalPolicy: true,
   revokeApprovalPolicy: true,
