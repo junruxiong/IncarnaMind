@@ -2,13 +2,15 @@ import { useEffect, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { Document } from "../../../core/api";
 import type { CommandId } from "../../../shared/commands";
-import { menuKeysLabel } from "../commands/keymap";
+import { keysHere, menuKeysLabel } from "../commands/keymap";
 import { buildMenu, type MenuItem } from "../commands/menus";
 import { type CommandContext, commands, menuLabelOf } from "../commands/registry";
+import { dialogOrMenuOpen } from "../escapeDismiss";
 import { useT } from "../i18n";
 import type { ObjectRef } from "../objects";
 import { useSelectedOn, useSelection } from "../selection";
 import { useAppStore } from "../store";
+import { TAGS_KEYS } from "../treeKeys";
 import { useDocumentMove } from "./library/DocumentMoveTo";
 import { CloseLineIcon } from "./lineIcons";
 import { ObjectMenu } from "./ObjectMenu";
@@ -68,7 +70,8 @@ export function LibrarySelectBox({ document }: { document: Pick<Document, "id" |
  * none, how many, then Move to…, Tags…, Ask about these and Delete, each
  * saying how many it acts on, ⋯ for every command that applies to all of them
  * (the right-click menu's), and Esc to clear. Narrow, the named ones go under
- * ⋯ and the bar never wraps.
+ * ⋯ and the bar never wraps. Rows scroll under it, their checkboxes in the
+ * margin too.
  */
 export function LibrarySelectionBar({ shownIds }: { shownIds: readonly string[] }) {
   const t = useT();
@@ -87,21 +90,19 @@ export function LibrarySelectionBar({ shownIds }: { shownIds: readonly string[] 
   });
   if (items.length < 2) return null;
   const last = items.at(-1) as ObjectRef;
+  const moveBeside = (selector: string) => {
+    const anchor = bar.current?.querySelector<HTMLElement>(selector);
+    if (!anchor) return;
+    useDocumentMove.getState().show({
+      anchor,
+      documentIds: items.flatMap((ref) => (ref.kind === "document" ? [ref.id] : [])),
+    });
+  };
   const ctx: CommandContext = {
     selection: items,
     focus: last,
     surface: "library",
-    here: {
-      "document.moveTo": () => {
-        const anchor = bar.current?.querySelector<HTMLElement>('[data-command="document.moveTo"]');
-        if (anchor) {
-          useDocumentMove.getState().show({
-            anchor,
-            documentIds: items.flatMap((ref) => (ref.kind === "document" ? [ref.id] : [])),
-          });
-        }
-      },
-    },
+    here: { "document.moveTo": () => moveBeside('[data-command="document.moveTo"]') },
   };
   const offered = buildMenu("document", ctx).filter((entry): entry is MenuItem => entry !== "rule");
   const named = NAMED.flatMap(({ id, from }) => {
@@ -137,11 +138,12 @@ export function LibrarySelectionBar({ shownIds }: { shownIds: readonly string[] 
       aria-label={t("library.selected", { count: items.length })}
       data-testid="library-selection"
       onKeyDown={(event) => {
-        if (event.key !== "Escape" || event.defaultPrevented) return;
+        // A picker or menu that is open, such as the bar's Tags picker, closes first.
+        if (event.key !== "Escape" || event.defaultPrevented || dialogOrMenuOpen()) return;
         event.preventDefault();
         useSelection.getState().clear("library");
       }}
-      className="@container sticky top-0 z-10 mt-2 flex h-9 min-w-0 items-center gap-1 rounded-md bg-frame pr-1 pl-2.5 text-[13px]"
+      className="@container sticky top-0 z-10 mt-2 flex h-9 min-w-0 items-center gap-1 rounded-md bg-frame pr-1 pl-2.5 text-[13px] before:absolute before:inset-y-0 before:right-full before:w-10 before:bg-sheet"
     >
       <input
         ref={all}
@@ -162,11 +164,20 @@ export function LibrarySelectionBar({ shownIds }: { shownIds: readonly string[] 
         documents={documents}
         testId="library-selection-tags"
         className={`${barCommandClass} inline-flex`}
+        keys={
+          <span className="hidden text-[12px] text-ink-meta @[44rem]:inline">
+            {keysHere(TAGS_KEYS)}
+          </span>
+        }
       />
       {rest.map(button)}
       <ObjectMenu
         target={last}
         selection={items}
+        here={{
+          // Once the menu has closed and given the focus back, so the picker opens beside ⋯.
+          "document.moveTo": () => requestAnimationFrame(() => moveBeside("[data-object-menu]")),
+        }}
         label={t("library.selected.more", { count: items.length })}
       />
       <span className="flex-1" />
