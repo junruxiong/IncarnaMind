@@ -51,7 +51,9 @@ test("the Privacy page lists the data flows and the update check, and offers no 
   // Allowed from here, with the date; revoked, it asks again next time.
   await service.getByTestId("data-flow-allow").click();
   await expect(service).toHaveAttribute("data-consent", "accepted");
-  await expect(service.getByTestId("data-flow-decision")).toContainText("Allowed on");
+  await expect(service.getByTestId("data-flow-decision")).toContainText(
+    /Allowed on \d{1,2} [A-Z][a-z]+ \d{4}/,
+  );
   await service.getByTestId("data-flow-revoke").click();
   await expect(service).toHaveAttribute("data-consent", "not-asked");
 

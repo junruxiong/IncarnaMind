@@ -156,11 +156,11 @@ describe("the problem line", () => {
 describe("dates", () => {
   const now = new Date("2026-10-13T12:00:00Z");
 
-  test("this year's as a month and a day, earlier ones with the year", () => {
-    expect(addedLabel("2026-10-09T10:00:00Z", now, "en")).toBe("Oct 9");
-    expect(addedLabel("2025-03-04T10:00:00Z", now, "en")).toBe("Mar 4, 2025");
+  test("this year's as a day and a month, earlier ones with the year", () => {
+    expect(addedLabel("2026-10-09T10:00:00Z", now, "en")).toBe("9 Oct");
+    expect(addedLabel("2025-03-04T10:00:00Z", now, "en")).toBe("4 Mar 2025");
     expect(addedLabel("2026-10-09T10:00:00Z", now, "zh-CN")).toBe("10月9日");
-    expect(addedLabel("2025-03-04T10:00:00Z", now, "zh-CN")).toBe("2025/3/4");
+    expect(addedLabel("2025-03-04T10:00:00Z", now, "zh-CN")).toBe("2025年3月4日");
     expect(addedLabel("not a date", now, "en")).toBe("");
   });
 });

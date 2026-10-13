@@ -33,7 +33,7 @@ describe("when it was deleted", () => {
     expect(whenDeleted(ago(60 * 60 * 1000), NOW, "en", say("en"))).toMatch(/^Today, \d/);
     expect(whenDeleted(ago(24 * 60 * 60 * 1000), NOW, "en", say("en"))).toBe("Yesterday");
     expect(whenDeleted(ago(24 * 60 * 60 * 1000), NOW, "zh-CN", say("zh-CN"))).toBe("昨天");
-    expect(whenDeleted(ago(8 * DAY), NOW, "en", say("en"))).toBe("Oct 4");
+    expect(whenDeleted(ago(8 * DAY), NOW, "en", say("en"))).toBe("4 Oct");
     expect(whenDeleted(ago(8 * DAY), NOW, "zh-CN", say("zh-CN"))).toContain("10月");
     expect(whenDeleted(ago(400 * DAY), NOW, "en", say("en"))).toMatch(/2025/);
   });

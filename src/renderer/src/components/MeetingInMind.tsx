@@ -1,6 +1,7 @@
 import { isMacOS } from "@tiptap/core";
 import { useEffect, useId, useState } from "react";
 import type { Meeting } from "../../../core/api";
+import { formatDateTime } from "../../../shared/dates";
 import { useGap, useLanguage, useT } from "../i18n";
 import { isLive, useMeetingOf, useMeetings } from "../meetings";
 import { clockTime } from "../meetingTime";
@@ -207,12 +208,7 @@ function MeetingAudioLine({ meeting, className = "" }: { meeting: Meeting; class
     audio.expiresAt === null
       ? t("meetings.audio.keptWhile")
       : t("meetings.audio.keptUntil", {
-          time: new Intl.DateTimeFormat(language, {
-            day: "numeric",
-            month: "short",
-            hour: "2-digit",
-            minute: "2-digit",
-          }).format(new Date(audio.expiresAt)),
+          time: formatDateTime(audio.expiresAt, language),
         });
   return (
     <ProblemLine

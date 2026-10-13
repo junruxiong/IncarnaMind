@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { ApprovalRequest, Task, TaskEffect } from "../../../core/api";
+import { formatDateTime } from "../../../shared/dates";
 import { useApprovals } from "../approvals";
 import { keysLabel } from "../commands/keys";
 import { formatMoney } from "../cost";
@@ -159,10 +160,7 @@ function details(task: Task, t: Translate, language: ReturnType<typeof useLangua
   if (task.kind === "comparison" && task.progress) {
     parts.push(t("task.details.cells", { done: task.progress.done, total: task.progress.total }));
   }
-  const time = new Intl.DateTimeFormat(language, { hour: "numeric", minute: "2-digit" }).format(
-    new Date(task.startedAt),
-  );
-  parts.push(t("task.details.started", { time }));
+  parts.push(t("task.details.started", { time: formatDateTime(task.startedAt, language) }));
   if (task.cost) parts.push(t("task.details.cost", { cost: formatMoney(task.cost, language) }));
   return parts;
 }
