@@ -184,12 +184,15 @@ const BY_QUARTER = /\bby quarter\b|按季度/i;
 const BY_QUARTER_CHINESE = /分季度/;
 const IN_MILLIONS = /\bin millions\b/i;
 
+/** The text of a user message. */
+const userText = (message: Prompt[number] | undefined): string =>
+  !message || typeof message.content === "string"
+    ? ""
+    : message.content.map((part) => (part.type === "text" ? part.text : "")).join("");
+
 /** The text of the last user message: the Question, after what it is asked beside. */
-function lastUserText(prompt: Prompt): string {
-  const last = prompt.filter((message) => message.role === "user").at(-1);
-  if (!last || typeof last.content === "string") return "";
-  return last.content.map((part) => (part.type === "text" ? part.text : "")).join("");
-}
+const lastUserText = (prompt: Prompt): string =>
+  userText(prompt.filter((message) => message.role === "user").at(-1));
 
 /** The Question, at the end of its Question context. */
 const lastQuestion = (prompt: Prompt): string => lastUserText(prompt).split("\n\n").at(-1) ?? "";
@@ -200,8 +203,11 @@ const ABOUT_THE_MIND = /\bnotes?\b|\bselect(?:ed|ion)\b|笔记|选中/i;
 /** What the Answer says it read of the Mind a Question about it was asked beside, if any. */
 function mindRead(prompt: Prompt): string | null {
   if (!ABOUT_THE_MIND.test(lastQuestion(prompt))) return null;
+  // The Mind starts the first user message, and the selection the last (#564).
   const text = lastUserText(prompt);
-  const mind = /<mind name="([^"]*)">\n([\s\S]*?)<\/mind>/.exec(text);
+  const mind = /<mind name="([^"]*)">\n([\s\S]*?)<\/mind>/.exec(
+    userText(prompt.find((message) => message.role === "user")),
+  );
   if (!mind) return null;
   const first = (mind[2] ?? "")
     .split("\n")

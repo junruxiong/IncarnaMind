@@ -3,6 +3,7 @@ import { useCitationStylePicker } from "../citationStylePicker";
 import { blockMenuOpeners } from "../editor/blockMenuOpeners";
 import { noteHolding } from "../editor/noteKeymap";
 import { useFindSources } from "../findSources";
+import { useHistory } from "../history";
 import { currentTabOf } from "../layoutSlice";
 import { startSkillFromMind } from "../makeSkill";
 import { useMindTools } from "../mindTools";
@@ -44,6 +45,7 @@ import { settingsPageCommands } from "./settings";
 import { tableCommands } from "./tables";
 import { tabCommands } from "./tabs";
 import { onlyOne } from "./targets";
+import { taskCommands } from "./tasks";
 import { webPageCommands } from "./webPages";
 
 /** What opens the menu of the Block with this ID, if its Mind is open. */
@@ -58,8 +60,8 @@ function mindInFront(): string | null {
   return item?.kind === "mind" ? item.mindId : null;
 }
 
-/** The Mind whose outline a menu or the keyboard asks for: the Mind's row, the Mind a tab shows, else the one in front. */
-function outlineMind(ctx: CommandContext): string | null {
+/** The Mind a menu or the keyboard names: the Mind's row, the Mind a tab shows, else the one in front. */
+function mindShown(ctx: CommandContext): string | null {
   const target = ctx.selection[0] ?? ctx.focus;
   if (target?.kind === "mind") return target.id;
   if (target?.kind === "tab") {
@@ -108,6 +110,7 @@ const appCommands: readonly Command[] = [
   ...evidenceCommands,
   ...comparisonCommands,
   ...exportCommands,
+  ...taskCommands,
   {
     ...fromMenu("settings.open"),
     group: "open",
@@ -173,6 +176,20 @@ const appCommands: readonly Command[] = [
         `article[data-mind-id="${mindId}"] [data-testid="references-style"]`,
       );
       useCitationStylePicker.getState().show(mindId, button);
+    },
+  },
+  {
+    id: "mind.history",
+    label: "history.command",
+    menuLabel: "history.menu",
+    keywords: ["history.keywords"],
+    group: "main",
+    // Opening it changes nothing; its Restore is taken back with Undo.
+    reversible: true,
+    when: (ctx) => onlyOne(ctx) && mindShown(ctx) !== null,
+    run: (ctx) => {
+      const mindId = mindShown(ctx);
+      if (mindId) useHistory.getState().open(mindId);
     },
   },
   {
@@ -254,9 +271,9 @@ const appCommands: readonly Command[] = [
     group: "main",
     // Opening it changes nothing.
     reversible: true,
-    when: (ctx) => onlyOne(ctx) && outlineMind(ctx) !== null,
+    when: (ctx) => onlyOne(ctx) && mindShown(ctx) !== null,
     run: (ctx) => {
-      const mindId = outlineMind(ctx);
+      const mindId = mindShown(ctx);
       if (!mindId) return;
       // A Mind's row in the sidebar opens the Mind, which then shows its outline.
       if (mindId !== mindInFront()) useAppStore.getState().openMind(mindId);

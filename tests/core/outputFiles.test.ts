@@ -87,6 +87,7 @@ describe("The Output location", () => {
       citations: 0,
       unverifiedCitations: 0,
       questions: 0,
+      word: null,
     });
     expect(await readFile(join(location, "Tides.md"), "utf8")).toContain(
       "Spring tides come twice a month.",

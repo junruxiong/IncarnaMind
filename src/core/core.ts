@@ -52,6 +52,7 @@ import type {
 } from "./api";
 import { createApprovals } from "./approvals";
 import { createBackgroundQueue } from "./backgroundQueue";
+import { createCheckpoints } from "./checkpoints";
 import { createCitationStyles } from "./citationStyles";
 import { type CitedPages, type CitedPlace, createCitedPages } from "./citedPages";
 import { COMPARISON_TASK, createComparisons } from "./comparisons";
@@ -334,6 +335,7 @@ export function createCore(adapters: CoreAdapters): Core {
     events.emit("mind.update", { mindId, update });
     // Only notes the change; what became of AI text is worked out once the Mind is quiet.
     aiUse.contentStored(mindId);
+    checkpoints.edited(mindId);
     mindIndex.contentStored(mindId);
     comparisons.mindChanged(mindId);
     const renamed = minds.setAutoTitle(mindId, content.peek(mindId, firstLineOf));
@@ -448,6 +450,18 @@ export function createCore(adapters: CoreAdapters): Core {
   const privacyChanged = () => events.emit("privacy.changed", privacy.status());
   const platform = process.platform;
   const retention = createVersionRetention(db, now);
+  const checkpoints = createCheckpoints({
+    db,
+    now,
+    content,
+    retention,
+    requireMind: (mindId) => writableMind(mindId).id,
+    changed: (mindId) => events.emit("checkpoints.changed", { mindId }),
+    stopAnswer: (mindId, answerId) => answers.stop({ mindId, answerId }),
+    settleAnswers: (mindId) => answers.settleOrphans(mindId),
+    say: (key) => translate(settings.get().language, key),
+    reportError: (error) => console.error(error),
+  });
   // Background work (automatic tagging, Organize's classification, saving cited pages): one
   // job at a time, giving way to Answers.
   const background = createBackgroundQueue({ reportError: (error) => console.error(error) });
@@ -1031,6 +1045,7 @@ export function createCore(adapters: CoreAdapters): Core {
       searchableCount: (ids) => documents.searchableCount(ids),
     },
     evidence: (ids) => evidence.scope(ids).documentIds ?? [...ids],
+    checkpoint: (mindId) => checkpoints.save(mindId, "compare"),
     tasks: {
       start: (kind, mindId, input) => tasks.start(kind, mindId, input),
       unfinished: () => tasks.unfinished(),
@@ -1221,6 +1236,7 @@ export function createCore(adapters: CoreAdapters): Core {
     printer: adapters.printer ?? null,
     paper: () => paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages())),
     ...(adapters.pictures && { pictures: adapters.pictures }),
+    wordPackage: (mindId) => wordImports.packageOf(mindId),
     log: adapters.log ?? silentLogger,
     now,
   });
@@ -1946,6 +1962,10 @@ export function createCore(adapters: CoreAdapters): Core {
     closeMind: async (mindId) => {
       content.close(parseMindId(mindId));
     },
+    saveCheckpoint: async (mindId, reason) => checkpoints.save(mindId, reason),
+    listCheckpoints: async (mindId) => checkpoints.list(mindId),
+    compareCheckpoints: async (input) => checkpoints.compare(input),
+    restoreCheckpoint: async (mindId, checkpointId) => checkpoints.restore(mindId, checkpointId),
     askInConversation: async (input) =>
       answers.askInConversation(conversations.parseQuestion(input)),
     regenerateConversationAnswer: async (input) => answers.regenerateInConversation(input),
@@ -2232,7 +2252,8 @@ export function createCore(adapters: CoreAdapters): Core {
     answerTaskAsk: (taskId, answer) => tasks.answer(taskId, answer),
 
     askQuestion: async (input) => answers.ask(input),
-    regenerateAnswer: async (input) => answers.regenerate(input),
+    regenerateAnswer: async (input) =>
+      answers.regenerate(input, (mindId) => checkpoints.save(mindId, "regenerate")),
     stopAnswer: async (input) => answers.stop(input),
     suggestNext: (request) => suggestions.suggest(request),
     cancelSuggestion: async (requestId) => suggestions.cancel(requestId),
@@ -2535,9 +2556,12 @@ export function createCore(adapters: CoreAdapters): Core {
       return exported;
     },
     saveMindExport: async (mindId, options) => {
-      const { fileName, data, ...counts } = await mindExports.export(mindId, options);
+      const { fileName, data, word, ...counts } = await mindExports.export(mindId, options);
+      // What a Word file can't keep is said before anything is saved (#105).
+      const accepted = new Set(Array.isArray(options?.accept) ? options.accept : []);
+      if (word?.notKept.some((loss) => !accepted.has(loss.key))) return { status: "review", word };
       const saved = await saveExport(fileName, data, () => recordExport(options));
-      return saved.status === "saved" ? { ...saved, ...counts } : saved;
+      return saved.status === "saved" ? { ...saved, ...counts, word } : saved;
     },
     saveSkillExport: async (skillId) => {
       const { fileName, data } = await skills.exportZip(skillId);
@@ -2680,6 +2704,7 @@ export function createCore(adapters: CoreAdapters): Core {
       rerankingModel.close();
       textRecognitionModel?.close();
       activity.stop();
+      checkpoints.close();
       aiUse.close();
       mindIndex.close();
       events.clear();
