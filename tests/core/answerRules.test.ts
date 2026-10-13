@@ -9,7 +9,7 @@
 import { utimes } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 import { createCitationSession } from "../../src/core/answers/citations";
-import { documentInstructions } from "../../src/core/answers/prompt";
+import { datedDocumentsNote, documentInstructions } from "../../src/core/answers/prompt";
 import { askAndFinish, setUpWithDocuments, shownPassages } from "../helpers/citations";
 import { createTempDataFolder } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
@@ -196,4 +196,90 @@ describe("The Answer instructions", { timeout: 30_000 }, () => {
       expect(text).toContain("You may add what the Passages do say that comes closest");
     },
   );
+});
+
+/** Passages as the search Tool formats them: each with its Document, and its date when known. */
+const handed = (...documents: readonly [string, string | null][]) =>
+  documents
+    .map(
+      ([document, date], index) =>
+        `<passage id="P${index + 1}" document="${document}"${date ? ` date="${date}"` : ""} pages="1">\nOutages must be reported.\n</passage>`,
+    )
+    .join("\n\n");
+
+describe("The note on Documents of different dates (#660)", { timeout: 30_000 }, () => {
+  const NOTE = "These Passages come from Documents of different dates:";
+
+  test("names each dated Document with its date, newest first, and reminds the model to name the older one", () => {
+    expect(
+      datedDocumentsNote(
+        handed(
+          ["Handbook", "2024-03-01"],
+          ["Memo", "2025"],
+          ["Memo", "2025"],
+          ["Circular", "2023-11"],
+        ),
+      ),
+    ).toBe(
+      `${NOTE} "Memo" (2025), "Handbook" (2024-03-01), "Circular" (2023-11). Where they give different figures for the same thing, lead with the newer Document, then write one sentence naming the older one, its date and its figure, with a Citation.`,
+    );
+  });
+
+  test("is left out for one Document, for Documents of the same date, and for undated ones", () => {
+    expect(datedDocumentsNote(handed(["Memo", "2025"]))).toBe("");
+    expect(datedDocumentsNote(handed(["Memo", "2025"], ["Memo", "2025"]))).toBe("");
+    expect(datedDocumentsNote(handed(["Memo", "2024-03-01"], ["Handbook", "2024-03-01"]))).toBe("");
+    expect(datedDocumentsNote(handed(["Memo", "2025"], ["Handbook", null]))).toBe("");
+    expect(datedDocumentsNote("No Passages in the User's Documents match this search.")).toBe("");
+  });
+
+  test("follows a Tool-loop search's Passages when they come from Documents of different dates", async () => {
+    const seen: Seen = { system: [], results: [] };
+    const { core, client, mind } = await setUp(searchingModel(seen));
+
+    await askAndFinish(core, client, mind.id, QUESTION);
+
+    const [result = ""] = seen.results;
+    expect(
+      result.endsWith(
+        `${NOTE} "Outage memo" (2025), "Operations handbook" (2024-03-01), "Circular" (2023-11). Where they give different figures for the same thing, lead with the newer Document, then write one sentence naming the older one, its date and its figure, with a Citation.`,
+      ),
+    ).toBe(true);
+  });
+
+  test("isn't added when the Passages handed are from Documents of one date", async () => {
+    const seen: Seen = { system: [], results: [] };
+    const setup = await setUpWithDocuments(searchingModel(seen), []);
+    const sources = await createTempDataFolder();
+    const day = new Date("2024-03-01T12:00:00Z");
+    const paths = await Promise.all(
+      ["Shift notes.md", "Night notes.md"].map(async (name) => {
+        const path = await writeSourceFile(
+          sources,
+          name,
+          `# ${name}\n\nOutages over 6 hours must be reported.\n`,
+        );
+        await utimes(path, day, day);
+        return path;
+      }),
+    );
+    await addAndProcess(setup.core, paths);
+
+    await askAndFinish(setup.core, setup.client, setup.mind.id, QUESTION);
+
+    expect(shownPassages(seen.results.join("\n\n")).map((passage) => passage.date)).toEqual([
+      "2024-03-01",
+      "2024-03-01",
+    ]);
+    expect(seen.results.join("\n")).not.toContain(NOTE);
+  });
+
+  test("follows one search's Passages in the instructions of a model that can't call Tools", async () => {
+    const seen: Seen = { system: [], results: [] };
+    const { core, client, mind } = await setUp(oneSearchModel(seen, true));
+
+    await askAndFinish(core, client, mind.id, QUESTION);
+
+    expect(seen.system.at(-1)).toContain(`${NOTE} "Outage memo" (2025)`);
+  });
 });
