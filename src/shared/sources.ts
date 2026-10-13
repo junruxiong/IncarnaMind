@@ -6,13 +6,14 @@
  */
 import type { CitationAttributes, Document } from "../core/api";
 import type { Language } from "../core/language";
-import { citationState, citedLocation } from "./citations";
+import { citationState, citedLocation, shownDocumentName } from "./citations";
 import { titleWithoutSite } from "./documentNames";
 import { translate } from "./i18n";
 import type { Translate } from "./locations";
 
-/** What a source needs of a live Document: whether a Citation still has one, and its web page. */
-export type SourceDocument = Pick<Document, "id" | "contentHash"> & Partial<Pick<Document, "web">>;
+/** What a source needs of a live Document: whether a Citation still has one, its name and its web page. */
+export type SourceDocument = Pick<Document, "id" | "contentHash"> &
+  Partial<Pick<Document, "name" | "title" | "web">>;
 
 export interface SourceContext {
   language: Language;
@@ -70,8 +71,8 @@ function webOf(attributes: Cited, context: SourceContext) {
   return { web, fetchedAt: version?.fetchedAt ?? null };
 }
 
-const nameOf = (attributes: Cited, t: Translate) =>
-  attributes.documentName || t("export.unnamedDocument");
+const nameOf = (attributes: Cited, context: SourceContext, t: Translate) =>
+  shownDocumentName(attributes, context.documents) || t("export.unnamedDocument");
 
 /** A web page's own words for its source, the site named after the title it doesn't end with. */
 function webParts(name: string, web: { site: string }): string[] {
@@ -90,7 +91,7 @@ export function sourceText(
   context: SourceContext,
 ): { text: string; link: string | null } {
   const t = translator(context.language);
-  const name = nameOf(attributes, t);
+  const name = nameOf(attributes, context, t);
   const location = citedLocation(attributes, t);
   const found = webOf(attributes, context);
   if (!found) {
@@ -119,7 +120,7 @@ export function sourcesOf(citations: readonly Cited[], context: SourceContext): 
   const found = new Map<string, Source & { fetched: Set<string> }>();
   for (const attributes of citations) {
     const live = context.documents ? liveIdOf(attributes, context.documents) : null;
-    const name = nameOf(attributes, t);
+    const name = nameOf(attributes, context, t);
     const key = live ?? `name:${name}`;
     let source = found.get(key);
     if (!source) {
