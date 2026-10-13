@@ -49,7 +49,8 @@ import { InvalidInputError, isRecord, NotFoundError } from "../errors";
 import { parseSearchScope } from "../scope";
 import { isChatModelChoice } from "../settings";
 import type { Database, SqlValue } from "../storage";
-import { excerptOf, findTerms, indexText, plainText, searchTerms, termQuery } from "./search";
+import { excerptOf, findTerms, searchTerms, termQuery } from "../wordSearch";
+import { indexText, plainText } from "./search";
 
 /** A Question to add, read from `askInConversation`'s input (see `parseQuestion`). */
 export interface QuestionInput {

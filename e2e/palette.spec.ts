@@ -1,0 +1,235 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { expect, type Page, test } from "@playwright/test";
+import type { CoreBridge } from "../src/core/api";
+import {
+  addDocuments,
+  createDataFolder,
+  dismissChatSetup,
+  enterContent,
+  launchApp,
+  newMind,
+  pointAndClick,
+  removeDataFolder,
+  setWindowSize,
+} from "./app";
+
+/**
+ * ⌘K: names, the registry's commands, and the words inside Minds and
+ * Documents, by keyboard and from the sidebar's Search.
+ */
+
+let dataDir: string;
+test.beforeEach(async () => {
+  dataDir = await createDataFolder();
+});
+test.afterEach(async () => {
+  await removeDataFolder(dataDir);
+});
+
+const palette = (window: Page) => window.getByTestId("palette");
+const group = (window: Page, id: string) =>
+  palette(window).locator(`[data-testid="palette-group"][data-group="${id}"]`);
+
+async function openPalette(window: Page) {
+  await window.keyboard.press("ControlOrMeta+k");
+  await expect(palette(window)).toBeVisible();
+  await expect(window.getByTestId("palette-search")).toBeFocused();
+}
+
+/** A new Mind with these lines, named by its first. */
+async function writeMind(window: Page, lines: string[]) {
+  await newMind(window);
+  await enterContent(window);
+  for (const [index, line] of lines.entries()) {
+    if (index > 0) await window.keyboard.press("Enter");
+    await window.keyboard.type(line);
+  }
+}
+
+/** Whether the focus is in a Mind's text. */
+const focusInNote = (window: Page) =>
+  window.evaluate(() => document.activeElement?.closest(".ProseMirror") !== null);
+
+test("a word only inside a Mind is found, and so is a Chinese word, and Enter opens the Mind at it", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await setWindowSize(app, window, 1280, 660);
+  await dismissChatSetup(window);
+  await writeMind(window, [
+    "Supplier review",
+    "The pilot boarded near Rotterdam at dawn.",
+    "本季度的财务报表显示利润增长。",
+  ]);
+  await writeMind(window, ["Stand-up notes", "Leeds account handover."]);
+
+  await openPalette(window);
+  await window.keyboard.type("Rotterdam");
+  const notes = group(window, "notes");
+  await expect(notes.getByTestId("palette-item")).toHaveCount(1);
+  await expect(notes).toContainText("Supplier review");
+  await expect(notes.locator("b")).toHaveText("Rotterdam");
+  // Nothing is named so: names come first, and there are none.
+  await expect(group(window, "minds")).toHaveCount(0);
+
+  // Opened from the other Mind: Enter shows this one, its title in the front tab.
+  await window.keyboard.press("Enter");
+  await expect(palette(window)).toBeHidden();
+  await expect(window.getByTestId("mind-title").locator("visible=true")).toHaveAttribute(
+    "placeholder",
+    "Supplier review",
+  );
+  await expect.poll(() => focusInNote(window)).toBe(true);
+  // The cursor is in the line the words were found in.
+  await expect
+    .poll(() => window.evaluate(() => document.getSelection()?.anchorNode?.textContent ?? ""))
+    .toContain("Rotterdam");
+
+  await openPalette(window);
+  await window.keyboard.type("财务");
+  await expect(group(window, "notes")).toContainText("Supplier review");
+  await expect(group(window, "notes")).not.toContainText("Stand-up notes");
+});
+
+test("the words inside a Mind are found as soon as they are typed", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await setWindowSize(app, window, 1280, 660);
+  await dismissChatSetup(window);
+  await writeMind(window, ["Harbour log", "Tides in Bergen"]);
+
+  await openPalette(window);
+  await window.keyboard.type("Bergen");
+  await expect(group(window, "notes")).toContainText("Harbour log");
+  await window.keyboard.press("Escape");
+  await expect(palette(window)).toBeHidden();
+  await expect.poll(() => focusInNote(window)).toBe(true);
+
+  // Typing on where the cursor was, then searching at once.
+  await window.keyboard.type(" and the moon over Ålesund");
+  await openPalette(window);
+  await window.keyboard.type("alesund");
+  await expect(group(window, "notes")).toContainText("Harbour log");
+  await expect(group(window, "notes").locator("b")).toHaveText("Ålesund");
+});
+
+test("names, commands and the words in Documents, all by keyboard; Esc closes and gives the focus back", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await setWindowSize(app, window, 1280, 660);
+  await dismissChatSetup(window);
+  const sources = join(dataDir, "sources");
+  await mkdir(sources);
+  const msa = join(sources, "Aldermoor MSA.txt");
+  await writeFile(msa, "Either party may end this contract on ninety days' written notice.");
+  await addDocuments(window, [msa]);
+  await writeMind(window, ["Contract checklist"]);
+
+  // From the sidebar's Search, by keyboard: the row takes the focus back.
+  const search = window.getByTestId("sidebar-search");
+  await expect(search).toContainText(/⌘K|Ctrl\+K/);
+  await search.focus();
+  await window.keyboard.press("Enter");
+  await expect(palette(window)).toBeVisible();
+  // Nothing typed: the Minds edited last, then every action.
+  await expect(group(window, "recent")).toContainText("Contract checklist");
+  await expect(group(window, "actions")).toBeVisible();
+  await window.keyboard.press("Escape");
+  await expect(palette(window)).toBeHidden();
+  await expect(search).toBeFocused();
+
+  // ⌘K again closes it.
+  await openPalette(window);
+  await window.keyboard.press("ControlOrMeta+k");
+  await expect(palette(window)).toBeHidden();
+
+  // ⌘↵ opens a Document in a tab of its own, beside the Mind's in its group.
+  await openPalette(window);
+  await window.keyboard.type("aldermoor");
+  await expect(group(window, "documents")).toContainText("Aldermoor MSA");
+  await window.keyboard.press("ControlOrMeta+Enter");
+  await expect(palette(window)).toBeHidden();
+  const groups = window.getByTestId("tab-group");
+  await expect(groups).toHaveCount(1);
+  await expect(groups.first().getByTestId("document-tab")).toHaveAttribute("aria-selected", "true");
+
+  await openPalette(window);
+  await window.keyboard.type("contract");
+  await expect(group(window, "minds")).toContainText("Contract checklist");
+  await expect(group(window, "documentText")).toContainText("Aldermoor MSA");
+  await expect(group(window, "documentText").locator("b")).toHaveText("contract");
+  // ↓ moves through every group in order, and wraps.
+  const items = palette(window).getByTestId("palette-item");
+  await expect(items.first()).toHaveAttribute("aria-selected", "true");
+  await window.keyboard.press("ArrowUp");
+  await expect(items.last()).toHaveAttribute("aria-selected", "true");
+  await window.keyboard.press("Enter");
+  await expect(palette(window)).toBeHidden();
+  await expect(window.getByTestId("viewer-title")).toHaveText("Aldermoor MSA");
+
+  // ">" for actions only, as in VS Code: a command from the registry, Settings at a page.
+  await openPalette(window);
+  await window.keyboard.type("> settings models");
+  await expect(palette(window).getByTestId("palette-group")).toHaveCount(1);
+  const action = group(window, "actions").getByTestId("palette-item").first();
+  await expect(action).toContainText("Settings: Models");
+  await window.keyboard.press("Enter");
+  await expect(window.getByTestId("settings-page-title")).toHaveText("Models");
+});
+
+test("an empty Library offers its actions, and with nothing found it says so, in English and in Chinese, at a narrow and a wide window", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await openPalette(window);
+  await expect(group(window, "recent")).toHaveCount(0);
+  await expect(group(window, "actions").getByTestId("palette-item").first()).toBeVisible();
+  await window.keyboard.type("tides");
+  await expect(window.getByTestId("palette-empty")).toHaveText("No matches in names or text");
+  await window.keyboard.press("Escape");
+
+  await writeMind(window, ["Tides in Bergen"]);
+
+  for (const width of [900, 1600]) {
+    await setWindowSize(app, window, width, 660);
+    await openPalette(window);
+    await window.keyboard.type("zqxjv");
+    await expect(window.getByTestId("palette-empty")).toHaveText("No matches in names or text");
+    const box = await palette(window).boundingBox();
+    expect(box && box.x >= 0 && box.x + box.width <= width).toBe(true);
+    await window.keyboard.press("Escape");
+  }
+
+  await window.evaluate(async () => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    await bridge.updateSettings({ user: { language: "zh-CN" } });
+  });
+  await expect(window.getByTestId("sidebar-search")).toContainText("搜索");
+  await openPalette(window);
+  await window.keyboard.type("zqxjv");
+  await expect(window.getByTestId("palette-empty")).toHaveText("名称和内容中都没有匹配项");
+});
+
+test("an action run from ⌘K is taken back with Undo", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await setWindowSize(app, window, 1280, 660);
+  await dismissChatSetup(window);
+  await writeMind(window, ["Tides in Bergen"]);
+
+  await openPalette(window);
+  await window.keyboard.type("citation style");
+  const action = group(window, "actions").getByTestId("palette-item").first();
+  await expect(action).toContainText("Citation style…");
+  await window.keyboard.press("Enter");
+  const picker = window.getByTestId("citation-style-picker");
+  await expect(picker.getByTestId("citation-style-search")).toBeFocused();
+  await window.keyboard.type("ieee");
+  await expect(picker.getByTestId("citation-style-option").first()).toHaveText("IEEE");
+  await window.keyboard.press("Enter");
+  await expect(picker).toBeHidden();
+  await expect(window.getByTestId("undo-message")).toContainText("IEEE");
+
+  await pointAndClick(window, window.getByTestId("undo-action"));
+  await openPalette(window);
+  await window.keyboard.type("citation style");
+  await window.keyboard.press("Enter");
+  const current = window.locator('[data-testid="citation-style-option"][data-current="true"]');
+  await expect(current).toHaveCount(1);
+  await expect(current).not.toHaveText("IEEE");
+});
