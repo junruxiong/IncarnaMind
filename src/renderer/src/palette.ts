@@ -8,6 +8,7 @@ import type {
   Document,
   DocumentGroupAssignment,
   DocumentKind,
+  DocumentTag,
   DocumentTextMatch,
   LibraryGroup,
   Mind,
@@ -107,13 +108,18 @@ export interface PaletteGroup {
   items: PaletteItem[];
 }
 
-/** What names are found among. */
+/** A Document as the palette reads it. */
+export type NamedDocument = Pick<Document, "id" | "name" | "title" | "kind"> & {
+  tags: readonly Pick<DocumentTag, "tagId">[];
+};
+
+/** What names are found among, as the palette reads them. */
 export interface NamedThings {
   minds: readonly Mind[];
-  documents: readonly Document[];
-  folders: readonly LibraryGroup[];
-  assignments: readonly DocumentGroupAssignment[];
-  tags: readonly Tag[];
+  documents: readonly NamedDocument[];
+  folders: readonly Pick<LibraryGroup, "id" | "name">[];
+  assignments: readonly Pick<DocumentGroupAssignment, "documentId" | "groupId">[];
+  tags: readonly Pick<Tag, "id" | "name" | "colour">[];
 }
 
 /** How many of each group show; the rest is a word or two more away. */
@@ -337,7 +343,7 @@ export function noteGroup(
 /** "In your Documents": the Documents the core found the words in, with the Passage that holds them. */
 export function documentTextGroup(
   found: readonly DocumentTextMatch[],
-  documents: readonly Document[],
+  documents: readonly NamedDocument[],
   t: Translate,
 ): PaletteGroup[] {
   const byId = new Map(documents.map((document) => [document.id, document]));

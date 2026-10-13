@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { JSONContent } from "@tiptap/core";
 import { describe, expect, test, vi } from "vitest";
@@ -10,7 +11,12 @@ import {
 } from "../../src/core";
 import { openDatabase } from "../../src/core/storage";
 import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core";
-import { addAndProcess, createSourceFolder, writeSourceFile } from "../helpers/documents";
+import {
+  addAndProcess,
+  createSourceFolder,
+  waitForDocuments,
+  writeSourceFile,
+} from "../helpers/documents";
 import { connectToMind, type MindClient, typeInto } from "../helpers/mindClient";
 import { editMind, heading, note, writeMind } from "../helpers/minds";
 
@@ -228,5 +234,36 @@ describe("searching the words in Documents", () => {
     expect((await core.searchDocumentText("通知期")).map((each) => each.documentId)).toEqual([
       handbookDoc?.id,
     ]);
+  });
+  test("leaves out a missing Document, and one long Document doesn't crowd out the others", async () => {
+    const core = startCore(await createTempDataFolder());
+    const folder = await createSourceFolder();
+    const long = await writeSourceFile(
+      folder,
+      "Harbour log.txt",
+      Array.from(
+        { length: 6000 },
+        (_, day) => `Day ${day}: the harbour pilot boarded the harbour pilot boat at dawn.`,
+      ).join("\n\n"),
+    );
+    const filler = Array.from({ length: 300 }, (_, n) => `word${n}`).join(" ");
+    const short = await writeSourceFile(
+      folder,
+      "Pilot rota.txt",
+      `${filler} Each harbour pilot works four days. ${filler}`,
+    );
+    const gone = await writeSourceFile(folder, "Old rota.txt", "The harbour pilot rota for 2019.");
+    const [logDoc, rotaDoc, goneDoc] = await addAndProcess(core, [long, short, gone]);
+
+    const found = async () =>
+      (await core.searchDocumentText("harbour pilot")).map((match) => match.documentId).sort();
+    expect(await found()).toEqual([logDoc?.id, rotaDoc?.id, goneDoc?.id].sort());
+
+    await rm(gone);
+    await core.reconcileDocuments();
+    await waitForDocuments(core, (listed) =>
+      expect(listed.find((each) => each.id === goneDoc?.id)?.fileStatus).toBe("missing"),
+    );
+    expect(await found()).toEqual([logDoc?.id, rotaDoc?.id].sort());
   });
 });
