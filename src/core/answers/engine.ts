@@ -74,6 +74,7 @@ import type {
   ReadThirdPartySource,
   ThirdPartyReason,
 } from "../api";
+import { ONE_SEARCH_PARAMETERS, type SearchToolParameters } from "../documents/searchTool";
 import { detectLanguage } from "../documents/textLanguage";
 import type { ChatLanguageModel, ContextWindow } from "../providers/models";
 import { cacheProviderOptions, tokenUsageOf } from "../providers/promptCache";
@@ -150,6 +151,8 @@ export interface CiteOptions {
 export interface AnswerSearchOptions {
   /** False leaves the reranker out (ADR-0009, 2026-10-12). Omitted: as the User set it. */
   rerank?: boolean;
+  /** Counts for this search instead of the Tool's defaults. */
+  parameters?: Partial<SearchToolParameters>;
 }
 
 /** What a search gives the model. */
@@ -595,7 +598,7 @@ const calculationsSchema = {
       formula: {
         type: "string",
         description:
-          "In Excel's syntax, over the inputs' names: (rev2025 - rev2024) / rev2024, SUM(q1, q2, q3, q4), RRI(4, start, end), a > b. A percent is a share, 25% is 0.25: never multiply by 100, give as instead.",
+          "In Excel's syntax, over the inputs' names: (rev2025 - rev2024) / rev2024, SUM(q1, q2, q3, q4), RRI(4, start, end), a > b. A percent is a share, 25% is 0.25: never multiply by 100, give as instead. Inputs are in base units: never multiply or divide by 1000 or 10000 to change the scale, give scale instead.",
       },
       as: {
         type: "string",
@@ -606,7 +609,8 @@ const calculationsSchema = {
       decimals: { type: "integer", description: "Decimal places, when the default won't do." },
       scale: {
         type: "string",
-        description: "Show an amount in this scale: 万, 亿, thousand, million, billion.",
+        description:
+          "Show an amount in this scale: 万, 亿, thousand, million, billion. Inputs are in base units with their page's scale applied, so this, never the formula, sets the scale shown.",
       },
     },
     required: ["marker", "inputs", "formula"],
@@ -1011,7 +1015,9 @@ function createWritingEngine(options: AiSdkAnswerEngineOptions): AnswerEngine {
             input: { query: each },
           };
           try {
-            const result = await request.documents.searchDocuments(each, signal);
+            const result = await request.documents.searchDocuments(each, signal, {
+              parameters: ONE_SEARCH_PARAMETERS,
+            });
             for (const source of result.thirdParty ?? []) {
               if (read.has(source)) continue;
               read.add(source);
@@ -1200,7 +1206,7 @@ export function documentTools(
       ? {
           ...own(DOCUMENT_TOOLS.calculate),
           description:
-            'Work out a number from numbers in the Passages instead of in your head, and get its result back. Give figures, each {marker, label, inputs, formula, as}. Each input is {name, label, citation, number}: citation is the marker of a cite record whose quote has the number (1 for [^1]), or give passage, location and quote instead; number is the number as it is written there. The formula is in Excel\'s syntax over the inputs\' names. For example: {"figures": [{"marker": 1, "label": "Revenue growth 2025", "inputs": [{"name": "r24", "label": "Revenue 2024", "citation": 1, "number": "$1,231.0 million"}, {"name": "r25", "label": "Revenue 2025", "citation": 1, "number": "$1,482.6 million"}], "formula": "r25 / r24 - 1", "as": "percent"}]}. IncarnaMind reads each number from its quote, checks the quote and does the arithmetic. Write the figure\'s marker, such as [=1], in the number\'s place; never write the number yourself.',
+            'Work out a number from numbers in the Passages instead of in your head, and get its result back. Give figures, each {marker, label, inputs, formula, as}. Each input is {name, label, citation, number}: citation is the marker of a cite record whose quote has the number (1 for [^1]), or give passage, location and quote instead; number is the number as it is written there. The formula is in Excel\'s syntax over the inputs\' names. For example: {"figures": [{"marker": 1, "label": "Revenue growth 2025", "inputs": [{"name": "r24", "label": "Revenue 2024", "citation": 1, "number": "$1,231.0 million"}, {"name": "r25", "label": "Revenue 2025", "citation": 1, "number": "$1,482.6 million"}], "formula": "r25 / r24 - 1", "as": "percent"}]}. IncarnaMind reads each number from its quote, checks the quote and does the arithmetic. Inputs are read in base units with their page\'s scale ("单位：万元", "in millions") applied, so give scale ("亿", "billion") for the scale a figure is shown in, never multiply or divide by 1000 or 10000 in the formula. Write the figure\'s marker, such as [=1], in the number\'s place; never write the number yourself.',
           inputSchema: {
             type: "object",
             properties: { figures: calculationsSchema },

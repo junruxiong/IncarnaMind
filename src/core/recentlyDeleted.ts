@@ -69,7 +69,14 @@ function purge(
   if (ids.length === 0) return;
   const list = JSON.stringify(ids);
   const IN = "IN (SELECT value FROM json_each(?))";
-  if (kind === "mind") db.run(`DELETE FROM mind_updates WHERE mind_id ${IN}`, [list]);
+  if (kind === "mind") {
+    db.run(`DELETE FROM mind_updates WHERE mind_id ${IN}`, [list]);
+    // The Word package it was imported from goes once no other Mind keeps it (`sweepWordPackages`).
+    db.run(
+      `UPDATE word_packages SET deleted_at = ?, updated_at = ? WHERE mind_id ${IN} AND deleted_at IS NULL`,
+      [at, at, list],
+    );
+  }
   if (kind === "conversation") {
     // Its messages, their index and its titles: everything the User asked or was answered.
     const purged = `(SELECT id FROM conversations WHERE id ${IN} AND deleted_at IS NOT NULL)`;

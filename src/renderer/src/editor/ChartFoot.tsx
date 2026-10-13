@@ -1,3 +1,4 @@
+import { Fragment, type ReactNode, type RefObject } from "react";
 import type { CitationCheck } from "../../../core/api";
 import type { ChartInk } from "../../../shared/chartLayout";
 import { type ChartSources, MAX_CHART_VALUES } from "../../../shared/charts";
@@ -13,6 +14,8 @@ export function ChartFoot({
   rows,
   cutFrom,
   onUpdate,
+  onFindUncited,
+  findRef,
 }: {
   legend: { ink: ChartInk; name: string }[];
   sources: ChartSources;
@@ -23,6 +26,9 @@ export function ChartFoot({
   cutFrom: number | null;
   /** Null when its table hasn't changed, or can't be charted now. */
   onUpdate: (() => void) | null;
+  /** Puts the next value with no Citation in focus, with its card (#503). */
+  onFindUncited(): void;
+  findRef: RefObject<HTMLButtonElement | null>;
 }) {
   const t = useT();
   const cited = sources.values - sources.uncited;
@@ -45,13 +51,37 @@ export function ChartFoot({
   } else if (cited > 0) {
     said = t("chart.source.documents", { count: cited, documents: sources.documents });
   }
-  const more = [
-    cited > 0 && sources.uncited > 0 ? t("chart.source.uncited", { count: sources.uncited }) : null,
+  const more: ReactNode[] = [
+    cited > 0 && sources.uncited > 0 ? (
+      // A way to find them, not a warning: quiet, as the rest of the line.
+      <button
+        key="uncited"
+        ref={findRef}
+        type="button"
+        data-chart-ui=""
+        data-testid="chart-find-uncited"
+        className="chart-find"
+        onClick={onFindUncited}
+      >
+        {t("chart.source.uncited", { count: sources.uncited })}
+      </button>
+    ) : null,
     notFound > 0 ? t(`chart.source.notFound.${plural(notFound)}`, { count: notFound }) : null,
     sources.notDrawn > 0
       ? t(`chart.source.notDrawn.${plural(sources.notDrawn)}`, { count: sources.notDrawn })
       : null,
-  ].filter((part): part is string => part !== null);
+    sources.noUnit > 0
+      ? t(`chart.source.noUnit.${plural(sources.noUnit)}`, { count: sources.noUnit })
+      : null,
+  ].filter((part) => part !== null);
+  const line = (parts: ReactNode[]) =>
+    parts.map((part, index) => (
+      // biome-ignore lint/suspicious/noArrayIndexKey: the parts of one line, in a fixed order.
+      <Fragment key={index}>
+        {index > 0 && " · "}
+        {part}
+      </Fragment>
+    ));
 
   return (
     <div className="chart-foot" data-testid="chart-foot">
@@ -68,10 +98,10 @@ export function ChartFoot({
       {said && (
         <span className="chart-source" data-testid="chart-source">
           {check && <ChartCheck check={check} label={said} size="md" />}
-          <span>{[said, ...more].join(" · ")}</span>
+          <span>{line([said, ...more])}</span>
         </span>
       )}
-      {!said && more.length > 0 && <span className="chart-source">{more.join(" · ")}</span>}
+      {!said && more.length > 0 && <span className="chart-source">{line(more)}</span>}
       {cutFrom !== null && (
         <span className="chart-source" data-testid="chart-cut">
           {t("chart.cut", { rows, total: cutFrom, max: MAX_CHART_VALUES })}
