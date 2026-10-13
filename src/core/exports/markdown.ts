@@ -5,10 +5,13 @@
  * markdown-it-mark read them), and each Citation and each footnote the User
  * wrote as a footnote, numbered together in the order they appear. A Citation
  * inside the User's footnote is written into its text, as its source.
+ * Someone's changes from a Word file still waiting are CriticMarkup, each with
+ * who made it and when: "{--by cheque--}{>>Deleted by Priya Nair, 2 Oct 2026<<}" (#734).
  */
 import type { TableAlign } from "../../shared/markdownTables";
 import type { StyledRun } from "../api";
 import { type Block, type Footnote, type Inline, type Marks, tableLayout } from "../mindText";
+import { changedContent, changeEnding, changeSpans } from "../shownChanges";
 import type { ExportLabels } from "./labels";
 
 export type MarkdownLabels = ExportLabels;
@@ -95,13 +98,16 @@ class MarkdownWriter {
   private block(block: Block, context: Context): string {
     switch (block.kind) {
       case "paragraph":
-        return this.inline(block.content, context).split("\n").map(escapeLineStart).join("\n");
+        return this.inline(changedContent(block), context)
+          .split("\n")
+          .map(escapeLineStart)
+          .join("\n");
       case "heading": {
-        const text = this.inline(block.content, context).replace(/\\\n/g, " ");
+        const text = this.inline(changedContent(block), context).replace(/\\\n/g, " ");
         return text ? `${"#".repeat(block.level)} ${text}` : "";
       }
       case "question": {
-        const text = this.inline(block.content, context);
+        const text = this.inline(changedContent(block), context);
         return `**${this.labels.question}**${text ? ` ${text}` : ""}`;
       }
       case "code": {
@@ -207,12 +213,26 @@ class MarkdownWriter {
     return lines.join("\n");
   }
 
+  /** Inline content, someone's changes in it as CriticMarkup with who made each and when. */
+  inline(content: readonly Inline[], context: Context): string {
+    const spans = changeSpans(content);
+    return spans
+      .map(({ change, content: part }, at) => {
+        const text = this.marked(part, context);
+        if (!change) return text;
+        const marked = change.kind === "insert" ? `{++${text}++}` : `{--${text}--}`;
+        const ended = changeEnding(spans, at);
+        return ended ? `${marked}{>>${this.labels.change(ended)}<<}` : marked;
+      })
+      .join("");
+  }
+
   /**
    * Inline content with its marks: **bold**, *italic*, ~~strike~~,
    * ==highlight==, `code` and [links](…), properly nested; $math$; footnote
    * references; hard breaks.
    */
-  inline(content: readonly Inline[], context: Context): string {
+  private marked(content: readonly Inline[], context: Context): string {
     let out = "";
     /** Marks open at this point, outermost first. */
     let open: OpenMark[] = [];

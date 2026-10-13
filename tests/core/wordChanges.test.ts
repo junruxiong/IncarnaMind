@@ -6,8 +6,6 @@
  * rejected without a trace and the rest back as they were. What can't be
  * accepted or rejected here is kept as is, and listed.
  */
-import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import type { JSONContent } from "@tiptap/core";
 import { describe, expect, test } from "vitest";
 import type { Core } from "../../src/core";
@@ -17,12 +15,13 @@ import {
   pendingProposals,
   proposalRequestOf,
 } from "../../src/shared/proposals";
-import { wordFileOf, wordImportProgressOf, wordReportOf } from "../../src/shared/wordFiles";
+import { wordReportOf } from "../../src/shared/wordFiles";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import { acceptedParagraphs, checkWellFormed, unzip } from "../helpers/docx";
-import { connectToMind, type MindClient } from "../helpers/mindClient";
+import type { MindClient } from "../helpers/mindClient";
 import { editMind, readMind, resolveChanges, shownWithChanges } from "../helpers/minds";
 import { field, NUMBERING, paragraph, run, wordFile } from "../helpers/word";
+import { importWord } from "../helpers/wordImports";
 
 const PRIYA = 'w:author="Priya Nair" w:date="2026-10-02T09:00:00Z"';
 const LARS = 'w:author="Lars Berg" w:date="2026-10-05T16:20:00Z"';
@@ -65,22 +64,7 @@ async function imported(body: string): Promise<{
   const dataDir = await createTempDataFolder();
   const core = startCore(dataDir);
   const bytes = wordFile({ body, numbering: NUMBERING });
-  const path = join(dataDir, "Lease.docx");
-  await writeFile(path, bytes);
-  const result = await core.importWordFile({ path, origin: "someone-else" });
-  if (!result.ok) throw new Error(`Refused: ${result.refusal}`);
-  const client = await connectToMind(core, result.mind.id);
-  await new Promise<void>((resolve) => {
-    const check = () => {
-      if (wordFileOf(client.doc) && wordImportProgressOf(client.doc) === null) {
-        client.doc.off("update", check);
-        resolve();
-      }
-    };
-    client.doc.on("update", check);
-    check();
-  });
-  return { core, mindId: result.mind.id, client, bytes };
+  return { core, bytes, ...(await importWord(core, dataDir, bytes)) };
 }
 
 async function exported(core: Core, mindId: string, trackChanges = true) {

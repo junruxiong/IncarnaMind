@@ -179,6 +179,17 @@ sup.note-ref + sup.note-ref::before {
   color: var(--warning);
 }
 
+/* Someone's changes still waiting (#734), as Word prints them: inserted words underlined, deleted ones struck. */
+ins.change {
+  text-decoration: underline 0.75pt;
+  text-underline-offset: 2pt;
+}
+
+del.change {
+  color: var(--ink-meta);
+  text-decoration: line-through 0.75pt;
+}
+
 .chart-picture {
   margin-bottom: 4pt;
   text-align: center;

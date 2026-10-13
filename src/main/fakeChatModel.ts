@@ -33,7 +33,9 @@
  *
  * A Question about the User's notes or what they selected ("notes", "selected",
  * 笔记, 选中), asked beside a Mind, gets an Answer that starts by saying what it
- * read of the Mind: its name and first line, and the selected text.
+ * read of the Mind: its name and first line, and the selected text. One about
+ * what someone changed ("change", 修订) lists the changes it read marked in
+ * the Mind, with who made each (#734).
  *
  * With Skills: a Question that names a listed Skill gets it loaded with
  * use_skill first. An Answer that follows a Skill (forced, or loaded) starts
@@ -203,15 +205,26 @@ const lastQuestion = (prompt: Prompt): string => lastUserText(prompt).split("\n\
 /** A Question about the User's notes or what they selected in them. */
 const ABOUT_THE_MIND = /\bnotes?\b|\bselect(?:ed|ion)\b|笔记|选中/i;
 
+/** A Question about what someone changed in the Mind. */
+const ABOUT_THE_CHANGES = /\bchang(?:e|es|ed)\b|修订/i;
+
 /** What the Answer says it read of the Mind a Question about it was asked beside, if any. */
 function mindRead(prompt: Prompt): string | null {
-  if (!ABOUT_THE_MIND.test(lastQuestion(prompt))) return null;
+  const question = lastQuestion(prompt);
+  const aboutChanges = ABOUT_THE_CHANGES.test(question);
+  if (!ABOUT_THE_MIND.test(question) && !aboutChanges) return null;
   // The Mind starts the first user message, and the selection the last (#564).
   const text = lastUserText(prompt);
   const mind = /<mind name="([^"]*)">\n([\s\S]*?)<\/mind>/.exec(
     userText(prompt.find((message) => message.role === "user")),
   );
   if (!mind) return null;
+  if (aboutChanges) {
+    const changes = [...(mind[2] ?? "").matchAll(/\[(?:inserted|deleted) by [^\]]*\]/g)];
+    return changes.length > 0
+      ? `Changes in “${mind[1]}”: ${changes.map((each) => each[0]).join("; ")}`
+      : `No changes are marked in “${mind[1]}”.`;
+  }
   const first = (mind[2] ?? "")
     .split("\n")
     .map((line) => line.replace(/^#+\s*/, "").trim())

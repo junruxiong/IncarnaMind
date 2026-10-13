@@ -484,6 +484,15 @@ export async function tabMenu(window: Page): Promise<Locator> {
   return menu;
 }
 
+/** "Import a Word file…" from the "+" menu; the test answers the system's open dialog first. */
+export async function importWordFromMenu(window: Page): Promise<Locator> {
+  await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-import-word").click();
+  const dialog = window.getByTestId("word-import-dialog");
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
 /** Export options…, from the tab's menu; resolves once the sheet shows `title`. */
 export async function openOptions(window: Page, title: string): Promise<void> {
   await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.exportOptions"));

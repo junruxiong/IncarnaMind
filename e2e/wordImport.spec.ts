@@ -20,6 +20,7 @@ import {
   coreOf,
   createDataFolder,
   dismissChatSetup,
+  importWordFromMenu,
   interceptOpenDialog,
   launchApp,
   motionSettled,
@@ -103,15 +104,6 @@ function memo(): Buffer {
   });
 }
 
-/** "Import a Word file…" from the "+" menu; the test answers the system's open dialog. */
-async function importFromMenu(window: Page): Promise<Locator> {
-  await window.getByTestId("plus-menu").click();
-  await window.getByTestId("plus-import-word").click();
-  const dialog = window.getByTestId("word-import-dialog");
-  await expect(dialog).toBeVisible();
-  return dialog;
-}
-
 test("Import a Word file… asks whose it is, then opens the Mind with what is kept as is in place", async () => {
   const path = join(files, "Market entry memo (Velomark).docx");
   await writeFile(path, memo());
@@ -119,7 +111,7 @@ test("Import a Word file… asks whose it is, then opens the Mind with what is k
   await dismissChatSetup(window);
   await interceptOpenDialog(app, path);
 
-  const dialog = await importFromMenu(window);
+  const dialog = await importWordFromMenu(window);
   await expect(dialog.getByTestId("word-import-file")).toHaveText(
     "Market entry memo (Velomark).docx",
   );
@@ -209,7 +201,7 @@ test("someone else's tracked changes wait in place with who made them and when: 
   await mkdir(output);
   await useOutputLocation(window, output);
   await interceptOpenDialog(app, path);
-  const dialog = await importFromMenu(window);
+  const dialog = await importWordFromMenu(window);
   await dialog.getByTestId("word-import-confirm").click();
   await expect(dialog).toBeHidden();
 
@@ -314,7 +306,7 @@ test("deleting a section break asks first: Keep it leaves it, Delete takes it", 
   const { app, window } = await launchApp(dataDir, { home });
   await dismissChatSetup(window);
   await interceptOpenDialog(app, path);
-  const dialog = await importFromMenu(window);
+  const dialog = await importWordFromMenu(window);
   await expect(dialog.getByTestId("word-import-origin-own")).toBeChecked();
   await dialog.getByTestId("word-import-confirm").click();
 
@@ -362,7 +354,7 @@ test("a file that can't be imported says why, and no Mind is made", async () => 
     (await coreOf(window)).evaluate((bridge) => bridge.listMinds().then((list) => list.length));
   const before = await minds();
 
-  const dialog = await importFromMenu(window);
+  const dialog = await importWordFromMenu(window);
   await expect(dialog.getByTestId("word-import-refusal")).toContainText(
     "“Old minutes.doc” is an older Word file (.doc). Save it as .docx in Word, then import that.",
   );
@@ -447,7 +439,7 @@ test("Export writes back into the Word file: the User's edits tracked under thei
   await closeSettings(window);
 
   await interceptOpenDialog(app, path);
-  const dialog = await importFromMenu(window);
+  const dialog = await importWordFromMenu(window);
   await dialog.getByTestId("word-import-confirm").click();
 
   // The paragraph with the comment goes.

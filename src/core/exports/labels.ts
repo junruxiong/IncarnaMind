@@ -1,6 +1,7 @@
 import { translate } from "../../shared/i18n";
 import type { Language } from "../language";
 import type { Footnote } from "../mindText";
+import type { NotedChange } from "../shownChanges";
 
 export interface ExportLabels {
   question: string;
@@ -16,6 +17,8 @@ export interface ExportLabels {
   aiText: string;
   /** A Word file's comment on a Citation whose check failed: what failed, and the source. */
   failedCheck(footnote: Footnote): string;
+  /** Who made someone's change shown in an export, and when (#734): "Deleted by Priya Nair, 2 Oct 2026". */
+  change(change: NotedChange): string;
 }
 
 export function exportLabels(language: Language): ExportLabels {
@@ -43,5 +46,20 @@ export function exportLabels(language: Language): ExportLabels {
           : t(`export.comment.${failed.check}`, { source });
       return failed.verdict ? `${said}\n${failed.verdict}` : said;
     },
+    change: ({ kind, pending }) => {
+      const author = pending.by || t("export.change.someone");
+      const date = changeDate(pending.at);
+      const key = (
+        {
+          insert: "export.change.inserted",
+          delete: "export.change.deleted",
+          replace: "export.change.replaced",
+        } as const
+      )[kind];
+      return date ? t(key, { author, date }) : t(`${key}.noDate`, { author });
+    },
   };
 }
+
+/** The day a change was made, as the Word file gives it. */
+const changeDate = (at: string | null) => /^\d{4}-\d{2}-\d{2}/.exec(at ?? "")?.[0] ?? null;
