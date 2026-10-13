@@ -1,6 +1,6 @@
 import { constants } from "node:fs";
 import { copyFile, link, mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { DATABASE_FILE, type Document, type Folder, type WatchListener } from "../../src/core";
 import { isInside, type StatIdentity } from "../../src/core/documents/files";
@@ -18,6 +18,7 @@ import {
   writeSourceFile,
 } from "../helpers/documents";
 import { connectToMind } from "../helpers/mindClient";
+import { docxOf } from "../helpers/office";
 import { buildPdf } from "../helpers/pdf";
 
 /*
@@ -417,8 +418,8 @@ describe("Two different files are never one Document", { timeout: 60_000 }, () =
     const before = await linkAndProcess(first, library);
     await first.close();
     await rm(deleted);
-    // On the same disk: the new file gets the deleted one's number, at a later creation time.
-    const reused = await writeSourceFile(library, "Sub/notes.md", `${NOTES}${EDIT}`);
+    // On the same disk: a new file gets the deleted one's number, at a later creation time.
+    const reused = await writeSourceFile(library, "Sub/minutes.md", `${NOTES}${EDIT}`);
     identities.set(reused, { dev: 7n, ino: 42n, birthtimeNs: 2_000n });
     // The control: moved and edited, keeping its number and creation time.
     const moved = join(library, "Sub", "kept.md");
@@ -438,7 +439,7 @@ describe("Two different files are never one Document", { timeout: 60_000 }, () =
     expect(byId(documents, documentAt(before, deleted).id).fileStatus).toBe("missing");
   });
 
-  test("a Save As copy, a Duplicate and a second link to a file are new Documents, even once the original is gone", async () => {
+  test("a Save As copy under a new name, a Duplicate and a second link to a file are new Documents, even once the original is gone", async () => {
     const dataDir = await createTempDataFolder();
     const library = await createSourceFolder();
     const report = await writeSourceFile(library, "report.md", NOTES);
@@ -447,8 +448,8 @@ describe("Two different files are never one Document", { timeout: 60_000 }, () =
     const first = startCore(dataDir);
     const before = await linkAndProcess(first, library);
     await first.close();
-    // Save As into another folder, with changes, then the original deleted.
-    const savedAs = await writeSourceFile(library, "Archive/report.md", `${NOTES}${EDIT}`);
+    // Save As under a new name, with changes, then the original deleted.
+    const savedAs = await writeSourceFile(library, "Archive/report final.md", `${NOTES}${EDIT}`);
     await rm(report);
     // Duplicated (cloned where the file system can), the copy edited, the original deleted.
     const duplicate = join(library, "paper copy.md");
@@ -527,8 +528,171 @@ describe("Two different files are never one Document", { timeout: 60_000 }, () =
   });
 });
 
+/** Saves as Word and Pages do (#604): the new content goes into a file beside it, which then replaces it. */
+async function saveByReplacing(path: string, contents: Buffer): Promise<void> {
+  const beside = join(dirname(path), `.~${basename(path)}`);
+  await writeFile(beside, contents);
+  await rename(beside, path);
+}
+
+const HARBOUR_V1 = docxOf([{ text: "Harbour report", heading: 1 }, { text: NOTES }]);
+const HARBOUR_V2 = docxOf([
+  { text: "Harbour report", heading: 1 },
+  { text: NOTES },
+  { text: "Added later: the harbour wall was raised by a metre." },
+]);
+
+/**
+ * A Linked folder with Harbour.docx in it, tagged, whose file is then moved
+ * into a subfolder while the app is closed and saved by replacing it, as
+ * Word and Pages save. `keepCreated` keeps the old file's creation time on the
+ * new one, as Word does; its stat stands in for that, since a test can't set it.
+ */
+async function movedAndSavedByReplacing({ keepCreated }: { keepCreated: boolean }) {
+  const dataDir = await createTempDataFolder();
+  const library = await createSourceFolder();
+  const path = await writeSourceFile(library, "Harbour.docx", HARBOUR_V1);
+  await writeSourceFile(library, "Notes.md", NOTES);
+  const created = new Map<string, bigint>();
+  const linkedFolders = {
+    stat: statAs((at, real) => ({ ...real, birthtimeNs: created.get(at) ?? real.birthtimeNs })),
+  };
+  const first = startCore(dataDir, { linkedFolders });
+  const before = await linkAndProcess(first, library);
+  const harbour = documentAt(before, path);
+  const tag = await first.createTag({ name: "Harbours" });
+  await first.addDocumentTag(harbour.id, tag.id);
+  await first.close();
+  const original = await stat(path, { bigint: true });
+  const moved = join(library, "Reports", "Harbour.docx");
+  await mkdir(join(library, "Reports"));
+  await rename(path, moved);
+  await saveByReplacing(moved, HARBOUR_V2);
+  const saved = await stat(moved, { bigint: true });
+  expect(saved.ino).not.toBe(original.ino);
+  if (keepCreated) created.set(moved, original.birthtimeNs);
+  return { dataDir, library, linkedFolders, before, harbour, tag, moved };
+}
+
+describe("A file an editor saved by replacing it, after it was moved (#604)", {
+  timeout: 60_000,
+}, () => {
+  test("with its creation time kept, as Word saves, is still its Document, with its Tags and Folder", async () => {
+    const { dataDir, linkedFolders, before, harbour, tag, moved } = await movedAndSavedByReplacing({
+      keepCreated: true,
+    });
+
+    const second = startCore(dataDir, { linkedFolders });
+    await second.reconcileDocuments();
+    const documents = await waitForDocuments(second, (current) => {
+      expect(byId(current, harbour.id)).toMatchObject({
+        contentHash: sha256(HARBOUR_V2),
+        status: "ready",
+      });
+    });
+
+    expect(documents.map((each) => each.id).sort()).toEqual(before.map((each) => each.id).sort());
+    expect(byId(documents, harbour.id)).toMatchObject({
+      path: moved,
+      fileStatus: "available",
+      folderId: folderAt(await second.listFolders(), "Reports").id,
+      tags: [expect.objectContaining({ tagId: tag.id, source: "user" })],
+    });
+  });
+
+  test("with a new creation time, as Pages saves, is still its Document when it is newer and the only one with its name", async () => {
+    const { dataDir, linkedFolders, before, harbour, tag, moved } = await movedAndSavedByReplacing({
+      keepCreated: false,
+    });
+
+    const second = startCore(dataDir, { linkedFolders });
+    await second.reconcileDocuments();
+    const documents = await waitForDocuments(second, (current) => {
+      expect(byId(current, harbour.id)).toMatchObject({
+        contentHash: sha256(HARBOUR_V2),
+        status: "ready",
+      });
+    });
+
+    expect(documents).toHaveLength(before.length);
+    expect(byId(documents, harbour.id)).toMatchObject({
+      path: moved,
+      tags: [expect.objectContaining({ tagId: tag.id })],
+    });
+  });
+
+  test("isn't matched when two Documents with its name went, or two new files have its name", async () => {
+    const dataDir = await createTempDataFolder();
+    const library = await createSourceFolder();
+    const paths = {
+      a: await writeSourceFile(library, "A/Report.docx", HARBOUR_V1),
+      b: await writeSourceFile(library, "B/Report.docx", docxOf([{ text: PAPER }])),
+      notes: await writeSourceFile(library, "Minutes.docx", docxOf([{ text: OTHER }])),
+    };
+    const first = startCore(dataDir);
+    const before = await linkAndProcess(first, library);
+    await first.close();
+    // Both Report.docx went; one came back elsewhere, saved by replacing.
+    await rm(paths.a);
+    await rm(paths.b);
+    const report = await writeSourceFile(library, "C/Report.docx", HARBOUR_V1);
+    await saveByReplacing(report, HARBOUR_V2);
+    // Minutes.docx went, and two new files have its name.
+    await rm(paths.notes);
+    const twins = [
+      await writeSourceFile(library, "X/Minutes.docx", docxOf([{ text: `${OTHER}${EDIT}` }])),
+      await writeSourceFile(library, "Y/Minutes.docx", docxOf([{ text: `${OTHER}Y.` }])),
+    ];
+
+    const second = startCore(dataDir);
+    await second.reconcileDocuments();
+    const documents = await waitForDocuments(second, (current) => {
+      for (const path of [report, ...twins]) expect(documentAt(current, path).status).toBe("ready");
+    });
+
+    const old = new Set(before.map((each) => each.id));
+    for (const path of [report, ...twins])
+      expect(old.has(documentAt(documents, path).id)).toBe(false);
+    for (const document of before) expect(byId(documents, document.id).fileStatus).toBe("missing");
+  });
+
+  test("a Finder Duplicate and a Save As under a new name are new Documents, even once the original is gone", async () => {
+    const dataDir = await createTempDataFolder();
+    const library = await createSourceFolder();
+    const harbour = await writeSourceFile(library, "Harbour.docx", HARBOUR_V1);
+    const estuary = await writeSourceFile(library, "Estuary.docx", docxOf([{ text: PAPER }]));
+    const first = startCore(dataDir);
+    const before = await linkAndProcess(first, library);
+    await first.close();
+    // Duplicated in the Finder (cloned where the file system can), the copy edited, the original deleted.
+    const duplicate = join(library, "Harbour copy.docx");
+    await copyFile(harbour, duplicate, constants.COPYFILE_FICLONE);
+    await saveByReplacing(duplicate, HARBOUR_V2);
+    await rm(harbour);
+    // Saved As under a new name, the original deleted.
+    const savedAs = await writeSourceFile(
+      library,
+      "Archive/Estuary final.docx",
+      docxOf([{ text: `${PAPER}${EDIT}` }]),
+    );
+    await rm(estuary);
+
+    const second = startCore(dataDir);
+    await second.reconcileDocuments();
+    const documents = await waitForDocuments(second, (current) => {
+      for (const path of [duplicate, savedAs])
+        expect(documentAt(current, path).status).toBe("ready");
+    });
+
+    const old = new Set(before.map((each) => each.id));
+    for (const path of [duplicate, savedAs])
+      expect(old.has(documentAt(documents, path).id)).toBe(false);
+    for (const document of before) expect(byId(documents, document.id).fileStatus).toBe("missing");
+  });
+});
+
 describe("Files on any system", { timeout: 60_000 }, () => {
-  test("a file system without file numbers or creation times falls back to the content alone", async () => {
+  test("a file system without file numbers or creation times finds a moved file by its content, and a moved and edited one by its name", async () => {
     const dataDir = await createTempDataFolder();
     const library = await createSourceFolder();
     const linkedFolders = {
@@ -568,12 +732,11 @@ describe("Files on any system", { timeout: 60_000 }, () => {
 
     // Moved without changes, still found by its content.
     expect(documentAt(documents, moved.unedited).id).toBe(documentAt(before, paths.unedited).id);
-    // Moved and edited: a new Document, as before IncarnaMind read file numbers.
+    // Moved and edited: the one Document with its name whose file went, as an editor's save is (#604).
     for (const key of ["unnumbered", "untimed"] as const) {
-      const old = documentAt(before, paths[key]).id;
-      expect(documentAt(documents, moved[key]).id).not.toBe(old);
-      expect(byId(documents, old).fileStatus).toBe("missing");
+      expect(documentAt(documents, moved[key]).id).toBe(documentAt(before, paths[key]).id);
     }
+    expect(documents).toHaveLength(3);
   });
 
   test("file numbers too big for a JavaScript number, as Windows' are, are compared exactly", async () => {
