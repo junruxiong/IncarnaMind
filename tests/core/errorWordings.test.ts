@@ -26,6 +26,7 @@ const SENTENCES_LEFT: Record<string, number> = {
   "aiUse.ts": 7,
   "answers/index.ts": 6,
   "approvals.ts": 12,
+  "checkpoints/index.ts": 4,
   "citationStyles/request.ts": 6,
   "citedPages.ts": 1,
   "comparisons/index.ts": 12,
