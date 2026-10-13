@@ -58,11 +58,11 @@ const OWN_TITLES: Record<string, MessageKey> = {
   conversationText: "palette.group.conversationText",
 };
 
-/** What the core found for one query; `failed` says why it couldn't search. */
+/** What the core found for one query; `failed` holds why it couldn't search. */
 interface Found<T> {
   query: string;
   items: readonly T[];
-  failed?: string;
+  failed?: { error: unknown };
 }
 
 /** Asks the core once typing pauses; each answer stays until the next arrives. */
@@ -80,8 +80,7 @@ function useFound<T>(
     const timer = setTimeout(() => {
       latest.current(text).then(
         (items) => current && setFound({ query: text, items }),
-        (error: unknown) =>
-          current && setFound({ query: text, items: [], failed: errorMessage(error) }),
+        (error: unknown) => current && setFound({ query: text, items: [], failed: { error } }),
       );
     }, WORDS_DELAY_MS);
     return () => {
@@ -178,7 +177,8 @@ function Palette() {
     nothing && !actionsOnly && assistantHandle.current !== null
       ? askGroup(text, conversationLabel(openConversation), t)
       : [];
-  const problem = searching ? (notes?.failed ?? passages?.failed ?? said?.failed) : undefined;
+  const failed = searching ? (notes?.failed ?? passages?.failed ?? said?.failed) : undefined;
+  const problem = failed ? errorMessage(failed.error, t) : undefined;
 
   const items = [...groups, ...asking].flatMap((group) => group.items);
   const active = items.find((item) => item.key === activeKey) ?? items[0];
