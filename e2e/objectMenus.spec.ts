@@ -270,7 +270,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
   const tabMenu = tab.getByTestId("tab-actions");
   const byRightClick = await commandsIn(tabMenu);
   // Its Mind's items first, then the tab's own.
-  expect(byRightClick.slice(0, 9)).toEqual([
+  expect(byRightClick.slice(0, 10)).toEqual([
     "mind.outline",
     "mind.export",
     "mind.exportAs.pdf",
