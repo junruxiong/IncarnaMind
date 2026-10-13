@@ -206,6 +206,25 @@ export const noteSlashItems: readonly SlashItem[] = [
 ];
 
 /**
+ * "Compare Documents…" (#98): the slash and what was typed after it go, and
+ * the sheet opens at the foot of the Mind, its table to go where they were.
+ */
+export function compareSlashItem(onCompare: (afterBlockId: string | null) => void): SlashItem {
+  return {
+    id: "compare",
+    label: "command.compareDocuments",
+    keywords: ["comparison", "table", "documents"],
+    icon: <TableIcon className="size-3.5" />,
+    run(editor, range) {
+      editor.chain().focus().deleteRange(range).run();
+      const { $from } = editor.state.selection;
+      const block = $from.depth > 0 ? $from.node(1) : null;
+      onCompare(typeof block?.attrs.id === "string" ? block.attrs.id : null);
+    },
+  };
+}
+
+/**
  * The slash menu's entries for the enabled Skills, labelled with their names
  * as they are. Choosing one forces the Skill on the Question the cursor is
  * in; in a Note, it goes to the composer as a chip, for the Question asked

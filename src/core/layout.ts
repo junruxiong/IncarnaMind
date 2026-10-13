@@ -222,12 +222,14 @@ export function parseLayoutChange(value: unknown): LayoutChange {
     case "open": {
       const preview = optionalBoolean(value.preview, "preview");
       const focus = optionalBoolean(value.focus, "focus");
+      const keep = optionalBoolean(value.keep, "keep");
       return {
         type: "open",
         item: parseItem(value.item),
         where: parseWhere(value.where),
         ...(preview !== undefined && { preview }),
         ...(focus !== undefined && { focus }),
+        ...(keep !== undefined && { keep }),
         ...(value.place !== undefined && { place: parsePlace(value.place) }),
       };
     }
@@ -371,14 +373,9 @@ function requireTab(layout: Layout, tabId: string): { group: LayoutGroup; tab: L
 }
 
 /** Where it is open, the focused group first. */
-function findOpen(
-  layout: Layout,
-  item: TabItem,
-  except?: LayoutGroup,
-): { group: LayoutGroup; tab: LayoutTab } | null {
+function findOpen(layout: Layout, item: TabItem): { group: LayoutGroup; tab: LayoutTab } | null {
   const focused = focusedGroup(layout);
   for (const group of [focused, ...layout.groups.filter((each) => each !== focused)]) {
-    if (group === except) continue;
     const tab = group.tabs.find((each) => sameItem(each.item, item));
     if (tab) return { group, tab };
   }
@@ -475,12 +472,15 @@ function open(
   const where = change.where ?? { in: "place" };
   const focus = change.focus !== false;
   const preview = change.preview === true && item.kind === "document";
-  const reveal = (group: LayoutGroup, tab: LayoutTab) => {
-    if (change.preview === false) tab.preview = false;
+  const update = (tab: LayoutTab) => {
+    if (change.preview === false || change.keep === true) tab.preview = false;
     if (place) {
       tab.place = place;
       tab.opened += 1;
     }
+  };
+  const reveal = (group: LayoutGroup, tab: LayoutTab) => {
+    update(tab);
     show(layout, group, tab, focus);
   };
 
@@ -488,18 +488,21 @@ function open(
     where.in === "side" && where.from !== undefined
       ? requireGroup(layout, where.from)
       : focusedGroup(layout);
-  // The Library has one tab per window; anything else is revealed where it is open,
-  // except in the group it is opened from to the side, which keeps what it shows.
-  if (where.in !== "group" || item.kind === "library") {
-    const open = findOpen(
-      layout,
-      item,
-      where.in === "side" && item.kind !== "library" ? from : undefined,
-    );
-    if (open) {
-      reveal(open.group, open.tab);
-      return;
-    }
+  const shown = from.tabs.find((tab) => tab.id === from.activeTabId);
+  // The Library has one tab per window; anything else is revealed wherever it is open,
+  // and only a tab asked for in a group (Open in a new tab) can be a second one.
+  const found = where.in !== "group" || item.kind === "library" ? findOpen(layout, item) : null;
+  // Showing a Document that is behind the Mind in the group it is opened from would replace
+  // the Mind in view: its tab moves to the group a new tab would open in.
+  const behindMind =
+    found?.group === from &&
+    found.tab !== shown &&
+    shown?.item.kind === "mind" &&
+    item.kind === "document" &&
+    (where.in === "side" || where.in === "beside");
+  if (found && !behindMind) {
+    reveal(found.group, found.tab);
+    return;
   }
 
   let target: LayoutGroup;
@@ -511,7 +514,6 @@ function open(
   } else if (where.in === "side") {
     target = sideGroup(layout, from, newId);
   } else if (where.in === "beside") {
-    const shown = from.tabs.find((tab) => tab.id === from.activeTabId);
     target = shown?.item.kind === "document" ? from : sideGroup(layout, from, newId);
   } else {
     target = from;
@@ -521,6 +523,14 @@ function open(
   const replaced = preview ? target.tabs.find((tab) => tab.preview) : undefined;
   if (here) {
     reveal(target, here);
+  } else if (found) {
+    takeOut(from, found.tab);
+    update(found.tab);
+    const displaced = found.tab.preview ? target.tabs.find((tab) => tab.preview) : undefined;
+    if (displaced) takeOut(target, displaced);
+    const pinned = target.tabs.filter((tab) => tab.pinned).length;
+    insert(target, found.tab, found.tab.pinned ? pinned : undefined);
+    show(layout, target, found.tab, focus);
   } else if (replaced) {
     replaced.item = item;
     replaced.place = place ?? null;
