@@ -19,8 +19,8 @@ import { type ModelCall, scriptedModel } from "../helpers/models";
 const RULES = [
   "If the Question takes for granted what the Passages don't say",
   "文档中没有董事会批准的记录",
-  "If Passages disagree, lead with the newer Document by its date",
-  "较早的 2024 年手册写的是 6 小时",
+  "give different figures for the same thing (one updates the other), lead with the newer Document by its date",
+  "较早的手册（2024 年 1 月）写的是 6 小时",
 ];
 
 const QUESTION = "How many hours of outage must be reported?";
@@ -177,8 +177,23 @@ describe("The Answer instructions", { timeout: 30_000 }, () => {
       const text = documentInstructions(mode, { total: 2, names: ["Memo", "Handbook"] }, "");
 
       for (const rule of RULES) expect(text).toContain(rule);
-      expect(text.includes("says 6[^2]")).toBe(mode !== "none");
+      expect(text.includes("says 6 hours[^2]")).toBe(mode !== "none");
       if (mode === "none") expect(text).not.toContain("[^");
+    },
+  );
+
+  test.each(["tools", "structured-output", "none"] as const)(
+    "when answering with %s, stop where the Documents stop: own knowledge only for a general Question, labelled, with no figures",
+    (mode) => {
+      const text = documentInstructions(mode, { total: 1, names: ["Memo"] }, "");
+
+      expect(text).toContain("If the Documents don't cover the Question, say so plainly.");
+      expect(text).toContain("never fill the gap from your own knowledge");
+      expect(text).toContain('starts "Not from your Documents:" ("以下内容不是来自你的文档：")');
+      expect(text).not.toContain("answer from your own knowledge if you can");
+      // The premise rule's "then answer from what they say" is the Passages, never the model's own knowledge.
+      expect(text).toContain("then answer from what they say");
+      expect(text).toContain("You may add what the Passages do say that comes closest");
     },
   );
 });
