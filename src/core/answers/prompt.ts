@@ -121,6 +121,8 @@ const DATED_PASSAGE = /<passage id="[^"]*" document="([^"]*)" date="([^"]+)"/g;
  * (#660): GPT-6 Luna, told the rule in its instructions, still gave only the
  * newer Document's figure when a search handed it both. It names each dated
  * Document with its date, newest first; empty when fewer than two dates differ.
+ * Without its line on passing mentions, Luna took "the other five Functions"
+ * in NIST CSF 2.0 for the Core's count.
  */
 export function datedDocumentsNote(passages: string): string {
   const dates = new Map<string, string>();
@@ -134,7 +136,7 @@ export function datedDocumentsNote(passages: string): string {
     .sort(([, a], [, b]) => b.localeCompare(a))
     .map(([document, date]) => `"${document}" (${date})`)
     .join(", ");
-  return `These Passages come from Documents of different dates: ${listed}. Where they give different figures for the same thing, lead with the newer Document, then write one sentence naming the older one, its date and its figure, with a Citation.`;
+  return `These Passages come from Documents of different dates: ${listed}. Take each Document's figure only from a sentence that states it for that Document, never from a passing mention. Where they give different figures for the same thing, lead with the newer Document, then write one sentence naming the older one, its date and its figure, with a Citation.`;
 }
 
 const RECORD =

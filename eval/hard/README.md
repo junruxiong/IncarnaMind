@@ -175,7 +175,17 @@ The 10 disagreeing Questions, twice each (20 Answers per cell), as above: before
 
 - Luna now names the older Document in about half its Answers that were handed both. The rest still give only the newer figure.
 - Luna's quote not found cites page 9 of the December 2024 China Economic Update for a sentence on page 8.
-- Worse with the note: on the NIST question Luna answered six Functions both times before and five both times after, naming CSF 1.1's five as the older figure. CSF 2.0's text speaks of GOVERN and "the other five Functions". Haiku answered six both ways.
+- Worse with that first note: on the NIST question Luna answered six Functions both times before and five both times after, naming CSF 1.1's five as the older figure. CSF 2.0's text speaks of GOVERN and "the other five Functions". Haiku answered six both ways.
+
+The note then gained a line: "Take each Document's figure only from a sentence that states it for that Document, never from a passing mention." Asked again, the NIST Question 4 times and the 10 disagreeing Questions once each:
+
+| | Haiku 5.5 | GPT-6 Luna |
+|---|---|---|
+| NIST Question right (six Functions, CSF 2.0 first) | 4/4 | 4/4 |
+| Newer source leads, cited (the 10) | 9/10 | 10/10 |
+| Names the older one too (the 10) | 9/10 | 7/10 |
+| Handed both, then led and named the older (the 10) | 8 of 9 | 7 of 8 |
+| Quotes found (the 10) | 25 of 25 | 18 of 18 |
 
 ### 2026-10-13: the Answer rules (#548), before and after
 

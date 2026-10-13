@@ -221,7 +221,7 @@ describe("The note on Documents of different dates (#660)", { timeout: 30_000 },
         ),
       ),
     ).toBe(
-      `${NOTE} "Memo" (2025), "Handbook" (2024-03-01), "Circular" (2023-11). Where they give different figures for the same thing, lead with the newer Document, then write one sentence naming the older one, its date and its figure, with a Citation.`,
+      `${NOTE} "Memo" (2025), "Handbook" (2024-03-01), "Circular" (2023-11). Take each Document's figure only from a sentence that states it for that Document, never from a passing mention. Where they give different figures for the same thing, lead with the newer Document, then write one sentence naming the older one, its date and its figure, with a Citation.`,
     );
   });
 
@@ -242,7 +242,7 @@ describe("The note on Documents of different dates (#660)", { timeout: 30_000 },
     const [result = ""] = seen.results;
     expect(
       result.endsWith(
-        `${NOTE} "Outage memo" (2025), "Operations handbook" (2024-03-01), "Circular" (2023-11). Where they give different figures for the same thing, lead with the newer Document, then write one sentence naming the older one, its date and its figure, with a Citation.`,
+        `${NOTE} "Outage memo" (2025), "Operations handbook" (2024-03-01), "Circular" (2023-11). Take each Document's figure only from a sentence that states it for that Document, never from a passing mention. Where they give different figures for the same thing, lead with the newer Document, then write one sentence naming the older one, its date and its figure, with a Citation.`,
       ),
     ).toBe(true);
   });
