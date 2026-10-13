@@ -340,13 +340,7 @@ function EntryGrid({
                 {entry.summary[language]}
               </span>
               {subscription && (
-                <span
-                  className={`mt-1 self-start rounded-sm px-1.5 text-[11px] leading-[18px] ${
-                    subscription === "free"
-                      ? "bg-success-wash text-success"
-                      : "bg-frame text-ink-secondary"
-                  }`}
-                >
+                <span className="mt-1 self-start rounded-sm bg-frame px-1.5 text-[11px] leading-[18px] text-ink-secondary">
                   {subscription === "free"
                     ? t("connectors.directory.free")
                     : t("connectors.directory.subscription", { product: subscription.product })}
