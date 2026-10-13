@@ -523,6 +523,8 @@ test("organized folders remain separate from source locations and follow changes
     await pointAt(window, row);
     await row.getByTestId("document-tags-menu").click();
     await expect(row.getByTestId("document-tags-popover")).toBeVisible();
+    // Esc is the picker's once the focus is in its field.
+    await expect(row.getByTestId("tag-picker-input")).toBeFocused();
     await window.keyboard.press("Escape");
     await expect(row.getByTestId("document-tags-popover")).toBeHidden();
   } finally {
