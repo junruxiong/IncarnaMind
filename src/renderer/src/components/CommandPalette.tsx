@@ -34,7 +34,9 @@ import {
 } from "../palette";
 import { useAppStore } from "../store";
 import { DocumentLineIcon, FolderLineIcon, MindLineIcon, SearchLineIcon } from "./lineIcons";
+import { ProblemMark } from "./ProblemLine";
 import { TagDot } from "./TagColour";
+import { errorTextClass } from "./ui";
 
 /** How long typing pauses before the words inside are searched for. */
 const WORDS_DELAY_MS = 120;
@@ -247,7 +249,8 @@ function Palette() {
           </div>
         ))}
         {problem !== undefined ? (
-          <p role="alert" className="px-2 pt-3 text-[13px] leading-5 break-words text-danger">
+          <p role="alert" className={`px-2 pt-3 ${errorTextClass}`}>
+            <ProblemMark />
             {problem}
           </p>
         ) : (

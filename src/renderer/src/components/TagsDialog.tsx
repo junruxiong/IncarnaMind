@@ -9,6 +9,7 @@ import { useRequests } from "../requests";
 import { useAppStore } from "../store";
 import { deleteTag, editTag, mergeTags } from "../tagChanges";
 import { MergeLineIcon, PencilLineIcon, TrashLineIcon } from "./lineIcons";
+import { ProblemMark } from "./ProblemLine";
 import { TagColourPicker, tagChipColour } from "./TagColour";
 import {
   buttonClass,
@@ -143,6 +144,7 @@ export function TagsDialog() {
             <NewTag run={run} />
             {error && (
               <p role="alert" className={errorTextClass}>
+                <ProblemMark />
                 {error}
               </p>
             )}

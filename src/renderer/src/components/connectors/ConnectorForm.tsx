@@ -3,6 +3,7 @@ import type { LocalConnector, SecretStorageStatus } from "../../../../core/api";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
+import { ProblemMark } from "../ProblemLine";
 import { SecretStorageNotice } from "../providers/ProviderForm";
 import {
   choiceListClass,
@@ -222,6 +223,7 @@ export function ConnectorForm({
       </div>
       {error && (
         <p role="alert" className={errorTextClass}>
+          <ProblemMark />
           {error}
         </p>
       )}
@@ -293,6 +295,7 @@ function LocalFields(props: {
           placeholder="GITHUB_PERSONAL_ACCESS_TOKEN=…"
           spellCheck={false}
           autoComplete="off"
+          aria-invalid={props.envInvalid || undefined}
           className={`${inputClass} font-mono`}
         />
         <span className={hintClass}>
@@ -301,7 +304,8 @@ function LocalFields(props: {
             : t("connectors.form.envHint")}
         </span>
         {props.envInvalid && (
-          <span role="alert" className="mt-1 block text-[12px] leading-[18px] text-danger">
+          <span role="alert" className="mt-1 block text-[12px] leading-[18px] text-ink">
+            <ProblemMark />
             {t("connectors.form.envInvalid")}
           </span>
         )}

@@ -1,4 +1,14 @@
 import { Fragment, type ReactNode } from "react";
+import { ExclamationIcon } from "../viewer/icons";
+
+/**
+ * The amber "!" that leads the words of an error (DESIGN.md, Colors: Red,
+ * sparingly). Left alone it sits in the text, before its first word; pass a
+ * `className` to place it as a flex item instead.
+ */
+export function ProblemMark({ className = "mr-1.5 inline align-[-2px]" }: { className?: string }) {
+  return <ExclamationIcon className={`size-3.5 shrink-0 text-warning ${className}`} />;
+}
 
 /** The one action a problem offers. */
 export interface ProblemAction {

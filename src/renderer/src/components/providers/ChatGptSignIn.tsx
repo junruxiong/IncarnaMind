@@ -5,6 +5,7 @@ import { CHATGPT_USAGE_URL } from "../../chatGptUsage";
 import { core } from "../../core";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
+import { ProblemMark } from "../ProblemLine";
 import {
   buttonStyle,
   dialogActionsClass,
@@ -182,7 +183,8 @@ export function ChatGptSignInState({
         : null;
   return (
     <div role="alert" data-testid="chatgpt-error" className="text-[13px] leading-5 break-words">
-      <p className="text-danger">
+      <p className="text-ink">
+        <ProblemMark />
         {failureText}
         {action && (
           <>

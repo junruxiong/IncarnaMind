@@ -42,9 +42,12 @@ export const dangerButtonClass = buttonStyle("danger");
 export const iconButtonClass =
   "inline-flex size-7 shrink-0 items-center justify-center rounded-md text-ink-meta hover:bg-chip hover:text-ink focus-visible:outline-offset-0 disabled:opacity-50";
 
-/** A field's box: radius 4, a 1px edge, blue when focused. Sized by where it sits. */
+/**
+ * A field's box: radius 4, a 1px edge, blue when focused, `warning` while its
+ * value is wrong (`aria-invalid`, with its message under it). Sized by where it sits.
+ */
 export const fieldClass =
-  "rounded-sm border border-rule-strong bg-sheet px-2.5 py-1.5 text-ui text-ink placeholder:text-ink-placeholder focus:border-accent focus:outline-1 focus:outline-offset-0 focus:outline-accent disabled:opacity-60";
+  "rounded-sm border border-rule-strong bg-sheet px-2.5 py-1.5 text-ui text-ink placeholder:text-ink-placeholder aria-invalid:border-warning focus:border-accent focus:outline-1 focus:outline-offset-0 focus:outline-accent disabled:opacity-60";
 
 /** A text field, under its label, as wide as its column. */
 export const inputClass = `mt-1 block w-full ${fieldClass}`;
@@ -59,8 +62,8 @@ export const hintClass = "mt-1 block text-[12px] leading-[18px] text-ink-meta";
 export const noticeClass =
   "rounded-lg border border-rule bg-frame px-3 py-2 text-[13px] leading-5 text-ink-secondary";
 
-/** What went wrong, in words. */
-export const errorTextClass = "text-[13px] leading-5 break-words text-danger";
+/** What went wrong, in words, in ink after a `ProblemMark`. Red is only for what can't be undone. */
+export const errorTextClass = "text-[13px] leading-5 break-words text-ink";
 
 /** Something that worked, e.g. a connection test: in ink, as green is for Citation checks. */
 export const successTextClass = "text-[13px] leading-5 text-ink-secondary";

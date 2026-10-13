@@ -5,6 +5,7 @@ import { useLanguage, useT } from "../i18n";
 import { folderName, formatBytes, formatCount, formatDuration } from "../linkedFolders";
 import { type LinkingFolder, useAppStore } from "../store";
 import { FolderLineIcon } from "./lineIcons";
+import { ProblemMark } from "./ProblemLine";
 import {
   buttonClass,
   choiceListClass,
@@ -107,6 +108,7 @@ function LinkFolderForm({ linking, onCancel }: { linking: LinkingFolder; onCance
 
       {error ? (
         <p role="alert" className={errorTextClass}>
+          <ProblemMark />
           {t("linkedFolders.preview.failed", { message: error })}
         </p>
       ) : preview ? (

@@ -17,6 +17,7 @@ import { type Box, enterFrom, exitToward } from "../motion";
 import { useAppStore } from "../store";
 import { actionFor, pickerOptions, type TagOnDocuments, tagsOnDocuments } from "../tagEditing";
 import { CheckLineIcon, CloseLineIcon, PlusLineIcon, SparkLineIcon } from "./lineIcons";
+import { ProblemMark } from "./ProblemLine";
 import { ReviewRing, TagDot, tagChipColour } from "./TagColour";
 import { buttonStyle, errorTextClass, hintClass, inputClass, menuRuleClass } from "./ui";
 
@@ -449,6 +450,7 @@ export function TagPicker({
       </div>
       {error && (
         <p role="alert" className={`${errorTextClass} px-3 pb-2`}>
+          <ProblemMark />
           {error}
         </p>
       )}
@@ -585,6 +587,7 @@ function DescribeTag({
       <p className={`${hintClass} mt-0`}>{t("tags.picker.descriptionHint")}</p>
       {error && (
         <p role="alert" className={errorTextClass}>
+          <ProblemMark />
           {error}
         </p>
       )}

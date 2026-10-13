@@ -436,10 +436,11 @@ function DocumentStatusLabel({ item }: { item: Document }) {
     <span
       data-testid="document-status"
       title={title}
-      className={`shrink-0 text-label font-semibold ${
-        item.status === "failed" && !unread ? "text-danger" : "text-ink-meta"
-      }`}
+      className="flex shrink-0 items-center gap-1.5 text-label font-semibold text-ink-meta"
     >
+      {item.status === "failed" && !unread && (
+        <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-attention" />
+      )}
       <span aria-hidden="true">{short}</span>
       <span className="sr-only">{full}</span>
     </span>

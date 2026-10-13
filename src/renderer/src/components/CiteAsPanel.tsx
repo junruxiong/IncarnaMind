@@ -22,7 +22,7 @@ import {
 } from "../referenceEditing";
 import { useAppStore } from "../store";
 import { useUndo } from "../undo";
-import { type ProblemAction, ProblemLine } from "./ProblemLine";
+import { type ProblemAction, ProblemLine, ProblemMark } from "./ProblemLine";
 import { buttonStyle } from "./ui";
 
 type TextField = Exclude<ReferenceField, "type">;
@@ -409,10 +409,11 @@ function TextValue({
             }
           }}
           onBlur={() => finish(true, false)}
-          className="block w-full resize-none rounded-sm border border-accent bg-sheet px-1.5 py-1 text-[13px] leading-5 text-ink outline-1 outline-accent [field-sizing:content]"
+          className="block w-full resize-none rounded-sm border border-accent bg-sheet px-1.5 py-1 text-[13px] leading-5 text-ink outline-1 outline-accent aria-invalid:border-warning [field-sizing:content]"
         />
         {problem && (
-          <p id={problemId} role="alert" className="mt-1 text-[12px] leading-[18px] text-ink-meta">
+          <p id={problemId} role="alert" className="mt-1 text-[12px] leading-[18px] text-ink">
+            <ProblemMark />
             {problem}
           </p>
         )}

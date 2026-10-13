@@ -13,6 +13,7 @@ import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
+import { ProblemMark } from "../ProblemLine";
 import {
   buttonClass,
   choiceListClass,
@@ -209,6 +210,7 @@ function BuiltInModelState({ model }: { model: RerankingModelStatus }) {
         className={`mt-1.5 ${errorTextClass}`}
         title={message}
       >
+        <ProblemMark />
         {kind === "load"
           ? t("rerank.settings.loadFailed")
           : t("rerank.settings.failed", { reason: t(FAILURE_KEYS[kind]) })}
@@ -406,6 +408,7 @@ function RerankForm({
       {test && <TestResult result={test} onRetry={() => void run("testing")} />}
       {error && (
         <p role="alert" className={errorTextClass}>
+          <ProblemMark />
           {error}
         </p>
       )}

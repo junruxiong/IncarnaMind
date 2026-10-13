@@ -10,6 +10,7 @@ import { core } from "../../core";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
 import { InlinePath } from "../PathText";
+import { ProblemMark } from "../ProblemLine";
 import { SecretStorageNotice } from "../providers/ProviderForm";
 import { SLOT, Slotted } from "../Slotted";
 import {
@@ -186,6 +187,7 @@ export function ConnectAgentDialog({
         )}
         {problem && (
           <p data-testid="connect-agent-problem" role="alert" className={errorTextClass}>
+            <ProblemMark />
             {problem}
           </p>
         )}

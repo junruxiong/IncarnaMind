@@ -4,6 +4,7 @@ import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
+import { ProblemMark } from "../ProblemLine";
 import {
   buttonClass,
   errorTextClass,
@@ -162,6 +163,7 @@ export function ChatGptPlanSettings() {
       {test && <TestResult result={test} onRetry={() => void testConnection()} />}
       {error && (
         <p role="alert" data-testid="chatgpt-settings-error" className={errorTextClass}>
+          <ProblemMark />
           {error}
         </p>
       )}

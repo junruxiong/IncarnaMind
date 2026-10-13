@@ -14,6 +14,7 @@ import { DropOverlay, useFileDrop } from "./components/FileDrop";
 import { FileWriteDialog } from "./components/FileWriteDialog";
 import { InfoPanel } from "./components/InfoPanel";
 import { MeetingNoticeDialog } from "./components/MeetingNoticeDialog";
+import { ProblemMark } from "./components/ProblemLine";
 import { ChatGptWelcomeDialog } from "./components/providers/ChatGptSignIn";
 import { ChatSetupDialog } from "./components/providers/ChatSetupDialog";
 import { RequestedDialogs } from "./components/RequestedDialogs";
@@ -65,7 +66,8 @@ export function App() {
   if (status.kind === "loading") return <AppShell />;
   if (status.kind === "failed") {
     return (
-      <p role="alert" className="p-6 text-ui text-danger">
+      <p role="alert" className="p-6 text-ui text-ink">
+        <ProblemMark />
         {t("error.load", { message: status.message })}
       </p>
     );
