@@ -282,18 +282,32 @@ function usageDataProject(): { key: string; host: string; testerBuild: boolean }
   return { key, host, testerBuild: tester?.trim() === "1" };
 }
 
-/** Sends usage data, if this copy was built to. The core starts it only while the User agrees. */
+/**
+ * Sends usage data, if this copy was built to. The core starts it only while the User agrees.
+ * A test build lets a test wait for what was captured so far to reach the server
+ * (`globalThis.incarnamindUsageData.flush`), instead of waiting a while and hoping.
+ */
 function createUsageDataSender(): UsageDataSender | undefined {
   const project = usageDataProject();
   if (!project) return undefined;
-  return createPostHogSender({
+  const test = import.meta.env.MODE === "test";
+  const sender = createPostHogSender({
     projectKey: project.key,
     host: project.host,
     testerBuild: project.testerBuild,
     appVersion: app.getVersion(),
     // The smoke tests don't wait half a minute for events.
-    ...(import.meta.env.MODE === "test" && { flushIntervalMs: 500 }),
+    ...(test && { flushIntervalMs: 500 }),
   });
+  if (test) {
+    (globalThis as { incarnamindUsageData?: unknown }).incarnamindUsageData = {
+      flush: async () => {
+        await sender.settled();
+        await sender.flush();
+      },
+    };
+  }
+  return sender;
 }
 
 /**
@@ -323,6 +337,14 @@ function testConnectorDirectory(): unknown {
     import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_CONNECTOR_DIRECTORY : undefined;
   return file ? JSON.parse(readFileSync(file, "utf8")) : undefined;
 }
+
+/**
+ * Test-only launch flag: where the Connectors search asks the MCP Registry
+ * (#148), a local stand-in, so the smoke tests reach no registry. Only a
+ * test build honours it.
+ */
+const connectorRegistryUrl =
+  import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_CONNECTOR_REGISTRY : undefined;
 
 /**
  * Test-only launch flag: the port of a local server standing in for the web
@@ -421,6 +443,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
   const connectorDirectory = testConnectorDirectory();
   return {
     ...(connectorDirectory !== undefined && { connectorDirectory }),
+    ...(connectorRegistryUrl && { connectorRegistryUrl }),
     ...(chatGptStore && { chatGptStore }),
     ...(chatGptPlan && { chatGptPlan }),
     ...(web && { web }),

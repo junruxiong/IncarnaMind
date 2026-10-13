@@ -15,29 +15,29 @@
   <a href="#download"><b>Download</b></a> ·
   <a href="#what-you-can-do">What you can do</a> ·
   <a href="#your-files-stay-yours">Privacy</a> ·
-  <a href="https://github.com/junruxiong/IncarnaMind/discussions">Discussions</a>
+  <a href="https://github.com/IncarnaMind/IncarnaMind/discussions">Discussions</a>
   <br><br>
   <img alt="Desktop app for macOS, Windows and Linux" src="https://img.shields.io/badge/macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-desktop%20app-17191C">
-  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/github/license/junruxiong/IncarnaMind?color=17191C"></a>
-  <!-- After the first release, add: <a href="https://github.com/junruxiong/IncarnaMind/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/junruxiong/IncarnaMind?color=17191C"></a> -->
+  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/github/license/IncarnaMind/IncarnaMind?color=17191C"></a>
+  <!-- After the first release, add: <a href="https://github.com/IncarnaMind/IncarnaMind/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/IncarnaMind/IncarnaMind?color=17191C"></a> -->
 </p>
 
-<p align="center"><img src="docs/images/demo.gif" width="880" alt="Eight screens in turn: a Mind with the assistant beside it, its Answer's citations checked; the Answer's steps unfolded, showing what it searched and the sources it used; a Citation opened beside the note with the quote highlighted on the PDF page; the assistant's change waiting in a Mind to accept or reject; the Library with every Document, Folders and Tags; three groups of tabs side by side; a meeting written in a Mind while the assistant answers from the live transcript; and the app in Chinese."></p>
+<p align="center"><img src="docs/images/demo.gif" width="880" alt="Six screens in turn: two sentences of a draft selected, with Check against Documents in the menu; the same draft checked, each sentence marked supported, unsupported or contradicted, with a count under the title; a Citation opened beside the note, its quote highlighted on the PDF page; a lender update someone else wrote, opened to verify, with Check 8 claims; its claims checked, one contradicted by the facilities agreement on page 3; and the checked draft in the Chinese interface."></p>
 
-<p align="center"><sub>The assistant changing a Mind for you to accept or reject, and answers from a live meeting transcript are <a href="#coming-next">coming next</a>; the rest is in the app today.</sub></p>
+<p align="center"><sub>Everything shown is in the app today.</sub></p>
 
 **IncarnaMind** is a free, open-source desktop app for macOS, Windows and Linux where you ask questions about your own documents (PDF, Word, PowerPoint, Excel and more) and write with AI. Every answer cites the exact page, and IncarnaMind checks that each quoted passage is really there. It works with your ChatGPT plan, your own API key or a local model through Ollama.
 
 ## Download
 
-**IncarnaMind isn't released yet.** Once it is, the [Releases page](https://github.com/junruxiong/IncarnaMind/releases) will have installers for macOS (Apple silicon and Intel), Windows and Linux. To hear when, [leave your e-mail](https://tally.so/r/rjN2jL?ref=readme) or click **Watch → Custom → Releases** at the top of this page. To try it now, run it from source with Node.js 24 or newer:
+**IncarnaMind isn't released yet.** Once it is, the [Releases page](https://github.com/IncarnaMind/IncarnaMind/releases) will have installers for macOS (Apple silicon and Intel), Windows and Linux. To hear when, [leave your e-mail](https://tally.so/r/rjN2jL?ref=readme) or click **Watch → Custom → Releases** at the top of this page. To try it now, run it from source with Node.js 24 or newer:
 
 ```shell
-git clone https://github.com/junruxiong/IncarnaMind.git && cd IncarnaMind
+git clone https://github.com/IncarnaMind/IncarnaMind.git && cd IncarnaMind
 npm install && npm run dev
 ```
 
-Windows releases are signed through the SignPath Foundation's free signing for open-source projects: see the [Code signing policy](docs/code-signing-policy.md).
+Windows releases will be signed through the SignPath Foundation's free signing for open-source projects; until then the installer is unsigned. See the [Code signing policy](docs/code-signing-policy.md).
 
 <details>
 <summary>If your system won't open it</summary>
@@ -50,7 +50,9 @@ Windows releases are signed through the SignPath Foundation's free signing for o
 
 ## What you can do
 
-**Write and ask in one place.** A Mind is a notebook for one topic. Beside it sits the assistant: ask it about the Mind you're in or your files, and the Answer comes back there, in a conversation, with its citations checked. Your draft stays as you wrote it until you pick **Add to note**, which puts the Answer at your cursor as text you can edit, citations and all, with a link back to the conversation it came from.
+**Check your draft before you send it.** Select sentences in a Mind and choose **Check against Documents**: each one comes back supported, unsupported or contradicted by your Documents, with the page one click away, and the line under the title counts what still needs a look. A PDF someone else wrote can be checked the same way, claim by claim: **+ → Verify a document…**.
+
+**Write and ask in one place.** A Mind is a notebook for one topic. Beside it sits the assistant: ask it about the Mind you're in or your files, and the Answer comes back there, in a conversation, with its citations checked. Your draft stays as you wrote it until you pick **Add to note**, which puts the Answer at your cursor as text you can edit, citations and all.
 
 **Check every answer.** Answers cite where each claim came from and carry the quote, which is checked against that place: a green check if it's there, an amber mark if it isn't, and a click opens the page with the quote highlighted. Unfold an Answer's steps to see what it searched and which sources it used.
 
@@ -68,7 +70,9 @@ Windows releases are signed through the SignPath Foundation's free signing for o
 
 **Ask from the AI agent you already use** (experimental, off by default). Connect Claude, Codex, Cursor and others in **Settings → Agents**, on their own plan: they read only the folders you choose, every quote they get from IncarnaMind is checked, and what they read goes to their AI service under its terms. [How to connect each one](docs/agents.md).
 
-**Hand it in.** Export a Mind to Word or Markdown, with its citations and bibliography in the style you pick: APA, MLA, Chicago, Harvard, IEEE, Vancouver, GB/T 7714 or IncarnaMind's numbered style. A citation that didn't pass the check is marked "[unverified]".
+**Hand it in.** Export a Mind to Word or Markdown, with its citations and bibliography in the style you pick: APA, MLA, Chicago, Harvard, IEEE, Vancouver, GB/T 7714 or IncarnaMind's numbered style. A citation that didn't pass the check is marked "[unverified]". Open a Word file as a Mind and export it back into the same file: the parts you didn't touch stay exactly as they were, and your edits can go in as tracked changes.
+
+**Compare documents in a table.** **Compare Documents…** puts the same questions to each file you pick and fills a table, every cell a cited, checked answer.
 
 **Connect apps and Skills that ask first.** Add Connectors (MCP servers), or bring over the ones you set up in Claude Desktop or Cursor, and Skills (standard `SKILL.md` folders), three of them built in; a tool that could change something, or a Skill's script, runs only after you say yes.
 
@@ -98,15 +102,15 @@ There's no account and no IncarnaMind server. Your Minds and the search index st
 
 ## Coming next
 
-Planned, not available yet, with no dates (see the [roadmap](https://github.com/junruxiong/IncarnaMind/issues/74)): asking during a meeting, with answers that cite its live transcript; the assistant editing your Minds, each change waiting for you to accept it; Word files opened and exported back with tracked changes; your drafts, and other people's documents, checked against your files; comparison tables across documents; and research Tasks that run in the background.
+Planned, not available yet, with no dates (see the [roadmap](https://github.com/IncarnaMind/IncarnaMind/issues/74)): asking during a meeting, with answers that cite its live transcript; the assistant editing your Minds, each change waiting for you to accept it; a reviewing pane for other people's tracked changes in a Word file; and research Tasks that run in the background.
 
 ## Contributing
 
-Code, testing with your own documents, translations and ideas are all welcome: start with [CONTRIBUTING.md](CONTRIBUTING.md), [open an issue](https://github.com/junruxiong/IncarnaMind/issues/new/choose) or ask in [Discussions](https://github.com/junruxiong/IncarnaMind/discussions).
+Code, testing with your own documents, translations and ideas are all welcome: start with [CONTRIBUTING.md](CONTRIBUTING.md), [open an issue](https://github.com/IncarnaMind/IncarnaMind/issues/new/choose) or ask in [Discussions](https://github.com/IncarnaMind/IncarnaMind/discussions).
 
 ## History
 
-IncarnaMind began in 2023 as a Python command-line tool for chatting with your PDFs, starred by about 800 of you, and was rebuilt in 2026 as a desktop app around one idea: an answer from your files is only useful if you can check it. The old tool lives on at the [`v1-python-cli`](https://github.com/junruxiong/IncarnaMind/tree/v1-python-cli) tag. Thank you for sticking around, and if IncarnaMind is useful to you, a star helps other people find it.
+IncarnaMind began in 2023 as a Python command-line tool for chatting with your PDFs, starred by about 800 of you, and was rebuilt in 2026 as a desktop app around one idea: an answer from your files is only useful if you can check it. The old tool lives on at the [`v1-python-cli`](https://github.com/IncarnaMind/IncarnaMind/tree/v1-python-cli) tag. Thank you for sticking around, and if IncarnaMind is useful to you, a star helps other people find it.
 
 <details>
 <summary>Citing IncarnaMind</summary>
@@ -114,7 +118,7 @@ IncarnaMind began in 2023 as a Python command-line tool for chatting with your P
 ```bibtex
 @misc{IncarnaMind2023, author = {Junru Xiong}, title = {IncarnaMind}, year = {2023},
   publisher = {GitHub}, journal = {GitHub Repository},
-  howpublished = {\url{https://github.com/junruxiong/IncarnaMind}}}
+  howpublished = {\url{https://github.com/IncarnaMind/IncarnaMind}}}
 ```
 
 </details>
