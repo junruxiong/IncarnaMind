@@ -157,7 +157,7 @@ export function ProviderForm({
         onSaved(provider);
       }
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     } finally {
       setBusy(null);
     }
@@ -172,7 +172,7 @@ export function ProviderForm({
     try {
       setSecretStorage(await core.acceptPlainTextSecretStorage());
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     }
   };
 
