@@ -13,7 +13,7 @@ import type { ApprovalRequest, Task, TaskEffect } from "../../../core/api";
 import { useApprovals } from "../approvals";
 import { keysLabel } from "../commands/keys";
 import { formatMoney } from "../cost";
-import { ApprovalCard } from "../editor/AnswerView";
+import { ApprovalCard, withShortcut } from "../editor/AnswerView";
 import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
 import { needsYou } from "../taskGroups";
@@ -268,6 +268,7 @@ function UnknownOutcomeCard({ task, effect }: { task: Task; effect: TaskEffect }
           data-allow
           onClick={() => answerTaskAsk(task.id, "redo")}
           className="approval-button approval-button--primary"
+          {...withShortcut(t("task.unknown.redo"), keysLabel(ALLOW_KEYS, mac))}
         >
           {t("task.unknown.redo")}
           <span className="approval-keys">{keysLabel(ALLOW_KEYS, mac)}</span>

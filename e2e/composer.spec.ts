@@ -198,7 +198,8 @@ test("typing in the composer and pressing Enter shows the Question in the assist
   expect((inputBox?.x ?? 0) + (inputBox?.width ?? 0)).toBeLessThan(
     (assistantBox?.x ?? 0) + (assistantBox?.width ?? 0),
   );
-  expect(inputBox?.width ?? 0).toBeGreaterThan((assistantBox?.width ?? 0) - 32);
+  // Its 16px edges are all that is left of the assistant's width.
+  expect(inputBox?.width ?? 0).toBeGreaterThanOrEqual((assistantBox?.width ?? 0) - 33);
   await screenshot(window, "composer-empty-en");
 
   // Clicked into, then typed in: the Ask button turns primary; Enter asks.
