@@ -443,6 +443,24 @@ test("a Document still being read shows its progress in the peek, which goes onc
   }
 });
 
+test("a file that couldn't be read shows its kind in the peek, and says why", async () => {
+  const path = join(sources, "Broken.pdf");
+  await writeFile(path, "this is not a PDF at all");
+  const { app, window } = await start();
+  try {
+    await window.getByTestId("add-documents-input").setInputFiles([path]);
+    const row = sidebar.row(window, "Broken");
+    await expect(row).toHaveAttribute("data-status", "failed", { timeout: 30_000 });
+    await sidebar.main(row).focus();
+    await window.keyboard.press("Space");
+    const peek = peekOf(window);
+    await expect(peek.getByTestId("peek-page")).toHaveAttribute("data-state", "kind-only");
+    await expect(peek.getByTestId("peek-status")).toContainText("Failed");
+  } finally {
+    await app.close();
+  }
+});
+
 test("a large file shows its kind in the peek instead of being read whole", async () => {
   const path = join(sources, "Logbook.txt");
   await writeFile(path, `${"Spring tides come twice a month.\n".repeat(100_000)}`);
@@ -454,7 +472,7 @@ test("a large file shows its kind in the peek instead of being read whole", asyn
     const peek = peekOf(window);
     await expect(peek.getByTestId("peek-name")).toHaveText("Logbook");
     await expect(peek.getByTestId("peek-kind")).toContainText(/MB/);
-    await expect(peek.getByTestId("peek-page")).toHaveAttribute("data-state", "large");
+    await expect(peek.getByTestId("peek-page")).toHaveAttribute("data-state", "kind-only");
     await expect(peek.getByTestId("viewer-text")).toHaveCount(0);
   } finally {
     await app.close();
