@@ -13,6 +13,7 @@ import { DropOverlay, useFileDrop } from "./components/FileDrop";
 import { FileWriteDialog } from "./components/FileWriteDialog";
 import { InfoPanel } from "./components/InfoPanel";
 import { MeetingNoticeDialog } from "./components/MeetingNoticeDialog";
+import { Peek } from "./components/Peek";
 import { ChatGptWelcomeDialog } from "./components/providers/ChatGptSignIn";
 import { ChatSetupDialog } from "./components/providers/ChatSetupDialog";
 import { RequestedDialogs } from "./components/RequestedDialogs";
@@ -264,6 +265,7 @@ function Workspace() {
         <RequestedDialogs />
         <SortMenu />
         <InfoPanel />
+        <Peek />
         <AddWebPageDialog />
         <WordImportDialog />
         <ChatSetupDialog />

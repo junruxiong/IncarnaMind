@@ -860,3 +860,18 @@
     }
   }
 }
+
+/*
+ * A view drawn small in a peek: the page alone, with no toolbar, sheet tabs or
+ * slide number, no scrollbars, and nothing to point at or select.
+ */
+.peek-view {
+  pointer-events: none;
+  user-select: none;
+}
+.peek-view * {
+  scrollbar-width: none;
+}
+.peek-view :is(.viewer-header, .viewer-sheet-tabs, .viewer-slide-number) {
+  display: none;
+}

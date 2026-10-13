@@ -33,6 +33,7 @@ import {
   mindCommands,
   tagCommands,
 } from "./objects";
+import { peekCommands } from "./peek";
 import { proposalCommands } from "./proposals";
 import { sortCommands } from "./sort";
 import "./objectMenus";
@@ -90,6 +91,7 @@ const appCommands: readonly Command[] = [
   ...selectionCommands,
   ...mindCommands,
   ...documentCommands,
+  ...peekCommands,
   ...folderCommands,
   ...newFolderCommands,
   ...tagCommands,

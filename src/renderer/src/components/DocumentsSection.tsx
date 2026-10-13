@@ -15,6 +15,7 @@ import { documentStatusText } from "../documentStatus";
 import { useLanguage, useT } from "../i18n";
 import { currentTabOf } from "../layoutSlice";
 import { fileStatusLabel } from "../linkedFolders";
+import { usePeekKey } from "../peek";
 import { useRequests } from "../requests";
 import { scanningStatus } from "../scanStatus";
 import {
@@ -316,6 +317,7 @@ const DocumentRow = memo(function DocumentRow({
   const select = useSelectable({ kind: "document", id: item.id }, "sidebar", () =>
     openDocument({ documentId: item.id }),
   );
+  const peek = usePeekKey(item.id, "sidebar");
   const lit = isOpen || select.selected;
   const muted = !lit && (isProcessing(item.status) || item.fileStatus !== "available");
 
@@ -331,6 +333,7 @@ const DocumentRow = memo(function DocumentRow({
       data-tagging={item.tagging}
       role="treeitem"
       {...select.rowProps}
+      {...peek.rowProps}
       {...(rename.renaming ? {} : objectMenu.rowProps)}
       className={rowClass(lit, muted ? "muted" : "item")}
     >

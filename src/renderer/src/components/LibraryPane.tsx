@@ -26,6 +26,7 @@ import {
   toggleFilterValue,
 } from "../libraryFilters";
 import { formatCount } from "../linkedFolders";
+import { usePeekKey } from "../peek";
 import { missingList } from "../referenceEditing";
 import { useRequests } from "../requests";
 import { extendThroughRows, useSelectable, useSelection, useSelectionOrder } from "../selection";
@@ -530,6 +531,7 @@ const LibraryRow = memo(function LibraryRow({
         { as: "library", ...(place && { from: place.groupId }) },
       ),
   );
+  const peek = usePeekKey(doc.id, "library");
   // A double-click keeps the preview it opened, then renames.
   const rename = useRename<HTMLButtonElement>(`library-document:${doc.id}`, () =>
     keepPreviewOf(doc.id),
@@ -554,6 +556,7 @@ const LibraryRow = memo(function LibraryRow({
       // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: a row of the grid, which says whether it is selected.
       role="row"
       {...select.rowProps}
+      {...peek.rowProps}
       {...objectMenu.rowProps}
       className={`group/row library-columns relative border-b border-rule py-3 ${
         select.selected ? "bg-accent-wash" : ""
