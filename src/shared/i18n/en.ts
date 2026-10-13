@@ -1329,6 +1329,9 @@ export const en = {
   "settings.language.system": "Same as system",
   "settings.language.en": "English",
   "settings.language.zh-CN": "简体中文",
+  "settings.authorName": "Your name",
+  "settings.authorName.body":
+    "Your edits in a Word file go under this name when the file shows them as tracked changes.",
   "settings.motion": "Motion",
   "settings.motion.body":
     "How things move as they open, close and change place. Reduced turns movement into short fades; Off shows every change at once.",
@@ -2333,6 +2336,15 @@ export const en = {
   "export.pack.noPage": "This page wasn't saved when it was cited, so only the quotes are shown.",
   "export.saveTo": "Save to",
   "export.includeQuestions": "Include Questions",
+  "export.options.docx.pending": "Changes waiting for you go in as tracked changes by IncarnaMind.",
+  "export.trackChanges": "Show my edits as tracked changes",
+  "export.trackChanges.hint":
+    "Your edits since the import, as tracked changes by {name}. Your name is in Settings › General.",
+  "export.markAiText": "Mark AI-written text with a comment",
+  "export.markAiText.hint": "Each passage gets a comment: “Written by IncarnaMind”.",
+  "export.commentFailedChecks": "Comment on Citations whose check failed",
+  "export.commentFailedChecks.hint":
+    "When the quote wasn't found, or your Documents don't support the claim or contradict it.",
   "export.questionsLeftOut.one": "1 Question is left out.",
   "export.questionsLeftOut.other": "{count} Questions are left out.",
   "export.saving.line": "Exporting as {format}…",
@@ -2373,6 +2385,11 @@ export const en = {
   "export.word.kept.both": "The header and footer you deleted from the Mind stay in the file",
   "export.question": "Question:",
   "export.unverified": "[unverified]",
+  "export.comment.aiText": "Written by IncarnaMind",
+  "export.comment.notFound": "Quote not found in {source}: “{quote}”",
+  "export.comment.notFound.noQuote": "Quote not found in {source}",
+  "export.comment.unsupported": "Unsupported by the Documents checked ({source})",
+  "export.comment.contradicted": "Contradicted by the Documents checked ({source})",
   "export.html.notes": "Notes",
   "export.html.back": "Back to text",
   "export.citation.location": "{document}, {location}",
@@ -2413,6 +2430,7 @@ export const en = {
   "error.startup.newer.quit": "Quit",
 
   "error.document.notFound": "There is no such Document.",
+  "error.export.choice": "{name} must be true or false.",
   "error.document.gone": "That Document no longer exists.",
   "error.document.nameEmpty": "A Document's name can't be empty.",
   "error.document.nameTooLong": "A Document's name can't be longer than {max} characters.",
