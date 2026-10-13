@@ -2,7 +2,7 @@
  * Electron implementations of the core's adapters. This is the only place that
  * turns Electron APIs into capabilities the core can use.
  */
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -35,6 +35,7 @@ import { createUtilityProcessTextRecognizer } from "./scanReader";
 import { createFileKeychain, SECRETS_FILE, type SecretCipher } from "./secretsFile";
 import { createUtilityProcessTranscriber } from "./transcriber";
 import { createPostHogSender } from "./usageData";
+import { systemUserName } from "./userName";
 
 /**
  * `safeStorage` encrypts with a key held by the OS secret store: the macOS
@@ -281,18 +282,32 @@ function usageDataProject(): { key: string; host: string; testerBuild: boolean }
   return { key, host, testerBuild: tester?.trim() === "1" };
 }
 
-/** Sends usage data, if this copy was built to. The core starts it only while the User agrees. */
+/**
+ * Sends usage data, if this copy was built to. The core starts it only while the User agrees.
+ * A test build lets a test wait for what was captured so far to reach the server
+ * (`globalThis.incarnamindUsageData.flush`), instead of waiting a while and hoping.
+ */
 function createUsageDataSender(): UsageDataSender | undefined {
   const project = usageDataProject();
   if (!project) return undefined;
-  return createPostHogSender({
+  const test = import.meta.env.MODE === "test";
+  const sender = createPostHogSender({
     projectKey: project.key,
     host: project.host,
     testerBuild: project.testerBuild,
     appVersion: app.getVersion(),
     // The smoke tests don't wait half a minute for events.
-    ...(import.meta.env.MODE === "test" && { flushIntervalMs: 500 }),
+    ...(test && { flushIntervalMs: 500 }),
   });
+  if (test) {
+    (globalThis as { incarnamindUsageData?: unknown }).incarnamindUsageData = {
+      flush: async () => {
+        await sender.settled();
+        await sender.flush();
+      },
+    };
+  }
+  return sender;
 }
 
 /**
@@ -311,6 +326,17 @@ const referenceLookupUrl =
  */
 const sourceProvidersUrl =
   import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_SOURCES : undefined;
+
+/**
+ * Test-only launch flag: a JSON file of Connectors directory entries (#148)
+ * in place of the list that ships with the app, so the smoke tests connect
+ * an entry served by a local stand-in. Only a test build honours it.
+ */
+function testConnectorDirectory(): unknown {
+  const file =
+    import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_CONNECTOR_DIRECTORY : undefined;
+  return file ? JSON.parse(readFileSync(file, "utf8")) : undefined;
+}
 
 /**
  * Test-only launch flag: the port of a local server standing in for the web
@@ -406,7 +432,9 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
   const chatGptStore = chatGptTestProfile(log);
   const chatGptPlan = chatGptStandIn();
   const web = webStandIn();
+  const connectorDirectory = testConnectorDirectory();
   return {
+    ...(connectorDirectory !== undefined && { connectorDirectory }),
     ...(chatGptStore && { chatGptStore }),
     ...(chatGptPlan && { chatGptPlan }),
     ...(web && { web }),
@@ -440,6 +468,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     },
     systemLanguages: () => app.getPreferredSystemLanguages(),
     systemRegion: () => app.getLocaleCountryCode(),
+    systemUserName: () => systemUserName(log),
     keychain: createSafeStorageKeychain(dataDir),
     browser: systemBrowser,
     shell: fileShell,

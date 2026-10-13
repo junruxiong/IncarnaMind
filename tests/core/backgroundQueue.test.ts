@@ -12,7 +12,7 @@ import { migrate, openDatabase } from "../../src/core/storage";
 import { createTags } from "../../src/core/tags";
 import type { TagClassifier } from "../../src/core/tags/classify";
 import { createTagger } from "../../src/core/tags/tagger";
-import { createTempDataFolder, nextEvent, startCore } from "../helpers/core";
+import { createTempDataFolder, nextEvent, nextTurn, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
 import { connectToMind } from "../helpers/mindClient";
 import { question, writeMind } from "../helpers/minds";
@@ -445,7 +445,7 @@ describe("Background work gives way to Answers", { timeout: 30_000 }, () => {
     await ask();
 
     const document = await addDocument(core);
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await nextTurn();
     expect(fake.tagging.requests).toEqual([]);
     expect(await taggingOf(core, document.id)).toBe("pending");
 
@@ -472,7 +472,7 @@ describe("Background work gives way to Answers", { timeout: 30_000 }, () => {
       await waiting;
       expect(fake.aborted).toBe(1);
       // Not tried again while the Answer is written.
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await nextTurn();
       expect(fake.tagging.requests).toHaveLength(1);
 
       await finishAnswer();
@@ -498,7 +498,7 @@ describe("Background work gives way to Answers", { timeout: 30_000 }, () => {
     await waiting;
     expect(fake.aborted).toBe(1);
     // Not tried again while the Meeting records.
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await nextTurn();
     expect(fake.tagging.requests).toHaveLength(1);
 
     await core.stopMeeting(meeting.id);
