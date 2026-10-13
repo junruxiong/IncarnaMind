@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import type { ConsentRequest, Core, Skill, SkillDraft } from "../../src/core";
 import { readDraft } from "../../src/core/skills/draft";
-import { createTempDataFolder, nextEvent, startCore } from "../helpers/core";
+import { createTempDataFolder, nextEvent, saveProviderUnasked, startCore } from "../helpers/core";
 import { connectToMind } from "../helpers/mindClient";
 import { heading, note, question, writeMind } from "../helpers/minds";
 import { replyingModel, scriptedModels } from "../helpers/models";
@@ -373,7 +373,7 @@ describe("Make this a Skill", () => {
     const model = replyingModel(REPLY);
     const models = scriptedModels(model);
     const core = startCore(dataDir, { createChatModel: models.createChatModel });
-    await core.saveChatProvider({ kind: "openai", apiKey: "sk-test", modelId: "gpt-test" });
+    await saveProviderUnasked(core, { kind: "openai", apiKey: "sk-test", modelId: "gpt-test" });
     const mind = await core.createMind({ title: "Cloud" });
     const client = await connectToMind(core, mind.id);
     writeMind(client, [note("Some work.")]);

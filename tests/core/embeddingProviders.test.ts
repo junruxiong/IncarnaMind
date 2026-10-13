@@ -1,6 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import {
   ConsentDeclinedError,
   type Core,
@@ -11,10 +12,10 @@ import {
   InvalidInputError,
   RECOMMENDED_OLLAMA_MODEL,
 } from "../../src/core";
+import { openDatabase } from "../../src/core/storage";
 import {
   createMemoryKeychain,
   createTempDataFolder,
-  nextEvent,
   queryDatabase,
   startCore,
 } from "../helpers/core";
@@ -34,6 +35,7 @@ Bond yields rose after the announcement.`;
 const BUILT_IN_ID = "multilingual-e5-small-int8";
 const OPENAI = { id: "https://api.openai.com", name: "OpenAI" };
 const OPENAI_KEY = "sk-test-embeddings-key";
+const DECIDED_AT = "2026-09-01T09:00:00.000Z";
 /** A server on this computer: nothing is sent elsewhere, so no consent is asked. */
 const LOCAL_SERVER = "http://127.0.0.1:9/v1";
 
@@ -352,25 +354,50 @@ describe("Switching the embedding provider", { timeout: 30_000 }, () => {
 });
 
 describe("Consent for cloud embeddings", { timeout: 30_000 }, () => {
-  test("nothing is sent before the User accepts; declining changes nothing", async () => {
-    const { core, embeddings, keychain, dataDir } = await setUp();
-    const requested = nextEvent(core, "consent.requested");
+  test("choosing a cloud provider, where the dialog says what goes, allows it: nothing asks", async () => {
+    const { core } = await setUp();
+    const asked = vi.fn();
+    core.on("consent.requested", asked);
+    const finished = rebuildFinished(core);
 
-    const saving = core.saveEmbeddingProvider({
+    await core.saveEmbeddingProvider({
       kind: "openai",
       apiKey: OPENAI_KEY,
       modelId: "text-embedding-3-small",
     });
-    const request = await requested;
-    expect(request.flow).toEqual({
-      id: "embeddings",
-      service: OPENAI,
-      sends: ["document-text", "queries"],
-    });
-    expect(embeddings.calls).toEqual([]);
+    await finished;
 
-    await core.respondToConsent(request.requestId, false);
-    await expect(saving).rejects.toThrow(ConsentDeclinedError);
+    expect(asked).not.toHaveBeenCalled();
+    expect(await core.listDataFlows()).toContainEqual({
+      flow: { id: "embeddings", service: OPENAI, sends: ["document-text", "queries"] },
+      consent: "accepted",
+      decidedAt: expect.any(String),
+      chosen: true,
+    });
+  });
+
+  test("a decline made before stays: choosing the provider again changes nothing and sends nothing", async () => {
+    const { core, embeddings, keychain, dataDir } = await setUp();
+    const db = openDatabase(join(dataDir, DATABASE_FILE));
+    try {
+      db.run(
+        `INSERT INTO data_flow_consents
+           (id, flow, service_id, service_name, decision, data_kinds, created_at, updated_at)
+         VALUES (?, 'embeddings', ?, ?, 'declined', '[]', ?, ?)`,
+        [randomUUID(), OPENAI.id, OPENAI.name, DECIDED_AT, DECIDED_AT],
+      );
+    } finally {
+      db.close();
+    }
+
+    await expect(
+      core.saveEmbeddingProvider({
+        kind: "openai",
+        apiKey: OPENAI_KEY,
+        modelId: "text-embedding-3-small",
+      }),
+    ).rejects.toThrow(ConsentDeclinedError);
+
     expect((await core.getEmbeddingSettings()).provider.kind).toBe("built-in");
     expect(keychain.secrets.size).toBe(0);
     expect((await core.listDocuments()).map((each) => each.status)).toEqual(["ready", "ready"]);
@@ -379,11 +406,12 @@ describe("Consent for cloud embeddings", { timeout: 30_000 }, () => {
       BUILT_IN_ID,
     ]);
     expect(embeddings.calls).toEqual([]);
-    expect(await core.listDataFlows()).toContainEqual({
-      flow: { id: "embeddings", service: OPENAI, sends: ["document-text", "queries"] },
-      consent: "declined",
-      decidedAt: expect.any(String),
-    });
+    expect(await core.listDataFlows()).toContainEqual(
+      expect.objectContaining({
+        flow: expect.objectContaining({ id: "embeddings", service: OPENAI }),
+        consent: "declined",
+      }),
+    );
   });
 
   test("once accepted, every Document's text goes to the provider, and searches too", async () => {
@@ -418,19 +446,19 @@ describe("Consent for cloud embeddings", { timeout: 30_000 }, () => {
     expect(embeddings.queries()).toEqual(["bond yields"]);
   });
 
-  test("the connection test asks first too, sends nothing of the User's, and reports the size", async () => {
+  test("the connection test sends nothing of the User's, so it asks nothing, and reports the size", async () => {
     const { core, embeddings } = await setUp();
-    const requested = nextEvent(core, "consent.requested");
-    const testing = core.testEmbeddingConnection({
-      kind: "openai",
-      apiKey: OPENAI_KEY,
-      modelId: "text-embedding-3-small",
-    });
-    const request = await requested;
-    expect(embeddings.calls).toEqual([]);
-    await core.respondToConsent(request.requestId, true);
+    const asked = vi.fn();
+    core.on("consent.requested", asked);
 
-    expect(await testing).toEqual({ ok: true, dimensions: 64 });
+    expect(
+      await core.testEmbeddingConnection({
+        kind: "openai",
+        apiKey: OPENAI_KEY,
+        modelId: "text-embedding-3-small",
+      }),
+    ).toEqual({ ok: true, dimensions: 64 });
+    expect(asked).not.toHaveBeenCalled();
     expect(embeddings.calls).toHaveLength(1);
     expect(embeddings.calls[0]?.values[0]).toContain("checking");
     // Testing saves nothing.

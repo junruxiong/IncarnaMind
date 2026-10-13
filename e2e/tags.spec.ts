@@ -138,7 +138,7 @@ test("without a model, Documents are ready to search, and one notice, not one pe
   const notice = window.getByTestId("tagging-waiting");
   await expect(notice).toHaveCount(1);
   await expect(window.getByTestId("sidebar-footer").getByTestId("tagging-waiting")).toBeVisible();
-  await expect(notice).toContainText("Automatic tagging is waiting for a model.");
+  await expect(notice).toContainText("Tags wait until you choose a model.");
   await expect(window.getByTestId("document-tagging")).toHaveCount(0);
   for (let index = 0; index < 3; index++) {
     await expect(await openDocumentTags(items.nth(index))).toHaveCount(0);

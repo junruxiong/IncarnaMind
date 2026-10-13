@@ -9,10 +9,11 @@
  *   gives way to Answers. A call to a model on this computer that an Answer
  *   interrupts leaves its Document waiting, first in line once no Answer is
  *   being written.
- * - Nothing is sent before the User accepts the "tagging" data flow to the
- *   tagger's service; a local model needs no consent.
+ * - Nothing is sent before the User allows the "tagging" data flow to the
+ *   tagger's service, which choosing it does (ADR-0022); a local model needs
+ *   no consent. Tagging is background work: it never asks.
  * - With no usable tagger (no chat model set up, a missing key or sign-in, or
- *   the flow declined) Documents wait as "waiting-for-provider", and are
+ *   the flow not allowed) Documents wait as "waiting-for-provider", and are
  *   picked up again whenever that may have changed.
  * - Only automatic links change: Tags the User added or removed on a
  *   Document stay as they are (see `TagsStore.applyAutomatic`).
@@ -22,6 +23,7 @@ import type { BackgroundCall, BackgroundJob, BackgroundQueue } from "../backgrou
 import {
   ChatNotReadyError,
   ConsentDeclinedError,
+  ConsentNeededError,
   InvalidInputError,
   NotFoundError,
   TaggingNotReadyError,
@@ -60,13 +62,14 @@ export interface TaggerOptions {
   canRun(): Promise<boolean>;
   /**
    * A quick check, with no waiting: false when tagging certainly can't run
-   * (no tagger set up, or the User declined the flow to its service).
+   * (no tagger set up, or the User hasn't allowed the flow to its service).
    */
   mightBeReady(): boolean;
   /**
    * The tagger in use, once the User has accepted the tagging flow to its
-   * service. Throws ChatNotReadyError, ConsentDeclinedError or
-   * TaggingNotReadyError when it can't be used: nothing is sent then.
+   * service. Throws ChatNotReadyError, ConsentDeclinedError,
+   * ConsentNeededError or TaggingNotReadyError when it can't be used:
+   * nothing is sent then.
    */
   prepare(): Promise<TagClassifier>;
   /** Pushes "documents.tagged" for these Documents. */
@@ -189,9 +192,10 @@ export function createTagger(options: TaggerOptions) {
         if (
           error instanceof ChatNotReadyError ||
           error instanceof ConsentDeclinedError ||
+          error instanceof ConsentNeededError ||
           error instanceof TaggingNotReadyError
         ) {
-          // Declined, or the tagger went away while this waited: this and the rest wait.
+          // Not allowed, or the tagger went away while this waited: this and the rest wait.
           if (setState(id, "waiting-for-provider")) announce([id]);
           park();
         } else {

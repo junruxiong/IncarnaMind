@@ -77,7 +77,7 @@ export const zhCN = {
   "library.startersHint": "先选择需要的文件夹，之后随时可以重命名或新建。",
   "library.addSelected": "添加所选文件夹",
   "library.modelHint":
-    "选择用来分配文件夹和标签的模型，可以与对话模型不同。使用云端模型时，发送文档文本、文件夹名称和标签说明（如果模型能读取图片，还有扫描版 PDF 的前几页）之前，会先征得你的同意。",
+    "选择用来分配文件夹和标签的模型，可以与对话模型不同。使用云端模型时，会把文档文本、文件夹名称和标签说明发送给它；如果模型能读取图片，还会发送扫描版 PDF 的前几页。",
   "library.connection": "连接",
   "library.manualOnly": "手动整理",
   "library.jev": "Jev · 已保存的连接",
@@ -987,6 +987,7 @@ export const zhCN = {
   "status.tagging.one": "正在为 1 个文档打标签…",
   "status.tagging.other": "正在为 {count} 个文档打标签…",
   "status.taggingWaiting": "需要模型才能打标签",
+  "status.taggingPermission": "打标签需要你允许",
   "status.setUp": "设置",
   "status.downloading": "搜索模型",
   "status.downloadFailed": "搜索模型下载失败",
@@ -1239,7 +1240,8 @@ export const zhCN = {
   "tags.dialog.retag.started": "已开始重新打标签。",
   "tags.dialog.done": "完成",
 
-  "jev.waiting.notice": "自动打标签需要模型。设置好模型后，会立即为你的文档打标签。",
+  "jev.waiting.notice": "选好模型后再打标签。",
+  "jev.waiting.permission": "允许把文档文字发送给 {service} 后再打标签。",
   "jev.chip.needsReview": "待确认",
   "jev.chip.likely": "{tag}：自动添加，可能性 {percent}%",
   "jev.chip.review": "{tag}：自动添加，但可能性只有 {percent}%。确认即可保留，也可以移除。",
@@ -1264,6 +1266,7 @@ export const zhCN = {
   "jev.form.reviewTo": "到（%）",
   "jev.form.reviewHint": "低于第一个数值的标签不会添加；达到第二个数值的标签会直接添加，不作标记。",
   "jev.form.save": "用 Jev 打标签",
+  "jev.form.sends": "Jev 为文档打标签时，会收到用于打标签的文档文字。",
 
   "settings.title": "设置",
   "settings.pages.models": "模型",
@@ -1360,6 +1363,8 @@ export const zhCN = {
   "providers.form.test": "测试连接",
   "providers.form.testing": "正在测试…",
   "providers.form.save": "使用此提供商",
+  "providers.sends":
+    "你的问题、当前 Mind、文档中的相关段落，以及用于打标签的文档文字，会在使用时发送给 {provider}。",
   "providers.form.saving": "正在保存…",
 
   "providers.test.ok": "连接成功：提供商已响应。",
@@ -1629,12 +1634,13 @@ export const zhCN = {
   "privacy.intro":
     "IncarnaMind 不收集任何使用数据。本页列出它从这台电脑发出的所有内容，你可以在这里更改。",
   "privacy.flows.intro":
-    "以下数据流会把你的内容发送到这台电脑以外的服务。在你允许之前，不会发送任何内容；开启“所有内容都留在这台电脑上”时，一律不会发送。提供商允许选择时，IncarnaMind 会要求它不要保存你的请求。",
+    "以下数据流会把你的内容发送到这台电脑以外的服务。选择服务时，IncarnaMind 会说明要发送的内容，选择即表示允许；未经允许的数据流不会发送任何内容，开启“所有内容都留在这台电脑上”时，一律不会发送。提供商允许选择时，IncarnaMind 会要求它不要保存你的请求。",
   "privacy.flows.service": "发送到 {service}",
   "privacy.flows.local": "留在这台电脑上",
   "privacy.flows.sends": "发送：",
   "privacy.flows.notInUse": "未使用：所有内容都留在这台电脑上。",
   "privacy.flows.decided": "{date}{status}",
+  "privacy.flows.chosen": "{date}选择 {service} 时已允许",
   "privacy.flows.allow": "允许",
   "privacy.traffic.title": "其他网络连接",
   "privacy.traffic.intro":
@@ -2376,6 +2382,7 @@ export const zhCN = {
     "当前没有运行任何密钥环，API 密钥会以明文形式保存。请启动 GNOME Keyring 或 KWallet，或在设置中允许以明文保存。",
   "error.secrets.unencrypted": "此系统无法加密 API 密钥，因此无法保存密钥。",
   "error.consent.declined": "你已拒绝向 {service} 发送数据，因此没有发送任何内容。",
+  "error.consent.needed": "等你允许向 {service} 发送数据后再继续，目前没有发送任何内容。",
   "error.connector.notFound": "这个连接器不存在。",
   "error.connector.nameEmpty": "连接器名称不能为空。",
   "error.connector.nameTooLong": "连接器名称不能超过 {max} 个字符。",
@@ -2513,6 +2520,8 @@ export const zhCN = {
     "用于 API 密钥等。这些值会加密保存在系统中，绝不会存入 IncarnaMind 的数据库。",
   "connectors.form.envInvalid": "请按 NAME=value 的格式填写每个环境变量。",
   "connectors.form.add": "添加连接器",
+  "connectors.form.sends":
+    "回答向这个连接器的工具提出的请求会发送给它，它可能再通过互联网发送出去。",
   "connectors.form.adding": "正在添加…",
   "connectors.form.cancel": "取消",
   "connectors.form.save": "保存并重启",
@@ -2530,6 +2539,8 @@ export const zhCN = {
   "connectors.import.env": "环境变量：{names}（加密保存在系统中）",
   "connectors.import.confirm": "添加 {count} 个连接器",
   "connectors.import.confirm.one": "添加 1 个连接器",
+  "connectors.import.sends":
+    "回答向这些连接器的工具提出的请求会发送给它们，它们可能再通过互联网发送出去。",
   "connectors.import.nothing": "没有可以添加的内容。",
   "connectors.import.adding": "正在添加…",
   "connectors.consent.note": "这个连接器在你的电脑上运行，但它可能会把收到的内容通过网络发送出去。",

@@ -1,7 +1,7 @@
-import { describe, expect, test, vi } from "vitest";
+import { describe, expect, onTestFinished, test, vi } from "vitest";
 import type { Core } from "../../src/core";
 import type { DocumentGroupAssignment } from "../../src/core/api";
-import { createTempDataFolder, nextEvent, startCore } from "../helpers/core";
+import { createTempDataFolder, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
 import { startFakeJev } from "../helpers/jev";
 import { classifierModel } from "../helpers/library";
@@ -313,9 +313,11 @@ describe("Library groups", () => {
     expect(fake.calls).toHaveLength(1);
   });
 
-  test("cloud group classification gets separate consent and never silently falls back", async () => {
+  test("cloud group classification is allowed by choosing its model, and never silently falls back", async () => {
     const { core, fake } = await setup();
     const doc = await add(core);
+    const requests: string[] = [];
+    core.on("consent.requested", (request) => requests.push(request.flow.id));
     const provider = await core.saveChatProvider({
       kind: "openai",
       apiKey: "test-key",
@@ -325,23 +327,30 @@ describe("Library groups", () => {
       classifier: { kind: "chat", choice: { providerId: provider.id, modelId: "small" } },
       automatic: false,
     });
-    const requested = nextEvent(core, "consent.requested");
-    await core.classifyDocuments([doc.id]);
-    const request = await requested;
-    expect(request.flow).toMatchObject({
-      id: "classification",
-      sends: ["groups", "tags", "document-excerpts", "page-images"],
+    expect(await core.listDataFlows()).toContainEqual({
+      flow: {
+        id: "classification",
+        service: { id: "https://api.openai.com", name: "OpenAI" },
+        sends: ["groups", "tags", "document-excerpts", "page-images"],
+      },
+      consent: "accepted",
+      decidedAt: expect.any(String),
+      chosen: true,
     });
-    expect(fake.calls).toHaveLength(0);
-    await core.respondToConsent(request.requestId, false);
+
+    // Revoked, organizing waits: it never asks, and sends nothing anywhere else.
+    await core.revokeConsent("classification", "https://api.openai.com");
+    await core.classifyDocuments([doc.id]);
     await settled(core, doc.id, "waiting");
     expect(fake.calls).toHaveLength(0);
+    expect(requests).toEqual([]);
     await core.allowDataFlow("classification", "https://api.openai.com");
     await settled(core, doc.id);
     expect(fake.calls).toHaveLength(1);
+    expect(requests).toEqual([]);
   });
 
-  test("turning on local-only while cloud consent is pending prevents inference", async () => {
+  test("in local mode a cloud classifier, though allowed, is never used", async () => {
     const { core, fake } = await setup();
     const doc = await add(core);
     const provider = await core.saveChatProvider({
@@ -353,32 +362,23 @@ describe("Library groups", () => {
       classifier: { kind: "chat", choice: { providerId: provider.id, modelId: "small" } },
       automatic: false,
     });
-    const requested = nextEvent(core, "consent.requested");
-    await core.classifyDocuments([doc.id]);
-    const request = await requested;
     await core.setLocalOnly(true);
-    await core.respondToConsent(request.requestId, true);
+    await core.classifyDocuments([doc.id]);
     await settled(core, doc.id, "waiting");
     expect(fake.calls).toHaveLength(0);
   });
 
-  test("turning on local-only during hosted Jev consent prevents inference", async () => {
+  test("in local mode hosted Jev, though allowed, is never used", async () => {
     const { core } = await setup();
     const doc = await add(core);
     await core.saveJevSettings({ apiKey: "test-key", endpoint: "https://jev.example" });
     await core.saveLibrarySettings({ classifier: { kind: "jev" }, automatic: false });
     const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}"));
-    try {
-      const requested = nextEvent(core, "consent.requested");
-      await core.classifyDocuments([doc.id]);
-      const request = await requested;
-      await core.setLocalOnly(true);
-      await core.respondToConsent(request.requestId, true);
-      await settled(core, doc.id, "waiting");
-      expect(fetch).not.toHaveBeenCalled();
-    } finally {
-      fetch.mockRestore();
-    }
+    onTestFinished(() => fetch.mockRestore());
+    await core.setLocalOnly(true);
+    await core.classifyDocuments([doc.id]);
+    await settled(core, doc.id, "waiting");
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   test("Ollama Tev1 uses Choice with short bilingual text and Unsorted; no API key setup", async () => {

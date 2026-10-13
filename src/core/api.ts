@@ -4652,6 +4652,19 @@ export const dataFlowIds = [
 
 export type DataFlowId = (typeof dataFlowIds)[number];
 
+/**
+ * The flows choosing the chat model's provider allows (ADR-0022): everything
+ * that sends to it, as the line above "Use this provider" says.
+ */
+export const CHOSEN_PROVIDER_FLOWS: readonly DataFlowId[] = [
+  "chat",
+  "edits",
+  "checks",
+  "suggestions",
+  "tagging",
+  "classification",
+];
+
 /** Data leaving this computer: what one flow sends to one service. */
 export interface DataFlow {
   id: DataFlowId;
@@ -4677,6 +4690,11 @@ export interface DataFlowStatus {
    * "not-asked" when they allowed the flow before it started sending more.
    */
   decidedAt: string | null;
+  /**
+   * Allowed when the User chose the service, where a line said what goes to
+   * it (ADR-0022), rather than in a dialog or in Settings › Privacy.
+   */
+  chosen: boolean;
 }
 
 /** A registered external data flow, for the Privacy page: what it sends, and where. */

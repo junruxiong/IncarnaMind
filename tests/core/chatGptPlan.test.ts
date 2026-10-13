@@ -4,6 +4,7 @@ import { generateText, jsonSchema, streamText, tool } from "ai";
 import { describe, expect, test } from "vitest";
 import {
   ChatNotReadyError,
+  ConsentDeclinedError,
   type Core,
   type CoreAdapters,
   type CoreEventName,
@@ -32,6 +33,7 @@ import {
   type MemoryKeychain,
   manualClock,
   nextEvent,
+  saveProviderUnasked,
   startCore,
 } from "../helpers/core";
 
@@ -722,11 +724,12 @@ describe("Consent and Local mode", () => {
   test("nothing goes to OpenAI before the User accepts the chat flow to ChatGPT", async () => {
     const { core, fake } = await setUp();
     await core.signInToChatGpt();
-    await core.saveChatProvider({ kind: "chatgpt", modelId: MODEL });
+    await saveProviderUnasked(core, { kind: "chatgpt", modelId: MODEL });
     expect(await core.getChatReadiness()).toMatchObject({ ready: true, consent: "needed" });
 
     const requested = nextEvent(core, "consent.requested");
-    const result = core.testChatConnection({ kind: "chatgpt", modelId: MODEL });
+    const result = core.prepareChatModel();
+    result.catch(() => undefined);
     const request = await requested;
 
     expect(request.flow).toEqual({
@@ -738,7 +741,7 @@ describe("Consent and Local mode", () => {
 
     await core.respondToConsent(request.requestId, false);
 
-    expect(await result).toMatchObject({ ok: false, error: { kind: "consent-declined" } });
+    await expect(result).rejects.toThrow(ConsentDeclinedError);
     expect(await core.getChatReadiness()).toMatchObject({
       ready: false,
       reason: "consent-declined",
