@@ -98,7 +98,7 @@ export function ReferencesBlock({
       ]);
       setCopied(true);
     } catch (error) {
-      setCopyProblem(errorMessage(error));
+      setCopyProblem(errorMessage(error, t));
     }
   };
 

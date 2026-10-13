@@ -114,7 +114,7 @@ function parseBaseUrl(kind: ApiEmbeddingProviderKind, raw: unknown): string | nu
     return null;
   }
   if (!given) {
-    if (rule === "required") throw new InvalidInputError("Enter the server's URL.");
+    if (rule === "required") throw new InvalidInputError({ key: "error.provider.urlMissing" });
     return OLLAMA_DEFAULT_URL;
   }
   return normalizeBaseUrl(given);
@@ -122,7 +122,7 @@ function parseBaseUrl(kind: ApiEmbeddingProviderKind, raw: unknown): string | nu
 
 function parseModelId(value: unknown): string {
   if (typeof value !== "string" || value.trim() === "" || value.length > 500) {
-    throw new InvalidInputError("Enter an embedding model name.");
+    throw new InvalidInputError({ key: "error.provider.embeddingModelMissing" });
   }
   return value.trim();
 }
