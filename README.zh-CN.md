@@ -22,9 +22,9 @@
   <!-- 第一个版本发布后，加上：<a href="https://github.com/IncarnaMind/IncarnaMind/releases/latest"><img alt="最新版本" src="https://img.shields.io/github/v/release/IncarnaMind/IncarnaMind?color=17191C"></a> -->
 </p>
 
-<p align="center"><img src="docs/images/demo.gif" width="880" alt="依次展示八个界面：Mind 旁边是助手，回答里的引用都已核对；展开回答的过程，可以看到它搜了什么、用了哪些来源；在笔记旁打开一条引用，PDF 页面上高亮着引文；助手的修改在 Mind 里等你接受或拒绝；资料库里的全部文档、文件夹和标签；三组标签页并排；在 Mind 里记会议笔记，助手根据实时转写回答；以及中文界面。"></p>
+<p align="center"><img src="docs/images/demo.gif" width="880" alt="依次展示六个界面：选中草稿里的两句话，菜单里有“对照文档核对”；同一篇草稿核对后，每句话都标出有依据、无依据或与文档矛盾，标题下显示统计；在笔记旁打开一条引用，PDF 页面上高亮着引文；打开一份别人写的贷款人季度报告来核对，显示“核对 8 条说法”；核对结果中有一条与贷款协议第 3 页矛盾；以及中文界面下核对过的草稿。"></p>
 
-<p align="center"><sub>助手修改 Mind 等你接受，以及根据会议实时转写回答，都<a href="#即将推出">即将推出</a>，其余功能现在就能用。</sub></p>
+<p align="center"><sub>图中展示的功能现在都能用。</sub></p>
 
 **IncarnaMind** 是一款免费开源的桌面应用，支持 macOS、Windows 和 Linux：你可以就自己的文档（PDF、Word、PowerPoint、Excel 等）提问，并借助 AI 写作。每个回答都标明出处的确切页码，IncarnaMind 会核对每段引文确实在那里。它可以使用你自己的 API 密钥、通过 Ollama 运行的本地模型，或你的 ChatGPT 订阅。
 
@@ -37,7 +37,7 @@ git clone https://github.com/IncarnaMind/IncarnaMind.git && cd IncarnaMind
 npm install && npm run dev
 ```
 
-Windows 版通过 SignPath Foundation 为开源项目提供的免费签名服务签名，见[代码签名政策（Code signing policy）](docs/code-signing-policy.md)。
+Windows 版将通过 SignPath Foundation 为开源项目提供的免费签名服务签名，在此之前安装程序暂未签名。见[代码签名政策（Code signing policy）](docs/code-signing-policy.md)。
 
 <details>
 <summary>系统不让打开时</summary>
@@ -50,7 +50,9 @@ Windows 版通过 SignPath Foundation 为开源项目提供的免费签名服务
 
 ## 你能用它做什么
 
-**边写边问。** 一个 Mind 就是为一个主题准备的笔记本，旁边就是助手：就当前的 Mind 或你的文件向它提问，回答以对话的形式留在助手里，每个引用都已核对。你的草稿保持原样，直到你点 **添加到笔记**：回答连同引用放到光标处，可以像普通文字一样修改，还带着回到原对话的链接。
+**交稿前先核对一遍。** 在 Mind 里选中几句话，选择 **对照文档核对**：每句话都会标出在你的文档里有依据、无依据还是与文档矛盾，原文一键打开，标题下还会统计还有几处需要留意。别人写的 PDF 也能这样逐条核对说法：**+ → 核对文档…**。
+
+**边写边问。** 一个 Mind 就是为一个主题准备的笔记本，旁边就是助手：就当前的 Mind 或你的文件向它提问，回答以对话的形式留在助手里，每个引用都已核对。你的草稿保持原样，直到你点 **添加到笔记**：回答连同引用放到光标处，可以像普通文字一样修改。
 
 **每个回答都能核对。** 回答会标出每个说法的出处，并附上原文引文，再逐条到那个位置核对：找到了打绿勾，没找到就标成橙色；点一下，原文就打开到那一页，引文高亮显示。展开回答的过程，可以看到它搜了什么、用了哪些来源。
 
@@ -68,7 +70,9 @@ Windows 版通过 SignPath Foundation 为开源项目提供的免费签名服务
 
 **在你已经在用的 AI 智能体里提问**（实验功能，默认关闭）。在**设置 → 智能体**里连接 Claude、Codex、Cursor 等，用的是它们自己的订阅：它们只能读你选定的文件夹，从 IncarnaMind 拿到的每条引文都经过核对；它们读到的内容会按其服务条款发给它们的 AI 服务。[各个智能体的连接方法](docs/agents.zh-CN.md)。
 
-**写完就能交。** 把 Mind 导出为 Word 或 Markdown，引用和参考文献按你选的引用格式排好：APA、MLA、Chicago、Harvard、IEEE、Vancouver、GB/T 7714，或 IncarnaMind 自己的编号格式。没通过核对的引用会标上“[未核实]”。
+**写完就能交。** 把 Mind 导出为 Word 或 Markdown，引用和参考文献按你选的引用格式排好：APA、MLA、Chicago、Harvard、IEEE、Vancouver、GB/T 7714，或 IncarnaMind 自己的编号格式。没通过核对的引用会标上“[未核实]”。也可以把 Word 文件打开成 Mind，再导出回同一个文件：没改动的部分原样保留，你的修改可以作为修订写回去。
+
+**用表格对比文档。** **对比文档…** 会向你选的每个文件提出同样的问题，填成一张表，每一格都是带引用、经过核对的回答。
 
 **连接应用和技能，运行前先问你。** 添加连接器（MCP 服务器），或者直接导入你在 Claude Desktop、Cursor 里配置好的；也可以添加技能（标准的 `SKILL.md` 文件夹），内置三个。可能改动内容的工具和技能里的脚本，都要你同意后才会运行。
 
@@ -98,7 +102,7 @@ Windows 版通过 SignPath Foundation 为开源项目提供的免费签名服务
 
 ## 即将推出
 
-下面是计划中的功能，现在还不能用，也没有具体日期（见[路线图](https://github.com/IncarnaMind/IncarnaMind/issues/74)）：会议进行中直接提问，回答引用实时转写；助手直接修改你的 Mind，每处修改都等你接受；打开 Word 文件再导出回去，修改保留为修订；对照你的文件核对你自己的草稿和别人的文档；跨文档的对比表；在后台运行的研究任务。
+下面是计划中的功能，现在还不能用，也没有具体日期（见[路线图](https://github.com/IncarnaMind/IncarnaMind/issues/74)）：会议进行中直接提问，回答引用实时转写；助手直接修改你的 Mind，每处修改都等你接受；在审阅栏里逐条查看别人在 Word 文件里的修订；在后台运行的研究任务。
 
 ## 参与贡献
 

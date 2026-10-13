@@ -796,6 +796,11 @@ export interface CoreAdapters {
    */
   connectorDirectory?: unknown;
   /**
+   * Where the Connectors search asks the MCP Registry. Defaults to the
+   * official one; tests point it at a local stand-in. Consent is still the Registry's.
+   */
+  connectorRegistryUrl?: string;
+  /**
    * Where requests to TypeSafe's hosted Jev go. Defaults to
    * https://api.typesafe.ai; tests point it at a local fake server. Consent
    * still treats them as going to TypeSafe.

@@ -9,6 +9,8 @@
  */
 import { getSchema } from "@tiptap/core";
 import {
+  PROPOSAL_ATTRIBUTE,
+  PROPOSAL_DELETE_MARK,
   WORD_ATOM_NODE,
   WORD_BLOCK_NODE,
   type WordImportReport,
@@ -30,6 +32,7 @@ import {
 } from "../../src/core/documents/formats/xml";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
 import type { NodeJSON } from "../../src/shared/blockJson";
+import { readProposalAttribute } from "../../src/shared/proposals";
 import { readWordAtom } from "../../src/shared/wordFiles";
 
 const schema = getSchema(noteExtensions());
@@ -52,20 +55,27 @@ const normal = (text: string) => text.replace(/[\s­]/g, "").replace(/‑/g, "-"
 
 /**
  * The text a Mind's nodes keep, in order: atoms by what they show or hold.
- * Struck text (another person's deletion, a move's old place) is apart, as
- * the editor shows it; comments and notes are kept beside the text, not in it.
+ * Struck text (another person's deletion, as a change to accept or reject or
+ * kept as is, a move's old place) is apart, as the editor shows it; comments
+ * and notes are kept beside the text, not in it.
  */
-function mindText(nodes: readonly NodeJSON[], into = { shown: "", struck: "" }) {
+function mindText(nodes: readonly NodeJSON[], into = { shown: "", struck: "" }, struck = false) {
   for (const node of nodes) {
-    if (node.type === "text") into.shown += node.text ?? "";
-    else if (node.type === WORD_ATOM_NODE || node.type === WORD_BLOCK_NODE) {
+    const removed =
+      struck ||
+      readProposalAttribute(node.attrs?.[PROPOSAL_ATTRIBUTE])?.kind === "delete" ||
+      (node.marks?.some((mark) => mark.type === PROPOSAL_DELETE_MARK) ?? false);
+    if (node.type === "text") {
+      if (removed) into.struck += node.text ?? "";
+      else into.shown += node.text ?? "";
+    } else if (node.type === WORD_ATOM_NODE || node.type === WORD_BLOCK_NODE) {
       const atom = readWordAtom(node.attrs ?? {});
       if (atom.kind === "deletion") into.struck += atom.label;
       else if (!["comment", "footnote", "endnote"].includes(atom.kind)) {
         into.shown += `${atom.label}${atom.text}`;
       }
     }
-    if (node.content) mindText(node.content, into);
+    if (node.content) mindText(node.content, into, removed);
   }
   return into;
 }
@@ -80,29 +90,34 @@ const withoutMoves = (node: XmlElement): XmlElement => ({
 });
 
 /** What the import made editable and kept as is, in one line. */
-function counts(report: WordImportReport): string {
-  const kept = Object.entries(report.kept)
-    .filter(([, count]) => (count ?? 0) > 0)
-    .map(([kind, count]) => `${count} ${kind}`)
-    .join(", ");
+function counts(report: WordImportReport, changes: number): string {
+  const listed = (counted: Partial<Record<string, number>>) =>
+    Object.entries(counted)
+      .filter(([, count]) => (count ?? 0) > 0)
+      .map(([kind, count]) => `${count} ${kind}`)
+      .join(", ");
   return [
     `${report.paragraphs} paragraphs`,
     `${report.tables} tables`,
     `${report.images} pictures`,
     `${report.links} links`,
-    `kept: ${kept || "nothing"}`,
+    ...(changes > 0 ? [`${changes} changes to accept or reject`] : []),
+    `kept: ${listed(report.kept) || "nothing"}`,
+    ...(report.keptChanges ? [`changes kept: ${listed(report.keptChanges)}`] : []),
   ].join(", ");
 }
 
 export async function checkImport(bytes: Uint8Array): Promise<ImportCheck> {
   let blocks: NodeJSON[];
   let report: WordImportReport;
+  let changes: number;
   let body: ReturnType<typeof child>;
   try {
     const pkg = await openWordPackage(bytes);
     const structure = await readWordStructure(pkg, await reviewOf(pkg));
     blocks = structure.blocks;
     report = structure.report;
+    changes = structure.changes.size;
     body = child(parseXml((await pkg.zip.readText(pkg.part)) ?? ""), "w:body");
   } catch (error) {
     // What #104 refuses on purpose, before any Mind is made: a Strict file, macros, a password.
@@ -138,5 +153,5 @@ export async function checkImport(bytes: Uint8Array): Promise<ImportCheck> {
       report,
     };
   }
-  return { ok: true, detail: counts(report), report };
+  return { ok: true, detail: counts(report, changes), report };
 }
