@@ -146,7 +146,7 @@ export function ClientForm({
     try {
       await onSubmit({ clientId, ...(clientSecret.trim() ? { clientSecret } : {}) });
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     } finally {
       setBusy(false);
     }

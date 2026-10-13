@@ -75,7 +75,7 @@ export function FileWriteDialog() {
         setQueue((current) => current.filter((queued) => queued.requestId !== request.requestId));
       }
     } catch (failure) {
-      setProblem(errorMessage(failure));
+      setProblem(errorMessage(failure, t));
     }
   };
 

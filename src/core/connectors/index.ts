@@ -329,7 +329,7 @@ export function createConnectors(options: ConnectorsOptions) {
       throw new InvalidInputError("A Connector id must be a non-empty string.");
     }
     const row = rowById(id);
-    if (!row) throw new NotFoundError("That Connector doesn't exist.");
+    if (!row) throw new NotFoundError({ key: "error.connector.notFound" });
     return row;
   };
   const requireRemote = (id: unknown) => {
@@ -744,7 +744,7 @@ export function createConnectors(options: ConnectorsOptions) {
 
   const assertNameFree = (name: string) => {
     if (liveRows().some((row) => sameName(row.name, name))) {
-      throw new InvalidInputError(`A Connector named "${name}" already exists.`);
+      throw new InvalidInputError({ key: "error.connector.nameTaken", values: { name } });
     }
   };
 
@@ -948,7 +948,10 @@ export function createConnectors(options: ConnectorsOptions) {
         throw new InvalidInputError("Only a local Connector's command can be changed.");
       }
       if (liveRows().some((other) => other.id !== row.id && sameName(other.name, config.name))) {
-        throw new InvalidInputError(`A Connector named "${config.name}" already exists.`);
+        throw new InvalidInputError({
+          key: "error.connector.nameTaken",
+          values: { name: config.name },
+        });
       }
       const envNames = Object.keys(config.env);
       if (envNames.length > 0) await secrets.set(envSecret(row.id), JSON.stringify(config.env));
@@ -974,7 +977,7 @@ export function createConnectors(options: ConnectorsOptions) {
 
     async restart(id: unknown): Promise<Connector> {
       const row = requireRow(id);
-      if (row.enabled !== 1) throw new InvalidInputError("Turn the Connector on first.");
+      if (row.enabled !== 1) throw new InvalidInputError({ key: "error.connector.off" });
       const runtime = runtimeOf(row.id);
       await cancelSignIn(runtime);
       runtime.failures = 0;
@@ -1012,7 +1015,7 @@ export function createConnectors(options: ConnectorsOptions) {
      */
     async signIn(id: unknown): Promise<ConnectorSignInResult> {
       const { row, config } = requireRemote(id);
-      if (row.enabled !== 1) throw new InvalidInputError("Turn the Connector on first.");
+      if (row.enabled !== 1) throw new InvalidInputError({ key: "error.connector.off" });
       const storage = secrets.status();
       const runtime = runtimeOf(row.id);
       // Check before the User signs in, not after: the tokens would have nowhere to go. The
