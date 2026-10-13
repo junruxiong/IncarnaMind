@@ -39,7 +39,7 @@ Single-context: `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/
 8. **Add few dependencies.** A new one must be open source under a permissive licence, maintained and small, and the pull request says why it's needed. No LangChain (ADR-0005). The lockfile changes only through `npm install`.
 9. **Keep secrets and the User's data safe.**
    - No keys or tokens in code, logs, tests, issues or pull requests. Store secrets only through `src/core/secrets.ts`.
-   - Nothing leaves the computer without the User's consent (ADR-0014, `src/core/consent.ts`).
+   - Nothing leaves the computer without the User's consent, which they give where they choose the service (ADR-0022, `src/core/consent.ts`); background work never asks. Usage data follows ADR-0014.
 10. **Every interface string comes in English and Simplified Chinese**, in `src/shared/i18n/`. Chinese strings follow [`docs/agents/zh-CN.md`](docs/agents/zh-CN.md).
 11. **Write as few comments as possible.** Add one only when the code can't say it itself: a reason that isn't obvious, such as a workaround, a platform quirk, a constraint from an ADR or an issue (link it), or a trap the next reader would fall into. Prefer clearer names and smaller functions to a comment.
     - Don't write comments that restate what the code does, narrate a change ("now uses…", "fixed…"), label sections or address the reviewer.

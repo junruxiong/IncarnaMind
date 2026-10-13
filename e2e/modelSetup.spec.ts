@@ -26,7 +26,7 @@ test.afterEach(async () => {
   await removeDataFolder(dataDir);
 });
 
-test("by mouse alone: the first own Question, Use my ChatGPT plan, and its Answer, with no dialog between but OpenAI's own sign-in", async () => {
+test("by mouse alone: the first own Question, Use my ChatGPT plan, and its Answer, with no consent dialog", async () => {
   const openai = await createFakeOpenAI();
   const { app, window } = await launchApp(dataDir, {
     fakeChat: true,
@@ -49,8 +49,6 @@ test("by mouse alone: the first own Question, Use my ChatGPT plan, and its Answe
     await expect.poll(() => urlsOpened(app)).toHaveLength(1);
     const [authorize] = await urlsOpened(app);
     expect((await signInAt(openai, authorize ?? "")).status).toBe(200);
-    // The chat consent for OpenAI is #718's to remove; until then it is answered here.
-    await window.getByTestId("consent-dialog").getByTestId("consent-allow").click();
     await window.getByTestId("chatgpt-welcome-ok").click();
 
     await expect(card).toBeHidden();

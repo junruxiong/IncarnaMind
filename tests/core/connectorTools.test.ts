@@ -37,8 +37,12 @@ function tideModel(): MockLanguageModelV4 {
   });
 }
 
-/** A core with a local chat model (no chat consent), the tiny server as a ready Connector, and a Mind. */
-async function setUp(model: MockLanguageModelV4) {
+/**
+ * A core with a local chat model (no chat consent), the tiny server as a
+ * ready Connector, and a Mind. Connecting it allows its Tool calls
+ * (ADR-0022); `unasked`, it is as one connected before that left it.
+ */
+async function setUp(model: MockLanguageModelV4, { unasked = false } = {}) {
   const dataDir = await createTempDataFolder();
   const models = scriptedModels(model);
   const core = startCore(dataDir, {
@@ -48,6 +52,7 @@ async function setUp(model: MockLanguageModelV4) {
   await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
   const logFile = logFileIn(dataDir);
   const connector = await core.addConnector(tideServer(logFile));
+  if (unasked) await core.revokeConsent("connectors", `connector:${connector.id}`);
   await waitForState(core, connector.id, "ready");
   const mind = await core.createMind({ title: "Tides" });
   const client = await connectToMind(core, mind.id);
@@ -74,15 +79,22 @@ describe("Answers use Connector Tools", { timeout: 30_000 }, () => {
     core.on("answer.toolCallStarted", (event) => started.push(event));
     core.on("answer.toolCallFinished", (event) => ended.push(event));
     core.on("approval.requested", (request) => approvals.push(request));
+    const requests: string[] = [];
+    core.on("consent.requested", (request) => requests.push(request.flow.id));
 
-    const consent = answerConsent(core, true);
     const { answerId, finished } = await askAndFinish(core, client, mind.id, "When is high tide?");
 
-    // The first call through the Connector asked first, though it runs on this computer.
-    expect((await consent).flow).toEqual({
-      id: "connectors",
-      service: { id: `connector:${connector.id}`, name: "Tides" },
-      sends: ["tool-arguments"],
+    // Connecting it allowed its Tool calls, though it runs on this computer: nothing asked.
+    expect(requests).toEqual([]);
+    expect(await core.listDataFlows()).toContainEqual({
+      flow: {
+        id: "connectors",
+        service: { id: `connector:${connector.id}`, name: "Tides" },
+        sends: ["tool-arguments"],
+      },
+      consent: "accepted",
+      decidedAt: expect.any(String),
+      chosen: true,
     });
     // Both Tools, under the Connector's name; no Documents, so no search.
     const first = model.doStreamCalls[0];
@@ -121,8 +133,8 @@ describe("Answers use Connector Tools", { timeout: 30_000 }, () => {
     expect(finished).toMatchObject({ status: "done", citations: [], citationSupport: null });
   });
 
-  test("once allowed, later calls through the Connector don't ask again", async () => {
-    const { core, logFile, mind, client } = await setUp(tideModel());
+  test("connected before, it asks once: later calls through the Connector don't ask again", async () => {
+    const { core, logFile, mind, client } = await setUp(tideModel(), { unasked: true });
     const requests: string[] = [];
     core.on("consent.requested", (request) => requests.push(request.flow.id));
 
@@ -137,7 +149,7 @@ describe("Answers use Connector Tools", { timeout: 30_000 }, () => {
 
   test("declining sends nothing to the Connector; the Answer goes on without the Tool", async () => {
     const model = tideModel();
-    const { core, logFile, mind, client } = await setUp(model);
+    const { core, logFile, mind, client } = await setUp(model, { unasked: true });
 
     const consent = answerConsent(core, false);
     const { answerId } = await askAndFinish(core, client, mind.id, "When is high tide?");
@@ -175,14 +187,12 @@ describe("Answers use Connector Tools", { timeout: 30_000 }, () => {
     const connector = await first.addConnector(tideServer(logFile));
     await waitForState(first, connector.id, "ready");
     const mind = await first.createMind({ title: "Tides" });
-    const consent = answerConsent(first, true);
     const { answerId } = await askAndFinish(
       first,
       await connectToMind(first, mind.id),
       mind.id,
       "When is high tide?",
     );
-    await consent;
     first.close();
 
     const second = start();
@@ -201,7 +211,7 @@ describe("Answers use Connector Tools", { timeout: 30_000 }, () => {
   });
 
   test("stopping an Answer while it waits for consent sends nothing", async () => {
-    const { core, logFile, mind, client } = await setUp(tideModel());
+    const { core, logFile, mind, client } = await setUp(tideModel(), { unasked: true });
 
     const requested = nextEvent(core, "consent.requested");
     const answerId = await askNew(core, client, mind.id, "When is high tide?");
@@ -254,9 +264,7 @@ describe("Answers use Connector Tools", { timeout: 30_000 }, () => {
     const connector: Connector = await core.addConnector(tideServer(logFileIn(sources)));
     await waitForState(core, connector.id, "ready");
 
-    const consent = answerConsent(core, true);
     const { answerId } = await askAndFinish(core, client, mind.id, "How often is high tide?");
-    await consent;
 
     expect(model.doStreamCalls[0]?.tools?.map((each) => each.name).sort()).toEqual([
       "cite",
@@ -294,10 +302,6 @@ describe("The chat flow with Connectors", { timeout: 30_000 }, () => {
       processes: testProcesses(),
     });
     await core.saveChatProvider({ kind: "openai", apiKey: "sk-test", modelId: "gpt-5.4-mini" });
-    const first = nextEvent(core, "consent.requested");
-    const tested = core.testChatConnection({ kind: "openai", modelId: "gpt-5.4-mini" });
-    await core.respondToConsent((await first).requestId, true);
-    await tested;
     expect(await core.getChatReadiness()).toMatchObject({ consent: "accepted" });
 
     const connector = await core.addConnector({ name: "Mine", command: "tide-cli-not-installed" });
@@ -311,16 +315,32 @@ describe("The chat flow with Connectors", { timeout: 30_000 }, () => {
     expect(await core.getChatReadiness()).toMatchObject({ consent: "accepted" });
   });
 
+  test("choosing a cloud provider with a Connector on doesn't allow Tool results, which its line doesn't name: the first Question asks", async () => {
+    const dataDir = await createTempDataFolder();
+    const core = startCore(dataDir, {
+      createChatModel: scriptedModels(scriptedModel(() => ({ text: "OK" }))).createChatModel,
+      processes: testProcesses(),
+    });
+    await core.addConnector({ name: "Mine", command: "tide-cli-not-installed" });
+
+    await core.saveChatProvider({ kind: "openai", apiKey: "sk-test", modelId: "gpt-5.4-mini" });
+
+    expect(await core.getChatReadiness()).toMatchObject({ ready: true, consent: "needed" });
+    const requested = nextEvent(core, "consent.requested");
+    const prepared = core.prepareChatModel();
+    const request = await requested;
+    expect(request.newKinds).toEqual(["tool-results"]);
+    await core.respondToConsent(request.requestId, true);
+    await prepared;
+    expect(await core.getChatReadiness()).toMatchObject({ consent: "accepted" });
+  });
+
   test("Skills alone don't make it ask again: their Tools return only the Skills' own text", async () => {
     const dataDir = await createTempDataFolder();
     const core = startCore(dataDir, {
       createChatModel: scriptedModels(scriptedModel(() => ({ text: "OK" }))).createChatModel,
     });
     await core.saveChatProvider({ kind: "openai", apiKey: "sk-test", modelId: "gpt-5.4-mini" });
-    const first = nextEvent(core, "consent.requested");
-    const tested = core.testChatConnection({ kind: "openai", modelId: "gpt-5.4-mini" });
-    await core.respondToConsent((await first).requestId, true);
-    await tested;
 
     const sources = await createTempDataFolder();
     await importSkill(

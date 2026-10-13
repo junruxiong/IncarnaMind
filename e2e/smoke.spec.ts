@@ -266,31 +266,6 @@ test("Settings → Models lists the key providers, and “Already pay for a plan
   await app.close();
 });
 
-test('after "Don\'t allow", a connection test offers to ask again, and asks before sending anything', async () => {
-  const { app, window } = await launchApp(dataDir);
-  const settings = await openSettings(window, "models");
-  const form = settings.getByTestId("provider-form");
-  await window.getByTestId("chat-choice-api-key").check();
-  await form
-    .locator("label")
-    .filter({ hasText: /^OpenAI$/ })
-    .click();
-  await form.getByLabel(/^API key/).fill("sk-not-a-real-key");
-  const consent = window.getByTestId("consent-dialog");
-
-  await form.getByTestId("provider-use-key").click();
-  await consent.getByTestId("consent-decline").click();
-  const result = form.getByTestId("connection-test");
-  await expect(result).toContainText("Nothing was sent");
-
-  // Asking again forgets the "Don't allow": the test asks first, again.
-  await result.getByTestId("connection-test-ask-again").click();
-  await expect(consent).toBeVisible();
-  await consent.getByTestId("consent-decline").click();
-  await expect(result).toContainText("Nothing was sent");
-  await app.close();
-});
-
 test("first run fits a small window; the not-ready notice and a long title keep the Mind's text edge", async () => {
   const { app, window } = await launchApp(dataDir);
   await setWindowSize(app, window, 1000, 600);
