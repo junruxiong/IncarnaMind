@@ -26,6 +26,7 @@ import {
   toggleFilterValue,
 } from "../libraryFilters";
 import { formatCount } from "../linkedFolders";
+import { useModelNames } from "../modelNames";
 import { missingList } from "../referenceEditing";
 import { useRequests } from "../requests";
 import { extendThroughRows, useSelectable, useSelection, useSelectionOrder } from "../selection";
@@ -513,6 +514,7 @@ const LibraryRow = memo(function LibraryRow({
   act: Action;
 }) {
   const t = useT();
+  const nameOf = useModelNames();
   const place = useTabPlace();
   const name = displayName(doc);
   const fileName = fileNameOf(doc.path);
@@ -615,8 +617,9 @@ const LibraryRow = memo(function LibraryRow({
             )}
           </p>
           {item?.model && (
-            <p>
-              {item.model.id} · {t(item.model.images ? "library.usedPages" : "library.usedText")}
+            <p title={nameOf(item.model.id).id}>
+              {nameOf(item.model.id).name} ·{" "}
+              {t(item.model.images ? "library.usedPages" : "library.usedText")}
               {item.model.reason === "slow"
                 ? ` · ${t("library.route.slow")}`
                 : item.model.reason === "memory"

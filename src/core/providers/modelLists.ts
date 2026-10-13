@@ -39,6 +39,8 @@ export interface ModelListSpec {
 /** A model a provider lists, with what the list says it can do, if anything. */
 export interface ListedModel {
   id: string;
+  /** The name the provider's own list gives it (the ChatGPT plan's). */
+  name?: string;
   facts?: ModelFactsLayer;
   /** An Ollama model that runs on ollama.com, not on this computer. */
   cloud?: boolean;
