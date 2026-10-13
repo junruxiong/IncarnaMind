@@ -116,6 +116,43 @@ describe("figure markers in an Answer", () => {
     );
   });
 
+  // protects=a scale or currency the model writes after a marker never shows beside the figure's own, and one that isn't the figure's is kept as what the Answer wrote (#577); fails_when="万元 亿元" or "billion million" reads in the text, a differing scale isn't flagged, or the text's own words ("people") go; no_claim=units other than a scale or currency.
+  test("don't show a scale twice: the model's is left out, and kept as what it wrote when it isn't the figure's", () => {
+    const more = new Map<number, PlacedFigure>([
+      [1, figure(1_203_456_700, "12.03亿元", "zh-CN")],
+      // The figure of #577, worked out as 万元 when the model meant 亿元.
+      [2, figure(120_345.67, "12.0346万元", "zh-CN")],
+      [3, figure(1_482_600_000, "$1.48 billion")],
+      [4, figure(1_234, "1,234")],
+      [5, figure(1_200_000, "1.2 million")],
+    ]);
+    const written: (string | null)[] = [];
+    const blocks = withFigures(
+      markdownToBlocks(
+        "合计为 [=1] 亿元，即 [=1]元，[=1]亿元以上；[=2] 亿元。Revenue was [=3] billion, or [=3] million dollars; [=4] million; [=5] people, [=5] million people.",
+      ),
+      (marker) => more.get(marker) ?? null,
+      (each, _marker, wrote) => {
+        written.push(wrote);
+        return each.shown;
+      },
+    );
+    expect(textOf(blocks)).toBe(
+      "合计为 12.03亿元，即 12.03亿元，12.03亿元以上；12.0346万元。Revenue was $1.48 billion, or $1.48 billion; 1,234; 1.2 million people, 1.2 million people.",
+    );
+    expect(written).toEqual([
+      null,
+      null,
+      null,
+      "亿元",
+      null,
+      "million dollars",
+      "million",
+      null,
+      null,
+    ]);
+  });
+
   test("read the same as text, for Question context, search and outside agents", () => {
     expect(
       withFigureText(
