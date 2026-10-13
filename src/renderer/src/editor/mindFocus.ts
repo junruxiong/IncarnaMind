@@ -5,6 +5,12 @@ import type { MindFocus } from "../../../core/api";
 /** A line break as a line of its own; any other inline node that isn't text reads as nothing. */
 const leafText = (leaf: ProseMirrorNode) => (leaf.type.name === "hardBreak" ? "\n" : "");
 
+/** The text selected in the Mind as the editor reads it; "" with nothing selected. */
+export function selectedText(state: EditorState): string {
+  const { selection, doc } = state;
+  return selection.empty ? "" : doc.textBetween(selection.from, selection.to, "\n\n", leafText);
+}
+
 /**
  * Where the User is in the Mind when they ask in the assistant (#544): the
  * text they selected, and the top-level Blocks it is in; with nothing
@@ -26,5 +32,5 @@ export function mindFocusOf(state: EditorState): MindFocus {
     add(node);
     return false;
   });
-  return { selection: doc.textBetween(selection.from, selection.to, "\n\n", leafText), blockIds };
+  return { selection: selectedText(state), blockIds };
 }
