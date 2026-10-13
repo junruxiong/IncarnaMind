@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import type { Editor } from "@tiptap/core";
 import type { CoreBridge } from "../src/core/api";
 import {
   acceptPlainTextKeys,
@@ -101,6 +102,35 @@ async function writeMind(window: Page, title: string, notes: readonly string[]):
 const chipOf = (window: Page) => window.getByTestId("composer-selection");
 const heldOf = (window: Page) => window.getByTestId("mind-editor").locator(".held-selection");
 const selectedIn = (window: Page) => window.evaluate(() => globalThis.getSelection()?.toString());
+
+/**
+ * ProseMirror puts its selection back into the page a moment (20 ms) after the editor takes the
+ * focus; keys pressed before that are undone by it. This waits for it.
+ */
+const afterFocus = (window: Page) =>
+  window.evaluate(() => new Promise((resolve) => setTimeout(resolve, 60)));
+
+/** Selects the last words of a line with Shift+ArrowLeft, again if the editor undid it on taking the focus. */
+async function selectBack(window: Page, line: Locator, words: string): Promise<void> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await clickEndOf(window, line);
+    await afterFocus(window);
+    await window.keyboard.press("ArrowLeft");
+    for (let index = 0; index < [...words].length; index++) {
+      await window.keyboard.press("Shift+ArrowLeft");
+    }
+    if ((await selectedIn(window)) === words) break;
+  }
+  // The editor reads the page's selection a moment after it changes; a Tab before that loses it.
+  await expect.poll(() => selectedInEditor(window)).toBe(words);
+}
+
+const selectedInEditor = (window: Page) =>
+  window.evaluate(() => {
+    const editor = (document.querySelector(".ProseMirror") as unknown as { editor: Editor }).editor;
+    const { from, to } = editor.state.selection;
+    return editor.state.doc.textBetween(from, to);
+  });
 
 async function allowSending(window: Page): Promise<void> {
   const consent = window.getByTestId("consent-dialog");
@@ -238,12 +268,7 @@ for (const [language, width] of [
     const composer = window.getByTestId("composer-input");
 
     // Select with the keyboard, from the end of a line back over its last words.
-    await clickEndOf(window, lines.nth(1));
-    await window.keyboard.press("ArrowLeft");
-    for (let index = 0; index < [...words.second].length; index++) {
-      await window.keyboard.press("Shift+ArrowLeft");
-    }
-    expect(await selectedIn(window)).toBe(words.second);
+    await selectBack(window, lines.nth(1), words.second);
     await tabTo(window, composer);
     await expect(chipOf(window)).toBeVisible();
     await expect(heldOf(window)).not.toHaveCount(0);
@@ -254,11 +279,7 @@ for (const [language, width] of [
     await expect(heldOf(window)).toHaveCount(0);
 
     // Back in the Mind, the same passage stays out; a new one brings the chip back.
-    await clickEndOf(window, lines.nth(0));
-    await window.keyboard.press("ArrowLeft");
-    for (let index = 0; index < [...words.first].length; index++) {
-      await window.keyboard.press("Shift+ArrowLeft");
-    }
+    await selectBack(window, lines.nth(0), words.first);
     await tabTo(window, composer);
     await expect(chipOf(window)).toBeVisible();
 
