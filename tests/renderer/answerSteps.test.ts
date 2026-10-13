@@ -233,6 +233,17 @@ describe("an Answer's steps", () => {
     });
   });
 
+  // protects=a Question about a selection (#565) marks its Mind step as read for that selection, unless the Mind was cut; fails_when=the mark is missing, or shows on a Question about nothing or on a part read; no_claim=the words, the component's.
+  test("a Question about a selection marks the Mind step it read for it", () => {
+    const read = input({ read: READ }, { askedFrom: MIND, selection: true });
+    expect(foldedLine(read)).toEqual({ kind: "read", mind: READ, share: null, selection: true });
+    expect(foldedLine(input({ read: READ }, { askedFrom: MIND }))).not.toHaveProperty("selection");
+    const part = { ...READ, partial: true };
+    expect(
+      foldedLine(input({ read: part }, { askedFrom: MIND, selection: true })),
+    ).not.toHaveProperty("selection");
+  });
+
   // protects=when the folded line is the Mind step (no search), the timeline doesn't say it again and starts with the next step; fails_when=the Mind's row repeats under the line, or another row goes; no_claim=the line's link to the Mind is the component's, tested end to end.
   test("folded to the Mind it read, or asked from, the timeline leaves that step out", () => {
     const read = input({ read: READ, toolCalls: [connectorCall] }, { askedFrom: MIND });

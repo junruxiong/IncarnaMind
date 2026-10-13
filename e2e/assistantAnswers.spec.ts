@@ -335,7 +335,7 @@ test("with no Mind in focus, Add to note opens the ▾, and adds through it", as
   await app.close();
 });
 
-test("the keyboard reaches it all: ⌘J, Tab through an Answer's actions, ⌘⇧C, ⌘⇧A, and Esc folds, then goes back to the Mind", async () => {
+test("the keyboard reaches it all: ⌘J, Tab through an Answer's actions, ⌘⇧C, ⌘⇧A, and Esc goes back to the Mind", async () => {
   const { app, window } = await start();
   const editor = await mindWithNotes(window, "Reading notes: tides");
   const answer = await askInAssistant(window, "When do spring tides happen?");
@@ -379,15 +379,13 @@ test("the keyboard reaches it all: ⌘J, Tab through an Answer's actions, ⌘⇧
   // The focus stayed in the note.
   await expect(editor).toBeFocused();
 
-  // Esc in the assistant folds it, the focus on what shows it again; a second Esc, back to the Mind.
+  // Esc in the assistant goes back to the Mind and leaves it open.
   await window.keyboard.press("ControlOrMeta+j");
   await expect(window.getByTestId("composer-input")).toBeFocused();
   await window.keyboard.press("Escape");
   const assistant = window.getByTestId("assistant");
-  await expect(assistant).toHaveAttribute("data-folded", "true");
-  await expect(assistant.getByTestId("assistant-fold")).toBeFocused();
-  await window.keyboard.press("Escape");
   await expect(editor).toBeFocused();
+  await expect(assistant).not.toHaveAttribute("data-folded");
   // ⌘J unfolds it, into the composer.
   await window.keyboard.press("ControlOrMeta+j");
   await expect(assistant).not.toHaveAttribute("data-folded");
