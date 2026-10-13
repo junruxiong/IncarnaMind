@@ -14,7 +14,7 @@ import { core } from "../core";
 import { LIBRARY_DELETED } from "../deletedItems";
 import { errorMessage as messageOf } from "../errors";
 import { useFindSources } from "../findSources";
-import { useLanguage, useT } from "../i18n";
+import { translateNow, useLanguage, useT } from "../i18n";
 import { bridgeFrom, type LibraryBridge, type LibraryView } from "../libraryBridges";
 import {
   documentFacets,
@@ -121,7 +121,7 @@ function LibrarySheet() {
       await useAppStore.getState().refreshLibrary();
       return true;
     } catch (failure) {
-      setError(messageOf(failure));
+      setError(messageOf(failure, translateNow));
       return false;
     } finally {
       setBusy(false);

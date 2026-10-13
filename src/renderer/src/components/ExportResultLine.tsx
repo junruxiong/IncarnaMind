@@ -131,7 +131,7 @@ function ResultBody({
   const run = (act: () => Promise<void>, failed: "export.failed.open" | "export.failed.show") => {
     setError(null);
     act().catch((failure: unknown) =>
-      setError(t(failed, { reason: reasonOf(errorMessage(failure), t) })),
+      setError(t(failed, { reason: reasonOf(errorMessage(failure, t), t) })),
     );
   };
 
