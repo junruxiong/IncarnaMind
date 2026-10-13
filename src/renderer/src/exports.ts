@@ -15,6 +15,7 @@ import { useAppStore } from "./store";
 export const FORMAT_LABELS: Readonly<Record<ExportFormat, MessageKey>> = {
   docx: "export.format.docx",
   pdf: "export.format.pdf",
+  "source-pack": "export.format.source-pack",
   html: "export.format.html",
   markdown: "export.format.markdown",
 };
@@ -30,14 +31,20 @@ const DEFAULT_PREFERENCES: ExportPreferences = {
 export const exportPreferences = (): ExportPreferences =>
   useAppStore.getState().settings?.user.exportOptions ?? DEFAULT_PREFERENCES;
 
-/** What an export of `format` asks the core for: Markdown, the archive, keeps the Questions. */
+/** Whether a format has the Include Questions option: Markdown keeps them, and a source pack has none. */
+export const hasQuestionsOption = (
+  format: ExportFormat,
+): format is Exclude<ExportFormat, "markdown" | "source-pack"> =>
+  format !== "markdown" && format !== "source-pack";
+
+/** What an export of `format` asks the core for. */
 export const optionsFor = (
   format: ExportFormat,
   preferences: ExportPreferences,
 ): ExportMindOptions =>
-  format === "markdown"
-    ? { format }
-    : { format, includeQuestions: preferences[format].includeQuestions };
+  hasQuestionsOption(format)
+    ? { format, includeQuestions: preferences[format].includeQuestions }
+    : { format };
 
 /** How the last export went, said in the Mind it exported (`ExportResultLine`). */
 export type ExportResult =
@@ -55,6 +62,8 @@ export type ExportResult =
   /** Not saved yet: what a Word file can't keep, for the User to see first (#105). */
   | { mindId: string; state: "review"; format: ExportFormat; word: WordExportReport }
   | { mindId: string; state: "failed"; format: ExportFormat; message: string }
+  /** A source pack of a Mind with no Citations: nothing to make, and nothing went wrong. */
+  | { mindId: string; state: "empty"; format: ExportFormat }
   | {
       mindId: string;
       state: "not-allowed";
@@ -102,6 +111,13 @@ export async function exportMind(
     }
   };
   try {
+    if (chosen === "source-pack") {
+      const { citations } = await core.previewMindExport(mindId, { format: chosen });
+      if (citations === 0) {
+        settle({ mindId, state: "empty", format: chosen });
+        return;
+      }
+    }
     if (first && !(await first())) {
       settle(null);
       return;
