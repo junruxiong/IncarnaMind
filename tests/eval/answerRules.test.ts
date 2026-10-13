@@ -24,6 +24,7 @@ describe("A premise the Documents don't support", () => {
     "泸州老窖 2024 年没有亏损：归属于上市公司股东的净利润约 134.73 亿元[^1]。",
     "不是上调，而是下调：2024 年两次下调存款准备金率各 0.5 个百分点[^1]。",
     "实际上，世卫组织建议每日盐摄入量低于 5 克[^1]。",
+    "文档不支持“两次上调”这一说法：两次都是下调[^1]。",
   ])("is flagged: %s", (text) => {
     expect(flagsPremise(text)).toBe(true);
   });
