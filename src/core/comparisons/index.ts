@@ -129,11 +129,8 @@ export interface ComparisonsOptions {
   };
   /** The Documents among `ids` that checks may use as evidence (#80). */
   evidence(ids: readonly string[]): string[];
-  /**
-   * Saves the Mind as it is before the table goes in, as History does before
-   * every AI change. Absent until Minds keep checkpoints (#113).
-   */
-  checkpoint?(mindId: string): void;
+  /** Saves a Checkpoint of the Mind as it is before the table goes in (#113). */
+  checkpoint(mindId: string): void;
   tasks: ComparisonTasks;
   emit<E extends "comparison.filling">(event: E, payload: CoreEvents[E]): void;
   reportError(error: unknown): void;
@@ -687,7 +684,7 @@ export function createComparisons(options: ComparisonsOptions) {
           content: columns.map((column) => cellJSON(column.id)),
         })),
       });
-      options.checkpoint?.(mindId);
+      options.checkpoint(mindId);
       content.edit(mindId, (blocks) => {
         blocks.insert(placeOf(blocks, afterBlockId), [table]);
         if (blocks.doc) {
