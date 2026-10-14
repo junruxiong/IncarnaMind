@@ -5,6 +5,7 @@ import { useT } from "../i18n";
 
 /** The line for text its Answer read itself. */
 const READ: Record<ReadThirdPartySource, MessageKey> = {
+  imported: "approvals.thirdParty.read.imported",
   "web-page": "approvals.thirdParty.read.webPage",
   "checked-document": "approvals.thirdParty.read.checkedDocument",
 };

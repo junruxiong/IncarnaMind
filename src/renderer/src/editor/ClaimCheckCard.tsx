@@ -3,6 +3,7 @@ import { type CSSProperties, useCallback, useEffect, useRef, useState } from "re
 import { createPortal } from "react-dom";
 import type * as Y from "yjs";
 import { CITATION_NODE, type CitationAttributes, type ClaimCalculation } from "../../../core/api";
+import { shownDocumentName } from "../../../shared/citations";
 import { formulaText } from "../../../shared/formula";
 import { citationLocation, formatLocation, openKind } from "../../../shared/locations";
 import { addAsCitation, checkAgain } from "../checks";
@@ -174,6 +175,7 @@ export function ClaimMark({
  */
 function Working({ calculation, onOpen }: { calculation: ClaimCalculation; onOpen(): void }) {
   const t = useT();
+  const documents = useAppStore((store) => store.documents);
   const { figure } = calculation;
   const byName = new Map(figure.inputs.map((input) => [input.name.toLowerCase(), input]));
   const working = formulaText(
@@ -195,7 +197,9 @@ function Working({ calculation, onOpen }: { calculation: ClaimCalculation; onOpe
         {figure.inputs.map((input) => {
           const location = citationLocation(input.citation);
           const where = location ? formatLocation(location, t) : null;
-          const source = [input.citation.documentName, where].filter(Boolean).join(" · ");
+          const source = [shownDocumentName(input.citation, documents), where]
+            .filter(Boolean)
+            .join(" · ");
           return (
             <li key={input.name}>
               <button
@@ -280,8 +284,8 @@ function ClaimCard({
           </p>
         )}
         {evidence && (
-          <p className="citation-card-source">
-            {[evidence.documentName, where].filter(Boolean).join(" · ")}
+          <p data-testid="claim-source" className="citation-card-source">
+            {[shownDocumentName(evidence, documents), where].filter(Boolean).join(" · ")}
           </p>
         )}
       </div>
