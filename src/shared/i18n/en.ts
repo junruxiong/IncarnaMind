@@ -704,6 +704,7 @@ export const en = {
   "proposal.theirs.rejectAll": "Reject all changes from {name}",
   "proposal.unknownAuthor": "Unknown author",
   "proposal.madeBy": "{author}, {date}",
+  "proposal.why": "Why: {reason}",
   "proposal.outOfDate.why.theirs":
     "You edited this text after the change was made, so it can't be accepted. Reject it, or finish the edit yourself.",
   "proposal.announce.theirs":
@@ -1925,6 +1926,7 @@ export const en = {
 
   "answer.label": "Answer",
   "answer.status.streaming": "Writing…",
+  "mind.writing": "Writing…",
   "answer.phase.waiting-for-consent": "Waiting for your permission to send",
   "answer.phase.loading": "Loading the model…",
   "answer.phase.searching": "Searching your Documents…",

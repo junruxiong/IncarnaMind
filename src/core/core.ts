@@ -1025,8 +1025,7 @@ export function createCore(adapters: CoreAdapters): Core {
       },
       folderName: (folderId) =>
         library.folders().find((folder) => folder.id === folderId)?.name ?? null,
-      writing: (mindId, place) =>
-        events.emit("mind.writing", { mindId, after: place?.after ?? null, writing: place !== null }),
+      writing: (mindId, place) => events.emit("mind.writing", { mindId, place }),
       proposeInMind: (input) => edits.proposeInMind(input),
     },
     withdrawChanges: (changes) => {
@@ -1251,6 +1250,7 @@ export function createCore(adapters: CoreAdapters): Core {
     consent,
     localOnly: () => embedding.localOnly(),
     recheck: (attributes) => recheckKept(documents, attributes),
+    writing: (mindId, place) => events.emit("mind.writing", { mindId, place }),
     now: () => adapters.now?.() ?? new Date(),
   });
 

@@ -2673,6 +2673,10 @@
     color: var(--color-ink-meta);
     user-select: none;
   }
+  /* The paragraph the assistant is writing anew, until its change is in (#202). */
+  .mind-rewriting {
+    color: var(--color-ink-meta);
+  }
   /* Being written: a pulsing accent dot. Waiting for approval: an attention dot. */
   .answer-writing {
     display: inline-flex;
@@ -3348,8 +3352,7 @@
     position: fixed;
     z-index: 30;
     display: flex;
-    align-items: center;
-    gap: 6px;
+    flex-direction: column;
     max-width: min(420px, calc(100vw - 16px));
     padding: 2px 8px;
     border-radius: 6px;
@@ -3360,6 +3363,18 @@
     line-height: 20px;
     color: var(--color-ink-meta);
     white-space: nowrap;
+  }
+  .change-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  /* Why the assistant made the change (#202), under the bar while the cursor is in it. */
+  .change-bar-why {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--color-ink-secondary);
   }
   .change-bar-position {
     min-width: 0;

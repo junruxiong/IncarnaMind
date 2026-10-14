@@ -14,7 +14,6 @@ import { createSourceFolder, waitForProcessing, writeSourceFile } from "../helpe
 import { connectToMind, type MindClient } from "../helpers/mindClient";
 import { heading, note, shownWithChanges, writeMind } from "../helpers/minds";
 import {
-  type GenerateCall,
   type ModelCall,
   type ScriptedReply,
   scriptedModel,
@@ -34,16 +33,16 @@ import { buildPdf } from "../helpers/pdf";
 /** A model that calls one Minds' Tool first, then replies with `reply`; edits drop "very" and "really". */
 function toolModel(call: { tool: string; input: Record<string, unknown> } | null, reply: string) {
   return scriptedModel(
-    ({ results }: ModelCall): ScriptedReply =>
-      call && results.length === 0 ? { calls: [call] } : { text: reply },
-    { generate: shortened },
+    (model: ModelCall): ScriptedReply =>
+      shortened(model) ??
+      (call && model.results.length === 0 ? { calls: [call] } : { text: reply }),
   );
 }
 
-/** Edit with AI's reply: the passage with its "very"s and "really"s taken out. */
-function shortened({ prompt }: GenerateCall) {
-  const passage = /<passage>\n([\s\S]*?)\n<\/passage>/.exec(prompt)?.[1] ?? "";
-  return { text: passage.replace(/\b(?:very|really) /g, "") };
+/** Edit with AI's reply, to the request edit_mind makes: the passage with its "very"s and "really"s taken out. */
+function shortened({ prompt }: ModelCall): ScriptedReply | null {
+  const passage = /<passage>\n([\s\S]*?)\n<\/passage>/.exec(prompt)?.[1];
+  return passage === undefined ? null : { text: passage.replace(/\b(?:very|really) /g, "") };
 }
 
 async function setUp(model: MockLanguageModelV4) {
@@ -294,16 +293,16 @@ describe("Written again", { timeout: 30_000 }, () => {
   // protects=Regenerate on an Answer that changed Minds takes back what still waits from it first, so nothing is proposed twice and a Mind it made, still empty of the User's words, goes; fails_when=the changes double, or the first new Mind stays beside the second; no_claim=what the User has accepted, which stays.
   test("regenerating takes back its changes still waiting, and the Mind it made", async () => {
     const model = scriptedModel(
-      ({ results }): ScriptedReply =>
-        results.length === 0
+      (call): ScriptedReply =>
+        shortened(call) ??
+        (call.results.length === 0
           ? {
               calls: [
                 { tool: "edit_mind", input: { instruction: "Shorten it" } },
                 { tool: "create_mind", input: { title: "Notes", content: "One line." } },
               ],
             }
-          : { text: "Done." },
-      { generate: shortened },
+          : { text: "Done." }),
     );
     const { core, mind, client } = await setUp(model);
     const first = await ask(core, { text: "Shorten it and make notes", mindId: mind.id });
@@ -434,10 +433,10 @@ describe("New Blocks come in as the model writes them", { timeout: 30_000 }, () 
     );
   }
 
-  /** Resolves with each "mind.writing" event, in order, as they come. */
+  /** Each "mind.writing" event, in order, as they come: whether it is writing. */
   const writingEvents = (core: Core) => {
-    const seen: { after: string | null; writing: boolean }[] = [];
-    core.on("mind.writing", ({ after, writing }) => seen.push({ after, writing }));
+    const seen: { writing: boolean }[] = [];
+    core.on("mind.writing", ({ place }) => seen.push({ writing: place !== null }));
     return seen;
   };
 

@@ -30,6 +30,9 @@ import {
  *
  * A change whose words the User edits goes out of date (#94): it can't be
  * accepted, and Regenerate makes it again from their words.
+ *
+ * Changes stream in paragraph by paragraph (#202), with "Writing…" on the
+ * paragraph being written, and the change's bar says why it was made.
  */
 
 const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
@@ -308,6 +311,8 @@ test("⌘J with text selected says what to change in the composer, in Chinese; �
   const changeBar = window.getByTestId("change-bar");
   await expect(changeBar).toContainText("第 1 处修订，共 1 处");
   await expect(changeBar.getByTestId("change-accept")).toHaveText("接受");
+  // The cursor is in it: why it was made, under its bar.
+  await expect(changeBar.getByTestId("change-bar-why")).toHaveText("原因：已按你的要求修改。");
   await expect(window.getByTestId("proposal-spoken")).toContainText(
     "建议的修订：将“规律”改为“准时”",
   );
@@ -346,6 +351,68 @@ test("⌘J with text selected says what to change in the composer, in Chinese; �
   await expect(bar).toHaveCount(0);
   await pointAndClick(window, problem.getByTestId("edit-problem-close"));
   await expect(problem).toHaveCount(0);
+});
+
+test("⌘J's change streams in paragraph by paragraph with Writing… on the next; the bar says why; Stop keeps what is finished (#202)", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setWindowSize(app, window, 1280, 820);
+  await newMind(window);
+  const editor = window.getByTestId("mind-editor");
+  await editor.click();
+  for (const line of [
+    "The tides here are very strong and really regular.",
+    "The moon is really bright over the harbour tonight.",
+    "Harbours are very busy in the spring and really quiet in winter.",
+  ]) {
+    await window.keyboard.type(line);
+    await window.keyboard.press("Enter");
+  }
+  const paragraphs = editor.locator(":scope > p");
+  const bar = window.getByTestId("proposals-bar");
+  const writing = editor.getByTestId("mind-writing");
+
+  const ask = async (instruction: string) => {
+    await editor.click();
+    await window.keyboard.press("ControlOrMeta+a");
+    await window.keyboard.press("ControlOrMeta+j");
+    await expect(window.getByTestId("composer-input")).toBeFocused();
+    await window.keyboard.type(instruction);
+    await window.keyboard.press("Enter");
+  };
+
+  // The first paragraph is a change before the last has come; Writing… is on the one being written.
+  await ask("Shorten this slowly");
+  await expect(paragraphs.first().locator("del.proposal-delete")).toHaveText(["very ", "really "]);
+  await expect(writing).toHaveText("Writing…");
+  await expect(editor.getByTestId("mind-rewriting")).toHaveCount(1);
+  await expect(paragraphs.nth(2).locator("del.proposal-delete")).toHaveCount(0);
+  await expect(window.getByTestId("edit-pending")).toBeVisible();
+  await screenshot(window, "edit-streaming-en");
+
+  // Once done, Writing… goes, every change is in, and the cursor's change says why on its bar.
+  // Asked "slowly", the scripted model takes a few seconds over the rest.
+  await expect(writing).toHaveCount(0, { timeout: 30_000 });
+  await expect(bar.getByTestId("proposals-count")).toHaveText("5 changes from the assistant");
+  const changeBar = window.getByTestId("change-bar");
+  await expect(changeBar.getByTestId("change-bar-why")).toHaveText("Why: Changed as you asked.");
+  await expect(changeBar).toHaveAttribute("title", "Why: Changed as you asked.");
+  await screenshot(window, "edit-reason-en");
+  await pointAndClick(window, bar.getByTestId("proposals-reject-all"));
+  await expect(bar).toHaveCount(0);
+
+  // Stop halfway keeps the finished paragraph's changes; the rest stays as it was.
+  await ask("Shorten this slowly");
+  await expect(paragraphs.first().locator("del.proposal-delete")).toHaveText(["very ", "really "]);
+  await pointAndClick(window, window.getByTestId("edit-stop"));
+  await expect(writing).toHaveCount(0);
+  await expect(window.getByTestId("edit-pending")).toHaveCount(0);
+  await expect(paragraphs.first().locator("del.proposal-delete")).toHaveText(["very ", "really "]);
+  await expect(paragraphs.nth(2)).toHaveText(
+    "Harbours are very busy in the spring and really quiet in winter.",
+  );
+  await expect(paragraphs.nth(2).locator("del.proposal-delete")).toHaveCount(0);
 });
 
 test("a double click accepts a change once; a change whose words the User edits is out of date until Regenerate makes it again", async () => {

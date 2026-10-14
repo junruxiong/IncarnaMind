@@ -372,7 +372,7 @@ function MindEditorView({
         }),
         QuestionFold.configure({ mindId }),
         ProposalReview.configure({ translate: translateNow }),
-        WritingPlace.configure({ label: () => translateNow("answer.status.streaming") }),
+        WritingPlace.configure({ label: () => translateNow("mind.writing") }),
         Suggestions.configure({
           request: (request) => askForSuggestion(mindId, doc, request),
           cancel: (requestId) =>
@@ -553,11 +553,11 @@ function MindEditorView({
     };
   }, [asksHere, editor, doc, mindId]);
 
-  // The assistant writing new Blocks into this Mind as they come (#202): "Writing…" where the next goes.
+  // The assistant writing changes into this Mind as they come (#202): "Writing…" where the next goes.
   useEffect(() => {
     setWritingPlace(editor, writingPlaceOf(mindId));
-    return onMindWriting(({ mindId: changed, after, writing }) => {
-      if (changed === mindId) setWritingPlace(editor, writing ? { after } : null);
+    return onMindWriting(({ mindId: changed, place }) => {
+      if (changed === mindId) setWritingPlace(editor, place);
     });
   }, [editor, mindId]);
 

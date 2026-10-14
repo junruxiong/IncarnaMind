@@ -69,7 +69,9 @@
  * does so, or "drop the citations" (去掉引用) leaves their markers out.
  * "Restructure" (重新组织) cuts a plain last paragraph and puts the last
  * section, from its heading (a "#" paragraph) on, first, keeping each
- * paragraph's mark, as a model restructuring a whole Mind does (#703).
+ * paragraph's mark, as a model restructuring a whole Mind does (#703). The
+ * new text streams in word by word, slowly when the instruction says
+ * "slowly", then a line saying why (#202).
  *
  * Make this a Skill (`fakeSkillDraft`): a draft whose "when to use it" and first
  * step quote the Mind's last Question, so a test sees that the Mind was read.
@@ -108,6 +110,8 @@ const WORD_DELAY_MS = 60;
 /** For a Question asked "slowly": the wait before each step, and between two words of the Answer. */
 const SLOW_STEP_MS = 1200;
 const SLOW_WORD_MS = 250;
+/** Between two words of Edit with AI's new text: a passage takes a moment, not seconds. */
+const EDIT_WORD_MS = 10;
 const SLOWLY = /\bslowly\b/i;
 
 /** What the scripted model reasons before it searches: a line that quotes the Question. */
@@ -869,9 +873,20 @@ function restructured(passage: string): string {
   return [...paragraphs.slice(last), ...paragraphs.slice(0, last)].join("\n\n");
 }
 
-/** The scripted Edit with AI (see the top of this file): the passage's new text, or an explanation. */
-function fakeEdit(options: GenerateOptions): string | null {
-  const request = options.prompt
+/** Why the scripted Edit with AI changed a passage, by its action, in English and in Chinese. */
+const EDIT_REASONS: Readonly<Record<string, readonly [string, string]>> = {
+  shorten: ["Shorter: the filler words are gone.", "更简洁：去掉了多余的词。"],
+  improve: ["Each sentence starts with a capital.", "每句话的开头都大写了。"],
+  translate: ["Translated.", "已翻译。"],
+  instruction: ["Changed as you asked.", "已按你的要求修改。"],
+};
+
+/**
+ * The scripted Edit with AI (see the top of this file): the passage's new
+ * text and why, or an explanation; `slow` when the instruction says "slowly".
+ */
+function fakeEdit(prompt: Prompt): { text: string; slow: boolean } | null {
+  const request = prompt
     .filter((message) => message.role === "user")
     .map((message) =>
       typeof message.content === "string"
@@ -883,7 +898,16 @@ function fakeEdit(options: GenerateOptions): string | null {
   if (!task) return null;
   const passage = /<passage>\n([\s\S]*?)\n<\/passage>/.exec(request)?.[1] ?? "";
   const asked = (task[2] ?? "").replace(/^Do what the User asks: /, "");
-  switch (task[1]) {
+  const action = task[1] ?? "";
+  const text = editedText(action, passage, asked.replace(/\s+slowly\.?$/i, ""));
+  // In the passage's language, as the instructions ask.
+  const why = EDIT_REASONS[action]?.[/\p{Script=Han}/u.test(passage) ? 1 : 0];
+  return { text: why ? `${text}\n\n<why>${why}</why>` : text, slow: SLOWLY.test(asked) };
+}
+
+/** The scripted Edit with AI's new text for `passage`, or its explanation. */
+function editedText(action: string, passage: string, asked: string): string {
+  switch (action) {
     case "shorten":
       return passage.replace(FILLER, "");
     case "improve":
@@ -1052,6 +1076,19 @@ function replyParts(prompt: Prompt, tools: readonly OfferedTool[]): StreamPart[]
   return parts;
 }
 
+/** Edit with AI's new text, streamed in word by word. */
+function editParts(text: string): StreamPart[] {
+  return [
+    { type: "stream-start", warnings: [] },
+    { type: "text-start", id: "edit" },
+    ...text
+      .split(/(?<=\s)/)
+      .map((word): StreamPart => ({ type: "text-delta", id: "edit", delta: word })),
+    { type: "text-end", id: "edit" },
+    { type: "finish", finishReason: { unified: "stop", raw: undefined }, usage: USAGE },
+  ];
+}
+
 export const createFakeChatModel: ChatModelFactory = (spec) =>
   new MockLanguageModelV4({
     provider: "incarnamind-fake",
@@ -1065,7 +1102,10 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
           text:
             options.responseFormat?.type === "json"
               ? fakeStructuredOutput(options)
-              : (fakeClaims(options) ?? fakeSkillDraft(options) ?? fakeEdit(options) ?? "OK"),
+              : (fakeClaims(options) ??
+                fakeSkillDraft(options) ??
+                fakeEdit(options.prompt)?.text ??
+                "OK"),
         },
       ],
       finishReason: { unified: "stop", raw: undefined },
@@ -1096,10 +1136,13 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
         });
       }
       const search = tools?.find((each) => each.type === "provider");
+      const edit = search ? null : fakeEdit(prompt);
       const parts = search
         ? searchParts(search.name, lastQuestion(prompt))
-        : replyParts(prompt, tools ?? []);
-      const slow = !search && SLOWLY.test(lastQuestion(prompt));
+        : edit
+          ? editParts(edit.text)
+          : replyParts(prompt, tools ?? []);
+      const slow = edit ? edit.slow : !search && SLOWLY.test(lastQuestion(prompt));
       const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
       const stream = new ReadableStream<StreamPart>({
         async pull(controller) {
@@ -1110,7 +1153,7 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
           }
           if (slow && part.type === "stream-start") await wait(SLOW_STEP_MS);
           if (part.type === "text-delta" || part.type === "tool-input-delta") {
-            await wait(slow ? SLOW_WORD_MS : WORD_DELAY_MS);
+            await wait(slow ? SLOW_WORD_MS : edit ? EDIT_WORD_MS : WORD_DELAY_MS);
           }
           if (slow && part.type === "reasoning-delta") await wait(WORD_DELAY_MS);
           if (abortSignal?.aborted) {
