@@ -3736,6 +3736,11 @@ export interface ClaimCalculation {
   figure: CalculatedFigure;
   /** The number as the sentence writes it: "1.1x". */
   stated: string;
+  /**
+   * Whether they agree. One that doesn't contradicts the sentence; one that
+   * does settles only that number, and a Passage may still contradict the rest.
+   */
+  agrees: boolean;
 }
 
 /** What one claim check found: the claim-check function's result (`checkClaim`). */

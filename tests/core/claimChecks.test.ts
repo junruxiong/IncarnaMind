@@ -472,6 +472,52 @@ describe("A figure the Documents don't state, worked out (#707)", () => {
     });
   });
 
+  test("a figure that agrees settles only its number: a Passage that contradicts the rest of the sentence still does", async () => {
+    const claim = "Revenue grew 11.6% in 2025, to £141.9m.";
+    const plans = {
+      [claim]: {
+        verdict: "contradicted",
+        quote: "Revenue was £131.9m in 2025",
+        says: "The update says revenue was £131.9m in 2025, not £141.9m.",
+        calculation: { ...GROWTH, stated: "11.6%" },
+      },
+    } as const;
+    const { core } = await calculatingCheck(checkingModel(plans));
+
+    expect(await core.checkClaim({ claim })).toMatchObject({
+      verdict: "contradicted",
+      evidence: { quote: "Revenue was £131.9m in 2025", check: "found" },
+      says: "The update says revenue was £131.9m in 2025, not £141.9m.",
+      calculation: { stated: "11.6%", agrees: true, figure: { shown: "11.6%" } },
+    });
+  });
+
+  test.each([
+    ["Net debt to EBITDA was about 1.4x.", "about 1.4x", "supported"],
+    ["Net debt to EBITDA was 1.4x.", "1.4x", "contradicted"],
+  ])(
+    "an approximate number is a place looser: “%s” against 1.31x",
+    async (claim, stated, verdict) => {
+      const plans = {
+        [claim]: { verdict: "unsupported", calculation: { ...RATIO, stated } },
+      } as const;
+      const { core } = await calculatingCheck(checkingModel(plans));
+      expect(await core.checkClaim({ claim })).toMatchObject({ verdict });
+    },
+  );
+
+  test("a bare number isn't compared with a ratio: “1.31” could be a share or a multiple", async () => {
+    const claim = "Net debt to EBITDA was 1.31.";
+    const plans = {
+      [claim]: { verdict: "unsupported", calculation: { ...RATIO, stated: "1.31" } },
+    } as const;
+    const { core } = await calculatingCheck(checkingModel(plans));
+    expect(await core.checkClaim({ claim })).toMatchObject({
+      verdict: "unsupported",
+      calculation: null,
+    });
+  });
+
   test("a figure for a number the sentence doesn't have decides nothing: the model's own verdict stands", async () => {
     const claim = "Net debt to EBITDA fell to 1.1x.";
     const plans = {

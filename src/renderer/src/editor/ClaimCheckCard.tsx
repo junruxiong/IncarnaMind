@@ -172,15 +172,7 @@ export function ClaimMark({
  * what the sentence says when they differ, and each input's Citation, which
  * opens its Document at the quote. "Calculated", never "verified" (ADR-0021).
  */
-function Working({
-  calculation,
-  contradicted,
-  onOpen,
-}: {
-  calculation: ClaimCalculation;
-  contradicted: boolean;
-  onOpen(): void;
-}) {
+function Working({ calculation, onOpen }: { calculation: ClaimCalculation; onOpen(): void }) {
   const t = useT();
   const { figure } = calculation;
   const byName = new Map(figure.inputs.map((input) => [input.name.toLowerCase(), input]));
@@ -194,7 +186,7 @@ function Working({
       <p data-testid="claim-figure" className="claim-card-figure">
         {working} = {figure.shown}
       </p>
-      {contradicted && (
+      {!calculation.agrees && (
         <p data-testid="claim-stated" className="claim-card-says">
           {t("claim.calculated.stated", { stated: calculation.stated })}
         </p>
@@ -256,7 +248,9 @@ function ClaimCard({
   const state = shown.state;
   const decided = state === "supported" || state === "contradicted";
   const calculation = decided ? check.calculation : null;
-  const evidence = decided && !calculation ? check.evidence : null;
+  // A figure that agrees can sit beside a Passage that contradicts the rest of the sentence.
+  const fromPassage = !calculation || (state === "contradicted" && calculation.agrees);
+  const evidence = decided && fromPassage ? check.evidence : null;
   const location = evidence ? citationLocation(evidence) : null;
   const where = location ? formatLocation(location, t) : null;
   const folderName = useAppStore((store) =>
@@ -291,13 +285,6 @@ function ClaimCard({
           </p>
         )}
       </div>
-      {calculation && (
-        <Working
-          calculation={calculation}
-          contradicted={state === "contradicted"}
-          onOpen={onOpen}
-        />
-      )}
       {evidence?.quote && (
         <figure className="citation-card-quote">
           <figcaption className="sr-only">{t("citation.quote")}</figcaption>
@@ -308,6 +295,7 @@ function ClaimCard({
           </blockquote>
         </figure>
       )}
+      {calculation && <Working calculation={calculation} onOpen={onOpen} />}
       {state === "unsupported" && (
         <p data-testid="claim-nothing" className="citation-card-note">
           {searchedFolder

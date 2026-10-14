@@ -922,6 +922,10 @@ function checkReply(prompt: Prompt, tools: readonly string[]): Reply {
       },
     };
   }
+  // The figure worked out is the only number the sentence has: the rest of it is supported.
+  if (multiple && tools.includes("calculate")) {
+    return { text: "Verdict: supported\nThe Document's figures give it [^1]." };
+  }
   return {
     text: contradicted
       ? `Verdict: contradicted\nThe Document says: ${best.line} [^1]`

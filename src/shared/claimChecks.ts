@@ -76,7 +76,11 @@ function calculationOf(value: unknown): ClaimCalculation | null {
   const { figure } = value;
   if (stated === null || !Array.isArray(figure.inputs) || typeof figure.shown !== "string")
     return null;
-  return { figure: figure as unknown as CalculatedFigure, stated };
+  return {
+    figure: figure as unknown as CalculatedFigure,
+    stated,
+    agrees: value.agrees === true,
+  };
 }
 
 function scopeOf(value: unknown): ClaimCheckScope {

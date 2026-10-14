@@ -16,7 +16,9 @@
  * A model measured to use `calculate` (ADR-0021) is offered it too, for a
  * figure the sentence states that no Passage does but their numbers give
  * (#707). It names the sentence's number as `stated`; IncarnaMind works the
- * figure out and compares, and that decides the verdict, not the model.
+ * figure out and compares, not the model. A figure that disagrees contradicts
+ * the sentence; one that agrees settles that number only, and the model's
+ * verdict on the rest of the sentence still stands.
  */
 import { generateText } from "ai";
 import type { FigureContext } from "../../../shared/figures";
@@ -213,47 +215,65 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
         scoped.pageTexts(citation.documentId, citation.contentHash, null, null),
       ),
     );
-    if (worked) {
+    // A figure that disagrees contradicts the sentence. One that agrees settles only that
+    // number: the model's verdict still stands on the rest of the sentence.
+    if (worked && !worked.calculation.agrees) {
       return {
-        verdict: worked.agrees ? "supported" : "contradicted",
+        verdict: "contradicted",
         evidence: worked.evidence,
         says: null,
         calculation: worked.calculation,
         ...facts(),
       };
     }
-    if (!finished || reply.trim() === "") return notChecked("empty");
+    const byCalculation: ClaimCheckResult | null = worked && {
+      verdict: "supported",
+      evidence: worked.evidence,
+      says: null,
+      calculation: worked.calculation,
+      ...facts(),
+    };
+    if (!finished || reply.trim() === "") return byCalculation ?? notChecked("empty");
     const verdict = readVerdict(reply);
-    if (!verdict) return notChecked(readsAsRefusal(reply) ? "refused" : "malformed");
-    if (verdict.verdict === "unsupported") {
-      return { verdict: "unsupported", evidence: null, says: null, calculation: null, ...facts() };
+    if (!verdict) {
+      return byCalculation ?? notChecked(readsAsRefusal(reply) ? "refused" : "malformed");
     }
+    if (byCalculation && verdict.verdict !== "contradicted") return byCalculation;
+    const unsupported: ClaimCheckResult = {
+      verdict: "unsupported",
+      evidence: null,
+      says: null,
+      calculation: null,
+      ...facts(),
+    };
+    if (verdict.verdict === "unsupported") return unsupported;
     session.check();
     const evidence =
       decidingCitation(session.finalCitation) ??
       (await askForEvidence(request, verdict, session, signal));
     if (signal.aborted) return notChecked("stopped");
-    if (!evidence) return notChecked("no-evidence");
+    if (!evidence) return byCalculation ?? notChecked("no-evidence");
     if (verdict.verdict === "contradicted") {
       const judged = await confirmContradiction(request, evidence, session, signal);
       if (signal.aborted) return notChecked("stopped");
-      if (judged === "neither") {
-        return {
-          verdict: "unsupported",
-          evidence: null,
-          says: null,
-          calculation: null,
-          ...facts(),
-        };
+      if (judged === "neither") return byCalculation ?? unsupported;
+      if (judged === "same") {
+        return (
+          byCalculation ?? {
+            verdict: "supported",
+            evidence,
+            says: null,
+            calculation: null,
+            ...facts(),
+          }
+        );
       }
-      if (judged === "same")
-        return { verdict: "supported", evidence, says: null, calculation: null, ...facts() };
     }
     return {
       verdict: verdict.verdict,
       evidence,
       says: verdict.says,
-      calculation: null,
+      calculation: worked?.calculation ?? null,
       ...facts(),
     };
   };
@@ -270,7 +290,7 @@ function calculated(
   figures: CalculationSession,
   stated: ReadonlyMap<number, string>,
   contextOf: (citation: Citation) => FigureContext,
-): { agrees: boolean; evidence: Citation; calculation: ClaimCalculation } | null {
+): { evidence: Citation; calculation: ClaimCalculation } | null {
   figures.check();
   for (const [marker, named] of stated) {
     const figure = figures.figure(marker);
@@ -281,7 +301,7 @@ function calculated(
     if (figure.inputs.some((input) => input.citation.check !== "found")) continue;
     const agrees = agreesWith(number, figure);
     if (agrees === null) continue;
-    return { agrees, evidence: first, calculation: { figure, stated: number.chars } };
+    return { evidence: first, calculation: { figure, stated: number.chars, agrees } };
   }
   return null;
 }
