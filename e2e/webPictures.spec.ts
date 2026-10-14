@@ -121,6 +121,7 @@ test("the article's pictures show in place in the reader, and one not saved is a
   await expect(boxes.filter({ hasText: "thumbs up" })).toContainText("Not saved with the page");
   await expect(boxes.filter({ hasText: "A map from the office network" })).toBeVisible();
   await expect(window.getByTestId("viewer-web-left-out")).toHaveCount(0);
+  await pictures.nth(0).scrollIntoViewIfNeeded();
   if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, "web-pictures-en.png") });
 
   await setLanguage(window, "zh-CN");
