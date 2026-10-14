@@ -62,6 +62,6 @@ export const useKeyRefusals = create<KeyRefusalsState>()((set) => ({
 export function useKeySavedSince(providerId: string | null, at: string | null): boolean {
   return useKeyRefusals((state) => {
     const saved = providerId ? state.savedAt[providerId] : undefined;
-    return saved !== undefined && at !== null && saved > at;
+    return saved !== undefined && at !== null && Date.parse(saved) > Date.parse(at);
   });
 }

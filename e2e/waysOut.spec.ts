@@ -98,7 +98,7 @@ test("a refused key: Check the key opens its field with the refusal, and once a 
   await expect(key).toBeFocused();
   await expect(key).toBeInViewport();
   await expect(form.getByTestId("provider-key-refused")).toHaveText(
-    /^Anthropic refused this key on .+\.$/,
+    /^Anthropic refused this key \(Today, .+\)\.$/,
   );
   await motionSettled(window);
   await screenshot(window, "key-refused-settings");

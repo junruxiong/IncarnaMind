@@ -1451,7 +1451,7 @@ export const en = {
   "providers.form.apiKey": "API key",
   "providers.form.apiKeyOptional": "API key (optional)",
   "providers.form.apiKeySaved": "A key is saved. Leave this empty to keep it.",
-  "providers.form.keyRefused": "{provider} refused this key on {when}.",
+  "providers.form.keyRefused": "{provider} refused this key ({when}).",
   "providers.form.keyRefusedNow": "{provider} refused this key.",
   "providers.form.region": "Region",
   "providers.region.cn": "China",
