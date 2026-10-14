@@ -2319,7 +2319,7 @@ export function createDocuments(options: DocumentsOptions) {
         // A saved web page's picture: one of the files its versions show, and nothing else (#756).
         const hash = /^pictures\/([0-9a-f]{64})\.(?:png|jpg|gif|webp|avif)$/.exec(path)?.[1];
         if (!hash || !showsPicture(db, row.id, hash)) {
-          throw new NotFoundError("The web page shows no such picture.");
+          throw new NotFoundError({ key: "error.document.noSuchPicture" });
         }
       } else if (row.kind !== "markdown") {
         throw new NotFoundError("Only a Markdown Document shows pictures from beside it.");
