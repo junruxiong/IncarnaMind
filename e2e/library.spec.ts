@@ -281,7 +281,9 @@ test("Organize suggests a Folder and Tags, keeps corrections and survives reopen
 test("onboarding offers starter folders, and Organize with no model chosen opens its settings, in Chinese", async () => {
   const { app, window } = await launchApp(dataDir, { examples: true });
   try {
-    await window.getByTestId("onboarding-groups").click();
+    await window.keyboard.press("ControlOrMeta+k");
+    await window.keyboard.type("Starter folders");
+    await window.keyboard.press("Enter");
     await expect(window.getByTestId("library")).toBeVisible();
     await expect(window.getByTestId("chat-setup")).not.toBeVisible();
     await window.evaluate(async () =>
