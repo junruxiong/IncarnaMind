@@ -7,24 +7,29 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
-import type { DocumentTextMatch, MindTextMatch } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
+import { assistantHandle } from "../commands/handles";
 import { keysHere, pressesShortcut } from "../commands/keymap";
-import { commands } from "../commands/registry";
+import { commands, labelOf } from "../commands/registry";
+import { conversationById, conversationLabel, useConversations } from "../conversations";
 import { core } from "../core";
 import { errorMessage } from "../errors";
-import { translateNow, useT } from "../i18n";
+import { findable } from "../finding";
+import "../findingKinds";
+import { useLanguage, useT } from "../i18n";
+import { prepareName } from "../matcher";
 import { enter, exit } from "../motion";
 import {
   actionGroup,
+  askGroup,
+  conversationTextGroup,
   documentTextGroup,
-  type NamedThings,
+  findings,
   nameGroups,
   noteGroup,
-  PALETTE_CONTEXT,
   type PaletteGroup,
-  type PaletteGroupId,
   type PaletteItem,
   readQuery,
   recentGroup,
@@ -33,31 +38,74 @@ import {
   usePalette,
 } from "../palette";
 import { useAppStore } from "../store";
-import { DocumentLineIcon, FolderLineIcon, MindLineIcon, SearchLineIcon } from "./lineIcons";
+import {
+  ConversationLineIcon,
+  DocumentLineIcon,
+  MindLineIcon,
+  SearchLineIcon,
+  SparkLineIcon,
+} from "./lineIcons";
 import { Marked } from "./Marked";
-import { TagDot } from "./TagColour";
 
 /** How long typing pauses before the words inside are searched for. */
 const WORDS_DELAY_MS = 120;
 
-const GROUP_TITLES: Record<PaletteGroupId, MessageKey> = {
+const OWN_TITLES: Record<string, MessageKey> = {
   recent: "palette.group.recent",
-  minds: "palette.group.minds",
-  documents: "palette.group.documents",
-  foldersAndTags: "palette.group.foldersAndTags",
   actions: "palette.group.actions",
   notes: "palette.group.notes",
   documentText: "palette.group.documentText",
+  conversationText: "palette.group.conversationText",
 };
 
-const NO_GROUPS: NamedThings["folders"] = [];
-const NO_ASSIGNMENTS: NamedThings["assignments"] = [];
-
-/** What the core found for one query; `failed` says why it couldn't search. */
+/** What the core found for one query; `failed` holds why it couldn't search. */
 interface Found<T> {
   query: string;
   items: readonly T[];
-  failed?: string;
+  failed?: { error: unknown };
+}
+
+/** Asks the core once typing pauses; each answer stays until the next arrives. */
+function useFound<T>(
+  searching: boolean,
+  text: string,
+  search: (text: string) => Promise<readonly T[]>,
+): Found<T> | null {
+  const [found, setFound] = useState<Found<T> | null>(null);
+  const latest = useRef(search);
+  latest.current = search;
+  useEffect(() => {
+    if (!searching) return;
+    let current = true;
+    const timer = setTimeout(() => {
+      latest.current(text).then(
+        (items) => current && setFound({ query: text, items }),
+        (error: unknown) => current && setFound({ query: text, items: [], failed: { error } }),
+      );
+    }, WORDS_DELAY_MS);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  }, [searching, text]);
+  return searching ? found : null;
+}
+
+/** Folds every name in idle time once ⌘K opens, so the first key typed waits for none. */
+function usePreparedNames(names: () => readonly string[]): void {
+  const latest = useRef(names);
+  latest.current = names;
+  useEffect(() => {
+    const all = latest.current();
+    let at = 0;
+    let handle = 0;
+    const step = (deadline: IdleDeadline) => {
+      while (at < all.length && deadline.timeRemaining() > 1) prepareName(all[at++] ?? "");
+      if (at < all.length) handle = requestIdleCallback(step);
+    };
+    handle = requestIdleCallback(step);
+    return () => cancelIdleCallback(handle);
+  }, []);
 }
 
 /**
@@ -72,20 +120,27 @@ export function CommandPalette() {
 
 function Palette() {
   const t = useT();
+  const language = useLanguage();
   const id = useId();
   const dialog = useRef<HTMLDialogElement>(null);
   const field = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   const [activeKey, setActiveKey] = useState<string | null>(null);
-  const [notes, setNotes] = useState<Found<MindTextMatch> | null>(null);
-  const [passages, setPassages] = useState<Found<DocumentTextMatch> | null>(null);
-
+  const context = usePalette((state) => state.context);
   const minds = useAppStore((state) => state.minds);
   const documents = useAppStore((state) => state.documents);
-  const tags = useAppStore((state) => state.tags);
-  const folders = useAppStore((state) => state.library?.groups ?? NO_GROUPS);
-  const assignments = useAppStore((state) => state.library?.assignments ?? NO_ASSIGNMENTS);
+  const openConversation = useConversations((state) =>
+    state.openId ? conversationById(state.openId) : undefined,
+  );
+  const version = useSyncExternalStore(findable.subscribe, findable.version);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `version` is when the objects changed.
+  const found = useMemo(() => findings(t), [version, t]);
+
+  usePreparedNames(() => [
+    ...found.kinds.flatMap(({ objects }) => objects.map((object) => object.name)),
+    ...commands.list(context).map((command) => labelOf(command, context, t)),
+  ]);
 
   useLayoutEffect(() => {
     const element = dialog.current;
@@ -97,51 +152,36 @@ function Palette() {
 
   const { text, words, actionsOnly } = useMemo(() => readQuery(query), [query]);
   const searching = !actionsOnly && searchesWords(text);
-  // Asked for once typing pauses; each answer stays until the next arrives.
-  useEffect(() => {
-    if (!searching) return;
-    let current = true;
-    const timer = setTimeout(() => {
-      core.searchMinds(text).then(
-        (items) => current && setNotes({ query: text, items }),
-        (error: unknown) =>
-          current &&
-          setNotes({ query: text, items: [], failed: errorMessage(error, translateNow) }),
-      );
-      core.searchDocumentText(text).then(
-        (items) => current && setPassages({ query: text, items }),
-        (error: unknown) =>
-          current &&
-          setPassages({ query: text, items: [], failed: errorMessage(error, translateNow) }),
-      );
-    }, WORDS_DELAY_MS);
-    return () => {
-      current = false;
-      clearTimeout(timer);
-    };
-  }, [searching, text]);
+  const notes = useFound(searching, text, core.searchMinds);
+  const passages = useFound(searching, text, core.searchDocumentText);
+  const said = useFound(searching, text, core.searchConversations);
 
-  const things = useMemo(
-    () => ({ minds, documents, tags, folders, assignments }),
-    [minds, documents, tags, folders, assignments],
-  );
   const groups: PaletteGroup[] = useMemo(() => {
-    if (actionsOnly) return actionGroup(words, PALETTE_CONTEXT, t);
+    if (actionsOnly) return actionGroup(words, context, language, found.names);
     if (words.length === 0) {
-      return [...recentGroup(things, t), ...actionGroup([], PALETTE_CONTEXT, t)];
+      return [...recentGroup(minds, found), ...actionGroup([], context, language, found.names)];
     }
     return [
-      ...nameGroups(words, things, t),
-      ...actionGroup(words, PALETTE_CONTEXT, t),
-      ...(searching && notes ? noteGroup(notes.items, minds, t) : []),
-      ...(searching && passages ? documentTextGroup(passages.items, documents, t) : []),
+      ...nameGroups(words, found),
+      ...actionGroup(words, context, language, found.names),
+      ...(notes ? noteGroup(notes.items, minds, t) : []),
+      ...(passages ? documentTextGroup(passages.items, documents, t) : []),
+      ...(said ? conversationTextGroup(said.items) : []),
     ];
-  }, [actionsOnly, words, things, t, searching, notes, passages, minds, documents]);
+  }, [actionsOnly, words, found, context, language, t, notes, passages, said, minds, documents]);
 
-  const items = groups.flatMap((group) => group.items);
+  const waiting =
+    searching && [notes, passages, said].some((each) => each === null || each.query !== text);
+  const nothing = groups.length === 0 && text !== "" && !waiting;
+  const asking =
+    nothing && !actionsOnly && assistantHandle.current !== null
+      ? askGroup(text, conversationLabel(openConversation), t)
+      : [];
+  const failed = searching ? (notes?.failed ?? passages?.failed ?? said?.failed) : undefined;
+  const problem = failed ? errorMessage(failed.error, t) : undefined;
+
+  const items = [...groups, ...asking].flatMap((group) => group.items);
   const active = items.find((item) => item.key === activeKey) ?? items[0];
-  const waiting = searching && (notes?.query !== text || passages?.query !== text);
-  const problem = searching ? (notes?.failed ?? passages?.failed) : undefined;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: the option chosen now is when to scroll, not what is read.
   useLayoutEffect(() => {
@@ -155,12 +195,16 @@ function Palette() {
     if (!element?.open) return;
     exit(element, {});
     element.close();
+    // Now, not on the dialog's close event a task later: ⌘K pressed meanwhile opens it again.
+    usePalette.getState().hide();
   };
 
   const choose = (item: PaletteItem, inTab = false) => {
     // Closed first, so the focus is back where it was before what was chosen moves it.
     close();
-    runItem(item, { inTab }).catch((error: unknown) => useAppStore.getState().reportError(error));
+    runItem(item, { inTab, context }).catch((error: unknown) =>
+      useAppStore.getState().reportError(error),
+    );
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLDialogElement>) => {
@@ -183,6 +227,16 @@ function Palette() {
   };
 
   const optionId = (item: PaletteItem) => `${id}-${items.indexOf(item)}`;
+  const option = (item: PaletteItem) => (
+    <Option
+      key={item.key}
+      id={optionId(item)}
+      item={item}
+      active={item.key === active?.key}
+      onPoint={() => item.key !== active?.key && setActiveKey(item.key)}
+      onChoose={(inTab) => choose(item, inTab)}
+    />
+  );
 
   return (
     <dialog
@@ -223,40 +277,28 @@ function Palette() {
         className="thin-scrollbar min-h-0 flex-1 overflow-y-auto px-2 pb-2"
       >
         {groups.map((group) => (
-          // biome-ignore lint/a11y/useSemanticElements: options in a listbox are grouped by role, which a fieldset can't be.
-          <div
+          <Group
             key={group.id}
-            role="group"
-            aria-labelledby={`${id}-${group.id}`}
-            data-testid="palette-group"
-            data-group={group.id}
+            id={`${id}-${group.id}`}
+            group={group}
+            title={t(group.title ?? OWN_TITLES[group.id] ?? "palette.results")}
           >
-            <div
-              id={`${id}-${group.id}`}
-              className="px-2 pt-3 pb-1 text-[12px] leading-[18px] font-semibold text-ink-meta"
-            >
-              {t(GROUP_TITLES[group.id])}
-            </div>
-            {group.items.map((item) => (
-              <Option
-                key={item.key}
-                id={optionId(item)}
-                item={item}
-                active={item === active}
-                onPoint={() => item.key !== active?.key && setActiveKey(item.key)}
-                onChoose={(inTab) => choose(item, inTab)}
-              />
-            ))}
-          </div>
+            {group.items.map(option)}
+          </Group>
         ))}
         {problem !== undefined ? (
-          <p role="alert" className="px-2 pt-3 text-[13px] leading-5 break-words text-danger">
+          <p
+            id={`${id}-status`}
+            role="alert"
+            className="px-2 pt-3 text-[13px] leading-5 break-words text-danger"
+          >
             {problem}
           </p>
         ) : (
-          items.length === 0 &&
+          groups.length === 0 &&
           query.trim() !== "" && (
             <p
+              id={`${id}-status`}
               role="status"
               data-testid={waiting ? "palette-searching" : "palette-empty"}
               className="px-2 pt-4 pb-2 text-[13px] leading-5 text-ink-meta"
@@ -264,6 +306,17 @@ function Palette() {
               {t(waiting ? "palette.searching" : "palette.empty")}
             </p>
           )
+        )}
+        {asking.length > 0 && (
+          // biome-ignore lint/a11y/useSemanticElements: options in a listbox are grouped by role, which a fieldset can't be.
+          <div
+            role="group"
+            aria-labelledby={`${id}-status`}
+            data-testid="palette-group"
+            data-group="ask"
+          >
+            {asking.flatMap((group) => group.items.map(option))}
+          </div>
         )}
       </div>
       <div className="flex h-9 shrink-0 items-center gap-4 border-t border-rule px-4 text-[12px] whitespace-nowrap text-ink-meta">
@@ -273,6 +326,31 @@ function Palette() {
         <span className="ml-auto min-w-0 truncate">{t("palette.hint.actionsOnly")}</span>
       </div>
     </dialog>
+  );
+}
+
+function Group({
+  id,
+  group,
+  title,
+  children,
+}: {
+  id: string;
+  group: PaletteGroup;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    // biome-ignore lint/a11y/useSemanticElements: options in a listbox are grouped by role, which a fieldset can't be.
+    <div role="group" aria-labelledby={id} data-testid="palette-group" data-group={group.id}>
+      <div
+        id={id}
+        className="px-2 pt-3 pb-1 text-[12px] leading-[18px] font-semibold text-ink-meta"
+      >
+        {title}
+      </div>
+      {children}
+    </div>
   );
 }
 
@@ -295,30 +373,25 @@ function Key({ children }: { children: ReactNode }) {
 
 function ItemIcon({ item }: { item: PaletteItem }) {
   const className = "size-4 shrink-0 text-ink-meta";
-  if (item.kind === "note") return <MindLineIcon className={className} />;
-  if (item.kind === "passage")
-    return <DocumentLineIcon kind={item.documentKind} className={className} />;
-  if (item.kind === "command") {
-    const Icon = commands.get(item.id)?.icon;
-    return Icon ? (
-      <Icon className={className} />
-    ) : (
-      <span aria-hidden="true" className="size-4 shrink-0" />
-    );
-  }
-  switch (item.ref.kind) {
-    case "mind":
+  switch (item.kind) {
+    case "object":
+      return <>{item.icon(className)}</>;
+    case "note":
       return <MindLineIcon className={className} />;
-    case "document":
-      return <DocumentLineIcon kind={item.documentKind ?? "text"} className={className} />;
-    case "folder":
-      return <FolderLineIcon className={className} />;
-    default:
-      return (
-        <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center">
-          <TagDot colour={item.tagColour} />
-        </span>
+    case "passage":
+      return <DocumentLineIcon kind={item.documentKind} className={className} />;
+    case "said":
+      return <ConversationLineIcon className={className} />;
+    case "ask":
+      return <SparkLineIcon className={className} />;
+    case "command": {
+      const Icon = commands.get(item.id)?.icon;
+      return Icon ? (
+        <Icon className={className} />
+      ) : (
+        <span aria-hidden="true" className="size-4 shrink-0" />
       );
+    }
   }
 }
 
@@ -335,9 +408,8 @@ function Option({
   onPoint(): void;
   onChoose(inTab: boolean): void;
 }) {
-  const words = item.kind === "note" || item.kind === "passage";
+  const words = item.kind === "note" || item.kind === "passage" || item.kind === "said";
   const ranges = item.kind === "object" || item.kind === "command" ? item.ranges : [];
-  const meta = item.kind === "command" ? null : item.meta;
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: the field owns the keys (aria-activedescendant).
     <div
@@ -347,6 +419,7 @@ function Option({
       aria-selected={active}
       data-testid="palette-item"
       data-kind={item.kind === "object" ? item.ref.kind : item.kind}
+      data-key={item.key}
       // Choosing with the pointer keeps the focus in the field until it closes.
       onMouseDown={(event) => event.preventDefault()}
       onMouseMove={onPoint}
@@ -363,9 +436,9 @@ function Option({
           <span className="truncate text-ui text-ink" title={item.name}>
             <Marked text={item.name} ranges={ranges} />
           </span>
-          {meta && (
-            <span className="min-w-0 shrink truncate text-[12px] text-ink-meta" title={meta}>
-              {meta}
+          {item.meta && (
+            <span className="min-w-0 shrink truncate text-[12px] text-ink-meta" title={item.meta}>
+              {item.meta}
             </span>
           )}
         </span>
