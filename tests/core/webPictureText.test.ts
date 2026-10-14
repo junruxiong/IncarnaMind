@@ -19,7 +19,7 @@ import { formatLocation } from "../../src/shared/locations";
 import type { UnitLabel } from "../../src/shared/units";
 import { askAndFinish, citingModel, onlyCitation, setUpWithDocuments } from "../helpers/citations";
 import { createTempDataFolder, NO_MODEL_FILES, queryDatabase, startCore } from "../helpers/core";
-import { waitForProcessing } from "../helpers/documents";
+import { waitForDocuments, waitForProcessing } from "../helpers/documents";
 import { startWeb } from "../helpers/web";
 
 const REPORT = readFileSync(new URL("../fixtures/web/report.html", import.meta.url));
@@ -36,9 +36,10 @@ function recognizer(): TextRecognizer {
   });
   return {
     load: (files) => fake.load(files),
-    async read(picture, page) {
+    read: (picture, page) => fake.read(picture, page),
+    async readFile(file, page) {
       if (page === 2) throw new Error("The model failed on this picture.");
-      return fake.read(picture, page);
+      return fake.readFile(file, page);
     },
     close: () => fake.close(),
   };
@@ -180,5 +181,38 @@ describe("A web page's pictures, read", { timeout: 30_000 }, () => {
       true,
     );
     third.close();
+  });
+
+  test("a page whose pictures are being read when the app quits in good order is read again at the next start", async () => {
+    const web = await startSite();
+    const dataDir = await createTempDataFolder();
+    const slow = createFakeTextRecognizer({
+      script: { pages: { "1": { lines: CHART_LINES } } },
+      delayMs: 5_000,
+    });
+    const core = startCore(dataDir, {
+      ...web.adapters,
+      textRecognizer: slow,
+      textRecognitionModelSource: NO_MODEL_FILES,
+    });
+    const result = await core.saveWebPage({ address: `http://127.0.0.1:${web.port}/report` });
+    if (result.outcome !== "saved") throw new Error(JSON.stringify(result));
+    await waitForDocuments(core, (documents) => {
+      expect(documents.find((each) => each.id === result.document.id)?.status).toBe("extracting");
+    });
+    core.close();
+    expect(
+      queryDatabase(dataDir, "SELECT status FROM documents WHERE id = ?", [result.document.id]),
+    ).toEqual([{ status: "queued" }]);
+
+    const again = startCore(dataDir, {
+      ...web.adapters,
+      textRecognizer: recognizer(),
+      textRecognitionModelSource: NO_MODEL_FILES,
+    });
+    const [page] = await waitForProcessing(again, [result.document.id]);
+    expect(page?.failure).toBeNull();
+    expect(await again.searchPassages("44.9", { mode: "keyword" })).toHaveLength(1);
+    again.close();
   });
 });

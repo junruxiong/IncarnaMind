@@ -172,7 +172,6 @@ export async function pagePicture(
   }
 }
 
-/** RGBA pixels in shades of grey, one byte each. */
 export function greys(data: Uint8ClampedArray): Uint8Array {
   const pixels = new Uint8Array(data.length / 4);
   for (let index = 0; index < pixels.length; index++) {

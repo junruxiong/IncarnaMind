@@ -76,7 +76,7 @@ export interface UnitLabel {
   header?: boolean;
   /** page: a scanned page, whose text was read from its picture (#397), not taken from the PDF. */
   scan?: UnitScan;
-  /** section: a web page's pictures in it whose text was read on this computer (#756). */
+  /** section: a web page's pictures in it whose text was read on this computer. */
   figures?: UnitFigure[];
   /**
    * rows of a workbook: the number stored in each cell whose shown text isn't
@@ -106,7 +106,7 @@ export interface UnitScan {
 }
 
 /**
- * A web page's picture read on this computer (#756): its anchor is
+ * A web page's picture read on this computer: its anchor is
  * "figure{number}", and each line read "figure{number}.line{n}".
  */
 export interface UnitFigure {

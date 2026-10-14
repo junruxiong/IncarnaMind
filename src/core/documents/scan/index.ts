@@ -9,6 +9,7 @@ import { join } from "node:path";
 import type {
   EmbeddingModelSource,
   PagePicture,
+  PictureRead,
   RecognizedLine,
   TextRecognitionFiles,
   TextRecognizer,
@@ -38,6 +39,8 @@ export interface TextRecognitionModel {
    * if it can't be downloaded or started, or with the model's error.
    */
   read(picture: PagePicture, page: number): Promise<RecognizedLine[]>;
+  /** As `read`, for a picture file (`TextRecognizer.readFile`). */
+  readFile(file: Uint8Array, page: number): Promise<PictureRead>;
   /** Stops a download (keeping what it got) and the model. */
   close(): void;
 }
@@ -86,6 +89,15 @@ export function createTextRecognitionModel(
     reportError: options.reportError,
   });
 
+  async function started(): Promise<void> {
+    await downloaded();
+    if (!(await files.load())) {
+      throw new TextRecognitionUnavailableError(
+        files.status().error?.message ?? "The text recognition model couldn't start.",
+      );
+    }
+  }
+
   /** Resolves once the files are downloaded and checked, downloading them if they aren't. */
   function downloaded(): Promise<void> {
     if (files.isReady()) return Promise.resolve();
@@ -101,13 +113,12 @@ export function createTextRecognitionModel(
     retry: files.retry,
     onReady: files.onReady,
     async read(picture, page) {
-      await downloaded();
-      if (!(await files.load())) {
-        throw new TextRecognitionUnavailableError(
-          files.status().error?.message ?? "The text recognition model couldn't start.",
-        );
-      }
+      await started();
       return recognizer.read(picture, page);
+    },
+    async readFile(file, page) {
+      await started();
+      return recognizer.readFile(file, page);
     },
     close() {
       files.close();

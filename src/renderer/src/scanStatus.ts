@@ -28,7 +28,6 @@ const SCANNING_KEYS = {
   },
 } as const satisfies Record<DocumentScanProgress["of"], Record<"one" | "other", MessageKey>>;
 
-/** The row's short status and its full words, while scanned pages or a web page's pictures are read. */
 export function scanningStatus(scan: DocumentScanProgress, t: Translate) {
   const keys = SCANNING_KEYS[scan.of];
   return {
