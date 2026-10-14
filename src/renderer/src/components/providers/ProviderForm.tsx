@@ -1,16 +1,18 @@
 import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import type {
   ChatProvider,
-  ChatProviderKind,
   ConnectionTestResult,
   SecretStorageStatus,
   TestChatConnectionInput,
 } from "../../../../core/api";
 import {
-  catalogProviderOfKind,
+  catalogProvider,
   endpointOf,
-  KEY_PROVIDER_KINDS,
+  isPreset,
+  KEY_PROVIDERS,
   keyProviderGroups,
+  kindOfCatalogId,
+  untestedForCitations,
 } from "../../../../core/providers/catalog/providers";
 import type { MessageKey } from "../../../../shared/i18n";
 import { modelName } from "../../../../shared/modelName";
@@ -30,18 +32,19 @@ import {
   primaryButtonClass,
   successTextClass,
 } from "../ui";
-import { testErrorKey, useProviderKey } from "./shared";
+import { keyProviderName, testErrorKey, useProviderKey } from "./shared";
 
-type FormKind = ChatProviderKind;
+/** A key provider's catalog id: a kind's own, or a preset's. */
+type FormKind = string;
 
 /**
  * Prefilled when a provider is picked: its Answers model in the catalog, none
  * for a server. The User can type any model their account has.
  */
-const suggestedModel = (kind: FormKind): string => catalogProviderOfKind(kind)?.roles.answers ?? "";
+const suggestedModel = (kind: FormKind): string => catalogProvider(kind)?.roles.answers ?? "";
 
 const isSuggestion = (model: string) =>
-  KEY_PROVIDER_KINDS.some((kind) => suggestedModel(kind) === model);
+  KEY_PROVIDERS.some((kind) => suggestedModel(kind) === model);
 
 /** The providers shown as one row of choices; the rest are under "More…". */
 const ROW: readonly FormKind[] = ["anthropic", "openai", "google", "deepseek", "qwen"];
@@ -51,7 +54,7 @@ const OTHER_MODEL = "\u0000other";
 
 /** A provider's current models from our own list: the recommended one first, then its other roles. */
 function modelChoices(kind: FormKind): string[] {
-  const roles = catalogProviderOfKind(kind)?.roles;
+  const roles = catalogProvider(kind)?.roles;
   return [...new Set([roles?.answers, roles?.strongest, roles?.quickTasks])].filter(
     (id): id is string => id !== undefined,
   );
@@ -67,7 +70,7 @@ const hostOf = (url: string): string | null => {
 };
 
 const sameServer = (provider: ChatProvider, kind: FormKind, endpoint: string, baseUrl: string) =>
-  provider.kind === kind &&
+  (provider.catalogId ?? provider.kind) === kind &&
   (kind === "openai-compatible"
     ? provider.baseUrl === baseUrl.trim().replace(/\/+$/, "")
     : provider.endpoint === endpoint);
@@ -119,7 +122,7 @@ export function ProviderForm({
   }, []);
 
   const { main, more } = keyProviderGroups(
-    withMoreProviders ? providers.map((each) => each.kind) : [],
+    withMoreProviders ? providers.map((each) => each.catalogId ?? each.kind) : [],
   );
   const refusedHere = refused !== null && refused.kind === kind;
   const keyField = useRef<HTMLInputElement>(null);
@@ -132,7 +135,7 @@ export function ProviderForm({
     keyField.current?.scrollIntoView({ block: "center" });
     keyField.current?.focus({ preventScroll: true });
   }, []);
-  const catalog = kind ? catalogProviderOfKind(kind) : undefined;
+  const catalog = kind ? catalogProvider(kind) : undefined;
   const words = language === "zh-CN" ? "zh" : "en";
   const endpoint = catalog ? endpointOf(catalog, endpointId) : undefined;
   const saved = kind
@@ -168,9 +171,11 @@ export function ProviderForm({
         onChange={() => choose(option)}
         className="sr-only"
       />
-      {option === "qwen" || option === "deepseek"
-        ? t(`providers.kind.short.${option}`)
-        : t(`providers.kind.${option}`)}
+      {option === "qwen"
+        ? t("providers.kind.short.qwen")
+        : option === "deepseek"
+          ? t("providers.kind.short.deepseek")
+          : keyProviderName(option, t, language)}
     </label>
   );
 
@@ -190,7 +195,8 @@ export function ProviderForm({
   const input = (): TestChatConnectionInput | null => {
     if (!kind) return null;
     return {
-      kind,
+      kind: kindOfCatalogId(kind),
+      ...(isPreset(catalogProvider(kind)) && { catalogId: kind }),
       modelId: modelId.trim(),
       ...(endpoint ? { endpoint: endpoint.id } : {}),
       ...(kind === "openai-compatible" ? { baseUrl: baseUrl.trim() } : {}),
@@ -242,11 +248,11 @@ export function ProviderForm({
     }
   };
   const site = siteOf(endpoint?.keyUrl ?? catalog?.keyUrl);
-  const providerName = kind ? t(`providers.kind.${kind}`) : "";
+  const providerName = kind ? keyProviderName(kind, t, language) : "";
   const choices = kind && kind !== "openai-compatible" ? modelChoices(kind) : [];
   const recommended = choices[0];
   const shownName = (id: string) =>
-    modelName(id, { kind: kind ?? undefined, endpoint: endpoint?.id });
+    modelName(id, { kind: kind ? kindOfCatalogId(kind) : undefined, endpoint: endpoint?.id });
   const typedModel = kind === "openai-compatible" || otherModel || choices.length === 0;
   const rowKinds = ROW.filter((each) => main.includes(each) || more.includes(each));
   const underMore = [...main, ...more].filter((each) => !rowKinds.includes(each));
@@ -383,7 +389,9 @@ export function ProviderForm({
               </select>
               {recommended && modelId === recommended && (
                 <span data-testid="provider-model-reason" className={hintClass}>
-                  {t("providers.form.recommended", { model: shownName(recommended) })}
+                  {untestedForCitations(catalog)
+                    ? t("providers.untested")
+                    : t("providers.form.recommended", { model: shownName(recommended) })}
                 </span>
               )}
             </label>
@@ -393,7 +401,7 @@ export function ProviderForm({
             provider={
               kind === "openai-compatible"
                 ? (hostOf(baseUrl) ?? t("providers.kind.openai-compatible"))
-                : t(`providers.kind.${kind}`)
+                : providerName
             }
           />
           <div className="flex flex-wrap items-center gap-2">
@@ -436,7 +444,7 @@ export function ProviderForm({
 function KeyRefusedLine({ id, refused }: { id: string; refused: KeyRefusal }) {
   const t = useT();
   const language = useLanguage();
-  const provider = t(`providers.kind.${refused.kind}`);
+  const provider = keyProviderName(refused.kind, t, language);
   const when = refused.at ? dayOf(new Date(refused.at), new Date(), language, t) : null;
   return (
     <span id={id} data-testid="provider-key-refused" role="status" className={hintClass}>
