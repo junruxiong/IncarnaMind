@@ -124,6 +124,14 @@ export function WordImportDialog() {
                 })}
               </p>
             )}
+            {check.layoutNotShown && (
+              <p
+                data-testid="word-import-layout"
+                className="mt-3 text-[13px] leading-5 text-ink-secondary"
+              >
+                {t("wordImport.layoutNotShown")}
+              </p>
+            )}
             <p className="mt-3 text-[13px] leading-5 text-ink-meta">{t("wordImport.keeps")}</p>
             <label className={tickClass}>
               <input

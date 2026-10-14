@@ -9,6 +9,7 @@ import {
   type WordImportReport,
 } from "../../../core/api";
 import {
+  layoutNotShown,
   observeWordFile,
   wordFileOf,
   wordImportProgressOf,
@@ -115,6 +116,7 @@ export function WordOrigin({ doc, editor }: { doc: Y.Doc; editor: Editor | null 
   }
   const tooltip = [
     t("wordImport.from.tooltip"),
+    layoutNotShown(report?.layout) ? t("wordImport.layoutNotShown") : "",
     ...(report ? reportLines(report, t, language) : []),
   ]
     .filter(Boolean)
