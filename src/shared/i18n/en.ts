@@ -1074,7 +1074,7 @@ export const en = {
   "status.downloading": "Search model",
   "status.downloadFailed": "Search model download failed",
   "status.modelFailed": "Search model couldn't start",
-  "status.rerankDownloading": "Getting search ready",
+  "status.rerankDownloading": "Search setup",
   "status.rerankDownloading.full":
     "Getting search ready: {downloaded} of {total} MB. Until then, search keeps its own order.",
   "status.rerankDownloadFailed": "Couldn't get search ready",

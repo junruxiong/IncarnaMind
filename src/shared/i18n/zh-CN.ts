@@ -1033,7 +1033,7 @@ export const zhCN = {
   "status.downloading": "搜索模型",
   "status.downloadFailed": "搜索模型下载失败",
   "status.modelFailed": "搜索模型无法启动",
-  "status.rerankDownloading": "正在准备搜索",
+  "status.rerankDownloading": "准备搜索",
   "status.rerankDownloading.full":
     "正在准备搜索：{downloaded} / {total} MB。完成前，搜索结果保持原有顺序。",
   "status.rerankDownloadFailed": "未能准备好搜索",
