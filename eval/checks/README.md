@@ -10,13 +10,13 @@ Every label is in `labels.json`. A sentence or claim is labelled as `CONTEXT.md`
 
 | Set | Language | Supported | Contradicted | Unsupported | All |
 |---|---|---|---|---|---|
-| Find support | English | 55 | 25 | 20 | 100 |
+| Find support | English | 59 | 29 | 20 | 108 |
 | Find support | Chinese | 55 | 25 | 20 | 100 |
 | Verify | English | 22 | 27 | 36 | 85 |
 | Verify | Chinese | 20 | 25 | 35 | 80 |
 
-- **Find support:** 200 sentences as a User might write them about the Folder's Documents, in their own words. The contradicted ones change a figure, date, party or outcome a Document states, often to one that appears nearby for something else (Bag B's weight for Bag A's, the roof package's completion date for the children's library's). The unsupported ones are near misses: about something a Document covers, saying what none of them says. Each has a `note` on what the Folder does say.
-- **Find support by the kind of Document** (supported, contradicted, unsupported): Word 18, 8, 6; PDF 20, 8, 7; PowerPoint 16, 7, 5; Excel 13, 7, 4; web page 12, 4, 5; Transcript 9, 4, 3; Markdown 8, 4, 4; plain text 8, 4, 4; CSV 6, 4, 2.
+- **Find support:** 208 sentences as a User might write them about the Folder's Documents, in their own words. The contradicted ones change a figure, date, party or outcome a Document states, often to one that appears nearby for something else (Bag B's weight for Bag A's, the roof package's completion date for the children's library's). The unsupported ones are near misses: about something a Document covers, saying what none of them says. Each has a `note` on what the Folder does say. Eight state a figure no Document states but their numbers give (#707): a share, a fall, a sum and a difference, each right and wrong (`fs-201` to `fs-208`); their evidence is the Passage with the figures, and their `note` the working.
+- **Find support by the kind of Document** (supported, contradicted, unsupported): Word 21, 11, 6; PDF 20, 8, 7; PowerPoint 16, 7, 5; Excel 14, 8, 4; web page 12, 4, 5; Transcript 9, 4, 3; Markdown 8, 4, 4; plain text 8, 4, 4; CSV 6, 4, 2.
 - **Verify:** 10 documents someone else might send, each about the subject of one or two Folder Documents (see `ATTRIBUTION.md`): five in English and five in Chinese, five PDFs, four Word files and a deck. Each claim is a sentence of its document, quoted as the app extracts its text. The few sentences that claim nothing (thanks, requests, an opinion) have no label. Every contradicted claim has both quotes: the Folder's (`evidence`) and the document's own conflicting words (`contradiction`).
 
 ## The Folder
@@ -64,7 +64,7 @@ Each run makes one call per received document and one per sentence or claim, abo
 
 `lib/scoring.ts`, tested in `tests/eval/checkScoring.test.ts` and, through a core with a scripted model, `tests/eval/checkPipeline.test.ts`.
 
-- **Find support:** precision and recall of "supported" over the 200 sentences, in all, per language and per kind of Document. "Contradicted" is reported too, and how many of the sentences rightly found supported rest on the labelled Passage (its Document and Units).
+- **Find support:** precision and recall of "supported" over the 208 sentences, in all, per language and per kind of Document. "Contradicted" is reported too, and how many of the sentences rightly found supported rest on the labelled Passage (its Document and Units).
 - **Verify:** an extracted claim is matched to the labelled claim most like it, by its quoted source or its own words: the Dice coefficient of their character pairs, after the check's normalisation and with traditional characters read as simplified, at least 0.5. A labelled claim with no match wasn't extracted.
   - Claims extracted: the share of labelled claims matched.
   - "Contradicted" recall is over the labelled contradicted claims, and a claim that wasn't extracted is a miss. Precision is over the claims a check called contradicted, each labelled claim once; a claim that matches no label counts against it.
