@@ -1568,6 +1568,13 @@ export const zhCN = {
   "chatgpt.welcome.ok": "知道了",
   "chatgpt.consent.note": "数据会以你的 ChatGPT 账号发送给 OpenAI，并计入订阅的用量。",
   "chatgpt.menu.hint": "使用 Plus 或 Pro 订阅",
+  "chatgpt.paste.question": "没有回到 IncarnaMind？",
+  "chatgpt.paste.open": "粘贴浏览器地址栏里的地址",
+  "chatgpt.paste.continue": "继续",
+  "chatgpt.paste.problem.not-sign-in-address": "这不是登录地址。",
+  "chatgpt.paste.problem.other-sign-in":
+    "这个地址来自之前的一次登录。在刚打开的页面上登录后，再粘贴地址栏里的地址。",
+  "chatgpt.paste.problem.finished": "这次登录已经结束。",
 
   "consent.dialog.title": "向 {service} 发送数据？",
   "consent.dialog.body": "为了{purpose}，IncarnaMind 会向 {service} 发送：",

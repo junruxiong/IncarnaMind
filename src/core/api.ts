@@ -4761,6 +4761,18 @@ export interface ChatGptSignOutResult {
   status: ChatGptPlanStatus;
 }
 
+export type ChatGptPastedAddressProblem =
+  /** It isn't the address the sign-in sends the browser back to, with a code and a state. */
+  | "not-sign-in-address"
+  /** It is, but for another sign-in, e.g. from an older tab. */
+  | "other-sign-in"
+  /** The sign-in already finished, or none is waiting. */
+  | "finished";
+
+export type ChatGptPastedAddressResult =
+  | { ok: true }
+  | { ok: false; problem: ChatGptPastedAddressProblem };
+
 // ---------------------------------------------------------------------------
 // Secrets
 
@@ -7372,6 +7384,13 @@ export interface CoreApi {
    * device. A saved ChatGPT provider then needs a new sign-in.
    */
   signOutOfChatGpt(): Promise<ChatGptSignOutResult>;
+  /**
+   * The address the browser ended on, pasted by the User when the sign-in
+   * didn't come back to IncarnaMind: checked exactly as the browser's own
+   * return, and the waiting `signInToChatGpt` finishes with it. A refused
+   * address changes nothing.
+   */
+  pasteChatGptSignInAddress(address: string): Promise<ChatGptPastedAddressResult>;
 
   /**
    * Every registered external data flow, to each service it currently goes to
@@ -8154,6 +8173,7 @@ const methods: Record<CoreApiMethod, true> = {
   signInToChatGpt: true,
   cancelChatGptSignIn: true,
   signOutOfChatGpt: true,
+  pasteChatGptSignInAddress: true,
   listDataFlows: true,
   listConsentRequests: true,
   respondToConsent: true,
