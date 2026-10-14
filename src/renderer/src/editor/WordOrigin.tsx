@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type * as Y from "yjs";
 import type { KeptChangeKind, WordAtomKind, WordImportReport } from "../../../core/api";
 import {
+  layoutNotShown,
   observeWordFile,
   wordFileOf,
   wordImportProgressOf,
@@ -100,6 +101,7 @@ export function WordOrigin({ doc }: { doc: Y.Doc }) {
   }
   const tooltip = [
     t("wordImport.from.tooltip"),
+    layoutNotShown(report?.layout) ? t("wordImport.layoutNotShown") : "",
     ...(report ? reportLines(report, t, language) : []),
   ]
     .filter(Boolean)
