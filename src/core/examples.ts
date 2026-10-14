@@ -1,19 +1,19 @@
 /**
  * The example Minds (onboarding): "Draft: credit committee paper", the
- * first-run default (#802), and one per group of the first run's question
- * (papers, reports, contracts, meetings), each in English and in Chinese with
- * Documents of its own. Each is a Mind written in advance that works before
- * any chat model is set up. Its Documents ship with the app (`Paths.examples`),
- * each with its source, licence and attribution in LICENSE. Made, they are
- * copied into the data folder and linked as a Linked folder; the Mind holds a
- * Question and an Answer whose Citations quote real sentences of them
- * (src/core/exampleSets.ts), and the credit paper a draft of the User's own,
- * one of whose sentences a check already found contradicted. Its Citations are
- * checked like any others, against the stored text, once all its Documents
- * have been read, and its draft's checks are written then, with the Passages
- * that decide them. They retain no Document version (#79): the example's
- * Documents change only when it follows the interface language, which writes
- * the Mind again.
+ * first-run default (#802), and one each for papers, reports, contracts and
+ * meetings, which the default's banner offers, each in English and in Chinese
+ * with Documents of its own. Each is a Mind written in advance that works
+ * before any chat model is set up. Its Documents ship with the app
+ * (`Paths.examples`), each with its source, licence and attribution in
+ * LICENSE. Made, they are copied into the data folder and linked as a Linked
+ * folder; the Mind holds a Question and an Answer whose Citations quote real
+ * sentences of them (src/core/exampleSets.ts), and the credit paper a draft of
+ * the User's own, one of whose sentences a check already found contradicted.
+ * Its Citations are checked like any others, against the stored text, once
+ * all its Documents have been read, and its draft's checks are written then,
+ * with the Passages that decide them. They retain no Document version (#79):
+ * the example's Documents change only when it follows the interface
+ * language, which writes the Mind again.
  *
  * Which Mind and Linked folder are an example's is a device value, so no
  * table changes: the renderer marks them "Example", and `remove` deletes both.
@@ -57,12 +57,17 @@ import type { Language } from "./language";
 const EXAMPLES_VALUE = "examples";
 /**
  * The device value naming the example an earlier version made on a first run,
- * "Draft: credit committee paper", before the credit paper replaced it (#802). Its files
+ * "Where tea comes from", before the credit paper replaced it (#802). Its files
  * no longer ship: it is only shown as the example, and removed, never remade.
  */
 const LEGACY_VALUE = EXAMPLES_VALUE;
 /** Set once the examples were offered on a first run, so they aren't made again unasked. */
 const OFFERED_VALUE = "examplesOffered";
+/** The order this install offers the other examples in, picked at random once. */
+const ORDER_VALUE = "examplesOrder";
+const DEFAULT_GROUP: ExampleGroup = "credit";
+/** The examples the banner offers besides the default. */
+const OFFERED_GROUPS: readonly ExampleGroup[] = ["papers", "contracts", "meetings"];
 
 const GROUPS = Object.keys(EXAMPLE_SETS) as ExampleGroup[];
 const valueKey = (group: ExampleGroup) => `${EXAMPLES_VALUE}.${group}`;
@@ -107,6 +112,8 @@ export interface ExamplesOptions {
   recheck(input: RecheckCitationInput): CitationRecheck;
   /** Pushes "examples.changed". */
   changed(examples: Examples): void;
+  /** A number from 0 up to, not including, 1; Math.random unless a test sets it. */
+  random?(): number;
 }
 
 /** An example's draft, as the Blocks it is written into its Mind as. */
@@ -128,7 +135,7 @@ export function createExamples(options: ExamplesOptions) {
   const stored = (group: ExampleGroup): StoredExamples | null => read(valueKey(group));
 
   /** The earlier version's tea example, while it is the one shown (no credit paper made yet). */
-  const legacy = (): StoredExamples | null => (stored("credit") ? null : read(LEGACY_VALUE));
+  const legacy = (): StoredExamples | null => (stored(DEFAULT_GROUP) ? null : read(LEGACY_VALUE));
 
   function read(key: string): StoredExamples | null {
     const value = options.readValue(key);
@@ -145,13 +152,36 @@ export function createExamples(options: ExamplesOptions) {
       : null;
   }
 
+  /** A kept order: each offered example exactly once. */
+  const isOffered = (value: unknown): value is ExampleGroup[] =>
+    Array.isArray(value) &&
+    value.length === OFFERED_GROUPS.length &&
+    OFFERED_GROUPS.every((group) => value.includes(group));
+
+  /** The offered examples in this install's order: shuffled the first time, then kept. */
+  const order = (): ExampleGroup[] => {
+    const kept = options.readValue(ORDER_VALUE);
+    if (isOffered(kept)) return kept;
+    const random = options.random ?? Math.random;
+    const shuffled = [...OFFERED_GROUPS];
+    for (let index = shuffled.length - 1; index > 0; index--) {
+      const other = Math.floor(random() * (index + 1));
+      [shuffled[index], shuffled[other]] = [
+        shuffled[other] as ExampleGroup,
+        shuffled[index] as ExampleGroup,
+      ];
+    }
+    options.writeValue(ORDER_VALUE, shuffled);
+    return shuffled;
+  };
+
   /**
    * Each part while it exists: the Mind can be deleted, or the folder unlinked,
    * on its own. The default is the earlier version's tea example while there is
    * one and no credit paper.
    */
-  const status = (group: ExampleGroup = "credit"): Examples => {
-    const old = group === "credit" ? legacy() : null;
+  const status = (group: ExampleGroup = DEFAULT_GROUP): Examples => {
+    const old = group === DEFAULT_GROUP ? legacy() : null;
     const examples = old ?? stored(group);
     const mind = examples && options.mindExists(examples.mindId) ? examples : null;
     const folder =
@@ -162,6 +192,10 @@ export function createExamples(options: ExamplesOptions) {
       mindId: mind?.mindId ?? null,
       linkedFolderId: folder?.linkedFolderId ?? null,
       answerId: mind?.answerId ?? null,
+      more: [
+        ...(group === DEFAULT_GROUP ? [] : [DEFAULT_GROUP]),
+        ...order().filter((each) => each !== group),
+      ],
     };
   };
 
@@ -324,8 +358,8 @@ export function createExamples(options: ExamplesOptions) {
    * files. The default is the earlier version's tea example while it is the one
    * shown; once it is gone, the credit paper is offered as on a first run.
    */
-  const remove = async (group: ExampleGroup = "credit"): Promise<void> => {
-    const old = group === "credit" ? legacy() : null;
+  const remove = async (group: ExampleGroup = DEFAULT_GROUP): Promise<void> => {
+    const old = group === DEFAULT_GROUP ? legacy() : null;
     const examples = old ?? stored(group);
     if (!examples) return;
     if (options.mindExists(examples.mindId)) options.deleteMind(examples.mindId);
@@ -386,14 +420,14 @@ export function createExamples(options: ExamplesOptions) {
       answer.setAttribute("generatedHash", contentHash(answer));
     });
 
-  const create = async (group: ExampleGroup = "credit"): Promise<Examples> => {
+  const create = async (group: ExampleGroup = DEFAULT_GROUP): Promise<Examples> => {
     if (!GROUPS.includes(group)) throw new Error(`There is no example for "${group}".`);
     const current = status(group);
     if (current.mindId && current.linkedFolderId) return current;
     const source = options.source;
     if (!source) throw new Error("This copy of IncarnaMind has no examples.");
     // What is left of them (the Mind deleted, or the folder unlinked) goes first.
-    if (stored(group) || (group === "credit" && legacy())) await remove(group);
+    if (stored(group) || (group === DEFAULT_GROUP && legacy())) await remove(group);
     const language = options.language();
     const set = EXAMPLE_SETS[group][language];
 
@@ -512,7 +546,7 @@ export function createExamples(options: ExamplesOptions) {
       if (options.source === undefined || options.readValue(OFFERED_VALUE) === true) return null;
       options.writeValue(OFFERED_VALUE, true);
       if (hasMinds) return null;
-      return create("credit");
+      return create(DEFAULT_GROUP);
     },
 
     remove,

@@ -40,6 +40,8 @@ export interface ProcessorHandlers {
   read(job: ProcessingJob, page: number, picture: PagePicture): Promise<RecognizedLine[]>;
   /** Whether an error from `read` means no page can be read now. */
   isUnavailable(error: unknown): boolean;
+  /** The password that opens a job's PDF, when it is locked and one is kept (#763). */
+  password?(job: WorkerJob): Promise<string | undefined>;
 }
 
 export interface Processor {
@@ -66,7 +68,11 @@ export function createProcessor(
 ): Processor {
   const queue: WorkerJob[] = [];
   let worker: Worker | undefined;
-  let current: { id: number; job: WorkerJob } | undefined;
+  /**
+   * The job under way. `posted`: it has gone to the worker; until then (its
+   * PDF's password is being read) a stop is kept in `stopped`.
+   */
+  let current: { id: number; job: WorkerJob; posted: boolean; stopped: boolean } | undefined;
   let nextId = 1;
   let pumpScheduled = false;
   let closed = false;
@@ -153,10 +159,34 @@ export function createProcessor(
     if (closed || current) return;
     const job = take();
     if (!job) return;
-    current = { id: nextId++, job };
+    const id = nextId++;
+    const started = { id, job, posted: false, stopped: false };
+    current = started;
     if (job.task === "process") call(() => handlers.onStart(job));
     worker ??= startWorker();
-    worker.postMessage({ id: current.id, job } satisfies WorkerRequest);
+    const running = worker;
+    const send = (password: string | undefined) => {
+      if (closed || current?.id !== id || worker !== running) return;
+      // Stopped while its password was read: it never starts.
+      if (started.stopped) {
+        finish(id, { outcome: "stopped" });
+        return;
+      }
+      started.posted = true;
+      running.postMessage({
+        id,
+        job,
+        ...(password !== undefined && { password }),
+      } satisfies WorkerRequest);
+    };
+    if (job.kind !== "pdf" || !handlers.password) {
+      send(undefined);
+      return;
+    }
+    handlers.password(job).then(send, (error: unknown) => {
+      reportError(error);
+      send(undefined);
+    });
   }
 
   // Deferred, so a job enqueued while the core starts up runs after it has returned.
@@ -178,7 +208,9 @@ export function createProcessor(
       );
       if (index !== -1) queue.splice(index, 1);
       if (current?.job.task === "process" && current.job.documentId === documentId) {
-        worker?.postMessage({ id: current.id, stop: true } satisfies WorkerRequest);
+        if (current.posted) {
+          worker?.postMessage({ id: current.id, stop: true } satisfies WorkerRequest);
+        } else current.stopped = true;
       }
     },
     hold(value) {

@@ -103,7 +103,7 @@ describe("Verify a document", () => {
     const { core, report, tides } = await setUp();
     const { mind, documentId, client } = await verified(core, report);
 
-    expect(mind.title).toBe("Harbour report");
+    expect(mind.title).toBe("Checking: Harbour report");
     const paragraphs: JSONContent[] = readMind(client).toJSON().content ?? [];
     expect(paragraphs.map((block) => [block.type, block.content?.[0]?.text])).toEqual([
       ["paragraph", "Harbour report"],
