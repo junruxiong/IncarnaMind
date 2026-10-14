@@ -1,19 +1,34 @@
-import { useEffect, useState } from "react";
+import type { Editor } from "@tiptap/core";
+import { type ReactNode, useEffect, useState } from "react";
 import type * as Y from "yjs";
-import type { KeptChangeKind, WordAtomKind, WordImportReport } from "../../../core/api";
+import {
+  BLOCK_ID_ATTRIBUTE,
+  type Document,
+  type KeptChangeKind,
+  type WordAtomKind,
+  type WordImportReport,
+} from "../../../core/api";
 import {
   layoutNotShown,
   observeWordFile,
   wordFileOf,
   wordImportProgressOf,
   wordReportOf,
+  wordSourceOf,
 } from "../../../shared/wordFiles";
 import { DocumentLineIcon } from "../components/lineIcons";
+import { useObjectMenu } from "../components/ObjectMenu";
 import { ProblemLine } from "../components/ProblemLine";
+import { menuClass, menuItemClass, menuItemUnavailableClass } from "../components/ui";
+import { usePopoverMenu } from "../components/usePopoverMenu";
+import { files } from "../core";
+import { showFileLabelKey } from "../fileInfo";
 import { useLanguage, useT } from "../i18n";
+import { fileStatusLabel } from "../linkedFolders";
 import { useAppStore } from "../store";
 import { openDocumentBeside } from "../verify";
 import { useWordImport } from "../wordImport";
+import { ChevronDownSmallIcon } from "./icons";
 import { wordAtomName } from "./WordAtomView";
 
 /** What the Mind keeps about the Word file it was imported from, kept up to date as the import goes on. */
@@ -65,11 +80,12 @@ function reportLines(
  * The line under the title of a Mind imported from a Word file (#104; the
  * board Final-30-Word-Import): "From Lease.docx · Export keeps its styles",
  * what the import did on hover. "From Lease.docx" opens the original beside
- * the Mind while it is a Document (#720), as a verified PDF's line does.
+ * the Mind while it is a Document (#720), as a verified PDF's line does, at
+ * the paragraph the caret is in (#736); its menu also offers Show in Finder.
  * While the import goes on, how far it has got, with a 2px bar, as a Linked
  * folder's indexing shows it.
  */
-export function WordOrigin({ doc }: { doc: Y.Doc }) {
+export function WordOrigin({ doc, editor }: { doc: Y.Doc; editor: Editor | null }) {
   const t = useT();
   const language = useLanguage();
   const { file, progress, report } = useWordFile(doc);
@@ -108,18 +124,19 @@ export function WordOrigin({ doc }: { doc: Y.Doc }) {
     .join("\n");
   const from = t("wordImport.from", { name: file.name });
   return (
-    <p className="mind-word" data-testid="mind-word-origin" title={tooltip}>
+    <div className="mind-word" data-testid="mind-word-origin" title={tooltip}>
       {original ? (
-        <button
-          type="button"
-          data-testid="mind-word-original"
-          className="mind-word-from"
-          title={t("wordImport.from.open", { name: file.name })}
-          onClick={() => openDocumentBeside(original.id)}
+        <OriginalLink
+          original={original}
+          name={file.name}
+          open={() => {
+            const wordPlace = caretWordPlace(editor, doc);
+            openDocumentBeside(original.id, wordPlace ? { wordPlace } : {});
+          }}
         >
           {icon}
           <span className="min-w-0 truncate">{from}</span>
-        </button>
+        </OriginalLink>
       ) : (
         <>
           {icon}
@@ -127,7 +144,107 @@ export function WordOrigin({ doc }: { doc: Y.Doc }) {
         </>
       )}
       <span className="shrink-0">{` · ${t("wordImport.keepsStyles")}`}</span>
-    </p>
+    </div>
+  );
+}
+
+/** The paragraph's or table's place in the Word file, of the Block the caret is in, as the import recorded it. */
+function caretWordPlace(editor: Editor | null, doc: Y.Doc): string | null {
+  if (!editor) return null;
+  const { $from } = editor.state.selection;
+  for (let depth = $from.depth; depth > 0; depth--) {
+    const id: unknown = $from.node(depth).attrs[BLOCK_ID_ATTRIBUTE];
+    const place = typeof id === "string" ? wordSourceOf(doc, id)?.n : undefined;
+    if (place && /^w:(p|tbl)#\d+$/.test(place)) return place;
+  }
+  return null;
+}
+
+/**
+ * "From Lease.docx", opening the original, and its menu, by the chevron beside it or a
+ * right-click: Open the original, and Show in Finder.
+ */
+function OriginalLink({
+  original,
+  name,
+  open,
+  children,
+}: {
+  original: Document;
+  name: string;
+  open(): void;
+  children: ReactNode;
+}) {
+  const t = useT();
+  const menu = usePopoverMenu();
+  // A right-click, the context-menu key or Shift+F10 opens the chevron's menu, as on any row.
+  const row = useObjectMenu({ kind: "document", id: original.id });
+  const choose = (action: () => void) => {
+    menu.close();
+    action();
+  };
+  const away = fileStatusLabel(original.fileStatus);
+  return (
+    <span className="mind-word-original" {...row.rowProps}>
+      <button
+        type="button"
+        data-testid="mind-word-original"
+        className="mind-word-from"
+        title={t("wordImport.from.open", { name })}
+        onClick={open}
+      >
+        {children}
+      </button>
+      <button
+        type="button"
+        {...menu.buttonProps}
+        {...row.buttonProps}
+        data-testid="mind-word-original-menu"
+        aria-label={t("wordImport.original.more", { name })}
+        className="mind-word-more"
+      >
+        <ChevronDownSmallIcon />
+      </button>
+      <div
+        {...menu.menuProps}
+        role="menu"
+        aria-label={t("wordImport.original.more", { name })}
+        data-testid="mind-word-original-items"
+        className={menuClass}
+      >
+        {menu.open && (
+          <>
+            <button
+              type="button"
+              role="menuitem"
+              data-testid="mind-word-open-original"
+              onClick={() => choose(open)}
+              className={`${menuItemClass} pl-2`}
+            >
+              {t("wordImport.openOriginal")}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              data-testid="mind-word-show-original"
+              aria-disabled={away ? true : undefined}
+              title={away ? t(away.reason) : undefined}
+              onClick={() => {
+                if (away) return;
+                choose(() => {
+                  files
+                    .showDocumentInFolder(original.id)
+                    .catch((error) => useAppStore.getState().reportError(error));
+                });
+              }}
+              className={`${menuItemClass} ${menuItemUnavailableClass} pl-2`}
+            >
+              {t(showFileLabelKey(navigator.platform))}
+            </button>
+          </>
+        )}
+      </div>
+    </span>
   );
 }
 

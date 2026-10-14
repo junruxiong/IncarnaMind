@@ -2,7 +2,7 @@ import { registerMenu } from "./menus";
 
 // Later features add their items with registerMenu: Move to… (#229, #212), Add to note (#201), History (#300), Tag colour and merge (#205).
 
-/** Export as… the last format (⇧⌘E), each other format, then the options sheet (#100). */
+/** Export as… the last format (⇧⌘E), each other format, the options sheet (#100), then the AI use statement (#739). */
 const EXPORTS = [
   "mind.export",
   "mind.exportAs.docx",
@@ -11,6 +11,7 @@ const EXPORTS = [
   "mind.exportAs.html",
   "mind.exportAs.markdown",
   "mind.exportOptions",
+  "mind.aiUseStatement",
 ] as const;
 
 registerMenu("mind", [
@@ -38,6 +39,7 @@ registerMenu("document", [
   "folder.newWith",
   "document.tags",
   "document.retry",
+  "document.unlock",
   "document.fetchAgain",
   "document.countAsEvidence",
   "document.leaveOutOfEvidence",
@@ -48,6 +50,7 @@ registerMenu("document", [
   "document.openLivePage",
   "document.copyAddress",
   "file.info",
+  "document.forgetPassword",
   "document.delete",
 ]);
 
@@ -107,6 +110,7 @@ registerMenu("chart", [
   "chart.kind.line",
   "chart.kind.pie",
   "chart.kind.scatter",
+  "chart.switch",
   "chart.update",
   "chart.rename",
   "block.delete",
