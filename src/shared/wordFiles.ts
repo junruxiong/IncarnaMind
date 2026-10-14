@@ -11,6 +11,8 @@ import {
   MIND_WORD_FIELD,
   MIND_WORD_SOURCES_FIELD,
   PROPOSAL_ATTRIBUTE,
+  WORD_LOOK_ATTRIBUTE,
+  WORD_RUN_MARK,
   type WordAtomAttributes,
   type WordAtomKind,
   type WordFileInfo,
@@ -200,8 +202,13 @@ export function observeWordFile(doc: Y.Doc, listener: () => void): () => void {
   return () => map.unobserve(listener);
 }
 
-/** Attributes that don't change what a node is: its id, whether Questions read it, a Proposal on it. */
-const NOT_CONTENT = new Set(["id", "includeInContext", PROPOSAL_ATTRIBUTE]);
+/**
+ * Attributes that don't change what a node is: its id, whether Questions read it, a Proposal on
+ * it, its Word look (#746), which a Mind imported earlier gets later without being edited.
+ */
+const NOT_CONTENT = new Set(["id", "includeInContext", PROPOSAL_ATTRIBUTE, WORD_LOOK_ATTRIBUTE]);
+/** Marks that don't change what text is: its run's Word look. */
+const NOT_TEXT_CONTENT = new Set([WORD_RUN_MARK]);
 /** Mark attributes that are how a link opens, not where it leads. */
 const NOT_MARK_CONTENT = new Set(["target", "rel", "class"]);
 
@@ -218,16 +225,31 @@ function sorted(value: unknown, skip: ReadonlySet<string> = new Set()): unknown 
 
 function canonical(node: Y.XmlElement | Y.XmlText): unknown {
   if (node instanceof Y.XmlText) {
-    return (node.toDelta() as { insert: unknown; attributes?: Record<string, unknown> }[]).map(
-      (run) => [
-        typeof run.insert === "string" ? run.insert : "￼",
-        Object.fromEntries(
-          Object.keys(run.attributes ?? {})
-            .sort()
-            .map((mark) => [mark, sorted(run.attributes?.[mark], NOT_MARK_CONTENT)]),
-        ),
-      ],
-    );
+    const runs: [string, Record<string, unknown>][] = [];
+    for (const run of node.toDelta() as {
+      insert: unknown;
+      attributes?: Record<string, unknown>;
+    }[]) {
+      const marks = Object.fromEntries(
+        Object.keys(run.attributes ?? {})
+          .filter((mark) => !NOT_TEXT_CONTENT.has(mark))
+          .sort()
+          .map((mark) => [mark, sorted(run.attributes?.[mark], NOT_MARK_CONTENT)]),
+      );
+      const last = runs.at(-1);
+      // Text the left-out marks alone split is one run, as it was before they were there.
+      if (
+        typeof run.insert === "string" &&
+        last &&
+        last[0] !== "￼" &&
+        JSON.stringify(last[1]) === JSON.stringify(marks)
+      ) {
+        last[0] += run.insert;
+      } else {
+        runs.push([typeof run.insert === "string" ? run.insert : "￼", marks]);
+      }
+    }
+    return runs;
   }
   return [
     node.nodeName,

@@ -1,0 +1,335 @@
+/**
+ * A Mind imported from Word keeps the file's look (#746), through the core's
+ * public interface: each paragraph's, run's, table's and cell's style,
+ * resolved from the defaults, the theme, the style chains, the list level and
+ * direct formatting, kept once under a short key that the Blocks and the text
+ * name; export writes the file's own bytes for what the User didn't change;
+ * and a Mind imported before gets the look once, at a start, on the Blocks
+ * still as imported.
+ */
+import { rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { describe, expect, test, vi } from "vitest";
+import * as Y from "yjs";
+import {
+  CONTENT_SCHEMA_VERSION,
+  CONTENT_SCHEMA_VERSION_KEY,
+  type CoreAdapters,
+  MIND_SETTINGS_FIELD,
+  MIND_WORD_LOOK_FIELD,
+  WORD_LOOK_ATTRIBUTE,
+  WORD_RUN_MARK,
+  type WordLook,
+} from "../../src/core";
+import { WORD_PACKAGES_FOLDER } from "../../src/core/wordImports";
+import { wordFileOf } from "../../src/shared/wordFiles";
+import { wordLookOf } from "../../src/shared/wordLook";
+import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core";
+import { unzip } from "../helpers/docx";
+import { recordingLog } from "../helpers/log";
+import { connectToMind, type MindClient } from "../helpers/mindClient";
+import { readMind } from "../helpers/minds";
+import { contractFile, RESUME_TEXT_WIDTH_TWIPS, resumeFile } from "../helpers/wordLookFiles";
+import { importWordBytes } from "../helpers/wordMinds";
+
+/** Each paragraph-like node's text, with its look and its runs' looks, in order. */
+function styled(client: MindClient, look: WordLook) {
+  const found: { type: string; text: string; look: unknown; runs: unknown[] }[] = [];
+  readMind(client).descendants((node) => {
+    if (!["paragraph", "heading", "table", "tableCell", "tableHeader"].includes(node.type.name)) {
+      return true;
+    }
+    const key = node.attrs[WORD_LOOK_ATTRIBUTE] as string | null;
+    const styles =
+      node.type.name === "table"
+        ? look.tables
+        : node.type.name.startsWith("table")
+          ? look.cells
+          : look.paragraphs;
+    const runs: unknown[] = [];
+    node.forEach((child) => {
+      const run = child.marks.find((mark) => mark.type.name === WORD_RUN_MARK)?.attrs.k;
+      runs.push(typeof run === "string" ? look.runs[run] : null);
+    });
+    found.push({
+      type: node.type.name,
+      text: node.textContent,
+      look: key ? styles[key] : null,
+      runs,
+    });
+    return true;
+  });
+  return found;
+}
+
+async function imported(bytes: Buffer, adapters: Partial<CoreAdapters> = {}) {
+  const dataDir = await createTempDataFolder();
+  const core = startCore(dataDir, adapters);
+  const mind = await importWordBytes(core, dataDir, bytes, { name: "File.docx", origin: "own" });
+  const look = wordLookOf(mind.client.doc);
+  if (!look) throw new Error("No look.");
+  return { dataDir, core, ...mind, look };
+}
+
+describe("a Mind imported from Word keeps its look", () => {
+  test("the résumé: 华文中宋 in its sizes, shaded section titles, dates on a right tab, lists' indents, tables with and without lines", async () => {
+    const { client, look } = await imported(resumeFile());
+
+    expect(look.body).toBe(10.5);
+    expect(look.width).toBe(RESUME_TEXT_WIDTH_TWIPS / 20);
+    const nodes = styled(client, look);
+    const name = nodes.find((node) => node.text === "林　晓");
+    expect(name?.look).toMatchObject({ align: "center" });
+    expect(name?.runs[0]).toEqual({
+      font: "Times New Roman",
+      eastAsia: "华文中宋",
+      size: 22,
+      color: "1F3864",
+      spacing: 2,
+    });
+    const section = nodes.find((node) => node.text === "教育背景");
+    expect(section?.look).toEqual({
+      shade: "D9E2F3",
+      before: 12,
+      after: 6,
+      line: { rule: "auto", value: 1.25 },
+    });
+    expect(section?.runs[0]).toMatchObject({ size: 14, color: "1F3864", eastAsia: "华文中宋" });
+    const school = nodes.find((node) => node.text.startsWith("复旦大学"));
+    expect(school?.text).toBe("复旦大学\t金融学\t硕士\t2023.09 – 2026.06");
+    expect(school?.look).toMatchObject({
+      tabs: [
+        { at: 120, align: "left", leader: "none" },
+        { at: 210, align: "left", leader: "none" },
+        { at: RESUME_TEXT_WIDTH_TWIPS / 20, align: "right", leader: "none" },
+      ],
+    });
+    const bullet = nodes.find((node) => node.text.startsWith("跟踪 12 家"));
+    expect(bullet?.look).toMatchObject({ left: 21, firstLine: -10.5 });
+    // The layout tables draw no lines; the skills table does, and shades its first column.
+    const tables = nodes.filter((node) => node.type === "table");
+    expect(tables).toHaveLength(3);
+    expect(tables[0]?.look).toMatchObject({
+      width: { value: 481.9, unit: "pt" },
+      columns: [356.9, 125],
+    });
+    expect(tables[0]?.look).not.toHaveProperty("borders");
+    expect(tables[2]?.look).toMatchObject({
+      borders: {
+        top: { style: "single", width: 0.5, color: "4472C4", space: 0 },
+        insideV: { style: "single", width: 0.5, color: "4472C4", space: 0 },
+      },
+      margins: { left: 5.4, right: 5.4 },
+    });
+    const cells = nodes.filter((node) => node.type === "tableCell");
+    expect(cells.find((node) => node.text === "语言")?.look).toEqual({
+      width: { value: 100, unit: "pt" },
+      shade: "F2F2F2",
+    });
+    expect(cells.find((node) => node.text === "2025.06 – 2025.09")?.look).toEqual({
+      width: { value: 125, unit: "pt" },
+    });
+    // Each style once, whatever the number of Blocks that use it.
+    const keys = (styles: Record<string, unknown>) =>
+      new Set(Object.values(styles).map((each) => JSON.stringify(each))).size;
+    expect(keys(look.paragraphs)).toBe(Object.keys(look.paragraphs).length);
+    expect(keys(look.runs)).toBe(Object.keys(look.runs).length);
+  });
+
+  test("the contract: the theme's Book Antiqua, a small-caps title, justified clauses with hanging numbers, a bordered table with a shaded heading row", async () => {
+    const { client, look } = await imported(contractFile());
+
+    expect(look.body).toBe(12);
+    expect(look.width).toBe(451.3);
+    const nodes = styled(client, look);
+    const title = nodes.find((node) => node.text === "Supply agreement");
+    expect(title?.look).toEqual({ align: "center", line: { rule: "auto", value: 1.079 } });
+    expect(title?.runs[0]).toEqual({
+      font: "Book Antiqua",
+      eastAsia: "宋体",
+      size: 16,
+      bold: true,
+      smallCaps: true,
+      spacing: 2,
+    });
+    expect(nodes.find((node) => node.text.startsWith("Dated"))?.look).toMatchObject({
+      align: "right",
+    });
+    const heading = nodes.find((node) => node.text === "2.\tPrices");
+    expect(heading?.type).toBe("heading");
+    expect(heading?.look).toMatchObject({ keepNext: true, before: 12, after: 6 });
+    expect(heading?.runs[0]).toMatchObject({ bold: true, font: "Book Antiqua" });
+    const clause = nodes.find((node) => node.text.startsWith("2.1"));
+    expect(clause?.look).toMatchObject({ align: "justify", left: 28.35, firstLine: -28.35 });
+    const [definitions, signatures] = nodes.filter((node) => node.type === "table");
+    expect(definitions?.look).toMatchObject({
+      width: { value: 100, unit: "percent" },
+      borders: { top: { style: "single", width: 0.5, color: "000000", space: 0 } },
+      margins: { top: 2.85, bottom: 2.85 },
+    });
+    expect(signatures?.look).toMatchObject({ width: { value: 100, unit: "percent" } });
+    const heads = nodes.filter(
+      (node) => node.type === "tableCell" && (node.text === "Term" || node.text === "Meaning"),
+    );
+    expect(heads.map((node) => node.look)).toEqual([{ shade: "F2F2F2" }, { shade: "F2F2F2" }]);
+    // A character style's bold, on a defined term.
+    const term = nodes.find((node) => node.type === "paragraph" && node.text === "“Products”");
+    expect(term?.runs[0]).toMatchObject({ bold: true });
+    expect(
+      nodes.find((node) => node.text.endsWith("clause 9") && node.type === "tableCell")?.look,
+    ).toEqual({
+      vertical: "center",
+    });
+    expect(
+      nodes.find(
+        (node) => node.type === "tableCell" && node.text.startsWith("Signed for Northwind"),
+      )?.look,
+    ).toEqual({ borders: { bottom: { style: "single", width: 0.75, color: "000000", space: 0 } } });
+  });
+
+  test("the Mind records content schema 21, and export writes the file's own bytes for what wasn't changed", async () => {
+    for (const bytes of [resumeFile(), contractFile()]) {
+      const { core, mindId, client } = await imported(bytes);
+      expect(client.doc.getMap(MIND_SETTINGS_FIELD).get(CONTENT_SCHEMA_VERSION_KEY)).toBe(
+        CONTENT_SCHEMA_VERSION,
+      );
+      expect(CONTENT_SCHEMA_VERSION).toBe(21);
+      const result = await core.exportMind(mindId, { format: "docx" });
+      const before = unzip(bytes);
+      const after = unzip(result.data);
+      const changed = [...new Set([...before.keys(), ...after.keys()])].filter(
+        (name) => !before.get(name)?.equals(after.get(name) ?? Buffer.alloc(0)),
+      );
+      expect(changed).toEqual([]);
+    }
+  });
+});
+
+/** Takes the look off a Mind, as a Mind imported before #746 has none, and forgets it was given. */
+function withoutLook(client: MindClient, dataDir: string, mindId: string): void {
+  client.doc.transact(() => {
+    const strip = (element: Y.XmlElement) => {
+      if (element.getAttribute(WORD_LOOK_ATTRIBUTE) !== undefined) {
+        element.removeAttribute(WORD_LOOK_ATTRIBUTE);
+      }
+      for (const child of element.toArray()) {
+        if (child instanceof Y.XmlElement) strip(child);
+        else if (child instanceof Y.XmlText)
+          child.format(0, child.length, { [WORD_RUN_MARK]: null });
+      }
+    };
+    for (const child of client.blocks.toArray()) {
+      if (child instanceof Y.XmlElement) strip(child);
+    }
+    client.doc.getMap(MIND_WORD_LOOK_FIELD).clear();
+  });
+  queryDatabase(dataDir, "UPDATE word_packages SET look_version = NULL WHERE mind_id = ?", [
+    mindId,
+  ]);
+}
+
+/** Whether any node or text in the Mind has a look. */
+function lookShown(client: MindClient): { blocks: number; runs: number } {
+  let blocks = 0;
+  let runs = 0;
+  readMind(client).descendants((node) => {
+    if (node.attrs[WORD_LOOK_ATTRIBUTE]) blocks++;
+    if (node.marks.some((mark) => mark.type.name === WORD_RUN_MARK)) runs++;
+    return true;
+  });
+  return { blocks, runs };
+}
+
+describe("a Mind imported before gets its look once", () => {
+  test("at the next start, on the Blocks as imported: a Block the User changed stays plain, and it runs once", async () => {
+    const { dataDir, core, mindId, client } = await imported(contractFile());
+    const full = lookShown(client);
+    withoutLook(client, dataDir, mindId);
+    // The User changes the first clause.
+    client.doc.transact(() => {
+      const clause = client.blocks
+        .toArray()
+        .find(
+          (child): child is Y.XmlElement =>
+            child instanceof Y.XmlElement && child.toString().includes("Prices are fixed"),
+        );
+      const text = clause?.toArray().find((child) => child instanceof Y.XmlText) as Y.XmlText;
+      text.insert(text.length, " Edited.");
+    });
+    await client.settled();
+    expect(lookShown(client)).toEqual({ blocks: 0, runs: 0 });
+    core.close();
+
+    const { log, entries } = recordingLog();
+    const restarted = startCore(dataDir, { log });
+    const after = await connectToMind(restarted, mindId);
+    await vi.waitFor(() => expect(wordLookOf(after.doc)).not.toBeNull(), { timeout: 10_000 });
+    const shown = lookShown(after);
+    expect(shown.blocks).toBeGreaterThan(0);
+    expect(shown.blocks).toBeLessThan(full.blocks);
+    const edited = styled(after, wordLookOf(after.doc) as WordLook).find((node) =>
+      node.text.includes("Edited."),
+    );
+    expect(edited).toMatchObject({ look: null, runs: [null] });
+    expect(
+      styled(after, wordLookOf(after.doc) as WordLook).find((node) => node.text.startsWith("3.1"))
+        ?.look,
+    ).toMatchObject({ align: "justify" });
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        event: "word.look.added",
+        fields: expect.objectContaining({ mindId, skipped: 1 }),
+      }),
+    );
+    expect(
+      queryDatabase<{ look_version: number }>(dataDir, "SELECT look_version FROM word_packages"),
+    ).toEqual([{ look_version: 1 }]);
+    const state = Y.encodeStateVector(after.doc);
+    restarted.close();
+
+    // Once given, the next start leaves the Mind as it is.
+    const again = startCore(dataDir);
+    const third = await connectToMind(again, mindId);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(Buffer.from(Y.encodeStateVector(third.doc))).toEqual(Buffer.from(state));
+  });
+
+  test("a Mind whose package is gone, or can't be read, is left as it was and the failure logged", async () => {
+    const { dataDir, core, mindId, client } = await imported(resumeFile());
+    withoutLook(client, dataDir, mindId);
+    await client.settled();
+    const sha256 = wordFileOf(client.doc)?.sha256;
+    core.close();
+    const kept = join(dataDir, WORD_PACKAGES_FOLDER, `${sha256}.docx`);
+
+    await writeFile(kept, "not a Word file");
+    const broken = recordingLog();
+    const first = startCore(dataDir, { log: broken.log });
+    const unread = await connectToMind(first, mindId);
+    await vi.waitFor(() =>
+      expect(broken.entries).toContainEqual(
+        expect.objectContaining({
+          event: "word.look.failed",
+          fields: expect.objectContaining({ mindId }),
+        }),
+      ),
+    );
+    expect(lookShown(unread)).toEqual({ blocks: 0, runs: 0 });
+    expect(wordLookOf(unread.doc)).toBeNull();
+    first.close();
+
+    await rm(kept);
+    const gone = recordingLog();
+    const second = startCore(dataDir, { log: gone.log });
+    const missing = await connectToMind(second, mindId);
+    await vi.waitFor(() =>
+      expect(gone.entries).toContainEqual(
+        expect.objectContaining({ event: "word.look.packageMissing", fields: { mindId } }),
+      ),
+    );
+    expect(lookShown(missing)).toEqual({ blocks: 0, runs: 0 });
+    expect(queryDatabase(dataDir, "SELECT look_version FROM word_packages")).toEqual([
+      { look_version: null },
+    ]);
+  });
+});

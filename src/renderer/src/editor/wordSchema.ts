@@ -1,5 +1,11 @@
-import { mergeAttributes, Node, type NodeViewRenderer } from "@tiptap/core";
-import { IMAGE_NODE, WORD_ATOM_NODE, WORD_BLOCK_NODE } from "../../../core/api";
+import { Extension, Mark, mergeAttributes, Node, type NodeViewRenderer } from "@tiptap/core";
+import {
+  IMAGE_NODE,
+  WORD_ATOM_NODE,
+  WORD_BLOCK_NODE,
+  WORD_LOOK_ATTRIBUTE,
+  WORD_RUN_MARK,
+} from "../../../core/api";
 import { readWordAtom, wordAtomText } from "../../../shared/wordFiles";
 
 /**
@@ -174,4 +180,60 @@ export const InlineImage = Node.create({
   renderText({ node }) {
     return typeof node.attrs.alt === "string" ? node.attrs.alt : "";
   },
+});
+
+/** The node types a Word file's look is kept on (#746). */
+export const WORD_LOOK_TYPES = ["paragraph", "heading", "table", "tableCell", "tableHeader"];
+
+/**
+ * A Word file's look on the Blocks of a Mind imported from it (#746): the key
+ * of each paragraph's, heading's, table's and cell's style in the Mind's
+ * `WordLook`. Enter keeps it, as Word gives a new paragraph the properties of
+ * the one before.
+ */
+export const WordLookAttribute = Extension.create({
+  name: "wordLookAttribute",
+
+  addGlobalAttributes() {
+    return [
+      {
+        types: WORD_LOOK_TYPES,
+        attributes: {
+          [WORD_LOOK_ATTRIBUTE]: {
+            default: null,
+            keepOnSplit: true,
+            parseHTML: (element: HTMLElement) => element.getAttribute("data-word-look"),
+            renderHTML: (attributes: Record<string, unknown>) => {
+              const key = attributes[WORD_LOOK_ATTRIBUTE];
+              return typeof key === "string" ? { "data-word-look": key } : {};
+            },
+          },
+        },
+      },
+    ];
+  },
+});
+
+/**
+ * A run of text's look in a Mind imported from Word (#746): its style's key
+ * in the Mind's `WordLook`. Inclusive, so what is typed at its end takes it,
+ * as typing in Word takes the run's formatting.
+ */
+export const WordRun = Mark.create({
+  name: WORD_RUN_MARK,
+  inclusive: true,
+
+  addAttributes() {
+    return {
+      k: {
+        default: null,
+        parseHTML: (element: HTMLElement) => element.getAttribute("data-word-run"),
+        renderHTML: (attributes: Record<string, unknown>) =>
+          typeof attributes.k === "string" ? { "data-word-run": attributes.k } : {},
+      },
+    };
+  },
+
+  parseHTML: () => [{ tag: "span[data-word-run]" }],
+  renderHTML: ({ HTMLAttributes }) => ["span", HTMLAttributes, 0],
 });

@@ -37,14 +37,18 @@ import {
   WORD_ATOM_NODE,
   WORD_BLOCK_NODE,
   WORD_CHANGE_ID,
+  WORD_LOOK_ATTRIBUTE,
+  WORD_RUN_MARK,
   type WordAtomInfo,
   type WordAtomKind,
   type WordChangeRequest,
   type WordImportReport,
   type WordLayout,
+  type WordLook,
   type WordSource,
 } from "../../api";
 import { headingLevelOf, textIn } from "./docx";
+import { LookReader, type ParagraphLookContext, type TableLookContext } from "./docxLook";
 import {
   NS_STRICT,
   NS_TRANSITIONAL,
@@ -75,6 +79,8 @@ export interface WordStructure {
   report: WordImportReport;
   /** Someone's tracked changes read as Proposals (#108), by their request: who made each, and when. */
   changes: Map<string, WordChangeRequest>;
+  /** The file's look (#746): the styles its Blocks' `wordLook` attributes and its text's `wordRun` marks name. */
+  look: WordLook;
 }
 
 /** Reads a Word package's main document as Blocks. Throws `WordRefusedError` for one that can't be read. */
@@ -589,6 +595,9 @@ class Reader {
   private readonly absorbed = new Set<XmlElement>();
   /** Someone's changes kept as is, by kind. */
   private readonly kept: Partial<Record<KeptChangeKind, number>> = {};
+  /** The paragraph being read's look, which its runs start from; the table it is in. */
+  private paragraphLook: ParagraphLookContext = { key: null, runs: {} };
+  private tableLook: TableLookContext | null = null;
 
   private constructor(
     private readonly documentText: string,
@@ -602,6 +611,7 @@ class Reader {
     /** The text of each header and footer part. */
     private readonly partTexts: Map<string, string>,
     review: WordReview,
+    private readonly look: LookReader,
   ) {
     this.report = {
       paragraphs: 0,
@@ -636,8 +646,16 @@ class Reader {
       const target = partOf(suffix);
       return target && zip.has(target) ? zip.readText(target) : undefined;
     };
-    const styles = readStyles(await read("/styles"));
-    const numbering = readNumbering(await read("/numbering"), styles);
+    const stylesXml = await read("/styles");
+    const numberingXml = await read("/numbering");
+    const styles = readStyles(stylesXml);
+    const numbering = readNumbering(numberingXml, styles);
+    const look = new LookReader({
+      ...(stylesXml !== undefined && { styles: stylesXml }),
+      ...(numberingXml !== undefined && { numbering: numberingXml }),
+      ...(await read("/theme").then((theme) => (theme === undefined ? {} : { theme }))),
+      document,
+    });
     const comments = new Map<string, Comment>();
     const commentsXml = await read("/comments");
     for (const comment of commentsXml ? elements(parseXml(commentsXml)) : []) {
@@ -687,6 +705,7 @@ class Reader {
       images,
       partTexts,
       review,
+      look,
     );
   }
 
@@ -795,6 +814,7 @@ class Reader {
       sources: this.sources,
       report: this.report,
       changes: this.changes,
+      look: this.look.look(),
     };
   }
 
@@ -826,7 +846,7 @@ class Reader {
     const kind = deletion ? "delete" : "insert";
     for (const run of elements(element)) {
       this.currentRun = run;
-      const own = [...marks, ...runMarks(child(run, "w:rPr")), mark];
+      const own = [...marks, ...this.marksOfRun(run), mark];
       for (const each of elements(run)) {
         switch (each.name) {
           case "w:t":
@@ -1102,10 +1122,12 @@ class Reader {
     const styleId = (pPr && child(pPr, "w:pStyle")?.attrs["w:val"]) ?? this.styles.defaultId;
     const level = this.headingLevel(styleId, pPr);
     const list = level === null ? this.listOf(styleId, pPr) : null;
+    this.paragraphLook = this.look.paragraph(p, this.tableLook);
+    const looks = this.paragraphLook.key ? { [WORD_LOOK_ATTRIBUTE]: this.paragraphLook.key } : {};
     const node =
       level === null
-        ? paragraphNode("paragraph", {})
-        : paragraphNode("heading", { level: Math.min(6, Math.max(1, level)) });
+        ? paragraphNode("paragraph", looks)
+        : paragraphNode("heading", { level: Math.min(6, Math.max(1, level)), ...looks });
     node.content.push(...this.pending);
     this.pending = [];
     this.fieldDepth = 0;
@@ -1193,6 +1215,9 @@ class Reader {
 
     const occupied = placed.map(() => new Array<boolean>(width).fill(false));
     const content = new Map<Placed, NodeJSON[]>();
+    const outer = this.tableLook;
+    const tableLook = this.look.table(tbl);
+    this.tableLook = tableLook;
     placed.forEach((row) => {
       for (const at of row) {
         if (at.merge === "continue" && mergedInto.has(at)) continue;
@@ -1210,6 +1235,7 @@ class Reader {
         );
       if (!empty) this.blocks(cell.cell, content.get(into) ?? [], true);
     }
+    this.tableLook = outer;
 
     const tableRows: NodeJSON[] = placed.map((row, r) => {
       const trPr = rows[r] && child(rows[r].element, "w:trPr");
@@ -1232,9 +1258,10 @@ class Reader {
             }
           }
           const blocks = content.get(at) ?? [];
+          const cellLook = this.look.cell(at.cell, tableLook);
           const cellNode: NodeJSON = {
             type: cellType,
-            attrs: { colspan, rowspan },
+            attrs: { colspan, rowspan, ...(cellLook && { [WORD_LOOK_ATTRIBUTE]: cellLook }) },
             content: blocks.length > 0 ? blocks : [paragraphNode("paragraph", {})],
           };
           this.origins.set(cellNode, at.cell);
@@ -1271,7 +1298,14 @@ class Reader {
     const id = newId();
     this.sources.set(id, { n: this.place(tbl) });
     this.report.tables++;
-    return { type: "table", attrs: { [BLOCK_ID_ATTRIBUTE]: id }, content: tableRows };
+    return {
+      type: "table",
+      attrs: {
+        [BLOCK_ID_ATTRIBUTE]: id,
+        ...(tableLook.key && { [WORD_LOOK_ATTRIBUTE]: tableLook.key }),
+      },
+      content: tableRows,
+    };
   }
 
   // -------------------------------------------------------------------------
@@ -1398,8 +1432,15 @@ class Reader {
     });
   }
 
+  /** A run's own marks: the editor's for its formatting, and its look's (#746). */
+  private marksOfRun(run: XmlElement): MarkJSON[] {
+    const rPr = child(run, "w:rPr");
+    const key = this.look.run(rPr, this.paragraphLook, textIn(run).length);
+    return [...runMarks(rPr), ...(key ? [{ type: WORD_RUN_MARK, attrs: { k: key } }] : [])];
+  }
+
   private run(run: XmlElement, marks: MarkJSON[], out: NodeJSON[]): void {
-    const own = [...marks, ...runMarks(child(run, "w:rPr"))];
+    const own = [...marks, ...this.marksOfRun(run)];
     this.currentRun = run;
     for (const element of elements(run)) {
       if (element.name === "w:rPr") continue;
