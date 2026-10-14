@@ -71,7 +71,7 @@ export function citedTextKept(
 }
 
 /** What a Citation needs of a live Document: whether it is there, and the name to show for it. */
-type LiveDocument = Pick<Document, "id" | "contentHash"> &
+export type LiveDocument = Pick<Document, "id" | "contentHash"> &
   Partial<Pick<Document, "name" | "title">>;
 
 /** A list of Documents by ID and by content: the first in the list with each. */
