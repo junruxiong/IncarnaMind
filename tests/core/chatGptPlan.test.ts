@@ -15,10 +15,10 @@ import {
 } from "../../src/core";
 import { DATABASE_FILE } from "../../src/core/core";
 import { planResetTime, shapePlanRequest } from "../../src/core/providers/chatgpt/planEndpoint";
-import { firstReset, nextPlanModel } from "../../src/core/providers/chatgpt/planLimits";
 import { classifyProviderError } from "../../src/core/providers/providerErrors";
 import { migrate, migrations, openDatabase } from "../../src/core/storage";
 import { createFileKeychain, SECRETS_FILE } from "../../src/main/secretsFile";
+import { firstReset, nextPlanModel } from "../../src/shared/planLimits";
 import {
   ACCOUNT_MODELS,
   ANSWER,
