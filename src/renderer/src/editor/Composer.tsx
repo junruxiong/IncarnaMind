@@ -701,7 +701,7 @@ export function Composer({
               className="composer-chip composer-scope-all"
             >
               <SearchIcon className="composer-chip-icon" />
-              {t("composer.scope.all")}
+              <span className="truncate">{t("composer.scope.all")}</span>
             </button>
           )}
           {answering && !editing ? (

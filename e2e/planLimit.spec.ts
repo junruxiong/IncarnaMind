@@ -59,6 +59,18 @@ function usedUp(openai: FakeOpenAIServer, model: string, hours: number) {
   };
 }
 
+async function expectChipWhole(window: Page) {
+  const assistant = window.getByTestId("assistant");
+  const fits = (element: HTMLElement | SVGElement) => element.scrollWidth <= element.clientWidth;
+  expect(await assistant.getByTestId("composer-model").locator("span").evaluate(fits)).toBe(true);
+  const scope = assistant.getByTestId("composer-scope-all");
+  expect(await scope.evaluate(fits)).toBe(true);
+  const scopeBox = await scope.boundingBox();
+  const askBox = await assistant.getByTestId("composer-ask").boundingBox();
+  if (!scopeBox || !askBox) throw new Error("The composer's controls aren't visible.");
+  expect(scopeBox.x + scopeBox.width).toBeLessThanOrEqual(askBox.x);
+}
+
 async function shot(window: Page, name: string) {
   if (!SCREENSHOTS) return;
   await mkdir(SCREENSHOTS, { recursive: true });
@@ -134,9 +146,11 @@ test("a used-up plan model offers the next one in one click, which answers in pl
       "title",
       `GPT-6.1 Sol’s limit is used up until ${time}. Questions go to GPT-6 Luna until then.`,
     );
+    await expectChipWhole(window);
     await shots(app, window, "answered-en");
     await setLanguage(window, "zh-CN");
     await expect(chip).toHaveText(`GPT-6 Luna · ${zhTime} 前`);
+    await expectChipWhole(window);
     await shots(app, window, "answered-zh");
 
     usedUp(openai, LUNA, 1);
