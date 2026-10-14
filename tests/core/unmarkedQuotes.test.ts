@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { matchUnmarked, parseAsked } from "../../src/core/answers/unmarkedQuotes";
+import { matchUnmarked, parseAsked, settleOrphans } from "../../src/core/answers/unmarkedQuotes";
 import { askAndFinish, citationsIn, setUpWithDocuments } from "../helpers/citations";
 import { type ModelCall, type ScriptedReply, scriptedModel } from "../helpers/models";
 
@@ -12,6 +12,9 @@ import { type ModelCall, type ScriptedReply, scriptedModel } from "../helpers/mo
 const FIRST =
   "Tea drinking began in southwest China, where it was first used as a medicinal drink.";
 const SECOND = "Traders carried tea along the Tea Horse Road to Tibet.";
+/** Shares enough of SECOND's words to draw on it, too few to be a near-duplicate of it. */
+const LOOSE =
+  "Long ago, merchants and traders carried bricks of tea along the old Horse Road through mountains and rivers, trading them for horses and silver.";
 const TEA = {
   name: "Tea history.md",
   contents: `# Tea history\n\n${FIRST}\n\n${SECOND}\n`,
@@ -75,6 +78,25 @@ describe("An Answer that quotes without markers (#760)", { timeout: 30_000 }, ()
     expect(finished.citations).toHaveLength(1);
   });
 
+  // protects=two sentences holding one marker the model gave no record for each get their own Citation, the first keeping the marker; fails_when=the second's record overwrites the first's, so the first cites the second's Passage; no_claim=none beyond protects.
+  test("two sentences sharing a marker with no record each get their own Citation", async () => {
+    const model = quotingModel(`It says "${FIRST}" [^1] It also says "${SECOND}" [^1]`);
+    const { core, client, mind } = await setUpWithDocuments(model, [TEA]);
+
+    const { answerId, finished } = await askAndFinish(
+      core,
+      client,
+      mind.id,
+      "What do the notes say?",
+    );
+
+    expect(citationsIn(client, answerId).map((each) => [each.quote, each.check])).toEqual([
+      [FIRST, "found"],
+      [SECOND, "found"],
+    ]);
+    expect(finished.citedAfterChecking).toEqual({ count: 2, asked: false });
+  });
+
   // protects=a sentence worded closely like a Passage's is cited with that sentence as its quote; fails_when=it stays uncited or cites another Passage sentence; no_claim=how close is close enough beyond this pair.
   test("a sentence worded closely like a Passage's is cited with the Passage's sentence", async () => {
     const model = quotingModel(
@@ -98,7 +120,7 @@ describe("An Answer that quotes without markers (#760)", { timeout: 30_000 }, ()
   // protects=when nothing matches the model is asked once for its Citations, with the Passages it read, and only a quote the check finds is taken; fails_when=no request is made, more than one is, or an unfound quote is cited; no_claim=what a real model replies.
   test("when nothing matches, the model is asked once, with the Passages it read", async () => {
     const asked: ModelCall[] = [];
-    const model = quotingModel("Traders took tea to Tibet on horseback.", (call) => {
+    const model = quotingModel(LOOSE, (call) => {
       asked.push(call);
       const [id] = passageIds(
         call.options.prompt.map((message) => JSON.stringify(message)).join(""),
@@ -107,12 +129,12 @@ describe("An Answer that quotes without markers (#760)", { timeout: 30_000 }, ()
         text: JSON.stringify({
           citations: [
             {
-              sentence: "Traders took tea to Tibet on horseback.",
+              sentence: LOOSE,
               passage: id,
               quote: SECOND,
             },
             {
-              sentence: "Traders took tea to Tibet on horseback.",
+              sentence: LOOSE,
               passage: id,
               quote: "Not in it.",
             },
@@ -144,7 +166,7 @@ describe("An Answer that quotes without markers (#760)", { timeout: 30_000 }, ()
       requests++;
       return { text: JSON.stringify({ citations: [] }) };
     };
-    const drawing = quotingModel("Tea reached Tibet with traders, I think.", replyNothing);
+    const drawing = quotingModel(LOOSE, replyNothing);
     const first = await setUpWithDocuments(drawing, [TEA]);
 
     const asked = await askAndFinish(first.core, first.client, first.mind.id, "Who carried it?");
@@ -206,7 +228,7 @@ describe("Matching sentences to Passages", () => {
         `It says “${FIRST}” Also “began in”. 文中说「茶最早在中国西南地区作为药用饮品。」`,
         passages,
         found(text),
-      ),
+      ).map(({ passage, quote, sentence }) => ({ passage, quote, sentence })),
     ).toEqual([
       { passage: "P1", quote: FIRST, sentence: `It says “${FIRST}` },
       {
@@ -217,11 +239,47 @@ describe("Matching sentences to Passages", () => {
     ]);
   });
 
+  // protects=a near-duplicate with another number, or a negation the Passage doesn't have, isn't cited, in English and Chinese; one saying the same is; fails_when=£739,800 is cited by £793,800, "is not" by "is", or 不是 by 是; no_claim=quotations, which the check reads word for word.
+  test("a near-duplicate must give the same numbers and negations", () => {
+    const rent = "The rent for the flat in Camden is £793,800 a year, paid monthly.";
+    const monthly = "The rent for the flat in Camden is £1,200 a month, paid in advance.";
+    const zh = "这套公寓的月租金是一千二百元，按月支付。";
+    const passages = [{ id: "P1", text: `${rent}\n${monthly}\n${zh}` }];
+    const found = (_passage: string, quote: string) => passages[0]?.text.includes(quote) ?? false;
+    const cited = (sentence: string) =>
+      matchUnmarked(sentence, passages, found).map((each) => each.quote);
+
+    expect(cited("The rent for the flat in Camden is £739,800 a year, paid monthly.")).toEqual([]);
+    expect(
+      cited("The rent for the flat in Camden is not £1,200 a month, paid in advance."),
+    ).toEqual([]);
+    expect(cited("这套公寓的月租金不是一千二百元，按月支付。")).toEqual([]);
+    expect(cited("这套公寓的月租金是一千二百元，每月支付。")).toEqual([zh]);
+    expect(cited("The rent for the flat in Camden is £793,800 a year, paid each month.")).toEqual([
+      rent,
+    ]);
+  });
+
   // protects=a sentence that shares only a few words with a Passage isn't cited; fails_when=a loose paraphrase is cited; no_claim=none beyond protects.
   test("a loosely related sentence isn't cited", () => {
     expect(
       matchUnmarked("China is where tea is from.", [{ id: "P1", text: FIRST }], found(FIRST)),
     ).toEqual([]);
+  });
+
+  // protects=a marker without a record stays only in the sentence that took it; elsewhere it becomes that sentence's own Citation's marker, or goes; fails_when=a sentence keeps another's Citation; no_claim=none beyond protects.
+  test("a shared marker without a record stays only where it was taken", () => {
+    const answer = "A one [^1]. B two [^1]. C three [^1].";
+    const span = (sentence: string) => {
+      const start = answer.indexOf(sentence);
+      return { start, end: start + sentence.length };
+    };
+    expect(
+      settleOrphans(answer, [
+        { marker: 1, took: true, ...span("A one [^1].") },
+        { marker: 4, took: false, ...span("B two [^1].") },
+      ]),
+    ).toBe("A one [^1]. B two [^4]. C three .");
   });
 
   // protects=the reply to the one request is read leniently and only well-formed items are kept; fails_when=a malformed item throws or is kept; no_claim=none beyond protects.

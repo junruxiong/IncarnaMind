@@ -1,26 +1,32 @@
 /**
- * Citations for what an Answer quotes without markers (#760). Some models
- * read Passages, then quote them word for word, or nearly, and give no
- * Citation for it: the Answer looks uncited, though everything in it can be
- * checked. So once an Answer is written and its own records placed, each of
- * its sentences with no marker is matched to the Passages it read:
+ * Citations for what an Answer quotes without markers (#760; the decision is
+ * in ADR-0007). Some models read Passages, then quote them word for word, or
+ * nearly, and give no Citation for it: the Answer looks uncited, though
+ * everything in it can be checked. So once an Answer is written and its own
+ * records placed, each of its sentences that no Citation is on (no marker,
+ * or only markers the model gave no record for) is matched to the Passages
+ * it read:
  *
- * 1. a quotation in it ("…", “…”, 「…」) that the Citation check finds in a
- *    Passage, word for word;
- * 2. else the sentence itself, when it is worded closely like a sentence of
- *    a Passage that the check finds there: that sentence is the quote.
+ * 1. a quotation starting in it ("…", “…”, 「…」), of at least three words,
+ *    that the Citation check finds in a Passage, word for word;
+ * 2. else the Passage sentence it is a near-duplicate of: they share at
+ *    least five words and 60% of their words (Dice), give the same numbers
+ *    (as a multiset, "739,800" read as one) and as many negations ("not",
+ *    "no", "never", "n't", 不, 没, 未, 无, 非), and the check finds it there.
  *
  * Each match becomes a Citation record, taken as structured output's are,
- * and its marker goes after the sentence (see ./markerPlacement). Only a
- * quote the check finds is taken, so nothing is cited "not found".
+ * and its marker goes after the sentence (see ./markerPlacement). A marker
+ * the model wrote with no record goes to the first sentence that holds it
+ * and matches; in another sentence it becomes that sentence's own Citation's
+ * marker, or goes, as a marker with no record always did. Only a quote the
+ * check finds is taken, so nothing added is "not found".
  *
- * When nothing matches, the Answer has no Citation at all, and it draws on
- * the Passages (a sentence of it shares a few words with one of theirs), the
- * model is asked once more, in one request with the Answer and the Passages
- * it read, for its Citations (as ./quoteRetry asks for quotes). What it gives
- * is taken the same way. Never more than once per Answer. An Answer that
- * shares nothing with them, such as one saying the Documents don't answer
- * the Question, isn't asked about.
+ * When nothing matches, the Answer has no Citation at all, and one of its
+ * sentences shares at least five words with one of the Passages', the model
+ * is asked once more, in one request with the Answer and the Passages it
+ * read, for its Citations (as ./quoteRetry asks for quotes); what it gives
+ * is taken the same way. Never more than once per Answer, so an Answer
+ * saying the Documents don't cover the Question doesn't pay for it.
  */
 import { jsonSchema, Output, streamText } from "ai";
 import { sentenceSpans } from "../../shared/sentences";
@@ -45,8 +51,6 @@ const MIN_QUOTED_WORDS = 3;
 const MIN_SHARED_WORDS = 5;
 /** …and this much of their words (Dice similarity). */
 const MIN_SIMILARITY = 0.6;
-/** An Answer draws on the Passages when one of its sentences shares this many words with one of theirs. */
-const MIN_RELATED_WORDS = 3;
 /** The most Passages, and of each one's text, the one request for Citations holds without a window. */
 const MAX_ASKED_PASSAGES = 12;
 const MAX_ASKED_CHARACTERS = 3000;
@@ -69,11 +73,41 @@ interface Match extends MarkerRecord {
 }
 
 /**
- * A match, before its marker is given: the number of a marker the model
- * wrote in the sentence with no record behind it, which the Citation takes,
- * if there is one.
+ * A match, before its marker is given, with where its sentence is in the
+ * Answer: the number of a marker the model wrote in the sentence with no
+ * record behind it, which the Citation takes, if it is the first sentence
+ * to hold that marker.
  */
-type Found = Omit<Match, "marker"> & { marker?: number };
+type Found = Omit<Match, "marker"> & { marker?: number; start?: number; end?: number };
+
+/** A number as written, without the separators between its groups of three: "£739,800" is "739800". */
+const LATIN_NUMBER = /\d+(?:[.,\s]\d+)*/g;
+const CHINESE_NUMBER = /[零〇一二两三四五六七八九十百千万亿]+/gu;
+const NEGATION = /\b(?:not|no|never)\b|n't\b|[不没未无非]/giu;
+
+/** The numbers in a text, sorted, so two texts' can be compared as a multiset. */
+function numbersOf(text: string): string[] {
+  const latin = [...text.matchAll(LATIN_NUMBER)].map((found) =>
+    found[0].replace(/[,\s](?=\d{3}(?!\d))/g, ""),
+  );
+  const chinese = [...text.matchAll(CHINESE_NUMBER)].map((found) => found[0]);
+  return [...latin, ...chinese].sort();
+}
+
+/**
+ * Whether a near-duplicate says the same as a Passage's sentence: the same
+ * numbers, and as many negations. Shared words alone don't tell "£739,800"
+ * from "£793,800", or "is not" from "is".
+ */
+function saysTheSame(a: string, b: string): boolean {
+  const ours = numbersOf(a);
+  const theirs = numbersOf(b);
+  return (
+    ours.length === theirs.length &&
+    ours.every((number, index) => number === theirs[index]) &&
+    (a.match(NEGATION)?.length ?? 0) === (b.match(NEGATION)?.length ?? 0)
+  );
+}
 
 /**
  * The Answer's sentences no Citation is on: those with no marker, or with
@@ -101,16 +135,22 @@ function quotationsIn(answer: string): { at: number; quote: string }[] {
     .filter(({ quote }) => wordsOf(quote).size >= MIN_QUOTED_WORDS);
 }
 
-/** The sentence of a Passage that `words` are worded most closely like, if close enough. */
+/**
+ * The sentence of a Passage that `sentence` is worded most closely like, if
+ * close enough and saying the same (see `saysTheSame`).
+ */
 function closestSentence(
-  words: ReadonlySet<string>,
+  sentence: string,
   passages: readonly { id: string; sentences: { text: string; words: Set<string> }[] }[],
 ): { passage: string; quote: string } | null {
+  const words = wordsOf(sentence);
+  if (words.size < MIN_SHARED_WORDS) return null;
   let best: { passage: string; quote: string; score: number } | null = null;
   for (const passage of passages) {
     for (const candidate of passage.sentences) {
       const alike = likeness(words, candidate.words);
       if (alike.shared < MIN_SHARED_WORDS || alike.score < MIN_SIMILARITY) continue;
+      if (!saysTheSame(sentence, candidate.text)) continue;
       if (!best || alike.score > best.score) {
         best = { passage: passage.id, quote: candidate.text, score: alike.score };
       }
@@ -137,9 +177,12 @@ export function matchUnmarked(
   }));
   const quotations = quotationsIn(answer);
   const matches: Found[] = [];
+  /** Markers without records a sentence has taken: a later sentence holding one gets its own. */
+  const taken = new Set<number>();
   for (const { start, end, text: sentence, markers } of uncitedSentences(answer, recorded)) {
-    const own = markers[0] === undefined ? {} : { marker: markers[0] };
     if (matches.length >= MAX_ADDED) break;
+    const orphan = markers.find((marker) => !taken.has(marker));
+    const own = { start, end, ...(orphan === undefined ? {} : { marker: orphan }) };
     const byQuotation = quotations
       .filter(({ at }) => at >= start && at < end)
       .flatMap(({ quote }) =>
@@ -147,27 +190,65 @@ export function matchUnmarked(
           found(passage.id, quote) ? [{ passage: passage.id, quote }] : [],
         ),
       )[0];
-    if (byQuotation) {
-      matches.push({ ...byQuotation, sentence, ...own });
-      continue;
-    }
-    const words = wordsOf(sentence);
-    if (words.size < MIN_SHARED_WORDS) continue;
-    const closest = closestSentence(words, split);
-    if (closest && found(closest.passage, closest.quote)) {
-      matches.push({ ...closest, sentence, ...own });
-    }
+    const match = byQuotation ?? closestSentence(sentence, split);
+    if (!match || (match !== byQuotation && !found(match.passage, match.quote))) continue;
+    matches.push({ ...match, sentence, ...own });
+    if (orphan !== undefined) taken.add(orphan);
   }
   return matches;
 }
 
-/** Whether a sentence of `answer` shares a few words with a sentence of the Passages. */
+/** Whether a sentence of `answer` shares as many words with a sentence of the Passages as a match needs. */
 function drawsOn(answer: string, passages: readonly ShownPassage[]): boolean {
   const theirs = passages.flatMap((passage) => passageSentences(passage.text).map(wordsOf));
   return answerSentences(answer).some((sentence) => {
     const words = wordsOf(sentence.text);
-    return theirs.some((each) => likeness(words, each).shared >= MIN_RELATED_WORDS);
+    return theirs.some((each) => likeness(words, each).shared >= MIN_SHARED_WORDS);
   });
+}
+
+/**
+ * A marker without a record that a sentence took stays only there: in
+ * another sentence it is that sentence's own Citation's marker, if it has
+ * one, else it goes, as a marker with no record always did.
+ */
+export function settleOrphans(
+  answer: string,
+  records: readonly (Pick<Found, "start" | "end"> & { marker: number; took: boolean })[],
+): string {
+  const takers = new Map(
+    records.filter((record) => record.took).map((record) => [record.marker, record]),
+  );
+  if (takers.size === 0) return answer;
+  const within = (at: number) =>
+    records.find(
+      (record) =>
+        record.start !== undefined &&
+        record.end !== undefined &&
+        at >= record.start &&
+        at < record.end,
+    );
+  const renumbered = new Set<number>();
+  const edits: { at: number; length: number; text: string }[] = [];
+  for (const found of answer.matchAll(MARKER)) {
+    const marker = Number(found[1]);
+    const taker = takers.get(marker);
+    if (!taker || within(found.index) === taker) continue;
+    const owner = within(found.index);
+    // Its sentence's own Citation, once; any other occurrence there goes.
+    const keep = owner && !owner.took && !renumbered.has(owner.marker);
+    if (keep && owner) renumbered.add(owner.marker);
+    edits.push({
+      at: found.index,
+      length: found[0].length,
+      text: keep && owner ? `[^${owner.marker}]` : "",
+    });
+  }
+  let text = answer;
+  for (const edit of edits.reverse()) {
+    text = text.slice(0, edit.at) + edit.text + text.slice(edit.at + edit.length);
+  }
+  return text;
 }
 
 /** The Citations in the reply to the one request, as given. */
@@ -308,10 +389,10 @@ export async function* citeUnmarked(
 
   const used = [...answer.matchAll(MARKER)].map((each) => Number(each[1]));
   let next = Math.max(0, ...used) + 1;
-  const records: Match[] = matches.map((match) => {
-    if (match.marker !== undefined) return { ...match, marker: match.marker };
+  const records = matches.map((match) => {
+    if (match.marker !== undefined) return { ...match, marker: match.marker, took: true };
     while (recorded(next)) next++;
-    const record = { ...match, marker: next };
+    const record = { ...match, marker: next, took: false };
     next++;
     return record;
   });
@@ -327,7 +408,7 @@ export async function* citeUnmarked(
     return answer;
   }
   const { text } = withMissingMarkers(
-    answer,
+    settleOrphans(answer, records),
     records,
     (marker) => documents.hasRecord?.(marker) ?? false,
   );
