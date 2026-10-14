@@ -4,6 +4,7 @@ import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { localModeChosen } from "../../localMode";
+import { ProblemMark } from "../ProblemLine";
 import { errorTextClass } from "../ui";
 import { useKeepLocal } from "./KeepLocalChoice";
 
@@ -99,6 +100,7 @@ export function OllamaProgress({ ollama }: { ollama: Ollama }) {
       )}
       {error && (
         <p role="alert" className={errorTextClass}>
+          <ProblemMark />
           {error}
         </p>
       )}
