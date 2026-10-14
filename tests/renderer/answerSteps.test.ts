@@ -162,11 +162,14 @@ describe("an Answer's steps", () => {
       "check",
     ]);
     expect(foldedLine(steps)).toEqual({ kind: "searched-web", sources: 1 });
-    expect(foldedLine(input({ toolCalls: [search("s1", "parks"), searched, read] }))).toEqual({
-      kind: "searched",
-      sources: 0,
-      extraScopes: 1,
-    });
+    expect(
+      foldedLine(
+        input({
+          toolCalls: [search("s1", "parks"), searched, read],
+          citations: [citation(1, "p", "d9", 1)],
+        }),
+      ),
+    ).toEqual({ kind: "searched", sources: 1, extraScopes: 1 });
   });
 
   // protects=a failed search is its own row where it happened, never grouped; fails_when=it joins a search row or moves; no_claim=none beyond protects.
@@ -212,7 +215,11 @@ describe("an Answer's steps", () => {
       model: "claude-sonnet-5-5",
       seconds: null,
     });
-    expect(foldedLine(older)).toEqual({ kind: "searched", sources: 0, extraScopes: 0 });
+    expect(foldedLine(older)).toEqual({
+      kind: "read-passages",
+      passages: 4,
+      citedAfterChecking: 0,
+    });
   });
 
   // protects=an Answer that read its Mind says so, whole or in part, and a Mind deleted since reads as deleted; fails_when=it says "Asked from", hides the cut, or shows a deleted Mind's name; no_claim=what the Answer read is the core's (tests/core/assistantReadsMind.test.ts).
@@ -296,9 +303,57 @@ describe("an Answer's steps", () => {
   // protects=a Connector searched beside the Question's scope counts as one more scope; fails_when=it isn't counted, or a Connector that didn't run is; no_claim=none beyond protects.
   test("two scopes: a Connector's beside the Question's", () => {
     const signIn = { ...connectorCall, id: "c2", status: "failed" as const, signInRequired: true };
-    expect(foldedLine(input({ toolCalls: [search("s1", "heat"), connectorCall, signIn] }))).toEqual(
-      { kind: "searched", sources: 0, extraScopes: 1 },
+    expect(
+      foldedLine(
+        input({
+          toolCalls: [search("s1", "heat"), connectorCall, signIn],
+          citations: [citation(1, "p1", "d1", 3)],
+        }),
+      ),
+    ).toEqual({ kind: "searched", sources: 1, extraScopes: 1 });
+  });
+
+  // protects=#760: once Passages were read the line never says "no sources"; it says how many were read and what checking them added; fails_when=it says "no sources", counts a Passage two searches found twice, or hides the Citations added; no_claim=which sentences get Citations, which is the core's (tests/core/unmarkedQuotes.test.ts).
+  test("Passages read and nothing cited: how many were read, and what checking them added", () => {
+    const searches = [
+      search("s1", "tea", { passages: ["p1", "p2", "p3"] }),
+      search("s2", "tea origin", { passages: ["p3", "p4"] }),
+    ];
+    const none = input({ toolCalls: searches });
+    expect(foldedLine(none)).toEqual({ kind: "read-passages", passages: 4, citedAfterChecking: 0 });
+    expect(en("steps.readNoneMatched", { passages: en("steps.passages", { count: 4 }) })).toBe(
+      "Read 4 passages · none of its sentences could be matched to them",
     );
+    expect(zh("steps.readNoneMatched", { passages: zh("steps.passages", { count: 4 }) })).toBe(
+      "读取了 4 个段落 · 没有句子能与这些段落对应",
+    );
+
+    const added = input({
+      toolCalls: searches,
+      citations: [citation(1, "p1", "d1", 3), citation(2, "p4", "d2", 1)],
+      steps: { ...STEPS, citedAfterChecking: 2 },
+    });
+    expect(foldedLine(added)).toEqual({
+      kind: "read-passages",
+      passages: 4,
+      citedAfterChecking: 2,
+    });
+    expect(en("steps.readCited", { passages: en("steps.passages", { count: 4 }), count: 2 })).toBe(
+      "Read 4 passages · 2 sentences cited after checking",
+    );
+    expect(zh("steps.readCited.one", { passages: zh("steps.passages.one") })).toBe(
+      "读取了 1 个段落 · 核对后为 1 个句子添加了引用",
+    );
+
+    // Cited by the model itself, with or without more added: the searched line, as before.
+    const cited = input({ toolCalls: searches, citations: [citation(1, "p1", "d1", 3)] });
+    expect(foldedLine(cited)).toEqual({ kind: "searched", sources: 1, extraScopes: 0 });
+    const both = input({
+      toolCalls: searches,
+      citations: [citation(1, "p1", "d1", 3), citation(2, "p4", "d2", 1)],
+      steps: { ...STEPS, citedAfterChecking: 1 },
+    });
+    expect(foldedLine(both)).toEqual({ kind: "searched", sources: 2, extraScopes: 0 });
   });
 
   // protects=the rows' order: reasoning, the Mind read, the calls as they started, the check last; fails_when=any row is out of order or a call waiting for approval shows; no_claim=none beyond protects.

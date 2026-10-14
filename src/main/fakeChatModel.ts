@@ -26,7 +26,8 @@
  * and writes its Answer word by word, so a test sees each step of the Answer.
  *
  * A Question with "blank reply" in it gets a reply with no text at all. A model whose id ends
- * "-not-found" fails as one its provider doesn't know.
+ * "-not-found" fails as one its provider doesn't know when it answers; one ending "-claims-not-found"
+ * does when it finds or checks claims.
  *
  * A comparison table's cell (#98) cites its Document's line that shares the
  * most words with the Question and answers with its value ("Termination
@@ -69,6 +70,9 @@
  * of" as "many", Translate… puts the text in capitals, Explain says what the
  * passage starts with, and an instruction to "replace X with Y" (把 X 换成 Y)
  * does so, or "drop the citations" (去掉引用) leaves their markers out.
+ * "Restructure" (重新组织) cuts a plain last paragraph and puts the last
+ * section, from its heading (a "#" paragraph) on, first, keeping each
+ * paragraph's mark, as a model restructuring a whole Mind does (#703).
  *
  * Make this a Skill (`fakeSkillDraft`): a draft whose "when to use it" and first
  * step quote the Mind's last Question, so a test sees that the Mind was read.
@@ -847,6 +851,17 @@ function fakeSkillDraft(options: GenerateOptions): string | null {
 
 const FILLER = /(?:\b(?:very|really|truly|quite|actually|basically)\s+|非常|真的|其实|十分)/giu;
 
+/** A passage restructured (see the top of this file): its last section first, a plain last paragraph cut. */
+function restructured(passage: string): string {
+  const paragraphs = passage.split(/\n\n+/);
+  if (paragraphs.length > 1 && !/^(?:#|- |\d+\. |> )/.test(paragraphs.at(-1) ?? "")) {
+    paragraphs.pop();
+  }
+  const last = paragraphs.findLastIndex((paragraph) => paragraph.startsWith("#"));
+  if (last <= 0) return paragraphs.join("\n\n");
+  return [...paragraphs.slice(last), ...paragraphs.slice(0, last)].join("\n\n");
+}
+
 /** The scripted Edit with AI (see the top of this file): the passage's new text, or an explanation. */
 function fakeEdit(options: GenerateOptions): string | null {
   const request = options.prompt
@@ -888,6 +903,7 @@ function fakeEdit(options: GenerateOptions): string | null {
       if (replace?.[1] && replace[2] !== undefined)
         return passage.split(replace[1]).join(replace[2]);
       if (/drop the citations|去掉引用/i.test(asked)) return passage.replace(/\s*\[\d+\]/g, "");
+      if (/restructure|重新组织/i.test(asked)) return restructured(passage);
       if (SHORTEN.test(asked)) return passage.replace(FILLER, "");
       return `${passage} (edited)`;
     }
@@ -1028,20 +1044,31 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
     modelId: spec.modelId,
     // Structured output (automatic tagging) gets its Tags as JSON; Edit with AI its new text;
     // anything else (a connection test) gets "OK".
-    doGenerate: async (options) => ({
-      content: [
-        {
-          type: "text",
-          text:
-            options.responseFormat?.type === "json"
-              ? fakeStructuredOutput(options)
-              : (fakeClaims(options) ?? fakeSkillDraft(options) ?? fakeEdit(options) ?? "OK"),
-        },
-      ],
-      finishReason: { unified: "stop", raw: undefined },
-      usage: USAGE,
-      warnings: [],
-    }),
+    doGenerate: async (options) => {
+      // A model id ending "-claims-not-found" is one its provider doesn't know when it checks or finds claims (#764).
+      if (spec.modelId.endsWith("-claims-not-found")) {
+        throw new APICallError({
+          message: `The model ${spec.modelId} does not exist`,
+          url: "https://fake.invalid/chat",
+          requestBodyValues: {},
+          statusCode: 404,
+        });
+      }
+      return {
+        content: [
+          {
+            type: "text",
+            text:
+              options.responseFormat?.type === "json"
+                ? fakeStructuredOutput(options)
+                : (fakeClaims(options) ?? fakeSkillDraft(options) ?? fakeEdit(options) ?? "OK"),
+          },
+        ],
+        finishReason: { unified: "stop", raw: undefined },
+        usage: USAGE,
+        warnings: [],
+      };
+    },
     doStream: async ({ prompt, tools, abortSignal }) => {
       // A model id ending "-not-found" is one its provider doesn't know, for a test of that Problem.
       if (spec.modelId.endsWith("-not-found")) {

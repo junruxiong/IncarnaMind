@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { InvalidInputError, NotFoundError } from "../../src/core/errors";
 import type { Language } from "../../src/core/language";
-import { describeError, errorMessage } from "../../src/renderer/src/errors";
+import { describeError, errorMessage, providerErrorText } from "../../src/renderer/src/errors";
 import { errorForWindow } from "../../src/shared/errorWording";
 import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
 
@@ -147,5 +147,19 @@ describe("a failure of the system's", () => {
 
   test("a sentence of the core's that names no code keeps its own words", () => {
     expect(describeError(new Error("Choose the folder that holds them now.")).reason).toBeNull();
+  });
+});
+
+describe("a provider's error", () => {
+  test("says its wording in the interface language, and its message when the core gave none", () => {
+    const worded = {
+      kind: "unknown",
+      message: "Cloud classification is paused in local mode.",
+      wording: { key: "error.tagging.cloudPaused" },
+    } as const;
+    expect(providerErrorText(worded, words("zh-CN"))).toBe("本地模式下，云端分类已暂停。");
+    expect(providerErrorText(worded, english)).toBe(worded.message);
+    const plain = { kind: "rate-limit", message: "Too many requests" } as const;
+    expect(providerErrorText(plain, words("zh-CN"))).toBe("Too many requests");
   });
 });
