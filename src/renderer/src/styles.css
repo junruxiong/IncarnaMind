@@ -5196,6 +5196,10 @@
   .assistant-answer[data-sought] {
     animation: block-just-added 1600ms ease-in both;
   }
+  /* A folder just linked is washed the same way, where it now shows in the sidebar. */
+  [data-just-linked] {
+    animation: block-just-added 1600ms ease-in both;
+  }
   .assistant-answer-frame {
     position: relative;
     /* Room at the right for the Citations' checks. */
@@ -7586,7 +7590,8 @@
 }
 /* Washed while it lasts, with no fade. */
 :root:not([data-motion="on"]) .mind-editor > .block-just-added,
-:root:not([data-motion="on"]) .assistant-answer[data-sought] {
+:root:not([data-motion="on"]) .assistant-answer[data-sought],
+:root:not([data-motion="on"]) [data-just-linked] {
   animation: none;
   background: var(--color-frame);
   box-shadow: 0 0 0 6px var(--color-frame);

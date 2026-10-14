@@ -345,12 +345,12 @@ export async function editFolderInLibrary(window: Page, name: string): Promise<L
 }
 
 /**
- * Shows the sidebar's Source locations view: each Linked folder with its
+ * Shows the sidebar's Folders on disk view: each Linked folder with its
  * folders as on disk, and "Other Documents".
  */
 export async function showSourceLocations(window: Page): Promise<void> {
   const button = window.getByTestId("browse-views").getByRole("button", {
-    name: "Source locations",
+    name: "Folders on disk",
   });
   await button.click();
   await expect(button).toHaveAttribute("aria-pressed", "true");

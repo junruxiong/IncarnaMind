@@ -251,9 +251,12 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     tag.getByTestId("tag-actions"),
   );
   expect(tagMenu).toEqual(["tag.open", "—", "tag.manage", "tag.rename", "—", "tag.delete"]);
-  await window.getByTestId("browse-views").getByRole("button", { name: "Folders" }).click();
+  await window
+    .getByTestId("browse-views")
+    .getByRole("button", { name: "Folders", exact: true })
+    .click();
 
-  // A Linked folder, in Source locations.
+  // A Linked folder, in Folders on disk.
   await linkFolderFromSidebar(app, window, library);
   await showSourceLocations(window);
   const linked = linkedFolderRow(window, "Library");
@@ -276,7 +279,10 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "—",
     "linkedFolder.unlink",
   ]);
-  await window.getByTestId("browse-views").getByRole("button", { name: "Folders" }).click();
+  await window
+    .getByTestId("browse-views")
+    .getByRole("button", { name: "Folders", exact: true })
+    .click();
 
   // A tab: its own actions, then Close and Close other tabs last. The keyboard opens the same menu
   // as the right-click, its ⋯ being out of sight in the tab.
