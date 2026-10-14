@@ -27,6 +27,8 @@ import { core } from "../core";
 import { formatResetTime } from "../cost";
 import { useFindSources } from "../findSources";
 import { useLanguage, useT } from "../i18n";
+import { useKeyRefusals, useKeySavedSince } from "../keyRefusals";
+import { requestModelMenu } from "../modelMenu";
 import { useModelNames } from "../modelNames";
 import { useStoppedByPlanLimit } from "../planLimits";
 import { ANSWER_PROBLEMS, answerProblem } from "../problems";
@@ -150,9 +152,9 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
       <CallRows calls={toolCalls} approvals={approvals} />
 
       {text(node.attrs.citationSupport) === "none" && (
-        <p contentEditable={false} data-testid="answer-no-citations" className="answer-info">
-          {t("citation.unsupported")}
-        </p>
+        <div contentEditable={false}>
+          <NoCitationsLine modelId={modelId} providerId={text(node.attrs.providerId)} />
+        </div>
       )}
 
       <NodeViewContent
@@ -235,6 +237,34 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
   );
 }
 
+/** An Answer by a model that can't add Citations (#765): it says so, with the way to another model. */
+export function NoCitationsLine({
+  modelId,
+  providerId,
+}: {
+  modelId: string | null;
+  providerId: string | null;
+}) {
+  const t = useT();
+  const shownModel = useModelNames()(modelId ?? "", providerId);
+  return (
+    <ProblemLine
+      testId="answer-no-citations"
+      role="status"
+      action={{
+        label: t("citation.unsupported.choose"),
+        testId: "answer-choose-model",
+        onClick: requestModelMenu,
+      }}
+      className="answer-info"
+    >
+      {t("citation.unsupported", {
+        model: modelId ? shownModel.name : t("answer.error.thisModel"),
+      })}
+    </ProblemLine>
+  );
+}
+
 /** Failures that can come of a model that can't answer, rather than of the connection. */
 const WRONG_MODEL: ReadonlySet<ProviderErrorKind> = new Set([
   "model",
@@ -250,6 +280,7 @@ export function AnswerError({
   providerId,
   resetsAt,
   details,
+  failedAt = null,
   onRetry,
   onOpenSettings,
 }: {
@@ -259,6 +290,11 @@ export function AnswerError({
   /** When the plan's limit resets, when its provider said. */
   resetsAt: string | null;
   details: string | null;
+  /**
+   * When it failed, ISO 8601, said beside a refused key; an Answer in a Mind keeps no time, so
+   * its failure counts from when it was first shown. A key saved since lets it be asked again.
+   */
+  failedAt?: string | null;
   onRetry?: (() => void) | undefined;
   onOpenSettings(page: SettingsPage): void;
 }) {
@@ -268,6 +304,8 @@ export function AnswerError({
   const provider = useAnswers(
     (state) => state.models?.find((group) => group.provider.id === providerId)?.provider.kind,
   );
+  const [shownAt] = useState(() => new Date().toISOString());
+  const keySaved = useKeySavedSince(providerId, failedAt ?? shownAt);
   // Whose plan it was decides where its usage is managed.
   useEffect(() => {
     if (kind === "plan-limit" || WRONG_MODEL.has(kind)) useAnswers.getState().loadModels();
@@ -291,25 +329,33 @@ export function AnswerError({
   const { line, fix } = answerProblem(kind, provider);
   const action = removeFromMenu
     ? { label: t("answer.error.removeFromMenu"), onClick: removeFromMenu }
-    : fix.kind === "settings"
-      ? { label: t(fix.label), onClick: () => onOpenSettings(fix.page) }
-      : fix.kind === "sign-in"
+    : kind === "auth" && keySaved && onRetry
+      ? { label: t("answer.error.askAgain"), onClick: onRetry }
+      : kind === "auth"
         ? {
-            label: t(fix.label),
+            label: t("answer.error.checkKey"),
             onClick: () =>
-              void signInAgain(onOpenSettings).then((signedIn) => {
-                if (signedIn) onRetry?.();
-              }),
+              void useKeyRefusals.getState().check(providerId, modelId ?? "", failedAt),
           }
-        : fix.kind === "link"
-          ? // The main process opens it in the User's browser.
-            {
-              label: `${t(fix.label)} ↗`,
-              onClick: () => window.open(fix.url, "_blank", "noreferrer"),
-            }
-          : fix.kind === "retry" && onRetry
-            ? { label: t(fix.label), onClick: onRetry }
-            : undefined;
+        : fix.kind === "settings"
+          ? { label: t(fix.label), onClick: () => onOpenSettings(fix.page) }
+          : fix.kind === "sign-in"
+            ? {
+                label: t(fix.label),
+                onClick: () =>
+                  void signInAgain(onOpenSettings).then((signedIn) => {
+                    if (signedIn) onRetry?.();
+                  }),
+              }
+            : fix.kind === "link"
+              ? // The main process opens it in the User's browser.
+                {
+                  label: `${t(fix.label)} ↗`,
+                  onClick: () => window.open(fix.url, "_blank", "noreferrer"),
+                }
+              : fix.kind === "retry" && onRetry
+                ? { label: t(fix.label), onClick: onRetry }
+                : undefined;
   return (
     <div contentEditable={false} data-testid="answer-error" data-error-kind={kind}>
       <ProblemLine
