@@ -26,7 +26,7 @@ import { selectionForEdit } from "./editor/editSelection";
 export type CheckProblem =
   | Exclude<CheckSentencesResult, { kind: "checked" } | { kind: "cancelled" }>
   /** Worded when shown, so it reads in the interface language (#627). */
-  | { kind: "failed"; error: unknown }
+  | { kind: "failed"; error: unknown; retry?: () => void }
   /** Check for contradictions in a Mind with no cited claims (#112). */
   | { kind: "no-cited" }
   /** Check this Mind (#737), in a Mind with no sentence to check. */
@@ -110,7 +110,7 @@ export async function checkSentences(
   const requestId = crypto.randomUUID();
   setFor("problems", mindId, null);
   setFor("running", mindId, { requestId, action });
-  let result: CheckSentencesResult | { kind: "failed"; error: unknown };
+  let result: CheckProblem | CheckSentencesResult;
   try {
     result = await core.checkSentences({
       requestId,
@@ -122,7 +122,15 @@ export async function checkSentences(
       model: mindModelOf(doc),
     });
   } catch (error) {
-    result = { kind: "failed", error };
+    result = {
+      kind: "failed",
+      error,
+      retry: () =>
+        void checkSentences(editor, mindId, doc, action, {
+          range: { from: selection.range.from, to: selection.range.to },
+          allDocuments,
+        }),
+    };
   } finally {
     setFor("running", mindId, null);
   }

@@ -172,6 +172,11 @@ function buildMenu(): void {
       ],
     },
     {
+      label: t("menu.help"),
+      role: "help",
+      submenu: [command("help.feedback")],
+    },
+    {
       label: t("menu.window"),
       role: "windowMenu",
       submenu: [

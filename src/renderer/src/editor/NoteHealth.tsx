@@ -327,7 +327,23 @@ export function NoteHealth({
         problem.kind !== "local-mode" &&
         problem.kind !== "no-documents" &&
         problem.kind !== "find-failed" && (
-          <ProblemLine testId="checks-problem" className="mind-health-line" action={close}>
+          <ProblemLine
+            testId="checks-problem"
+            className="mind-health-line"
+            action={
+              problem.kind === "failed" && problem.retry
+                ? {
+                    label: t("checks.tryAgain"),
+                    testId: "checks-try-again",
+                    onClick: () => {
+                      dismissCheckProblem(mindId);
+                      problem.retry?.();
+                    },
+                  }
+                : close
+            }
+            also={problem.kind === "failed" && problem.retry ? close : undefined}
+          >
             {problem.kind === "only-cited"
               ? t("checks.problem.only-cited.folder", { folder: folderName ?? "" })
               : problem.kind === "failed"
