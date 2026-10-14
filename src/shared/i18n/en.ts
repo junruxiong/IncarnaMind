@@ -1645,6 +1645,13 @@ export const en = {
   "chatgpt.consent.note":
     "It goes to OpenAI under your ChatGPT account, and counts against your plan's limits.",
   "chatgpt.menu.hint": "Use your Plus or Pro plan",
+  "chatgpt.paste.question": "Didn't come back?",
+  "chatgpt.paste.open": "Paste the address the browser shows",
+  "chatgpt.paste.continue": "Continue",
+  "chatgpt.paste.problem.not-sign-in-address": "That isn't the sign-in address.",
+  "chatgpt.paste.problem.other-sign-in":
+    "That address is from an earlier sign-in. Sign in on the page just opened, then paste its address.",
+  "chatgpt.paste.problem.finished": "This sign-in has already finished.",
 
   "consent.dialog.title": "Send data to {service}?",
   "consent.dialog.body": "To {purpose}, IncarnaMind sends this to {service}:",
