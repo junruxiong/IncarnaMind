@@ -32,15 +32,14 @@ export const chartCommands: readonly Command[] = [
     group: "main",
     appliesTo: ["block"],
     reversible: true,
+    // Not offered for a table that isn't a series of numbers: a calculation's working table.
     when: (ctx) => {
       const editor = noteOf(ctx);
-      return editor !== null && isInTable(editor.state);
-    },
-    enabled(ctx) {
-      const editor = noteOf(ctx);
-      return editor && chartOfTable(editor.state, languageNow())
-        ? true
-        : { reason: "chart.fromTable.none" };
+      return (
+        editor !== null &&
+        isInTable(editor.state) &&
+        chartOfTable(editor.state, languageNow()) !== null
+      );
     },
     run(ctx) {
       const editor = noteOf(ctx);
@@ -96,6 +95,15 @@ export const chartCommands: readonly Command[] = [
       run: (ctx) => chartOf(ctx)?.setKind(kind),
     }),
   ),
+  {
+    id: "chart.switch",
+    label: "chart.switch",
+    group: "main",
+    appliesTo: ["chart", "block"],
+    reversible: true,
+    when: (ctx) => chartOf(ctx)?.canSwitch() ?? false,
+    run: (ctx) => chartOf(ctx)?.switchRowsAndColumns(),
+  },
   {
     id: "chart.update",
     label: "chart.update.command",

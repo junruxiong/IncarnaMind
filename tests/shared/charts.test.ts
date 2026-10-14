@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import type { CitationAttributes } from "../../src/core";
 import {
   type ChartAttributes,
+  canSwitch,
   chartCells,
   chartFromFigures,
   chartFromTable,
@@ -9,12 +10,16 @@ import {
   chartSources,
   chosenSeries,
   drawnSeries,
+  isNumericSeries,
   listedRows,
   MAX_CHART_VALUES,
   readChart,
   readChartData,
   type SourceCell,
   type SourceGrid,
+  seriesName,
+  switchedChart,
+  switchedData,
   unitlessRows,
 } from "../../src/shared/charts";
 
@@ -401,5 +406,349 @@ describe("a number with no unit (#579)", () => {
     const older = readChart(stored as unknown as Record<string, unknown>);
     expect(older.data.rows[0]?.values[1]?.scale).toBeNull();
     expect([...unitlessRows(older.data, 1)]).toEqual([4]);
+  });
+});
+
+/** A statement of accounts: the years across, a metric on each row. */
+const YEARS_BY_METRICS: SourceGrid = [
+  [head("Metric"), head("2023"), head("2024"), head("2025")],
+  [cell("Revenue", cited(22)), cell("289.4", cited(22)), cell("301.2"), cell("330.6")],
+  [cell("Net income"), cell("41.2"), cell("45.0"), cell("52.3")],
+];
+
+describe("which way round a chart from a table goes", () => {
+  test("puts the years on the x axis when they run across the table, and the metrics are the series", () => {
+    const chart = fromTable(YEARS_BY_METRICS) as ChartAttributes;
+    expect(chart.source).toEqual({ kind: "table", blockId: "table-1", switched: true });
+    expect(chart.data.labelHeading).toBe("Metric");
+    expect(chart.data.series).toEqual(["Revenue", "Net income"]);
+    expect(chart.data.rows.map((row) => row.label)).toEqual(["2023", "2024", "2025"]);
+    expect(chart.data.rows.map((row) => row.values.map((value) => value?.value))).toEqual([
+      [289.4, 41.2],
+      [301.2, 45],
+      [330.6, 52.3],
+    ]);
+    // Each value is still the cell it was read from, and keeps the Citation in it.
+    expect(chart.data.rows[1]?.values[1]?.from).toEqual({ kind: "cell", row: 2, column: 2 });
+    expect(chart.data.rows[0]?.values[0]?.citation?.pageFrom).toBe(22);
+    expect(chart.data.cutFrom).toBeNull();
+  });
+
+  test("keeps the years on the rows when they run down the table", () => {
+    const chart = fromTable([
+      [head("Year"), head("Revenue"), head("Net income")],
+      [cell("2023"), cell("289.4"), cell("41.2")],
+      [cell("2024"), cell("301.2"), cell("45.0")],
+    ]) as ChartAttributes;
+    expect(chart.source).toEqual({ kind: "table", blockId: "table-1" });
+    expect(chart.data.series).toEqual(["Revenue", "Net income"]);
+    expect(chart.data.rows.map((row) => row.label)).toEqual(["2023", "2024"]);
+  });
+
+  test("quarters, months and dates are periods too", () => {
+    for (const periods of [
+      ["Q1 2025", "Q2 2025", "Q3 2025"],
+      ["2025Q1", "2025Q2", "2025Q3"],
+      ["FY2023", "FY2024", "FY2025"],
+      ["Jan 2025", "Feb 2025", "Mar 2025"],
+      ["2025-01-31", "2025-02-28", "2025-03-31"],
+    ]) {
+      const chart = fromTable([
+        [head("Metric"), ...periods.map(head)],
+        [cell("Revenue"), cell("1.5"), cell("2.5"), cell("3.5")],
+        [cell("Cost"), cell("1.0"), cell("1.2"), cell("1.4")],
+      ]) as ChartAttributes;
+      expect(chart.data.rows.map((row) => row.label)).toEqual(periods);
+      expect(chart.data.series).toEqual(["Revenue", "Cost"]);
+    }
+  });
+
+  test("in Chinese: 2024年, 2024年第一季度, 一季度", () => {
+    for (const periods of [
+      ["2023年", "2024年", "2025年"],
+      ["2024年第一季度", "2024年第二季度", "2024年第三季度"],
+      ["一季度", "二季度", "三季度"],
+      ["第一季度", "第二季度", "第三季度"],
+    ]) {
+      const chart = fromTable([
+        [head("指标"), ...periods.map(head)],
+        [cell("营业收入"), cell("1.5亿元"), cell("2.5亿元"), cell("3.5亿元")],
+        [cell("净利润"), cell("0.2亿元"), cell("0.3亿元"), cell("0.4亿元")],
+      ]) as ChartAttributes;
+      expect(chart.source).toMatchObject({ switched: true });
+      expect(chart.data.rows.map((row) => row.label)).toEqual(periods);
+      expect(chart.data.series).toEqual(["营业收入", "净利润"]);
+      expect(chart.data.rows[0]?.values[0]?.value).toBe(150_000_000);
+    }
+  });
+
+  test("leaves a note or a total beside the years as it is, and a column of words out", () => {
+    const chart = fromTable([
+      [head("Metric"), head("2023"), head("2024"), head("Notes")],
+      [cell("Revenue"), cell("289.4"), cell("301.2"), cell("restated")],
+      [cell("Net income"), cell("41.2"), cell("45.0"), cell("")],
+    ]) as ChartAttributes;
+    expect(chart.source).toMatchObject({ switched: true });
+    expect(chart.data.rows.map((row) => row.label)).toEqual(["2023", "2024"]);
+  });
+
+  test("a row with no number is not a series", () => {
+    const chart = fromTable([
+      [head("Metric"), head("2023"), head("2024")],
+      [cell("Revenue"), cell("289.4"), cell("301.2")],
+      [cell("Operating costs:"), cell(""), cell("")],
+      [cell("Rent"), cell("12.0"), cell("13.5")],
+    ]) as ChartAttributes;
+    expect(chart.data.series).toEqual(["Revenue", "Rent"]);
+  });
+
+  test("keeps today's way round when both the first row and the first column hold periods, or neither does", () => {
+    const both = fromTable(QUARTERS) as ChartAttributes;
+    expect(both.source).toEqual({ kind: "table", blockId: "table-1" });
+    expect(both.data.series).toEqual(["2024", "2025"]);
+    expect(both.data.rows.map((row) => row.label)).toEqual(["Q1", "Q2", "Q3", "Q4"]);
+
+    const neither = fromTable([
+      [head("Segment"), head("Revenue"), head("Margin")],
+      [cell("Cloud"), cell("120"), cell("31%")],
+      [cell("Devices"), cell("80"), cell("22%")],
+    ]) as ChartAttributes;
+    expect(neither.source).toEqual({ kind: "table", blockId: "table-1" });
+    expect(neither.data.rows.map((row) => row.label)).toEqual(["Cloud", "Devices"]);
+  });
+
+  test("goes the way it is told, whatever the periods say", () => {
+    const options = { blockId: "table-1", title: "", language: "en" };
+    const down = chartFromTable(YEARS_BY_METRICS, { ...options, switched: false });
+    expect(down?.source).toEqual({ kind: "table", blockId: "table-1" });
+    expect(down?.data.series).toEqual(["2023", "2024", "2025"]);
+    const across = chartFromTable(QUARTERS, { ...options, switched: true });
+    expect(across?.data.rows.map((row) => row.label)).toEqual(["2024", "2025"]);
+    expect(across?.data.series).toEqual(["Q1", "Q2", "Q3", "Q4"]);
+  });
+
+  test("is cut at the values that fit, whichever way round", () => {
+    const years = Array.from({ length: 300 }, (_, index) => String(1900 + index));
+    const chart = fromTable([
+      [head("Metric"), ...years.map(head)],
+      [cell("A"), ...years.map((_, index) => cell(String(index)))],
+      [cell("B"), ...years.map((_, index) => cell(String(index * 2)))],
+    ]) as ChartAttributes;
+    expect(chart.source).toMatchObject({ switched: true });
+    expect(chart.data.rows).toHaveLength(MAX_CHART_VALUES / 2);
+    expect(chart.data.cutFrom).toBe(300);
+    expect(listedRows(chart.data)).toHaveLength(300);
+  });
+});
+
+describe("a table that is a series of numbers", () => {
+  const rows = (...lines: string[][]): SourceGrid =>
+    lines.map((line, index) => line.map((text) => (index === 0 ? head(text) : cell(text))));
+
+  test("is one with mostly figures in its body, notes beside them or not", () => {
+    expect(isNumericSeries(QUARTERS, "en")).toBe(true);
+    expect(isNumericSeries(YEARS_BY_METRICS, "en")).toBe(true);
+    expect(
+      isNumericSeries(
+        rows(
+          ["Site", "Rise (mm/yr)", "Notes"],
+          ["Harbour", "4.1", "Gauge on the pier"],
+          ["Estuary", "3.2", "Since 1990"],
+        ),
+        "en",
+      ),
+    ).toBe(true);
+    expect(
+      isNumericSeries(
+        rows(
+          ["指标", "2024年", "2025年", "备注"],
+          ["营业收入", "1.5亿元", "1.8亿元", "含并表"],
+          ["净利润", "(1,250)", "约 3.5%", ""],
+        ),
+        "zh-CN",
+      ),
+    ).toBe(true);
+  });
+
+  test("with dashes and n/a counting for nothing", () => {
+    expect(
+      isNumericSeries(
+        rows(["Metric", "2024", "2025"], ["Revenue", "—", "12"], ["Cost", "n/a", "-"]),
+        "en",
+      ),
+    ).toBe(true);
+  });
+
+  test("is not a calculation's working table, with its formulas, steps in words and several units", () => {
+    for (const grid of [
+      rows(
+        ["Step", "Formula", "Result"],
+        ["Revenue growth", "(377.9 − 330.6) ÷ 330.6", "14.3%"],
+        ["Gross margin", "138.2 ÷ 377.9", "36.6%"],
+        ["Net margin", "41.2 / 377.9", "10.9%"],
+      ),
+      rows(
+        ["Item", "Calculation", "Inputs", "Result"],
+        ["Growth", "(B − A) / A", "A = 330.6, B = 377.9", "14.3%"],
+        ["Margin", "profit / revenue", "41.2 and 377.9", "10.9%"],
+      ),
+      rows(
+        ["Item", "How it was worked out", "Result"],
+        ["Growth", "Take 377.9 less last year's 330.6, then divide by 330.6", "14.3%"],
+        ["Weight", "10 kg + 5 lb", "14.3 kg"],
+      ),
+      rows(["Item", "Value"], ["Load", "10 kg + 5 lb"], ["Cost", "$12 × 3 kg"], ["Total", "$36"]),
+    ]) {
+      expect(isNumericSeries(grid, "en")).toBe(false);
+    }
+    for (const grid of [
+      rows(
+        ["步骤", "公式", "结果"],
+        ["营业收入同比", "(377.9 − 330.6) ÷ 330.6", "14.3%"],
+        ["毛利率", "138.2 ÷ 377.9", "36.6%"],
+      ),
+      rows(
+        ["项目", "计算过程", "结果"],
+        ["同比增长", "用本年的 377.9 减去上年的 330.6，再除以 330.6", "14.3%"],
+        ["净利率", "41.2 除以 377.9", "10.9%"],
+      ),
+    ]) {
+      expect(isNumericSeries(grid, "zh-CN")).toBe(false);
+    }
+  });
+
+  test("is not a table of words, or of one cell with no number", () => {
+    expect(
+      isNumericSeries(
+        rows(["Claim", "Where"], ["Spring tides", "Documents"], ["Neap tides", "Notes"]),
+        "en",
+      ),
+    ).toBe(false);
+    expect(
+      isNumericSeries(
+        rows(["Company", "HQ", "Founded"], ["Acme", "Oslo", "see note"], ["Beta", "Rome", "n/a"]),
+        "en",
+      ),
+    ).toBe(false);
+    expect(isNumericSeries([], "en")).toBe(false);
+    expect(isNumericSeries(rows(["A", "B"]), "en")).toBe(false);
+  });
+
+  test("so no chart is made of a table that is not one", () => {
+    expect(
+      fromTable(
+        rows(
+          ["Step", "Formula", "Result"],
+          ["Growth", "(377.9 − 330.6) ÷ 330.6", "14.3%"],
+          ["Margin", "138.2 ÷ 377.9", "36.6%"],
+        ),
+      ),
+    ).toBeNull();
+  });
+});
+
+describe("switching a chart's rows and columns", () => {
+  const made = () => fromTable(QUARTERS) as ChartAttributes;
+
+  test("makes the series the rows, and the rows the series, each value where it was", () => {
+    const chart = made();
+    const data = switchedData(chart.data);
+    expect(data?.series).toEqual(["Q1", "Q2", "Q3", "Q4"]);
+    expect(data?.rows.map((row) => row.label)).toEqual(["2024", "2025"]);
+    expect(data?.rows[1]?.values[2]?.shown).toBe("377.9");
+    expect(data?.rows[1]?.values[2]?.from).toEqual({ kind: "cell", row: 3, column: 2 });
+    expect(data?.labelHeading).toBe("Quarter");
+  });
+
+  test("switched twice is the chart it was", () => {
+    const chart = made();
+    const once = switchedData(chart.data);
+    expect(switchedData(once as ChartAttributes["data"])).toEqual(chart.data);
+  });
+
+  test("is what a chart made the other way round from the same table holds", () => {
+    const options = { blockId: "table-1", title: "", language: "en" };
+    const across = chartFromTable(QUARTERS, { ...options, switched: true });
+    expect(switchedData(made().data)).toEqual(across?.data);
+    const down = chartFromTable(YEARS_BY_METRICS, { ...options, switched: false });
+    expect(switchedData(fromTable(YEARS_BY_METRICS)?.data as ChartAttributes["data"])).toEqual(
+      down?.data,
+    );
+  });
+
+  test("remembers it was switched, draws every column again, and switches back", () => {
+    const chart = { ...made(), kind: "line" as const, drawn: [1] };
+    const switched = switchedChart(chart);
+    expect(switched?.source).toEqual({ kind: "table", blockId: "table-1", switched: true });
+    expect(switched?.drawn).toBeNull();
+    expect(switched?.kind).toBe("line");
+    const back = switchedChart({ ...chart, ...switched } as ChartAttributes);
+    expect(back?.source).toEqual({ kind: "table", blockId: "table-1" });
+    expect(back?.data).toEqual(chart.data);
+  });
+
+  test("a scatter chart stays one if the new series can draw it, and becomes a bar chart if not", () => {
+    const oneRow = fromTable([
+      [head("Segment"), head("Revenue"), head("Margin")],
+      [cell("Cloud"), cell("120"), cell("31")],
+    ]) as ChartAttributes;
+    expect(switchedChart({ ...oneRow, kind: "scatter" })?.kind).toBe("bar");
+    const threeRows = fromTable([
+      [head("Segment"), head("Revenue"), head("Margin")],
+      [cell("Cloud"), cell("120"), cell("31")],
+      [cell("Devices"), cell("80"), cell("22")],
+      [cell("Services"), cell("60"), cell("40")],
+    ]) as ChartAttributes;
+    const switched = switchedChart({ ...threeRows, kind: "scatter" });
+    expect(switched?.kind).toBe("scatter");
+    expect(switched?.data.series).toEqual(["Cloud", "Devices", "Services"]);
+  });
+
+  test("can't be done to figures from text, a single value, or a chart cut to fit", () => {
+    const figures = chartFromFigures([{ text: "Q1: 289.4", citation: null }], {
+      title: "",
+      language: "en",
+    }) as ChartAttributes;
+    expect(canSwitch(figures)).toBe(false);
+    expect(switchedChart(figures)).toBeNull();
+
+    const single = fromTable([
+      [head("Segment"), head("Revenue")],
+      [cell("Cloud"), cell("120")],
+    ]) as ChartAttributes;
+    expect(canSwitch(single)).toBe(false);
+
+    const rows = Array.from({ length: 300 }, (_, index) => [
+      cell(`Day ${index + 1}`),
+      cell(String(index)),
+      cell(String(index * 2)),
+    ]);
+    const cutChart = fromTable([[head("Day"), head("A"), head("B")], ...rows]) as ChartAttributes;
+    expect(cutChart.data.cutFrom).toBe(300);
+    expect(canSwitch(cutChart)).toBe(false);
+    expect(switchedData(cutChart.data)).toBeNull();
+
+    expect(canSwitch(made())).toBe(true);
+  });
+
+  test("names a series with no heading by its row once switched, as it did by its column", () => {
+    const say = (key: string, params?: Record<string, unknown>) => `${key} ${params?.number}`;
+    const grid: SourceGrid = [
+      [head("Metric"), head("2023"), head("2024")],
+      [cell(""), cell("1.5"), cell("2.5")],
+      [cell("Cost"), cell("1.0"), cell("1.2")],
+    ];
+    const across = fromTable(grid) as ChartAttributes;
+    expect(across.data.series).toEqual(["", "Cost"]);
+    expect(seriesName(across, 0, say)).toBe("chart.series.unnamedRow 2");
+    const down = chartFromTable(grid, {
+      blockId: "table-1",
+      title: "",
+      language: "en",
+      switched: false,
+    }) as ChartAttributes;
+    expect(seriesName(down, 0, say)).toBe("2023");
+    const stored = readChart(JSON.parse(JSON.stringify(across)) as Record<string, unknown>);
+    expect(stored.source).toEqual({ kind: "table", blockId: "table-1", switched: true });
   });
 });
