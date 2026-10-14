@@ -8,6 +8,8 @@
 import { translate } from "../../../shared/i18n";
 import type { Browser } from "../../adapters";
 import type {
+  ChatGptPastedAddressProblem,
+  ChatGptPastedAddressResult,
   ChatGptPlanModel,
   ChatGptPlanStatus,
   ChatGptSignInErrorKind,
@@ -15,7 +17,7 @@ import type {
   ChatGptSignOutResult,
 } from "../../api";
 import { SecretStorageError } from "../../errors";
-import { DEFAULT_SIGN_IN_TIMEOUT_MS, OAuthFlowError } from "../../oauth";
+import { DEFAULT_SIGN_IN_TIMEOUT_MS, OAuthFlowError, type PastedRedirect } from "../../oauth";
 import type { Secrets } from "../../secrets";
 import type { SettingsStore } from "../../settings";
 import { ChatGptOtherAccountError, ChatGptPlanNotAllowedError } from "./errors";
@@ -57,6 +59,12 @@ function signInError(error: unknown): { kind: ChatGptSignInErrorKind; message: s
   if (error instanceof ChatGptOtherAccountError) return { kind: "other-account", message };
   return { kind: "failed", message };
 }
+
+const PASTE_PROBLEMS: Record<Exclude<PastedRedirect, "accepted">, ChatGptPastedAddressProblem> = {
+  "not-redirect": "not-sign-in-address",
+  "wrong-state": "other-sign-in",
+  finished: "finished",
+};
 
 export type ChatGptPlan = ReturnType<typeof createChatGptPlan>;
 
@@ -162,6 +170,11 @@ export function createChatGptPlan(options: {
       const { revoked } = await signIn.signOut();
       listed = null;
       return { revoked, status: await status() };
+    },
+
+    pasteSignInAddress(address: string): ChatGptPastedAddressResult {
+      const pasted = signIn.pasteAddress(address);
+      return pasted === "accepted" ? { ok: true } : { ok: false, problem: PASTE_PROBLEMS[pasted] };
     },
 
     /**

@@ -196,8 +196,9 @@ export interface CitedPagesOptions {
   document(documentId: string): Document | null;
   /** The path of a live Document's file, checked to be there. */
   filePath(documentId: string): Promise<string>;
-  /** Draws a PDF's pages from its file, which must be this version. */
+  /** Draws a PDF's pages from its file, which must be this version; `documentId` is whose. */
   drawPdf(
+    documentId: string,
     file: string,
     contentHash: string,
     pages: readonly number[],
@@ -235,7 +236,7 @@ export function createCitedPages(options: CitedPagesOptions) {
         { length: row.page_to - row.page_from + 1 },
         (_, index) => row.page_from + index,
       );
-      return options.drawPdf(path, row.content_hash, pages, signal);
+      return options.drawPdf(row.document_id, path, row.content_hash, pages, signal);
     }
     const capture = options.capturePage;
     if (!capture) throw new Error("This copy of IncarnaMind can't draw cited pages.");

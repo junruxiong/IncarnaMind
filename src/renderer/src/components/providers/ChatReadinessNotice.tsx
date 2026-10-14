@@ -3,6 +3,7 @@ import { signInAgain } from "../../chatGptSignIn";
 import { useT } from "../../i18n";
 import { turnOffLocalMode } from "../../localMode";
 import { useModelSetup } from "../../modelSetup";
+import { useRequests } from "../../requests";
 import type { SettingsPage } from "../../settingsPages";
 import { useAppStore } from "../../store";
 import { ProblemLine } from "../ProblemLine";
@@ -92,7 +93,7 @@ export function ReadinessLine({
         action={{
           label: t("localMode.useLocal"),
           testId: "local-mode-use-local",
-          onClick: () => openSettings("models"),
+          onClick: () => useRequests.getState().ask({ chooseLocalModel: true }),
         }}
         also={{
           label: t("localMode.turnOff"),
