@@ -72,6 +72,7 @@ import {
   type MarkedCitation,
   type MarkedFigure,
   MIND_CONTENT_FIELD,
+  type MindChange,
   type MindFocus,
   type ProviderError,
   QUESTION_BLOCK,
@@ -98,6 +99,7 @@ import { givesStructuredOutput, calculates as offersCalculate } from "../provide
 import type { PreparedChatModel } from "../providers/chat";
 import { classifyProviderError } from "../providers/providerErrors";
 import type { WebResult } from "../providers/webSearch";
+import { messageReference } from "../references";
 import type { GateDecision } from "../runs/engine";
 import type { SkillScript, SkillSession } from "../skills";
 import {
@@ -116,6 +118,7 @@ import {
   type ToolProvider,
   type ToolProviderKind,
 } from "../tools";
+import { type MindsForTools, type MindToolsOptions, mindTools } from "../tools/minds/tools";
 import { asksForWeb } from "../tools/web/intent";
 import { type SavedPage, webTools } from "../tools/web/tools";
 import {
@@ -165,6 +168,7 @@ import {
   type ListedDocuments,
   languageInstruction,
   loadedSkillText,
+  mindInstructions,
   signInNeededInstructions,
   skillInstructions,
   sourcesInstructions,
@@ -298,6 +302,12 @@ export interface CellAnswer {
 /** No Search scope: every Document. */
 const NO_SCOPE: SearchScope = { folderIds: [], tagIds: [], documentIds: [] };
 
+/** The Folder a Search scope is, when it is one Folder alone; null otherwise. */
+const oneFolderOf = (scope: SearchScope | null): string | null =>
+  scope && scope.folderIds.length === 1 && scope.tagIds.length + scope.documentIds.length === 0
+    ? (scope.folderIds[0] ?? null)
+    : null;
+
 export interface AnswersOptions {
   content: MindContent;
   events: ReturnType<typeof createEventHub>;
@@ -335,6 +345,11 @@ export interface AnswersOptions {
   connectorsNeedingSignIn?(): { id: string; name: string }[];
   /** Searching the web and saving its pages (#128); absent: no web search. */
   web?: AnswerWeb;
+  /**
+   * The Minds an Answer in the assistant reads, changes and makes, as
+   * Proposals (#202, ../tools/minds); absent: it changes none.
+   */
+  minds?: MindsForTools;
   /** Asking the User before a Connector Tool or a Skill script runs. */
   approvals: AnswerApprovals;
   /** Running Skill scripts. */
@@ -432,6 +447,7 @@ const CARD_SOURCES: Record<ToolProviderKind, AnswerToolCall["source"]> = {
   connector: "connector",
   sources: "sources",
   web: "web",
+  minds: "minds",
 };
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -631,6 +647,12 @@ export function createAnswers(options: AnswersOptions) {
     toolSet?: ToolSet;
     /** Written for a Task (#126), which gives way to Answers itself (see ../runs/tasks). */
     task?: boolean;
+    /**
+     * An Answer in the assistant (#202): the Mind it was asked from and the
+     * Blocks the User selected there, where a Mind it makes goes, and what
+     * Blocks it adds link back to. It is offered the Minds' Tools. Absent: none.
+     */
+    assistant?: Pick<MindToolsOptions, "focused" | "folderId" | "origin">;
   }): void {
     const { home, answerId, model, context, documentIds, forcedSkill } = input;
     const outside = input.outside === true;
@@ -896,7 +918,7 @@ export function createAnswers(options: AnswersOptions) {
       id: string,
       ok: boolean,
       resultCount: number | null,
-      found: Pick<AnswerToolCall, "passages" | "error" | "webPage"> = {},
+      found: Pick<AnswerToolCall, "passages" | "error" | "webPage" | "mindChange"> = {},
     ) => {
       const call = toolCalls.find((each) => each.id === id);
       if (!call) return;
@@ -907,6 +929,7 @@ export function createAnswers(options: AnswersOptions) {
       if (found.passages) call.passages = found.passages;
       if (found.error) call.error = found.error;
       if (found.webPage) call.webPage = found.webPage;
+      if (found.mindChange) call.mindChange = found.mindChange;
       announce("answer.toolCallFinished", { ...place, answerId, call: { ...call } });
       writeSoon();
     };
@@ -918,6 +941,8 @@ export function createAnswers(options: AnswersOptions) {
     };
     /** What each call of `read_web_page` came to, by call, for its card when it finishes. */
     const webPages = new Map<string, WebPageCall>();
+    /** What each call of a Minds' Tool changed, by call, for its card when it finishes (#202). */
+    const mindChanges = new Map<string, MindChange>();
     /** Keeps how a script's run went on its card. */
     const setScriptRun = (id: string, run: SkillScriptRun) => {
       const call = toolCalls.find((each) => each.id === id);
@@ -1253,6 +1278,41 @@ export function createAnswers(options: AnswersOptions) {
               read: (toolCallId, call) => webPages.set(toolCallId, call),
             })
           : [];
+      // The Minds' Tools, for an Answer in the assistant (#202).
+      const minds = outside ? undefined : options.minds;
+      const fromMinds: Tool[] =
+        minds && input.assistant
+          ? mindTools({
+              minds,
+              prepared,
+              ...input.assistant,
+              blocksOf: (text) => {
+                let notFound = 0;
+                let unrecorded = 0;
+                const cited = withCitations(
+                  markdownToBlocks(withoutFootnoteDefinitions(text)),
+                  (marker) => {
+                    const node = session.checkedNode(marker);
+                    if (!node) unrecorded++;
+                    else if (node.attrs?.check === "not-found") notFound++;
+                    return node;
+                  },
+                );
+                const blocks = asGenerated(
+                  calculating
+                    ? withFigures(
+                        cited,
+                        (marker) => figures.figure(marker),
+                        (figure) => figure.shown,
+                      )
+                    : cited,
+                );
+                return { blocks, notFound, unrecorded };
+              },
+              changed: (toolCallId, change) => mindChanges.set(toolCallId, change),
+              now: () => new Date(),
+            })
+          : [];
       const documents: AnswerTools = {
         get documentCount() {
           return session.tools.documentCount;
@@ -1319,6 +1379,7 @@ export function createAnswers(options: AnswersOptions) {
             connectorTools = false,
             sourceTools = false,
             webTools: withWebTools = false,
+            mindTools: withMindTools = false,
           } = {},
         ) =>
           [
@@ -1336,6 +1397,7 @@ export function createAnswers(options: AnswersOptions) {
             connectorTools ? connectorInstructions(fromConnectors, mode === "no-documents") : "",
             sourcesInstructions(sourceTools),
             webInstructions(withWebTools),
+            mindInstructions(withMindTools),
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
             language,
           ]
@@ -1346,7 +1408,7 @@ export function createAnswers(options: AnswersOptions) {
         question: context.question,
         model: prepared.model,
         documents,
-        tools: [...provided, ...fromSkills, ...fromWeb],
+        tools: [...provided, ...fromSkills, ...fromWeb, ...fromMinds],
         gate,
         toolSet: input.toolSet,
         thirdParty: contextReasons,
@@ -1433,10 +1495,12 @@ export function createAnswers(options: AnswersOptions) {
           }
           case "tool-call-finished": {
             const webPage = webPages.get(event.id);
+            const mindChange = mindChanges.get(event.id);
             callFinished(event.id, event.ok, event.resultCount, {
               ...(event.passages && { passages: [...event.passages] }),
               ...(event.error && { error: event.error }),
               ...(webPage && { webPage }),
+              ...(mindChange && { mindChange }),
             });
             break;
           }
@@ -1700,6 +1764,15 @@ export function createAnswers(options: AnswersOptions) {
       emptyScope,
       forcedSkill: question.forcedSkill,
       consentNeeded: ready.consentNeeded,
+      assistant: {
+        focused: mind && {
+          mindId: mind.mindId,
+          // Where the cursor is counts only as a selection when text is selected.
+          blockIds: question.focus?.selection ? question.focus.blockIds : [],
+        },
+        folderId: oneFolderOf(question.scope),
+        origin: { from: messageReference(conversation.id, answer.id), question: question.text },
+      },
     });
     return { asked: true, conversation, questionId: question.id, answerId: answer.id };
   }
