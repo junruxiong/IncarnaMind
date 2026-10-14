@@ -760,6 +760,19 @@ export class LookReader {
     return this.paragraphs.key(run ? { ...paragraph.look, run } : paragraph.look);
   }
 
+  /** Drawn on a paragraph, these would cover all its text, not only the text that has them. */
+  canBeParagraphRun(key: string): boolean {
+    const look = this.runs.entries[key];
+    return !(
+      look?.underline ||
+      look?.strike ||
+      look?.doubleStrike ||
+      look?.highlight ||
+      look?.shade ||
+      look?.vertical
+    );
+  }
+
   /** For text with no look in a paragraph whose `run` has one. */
   plainRun(): string {
     return this.runs.empty({});
