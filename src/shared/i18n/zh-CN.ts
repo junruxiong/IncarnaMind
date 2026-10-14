@@ -1394,9 +1394,11 @@ export const zhCN = {
   "setup.body": "你的问题会留在这里，选好后立即回答。",
   "setup.waiting": "等待你选择模型",
   "setup.chatgpt.use": "使用我的 ChatGPT 订阅",
-  "setup.chatgpt.line": "Plus 或 Pro · 无需密钥 · 你的问题会通过你的 ChatGPT 账号发送给 OpenAI。",
+  "setup.chatgpt.line":
+    "Plus 或 Pro · 无需密钥 · 你的问题、当前 Mind、文档中的相关段落，以及用于打标签的文档文字，会通过你的 ChatGPT 账号发送给 OpenAI。",
   "setup.deepseek.use": "粘贴 DeepSeek 密钥",
-  "setup.deepseek.line": "你的问题会通过你自己的密钥发送给 DeepSeek。",
+  "setup.deepseek.line":
+    "你的问题、当前 Mind、文档中的相关段落，以及用于打标签的文档文字，会通过你自己的密钥发送给 DeepSeek。",
   "setup.how": "如何获取？",
   "setup.getOllama": "获取 Ollama",
   "setup.other": "其他方式",

@@ -151,7 +151,7 @@ test("a failed Answer says so under itself with one action: the key's page in Se
   }
 });
 
-test("asking without a chat model says what to set up at the top of the Mind, and the first Question waits for the setup card", async () => {
+test("asking without a chat model says what to set up at the top of the Mind, and the first Question waits for the setup card, which takes that line's place", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await newMind(window);
@@ -163,18 +163,9 @@ test("asking without a chat model says what to set up at the top of the Mind, an
   await expect(window.getByRole("status").filter({ has: top })).toHaveCount(0);
   await screenshot(window, "needs-chat-model-en");
 
-  // Asked from the composer, the Question waits in the conversation and the composer becomes the
-  // setup card, not a line; nothing is written into the note.
-  await window.getByTestId("mind-editor").click();
-  await window.keyboard.press("ControlOrMeta+j");
-  await window.keyboard.type("Is anyone there?");
-  await window.keyboard.press("Enter");
-  await expect(window.getByTestId("model-setup")).toBeVisible();
-  await expect(window.getByTestId("mind-editor").getByTestId("question")).toHaveCount(0);
-  await expect(window.locator("dialog[open]")).toHaveCount(0);
-  await screenshot(window, "needs-chat-model-composer-en");
-
   // The notice's action opens Settings on Models, by keyboard too.
+  await window.getByTestId("mind-title").fill("Tides");
+  await window.keyboard.press("End");
   await top.getByRole("button").focus();
   await expect(top.getByRole("button")).toHaveCSS("outline-style", "solid");
   await window.keyboard.press("Enter");
@@ -186,6 +177,19 @@ test("asking without a chat model says what to set up at the top of the Mind, an
   await expect(top).toContainText("提问需要先设置对话模型");
   await expect(top.getByRole("button")).toHaveText("去设置");
   await screenshot(window, "needs-chat-model-zh");
+  await bridge(window).settings("en");
+
+  // Asked from the composer, the Question waits in the conversation and the composer becomes the
+  // setup card, not a line; nothing is written into the note, and the line above steps aside.
+  await window.getByTestId("mind-editor").click();
+  await window.keyboard.press("ControlOrMeta+j");
+  await window.keyboard.type("Is anyone there?");
+  await window.keyboard.press("Enter");
+  await expect(window.getByTestId("model-setup")).toBeVisible();
+  await expect(window.getByTestId("mind-editor").getByTestId("question")).toHaveCount(0);
+  await expect(window.locator("dialog[open]")).toHaveCount(0);
+  await expect(top).toHaveCount(0);
+  await screenshot(window, "needs-chat-model-composer-en");
   await app.close();
 });
 
