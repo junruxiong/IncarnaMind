@@ -47,6 +47,7 @@ function countingRecognizer(script: FakeScanScript, fail: ReadonlySet<number> = 
       if (fail.has(page)) throw new Error("The model failed on this page.");
       return fake.read(picture, page);
     },
+    readFile: (file, page) => fake.readFile(file, page),
     close: () => fake.close(),
   };
   return { recognizer, read };
@@ -460,6 +461,7 @@ describe("Scanned pages are read on this computer (#397)", { timeout: 60_000 }, 
         read.push(page);
         return fake.read(picture, page);
       },
+      readFile: (file, page) => fake.readFile(file, page),
       close: () => fake.close(),
     };
     const core = startCore(dataDir, scanning(recognizer));

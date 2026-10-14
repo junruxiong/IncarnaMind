@@ -4,9 +4,9 @@
  * heading so a Location can name them ("§ History, ¶ 3"). Pure: the worker
  * indexes with it and the viewer draws with it, so both see the same blocks.
  *
- * A picture saved with the page (#756) is a block of its own, numbered in
- * the page from 1 and anchored "figure2": its description, and the text the
- * worker read from it, each line anchored "figure2.line3" with its box on
+ * A picture saved with the page is a block of its own, numbered in
+ * the page from 1 and anchored "figure2": its description, and the text
+ * read from it, each line anchored "figure2.line3" with its box on
  * the picture. A picture's text never moves where a section is cut, so the
  * viewer, which has only the descriptions, cuts the page where the index did.
  */
@@ -46,7 +46,6 @@ export interface FigureReading {
   text: string;
   /** Spans of `text`, with their boxes on the picture as fractions (see `Anchor.quad`). */
   lines: { start: number; end: number; quad: number[] }[];
-  /** Spans of `text`. */
   unsure?: [number, number][];
   /** It couldn't be read now: only its description is text. */
   unread?: boolean;

@@ -6,6 +6,7 @@
  * confidence, the rest with a high one; a page it says fails, fails.
  */
 import type { RecognizedLine, TextRecognizer } from "../../adapters";
+import { readDrawn } from "./picture";
 
 /**
  * A line the fake reads: its text, or its text with its box (as fractions of
@@ -33,7 +34,7 @@ export function createFakeTextRecognizer(
   options: { script?: FakeScanScript; delayMs?: number } = {},
 ): TextRecognizer {
   let loaded = false;
-  return {
+  const recognizer: TextRecognizer = {
     async load() {
       loaded = true;
     },
@@ -81,8 +82,12 @@ export function createFakeTextRecognizer(
         };
       });
     },
+    async readFile(file, page) {
+      return readDrawn(file, (picture) => recognizer.read(picture, page));
+    },
     close() {
       loaded = false;
     },
   };
+  return recognizer;
 }

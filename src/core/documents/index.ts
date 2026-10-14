@@ -944,6 +944,12 @@ export function createDocuments(options: DocumentsOptions) {
       }
       return textRecognition.read(picture, page);
     },
+    readFile(_job, page, file) {
+      if (!textRecognition) {
+        return Promise.reject(new TextRecognitionUnavailableError("Pictures can't be read."));
+      }
+      return textRecognition.readFile(file, page);
+    },
     isUnavailable: (error) => error instanceof TextRecognitionUnavailableError,
     onResult(job, result) {
       scanProgress.delete(job.documentId);
@@ -1403,7 +1409,22 @@ export function createDocuments(options: DocumentsOptions) {
     citedAtStart = byDocument;
   }
   for (const row of unfinished) {
-    if (row.status === "extracting") setStatus(row.id, "queued");
+    if (row.status === "extracting") {
+      // Its reading stopped the app last time: read again at every start, it could again.
+      // It waits for the User's Retry.
+      // A version read before stays searchable, as after a crash of the worker alone.
+      db.run(
+        `UPDATE documents SET status = ?, failure_reason = 'processing-error',
+           failure_message = ?, updated_at = ? WHERE id = ?`,
+        [
+          indexedStatus(row) ?? "failed",
+          "IncarnaMind stopped while reading this file.",
+          now(),
+          row.id,
+        ],
+      );
+      continue;
+    }
     if (!isPaused(row.id)) processor.enqueue(jobFor(row));
   }
   citedAtStart = null;
@@ -2520,6 +2541,13 @@ export function createDocuments(options: DocumentsOptions) {
       library.close();
       embedding.close();
       processor.close();
+      // Closed in good order, a Document being read is read again at the next start; one
+      // still "extracting" then is one whose reading stopped the app (see `unfinished`).
+      db.run(
+        `UPDATE documents SET status = 'queued', updated_at = ?
+         WHERE deleted_at IS NULL AND status = 'extracting'`,
+        [now()],
+      );
     },
   };
 }
