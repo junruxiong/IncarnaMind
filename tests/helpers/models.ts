@@ -1,6 +1,7 @@
 import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import type { ChatModelFactory, ChatModelSpec } from "../../src/core";
+import { CITE_RETRY_INSTRUCTIONS } from "../../src/core/answers/prompt";
 
 /** A chat model that answers "OK" to every request. */
 export function replyingModel(text = "OK"): MockLanguageModelV4 {
@@ -185,6 +186,16 @@ export function failingStreamModel(statusCode: number | undefined, message: stri
 }
 
 /** What a model was asked, simplified: the instructions, then each message's role and text. */
+/** The index of the model's last request in an Answer itself, not the one request for its Citations (#760). */
+export function lastAnswerCall(model: MockLanguageModelV4): number {
+  return model.doStreamCalls.findLastIndex(
+    (call) =>
+      !call.prompt.some(
+        (message) => message.role === "system" && message.content === CITE_RETRY_INSTRUCTIONS,
+      ),
+  );
+}
+
 export function promptOf(model: MockLanguageModelV4, call = 0): { role: string; text: string }[] {
   const options = model.doStreamCalls[call];
   if (!options) throw new Error(`The model wasn't asked ${call + 1} time(s).`);

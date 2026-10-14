@@ -701,6 +701,7 @@ export function createAnswers(options: AnswersOptions) {
     let support: CitationSupport | null = null;
     /** Markers the engine put in for records the model gave without them. */
     let placedMarkers = 0;
+    const citedAfterChecking = { count: 0, asked: false };
     /** The one request for exact quotes, if the engine made it (see ./quoteRetry). */
     let quoteRetry: QuoteRetry | null = null;
     /** The one request to fix figures, if the engine made it (see ./figureRetry). */
@@ -739,6 +740,7 @@ export function createAnswers(options: AnswersOptions) {
             ? { summary, ms: Math.max(0, thoughtUntil - reasoningStartedAt) }
             : null,
         ...(read?.partial && { readShare }),
+        ...(citedAfterChecking.count > 0 && { citedAfterChecking: citedAfterChecking.count }),
       };
     };
     let skills: SkillSession | null = null;
@@ -895,6 +897,7 @@ export function createAnswers(options: AnswersOptions) {
           status: written ? outcome.status : "stopped",
           ...session.summary(),
           placedMarkers,
+          citedAfterChecking: { ...citedAfterChecking },
           citationSupport: support,
           quoteRetry,
           figures: placed.figures,
@@ -1338,6 +1341,8 @@ export function createAnswers(options: AnswersOptions) {
         hasRecord: (marker) => session.tools.hasRecord?.(marker) ?? false,
         unfoundQuotes: () => session.tools.unfoundQuotes?.() ?? [],
         correctQuote: (marker, quote) => session.tools.correctQuote?.(marker, quote) ?? false,
+        shownPassages: () => session.tools.shownPassages?.() ?? [],
+        quoteFound: (passage, quote) => session.tools.quoteFound?.(passage, quote) ?? false,
         ...(calculating && {
           calculate: (given: readonly unknown[], calculateOptions?: CiteOptions) =>
             figures.calculate(given, calculateOptions),
@@ -1451,6 +1456,10 @@ export function createAnswers(options: AnswersOptions) {
             break;
           case "markers-placed":
             placedMarkers += event.count;
+            break;
+          case "cited-after-checking":
+            citedAfterChecking.count += event.count;
+            citedAfterChecking.asked ||= event.asked;
             break;
           case "mind-cut":
             if (read) read = event.share === 0 ? null : { ...read, partial: true };
