@@ -23,6 +23,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, renameSync } from "node:fs";
 import { rm, stat } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
+import type { LiveDocument } from "../../shared/citations";
 import { quoteInUnits } from "../../shared/locations";
 import {
   type Anchor,
@@ -1498,6 +1499,20 @@ export function createDocuments(options: DocumentsOptions) {
       .map(toDocument);
   };
 
+  /** Every live Document's id, version and names, in `list`'s order: what a Citation needs to show its Document's current name. */
+  const names = (): LiveDocument[] =>
+    db
+      .all<{ id: string; content_hash: string; name: string; title: string | null }>(
+        `SELECT id, content_hash, name, title FROM documents
+         WHERE deleted_at IS NULL ORDER BY created_at DESC, rowid DESC`,
+      )
+      .map((row) => ({
+        id: row.id,
+        contentHash: row.content_hash,
+        name: row.name,
+        title: row.title,
+      }));
+
   /** The ids of the live Documents the filter keeps, in `list`'s order. */
   const ids = (filter: DocumentFilter = {}): string[] => {
     const { where, params } = filterWhere(filter);
@@ -2062,6 +2077,7 @@ export function createDocuments(options: DocumentsOptions) {
     },
 
     list,
+    names,
     ids,
 
     /** A live Document. Throws NotFoundError for an unknown or deleted one. */
