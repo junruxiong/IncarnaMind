@@ -215,17 +215,17 @@ function citationStylesFolder(): string {
 }
 
 /**
- * The User's Documents folder, where the first save offers to put the Output
- * location. A test build uses one in its data folder, so the smoke tests never
- * write into the User's.
- */
-/**
  * The home folder the core gets. Node's, not `app.getPath("home")`: on macOS
  * that ignores HOME, which the smoke tests point at a temporary folder, and
  * their agents' settings would land in the real one.
  */
 export const homeFolder = (): string => homedir();
 
+/**
+ * The User's Documents folder, where the first save offers to put the Output
+ * location. A test build uses one in its data folder, so the smoke tests never
+ * write into the User's.
+ */
 function documentsFolder(dataDir: string): string {
   return import.meta.env.MODE === "test" ? join(dataDir, "Documents") : app.getPath("documents");
 }
