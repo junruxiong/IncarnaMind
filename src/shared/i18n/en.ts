@@ -662,7 +662,7 @@ export const en = {
   "verify.tryAgain": "Try again",
   "consent.flow.checks": "Find support and Verify",
   "consent.flow.checks.purpose":
-    "check the sentences you select, and the documents you verify, against your Documents",
+    "check the sentences you select, a whole Mind you check, and the documents you verify, against your Documents",
   "aiText.markedAsMine": "Marked as yours",
   "edit.pending.improve": "Improving the writing…",
   "edit.pending.shorten": "Shortening…",
