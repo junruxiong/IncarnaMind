@@ -18,6 +18,7 @@ import {
   type StartResearchInput,
   type Task,
 } from "../../src/core";
+import { CostCapError } from "../../src/core/providers/providerErrors";
 import { openDatabase } from "../../src/core/storage";
 import { aiUseOfAccepted, pendingProposals, resolveProposals } from "../../src/shared/proposals";
 import { shownPassages } from "../helpers/citations";
@@ -76,7 +77,12 @@ const requestText = (call: ModelCall) =>
  * reads the pages found, cites the first Passage it was given, then writes
  * its notes. `hold` keeps a step's notes from finishing until it resolves.
  */
-function researcher(seen: ModelCall[], hold?: { step: string; until: Promise<void> }) {
+function researcher(
+  seen: ModelCall[],
+  hold?: { step: string; until: Promise<void> },
+  /** While `capped`, the Tag request meets the monthly cap. */
+  tagging: { capped: boolean } = { capped: false },
+) {
   return scriptedModel(
     (call): ScriptedReply => {
       seen.push(call);
@@ -111,18 +117,23 @@ function researcher(seen: ModelCall[], hold?: { step: string; until: Promise<voi
         : { text: notes };
     },
     {
-      generate: (call) =>
-        /Change it as the User asks/.test(call.prompt)
-          ? {
-              text: "TITLE: How tea came to Europe\n1. Find the first traders\n2. **Check the dates**",
-            }
-          : call.prompt.includes("Topic:") && !call.prompt.includes("Plain words")
-            ? {
-                text: "TITLE: How did tea reach Europe?\n1. Find who first brought tea\n2) Compare the sources\n\nThat's the plan.",
-              }
-            : /You tag the web pages/.test(call.system)
-              ? { text: "Tea: 1\nNothing here: 9" }
-              : { text: "Sure, I can help." },
+      generate: (call) => {
+        if (/Change it as the User asks/.test(call.prompt)) {
+          return {
+            text: "TITLE: How tea came to Europe\n1. Find the first traders\n2. **Check the dates**",
+          };
+        }
+        if (call.prompt.includes("Topic:") && !call.prompt.includes("Plain words")) {
+          return {
+            text: "TITLE: How did tea reach Europe?\n1. Find who first brought tea\n2) Compare the sources\n\nThat's the plan.",
+          };
+        }
+        if (/You tag the web pages/.test(call.system)) {
+          if (tagging.capped) throw new CostCapError();
+          return { text: "Tea: 1\nNothing here: 9" };
+        }
+        return { text: "Sure, I can help." };
+      },
     },
   );
 }
@@ -363,8 +374,9 @@ describe("Research", { timeout: 30_000 }, () => {
     expect(JSON.parse(row?.result ?? "{}").documents).toEqual(expect.arrayContaining([page?.id]));
   });
 
-  test("going on after a quit in the middle of writing, it proposes its draft once, and a new Mind it made is made once", async () => {
-    const answering = researcher([]);
+  test("going on after a quit in the middle of writing, it neither asks the model again nor proposes its draft twice, and a new Mind it made is made once", async () => {
+    const seen: ModelCall[] = [];
+    const answering = researcher(seen);
     const { core, dataDir, folder, mind, keychain, web } = await setUp(answering);
     const task = await started(
       core,
@@ -380,6 +392,7 @@ describe("Research", { timeout: 30_000 }, () => {
     );
     expect(made).toMatchObject({ title: "How did tea reach Europe", folderId: filed?.id });
     core.close();
+    const asked = seen.length;
 
     // As if IncarnaMind had been quit after the changes went in, before the step was settled.
     const db = openDatabase(join(dataDir, DATABASE_FILE));
@@ -403,7 +416,38 @@ describe("Research", { timeout: 30_000 }, () => {
     ).toHaveLength(1);
     const changes = await changesIn(reopened, written.mindId);
     expect(changes.ids).toEqual([written.proposalId]);
+    expect(again.review).toEqual(written);
+    // The changes were found in the Mind, so the draft wasn't paid for again.
+    expect(seen).toHaveLength(asked);
     reopened.close();
+  });
+
+  test("at the monthly cap while it chooses Tags, it pauses at the save step with the pages filed; going on, it tags them and writes its draft", async () => {
+    const tagging = { capped: true };
+    const { core, folder, mind } = await setUp(researcher([], undefined, tagging));
+    const task = await started(core, startInput(mind.id, folder.id));
+    const paused = await waitForTask(core, task.id, (each) => each.status === "paused");
+
+    expect(paused).toMatchObject({ pausedReason: "cost-cap", progress: { done: 2, total: 4 } });
+    const page = (await core.listDocuments()).find((each) => each.kind === "web");
+    expect(page?.tags).toEqual([]);
+    const folderNamed = async () =>
+      (await core.getLibrary()).groups.filter((each) => each.name === "How did tea reach Europe");
+    const [filed] = await folderNamed();
+    expect(
+      (await core.getLibrary()).assignments.find((each) => each.documentId === page?.id)?.groupId,
+    ).toBe(filed?.id);
+    expect((await changesIn(core, mind.id)).ids).toEqual([]);
+
+    tagging.capped = false;
+    await core.resumeTask(task.id);
+    const done = await waitForTask(core, task.id, (each) => each.finishedAt !== null);
+    expect(done).toMatchObject({ status: "done", progress: { done: 4, total: 4 } });
+    expect(await folderNamed()).toHaveLength(1);
+    const tea = (await core.listTags()).find((tag) => tag.name === "Tea");
+    const tagged = (await core.listDocuments()).find((each) => each.id === page?.id);
+    expect(tagged?.tags.map((each) => each.tagId)).toEqual([tea?.id]);
+    expect((await changesIn(core, mind.id)).ids).toHaveLength(1);
   });
 
   test("with the Library only, it files nothing and writes its draft; with nothing found, it says it couldn't finish and proposes nothing", async () => {

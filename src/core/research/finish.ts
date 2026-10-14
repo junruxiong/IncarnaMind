@@ -12,10 +12,18 @@ import { cutTitle } from "../../shared/naming";
 import type { CellAnswer } from "../answers";
 import type { NodeJSON } from "../answers/blocks";
 import type { QuestionContext } from "../answers/context";
-import type { ChatModelChoice, ProposalRequest, ResearchPlan, ResearchTarget } from "../api";
+import type {
+  ChatModelChoice,
+  ProposalRequest,
+  ResearchPlan,
+  ResearchTarget,
+  RunStop,
+} from "../api";
 import { isRecord } from "../errors";
 import type { PreparedChatModel } from "../providers/chat";
+import { classifyProviderError } from "../providers/providerErrors";
 import { RECORD_PREFIX } from "../runs/journal";
+import { runStopOf } from "../runs/stop";
 import type { TaskEnd, TaskRun } from "../runs/tasks";
 import { draftContext, readTags, TAG_INSTRUCTIONS, tagPrompt } from "./prompt";
 
@@ -53,6 +61,8 @@ export interface FinishOptions {
     apply(documentId: string, tagIds: readonly string[]): void;
   };
   notes: {
+    /** A request's changes in a Mind, once it has proposed there; null before. */
+    proposed(mindId: string, request: string): { proposalId: string; changes: number } | null;
     propose(
       mindId: string,
       blocks: readonly NodeJSON[],
@@ -135,14 +145,25 @@ function folderFor(options: FinishOptions, task: TaskRun, title: string, topic: 
   return { id, name: chosen };
 }
 
-/** Tags for the pages, as the research's model chooses them, the User's own reused by name. */
+/** How a Task pauses at a limit: the monthly cap, or a plan's until it resets. */
+export const pausedBy = (stop: RunStop): TaskEnd => ({
+  status: "paused",
+  reason: stop.reason,
+  resetsAt: stop.reason === "plan-limit" ? stop.resetsAt : null,
+});
+
+/**
+ * Tags for the pages, as the research's model chooses them, the User's own
+ * reused by name. A failed request leaves them untagged, but the monthly cap
+ * or a plan's limit stops it (`stop`), so the Task pauses there.
+ */
 async function tagPages(
   options: FinishOptions,
   prepared: PreparedChatModel,
   title: string,
   pages: readonly { id: string; name: string }[],
   signal: AbortSignal,
-): Promise<string[]> {
+): Promise<{ tags: string[] } | { stop: RunStop }> {
   const existing = options.tags.list();
   let reply: string;
   try {
@@ -160,8 +181,11 @@ async function tagPages(
     });
     reply = result.text;
   } catch (error) {
-    if (!signal.aborted) options.reportError(error);
-    return [];
+    if (signal.aborted) return { tags: [] };
+    const stop = runStopOf(classifyProviderError(error));
+    if (stop) return { stop };
+    options.reportError(error);
+    return { tags: [] };
   }
   const applied: string[] = [];
   for (const tag of readTags(reply, pages.length)) {
@@ -183,12 +207,14 @@ async function tagPages(
     }
     applied.push(known?.name ?? tag.name);
   }
-  return applied;
+  return { tags: applied };
 }
 
 /**
  * Files the web pages the Task saved into a new Folder with Tags: the `save`
- * step. Pages the User had saved before it started stay where they are.
+ * step. Pages the User had saved before it started stay where they are. At
+ * the monthly cap or a plan's limit it pauses with the step left open: going
+ * on files nothing twice and tags the pages then.
  */
 export async function fileSources(
   options: FinishOptions,
@@ -196,7 +222,7 @@ export async function fileSources(
   input: { topic: string; plan: ResearchPlan },
   documents: readonly string[],
   prepared: PreparedChatModel,
-): Promise<SavedSources> {
+): Promise<SavedSources | { end: TaskEnd }> {
   task.started(SAVE_STEP);
   const pages = options.documents.webPagesSince(documents, task.startedAt);
   if (pages.length === 0) {
@@ -209,15 +235,23 @@ export async function fileSources(
     pages.map((page) => page.id),
     folder.id,
   );
-  const tags = await tagPages(options, prepared, input.plan.title, pages, task.signal);
+  const tagged = await tagPages(options, prepared, input.plan.title, pages, task.signal);
+  if ("stop" in tagged) return { end: pausedBy(tagged.stop) };
   const saved: SavedSources = {
     folderId: folder.id,
     folder: folder.name,
     documents: pages.length,
-    tags,
+    tags: tagged.tags,
   };
   task.settled(SAVE_STEP, "completed", saved);
   return saved;
+}
+
+/** The Mind the draft goes into without making one: the one chosen, else the new one an earlier try made. */
+function madeMind(options: FinishOptions, task: TaskRun, target: ResearchTarget): string | null {
+  if ("mindId" in target && options.mindExists(target.mindId)) return target.mindId;
+  const earlier = idOf(task.step(MIND_RECORD)?.result, "mindId");
+  return earlier && options.mindExists(earlier) ? earlier : null;
 }
 
 /** The Mind the draft goes into: the one chosen, else the new one an earlier try made, else a new one. */
@@ -228,9 +262,8 @@ export function draftMind(
   title: string,
   folderId: string | null,
 ): string {
-  if ("mindId" in target && options.mindExists(target.mindId)) return target.mindId;
-  const earlier = idOf(task.step(MIND_RECORD)?.result, "mindId");
-  if (earlier && options.mindExists(earlier)) return earlier;
+  const made = madeMind(options, task, target);
+  if (made) return made;
   const home = folderId ?? (task.mindId ? options.folderOfMind(task.mindId) : null);
   const mindId = options.createMind(cutTitle(title), home);
   task.started(MIND_RECORD);
@@ -246,7 +279,7 @@ export type AnswerStep = (
 /**
  * Writes the cited draft from the Documents the steps used, as changes to
  * accept in the Mind: the `draft` step. A quit after the changes went in
- * finds them there and proposes nothing again.
+ * finds them there, and neither asks the model nor proposes again.
  */
 export async function writeDraft(
   options: FinishOptions,
@@ -263,6 +296,13 @@ export async function writeDraft(
   }) => Promise<CellAnswer>,
 ): Promise<{ written: WrittenDraft } | { failed: string } | { end: TaskEnd }> {
   task.started(DRAFT_STEP);
+  const earlierMind = madeMind(options, task, input.writeInto);
+  const earlier = earlierMind ? options.notes.proposed(earlierMind, input.draftRequest) : null;
+  if (earlierMind && earlier) {
+    const written: WrittenDraft = { mindId: earlierMind, ...earlier };
+    task.settled(DRAFT_STEP, "completed", written);
+    return { written };
+  }
   const documentIds = options.documents.live(found.documents);
   if (documentIds.length === 0) {
     task.settled(DRAFT_STEP, "failed", { problem: "no-sources" });

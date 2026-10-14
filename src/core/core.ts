@@ -1210,6 +1210,7 @@ export function createCore(adapters: CoreAdapters): Core {
       },
     },
     notes: {
+      proposed: (mindId, request) => noteAdding.proposed(mindId, request),
       propose: (mindId, blocks, request, made) => noteAdding.propose(mindId, blocks, request, made),
     },
     now: () => adapters.now?.() ?? new Date(),
