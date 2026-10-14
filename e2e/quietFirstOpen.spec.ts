@@ -7,9 +7,11 @@ import {
   launchApp,
   newMind,
   removeDataFolder,
+  savedPath,
   setLanguage,
   setWindowSize,
   useLocalChatModel,
+  useOutputLocation,
 } from "./app";
 
 let dataDir: string;
@@ -97,5 +99,44 @@ test("the quiet first open holds at 1,100 px in Chinese (#123)", async () => {
   await expect(window.getByTestId("sidebar").getByTestId("not-in-a-folder-toggle")).toHaveText(
     "示例",
   );
+  await app.close();
+});
+
+test("File > Export names the Mind in front and exports it while the tab strip is hidden (#123)", async () => {
+  const { app, window } = await launchApp(dataDir, { examples: true });
+  await expect(window.getByTestId("tab-list")).toHaveCount(0);
+  await useOutputLocation(window, sources);
+  const item = () =>
+    app.evaluate(({ Menu }) => {
+      const found = Menu.getApplicationMenu()
+        ?.items.flatMap((menu) => menu.submenu?.items ?? [])
+        .find((each) => each.id === "mind.export");
+      return found ? { label: found.label, enabled: found.enabled } : null;
+    });
+  await expect.poll(item).toEqual({ label: "Export “Where tea comes from”…", enabled: true });
+
+  await app.evaluate(({ Menu }) => {
+    Menu.getApplicationMenu()
+      ?.items.flatMap((menu) => menu.submenu?.items ?? [])
+      .find((each) => each.id === "mind.export")
+      ?.click();
+  });
+  await savedPath(window, "Where tea comes from.docx");
+  await app.close();
+});
+
+test("File > Export is disabled with no Mind open (#123)", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await expect(window.getByTestId("mind-none-open")).toBeVisible();
+  await expect
+    .poll(() =>
+      app.evaluate(({ Menu }) => {
+        const found = Menu.getApplicationMenu()
+          ?.items.flatMap((menu) => menu.submenu?.items ?? [])
+          .find((each) => each.id === "mind.export");
+        return found ? { label: found.label, enabled: found.enabled } : null;
+      }),
+    )
+    .toEqual({ label: "Export…", enabled: false });
   await app.close();
 });
