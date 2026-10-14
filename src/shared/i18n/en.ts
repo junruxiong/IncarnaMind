@@ -1460,9 +1460,10 @@ export const en = {
   "setup.waiting": "Waiting for you to choose a model",
   "setup.chatgpt.use": "Use my ChatGPT plan",
   "setup.chatgpt.line":
-    "Plus or Pro · No key needed · Your Questions go to OpenAI under your ChatGPT account.",
+    "Plus or Pro · No key needed · Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to OpenAI under your ChatGPT account.",
   "setup.deepseek.use": "Paste a DeepSeek key",
-  "setup.deepseek.line": "Your Questions go to DeepSeek, under your own key.",
+  "setup.deepseek.line":
+    "Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to DeepSeek under your own key.",
   "setup.how": "How do I get one?",
   "setup.getOllama": "Get Ollama",
   "setup.other": "Other ways",

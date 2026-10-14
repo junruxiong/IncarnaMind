@@ -83,7 +83,9 @@ export function ModelSetupCard() {
           >
             {t("setup.how")}
           </button>
-          <p className={hintClass}>{t("setup.deepseek.line")}</p>
+          <p data-testid="setup-deepseek-sends" className={hintClass}>
+            {t("setup.deepseek.line")}
+          </p>
           {view === "deepseek" && (
             <ProviderForm providers={providers} onSaved={() => undefined} initialKind="deepseek" />
           )}
@@ -235,7 +237,9 @@ function ChatGptWay({ primary = false }: { primary?: boolean }) {
           {primary ? t("setup.chatgpt.use") : t("chatgpt.continue")}
         </button>
       )}
-      {primary && <p className={hintClass}>{t("setup.chatgpt.line")}</p>}
+      <p data-testid="setup-chatgpt-sends" className={hintClass}>
+        {t("setup.chatgpt.line")}
+      </p>
       <ChatGptSignInState sign={sign} />
     </div>
   );
