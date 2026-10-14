@@ -56,6 +56,7 @@ export const en = {
   "unread.reason.scan":
     "A scan with no text that could be recognized (handwriting or a picture, say).",
   "unread.reason.password": "Password-protected. Remove the password and add it again.",
+  "unread.reason.passwordPdf": "Locked with a password.",
   "unread.reason.damaged": "The file is damaged or couldn't be opened.",
   "unread.reason.too-large": "Too large to open.",
   "unread.reason.pages": "Some scanned pages haven't been read yet.",
@@ -499,6 +500,7 @@ export const en = {
   "chart.kindName.scatter": "Scatter chart",
   "chart.kindMenu": "Chart type",
   "chart.columns": "Columns",
+  "chart.rows": "Rows",
   "chart.scatter.across": "across",
   "chart.scatter.up": "up",
   "chart.scatter.needsTwo": "A scatter chart needs two columns of numbers",
@@ -513,14 +515,15 @@ export const en = {
   "chart.empty": "Nothing to draw. Choose a column of numbers in Chart type.",
   "chart.plot.label": "{kind}: {title}, {count} values. The arrow keys move between them.",
   "chart.fromTable": "Chart from table",
-  "chart.fromTable.none": "No column of this table holds numbers to chart",
   "chart.fromFigures": "Chart from selected figures",
   "chart.fromFigures.none": "Select lines with figures in them to chart them",
   "chart.command.bar": "Show as bar chart",
   "chart.command.line": "Show as line chart",
   "chart.command.pie": "Show as pie chart",
   "chart.command.scatter": "Show as scatter chart",
+  "chart.switch": "Switch rows and columns",
   "chart.series.unnamed": "Column {number}",
+  "chart.series.unnamedRow": "Row {number}",
   "chart.series.value": "Value",
   "chart.point": "{label}: {value} · {source}",
   "chart.point.title": "{row} · {series}",
@@ -639,6 +642,7 @@ export const en = {
   "checks.problem.local-mode":
     "Local mode is on, and the model isn't on this computer, so nothing was checked.",
   "checks.problem.chooseModel": "Choose a model",
+  "checks.tryAgain": "Try again",
   "checks.problem.failed": "Couldn't check: {message}",
   "verify.command": "Verify a document…",
   "verify.command.keywords": "verify check PDF claims fact-check received draft someone else",
@@ -647,6 +651,7 @@ export const en = {
   "verify.refused.unreadable": "Couldn't read that PDF.",
   "verify.refused.no-text":
     "That PDF has no text to check. If it's a scan, its pages couldn't be read.",
+  "verify.mindTitle": "Checking: {name}",
   "verify.from": "From {name}",
   "verify.from.title": "Someone else wrote this text. Open {name} beside it",
   "verify.finding": "Finding the claims to check…",
@@ -803,6 +808,12 @@ export const en = {
   "viewer.keepTip": "Keep this tab open (or double-click its tab)",
   "viewer.loading": "Opening the Document…",
   "viewer.failed": "This Document couldn't be shown: {message}",
+  "viewer.locked.title": "This PDF is locked",
+  "viewer.locked.body":
+    "Type its password to open it. It's kept on this computer, for this PDF only.",
+  "viewer.locked.password": "Password",
+  "viewer.locked.unlock": "Unlock",
+  "viewer.locked.wrong": "That password doesn't open it.",
   "viewer.notText": "This file doesn't hold readable text.",
   "viewer.removed.body": "This Document has been deleted from IncarnaMind, so it can't be shown.",
   "viewer.removed.unlinked":
@@ -926,6 +937,8 @@ export const en = {
   "documents.pick.title": "Add Documents",
   "documents.pick.filter": "Documents",
   "documents.retryAction": "Retry",
+  "documents.unlockAction": "Unlock…",
+  "documents.forgetPasswordAction": "Forget password",
   "documents.renameLabel": "New name for {name}",
   "documents.deleteAction.many": "Delete {count} Documents",
   "documents.deleteAction": "Delete",
@@ -1576,6 +1589,8 @@ export const en = {
   "providers.test.cost-cap":
     "Nothing was sent: this month's spending cap is reached. Change it in Settings → General.",
   "providers.test.no-answer": "The model sent no reply.",
+  "providers.test.ollama-not-running":
+    "Ollama isn't running on this computer. Open it, then test again.",
   "providers.test.unknown": "The test didn't work.",
 
   "providers.secrets.plainText.title": "No keyring is running",
@@ -1616,6 +1631,12 @@ export const en = {
   "localMode.keep.list.last": "{rest} and {last}",
   "localMode.keep.agents.one": "1 connected agent",
   "localMode.keep.agents": "{count} connected agents",
+  "localModel.title": "Use a local model",
+  "localModel.installed": "Ollama is on this computer, but it isn't running.",
+  "localModel.recommended": "Recommended: {model}, 3.3 GB. It is downloaded once.",
+  "localModel.open": "Open Ollama",
+  "localModel.opening": "Opening Ollama…",
+  "localModel.cancel": "Cancel",
 
   "providers.settings.title": "Chat model",
   "providers.settings.none": "No chat model is set up yet.",
@@ -1680,6 +1701,13 @@ export const en = {
   "chatgpt.consent.note":
     "It goes to OpenAI under your ChatGPT account, and counts against your plan's limits.",
   "chatgpt.menu.hint": "Use your Plus or Pro plan",
+  "chatgpt.paste.question": "Didn't come back?",
+  "chatgpt.paste.open": "Paste the address the browser shows",
+  "chatgpt.paste.continue": "Continue",
+  "chatgpt.paste.problem.not-sign-in-address": "That isn't the sign-in address.",
+  "chatgpt.paste.problem.other-sign-in":
+    "That address is from an earlier sign-in. Sign in on the page just opened, then paste its address.",
+  "chatgpt.paste.problem.finished": "This sign-in has already finished.",
 
   "consent.dialog.title": "Send data to {service}?",
   "consent.dialog.body": "To {purpose}, IncarnaMind sends this to {service}:",
@@ -1921,23 +1949,23 @@ export const en = {
   "privacy.usageData.resetId": "Reset install ID",
   "privacy.usageData.resetDone": "Reset: events from now on carry a new ID.",
 
-  "usageData.dialog.title": "Help improve IncarnaMind?",
-  "usageData.dialog.body":
-    "IncarnaMind can send anonymous usage data, so we can see which features are used and where people get stuck. Nothing is sent unless you agree.",
-  "usageData.dialog.tester.title": "This test version sends usage data",
-  "usageData.dialog.tester.body":
-    "As agreed when you joined as a tester, this version sends anonymous usage data, so we can see which features are used and where people get stuck. You can turn it off here.",
-  "usageData.dialog.example": "For example:",
+  "usageData.card.title": "Help improve IncarnaMind?",
+  "usageData.card.body":
+    "Send anonymous usage data, like which features you use. Never your files, their names or your Questions.",
+  "usageData.card.send": "Send",
+  "usageData.card.decline": "Don't send",
+  "usageData.card.what": "What's sent",
+  "usageData.card.example": "For example:",
   "usageData.example.question": "A Question was asked with a cloud model from Anthropic",
   "usageData.example.answer": "An Answer took 6 seconds and has 3 Citations, each quote found",
   "usageData.example.documents": "2 Documents were added: a PDF and a Word file",
-  "usageData.dialog.never":
-    "Never your Documents or their names, Folder or Tag names, Questions, Answers, quotes, keys or file paths. Events go to PostHog under a random ID for this install, with no account, e-mail or IP address.",
-  "usageData.dialog.change": "You can change this any time in Settings → Privacy.",
-  "usageData.dialog.details": "See every event",
-  "usageData.dialog.decline": "Don't send",
-  "usageData.dialog.accept": "Send usage data",
-  "usageData.dialog.done": "Done",
+  "usageData.card.change": "Change it any time in Settings → Privacy.",
+  "usageData.card.details": "See every event",
+  "usageData.card.tester.title": "This test version sends usage data",
+  "usageData.card.tester.body":
+    "As you agreed when you joined: anonymous, like which features you use. Never your files, their names or your Questions.",
+  "usageData.card.tester.switch": "Send usage data",
+  "usageData.card.tester.hide": "Hide this notice",
 
   "question.label": "Question: ",
   "question.placeholder": "Ask a Question… (type @ to choose what it searches)",
@@ -2062,6 +2090,7 @@ export const en = {
   "answer.error.local-mode":
     "Stopped: “Keep everything on this computer” was turned on, and {model} isn't on this computer",
   "answer.error.useLocal": "Use a local model",
+  "answer.error.ollama-not-running": "Ollama isn't running on this computer",
   "answer.error.too-long":
     "This Question is too long for the model’s context window, even with nothing before it. Shorten it, or choose another model",
   "answer.error.no-answer": "The model sent no Answer",
@@ -2686,6 +2715,9 @@ export const en = {
   "error.document.fileGone": "The Document's file isn't there to read.",
   "error.document.fileCantOpen": "The Document's file can't be opened.",
   "error.document.notFailed": "Only a Document that failed to process can be retried.",
+  "error.document.notPdf": "Only a PDF is opened with a password.",
+  "error.document.passwordMissing": "Type the PDF's password to open it.",
+  "error.document.notLocked": "This PDF isn't locked: it opens without a password.",
   "error.search.limit": "The limit must be a whole number from 1 to {max}.",
   "error.search.options": "The search's options must be given as a list of settings.",
   "error.tag.notFound": "That Tag doesn't exist or has been deleted.",
@@ -2731,6 +2763,9 @@ export const en = {
   "error.provider.urlScheme": "The server URL must start with http:// or https://.",
   "error.provider.urlExtras":
     "The server URL can't contain a user name, password, query or fragment. Put an API key in the key field.",
+  "error.provider.ollamaNotRunning": "Ollama isn't running on this computer.",
+  "error.provider.ollamaCantOpen":
+    "This computer can't open Ollama from here. Get it from ollama.com.",
   "error.provider.ollamaCloud":
     "{model} runs on ollama.com, not on this computer. Choose a local model, or pick it in the model menu.",
   "error.provider.rerankLocalMode":
@@ -2894,6 +2929,13 @@ export const en = {
   "menu.reload": "Reload",
   "menu.forceReload": "Force Reload",
   "menu.devTools": "Toggle Developer Tools",
+  "menu.help": "Help",
+  "menu.sendFeedback": "Send feedback…",
+  "feedback.title": "Send feedback",
+  "feedback.note":
+    "Feedback goes to IncarnaMind's page on GitHub, which is public: anyone can read what you post there. IncarnaMind sends nothing itself.",
+  "feedback.cancel": "Cancel",
+  "feedback.open": "Open GitHub",
   "menu.window": "Window",
   "menu.minimize": "Minimize",
   "menu.zoom": "Zoom",
@@ -3186,6 +3228,12 @@ export const en = {
     "A Mind is a page where you write, and ask your Documents with every quote checked. You write here like in any document, ask Questions about your Documents, and every claim in an Answer links to the page it came from. Click a check to see the quote; green means it was found.",
   "examples.banner.addOwn": "Add your Documents",
   "examples.banner.remove": "Remove the examples",
+  "examples.banner.more": "Try an example closer to your work:",
+  "examples.group.tea": "Tea",
+  "examples.group.papers": "Papers",
+  "examples.group.reports": "Reports",
+  "examples.group.contracts": "Contracts",
+  "examples.group.meetings": "Meetings",
   "examples.answer": "Example Answer, written in advance: no model needed to try it",
   "gettingStarted.title": "Get started",
   "gettingStarted.count": "· {done} of {total}",

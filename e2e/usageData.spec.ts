@@ -1,18 +1,20 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { gunzipSync } from "node:zlib";
-import { expect, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import { COMMON_FIELDS, SENDER_FIELDS, USAGE_EVENTS } from "../src/core/usageEvents";
 import {
+  askInAssistant,
+  assistantAnswers,
   closeSettings,
   createDataFolder,
-  dismissChatSetup,
   flushUsageData,
   launchApp,
   newMind,
   openPrivacySettings,
   removeDataFolder,
   showSettingsPage,
+  useLocalChatModel,
 } from "./app";
 
 interface SentEvent {
@@ -84,22 +86,52 @@ function expectOnlyDeclared(events: readonly SentEvent[]) {
   expect(JSON.stringify(events)).not.toContain(dataDir);
 }
 
-test("a release build asks on the first run, sends nothing when declined, and only what is declared once allowed", async () => {
-  const { app, window } = await launchApp(dataDir, { home, usageData: { host: posthog.host } });
+/** Asks the failing Question, then a real one: only the Answer that arrives counts. */
+async function askOwnQuestion(window: Page, card: Locator): Promise<void> {
+  await window.getByTestId("mind-editor").click();
+  await window.keyboard.press("ControlOrMeta+j");
+  await expect(window.getByTestId("composer-input")).toBeFocused();
+  await window.keyboard.type("Send a blank reply");
+  await window.keyboard.press("Enter");
+  await expect(assistantAnswers(window).last()).toHaveAttribute("data-status", "failed", {
+    timeout: 15_000,
+  });
+  await expect(card).toBeHidden();
+  await askInAssistant(window, "Where does tea come from?");
+}
 
-  // Asked first, with an example of what is sent; the chat setup waits.
-  const dialog = window.getByTestId("usage-data-dialog");
-  await expect(dialog).toBeVisible();
-  await expect(dialog).toHaveAttribute("data-tester", "false");
-  await expect(dialog).toContainText("Help improve IncarnaMind?");
-  await expect(dialog.getByTestId("usage-data-examples")).toContainText("A Question was asked");
-  await expect(dialog).toContainText("Never your Documents or their names");
+const releaseOptions = () => ({
+  home,
+  usageData: { host: posthog.host },
+  examples: true,
+  fakeChat: true,
+});
+
+test("a release build asks after the first Answer to the User's own Question, sends nothing when declined, and only what is declared once allowed", async () => {
+  const { app, window } = await launchApp(dataDir, releaseOptions());
+
+  // A first run asks nothing before the example, nor does an Answer that fails.
+  const card = window.getByTestId("usage-data-card");
+  await expect(window.getByTestId("example-banner")).toBeVisible();
+  await expect(card).toBeHidden();
+  await useLocalChatModel(window);
+  await askOwnQuestion(window, card);
+
+  // Asked in the sidebar, under Get started, with what is sent in place.
+  await expect(card).toBeVisible();
+  await expect(card).toHaveAttribute("data-tester", "false");
+  await expect(card).toContainText("Help improve IncarnaMind?");
+  await expect(window.getByTestId("usage-data-examples")).toBeHidden();
+  await card.getByTestId("usage-data-what").click();
+  await expect(card.getByTestId("usage-data-examples")).toContainText("A Question was asked");
+  await expect(card).toContainText("Settings → Privacy");
+  const sendBox = await card.getByTestId("usage-data-send").boundingBox();
+  const declineBox = await card.getByTestId("usage-data-decline").boundingBox();
+  expect(sendBox?.width).toBeCloseTo(declineBox?.width ?? 0, 0);
 
   // Declined: nothing is sent, whatever the User does.
-  await dialog.getByTestId("usage-data-decline").click();
-  await expect(dialog).toBeHidden();
-  await dismissChatSetup(window);
-  await newMind(window);
+  await card.getByTestId("usage-data-decline").click();
+  await expect(card).toBeHidden();
   const privacy = await openPrivacySettings(window);
   await expect(privacy).toContainText("collects usage data only if you agree");
   const row = privacy.locator('[data-testid="network-traffic-item"][data-traffic-id="usage-data"]');
@@ -110,10 +142,11 @@ test("a release build asks on the first run, sends nothing when declined, and on
   expect(posthog.requests).toEqual([]);
   await app.close();
 
-  // Asked once: not again.
-  const second = await launchApp(dataDir, { home, usageData: { host: posthog.host } });
+  // Asked once: not again, even after another Answer.
+  const second = await launchApp(dataDir, releaseOptions());
   await expect(second.window.getByTestId("mind-list-item")).toHaveCount(1);
-  await expect(second.window.getByTestId("usage-data-dialog")).toBeHidden();
+  await askInAssistant(second.window, "Where does tea come from?");
+  await expect(second.window.getByTestId("usage-data-card")).toBeHidden();
   await flushUsageData(second.app);
   expect(posthog.requests).toEqual([]);
 
@@ -153,18 +186,49 @@ test("a release build asks on the first run, sends nothing when declined, and on
   await second.app.close();
 });
 
-test("a test build says so on the first run, with the switch, and stops at once when it is turned off", async () => {
+test("nothing is sent or kept to send before Send; after it, an example opened carries its group only", async () => {
+  const { app, window } = await launchApp(dataDir, releaseOptions());
+  const card = window.getByTestId("usage-data-card");
+  const banner = window.getByTestId("example-banner");
+
+  // An example opened before the question: its event is neither sent nor kept.
+  await banner.locator('[data-testid="example-more-link"][data-group="meetings"]').click();
+  await expect(window.locator('[data-testid="example-more-link"][data-group="tea"]')).toBeVisible();
+  await useLocalChatModel(window);
+  await askOwnQuestion(window, card);
+  await expect(card).toBeVisible();
+  await flushUsageData(app);
+  expect(posthog.requests).toEqual([]);
+
+  await card.getByTestId("usage-data-send").click();
+  await expect(card).toBeHidden();
+  await window.locator('[data-testid="example-more-link"][data-group="contracts"]').first().click();
+  await expect
+    .poll(() => posthog.events().map((each) => each.event), { timeout: 10_000 })
+    .toContain("example_opened");
+  await flushUsageData(app);
+  const opened = posthog.events().filter((each) => each.event === "example_opened");
+  expect(opened).toHaveLength(1);
+  expect(opened[0]?.properties).toMatchObject({ group: "contracts" });
+  expectOnlyDeclared(posthog.events());
+  await app.close();
+});
+
+test("a test build says so from the first run, in the sidebar, with the switch, and stops at once when it is turned off", async () => {
   const { app, window } = await launchApp(dataDir, {
     home,
     usageData: { host: posthog.host, testerBuild: true },
+    examples: true,
   });
 
-  const dialog = window.getByTestId("usage-data-dialog");
-  await expect(dialog).toBeVisible();
-  await expect(dialog).toHaveAttribute("data-tester", "true");
-  await expect(dialog).toContainText("This test version sends usage data");
-  const usageSwitch = dialog.getByTestId("usage-data-switch");
+  const card = window.getByTestId("usage-data-card");
+  await expect(card).toBeVisible();
+  await expect(card).toHaveAttribute("data-tester", "true");
+  await expect(card).toContainText("This test version sends usage data");
+  const usageSwitch = card.getByTestId("usage-data-switch");
   await expect(usageSwitch).toBeChecked();
+  await card.getByTestId("usage-data-what").click();
+  await expect(card.getByTestId("usage-data-examples")).toBeVisible();
   // On by default, as testers agree when they join: the app's opening is sent.
   await expect
     .poll(() => posthog.events().map((each) => each.event), { timeout: 10_000 })
@@ -172,19 +236,29 @@ test("a test build says so on the first run, with the switch, and stops at once 
   expect(posthog.events()[0]?.properties).toMatchObject({ build: "tester" });
   expectOnlyDeclared(posthog.events());
 
-  // Turned off in the notice: nothing more is sent.
+  // Turned off in the notice: nothing more is sent, and the notice stays until hidden.
   await flushUsageData(app);
   const sent = posthog.events().length;
   await usageSwitch.uncheck();
-  await dialog.getByTestId("usage-data-done").click();
-  await expect(dialog).toBeHidden();
-  await dismissChatSetup(window);
-  await newMind(window);
+  await expect(usageSwitch).not.toBeChecked();
+  await expect(card).toBeVisible();
   const privacy = await openPrivacySettings(window);
   const row = privacy.locator('[data-traffic-id="usage-data"]');
   await expect(row.getByTestId("usage-data-switch")).not.toBeChecked();
   await expect(row).toContainText("this test version");
+  await closeSettings(window);
+  await card.getByTestId("usage-data-hide").click();
+  await expect(card).toBeHidden();
   await flushUsageData(app);
   expect(posthog.events()).toHaveLength(sent);
   await app.close();
+
+  const again = await launchApp(dataDir, {
+    home,
+    usageData: { host: posthog.host, testerBuild: true },
+    examples: true,
+  });
+  await expect(again.window.getByTestId("example-banner")).toBeVisible();
+  await expect(again.window.getByTestId("usage-data-card")).toBeHidden();
+  await again.app.close();
 });

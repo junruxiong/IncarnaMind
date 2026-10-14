@@ -73,6 +73,8 @@ export function TableMenu({ editor }: { editor: Editor }) {
   const [asked, setAsked] = useState<{ buttons: number } | null>(null);
   const shown = spot !== null && (focused || menu.open || asked !== null);
   const button = menu.buttonProps.ref;
+  const chart = menu.open && spot ? chartOfTable(editor.state, languageNow()) : null;
+  const groups = GROUPS.filter((group) => group[0] !== "chart" || chart !== null);
 
   useEffect(() => {
     editor.storage.tableKeys.openMenu = (buttons) => setAsked({ buttons });
@@ -150,27 +152,24 @@ export function TableMenu({ editor }: { editor: Editor }) {
       >
         {menu.open &&
           spot &&
-          GROUPS.map((group, index) => (
+          groups.map((group, index) => (
             <Fragment key={group.join()}>
               {index > 0 && <div className={menuRuleClass} />}
               {group.map((id) => {
                 if (id === "chart") {
                   // Chart from table (#436): a chart of it, inserted after it.
-                  const chart = chartOfTable(editor.state, languageNow());
                   return (
                     <button
                       key={id}
                       type="button"
                       role="menuitem"
                       data-testid="table-chart"
-                      aria-disabled={chart === null || undefined}
-                      title={chart === null ? t("chart.fromTable.none") : undefined}
                       onClick={() => {
                         if (!chart) return;
                         menu.close();
                         insertChart(editor, chart);
                       }}
-                      className={`${menuItemClass} ${menuItemUnavailableClass} pl-2`}
+                      className={`${menuItemClass} pl-2`}
                     >
                       <span className="flex-1">{t("chart.fromTable")}</span>
                     </button>

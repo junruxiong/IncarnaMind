@@ -4,9 +4,45 @@ import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { localModeChosen } from "../../localMode";
+import { useAppStore } from "../../store";
 import { ProblemMark } from "../ProblemLine";
 import { errorTextClass } from "../ui";
 import { useKeepLocal } from "./KeepLocalChoice";
+
+/** `open` resolves null when Ollama's app couldn't be opened; that failure is already reported. */
+export function useOllamaStatus() {
+  const [status, setStatus] = useState<OllamaStatus | null>(null);
+  const [opening, setOpening] = useState(false);
+
+  const detect = useCallback(async () => {
+    setStatus(null);
+    try {
+      setStatus(await core.detectOllama());
+    } catch {
+      setStatus({ running: false, baseUrl: "", installed: false, recommendedModel: "" });
+    }
+  }, []);
+
+  useEffect(() => {
+    void detect();
+  }, [detect]);
+
+  const open = async (): Promise<OllamaStatus | null> => {
+    setOpening(true);
+    try {
+      const opened = await core.openOllama();
+      setStatus(opened);
+      return opened;
+    } catch (failure) {
+      useAppStore.getState().reportError(failure);
+      return null;
+    } finally {
+      setOpening(false);
+    }
+  };
+
+  return { status, opening, detect, open };
+}
 
 /**
  * Local mode: whether Ollama runs on its default port, and, if it does, one
@@ -15,23 +51,10 @@ import { useKeepLocal } from "./KeepLocalChoice";
  */
 export function useOllama(onSaved: (provider: ChatProvider) => void, undoPlace?: string) {
   const t = useT();
-  const [status, setStatus] = useState<OllamaStatus | null>(null);
+  const { status, opening, detect, open } = useOllamaStatus();
   const [pulling, setPulling] = useState(false);
   const [progress, setProgress] = useState<OllamaPullProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  const detect = useCallback(async () => {
-    setStatus(null);
-    try {
-      setStatus(await core.detectOllama());
-    } catch {
-      setStatus({ running: false, baseUrl: "" });
-    }
-  }, []);
-
-  useEffect(() => {
-    void detect();
-  }, [detect]);
 
   useEffect(() => core.on("ollama.pullProgress", setProgress), []);
 
@@ -55,7 +78,7 @@ export function useOllama(onSaved: (provider: ChatProvider) => void, undoPlace?:
     }
   };
 
-  return { status, pulling, progress, error, keepLocal, detect, use };
+  return { status, pulling, progress, error, keepLocal, opening, detect, open, use };
 }
 
 export type Ollama = ReturnType<typeof useOllama>;
