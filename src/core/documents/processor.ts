@@ -40,6 +40,8 @@ export interface ProcessorHandlers {
   read(job: ProcessingJob, page: number, picture: PagePicture): Promise<RecognizedLine[]>;
   /** Whether an error from `read` means no page can be read now. */
   isUnavailable(error: unknown): boolean;
+  /** The password that opens a job's PDF, when it is locked and one is kept (#763). */
+  password?(job: WorkerJob): Promise<string | undefined>;
 }
 
 export interface Processor {
@@ -153,10 +155,27 @@ export function createProcessor(
     if (closed || current) return;
     const job = take();
     if (!job) return;
-    current = { id: nextId++, job };
+    const id = nextId++;
+    current = { id, job };
     if (job.task === "process") call(() => handlers.onStart(job));
     worker ??= startWorker();
-    worker.postMessage({ id: current.id, job } satisfies WorkerRequest);
+    const running = worker;
+    const send = (password: string | undefined) => {
+      if (closed || current?.id !== id || worker !== running) return;
+      running.postMessage({
+        id,
+        job,
+        ...(password !== undefined && { password }),
+      } satisfies WorkerRequest);
+    };
+    if (job.kind !== "pdf" || !handlers.password) {
+      send(undefined);
+      return;
+    }
+    handlers.password(job).then(send, (error: unknown) => {
+      reportError(error);
+      send(undefined);
+    });
   }
 
   // Deferred, so a job enqueued while the core starts up runs after it has returned.
