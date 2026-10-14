@@ -1,4 +1,7 @@
-/** One `web_pages` row per version of a web page (migration 47). */
+/**
+ * One `web_pages` row per version of a web page (migration 47), and one
+ * `web_page_pictures` row per picture each version shows (migration 89).
+ */
 import { randomUUID } from "node:crypto";
 import type { WebPageInfo } from "../../api";
 import type { Database } from "../../storage";
@@ -10,6 +13,7 @@ interface WebPageRow {
   author: string | null;
   published: string | null;
   fetched_at: string;
+  pictures_left_out: number;
 }
 
 export interface WebPageVersion {
@@ -20,12 +24,25 @@ export interface WebPageVersion {
   author: string | null;
   published: string | null;
   fetchedAt: string;
+  picturesLeftOut: number;
+}
+
+/** A picture a version shows, numbered from 1 as the page shows them; its file is named by `pictureHash`. */
+export interface WebPagePicture {
+  number: number;
+  pictureHash: string;
+  mediaType: string;
+  width: number;
+  height: number;
+  bytes: number;
+  address: string;
 }
 
 /** As last fetched; null for a Document that isn't a web page. */
 export function webPageInfo(db: Database, documentId: string): WebPageInfo | null {
   const rows = db.all<WebPageRow>(
-    `SELECT content_hash, address, site_name, author, published, fetched_at FROM web_pages
+    `SELECT content_hash, address, site_name, author, published, fetched_at, pictures_left_out
+     FROM web_pages
      WHERE document_id = ? AND deleted_at IS NULL ORDER BY fetched_at DESC, rowid DESC`,
     [documentId],
   );
@@ -38,6 +55,7 @@ export function webPageInfo(db: Database, documentId: string): WebPageInfo | nul
     published: latest.published,
     fetchedAt: latest.fetched_at,
     versions: rows.map((row) => ({ contentHash: row.content_hash, fetchedAt: row.fetched_at })),
+    picturesLeftOut: latest.pictures_left_out,
   };
 }
 
@@ -56,7 +74,7 @@ export function documentAtAddress(db: Database, address: string): string | null 
 export function recordVersion(db: Database, version: WebPageVersion, at: string): void {
   const updated = db.get<{ id: string }>(
     `UPDATE web_pages SET address = ?, site_name = ?, author = ?, published = ?, fetched_at = ?,
-       updated_at = ?
+       pictures_left_out = ?, updated_at = ?
      WHERE document_id = ? AND content_hash = ? AND deleted_at IS NULL RETURNING id`,
     [
       version.address,
@@ -64,6 +82,7 @@ export function recordVersion(db: Database, version: WebPageVersion, at: string)
       version.author,
       version.published,
       version.fetchedAt,
+      version.picturesLeftOut,
       at,
       version.documentId,
       version.contentHash,
@@ -72,8 +91,8 @@ export function recordVersion(db: Database, version: WebPageVersion, at: string)
   if (updated) return;
   db.run(
     `INSERT INTO web_pages (id, document_id, content_hash, address, site_name, author, published,
-       fetched_at, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       fetched_at, pictures_left_out, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       randomUUID(),
       version.documentId,
@@ -83,8 +102,74 @@ export function recordVersion(db: Database, version: WebPageVersion, at: string)
       version.author,
       version.published,
       version.fetchedAt,
+      version.picturesLeftOut,
       at,
       at,
     ],
   );
+}
+
+/** Records the pictures a version shows; a version fetched again shows the same ones. */
+export function recordPictures(
+  db: Database,
+  documentId: string,
+  contentHash: string,
+  pictures: readonly WebPagePicture[],
+  at: string,
+): void {
+  const known = new Set(
+    db
+      .all<{ number: number }>(
+        `SELECT number FROM web_page_pictures
+         WHERE document_id = ? AND content_hash = ? AND deleted_at IS NULL`,
+        [documentId, contentHash],
+      )
+      .map((row) => row.number),
+  );
+  for (const picture of pictures) {
+    if (known.has(picture.number)) continue;
+    db.run(
+      `INSERT INTO web_page_pictures (id, document_id, content_hash, number, picture_hash,
+         media_type, width, height, bytes, address, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        randomUUID(),
+        documentId,
+        contentHash,
+        picture.number,
+        picture.pictureHash,
+        picture.mediaType,
+        picture.width,
+        picture.height,
+        picture.bytes,
+        picture.address,
+        at,
+        at,
+      ],
+    );
+  }
+}
+
+/** Whether any version of the Document shows the picture named by this hash. */
+export function showsPicture(db: Database, documentId: string, pictureHash: string): boolean {
+  return (
+    db.get<{ found: number }>(
+      `SELECT 1 AS found FROM web_page_pictures
+       WHERE document_id = ? AND picture_hash = ? AND deleted_at IS NULL LIMIT 1`,
+      [documentId, pictureHash],
+    ) !== undefined
+  );
+}
+
+/** The pictures only Documents deleted permanently show: their files can go. */
+export function picturesOnlyPurgedShow(db: Database): { pictureHash: string; mediaType: string }[] {
+  return db
+    .all<{ picture_hash: string; media_type: string }>(
+      `SELECT p.picture_hash, max(p.media_type) AS media_type
+       FROM web_page_pictures p JOIN documents d ON d.id = p.document_id
+       WHERE p.deleted_at IS NULL
+       GROUP BY p.picture_hash
+       HAVING sum(d.purged_at IS NULL) = 0`,
+    )
+    .map((row) => ({ pictureHash: row.picture_hash, mediaType: row.media_type }));
 }

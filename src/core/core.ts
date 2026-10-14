@@ -176,6 +176,7 @@ import { chatClassifier } from "./tags/classify";
 import { createJevTagging } from "./tags/jev";
 import { createTagger, TAGGING_FLOW_SENDS } from "./tags/tagger";
 import { createWebSearch, WEB_SEARCH_SENDS } from "./tools/web";
+import { createPublicFetch } from "./tools/web/fetcher";
 import {
   createTranscriptionModel,
   QWEN3_ASR_0_6B,
@@ -597,6 +598,8 @@ export function createCore(adapters: CoreAdapters): Core {
     db.close();
     throw error;
   }
+  // A saved page's pictures may come from any host: only the public internet is reached (#756).
+  const pictureFetcher = createPublicFetch(adapters.web);
   const webPages = createWebPages({
     db,
     dataDir,
@@ -604,6 +607,8 @@ export function createCore(adapters: CoreAdapters): Core {
     documents,
     languages: () =>
       settings.get().language === "zh-CN" ? ["zh-CN", "zh;q=0.9", "en;q=0.8"] : ["en", "*;q=0.5"],
+    pictureFetch: pictureFetcher.fetch,
+    reportError: (error) => console.error("A web page's picture couldn't be fetched:", error),
     ...adapters.webPages,
   });
   webPages.dropPurged().catch((error: unknown) => console.error(error));
@@ -2947,6 +2952,7 @@ export function createCore(adapters: CoreAdapters): Core {
       // the User's approval are denied, and Skill scripts running are stopped.
       answers.stopAll();
       void webSearch.close().catch((error: unknown) => console.error(error));
+      void pictureFetcher.close().catch((error: unknown) => console.error(error));
       suggestions.stop();
       edits.stopAll();
       checks.stopAll();

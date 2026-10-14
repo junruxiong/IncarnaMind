@@ -2137,6 +2137,11 @@ export interface WebPageInfo {
   fetchedAt: string;
   /** When each version kept was last fetched, for the Citations that quote an older one. */
   versions: { contentHash: string; fetchedAt: string }[];
+  /**
+   * The article's pictures the last fetch didn't keep because of the caps
+   * (#756): over 60, over 5 MB, or past 25 MB for the page.
+   */
+  picturesLeftOut: number;
 }
 
 /** What `saveWebPage` takes. */

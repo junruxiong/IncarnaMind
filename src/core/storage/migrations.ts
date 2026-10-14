@@ -1657,6 +1657,36 @@ export const migrations: readonly Migration[] = [
       ALTER TABLE document_groups ADD COLUMN error_wording TEXT;
     `,
   },
+  {
+    version: 89,
+    description: "Web pages keep their pictures: each version's, and how many were left out (#756)",
+    // A saved page's pictures are files named by their content (src/core/documents/web),
+    // shared by its versions; a row per picture per version, numbered as the page shows
+    // them, says which files a version shows, so a picture an older version still has stays.
+    sql: `
+      CREATE TABLE web_page_pictures (
+        id TEXT PRIMARY KEY NOT NULL,
+        document_id TEXT NOT NULL REFERENCES documents (id),
+        content_hash TEXT NOT NULL,
+        number INTEGER NOT NULL,
+        picture_hash TEXT NOT NULL,
+        media_type TEXT NOT NULL,
+        width INTEGER NOT NULL,
+        height INTEGER NOT NULL,
+        bytes INTEGER NOT NULL,
+        address TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX web_page_pictures_by_number
+        ON web_page_pictures (document_id, content_hash, number) WHERE deleted_at IS NULL;
+      CREATE INDEX web_page_pictures_by_picture
+        ON web_page_pictures (picture_hash) WHERE deleted_at IS NULL;
+      -- Pictures over the caps (too many, too large, past the page's total), per version.
+      ALTER TABLE web_pages ADD COLUMN pictures_left_out INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
 ];
 
 /**
