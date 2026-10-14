@@ -21,6 +21,10 @@ export function parseOrigin(value: unknown): BlockOrigin | null {
   return { from: reference, question: typeof question === "string" ? question : "" };
 }
 
+/** One Block's origin, or null when it wasn't added from an Answer. */
+export const originOf = (doc: Y.Doc, blockId: string): BlockOrigin | null =>
+  parseOrigin(originsOf(doc).get(blockId));
+
 /** Every Block's origin in the Mind, by Block id. */
 export function allOrigins(doc: Y.Doc): Map<string, BlockOrigin> {
   const origins = new Map<string, BlockOrigin>();
