@@ -270,6 +270,7 @@ test("Reject all keeps a Mind the assistant made once something of it was accept
   // Fieldwork plan is open beside, with the cursor in its first change: ⌘↵ accepts that one.
   await pointAndClick(window, rows.nth(1).getByTestId("mind-changes-open"));
   await expect(window.getByTestId("mind-title")).toHaveValue("Fieldwork plan");
+  await expect(window.getByTestId("change-bar")).toContainText("Change 1 of 2");
   await window.keyboard.press("ControlOrMeta+Enter");
   await expect(rows.nth(1)).toContainText("· 1 change");
 
