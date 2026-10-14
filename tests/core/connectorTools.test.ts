@@ -237,6 +237,46 @@ describe("Answers use Connector Tools", { timeout: 30_000 }, () => {
     expect(system).not.toMatch(/Connectors/);
   });
 
+  test("a Tool the User turned off isn't offered to Answers; turned back on, it is", async () => {
+    const model = scriptedModel(() => ({ text: "No Tools needed." }));
+    const { core, connector, mind, client } = await setUp(model);
+    const offered = (index: number) =>
+      (model.doStreamCalls[index]?.tools ?? []).map((tool) => tool.name);
+
+    const set = await core.setApprovalPolicy({
+      subject: { kind: "tool", connectorId: connector.id, tool: "book_boat" },
+      policy: "off",
+    });
+    expect(set).toMatchObject({ policy: "off", ownerName: "Tides" });
+    await askAndFinish(core, client, mind.id, "When is high tide?");
+    expect(offered(0)).toContain(LOOKUP);
+    expect(offered(0)).not.toContain(BOOK);
+
+    await core.setApprovalPolicy({
+      subject: { kind: "tool", connectorId: connector.id, tool: "book_boat" },
+      policy: null,
+    });
+    await askAndFinish(core, client, mind.id, "And tomorrow?");
+    expect(offered(1)).toEqual(expect.arrayContaining([LOOKUP, BOOK]));
+  });
+
+  test("a Skill's scripts can't be turned off: they ask, or always run", async () => {
+    const { core } = await setUp(scriptedModel(() => ({ text: "No Tools needed." })));
+    const skill = await importSkill(
+      core,
+      await writeFolder(await createTempDataFolder(), "tide-tables", {
+        "SKILL.md": simpleSkillMd("tide-tables", "Read tide tables."),
+      }),
+    );
+
+    await expect(
+      core.setApprovalPolicy({
+        subject: { kind: "skill-script", skillId: skill.id },
+        policy: "off",
+      }),
+    ).rejects.toThrow('A Skill\'s scripts always ask unless set to "always".');
+  });
+
   test("document search, the Skill Tools and the Connector Tools are offered together, and each call's card says where it came from", async () => {
     const model = scriptedModel((call: ModelCall) =>
       call.results.length === 0
