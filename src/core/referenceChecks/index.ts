@@ -15,7 +15,7 @@ import type { MindContent } from "../mindContent";
 import { parseMindId } from "../minds";
 import { CROSSREF } from "../referenceRecords/lookup";
 import { SourceError, type SourceHttp } from "../sources/http";
-import { checkReference, isCheckable } from "./check";
+import { checkReference } from "./check";
 import { createCrossrefClient } from "./crossref";
 import { referenceList } from "./list";
 import { citedReference } from "./match";
@@ -59,6 +59,7 @@ export function createReferenceChecks(options: ReferenceChecksOptions) {
   const notChecked = (reference: string, reason: ReferenceCheckReason): ReferenceCheck => ({
     reference,
     mark: "not-checked",
+    by: null,
     record: null,
     differences: [],
     reason,
@@ -69,8 +70,7 @@ export function createReferenceChecks(options: ReferenceChecksOptions) {
       const mindId = parseMindId(mindIdInput);
       const entries = options.content
         .read(mindId, referenceList)
-        .map((entry) => ({ ...entry, cited: citedReference(entry.text) }))
-        .filter((entry) => isCheckable(entry.cited));
+        .map((entry) => ({ ...entry, cited: citedReference(entry.text) }));
       if (entries.length === 0) return { kind: "no-references" };
 
       running.get(mindId)?.abort();

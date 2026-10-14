@@ -11,17 +11,16 @@
  * (the DOI leads to a record, but not to this work); found by searching, it
  * is no match at all.
  */
-import { normalizeDoi } from "../../shared/references";
+import { ARXIV_IN_TEXT, DOI_IN_TEXT, doiOf, titleWords } from "../../shared/referenceList";
 import type { ReferenceDifference, ReferenceFields, ReferenceName } from "../api";
 
 /** Of the record's title words, the share the reference must hold for it to be that work. */
 export const SAME_TITLE = 0.75;
-/** Below this share, a DOI's record is another work's. */
-export const OTHER_TITLE = 0.5;
 
 /** A reference as written, with what can be read from it without a service. */
 export interface CitedReference {
   text: string;
+  /** Its DOI, or for an arXiv preprint the DOI arXiv registers for it. */
   doi: string | null;
   /** The year it names: the first four-digit year from 1500 to 2099. */
   year: number | null;
@@ -34,41 +33,15 @@ export interface WorkRecord {
   years: number[];
 }
 
-const DOI_IN_TEXT = /(?:doi\.org\/|doi\s*[:：]?\s*)?(10\.\d{4,9}\/[^\s"<>]+)/i;
 const YEAR = /(?<!\d)(1[5-9]\d\d|20\d\d)(?!\d)/;
-
-/** Folds case and accents, so "Müller" is "muller". */
-const folded = (text: string) => text.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
-
-/** Common English words, which say nothing about which work a title is. */
-const STOP_WORDS = new Set(
-  "a an and are as at be by for from in into is it its of on or the their to with".split(" "),
-);
-
-/** A text's words: letters and digits, folded; a CJK run as its characters, two by two. */
-export function titleWords(text: string): string[] {
-  const words: string[] = [];
-  for (const [run] of folded(text).matchAll(/[\p{L}\p{N}]+/gu)) {
-    for (const [part] of run.matchAll(/\p{Script=Han}+|[^\p{Script=Han}]+/gu)) {
-      if (/^\p{Script=Han}/u.test(part)) {
-        const chars = [...part];
-        if (chars.length === 1) words.push(part);
-        for (let at = 0; at + 1 < chars.length; at++) words.push(`${chars[at]}${chars[at + 1]}`);
-      } else if (!STOP_WORDS.has(part)) {
-        words.push(part);
-      }
-    }
-  }
-  return words;
-}
 
 /** What can be read from a reference as written: its DOI and year. */
 export function citedReference(text: string): CitedReference {
-  const doi = DOI_IN_TEXT.exec(text)?.[1];
-  const year = YEAR.exec(text.replace(DOI_IN_TEXT, " "))?.[1];
+  // A DOI's or arXiv number's digits aren't its year: "arXiv:1706.03762".
+  const year = YEAR.exec(text.replace(DOI_IN_TEXT, " ").replace(ARXIV_IN_TEXT, " "))?.[1];
   return {
     text: text.replace(/\s+/g, " ").trim(),
-    doi: doi ? normalizeDoi(doi) : null,
+    doi: doiOf(text),
     year: year ? Number(year) : null,
   };
 }
@@ -86,9 +59,9 @@ export function titleCoverage(reference: string, title: string): number {
 /** A name's family name, or a literal name whole. */
 const familyOf = (name: ReferenceName) => ("family" in name ? name.family : name.literal);
 
-/** The authors as a reader would list them: "Hochreiter, Schmidhuber". */
+/** The authors as a reader would list them, in any language: "Hochreiter, Schmidhuber", "A, B, C, …". */
 const authorList = (authors: readonly ReferenceName[]) =>
-  authors.slice(0, 3).map(familyOf).join(", ") + (authors.length > 3 ? " et al." : "");
+  [...authors.slice(0, 3).map(familyOf), ...(authors.length > 3 ? ["…"] : [])].join(", ");
 
 /**
  * How `cited` differs from the work `record` describes: its title (when

@@ -47,10 +47,21 @@ const WRONG_YEAR =
   "Hochreiter, S., & Schmidhuber, J. (2003). Long short-term memory. Neural Computation.";
 const WRONG_AUTHOR = "Smith, A. (2015). Deep learning. Nature. doi:10.1038/nature14539";
 const DEAD_DOI = "Doe, J. (2020). A study of nothing much at all. doi:10.9999/nowhere.42";
+const PREPRINT =
+  "Kingma, D. P., & Ba, J. (2014). Adam: A method for stochastic optimization. arXiv preprint arXiv:1412.6980.";
+const INVENTED_PREPRINT =
+  "Ray, S. (2023). Recursive gradient lattices for sparse memory. arXiv preprint arXiv:2399.00001.";
+const WEB_PAGE = "OpenAI. (2022). Introducing ChatGPT. https://openai.com/blog/chatgpt";
 
 /** A core whose Crossref is the stand-in, with a Mind whose reference list holds `entries`. */
-async function setUp(entries: readonly string[], { localOnly = false } = {}) {
-  const services = await startReferenceServices({ works: [LSTM, DEEP] });
+async function setUp(
+  entries: readonly string[],
+  { localOnly = false, works = [LSTM, DEEP] }: { localOnly?: boolean; works?: CrossrefWork[] } = {},
+) {
+  const services = await startReferenceServices({
+    works,
+    registered: { "10.48550/arXiv.1412.6980": "datacite" },
+  });
   onTestFinished(() => services.close());
   const core: Core = startCore(await createTempDataFolder(), {
     referenceLookup: { crossref: services.url, arxiv: services.url },
@@ -68,9 +79,19 @@ async function setUp(entries: readonly string[], { localOnly = false } = {}) {
 }
 
 describe("Checking a reference list (#711)", { timeout: 30_000 }, () => {
-  // protects=each mark: found by search and by DOI, not found (invented, or a DOI leading nowhere), doesn't match (year, author); only the reference is sent; fails_when=a mark is wrong or more than the reference goes; no_claim=Crossref's real matching (the evaluation, eval/references).
+  // protects=each mark: found by search and by DOI, not found (invented, or a DOI or arXiv number leading nowhere), doesn't match (year, author), not checked when another agency holds the DOI; a web page isn't looked up; only the reference is sent; checking again asks nothing twice; fails_when=a mark is wrong, a preprint reads as not found, more than the reference goes, or a reference is asked about again; no_claim=Crossref's real matching (the evaluation, eval/references).
   test("every entry gets its mark, and only the reference is sent", async () => {
-    const entries = [REAL, BY_DOI, INVENTED, WRONG_YEAR, WRONG_AUTHOR, DEAD_DOI];
+    const entries = [
+      REAL,
+      BY_DOI,
+      INVENTED,
+      WRONG_YEAR,
+      WRONG_AUTHOR,
+      DEAD_DOI,
+      WEB_PAGE,
+      PREPRINT,
+      INVENTED_PREPRINT,
+    ];
     const { core, services, mindId } = await setUp(entries);
     const progress: CoreEvents["referenceCheck.progress"][] = [];
     core.on("referenceCheck.progress", (event) => progress.push(event));
@@ -78,18 +99,23 @@ describe("Checking a reference list (#711)", { timeout: 30_000 }, () => {
     const result = await core.checkReferences(mindId);
 
     if (result.kind !== "checked") throw new Error(`Not checked: ${result.kind}`);
-    expect(result.references.map((each) => each.mark)).toEqual([
-      "found",
-      "found",
-      "not-found",
-      "mismatch",
-      "mismatch",
-      "not-found",
+    expect(result.references.map(({ mark, by, reason }) => [mark, by, reason])).toEqual([
+      ["found", "search", null],
+      ["found", "doi", null],
+      ["not-found", "search", null],
+      ["mismatch", "search", null],
+      ["mismatch", "doi", null],
+      ["not-found", "doi", null],
+      ["not-checked", "doi", "registered-elsewhere"],
+      ["not-found", "doi", null],
     ]);
     const [real, byDoi, , wrongYear, wrongAuthor] = result.references;
     expect(real?.record).toEqual({
       title: "Long Short-Term Memory",
-      authors: ["Hochreiter, Sepp", "Schmidhuber, Jürgen"],
+      authors: [
+        { family: "Hochreiter", given: "Sepp" },
+        { family: "Schmidhuber", given: "Jürgen" },
+      ],
       year: 1997,
       doi: "10.1162/neco.1997.9.8.1735",
     });
@@ -103,7 +129,28 @@ describe("Checking a reference list (#711)", { timeout: 30_000 }, () => {
       expect(request.bodyLength).toBe(0);
       expect(decodeURIComponent(request.path)).not.toContain("Recurrent networks remember");
     }
-    expect(progress.at(-1)).toEqual({ mindId, done: 6, total: 6 });
+    expect(services.requests.some(({ path }) => path.toLowerCase().includes("openai"))).toBe(false);
+    expect(progress.at(-1)).toEqual({ mindId, done: 8, total: 8 });
+
+    // Checked again, nothing is asked twice.
+    const asked = services.requests.length;
+    expect(await core.checkReferences(mindId)).toEqual(result);
+    expect(services.requests).toHaveLength(asked);
+  });
+
+  // protects=a work with several records (a later reprint first) is found by the one it matches; fails_when=the reprint's year reads as a mismatch; no_claim=none beyond protects.
+  test("of a work's several records, the one it matches is taken", async () => {
+    const reprint: CrossrefWork = {
+      ...LSTM,
+      DOI: "10.5555/reprint.2020",
+      issued: { "date-parts": [[2020]] },
+    };
+    const { core, mindId } = await setUp([REAL], { works: [reprint, LSTM] });
+
+    expect(await core.checkReferences(mindId)).toMatchObject({
+      kind: "checked",
+      references: [{ mark: "found", record: { doi: "10.1162/neco.1997.9.8.1735", year: 1997 } }],
+    });
   });
 
   // protects=starting the check is the consent (ADR-0022): no dialog, and Settings › Privacy lists it as chosen; fails_when=a dialog opens or nothing is listed; no_claim=the line by the action, which the e2e covers.
@@ -187,9 +234,12 @@ describe("Checking a reference list (#711)", { timeout: 30_000 }, () => {
 });
 
 describe("Reading a reference as written", () => {
-  // protects=the DOI and year are read from the text, the DOI's own digits not taken for a year; fails_when=a DOI's digits read as the year, or trailing punctuation stays in the DOI; no_claim=none beyond protects.
+  // protects=the DOI and year are read from the text, an arXiv number as arXiv's DOI, and neither's digits taken for a year; fails_when=a DOI's or arXiv number's digits read as the year, or trailing punctuation stays in the DOI; no_claim=none beyond protects.
   test("its DOI and year", () => {
     expect(citedReference(`${BY_DOI}.`)).toMatchObject({ doi: "10.1038/nature14539", year: 2015 });
+    expect(
+      citedReference("Vaswani, A. Attention is all you need. arXiv:1706.03762v5 (2017)."),
+    ).toMatchObject({ doi: "10.48550/arXiv.1706.03762", year: 2017 });
     expect(
       citedReference("Wu, L. (2021). 深度学习综述. 计算机学报. https://doi.org/10.1234/2019.5"),
     ).toMatchObject({ doi: "10.1234/2019.5", year: 2021 });

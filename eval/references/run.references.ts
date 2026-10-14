@@ -16,6 +16,7 @@ import { createCrossrefClient } from "../../src/core/referenceChecks/crossref";
 import { citedReference } from "../../src/core/referenceChecks/match";
 import { createSourceHttp } from "../../src/core/sources/http";
 import { createPace } from "../../src/core/sources/pace";
+import { formatNames } from "../../src/shared/references";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -44,6 +45,7 @@ test("references against Crossref", async () => {
       check = {
         reference: item.reference,
         mark: "not-checked",
+        by: null,
         record: null,
         differences: [],
         reason: "service-error",
@@ -77,7 +79,7 @@ test("references against Crossref", async () => {
       .filter(({ item, check }) => item.expected !== check.mark)
       .map(
         ({ item, check }) =>
-          `- ${item.id} (${item.note}): expected ${item.expected}, marked ${check.mark}${check.record ? `; Crossref: “${check.record.title}”, ${check.record.year ?? "no year"}, ${check.record.authors.slice(0, 2).join("; ")}` : ""}${check.differences.length > 0 ? `; differs in ${check.differences.map((each) => each.field).join(", ")}` : ""}`,
+          `- ${item.id} (${item.note}): expected ${item.expected}, marked ${check.mark}${check.record ? `; Crossref: “${check.record.title}”, ${check.record.year ?? "no year"}, ${formatNames(check.record.authors.slice(0, 2), "en")}` : ""}${check.differences.length > 0 ? `; differs in ${check.differences.map((each) => each.field).join(", ")}` : ""}`,
       ),
     "",
   );

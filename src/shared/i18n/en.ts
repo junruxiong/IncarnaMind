@@ -645,7 +645,7 @@ export const en = {
   "references.notChecked.one": "1 not checked",
   "references.show": "Show",
   "references.hide": "Hide",
-  "references.listLabel": "References that need a look",
+  "references.listLabel": "Checked references",
   "references.mark.found": "Found",
   "references.mark.not-found": "We couldn't find this work",
   "references.mark.mismatch": "Doesn't match the work's record",
@@ -656,6 +656,12 @@ export const en = {
   "references.reason.rate-limited":
     "Not checked: Crossref asked to slow down. Check again in a minute",
   "references.reason.service-error": "Not checked: Crossref had an error",
+  "references.reason.registered-elsewhere":
+    "Not checked: its DOI or arXiv number exists, but its record isn't in Crossref",
+  "references.notFound.doi": "No work has the DOI or arXiv number it gives.",
+  "references.notFound.search":
+    "Crossref has no record like it. Papers from conferences, preprints and many Chinese journals aren't all in Crossref.",
+  "references.record.etAl": "{names} et al.",
   "references.difference.year.cited": "Year: {cited} here, {found} in Crossref",
   "references.difference.title": "Title in Crossref: {found}",
   "references.difference.authors": "Authors in Crossref: {found}",

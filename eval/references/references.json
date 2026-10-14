@@ -82,9 +82,9 @@
     },
     {
       "id": "real-14",
-      "reference": "Granovetter, M. S. (1973). The strength of weak ties. American Journal of Sociology, 78(6), 1360–1380.",
+      "reference": "周志华. (2016). 机器学习. 北京: 清华大学出版社.",
       "expected": "found",
-      "note": "no DOI"
+      "note": "Chinese book, no DOI"
     },
     {
       "id": "real-15",
@@ -94,21 +94,21 @@
     },
     {
       "id": "real-16",
-      "reference": "Hirsch, J. E. (2005). An index to quantify an individual's scientific research output. Proceedings of the National Academy of Sciences, 102(46), 16569–16572.",
+      "reference": "Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, Ł., & Polosukhin, I. (2017). Attention is all you need. Advances in Neural Information Processing Systems, 30.",
       "expected": "found",
-      "note": "no DOI"
+      "note": "conference, no DOI"
     },
     {
       "id": "real-17",
-      "reference": "Hardin, G. (1968). The tragedy of the commons. Science, 162(3859), 1243–1248.",
+      "reference": "Kingma, D. P., & Ba, J. (2014). Adam: A method for stochastic optimization. arXiv preprint arXiv:1412.6980.",
       "expected": "found",
-      "note": "no DOI"
+      "note": "arXiv preprint"
     },
     {
       "id": "real-18",
-      "reference": "Rumelhart, D. E., Hinton, G. E., & Williams, R. J. (1986). Learning representations by back-propagating errors. Nature, 323(6088), 533–536.",
+      "reference": "Brown, T., Mann, B., Ryder, N., et al. (2020). Language models are few-shot learners. Advances in Neural Information Processing Systems, 33, 1877–1901.",
       "expected": "found",
-      "note": "no DOI"
+      "note": "conference, no DOI"
     },
     {
       "id": "real-19",
@@ -118,9 +118,9 @@
     },
     {
       "id": "real-20",
-      "reference": "Virtanen, P., Gommers, R., Oliphant, T. E., et al. (2020). SciPy 1.0: Fundamental algorithms for scientific computing in Python. Nature Methods, 17(3), 261–272.",
+      "reference": "Devlin, J., Chang, M.-W., Lee, K., & Toutanova, K. (2019). BERT: Pre-training of deep bidirectional transformers for language understanding. In Proceedings of NAACL-HLT 2019 (pp. 4171–4186).",
       "expected": "found",
-      "note": "no DOI"
+      "note": "conference, no DOI"
     },
     {
       "id": "invented-01",

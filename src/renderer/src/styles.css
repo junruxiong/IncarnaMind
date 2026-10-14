@@ -1179,7 +1179,7 @@
   .mind-verify-problem {
     margin: -8px 0 16px;
   }
-  /* A checked reference list's entries that need a look (#711), under its line. */
+  /* A checked reference list's entries (#711), under its line: those that need a look first. */
   .mind-references {
     display: flex;
     flex-direction: column;
@@ -1220,6 +1220,20 @@
   }
   .mind-reference-detail {
     color: var(--color-ink-meta);
+  }
+  .mind-reference-record {
+    margin: -4px 0 4px;
+    color: var(--color-ink-meta);
+    overflow-wrap: anywhere;
+  }
+  .mind-reference-link {
+    border-radius: 4px;
+    color: var(--color-accent);
+    text-underline-offset: 2px;
+
+    &:hover {
+      text-decoration: underline;
+    }
   }
 
   /* The count under the title: quiet status text, pulled up into the title's margin. */
