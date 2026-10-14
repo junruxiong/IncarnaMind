@@ -4078,6 +4078,49 @@
     padding-left: 22px;
     color: var(--color-ink-secondary);
   }
+  /* A figure a check worked out (#707): how, then each input's Citation. */
+  .claim-card-working {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .claim-card-figure {
+    padding-left: 22px;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-ink);
+    overflow-wrap: break-word;
+  }
+  .claim-card-inputs {
+    display: flex;
+    flex-direction: column;
+    margin: 4px 0 0;
+    padding: 0 0 0 16px;
+    list-style: none;
+  }
+  .claim-card-input {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    padding: 4px 6px;
+    border-radius: 6px;
+    text-align: left;
+
+    &:hover {
+      background: var(--color-frame);
+    }
+  }
+  .claim-card-input-figure {
+    color: var(--color-ink);
+    overflow-wrap: break-word;
+  }
+  .claim-card-input-source {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--text-meta);
+    line-height: 18px;
+    color: var(--color-ink-meta);
+  }
   .citation-card-note {
     padding-left: 22px;
     font-size: var(--text-meta);
