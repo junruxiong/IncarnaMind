@@ -144,6 +144,58 @@ function stateOf(doc: ProseMirrorNode, context: ClaimContext): ClaimState {
   return { context, claims, decorations: DecorationSet.create(doc, washes) };
 }
 
+/** How the checks of a Mind's sentences cover its Documents (#764). */
+export interface Coverage {
+  /** More than half of the sentences that got a verdict found nothing in the Documents. */
+  mostlyUncovered: boolean;
+  /** Some of them were checked in a Folder only, so every Document could still say something. */
+  canWiden: boolean;
+  /** From the first to the last sentence that found nothing: where "Check against all Documents" goes. */
+  range: { from: number; to: number } | null;
+  /** How the first of them was checked. */
+  action: ShownClaim["check"]["action"] | null;
+}
+
+const NO_COVERAGE: Coverage = {
+  mostlyUncovered: false,
+  canWiden: false,
+  range: null,
+  action: null,
+};
+
+/** Whether the checks, taken together, say the Documents don't cover most of what was checked. */
+export function coverageOf(claims: readonly ShownClaim[]): Coverage {
+  let checked = 0;
+  const lacking: ShownClaim[] = [];
+  for (const claim of claims) {
+    const { state } = claim.shown;
+    if (state === "supported" || state === "contradicted") checked++;
+    else if (state === "unsupported") {
+      checked++;
+      lacking.push(claim);
+    }
+  }
+  const first = lacking[0];
+  const last = lacking.at(-1);
+  if (!first || !last || checked < 2 || lacking.length * 2 <= checked) return NO_COVERAGE;
+  return {
+    mostlyUncovered: true,
+    canWiden: lacking.some(
+      (claim) => !claim.check.scope.widened && claim.check.scope.folderId !== null,
+    ),
+    range: { from: first.from, to: last.to },
+    action: first.check.action,
+  };
+}
+
+/** Whether two readings of the coverage say the same. */
+export const sameCoverage = (a: Coverage, b: Coverage | null): boolean =>
+  b !== null &&
+  a.mostlyUncovered === b.mostlyUncovered &&
+  a.canWiden === b.canWiden &&
+  a.range?.from === b.range?.from &&
+  a.range?.to === b.range?.to;
+
 /** The checks in the editor, as they show now. Empty without `ClaimChecks`. */
 export function shownClaims(state: EditorState): readonly ShownClaim[] {
   return claimsKey.getState(state)?.claims ?? [];

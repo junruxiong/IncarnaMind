@@ -3,6 +3,7 @@ import type { ConnectorImportEntry, SecretStorageStatus } from "../../../../core
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
+import { ProblemMark } from "../ProblemLine";
 import { SecretStorageNotice } from "../providers/ProviderForm";
 import { TypingTextarea } from "../TypingTextarea";
 import {
@@ -190,6 +191,7 @@ export function ConnectorImport({ onDone }: { onDone(): void }) {
       )}
       {error && (
         <p role="alert" className={errorTextClass}>
+          <ProblemMark />
           {error}
         </p>
       )}
