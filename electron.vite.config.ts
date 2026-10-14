@@ -94,6 +94,8 @@ function fontLicences(): Plugin {
 // plain Node.
 export default defineConfig({
   main: {
+    // false leaves the experimental sign-in routes out of the bundle (src/core/buildFlags.ts).
+    define: { __EXPERIMENTAL_SIGN_IN_ROUTES__: "true" },
     build: {
       rollupOptions: {
         input: {

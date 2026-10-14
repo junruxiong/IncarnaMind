@@ -48,7 +48,7 @@ Every field is a value from a closed list, a whole number, or true/false: there'
 | `app_opened` | `language`: the interface language, `en` or `zh-CN` |
 | `example_opened` | `group`: which example was opened from an example's banner: `tea`, `papers`, `reports`, `contracts` or `meetings`. Nothing else |
 | `mind_created` | No fields: you made a Mind |
-| `question_asked` | `provider`: the kind of provider of the model (`openai`, `anthropic`, `google`, `deepseek`, `qwen`, `kimi`, `glm`, `siliconflow`, `mistral`, `xai`, `openrouter`, `openai-compatible`, `ollama`, `chatgpt`); `local`: whether the model runs on your computer. Never the Question or the model's prompt |
+| `question_asked` | `provider`: the kind of provider of the model (`openai`, `anthropic`, `google`, `deepseek`, `qwen`, `kimi`, `glm`, `siliconflow`, `mistral`, `xai`, `openrouter`, `openai-compatible`, `ollama`, `chatgpt`, `claude-account`); `local`: whether the model runs on your computer. Never the Question or the model's prompt |
 | `answer_finished` | `outcome`: `done` or `stopped`; `duration_ms`: how long it took; `citations`: how many Citations it has; `found`, `not_found`, `cant_check`: how many of them by check |
 | `citation_opened` | `check`: the Citation's check, `found`, `not-found`, `unsupported`, `contradicted`, `cant-check` or `checking` |
 | `documents_added` | `documents`: how many new Documents; `already_added`: files that were in already; `skipped`: files that couldn't be added; `pdf`, `docx`, `pptx`, `xlsx`, `csv`, `markdown`, `text`, `web`, `transcript`: the new Documents by format (`web`: web pages saved by their address; `transcript`: WebVTT Transcripts, a Meeting's or a file's). Never their names or addresses |

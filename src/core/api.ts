@@ -3170,7 +3170,8 @@ export interface TestRerankConnectionInput {
  * Where Answers can come from. "ollama" is an OpenAI-compatible server run by
  * Ollama, normally on this computer; it also offers one-click model downloads.
  * "chatgpt" is the User's ChatGPT plan, used through Sign in with ChatGPT
- * instead of an API key (see `ChatGptPlanStatus`).
+ * instead of an API key (see `ChatGptPlanStatus`); "claude-account" the
+ * User's Claude plan, signed in with their Claude account (see `ClaudeAccountStatus`).
  */
 export const chatProviderKinds = [
   "openai",
@@ -3187,6 +3188,7 @@ export const chatProviderKinds = [
   "openai-compatible",
   "ollama",
   "chatgpt",
+  "claude-account",
 ] as const;
 
 export type ChatProviderKind = (typeof chatProviderKinds)[number];
@@ -3284,6 +3286,8 @@ export interface ProviderError {
   wording?: ErrorWording;
   /** "plan-limit": when the plan's limit resets (ISO 8601), when the provider says. */
   resetsAt?: string;
+  /** A Claude account's request: which of the route's problems it is, for its own line. */
+  claudeAccount?: ClaudeAccountProblem;
 }
 
 /**
@@ -4761,7 +4765,8 @@ export interface ChatGptSignOutResult {
   status: ChatGptPlanStatus;
 }
 
-export type ChatGptPastedAddressProblem =
+/** Why an address pasted into a waiting sign-in (ChatGPT, Claude) wasn't taken. */
+export type PastedAddressProblem =
   /** It isn't the address the sign-in sends the browser back to, with a code and a state. */
   | "not-sign-in-address"
   /** It is, but for another sign-in, e.g. from an older tab. */
@@ -4769,9 +4774,63 @@ export type ChatGptPastedAddressProblem =
   /** The sign-in already finished, or none is waiting. */
   | "finished";
 
-export type ChatGptPastedAddressResult =
-  | { ok: true }
-  | { ok: false; problem: ChatGptPastedAddressProblem };
+export type PastedAddressResult = { ok: true } | { ok: false; problem: PastedAddressProblem };
+
+// ---------------------------------------------------------------------------
+// Claude account
+
+/**
+ * Why the Claude account route stopped, each said where it happened in its
+ * own line with a way back (src/core/providers/claudeAccount/problems.ts).
+ */
+export type ClaudeAccountProblem =
+  /** The User cancelled the sign-in, or didn't finish it in time: nothing was kept. */
+  | "sign-in-cancelled"
+  /** There is no sign-in on this device. */
+  | "signed-out"
+  /** The sign-in can't be renewed any more: sign in again. */
+  | "sign-in-expired"
+  /** Anthropic refused the sign-in, or a request made with it. */
+  | "refused"
+  /** The plan's usage limit is reached, until `ProviderError.resetsAt` when Anthropic says. */
+  | "plan-limit"
+  /** Anthropic answered in a way this route doesn't know. */
+  | "unexpected-response";
+
+/** The Claude account sign-in on this device. */
+export type ClaudeAccount =
+  | { state: "signed-out" }
+  /** Refreshing the sign-in failed: sign in again. */
+  | { state: "expired" }
+  | { state: "signed-in" };
+
+/**
+ * The Claude account route: the User's Claude plan, signed in with
+ * Anthropic's OAuth, used for Answers instead of an API key. What it sends
+ * goes to Anthropic under the User's account and counts toward the plan's
+ * usage limits. It is opt-in, and not offered at all where this build has
+ * no client profile for it (`available`).
+ */
+export interface ClaudeAccountStatus {
+  available: boolean;
+  /** An experimental sign-in route: the provider may refuse or block it, which the User is told first. */
+  experimental: boolean;
+  account: ClaudeAccount;
+  /** A browser sign-in is waiting for the User. */
+  signingIn: boolean;
+}
+
+export type ClaudeSignInErrorKind =
+  | Extract<ClaudeAccountProblem, "sign-in-cancelled" | "refused" | "unexpected-response">
+  /** This build has no client profile for the route. */
+  | "unavailable"
+  /** This device can't store the sign-in securely (see `getSecretStorage`). */
+  | "secret-storage"
+  | "failed";
+
+export type ClaudeSignInResult =
+  | { ok: true; status: ClaudeAccountStatus }
+  | { ok: false; error: { kind: ClaudeSignInErrorKind; message: string } };
 
 // ---------------------------------------------------------------------------
 // Secrets
@@ -5011,6 +5070,8 @@ export interface RegisteredDataFlow {
  * - "ollama-pull": Ollama downloads a model from its registry, when the User picks local models.
  * - "chatgpt-sign-in": Sign in with ChatGPT, refreshing it, signing out, and
  *   reading OpenAI's signing keys; listed once the User has signed in.
+ * - "claude-sign-in": signing in with a Claude account and refreshing it;
+ *   listed once the User has started signing in.
  * - "remote-connectors": connecting to each remote Connector that is on, and
  *   signing in to it: its server, and the authorization server it names
  *   (discovery, registration, tokens). One entry per server. Tool calls, which
@@ -5027,6 +5088,7 @@ export const networkTrafficIds = [
   "transcription-model",
   "ollama-pull",
   "chatgpt-sign-in",
+  "claude-sign-in",
   "remote-connectors",
   "usage-data",
 ] as const;
@@ -7390,7 +7452,28 @@ export interface CoreApi {
    * return, and the waiting `signInToChatGpt` finishes with it. A refused
    * address changes nothing.
    */
-  pasteChatGptSignInAddress(address: string): Promise<ChatGptPastedAddressResult>;
+  pasteChatGptSignInAddress(address: string): Promise<PastedAddressResult>;
+
+  /** The Claude account route: whether this build offers it, and its sign-in. */
+  getClaudeAccount(): Promise<ClaudeAccountStatus>;
+  /**
+   * "Sign in with Claude": opens Anthropic's sign-in in the User's browser
+   * and waits, for a few minutes at most, until they finish there or paste
+   * what the page shows. Starting again cancels a sign-in still waiting.
+   * Signing in doesn't choose a model: `saveChatProvider` with the
+   * "claude-account" kind does, and that choice allows its flows (ADR-0022).
+   */
+  signInToClaude(): Promise<ClaudeSignInResult>;
+  /** Stops waiting for a browser sign-in. Nothing is kept. */
+  cancelClaudeSignIn(): Promise<void>;
+  /** Forgets the Claude account's tokens on this device. A saved Claude account then needs a new sign-in. */
+  signOutOfClaude(): Promise<ClaudeAccountStatus>;
+  /**
+   * The address the browser ended on, or the code Anthropic's page shows,
+   * pasted by the User: checked exactly as the browser's own return, and the
+   * waiting `signInToClaude` finishes with it. A refused one changes nothing.
+   */
+  pasteClaudeSignInAddress(address: string): Promise<PastedAddressResult>;
 
   /**
    * Every registered external data flow, to each service it currently goes to
@@ -7960,6 +8043,8 @@ export interface CoreEvents {
   "references.importProgress": { done: number; total: number };
   /** The ChatGPT sign-in changed: started, finished, signed out, or expired. */
   "chatGptPlan.changed": ChatGptPlanStatus;
+  /** The Claude account sign-in changed: started, finished, signed out, or expired. */
+  "claudeAccount.changed": ClaudeAccountStatus;
   /** Jev was set up, changed or removed on this device. */
   "jev.changed": JevSettings;
   /**
@@ -8174,6 +8259,11 @@ const methods: Record<CoreApiMethod, true> = {
   cancelChatGptSignIn: true,
   signOutOfChatGpt: true,
   pasteChatGptSignInAddress: true,
+  getClaudeAccount: true,
+  signInToClaude: true,
+  cancelClaudeSignIn: true,
+  signOutOfClaude: true,
+  pasteClaudeSignInAddress: true,
   listDataFlows: true,
   listConsentRequests: true,
   respondToConsent: true,

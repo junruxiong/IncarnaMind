@@ -1496,6 +1496,7 @@ export const en = {
   "providers.kind.ollama": "Ollama",
   "providers.kind.chatgpt": "ChatGPT plan",
 
+  "providers.kind.claude-account": "Claude account",
   "providers.form.label": "Chat provider",
   "providers.form.apiKey": "API key",
   "providers.form.apiKeyOptional": "API key (optional)",
@@ -1638,6 +1639,22 @@ export const en = {
   "chatgpt.page.success.body": "You can close this tab and go back to IncarnaMind.",
   "chatgpt.page.failure.title": "The ChatGPT sign-in didn't work",
   "chatgpt.page.failure.body": "Close this tab and try again in IncarnaMind.",
+  "claudeAccount.page.success.title": "Signed in with Claude",
+  "claudeAccount.page.success.body": "You can close this tab and go back to IncarnaMind.",
+  "claudeAccount.page.failure.title": "The Claude sign-in didn't work",
+  "claudeAccount.page.failure.body": "Close this tab and try again in IncarnaMind.",
+  "claudeAccount.problem.signInCancelled": "Claude sign-in cancelled: nothing was kept",
+  "claudeAccount.problem.signedOut": "You're not signed in to Claude",
+  "claudeAccount.problem.signInExpired": "Your Claude sign-in has expired",
+  "claudeAccount.problem.refused": "Anthropic didn't let IncarnaMind use your Claude plan",
+  "claudeAccount.problem.planLimit": "Your Claude plan's usage limit is reached",
+  "claudeAccount.problem.planLimitUntil": "Your Claude plan's usage limit is reached until {time}",
+  "claudeAccount.problem.unexpectedResponse": "Claude answered in a way IncarnaMind didn't expect",
+  "claudeAccount.wayBack.signIn": "Sign in with Claude",
+  "claudeAccount.wayBack.signInAgain": "Sign in again",
+  "claudeAccount.wayBack.useAnotherModel": "Use another model",
+  "claudeAccount.wayBack.pasteApiKey": "Paste an API key instead",
+  "claudeAccount.wayBack.useClaudeCode": "Use Claude Code",
   "chatgpt.welcome.title": "You're using your ChatGPT plan",
   "chatgpt.welcome.body":
     "Questions you ask in IncarnaMind with a ChatGPT model now use your ChatGPT plan. You can see and limit this in ChatGPT's settings.",
@@ -1863,6 +1880,9 @@ export const en = {
   "privacy.traffic.chatgpt-sign-in": "Sign in with ChatGPT",
   "privacy.traffic.chatgpt-sign-in.description":
     "When you continue with ChatGPT, IncarnaMind signs you in with OpenAI, renews and ends the sign-in, and reads OpenAI's signing keys and the models your plan offers. Questions asked with your plan are the chat flow above.",
+  "privacy.traffic.claude-sign-in": "Sign in with Claude",
+  "privacy.traffic.claude-sign-in.description":
+    "When you sign in with your Claude account, IncarnaMind signs you in with Anthropic and renews the sign-in. Questions asked with your plan are the chat flow above.",
   "privacy.traffic.remote-connectors": "Remote Connectors and their sign-in",
   "privacy.traffic.remote-connectors.description":
     "IncarnaMind connects to your remote Connectors' servers to list their Tools, and to the sign-in services they name to sign you in and renew the sign-in. What their Tools are sent is the Connectors flow above.",
