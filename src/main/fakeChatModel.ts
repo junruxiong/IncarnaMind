@@ -85,7 +85,8 @@
  * (叫), its content citing the Documents when there are any; and "add X to
  * <Mind>" (把 X 添加到 <Mind>) calls add_to_mind with X; "add X to <Mind> and
  * make a new note called Y" calls both. Each then replies with the first
- * sentence of what its calls came to.
+ * sentence of what its calls came to. Anything else, asked in a Search scope
+ * with no Documents, gets the sentence the instructions give for that.
  */
 import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
@@ -529,6 +530,8 @@ function nextReply(prompt: Prompt, tools: readonly OfferedTool[]): Reply {
   const said: string[] = [];
   const minds = mindsReply(prompt, question, names);
   if (minds) return minds;
+  const nothing = EMPTY_SCOPE.exec(systemOf(prompt));
+  if (nothing?.[1]) return { text: nothing[1] };
   const run = scriptNamed(prompt, question, names);
   if (run) {
     const result = lastResult(prompt, "run_skill_script");
@@ -574,6 +577,10 @@ function nextReply(prompt: Prompt, tools: readonly OfferedTool[]): Reply {
   const reply = answerReply(prompt, names);
   return "text" in reply && said.length > 0 ? { text: [...said, reply.text].join("\n\n") } : reply;
 }
+
+/** What to say when the Search scope has no Documents, as the instructions give it. */
+const EMPTY_SCOPE =
+  /nothing to search or cite\. If the User asks about their Documents, reply with just this: "([^"]+)"/;
 
 /** A request to shorten a Mind's text. */
 const SHORTEN = /\bshort(?:en|er)\b|缩短|改短/i;

@@ -62,7 +62,7 @@ Windows releases will be signed through the SignPath Foundation's free signing f
 
 **Find and add sources.** Search OpenAlex, arXiv and PubMed and add open-access papers as Documents, save a web page by its address so it can be cited and checked like a file, and import your references from Zotero or any CSL JSON, BibTeX or RIS file.
 
-**Write with AI you can check.** Select text and choose Edit with AI: the changes come back for you to accept or reject. Turn on suggestions as you write, and when you pause, grey text offers how the paragraph could go on, only where your Documents support it and always with a citation; Tab accepts.
+**Write with AI you can check.** Tell the assistant what to change ("shorten the summary", "add today's decision to the project plan", "summarise these papers into a new note") and it changes the Mind, or makes a new one, as changes waiting for you to accept or reject; a question still gets an answer. Or select text and choose Edit with AI. Turn on suggestions as you write, and when you pause, grey text offers how the paragraph could go on, only where your Documents support it and always with a citation; Tab accepts.
 
 **Keep a big library tidy.** Tags are added for you, IncarnaMind suggests a Folder for each Document for you to accept, and the choices you make yourself are kept.
 
@@ -102,7 +102,7 @@ There's no account and no IncarnaMind server. Your Minds and the search index st
 
 ## Coming next
 
-Planned, not available yet, with no dates (see the [roadmap](https://github.com/IncarnaMind/IncarnaMind/issues/74)): asking during a meeting, with answers that cite its live transcript; the assistant editing your Minds, each change waiting for you to accept it; a reviewing pane for other people's tracked changes in a Word file; and research Tasks that run in the background.
+Planned, not available yet, with no dates (see the [roadmap](https://github.com/IncarnaMind/IncarnaMind/issues/74)): asking during a meeting, with answers that cite its live transcript; a reviewing pane for other people's tracked changes in a Word file; and research Tasks that run in the background.
 
 ## Contributing
 

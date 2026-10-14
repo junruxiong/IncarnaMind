@@ -158,3 +158,35 @@ export function MindChangesCard({
     </section>
   );
 }
+
+/** Whether an Answer tried to change the Mind in focus, and there was none. */
+export function wantedAMind(answer: Pick<ConversationAnswer, "toolCalls">): boolean {
+  return answer.toolCalls.some(
+    (call) =>
+      call.source === "minds" &&
+      call.status === "failed" &&
+      (call.tool === "edit_mind" || call.tool === "add_to_mind") &&
+      typeof call.input.mind !== "string",
+  );
+}
+
+/**
+ * Under an Answer asked with no Mind in focus that tried to change one
+ * (#202): it says so, and offers New Mind, whose title takes the cursor.
+ */
+export function NoMindLine() {
+  const t = useT();
+  return (
+    <p data-testid="mind-changes-no-mind" className="mind-changes-no-mind">
+      {t("mindChanges.noMind")}
+      <button
+        type="button"
+        data-testid="mind-changes-new-mind"
+        onClick={() => void useAppStore.getState().createMind()}
+        className="mind-changes-review"
+      >
+        {t("sidebar.newMind")}
+      </button>
+    </p>
+  );
+}
