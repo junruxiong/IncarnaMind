@@ -4644,6 +4644,14 @@
     font-size: var(--text-meta);
     color: var(--color-ink-meta);
   }
+  /* An empty Folder or Tag stays pickable but reads as empty: its name greys, its hint says so. */
+  .scope-picker-item--empty .truncate {
+    color: var(--color-ink-meta);
+  }
+  .scope-chip-empty {
+    flex-shrink: 0;
+    color: var(--color-ink-meta);
+  }
   .scope-picker-empty {
     padding: 4px 8px;
     font-size: 13px;
