@@ -17,11 +17,18 @@ process.env[REAL_HOME_VARIABLE] = realHome;
 const home = mkdtempSync(join(tmpdir(), "incarnamind-test-home-"));
 Object.assign(process.env, homeEnv(home));
 
+// Where the person running chose to keep downloads and reports, which may well be in their home
+// folder; the evaluation's configs always name its cache (eval/lib/cache.ts).
+const chosen = [
+  "INCARNAMIND_EVAL_CACHE",
+  "INCARNAMIND_EVAL_MODELS",
+  "INCARNAMIND_WORD_PDFS",
+  "INCARNAMIND_LIVE_REPORT",
+].flatMap((name) => process.env[name]?.trim() || []);
 const guard = createHomeGuard(realHome, [
   fileURLToPath(new URL("../..", import.meta.url)),
   tmpdir(),
-  // The evaluation keeps its downloads there between runs (eval/lib/cache.ts).
-  ...(process.env.INCARNAMIND_EVAL_CACHE ? [process.env.INCARNAMIND_EVAL_CACHE] : []),
+  ...chosen,
 ]);
 installHomeGuard(guard);
 
