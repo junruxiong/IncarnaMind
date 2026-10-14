@@ -65,7 +65,7 @@ export interface OllamaModels {
    * a request otherwise waits for it to load. Null when Ollama can't say.
    */
   loaded(baseUrl: string, model: string, numCtx: number): Promise<boolean | null>;
-  /** Whether anything answers at `baseUrl`, asked as Settings looks for Ollama: quickly, with no retry. */
+  /** Whether anything answers at `baseUrl`, asked quickly and with no retry. */
   running(baseUrl: string): Promise<boolean>;
 }
 

@@ -13,12 +13,8 @@ import type { SettingsPage } from "./settingsPages";
 export type AnswerFix =
   | { kind: "settings"; page: SettingsPage; label: MessageKey }
   | { kind: "retry"; label: MessageKey }
-  /** The choice of a local model, in place (`LocalModelDialog`). */
   | { kind: "local-model"; label: MessageKey }
-  /**
-   * Opening Ollama (`label`) and then asking again; getting it where it isn't on this
-   * computer, and Try again once it runs (`OllamaNotRunningLine`).
-   */
+  /** `label` only where Ollama's app is here: `OllamaNotRunningLine` offers Get Ollama or Try again otherwise. */
   | { kind: "ollama"; label: MessageKey }
   /** A page of the provider's own, opened in the browser. */
   | { kind: "link"; url: string; label: MessageKey }
@@ -53,7 +49,6 @@ export const ANSWER_PROBLEMS: Record<ProviderErrorKind, AnswerProblem> = {
     line: "answer.error.local-mode",
     fix: { kind: "local-model", label: "answer.error.useLocal" },
   },
-  // The model is in Ollama, which isn't running: open it, or get it.
   "ollama-not-running": {
     line: "answer.error.ollama-not-running",
     fix: { kind: "ollama", label: "localModel.open" },

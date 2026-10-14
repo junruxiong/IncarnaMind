@@ -103,7 +103,6 @@ test("in local mode a Question to a cloud model isn't sent: one line says so wit
   await window.keyboard.press("Escape");
   await bridge(window).language("en");
 
-  // Use a local model: the choice of one opens in place, never a company's settings.
   await refusal.getByTestId("local-mode-use-local").click();
   await expect(window.getByTestId("local-model-dialog")).toBeVisible();
   await expect(window.getByTestId("settings")).toBeHidden();

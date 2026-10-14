@@ -64,7 +64,7 @@ export function ReadinessExplanation({
 /**
  * Why Questions can't be asked, as one line with the one thing that fixes it.
  * Local mode refusing a cloud model has two ways out, so it offers both: a
- * local model, chosen in place, or turning local mode off (which can be undone).
+ * local model, or turning local mode off (which can be undone).
  * `refused`: a Question was just asked and not sent, rather than Questions
  * being off in general.
  */

@@ -47,10 +47,8 @@ export interface LaunchOptions {
    */
   ollama?: string;
   /**
-   * The Ollama app is on this computer ("installed") or isn't ("missing"); opening it
-   * launches nothing, only counts (`ollamaAppOpened`). Set, the Ollama at `ollama` is
-   * really asked for, so it can be down or come up in the test; without it, the scripted
-   * chat model's Ollama is always running.
+   * Set, the app really asks the Ollama at `ollama` whether it runs, and opening Ollama's app
+   * only counts (`ollamaAppOpened`). Without it, the scripted chat model's Ollama always runs.
    */
   ollamaApp?: "installed" | "missing";
   /**
@@ -596,7 +594,6 @@ export function urlsOpened(app: ElectronApplication) {
   return app.evaluate(() => (globalThis as { urlsOpened?: string[] }).urlsOpened ?? []);
 }
 
-/** How many times the app was asked to open Ollama's app (`LaunchOptions.ollamaApp`). */
 export function ollamaAppOpened(app: ElectronApplication) {
   return app.evaluate(
     () =>

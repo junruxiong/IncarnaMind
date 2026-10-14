@@ -19,14 +19,6 @@ import {
   useLocalChatModel,
 } from "./app";
 
-/*
- * A new User's way to a model on this computer (#763): "Use a local model" opens the Ollama
- * choice in place with Get Ollama and the recommended model, and an Answer to Ollama while
- * it isn't running says so at once with Open Ollama (or Get Ollama), never a wait ending in
- * "Couldn't reach the provider". Set INCARNAMIND_SCREENSHOTS to a folder to also save
- * screenshots there.
- */
-
 const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
 async function screenshot(target: Page | Locator, name: string): Promise<void> {
   if (SCREENSHOTS) await target.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
@@ -77,7 +69,6 @@ test.afterEach(async () => {
   );
 });
 
-/** A port where nothing listens yet: the Ollama of a computer where it isn't running. */
 async function freePort(): Promise<number> {
   const server = createServer();
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -86,7 +77,6 @@ async function freePort(): Promise<number> {
   return port;
 }
 
-/** Ollama starts answering on `port`, listing `models`, as it does once its app is open. */
 async function startOllama(port: number, models: string[] = []): Promise<void> {
   const server = createServer((request, response) => {
     if (request.url === "/api/tags") {
@@ -108,7 +98,6 @@ const bridge = (window: Page) => ({
       ).incarnamind.detectOllama();
       return status.recommendedModel;
     }),
-  /** A chat model on a server elsewhere, then "Keep everything on this computer" on. Saving sends nothing. */
   cloudModelInLocalMode: () =>
     window.evaluate(async () => {
       const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
@@ -126,7 +115,6 @@ const bridge = (window: Page) => ({
     }),
 });
 
-/** Every box in `inner` lies inside `outer`, and `outer` inside the window's width. */
 async function expectInside(inner: Locator, outer: Locator, width: number): Promise<void> {
   const outerBox = await outer.boundingBox();
   expect(outerBox).not.toBeNull();
@@ -141,7 +129,6 @@ async function expectInside(inner: Locator, outer: Locator, width: number): Prom
   }
 }
 
-/** Asks in the assistant beside the Mind, and returns the Answer once it has ended. */
 async function ask(window: Page, question: string): Promise<Locator> {
   const answers = assistantAnswers(window);
   const before = await answers.count();
@@ -184,7 +171,6 @@ for (const language of LANGUAGES) {
       await setWindowSize(app, window, width, 700);
       await pointAndClick(window, refusal.getByTestId("local-mode-use-local"));
       await expect(dialog).toBeVisible();
-      // Open in place: the Mind stays, and no company's settings open.
       await expect(window.getByTestId("settings")).toBeHidden();
       await expect(dialog.getByTestId("local-model-status")).toHaveText(words.notDetected);
       await expect(dialog.getByTestId("local-model-recommended")).toHaveText(
@@ -198,14 +184,12 @@ for (const language of LANGUAGES) {
       await expect(dialog).toBeHidden();
     }
 
-    // Get Ollama opens ollama.com in the browser, and the choice stays.
     await pointAndClick(window, refusal.getByTestId("local-mode-use-local"));
     await pointAndClick(window, dialog.getByTestId("ollama-get"));
     await expect.poll(() => urlsOpened(app)).toEqual(["https://ollama.com/download"]);
     await expect(dialog).toBeVisible();
     expect(await ollamaAppOpened(app)).toBe(0);
 
-    // Ollama is installed and started, with the recommended model: Check again finds it.
     await startOllama(port, [recommended]);
     await pointAndClick(window, dialog.getByTestId("ollama-check-again"));
     await expect(dialog.getByTestId("local-model-status")).toHaveText(words.detected);
@@ -214,7 +198,6 @@ for (const language of LANGUAGES) {
     await screenshot(dialog, `local-model-use-${language}`);
     await pointAndClick(window, use);
 
-    // The model is chosen and "Keep everything on this computer" stays on; the Question was kept.
     await expect(dialog).toBeHidden();
     await expect(refusal).toBeHidden();
     await expect(window.getByTestId("chat-readiness")).toBeHidden();
@@ -254,13 +237,11 @@ for (const language of LANGUAGES) {
       await screenshot(answer, `ollama-not-running-open-${language}-${width}`);
     }
 
-    // Open Ollama opens its app (here only counted) and waits for it.
     await pointAndClick(window, action);
     await expect.poll(() => ollamaAppOpened(app)).toBe(1);
     await expect(line).toHaveText(words.opening);
     await expect(line.getByTestId("answer-error-action")).toHaveCount(0);
 
-    // Once Ollama answers, the same Question is asked again.
     await startOllama(port);
     const answered = assistantAnswers(window).last();
     await expect(answered).toHaveAttribute("data-status", "done", { timeout: 20_000 });
@@ -299,10 +280,8 @@ for (const language of LANGUAGES) {
     await pointAndClick(window, action);
     await expect.poll(() => urlsOpened(app)).toEqual(["https://ollama.com/download"]);
     expect(await ollamaAppOpened(app)).toBe(0);
-    // Nothing else happened: the Question is still unanswered, its line still there.
     await expect(line).toBeVisible();
 
-    // Back in the window with Ollama installed and running: Try again asks the same Question.
     await startOllama(port);
     await window.evaluate(() => globalThis.dispatchEvent(new Event("focus")));
     await expect(line).toHaveText(`${words.notRunning} · ${words.tryAgain}`);
