@@ -20,6 +20,7 @@ import { CitationMark, quoteMarkOf, quoteTone } from "./quoteMark";
 import { OutlineButton, type OutlineEntry, UnitOutline } from "./UnitOutline";
 import { useDocumentFile } from "./useDocumentFile";
 import { ViewerHeader } from "./ViewerHeader";
+import { drawnIndexOf } from "./wordPlaces";
 
 /** docx-preview's class prefix: a paragraph in style "Heading2" is `p.docx_heading2`. */
 const CLASS_NAME = "docx";
@@ -79,6 +80,18 @@ export function DocxView({ document, target }: { document: Document; target: Vie
   );
 }
 
+/**
+ * The drawn paragraph or table at a place in a Word file ("w:p#12"), by its place among
+ * those drawn (`drawnIndexOf`): docx-preview draws each in order in the pages' articles,
+ * headers and footers apart.
+ */
+function drawnAt(body: HTMLElement, place: string, index: number): HTMLElement | null {
+  const tag = place.startsWith("w:tbl#") ? "table" : "p";
+  return (
+    body.querySelectorAll<HTMLElement>(`section.${CLASS_NAME} > article ${tag}`)[index] ?? null
+  );
+}
+
 interface MarkPlace {
   top: number;
   left: number;
@@ -102,6 +115,22 @@ function DocxPages({ loaded, target }: { loaded: Loaded; target: ViewerTarget })
   const comments = useRef<DocxComment[]>([]);
   const t = useT();
   const { docx } = loaded;
+  // Where the paragraph a Mind's caret was in is among those drawn (#736).
+  const [placed, setPlaced] = useState<{ place: string; index: number | null } | null>(null);
+  useEffect(() => {
+    const place = target.wordPlace;
+    if (!place) return;
+    let current = true;
+    drawnIndexOf(loaded.bytes, place).then(
+      (index) => {
+        if (current) setPlaced({ place, index });
+      },
+      (error: unknown) => console.error("viewer.docx.wordPlace", error),
+    );
+    return () => {
+      current = false;
+    };
+  }, [loaded.bytes, target.wordPlace]);
 
   // Draw the pages once.
   // biome-ignore lint/correctness/useExhaustiveDependencies: drawn again only for new bytes
@@ -268,18 +297,24 @@ function DocxPages({ loaded, target }: { loaded: Loaded; target: ViewerTarget })
     }
     setMarks(found ?? []);
     if (section?.heading) setCurrent(headingElements().indexOf(section.heading));
-    // Go to the quote, or else to the cited section, or the top.
+    // Go to the quote, or else to the cited section, or the paragraph a Mind's caret is in
+    // (#736), or the top.
     const container = scroller.current;
     if (!container) return;
-    const anchor = found?.[0] ?? section?.heading ?? null;
+    const at =
+      placed && placed.place === target.wordPlace && placed.index !== null
+        ? drawnAt(body, placed.place, placed.index)
+        : null;
+    const anchor = found?.[0] ?? section?.heading ?? at;
     if (anchor) {
       const top =
         anchor.getBoundingClientRect().top -
         container.getBoundingClientRect().top +
         container.scrollTop;
-      container.scrollTop = Math.max(0, top - (found ? container.clientHeight / 3 : PADDING));
+      const above = found || anchor === at ? container.clientHeight / 3 : PADDING;
+      container.scrollTop = Math.max(0, top - above);
     } else container.scrollTop = 0;
-  }, [rendered, citedSection, target.request, target.quote]);
+  }, [rendered, citedSection, target.request, target.quote, target.wordPlace, placed]);
 
   // The Citation's mark: in the page's right margin, level with the quote's first line; for a
   // quote in a comment's note, in the margin between the page's text and the note (#76).

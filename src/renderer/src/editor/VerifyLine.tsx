@@ -139,7 +139,9 @@ export function VerifyLine({
     // The PDF beside it turns to the claim's page.
     const id: unknown = place.parent.attrs.id;
     const page = typeof id === "string" ? verification.pages[id] : undefined;
-    if (page !== undefined) openDocumentBeside(verification.documentId, page);
+    if (page !== undefined) {
+      openDocumentBeside(verification.documentId, { pageFrom: page, pageTo: page });
+    }
   };
 
   const stop = (

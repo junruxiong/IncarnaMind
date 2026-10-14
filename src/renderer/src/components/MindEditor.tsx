@@ -637,7 +637,7 @@ function MindEditorView({
       {countSlot &&
         createPortal(
           <>
-            <WordOrigin doc={doc} />
+            <WordOrigin doc={doc} editor={editor} />
             <OriginalNotAdded mindId={mindId} />
             {verification ? (
               <VerifyLine editor={editor} doc={doc} mindId={mindId} verification={verification} />
