@@ -42,10 +42,10 @@ import {
 } from "./sidebarRows";
 
 /** The "Other Documents" group's key among the folded. */
-/** How long a folder just linked stays washed. */
-const LINKED_WASH_MS = 1600;
-
 const OTHER_DOCUMENTS = "other-documents";
+
+/** As long as the wash's animation lasts (`[data-just-linked]` in styles.css). */
+const LINKED_WASH_MS = 1600;
 
 interface FolderTreeState {
   /**
