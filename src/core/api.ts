@@ -34,6 +34,7 @@ import type { CitationForm, CitationStyleId } from "../shared/citationStyles";
 import type { FormulaInput, FormulaLiteral, ResultUnit, ShowAs } from "../shared/formula";
 import type { TagColour } from "../shared/tagColours";
 import type { Anchor, UnitKind, UnitLabel } from "../shared/units";
+import type { ErrorWording } from "./errors";
 import type { Language, LanguagePreference } from "./language";
 
 export interface Mind {
@@ -618,8 +619,12 @@ export const INCLUDE_IN_CONTEXT_ATTRIBUTE = "includeInContext";
  */
 export type ThirdPartySource = "imported" | "web-page" | "checked-document";
 
-/** Third-party text a Run reads itself: a saved web page a search found, or the document a check checks. */
-export type ReadThirdPartySource = Exclude<ThirdPartySource, "imported">;
+/**
+ * Third-party text a Run reads itself: a saved web page a search found, the
+ * document a check checks, or what another Mind holds that came from them
+ * (`read_mind`, #202).
+ */
+export type ReadThirdPartySource = ThirdPartySource;
 
 /**
  * Why a Run counts as having read third-party text: it read some itself, or
@@ -751,9 +756,11 @@ export interface AnswerToolCall {
    * search; "skill", the Skill Tools; "connector", one of the User's
    * Connectors (see `connector`); "sources", Find sources (`find_sources`,
    * `{ query, from_year?, to_year?, open_access_only? }`); "web", web search
-   * (`search_web`, `{ query }`, and `read_web_page`, `{ url, query }`; #128).
+   * (`search_web`, `{ query }`, and `read_web_page`, `{ url, query }`; #128);
+   * "minds", the Minds' Tools of an Answer in the assistant (#202:
+   * `read_mind`, `edit_mind`, `add_to_mind`, `create_mind`, see `mindChange`).
    */
-  source: "documents" | "skill" | "connector" | "sources" | "web";
+  source: "documents" | "skill" | "connector" | "sources" | "web" | "minds";
   /** A Connector's Tool: which Connector, with its name when the call was made. */
   connector?: { id: string; name: string };
   /** What the model asked, e.g. `{ query }` for a search, or the arguments sent to a Connector. */
@@ -808,6 +815,22 @@ export interface AnswerToolCall {
    * were left out of its text. Absent: none.
    */
   uncalculated?: number;
+  /** A Minds' Tool that changed a Mind or made one, once it ended (#202). Absent otherwise. */
+  mindChange?: MindChange;
+}
+
+/**
+ * What a call of a Minds' Tool did (#202): the changes it proposed in one
+ * Mind, which wait there for the User to accept or reject them.
+ */
+export interface MindChange {
+  mindId: string;
+  /** The call made the Mind. */
+  created: boolean;
+  /** The request its Proposals belong to (`ProposalRef.request`). */
+  request: string;
+  /** How many Proposals it made there. */
+  proposals: number;
 }
 
 /** What a call of `read_web_page` came to (see `AnswerToolCall.webPage`). */
@@ -984,9 +1007,16 @@ export interface WordFileCheck {
   origin: WordOrigin;
   /** Who wrote its tracked changes and comments, in the order they first appear. */
   authors: string[];
+  /** Its look is mostly what a Mind doesn't draw, so the import screen says it is kept (#735). */
+  layoutNotShown: boolean;
   /** Its tracked changes, of every kind (paragraph marks, formatting and moves too). */
   changes: number;
   comments: number;
+  /**
+   * An earlier file of the same name imported into the same Folder whose original is a
+   * Document (#720), which this one can become a new version of; null for none.
+   */
+  earlierDraft: { documentId: string; name: string } | null;
 }
 
 export interface ImportWordFileInput {
@@ -995,6 +1025,16 @@ export interface ImportWordFileInput {
   origin: WordOrigin;
   /** The Folder to make the Mind in; none, or null: Not in a Folder. */
   folderId?: string | null;
+  /**
+   * Also adds the original file to the Library as a Document, in the Mind's Folder, so
+   * Answers can cite it (#720). Absent: false, the Mind alone.
+   */
+  addOriginal?: boolean;
+  /**
+   * With `addOriginal`, makes the file a new version of this Document (the check's
+   * `earlierDraft`) instead of a Document of its own; one that can't take it is added as new.
+   */
+  newVersionOf?: string | null;
 }
 
 /**
@@ -1003,7 +1043,15 @@ export interface ImportWordFileInput {
  * no Mind made.
  */
 export type ImportWordFileResult =
-  | { ok: true; mind: Mind }
+  | {
+      ok: true;
+      mind: Mind;
+      /**
+       * With `addOriginal`: whether the original became a Document. False when the Library
+       * couldn't take it, which the User is told, with a way to try again (`addWordOriginal`).
+       */
+      originalAdded?: boolean;
+    }
   | { ok: false; refusal: WordRefusalReason };
 
 /**
@@ -1028,6 +1076,25 @@ export interface WordImportReport {
    * Absent on reports from before #108.
    */
   keptChanges?: Partial<Record<KeptChangeKind, number>>;
+  /** What the Mind doesn't draw of the file's look; absent from a report made before #735. */
+  layout?: WordLayout;
+}
+
+/**
+ * What a Word file's look holds that a Mind doesn't draw (#735), counted from
+ * the document's own formatting: paragraphs, runs and cells shaded;
+ * paragraphs with a border; tab stops set; tables with no borders, which
+ * place text; and how many text colours (other than black), fonts and sizes
+ * it sets.
+ */
+export interface WordLayout {
+  shading: number;
+  borders: number;
+  tabStops: number;
+  layoutTables: number;
+  colours: number;
+  fonts: number;
+  sizes: number;
 }
 
 /**
@@ -1062,6 +1129,8 @@ export interface WordFileInfo {
   size: number;
   /** The package's main document part: "word/document.xml". */
   part: string;
+  /** The Document the original was also added as (#720); null or absent: none. */
+  documentId?: string | null;
 }
 
 /** How far an import has got, in top-level Blocks. While `done` is under `total`, the Mind can't be edited. */
@@ -1959,6 +2028,11 @@ export interface Document {
   ownFile: OwnFile | null;
   /** Where its text came from, when Find sources added it (#296); null for any other Document. */
   found: DocumentFoundSource | null;
+  /**
+   * The Mind this file was last imported as, still there (#720): the User's working copy of
+   * it, which is never cited. Null for a file never imported.
+   */
+  importedAs: string | null;
   /** When the Document was added to IncarnaMind. ISO 8601, UTC. */
   createdAt: string;
   /** ISO 8601, UTC. */
@@ -3171,6 +3245,8 @@ export interface ProviderError {
   kind: ProviderErrorKind;
   /** The provider's own message, for details. */
   message: string;
+  /** The message as a key of the dictionary, when the core worded it, to say in the interface language. */
+  wording?: ErrorWording;
   /** "plan-limit": when the plan's limit resets (ISO 8601), when the provider says. */
   resetsAt?: string;
 }
@@ -3321,7 +3397,7 @@ export interface TaskProgress {
   total: number;
 }
 
-/** What the User can ask of a Task from its progress in the thread, as its kind allows (D189). */
+/** What the User can ask of a Task from its progress in the thread, as its kind allows (#657). */
 export type TaskAction = "plan" | "tell" | "pause" | "stop";
 
 /**
@@ -3750,14 +3826,25 @@ export type ClaimCheckResult =
       excluded: LeftOutDocument[];
     };
 
+/**
+ * What a sentence already cites: a Citation's quote, and its Document as it was cited. With
+ * `documentId` (or `contentHash`) the check names the Document as it is named now.
+ */
+export interface CitedQuote {
+  documentName: string;
+  quote: string;
+  documentId?: string;
+  contentHash?: string;
+}
+
 /** What the claim-check function checks (`checkClaim`). */
 export interface CheckClaimInput {
   /** The sentence, or claim, to check: the User's own words. */
   claim: string;
   /** The paragraph it is in, for what its words refer to. */
   context?: string;
-  /** What the sentence already cites, for Check against Documents: each Citation's Document and quote. */
-  cited?: { documentName: string; quote: string }[];
+  /** What the sentence already cites, for Check against Documents. */
+  cited?: CitedQuote[];
   /** Where to look. None: every Document. */
   scope?: SearchScope | null;
   /** The document being checked, which is never its own evidence (#97). */
@@ -3985,6 +4072,11 @@ export interface AnswerSteps {
    * to 1, when that was part of it (#564).
    */
   readShare?: number;
+  /**
+   * How many of its Citations were added after it was written, for sentences
+   * it wrote without markers that match the Passages it read (#760).
+   */
+  citedAfterChecking?: number;
 }
 
 /** A Tool call of an Answer started, or finished (see `call.status`). */
@@ -4030,6 +4122,12 @@ export interface AnswerFinished extends AnswerPlace {
   rejectedRecords: RejectedRecord[];
   /** Markers the model left out of its text for records it gave, which the engine put in. */
   placedMarkers: number;
+  /**
+   * Citations added for sentences the Answer wrote without markers, matched
+   * to the Passages it read (#760), and whether the model was asked once
+   * more for its Citations. The evaluation counts these.
+   */
+  citedAfterChecking: { count: number; asked: boolean };
   /** How the model could give Citations; null when there were no Documents to search. */
   citationSupport: CitationSupport | null;
   /**
@@ -4256,6 +4354,11 @@ export interface AskInConversationInput {
 export interface ConversationAnswerInput {
   conversationId: string;
   answerId: string;
+  /**
+   * Regenerating: first clears the Question's Search scope, so the Answer
+   * is written from every Document ("Search all Documents", #748).
+   */
+  clearScope?: boolean;
 }
 
 /** What asking in a conversation (or regenerating an Answer there) did. */
@@ -4765,6 +4868,19 @@ export const dataFlowIds = [
 
 export type DataFlowId = (typeof dataFlowIds)[number];
 
+/**
+ * The flows choosing the chat model's provider allows (ADR-0022): everything
+ * that sends to it, as the line above "Use this provider" says.
+ */
+export const CHOSEN_PROVIDER_FLOWS: readonly DataFlowId[] = [
+  "chat",
+  "edits",
+  "checks",
+  "suggestions",
+  "tagging",
+  "classification",
+];
+
 /** Data leaving this computer: what one flow sends to one service. */
 export interface DataFlow {
   id: DataFlowId;
@@ -4790,6 +4906,11 @@ export interface DataFlowStatus {
    * "not-asked" when they allowed the flow before it started sending more.
    */
   decidedAt: string | null;
+  /**
+   * Allowed when the User chose the service, where a line said what goes to
+   * it (ADR-0022), rather than in a dialog or in Settings › Privacy.
+   */
+  chosen: boolean;
 }
 
 /** A registered external data flow, for the Privacy page: what it sends, and where. */
@@ -5324,6 +5445,13 @@ export interface ConnectorDirectoryEntry {
   /** Its MCP endpoint, an https URL. A Connector at this URL is this entry, connected. */
   url: string;
   signIn: ConnectorDirectorySignIn;
+  /**
+   * Its Tools as IncarnaMind reviewed them, shown before the User connects
+   * it: each one's name and whether it may change things. Absent when the
+   * service lists them only once signed in; its page then says they appear
+   * once it's connected.
+   */
+  tools?: { title: LocalizedText; changes: boolean }[];
   /** Listed only in these interface languages, e.g. a service for Chinese Users. Absent: in every language. */
   languages?: Language[];
 }
@@ -5387,11 +5515,12 @@ export type ApprovalSubjectKind = ApprovalSubject["kind"];
  * What the User chose for a subject, replacing the default:
  * - "always": it runs without asking ("always allow" a Tool; "always run" a Skill's scripts).
  * - "ask": it asks every time, even a Tool its Connector says only reads.
+ * - "off": a Connector's Tool only: Answers aren't offered it, so it never runs.
  *
  * Without a policy, a Tool asks first unless its Connector says it only reads
  * (`ConnectorTool.readOnly`), and a Skill script always asks.
  */
-export type ApprovalPolicyValue = "always" | "ask";
+export type ApprovalPolicyValue = "always" | "ask" | "off";
 
 /** One of the User's approval policies, as the approvals page lists it. */
 export interface ApprovalPolicy {
@@ -6388,10 +6517,11 @@ export interface CoreApi {
   /** Makes a Mind, in a Folder if given (it must exist), and returns it. */
   createMind(input?: CreateMindInput): Promise<Mind>;
   /**
-   * Reads a Word file for the import screen (#104): whether it can be imported, and
-   * whose document it looks like. Keeps nothing, and changes nothing.
+   * Reads a Word file for the import screen (#104): whether it can be imported, whose
+   * document it looks like, and an earlier draft of it imported into the Folder (none, or
+   * null: Not in a Folder). Keeps nothing, and changes nothing.
    */
-  checkWordFile(path: string): Promise<WordFileCheck>;
+  checkWordFile(path: string, folderId?: string | null): Promise<WordFileCheck>;
   /**
    * Imports a .docx as a new Mind (#104), titled after the file, keeping a copy of its
    * package in the data folder to export back into (#105), so the file may move or go.
@@ -6401,6 +6531,13 @@ export interface CoreApi {
    * next start). Someone else's document makes every Block third-party text (#78).
    */
   importWordFile(input: ImportWordFileInput): Promise<ImportWordFileResult>;
+  /**
+   * Adds the original of a Mind imported from Word to the Library, in the Mind's Folder,
+   * and links the two, as importing with `addOriginal` does (#720): for when that failed.
+   * Returns whether it was added. Throws NotFoundError for an unknown Mind, and
+   * InvalidInputError for one not imported from Word.
+   */
+  addWordOriginal(mindId: string, path: string): Promise<boolean>;
   /** Minds that are not deleted, most recently updated first. Editing a Mind's content updates it. */
   listMinds(): Promise<Mind[]>;
   /** Changes a Mind's title (trimmed; empty means "Untitled") and returns the Mind. */
@@ -6466,6 +6603,11 @@ export interface CoreApi {
    * reading the Mind it was asked from as that Mind is now.
    */
   regenerateConversationAnswer(input: ConversationAnswerInput): Promise<ConversationAskResult>;
+  /**
+   * How many Documents a Search scope covers that can be searched now; for a
+   * scope of none (null), every Document's. 0: the scope holds none (#748).
+   */
+  countScopeDocuments(scope?: SearchScope | null): Promise<number>;
   /** Stops an Answer of a conversation being written, keeping what it has. */
   stopConversationAnswer(input: ConversationAnswerInput): Promise<void>;
   /**
@@ -7750,6 +7892,7 @@ const methods: Record<CoreApiMethod, true> = {
   createMind: true,
   checkWordFile: true,
   importWordFile: true,
+  addWordOriginal: true,
   listMinds: true,
   renameMind: true,
   deleteMind: true,
@@ -7762,6 +7905,7 @@ const methods: Record<CoreApiMethod, true> = {
   restoreCheckpoint: true,
   askInConversation: true,
   regenerateConversationAnswer: true,
+  countScopeDocuments: true,
   stopConversationAnswer: true,
   listConversations: true,
   getConversation: true,

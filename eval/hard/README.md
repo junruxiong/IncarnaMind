@@ -162,6 +162,19 @@ Keyword + rerank at the top 8 and 10 is 135 and 143 of 180. The search Tool's fi
 
 ## Results
 
+### 2026-10-14: sentences written without markers (#760)
+
+The Citation part only, with the library added as by default (embeddings off) and no retrieval modes, asking the 20 false-premise and disagreeing Questions once each. "No Citation of its own": an Answer whose Citations were all added by the check of sentences written without markers, or that has none, which is how the Answer looked before #760. An Apple M2 Max with other work running.
+
+| | Haiku 5.5 | Sonnet 5.5 |
+|---|---|---|
+| No Citation of its own | 0/20 | 0/20 |
+| No Citation after the check | 0/20 | 0/20 |
+| Citations added for sentences quoted without one | 0 | 9, all found |
+| Asked once more for Citations | 0 | 0 |
+
+On this set both models cite. The failure #760 came from is on the example Documents (the tea articles), asked in the app with twelve Questions in English and Chinese: Haiku 5.5 answered one of twelve with no Citation of its own (all six of its quotations added after checking), and quoted without Citations in two more of six in an earlier run; Sonnet 5.5 answered none uncited, and the check added 4 Citations to sentences it quoted without one.
+
 ### 2026-10-13: a note on Documents of different dates (#660)
 
 The 10 disagreeing Questions, twice each (20 Answers per cell), as above: before is #548's rules alone, after adds the note the search Tool appends when the Passages it hands come from Documents of different dates. "Handed both": Answers whose searches handed the model the newer and the older Document (or a translation of either).

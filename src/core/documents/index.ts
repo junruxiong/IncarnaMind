@@ -23,6 +23,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, renameSync } from "node:fs";
 import { rm, stat } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
+import type { LiveDocument } from "../../shared/citations";
 import { quoteInUnits } from "../../shared/locations";
 import {
   type Anchor,
@@ -74,12 +75,7 @@ import {
 } from "./files";
 import { isPackageKind, packageSizeError } from "./formats/zip";
 import { keywordText } from "./keywords";
-import {
-  createLibrary,
-  FORGET_FILE_IDENTITY,
-  type LibraryHooks,
-  type LibraryOptions,
-} from "./library";
+import { createLibrary, FORGET_FILE_IDENTITY, type LibraryHooks } from "./library";
 import type { PageText } from "./passages";
 import {
   CURRENT_SINCE,
@@ -416,8 +412,6 @@ export interface DocumentsOptions {
     retryMs: number;
     detectDataless: boolean;
   };
-  /** Says something to the User, in their language: why locating a Linked folder was refused. */
-  say: LibraryOptions["say"];
   reportError?: (error: unknown) => void;
 }
 
@@ -487,6 +481,15 @@ export function createDocuments(options: DocumentsOptions) {
     return row.status as DocumentStatus;
   };
 
+  /** The Mind a file was last imported as, still there (#720). */
+  const importedMindOf = (documentId: string): string | null =>
+    db.get<{ mind_id: string }>(
+      `SELECT p.mind_id FROM word_packages p JOIN minds m ON m.id = p.mind_id
+       WHERE p.document_id = ? AND p.deleted_at IS NULL AND m.deleted_at IS NULL
+       ORDER BY p.created_at DESC, p.rowid DESC LIMIT 1`,
+      [documentId],
+    )?.mind_id ?? null;
+
   const toDocument = (row: DocumentRow): Document => {
     const tagging = taggingOf(row.status, row.tagging_status);
     const status = statusOf(row);
@@ -528,6 +531,7 @@ export function createDocuments(options: DocumentsOptions) {
       reference: referenceOf(db, row.id),
       ownFile: ownFileOf(row),
       found: foundSourceOf(db, row.id),
+      importedAs: importedMindOf(row.id),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -1228,7 +1232,6 @@ export function createDocuments(options: DocumentsOptions) {
     db,
     now,
     dataDir,
-    say: options.say,
     folders: options.folders,
     watch: options.linkedFolders.watch,
     stat: options.linkedFolders.stat,
@@ -1497,6 +1500,20 @@ export function createDocuments(options: DocumentsOptions) {
       )
       .map(toDocument);
   };
+
+  /** Every live Document's id, version and names, in `list`'s order: what a Citation needs to show its Document's current name. */
+  const names = (): LiveDocument[] =>
+    db
+      .all<{ id: string; content_hash: string; name: string; title: string | null }>(
+        `SELECT id, content_hash, name, title FROM documents
+         WHERE deleted_at IS NULL ORDER BY created_at DESC, rowid DESC`,
+      )
+      .map((row) => ({
+        id: row.id,
+        contentHash: row.content_hash,
+        name: row.name,
+        title: row.title,
+      }));
 
   /** The ids of the live Documents the filter keeps, in `list`'s order. */
   const ids = (filter: DocumentFilter = {}): string[] => {
@@ -1995,6 +2012,9 @@ export function createDocuments(options: DocumentsOptions) {
       return { documents, skipped };
     },
 
+    /** See the library's `newVersionFrom`: a newer draft of a Word file imported before (#720). */
+    newVersionFrom: (documentId: string, path: string) => library.newVersionFrom(documentId, path),
+
     /**
      * Adds a file IncarnaMind saved in the data folder, a web page's snapshot
      * or a Meeting's Transcript while it records, as a new Document named
@@ -2062,6 +2082,7 @@ export function createDocuments(options: DocumentsOptions) {
     },
 
     list,
+    names,
     ids,
 
     /** A live Document. Throws NotFoundError for an unknown or deleted one. */

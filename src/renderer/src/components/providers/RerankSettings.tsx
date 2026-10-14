@@ -13,6 +13,7 @@ import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
+import { ProblemMark } from "../ProblemLine";
 import {
   buttonClass,
   choiceListClass,
@@ -209,6 +210,7 @@ function BuiltInModelState({ model }: { model: RerankingModelStatus }) {
         className={`mt-1.5 ${errorTextClass}`}
         title={message}
       >
+        <ProblemMark />
         {kind === "load"
           ? t("rerank.settings.loadFailed")
           : t("rerank.settings.failed", { reason: t(FAILURE_KEYS[kind]) })}
@@ -380,6 +382,11 @@ function RerankForm({
         </>
       )}
 
+      {!builtIn && (
+        <p data-testid="rerank-sends" className={hintClass}>
+          {t("rerank.settings.sends", { service: t(`rerank.kind.${kind}`) })}
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="submit"
@@ -403,9 +410,10 @@ function RerankForm({
         </button>
       </div>
 
-      {test && <TestResult result={test} onRetry={() => void run("testing")} />}
+      {test && <TestResult result={test} />}
       {error && (
         <p role="alert" className={errorTextClass}>
+          <ProblemMark />
           {error}
         </p>
       )}

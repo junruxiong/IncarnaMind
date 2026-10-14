@@ -14,6 +14,7 @@ import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
+import { ProblemMark } from "../ProblemLine";
 import {
   buttonClass,
   choiceListClass,
@@ -140,6 +141,7 @@ export function EmbeddingSettingsSection() {
             )}
             {error && (
               <p role="alert" className={`mt-1 ${errorTextClass}`} title={error.message}>
+                <ProblemMark />
                 {t("embeddingProviders.settings.error", { reason: t(testErrorKey(error.kind)) })}
               </p>
             )}
@@ -467,10 +469,11 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
             {t("embeddingProviders.test.ok", { dimensions: test.dimensions })}
           </p>
         ) : (
-          <TestResult result={test} onRetry={() => void runTest()} />
+          <TestResult result={test} />
         ))}
       {error && (
         <p role="alert" className={errorTextClass}>
+          <ProblemMark />
           {error}
         </p>
       )}

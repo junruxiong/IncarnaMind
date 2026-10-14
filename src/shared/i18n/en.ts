@@ -97,7 +97,7 @@ export const en = {
     "Start with the folders you need. Rename them or add your own at any time.",
   "library.addSelected": "Add selected folders",
   "library.modelHint":
-    "Choose the model that assigns folders and tags. This can be different from your chat model. Cloud models ask before receiving your document text, folder names and tag definitions, and, if they can read images, the first pages of scanned PDFs.",
+    "Choose the model that assigns folders and tags. This can be different from your chat model. A cloud model receives your document text, folder names and tag definitions, and, if it can read images, the first pages of scanned PDFs.",
   "library.connection": "Connection",
   "library.manualOnly": "Organize manually",
   "library.jev": "Jev · saved connection",
@@ -172,22 +172,27 @@ export const en = {
   "command.palette.open": "Search…",
   "command.settings.page": "Settings: {page}",
   "palette.label": "Search",
-  "palette.placeholder": "Search Minds, Documents, Folders, Tags and actions…",
+  "palette.placeholder": "Search Minds, conversations, Documents, Folders, Tags and actions…",
   "palette.results": "Results",
   "palette.group.recent": "Recent",
   "palette.group.minds": "Minds",
+  "palette.group.conversations": "Conversations",
   "palette.group.documents": "Documents",
   "palette.group.foldersAndTags": "Folders and Tags",
   "palette.group.actions": "Actions",
   "palette.group.notes": "In your notes",
   "palette.group.documentText": "In your Documents",
+  "palette.group.conversationText": "In your conversations",
   "palette.kind.mind": "Mind",
+  "palette.kind.conversation": "Conversation",
   "palette.kind.folder": "Folder",
   "palette.kind.tag": "Tag",
   "palette.tag.count": "on {count} Documents",
   "palette.tag.count.one": "on 1 Document",
   "palette.searching": "Searching notes and Documents…",
   "palette.empty": "No matches in names or text",
+  "palette.ask": "Ask about “{text}”",
+  "palette.ask.in": "in {conversation}",
   "palette.hint.move": "to move",
   "palette.hint.open": "to open",
   "palette.hint.openTab": "in a new tab",
@@ -229,6 +234,8 @@ export const en = {
   "mind.count": "{count} Minds",
   "mind.moveTo": "Move to…",
   "document.openTab": "Open in a new tab",
+  "document.openMind": "Open its Mind",
+  "document.peek": "Peek",
   "object.copy": "Copy",
   "document.tags": "Tags…",
   "folder.organize": "Organize this Folder",
@@ -939,6 +946,8 @@ export const en = {
   "info.from.linked": "Linked folder “{name}”",
   "info.from.own": "Other Documents",
   "info.folder": "Folder",
+  "info.mind": "Mind",
+  "info.importedAs": "Imported as a Mind",
   "info.tags": "Tags",
   "info.created": "Created",
   "info.createdValue": "{date} (the file’s own date)",
@@ -954,6 +963,10 @@ export const en = {
   "info.slides.other": "{count} slides",
   "info.sheets.one": "1 sheet",
   "info.sheets.other": "{count} sheets",
+  "peek.label": "Peek: {name}",
+  "peek.kind": "Kind",
+  "peek.ask": "Ask about this",
+  "peek.addTags": "+ Add tags",
   "info.files.one": "1 file",
   "info.files.other": "{count} files",
   "documents.other": "Other Documents",
@@ -1029,12 +1042,6 @@ export const en = {
   "linkedFolders.locateAction": "Locate folder…",
   "linkedFolders.locate.pickTitle": "Locate “{name}”",
   "linkedFolders.locate.pickButton": "Choose",
-  "linkedFolders.locate.notThis":
-    "None of the files in “{name}” are in that folder. Choose the folder that holds them now.",
-  "linkedFolders.locate.overlaps":
-    "That folder is inside a Linked folder, or holds one. Choose the folder “{name}” is in now.",
-  "linkedFolders.locate.taken":
-    "“{file}” in that folder is in IncarnaMind already, added on its own. Delete it from IncarnaMind, then locate the folder again.",
   "linkedFolders.unlinkAction": "Unlink…",
   "linkedFolders.unlink.title": "Unlink “{name}”?",
   "linkedFolders.unlink.body":
@@ -1059,6 +1066,7 @@ export const en = {
   "status.tagging.one": "Tagging 1 Document…",
   "status.tagging.other": "Tagging {count} Documents…",
   "status.taggingWaiting": "Tags need a model",
+  "status.taggingPermission": "Tags need your OK",
   "status.setUp": "Set up",
   "status.downloading": "Search model",
   "status.downloadFailed": "Search model download failed",
@@ -1325,8 +1333,8 @@ export const en = {
   "tags.dialog.retag.started": "Re-tagging has started.",
   "tags.dialog.done": "Done",
 
-  "jev.waiting.notice":
-    "Automatic tagging is waiting for a model. Your Documents are tagged as soon as one is set up.",
+  "jev.waiting.notice": "Tags wait until you choose a model.",
+  "jev.waiting.permission": "Tags wait until you allow Document text to go to {service}.",
   "jev.chip.needsReview": "needs review",
   "jev.chip.likely": "{tag}: added automatically, {percent}% likely",
   "jev.chip.review":
@@ -1354,6 +1362,7 @@ export const en = {
   "jev.form.reviewHint":
     "Below the first number a Tag isn't applied; from the second it is applied without a mark.",
   "jev.form.save": "Use Jev for tagging",
+  "jev.form.sends": "Document text for Tags goes to Jev when it tags your Documents.",
 
   "settings.title": "Settings",
   "settings.pages.models": "Models",
@@ -1454,6 +1463,8 @@ export const en = {
   "providers.form.test": "Test connection",
   "providers.form.testing": "Testing…",
   "providers.form.save": "Use this provider",
+  "providers.sends":
+    "Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to {provider} when you use it.",
   "providers.form.saving": "Saving…",
 
   "providers.test.ok": "Connected: the provider answered.",
@@ -1747,12 +1758,13 @@ export const en = {
   "privacy.intro":
     "IncarnaMind collects no usage data. This page lists everything it sends from this computer, and lets you change it.",
   "privacy.flows.intro":
-    "These send your content to a service outside this computer. Nothing is sent on one until you allow it, and nothing at all while “Keep everything on this computer” is on. Where a provider offers the choice, IncarnaMind asks it not to store your requests.",
+    "These send your content to a service outside this computer. Choosing a service, where IncarnaMind says what goes to it, allows these; nothing is sent on one you haven't allowed, and nothing at all while “Keep everything on this computer” is on. Where a provider offers the choice, IncarnaMind asks it not to store your requests.",
   "privacy.flows.service": "to {service}",
   "privacy.flows.local": "Stays on this computer",
   "privacy.flows.sends": "Sends:",
   "privacy.flows.notInUse": "Not in use: everything stays on this computer.",
   "privacy.flows.decided": "{status} on {date}",
+  "privacy.flows.chosen": "Allowed when you chose {service}, {date}",
   "privacy.flows.allow": "Allow",
   "privacy.traffic.title": "Other network traffic",
   "privacy.traffic.intro":
@@ -1920,6 +1932,7 @@ export const en = {
   "scope.chip.more": "+{count} more",
   "scope.chip.moreLabel": "Show the other {count} Documents in the Search scope",
   "scope.chip.fewer": "Show fewer",
+  "scope.empty.line": "{scope} has no Documents",
   "scope.answer.empty":
     "This Question's Search scope has no Documents to search, so nothing was searched. Add Documents to its Folders or Tags, or remove the scope to search all your Documents.",
 
@@ -2504,6 +2517,8 @@ export const en = {
   "error.folder.nameTaken": "A folder with this name already exists.",
   "error.folder.limit": "The Library supports up to 100 folders.",
   "error.mind.notFound": "That Mind doesn't exist or has been deleted.",
+  "error.mind.notFromWord":
+    "This Mind wasn’t imported from a Word file, so it has no original to add.",
   "error.mind.newerVersion": "A newer version of IncarnaMind made this. Update to open it.",
   "error.mind.newerVersionEdit":
     "A newer version of IncarnaMind wrote this Mind. Update IncarnaMind to edit it.",
@@ -2543,6 +2558,7 @@ export const en = {
     "No keyring is running, so API keys would be stored in plain text. Start GNOME Keyring or KWallet, or accept plain-text storage in Settings.",
   "error.secrets.unencrypted": "This system can't encrypt API keys, so they can't be saved.",
   "error.consent.declined": "You declined sending data to {service}, so nothing was sent.",
+  "error.consent.needed": "Waiting until you allow sending data to {service}. Nothing was sent.",
   "error.connector.notFound": "That Connector doesn't exist.",
   "error.connector.nameEmpty": "A Connector's name can't be empty.",
   "error.connector.nameTooLong": "A Connector's name can't be longer than {max} characters.",
@@ -2565,6 +2581,96 @@ export const en = {
   "error.connector.jsonInvalid": "That isn't valid JSON: {reason}",
   "error.connector.noServers":
     "No MCP servers found: expected an “mcpServers” object, as Claude Desktop and Cursor write it.",
+  "error.restore.unknown": "That isn't in Recently deleted.",
+  "error.restore.deletedPermanently": "“{name}” was deleted permanently, so it can't be restored.",
+  "error.restore.expired":
+    "“{name}” was deleted more than {days} days ago, so it can't be restored.",
+  "error.restore.unlinked":
+    "“{name}” can't be restored: the Linked folder it was in has been unlinked.",
+  "error.restore.documentBack": "“{name}” is in the Library again, so it can't be restored.",
+  "error.restore.documentGone": "That Document was deleted. Restore it first.",
+  "error.restore.tagGone": "The Tag “{name}” was deleted. Restore it first.",
+  "error.restore.folderGone": "The Folder “{name}” was deleted. Restore it first.",
+  "error.restore.tagNameTaken":
+    "There is another Tag named “{name}” now. Rename it, then restore this one.",
+  "error.restore.folderNameTaken":
+    "There is another Folder named “{name}” now. Rename it, then restore this one.",
+  "error.restore.folderLimit":
+    "The Library holds up to 100 Folders. Delete one, then restore this one.",
+  "error.restore.notDeleted": "“{name}” isn't deleted, so it can't be deleted permanently.",
+  "error.history.gone": "That version is no longer kept.",
+  "error.linkedFolder.notThis":
+    "None of the files in “{name}” are in that folder. Choose the folder that holds them now.",
+  "error.linkedFolder.overlaps":
+    "That folder is inside a Linked folder, or holds one. Choose the folder “{name}” is in now.",
+  "error.linkedFolder.taken":
+    "“{file}” in that folder is in IncarnaMind already, added on its own. Delete it from IncarnaMind, then locate the folder again.",
+  "error.agent.notConnected": "That agent isn't connected.",
+  "error.agent.nameEmpty": "Give the agent a name.",
+  "error.agent.nameTooLong": "An agent's name can be at most {max} characters.",
+  "error.agent.nameTaken": "An agent named “{name}” is already connected.",
+  "error.agent.noFolders": "Choose at least one Folder for the agent to read.",
+  "error.agent.keyUnreadable":
+    "This agent's key can't be read on this computer. Disconnect it and connect it again.",
+  "error.agent.undoChanged": "{path} has changed since, so IncarnaMind left it as it is.",
+  "error.library.noClassifier": "Choose a classification model first.",
+  "error.library.noFolders": "Create or choose folders first.",
+  "error.library.classifierModel": "Choose a connected provider and a model.",
+  "error.library.autoNotLocal": "Automatic classification must run on this computer.",
+  "error.library.localModelMissing": "Enter the local server and decision model.",
+  "error.library.ollamaNotLocal": "The Ollama decision model must run on this computer.",
+  "error.meeting.notFound": "That Meeting doesn't exist or has been discarded.",
+  "error.meeting.off": "Meetings are turned off in Settings.",
+  "error.meeting.otherRecording": "Another Meeting is being recorded. Stop it first.",
+  "error.meeting.noticeUnread": "Read the recording notice before recording a Meeting.",
+  "error.meeting.cantDiscard": "Only a Meeting that hasn't started can be discarded.",
+  "error.meeting.alreadyStarted": "That Meeting has started already.",
+  "error.meeting.notRecording": "That Meeting isn't recording.",
+  "error.meeting.notPaused": "That Meeting isn't paused.",
+  "error.meeting.notBeingRecorded": "That Meeting isn't being recorded.",
+  "error.comparison.noQuestion": "Add a Question to compare by.",
+  "error.comparison.tooManyQuestions": "A comparison table has at most {max} Questions.",
+  "error.comparison.noDocuments": "There are no Documents to compare.",
+  "error.comparison.tooManyDocuments": "A comparison table has at most {max} Documents.",
+  "error.comparison.questionTooLong": "A Question can't be longer than {max} characters.",
+  "error.comparison.instructionTooLong":
+    "What else the table should show can't be longer than {max} characters.",
+  "error.comparison.notFound": "That comparison table isn't in this Mind.",
+  "error.edit.noInstruction": "Say what to change, or the language to translate into.",
+  "error.edit.instructionTooLong": "What to change can't be longer than {max} characters.",
+  "error.reference.tooLong": "A reference's field can't be longer than {max} characters.",
+  "error.reference.notYear": "“{text}” isn't a year or a date.",
+  "error.reference.notDoi": "“{text}” isn't a DOI.",
+  "error.import.undoGone": "That import can't be undone any more.",
+  "error.import.filesGone": "That import's files can't be added any more.",
+  "error.import.noSuchReference": "There is no such reference without a Document.",
+  "error.import.fileNotAdded": "That file can't be added as a Document.",
+  "error.sources.nothingToFind": "Type what to search for.",
+  "error.sources.yearsOrder": "The first year comes after the last.",
+  "error.sources.keyLooksWrong": "That doesn't look like a key. Check it and paste it again.",
+  "error.skill.notFound": "That Skill doesn't exist or has been removed.",
+  "error.skill.previewExpired": "That Skill preview has expired: choose the Skill again.",
+  "error.skill.builtInName":
+    "“{name}” is the name of a built-in Skill, whose files can't be replaced. Give the Skill another name in its SKILL.md, or duplicate the built-in Skill to make your own.",
+  "error.approval.riskNotAccepted":
+    "Confirm the risk warning before always running a Skill's scripts.",
+  "error.privacy.usageDataLocalMode":
+    "Usage data stays off while “Keep everything on this computer” is on.",
+  "error.check.claimTooLong": "The claim is too long to check: at most {max} characters.",
+  "error.check.localMode": "Local mode is on, and the model isn't on this computer.",
+  "error.check.declined":
+    "You declined sending the claim to the model's service, so nothing was sent.",
+  "error.tagging.noModel": "Choose a classification model.",
+  "error.tagging.cloudPaused": "Cloud classification is paused in local mode.",
+  "error.tagging.jevNotSetUp": "Jev isn't set up.",
+  "error.tagging.jevKeyUnreadable": "The Jev key can't be read on this device.",
+  "error.tagging.startOllama": "Start Ollama to use automatic local classification.",
+  "error.tagging.installModel":
+    "Install {model} in Ollama, then classify again, or select a model manually.",
+  "error.tagging.needsPageImages":
+    "This PDF needs page images. Install clef-flash in Ollama, then classify it again, or move it to a Folder yourself.",
+  "error.tagging.needsMemory":
+    "Clef-Flash needs more available memory for this PDF. Close other models and retry, or move it to a Folder yourself.",
 
   // The application menu (src/main/menu.ts).
   "menu.about": "About IncarnaMind",
@@ -2698,11 +2804,13 @@ export const en = {
   "connectors.directory.what": "What it can do",
   "connectors.directory.what.before":
     "Its Tools show here once it's connected, each with whether it asks before it runs.",
+  "connectors.directory.what.listed":
+    "These are its Tools as IncarnaMind reviewed them. Once it's connected, you choose which of them ask first or are off.",
   "connectors.directory.tool.reads": "Reads",
   "connectors.directory.tool.changes": "May change things",
   "connectors.directory.where": "Where your data goes",
   "connectors.directory.where.body":
-    "What the assistant asks {name} for, such as words from your Question, goes to {name}, once you agree. What it returns goes to your chat model, as your Documents do.",
+    "Once you connect it, what the assistant asks {name} for, such as words from your Question, goes to {name}. What it returns goes to your chat model, as your Documents do.",
   "connectors.directory.how": "How it signs in",
   "connectors.directory.how.browser":
     "Sign in with {name} in your browser. Your sign-in is kept in your keychain.",
@@ -2736,7 +2844,7 @@ export const en = {
   "connectors.error.failed": "It couldn't be connected.",
   "connectors.tools.none": "No Tools",
   "connectors.tools.note":
-    "A Connector says which of its Tools only read; IncarnaMind can't check that. Those run without asking, and the others ask before each call. Change either here.",
+    "A Connector says which of its Tools only read; IncarnaMind can't check that. Those run without asking, and the others ask before each call. Change either here, or turn a Tool off so Answers don't use it.",
   "connectors.form.name": "Name",
   "connectors.form.command": "Command",
   "connectors.form.commandHint":
@@ -2748,6 +2856,8 @@ export const en = {
     "For API keys and the like. The values are kept in your keychain, never in IncarnaMind's database.",
   "connectors.form.envInvalid": "Write each environment variable as NAME=value.",
   "connectors.form.add": "Add Connector",
+  "connectors.form.sends":
+    "What Answers ask this Connector's Tools goes to it, and it may send that over the internet.",
   "connectors.form.adding": "Adding…",
   "connectors.form.cancel": "Cancel",
   "connectors.form.save": "Save and restart",
@@ -2766,6 +2876,8 @@ export const en = {
   "connectors.import.env": "Environment: {names} (kept in your keychain)",
   "connectors.import.confirm": "Add {count} Connectors",
   "connectors.import.confirm.one": "Add 1 Connector",
+  "connectors.import.sends":
+    "What Answers ask these Connectors' Tools goes to them, and they may send that over the internet.",
   "connectors.import.nothing": "Nothing here can be added.",
   "connectors.import.adding": "Adding…",
   "connectors.consent.note":
@@ -2834,6 +2946,8 @@ export const en = {
   "approvals.card.alwaysAllowHint":
     "Run {tool} from now on without asking. You can revoke this in Settings, under Approvals.",
   "approvals.card.deny": "Deny",
+  "approvals.thirdParty.read.imported":
+    "This Answer read a Mind with imported text, so it asks you first.",
   "approvals.thirdParty.read.webPage": "This Answer read a web page, so it asks you first.",
   "approvals.thirdParty.read.checkedDocument":
     "This Answer read the document being checked, so it asks you first.",
@@ -2855,16 +2969,18 @@ export const en = {
   "approvals.tools.select": "When an Answer calls {tool}",
   "approvals.tools.ask": "Ask every time",
   "approvals.tools.always": "Always allow",
+  "approvals.tools.off": "Off",
   "approvals.settings.title": "Approvals",
   "approvals.settings.body":
-    "Tools that may change something, and Skill scripts, ask before each run. Here is every Tool you always allow or set to ask every time, and every Skill whose scripts always run. Revoke one to go back to the default.",
+    "Tools that may change something, and Skill scripts, ask before each run. Here is every Tool you always allow, set to ask every time or turned off, and every Skill whose scripts always run. Revoke one to go back to the default.",
   "approvals.settings.empty":
-    "No Tool is set to always allow or to ask every time. No Skill's scripts always run.",
+    "No Tool is set to always allow, to ask every time or to stay off. No Skill's scripts always run.",
   "approvals.settings.revoke": "Revoke",
   "approvals.settings.revokeLabel": "Revoke the setting for {name}",
   "approvals.settings.skillScripts": "Scripts of {skill}",
   "approvals.policy.always": "Always allow",
   "approvals.policy.ask": "Ask every time",
+  "approvals.policy.off": "Off",
   "approvals.policy.alwaysRun": "Always run",
 
   // Onboarding: the example Mind, the "Get started" checklist and the three steps.
@@ -2891,44 +3007,26 @@ export const en = {
   "gettingStarted.hide": "Hide Get started",
   "gettingStarted.done": "Done: ",
   "gettingStarted.step.citation": "Check a Citation in the example",
-  "gettingStarted.step.documents": "Index your Documents or connect apps",
+  "gettingStarted.step.documents": "Add your Documents",
   "gettingStarted.step.question": "Ask your own Question",
   "startGuide.title": "Start in three steps",
   "startGuide.documents.title": "Add your Documents, or connect your apps",
   "startGuide.documents.body":
     "PDF, Word, PowerPoint, Excel, Markdown or text. Your files stay where they are; IncarnaMind only reads them. A Google Drive or OneDrive folder synced to this computer works too.",
   "startGuide.documents.linkFolder": "Link a folder…",
-  "startGuide.documents.addFiles": "Add files",
+  "startGuide.documents.addFiles": "Add files…",
   "startGuide.documents.connectApp": "Connect an app…",
   "startGuide.documents.apps":
-    "Connect Notion, Google Drive or any app with an MCP server, and Answers can look things up there too. Only your Documents get checked Citations.",
+    "Connect Notion, Google Drive and other apps, and Answers can look things up there too. Only your Documents get checked Citations.",
   "startGuide.ask.title": "Ask a Question",
   "startGuide.ask.body":
-    "Press {shortcut} anywhere in a Mind and type. The Answer is written right below, from your Documents.",
+    "Press {shortcut} and ask. The Answer appears in the assistant; add it to your note with one click.",
   "startGuide.ask.example": "e.g. What do these reports say about Q3 revenue?",
   "startGuide.check.title": "Check where each claim comes from",
   "startGuide.check.body":
     "Every claim gets a mark in the margin: {mark} when the quote is found in your Document. Click it to open the page.",
   "startGuide.example.lead": "Want to see it first?",
   "startGuide.example.open": "Open the example Mind",
-  "restore.error.unknown": "That isn't in Recently deleted.",
-  "restore.error.deletedPermanently": "“{name}” was deleted permanently, so it can't be restored.",
-  "restore.error.expired":
-    "“{name}” was deleted more than {days} days ago, so it can't be restored.",
-  "restore.error.unlinked":
-    "“{name}” can't be restored: the Linked folder it was in has been unlinked.",
-  "restore.error.documentBack": "“{name}” is in the Library again, so it can't be restored.",
-  "restore.error.documentGone": "That Document was deleted. Restore it first.",
-  "restore.error.tagGone": "The Tag “{name}” was deleted. Restore it first.",
-  "restore.error.folderGone": "The Folder “{name}” was deleted. Restore it first.",
-  "restore.error.tagNameTaken":
-    "There is another Tag named “{name}” now. Rename it, then restore this one.",
-  "restore.error.folderNameTaken":
-    "There is another Folder named “{name}” now. Rename it, then restore this one.",
-  "restore.error.folderLimit":
-    "The Library holds up to 100 Folders. Delete one, then restore this one.",
-  "deletePermanently.error.notDeleted":
-    "“{name}” isn't deleted, so it can't be deleted permanently.",
   "meetings.mindTitle": "Meeting, {date}",
   "settings.pages.meetings": "Meetings",
   "status.readingPaused": "Reading paused while recording",
@@ -3317,6 +3415,11 @@ export const en = {
   "steps.sources": "{count} sources",
   "steps.sources.one": "1 source",
   "steps.sources.none": "no sources",
+  "steps.passages": "{count} passages",
+  "steps.passages.one": "1 passage",
+  "steps.readCited": "Read {passages} · {count} sentences cited after checking",
+  "steps.readCited.one": "Read {passages} · 1 sentence cited after checking",
+  "steps.readNoneMatched": "Read {passages} · none of its sentences could be matched to them",
   "steps.read": "Read “{mind}”",
   "steps.read.part": "Read part of “{mind}”",
   "steps.read.selection": "Read your selection in “{mind}”",
@@ -3357,6 +3460,22 @@ export const en = {
   "answer.add": "Add to note",
   "answer.add.to": "Add to “{mind}” ({shortcut})",
   "answer.add.choose": "Choose a Mind to add it to",
+  "mindCall.thisMind": "this Mind",
+  "mindCall.reading": "Reading “{mind}”…",
+  "mindCall.editing": "Changing “{mind}”…",
+  "mindCall.adding": "Adding to “{mind}”…",
+  "mindCall.creating": "Making “{mind}”…",
+  "mindCall.read": "Read “{mind}”",
+  "mindCall.edited": "Edited “{mind}” · {count} changes",
+  "mindCall.edited.one": "Edited “{mind}” · 1 change",
+  "mindCall.created": "Created “{mind}”",
+  "mindCall.created.changes": "Created “{mind}” · {count} changes",
+  "mindCall.created.one": "Created “{mind}” · 1 change",
+  "mindCall.unchanged": "No change needed in “{mind}”",
+  "mindCall.readFailed": "Couldn't read “{mind}”",
+  "mindCall.failed": "Couldn't change “{mind}”",
+  "mindCall.createFailed": "Couldn't make “{mind}”",
+  "mindCall.open": "Open",
   "answer.added": "Added to “{mind}”",
   "answer.addedToNew": "Made the Mind “{mind}” from this Answer",
   "answer.addTo": "Add to another Mind or a new Mind",
@@ -3377,11 +3496,9 @@ export const en = {
   "command.answer.regenerate": "Regenerate the Answer",
   "command.answer.stop": "Stop the Answer",
   "command.answer.stop.unavailable": "No Answer is being written",
-  "origin.from": "From the conversation “{title}”",
-  "origin.open": "Open the conversation this came from",
+  "origin.open": "Open the source conversation",
   "origin.deleted": "From the conversation “{title}”, now in Recently deleted",
   "origin.gone": "From a conversation that has been deleted",
-  "origin.asked": "You asked: {question}",
   "assistant.narrow":
     "While the window is narrower than 1,000 px the assistant sits at the bottom; it goes back to the side when the window is wider.",
   "command.assistant.dock": "Assistant: {dock}",
@@ -3451,7 +3568,6 @@ export const en = {
   "agents.setup.other": "Copy the settings to paste into your agent",
   "agents.note.codex":
     "Used in the ChatGPT app’s Work and Codex modes; ordinary Chat mode doesn’t use it.",
-  "agents.setup.undoChanged": "{path} has changed since, so IncarnaMind left it as it is.",
   "agents.client.other": "Other agent",
   "agents.client.codex": "ChatGPT app and Codex",
   "agents.sentence.codex": "the ChatGPT app or Codex",
@@ -3564,7 +3680,6 @@ export const en = {
   "history.noChanges": "No changes: these two versions read the same.",
   "history.restored": "Restored the version from {version}",
   "history.restored.name": "Restore Version",
-  "history.error.gone": "That version is no longer kept.",
   "wordImport.command": "Import a Word file…",
   "wordImport.pick.title": "Import a Word file",
   "wordImport.pick.filter": "Word documents",
@@ -3580,6 +3695,10 @@ export const en = {
   "wordImport.othersMore": "{count} more",
   "wordImport.keeps":
     "IncarnaMind keeps a copy of the file, so export can write your changes back into it.",
+  "wordImport.addOriginal": "Also add the original to the Library, so Answers can cite it",
+  "wordImport.newerDraft": "A newer draft of “{name}”? Keep both as versions",
+  "wordImport.layoutNotShown":
+    "This file’s layout (fonts, colours, shading and aligned columns) isn’t shown in the Mind. It’s kept, and comes back when you export to Word.",
   "wordImport.import": "Import",
   "wordImport.importing": "Importing…",
   "wordImport.cancel": "Cancel",
@@ -3600,6 +3719,9 @@ export const en = {
     "“{name}” couldn’t be read. It may have moved, or IncarnaMind isn’t allowed to open it.",
   "wordImport.from": "From {name}",
   "wordImport.keepsStyles": "Export keeps its styles",
+  "wordImport.from.open": "Open {name} beside it",
+  "wordImport.notAdded": "“{name}” couldn’t be added to the Library, so Answers can’t cite it.",
+  "wordImport.addToLibrary": "Add to Library",
   "wordImport.from.tooltip":
     "Opened from a Word file. Export writes your changes back into it and keeps its styles, numbering, headers and footers.",
   "wordImport.progress": "Importing “{name}” · {percent}%",

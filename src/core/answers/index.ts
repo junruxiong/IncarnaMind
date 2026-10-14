@@ -45,6 +45,7 @@ import type * as Y from "yjs";
 import { asGenerated } from "../../shared/aiText";
 import { runsByDefault } from "../../shared/approvalRules";
 import { citationNode, withCitations } from "../../shared/blockJson";
+import type { LiveDocument } from "../../shared/citations";
 import { withFigures, withFigureText } from "../../shared/figureMarkers";
 import { recordProposalRequest, resolveProposals } from "../../shared/proposals";
 import { searchScopeOf } from "../../shared/searchScope";
@@ -72,6 +73,7 @@ import {
   type MarkedCitation,
   type MarkedFigure,
   MIND_CONTENT_FIELD,
+  type MindChange,
   type MindFocus,
   type ProviderError,
   QUESTION_BLOCK,
@@ -98,6 +100,7 @@ import { givesStructuredOutput, calculates as offersCalculate } from "../provide
 import type { PreparedChatModel } from "../providers/chat";
 import { classifyProviderError } from "../providers/providerErrors";
 import type { WebResult } from "../providers/webSearch";
+import { messageReference } from "../references";
 import type { GateDecision } from "../runs/engine";
 import type { SkillScript, SkillSession } from "../skills";
 import {
@@ -116,6 +119,7 @@ import {
   type ToolProvider,
   type ToolProviderKind,
 } from "../tools";
+import { type MindsForTools, type MindToolsOptions, mindTools } from "../tools/minds/tools";
 import { asksForWeb } from "../tools/web/intent";
 import { type SavedPage, webTools } from "../tools/web/tools";
 import {
@@ -165,6 +169,7 @@ import {
   type ListedDocuments,
   languageInstruction,
   loadedSkillText,
+  mindInstructions,
   signInNeededInstructions,
   skillInstructions,
   sourcesInstructions,
@@ -253,6 +258,8 @@ export interface AnswerConversations {
   add(input: QuestionInput, answerModel: ChatModelChoice | null, read: AnswerRead | null): Turn;
   /** The Question of an Answer, to write the Answer again. */
   questionOf(input: unknown): { answerId: string; question: ConversationQuestion };
+  /** Takes the Search scope off a Question: its Answers search every Document (#748). */
+  clearScope(questionId: string): ConversationQuestion | null;
   /** Empties an Answer, where it is, to write it again, reading `read`. */
   restartAnswer(
     answerId: string,
@@ -296,7 +303,17 @@ export interface CellAnswer {
 }
 
 /** No Search scope: every Document. */
+/** Tells the model its Question's Search scope holds no Documents, so it answers from what it has (#748). */
+const EMPTY_SCOPE_NOTE =
+  "The User limited this Question to a Search scope (Folders, Tags or Documents) that holds no Documents, so there is nothing to search. Answer from the Mind you read, the conversation and the request itself. If the Answer needs the User's Documents, say so plainly in one sentence: do not guess what they hold.";
+
 const NO_SCOPE: SearchScope = { folderIds: [], tagIds: [], documentIds: [] };
+
+/** The Folder a Search scope is, when it is one Folder alone; null otherwise. */
+const oneFolderOf = (scope: SearchScope | null): string | null =>
+  scope && scope.folderIds.length === 1 && scope.tagIds.length + scope.documentIds.length === 0
+    ? (scope.folderIds[0] ?? null)
+    : null;
 
 export interface AnswersOptions {
   content: MindContent;
@@ -335,6 +352,11 @@ export interface AnswersOptions {
   connectorsNeedingSignIn?(): { id: string; name: string }[];
   /** Searching the web and saving its pages (#128); absent: no web search. */
   web?: AnswerWeb;
+  /**
+   * The Minds an Answer in the assistant reads, changes and makes, as
+   * Proposals (#202, ../tools/minds); absent: it changes none.
+   */
+  minds?: MindsForTools;
   /** Asking the User before a Connector Tool or a Skill script runs. */
   approvals: AnswerApprovals;
   /** Running Skill scripts. */
@@ -432,6 +454,7 @@ const CARD_SOURCES: Record<ToolProviderKind, AnswerToolCall["source"]> = {
   connector: "connector",
   sources: "sources",
   web: "web",
+  minds: "minds",
 };
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -444,6 +467,8 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
 export interface DocumentsForAnswers
   extends Pick<AnswerDocuments, "citationSource" | "pageTexts" | "documentDate"> {
   searchableCount(documentIds: readonly string[] | null): number;
+  /** Every live Document's names: what a Citation in the Question context names its Document by. */
+  names(): readonly LiveDocument[];
   /** How many Documents there are to search, and the names of the `limit` most recently added, newest first. */
   searchableNames(documentIds: readonly string[] | null, limit: number): ListedDocuments;
   /** The languages the Documents to search are in, the most common first, with how many are in each. */
@@ -598,7 +623,11 @@ export function createAnswers(options: AnswersOptions) {
     context: QuestionContext;
     /** The Documents of the Question's Search scope; null with no Search scope (every Document). */
     documentIds: string[] | null;
-    /** The Search scope has no Documents to search: the Answer says so, and nothing is sent. */
+    /**
+     * The Search scope has no Documents to search. An outside agent's or a task's Answer says so
+     * and nothing is sent; the assistant's Question goes on to the model, which is told, and
+     * answers from the Mind it reads and the conversation (#748).
+     */
     emptyScope: boolean;
     /** The Skill the Question forces, loaded up front; null if none. */
     forcedSkill: string | null;
@@ -631,6 +660,12 @@ export function createAnswers(options: AnswersOptions) {
     toolSet?: ToolSet;
     /** Written for a Task (#126), which gives way to Answers itself (see ../runs/tasks). */
     task?: boolean;
+    /**
+     * An Answer in the assistant (#202): the Mind it was asked from and the
+     * Blocks the User selected there, where a Mind it makes goes, and what
+     * Blocks it adds link back to. It is offered the Minds' Tools. Absent: none.
+     */
+    assistant?: Pick<MindToolsOptions, "focused" | "folderId" | "origin">;
   }): void {
     const { home, answerId, model, context, documentIds, forcedSkill } = input;
     const outside = input.outside === true;
@@ -653,9 +688,8 @@ export function createAnswers(options: AnswersOptions) {
      * Question that has the Answer in its context counts as having read it too.
      * None for the Answer that says the Search scope is empty: no model wrote it.
      */
-    let textOrigin: ThirdPartySource | null = input.emptyScope
-      ? null
-      : (contextReasons[0]?.source ?? null);
+    let textOrigin: ThirdPartySource | null =
+      input.emptyScope && outside ? null : (contextReasons[0]?.source ?? null);
     /** What the Answer records of the Mind it read: less once the model's window cut it. */
     let read = input.mind?.read ?? null;
     /** How much of the Mind its request holds, from 0 to 1. */
@@ -667,6 +701,7 @@ export function createAnswers(options: AnswersOptions) {
     let support: CitationSupport | null = null;
     /** Markers the engine put in for records the model gave without them. */
     let placedMarkers = 0;
+    const citedAfterChecking = { count: 0, asked: false };
     /** The one request for exact quotes, if the engine made it (see ./quoteRetry). */
     let quoteRetry: QuoteRetry | null = null;
     /** The one request to fix figures, if the engine made it (see ./figureRetry). */
@@ -705,6 +740,7 @@ export function createAnswers(options: AnswersOptions) {
             ? { summary, ms: Math.max(0, thoughtUntil - reasoningStartedAt) }
             : null,
         ...(read?.partial && { readShare }),
+        ...(citedAfterChecking.count > 0 && { citedAfterChecking: citedAfterChecking.count }),
       };
     };
     let skills: SkillSession | null = null;
@@ -861,6 +897,7 @@ export function createAnswers(options: AnswersOptions) {
           status: written ? outcome.status : "stopped",
           ...session.summary(),
           placedMarkers,
+          citedAfterChecking: { ...citedAfterChecking },
           citationSupport: support,
           quoteRetry,
           figures: placed.figures,
@@ -896,7 +933,7 @@ export function createAnswers(options: AnswersOptions) {
       id: string,
       ok: boolean,
       resultCount: number | null,
-      found: Pick<AnswerToolCall, "passages" | "error" | "webPage"> = {},
+      found: Pick<AnswerToolCall, "passages" | "error" | "webPage" | "mindChange"> = {},
     ) => {
       const call = toolCalls.find((each) => each.id === id);
       if (!call) return;
@@ -907,6 +944,7 @@ export function createAnswers(options: AnswersOptions) {
       if (found.passages) call.passages = found.passages;
       if (found.error) call.error = found.error;
       if (found.webPage) call.webPage = found.webPage;
+      if (found.mindChange) call.mindChange = found.mindChange;
       announce("answer.toolCallFinished", { ...place, answerId, call: { ...call } });
       writeSoon();
     };
@@ -918,6 +956,8 @@ export function createAnswers(options: AnswersOptions) {
     };
     /** What each call of `read_web_page` came to, by call, for its card when it finishes. */
     const webPages = new Map<string, WebPageCall>();
+    /** What each call of a Minds' Tool changed, by call, for its card when it finishes (#202). */
+    const mindChanges = new Map<string, MindChange>();
     /** Keeps how a script's run went on its card. */
     const setScriptRun = (id: string, run: SkillScriptRun) => {
       const call = toolCalls.find((each) => each.id === id);
@@ -1132,8 +1172,9 @@ export function createAnswers(options: AnswersOptions) {
     };
 
     const run = async () => {
-      // Rather than search every Document, the Answer says the scope has none to search.
-      if (input.emptyScope) {
+      // An outside agent's Question, or a table's cell, whose scope has no Documents has nothing to
+      // answer from: it says so without asking the model.
+      if (input.emptyScope && outside) {
         // On a later turn, as a model's Answer would arrive, so whoever asked hears every event.
         await new Promise((resolve) => setTimeout(resolve, 0));
         if (finished) return;
@@ -1253,6 +1294,41 @@ export function createAnswers(options: AnswersOptions) {
               read: (toolCallId, call) => webPages.set(toolCallId, call),
             })
           : [];
+      // The Minds' Tools, for an Answer in the assistant (#202).
+      const minds = outside ? undefined : options.minds;
+      const fromMinds: Tool[] =
+        minds && input.assistant
+          ? mindTools({
+              minds,
+              prepared,
+              ...input.assistant,
+              blocksOf: (text) => {
+                let notFound = 0;
+                let unrecorded = 0;
+                const cited = withCitations(
+                  markdownToBlocks(withoutFootnoteDefinitions(text)),
+                  (marker) => {
+                    const node = session.checkedNode(marker);
+                    if (!node) unrecorded++;
+                    else if (node.attrs?.check === "not-found") notFound++;
+                    return node;
+                  },
+                );
+                const blocks = asGenerated(
+                  calculating
+                    ? withFigures(
+                        cited,
+                        (marker) => figures.figure(marker),
+                        (figure) => figure.shown,
+                      )
+                    : cited,
+                );
+                return { blocks, notFound, unrecorded };
+              },
+              changed: (toolCallId, change) => mindChanges.set(toolCallId, change),
+              now: () => new Date(),
+            })
+          : [];
       const documents: AnswerTools = {
         get documentCount() {
           return session.tools.documentCount;
@@ -1265,6 +1341,8 @@ export function createAnswers(options: AnswersOptions) {
         hasRecord: (marker) => session.tools.hasRecord?.(marker) ?? false,
         unfoundQuotes: () => session.tools.unfoundQuotes?.() ?? [],
         correctQuote: (marker, quote) => session.tools.correctQuote?.(marker, quote) ?? false,
+        shownPassages: () => session.tools.shownPassages?.() ?? [],
+        quoteFound: (passage, quote) => session.tools.quoteFound?.(passage, quote) ?? false,
         ...(calculating && {
           calculate: (given: readonly unknown[], calculateOptions?: CiteOptions) =>
             figures.calculate(given, calculateOptions),
@@ -1319,12 +1397,15 @@ export function createAnswers(options: AnswersOptions) {
             connectorTools = false,
             sourceTools = false,
             webTools: withWebTools = false,
+            mindTools: withMindTools = false,
           } = {},
         ) =>
           [
             base,
             mode === "no-documents"
-              ? ""
+              ? input.emptyScope
+                ? EMPTY_SCOPE_NOTE
+                : ""
               : documentInstructions(
                   mode,
                   options.documents.searchableNames(documentIds, LISTED_DOCUMENTS),
@@ -1336,6 +1417,7 @@ export function createAnswers(options: AnswersOptions) {
             connectorTools ? connectorInstructions(fromConnectors, mode === "no-documents") : "",
             sourcesInstructions(sourceTools),
             webInstructions(withWebTools),
+            mindInstructions(withMindTools),
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
             language,
           ]
@@ -1346,7 +1428,7 @@ export function createAnswers(options: AnswersOptions) {
         question: context.question,
         model: prepared.model,
         documents,
-        tools: [...provided, ...fromSkills, ...fromWeb],
+        tools: [...provided, ...fromSkills, ...fromWeb, ...fromMinds],
         gate,
         toolSet: input.toolSet,
         thirdParty: contextReasons,
@@ -1374,6 +1456,10 @@ export function createAnswers(options: AnswersOptions) {
             break;
           case "markers-placed":
             placedMarkers += event.count;
+            break;
+          case "cited-after-checking":
+            citedAfterChecking.count += event.count;
+            citedAfterChecking.asked ||= event.asked;
             break;
           case "mind-cut":
             if (read) read = event.share === 0 ? null : { ...read, partial: true };
@@ -1433,10 +1519,12 @@ export function createAnswers(options: AnswersOptions) {
           }
           case "tool-call-finished": {
             const webPage = webPages.get(event.id);
+            const mindChange = mindChanges.get(event.id);
             callFinished(event.id, event.ok, event.resultCount, {
               ...(event.passages && { passages: [...event.passages] }),
               ...(event.error && { error: event.error }),
               ...(webPage && { webPage }),
+              ...(mindChange && { mindChange }),
             });
             break;
           }
@@ -1627,7 +1715,8 @@ export function createAnswers(options: AnswersOptions) {
     if (mindId === null) return null;
     const name = options.readableMindName(mindId);
     if (name === null) return null;
-    const reading = content.peek(mindId, (blocks) => readMind(blocks, name, focus));
+    const documents = options.documents.names();
+    const reading = content.peek(mindId, (blocks) => readMind(blocks, name, focus, documents));
     return { mindId, reading, section: reading.section(MIND_TOKEN_LIMIT, question) };
   }
 
@@ -1659,8 +1748,10 @@ export function createAnswers(options: AnswersOptions) {
       mind && turn.earlier.length > 0
         ? mind.reading.section(MIND_TOKEN_LIMIT, asking)
         : mind?.section;
+    const documents = options.documents.names();
     const { context, origins } = conversationContextOf(turn.earlier, question.text, {
       mind: section,
+      documents,
     });
     const requestOf = (reading: MindReading, kept: MindCut): RequestMind => ({
       text: kept.text,
@@ -1688,8 +1779,10 @@ export function createAnswers(options: AnswersOptions) {
                 return null;
               const smaller = mind.reading.section(tokens, asking);
               return {
-                context: conversationContextOf(turn.earlier, question.text, { mind: smaller })
-                  .context,
+                context: conversationContextOf(turn.earlier, question.text, {
+                  mind: smaller,
+                  documents,
+                }).context,
                 request: requestOf(mind.reading, smaller),
                 share: smaller.share,
               };
@@ -1700,6 +1793,15 @@ export function createAnswers(options: AnswersOptions) {
       emptyScope,
       forcedSkill: question.forcedSkill,
       consentNeeded: ready.consentNeeded,
+      assistant: {
+        focused: mind && {
+          mindId: mind.mindId,
+          // Where the cursor is counts only as a selection when text is selected.
+          blockIds: question.focus?.selection ? question.focus.blockIds : [],
+        },
+        folderId: oneFolderOf(question.scope),
+        origin: { from: messageReference(conversation.id, answer.id), question: question.text },
+      },
     });
     return { asked: true, conversation, questionId: question.id, answerId: answer.id };
   }
@@ -1759,16 +1861,20 @@ export function createAnswers(options: AnswersOptions) {
       (blocks): { answerId: string; edited: boolean } & Asked => {
         const question = findBlock(blocks, QUESTION_BLOCK, questionId);
         if (!question) throw new NotFoundError({ key: "error.question.notInMind" });
-        const { context, origins } = questionContextOf(blocks, question.index);
+        const { context, origins } = questionContextOf(
+          blocks,
+          question.index,
+          QUESTION_CONTEXT_TOKEN_BUDGET,
+          options.documents.names(),
+        );
         const asked = {
           ...askedWith(context, question.element),
           contextReasons: origins.map((source) => ({ via: "context" as const, source })),
         };
         const attributes: Partial<AnswerAttributes> = {
           questionId,
-          // No model writes an Answer that says the Search scope is empty.
-          providerId: asked.emptyScope ? null : model.providerId,
-          modelId: asked.emptyScope ? null : model.modelId,
+          providerId: model.providerId,
+          modelId: model.modelId,
           status: "streaming",
           errorKind: null,
           errorMessage: null,
@@ -1859,20 +1965,17 @@ export function createAnswers(options: AnswersOptions) {
       if ("asked" in ready) return ready;
       // From here on nothing awaits, so the conversation and the Mind can't change underneath.
       const { documentIds, emptyScope } = scopeNow(question.scope);
-      // No model writes an Answer that says the Search scope is empty, and it reads nothing.
-      const mind = emptyScope
-        ? null
-        : mindToRead(question.mind?.id ?? null, question.focus, question.text);
-      const turn = options.conversations.add(
-        question,
-        emptyScope ? null : ready.model,
-        readOf(mind),
-      );
+      const mind = mindToRead(question.mind?.id ?? null, question.focus, question.text);
+      const turn = options.conversations.add(question, ready.model, readOf(mind));
       return startInConversation(turn, ready, documentIds, emptyScope, mind);
     },
 
     /** Writes an Answer of a conversation again, in place (see `CoreApi.regenerateConversationAnswer`). */
     async regenerateInConversation(input: unknown): Promise<ConversationAskResult> {
+      const asked = options.conversations.questionOf(input);
+      if (isRecord(input) && input.clearScope === true) {
+        options.conversations.clearScope(asked.question.id);
+      }
       const { answerId, question } = options.conversations.questionOf(input);
       const ready = await readyModel(question.model, question.forcedSkill);
       if ("asked" in ready) return ready;
@@ -1880,14 +1983,8 @@ export function createAnswers(options: AnswersOptions) {
       const { documentIds, emptyScope } = scopeNow(question.scope);
       const from = question.askedFrom;
       const mind =
-        emptyScope || !from || from.deleted
-          ? null
-          : mindToRead(from.mindId, question.focus, question.text);
-      const turn = options.conversations.restartAnswer(
-        answerId,
-        emptyScope ? null : ready.model,
-        readOf(mind),
-      );
+        !from || from.deleted ? null : mindToRead(from.mindId, question.focus, question.text);
+      const turn = options.conversations.restartAnswer(answerId, ready.model, readOf(mind));
       return startInConversation(turn, ready, documentIds, emptyScope, mind);
     },
 

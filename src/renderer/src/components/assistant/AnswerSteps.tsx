@@ -40,6 +40,7 @@ import {
   SparkLineIcon,
 } from "../lineIcons";
 import { ProblemLine } from "../ProblemLine";
+import { mindCallText, namedMind } from "./MindCall";
 
 /** The least time a live step stays up while another replaces it, so the line never flickers. */
 const MIN_STEP_MS = 1000;
@@ -202,6 +203,7 @@ function runningText(t: Translate, call: AnswerToolCall): string {
     return t("connectors.call.running", { connector: call.connector?.name ?? "", tool: call.tool });
   }
   if (call.source === "sources") return t("sources.call.running", { query: field(call, "query") });
+  if (call.source === "minds") return mindCallText(t, call, namedMind(t, call));
   if (call.source === "web") {
     return call.tool === "search_web"
       ? t("web.call.searching", { query: field(call, "query") })
@@ -238,6 +240,10 @@ function mindStepText(t: Translate, step: MindStep, name = mindLabel(t, step.min
 /** A share read as a whole percent, at least 1 and at most 99: "about 40%" is part, never none or all. */
 const percentOf = (share: number) => Math.min(99, Math.max(1, Math.round(share * 100)));
 
+function passagesText(t: Translate, count: number): string {
+  return count === 1 ? t("steps.passages.one") : t("steps.passages", { count });
+}
+
 function sourcesText(t: Translate, count: number): string {
   if (count === 0) return t("steps.sources.none");
   return count === 1 ? t("steps.sources.one") : t("steps.sources", { count });
@@ -255,6 +261,13 @@ function foldedText(
         scope: scope(line.extraScopes),
         sources: sourcesText(t, line.sources),
       });
+    case "read-passages": {
+      const passages = passagesText(t, line.passages);
+      if (line.citedAfterChecking === 0) return t("steps.readNoneMatched", { passages });
+      return line.citedAfterChecking === 1
+        ? t("steps.readCited.one", { passages })
+        : t("steps.readCited", { passages, count: line.citedAfterChecking });
+    }
     case "searched-web":
       return t("steps.searchedWeb", { sources: sourcesText(t, line.sources) });
     case "listened":
@@ -702,7 +715,9 @@ function useAskedInMeeting(question: ConversationQuestion | undefined): boolean 
 }
 
 /** What a Question searched, with `extra` scopes besides (see `stepsScope`). */
-function useStepsScopeOf(question: ConversationQuestion | undefined): (extra: number) => string {
+export function useStepsScopeOf(
+  question: ConversationQuestion | undefined,
+): (extra: number) => string {
   const t = useT();
   const folders = useAppStore((state) => state.folders);
   const groups = useAppStore((state) => state.library?.groups);

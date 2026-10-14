@@ -67,6 +67,18 @@ export class SecretStorageError extends TranslatableError {
   }
 }
 
+/**
+ * Thrown when background work would send on a flow the User hasn't allowed
+ * for this service: background work never asks (ADR-0022), so it waits.
+ * Nothing was sent.
+ */
+export class ConsentNeededError extends TranslatableError {
+  override name = "ConsentNeededError";
+  constructor(readonly flow: DataFlow) {
+    super({ key: "error.consent.needed", values: { service: flow.service.name } });
+  }
+}
+
 /** Thrown when the User declined a data flow: nothing was sent. */
 export class ConsentDeclinedError extends TranslatableError {
   override name = "ConsentDeclinedError";
@@ -106,7 +118,7 @@ export class ChatNotReadyError extends Error {
  * Thrown when automatic tagging's model can't be used yet, e.g. Jev is set up
  * but its key can't be read on this device. Documents wait until it can.
  */
-export class TaggingNotReadyError extends Error {
+export class TaggingNotReadyError extends TranslatableError {
   override name = "TaggingNotReadyError";
 }
 
