@@ -200,6 +200,7 @@ test("“Create a new note called Fieldwork plan” makes an empty Mind at once,
   await expect(editor.locator("p")).toHaveText(["First visit: the roastery."]);
   await expect(answers).toHaveCount(before);
   await expect(window.getByTestId("composer-input")).toHaveValue("");
+  await screenshot(window, "empty-note-by-name");
 });
 
 test("with no Mind open, a request to change one says so and offers New Mind", async () => {
@@ -214,6 +215,7 @@ test("with no Mind open, a request to change one says so and offers New Mind", a
   await expect(answer.getByTestId("assistant-answer-text")).toContainText("No Mind is open");
   const offer = answer.getByTestId("mind-changes-no-mind");
   await expect(offer).toContainText("No Mind was open to change.");
+  await screenshot(window, "no-mind-open");
   await pointAndClick(window, offer.getByTestId("mind-changes-new-mind"));
   await expect(window.getByTestId("mind-tab")).toHaveCount(1);
   await expect(window.getByTestId("mind-title")).toBeFocused();
