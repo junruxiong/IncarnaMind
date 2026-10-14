@@ -10,6 +10,7 @@ import {
   sectionTitleClass,
 } from "../ui";
 import { useContinueWithChatGpt } from "./ChatGptSignIn";
+import { LocalModeUnavailable } from "./LocalModeUnavailable";
 
 const GOOGLE_CREDITS = "https://developers.google.com/program";
 
@@ -21,6 +22,7 @@ const GOOGLE_CREDITS = "https://developers.google.com/program";
 export function PlansSettings() {
   const t = useT();
   const showPage = useAppStore((state) => state.showSettingsPage);
+  const localMode = useAppStore((state) => state.embedding?.localOnly === true);
   const sign = useContinueWithChatGpt({ keepDefault: true });
   const row = (title: string, line: string, action: React.ReactNode, extra?: React.ReactNode) => (
     <li className={ruledRowClass}>
@@ -35,6 +37,11 @@ export function PlansSettings() {
   return (
     <section data-testid="plans-settings">
       <h4 className={`mb-2 ${sectionTitleClass}`}>{t("plans.title")}</h4>
+      {localMode && (
+        <div className="mb-2">
+          <LocalModeUnavailable />
+        </div>
+      )}
       <ul className={ruledListClass}>
         {row(
           t("plans.chatgpt.title"),

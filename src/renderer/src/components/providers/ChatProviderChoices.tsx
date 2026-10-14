@@ -4,6 +4,7 @@ import { keyProviderGroups } from "../../../../core/providers/catalog/providers"
 import { CHATGPT_SERVICE } from "../../../../core/providers/chatgpt/service";
 import { useT } from "../../i18n";
 import type { KeyRefusal } from "../../keyRefusals";
+import { useAppStore } from "../../store";
 import { OnThisComputer } from "../OnThisComputer";
 import {
   buttonStyle,
@@ -21,6 +22,7 @@ import {
   useContinueWithChatGpt,
 } from "./ChatGptSignIn";
 import { KeepLocalChoice } from "./KeepLocalChoice";
+import { LocalModeUnavailable } from "./LocalModeUnavailable";
 import { type Ollama, OllamaProgress, ollamaDescription } from "./OllamaCard";
 import { ProviderForm, ProviderSendsLine } from "./ProviderForm";
 
@@ -64,6 +66,8 @@ export function ChatProviderChoices(props: ChatProviderChoicesProps) {
   const { refused = null } = props;
   const t = useT();
   const name = useId();
+  const localMode = useAppStore((state) => state.embedding?.localOnly === true);
+  const notRunning = ollama.status?.running === false;
 
   const apiKeyBody = withMoreProviders
     ? t("providers.choice.apiKey.body")
@@ -94,11 +98,15 @@ export function ChatProviderChoices(props: ChatProviderChoicesProps) {
       <Choice
         inputId={`${name}-ollama`}
         chosen={choice === "ollama"}
+        note={notRunning && ollamaActionInRow && <OllamaAction ollama={ollama} />}
         details={
-          (ollamaActionInRow || ollama.pulling || ollama.error || ollama.status?.running) && (
+          ((ollamaActionInRow && !notRunning) ||
+            ollama.pulling ||
+            ollama.error ||
+            ollama.status?.running) && (
             <div className="flex flex-col items-start gap-3">
               <OllamaProgress ollama={ollama} />
-              {ollamaActionInRow && <OllamaAction ollama={ollama} />}
+              {ollamaActionInRow && !notRunning && <OllamaAction ollama={ollama} />}
               {ollama.status?.running && (
                 <KeepLocalChoice keepLocal={ollama.keepLocal} disabled={ollama.pulling} />
               )}
@@ -123,6 +131,7 @@ export function ChatProviderChoices(props: ChatProviderChoicesProps) {
       <Choice
         inputId={`${name}-api-key`}
         chosen={choice === "api-key"}
+        note={localMode && <LocalModeUnavailable />}
         details={
           <ProviderForm
             providers={providers}
@@ -174,16 +183,21 @@ function ChatGptChoice({ onSaved }: { onSaved(provider: ChatProvider): void }) {
   );
 }
 
-/** One choice: its row, and, while chosen, what it opens, lined up with its words. */
+/**
+ * One choice: its row, and, while chosen, what it opens, lined up with its words. `note`: why it
+ * can't be used right now and its next step, shown whether chosen or not.
+ */
 function Choice({
   inputId,
   chosen,
+  note,
   details,
   children,
 }: {
   /** The choice's radio, which `children` holds. */
   inputId: string;
   chosen: boolean;
+  note?: ReactNode;
   details?: ReactNode;
   children: ReactNode;
 }) {
@@ -192,6 +206,7 @@ function Choice({
       <label htmlFor={inputId} className={choiceRowClass}>
         {children}
       </label>
+      {note && <div className="-mt-1 pr-4 pb-3 pl-11">{note}</div>}
       {chosen && details && <div className="pr-4 pb-4 pl-11">{details}</div>}
     </div>
   );
