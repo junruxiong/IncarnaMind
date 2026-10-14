@@ -7,6 +7,7 @@ import { useLanguage, useT } from "../../i18n";
 import { FORMAT_LABELS } from "../../libraryFilters";
 import { addedLabel, foundLine, type SearchMatch } from "../../libraryPage";
 import { atPassage, passagePlace } from "../../palette";
+import { usePeekKey } from "../../peek";
 import { missingList } from "../../referenceEditing";
 import { useSelectable } from "../../selection";
 import { useAppStore } from "../../store";
@@ -147,6 +148,7 @@ export const LibraryRow = memo(function LibraryRow({
         { as: "library", ...(place && { from: place.groupId }) },
       ),
   );
+  const peek = usePeekKey(doc.id, "library");
   // A double-click keeps the preview it opened, then renames.
   const rename = useRename<HTMLButtonElement>(`library-document:${doc.id}`, () =>
     keepPreviewOf(doc.id),
@@ -183,6 +185,7 @@ export const LibraryRow = memo(function LibraryRow({
       data-suggested={suggestedIn !== null ? "" : undefined}
       role="row"
       {...select.rowProps}
+      {...peek.rowProps}
       {...objectMenu.rowProps}
       onKeyDown={onKeyDown}
       onClick={(event) => {

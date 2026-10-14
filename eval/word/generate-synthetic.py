@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Writes the first 18 synthetic .docx files of the Word corpus (eval/word/README.md) into documents/synthetic/.
+"""Writes the first 20 synthetic .docx files of the Word corpus (eval/word/README.md) into documents/synthetic/.
 
 Standard library only, and deterministic: the same script writes the same bytes. Every file is
 invented text with invented names; nothing in it is real contract language or a real person.
@@ -8,7 +8,7 @@ invented text with invented names; nothing in it is real contract language or a 
 """
 import sys
 
-from ooxml import Doc, run
+from ooxml import Doc, run, t
 
 # ------------------------------------------------------------------ documents
 CL = (1, None)  # numId 1: English clauses
@@ -357,6 +357,127 @@ def zh_bilingual_contract():
     d.p(run("Notices go to ") + d.control("Contact", "contact", "legal@example.invalid") + run("，通知应发送至该邮箱。") + d.footnote("Example address; it does not exist. 示例地址，并不存在。"))
     d.p(d.comment("Counsel / 律师", "Which text prevails if they differ? 两种文本不一致时以哪种为准？", run("Both texts are equally authentic. 两种文本具有同等效力。")))
     d.save("zh-bilingual-contract")
+
+
+# ------------------------------------------------------------------ layout-heavy files (#735)
+# Résumés whose look is direct formatting the Mind doesn't draw: borderless tables placing the text,
+# shaded headings and cells, rules under headings, right-aligned tab stops, fonts, sizes, colours.
+
+
+def look(text, font=None, size=None, color=None, b=False):
+    props = ""
+    if font:
+        props += '<w:rFonts w:ascii="%s" w:hAnsi="%s" w:eastAsia="%s"/>' % (font, font, font)
+    if b:
+        props += "<w:b/>"
+    if color:
+        props += '<w:color w:val="%s"/>' % color
+    if size:
+        props += '<w:sz w:val="%d"/><w:szCs w:val="%d"/>' % (size, size)
+    return "<w:r><w:rPr>%s</w:rPr>%s</w:r>" % (props, t(text))
+
+
+TAB = "<w:r><w:tab/></w:r>"
+
+
+def laid(runs, shade=None, rule=None, right_tab=None, align=None):
+    ppr = ""
+    if rule:
+        ppr += '<w:pBdr><w:bottom w:val="single" w:sz="8" w:space="1" w:color="%s"/></w:pBdr>' % rule
+    if shade:
+        ppr += '<w:shd w:val="clear" w:color="auto" w:fill="%s"/>' % shade
+    if right_tab:
+        ppr += '<w:tabs><w:tab w:val="right" w:pos="%d"/></w:tabs>' % right_tab
+    if align:
+        ppr += '<w:jc w:val="%s"/>' % align
+    return "<w:p><w:pPr>%s</w:pPr>%s</w:p>" % (ppr, runs)
+
+
+def layout_table(rows, widths, shade=None):
+    """A table with no borders, placing text: each cell a list of paragraphs, the first column shaded."""
+    nil = "".join('<w:%s w:val="nil"/>' % side for side in ("top", "left", "bottom", "right", "insideH", "insideV"))
+    out = [
+        '<w:tbl><w:tblPr><w:tblW w:w="%d" w:type="dxa"/><w:tblBorders>%s</w:tblBorders>'
+        '<w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid>%s</w:tblGrid>'
+        % (sum(widths), nil, "".join('<w:gridCol w:w="%d"/>' % w for w in widths))
+    ]
+    for row in rows:
+        out.append("<w:tr>")
+        for col, paragraphs in enumerate(row):
+            fill = '<w:shd w:val="clear" w:color="auto" w:fill="%s"/>' % shade if shade and col == 0 else ""
+            out.append(
+                '<w:tc><w:tcPr><w:tcW w:w="%d" w:type="dxa"/>%s</w:tcPr>%s</w:tc>'
+                % (widths[col], fill, "".join(paragraphs) or "<w:p/>")
+            )
+        out.append("</w:tr>")
+    out.append("</w:tbl>")
+    return "".join(out)
+
+
+def en_resume_layout():
+    d = Doc()
+    serif, sans, accent, grey = "Georgia", "Calibri", "1F4E79", "7F7F7F"
+    d.raw(laid(look("Alex Example", serif, 48, accent, b=True), align="center"))
+    d.raw(laid(look("alex@example.com · +44 20 7946 0000", sans, 18, grey) + TAB + look("London", sans, 18, grey), right_tab=9000))
+    sections = [
+        ("Experience", [
+            ("Senior Analyst, Contoso Sample Ltd", "2022 – present", "Led the pricing review for 40 product lines; cut quoting time by a third."),
+            ("Analyst, Northwind Example Ltd", "2019 – 2022", "Built the weekly sales model the board used for two years."),
+            ("Graduate Trainee, Fabrikam Demo plc", "2017 – 2019", "Rotated through finance, operations and customer service."),
+        ]),
+        ("Education", [
+            ("MSc Economics, Example University", "2016 – 2017", "Dissertation on regional price indices."),
+            ("BA Mathematics, Sample College", "2013 – 2016", "First-class honours."),
+        ]),
+    ]
+    for heading, entries in sections:
+        d.raw(laid(look(heading.upper(), sans, 24, accent, b=True), shade="DEEAF6", rule=accent))
+        for role, when, what in entries:
+            d.raw(laid(look(role, sans, 22, b=True) + TAB + look(when, sans, 20, grey), right_tab=9000))
+            d.raw(laid(look(what, sans, 20)))
+    d.raw(laid(look("SKILLS", sans, 24, accent, b=True), shade="DEEAF6", rule=accent))
+    cell = lambda text, size=20: [laid(look(text, sans, size))]
+    d.raw(layout_table([
+        [cell("Analysis", 20), cell("Pricing models, forecasting, survey design")],
+        [cell("Tools", 20), cell("Spreadsheets, SQL, Python")],
+        [cell("Languages", 20), cell("English (native), French (working)")],
+    ], [2200, 6800], shade="F2F2F2"))
+    d.raw(laid(look("References available on request.", sans, 16, grey), align="center"))
+    d.save("en-resume-layout")
+
+
+def zh_resume_layout():
+    d = Doc(lang="zh")
+    font, accent, grey = "华文中宋", "C00000", "595959"
+    d.raw(laid(look("张示例", font, 44, accent, b=True), align="center"))
+    d.raw(laid(look("求职意向：数据分析", font, 24, grey), align="center"))
+    d.raw(layout_table([
+        [[laid(look("电话", font, 21, b=True))], [laid(look("138 0000 0000", font, 21))]],
+        [[laid(look("邮箱", font, 21, b=True))], [laid(look("zhang@example.com", font, 21))]],
+        [[laid(look("所在地", font, 21, b=True))], [laid(look("上海", font, 21))]],
+    ], [1800, 7200], shade="FBE4D5"))
+    for heading, entries in [
+        ("工作经历", [
+            ("示例科技有限公司 · 高级分析师", "2021.07 – 至今", "负责定价分析，季度报价时间缩短三分之一。"),
+            ("样例贸易有限公司 · 分析师", "2018.07 – 2021.06", "搭建周度销售模型，供管理层使用两年。"),
+        ]),
+        ("教育背景", [
+            ("示例大学 · 经济学硕士", "2016.09 – 2018.06", "论文题目：区域价格指数的编制。"),
+            ("样例学院 · 数学学士", "2012.09 – 2016.06", "连续三年获得一等奖学金。"),
+        ]),
+    ]:
+        d.raw(laid(look(heading, font, 28, "FFFFFF", b=True), shade=accent))
+        for place, when, what in entries:
+            d.raw(laid(look(place, font, 24, b=True) + TAB + look(when, font, 18, grey), right_tab=9000))
+            d.raw(laid(look(what, font, 21)))
+    d.raw(laid(look("技能", font, 28, "FFFFFF", b=True), shade=accent))
+    d.raw(layout_table([
+        [[laid(look("数据分析", font, 21, b=True))], [laid(look("定价模型、预测、问卷设计", font, 21))]],
+        [[laid(look("工具", font, 21, b=True))], [laid(look("电子表格、SQL、Python", font, 21))]],
+        [[laid(look("语言", font, 21, b=True))], [laid(look("英语（六级）", font, 21))]],
+    ], [1800, 7200], shade="FBE4D5"))
+    d.raw(laid(look("以上信息真实有效。", font, 15, grey), align="center"))
+    d.save("zh-resume-layout")
 
 
 def main():
