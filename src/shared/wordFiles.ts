@@ -202,6 +202,12 @@ export function observeWordFile(doc: Y.Doc, listener: () => void): () => void {
 
 /** Attributes that don't change what a node is: its id, whether Questions read it, a Proposal on it. */
 const NOT_CONTENT = new Set(["id", "includeInContext", PROPOSAL_ATTRIBUTE]);
+/**
+ * A change on a node within, such as someone's removal of a line break, is
+ * part of what the node holds, as one on its text is in its marks: resolved,
+ * the node was edited (#858). The node's own is compared by the export apart.
+ */
+const NOT_CONTENT_WITHIN = new Set(["id", "includeInContext"]);
 /** Mark attributes that are how a link opens, not where it leads. */
 const NOT_MARK_CONTENT = new Set(["target", "rel", "class"]);
 
@@ -216,7 +222,7 @@ function sorted(value: unknown, skip: ReadonlySet<string> = new Set()): unknown 
   );
 }
 
-function canonical(node: Y.XmlElement | Y.XmlText): unknown {
+function canonical(node: Y.XmlElement | Y.XmlText, within = false): unknown {
   if (node instanceof Y.XmlText) {
     return (node.toDelta() as { insert: unknown; attributes?: Record<string, unknown> }[]).map(
       (run) => [
@@ -231,11 +237,11 @@ function canonical(node: Y.XmlElement | Y.XmlText): unknown {
   }
   return [
     node.nodeName,
-    sorted(node.getAttributes(), NOT_CONTENT),
+    sorted(node.getAttributes(), within ? NOT_CONTENT_WITHIN : NOT_CONTENT),
     node
       .toArray()
       .filter((child) => child instanceof Y.XmlElement || child instanceof Y.XmlText)
-      .map((child) => canonical(child as Y.XmlElement | Y.XmlText)),
+      .map((child) => canonical(child as Y.XmlElement | Y.XmlText, true)),
   ];
 }
 
