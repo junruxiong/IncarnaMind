@@ -5,12 +5,14 @@ import { useT } from "../i18n";
 
 /** The line for text its Answer read itself. */
 const READ: Record<ReadThirdPartySource, MessageKey> = {
+  imported: "approvals.thirdParty.read.imported",
   "web-page": "approvals.thirdParty.read.webPage",
   "checked-document": "approvals.thirdParty.read.checkedDocument",
 };
 
 /** The line for text a Task read itself, such as Research's web pages (#130). */
 const TASK_READ: Record<ReadThirdPartySource, MessageKey> = {
+  imported: "approvals.thirdParty.task.imported",
   "web-page": "approvals.thirdParty.task.webPage",
   "checked-document": "approvals.thirdParty.task.checkedDocument",
 };
