@@ -8,7 +8,7 @@ import { describe, expect, test } from "vitest";
 import type { Core, CoreEvents } from "../../src/core";
 import { translate } from "../../src/shared/i18n";
 import { answerEnded } from "../helpers/citations";
-import { createTempDataFolder, nextEvent, startCore } from "../helpers/core";
+import { createTempDataFolder, nextEvent, saveProviderUnasked, startCore } from "../helpers/core";
 import {
   answering,
   askAndEnd,
@@ -22,11 +22,14 @@ import { question, writeMind } from "../helpers/minds";
 import { scriptedModels, streamingModel } from "../helpers/models";
 import { startOllamaServer } from "../helpers/ollama";
 
-/** A Mind with a Question asked of a cloud model whose chat flow the User hasn't allowed yet. */
+/**
+ * A Mind with a Question asked of a cloud model whose chat flow the User
+ * hasn't allowed yet: one chosen before choosing was the consent (ADR-0022).
+ */
 async function askACloudModel() {
   const models = scriptedModels(streamingModel("A notebook."));
   const core = startCore(await createTempDataFolder(), { createChatModel: models.createChatModel });
-  await core.saveChatProvider({ kind: "openai", apiKey: "sk-test", modelId: "gpt-test" });
+  await saveProviderUnasked(core, { kind: "openai", apiKey: "sk-test", modelId: "gpt-test" });
   const mind = await core.createMind({ title: "Cloud" });
   const client = await connectToMind(core, mind.id);
   const asked = question("What is a Mind?");
