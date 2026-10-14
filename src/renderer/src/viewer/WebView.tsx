@@ -281,7 +281,7 @@ function WebPageContent({
   const citedArea = useCallback(() => citedSections().range, [citedSections]);
   useCitedArea(true, citedArea);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: each open request goes there again
+  // biome-ignore lint/correctness/useExhaustiveDependencies: each open request goes there again, and so does a page drawn again in another language
   useLayoutEffect(() => {
     const body = host.current;
     const container = scroller.current;
@@ -309,7 +309,7 @@ function WebPageContent({
         container.scrollTop
       : 0;
     container.scrollTop = Math.max(0, top - (marks ? container.clientHeight / 3 : 24));
-  }, [page, target.request, target.quote, target.pageFrom, target.pageTo, target.figure]);
+  }, [page, t, target.request, target.quote, target.pageFrom, target.pageTo, target.figure]);
 
   useLayoutEffect(() => {
     const element = column.current;

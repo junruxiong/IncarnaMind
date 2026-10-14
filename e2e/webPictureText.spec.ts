@@ -28,7 +28,25 @@ const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
 const REPORT = readFileSync(join(__dirname, "../tests/fixtures/web/report.html"));
 const CHART_LINES = ["Container revenue by quarter", "Second quarter container revenue: 44.9"];
 
-const png = (width: number, height: number) => createCanvas(width, height).toBuffer("image/png");
+function chart(): Buffer {
+  const canvas = createCanvas(400, 300);
+  const context = canvas.getContext("2d");
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, 400, 300);
+  context.fillStyle = "#1d3557";
+  context.font = "18px sans-serif";
+  context.fillText("Container revenue by quarter", 24, 36);
+  for (const [index, height] of [150, 170, 190, 210].entries()) {
+    context.fillStyle = index === 1 ? "#e76f51" : "#457b9d";
+    context.fillRect(48 + index * 84, 270 - height, 56, height);
+  }
+  context.fillStyle = "#1d3557";
+  context.font = "16px sans-serif";
+  context.fillText("44.9", 140, 92);
+  return canvas.toBuffer("image/png");
+}
+
+const photo = () => createCanvas(640, 480).toBuffer("image/png");
 
 let dataDir: string;
 let home: string;
@@ -43,8 +61,8 @@ test.beforeEach(async () => {
       response.end(body);
     };
     if (request.url === "/report") return send(REPORT, "text/html; charset=utf-8");
-    if (request.url === "/charts/revenue.png") return send(png(400, 300), "image/png");
-    if (request.url === "/harbour/berth.jpg") return send(png(640, 480), "image/png");
+    if (request.url === "/charts/revenue.png") return send(chart(), "image/png");
+    if (request.url === "/harbour/berth.jpg") return send(photo(), "image/png");
     response.writeHead(404, { Connection: "close" });
     response.end("Not found");
   });
@@ -114,6 +132,8 @@ test("a chart's text is cited as its section and figure, its card says it was re
     "aria-label",
     /§ Results，图 1/,
   );
+  await expect(chart).toHaveAttribute("data-cited", "");
+  await expect(chart).toBeInViewport();
   await citation.getByTestId("citation-chip").hover();
   await expect(card.getByTestId("citation-scan")).toHaveText("从图片中识别");
   if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, "picture-cited-zh-CN.png") });
