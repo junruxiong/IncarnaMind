@@ -121,7 +121,7 @@ function useAllSteps(task: Task, wanted: boolean): readonly TaskStep[] | null {
 }
 
 /**
- * A Task's progress in the thread (D189; DESIGN.md, Task progress in the
+ * A Task's progress in the thread (#657; DESIGN.md, Task progress in the
  * thread; the boards Tasks-*), where it started, as an Answer shows its
  * steps: the live dot and its name, how far it is; a 3px bar; "Show all N
  * steps"; its latest steps, ✓ when done and a dot on the one it is on; then
