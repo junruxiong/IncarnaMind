@@ -197,6 +197,16 @@ const documents: AnswerTools = {
   cite: () => "Recorded.",
 };
 
+/** A Mind read with the Question (#564), as it starts the conversation's first message. */
+const MIND = `<mind name="Tides">\n${"Spring tides come at new and full moon. ".repeat(80)}\n</mind>`;
+const WITH_MIND = [
+  {
+    role: "user" as const,
+    content: `${MIND}\n\nWhat causes the tides?`,
+    stablePrefix: MIND.length,
+  },
+];
+
 const names = { total: 2, names: ["Tides.pdf", "Moon.pdf"] };
 
 /** A request as the Answers module makes it: the instructions as it composes them, Question by Question. */
@@ -377,6 +387,94 @@ describe("Anthropic requests", () => {
     // The Tool result, the last message, which the next step repeats.
     expect(second?.filter((mark) => mark.startsWith("message"))).toEqual(["message 3 (user)"]);
     expect(second?.length).toBeLessThanOrEqual(4);
+  });
+});
+
+describe("Anthropic requests with a Mind read with the Question (#564)", () => {
+  /** Where the `cache_control` marks of a request are, as `marks` above says them. */
+  function marked(body: Json) {
+    const found: string[] = [];
+    (body.tools as { cache_control?: unknown }[] | undefined)?.forEach((tool) => {
+      if (tool.cache_control) found.push("tool");
+    });
+    for (const block of (body.system ?? []) as { cache_control?: unknown }[]) {
+      if (block.cache_control) found.push("system");
+    }
+    (body.messages as { role: string; content: { cache_control?: unknown }[] }[]).forEach(
+      (each, at) => {
+        each.content.forEach((block, part) => {
+          if (block.cache_control) found.push(`message ${at + 1} part ${part + 1}`);
+        });
+      },
+    );
+    return found;
+  }
+
+  // protects=the first Question already writes the Mind to Anthropic's cache, as a part of its own, so the next Question reads it from there; fails_when=the Mind isn't marked, the Question is, or the text sent changes; no_claim=what Anthropic bills, the hand test's.
+  test("the first Question marks the end of the Mind, and its text is sent as it was", async () => {
+    const requests = fakeProvider("anthropic");
+
+    await run(request(modelOf("anthropic"), WITH_MIND));
+
+    const body = (requests[0] as Captured).body;
+    const [first] = body.messages as { content: { text: string }[] }[];
+    expect(first?.content.map((block) => block.text)).toEqual([MIND, "\n\nWhat causes the tides?"]);
+    expect(marked(body)).toEqual(["tool", "system", "message 1 part 1"]);
+  });
+
+  // protects=in a Tool loop with a Mind, the marks stay within Anthropic's four: the Tools' own mark gives way, the instructions' still covers them; fails_when=a request has five marks (Anthropic refuses it) or loses the Mind's; no_claim=none beyond protects.
+  test("in a Tool loop, the Mind's mark is kept within four, the Tools' giving way", async () => {
+    const requests: Captured[] = [];
+    let step = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        requests.push({ url: "", body: JSON.parse(String(init?.body)) as Json });
+        if (step++ > 0) return (replies.anthropic as (t: string, c: number) => Response)("Yes.", 0);
+        return sse([
+          {
+            type: "message_start",
+            message: {
+              id: "m",
+              type: "message",
+              role: "assistant",
+              model: "claude-haiku-5-5",
+              content: [],
+              usage: { input_tokens: 10, output_tokens: 1 },
+            },
+          },
+          {
+            type: "content_block_start",
+            index: 0,
+            content_block: { type: "tool_use", id: "toolu_1", name: "search_documents", input: {} },
+          },
+          {
+            type: "content_block_delta",
+            index: 0,
+            delta: { type: "input_json_delta", partial_json: '{"query":"tides"}' },
+          },
+          { type: "content_block_stop", index: 0 },
+          {
+            type: "message_delta",
+            delta: { stop_reason: "tool_use", stop_sequence: null },
+            usage: { output_tokens: 5 },
+          },
+          { type: "message_stop" },
+        ]);
+      }),
+    );
+
+    await run(
+      request(modelOf("anthropic"), [
+        ...WITH_MIND,
+        { role: "assistant", content: "The Moon's pull." },
+        { role: "user", content: "And the Sun?" },
+      ]),
+    );
+
+    const [first, second] = requests.map((each) => marked(each.body));
+    expect(first).toEqual(["tool", "system", "message 1 part 1", "message 2 part 1"]);
+    expect(second).toEqual(["system", "message 1 part 1", "message 2 part 1", "message 5 part 1"]);
   });
 });
 

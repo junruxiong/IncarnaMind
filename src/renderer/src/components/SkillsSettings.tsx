@@ -10,11 +10,12 @@ import {
 import type { SkillPickKind } from "../../../shared/bridge";
 import { core, files } from "../core";
 import { errorMessage } from "../errors";
+import { showFileLabelKey } from "../fileInfo";
 import { useT } from "../i18n";
 import { formatSize, pickSkill, skillDescription } from "../skills";
 import { useAppStore } from "../store";
 import { ExportLineIcon, MoreLineIcon, PlusLineIcon } from "./lineIcons";
-import { ProblemLine } from "./ProblemLine";
+import { ProblemLine, ProblemMark } from "./ProblemLine";
 import { SkillEditor } from "./SkillEditor";
 import {
   buttonClass,
@@ -82,7 +83,7 @@ export function SkillsSettings() {
     try {
       path = await pickSkill(kind);
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
       return;
     }
     if (!path) return;
@@ -94,7 +95,7 @@ export function SkillsSettings() {
       if (check.ok) setPreview(check.preview);
       else setError(check.error);
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     } finally {
       setBusy(null);
     }
@@ -107,7 +108,7 @@ export function SkillsSettings() {
       setPreview(null);
     } catch (failure) {
       setPreview(null);
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     } finally {
       setBusy(null);
     }
@@ -123,7 +124,7 @@ export function SkillsSettings() {
     try {
       setEditing({ kind: "edit", skill, draft: await core.getSkillDraft(skill.id) });
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     }
   };
 
@@ -143,7 +144,7 @@ export function SkillsSettings() {
       }
       // "cancelled": the User didn't choose where new files go, so nothing was saved.
     } catch (failure) {
-      setExported({ kind: "failed", message: errorMessage(failure) });
+      setExported({ kind: "failed", message: errorMessage(failure, t) });
     }
   };
 
@@ -308,9 +309,7 @@ function ExportStatus({
         testId="skill-export-done"
         title={exported.path}
         action={{
-          label: navigator.userAgent.includes("Mac")
-            ? t("export.showInFinder")
-            : t("export.showInFolder"),
+          label: t(showFileLabelKey(navigator.platform)),
           testId: "skill-export-show",
           onClick: () =>
             void files.showSavedFile(exported.path).catch(useAppStore.getState().reportError),
@@ -494,13 +493,13 @@ function SkillRow({
     menu.close();
     action();
   };
-  const item = (testId: string, text: string, action: () => void, className = "") => (
+  const item = (testId: string, text: string, action: () => void) => (
     <button
       type="button"
       role="menuitem"
       data-testid={testId}
       onClick={choose(action)}
-      className={`${menuItemClass} pl-2 ${className}`}
+      className={`${menuItemClass} pl-2`}
     >
       {text}
     </button>
@@ -551,14 +550,9 @@ function SkillRow({
                   void duplicateSkill(skill.id);
                 })}
               <div className={menuRuleClass} />
-              {item(
-                "skill-remove",
-                t("skills.settings.remove"),
-                () => {
-                  void removeSkill(skill.id);
-                },
-                "text-danger",
-              )}
+              {item("skill-remove", t("skills.settings.remove"), () => {
+                void removeSkill(skill.id);
+              })}
             </>
           )}
         </div>
@@ -664,6 +658,7 @@ function ImportError({ error }: { error: SkillImportError | string }) {
   if (typeof error === "string") {
     return (
       <p role="alert" data-testid="skill-import-error" className={errorTextClass}>
+        <ProblemMark />
         {t("error.action", { message: error })}
       </p>
     );
@@ -683,9 +678,12 @@ function ImportError({ error }: { error: SkillImportError | string }) {
       role="alert"
       data-testid="skill-import-error"
       data-kind={error.kind}
-      className="flex flex-col gap-1 text-[13px] leading-5 text-danger"
+      className="flex flex-col gap-1 text-[13px] leading-5 text-ink"
     >
-      <p>{message}</p>
+      <p>
+        <ProblemMark />
+        {message}
+      </p>
       <details className="text-[12px] text-ink-meta">
         <summary className="cursor-pointer">{t("skills.error.details")}</summary>
         <p className="mt-1 break-words">{error.message}</p>

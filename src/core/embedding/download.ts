@@ -165,7 +165,7 @@ async function fetchInto(
   signal: AbortSignal,
   onProgress: (bytes: number) => void,
 ): Promise<number> {
-  const url = new URL(file.path, baseUrl);
+  const url = new URL(file.url ?? file.path, baseUrl);
   let response: Response;
   try {
     response = await fetch(url, {

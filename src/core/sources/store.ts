@@ -85,6 +85,8 @@ const keysOf = (ids: WorkIds): string[] => [
   ...(ids.openalex ? [`openalex:${ids.openalex}`] : []),
   ...(ids.setid ? [`setid:${ids.setid}`] : []),
   ...(ids.nct ? [`nct:${ids.nct}`] : []),
+  ...(ids.cfr ? [`cfr:${ids.cfr}`] : []),
+  ...(ids.govinfo ? [`govinfo:${ids.govinfo}`] : []),
 ];
 
 /** The DOIs a work's records could carry: its own, and arXiv's for its preprint. */

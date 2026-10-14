@@ -122,9 +122,7 @@ export function createPrivacy(options: {
         throw new InvalidInputError("This copy of IncarnaMind can't send usage data.");
       }
       if (shareUsage === true && before.usageData.localMode) {
-        throw new InvalidInputError(
-          'Usage data stays off while "Keep everything on this computer" is on.',
-        );
+        throw new InvalidInputError({ key: "error.privacy.usageDataLocalMode" });
       }
 
       if (shareUsage !== undefined) usageData.setEnabled(shareUsage);

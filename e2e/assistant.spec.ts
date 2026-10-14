@@ -3,6 +3,7 @@ import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { Editor } from "@tiptap/core";
 import type { CoreBridge } from "../src/core/api";
 import {
+  assistantAnswers,
   createDataFolder,
   dismissChatSetup,
   dragBy,
@@ -10,6 +11,7 @@ import {
   newMind,
   removeDataFolder,
   setGroupBeside,
+  setLanguage,
   setWindowSize,
   useLocalChatModel,
   widthOf,
@@ -411,7 +413,14 @@ test("its ⋯ menu and the keyboard dock, float and fold it; ⌘J unfolds it int
   await window.getByTestId("assistant-history").click();
   const history = window.getByTestId("assistant-history-popover");
   await expect(history).toBeVisible();
-  await expect(history.getByTestId("assistant-history-empty")).toHaveText("No conversations yet.");
+  await expect(history.getByTestId("assistant-history-empty")).toHaveText(
+    "No conversations yet. Ask a Question to start one.",
+  );
+  await setLanguage(window, "zh-CN");
+  await expect(history.getByTestId("assistant-history-empty")).toHaveText(
+    "还没有对话。提一个问题即可开始。",
+  );
+  await setLanguage(window, "en");
   await window.keyboard.press("Escape");
   await expect(history).toBeHidden();
   await window.getByTestId("assistant-title").click();
@@ -508,12 +517,12 @@ test("moving, resizing and folding it keep the composer's draft, the Mind's scro
     );
   });
 
-  // Asked: the Answer streams into the Mind while the assistant moves, resizes and folds.
+  // Asked: the Answer streams into the assistant while it moves, resizes and folds.
   const input = window.getByTestId("composer-input");
   await input.click();
   await window.keyboard.type("When do spring tides happen?");
   await window.keyboard.press("Enter");
-  const answer = editor.getByTestId("answer");
+  const answer = assistantAnswers(window);
   await expect(answer).toHaveAttribute("data-status", "streaming");
   await fromMenu(window, "left");
   await dragBy(window, window.getByTestId("assistant-resize"), 40);
@@ -521,7 +530,8 @@ test("moving, resizing and folding it keep the composer's draft, the Mind's scro
   await window.getByTestId("assistant-fold").click();
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(answer).toContainText("That is all.");
-  await expect(editor.getByTestId("answer")).toHaveCount(1);
+  await expect(answer).toHaveCount(1);
+  await expect(editor.getByTestId("answer")).toHaveCount(0);
 
   // A draft stays as it was typed, wherever the assistant goes.
   await input.click();
@@ -544,16 +554,22 @@ test("moving, resizing and folding it keep the composer's draft, the Mind's scro
   await fromMenu(window, "right");
   expect(await scroller.evaluate((element) => element.scrollTop)).toBe(scrolled);
 
-  // History lists the assistant's conversations (#300), newest first: here one asked through
-  // the core, as the conversation in the assistant will ask (#201).
+  // History lists the assistant's conversations (#300), newest first: the one asked here, and
+  // one asked through the core since.
   await window.evaluate(async () => {
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     await bridge.askInConversation({ text: "When do neap tides come?" });
   });
   await window.getByTestId("assistant-history").click();
   const rows = window.getByTestId("assistant-history-row");
-  await expect(rows).toHaveCount(1);
-  await expect(rows).toContainText("When do neap tides come");
+  await expect(rows).toHaveCount(2);
+  await expect(rows.first()).toContainText("When do neap tides come");
+  await expect(rows.last()).toContainText("When do spring tides happen");
+  // Asked today, each shows its time alone, in the one date style.
+  await expect(rows.locator("time")).toHaveText([
+    /^\d{1,2}:\d{2}( [ap]m)?$/,
+    /^\d{1,2}:\d{2}( [ap]m)?$/,
+  ]);
   await window.keyboard.press("Escape");
   await app.close();
 });

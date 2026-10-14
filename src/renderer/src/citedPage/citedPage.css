@@ -1,0 +1,15 @@
+/* The hidden window that draws a cited page (#133): the view alone, without its toolbar or scrollbars. */
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+}
+
+.cited-page .viewer-header {
+  display: none;
+}
+
+.cited-page * {
+  scrollbar-width: none;
+}

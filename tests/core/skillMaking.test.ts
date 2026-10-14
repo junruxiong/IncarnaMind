@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import type { ConsentRequest, Core, Skill, SkillDraft } from "../../src/core";
 import { readDraft } from "../../src/core/skills/draft";
-import { createTempDataFolder, nextEvent, startCore } from "../helpers/core";
+import { createTempDataFolder, nextEvent, saveProviderUnasked, startCore } from "../helpers/core";
 import { connectToMind } from "../helpers/mindClient";
 import { heading, note, question, writeMind } from "../helpers/minds";
 import { replyingModel, scriptedModels } from "../helpers/models";
@@ -313,6 +313,28 @@ describe("Make this a Skill", () => {
     ).toBe(false);
   });
 
+  test("what was asked in the assistant from the Mind is read with it, and a deleted conversation's isn't", async () => {
+    const { core, mind, model } = await setUpDrafting(REPLY);
+    const asked = await core.askInConversation({
+      text: "Compare the indemnities.",
+      mindId: mind.id,
+    });
+    const elsewhere = await core.askInConversation({ text: "What is a spring tide?" });
+    const dropped = await core.askInConversation({ text: "Draft a reply.", mindId: mind.id });
+    if (!asked.asked || !elsewhere.asked || !dropped.asked) throw new Error("Not asked.");
+    await core.deleteConversation(dropped.conversation.id);
+
+    await core.draftSkillFromMind({ requestId: "r1", mindId: mind.id });
+
+    const drafting = model.doGenerateCalls
+      .map((call) => JSON.stringify(call.prompt))
+      .find((prompt) => prompt.includes("into a Skill"));
+    expect(drafting).toContain("Review the liability cap.");
+    expect(drafting).toContain("**Question:** Compare the indemnities.");
+    expect(drafting).not.toContain("What is a spring tide?");
+    expect(drafting).not.toContain("Draft a reply.");
+  });
+
   test("an empty Mind sends nothing", async () => {
     const dataDir = await createTempDataFolder();
     const model = replyingModel(REPLY);
@@ -351,7 +373,7 @@ describe("Make this a Skill", () => {
     const model = replyingModel(REPLY);
     const models = scriptedModels(model);
     const core = startCore(dataDir, { createChatModel: models.createChatModel });
-    await core.saveChatProvider({ kind: "openai", apiKey: "sk-test", modelId: "gpt-test" });
+    await saveProviderUnasked(core, { kind: "openai", apiKey: "sk-test", modelId: "gpt-test" });
     const mind = await core.createMind({ title: "Cloud" });
     const client = await connectToMind(core, mind.id);
     writeMind(client, [note("Some work.")]);

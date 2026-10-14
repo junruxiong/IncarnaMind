@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import {
+  assistantAnswers,
   createDataFolder,
   dismissChatSetup,
   interceptOpenExternal,
@@ -126,7 +127,7 @@ test("a web page added from the + menu is a Document named by its title, opened 
   const viewer = window.getByTestId("viewer");
   await expect(viewer.getByTestId("viewer-web-title")).toHaveText(TITLE);
   await expect(viewer.getByTestId("viewer-web-fetched")).toHaveText(
-    /^Fetched \d{1,2} \w{3} \d{4}$/,
+    /^Fetched \d{1,2} \w{3,4} \d{4}$/,
   );
   const article = viewer.getByTestId("viewer-web-article");
   await expect(article).toContainText("Tea was first introduced to Portuguese priests");
@@ -200,7 +201,7 @@ test("an Answer cites a web page by section and paragraph; its card says the sit
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type("Who first brought tea to Amsterdam?");
   await window.keyboard.press("Enter");
-  const answer = editor.getByTestId("answer");
+  const answer = assistantAnswers(window).last();
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
 
   const citation = answer.getByTestId("citation");
@@ -209,7 +210,7 @@ test("an Answer cites a web page by section and paragraph; its card says the sit
   const card = window.getByTestId("citation-card");
   await expect(card.getByTestId("citation-badge")).toHaveText(/^Quote found in § History, ¶\s\d$/);
   await expect(card.getByTestId("citation-web-source")).toHaveText(
-    /^The Open Encyclopedia · Fetched \d{1,2} \w{3} \d{4}$/,
+    /^The Open Encyclopedia · Fetched \d{1,2} \w{3,4} \d{4}$/,
   );
   const highlight = window.getByTestId("viewer").locator("[data-quote-highlight]").first();
   await expect(highlight).toBeVisible();

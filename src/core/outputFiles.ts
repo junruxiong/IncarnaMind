@@ -1,7 +1,8 @@
 /**
  * The files IncarnaMind creates (#124): exports now, and later transcripts,
  * saved web pages and what Tasks make. Each goes to the Output location, which
- * the first save asks for and each device keeps, or inside a Linked folder,
+ * each device keeps: Documents › IncarnaMind until the User picks another, the
+ * first save taking it without asking (D209); or inside a Linked folder,
  * e.g. next to the original it was made from, once the User has allowed that
  * folder (ADR-0010). A new file never replaces anything: it takes the next
  * free name. Folders are checked with symbolic links resolved, so nothing
@@ -11,14 +12,17 @@
  *
  * Questions work as consent's do: a save that needs an answer raises
  * "fileWrite.requested" and waits; saves waiting for the same answer share it.
+ * The Output location asks only when the default can't take files.
  */
 import { randomUUID } from "node:crypto";
-import { mkdir, realpath, stat } from "node:fs/promises";
+import { constants } from "node:fs";
+import { access, mkdir, realpath, stat } from "node:fs/promises";
 import { extname, isAbsolute, join } from "node:path";
 import type {
   FileWriteRequest,
   LinkedFolder,
   LinkedFolderWriting,
+  OutputFolderProblem,
   OutputSettings,
   OwnFileKind,
   SavedFile,
@@ -37,9 +41,6 @@ import type { Database } from "./storage";
 
 /** The device value holding the Output location: paths belong to one computer (ADR-0003). */
 const OUTPUT_LOCATION = "outputLocation";
-
-const OUTSIDE =
-  "IncarnaMind saves new files only in the output location, or inside a Linked folder it may add files to.";
 
 /** A file to save (see `OutputFiles.save`). */
 export interface NewFile {
@@ -64,7 +65,7 @@ export interface OutputFilesOptions {
   events: ReturnType<typeof createEventHub>;
   now: () => string;
   settings: SettingsStore;
-  /** The folder the first save offers: "IncarnaMind" in the User's Documents folder. */
+  /** The default Output location: "IncarnaMind" in the User's Documents folder. */
   suggested: string;
   /** The live Linked folders. */
   linkedFolders(): readonly Pick<LinkedFolder, "id" | "path">[];
@@ -106,11 +107,36 @@ function fileNameOf(input: unknown): string {
 /** A folder's real path, links followed; throws if it isn't a folder. */
 async function realFolder(path: string): Promise<string> {
   const real = await realpath(path);
-  if (!(await stat(real)).isDirectory()) throw new InvalidInputError("That path isn't a folder.");
+  if (!(await stat(real)).isDirectory())
+    throw new InvalidInputError({ key: "error.path.notFolder" });
   return real;
 }
 
-const isGone = (error: unknown) => (error as NodeJS.ErrnoException).code === "ENOENT";
+const codeOf = (error: unknown) => (error as NodeJS.ErrnoException).code;
+const isGone = (error: unknown) => codeOf(error) === "ENOENT";
+const isRefused = (error: unknown) => ["EACCES", "EPERM", "EROFS"].includes(codeOf(error) ?? "");
+
+/**
+ * The default Output location, made with the folders above it if need be, or
+ * why it can't take new files.
+ */
+async function usableDefault(
+  folder: string,
+): Promise<{ ok: true; real: string } | { ok: false; reason: OutputFolderProblem }> {
+  try {
+    await mkdir(folder, { recursive: true });
+    const real = await realpath(folder);
+    await access(real, constants.W_OK);
+    return { ok: true, real };
+  } catch (error) {
+    if (isRefused(error)) return { ok: false, reason: "not-writable" };
+    // A file where a folder on the way should be.
+    if (["EEXIST", "ENOTDIR", "ENOENT"].includes(codeOf(error) ?? "")) {
+      return { ok: false, reason: "missing" };
+    }
+    throw error;
+  }
+}
 
 export function createOutputFiles(options: OutputFilesOptions) {
   const { db, events, now, settings, suggested } = options;
@@ -214,7 +240,7 @@ export function createOutputFiles(options: OutputFilesOptions) {
       real = await realFolder(input);
     } catch (error) {
       if (!isGone(error)) throw error;
-      if (input !== suggested) throw new NotFoundError("There is no folder at that path.");
+      if (input !== suggested) throw new NotFoundError({ key: "error.path.noFolder" });
       await mkdir(input, { recursive: true });
       real = await realFolder(input);
     }
@@ -224,11 +250,25 @@ export function createOutputFiles(options: OutputFilesOptions) {
     return current();
   };
 
-  /** The Output location, asking the first time; made again if it was removed from a folder still there. */
-  const outputFolder = async (fileName: string): Promise<string> => {
+  /** Asks where new files go, saying why the default can't take this one; cancels if none is chosen. */
+  const askForLocation = async (fileName: string, problem: OutputFolderProblem): Promise<void> => {
+    await ask("output-location", { kind: "output-location", suggested, fileName, problem });
+    if (location() === null) throw new FileWriteCancelledError();
+  };
+
+  /**
+   * The Output location, made again if it was removed from a folder still
+   * there. None chosen yet, the default, without asking (D209), kept once a
+   * file is written there; asking, saying why, if it can't take files.
+   */
+  const outputFolder = async (
+    fileName: string,
+  ): Promise<{ folder: string; defaulted: boolean }> => {
     let chosen = location();
     if (chosen === null) {
-      await ask("output-location", { kind: "output-location", suggested, fileName });
+      const usable = await usableDefault(suggested);
+      if (usable.ok) return { folder: usable.real, defaulted: true };
+      await askForLocation(fileName, usable.reason);
       chosen = location();
       if (chosen === null) throw new FileWriteCancelledError();
     }
@@ -241,8 +281,8 @@ export function createOutputFiles(options: OutputFilesOptions) {
       real = await realFolder(chosen);
     }
     // A link put in its place, or above it, that leads elsewhere.
-    if (!isInside(chosen, real)) throw new InvalidInputError(OUTSIDE);
-    return real;
+    if (!isInside(chosen, real)) throw new InvalidInputError({ key: "error.files.outside" });
+    return { folder: real, defaulted: false };
   };
 
   /** A folder the caller named: inside the Output location or a Linked folder, links followed. */
@@ -253,7 +293,7 @@ export function createOutputFiles(options: OutputFilesOptions) {
     const real = await realFolder(folder);
     const chosen = location();
     if ((chosen === null || !isInside(chosen, real)) && !ownerOf(real)) {
-      throw new InvalidInputError(OUTSIDE);
+      throw new InvalidInputError({ key: "error.files.outside" });
     }
     return real;
   };
@@ -281,7 +321,7 @@ export function createOutputFiles(options: OutputFilesOptions) {
   /** Allows or stops new files in a live Linked folder, from Settings or its question. */
   const setLinkedFolderWriting = (linkedFolderId: unknown, allowed: unknown): OutputSettings => {
     if (typeof linkedFolderId !== "string" || !liveFolder(linkedFolderId)) {
-      throw new NotFoundError("That Linked folder doesn't exist or has been removed.");
+      throw new NotFoundError({ key: "error.linkedFolder.notFound" });
     }
     if (typeof allowed !== "boolean") throw new InvalidInputError("allowed must be true or false.");
     record(linkedFolderId, allowed);
@@ -313,9 +353,10 @@ export function createOutputFiles(options: OutputFilesOptions) {
     },
 
     /**
-     * Saves a new file: in the Output location, or in `folder`, asking first
-     * where the User hasn't answered yet. Throws `FileWriteCancelledError` if
-     * they didn't choose an Output location, `LinkedFolderWritesDeclinedError`
+     * Saves a new file: in the Output location (the default the first time),
+     * or in `folder`, asking first where the User hasn't answered yet. Throws
+     * `FileWriteCancelledError` if the default couldn't take it and they
+     * chose no other, `LinkedFolderWritesDeclinedError`
      * if the folder is in a Linked folder they said no to, and
      * `InvalidInputError` if it leads anywhere else.
      */
@@ -323,16 +364,30 @@ export function createOutputFiles(options: OutputFilesOptions) {
       const name = fileNameOf(file.name);
       // Checked again after every answer: the folder may have been unlinked meanwhile.
       for (;;) {
-        const folder =
-          file.folder === undefined ? await outputFolder(name) : await givenFolder(file.folder);
+        const { folder, defaulted } =
+          file.folder === undefined
+            ? await outputFolder(name)
+            : { folder: await givenFolder(file.folder), defaulted: false };
         const linked = ownerOf(folder);
         if (linked && !(await allowedIn(linked, name))) continue;
         // Before the file exists, so a Linked folder can't index it as the User's.
         if (file.ownFile) options.recordOwnFile(file.data, file.ownFile);
-        const used = await writeNewFile(folder, name, file.data);
+        let used: string;
+        try {
+          used = await writeNewFile(folder, name, file.data);
+        } catch (error) {
+          // macOS can refuse Documents only when a file is made in it, after the folder looked fine.
+          if (!defaulted || !isRefused(error)) throw error;
+          await askForLocation(name, "not-writable");
+          continue;
+        }
+        if (defaulted) {
+          settings.writeDeviceValue(OUTPUT_LOCATION, folder);
+          changed();
+        }
         const path = join(folder, used);
         saved.add(path);
-        return { path, name: used };
+        return { path, name: used, defaulted };
       }
     },
 

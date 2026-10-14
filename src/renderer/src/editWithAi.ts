@@ -7,7 +7,6 @@
  */
 import type { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
-import { yUndoPluginKey } from "@tiptap/y-tiptap";
 import type * as Y from "yjs";
 import { create } from "zustand";
 import {
@@ -20,6 +19,7 @@ import { mindModelOf } from "../../shared/mindModel";
 import { aiUseOfAccepted, proposalRequestOf } from "../../shared/proposals";
 import { useAnswers } from "./answers";
 import { core } from "./core";
+import { offerEditorUndo } from "./editor/editorUndo";
 import { selectionForEdit } from "./editor/editSelection";
 import {
   editorDoc,
@@ -29,9 +29,9 @@ import {
   resolveInEditor,
   setEditTarget,
 } from "./editor/proposalReview";
+import { errorMessage } from "./errors";
 import { translateNow } from "./i18n";
 import { useAppStore } from "./store";
-import { type Undoable, useUndo } from "./undo";
 
 /** The languages Translate… offers: each in its own name, and as the model is told it. */
 export const TRANSLATE_LANGUAGES: readonly { id: string; name: string; prompt: string }[] = [
@@ -141,7 +141,7 @@ function whenShown(editor: Editor, request: string): Promise<PendingProposal | n
 /** A request that threw, as the result the composer shows. */
 const failure = (error: unknown): EditWithAiResult => ({
   kind: "failed",
-  error: { kind: "unknown", message: error instanceof Error ? error.message : String(error) },
+  error: { kind: "unknown", message: errorMessage(error, t) },
 });
 
 /**
@@ -280,7 +280,8 @@ export async function regenerateChange(
     else set("problems", mindId, { kind: "cant-regenerate" });
     return;
   }
-  if (!made?.action) {
+  // An Answer added from the assistant (#201) isn't asked for again here, nor are changes from before #94.
+  if (made?.source !== "edit-with-ai" || !made.action) {
     set("problems", mindId, { kind: "cant-regenerate" });
     return;
   }
@@ -380,14 +381,27 @@ export function editFromComposer(
 export function resolveProposalsIn(
   editor: Editor,
   mindId: string,
-  ids: readonly string[],
+  ids: readonly string[] | "all",
   outcome: "accept" | "reject",
 ): void {
   if (editor.isDestroyed || ids.length === 0) return;
-  const resolved = resolveInEditor(editor, new Set(ids), outcome);
+  // A Checkpoint of the Mind before an AI change goes in (#113). Not awaited: the core takes it
+  // before the change this sends next.
+  const accepting =
+    outcome === "accept" &&
+    pendingIn(editor.state).some(
+      (proposal) => !proposal.outOfDate && (ids === "all" || ids.includes(proposal.id)),
+    );
+  if (accepting) {
+    core.saveCheckpoint(mindId, "accept").catch(useAppStore.getState().reportError);
+  }
+  const picked = pendingIn(editor.state).filter((each) => ids === "all" || ids.includes(each.id));
+  const resolved = resolveInEditor(editor, ids === "all" ? ids : new Set(ids), outcome);
   if (resolved.length === 0) {
     // Only changes out of date were picked: they can't be accepted, and the User hears why.
-    if (outcome === "accept") speak(mindId, t("proposal.cantAccept"));
+    const theirs = picked.length > 0 && picked.every((each) => each.theirs);
+    if (outcome === "accept")
+      speak(mindId, t(theirs ? "proposal.cantAccept.theirs" : "proposal.cantAccept"));
     return;
   }
   const doc = editorDoc(editor);
@@ -407,38 +421,5 @@ export function resolveProposalsIn(
         ? t("proposal.rejected.one")
         : t("proposal.rejected", { count });
   speak(mindId, message);
-  offerUndo(editor, message);
-}
-
-interface UndoStack {
-  undoStack: unknown[];
-  on(event: "stack-item-added" | "stack-item-popped", listener: () => void): void;
-  off(event: "stack-item-added" | "stack-item-popped", listener: () => void): void;
-}
-
-/**
- * "Accepted 2 changes · Undo", which takes the note's step back while it is the
- * note's last: once the User edits again, takes it back in the note, or closes
- * the note, it leaves the app's undo stack.
- */
-function offerUndo(editor: Editor, message: string): void {
-  const manager: UndoStack | undefined = yUndoPluginKey.getState(editor.state)?.undoManager;
-  const step = manager?.undoStack.at(-1);
-  if (!manager || step === undefined) return;
-  const change: Undoable = {
-    message,
-    undo: async () => {
-      if (!editor.isDestroyed && manager.undoStack.at(-1) === step) editor.commands.undo();
-    },
-  };
-  const stale = () => {
-    manager.off("stack-item-added", stale);
-    manager.off("stack-item-popped", stale);
-    editor.off("destroy", stale);
-    useUndo.getState().withdraw(change);
-  };
-  manager.on("stack-item-added", stale);
-  manager.on("stack-item-popped", stale);
-  editor.on("destroy", stale);
-  useUndo.getState().push(change);
+  offerEditorUndo(editor, message);
 }

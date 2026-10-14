@@ -4,9 +4,14 @@ import type { Language } from "../../src/core/language";
 import {
   badgeMessage,
   citationReference,
+  citationSource,
   citationState,
   citedLocation,
   citedTextKept,
+  closestWordsMessage,
+  parseQuotedWords,
+  shownDocumentName,
+  withShownName,
 } from "../../src/shared/citations";
 import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
 import { parseLocation } from "../../src/shared/locations";
@@ -43,6 +48,55 @@ const words = (
   };
 };
 
+describe("Where a Citation points", () => {
+  const sheetCitation = (documentName: string, sheet: string) => ({
+    ...found,
+    documentName,
+    location: { kind: "rows" as const, sheet, from: 3, to: 3 },
+  });
+
+  test("names the sheet unless it shares the Document's name", () => {
+    expect(citationSource(sheetCitation("利润表", "利润表"), in_("zh-CN")).text).toBe(
+      "利润表，第 3 行",
+    );
+    expect(citationSource(sheetCitation("Budget.xlsx", "Budget"), in_("en")).text).toBe(
+      "Budget.xlsx, row 3",
+    );
+    expect(citationSource(sheetCitation("年报.xlsx", "利润表"), in_("zh-CN")).text).toBe(
+      "年报.xlsx，利润表，第 3 行",
+    );
+  });
+});
+
+describe("The name a Citation shows for its Document", () => {
+  const renamed = [{ id: "tides", contentHash: "abc", name: "Tide tables" }];
+
+  test("is the Document's current name while it is there, and the stored one when it can't be found", () => {
+    expect(shownDocumentName(found, renamed)).toBe("Tide tables");
+    expect(shownDocumentName(found, [])).toBe("Tides");
+    expect(shownDocumentName(found, null)).toBe("Tides");
+    expect(shownDocumentName({ ...found, documentName: null }, [])).toBeNull();
+    // A Document with the same content, added again after the first was deleted, is the one it opens.
+    const again = [{ id: "tides-again", contentHash: "abc", name: "Tides (again)" }];
+    expect(shownDocumentName(found, again)).toBe("Tides (again)");
+    // Documents that don't say their names leave the stored one.
+    expect(shownDocumentName(found, [{ id: "tides", contentHash: "abc" }])).toBe("Tides");
+  });
+
+  test("is in the badge, the label and the card's line, and the stored attribute is left alone", () => {
+    const shown = withShownName(found, renamed);
+    expect(shown.documentName).toBe("Tide tables");
+    expect(found.documentName).toBe("Tides");
+    expect(citationSource(shown, in_("en")).text).toBe("Tide tables, p. 12–13");
+    expect(withShownName(found, [])).toBe(found);
+    const undated = { ...found, location: null, pageFrom: null, pageTo: null };
+    const state = citationState(undated, renamed);
+    expect(badgeMessage(state, withShownName(undated, renamed), in_("en")).params).toEqual({
+      document: "Tide tables",
+    });
+  });
+});
+
 describe("A Citation's badge", () => {
   test("says where the quote was found or not found, in words, and never that the sentence is verified", () => {
     expect(words(found)).toEqual({ en: "Quote found on p. 12–13", zh: "已在第 12–13 页找到引文" });
@@ -57,6 +111,37 @@ describe("A Citation's badge", () => {
       en: "Quote found in Tides",
       zh: "已在“Tides”中找到引文",
     });
+    const rows = (sheet: string) => ({
+      ...found,
+      documentName: "年报.xlsx",
+      pageFrom: null,
+      pageTo: null,
+      location: { kind: "rows" as const, sheet, from: 3, to: 3 },
+    });
+    expect(words(rows("利润表"))).toEqual({
+      en: "Quote found in 利润表, row 3",
+      zh: "已在“利润表，第 3 行”中找到引文",
+    });
+    expect(
+      words({
+        ...found,
+        pageFrom: null,
+        pageTo: null,
+        location: { kind: "section", heading: "2025年经营情况" },
+      }),
+    ).toEqual({
+      en: "Quote found in § 2025年经营情况",
+      zh: "已在“§ 2025年经营情况”中找到引文",
+    });
+    expect(
+      words({
+        ...found,
+        check: "not-found",
+        pageFrom: null,
+        pageTo: null,
+        location: { kind: "section", heading: "Tides" },
+      }).zh,
+    ).toBe("未在“§ Tides”中找到引文");
     expect(words({ ...found, check: "checking" }).en).toBe("checking…");
     expect(words({ ...found, check: "cant-check", checkReason: "no-text" }).en).toBe("Can't check");
     for (const check of ["found", "not-found", "cant-check", "checking"] as const) {
@@ -205,6 +290,74 @@ describe("A Citation's badge", () => {
   });
 });
 
+describe("The words an Answer put in quotation marks that a Citation's page lacks (#483)", () => {
+  const notFound: CitationAttributes = {
+    ...found,
+    pageFrom: 3,
+    pageTo: 3,
+    check: "not-found",
+    checkReason: "quoted-words-not-on-pages",
+  };
+  const closest = (attributes: Partial<CitationAttributes>) => {
+    const en = closestWordsMessage(attributes, in_("en"));
+    const zh = closestWordsMessage(attributes, in_("zh-CN"));
+    return {
+      en: translate("en", en.key, en.params),
+      zh: translate("zh-CN", zh.key, zh.params),
+    };
+  };
+
+  test("the label over the page's nearest words names the place the badge does", () => {
+    expect(closest(notFound)).toEqual({
+      en: "Closest words on p. 3",
+      zh: "第 3 页最接近的文字",
+    });
+    expect(closest({ ...notFound, pageFrom: null, pageTo: null })).toEqual({
+      en: "Closest words in Tides",
+      zh: "“Tides”中最接近的文字",
+    });
+    expect(
+      closest({
+        ...notFound,
+        pageFrom: null,
+        pageTo: null,
+        location: { kind: "time", from: 866_000, to: 870_000 },
+      }),
+    ).toEqual({
+      en: "Closest words in the transcript at 14:26",
+      zh: "转写稿 14:26 处最接近的文字",
+    });
+  });
+
+  test("the badge is the existing not-found one, and the reason is worded for both languages", () => {
+    expect(words(notFound)).toEqual({
+      en: "Quote not found on p. 3",
+      zh: "未在第 3 页找到引文",
+    });
+    expect(translate("en", "citation.reason.quoted-words-not-on-pages")).toContain(
+      "words in quotation marks",
+    );
+    expect(translate("zh-CN", "citation.reason.quoted-words-not-on-pages")).toContain("引号");
+  });
+
+  test("stored words are read back whole, or not at all", () => {
+    const stored = {
+      answer: [
+        { text: "training ", found: false },
+        { text: "coverage reached 98%", found: true },
+      ],
+      closest: [{ text: "Safety training: coverage reached 98%", found: false }],
+    };
+    expect(parseQuotedWords(stored)).toEqual(stored);
+    expect(parseQuotedWords(JSON.stringify(stored))).toEqual(stored);
+    expect(parseQuotedWords({ ...stored, closest: [] })).toEqual({ ...stored, closest: null });
+    expect(parseQuotedWords({ answer: [] })).toBeNull();
+    expect(parseQuotedWords({ answer: [{ text: 1, found: true }] })).toBeNull();
+    expect(parseQuotedWords("not json")).toBeNull();
+    expect(parseQuotedWords(undefined)).toBeNull();
+  });
+});
+
 describe("A Citation's Location label (ADR-0011)", () => {
   const at = (location: CitationAttributes["location"], name = "Deck") => ({
     ...found,
@@ -281,7 +434,7 @@ describe("A Citation's Location label (ADR-0011)", () => {
       }),
     ).toEqual({
       en: "Quote not found in § 2.1 Sensitivity",
-      zh: "未在 § 2.1 Sensitivity 中找到引文",
+      zh: "未在“§ 2.1 Sensitivity”中找到引文",
     });
     expect(words(at({ kind: "lines", from: 120, to: 134 })).en).toBe(
       "Quote found on lines 120–134",
@@ -290,7 +443,7 @@ describe("A Citation's Location label (ADR-0011)", () => {
       words(at({ kind: "section", heading: "2 Costs", comment: { author: "Reviewer" } })),
     ).toEqual({
       en: "Quote found in § 2 Costs, comment by Reviewer",
-      zh: "已在 § 2 Costs，Reviewer 的批注 中找到引文",
+      zh: "已在“§ 2 Costs，Reviewer 的批注”中找到引文",
     });
   });
 

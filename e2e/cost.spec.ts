@@ -2,9 +2,11 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
+import { openDatabase } from "../src/core/storage";
 import { createFakeOpenAI, signInAt } from "../tests/helpers/fakeOpenAI";
 import {
   acceptPlainTextKeys,
+  assistantAnswers,
   closeSettings,
   createDataFolder,
   dismissChatSetup,
@@ -44,16 +46,15 @@ const bridge = (window: Page) => ({
         }),
       language,
     ),
-  /** Claude Haiku 5.5 on an Anthropic key, billed per token, with Questions to Anthropic allowed. */
+  /** Claude Haiku 5.5 on an Anthropic key, billed per token: choosing it allows Questions to Anthropic. */
   keyProvider: () =>
     window.evaluate(async () => {
       const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-      const provider = await core.saveChatProvider({
+      await core.saveChatProvider({
         kind: "anthropic",
         apiKey: "sk-ant-test",
         modelId: "claude-haiku-5-5",
       });
-      if (provider.service) await core.allowDataFlow("chat", provider.service.id);
     }),
   cap: () =>
     window.evaluate(
@@ -108,13 +109,14 @@ test("an Answer stopped by the monthly cap says so in place, and Change cap open
     await expect.poll(() => bridge(window).cap()).toEqual({ amount: 0, currency: "USD" });
     await closeSettings(window);
 
-    // Asked, the Answer is stopped before anything is sent, with one line and one action.
+    // Asked in the assistant, the Answer is stopped before anything is sent, with one line and
+    // one action.
     await newMind(window);
     await window.getByTestId("mind-editor").click();
     await window.keyboard.press("ControlOrMeta+j");
     await window.keyboard.type("What is in my Documents?");
     await window.keyboard.press("Enter");
-    const answer = window.getByTestId("answer");
+    const answer = assistantAnswers(window).first();
     await expect(answer).toHaveAttribute("data-status", "failed");
     const error = answer.getByTestId("answer-error");
     await expect(error).toHaveAttribute("data-error-kind", "cost-cap");
@@ -171,7 +173,7 @@ test("Settings → Models shows what a key spent this month, and the ChatGPT pla
     await window.keyboard.press("ControlOrMeta+j");
     await window.keyboard.type("What is in my Documents?");
     await window.keyboard.press("Enter");
-    await expect(window.getByTestId("answer")).toHaveAttribute("data-status", "done");
+    await expect(assistantAnswers(window).first()).toHaveAttribute("data-status", "done");
     const settings = await openSettings(window, "models");
     const cost = settings.getByTestId("chat-provider-cost");
     await expect(cost).toHaveText("This month: $0");
@@ -207,5 +209,52 @@ test("Settings → Models shows what a key spent this month, and the ChatGPT pla
   } finally {
     await app.close();
     await openai.close();
+  }
+});
+
+test("a request a force-quit cut short counts for nothing, and the cost line says it was interrupted, in English and Chinese (#636)", async () => {
+  const first = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(first.window);
+  await acceptPlainTextKeys(first.window);
+  const providerId = await first.window.evaluate(async () => {
+    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    const provider = await core.saveChatProvider({
+      kind: "anthropic",
+      apiKey: "sk-ant-test",
+      modelId: "claude-haiku-5-5",
+    });
+    return provider.id;
+  });
+  await first.app.close();
+  // What a quit mid-request leaves: a reservation, never settled.
+  const db = openDatabase(join(dataDir, "incarnamind.db"));
+  const at = new Date().toISOString();
+  db.run(
+    `INSERT INTO model_requests (id, provider_id, model_id, flow, billing, status, currency,
+       reserved, created_at, updated_at)
+     VALUES ('interrupted-1', ?, 'claude-haiku-5-5', 'chat', 'per-token', 'reserved', 'USD', 0.26, ?, ?)`,
+    [providerId, at, at],
+  );
+  db.close();
+
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  try {
+    await setWindowSize(app, window, WIDE.width, WIDE.height);
+    const settings = await openSettings(window, "general");
+    const cap = settings.getByTestId("spending-cap-settings");
+    await expect(cap.getByTestId("spending-cap-spent")).toHaveText(
+      "Spent this month: $0 on your keys.",
+    );
+    await expect(cap.getByTestId("spending-cap-interrupted")).toHaveText(
+      "1 request was interrupted; its cost isn’t known.",
+    );
+    await shot(window, "cost-interrupted-wide-en");
+    await bridge(window).language("zh-CN");
+    await expect(cap.getByTestId("spending-cap-interrupted")).toHaveText(
+      "有 1 次请求被中断，费用未知。",
+    );
+    await shot(window, "cost-interrupted-wide-zh");
+  } finally {
+    await app.close();
   }
 });

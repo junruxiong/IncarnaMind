@@ -1,3 +1,23 @@
+import { Fragment } from "react";
+
+/**
+ * A path inside a sentence, in mono: it breaks after each slash (`/` or `\`),
+ * and in the middle of a name only when that name alone is wider than the
+ * line, so the words around it never break.
+ */
+export function InlinePath({ path }: { path: string }) {
+  return (
+    <code className="font-mono text-[12px] [overflow-wrap:anywhere]">
+      {[...path.matchAll(/[^/\\]+[/\\]?|[/\\]/g)].map((piece) => (
+        <Fragment key={piece.index}>
+          {piece[0]}
+          <wbr />
+        </Fragment>
+      ))}
+    </code>
+  );
+}
+
 /**
  * A path on one line that, when it doesn't fit, is cut at its start, so the
  * folder's own name stays in view ("…/Documents/IncarnaMind"); the whole path

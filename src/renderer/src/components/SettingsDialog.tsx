@@ -2,10 +2,10 @@ import { type ReactNode, useEffect, useState } from "react";
 import type { LanguagePreference } from "../../../core/language";
 import type { MessageKey } from "../../../shared/i18n";
 import { files } from "../core";
-import { errorMessage } from "../errors";
 import { useT } from "../i18n";
-import { type SettingsPage, settingsPages } from "../settingsPages";
+import { type SettingsPage, settingsPageLabels, settingsPages } from "../settingsPages";
 import { recordUsage, useAppStore } from "../store";
+import { AuthorNameSettings } from "./AuthorNameSettings";
 import { AgentsSettings } from "./agents/AgentsSettings";
 import { ConnectorsSettings } from "./connectors/ConnectorsSettings";
 import { EvidenceSettings } from "./EvidenceSettings";
@@ -17,6 +17,7 @@ import { PrivacySettings } from "./PrivacySettings";
 import { ChatGptPlanSettings } from "./providers/ChatGptPlanSettings";
 import { ChatModelSettings } from "./providers/ChatModelSettings";
 import { EmbeddingSettingsSection } from "./providers/EmbeddingSettings";
+import { OtherModelsSettings } from "./providers/OtherModelsSettings";
 import { RerankSettingsSection } from "./providers/RerankSettings";
 import { SkillScriptsSettings, SkillsSettings } from "./SkillsSettings";
 import { SpendingCapSettings } from "./SpendingCapSettings";
@@ -32,6 +33,7 @@ import {
   sectionTitleClass,
 } from "./ui";
 import { useModal } from "./useModal";
+import { WebSearchSettings } from "./WebSearchSettings";
 
 const languageOptions: readonly { value: LanguagePreference; label: MessageKey }[] = [
   { value: "system", label: "settings.language.system" },
@@ -39,19 +41,7 @@ const languageOptions: readonly { value: LanguagePreference; label: MessageKey }
   { value: "zh-CN", label: "settings.language.zh-CN" },
 ];
 
-/** Each page's name, in the list and as its title. */
-const pageLabels: Record<SettingsPage, MessageKey> = {
-  general: "privacy.tabs.general",
-  models: "settings.pages.models",
-  search: "settings.pages.search",
-  meetings: "settings.pages.meetings",
-  connectors: "connectors.settings.title",
-  skills: "skills.settings.title",
-  agents: "settings.pages.agents",
-  privacy: "privacy.tabs.privacy",
-};
-
-const REPOSITORY_URL = "https://github.com/junruxiong/IncarnaMind";
+const REPOSITORY_URL = "https://github.com/IncarnaMind/IncarnaMind";
 
 /**
  * Settings, in a native modal <dialog>: a list of pages on the frame on the
@@ -103,7 +93,7 @@ export function SettingsDialog() {
               onClick={() => showPage(each)}
               className={navRowClass(page === each)}
             >
-              {t(pageLabels[each])}
+              {t(settingsPageLabels[each])}
             </button>
           ))}
         </nav>
@@ -114,7 +104,7 @@ export function SettingsDialog() {
               data-testid="settings-page-title"
               className="font-serif text-heading font-semibold text-ink [font-variation-settings:'opsz'_32]"
             >
-              {t(pageLabels[page])}
+              {t(settingsPageLabels[page])}
             </h3>
             <button
               type="button"
@@ -160,6 +150,7 @@ function PageContent({ page }: { page: SettingsPage }) {
           <MotionSettings />
           <SuggestionSettings />
           <OutputLocationSettings />
+          <AuthorNameSettings />
           <DataFolderSettings />
           <AboutSettings />
         </Page>
@@ -170,6 +161,7 @@ function PageContent({ page }: { page: SettingsPage }) {
           <Titled title="providers.settings.title">
             <ChatModelSettings />
           </Titled>
+          <OtherModelsSettings />
           <ChatGptPlanSettings />
           <TaggingSettings />
         </Page>
@@ -181,6 +173,7 @@ function PageContent({ page }: { page: SettingsPage }) {
             <EmbeddingSettingsSection />
           </Titled>
           <RerankSettingsSection />
+          <WebSearchSettings />
           <EvidenceSettings />
         </Page>
       );
@@ -282,7 +275,7 @@ function DataFolderSettings() {
   const t = useT();
   const open = (folder: Promise<void>) =>
     folder.catch((failure: unknown) => {
-      useAppStore.setState({ actionError: errorMessage(failure) });
+      useAppStore.getState().reportError(failure);
     });
   return (
     <section data-testid="data-folder-settings">

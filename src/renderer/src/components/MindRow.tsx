@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, useRef, useState } from "react";
 import type { Mind } from "../../../core/api";
 import { mindName } from "../../../shared/naming";
 import { useCitationStylePicker } from "../citationStylePicker";
@@ -6,27 +6,30 @@ import { startMoveDrag } from "../folderDrag";
 import { useT } from "../i18n";
 import { currentTabOf } from "../layoutSlice";
 import { useMindStatus } from "../mindStatus";
+import { selectedOn, useSelectable } from "../selection";
 import { useAppStore } from "../store";
-import { isMoveToKey, TREE_ROW } from "../treeKeys";
+import { isMoveToKey, useTreeItem } from "../treeKeys";
+import { useRename } from "../useRename";
 import { ExampleChip, useIsExample } from "./GettingStarted";
+import { InlineName } from "./InlineName";
 import { MindLineIcon } from "./lineIcons";
 import { MoveToPicker } from "./MoveToPicker";
 import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
 import {
+  clearsActions,
   rowActionsClass,
   rowButtonClass,
   rowClass,
   rowIconClass,
-  rowInputClass,
   rowPadding,
 } from "./sidebarRows";
 
 /**
  * A Mind in the sidebar's tree, in its Folder (`depth` 1) or Not in a Folder
  * (0): its title, and an amber dot while one of its Answers waits for the
- * User's approval. Clicking opens it (⌘-click or a middle click in a new
- * tab). It renames in place: double-click it, press Enter on it while it is
- * open, or F2; Enter saves, Esc cancels, and a blank title changes nothing.
+ * User's approval. Clicking or Enter opens it and selects just it; ⌘-click
+ * and Shift-click select; a middle click opens it in a new tab. It renames in place: double-click it or press F2;
+ * Enter saves, Esc cancels, and a blank title changes nothing.
  * It drags onto a Folder; its menu (⋯, or a right-click) and ⇧⌘M offer the
  * same as "Move to…".
  */
@@ -37,30 +40,37 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
     return shown?.kind === "mind" && shown.mindId === mind.id;
   });
   const openMind = useAppStore((state) => state.openMind);
+  const renameMind = useAppStore((state) => state.renameMind);
   const waiting = useMindStatus(mind.id) === "waiting-for-approval";
   const isExample = useIsExample(mind.id);
-  const [renaming, setRenaming] = useState(false);
+  const rename = useRename<HTMLButtonElement>(`mind:${mind.id}`);
   const [moving, setMoving] = useState<HTMLElement | null>(null);
-  const button = useRef<HTMLButtonElement>(null);
   const row = useRef<HTMLLIElement>(null);
   const title = mindName(mind) || t("mind.untitled");
   const objectMenu = useObjectMenu({ kind: "mind", id: mind.id });
+  const select = useSelectable({ kind: "mind", id: mind.id }, "sidebar", () => openMind(mind.id));
+  const lit = isOpen || select.selected;
+  const treeItem = useTreeItem({ depth, selected: select.selected });
+  /** The Minds a drag or "Move to…" from this row takes: all those selected, if it is one of them. */
+  const mindIdsHere = () => {
+    const chosen = selectedOn("sidebar").flatMap((each) => (each.kind === "mind" ? [each.id] : []));
+    return chosen.includes(mind.id) ? chosen : [mind.id];
+  };
 
-  if (renaming) {
+  if (rename.renaming) {
     return (
-      <li className={rowClass(isOpen)} data-testid="mind-row" data-mind-id={mind.id}>
+      <li className={rowClass(lit)} data-testid="mind-row" data-mind-id={mind.id}>
         <span
           className="flex h-full w-full min-w-0 items-center gap-2 pr-1"
           style={rowPadding(depth)}
         >
-          <MindLineIcon className={rowIconClass(isOpen)} />
-          <RenameMind
-            mind={mind}
-            onDone={() => {
-              setRenaming(false);
-              // Back on its row, so the keyboard carries on from there.
-              requestAnimationFrame(() => button.current?.focus());
-            }}
+          <MindLineIcon className={rowIconClass(lit)} />
+          <InlineName
+            value={mind.title}
+            label={t("mind.renameLabel", { title })}
+            placeholder={title}
+            testId="mind-rename"
+            {...rename.field((name) => renameMind(mind.id, name))}
           />
         </span>
       </li>
@@ -68,11 +78,7 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
-    // F2, or Enter on the Mind already open (selected): its title, in place.
-    if (event.key === "F2" || (event.key === "Enter" && isOpen && !event.metaKey)) {
-      event.preventDefault();
-      setRenaming(true);
-    } else if (isMoveToKey(event)) {
+    if (isMoveToKey(event)) {
       event.preventDefault();
       setMoving(event.currentTarget);
     }
@@ -83,34 +89,38 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
       data-testid="mind-row"
       data-mind-id={mind.id}
       data-folder-id={mind.folderId ?? ""}
+      role="none"
+      {...select.refProps}
       draggable
-      onDragStart={(event) => startMoveDrag(event, { mindIds: [mind.id] })}
+      onDragStart={(event) => startMoveDrag(event, { mindIds: mindIdsHere() })}
       {...objectMenu.rowProps}
       ref={row}
-      className={rowClass(isOpen)}
+      className={rowClass(lit)}
     >
       <button
-        ref={button}
+        {...rename.nameProps}
         type="button"
-        {...TREE_ROW}
+        {...treeItem}
         data-testid="mind-list-item"
         data-mind-id={mind.id}
         aria-current={isOpen ? "page" : undefined}
         title={title}
-        // ⌘-click (Ctrl-click) or a middle click opens it to the side, as in VS Code.
-        onClick={(event) => openMind(mind.id, { side: event.metaKey || event.ctrlKey })}
+        // A click opens it; ⌘-click and Shift-click select (`useSelectable`). A middle click opens it to the side.
+        onClick={select.onClick}
         onMouseDown={(event) => {
           if (event.button === 1) event.preventDefault(); // no autoscroll
         }}
         onAuxClick={(event) => {
           if (event.button === 1) openMind(mind.id, { side: true });
         }}
-        onDoubleClick={() => setRenaming(true)}
-        onKeyDown={onKeyDown}
-        className={rowButtonClass}
+        onKeyDown={(event) => {
+          rename.nameProps.onKeyDown(event);
+          onKeyDown(event);
+        }}
+        className={`${rowButtonClass} ${clearsActions.menu}`}
         style={rowPadding(depth)}
       >
-        <MindLineIcon className={rowIconClass(isOpen)} />
+        <MindLineIcon className={rowIconClass(lit)} />
         <span
           data-testid="row-text"
           className={`min-w-0 flex-1 truncate ${mindName(mind) ? "" : "text-ink-meta"}`}
@@ -132,8 +142,9 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
         <ObjectMenu
           target={{ kind: "mind", id: mind.id }}
           label={t("mind.more", { title })}
+          tabIndex={-1}
           here={{
-            "mind.rename": () => setRenaming(true),
+            "mind.rename": rename.start,
             "mind.citationStyle": () =>
               requestAnimationFrame(() =>
                 useCitationStylePicker
@@ -153,59 +164,20 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
       </div>
       <MoveToPicker
         anchor={moving}
-        name={title}
-        current={mind.folderId}
+        name={
+          moving && mindIdsHere().length > 1
+            ? t("mind.count", { count: mindIdsHere().length })
+            : title
+        }
+        current={moving && mindIdsHere().length > 1 ? undefined : mind.folderId}
         onChoose={(folderId) => {
-          if (folderId !== mind.folderId) {
-            void useAppStore.getState().moveToFolder({ mindIds: [mind.id] }, folderId);
+          const mindIds = mindIdsHere();
+          if (mindIds.length > 1 || folderId !== mind.folderId) {
+            void useAppStore.getState().moveToFolder({ mindIds }, folderId);
           }
         }}
         onClose={() => setMoving(null)}
       />
     </li>
-  );
-}
-
-/** A Mind's title typed in its row: Enter or leaving the field saves, Esc cancels. */
-function RenameMind({ mind, onDone }: { mind: Mind; onDone(): void }) {
-  const t = useT();
-  const renameMind = useAppStore((state) => state.renameMind);
-  const [value, setValue] = useState(mind.title);
-  const field = useRef<HTMLInputElement>(null);
-  const finished = useRef(false);
-
-  useEffect(() => {
-    field.current?.focus();
-    field.current?.select();
-  }, []);
-
-  const finish = (save: boolean) => {
-    if (finished.current) return;
-    finished.current = true;
-    // A blank title changes nothing.
-    if (save && value.trim() !== "" && value.trim() !== mind.title) void renameMind(mind.id, value);
-    onDone();
-  };
-
-  return (
-    <input
-      ref={field}
-      value={value}
-      data-testid="mind-rename"
-      aria-label={t("mind.renameLabel", { title: mindName(mind) || t("mind.untitled") })}
-      placeholder={mindName(mind) || t("mind.untitled")}
-      onChange={(event) => setValue(event.target.value)}
-      onKeyDown={(event) => {
-        if (event.nativeEvent.isComposing) return;
-        if (event.key === "Enter" || event.key === "Escape") {
-          event.preventDefault();
-          // Esc cancels here, and closes nothing else.
-          event.stopPropagation();
-          finish(event.key === "Enter");
-        }
-      }}
-      onBlur={() => finish(true)}
-      className={rowInputClass}
-    />
   );
 }

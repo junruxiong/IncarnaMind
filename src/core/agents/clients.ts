@@ -17,6 +17,7 @@
  * are the agents' own documented ones, cited beside each.
  */
 import { join } from "node:path";
+import { HIDDEN_KEY } from "../../shared/agentSocket";
 import type { AgentClientId, AgentLaunch, AgentSetupKind } from "../api";
 import { SKILL_NAME } from "./skill";
 
@@ -247,6 +248,27 @@ export function withoutCodexTable(text: string): string {
   return [...lines.slice(0, start), ...lines.slice(end)].join("\n").replace(/\n{3,}/g, "\n\n");
 }
 
+/** Whether a settings file holds nothing but the empty frame IncarnaMind's entry left. */
+export function isEmptySettings(format: SettingsFormat, text: string): boolean {
+  if (text.trim() === "") return true;
+  if (format === "codex-toml") return false;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return false;
+    const entries = Object.entries(parsed);
+    const [only] = entries;
+    return (
+      entries.length === 1 &&
+      only?.[0] === "mcpServers" &&
+      typeof only[1] === "object" &&
+      only[1] !== null &&
+      Object.keys(only[1]).length === 0
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
  * An `mcpServers` settings file with IncarnaMind's entry set (`entry`) or
  * taken out (null). Throws when the file isn't a JSON object, so nothing of
@@ -270,9 +292,6 @@ export function withMcpServersEntry(before: string | null, entry: object | null)
   else delete next[SERVER_KEY];
   return `${JSON.stringify({ ...settings, mcpServers: next }, null, 2)}\n`;
 }
-
-/** How a pairing's key shows wherever settings are shown rather than copied. */
-export const HIDDEN_KEY = "•••••••";
 
 /** A settings text with the pairing's key hidden. */
 export const hideToken = (text: string, token: string) =>

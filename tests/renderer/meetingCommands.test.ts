@@ -13,6 +13,7 @@ import {
   labelOf,
   offered,
 } from "../../src/renderer/src/commands/registry";
+import { useRequests } from "../../src/renderer/src/requests";
 import type { CommandId } from "../../src/shared/commands";
 import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
 
@@ -173,5 +174,168 @@ describe("the meeting commands", () => {
     expect(resume).toHaveBeenCalledWith("m2");
     await commands.run("meeting.stop", IN_MIND);
     expect(stop).toHaveBeenCalledWith("m2");
+  });
+});
+
+describe("Mark (#139)", () => {
+  test("is ⌘D on macOS and Ctrl+D elsewhere, a window-wide key, named in both languages", () => {
+    const mark = command("meeting.mark");
+    expect(mark.shortcut?.list).toBeUndefined();
+    expect(keysLabel(keysOn(mark.shortcut?.keys ?? "", true), true)).toBe("⌘D");
+    expect(keysLabel(keysOn(mark.shortcut?.keys ?? "", false), false)).toBe("Ctrl+D");
+    expect(labelOf(mark, IN_MIND, en)).toBe("Mark this moment");
+    expect(labelOf(mark, IN_MIND, zh)).toBe("标记此刻");
+    expect(mark.reversible).toBe(true);
+  });
+
+  test("is offered while Meetings are on, and works only while audio is recorded", () => {
+    const mark = command("meeting.mark");
+    meetingsOn(false);
+    expect(offered(mark, IN_MIND)).toBe(false);
+
+    meetingsOn();
+    expect(offered(mark, IN_MIND)).toBe(true);
+    expect(mark.enabled?.(IN_MIND)).toEqual({ reason: "meetings.command.noneLive" });
+
+    stores.useMeetings.setState({ meetings: [meeting("m1", "mind-1", "paused")] });
+    showing("mind-1");
+    expect(mark.enabled?.(IN_MIND)).toEqual({ reason: "meetings.command.markPaused" });
+
+    stores.useMeetings.setState({ meetings: [meeting("m1", "mind-1", "recording")] });
+    expect(isEnabled(mark, IN_MIND)).toBe(true);
+  });
+});
+
+describe("Recording details (#161)", () => {
+  test("show and hide the details of the meeting in view once it has started, named in both languages", async () => {
+    meetingsOn();
+    const details = command("meeting.details");
+    expect(details.reversible).toBe(true);
+    expect(details.enabled?.(IN_MIND)).toEqual({ reason: "meetings.health.none" });
+    stores.useMeetings.setState({ meetings: [meeting("m1", "mind-1", "ready")] });
+    showing("mind-1");
+    expect(isEnabled(details, IN_MIND)).toBe(false);
+
+    stores.useMeetings.setState({
+      meetings: [meeting("m1", "mind-1", "stopped")],
+      detailsShown: {},
+    });
+    expect(isEnabled(details, IN_MIND)).toBe(true);
+    expect(labelOf(details, IN_MIND, en)).toBe("Show recording details");
+    expect(labelOf(details, IN_MIND, zh)).toBe("显示录制详情");
+    await commands.run("meeting.details", IN_MIND);
+    expect(stores.useMeetings.getState().detailsShown).toEqual({ m1: true });
+    expect(labelOf(details, IN_MIND, en)).toBe("Hide recording details");
+    expect(labelOf(details, IN_MIND, zh)).toBe("隐藏录制详情");
+    await commands.run("meeting.details", IN_MIND);
+    expect(stores.useMeetings.getState().detailsShown).toEqual({ m1: false });
+  });
+
+  test("are offered in a meeting's Mind even once Meetings are turned off", () => {
+    const details = command("meeting.details");
+    meetingsOn(false);
+    expect(offered(details, IN_MIND)).toBe(false);
+    stores.useMeetings.setState({ meetings: [meeting("m1", "mind-1", "stopped")] });
+    showing("mind-1");
+    expect(offered(details, IN_MIND)).toBe(true);
+  });
+});
+
+describe("Delete audio (#609)", () => {
+  const withAudio = (
+    id: string,
+    mindId: string,
+    status: Meeting["status"],
+    audio: Partial<Meeting["audio"]> = {},
+  ): Meeting =>
+    ({
+      id,
+      mindId,
+      status,
+      audio: { kept: true, expiresAt: null, deletedAt: null, ...audio },
+    }) as Meeting;
+  const deleteAudio = () => command("meeting.deleteAudio");
+  const asked = () => useRequests.getState().deleteAudio;
+
+  afterEach(() => useRequests.setState({ deleteAudio: null }));
+
+  test("is named in both languages, and asks first with the question on the Meeting's line", () => {
+    expect(labelOf(deleteAudio(), IN_MIND, en)).toBe("Delete audio");
+    expect(labelOf(deleteAudio(), IN_MIND, zh)).toBe("删除音频");
+    expect(deleteAudio().reversible).toEqual({ confirm: "meetings.audio.confirm" });
+    expect(en("meetings.audio.confirm")).toContain("It can’t be brought back");
+    expect(zh("meetings.audio.confirm")).toContain("无法恢复");
+  });
+
+  test("is offered while Meetings are on, or in a Meeting's Mind once they are off", () => {
+    meetingsOn(false);
+    expect(offered(deleteAudio(), IN_MIND)).toBe(false);
+    stores.useMeetings.setState({ meetings: [withAudio("m1", "mind-1", "stopped")] });
+    showing("mind-1");
+    expect(offered(deleteAudio(), IN_MIND)).toBe(true);
+    meetingsOn();
+    stores.useMeetings.setState({ meetings: [] });
+    expect(offered(deleteAudio(), IN_MIND)).toBe(true);
+  });
+
+  test("says why it can't run: no Meeting in view, a recording, or audio that is already gone", () => {
+    meetingsOn();
+    expect(deleteAudio().enabled?.(IN_MIND)).toEqual({
+      reason: "meetings.command.noMeetingInView",
+    });
+    stores.useMeetings.setState({ meetings: [withAudio("m1", "mind-1", "ready")] });
+    showing("mind-1");
+    expect(deleteAudio().enabled?.(IN_MIND)).toEqual({
+      reason: "meetings.command.noMeetingInView",
+    });
+
+    stores.useMeetings.setState({ meetings: [withAudio("m1", "mind-1", "recording")] });
+    expect(deleteAudio().enabled?.(IN_MIND)).toEqual({
+      reason: "meetings.command.audioWhileRecording",
+    });
+
+    stores.useMeetings.setState({
+      meetings: [withAudio("m1", "mind-1", "stopped", { kept: false, deletedAt: "2026-10-13" })],
+    });
+    expect(deleteAudio().enabled?.(IN_MIND)).toEqual({ reason: "meetings.audio.deleted" });
+    stores.useMeetings.setState({
+      meetings: [withAudio("m1", "mind-1", "stopped", { kept: false })],
+    });
+    expect(deleteAudio().enabled?.(IN_MIND)).toEqual({ reason: "meetings.audio.none" });
+
+    for (const status of ["paused", "stopped"] as const) {
+      stores.useMeetings.setState({ meetings: [withAudio("m1", "mind-1", status)] });
+      expect(isEnabled(deleteAudio(), IN_MIND), status).toBe(true);
+    }
+  });
+
+  test("asks about the Meeting in view, or the Mind it is aimed at, and deletes nothing itself", async () => {
+    meetingsOn();
+    const deleteMeetingAudio = vi.fn(async () => {});
+    stores.useMeetings.setState({
+      deleteAudio: deleteMeetingAudio,
+      meetings: [withAudio("m1", "mind-1", "stopped"), withAudio("m2", "mind-2", "paused")],
+    });
+    showing("mind-1");
+    await commands.run("meeting.deleteAudio", IN_MIND);
+    expect(asked()).toEqual({ meetingId: "m1" });
+
+    // A line's own button is for its Meeting, whichever group has the focus.
+    await commands.run("meeting.deleteAudio", {
+      ...IN_MIND,
+      focus: { kind: "mind", id: "mind-2" },
+    });
+    expect(asked()).toEqual({ meetingId: "m2" });
+    expect(deleteMeetingAudio).not.toHaveBeenCalled();
+  });
+
+  test("asks nothing where it can't run", async () => {
+    meetingsOn();
+    stores.useMeetings.setState({
+      meetings: [withAudio("m1", "mind-1", "stopped", { kept: false })],
+    });
+    showing("mind-1");
+    await commands.run("meeting.deleteAudio", IN_MIND);
+    expect(asked()).toBeNull();
   });
 });

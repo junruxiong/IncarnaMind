@@ -59,12 +59,15 @@ describe("The hard tier's Questions", () => {
   const library = loadManifest(ROOT);
   const set = loadHardQuestions(ROOT, library);
 
-  test("the committed set has 150 to 250 Questions, at least 15 per difficulty, in both languages", () => {
+  test("the committed set has 150 to 250 Questions, at least 15 per difficulty (10 for the Answer rules'), in both languages", () => {
     expect(set.questions.length).toBeGreaterThanOrEqual(150);
     expect(set.questions.length).toBeLessThanOrEqual(250);
+    const answerRules: readonly string[] = ["false-premise", "disagreeing"];
     for (const difficulty of DIFFICULTIES) {
       const tagged = set.questions.filter((each) => each.difficulty === difficulty);
-      expect(tagged.length, difficulty).toBeGreaterThanOrEqual(15);
+      expect(tagged.length, difficulty).toBeGreaterThanOrEqual(
+        answerRules.includes(difficulty) ? 10 : 15,
+      );
       expect(
         tagged.some((each) => each.language === "en"),
         `${difficulty} in English`,
@@ -188,6 +191,46 @@ describe("The hard tier's Questions", () => {
         LIBRARY,
       ),
     ).toEqual(["q: contract has no other version in its language for a near-duplicate Question."]);
+  });
+
+  test("a false-premise Question says what it takes for granted, and expects what the Documents do say", () => {
+    const premise = (extra: Partial<HardQuestion>) =>
+      questionProblems(question({ difficulty: "false-premise", ...extra }), LIBRARY);
+    expect(premise({ premise: "That revenue fell: it rose." })).toEqual([]);
+    expect(premise({})).toEqual(["q: a false-premise Question needs its premise."]);
+    expect(premise({ premise: "x", expected: [] })).toEqual(["q: expects no Passage."]);
+    expect(questionProblems(question({ premise: "x" }), LIBRARY)).toEqual([
+      "q: only a false-premise Question has a premise.",
+    ]);
+  });
+
+  test("a disagreeing Question names its newer and older Documents, each with what it says", () => {
+    const expected = [
+      {
+        document: "report-2023",
+        pages: [3, 3] as [number, number],
+        quote: "Revenue was 12 million",
+      },
+      {
+        document: "report-2022",
+        pages: [3, 3] as [number, number],
+        quote: "Revenue was 10 million",
+      },
+    ];
+    const disagreeing = (extra: Partial<HardQuestion>) =>
+      questionProblems(question({ difficulty: "disagreeing", expected, ...extra }), LIBRARY);
+    const newer = { document: "report-2023", says: ["12 million"] };
+    const older = { document: "report-2022", says: ["10 million"] };
+    const needs =
+      "q: a disagreeing Question needs newer and older: two of its expected Documents, each with what it says.";
+    expect(disagreeing({ newer, older })).toEqual([]);
+    expect(disagreeing({ newer })).toEqual([needs]);
+    expect(disagreeing({ newer, older: { ...older, says: [] } })).toEqual([needs]);
+    expect(disagreeing({ newer, older: newer })).toEqual([needs]);
+    expect(disagreeing({ newer, older: { document: "sheet", says: ["9"] } })).toEqual([needs]);
+    expect(questionProblems(question({ newer, older }), LIBRARY)).toEqual([
+      "q: only a disagreeing Question has newer and older.",
+    ]);
   });
 
   test("the loader fails on ids used twice, saying which", () => {

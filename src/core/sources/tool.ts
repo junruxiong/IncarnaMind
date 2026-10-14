@@ -60,6 +60,7 @@ function describe(work: FoundSource, index: number): string {
         }${work.access.licence?.commercial === false ? ", non-commercial use only" : ""}).`
       : "No open full text: it can be added as a reference only.",
     work.citedBy !== null ? `Cited by ${work.citedBy}.` : "",
+    work.unofficial ? "An unofficial compilation, not the official edition." : "",
     work.notice ? `The source says: ${work.notice}` : "",
     work.inLibrary
       ? work.inLibrary.documentId
@@ -90,7 +91,9 @@ export function resultText(result: FindSourcesResult): string {
       "",
       each.failure.reason === "declined"
         ? `${each.name} wasn't searched: the User didn't allow it.`
-        : `${each.name} couldn't be searched just now (${each.failure.reason}).`,
+        : each.failure.reason === "needs-key" || each.failure.reason === "key-rejected"
+          ? `${each.name} wasn't searched: it needs the User's own key, which they can add under Find sources in the Library.`
+          : `${each.name} couldn't be searched just now (${each.failure.reason}).`,
     );
   }
   return lines.join("\n").trim();
@@ -118,7 +121,12 @@ export function sourcesTool(
             `Set kind to "clinical_trials" to search ${names(KINDS.clinical_trials ?? [])} for clinical trials (give a condition, a drug or an NCT number).`,
           ]
         : []),
-      'Call it only when the User asks to find papers, articles, studies, drug labels, clinical trials or other published sources (for example "find papers since 2021 on …"), not to answer from the User\'s Documents.',
+      ...(kinds.includes("us_law")
+        ? [
+            `Set kind to "us_law" to search ${names(KINDS.us_law ?? [])} for US federal regulations (give key words), or to look up a citation: a CFR section or part ("17 CFR 240.10b-5", "17 CFR Part 243", "17 CFR 240.10b-5 as of 2019-06-30" for an earlier version) or a US Code section ("42 U.S.C. 1983", looked up at GovInfo when the User has added its key).`,
+          ]
+        : []),
+      'Call it only when the User asks to find papers, articles, studies, drug labels, clinical trials, regulations, statutes or other published sources (for example "find papers since 2021 on …"), not to answer from the User\'s Documents.',
       "Write the query as the key words of the topic (a title, a DOI or an arXiv ID also works), in the language the field publishes in, usually English.",
     ].join(" "),
     inputSchema: {
@@ -126,7 +134,7 @@ export function sourcesTool(
       properties: {
         query: {
           type: "string",
-          description: "The key words of the topic, a title, a DOI or an arXiv ID.",
+          description: "The key words of the topic, a title, a DOI, an arXiv ID or a citation.",
         },
         from_year: { type: "integer", description: "Only works published in or after this year." },
         to_year: { type: "integer", description: "Only works published in or before this year." },

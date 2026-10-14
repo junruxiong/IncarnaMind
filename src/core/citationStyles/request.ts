@@ -15,6 +15,7 @@ function parseWork(value: unknown): CitedWork {
     documentId: text(value.documentId),
     documentName: text(value.documentName),
     location: value.location === null ? null : parseLocation(value.location),
+    contentHash: text(value.contentHash),
   };
 }
 

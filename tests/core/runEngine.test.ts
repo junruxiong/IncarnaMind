@@ -11,7 +11,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { createAiSdkRunEngine } from "../../src/core/runs/aiSdkEngine";
 import type {
   GateDecision,
@@ -29,8 +29,6 @@ import { controlledModel, type ModelCall, scriptedModel } from "../helpers/model
 const ENGINES: { name: string; create: () => RunEngine }[] = [
   { name: "AI SDK 7", create: createAiSdkRunEngine },
 ];
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 interface Run {
   events: RunEvent[];
@@ -224,6 +222,26 @@ describe.each(ENGINES)("A Run engine: $name", ({ create }) => {
     ]);
   });
 
+  // protects=a model's reasoning reaches the caller as reasoning events, one paragraph a block, apart from the text and the messages; fails_when=it comes as text, joins its blocks, or is kept in the Run's messages; no_claim=a scripted model stands in for a provider.
+  test("the model's reasoning comes as reasoning events, a block a paragraph, never as text or in the messages", async () => {
+    const search = testTool("search_documents");
+    const model = scriptedModel((call) =>
+      call.index === 0
+        ? { reasoning: "Find the tide table.", calls: [SEARCH] }
+        : { reasoning: "Six o'clock.", text: "High water is at six." },
+    );
+
+    const run = await collect(create(), request(model, { tools: [search] }));
+
+    const reasoning = run.events.flatMap((event) =>
+      event.type === "reasoning" ? [event.text] : [],
+    );
+    expect(reasoning.join("")).toBe("Find the tide table.\n\nSix o'clock.");
+    expect(reasoning.filter((text) => text === "")).toHaveLength(2);
+    expect(run.text).toBe("High water is at six.");
+    expect(JSON.stringify(run.finished)).not.toContain("tide table");
+  });
+
   test("a denied gate: the Tool never runs, the model reads the gate's text as an ordinary result, and the Run goes on", async () => {
     const close = testTool("close_issue");
     const gate = scriptedGate(() => "deny");
@@ -283,15 +301,13 @@ describe.each(ENGINES)("A Run engine: $name", ({ create }) => {
     const controller = new AbortController();
     const model = stepsModel([[{ tool: "close_issue", input: { query: "42" } }]], "never");
 
-    const run = await collect(
+    const running = collect(
       create(),
       request(model, { tools: [close], gate: gate.gate, signal: controller.signal }),
-      (event) => {
-        if (event.type !== "tool-call") return;
-        setTimeout(() => controller.abort(), 50);
-      },
     );
-    await sleep(100);
+    await vi.waitFor(() => expect(gate.asked).toHaveLength(1), { timeout: 10_000 });
+    controller.abort();
+    const run = await running;
 
     // The gate never answers, so the Run comes back only because Stop ended the wait.
     expect(gate.asked).toHaveLength(1);
@@ -306,14 +322,13 @@ describe.each(ENGINES)("A Run engine: $name", ({ create }) => {
     const controller = new AbortController();
     const model = stepsModel([[SEARCH]], "never");
 
-    await collect(
+    const running = collect(
       create(),
       request(model, { tools: [search], signal: controller.signal }),
-      (event) => {
-        if (event.type !== "tool-call") return;
-        setTimeout(() => controller.abort(), 50);
-      },
     );
+    await vi.waitFor(() => expect(search.calls).toHaveLength(1), { timeout: 10_000 });
+    controller.abort();
+    await running;
 
     // The Tool would wait ten seconds, so the Run comes back only because Stop reached it.
     expect(search.calls.map((call) => call.aborted)).toEqual([true]);
@@ -323,11 +338,20 @@ describe.each(ENGINES)("A Run engine: $name", ({ create }) => {
   test("Stop while the model writes: its request is closed, and the Run settles at once", async () => {
     const controlled = controlledModel();
     const controller = new AbortController();
-    const running = collect(create(), request(controlled.model, { signal: controller.signal }));
+    let written = () => {};
+    const wrote = new Promise<void>((resolve) => {
+      written = resolve;
+    });
+    const running = collect(
+      create(),
+      request(controlled.model, { signal: controller.signal }),
+      (event) => {
+        if (event.type === "text-delta") written();
+      },
+    );
     await controlled.requested();
     controlled.push("High water ");
-
-    await sleep(50);
+    await wrote;
     controller.abort();
     const run = await running;
 

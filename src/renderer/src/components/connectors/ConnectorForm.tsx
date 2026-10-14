@@ -1,9 +1,11 @@
-import { type FormEvent, useEffect, useState } from "react";
-import type { LocalConnector, SecretStorageStatus } from "../../../../core/api";
+import { type FormEvent, useEffect, useId, useState } from "react";
+import type { Connector, LocalConnector, SecretStorageStatus } from "../../../../core/api";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
+import { ProblemMark } from "../ProblemLine";
 import { SecretStorageNotice } from "../providers/ProviderForm";
+import { TypingTextarea } from "../TypingTextarea";
 import {
   choiceListClass,
   compactChoiceRadioClass,
@@ -45,17 +47,25 @@ function parseEnvLines(text: string): Record<string, string> | null {
 export function ConnectorForm({
   onDone,
   editing,
+  kind: fixedKind,
+  prefill,
 }: {
-  onDone(): void;
+  /** Called with the Connector added or changed, or with nothing when the User cancelled. */
+  onDone(connector?: Connector): void;
   /** A local Connector to change instead of adding one: its fields start filled in. */
   editing?: LocalConnector;
+  /** Only this kind, with no choice between local and remote. */
+  kind?: "local" | "remote";
+  /** A local Connector to add, filled in from elsewhere (the MCP Registry): its variables are named, to be given values. */
+  prefill?: { name: string; command: string; args: string[]; env: string[] };
 }) {
   const t = useT();
-  const [kind, setKind] = useState<"local" | "remote">("local");
-  const [name, setName] = useState(editing?.name ?? "");
-  const [command, setCommand] = useState(editing?.command ?? "");
-  const [args, setArgs] = useState(editing?.args.join("\n") ?? "");
-  const [env, setEnv] = useState("");
+  const [chosenKind, setKind] = useState<"local" | "remote">("local");
+  const kind = fixedKind ?? chosenKind;
+  const [name, setName] = useState(editing?.name ?? prefill?.name ?? "");
+  const [command, setCommand] = useState(editing?.command ?? prefill?.command ?? "");
+  const [args, setArgs] = useState((editing?.args ?? prefill?.args)?.join("\n") ?? "");
+  const [env, setEnv] = useState(prefill?.env.map((each) => `${each}=`).join("\n") ?? "");
   const [url, setUrl] = useState("");
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
@@ -81,24 +91,30 @@ export function ConnectorForm({
     setBusy(true);
     setError(null);
     try {
+      let connector: Connector;
       if (remote) {
         const client = clientId.trim()
           ? { clientId, ...(clientSecret.trim() ? { clientSecret } : {}) }
           : undefined;
-        await core.addConnector({ name, url, ...(client ? { client } : {}) });
+        connector = await core.addConnector({ name, url, ...(client ? { client } : {}) });
       } else if (editing) {
-        await core.editConnector(editing.id, {
+        connector = await core.editConnector(editing.id, {
           name,
           command,
           args: lines(args),
           env: variables ?? {},
         });
       } else {
-        await core.addConnector({ name, command, args: lines(args), env: variables ?? {} });
+        connector = await core.addConnector({
+          name,
+          command,
+          args: lines(args),
+          env: variables ?? {},
+        });
       }
-      onDone();
+      onDone(connector);
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     } finally {
       setBusy(false);
     }
@@ -108,7 +124,7 @@ export function ConnectorForm({
     try {
       setSecretStorage(await core.acceptPlainTextSecretStorage());
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     }
   };
 
@@ -118,7 +134,7 @@ export function ConnectorForm({
       onSubmit={(event) => void submit(event)}
       className="flex flex-col gap-3"
     >
-      <fieldset hidden={editing !== undefined}>
+      <fieldset hidden={editing !== undefined || fixedKind !== undefined}>
         <legend className={`mb-1.5 ${fieldLabelClass}`}>{t("remoteConnectors.form.kind")}</legend>
         <div className={choiceListClass}>
           {(["local", "remote"] as const).map((each) => (
@@ -206,6 +222,11 @@ export function ConnectorForm({
         <SecretStorageNotice status={secretStorage} onAccept={() => void acceptPlainText()} />
       )}
 
+      {!editing && (
+        <p data-testid="connector-sends" className={hintClass}>
+          {t("connectors.form.sends")}
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <button type="submit" disabled={busy || invalid || blocked} className={primaryButtonClass}>
           {editing
@@ -216,12 +237,13 @@ export function ConnectorForm({
               ? t("connectors.form.adding")
               : t("connectors.form.add")}
         </button>
-        <button type="button" onClick={onDone} className={ghostButtonClass}>
+        <button type="button" onClick={() => onDone()} className={ghostButtonClass}>
           {t("connectors.form.cancel")}
         </button>
       </div>
       {error && (
         <p role="alert" className={errorTextClass}>
+          <ProblemMark />
           {error}
         </p>
       )}
@@ -242,6 +264,7 @@ function LocalFields(props: {
   savedEnv: readonly string[];
 }) {
   const t = useT();
+  const invalidId = useId();
   const { command, setCommand, args, setArgs, env, setEnv } = props;
   const [argsMoved, setArgsMoved] = useState(false);
   // A whole command line pasted as the command: the program stays, its
@@ -275,7 +298,7 @@ function LocalFields(props: {
       </label>
       <label className={fieldLabelClass}>
         {t("connectors.form.args")}
-        <textarea
+        <TypingTextarea
           value={args}
           onChange={(event) => setArgs(event.target.value)}
           rows={3}
@@ -286,13 +309,15 @@ function LocalFields(props: {
       </label>
       <label className={fieldLabelClass}>
         {t("connectors.form.env")}
-        <textarea
+        <TypingTextarea
           value={env}
           onChange={(event) => setEnv(event.target.value)}
           rows={2}
           placeholder="GITHUB_PERSONAL_ACCESS_TOKEN=…"
           spellCheck={false}
           autoComplete="off"
+          aria-invalid={props.envInvalid || undefined}
+          aria-describedby={props.envInvalid ? invalidId : undefined}
           className={`${inputClass} font-mono`}
         />
         <span className={hintClass}>
@@ -301,7 +326,12 @@ function LocalFields(props: {
             : t("connectors.form.envHint")}
         </span>
         {props.envInvalid && (
-          <span role="alert" className="mt-1 block text-[12px] leading-[18px] text-danger">
+          <span
+            id={invalidId}
+            role="alert"
+            className="mt-1 block text-[12px] leading-[18px] text-ink"
+          >
+            <ProblemMark />
             {t("connectors.form.envInvalid")}
           </span>
         )}

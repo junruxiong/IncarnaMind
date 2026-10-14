@@ -12,7 +12,7 @@ import { useUndo } from "../undo";
 import { checkKeys } from "./keys";
 
 /** Where the User is acting, as `data-surface` marks it on the page. */
-export const SURFACES = ["sidebar", "library", "mind", "viewer", "palette"] as const;
+export const SURFACES = ["sidebar", "library", "deleted", "mind", "viewer", "palette"] as const;
 export type Surface = (typeof SURFACES)[number];
 
 /** The menus' order of commands (docs/agents/interaction.md, rule 5). */
@@ -41,6 +41,8 @@ export interface Shortcut {
   outsideText?: true;
   /** The same command's second keys on Windows and Linux: Ctrl+Y redoes there, as Ctrl+Shift+Z does. */
   alsoOther?: Keys;
+  /** Keys only macOS has (Finder's ⌃⌘N): elsewhere the command has none, and stays in menus and ⌘K. */
+  macOnly?: true;
 }
 
 export interface CommandContext {
@@ -70,7 +72,7 @@ export interface Command {
   group: CommandGroup;
   /** The kinds it acts on, as the selection or the focus. Without them, it acts on the window. */
   appliesTo?: readonly ObjectKind[];
-  /** Menus show it in the danger ink: it deletes, or takes something away. */
+  /** It deletes or takes something away: the conformance check expects it to change the core with no question. */
   destructive?: true;
   /** Whether it is offered at all. */
   when?(ctx: CommandContext): boolean;
@@ -150,7 +152,9 @@ export const commands = {
     if (!command) throw new Error(`There is no command ${id}.`);
     const ctx = { ...NO_CONTEXT, ...given };
     if (!offered(command, ctx) || !isEnabled(command, ctx)) return undefined;
-    const change = (await command.run(ctx)) ?? undefined;
+    const done: unknown = await command.run(ctx);
+    // What a row's own action (`here`) hands back, such as a frame's handle, is no change to undo.
+    const change = typeof done === "object" && done !== null ? (done as Undoable) : undefined;
     if (change) useUndo.getState().push(change);
     return change;
   },

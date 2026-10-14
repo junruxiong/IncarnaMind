@@ -6,10 +6,10 @@ import { titleBarOptions } from "../../src/main/titleBar";
  * (e2e/titleBar.spec.ts), so Windows' and Linux's options are pinned here.
  */
 describe("titleBarOptions", () => {
-  it("puts macOS's traffic lights in the 44px band, centred, on the sidebar's icon column", () => {
+  it("centres macOS's 14px traffic lights on the headers' line, y 26, at the sidebar's icon column", () => {
     expect(titleBarOptions("darwin")).toEqual({
       titleBarStyle: "hiddenInset",
-      trafficLightPosition: { x: 16, y: 15 },
+      trafficLightPosition: { x: 16, y: 26 - 14 / 2 },
     });
   });
 

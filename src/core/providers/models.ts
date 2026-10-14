@@ -45,8 +45,11 @@ export interface ChatModelSpec {
   /**
    * "off": a small call that doesn't write the Answer (tagging, classifying),
    * which asks a model that thinks to skip it, where the provider lets it.
+   * "summary": a call that writes the Answer, which asks a model that thinks
+   * for its provider's summary of its reasoning, where there is one
+   * (`reasoningSummaryOptions`).
    */
-  thinking?: "off";
+  thinking?: "off" | "summary";
   apiKey: string | null;
   modelId: string;
   /** "chatgpt" only: the User's ChatGPT sign-in, which signs (and refreshes) every request. */
@@ -87,7 +90,8 @@ const hostedUrl = (spec: ChatModelSpec): string =>
 /**
  * The AI SDK provider for each kind, with what every request to its provider
  * carries: for OpenAI and xAI, `store: false`, as the Responses API keeps
- * requests unless every one says not to; and, for a small call, thinking off.
+ * requests unless every one says not to; for a small call, thinking off; and
+ * for the Answer's, the request for a summary of the model's reasoning.
  */
 export const createAiSdkChatModel: ChatModelFactory = (spec) => {
   const request = catalogProviderOfKind(spec.kind)?.request;
@@ -99,8 +103,37 @@ export const createAiSdkChatModel: ChatModelFactory = (spec) => {
   if (spec.thinking === "off" && request?.thinkingOff && canSkipThinking(spec, request)) {
     model = withProviderOptions(model, request.thinkingOff.options);
   }
+  const summary = spec.thinking === "summary" ? reasoningSummaryOptions(spec) : null;
+  if (summary) model = withProviderOptions(model, summary);
   return model;
 };
+
+/** The ChatGPT plan is OpenAI's Responses API: its reasoning is summarized as OpenAI's is. */
+const summaryQuirk = (kind: ChatProviderKind) =>
+  catalogProviderOfKind(kind === "chatgpt" ? "openai" : kind)?.request?.reasoningSummary;
+
+/**
+ * Whether a provider's reasoning comes back as its own summary (Anthropic,
+ * OpenAI's Responses API), which an Answer may show; any other's is raw chain
+ * of thought, which is never kept or shown (#391).
+ */
+export const summarizesReasoning = (kind: ChatProviderKind): boolean =>
+  summaryQuirk(kind) !== undefined;
+
+/**
+ * The provider options that ask a model for a summary of its reasoning: none
+ * for a provider that gives none, a model that doesn't think by default (it
+ * isn't turned on for one), or one the catalog knows doesn't reason.
+ */
+export function reasoningSummaryOptions(
+  spec: Pick<ChatModelSpec, "kind" | "modelId" | "endpoint">,
+): Record<string, Record<string, unknown>> | null {
+  const summary = summaryQuirk(spec.kind);
+  if (!summary) return null;
+  if (summary.only && !summary.only.some((prefix) => spec.modelId.startsWith(prefix))) return null;
+  const set = modelsProviderOfKind(spec.kind, spec.endpoint);
+  return catalogFacts(set, spec.modelId)?.reasoning === false ? null : summary.options;
+}
 
 /** Whether thinking can be turned off on this model: not on one the provider says always thinks, nor one the catalog knows doesn't think. */
 function canSkipThinking(

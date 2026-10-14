@@ -3,7 +3,6 @@ import { updateYFragment } from "@tiptap/y-tiptap";
 import { describe, expect, test } from "vitest";
 import * as Y from "yjs";
 import { ANSWER_BLOCK, MIND_SETTINGS_FIELD, QUESTION_BLOCK } from "../../src/core";
-import { questionAttributes } from "../../src/renderer/src/editor/composerAsk";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
 import { mindModelOf, observeMindModel, setMindModel } from "../../src/shared/mindModel";
 import { createTempDataFolder, startCore } from "../helpers/core";
@@ -160,15 +159,6 @@ describe("Minds written before the composer", () => {
     });
     expect(read.child(2).attrs).toMatchObject({ status: "done", citationSupport: "tools" });
     expect(read.child(4).attrs).toMatchObject({ status: "stopped" });
-    // A Question asked from the composer is stored with the same attributes as these.
-    const fromComposer = questionAttributes({
-      id: "q",
-      text: "Why?",
-      model: null,
-      scope: { folderIds: [], tagIds: [], documentIds: [] },
-      skill: null,
-    });
-    expect(Object.keys(fromComposer).sort()).toEqual(Object.keys(read.child(1).attrs).sort());
 
     // The editor's binding writes back what it shows: for these Blocks, nothing changes.
     const before = Y.encodeStateVector(reader.doc);

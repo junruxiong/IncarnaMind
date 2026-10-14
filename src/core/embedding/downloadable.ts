@@ -1,11 +1,12 @@
 /**
  * A built-in model whose files are downloaded once into the data folder and
  * then loaded into a runner off the core's thread: the embedding model (see
- * ./index) and the reranking model (see ../reranking). This is its download
- * state, as `EmbeddingModelStatus` reports it, and loading it.
+ * ./index), the reranking model (see ../reranking) and the text recognition
+ * model (see ../documents/scan). This is its download state, as
+ * `EmbeddingModelStatus` reports it, and loading it.
  */
 import { join } from "node:path";
-import type { EmbeddingModelFiles, EmbeddingModelSource } from "../adapters";
+import type { EmbeddingModelSource } from "../adapters";
 import type { EmbeddingModelError, EmbeddingModelStatus } from "../api";
 import { downloadModel, isModelDownloaded, ModelDownloadError } from "./download";
 
@@ -34,34 +35,30 @@ export interface DownloadableModel {
   close(): void;
 }
 
-export interface DownloadableModelOptions {
+export interface DownloadableModelOptions<Files> {
   /** What the User sees, e.g. "multilingual-e5-small". */
   name: string;
   /** The model's folder under `models/` in the data folder. */
   folder: string;
-  /** The files the runner loads, relative to the model's folder. */
-  files: { model: string; tokenizer: string; tokenizerConfig: string };
-  maxTokens: number;
+  /** What the runner loads, from the model's folder (an absolute path). */
+  runnerFiles(directory: string): Files;
   source: EmbeddingModelSource;
   dataDir: string;
   /** Loads the downloaded files into the runner; rejects if the model can't start. */
-  loadRunner(files: EmbeddingModelFiles): Promise<void>;
+  loadRunner(files: Files): Promise<void>;
   emitStatus(status: EmbeddingModelStatus): void;
   reportError?: (error: unknown) => void;
 }
 
-export function createDownloadableModel(options: DownloadableModelOptions): DownloadableModel {
+export function createDownloadableModel<Files>(
+  options: DownloadableModelOptions<Files>,
+): DownloadableModel {
   const { source, emitStatus } = options;
   const reportError = options.reportError ?? ((error) => console.error(error));
   const directory = join(options.dataDir, "models", options.folder);
   const totalBytes = source.files.reduce((sum, file) => sum + file.size, 0);
   const host = new URL(source.baseUrl).host;
-  const files: EmbeddingModelFiles = {
-    model: join(directory, options.files.model),
-    tokenizer: join(directory, options.files.tokenizer),
-    tokenizerConfig: join(directory, options.files.tokenizerConfig),
-    maxTokens: options.maxTokens,
-  };
+  const files = options.runnerFiles(directory);
 
   const ready = isModelDownloaded(directory, source.files);
   let status: EmbeddingModelStatus = {

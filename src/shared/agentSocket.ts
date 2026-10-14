@@ -13,6 +13,9 @@ export const AGENT_TOKEN_ENV = "INCARNAMIND_AGENT_TOKEN";
 /** The environment variable that tells the shim where the app's socket is. */
 export const AGENT_SOCKET_ENV = "INCARNAMIND_AGENT_SOCKET";
 
+/** How a pairing's key shows wherever settings are shown rather than copied. */
+export const HIDDEN_KEY = "•••••••";
+
 /** The version of the opening line; the app refuses one it doesn't know. */
 export const AGENT_HANDSHAKE_VERSION = 1;
 

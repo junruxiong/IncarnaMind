@@ -19,7 +19,8 @@
  */
 
 /**
- * - "page": a PDF's page.
+ * - "page": a PDF's page: the text in the PDF, or for a scanned page, the
+ *   text read from its picture (`UnitLabel.scan`, #397).
  * - "slide": a deck's slide, with its speaker notes.
  * - "section": the text under one heading of a Word or Markdown file or a
  *   web page (or the part of a long one), or what comes before the first
@@ -73,12 +74,33 @@ export interface UnitLabel {
   column?: number;
   /** rows: the Unit's first line repeats the sheet's header row, for context. */
   header?: boolean;
+  /** page: a scanned page, whose text was read from its picture (#397), not taken from the PDF. */
+  scan?: UnitScan;
   /**
    * rows of a workbook: the number stored in each cell whose shown text isn't
    * that number written plainly, by cell ("C12": 0.04213 for a cell showing
    * "4.2%"). Sparse; none for a CSV, whose cells are their text. See `cellNumber`.
    */
   values?: Record<string, number>;
+}
+
+/**
+ * How a scanned page's text was read (#397). Its anchors are its lines, in
+ * reading order ("line1", "line2", …), each with its box on the page (`Anchor.quad`).
+ */
+export interface UnitScan {
+  /**
+   * What read it, and which version of how it reads ("PP-OCRv5 mobile/1"):
+   * a page read by an older one is read again, unless a Citation quotes it.
+   */
+  reader: string;
+  /** The words it was unsure of: [start, end) UTF-16 offsets into the Unit's text. */
+  unsure?: [number, number][];
+  /**
+   * It couldn't be read (the model couldn't be downloaded or failed on it):
+   * the Unit has no text, and the Document names the page with Retry.
+   */
+  unread?: boolean;
 }
 
 /** A Word comment in a section's text: the target of its anchor ("comment3") and who wrote it. */
@@ -97,9 +119,16 @@ export interface Anchor {
    * slide: "title", "shape2", "table1.row3", "chart1", "image1" or "notes";
    * section: "p12" (the 12th paragraph read; in a web page's, the 12th from
    * its heading), or "comment3" (a Word comment, by its id); rows: a cell, "B12";
-   * cues: a cue's times in ms, "t754000-761500".
+   * cues: a cue's times in ms, "t754000-761500";
+   * a scanned page: "line3", the third line read, in reading order.
    */
   target: string;
+  /**
+   * A scanned page's line: its box on the page, as fractions of the page's
+   * width and height, x then y of each corner: top-left, top-right,
+   * bottom-right, bottom-left, as the text runs.
+   */
+  quad?: number[];
 }
 
 /** A Unit: its number, kind, label, text and anchors. */
@@ -246,4 +275,42 @@ export function sameRun(
     (a.kind ?? "page") === (b.kind ?? "page") &&
     (a.kind !== "rows" || a.label?.sheet === b.label?.sheet)
   );
+}
+
+/**
+ * A Unit's text from `start` to `end` (UTF-16 offsets), with the anchors and
+ * a scan's unsure words that fall in it moved with it, cut where they cross
+ * its ends: what is left of a scanned page once its running header and
+ * footer are taken off.
+ */
+export function cutUnit<Unit extends Pick<UnitText, "text" | "label" | "anchors">>(
+  unit: Unit,
+  start: number,
+  end: number,
+): Unit {
+  const inside = (from: number, to: number): [number, number] | null => {
+    const clipped: [number, number] = [Math.max(from, start) - start, Math.min(to, end) - start];
+    return clipped[0] < clipped[1] ? clipped : null;
+  };
+  const anchors = unit.anchors?.flatMap((anchor) => {
+    const span = inside(anchor.start, anchor.end);
+    return span ? [{ ...anchor, start: span[0], end: span[1] }] : [];
+  });
+  const scan = unit.label?.scan;
+  const unsure = scan?.unsure?.flatMap(([from, to]) => {
+    const span = inside(from, to);
+    return span ? [span] : [];
+  });
+  return {
+    ...unit,
+    text: unit.text.slice(start, end),
+    ...(unit.anchors !== undefined && { anchors: anchors ?? null }),
+    ...(scan &&
+      unit.label && {
+        label: {
+          ...unit.label,
+          scan: { ...scan, ...(unsure && unsure.length > 0 ? { unsure } : { unsure: undefined }) },
+        },
+      }),
+  };
 }

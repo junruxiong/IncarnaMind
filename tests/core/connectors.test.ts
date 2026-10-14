@@ -529,7 +529,7 @@ describe("Editing a local Connector", { timeout: 30_000 }, () => {
     const other = await core.addConnector({ ...tideServer(logFile), name: "Other" });
     await expect(
       core.editConnector(other.id, { name: "tides", command: NODE, args: [TIDE_SERVER] }),
-    ).rejects.toThrow('A Connector named "tides" already exists.');
+    ).rejects.toThrow("A Connector named “tides” already exists.");
     // A server on this computer that isn't there: nothing goes over the network.
     const remote = await core.addConnector({ name: "Harbour", url: "http://127.0.0.1:9/mcp" });
     await expect(

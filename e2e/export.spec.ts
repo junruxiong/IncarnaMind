@@ -1,14 +1,19 @@
-import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import { footnotesOf, paragraphsOf, part, unzip } from "../tests/helpers/docx";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
+  addToNote,
+  askInAssistant,
   closeSettings,
+  coreOf,
   createDataFolder,
+  DEFAULT_FOLDER_ZH,
   dismissChatSetup,
+  editFolderInLibrary,
   interceptOpenDialog,
   interceptOpenPath,
   interceptShowItemInFolder,
@@ -67,63 +72,49 @@ test.afterEach(async () => {
   await removeDataFolder(sources);
 });
 
-test("a Mind exports to .docx: the dialog counts the unverified Citation first; the first save asks where new files go, and the next goes there under a free name", async () => {
+test("Export saves a .docx in one click: the first goes to Documents › IncarnaMind without asking and says so, with Open and Change folder…; the Mind says a quote wasn't found, and the next goes there under a free name", async () => {
   await writeFile(join(sources, "Tides.pdf"), TIDES);
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
   await addDocuments(window, [join(sources, "Tides.pdf")]);
 
-  // A Note, then a Question whose Answer misquotes its Document.
+  // A Note, then an Answer that misquotes its Document, added from the assistant.
   await newMind(window);
   await window.getByTestId("mind-title").fill("Tides");
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await window.keyboard.type("Notes on tides.");
   await window.keyboard.press("Enter");
-  await window.keyboard.press("ControlOrMeta+j");
-  await window.keyboard.type("When do spring tides happen? Misquote it.");
-  await window.keyboard.press("Enter");
-  const answer = editor.getByTestId("answer");
-  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  const answer = await askInAssistant(window, "When do spring tides happen? Misquote it.");
   await expect(answer.getByTestId("citation")).toHaveAttribute("data-check", "not-found");
+  await addToNote(window, answer);
+  await expect(editor.getByTestId("citation")).toHaveAttribute("data-check", "not-found");
 
-  // Before anything is written, the dialog says how many Citations are unverified.
-  await window.getByTestId("export-mind").click();
-  const dialog = window.getByTestId("export-dialog");
-  await expect(dialog.getByTestId("export-format-docx")).toBeChecked();
-  await expect(dialog.getByTestId("export-include-questions")).not.toBeChecked();
-  const summary = dialog.getByTestId("export-citations");
-  await expect(summary).toHaveAttribute("data-unverified", "1");
-  await expect(summary).toContainText("1 Citation is unverified");
-
-  // The first save asks where new files go, offering IncarnaMind in Documents (the test
-  // build's own Documents folder). Esc cancels: nothing is saved, and the export waits.
+  // One click exports in the last format, Word to begin with. The first save goes to IncarnaMind
+  // in Documents (the test build's own Documents folder) without asking, and the line says so.
   await interceptShowItemInFolder(app);
-  await dialog.getByTestId("export-save").click();
+  await interceptOpenPath(app);
+  const exportButton = window.getByTestId("export-mind");
+  await expect(exportButton).toHaveAttribute("data-format", "docx");
+  await exportButton.click();
+  const result = window.getByTestId("export-result");
   const ask = window.getByTestId("file-write-dialog");
-  await expect(ask).toHaveAttribute("data-kind", "output-location");
-  await expect(ask).toContainText("Where should new files go?");
-  const suggested = join(dataDir, "Documents", "IncarnaMind");
-  await expect(ask.getByTestId("file-write-suggested")).toHaveText(suggested);
-  await screenshot(ask, "file-write-output-location-en");
-  await window.keyboard.press("Escape");
+  const done = result.getByTestId("export-done");
+  await expect(done).toHaveText("Saved “Tides.docx” in Documents › IncarnaMind");
+  await expect(done).toHaveAttribute("role", "status");
   await expect(ask).toBeHidden();
-  await expect(dialog.getByTestId("export-save")).toBeEnabled();
-  await expect(dialog.getByTestId("export-done")).toHaveCount(0);
+  await expect(result.getByTestId("export-unverified")).toHaveText(
+    "1 quote not found, marked unverified · Show",
+  );
+  await expect(result.getByTestId("export-show")).toHaveCount(0);
+  await screenshot(result, "export-first-save-en");
+  await screenshot(window, "export-first-save-window-en");
+  const target = join(await realpath(join(dataDir, "Documents", "IncarnaMind")), "Tides.docx");
+  await result.getByTestId("export-open").click();
+  await expect.poll(() => pathsOpened(app)).toEqual([target]);
 
-  // Save here: saved there, and the dialog says so and shows the file in the file manager.
-  await dialog.getByTestId("export-save").click();
-  await ask.getByTestId("file-write-save-here").click();
-  await expect(ask).toBeHidden();
-  await expect(dialog.getByTestId("export-done")).toContainText("Saved Tides.docx");
-  await expect(dialog.getByTestId("export-close")).toBeFocused();
-  await dialog.getByTestId("export-show").click();
-  await expect(dialog).toBeHidden();
-  const target = join(await realpath(suggested), "Tides.docx");
-  expect(await pathsShown(app)).toEqual([target]);
-
-  // The file is there: the Note and the Answer, not the Question, and the Citation a footnote.
+  // The file is there: the Notes, the one added from the Answer too, its Citation a footnote.
   const files = unzip(await readFile(target));
   const paragraphs = paragraphsOf(part(files, "word/document.xml")).map((each) => each.text);
   expect(paragraphs).toContain("Notes on tides.");
@@ -133,13 +124,93 @@ test("a Mind exports to .docx: the dialog counts the unverified Citation first; 
     "1": "Tides, p. 2 [unverified]",
   });
 
-  // The next export doesn't ask, and leaves the first file as it was.
+  // Change folder… opens Settings › General at the Output location, which shows that folder.
+  await result.getByTestId("export-change-folder").click();
+  const settings = window.getByTestId("settings");
+  await expect(settings).toHaveAttribute("data-page", "general");
+  const output = settings.getByTestId("output-location-settings");
+  await expect(output).toBeInViewport();
+  await expect(output.getByTestId("output-location-path")).toHaveText(dirname(target));
+  await expect(output.getByTestId("output-location-change")).toBeFocused();
+  await screenshot(window, "settings-output-location-from-export-en");
+  await closeSettings(window);
+
+  // The next export doesn't ask either, says only its name, and leaves the first file as it was.
   const first = await readFile(target);
-  await window.getByTestId("export-mind").click();
-  await dialog.getByTestId("export-save").click();
-  await expect(dialog.getByTestId("export-done")).toContainText("Saved Tides 2.docx");
+  await exportButton.click();
+  await expect(done).toHaveText("Saved Tides 2.docx");
   await expect(ask).toBeHidden();
+  await expect(result.getByTestId("export-change-folder")).toHaveCount(0);
+  await result.getByTestId("export-show").click();
+  await expect.poll(() => pathsShown(app)).toEqual([join(dirname(target), "Tides 2.docx")]);
   expect((await readFile(target)).equals(first)).toBe(true);
+  await app.close();
+});
+
+test("in Chinese, at the narrowest window, the first export says it went to 文稿 (文档 off macOS) › IncarnaMind, its long name wrapped whole; if that folder can't be made, the save asks where instead, in plain words, and Esc saves nothing", async () => {
+  // A file where the folder would be made.
+  await mkdir(join(dataDir, "Documents"), { recursive: true });
+  const blocked = join(dataDir, "Documents", "IncarnaMind");
+  await writeFile(blocked, "Not a folder.");
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await newMind(window);
+  const title =
+    "Contract review notes for the fourth-quarter credit committee 信贷委员会合同审阅笔记";
+  await window.getByTestId("mind-title").fill(title);
+  await window.getByTestId("mind-editor").click();
+  await window.keyboard.type("Spring tides come twice a month.");
+
+  const exportButton = window.getByTestId("export-mind");
+  const result = window.getByTestId("export-result");
+  const ask = window.getByTestId("file-write-dialog");
+  await exportButton.click();
+  await expect(ask).toHaveAttribute("data-kind", "output-location");
+  await expect(ask.getByRole("heading")).toHaveText("Where should new files go?");
+  await expect(ask.getByTestId("file-write-unusable")).toHaveText(
+    `Couldn't save “${title}.docx” in Documents › IncarnaMind: IncarnaMind couldn't make that folder.`,
+  );
+  await expect(ask.getByRole("button")).toHaveText(["Cancel", "Choose another folder…"]);
+  await screenshot(ask, "file-write-output-location-en");
+  await window.keyboard.press("Escape");
+  await expect(ask).toBeHidden();
+  await expect(result).toHaveCount(0);
+
+  await bridge(window).language("zh-CN");
+  await setWindowSize(app, window, 900, WINDOW_SIZE.height);
+  await exportButton.click();
+  await expect(ask.getByRole("heading")).toHaveText("新文件保存到哪里？");
+  await expect(ask.getByTestId("file-write-unusable")).toHaveText(
+    `无法把“${title}.docx”保存到“${DEFAULT_FOLDER_ZH}”：IncarnaMind 无法创建这个文件夹。`,
+  );
+  await screenshot(ask, "file-write-output-location-zh");
+  await ask.getByRole("button", { name: "取消" }).click();
+  await expect(ask).toBeHidden();
+  await expect(result).toHaveCount(0);
+
+  // With the file out of the way, the save goes there and says so, the whole name wrapped
+  // inside the line rather than cut short.
+  await rm(blocked);
+  await exportButton.click();
+  const done = result.getByTestId("export-done");
+  await expect(done).toHaveText(`已保存“${title}.docx”到“${DEFAULT_FOLDER_ZH}”`);
+  await expect(result.getByTestId("export-open")).toHaveText("打开");
+  await expect(result.getByTestId("export-change-folder")).toHaveText("更改文件夹…");
+  await expect(ask).toBeHidden();
+  const [line, saved, windowWidth] = await Promise.all([
+    result.boundingBox(),
+    done.boundingBox(),
+    window.evaluate(() => globalThis.innerWidth),
+  ]);
+  if (!line || !saved) throw new Error("The line isn't laid out.");
+  expect(saved.height).toBeGreaterThan(30);
+  expect(saved.x + saved.width).toBeLessThanOrEqual(line.x + line.width);
+  expect(line.x + line.width).toBeLessThanOrEqual(windowWidth);
+  expect(await done.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await screenshot(result, "export-first-save-zh");
+  await screenshot(window, "export-first-save-window-zh-narrow");
+  await result.getByTestId("export-change-folder").click();
+  await expect(window.getByTestId("output-location-settings")).toBeInViewport();
   await app.close();
 });
 
@@ -173,10 +244,7 @@ test("maths exports to .docx as Word equations, which a Word viewer shows as equ
   const target = join(sources, "Gravity.docx");
   await useOutputLocation(window, sources);
   await window.getByTestId("export-mind").click();
-  const dialog = window.getByTestId("export-dialog");
-  await dialog.getByTestId("export-save").click();
-  await expect(dialog.getByTestId("export-done")).toBeVisible();
-  await dialog.getByTestId("export-close").click();
+  await expect(window.getByTestId("export-done")).toHaveText("Saved Gravity.docx");
 
   // Word equations, not "$…$" text: one on its own line, one in the sentence.
   const document = part(unzip(await readFile(target)), "word/document.xml");
@@ -218,39 +286,38 @@ test("saving inside a Linked folder asks once; Settings › General shows where 
   await window.getByTestId("mind-editor").click();
   await window.keyboard.type("Spring tides come twice a month.");
 
-  // Settings › General: not chosen yet; Choose… picks a folder inside the Linked folder.
+  // Settings › General: the default until a folder is chosen; Change… picks one inside the
+  // Linked folder.
   const settings = await openSettings(window, "general");
   const output = settings.getByTestId("output-location-settings");
   await expect(output.getByTestId("output-location-path")).toHaveText(
-    "Not chosen yet. The first save asks.",
+    join(dataDir, "Documents", "IncarnaMind"),
+  );
+  await expect(output.getByTestId("output-location-default")).toHaveText(
+    "The default: new files go here until you choose another folder.",
   );
   await interceptOpenDialog(app, join(papers, "Exports"));
   await output.getByTestId("output-location-change").click();
   await expect(output.getByTestId("output-location-path")).toHaveText(
     await realpath(join(papers, "Exports")),
   );
-  await expect(output.getByTestId("output-location-change")).toHaveText("Change…");
+  await expect(output.getByTestId("output-location-default")).toHaveCount(0);
   await expect(output.getByTestId("linked-folder-writing")).toHaveCount(0);
   await closeSettings(window);
 
   // The first save there asks about the Linked folder; the next doesn't.
-  const dialog = window.getByTestId("export-dialog");
+  const result = window.getByTestId("export-result");
   const ask = window.getByTestId("file-write-dialog");
-  const exportOnce = async () => {
-    await window.getByTestId("export-mind").click();
-    await dialog.getByTestId("export-save").click();
-  };
+  const exportOnce = () => window.getByTestId("export-mind").click();
   await exportOnce();
   await expect(ask).toHaveAttribute("data-kind", "linked-folder");
   await expect(ask.getByRole("heading")).toHaveText("Add files to “Papers”?");
   await screenshot(ask, "file-write-linked-folder-en");
   await ask.getByTestId("file-write-allow").click();
-  await expect(dialog.getByTestId("export-done")).toContainText("Saved Tides.docx");
-  await dialog.getByTestId("export-close").click();
+  await expect(result.getByTestId("export-done")).toHaveText("Saved Tides.docx");
   await exportOnce();
-  await expect(dialog.getByTestId("export-done")).toContainText("Saved Tides 2.docx");
+  await expect(result.getByTestId("export-done")).toHaveText("Saved Tides 2.docx");
   await expect(ask).toBeHidden();
-  await dialog.getByTestId("export-close").click();
 
   // Settings shows the answer, and turns it off.
   await openSettings(window, "general");
@@ -265,15 +332,14 @@ test("saving inside a Linked folder asks once; Settings › General shows where 
 
   // The export says it isn't allowed, without asking; its Allow saves it.
   await exportOnce();
-  const problem = dialog.getByTestId("export-problem");
+  const problem = result.getByTestId("export-problem");
   await expect(problem).toHaveText(
     "Couldn't save: you haven't allowed new files in “Papers”, a Linked folder · Allow",
   );
   await expect(ask).toBeHidden();
-  await screenshot(dialog, "export-not-allowed-en");
+  await screenshot(result, "export-not-allowed-en");
   await problem.getByTestId("export-allow").click();
-  await expect(dialog.getByTestId("export-done")).toContainText("Saved Tides 3.docx");
-  await dialog.getByTestId("export-close").click();
+  await expect(result.getByTestId("export-done")).toHaveText("Saved Tides 3.docx");
   expect((await readFile(join(papers, "Lease.txt"))).equals(original)).toBe(true);
 
   // In Chinese, for another Linked folder: asked, and Don't allow is said where it happened.
@@ -287,7 +353,7 @@ test("saving inside a Linked folder asks once; Settings › General shows where 
   await screenshot(ask, "file-write-linked-folder-zh");
   await ask.getByTestId("file-write-deny").click();
   await expect(problem).toHaveText("无法保存：你没有允许在同步文件夹“Notes”中添加文件 · 允许");
-  await screenshot(dialog, "export-not-allowed-zh");
+  await screenshot(result, "export-not-allowed-zh");
   await app.close();
 });
 
@@ -312,10 +378,7 @@ test("an export saved into a Linked folder is IncarnaMind's file: its viewer say
   await window.getByTestId("mind-editor").click();
   await window.keyboard.type("Spring tides come twice a month.");
   await window.getByTestId("export-mind").click();
-  const dialog = window.getByTestId("export-dialog");
-  await dialog.getByTestId("export-save").click();
-  await expect(dialog.getByTestId("export-done")).toContainText("Saved Tides.docx");
-  await dialog.getByTestId("export-close").click();
+  await expect(window.getByTestId("export-done")).toHaveText("Saved Tides.docx");
 
   // The Linked folder picks the export up, beside the User's own file.
   await showSourceLocations(window);
@@ -391,9 +454,12 @@ test("an export saved into a Linked folder is IncarnaMind's file: its viewer say
   await expect(exported.getByTestId("document.countAsEvidence")).toHaveCount(0);
   await expect(exported.getByTestId("document.leaveOutOfEvidence")).toHaveCount(0);
   await window.keyboard.press("Escape");
-  await window.getByTestId("open-library").click();
+  await (await coreOf(window)).evaluate((core) =>
+    core.createLibraryGroup({ name: "Reports", description: "" }),
+  );
+  await window.getByTestId("browse-views").getByRole("button", { name: "Folders" }).click();
+  await editFolderInLibrary(window, "Reports");
   const library = window.getByTestId("library");
-  await library.getByRole("button", { name: "New folder", exact: true }).click();
   const counts = library.getByTestId("folder-counts-own-files");
   await expect(counts).toBeChecked();
   await expect(counts).toBeDisabled();

@@ -7,6 +7,7 @@ import type {
   LibraryGroupInput,
   LibrarySettings,
   LibrarySnapshot,
+  TaggingClassifier,
   TaggingModels,
 } from "./library/types";
 import type { UiUsageEvent } from "./usageEvents";
@@ -39,8 +40,10 @@ export type {
  * the renderer import it.
  */
 import type { CitationForm, CitationStyleId } from "../shared/citationStyles";
+import type { FormulaInput, FormulaLiteral, ResultUnit, ShowAs } from "../shared/formula";
 import type { TagColour } from "../shared/tagColours";
-import type { UnitKind, UnitLabel } from "../shared/units";
+import type { Anchor, UnitKind, UnitLabel } from "../shared/units";
+import type { ErrorWording } from "./errors";
 import type { Language, LanguagePreference } from "./language";
 
 export interface Mind {
@@ -107,8 +110,46 @@ export interface CreateMindInput {
  *   and its `proposal` attributes (see `ProposalRef`), so it goes out of date
  *   once that text changes. Version 4 Proposals have none and never go out
  *   of date: nothing is rewritten.
+ * - 7: charts (`CHART_NODE`, #436): a Block that draws values from a table
+ *   or from cited figures, each kept with its Citation. Older content is
+ *   version 7 content as it is: nothing is rewritten. A version before 7
+ *   opens a Mind with a chart read-only, as its editor would drop the chart.
+ * - 8: a Document chip the User writes with "@" (`DOCUMENT_CHIP_NODE`), and
+ *   checklists (`taskList` and `taskItem`, whose items keep `checked`). Older
+ *   content is version 8 content as it is: nothing is rewritten.
+ * - 11: AI text (#95): the `generated` mark on the words the AI wrote, in
+ *   code blocks too, and `generatedMarks` on Answers whose words carry it
+ *   (see `GENERATED_MARK`). Older content is version 11 content as it is:
+ *   nothing is rewritten, and an Answer without `generatedMarks` is the AI's
+ *   as a whole, as it always was.
+ * - 14: a chart value's scale (#579): `scale` beside `unit` on each value in
+ *   a chart's `data`, so a number with no unit or scale isn't drawn among
+ *   "$… million". An older version keeps it while it changes a chart's kind,
+ *   columns or title, but its Update writes the values again without it.
+ *   Older charts are version 14 content as they are: a value with no `scale`
+ *   is one whose scale isn't known, and nothing is rewritten.
+ * - 15: what a Word import keeps as it is (`WORD_ATOM_NODE`, `WORD_BLOCK_NODE`,
+ *   #104) and pictures in the text (`IMAGE_NODE`). Older content is version 15
+ *   content as it is: nothing is rewritten.
+ * - 16: the rows a cut chart doesn't draw (#503): `cutRows` beside `rows`
+ *   in a chart's `data`, which Show as table lists. An older version keeps
+ *   them while it changes a chart's kind, columns or title, but its Update
+ *   writes the data again without them. Older charts are version 16 content
+ *   as they are: one with no `cutRows` lists the rows it draws, and nothing
+ *   is rewritten.
+ * - 17: comparison tables (#98): `COMPARISON_TABLE_NODE`, `COMPARISON_ROW_NODE`
+ *   and `COMPARISON_CELL_NODE`. Older content is version 17 content as it is:
+ *   nothing is rewritten.
+ * - 18: checks of the User's own sentences (#96): the `claimCheck` mark on a
+ *   sentence's text, which holds its result (see `CLAIM_CHECK_MARK`). Older
+ *   content is version 18 content as it is: nothing is rewritten.
+ * - 20: someone's tracked changes in an imported Word file, as Proposals
+ *   (#108): their requests are `WordChangeRequest`s, which name the change's
+ *   author and date. A version before 20 would take them for the
+ *   assistant's, and count what accepting one keeps as AI text. Older
+ *   content is version 20 content as it is: nothing is rewritten.
  */
-export const CONTENT_SCHEMA_VERSION = 5;
+export const CONTENT_SCHEMA_VERSION = 20;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -217,6 +258,23 @@ export const MIND_CONTENT_FIELD = "blocks";
  */
 export const MIND_SETTINGS_FIELD = "settings";
 
+/**
+ * The name of the Y.Map, beside a Mind's Blocks, that says where Blocks came
+ * from: by Block id, a `BlockOrigin`. A Note added from an Answer in the
+ * assistant (#201) keeps its link back to that Answer here, not in the Block's
+ * attributes, which an older version's editor would strip. A Block deleted
+ * since leaves its entry unused. See src/shared/blockOrigins.ts.
+ */
+export const MIND_ORIGINS_FIELD = "origins";
+
+/** Where a Block came from: a Note added from an Answer links back to it. */
+export interface BlockOrigin {
+  /** The Answer, in its conversation (`messageReference`). */
+  from: ArtifactReference;
+  /** The Question it answered, as asked: shown with the link, even once the conversation is gone. */
+  question: string;
+}
+
 /** The attribute every Block keeps its UUID in, in the Mind's Yjs document. */
 export const BLOCK_ID_ATTRIBUTE = "id";
 
@@ -244,6 +302,28 @@ export const BLOCK_ID_ATTRIBUTE = "id";
 export const PROPOSAL_INSERT_MARK = "proposalInsert";
 export const PROPOSAL_DELETE_MARK = "proposalDelete";
 export const PROPOSAL_ATTRIBUTE = "proposal";
+
+/**
+ * AI text (CONTEXT.md): the words the AI wrote into a Mind that the User
+ * hasn't made their own, under this mark, with no attributes. Answers,
+ * Answers added to a note, the words a Proposal adds (kept once it is
+ * accepted) and accepted suggestions carry it; Citations, formulas, charts
+ * and inline code can't. It isn't inclusive, and what the User types is never
+ * under it, even inside AI text; "Mark as mine" takes it off. An Answer
+ * carries it only when `AnswerAttributes.generatedMarks` says so: an older
+ * Answer is AI text as a whole. Readers and exports treat it as no mark.
+ */
+export const GENERATED_MARK = "generated";
+
+/**
+ * A check of a sentence the User wrote (#96): Find support or Check against
+ * Documents put this mark on the sentence's text, with the result as its
+ * attributes (`ClaimCheckAttributes`). It isn't inclusive, so words typed
+ * after the sentence aren't under it. Whether it still holds is worked out
+ * from what it records (`claimCheckShown` in src/shared/claimChecks.ts).
+ * Readers and exports treat it as no mark.
+ */
+export const CLAIM_CHECK_MARK = "claimCheck";
 
 /** Which Proposal a mark or attribute belongs to. */
 export interface ProposalRef {
@@ -281,9 +361,11 @@ export const MIND_PROPOSAL_REQUESTS_FIELD = "proposalRequests";
 
 /**
  * What made a request's Proposals: Edit with AI (#93), with what it was asked
- * so a change can be made again (regenerated) once it is out of date; or
- * Regenerate of an Answer the User had edited (#94). The assistant (#202) and
- * Enhance (#114) add theirs.
+ * so a change can be made again (regenerated) once it is out of date;
+ * Regenerate of an Answer the User had edited (#94); an Answer from the
+ * assistant added to a new Mind, as changes to accept (#201); or Compare
+ * Documents, whose comparison table is one change (#98). The assistant
+ * (#202) and Enhance (#114) add theirs.
  */
 export type ProposalRequest =
   | (ProposalMaker & {
@@ -293,7 +375,27 @@ export type ProposalRequest =
       /** What the User asked for ("translate", "instruction"); "" for none. */
       instruction?: string;
     })
-  | (ProposalMaker & { source: "answer"; answerId: string });
+  | (ProposalMaker & { source: "answer"; answerId: string })
+  | (ProposalMaker & { source: "answer-added" })
+  | (ProposalMaker & { source: "comparison-table"; tableId: string })
+  | WordChangeRequest;
+
+/** The start of the id of someone's tracked change imported from a Word file (`WordChangeRequest`). */
+export const WORD_CHANGE_ID = "word:";
+
+/**
+ * Someone's tracked change in a Word file, imported as a Proposal (#108):
+ * who made it and when, as the file says. Its Proposal's id is "word:" and
+ * the place of the change's element in the main part ("word:w:del#4"), the
+ * same each time the file is read, so export finds it in the file again.
+ */
+export interface WordChangeRequest {
+  source: "word-change";
+  /** The author the file names; null when it names none. */
+  author: string | null;
+  /** When it was made, ISO 8601; null when the file doesn't say. */
+  date: string | null;
+}
 
 /** The model that made a request's Proposals, and when. */
 export interface ProposalMaker {
@@ -301,6 +403,114 @@ export interface ProposalMaker {
   modelId: string;
   /** ISO 8601, UTC. */
   createdAt: string;
+}
+
+/**
+ * Why a Checkpoint (CONTEXT.md) was saved: just before an AI change
+ * (accepting changes, Regenerate, Enhance, a comparison table going in,
+ * accepting someone else's changes from a Word file), just before restoring
+ * another one, or once the Mind had been left alone for
+ * `CHECKPOINT_IDLE_MS` ("idle"). Only idle ones thin out as they age (all for
+ * a day, then one an hour for a week, one a day for 90 days, then one a
+ * week); the others are kept for good.
+ */
+export const CHECKPOINT_REASONS = [
+  "accept",
+  "regenerate",
+  "enhance",
+  "compare",
+  "others",
+  "restore",
+  "idle",
+] as const;
+export type CheckpointReason = (typeof CHECKPOINT_REASONS)[number];
+
+/** How long a Mind goes unchanged before an idle Checkpoint is saved. */
+export const CHECKPOINT_IDLE_MS = 5 * 60_000;
+
+/** A saved copy of a Mind (CONTEXT.md, Checkpoint). Its content stays in the core. */
+export interface Checkpoint {
+  id: string;
+  mindId: string;
+  reason: CheckpointReason;
+  /** When it was saved (ISO 8601, UTC). */
+  createdAt: string;
+}
+
+/** A Mind's Checkpoints, as History lists them. */
+export interface CheckpointList {
+  /** Newest first. */
+  checkpoints: Checkpoint[];
+  /** The Checkpoint that holds the Mind exactly as it is now, if one does: only the newest can. */
+  current: string | null;
+}
+
+/** Two versions of a Mind to compare: a Checkpoint, and another one or (`to` null) the Mind now. */
+export interface CompareCheckpointsInput {
+  mindId: string;
+  from: string;
+  to: string | null;
+}
+
+/** Whether a part of a version is in both, only in the earlier one, or only in the later one. */
+export type ComparedChange = "same" | "removed" | "added";
+
+/**
+ * A part of a Block as History compares it: words, a Citation (named by its
+ * Document and Location), or a footnote the User wrote (its text). Marks such
+ * as bold aren't compared.
+ */
+export type ComparedPart =
+  | { kind: "text"; text: string; change: ComparedChange }
+  | { kind: "citation"; work: CitedWork; change: ComparedChange }
+  | { kind: "footnote"; text: string; change: ComparedChange };
+
+/**
+ * A Block of one version, as History shows it. An Answer is its Blocks; a list
+ * is its items; a table or a chart is its text, row by row (a line each, its
+ * cells split by " · "). Empty paragraphs aren't compared.
+ */
+export interface ComparedBlock {
+  kind:
+    | "paragraph"
+    | "heading"
+    | "question"
+    | "item"
+    | "quote"
+    | "code"
+    | "math"
+    | "rule"
+    | "table"
+    | "chart"
+    | "image";
+  /** A heading's level, from 1; a list item's depth, from 1; else 0. */
+  level: number;
+  /** A list item's bullet ("•") or number ("3."); "" for anything else, a later paragraph of an item too. */
+  marker: string;
+  parts: ComparedPart[];
+}
+
+/**
+ * One row of a comparison: a Block of the earlier version beside its
+ * counterpart in the later one. A Block only one version has leaves the other
+ * side null. `changed` rows are those whose sides differ.
+ */
+export interface ComparisonRow {
+  left: ComparedBlock | null;
+  right: ComparedBlock | null;
+  changed: boolean;
+}
+
+/** Two versions of a Mind side by side, in the order of their Blocks. */
+export interface MindComparison {
+  rows: ComparisonRow[];
+  /** How many rows changed: none when the two versions read the same. */
+  changes: number;
+}
+
+/** What restoring a Checkpoint did: it saved the Mind as it was, which restoring takes the restore back. */
+export interface RestoredCheckpoint {
+  before: Checkpoint;
 }
 
 /**
@@ -315,8 +525,11 @@ export const NOTE_BLOCK_TYPES = [
   "bulletList",
   "orderedList",
   "blockquote",
+  "taskList",
   "horizontalRule",
   "table",
+  "chart",
+  "wordBlock",
 ] as const;
 
 /** The node type of a Question Block. Its content is the User's text (inline). */
@@ -324,6 +537,79 @@ export const QUESTION_BLOCK = "question";
 
 /** The node type of an Answer Block. Its content is rich text (Note node types), which the User can edit. */
 export const ANSWER_BLOCK = "answer";
+
+/**
+ * A comparison table (CONTEXT.md, #98): a top-level Block holding one row per
+ * Document and, in each row, one cell per Question (`ComparisonTableAttributes`).
+ */
+export const COMPARISON_TABLE_NODE = "comparisonTable";
+/** A comparison table's row: one Document (`ComparisonRowAttributes`), its cells in the columns' order. */
+export const COMPARISON_ROW_NODE = "comparisonRow";
+/**
+ * A comparison table's cell: the Answer to its column's Question from its
+ * row's Document alone, Citations and all (Note node types), or why there is
+ * none (`ComparisonCellAttributes`).
+ */
+export const COMPARISON_CELL_NODE = "comparisonCell";
+
+/** A comparison table's column: its Question. */
+export interface ComparisonQuestion {
+  /** A random UUID: what each row's cell for this column names. */
+  id: string;
+  text: string;
+}
+
+/** Attributes of a comparison table's Block, as stored in the Mind's Yjs document. */
+export interface ComparisonTableAttributes {
+  id: string | null;
+  /** Its columns, in order. */
+  questions: ComparisonQuestion[];
+  /** The model its cells are written with; both null: the default model. */
+  providerId: string | null;
+  modelId: string | null;
+  /** What else the User asked the table to show, for every cell; null for nothing. */
+  instruction: string | null;
+}
+
+/** Attributes of a comparison table's row. */
+export interface ComparisonRowAttributes {
+  documentId: string;
+  /** The Document's name when the table was made: shown once the Document is deleted. */
+  documentName: string;
+}
+
+/**
+ * Where a cell is: waiting for its turn, being written, written (its content
+ * is its Answer), or without an Answer (`problem` says why). A cell left
+ * "waiting" or "writing" by a fill that ended (a quit, or the table rejected
+ * and brought back) is stopped: filling the table again writes it.
+ */
+export type ComparisonCellStatus = "waiting" | "writing" | "done" | "failed";
+
+/**
+ * Why a cell has no Answer: its Document doesn't answer the Question
+ * ("not-found"), has no text to search, was deleted, or is a file
+ * IncarnaMind wrote, which checks leave out (#80); or why its model didn't
+ * write one (a `ProviderErrorKind`). "cost-cap" and "plan-limit" stopped the
+ * fill (`RunStop`): the cell wasn't checked.
+ */
+export type ComparisonProblem =
+  | "not-found"
+  | "nothing-to-search"
+  | "source-removed"
+  | "left-out"
+  | ProviderErrorKind;
+
+/** Attributes of a comparison table's cell. */
+export interface ComparisonCellAttributes {
+  questionId: string;
+  status: ComparisonCellStatus;
+  problem: ComparisonProblem | null;
+  /** The provider's own message for a failure, or what the model said when the Document doesn't answer. */
+  message: string | null;
+  /** "plan-limit": when the plan's limit resets (ISO 8601), when the provider says. */
+  resetsAt: string | null;
+}
 
 /**
  * A Note's "include in Question context" flag. Absent (or null) means on, the
@@ -342,18 +628,23 @@ export const INCLUDE_IN_CONTEXT_ATTRIBUTE = "includeInContext";
  */
 export type ThirdPartySource = "imported" | "web-page" | "checked-document";
 
-/** Third-party text a Run reads itself: a saved web page a search found, or the document a check checks. */
-export type ReadThirdPartySource = Exclude<ThirdPartySource, "imported">;
+/**
+ * Third-party text a Run reads itself: a saved web page a search found, the
+ * document a check checks, or what another Mind holds that came from them
+ * (`read_mind`, #202).
+ */
+export type ReadThirdPartySource = ThirdPartySource;
 
 /**
  * Why a Run counts as having read third-party text: it read some itself, or
  * its Question context holds some (a Block or an Answer with a third-party
- * origin). Such a Run asks before a write or a send that a Tool-level
- * "always" would otherwise let through (see `ApprovalRequest.thirdParty`).
+ * origin), in the Mind a Question in a conversation read ("mind") or
+ * otherwise ("context"). Such a Run asks before a write or a send that a
+ * Tool-level "always" would otherwise let through (see `ApprovalRequest.thirdParty`).
  */
 export type ThirdPartyReason =
   | { via: "read"; source: ReadThirdPartySource }
-  | { via: "context"; source: ThirdPartySource };
+  | { via: "context" | "mind"; source: ThirdPartySource };
 
 /**
  * The name of the Y.Map, beside a Mind's Blocks, that says which Blocks hold
@@ -365,6 +656,14 @@ export type ThirdPartyReason =
  * A Block deleted since leaves its entry unused.
  */
 export const MIND_TEXT_ORIGINS_FIELD = "textOrigins";
+
+/**
+ * The name of the Y.Map, beside a Mind's Blocks, that says when in its Meeting
+ * each line was written (#139): the Meeting's time in ms, by Block id. A map
+ * rather than a Block attribute, for the reason `MIND_TEXT_ORIGINS_FIELD` is
+ * (see `src/shared/blockTimes.ts`), so the content schema version stays as it is.
+ */
+export const MIND_BLOCK_TIMES_FIELD = "blockTimes";
 
 /**
  * A Question's Search scope (CONTEXT.md): the Folders, Tags and individual
@@ -434,6 +733,12 @@ export interface AnswerAttributes {
   /** A fingerprint of the content as it was generated: it differs once the User edits the Answer. */
   generatedHash: string | null;
   /**
+   * True on an Answer written since content schema version 11: its AI text
+   * carries `GENERATED_MARK`, and the rest is the User's. Null on an older
+   * Answer, which is AI text as a whole.
+   */
+  generatedMarks: boolean | null;
+  /**
    * How the model could give Citations (see `CitationSupport`). Null until the
    * model has answered, when there were no Documents to search, and on Answers
    * written before Citations.
@@ -459,9 +764,12 @@ export interface AnswerToolCall {
    * Where the Tool comes from: "documents" is IncarnaMind's own document
    * search; "skill", the Skill Tools; "connector", one of the User's
    * Connectors (see `connector`); "sources", Find sources (`find_sources`,
-   * `{ query, from_year?, to_year?, open_access_only? }`).
+   * `{ query, from_year?, to_year?, open_access_only? }`); "web", web search
+   * (`search_web`, `{ query }`, and `read_web_page`, `{ url, query }`; #128);
+   * "minds", the Minds' Tools of an Answer in the assistant (#202:
+   * `read_mind`, `edit_mind`, `add_to_mind`, `create_mind`, see `mindChange`).
    */
-  source: "documents" | "skill" | "connector" | "sources";
+  source: "documents" | "skill" | "connector" | "sources" | "web" | "minds";
   /** A Connector's Tool: which Connector, with its name when the call was made. */
   connector?: { id: string; name: string };
   /** What the model asked, e.g. `{ query }` for a search, or the arguments sent to a Connector. */
@@ -483,6 +791,13 @@ export interface AnswerToolCall {
   /** A search: how many Passages it gave the model. Null otherwise, and while running. */
   resultCount: number | null;
   /**
+   * A search: the Passages it found, by id (`Citation.passageId`), so the
+   * Citations it led to can be told. Absent on searches made before #391.
+   */
+  passages?: string[];
+  /** A search that failed: why, sorted as an Answer's own failure is. Absent otherwise. */
+  error?: ProviderError;
+  /**
    * "use_skill" only: the Question forced this Skill, so the core loaded it up
    * front instead of the model calling the Tool. Absent otherwise.
    */
@@ -498,7 +813,39 @@ export interface AnswerToolCall {
    * script couldn't run. Absent while it runs, and when it never did (denied).
    */
   script?: SkillScriptRun;
+  /**
+   * "read_web_page" only, once it ended: the page saved as a Document, or
+   * why it couldn't be ("Couldn't save <url>: <reason>").
+   */
+  webPage?: WebPageCall;
+  /**
+   * "calculate" only, one call for all of an Answer's figures: `resultCount`
+   * is how many it shows; this, how many of its figure markers had none, and
+   * were left out of its text. Absent: none.
+   */
+  uncalculated?: number;
+  /** A Minds' Tool that changed a Mind or made one, once it ended (#202). Absent otherwise. */
+  mindChange?: MindChange;
 }
+
+/**
+ * What a call of a Minds' Tool did (#202): the changes it proposed in one
+ * Mind, which wait there for the User to accept or reject them.
+ */
+export interface MindChange {
+  mindId: string;
+  /** The call made the Mind. */
+  created: boolean;
+  /** The request its Proposals belong to (`ProposalRef.request`). */
+  request: string;
+  /** How many Proposals it made there. */
+  proposals: number;
+}
+
+/** What a call of `read_web_page` came to (see `AnswerToolCall.webPage`). */
+export type WebPageCall =
+  | { address: string; documentId: string; name: string }
+  | { address: string; failure: WebPageFailureReason };
 
 /** Where the User's approval of a Tool call stands (see `AnswerToolCall.approval`). */
 export type ToolCallApproval = "waiting" | "allowed" | "denied";
@@ -545,6 +892,305 @@ export const CITATION_NODE = "citation";
 export const FOOTNOTE_NODE = "footnote";
 
 /**
+ * The node type of a Document chip, which the User writes with "@" in a Note:
+ * an inline node that names a Document (`documentId`, and its `name` as it was
+ * when the chip was made, shown if the Document is gone) and opens it in the
+ * viewer. It is the User's own text, not a Citation: it checks nothing.
+ */
+export const DOCUMENT_CHIP_NODE = "documentChip";
+
+/**
+ * The node type of a chart (#436): a Block with no text of its own, whose
+ * attributes hold what it draws (see `ChartAttributes` in
+ * src/shared/charts.ts): its kind, its title, the series drawn, and its
+ * values, each with where it came from and the Citation that was there.
+ */
+export const CHART_NODE = "chart";
+
+/**
+ * What a Mind imported from a Word file (#104) keeps as it is: content the
+ * editor can't represent, shown in place, never edited inside, which export
+ * writes back as the original XML (#105). `WORD_ATOM_NODE` sits inside a
+ * paragraph's text (a field, a content control, a text box, a bookmark…),
+ * `WORD_BLOCK_NODE` is a Block of its own (a block content control, a nested
+ * table, a header or footer). Both hold `WordAtomAttributes`.
+ */
+export const WORD_ATOM_NODE = "wordAtom";
+export const WORD_BLOCK_NODE = "wordBlock";
+
+/** A picture in a paragraph's text, as Tiptap names it: a .docx's inline pictures (#104). */
+export const IMAGE_NODE = "image";
+
+/**
+ * What a kept-as-is atom is. Bookmarks, other ranges (a comment's, an
+ * editing permission's, a move's), section breaks and page breaks are
+ * invisible; the rest show their text, or a mark of their own.
+ */
+export type WordAtomKind =
+  | "field"
+  | "control"
+  | "textBox"
+  | "shape"
+  | "smartArt"
+  | "chart"
+  | "picture"
+  | "object"
+  | "equation"
+  | "symbol"
+  | "footnote"
+  | "endnote"
+  | "comment"
+  | "insertion"
+  | "deletion"
+  | "bookmark"
+  | "range"
+  | "sectionBreak"
+  | "pageBreak"
+  | "table"
+  | "header"
+  | "footer"
+  | "other";
+
+/**
+ * The attributes of a kept-as-is atom (`WORD_ATOM_NODE`, `WORD_BLOCK_NODE`).
+ *
+ * `source` says where its XML is in the Mind's stored Word package
+ * (`WordFileInfo.part` unless it names a part): an element by its qualified
+ * name and its place among the elements of that name in the part, from 0, in
+ * document order, nested ones and those in `mc:Fallback` counted ("w:sdt#3"),
+ * or a run of elements from one to another ("w:r#40..w:r#44", a field), or a
+ * whole part ("word/header1.xml").
+ */
+export interface WordAtomAttributes {
+  kind: WordAtomKind;
+  /** What it shows: a field's result, a control's text, a footnote's number. */
+  label: string;
+  /** Its text, read for Questions and search: a text box's, a comment's, a footnote's. */
+  text: string;
+  source: string | null;
+  /** More about it: a change's or a comment's author and date, a field's type. */
+  info: WordAtomInfo | null;
+}
+
+export interface WordAtomInfo {
+  author?: string;
+  /** As the file has it, ISO 8601. */
+  date?: string;
+  /** A field's type, the first word of its instruction: "DATE", "REF", "TOC". */
+  field?: string;
+  /** Shown on a line of its own: a display equation, a drawing in a paragraph by itself. */
+  display?: boolean;
+  /** A bookmark's name. */
+  name?: string;
+}
+
+/**
+ * Why a Word file isn't imported, said before any Mind is made:
+ * - "legacy": a Word 97–2003 file (.doc);
+ * - "macros": a macro-enabled file (.docm): IncarnaMind never runs macros;
+ * - "encrypted": protected with a password;
+ * - "strict": saved as Strict Open XML;
+ * - "damaged": not a Word document that can be read (a broken package or XML);
+ * - "too-large": over the size limits for Office files (ADR-0011, #77);
+ * - "unreadable": the file couldn't be read (moved, or not allowed).
+ */
+export type WordRefusalReason =
+  | "legacy"
+  | "macros"
+  | "encrypted"
+  | "strict"
+  | "damaged"
+  | "too-large"
+  | "unreadable";
+
+/** Whose document an imported Word file is: someone else's makes its Blocks third-party text (#78). */
+export type WordOrigin = "own" | "someone-else";
+
+/** What the import screen needs to know about a Word file before it is imported (`checkWordFile`). */
+export interface WordFileCheck {
+  /** The file's name, as the User sees it ("Lease, draft 4.docx"). */
+  fileName: string;
+  /** Why it can't be imported; null when it can. */
+  refusal: WordRefusalReason | null;
+  /** What the import screen starts on: someone else's when the file carries tracked changes or comments. */
+  origin: WordOrigin;
+  /** Who wrote its tracked changes and comments, in the order they first appear. */
+  authors: string[];
+  /** Its look is mostly what a Mind doesn't draw, so the import screen says it is kept (#735). */
+  layoutNotShown: boolean;
+  /** Its tracked changes, of every kind (paragraph marks, formatting and moves too). */
+  changes: number;
+  comments: number;
+  /**
+   * An earlier file of the same name imported into the same Folder whose original is a
+   * Document (#720), which this one can become a new version of; null for none.
+   */
+  earlierDraft: { documentId: string; name: string } | null;
+}
+
+export interface ImportWordFileInput {
+  /** The .docx's absolute path. */
+  path: string;
+  origin: WordOrigin;
+  /** The Folder to make the Mind in; none, or null: Not in a Folder. */
+  folderId?: string | null;
+  /**
+   * Also adds the original file to the Library as a Document, in the Mind's Folder, so
+   * Answers can cite it (#720). Absent: false, the Mind alone.
+   */
+  addOriginal?: boolean;
+  /**
+   * With `addOriginal`, makes the file a new version of this Document (the check's
+   * `earlierDraft`) instead of a Document of its own; one that can't take it is added as new.
+   */
+  newVersionOf?: string | null;
+}
+
+/**
+ * How an import went: the new Mind, which goes on filling in with the
+ * file's content (`WordImportProgress`), or why the file was refused, with
+ * no Mind made.
+ */
+export type ImportWordFileResult =
+  | {
+      ok: true;
+      mind: Mind;
+      /**
+       * With `addOriginal`: whether the original became a Document. False when the Library
+       * couldn't take it, which the User is told, with a way to try again (`addWordOriginal`).
+       */
+      originalAdded?: boolean;
+    }
+  | { ok: false; refusal: WordRefusalReason };
+
+/**
+ * What a Word import did with the file, by count, so nothing is dropped
+ * without a word: what became editable, and what is kept as is, by kind.
+ */
+export interface WordImportReport {
+  paragraphs: number;
+  headings: number;
+  listItems: number;
+  tables: number;
+  images: number;
+  links: number;
+  kept: Partial<Record<WordAtomKind, number>>;
+  /** Tracked changes, of every kind, and comments, whoever made them. */
+  changes: number;
+  comments: number;
+  sections: number;
+  /**
+   * Someone's tracked changes that can't be accepted or rejected here, by
+   * kind: they stay in the file as they are, for Word to resolve (#108).
+   * Absent on reports from before #108.
+   */
+  keptChanges?: Partial<Record<KeptChangeKind, number>>;
+  /** What the Mind doesn't draw of the file's look; absent from a report made before #735. */
+  layout?: WordLayout;
+}
+
+/**
+ * What a Word file's look holds that a Mind doesn't draw (#735), counted from
+ * the document's own formatting: paragraphs, runs and cells shaded;
+ * paragraphs with a border; tab stops set; tables with no borders, which
+ * place text; and how many text colours (other than black), fonts and sizes
+ * it sets.
+ */
+export interface WordLayout {
+  shading: number;
+  borders: number;
+  tabStops: number;
+  layoutTables: number;
+  colours: number;
+  fonts: number;
+  sizes: number;
+}
+
+/**
+ * A kind of tracked change a Word import keeps as is (#108): a change to a
+ * run's or a paragraph's formatting, a paragraph mark added or removed
+ * without its paragraph's text, a move, a table row's or cell's change, or
+ * an insertion or deletion holding more than text (a field, a picture, a
+ * note's mark).
+ */
+export type KeptChangeKind = "format" | "paragraphMark" | "move" | "row" | "cell" | "content";
+
+/**
+ * The name of the Y.Map, beside the Blocks of a Mind imported from a Word
+ * file, that says what it was imported from (see src/shared/wordFiles.ts):
+ * the file (`WordFileInfo`), how far the import has got
+ * (`WordImportProgress`), and what it did (`WordImportReport`).
+ */
+export const MIND_WORD_FIELD = "word";
+
+/**
+ * The name of the Y.Map that says which paragraph or table of the stored Word
+ * package each of the Mind's nodes was imported from, by node id
+ * (`WordSource`), for export to write into the original (#105).
+ */
+export const MIND_WORD_SOURCES_FIELD = "wordSources";
+
+/** The Word file a Mind was imported from. Its package is kept in the data folder by `sha256`. */
+export interface WordFileInfo {
+  /** As the User named it, with its extension. */
+  name: string;
+  sha256: string;
+  size: number;
+  /** The package's main document part: "word/document.xml". */
+  part: string;
+  /** The Document the original was also added as (#720); null or absent: none. */
+  documentId?: string | null;
+}
+
+/** How far an import has got, in top-level Blocks. While `done` is under `total`, the Mind can't be edited. */
+export interface WordImportProgress {
+  done: number;
+  total: number;
+}
+
+/**
+ * Where a node of a Mind imported from a Word file came from, in the main
+ * document part: `p`, the paragraph's `w14:paraId`, when it has one no other
+ * paragraph shares; else `n`, the element's place, as in
+ * `WordAtomAttributes.source` ("w:p#12", "w:tbl#3"). `f` is the node's
+ * fingerprint as imported (`wordFingerprint`): one that differs now was edited.
+ */
+export interface WordSource {
+  n: string;
+  p?: string;
+  f: string;
+}
+
+/**
+ * Something exporting a Mind back into its Word file can't keep (#105), said
+ * before the file is saved:
+ * - "comment": someone's comment on text the User deleted;
+ * - "change": someone's tracked change in text the User deleted;
+ * - "copy": a copy of something kept from Word, written as its text;
+ * - "edit": an edit next to a field, which is written as it was;
+ * - "signature": the file's digital signature, which no longer matches once it changes.
+ */
+export interface WordExportLoss {
+  /** The same for the same thing at the next export, so going ahead applies to what the User saw. */
+  key: string;
+  kind: "comment" | "change" | "copy" | "edit" | "signature";
+  /** Whose comment or change it is. */
+  author: string | null;
+  /** Its text, shortened; "" for none. */
+  text: string;
+}
+
+/** What exporting a Mind imported from a Word file does with the original (#105). */
+export interface WordExportReport {
+  /** What can't be kept: the User sees it before the file is saved. */
+  notKept: WordExportLoss[];
+  /** Parts of the package IncarnaMind doesn't know, kept as they are. */
+  unknownParts: string[];
+  /** The header and the footer, kept in the file though their Blocks were deleted from the Mind. */
+  keptFurniture: ("header" | "footer")[];
+}
+
+/**
  * Where a Citation's check stands. The check compares the model's quote with
  * the text of the cited Units (its Location: one or two pages, slides,
  * sections, blocks of rows or of lines; see src/shared/units.ts), once, when
@@ -567,6 +1213,8 @@ export type CitationCheck =
 export type CitationCheckReason =
   /** Not found: the quote isn't in the text of the cited Units (pages, slides…). */
   | "quote-not-on-pages"
+  /** Not found: the words the Answer put in quotation marks aren't in the text of the cited Units (#483). */
+  | "quoted-words-not-on-pages"
   /** Not found: the cited Units aren't all among the Units of the cited Passage. */
   | "pages-outside-passage"
   /** Not found: a Citation covers one Unit, or two consecutive ones of one sheet, at most. */
@@ -654,6 +1302,24 @@ export type CitationLocation =
       paragraphs?: { from: number; to: number };
     };
 
+/** A stretch of words, and whether the Document has it where the Answer's quoted words were looked for. */
+export interface QuotedPiece {
+  text: string;
+  found: boolean;
+}
+
+/**
+ * Words an Answer put in quotation marks that aren't in the text its Citation
+ * points to (#483), for the card to set beside the Document's own: each in
+ * pieces, so the card washes what matches and what doesn't.
+ */
+export interface QuotedWords {
+  /** The Answer's words, whole; the pieces the Document doesn't have are `found: false`. */
+  answer: QuotedPiece[];
+  /** The Document's words nearest them, the matching stretch `found: true`; null when none is near. */
+  closest: QuotedPiece[] | null;
+}
+
 /**
  * A Citation's attributes, as stored on its node in the Mind's Yjs document.
  * Everything a footnote or a message needs is stored here, so it still reads
@@ -662,7 +1328,7 @@ export type CitationLocation =
 export interface CitationAttributes {
   passageId: string | null;
   documentId: string | null;
-  /** The Document's display name when the Citation was made. */
+  /** The Document's name when the Citation was made: shown only when the Document can't be found (see `shownDocumentName`). */
   documentName: string | null;
   /**
    * The version of the Document the Citation quotes: the SHA-256 of its file
@@ -690,6 +1356,8 @@ export interface CitationAttributes {
   checkReason: CitationCheckReason | null;
   /** One line on what the evidence says, when a claim check has one ("The agreement says 31 October 2026, p. 7"). */
   verdict?: string | null;
+  /** The Answer's quoted words the check didn't find, when that is why `check` is "not-found" (#483). */
+  quotedWords?: QuotedWords | null;
 }
 
 /** A Citation, as the Answer event stream reports it. */
@@ -704,6 +1372,106 @@ export interface Citation {
   quote: string;
   check: CitationCheck;
   checkReason: CitationCheckReason | null;
+  quotedWords?: QuotedWords;
+}
+
+/**
+ * A number an Answer worked out from numbers in Passages (ADR-0021): the model
+ * named each input's number in a quote and a formula over them, and
+ * IncarnaMind read the numbers, checked the quotes and did the arithmetic
+ * (src/shared/formula.ts). The Answer shows it where its marker ("[=1]") is.
+ */
+export interface CalculatedFigure {
+  /** What it is, as the model labelled it: "Revenue growth 2025". */
+  label: string;
+  /** In Excel's formula syntax, over the inputs' names: "rev2025 / rev2024 - 1". */
+  formula: string;
+  inputs: FigureInput[];
+  /** As worked out, a double, as Excel computes it; true or false for a comparison. */
+  value: number | boolean;
+  unit: ResultUnit;
+  /** Worked out from an approximate input, so approximate too. */
+  approximate: boolean;
+  /** As the Answer writes it, in its language: "20.4%", "2.3个百分点". */
+  shown: string;
+  /** How it was shown, so it can be shown again the same way and compared. */
+  show: FigureShowOptions;
+  /** Numbers written in the formula itself, which no quote backs: the 4 in "^ (1 / 4)". */
+  literals: FormulaLiteral[];
+  /** The rules it was worked out and shown by (`FORMULA_VERSION`): a check runs the same ones. */
+  engine: number;
+  /**
+   * What the Answer wrote beside its marker when that isn't this figure: a
+   * number right before it ("26%" where IncarnaMind calculated 25.0%), or a
+   * scale or currency right after it ("亿元" after a figure in 万元), which
+   * the text leaves out. Null when it wrote nothing there, or the same
+   * figure, which the text then shows once.
+   */
+  written: string | null;
+}
+
+/** How a calculated figure's result was shown (see `showResult` in src/shared/formula.ts). */
+export interface FigureShowOptions {
+  language: Language;
+  as: ShowAs | null;
+  decimals: number | null;
+  /** A scale word in `language`: "million", "亿". */
+  scale: string | null;
+}
+
+/** A calculated figure of an Answer: where it goes is its marker ("[=2]") in the text. */
+export interface MarkedFigure extends CalculatedFigure {
+  marker: number;
+}
+
+/** A number a calculated figure is worked out from: one read from a Citation's quote. */
+export interface FigureInput {
+  /** The formula's name for it: "rev2024". */
+  name: string;
+  /** What it is, with its period, as the model labelled it: "Revenue 2024". */
+  label: string;
+  /** The Citation it reads the number from, with its own check. */
+  citation: Citation;
+  number: InputNumber;
+  /**
+   * In a workbook's rows: the cell the number is in, and the number the cell
+   * stores when its shown text isn't that number written plainly (#435),
+   * which is the one the formula used. Null for other kinds.
+   */
+  cell: { sheet: string | null; ref: string; stored: number | null } | null;
+  /**
+   * The line of the same Passage that states the number's scale or currency
+   * ("单位：万元"), given as `unitQuote` when the number has none of its own;
+   * null when none was needed.
+   */
+  unitStatement: {
+    citation: Citation;
+    scale: number;
+    scaleWord: string | null;
+    currency: string | null;
+  } | null;
+}
+
+/** A number as an input read it from its quote (see `Figure` in src/shared/figures.ts). */
+export interface InputNumber {
+  /** As written in the quote: "1.2亿", "(1,250)", "$1,482.6 million". */
+  chars: string;
+  /** Its UTF-16 offset in the quote: a check reads it there again. */
+  at: number;
+  /** What the formula used: its scale applied, and the cell's stored number where there is one. */
+  value: number;
+  scale: number;
+  scaleWord: string | null;
+  unit: FormulaInput["unit"];
+  /** Digits written after its decimal mark. */
+  decimals: number;
+  approximate: boolean;
+  /**
+   * The reading the model chose, from 1, when the reader could read the
+   * number more than one way (its separator or sign, a range's end, points);
+   * null when there was one.
+   */
+  reading: number | null;
 }
 
 /** A Mind opened for editing. */
@@ -755,8 +1523,20 @@ export interface UserSettings {
    * everywhere. Copies of the document being checked are left out either way.
    */
   leaveOutOwnFiles: boolean;
+  /** How Export and ⇧⌘E export a Mind: the choices last saved in Export options (#100). */
+  exportOptions: ExportPreferences;
+  /**
+   * The name the User's edits go under as tracked changes in a Word file
+   * (#107), or null: the name the computer knows them by (`Settings.author`).
+   */
+  authorName: string | null;
   /** The monthly cap on models billed per token: off (null) by default. */
   monthlyCap: MonthlyCap | null;
+  /**
+   * Answers may search the web through their model's provider, saving the
+   * pages they use as Documents (#128): off until the User turns it on.
+   */
+  webSearch: boolean;
 }
 
 /**
@@ -858,6 +1638,11 @@ export interface Settings {
    * the microphone only (Linux, for now); "none": nothing (no capture).
    */
   meetingAudio: "both" | "microphone" | "none";
+  /**
+   * The name the User's edits go under as tracked changes in a Word file
+   * (#107): `UserSettings.authorName`, or the name the computer knows them by.
+   */
+  author: string;
 }
 
 export interface SettingsPatch {
@@ -909,6 +1694,11 @@ export interface DocumentPlace {
   quote?: string;
   /** The Citation this was opened from, if a Citation opened it. */
   citation?: TabCitation;
+  /**
+   * In a Word file: the paragraph or table to go to, by its place in the main document
+   * part ("w:p#12", "w:tbl#3"), as a Mind imported from it records (`WordSource.n`, #736).
+   */
+  wordPlace?: string;
 }
 
 export interface LayoutTab {
@@ -1018,6 +1808,8 @@ export type LayoutChange =
       where?: OpenWhere;
       /** A Document as a preview, replacing the group's preview if it has one. */
       preview?: boolean;
+      /** A Document already open as a preview is kept, as a double-click on its tab does. */
+      keep?: boolean;
       /** Its group becomes the focused one: true unless false. */
       focus?: boolean;
       /** A Document: where in it, e.g. a Citation's quote. */
@@ -1111,12 +1903,28 @@ export type DocumentFailureReason =
    */
   | "file-missing"
   /** Anything else, e.g. the processing worker crashed. */
-  | "processing-error";
+  | "processing-error"
+  /**
+   * Scanned pages couldn't be read (#397): the text recognition model
+   * couldn't be downloaded or failed on them. The pages that were read are
+   * searched; Retry reads the others.
+   */
+  | "pages-unread";
 
 export interface DocumentFailure {
   reason: DocumentFailureReason;
   /** Technical detail in English, for logs and tooltips. */
   message: string;
+  /** "pages-unread": the scanned pages that couldn't be read, from 1; empty when none could be. */
+  pages?: number[];
+}
+
+/** Where reading a PDF's scanned pages is (#397), while it is processed. */
+export interface DocumentScanProgress {
+  /** How many of its pages are scans to read. */
+  pages: number;
+  /** How many of them are read so far. */
+  read: number;
 }
 
 /**
@@ -1196,8 +2004,12 @@ export interface Document {
    */
   contentHash: string;
   /**
-   * The file, where the User keeps it: an absolute path. IncarnaMind never
-   * changes it. A web page's is its snapshot, in the data folder.
+   * The file, where the User keeps it on this computer: an absolute path.
+   * IncarnaMind never changes the file. A web page's is its snapshot, in the
+   * data folder. Not what the Document is known by (ADR-0020): that is its
+   * Linked folder and its path inside it, its place in the data folder, or,
+   * for a file added on its own, its id; so it can be elsewhere on another
+   * computer, or after its Linked folder is located somewhere else.
    */
   path: string;
   /** Where the file is: see `DocumentFileStatus`. */
@@ -1211,6 +2023,8 @@ export interface Document {
   status: DocumentStatus;
   /** While `status` is "embedding": the share of its Passages embedded so far, from 0 to 1. Null otherwise. */
   progress: number | null;
+  /** While `status` is "extracting" and its scanned pages are read (#397): how far that is. Null otherwise. */
+  scan: DocumentScanProgress | null;
   /** Set when `status` is "failed": why the latest version read failed. */
   failure: DocumentFailure | null;
   /**
@@ -1241,6 +2055,12 @@ export interface Document {
    */
   creationDate: string | null;
   /**
+   * When the file was last modified, as the file system says, as last seen
+   * when it was indexed or its folder rescanned. ISO 8601, UTC. Null for a
+   * Document with no file of its own, and until a scan has seen it.
+   */
+  modifiedAt: string | null;
+  /**
    * The Document's own title (#213), for when its file name is machine-made
    * (a UUID, "Untitled"): the title in its properties, else its first
    * heading, else its first line. Null if it has none, or until it is read.
@@ -1261,6 +2081,11 @@ export interface Document {
   ownFile: OwnFile | null;
   /** Where its text came from, when Find sources added it (#296); null for any other Document. */
   found: DocumentFoundSource | null;
+  /**
+   * The Mind this file was last imported as, still there (#720): the User's working copy of
+   * it, which is never cited. Null for a file never imported.
+   */
+  importedAs: string | null;
   /** When the Document was added to IncarnaMind. ISO 8601, UTC. */
   createdAt: string;
   /** ISO 8601, UTC. */
@@ -1367,6 +2192,11 @@ export interface SaveWebPageInput {
  * - "not-a-page": the address is a file (a PDF, an image), not a web page.
  * - "video": the page is a video, with little text to read.
  * - "not-text": the page has too little text to read, such as an app.
+ * - "not-public": web search's fetcher refused it: the address is on this
+ *   computer or a local network, or redirects there (#128).
+ * - "too-many-redirects": it redirected more than web search's fetcher follows.
+ * - "not-from-search": web search fetches only the pages its search returned
+ *   in the same Answer, and this wasn't one.
  */
 export type WebPageFailureReason =
   | "invalid-address"
@@ -1378,7 +2208,10 @@ export type WebPageFailureReason =
   | "site-error"
   | "not-a-page"
   | "video"
-  | "not-text";
+  | "not-text"
+  | "not-public"
+  | "too-many-redirects"
+  | "not-from-search";
 
 export interface WebPageFailure {
   reason: WebPageFailureReason;
@@ -1523,13 +2356,16 @@ export type ReferenceLookupResult =
 /**
  * A Source provider (CONTEXT.md): a public service Find sources searches for
  * works to add, as Documents when their full text is open, else as reference
- * records. OpenAlex, arXiv and PubMed search; Crossref looks a DOI up. Laws,
- * filings and drug labels come later, each one more provider.
+ * records. OpenAlex, arXiv and PubMed search; Crossref looks a DOI up;
+ * openFDA, DailyMed and ClinicalTrials.gov find drug labels and trials; the
+ * eCFR searches US federal regulations, and GovInfo looks up the US Code and
+ * the CFR's official edition by citation.
  */
 export interface SourceProviderInfo {
   /**
-   * "openalex", "arxiv", "pubmed", "crossref". The UI says what each covers
-   * and what its records are licensed under (`sources.provider.<id>.about`).
+   * "openalex", "arxiv", "pubmed", "crossref", "openfda", "dailymed",
+   * "clinicaltrials", "ecfr", "govinfo". The UI says what each covers and what
+   * its records are licensed under (`sources.provider.<id>.about`).
    */
   id: string;
   /** As its operator names it. */
@@ -1546,21 +2382,29 @@ export interface SourceProviderInfo {
   searchedByDefault: boolean;
   /** An optional key of the User's: "none" for a provider that takes none, else whether one is set. The key itself is never given out. */
   key: "none" | "unset" | "set";
+  /** It works only with that key (GovInfo): without one it is off, and `keySignUp` is where to get one. */
+  keyNeeded: boolean;
+  keySignUp: string | null;
 }
 
 /**
  * What an Answer's search can ask for besides papers (`find_sources`' `kind`),
- * and the providers each is looked up in. Drug labels and trials aren't
- * searched with a search for papers.
+ * and the providers each is looked up in. Drug labels, trials and US law
+ * aren't searched with a search for papers.
  */
 export const SOURCE_KIND_PROVIDERS: Readonly<Record<string, readonly string[]>> = {
   drug_labels: ["openfda", "dailymed"],
   clinical_trials: ["clinicaltrials"],
+  us_law: ["ecfr", "govinfo"],
 };
 
 /** What Find sources looks for. */
 export interface FindSourcesInput {
-  /** Words, a title, or an identifier: a DOI, an arXiv ID, a PubMed ID, a label's set id or an NCT number. */
+  /**
+   * Words, a title, or an identifier: a DOI, an arXiv ID, a PubMed ID, a
+   * label's set id, an NCT number, or a citation ("17 CFR 240.10b-5", "42
+   * U.S.C. § 1983").
+   */
   query: string;
   /** Only works published in or after this year. */
   fromYear?: number | null;
@@ -1577,9 +2421,17 @@ export interface FindSourcesInput {
  * - "declined": the User didn't allow sending it searches;
  * - "unreachable": it couldn't be reached, or took too long;
  * - "rate-limited": it asked IncarnaMind to slow down (429), or its free daily allowance is used up;
- * - "service-error": it answered with an error, or with something unreadable.
+ * - "service-error": it answered with an error, or with something unreadable;
+ * - "needs-key": it works only with the User's own key, and none is set: nothing was sent;
+ * - "key-rejected": it didn't accept the User's key.
  */
-export type SourceFailureReason = "declined" | "unreachable" | "rate-limited" | "service-error";
+export type SourceFailureReason =
+  | "declined"
+  | "unreachable"
+  | "rate-limited"
+  | "service-error"
+  | "needs-key"
+  | "key-rejected";
 
 /** How one provider's part of a search went. */
 export interface SourceProviderOutcome {
@@ -1644,6 +2496,8 @@ export interface FoundSource {
   landingUrl: string | null;
   /** What the source says about relying on it, when it says (openFDA's disclaimer); shown with the result. */
   notice: string | null;
+  /** Its text is an unofficial compilation (the eCFR), not the official edition: the result says so. */
+  unofficial: boolean;
   /** Already in the Library: as a Document, or as a reference record without one. */
   inLibrary: { documentId: string | null; recordId: string } | null;
 }
@@ -1686,8 +2540,18 @@ export type AddFoundSourceResult =
     }
   | {
       outcome: "failed";
-      /** "local-mode": nothing may be sent; "declined": the provider isn't allowed; "not-found": search again. */
-      reason: "local-mode" | "declined" | "not-found";
+      /**
+       * "local-mode": nothing may be sent; "declined": the provider isn't allowed; "not-found": search
+       * again; "rate-limited": the provider asked to slow down, try later; "needs-key" and
+       * "key-rejected": the provider works only with the User's own key, and none is set or it was refused.
+       */
+      reason:
+        | "local-mode"
+        | "declined"
+        | "not-found"
+        | "rate-limited"
+        | "needs-key"
+        | "key-rejected";
       /** Technical detail in English, for logs and tooltips. */
       message: string;
     };
@@ -1793,6 +2657,37 @@ export interface DocumentText {
    * `page` being the Unit's number, from 1. Empty if no text is indexed.
    */
   pages: { page: number; text: string; kind: UnitKind; label: UnitLabel | null }[];
+}
+
+/**
+ * The scanned pages of a Document's current version (#397): the text read
+ * from each page's picture, and where each of its lines is on the page
+ * (`Anchor.quad`), so the viewer can lay the text over the picture and wash
+ * a quote there.
+ */
+export interface ScannedText {
+  documentId: string;
+  contentHash: string;
+  pages: { page: number; text: string; label: UnitLabel | null; anchors: Anchor[] }[];
+}
+
+/**
+ * Where a Citation's quote was read from a scan (#397), for its card: the
+ * words the text recognition wasn't sure of within it, as the page's text has
+ * them, in order (empty when it was sure of every one).
+ */
+export interface ScannedQuote {
+  unsure: string[];
+}
+
+/** A Citation's quote, as `readScannedQuote` looks it up: its Document, version, Units and quote. */
+export interface ScannedQuoteInput {
+  documentId: string;
+  /** The version it quotes; null for a Citation that doesn't say (the current one is read). */
+  contentHash: string | null;
+  pageFrom: number | null;
+  pageTo: number | null;
+  quote: string;
 }
 
 /**
@@ -1906,9 +2801,9 @@ export interface Examples {
  * placeholders (online-only files) aren't read unless the User asks.
  */
 export interface LinkedFolder {
-  /** A random UUID generated on this device. */
+  /** A random UUID generated on this device: the same wherever the folder is (ADR-0020). */
   id: string;
-  /** Absolute, symbolic links resolved. */
+  /** Where it is on this computer: absolute, symbolic links resolved. `locateLinkedFolder` changes it. */
   path: string;
   /** Its own Folder, the root of its Folders. */
   folderId: string;
@@ -1926,10 +2821,51 @@ export interface LinkedFolder {
    * download it. `downloadOnlineOnlyFiles` downloads and indexes them.
    */
   onlineOnly: { files: number; bytes: number; downloading: boolean };
+  /** Files in it in a format IncarnaMind doesn't read (.doc, .xls, .ppt, .wps, .caj…), found at its last look: not Documents (#740). */
+  unsupportedFiles: number;
   /** ISO 8601, UTC. */
   createdAt: string;
   /** ISO 8601, UTC. */
   updatedAt: string;
+}
+
+/** A file in a Linked folder in a format IncarnaMind doesn't read: it is left out of every search (#740). */
+export interface UnsupportedFile {
+  /** Absolute. */
+  path: string;
+  /** The file's name, with its extension. */
+  name: string;
+  /** Lower case, with the dot: ".xls". */
+  extension: string;
+  linkedFolderId: string;
+  /** The folder it is in, relative to its Linked folder: "" at the top. */
+  relativeFolder: string;
+}
+
+/**
+ * Why a file in a search's scope wasn't read, and what the User can do:
+ * - "format": a format not read yet (.doc, .xls, .ppt, .wps, .caj…): convert it;
+ * - "scan": a scan in which text recognition found no text (handwriting, a picture);
+ * - "password": password-protected: remove the password;
+ * - "damaged": the file is broken, or couldn't be read;
+ * - "too-large": too large to open;
+ * - "pages": a scan some of whose pages haven't been read yet.
+ */
+export type UnreadReason = "format" | "scan" | "password" | "damaged" | "too-large" | "pages";
+
+/** A file in a Search scope that couldn't be read, with why (#740). */
+export interface UnreadFile {
+  /** The Document's id, or the file's path for a file in a format not read. */
+  id: string;
+  /** The file's name, with its extension. */
+  name: string;
+  reason: UnreadReason;
+  /** For "format": its extension, lower case with the dot. Null otherwise. */
+  extension: string | null;
+  /** The Document, or null for a file in a format not read. */
+  documentId: string | null;
+  /** For "pages": the scanned pages that couldn't be read, from 1; empty when none could be, and for every other reason. */
+  pages: number[];
 }
 
 /**
@@ -2159,7 +3095,7 @@ export interface EmbeddingSettings {
    * "Keep everything on this computer": only embedding providers on this
    * computer can be chosen, and search results aren't reranked by a cloud
    * service. Turned on in Settings, or by choosing local models with one
-   * click (`selectOllama`).
+   * click (`selectOllama`, when the User asks for it).
    */
   localOnly: boolean;
   /** Set while Documents are embedded again after a switch. */
@@ -2227,6 +3163,11 @@ export interface RerankSettings {
    * keeps its own order.
    */
   model: RerankingModelStatus;
+  /**
+   * Where the built-in model runs on this computer: on the GPU, or on the CPU
+   * where no GPU can run it. Null until it has run since IncarnaMind started.
+   */
+  runsOn: "gpu" | "cpu" | null;
 }
 
 export interface SaveRerankSettingsInput {
@@ -2351,12 +3292,16 @@ export type ProviderErrorKind =
   | "too-long"
   /** The request could pass the User's monthly cap (`UserSettings.monthlyCap`): nothing was sent. */
   | "cost-cap"
+  /** The model's reply ended with no text, or none that could be read. */
+  | "no-answer"
   | "unknown";
 
 export interface ProviderError {
   kind: ProviderErrorKind;
   /** The provider's own message, for details. */
   message: string;
+  /** The message as a key of the dictionary, when the core worded it, to say in the interface language. */
+  wording?: ErrorWording;
   /** "plan-limit": when the plan's limit resets (ISO 8601), when the provider says. */
   resetsAt?: string;
 }
@@ -2395,6 +3340,8 @@ export interface ProviderCost {
   spent: Money[];
   /** Tokens of requests to models with no known price: counted here, not toward the cap. */
   unpricedTokens: number;
+  /** Requests a quit cut short with no usage known: counted as costing nothing (#636). */
+  interrupted: number;
 }
 
 /** Settings' month-to-date cost: recorded on this computer, never sent. */
@@ -2416,6 +3363,153 @@ export interface CostSummary {
  * provider says). Its unfinished items say "not checked" with the reason.
  */
 export type RunStop = { reason: "cost-cap" } | { reason: "plan-limit"; resetsAt: string | null };
+
+/** What Compare Documents makes a comparison table of (#98). */
+export interface CompareDocumentsInput {
+  mindId: string;
+  /** The rows, in order: Documents IncarnaMind wrote that checks leave out are dropped (#80). */
+  documentIds: string[];
+  /** The columns, in order. */
+  questions: string[];
+  /** What else the table should show, for every cell. */
+  instruction?: string | null;
+  /** The model its cells are written with; the default model when left out. */
+  model?: ChatModelChoice | null;
+  /**
+   * The Block it goes after (the one the cursor is in), or before, when that
+   * Block is an empty paragraph, which stays to write on. None: the Mind's end.
+   */
+  afterBlockId?: string | null;
+}
+
+/** A comparison table, by its Mind and its Block's id. */
+export interface ComparisonTableRef {
+  mindId: string;
+  tableId: string;
+}
+
+/**
+ * What asking for a comparison table, or for its cells to be filled, did: it
+ * is in the Mind (a change to accept, the first time) and its cells are being
+ * filled; or nothing was written or sent, because the model can't be used yet
+ * (`readiness` says why) or the User didn't allow it to be sent to.
+ */
+export type ComparisonResult =
+  | { started: true; tableId: string }
+  | { started: false; reason: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
+  | { started: false; reason: "consent-declined" };
+
+/** A comparison table whose cells are being filled ("comparison.filling"). */
+export interface ComparisonFilling extends ComparisonTableRef {
+  filling: boolean;
+}
+
+/**
+ * Where a Task (CONTEXT.md, #126) is:
+ * - "running": doing its steps, or waiting for its turn behind an Answer or a
+ *   recording; with an `ask`, waiting for the User;
+ * - "paused": waiting until it is resumed (`pausedReason` says why);
+ * - "done", "stopped" (by the User, or its table or Mind went) or "failed":
+ *   finished, kept in Recent for 7 days.
+ */
+export type TaskStatus = "running" | "paused" | "done" | "stopped" | "failed";
+
+/**
+ * Why a Task is paused: the User paused it; IncarnaMind was closed while it
+ * waited for the User; the monthly cap or a plan's limit stopped it; or its
+ * model can't be used now (a key removed, local mode). All but "user" need
+ * the User to act.
+ */
+export type TaskPausedReason = "user" | "closed" | "cost-cap" | "plan-limit" | "not-ready";
+
+/**
+ * A step of a Task that changes something outside IncarnaMind's database,
+ * journalled before and after it runs, so that after a crash its outcome is
+ * checked before anything is done again: a whole file written (the SHA-256
+ * of what it writes, and of what was there before, null for no file), or a
+ * call of a Connector's Tool, which IncarnaMind can't check afterwards.
+ */
+export type TaskEffect =
+  | { kind: "file-write"; path: string; sha256: string; previous: string | null }
+  | { kind: "connector"; connectorId: string; connectorName: string; tool: string };
+
+/**
+ * What a Task waits for the User to answer, one at a time:
+ * - "approval": a call that asks first; the request itself is among
+ *   `listApprovalRequests` with this Task's `taskId`, answered with
+ *   `respondToApproval`, and asked again if IncarnaMind was closed meanwhile;
+ * - "unknown-outcome": IncarnaMind was closed in the middle of an Effect and
+ *   can't tell whether it happened; `answerTaskAsk` does it again or skips it.
+ * `number` counts the Task's asks so far, this one included.
+ */
+export type TaskAsk =
+  | { kind: "approval"; stepKey: string; number: number }
+  | { kind: "unknown-outcome"; stepKey: string; number: number; effect: TaskEffect };
+
+/** How far a Task is: so many of its items settled, of so many. */
+export interface TaskProgress {
+  done: number;
+  total: number;
+}
+
+/** What the User can ask of a Task from its progress in the thread, as its kind allows (#657). */
+export type TaskAction = "plan" | "tell" | "pause" | "stop";
+
+/**
+ * A step of a Task, as its progress shows it: what it does, in the Task's own
+ * words ("Corvane Agreement · Termination notice"), and how it went. "failed":
+ * it ended without its result (a cell with no Answer); "skipped": the User
+ * chose to go on without it.
+ */
+export interface TaskStep {
+  key: string;
+  text: string;
+  status: "running" | "done" | "failed" | "skipped";
+}
+
+/**
+ * A Task (CONTEXT.md): a Run that goes on in the background and keeps its
+ * place when IncarnaMind is quit. Its journal (`runs`, `run_steps`) records
+ * each step as started and completed.
+ */
+export interface Task {
+  id: string;
+  /** What runs it: "comparison" fills a comparison table. A kind this version doesn't know stays as it is. */
+  kind: string;
+  /** The Mind it works in, if any. */
+  mindId: string | null;
+  /** The Block in that Mind it works on (a comparison table), if any: where opening it goes. */
+  blockId: string | null;
+  status: TaskStatus;
+  pausedReason: TaskPausedReason | null;
+  /** "plan-limit": when the plan's limit resets (ISO 8601), when the provider says. */
+  resetsAt: string | null;
+  ask: TaskAsk | null;
+  progress: TaskProgress | null;
+  /** "failed": why, as a `ProviderErrorKind` or another short kind. */
+  problem: string | null;
+  /** What its model requests have cost, settled and reserved; null with none billed. */
+  cost: Money | null;
+  /** What its kind lets the User ask of it, whatever it is doing now. */
+  actions: TaskAction[];
+  /** Its latest steps, oldest first (`listTaskSteps` has them all). */
+  steps: TaskStep[];
+  /** How many steps it has started in all. */
+  stepCount: number;
+  startedAt: string;
+  finishedAt: string | null;
+  updatedAt: string;
+}
+
+/** What answering a Task's "unknown-outcome" ask does: the step again, or on without it. */
+export type TaskAskAnswer = "redo" | "skip";
+
+/** Open a Task's place: its Mind, with its progress in the thread (`showTask`, a notification's click). */
+export interface TaskShown {
+  taskId: string;
+  mindId: string | null;
+  blockId: string | null;
+}
 
 /** A large run to estimate: so many items (a comparison table's cells, verify's sentences…), each about an Answer. */
 export interface RunEstimateInput {
@@ -2480,14 +3574,46 @@ export type ChatReadiness =
       modelId: string;
     };
 
+/**
+ * Why a listed model isn't in the menu by default: "unknown" (the catalog
+ * doesn't know it), "older" (deprecated, or on its way out), or
+ * "cannot-answer" (it needs another API than chat, for `reason`; it can't be
+ * added).
+ */
+export interface OtherModel {
+  id: string;
+  why: "unknown" | "older" | "cannot-answer";
+  reason?: CannotAnswerReason;
+}
+
+/** Which API, other than chat, a model needs. */
+export type CannotAnswerReason = "completion" | "audio" | "deep-research" | "computer-use";
+
+export interface SetChatModelInMenuInput {
+  providerId: string;
+  modelId: string;
+  inMenu: boolean;
+}
+
 /** A saved chat provider and the models a Question's model picker offers on it. */
 export interface ChatModelGroup {
   provider: ChatProvider;
   /**
-   * Model ids: the models the provider lists, when it can be asked, and always
-   * the default model if it is on this provider. The default comes first.
+   * Model ids in the menu: the default model if it is on this provider, first;
+   * then the provider's role models, then the rest of the catalog's current chat
+   * models it lists (every model a server lists, for Ollama and other servers),
+   * then those the User added.
    */
   models: string[];
+  /** The names the provider's own list gives, by model id, where it gives them. */
+  names: Record<string, string>;
+  /**
+   * What the provider lists that the menu leaves out (see `OtherModel`), for
+   * Settings → Models → Other models, including ids the User has added.
+   */
+  other: OtherModel[];
+  /** The ids in `models` that the User added from `other`; "In the menu" is on for them. */
+  added: string[];
   /**
    * The ids in `models` whose capabilities are unknown: neither the catalog
    * nor the provider says what they can do. They still work; an Answer finds
@@ -2586,6 +3712,8 @@ export interface SuggestionAccepted {
   characters: number;
   /** When, ISO 8601, UTC. */
   acceptedAt: string;
+  /** The suggestion's Citation, now in the Mind. */
+  citation: Citation;
 }
 
 /**
@@ -2680,6 +3808,232 @@ export type EditWithAiResult =
   /** The model failed, or gave nothing back. */
   | { kind: "failed"; error: ProviderError };
 
+/**
+ * The checks of the User's own sentences (#96). Both check each sentence's
+ * claim against the Documents: Find support looks for a Passage that backs
+ * it; Check against Documents does the same for a sentence that already has
+ * Citations, telling the model what they quote, so the claim is checked and
+ * not only the quote.
+ */
+export const claimCheckActions = ["find-support", "check-against-documents"] as const;
+export type ClaimCheckAction = (typeof claimCheckActions)[number];
+
+/** What a claim check found (CONTEXT.md: supported, unsupported, contradicted). */
+export type ClaimVerdict = "supported" | "unsupported" | "contradicted";
+
+/**
+ * Why a sentence wasn't checked. It is never shown as supported.
+ * - "refused": the model declined to check it.
+ * - "malformed": its reply held no verdict that could be read.
+ * - "empty": its reply was empty.
+ * - "no-evidence": it gave a verdict, but no quote the Citation check finds in the Passage it named.
+ * - "rate-limit": the model's service refused more requests for now.
+ * - "cost-cap": it could pass the monthly cap, so nothing was sent.
+ * - "plan-limit": the plan's usage limit is reached.
+ * - "failed": the model or its service failed otherwise (`detail` says how).
+ * - "stopped": the User stopped the check, or IncarnaMind quit, before this sentence was checked.
+ */
+export type ClaimCheckFailure =
+  | "refused"
+  | "malformed"
+  | "empty"
+  | "no-evidence"
+  | "rate-limit"
+  | "cost-cap"
+  | "plan-limit"
+  | "failed"
+  | "stopped";
+
+/** A Document version a check read, which it no longer holds for once the Document changes. */
+export interface CheckedVersion {
+  documentId: string;
+  contentHash: string;
+}
+
+/** A Document left out of a check's evidence that matched (#80): the result names it, with Count it. */
+export interface LeftOutDocument {
+  documentId: string;
+  documentName: string;
+  reason: EvidenceExclusion;
+}
+
+/** What one claim check found: the claim-check function's result (`checkClaim`). */
+export type ClaimCheckResult =
+  | {
+      verdict: ClaimVerdict;
+      /**
+       * For "supported" and "contradicted": the Passage that decides it, as a
+       * Citation whose quote the Citation check found. For "unsupported": null,
+       * or the nearest line when it states another value for the very thing
+       * the sentence says: "the Documents say something different" (#770).
+       */
+      evidence: Citation | null;
+      /** For "supported" and "contradicted": what the Document says, in one plain sentence. */
+      says: string | null;
+      /** The versions of the Documents it read, each once. */
+      versions: CheckedVersion[];
+      excluded: LeftOutDocument[];
+    }
+  | {
+      verdict: "not-checked";
+      reason: ClaimCheckFailure;
+      /** "failed": the provider's message. */
+      detail: string | null;
+      versions: CheckedVersion[];
+      excluded: LeftOutDocument[];
+    };
+
+/**
+ * What a sentence already cites: a Citation's quote, and its Document as it was cited. With
+ * `documentId` (or `contentHash`) the check names the Document as it is named now.
+ */
+export interface CitedQuote {
+  documentName: string;
+  quote: string;
+  documentId?: string;
+  contentHash?: string;
+}
+
+/** What the claim-check function checks (`checkClaim`). */
+export interface CheckClaimInput {
+  /** The sentence, or claim, to check: the User's own words. */
+  claim: string;
+  /** The paragraph it is in, for what its words refer to. */
+  context?: string;
+  /** What the sentence already cites, for Check against Documents. */
+  cited?: CitedQuote[];
+  /** Where to look. None: every Document. */
+  scope?: SearchScope | null;
+  /** The document being checked, which is never its own evidence (#97). */
+  checked?: CheckedDocument;
+  /** The model to check with; none, or null, the default chat model. */
+  model?: ChatModelChoice | null;
+}
+
+/**
+ * Where a sentence's check searched: the Mind's Folder (null for a Mind in
+ * none, which searches every Document), or every Document because the User
+ * asked ("Search all Documents"). A Mind moved to another Folder since needs
+ * its sentences checked again; one the User widened doesn't.
+ */
+export interface ClaimCheckScope {
+  folderId: string | null;
+  widened: boolean;
+}
+
+/**
+ * A sentence's check, as its `CLAIM_CHECK_MARK` stores it in the Mind: the
+ * result and what it was made from, so it is known to need a re-check once
+ * the sentence, a Document it read or the Mind's Folder changes.
+ */
+export interface ClaimCheckAttributes {
+  /** The result's random UUID: checking the sentence again gives it a new one. */
+  id: string;
+  /** The `checkSentences` request that made it. A "checking" mark of a request that ended was stopped. */
+  request: string;
+  action: ClaimCheckAction;
+  state: "checking" | ClaimVerdict | "not-checked";
+  /** "not-checked": why. */
+  reason: ClaimCheckFailure | null;
+  /** "failed": the provider's message. */
+  detail: string | null;
+  /** The sentence as it was checked: an inline node as U+FFFC, a line break as "\n". */
+  text: string;
+  /** "supported" and "contradicted": the Passage that decides it, as a Citation found. */
+  evidence: CitationAttributes | null;
+  /** "supported" and "contradicted": what the Document says, in one plain sentence. */
+  says: string | null;
+  scope: ClaimCheckScope;
+  versions: CheckedVersion[];
+  excluded: LeftOutDocument[];
+  /** When it was checked, or started. ISO 8601, UTC. */
+  checkedAt: string;
+}
+
+export interface CheckSentencesInput {
+  /** Chosen by the caller, so it can stop the request (`cancelCheck`). */
+  requestId: string;
+  mindId: string;
+  /** Where the selection starts, and where it ends: each sentence it touches is checked, whole. */
+  from: TextPlace;
+  to: TextPlace;
+  action: ClaimCheckAction;
+  /** Search every Document, not the Mind's Folder ("Search all Documents"). */
+  allDocuments?: boolean;
+  /** The model to use: the Mind's own; none, or null, the default chat model. */
+  model?: ChatModelChoice | null;
+}
+
+/** What `checkSentences` did. */
+export type CheckSentencesResult =
+  /**
+   * Each sentence has its mark: `checked` of them with a verdict, the rest not
+   * checked. `smallModel`: a model on this computer too small to judge
+   * reliably made the verdicts (#680), so they carry a notice.
+   */
+  | { kind: "checked"; sentences: number; checked: number; smallModel: boolean }
+  /** Nothing was sent: the model can't be used now, and `readiness` says why. */
+  | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
+  /** Nothing was sent: local mode is on, and the model isn't on this computer. */
+  | { kind: "local-mode" }
+  /** Nothing was sent: the scope holds no Document with text to check against. */
+  | { kind: "no-documents"; folderId: string | null }
+  /** The selection holds no sentence to check, or isn't in the Mind any more. */
+  | { kind: "nothing" }
+  /** Nothing was sent: the selection holds changes still waiting. */
+  | { kind: "has-proposals" }
+  /** The User stopped it (`cancelCheck`): the sentences not checked yet say "stopped". */
+  | { kind: "cancelled" };
+
+/** A document someone else wrote, to verify claim by claim (#97): the window offers PDFs. */
+export interface VerifyDocumentInput {
+  /** The file's absolute path: any file the Library reads. */
+  path: string;
+  /** The Folder the Mind goes in, and the PDF too if it is new to the Library; none, or null, for none. */
+  folderId?: string | null;
+}
+
+/** What `verifyDocument` did. */
+export type VerifyDocumentResult =
+  /** The Mind holds the document's text, a paragraph to a Block: its claims can be found. */
+  | { ok: true; mind: Mind; documentId: string }
+  /** No Mind was made: the file can't be read, or holds no text (a scan nothing could read). */
+  | { ok: false; reason: "unreadable" | "no-text" };
+
+/** Finding, or checking, the claims of a Mind made by `verifyDocument`. */
+export interface VerifyClaimsInput {
+  /** Chosen by the caller, so it can stop the request (`cancelCheck`). */
+  requestId: string;
+  mindId: string;
+  /** Check against every Document, not the Mind's Folder. */
+  allDocuments?: boolean;
+  /** The model to use: the Mind's own; none, or null, the default chat model. */
+  model?: ChatModelChoice | null;
+}
+
+/** Why finding or checking a document's claims sent nothing. */
+type VerifyRefusal =
+  | Exclude<CheckSentencesResult, { kind: "checked" } | { kind: "has-proposals" }>
+  /** Another document's claims are being found or checked, in that Mind: one run at a time. */
+  | { kind: "busy"; mindId: string };
+
+/** What `findClaims` did. */
+export type FindClaimsResult =
+  /** The Mind records which of its sentences make claims: `claims` of them. */
+  | { kind: "found"; claims: number }
+  /** The model failed, or its reply named no sentences that could be read. */
+  | { kind: "failed"; error: ProviderError }
+  | VerifyRefusal;
+
+/** What `verifyClaims` did. */
+export type VerifyClaimsResult =
+  /**
+   * Each claim has its mark: `checked` of them with a verdict, the rest not
+   * checked. `stop`: the monthly cap or a plan's limit stopped the run, and the
+   * claims after it say so.
+   */
+  { kind: "checked"; claims: number; checked: number; stop: RunStop | null } | VerifyRefusal;
+
 /** What asking a Question (or regenerating its Answer) did. */
 export type AskResult =
   /** The Answer is being written into the Mind, right after its Question. */
@@ -2724,19 +4078,62 @@ export interface AnswerDelta extends AnswerPlace {
  * is loading the local model; "searching", the User's Documents are being
  * searched; "writing", the model is at work; "checking-quotes", a local model
  * that answered with structured output is asked once more for the quotes of
- * its Citations that the check didn't find (ADR-0007).
+ * its Citations that the check didn't find (ADR-0007); "checking-figures", it
+ * is asked once more for the calculated figures it gave that couldn't be
+ * worked out (ADR-0021).
  */
 export type AnswerPhase =
   | "waiting-for-consent"
   | "loading"
   | "searching"
   | "writing"
-  | "checking-quotes";
+  | "checking-quotes"
+  | "checking-figures";
 
 /** An Answer being written moved to another phase. */
 export interface AnswerPhaseEvent extends AnswerPlace {
   answerId: string;
   phase: AnswerPhase;
+}
+
+/**
+ * More of the model's reasoning, as its provider summarized it (#391): only
+ * from a provider whose reasoning is a summary (`AnswerSteps.reasoning`),
+ * never raw chain of thought.
+ */
+export interface AnswerReasoning extends AnswerPlace {
+  answerId: string;
+  text: string;
+}
+
+/**
+ * How an Answer in a conversation was reached, beside its Tool calls and
+ * Citations (#391). Times are ISO 8601, UTC.
+ */
+export interface AnswerSteps {
+  /** When its Question went to the model; null when none did (its Search scope had no Documents). */
+  sentAt: string | null;
+  /** When it ended; null while it is being written. */
+  finishedAt: string | null;
+  /** What it was doing, and from when, oldest first. */
+  phases: { phase: AnswerPhase; at: string }[];
+  /**
+   * The model's reasoning as its provider summarized it (Anthropic's
+   * summarized thinking, the Responses API's reasoning summary), and how long
+   * it thought, in ms: from its first reasoning to the Answer's first text.
+   * Null when the model gave no summary. Raw chain of thought is never kept.
+   */
+  reasoning: { summary: string; ms: number } | null;
+  /**
+   * How much of the Mind it read (`ConversationAnswer.read`) it read, from 0
+   * to 1, when that was part of it (#564).
+   */
+  readShare?: number;
+  /**
+   * How many of its Citations were added after it was written, for sentences
+   * it wrote without markers that match the Passages it read (#760).
+   */
+  citedAfterChecking?: number;
 }
 
 /** A Tool call of an Answer started, or finished (see `call.status`). */
@@ -2782,6 +4179,12 @@ export interface AnswerFinished extends AnswerPlace {
   rejectedRecords: RejectedRecord[];
   /** Markers the model left out of its text for records it gave, which the engine put in. */
   placedMarkers: number;
+  /**
+   * Citations added for sentences the Answer wrote without markers, matched
+   * to the Passages it read (#760), and whether the model was asked once
+   * more for its Citations. The evaluation counts these.
+   */
+  citedAfterChecking: { count: number; asked: boolean };
   /** How the model could give Citations; null when there were no Documents to search. */
   citationSupport: CitationSupport | null;
   /**
@@ -2790,6 +4193,15 @@ export interface AnswerFinished extends AnswerPlace {
    * was made. The evaluation counts these.
    */
   quoteRetry: QuoteRetry | null;
+  /** Its calculated figures (ADR-0021), in the order of their markers in the text, each once. */
+  figures: MarkedFigure[];
+  /** Figure markers in its text that had no figure: left out, so their numbers are missing. */
+  uncalculated: number;
+  /**
+   * The one request a local model in structured output gets to fix the
+   * figures it gave that couldn't be worked out; null when none was made.
+   */
+  figureRetry: FigureRetry | null;
   /** The tokens its model calls counted (#343). */
   usage: AnswerUsage;
 }
@@ -2820,6 +4232,16 @@ export interface QuoteRetry {
   durationMs: number;
 }
 
+/** What an Answer's one request to fix its figures did (see `AnswerFinished.figureRetry`). */
+export interface FigureRetry {
+  /** The figures it asked about. */
+  figures: number;
+  /** Those it then worked out. */
+  recovered: number;
+  /** How long it took, in milliseconds. */
+  durationMs: number;
+}
+
 /** An Answer failed; the Answer shows the error by kind. */
 export interface AnswerFailed extends AnswerPlace {
   answerId: string;
@@ -2836,6 +4258,25 @@ export interface AskedFrom {
   name: string;
   /** Deleted (in Recently deleted, or for good), or not on this computer. */
   deleted: boolean;
+}
+
+/**
+ * Where the User was in the Mind in focus when they asked (#544): the text
+ * they selected, and the Mind's top-level Blocks it is in, by Block id, in
+ * order; with nothing selected, the Block the cursor is in.
+ */
+export interface MindFocus {
+  /** The selected text as the editor reads it; "" with nothing selected. */
+  selection: string;
+  blockIds: string[];
+}
+
+/** The Mind an Answer in a conversation read (#544), as it was then: what the Answer is based on. */
+export interface MindRead extends AskedFrom {
+  /** Its version as read: a fingerprint of its text, as the model read it before any cut. */
+  version: string;
+  /** It was too long for the model's window, so only part of it was read. */
+  partial: boolean;
 }
 
 /** A conversation, as History lists it. It exists once it has a Question; it is never a Mind. */
@@ -2868,6 +4309,8 @@ export interface ConversationQuestion {
   text: string;
   /** The Mind in focus when it was asked; null: none (Home, or no Mind in focus). */
   askedFrom: AskedFrom | null;
+  /** Where the User was in that Mind, which its Answer reads first; null: nowhere known. */
+  focus: MindFocus | null;
   /** Its Search scope; null: none, every Document. */
   scope: SearchScope | null;
   /** The model picked for it; null: the default. */
@@ -2885,9 +4328,10 @@ export interface MarkedCitation extends Citation {
 
 /**
  * An Answer in a conversation: the Markdown the model wrote, with a Citation
- * marker ("[^2]") where each Citation goes, and the Citations by marker
- * (ADR-0017). A marker with no Citation is left out when it is shown. It is
- * written as it streams.
+ * marker ("[^2]") where each Citation goes and a figure marker ("[=1]") where
+ * each calculated figure goes, and the Citations and figures by marker
+ * (ADR-0017, ADR-0021). A marker with neither is left out when it is shown.
+ * It is written as it streams.
  */
 export interface ConversationAnswer {
   kind: "answer";
@@ -2897,6 +4341,8 @@ export interface ConversationAnswer {
   text: string;
   /** In the order of their markers in the text, each once. */
   citations: MarkedCitation[];
+  /** Its calculated figures (ADR-0021), in the order of their markers ("[=1]") in the text, each once. */
+  figures: MarkedFigure[];
   /** The model that wrote it; null for one that says its Search scope has no Documents. */
   model: ChatModelChoice | null;
   status: AnswerStatus;
@@ -2912,6 +4358,14 @@ export interface ConversationAnswer {
    * it too, and so does a Mind it is added to. Null: none.
    */
   textOrigin: ThirdPartySource | null;
+  /**
+   * The Mind its Question was asked from, which it read (#544); null when it
+   * read none: none was in focus, it had been deleted, nothing of it fitted the
+   * model's window, or the Answer was written before.
+   */
+  read: MindRead | null;
+  /** How it was reached; null for an Answer written before #391. */
+  steps: AnswerSteps | null;
   /** ISO 8601, UTC. */
   createdAt: string;
   /** ISO 8601, UTC. */
@@ -2939,10 +4393,12 @@ export interface AskInConversationInput {
   /** What the User asked. */
   text: string;
   /**
-   * The Mind in focus, which the Question records; none or null: none (Home). A
-   * new conversation belongs to its Folder.
+   * The Mind in focus, which the Question records and its Answer reads; none
+   * or null: none (Home). A new conversation belongs to its Folder.
    */
   mindId?: string | null;
+  /** Where the User is in that Mind; ignored with no Mind. */
+  focus?: MindFocus | null;
   /** Its Search scope; none or null: every Document. */
   scope?: SearchScope | null;
   /** The model to answer with; none or null: the default. */
@@ -2955,6 +4411,11 @@ export interface AskInConversationInput {
 export interface ConversationAnswerInput {
   conversationId: string;
   answerId: string;
+  /**
+   * Regenerating: first clears the Question's Search scope, so the Answer
+   * is written from every Document ("Search all Documents", #748).
+   */
+  clearScope?: boolean;
 }
 
 /** What asking in a conversation (or regenerating an Answer there) did. */
@@ -2965,6 +4426,35 @@ export type ConversationAskResult =
   | { asked: false; reason: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
   /** Nothing was kept or sent: the Question forces a Skill (`skill`) that is off or gone. */
   | { asked: false; reason: "skill-unavailable"; skill: string; state: SkillAvailability };
+
+/** Blocks from an Answer to put into a Mind's note ("Add to note", #201). */
+export interface AddToNoteInput {
+  mindId: string;
+  /**
+   * The Blocks, as the editor writes them in JSON: Notes only (`NOTE_BLOCK_TYPES`)
+   * at the top level, with whatever they hold, Citations included. Their ids are
+   * given anew.
+   */
+  blocks: unknown[];
+  /** Their link back to the Answer they came from; null for none. */
+  origin: BlockOrigin | null;
+  /** The model that wrote the Answer, for the record of AI use; null when unknown. */
+  model: ChatModelChoice | null;
+  /** They wait as changes to accept or reject, each Block one (a new Mind made from an Answer). */
+  proposed?: boolean;
+}
+
+/** What "Add to note" put into a Mind: the ids of its new top-level Blocks, in order. */
+export interface AddedToNote {
+  mindId: string;
+  blockIds: string[];
+}
+
+/** Takes an "Add to note" back: its Blocks leave the Mind, with their links back. */
+export interface UndoAddToNoteInput {
+  mindId: string;
+  blockIds: string[];
+}
 
 /** Where words of a search are in a piece of text: `start` to `end`, in UTF-16 code units. */
 export interface TextRange {
@@ -2989,6 +4479,38 @@ export interface ConversationMatch {
   conversation: Conversation;
   titleHighlights: TextRange[];
   messages: MessageMatch[];
+}
+
+// ---------------------------------------------------------------------------
+// The words inside Minds and Documents (⌘K, #116)
+
+/**
+ * A Mind whose Blocks hold every word searched for (`CoreApi.searchMinds`): its best Block, one
+ * that holds them all if there is one, as a short excerpt with the words found, and the heading
+ * it sits under.
+ */
+export interface MindTextMatch {
+  mindId: string;
+  blockId: string;
+  /** The text of the nearest heading above the Block, "" when there is none. */
+  heading: string;
+  excerpt: string;
+  highlights: TextRange[];
+}
+
+/**
+ * A Document whose Passages hold every word searched for (`CoreApi.searchDocumentText`), at
+ * least one of them in the Passage's text rather than only in the Document's name: its best
+ * Passage, as a short excerpt with the words found.
+ */
+export interface DocumentTextMatch {
+  documentId: string;
+  passageId: string;
+  /** The first Unit the Passage covers, from 1, as in `PassageSearchResult`; null: none. */
+  pageFrom: number | null;
+  pageTo: number | null;
+  excerpt: string;
+  highlights: TextRange[];
 }
 
 // ---------------------------------------------------------------------------
@@ -3289,6 +4811,11 @@ export interface SelectOllamaInput {
   baseUrl?: string;
   /** Defaults to the recommended model. */
   model?: string;
+  /**
+   * "Also keep everything on this computer": Local mode is turned on or off
+   * to match. Left out, Local mode stays as it was.
+   */
+  localOnly?: boolean;
 }
 
 export interface OllamaPullProgress {
@@ -3323,10 +4850,14 @@ export const dataKinds = [
   "identifiers",
   "search-terms",
   "work-ids",
+  "provider-key",
   "selection",
   "scoped-passages",
   "scoped-minds",
   "answers",
+  "web-searches",
+  "verified-document",
+  "connector-search",
 ] as const;
 
 export type DataKind = (typeof dataKinds)[number];
@@ -3358,11 +4889,22 @@ export type DataKind = (typeof dataKinds)[number];
  *   local mode.
  * - "edits": when the User asks Edit with AI (#93), the text they selected
  *   and the paragraphs it is in, to the chat model's provider. None in local mode.
+ * - "checks": when the User asks Find support or Check against Documents
+ *   (#96), each sentence they selected, with its paragraph and what it cites,
+ *   and the Passages the check's searches find, to the chat model's provider;
+ *   when they verify a document (#97), its sentences, to find its claims, then
+ *   each claim with its paragraph and the Passages found. None in local mode.
  * - "agents": what an outside agent reads (#351), to that agent, which sends
  *   it on to the AI model it uses, out of IncarnaMind's sight: one service
  *   per pairing ("agent:<id>"), named as the User named the agent. Passages
  *   of the Documents in its Folders, those Folders' Minds, and the Answers it
  *   asks for. None in local mode.
+ * - "web-search": what an Answer searches the web for, written by the model
+ *   from the Question, to the provider of the model it is asked with, whose
+ *   own web search runs it (#128). None in local mode.
+ * - "connector-registry": the words the User types in Settings › Connectors'
+ *   search, to the official MCP Registry, which finds community Connectors
+ *   (#148). Asked the first time they search; none in local mode.
  */
 export const dataFlowIds = [
   "chat",
@@ -3375,10 +4917,26 @@ export const dataFlowIds = [
   "reference-lookup",
   "find-sources",
   "edits",
+  "checks",
   "agents",
+  "web-search",
+  "connector-registry",
 ] as const;
 
 export type DataFlowId = (typeof dataFlowIds)[number];
+
+/**
+ * The flows choosing the chat model's provider allows (ADR-0022): everything
+ * that sends to it, as the line above "Use this provider" says.
+ */
+export const CHOSEN_PROVIDER_FLOWS: readonly DataFlowId[] = [
+  "chat",
+  "edits",
+  "checks",
+  "suggestions",
+  "tagging",
+  "classification",
+];
 
 /** Data leaving this computer: what one flow sends to one service. */
 export interface DataFlow {
@@ -3405,6 +4963,11 @@ export interface DataFlowStatus {
    * "not-asked" when they allowed the flow before it started sending more.
    */
   decidedAt: string | null;
+  /**
+   * Allowed when the User chose the service, where a line said what goes to
+   * it (ADR-0022), rather than in a dialog or in Settings › Privacy.
+   */
+  chosen: boolean;
 }
 
 /** A registered external data flow, for the Privacy page: what it sends, and where. */
@@ -3432,6 +4995,8 @@ export interface RegisteredDataFlow {
  * - "reranking-model": downloads the built-in reranking model's files, once,
  *   when the first Documents are ready to search, unless reranking is off or
  *   uses a service.
+ * - "text-recognition-model": downloads the built-in text recognition
+ *   model's files (#397), once, when the first scanned page needs reading.
  * - "transcription-model": downloads the speech-to-text model and Silero VAD,
  *   once, when a Meeting is first transcribed on this computer (#136).
  * - "ollama-pull": Ollama downloads a model from its registry, when the User picks local models.
@@ -3449,6 +5014,7 @@ export const networkTrafficIds = [
   "update-check",
   "embedding-model",
   "reranking-model",
+  "text-recognition-model",
   "transcription-model",
   "ollama-pull",
   "chatgpt-sign-in",
@@ -3540,6 +5106,8 @@ export const aiUseKinds = [
   "assistant-change-rejected",
   /** A change from Edit with AI accepted (#93). */
   "edit-with-ai-accepted",
+  /** A comparison table from Compare Documents accepted (#98). */
+  "comparison-table-accepted",
 ] as const;
 export type AiUseKind = (typeof aiUseKinds)[number];
 
@@ -3883,6 +5451,104 @@ export interface ConnectorImportResult {
   skipped: ConnectorImportEntry[];
 }
 
+/** Words in each interface language, for data shipped beside the code, such as the Connectors directory. */
+export type LocalizedText = Record<Language, string>;
+
+/**
+ * The directory's groups, by use, in the order Settings › Connectors shows
+ * them: where the User's files are, financial data, legal research, medicine
+ * and research, and work.
+ */
+export const connectorDirectoryGroups = [
+  "files",
+  "financial-data",
+  "legal-research",
+  "medicine-and-research",
+  "work",
+] as const;
+export type ConnectorDirectoryGroup = (typeof connectorDirectoryGroups)[number];
+
+/**
+ * How a Connector in the directory signs in:
+ * - "browser": in the User's browser, IncarnaMind registering itself with the service;
+ * - "own-app": in the browser too, but the service registers only the apps it
+ *   knows: the User registers an OAuth app with it and enters its client ID
+ *   (`ConnectorClientInput`) before signing in;
+ * - "none": it needs no sign-in.
+ */
+export type ConnectorDirectorySignIn = "browser" | "own-app" | "none";
+
+/**
+ * A remote Connector IncarnaMind has reviewed, listed in Settings ›
+ * Connectors before the User connects it. The list ships with the app as
+ * data (src/core/connectors/directory.json).
+ */
+export interface ConnectorDirectoryEntry {
+  /** Stable across versions of the list, e.g. "factset". */
+  id: string;
+  /** The service's name, which the Connector takes when it is added, e.g. "FactSet". */
+  name: string;
+  /** Who runs the server, e.g. "FactSet". */
+  publisher: string;
+  group: ConnectorDirectoryGroup;
+  /** One line on what it reads. */
+  summary: LocalizedText;
+  /**
+   * What the User needs from the service: their own subscription to a
+   * product (`{ product: "FactSet" }`), nothing ("free"), or null when that
+   * depends on their account, e.g. a free tier.
+   */
+  subscription: { product: string } | "free" | null;
+  /** Its MCP endpoint, an https URL. A Connector at this URL is this entry, connected. */
+  url: string;
+  signIn: ConnectorDirectorySignIn;
+  /**
+   * Its Tools as IncarnaMind reviewed them, shown before the User connects
+   * it: each one's name and whether it may change things. Absent when the
+   * service lists them only once signed in; its page then says they appear
+   * once it's connected.
+   */
+  tools?: { title: LocalizedText; changes: boolean }[];
+  /** Listed only in these interface languages, e.g. a service for Chinese Users. Absent: in every language. */
+  languages?: Language[];
+}
+
+/** How a community server from the MCP Registry runs on this computer: its package, through npx or uvx. */
+export interface ConnectorRegistryCommand {
+  command: string;
+  args: string[];
+  /** The environment variables it reads, e.g. an API key, for the User to fill in. */
+  env: string[];
+}
+
+/** A community server found in the official MCP Registry. Not reviewed by IncarnaMind. */
+export interface ConnectorRegistryServer {
+  /** Its name in the Registry, e.g. "io.github.example/zotero-mcp". */
+  id: string;
+  /** Its title, or else its name's last part. */
+  name: string;
+  /** Who published it: its name's namespace, e.g. "io.github.example". */
+  publisher: string;
+  description: string;
+  /** Its MCP endpoint, when it runs remotely at an https URL IncarnaMind can use as it is. */
+  url: string | null;
+  /** How it runs on this computer, when it has a package IncarnaMind can start. */
+  command: ConnectorRegistryCommand | null;
+  /** Its website or repository, to read about it. */
+  link: string | null;
+}
+
+/**
+ * A search of the MCP Registry: the servers found, or why nothing was:
+ * - "local-mode": Local mode is on, so nothing was sent;
+ * - "declined": the User declined sending their search to the Registry;
+ * - "unreachable": it couldn't be reached, e.g. no network;
+ * - "service-error": it answered with an error, or something IncarnaMind can't read.
+ */
+export type ConnectorRegistrySearch =
+  | { outcome: "found"; servers: ConnectorRegistryServer[] }
+  | { outcome: "failed"; reason: "local-mode" | "declined" | "unreachable" | "service-error" };
+
 // ---------------------------------------------------------------------------
 // Approvals (#38)
 
@@ -3906,11 +5572,12 @@ export type ApprovalSubjectKind = ApprovalSubject["kind"];
  * What the User chose for a subject, replacing the default:
  * - "always": it runs without asking ("always allow" a Tool; "always run" a Skill's scripts).
  * - "ask": it asks every time, even a Tool its Connector says only reads.
+ * - "off": a Connector's Tool only: Answers aren't offered it, so it never runs.
  *
  * Without a policy, a Tool asks first unless its Connector says it only reads
  * (`ConnectorTool.readOnly`), and a Skill script always asks.
  */
-export type ApprovalPolicyValue = "always" | "ask";
+export type ApprovalPolicyValue = "always" | "ask" | "off";
 
 /** One of the User's approval policies, as the approvals page lists it. */
 export interface ApprovalPolicy {
@@ -3974,7 +5641,10 @@ export type ApprovalRequest = ToolApprovalRequest | SkillScriptApprovalRequest;
 
 interface ApprovalRequestBase extends AnswerPlace {
   requestId: string;
+  /** The Answer whose call this is; for a Task's call, the Task's id, as `taskId`. */
   answerId: string;
+  /** A Task's call (#126): it waits in the Task's row in the tray, and outlasts a quit. */
+  taskId?: string;
   /** The call's id among the Answer's `toolCalls`. */
   toolCallId: string;
   /** What the call can do, as its Tool declares it: why it asks. */
@@ -4122,17 +5792,74 @@ export interface TagMerge {
 // ---------------------------------------------------------------------------
 // Export
 
-/** What a Mind exports to: Markdown, for an archive, or Word (.docx), for the deliverable. */
-export type ExportFormat = "markdown" | "docx";
+/**
+ * What a Mind exports to: Markdown, for an archive, or Word (.docx), PDF or HTML, for the
+ * deliverable; or a source pack, a PDF of the pages the Mind cites (#134). Formats are listed
+ * in the order the options sheet offers them.
+ */
+export const EXPORT_FORMATS = ["docx", "pdf", "source-pack", "html", "markdown"] as const;
+export type ExportFormat = (typeof EXPORT_FORMATS)[number];
+
+/**
+ * The User's export choices (`UserSettings.exportOptions`): the format Export uses, and each
+ * format's own options. Markdown, the archive, always keeps the Questions; a source pack has
+ * none.
+ */
+export interface ExportPreferences {
+  format: ExportFormat;
+  docx: WordExportPreferences;
+  pdf: { includeQuestions: boolean };
+  html: { includeQuestions: boolean };
+  /** How a PDF, an HTML file or Markdown shows someone's changes still waiting (#734). Absent: shown. */
+  theirChanges?: TheirChangesShown;
+}
+
+/**
+ * How an export other than Word's shows someone's changes from a Word file
+ * still waiting (#734): marked as changes, with who made each and when, or
+ * as if every one were accepted. A Word file keeps them as tracked changes.
+ */
+export type TheirChangesShown = "shown" | "accepted";
+
+/** A Word export's own choices (#107), each on until the User turns it off (see `ExportMindOptions`). */
+export interface WordExportPreferences {
+  includeQuestions: boolean;
+  trackChanges: boolean;
+  markAiText: boolean;
+  commentFailedChecks: boolean;
+}
 
 export interface ExportMindOptions {
   format: ExportFormat;
   /**
    * Whether Questions are exported, marked as Questions. Defaults to true for
-   * Markdown, an archive of everything, and to false for .docx: the deliverable
-   * leaves the working material out.
+   * Markdown, an archive of everything, and to false for .docx, PDF and HTML: the
+   * deliverable leaves the working material out. A source pack has no Questions.
    */
   includeQuestions?: boolean;
+  /**
+   * For a Mind imported from a Word file, exported to Word (#105): the keys of
+   * what can't be kept (`WordExportLoss.key`) that the User has seen and
+   * exports anyway. `saveMindExport` saves nothing while anything else can't be kept.
+   */
+  accept?: string[];
+  /**
+   * Word only (#107): for a Mind imported from a Word file, the User's edits
+   * since the import go in as tracked changes under their name
+   * (`Settings.author`). Changes still waiting to be accepted always go into
+   * a Word file as tracked changes by IncarnaMind. Absent: off.
+   */
+  trackChanges?: boolean;
+  /** Word only: AI text gets a comment by IncarnaMind, "Written by IncarnaMind". Absent: off. */
+  markAiText?: boolean;
+  /** PDF, HTML and Markdown: how someone's changes still waiting are shown (#734). Absent: shown. */
+  theirChanges?: TheirChangesShown;
+  /**
+   * Word only: a Citation whose check failed (its quote wasn't found, or its
+   * claim is unsupported or contradicted) gets a comment by IncarnaMind
+   * saying so. Absent: off.
+   */
+  commentFailedChecks?: boolean;
 }
 
 /** What exporting a Mind will write, for the User to see before the file is written. */
@@ -4153,16 +5880,36 @@ export interface MindExportPreview {
   unverifiedCitations: number;
   /** The Question Blocks in the Mind, whether the export includes them or not. */
   questions: number;
+  /** The Mind was imported from a Word file, which a Word export writes back into (#105). */
+  fromWord: boolean;
+  /** Someone's changes from that Word file still waiting (#734), shown or accepted as `theirChanges` says. */
+  theirChanges: number;
 }
 
 /** A Mind exported as a file, for the host to save where the User chooses. */
 export interface MindExport extends MindExportPreview {
-  /** The file's contents: UTF-8 text for Markdown, a ZIP package for .docx. */
+  /** The file's contents: UTF-8 text for Markdown and HTML, a ZIP package for .docx, a PDF for PDF and a source pack. */
   data: Uint8Array;
+  /** For a Mind imported from a Word file, exported back into it: what it kept and couldn't keep. */
+  word: WordExportReport | null;
 }
 
 /** What `saveMindExport` did. */
 export type SavedMindExport =
+  /** Saved, with what it holds, so the result line can say how many quotes weren't found. */
+  | ({ status: "saved"; file: SavedFile; word: WordExportReport | null } & Omit<
+      MindExportPreview,
+      "fileName" | "fromWord" | "theirChanges"
+    >)
+  /**
+   * Not saved: a Mind imported from Word can't keep something in its file
+   * (`WordExportReport.notKept`) the User hasn't accepted (`ExportMindOptions.accept`).
+   */
+  | { status: "review"; word: WordExportReport }
+  | Exclude<SavedExport, { status: "saved" }>;
+
+/** What saving an export did: a Skill's zip (`saveSkillExport`), and the base of a Mind's. */
+export type SavedExport =
   | { status: "saved"; file: SavedFile }
   /** The User didn't choose where new files go, so nothing was saved. */
   | { status: "cancelled" }
@@ -4192,6 +5939,11 @@ export interface CitedWork {
   /** The Document's name when it was cited, which still names a Document deleted since. */
   documentName: string | null;
   location: CitationLocation | null;
+  /**
+   * The version quoted (`CitationAttributes.contentHash`): a web page's tells the day that
+   * version was fetched, which styles print as "accessed". Left out, a web page has no such day.
+   */
+  contentHash?: string | null;
 }
 
 /**
@@ -4275,9 +6027,12 @@ export interface SetMindCitationStyleOptions {
  * renames or deletes a file that is already there.
  */
 export interface OutputSettings {
-  /** The folder the User chose, absolute, symbolic links resolved; null until they choose (the first save asks). */
+  /**
+   * The folder new files go in, absolute, symbolic links resolved; null until
+   * the first save, which takes `suggested` without asking (D209).
+   */
   location: string | null;
-  /** The folder the first save offers: "IncarnaMind" in the User's Documents folder. */
+  /** The default: "IncarnaMind" in the User's Documents folder (文稿 on a Chinese Mac). */
   suggested: string;
   /** The Linked folders the User has answered about, oldest answer first. */
   linkedFolders: LinkedFolderWriting[];
@@ -4295,14 +6050,22 @@ export interface LinkedFolderWriting {
 
 /**
  * A save waiting for the User's answer (`respondToFileWrite`), asked once:
- * - "output-location": no Output location is chosen yet. Accepting saves in
- *   the suggested folder; `setOutputLocation` answers with another one.
+ * - "output-location": none is chosen and the default, `suggested`, can't
+ *   take new files (`problem`). `setOutputLocation` answers with another
+ *   folder; accepting makes the default the Output location all the same.
  * - "linked-folder": the file would go inside a Linked folder. Accepting lets
  *   IncarnaMind add files there from now on; declining stops it, until the
  *   User changes it in Settings (`setLinkedFolderWriting`).
  */
 export type FileWriteRequest =
-  | { requestId: string; kind: "output-location"; suggested: string; fileName: string }
+  | {
+      requestId: string;
+      kind: "output-location";
+      suggested: string;
+      fileName: string;
+      /** Why `suggested` can't take it. */
+      problem: OutputFolderProblem;
+    }
   | {
       requestId: string;
       kind: "linked-folder";
@@ -4311,12 +6074,20 @@ export type FileWriteRequest =
       fileName: string;
     };
 
+/** Why a folder can't take new files: it can't be made (a file is in the way), or IncarnaMind may not write in it. */
+export type OutputFolderProblem = "missing" | "not-writable";
+
 /** A new file IncarnaMind saved. */
 export interface SavedFile {
   /** Absolute. */
   path: string;
   /** Its name: the one asked for, or, when that was taken, the next free one ("Tides 2.docx"). */
   name: string;
+  /**
+   * This save took the default Output location, Documents › IncarnaMind,
+   * none being chosen yet (D209): what shows it says where, with a way to change it.
+   */
+  defaulted: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -4395,9 +6166,78 @@ export interface Meeting {
   saveError: string | null;
   /** Its Transcript, made on this computer (#136); null before it starts, or where this copy can't transcribe. */
   transcript: MeetingTranscript | null;
+  /** How well its capture went, so a bad recording can be explained (#161). */
+  health: CaptureHealth;
   createdAt: string;
   updatedAt: string;
 }
+
+/**
+ * How well a Meeting's capture went (#161): only numbers, times and kinds,
+ * never a word of its Transcript or any of its audio. It goes into the log as
+ * it happens, too.
+ */
+export interface CaptureHealth {
+  /**
+   * Live transcription on this computer: the time decoding took over the
+   * length of the speech it decoded, so under 1 keeps up with the Meeting.
+   * Null until some speech has been transcribed live.
+   */
+  realTimeFactor: number | null;
+  /** How much speech `realTimeFactor` is measured on, in ms. */
+  measuredMs: number;
+  /** Whether that is fast enough for live text; null until measured. */
+  keepsUp: boolean | null;
+  /** What happened to the capture, in the order it happened. */
+  events: CaptureHealthEvent[];
+}
+
+export type CaptureHealthEvent = {
+  /** When it happened (ISO 8601). */
+  at: string;
+  /** Where it happened, in the Meeting's time. */
+  atMs: number;
+} & CaptureEvent;
+
+/**
+ * What happened to a Meeting's capture:
+ * - "audioLost": a source's audio is missing for `durationMs` (see `AudioLossCause`).
+ * - "audioRecovered": IncarnaMind closed or crashed while recording, at
+ *   `atMs`, and the `durationMs` saved before then since recording last
+ *   started, in `parts`, was found at the next start.
+ * - "restarted": the transcription process stopped and was started again;
+ *   the speech it had not finished is a gap, transcribed again after the
+ *   Meeting stops while its audio is kept.
+ * - "behind": live text fell behind; the rest is transcribed after the Meeting stops.
+ * - "notTranscribed": a stretch of speech the engine couldn't read has no text.
+ * - "switched": transcription moved from one engine to another (#141, #462).
+ */
+export type CaptureEvent =
+  | { kind: "audioLost"; source: AudioSource; cause: AudioLossCause; durationMs: number }
+  | { kind: "audioRecovered"; parts: number; durationMs: number }
+  | { kind: "restarted"; gapMs: number }
+  | { kind: "behind" }
+  | { kind: "notTranscribed"; durationMs: number }
+  | {
+      kind: "switched";
+      from: TranscriptionEngine;
+      to: TranscriptionEngine;
+      reason: EngineSwitchReason;
+    };
+
+/**
+ * Why audio is missing: a part couldn't be saved because the disk was full
+ * ("full"), IncarnaMind wasn't allowed to write it ("denied") or something
+ * else went wrong ("error"); IncarnaMind closed while a part was being saved
+ * ("closed"); or no audio came in for a while ("stalled"), as when a device changes.
+ */
+export type AudioLossCause = "full" | "denied" | "error" | "closed" | "stalled";
+
+/** Where a Meeting's speech is turned into text: on this computer, or by a cloud service (#141). */
+export type TranscriptionEngine = "local" | "cloud";
+
+/** Why transcription moved to another engine: the one before fell behind or failed, or the User chose. */
+export type EngineSwitchReason = "behind" | "failed" | "user";
 
 /**
  * Where a Meeting's Transcript is (#136):
@@ -4445,6 +6285,8 @@ export interface MeetingTranscript {
   model: TranscriptionModelStatus | null;
   /** The WebVTT file in the Output location, once saved. */
   savedPath: string | null;
+  /** Its save took the default Output location, none being chosen yet (`SavedFile.defaulted`). */
+  savedDefaulted: boolean;
   problem: TranscriptProblem | null;
 }
 
@@ -4478,6 +6320,12 @@ export interface StartMeetingInput {
 // Outside agents (#351, experimental)
 
 /**
+ * Stands for Not in a Folder where a Folder's id goes in a pairing's scope and in an
+ * agent's `folderIds`. A Folder's id is a random UUID, so it can't be one.
+ */
+export const NOT_IN_A_FOLDER_ID = "not-in-a-folder";
+
+/**
  * An outside agent the User connected: an AI agent they run themselves, such
  * as Claude Code or Codex, that uses IncarnaMind as an MCP server. One pairing
  * per agent, on this device only: the agent runs on this computer.
@@ -4486,7 +6334,11 @@ export interface AgentPairing {
   id: string;
   /** What the User calls it, e.g. "Claude Code". Unique among pairings, ignoring case. */
   name: string;
-  /** The Folders it may search and read, with their Minds. None until the User picks some. */
+  /**
+   * The Folders it may search and read, with their Minds, and `NOT_IN_A_FOLDER_ID` for the
+   * Documents in no Folder at the time of each call, without their Minds. None until the
+   * User picks some.
+   */
   folderIds: string[];
   /** The agent it was set up in, e.g. "codex"; null for one set up by hand. */
   client: string | null;
@@ -4511,7 +6363,7 @@ export interface AgentSettings {
 export interface ConnectAgentInput {
   /** Trimmed; must not be empty, nor another pairing's name (ignoring case). */
   name: string;
-  /** Folders (by id) it may read; none by default. */
+  /** Folders (by id, or `NOT_IN_A_FOLDER_ID`) it may read; none by default. */
   folderIds?: string[];
   /** The agent it is set up in, e.g. "codex": lower-case letters, digits and hyphens. */
   client?: string;
@@ -4698,10 +6550,13 @@ export interface CoreApi {
   /**
    * Saves the Tagging setting: the model for automatic tagging and Organize,
    * and whether new and changed Documents are organized automatically. A
-   * classifier of null is Automatic.
+   * classifier of null is Automatic; `organizeWith` left out stays as it was.
    */
   saveLibrarySettings(
-    settings: Omit<LibrarySettings, "classifier"> & { classifier: LibraryClassifier | null },
+    settings: Omit<LibrarySettings, "classifier" | "organizeWith"> & {
+      classifier: LibraryClassifier | null;
+      organizeWith?: TaggingClassifier | null;
+    },
   ): Promise<void>;
   /**
    * What the Tagging section shows (#180): what Automatic tags with now and
@@ -4779,6 +6634,28 @@ export interface CoreApi {
 
   /** Makes a Mind, in a Folder if given (it must exist), and returns it. */
   createMind(input?: CreateMindInput): Promise<Mind>;
+  /**
+   * Reads a Word file for the import screen (#104): whether it can be imported, whose
+   * document it looks like, and an earlier draft of it imported into the Folder (none, or
+   * null: Not in a Folder). Keeps nothing, and changes nothing.
+   */
+  checkWordFile(path: string, folderId?: string | null): Promise<WordFileCheck>;
+  /**
+   * Imports a .docx as a new Mind (#104), titled after the file, keeping a copy of its
+   * package in the data folder to export back into (#105), so the file may move or go.
+   * A file that can't be imported is refused before any Mind is made. Otherwise the Mind
+   * is returned at once and fills in with the file's content, a batch at a time
+   * (`WordImportProgress` in its document; an import a quit cut short goes on at the
+   * next start). Someone else's document makes every Block third-party text (#78).
+   */
+  importWordFile(input: ImportWordFileInput): Promise<ImportWordFileResult>;
+  /**
+   * Adds the original of a Mind imported from Word to the Library, in the Mind's Folder,
+   * and links the two, as importing with `addOriginal` does (#720): for when that failed.
+   * Returns whether it was added. Throws NotFoundError for an unknown Mind, and
+   * InvalidInputError for one not imported from Word.
+   */
+  addWordOriginal(mindId: string, path: string): Promise<boolean>;
   /** Minds that are not deleted, most recently updated first. Editing a Mind's content updates it. */
   listMinds(): Promise<Mind[]>;
   /** Changes a Mind's title (trimmed; empty means "Untitled") and returns the Mind. */
@@ -4800,16 +6677,55 @@ export interface CoreApi {
   closeMind(mindId: string): Promise<void>;
 
   /**
+   * Saves a Checkpoint of the Mind as it is now (#113), and returns it. Call
+   * it just before an AI change goes into the Mind, with why: accepting
+   * changes, Regenerate, Enhance, inserting a comparison table ("compare"), or
+   * accepting someone else's changes ("others"). The renderer may call it
+   * without waiting, right before sending the change: calls are taken in
+   * order. When the Mind hasn't changed since its last Checkpoint, deletions
+   * included, nothing new is saved and that one is returned; an idle one is
+   * kept for good from then on. Its Citations' Document versions keep their
+   * text for as long as it is kept. Throws NotFoundError for an unknown or
+   * deleted Mind.
+   */
+  saveCheckpoint(mindId: string, reason: CheckpointReason): Promise<Checkpoint>;
+  /** A Mind's Checkpoints, newest first, and which holds it as it is now. */
+  listCheckpoints(mindId: string): Promise<CheckpointList>;
+  /**
+   * Compares a Checkpoint with another one, or with the Mind now, Block by
+   * Block and word by word. Throws NotFoundError for a Checkpoint that isn't
+   * one of the Mind's, or is no longer kept.
+   */
+  compareCheckpoints(input: CompareCheckpointsInput): Promise<MindComparison>;
+  /**
+   * Brings a Checkpoint's Blocks back as a new change to the Mind, after
+   * saving one of the Mind as it is ("restore"): nothing is overwritten, and
+   * both stay in History. Proposals that were waiting in it don't come back,
+   * so it reads as `compareCheckpoints` showed it. Restoring the `before` it
+   * returns takes it back.
+   * Throws MindReadOnlyError for a Mind a newer version wrote.
+   */
+  restoreCheckpoint(mindId: string, checkpointId: string): Promise<RestoredCheckpoint>;
+
+  /**
    * Asks a Question in the assistant (ADR-0017): adds it to the conversation, or starts
    * a conversation with it, and the Answer streams into the conversation ("answer.*"
    * events with its `conversationId`, and each write as "conversation.message"). The
-   * Question records the Mind in focus; a new conversation belongs to that Mind's Folder,
-   * or to none. When the Question can't be asked, nothing is kept: no Question, and no
-   * conversation. "conversations.changed" follows.
+   * Question records the Mind in focus, which its Answer reads, the selection first; a
+   * new conversation belongs to that Mind's Folder, or to none. When the Question can't be
+   * asked, nothing is kept: no Question, and no conversation. "conversations.changed" follows.
    */
   askInConversation(input: AskInConversationInput): Promise<ConversationAskResult>;
-  /** Writes an Answer of a conversation again, in place, for its Question as it was asked. */
+  /**
+   * Writes an Answer of a conversation again, in place, for its Question as it was asked,
+   * reading the Mind it was asked from as that Mind is now.
+   */
   regenerateConversationAnswer(input: ConversationAnswerInput): Promise<ConversationAskResult>;
+  /**
+   * How many Documents a Search scope covers that can be searched now; for a
+   * scope of none (null), every Document's. 0: the scope holds none (#748).
+   */
+  countScopeDocuments(scope?: SearchScope | null): Promise<number>;
   /** Stops an Answer of a conversation being written, keeping what it has. */
   stopConversationAnswer(input: ConversationAnswerInput): Promise<void>;
   /**
@@ -4826,6 +6742,20 @@ export interface CoreApi {
    */
   searchConversations(query: string): Promise<ConversationMatch[]>;
   /**
+   * ⌘K's "In your notes": the Minds, not deleted, whose Blocks hold every word of `query`
+   * (English and Chinese, as Document search reads them; the last letters of each word may be
+   * still to type), best match first, at most 20. Blocks are searched as they are now: words
+   * typed a moment ago are found.
+   */
+  searchMinds(query: string): Promise<MindTextMatch[]>;
+  /**
+   * ⌘K's "In your Documents" and the Library's search: live Documents whose Passages hold every
+   * word of `query`, as `searchMinds` reads it, best match first, one Passage each, at most
+   * `limit` (20 unless asked; InvalidInputError outside 1 to 200). Keyword search over the
+   * Passage index, whatever the embedding settings.
+   */
+  searchDocumentText(query: string, options?: { limit?: number }): Promise<DocumentTextMatch[]>;
+  /**
    * Gives a conversation the title the User typed (trimmed; empty goes back to its own
    * name) and returns it. A name the conversation gives itself never replaces it.
    */
@@ -4840,6 +6770,17 @@ export interface CoreApi {
    * Block's origin. Restoring what it points into makes it lead there again.
    */
   resolveReference(reference: ArtifactReference): Promise<ReferenceTarget>;
+  /**
+   * "Add to note" (#201) into a Mind that isn't open in the editor: Blocks at the
+   * end of its note (in place of its empty last line), each Citation in them
+   * checked again against its Document, with a link back to the Answer. As
+   * `proposed`, they wait as changes to accept or reject. What is added at once
+   * goes into the record of AI use; a proposal does once it is accepted. The
+   * Mind open in the editor adds at its cursor itself, by the same rules.
+   */
+  addToNote(input: AddToNoteInput): Promise<AddedToNote>;
+  /** Takes the Blocks an "Add to note" put into a Mind back out, with their links back. */
+  undoAddToNote(input: UndoAddToNoteInput): Promise<void>;
 
   getSettings(): Promise<Settings>;
   /**
@@ -4928,6 +6869,26 @@ export interface CoreApi {
    */
   readDocumentText(documentId: string): Promise<DocumentText>;
   /**
+   * The scanned pages of a Document's current version, with where their
+   * lines are (#397): empty when it has none. Throws NotFoundError for an
+   * unknown or deleted Document.
+   */
+  readScannedText(documentId: string): Promise<ScannedText>;
+  /**
+   * Whether a Citation's quote was read from a scan (#397), and the words in
+   * it the reading wasn't sure of; null when the Units it cites weren't
+   * scanned, or its quote isn't in them.
+   */
+  readScannedQuote(input: ScannedQuoteInput): Promise<ScannedQuote | null>;
+  /** The built-in text recognition model's download state (#397). */
+  getTextRecognitionModel(): Promise<EmbeddingModelStatus>;
+  /**
+   * Downloads the built-in text recognition model, or tries again after a
+   * failure; once it is ready, Documents whose scanned pages couldn't be
+   * read are read again. "textRecognitionModel.status" events report progress.
+   */
+  downloadTextRecognitionModel(): Promise<EmbeddingModelStatus>;
+  /**
    * What linking a folder would take (see `LinkedFolderPreview`), from the
    * files' metadata, without reading or changing anything. Throws for a path
    * that isn't a folder.
@@ -4947,6 +6908,25 @@ export interface CoreApi {
   addLinkedFolder(path: string, options?: AddDocumentsOptions): Promise<AddedLinkedFolder>;
   /** The Linked folders, in path order. */
   listLinkedFolders(): Promise<LinkedFolder[]>;
+  /**
+   * The files in a Search scope that couldn't be read, and why (#740): its
+   * Documents with no text, password-protected or damaged, and the files in
+   * its Linked folders in a format not read. A scope of none (null) is every
+   * Document. Empty when everything in it was read.
+   */
+  listUnreadFiles(scope?: SearchScope | null): Promise<UnreadFile[]>;
+  /**
+   * Points a Linked folder at where it is on this computer now, after it was
+   * moved or renamed, or when the data folder is opened on another computer
+   * (ADR-0020). Its Documents are looked for at their paths inside it and
+   * keep their ids, versions, Tags and Citations: a file with the same size
+   * and modified time isn't read, and one with the same content isn't
+   * processed again. Returns at once, "scanning". Throws InvalidInputError,
+   * changing nothing, for a folder inside or around another Linked folder,
+   * one that holds none of its files, or one with a file of it already added
+   * on its own.
+   */
+  locateLinkedFolder(linkedFolderId: string, path: string): Promise<LinkedFolder>;
   /**
    * Stops syncing a Linked folder and removes its Documents and Folders from
    * the index. Nothing on disk is touched. Of their stored text, only the
@@ -5019,7 +6999,7 @@ export interface CoreApi {
   listSourceProviders(): Promise<SourceProviderInfo[]>;
   /**
    * Sets, or with null removes, the User's own key for a provider that takes
-   * one (openFDA's). It is kept only in the keychain, sent only to that
+   * one (openFDA's, GovInfo's). It is kept only in the keychain, sent only to that
    * provider in a header, and never given back. Throws InvalidInputError for
    * a provider that takes none, and SecretStorageError when it can't be kept.
    */
@@ -5196,6 +7176,11 @@ export interface CoreApi {
    */
   listChatModels(): Promise<ChatModelGroup[]>;
   /**
+   * Puts a model id in a provider's model menu, or takes an id the User added
+   * back out. Any id can be added, listed by the provider or not.
+   */
+  setChatModelInMenu(input: SetChatModelInMenuInput): Promise<void>;
+  /**
    * This month's cost so far, for Settings: what requests billed per token
    * cost, settled and still reserved, and each provider's use. Recorded on
    * this computer only.
@@ -5207,6 +7192,49 @@ export interface CoreApi {
    * tokens and price; for a plan or a model on this computer, nothing.
    */
   estimateRun(input: RunEstimateInput): Promise<RunEstimate>;
+
+  /**
+   * Compare Documents (#98): puts a comparison table into the Mind, one row
+   * per Document and one column per Question, as one change to accept or
+   * reject, and fills its cells, each an Answer from its row's Document alone
+   * with checked Citations ("comparison.filling" while it does). A model off
+   * this computer writes up to 4 cells at once, backing off when its provider
+   * limits requests; one on this computer, one at a time. The monthly cap or a
+   * plan's limit stops the fill, and the cells left say they weren't checked.
+   */
+  compareDocuments(input: CompareDocumentsInput): Promise<ComparisonResult>;
+  /**
+   * Fills a comparison table's cells that have no Answer (`cellToFill`): a
+   * column the editor just added, or cells a fill left (a quit, the monthly
+   * cap, a failure). A fill already going takes them up once its cells are done.
+   */
+  fillComparisonTable(input: ComparisonTableRef): Promise<ComparisonResult>;
+  /** Stops filling a comparison table: cells being written stay as they were. */
+  stopComparisonTable(input: ComparisonTableRef): Promise<void>;
+  /** The comparison tables whose cells are being filled now. */
+  listFillingComparisons(): Promise<ComparisonTableRef[]>;
+
+  /**
+   * Tasks (#126): those not finished, then those finished in the last 7 days,
+   * most recent first ("task.changed" as each changes). A comparison table
+   * fills as a Task: closing its Mind or quitting doesn't stop it, and it
+   * goes on when IncarnaMind starts again.
+   */
+  listTasks(): Promise<Task[]>;
+  /**
+   * Pauses a running Task where it is: a step being done (a cell being
+   * written) stops and is done again when it resumes, and what it asked is
+   * asked again then. A file or Connector change under way finishes first.
+   */
+  pauseTask(taskId: string): Promise<Task>;
+  /** Resumes a paused Task from where it stopped. A Task waiting for an answer resumes once answered. */
+  resumeTask(taskId: string): Promise<Task>;
+  /** Stops a Task for good: what it did stays, and what it waits for is withdrawn. */
+  stopTask(taskId: string): Promise<Task>;
+  /** Answers a Task's "unknown-outcome" ask: do the step again, or go on without it. */
+  answerTaskAsk(taskId: string, answer: TaskAskAnswer): Promise<Task>;
+  /** Every step of a Task, in the order each first started. */
+  listTaskSteps(taskId: string): Promise<TaskStep[]>;
 
   /**
    * Asks a Question: its Answer is written into the Mind right after it, as the
@@ -5269,6 +7297,46 @@ export interface CoreApi {
   regenerateProposal(input: RegenerateProposalInput): Promise<EditWithAiResult>;
   /** Stops an Edit with AI request: it gives "cancelled". Stopping one that ended does nothing. */
   cancelEdit(requestId: string): Promise<void>;
+  /**
+   * Find support and Check against Documents (#96): checks each sentence the
+   * selection touches against the Mind's Folder (or every Document), one at a
+   * time, with `checkClaim`. Each sentence gets a `CLAIM_CHECK_MARK` at once,
+   * "checking", then its result, pushed as a "mind.update" like any edit.
+   * Sends on the "checks" flow once the User allows it for the model's
+   * service; in local mode only a model on this computer is used.
+   */
+  checkSentences(input: CheckSentencesInput): Promise<CheckSentencesResult>;
+  /** Stops a `checkSentences` request: it gives "cancelled". Stopping one that ended does nothing. */
+  cancelCheck(requestId: string): Promise<void>;
+  /**
+   * The claim-check function (#96): checks one claim against the Documents
+   * in a check Run, which is offered the Documents' search and `cite` only
+   * (ADR-0013), searching as `searchEvidence` does. A model that refuses,
+   * fails or gives no verdict leaves it "not-checked" with the reason.
+   * Sends on the "checks" flow, as `checkSentences` does.
+   */
+  checkClaim(input: CheckClaimInput): Promise<ClaimCheckResult>;
+  /**
+   * Verify (#97): adds a document someone else wrote (a PDF) to the Library,
+   * or finds it there, waits until its text is read, and makes a Mind of that
+   * text, a paragraph to a Block, each Block's page recorded. Its text is the
+   * document being checked: third-party (#78), and never its own evidence.
+   */
+  verifyDocument(input: VerifyDocumentInput): Promise<VerifyDocumentResult>;
+  /**
+   * Has the model name the sentences of a `verifyDocument` Mind that make
+   * claims, and records them in the Mind. Sends the document's sentences on
+   * the "checks" flow, as `checkSentences` does. One verify run at a time.
+   */
+  findClaims(input: VerifyClaimsInput): Promise<FindClaimsResult>;
+  /**
+   * Checks the claims `findClaims` found, as Check against Documents does,
+   * against the Mind's Folder (or every Document), the PDF, its earlier
+   * versions and its copies left out. A cloud model checks a few at once.
+   * Each gets its mark at once, then its result; the monthly cap or a plan's
+   * limit stops the run. `cancelCheck` stops it. One verify run at a time.
+   */
+  verifyClaims(input: VerifyClaimsInput): Promise<VerifyClaimsResult>;
 
   getSecretStorage(): Promise<SecretStorageStatus>;
   /** The User accepts storing keys without keyring protection on this device. */
@@ -5357,6 +7425,15 @@ export interface CoreApi {
   clearAiUse(): Promise<AiUseCleared>;
   /** Brings back what `clearAiUse` emptied at `clearedAt`. */
   restoreAiUse(clearedAt: string): Promise<AiUseStatus>;
+  /**
+   * Makes the AI use statement of a Mind (#739) as a new Mind for the User to edit: in the
+   * Mind's Folder, in the interface language, named after it. It states, as counts drawn from
+   * what the Mind records, which models the AI wrote with and for what, how much AI text is in
+   * each section and what became of it, and the results of checking Citations and sentences. A
+   * figure the record doesn't hold is left out, and nothing is estimated. The Mind itself is
+   * left as it is. Throws NotFoundError for an unknown Mind.
+   */
+  createAiUseStatement(mindId: string): Promise<Mind>;
   /**
    * The Folders of every Linked folder, as a flat list in name order (ignoring
    * case). Build the tree from each Folder's `parentId`; siblings keep the
@@ -5488,6 +7565,21 @@ export interface CoreApi {
   previewConnectorImport(json: string): Promise<ConnectorImportEntry[]>;
   /** Adds every server of an `mcpServers` configuration that the preview marks "add". */
   importConnectors(json: string): Promise<ConnectorImportResult>;
+  /** The reviewed Connectors of Settings › Connectors' Browse, in the directory's order. Reads nothing from the network. */
+  listConnectorDirectory(): Promise<ConnectorDirectoryEntry[]>;
+  /**
+   * Adds a directory entry as a remote Connector named as the service, and
+   * starts it, as `addConnector` does, with the User's OAuth app for an
+   * "own-app" entry. A Connector already at the entry's URL is returned
+   * instead, turned on.
+   */
+  addConnectorFromDirectory(entryId: string, client?: ConnectorClientInput): Promise<Connector>;
+  /**
+   * Searches the official MCP Registry for community servers matching what
+   * the User typed (two letters or more), asking them the first time
+   * ("connector-registry" flow). Nothing is sent in Local mode.
+   */
+  searchConnectorRegistry(query: string): Promise<ConnectorRegistrySearch>;
 
   /**
    * The User's approval policies, for the approvals page: every Tool always
@@ -5568,7 +7660,7 @@ export interface CoreApi {
    * (as `saveMindExport` does, asking where the first time). The zip imports
    * again with the same preview.
    */
-  saveSkillExport(skillId: string): Promise<SavedMindExport>;
+  saveSkillExport(skillId: string): Promise<SavedExport>;
   /**
    * The chat model drafts a Skill from what the User just did in a Mind: its
    * Notes, Questions and Answers, the latest weighing most. Sends on the
@@ -5601,8 +7693,12 @@ export interface CoreApi {
    * included, its Questions, in order. Its Citations are in the Mind's
    * citation style (#289): in the text, or as notes, with the Bibliography at
    * the end; in Numbered, each is its own footnote naming its Document and
-   * Location, e.g. "Tides, p. 12–13" or "Deck, slide 4". A Citation is marked
-   * "[unverified]" unless its quote was found. Math stays LaTeX.
+   * Location, e.g. "Tides, p. 12–13" or "Deck, slide 4"; a web page's also
+   * names its site, its address and the day the quoted version was fetched.
+   * A Citation is marked "[unverified]" unless its quote was found. Math stays
+   * LaTeX in Markdown, becomes Word equations in a .docx, and is typeset in a
+   * PDF, which the `printer` adapter prints with each footnote on the page of
+   * its marker.
    */
   exportMind(mindId: string, options: ExportMindOptions): Promise<MindExport>;
   /**
@@ -5740,6 +7836,8 @@ export interface CoreEvents {
   "examples.changed": Examples;
   /** A Mind's content changed. Clients editing that Mind apply the update to their `Y.Doc`. */
   "mind.update": MindUpdate;
+  /** A Mind's Checkpoints changed: one was saved, kept for good, or thinned out. Read `listCheckpoints` again. */
+  "checkpoints.changed": { mindId: string };
   /**
    * A Document was added or restored, or its processing status (or embedding
    * progress) changed, or its creation date, title or reference record was read
@@ -5748,6 +7846,8 @@ export interface CoreEvents {
   "document.status": Document;
   /** The built-in embedding model's state changed, or its download made progress. */
   "embeddingModel.status": EmbeddingModelStatus;
+  /** The built-in text recognition model's download state changed (#397). */
+  "textRecognitionModel.status": EmbeddingModelStatus;
   /**
    * The embedding model search uses changed, or local mode, or a rebuild made
    * progress (a Document finished) or finished, or the provider failed or recovered.
@@ -5865,12 +7965,19 @@ export interface CoreEvents {
   "answer.started": AnswerStarted;
   /** The Answer is loading its model, searching, or writing: its meta line says which. */
   "answer.phase": AnswerPhaseEvent;
+  "answer.reasoning": AnswerReasoning;
   "answer.delta": AnswerDelta;
   "answer.toolCallStarted": AnswerToolCallEvent;
   "answer.toolCallFinished": AnswerToolCallEvent;
   "answer.citationAdded": AnswerCitationAdded;
   "answer.finished": AnswerFinished;
   "answer.failed": AnswerFailed;
+  /** A comparison table's cells started or stopped being filled. */
+  "comparison.filling": ComparisonFilling;
+  /** A Task started, moved on, waits for the User, paused, resumed or finished. */
+  "task.changed": Task;
+  /** A Task's notification was clicked: the window opens its Mind, with its row in the tray. */
+  "task.shown": TaskShown;
   /** The User accepted a suggestion into a Mind (see `acceptSuggestion`). */
   "suggestion.accepted": SuggestionAccepted;
   /**
@@ -5910,21 +8017,33 @@ export type CoreApiMethod = keyof CoreApi;
 // A Record over every method name: adding a method to CoreApi without listing it here fails the type-check.
 const methods: Record<CoreApiMethod, true> = {
   createMind: true,
+  checkWordFile: true,
+  importWordFile: true,
+  addWordOriginal: true,
   listMinds: true,
   renameMind: true,
   deleteMind: true,
   openMind: true,
   applyMindUpdate: true,
   closeMind: true,
+  saveCheckpoint: true,
+  listCheckpoints: true,
+  compareCheckpoints: true,
+  restoreCheckpoint: true,
   askInConversation: true,
   regenerateConversationAnswer: true,
+  countScopeDocuments: true,
   stopConversationAnswer: true,
   listConversations: true,
   getConversation: true,
   searchConversations: true,
+  searchMinds: true,
+  searchDocumentText: true,
   renameConversation: true,
   deleteConversation: true,
   resolveReference: true,
+  addToNote: true,
+  undoAddToNote: true,
   getSettings: true,
   updateSettings: true,
   getLayout: true,
@@ -5938,9 +8057,15 @@ const methods: Record<CoreApiMethod, true> = {
   deleteDocument: true,
   retryDocument: true,
   readDocumentText: true,
+  readScannedText: true,
+  readScannedQuote: true,
+  getTextRecognitionModel: true,
+  downloadTextRecognitionModel: true,
   previewLinkedFolder: true,
   addLinkedFolder: true,
   listLinkedFolders: true,
+  listUnreadFiles: true,
+  locateLinkedFolder: true,
   removeLinkedFolder: true,
   listKeptCitationTexts: true,
   updateReference: true,
@@ -5980,8 +8105,19 @@ const methods: Record<CoreApiMethod, true> = {
   testChatConnection: true,
   getChatReadiness: true,
   listChatModels: true,
+  setChatModelInMenu: true,
   getCostSummary: true,
   estimateRun: true,
+  compareDocuments: true,
+  fillComparisonTable: true,
+  stopComparisonTable: true,
+  listFillingComparisons: true,
+  listTasks: true,
+  pauseTask: true,
+  resumeTask: true,
+  stopTask: true,
+  answerTaskAsk: true,
+  listTaskSteps: true,
   askQuestion: true,
   regenerateAnswer: true,
   stopAnswer: true,
@@ -5992,6 +8128,12 @@ const methods: Record<CoreApiMethod, true> = {
   editWithAi: true,
   regenerateProposal: true,
   cancelEdit: true,
+  checkSentences: true,
+  cancelCheck: true,
+  checkClaim: true,
+  verifyDocument: true,
+  findClaims: true,
+  verifyClaims: true,
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,
   detectOllama: true,
@@ -6016,6 +8158,7 @@ const methods: Record<CoreApiMethod, true> = {
   getAiUseStatus: true,
   clearAiUse: true,
   restoreAiUse: true,
+  createAiUseStatement: true,
   listFolders: true,
   getLibrary: true,
   createLibraryGroup: true,
@@ -6064,6 +8207,9 @@ const methods: Record<CoreApiMethod, true> = {
   setConnectorClient: true,
   previewConnectorImport: true,
   importConnectors: true,
+  listConnectorDirectory: true,
+  addConnectorFromDirectory: true,
+  searchConnectorRegistry: true,
   listApprovalPolicies: true,
   setApprovalPolicy: true,
   revokeApprovalPolicy: true,

@@ -1,16 +1,25 @@
 import { type KeyboardEvent, useContext, useEffect, useRef, useState } from "react";
 import type { Mind } from "../../../../core/api";
-import { ComposerDockContext, CountSlotContext } from "../../editor/mindContext";
+import { files } from "../../core";
+import {
+  CompareSheetSlotContext,
+  ComposerDockContext,
+  CountSlotContext,
+} from "../../editor/mindContext";
 import { useT } from "../../i18n";
 import { assistantTabOf } from "../../layoutSlice";
 import { useAppStore } from "../../store";
+import { useFittedName } from "../../useFittedName";
 import { useGroupsMerged } from "../../useWindowWidth";
+import { isWordFile, useWordImport } from "../../wordImport";
+import { ExportResultLine } from "../ExportResultLine";
 import { ExampleBanner, useIsExample } from "../GettingStarted";
 import { PlusLineIcon } from "../lineIcons";
 import { MakeSkillCard } from "../MakeSkillCard";
 import { MeetingInMind } from "../MeetingInMind";
 import { MindEditor } from "../MindEditor";
 import { ChatReadinessNotice } from "../providers/ChatReadinessNotice";
+import { TypingTextarea } from "../TypingTextarea";
 import { buttonStyle } from "../ui";
 import { useTabPlace } from "./tabItems";
 
@@ -22,33 +31,66 @@ export function MindTab({ mindId }: { mindId: string }) {
   const mind = useAppStore((state) => state.minds.find((each) => each.id === mindId));
   const isExample = useIsExample(mindId);
   const [countSlot, setCountSlot] = useState<HTMLElement | null>(null);
+  const [sheetSlot, setSheetSlot] = useState<HTMLElement | null>(null);
   const assistantSlot = useContext(ComposerDockContext);
   const tabId = useTabPlace()?.tabId;
   const merged = useGroupsMerged();
   const read = useAppStore((state) => assistantTabOf(state.layout, merged)?.id === tabId);
+  const dropTarget = useWordFileDrop();
   if (!mind) return null;
 
   return (
-    <div className="mind-scroller min-h-0 flex-grow overflow-auto">
-      {/* Every text in it starts at one edge (styles.css, `.mind-column`). */}
-      <article data-testid="mind-pane" data-mind-id={mind.id} className="mind-column">
-        <div className="mind-measure">
-          {isExample && <ExampleBanner />}
-          <MindTitle mind={mind} />
-          <div ref={setCountSlot} data-testid="mind-count-slot" />
-          <MeetingInMind mindId={mind.id} />
-          {/* The example works without a chat model: it says so in its Answer instead. */}
-          {!isExample && <ChatReadinessNotice />}
-          <ComposerDockContext.Provider value={read ? assistantSlot : null}>
-            <CountSlotContext.Provider value={countSlot}>
-              <MindEditor mindId={mind.id} />
-            </CountSlotContext.Provider>
-          </ComposerDockContext.Provider>
-          <MakeSkillCard mindId={mind.id} />
-        </div>
-      </article>
+    <div className="relative flex min-h-0 flex-grow flex-col">
+      <div ref={dropTarget} className="mind-scroller min-h-0 flex-grow overflow-auto">
+        {/* Every text in it starts at one edge (styles.css, `.mind-column`). */}
+        <article data-testid="mind-pane" data-mind-id={mind.id} className="mind-column">
+          <div className="mind-measure">
+            {isExample && <ExampleBanner />}
+            <MindTitle mind={mind} />
+            <div ref={setCountSlot} data-testid="mind-count-slot" />
+            <MeetingInMind mindId={mind.id} />
+            {/* The example works without a chat model: it says so in its Answer instead. */}
+            {!isExample && <ChatReadinessNotice />}
+            <ComposerDockContext.Provider value={read ? assistantSlot : null}>
+              <CountSlotContext.Provider value={countSlot}>
+                <CompareSheetSlotContext.Provider value={sheetSlot}>
+                  <MindEditor mindId={mind.id} />
+                </CompareSheetSlotContext.Provider>
+              </CountSlotContext.Provider>
+            </ComposerDockContext.Provider>
+            <MakeSkillCard mindId={mind.id} />
+          </div>
+        </article>
+      </div>
+      {/* The Compare Documents sheet docks here, in the column's measure, below the note. */}
+      <div ref={setSheetSlot} className="compare-sheet-dock" />
+      <ExportResultLine mindId={mind.id} />
     </div>
   );
+}
+
+/**
+ * A Word file dropped on a Mind, alone, opens the import screen (#104), which
+ * also offers to add it as a Document, as a drop anywhere else does. It is
+ * taken before the window's own drop handling (`useFileDrop`) sees it.
+ */
+function useWordFileDrop() {
+  const [element, setElement] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!element) return;
+    const drop = (event: DragEvent) => {
+      if (event.defaultPrevented || !event.dataTransfer) return;
+      const dropped = Array.from(event.dataTransfer.files);
+      const file = dropped.length === 1 ? dropped[0] : undefined;
+      const path = file && isWordFile(file.name) ? files.pathForFile(file) : "";
+      if (!path) return;
+      event.preventDefault();
+      void useWordImport.getState().open(path, true);
+    };
+    element.addEventListener("drop", drop);
+    return () => element.removeEventListener("drop", drop);
+  }, [element]);
+  return setElement;
 }
 
 /** A window with no tab open: a way to start a Mind. */
@@ -86,6 +128,10 @@ function MindTitle({ mind }: { mind: Mind }) {
   /** The title as it was when the User started typing it, for Undo. */
   const titleBefore = useRef(mind.title);
   const focusNow = useAppStore((state) => state.titleToFocus === mind.id);
+  // The name it takes while it has no title, one line of it; the whole name is in the tooltip.
+  const name = mind.autoTitle || t("mind.untitled");
+  const placeholder = useFittedName(field, name);
+  const value = draft ?? mind.title;
 
   // A Mind just created: its title takes the focus from the button that made it.
   useEffect(() => {
@@ -120,13 +166,14 @@ function MindTitle({ mind }: { mind: Mind }) {
   return (
     <h1 className="mind-title">
       {/* A text area, so a long title wraps instead of being cut off; it is still one line of text. */}
-      <textarea
+      <TypingTextarea
         ref={field}
         rows={1}
         data-testid="mind-title"
         aria-label={t("mind.title.label")}
-        placeholder={mind.autoTitle || t("mind.untitled")}
-        value={draft ?? mind.title}
+        placeholder={placeholder}
+        title={value === "" && placeholder !== name ? name : undefined}
+        value={value}
         onFocus={() => {
           setDraft(mind.title);
           titleBefore.current = mind.title;

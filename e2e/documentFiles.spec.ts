@@ -51,7 +51,8 @@ test("Open in default app and Show in folder use the file where the User keeps i
   await expect.poll(() => pathsOpened(app)).toEqual([original]);
 
   await openDocumentMenu(item);
-  await window.getByRole("menuitem", { name: "Show in folder" }).click();
+  // "Show in Finder" on macOS, "Show in folder" elsewhere.
+  await window.getByRole("menuitem", { name: /^Show in (Finder|folder)$/ }).click();
   await expect.poll(() => pathsShown(app)).toEqual([original]);
   await app.close();
 });

@@ -14,8 +14,11 @@ import { type Command, type CommandContext, fromMenu } from "./registry";
 function placeOf(ctx: CommandContext): EditMenuState["text"] {
   if (ctx.surface === "palette") return null;
   const focus = document.activeElement;
-  if (!typesText(focus)) return null;
-  return noteAround(focus) ? "note" : "field";
+  const typing = typesText(focus);
+  if (typing && !(focus instanceof HTMLElement && focus.isContentEditable)) return "field";
+  // A chart's buttons and values (#436) are in the note, though not text: ⌘Z there takes back the note's change.
+  if (noteAround(focus)) return "note";
+  return typing ? "field" : null;
 }
 
 const nameOf = (change: Undoable | undefined) => (change ? (change.name ?? "") : null);
@@ -41,8 +44,9 @@ export const editCommands: readonly Command[] = [
     run(ctx) {
       const place = placeOf(ctx);
       if (place === "note") noteAround(document.activeElement)?.commands.undo();
-      // In a field, the Edit menu does the field's own undo itself.
-      else if (place === null) return useUndo.getState().undo();
+      // A field's own undo, the system Edit menu's editing command, which only execCommand reaches.
+      else if (place === "field") document.execCommand("undo");
+      else return useUndo.getState().undo();
     },
   },
   {
@@ -58,7 +62,8 @@ export const editCommands: readonly Command[] = [
     run(ctx) {
       const place = placeOf(ctx);
       if (place === "note") noteAround(document.activeElement)?.commands.redo();
-      else if (place === null) return useUndo.getState().redo();
+      else if (place === "field") document.execCommand("redo");
+      else return useUndo.getState().redo();
     },
   },
 ];

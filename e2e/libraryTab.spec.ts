@@ -86,9 +86,9 @@ test("the Library is a tab beside the Mind, which stays in its own tab, and it c
     await expect(window.getByTestId("mind-tab")).toHaveCount(1);
     await expect(window.getByTestId("mind-tab")).toHaveAttribute("aria-selected", "false");
     await expect(window.getByRole("button", { name: "Back to Mind" })).toHaveCount(0);
-    // It starts with the search.
-    const first = library.locator("input, h1").first();
-    await expect(first).toHaveAttribute("type", "search");
+    // It starts with its title, then the search.
+    await expect(library.locator("input, h1").first()).toContainText("Library");
+    await expect(library.locator("input").first()).toHaveAttribute("type", "search");
 
     // Back to the Mind by its tab: the Library's tab stays open.
     await window.getByTestId("mind-tab").click();
@@ -128,7 +128,7 @@ test("each kind of Document has its own icon, names show no extension, and a mac
     await expect(rows).toHaveCount(5);
 
     // A mark of its own for each kind; Excel and CSV share one.
-    const marks = await library
+    const marks = await rows
       .locator("svg[data-kind]")
       .evaluateAll((icons) =>
         icons.map((icon) => [
@@ -151,15 +151,19 @@ test("each kind of Document has its own icon, names show no extension, and a mac
       /Quarterly report\.txt/,
     );
 
-    // The UUID-named workbook shows its own title; the file name stays in the tooltip and the details.
+    // The UUID-named workbook shows its own title; the file name stays in the tooltip and Get info.
     const sheet = rows.filter({ hasText: "Rent roll for Upper Grosvenor Street" });
     await expect(sheet).toHaveCount(1, { timeout: 15_000 });
     await expect(sheet.getByTestId("library-document-name")).toHaveText(
       "Rent roll for Upper Grosvenor Street",
     );
     await expect(sheet.getByRole("button").first()).toHaveAttribute("title", new RegExp(UUID_NAME));
-    await sheet.getByText("Your choice").or(sheet.locator("summary")).first().click();
-    await expect(sheet).toContainText(`${UUID_NAME}.xlsx`);
+    await sheet.locator("[data-row-main]").focus();
+    await window.keyboard.press("ControlOrMeta+i");
+    await expect(window.getByTestId("info-panel").getByTestId("info-path")).toContainText(
+      `${UUID_NAME}.xlsx`,
+    );
+    await window.keyboard.press("Escape");
     // The sidebar shows the title too.
     await expect(
       window
@@ -171,7 +175,7 @@ test("each kind of Document has its own icon, names show no extension, and a mac
   }
 });
 
-test("a Folder's header holds in the narrowest window that keeps groups side by side, with a Document open beside it: its name on two lines at most, Document actions only in Document menus", async () => {
+test("a Folder's section holds in the narrowest window that keeps groups side by side, with a Document open beside it: its name on one line, Document actions only in Document menus", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
     await dismissChatSetup(window);
@@ -182,9 +186,7 @@ test("a Folder's header holds in the narrowest window that keeps groups side by 
     await placeAssistant(window, { dock: "bottom" });
     await window.getByTestId("open-library").click();
     const library = window.getByTestId("library");
-    await openFolderInLibrary(window, "Reports & presentations");
     // Put a Document in the Folder, and open it in a group beside the Library.
-    const row = library.getByTestId("library-document").first();
     await window.evaluate(async () => {
       const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
       const snapshot = await bridge.getLibrary();
@@ -192,30 +194,38 @@ test("a Folder's header holds in the narrowest window that keeps groups side by 
       const group = snapshot.groups.find((each) => each.name === "Reports & presentations");
       if (group && documents[0]) await bridge.assignDocumentGroup(documents[0].id, group.id);
     });
+    await openFolderInLibrary(window, "Reports & presentations");
+    const folder = library
+      .getByTestId("library-section")
+      .filter({ hasText: "Reports & presentations" });
+    const row = folder.getByTestId("library-document").first();
     await expect(row).toBeVisible();
     await row.getByRole("button").first().click();
     await expect(window.getByTestId("viewer")).toBeVisible();
 
-    const heading = library.getByTestId("library-heading");
-    await expect(heading).toHaveText("Reports & presentations");
-    const box = await heading.evaluate((element) => {
+    const name = folder.getByTestId("library-section-name");
+    await expect(name).toHaveText("Reports & presentations");
+    const box = await name.evaluate((element) => {
       const style = getComputedStyle(element);
       const lineHeight =
         Number.parseFloat(style.lineHeight) || Number.parseFloat(style.fontSize) * 1.3;
       const rect = element.getBoundingClientRect();
-      return {
-        width: rect.width,
-        lines: Math.round(rect.height / lineHeight),
-        overflow: element.scrollWidth - element.clientWidth,
-      };
+      return { width: rect.width, lines: Math.round(rect.height / lineHeight) };
     });
-    // Squeezed beside buttons it was a few letters wide; now it has the pane's width.
-    expect(box.width).toBeGreaterThan(200);
-    expect(box.lines).toBeLessThanOrEqual(2);
-    expect(box.overflow).toBeLessThanOrEqual(0);
+    // Never a few letters wide, and never broken by letter: one line, cut with "…" if it must.
+    expect(box.width).toBeGreaterThan(100);
+    expect(box.lines).toBe(1);
+    expect(await library.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+      true,
+    );
 
-    // The Folder's page asks about the Folder; "this Document" is for a Document.
-    await expect(library.getByTestId("library-ask")).toHaveText("Ask about this Folder");
+    // The Folder's menu asks about the Folder; "this Document" is for a Document.
+    const head = folder.getByTestId("library-section-head");
+    await head.hover();
+    await head.getByTestId("folder-menu").click();
+    await expect(
+      window.getByTestId("folder-actions").filter({ visible: true }).getByTestId("folder.ask"),
+    ).toHaveText("Ask about this Folder");
     await expect(library.getByText("this Document")).toHaveCount(0);
     await window.keyboard.press("Escape");
   } finally {

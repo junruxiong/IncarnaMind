@@ -1,20 +1,25 @@
 import { existsSync, readdirSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { type ElectronApplication, expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import type { FakeCapture } from "../src/core/meetings/fakeCapture";
 import type { TestHooks } from "../src/shared/testHooks";
 import {
+  askInAssistant,
   closeSettings,
   createDataFolder,
+  DEFAULT_FOLDER_ZH,
   dismissChatSetup,
   launchApp,
+  motionSettled,
   openDocumentAt,
   openSettings,
+  pointAndClick,
   removeDataFolder,
   setWindowSize,
   showSettingsPage,
+  useLocalChatModel,
   useOutputLocation,
 } from "./app";
 
@@ -45,6 +50,14 @@ const bridge = (window: Page) =>
   window.evaluate(async () =>
     (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.listMeetings(),
   );
+
+/** ⌘K with this typed, once it is open and has the focus. */
+async function searchPalette(window: Page, text: string): Promise<void> {
+  await window.keyboard.press("ControlOrMeta+k");
+  await expect(window.getByTestId("palette-search")).toBeFocused();
+  await window.keyboard.type(text);
+  await expect(window.getByTestId("palette-search")).toHaveValue(text);
+}
 
 /** Settings → Meetings → Record meetings, by its switch. */
 async function turnOnMeetings(window: Page, name?: string): Promise<void> {
@@ -102,7 +115,7 @@ const fakeAudio = (app: ElectronApplication) =>
     return { settingsOpened: [...fake.settingsOpened], running: fake.running };
   });
 
-test("a meeting records from the + menu, after the one-time notice: the bar, ⌘⇧P, Stop and Delete audio now", async () => {
+test("a meeting records from the + menu, after the one-time notice: the bar, ⌘⇧P, Stop and Delete audio, from the line and from ⌘K", async () => {
   const { window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   // The Transcript is saved at Stop without asking where.
@@ -132,6 +145,19 @@ test("a meeting records from the + menu, after the one-time notice: the bar, ⌘
   const notice = window.getByTestId("meeting-notice");
   await expect(notice).toContainText("Tell everyone you’re recording before you start.");
   await shot(window, "meeting-notice-en");
+  await window.evaluate(async () =>
+    (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+      user: { language: "zh-CN" },
+    }),
+  );
+  const zhNotice = await notice.locator("#meeting-notice-body p").first().textContent();
+  expect(zhNotice).toContain("会议中其他人的声音。音频只保存在");
+  expect(zhNotice).not.toMatch(/[。：] /);
+  await window.evaluate(async () =>
+    (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+      user: { language: "en" },
+    }),
+  );
   await notice.getByRole("button", { name: "Cancel" }).click();
   await expect(notice).toBeHidden();
   expect((await bridge(window))[0]?.status).toBe("ready");
@@ -236,8 +262,29 @@ test("a meeting records from the + menu, after the one-time notice: the bar, ⌘
   const confirm = window.getByTestId("meeting-audio-confirm");
   await expect(confirm).toContainText("It can’t be brought back. Your notes stay.");
   await expect(confirm.getByTestId("meeting-audio-delete-confirm")).toBeFocused();
+  const question = await confirm.textContent();
   await window.keyboard.press("Escape");
   await expect(audio).toContainText("Audio kept on this computer");
+
+  // ⌘K's "Delete audio" is the same command: the same question, in the same place, and Esc
+  // or "Keep it" keeps the audio.
+  const palette = window.getByTestId("palette");
+  const deleteAudio = palette.getByTestId("palette-item").filter({ hasText: "Delete audio" });
+  await searchPalette(window, "delete audio");
+  await expect(deleteAudio).toHaveCount(1);
+  await shot(window, "meeting-delete-audio-palette-en");
+  await window.keyboard.press("Enter");
+  await expect(palette).toBeHidden();
+  await expect(confirm).toHaveText(question ?? "");
+  await expect(confirm.getByTestId("meeting-audio-delete-confirm")).toBeFocused();
+  await window.keyboard.press("Escape");
+  await expect(audio).toContainText("Audio kept on this computer");
+  await searchPalette(window, "delete audio");
+  await window.keyboard.press("Enter");
+  await confirm.getByRole("button", { name: "Keep it" }).click();
+  await expect(audio).toContainText("Audio kept on this computer");
+  expect((await bridge(window))[0]?.audio.kept).toBe(true);
+
   await audio.getByTestId("meeting-audio-delete").click();
   await shot(window, "meeting-delete-audio-en");
   await window.getByTestId("meeting-audio-delete-confirm").click();
@@ -245,6 +292,12 @@ test("a meeting records from the + menu, after the one-time notice: the bar, ⌘
   const [meeting] = await bridge(window);
   expect(meeting?.audio.kept).toBe(false);
   expect(existsSync(join(dataDir, "meetings", meeting?.id ?? ""))).toBe(false);
+
+  // With the audio gone, there is nothing to delete, and ⌘K no longer offers it.
+  await searchPalette(window, "delete audio");
+  await expect(deleteAudio).toHaveCount(0);
+  await window.keyboard.press("Escape");
+  await expect(palette).toBeHidden();
 
   // The notice comes once on a device: the next meeting records at once.
   await startRecording(window, await recordMeeting(window));
@@ -255,7 +308,7 @@ test("Show transcript opens the live Transcript beside the meeting, Hide transcr
   const { app, window } = await launchApp(dataDir);
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
-  await useOutputLocation(window, sources);
+  // No Output location chosen: the Transcript goes to the default, Documents › IncarnaMind.
   await turnOnMeetings(window);
   const bar = await startRecording(window, await recordMeeting(window), { notice: true });
   const toggle = bar.getByTestId("meeting-transcript-toggle");
@@ -335,21 +388,40 @@ test("Show transcript opens the live Transcript beside the meeting, Hide transcr
   await shot(window, "meeting-transcript-narrow-zh");
   await setWindowSize(app, window, 1440, 900);
 
-  // At Stop it is finished and saved as WebVTT in the Output location; it opens from the Mind.
+  // At Stop it is finished and saved as WebVTT in the default Output location, without asking;
+  // the line says where, opens it, and changes the folder in Settings.
+  await bar.getByTestId("meeting-stop").click();
+  await expect(bar).toBeHidden();
+  const saved = window.getByTestId("meeting-transcript-line");
+  await expect(saved).toHaveText(
+    `转写稿已保存到“${DEFAULT_FOLDER_ZH}” · 打开转写稿 · 更改文件夹…`,
+    {
+      timeout: 20_000,
+    },
+  );
+  await shot(window, "meeting-transcript-saved-zh");
   await window.evaluate(async () =>
     (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
       user: { language: "en" },
     }),
   );
-  await bar.getByTestId("meeting-stop").click();
-  await expect(bar).toBeHidden();
-  const saved = window.getByTestId("meeting-transcript-line");
-  await expect(saved).toHaveText("Transcript saved · Open transcript", { timeout: 20_000 });
+  await expect(saved).toHaveText(
+    "Transcript saved in Documents › IncarnaMind · Open transcript · Change folder…",
+  );
+  await expect(window.getByTestId("file-write-dialog")).toBeHidden();
   await expect(window.getByTestId("transcript-live")).toHaveCount(0);
   const [stopped] = await bridge(window);
   expect(stopped?.transcript?.savedPath).toMatch(/Transcript · Meeting, .*\.vtt$/);
+  expect(dirname(stopped?.transcript?.savedPath ?? "")).toBe(
+    await realpath(join(dataDir, "Documents", "IncarnaMind")),
+  );
   expect(existsSync(stopped?.transcript?.savedPath ?? "")).toBe(true);
   await shot(window, "meeting-transcript-saved-en");
+  await saved.getByTestId("meeting-transcript-change-folder").click();
+  await expect(window.getByTestId("output-location-settings")).toBeInViewport();
+  await expect(window.getByTestId("output-location-change")).toBeFocused();
+  await window.keyboard.press("Escape");
+  await expect(window.getByTestId("settings")).toBeHidden();
 
   // Opened at a Citation, the quote is washed in the line it was said in.
   await openDocumentAt(window, {
@@ -363,6 +435,170 @@ test("Show transcript opens the live Transcript beside the meeting, Hide transcr
   await expect(washed.first()).toBeVisible();
   await expect(washed.first()).toHaveText("The launch moves to the eighteenth of November.");
   await shot(window, "meeting-transcript-citation-en");
+});
+
+test("notes during the call: typed lines get their time, Mark (⌘D) and Add to note work by keyboard, and the Citation is found", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await setWindowSize(app, window, 1440, 900);
+  await dismissChatSetup(window);
+  // No Output location chosen: the Transcript goes to the default, Documents › IncarnaMind.
+  await turnOnMeetings(window);
+  const bar = await startRecording(window, await recordMeeting(window), { notice: true });
+  const toggle = bar.getByTestId("meeting-transcript-toggle");
+  await expect(toggle).toBeEnabled({ timeout: 20_000 });
+  await toggle.hover();
+  await toggle.click();
+  const transcript = window.getByTestId("viewer-transcript");
+  const lines = transcript.getByTestId("transcript-line");
+  await expect(lines.first()).toBeVisible();
+
+  // A line typed while recording takes the meeting's time, shown when it is pointed at.
+  const notes = window.getByTestId("mind-editor");
+  await notes.click();
+  await window.keyboard.type("Launch date");
+  const typed = notes.locator("p", { hasText: "Launch date" });
+  await expect(typed).toHaveAttribute("data-meeting-time", /^\d+:\d{2}$/);
+  const [minutes = 0, seconds = 0] = ((await typed.getAttribute("data-meeting-time")) ?? "")
+    .split(":")
+    .map(Number);
+  const typedSeconds = minutes * 60 + seconds;
+  await typed.hover();
+  await shot(window, "meeting-typed-time-wide-en");
+
+  // It falls within the line the Transcript has from that moment: after its start, before the next one.
+  const starts = () =>
+    lines.evaluateAll((all) => all.map((each) => Number(each.getAttribute("data-start"))));
+  await expect
+    .poll(async () => (await starts()).some((start) => start / 1000 > typedSeconds + 0.5), {
+      timeout: 30_000,
+    })
+    .toBe(true);
+  const all = await starts();
+  const here = all.filter((start) => start / 1000 <= typedSeconds + 1).at(-1);
+  const next = all.find((start) => start / 1000 > typedSeconds + 0.5);
+  expect(here).toBeDefined();
+  expect(next).toBeDefined();
+  expect(Math.floor((here ?? 0) / 1000)).toBeLessThanOrEqual(typedSeconds);
+  expect(Math.ceil((next ?? 0) / 1000)).toBeGreaterThanOrEqual(typedSeconds);
+
+  // Mark: ⌘D leaves an empty bullet with its time, the cursor in it.
+  await window.keyboard.press("ControlOrMeta+KeyD");
+  const marked = notes.locator("li p[data-meeting-time]");
+  await expect(marked).toHaveCount(1);
+  await expect(marked).toHaveText("");
+  await expect(marked).toHaveAttribute("data-meeting-time", /^\d+:\d{2}$/);
+  await window.keyboard.type("Ask about the payment review");
+  await expect(marked).toHaveText("Ask about the payment review");
+  await expect(window.getByTestId("meeting-mark")).toBeEnabled();
+  await shot(window, "meeting-mark-wide-en");
+
+  // Add to note, by keyboard: the line takes the focus, Enter adds it with a Citation that is found.
+  const second = lines.nth(1);
+  await expect(second).toBeVisible({ timeout: 20_000 });
+  await second.hover();
+  await second.click();
+  await expect(second).toBeFocused();
+  await expect(second.getByTestId("transcript-add")).toBeVisible();
+  await shot(window, "meeting-add-to-note-wide-en");
+  const quote = (await second.locator(".transcript-text").textContent()) ?? "";
+  await window.keyboard.press("ArrowUp");
+  await expect(lines.first()).toBeFocused();
+  await window.keyboard.press("ArrowDown");
+  await expect(second).toBeFocused();
+  await window.keyboard.press("Enter");
+  // It shows for a few seconds: asserted first.
+  await expect(window.getByTestId("transcript-added")).toHaveText("Added to the note");
+  const citation = notes.getByTestId("citation");
+  await expect(citation).toHaveCount(1);
+  await expect(citation).toHaveAttribute("data-check", "found");
+  await expect(notes.locator("li", { hasText: quote })).toHaveCount(1);
+  // The cursor stays in the Transcript, where the User is reading.
+  await expect(second).toBeFocused();
+
+  // The same line again is shown, not added twice.
+  await window.keyboard.press("Enter");
+  await expect(window.getByTestId("transcript-added")).toHaveText("Already in the note");
+  await expect(citation).toHaveCount(1);
+
+  // Undo takes it back, outside a text field.
+  await window.getByTestId("undo-action").click();
+  await expect(citation).toHaveCount(0);
+
+  // A transcript line can also be added with the mouse.
+  const third = lines.nth(2);
+  await expect(third).toBeVisible({ timeout: 20_000 });
+  await third.hover();
+  await third.getByTestId("transcript-add").click();
+  await expect(citation).toHaveCount(1);
+  await expect(citation).toHaveAttribute("data-check", "found");
+
+  // In a pause no time is taken, and Mark is off.
+  await window.keyboard.press("ControlOrMeta+Shift+KeyP");
+  await expect(bar).toHaveAttribute("data-status", "paused");
+  await expect(window.getByTestId("meeting-mark")).toBeDisabled();
+  await typed.click();
+  await expect(notes).toBeFocused();
+  await window.keyboard.press("End");
+  await window.keyboard.press("Enter");
+  await window.keyboard.type("Typed in the pause");
+  await expect(notes.locator("p", { hasText: "Typed in the pause" })).not.toHaveAttribute(
+    "data-meeting-time",
+  );
+  const timed = await notes.locator("[data-meeting-time]").count();
+  await window.keyboard.press("ControlOrMeta+KeyD");
+  await expect(notes.locator("[data-meeting-time]")).toHaveCount(timed);
+
+  // Resumed, it times lines again.
+  await window.keyboard.press("ControlOrMeta+Shift+KeyP");
+  await expect(bar).toHaveAttribute("data-status", "recording");
+  // Chinese and a narrow window hold the same controls.
+  const setLanguage = (language: "en" | "zh-CN") =>
+    window.evaluate(
+      async (value) =>
+        (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+          user: { language: value },
+        }),
+      language,
+    );
+  await setLanguage("zh-CN");
+  await expect(window.getByTestId("meeting-mark")).toContainText("标记");
+  await typed.hover();
+  await shot(window, "meeting-typed-time-wide-zh");
+  const fourth = lines.nth(3);
+  await expect(fourth).toBeVisible({ timeout: 20_000 });
+  await fourth.hover();
+  await fourth.getByTestId("transcript-add").click();
+  await expect(window.getByTestId("undo-message")).toHaveText("已将转写稿中的一句加入笔记");
+  await third.hover();
+  await expect(third.getByTestId("transcript-add")).toContainText("加入笔记");
+  // Reserved at the line's end: it covers no words, and nothing moves when it shows.
+  const words = await third.locator(".transcript-text").boundingBox();
+  const button = await third.getByTestId("transcript-add").boundingBox();
+  if (!words || !button) throw new Error("The line isn't drawn.");
+  expect(button.x).toBeGreaterThanOrEqual(words.x + words.width - 1);
+  await shot(window, "meeting-add-to-note-wide-zh");
+  await setWindowSize(app, window, 900, 700);
+  await window
+    .getByTestId("mind-tab")
+    .filter({ hasText: /Meeting|会议/ })
+    .click();
+  await expect(bar).toBeVisible();
+  await expect(window.getByTestId("meeting-mark")).toBeVisible();
+  await typed.hover();
+  await shot(window, "meeting-mark-narrow-zh");
+  await setLanguage("en");
+  await shot(window, "meeting-mark-narrow-en");
+  await window.getByTestId("document-tab").filter({ hasText: "Transcript" }).click();
+  await third.hover();
+  await shot(window, "meeting-add-to-note-narrow-en");
+  await window.getByTestId("mind-tab").filter({ hasText: "Meeting" }).click();
+  await setWindowSize(app, window, 1440, 900);
+  await expect(third).toBeVisible();
+
+  // The times are kept once the meeting is stopped.
+  await bar.getByTestId("meeting-stop").click();
+  await expect(bar).toBeHidden();
+  await expect(typed).toHaveAttribute("data-meeting-time", /^\d+:\d{2}$/);
 });
 
 test("with the computer's sound denied, a line says so and opens System Settings; the microphone records on", async () => {
@@ -441,6 +677,8 @@ test("killed mid-recording, IncarnaMind recovers the audio up to the last part a
   await expect.poll(() => partsOf(meetingId, "microphone").length, { timeout: 30_000 }).toBe(1);
   first.app.process().kill("SIGKILL");
   await first.app.waitForEvent("close");
+  // The next part was being written when it died.
+  await writeFile(join(dataDir, "meetings", meetingId, "microphone-0000010000.wav.writing"), "");
 
   const { window } = await launchApp(dataDir);
   const bar = window.getByTestId("meeting-bar");
@@ -450,6 +688,22 @@ test("killed mid-recording, IncarnaMind recovers the audio up to the last part a
     "IncarnaMind closed while recording. Everything up to 0:10 is saved.",
   );
   await shot(window, "meeting-interrupted-en");
+
+  // The recording details say what was recovered, and what was lost.
+  const toggle = bar.getByTestId("meeting-details-toggle");
+  await toggle.hover();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  const details = bar.getByTestId("meeting-details");
+  const line = (text: string) =>
+    details.getByTestId("meeting-details-line").filter({ hasText: text });
+  await expect(line("the 10 s saved before then was recovered")).toContainText("0:10");
+  await expect(
+    line("10 s of microphone audio lost: IncarnaMind closed while saving it"),
+  ).toContainText("0:10");
+  await shot(window, "meeting-details-recovered-en");
+  await toggle.click();
+  await expect(details).toBeHidden();
 
   await interrupted.getByTestId("meeting-line-resume").click();
   await expect(bar).toHaveAttribute("data-status", "recording");
@@ -463,4 +717,205 @@ test("killed mid-recording, IncarnaMind recovers the audio up to the last part a
   ]);
   // The gap starts where the saved part ends, about 10 seconds in.
   expect(Math.floor((resumed?.gaps[0]?.atMs ?? 0) / 1000)).toBe(10);
+});
+
+test("recording details: a slow engine, a fallback and a part that can't be saved, the last with a problem line, in English and Chinese", async () => {
+  test.setTimeout(150_000);
+  // Decoding takes one and a half times as long as the speech; after two lines it fails over.
+  const { app, window } = await launchApp(dataDir, {
+    transcriber: { realTimeFactor: 1.5, failover: { toCloudAfter: 2 } },
+  });
+  await setWindowSize(app, window, 1440, 900);
+  await dismissChatSetup(window);
+  await useOutputLocation(window, sources);
+  await turnOnMeetings(window);
+  const bar = await startRecording(window, await recordMeeting(window), { notice: true });
+  const [meeting] = await bridge(window);
+  const meetingId = meeting?.id ?? "";
+
+  // Quiet until asked for: the bar's pulse button shows them.
+  const toggle = bar.getByTestId("meeting-details-toggle");
+  await expect(toggle).toHaveAttribute("aria-label", "Show recording details");
+  await expect(bar.getByTestId("meeting-details")).toHaveCount(0);
+  await toggle.hover();
+  await toggle.click();
+  const details = bar.getByTestId("meeting-details");
+  await expect(details).toBeVisible();
+  await expect(details).toContainText(
+    /Transcribed on this computer at 0\.\d× real time, too slow to keep up live/,
+    { timeout: 30_000 },
+  );
+  await expect(details).toContainText(
+    "Switched to cloud transcription: this computer fell behind",
+    {
+      timeout: 30_000,
+    },
+  );
+  await expect(details).toContainText("No audio was lost");
+  await shot(window, "meeting-details-slow-fallback-en");
+
+  // Once the first part is saved, a file stands where the meeting's folder was: the next can't be.
+  await expect.poll(() => partsOf(meetingId, "microphone").length, { timeout: 30_000 }).toBe(1);
+  const folder = join(dataDir, "meetings", meetingId);
+  await rename(folder, `${folder}-aside`);
+  await writeFile(folder, "");
+  await expect(window.getByTestId("meeting-line-save")).toBeVisible({ timeout: 30_000 });
+  await rm(folder);
+  await rename(`${folder}-aside`, folder);
+  // Once parts are saved again, a line says what is missing, with the details one click away.
+  await toggle.click();
+  await expect(details).toBeHidden();
+  const unsaved = bar.getByTestId("meeting-line-unsaved");
+  await expect(unsaved).toHaveText(
+    /^\d+ s of audio couldn’t be saved, so it isn’t in the transcript\. · Details$/,
+    { timeout: 30_000 },
+  );
+  await expect(window.getByTestId("meeting-line-save")).toHaveCount(0);
+  await shot(window, "meeting-line-unsaved-wide-en");
+  await unsaved.getByTestId("meeting-line-details").click();
+  await expect(details).toBeVisible();
+  await expect(details).toContainText(
+    /\d+ s of (microphone audio|the computer’s sound) lost: it couldn’t be saved/,
+  );
+  await expect(unsaved).toHaveText(/couldn’t be saved, so it isn’t in the transcript\.$/);
+  await shot(window, "meeting-details-unsaved-wide-en");
+
+  await setWindowSize(app, window, 900, 700);
+  await expect(details).toBeVisible();
+  const controls = await bar.getByTestId("meeting-controls").boundingBox();
+  expect(controls?.height).toBeLessThanOrEqual(28);
+  const barBox = await bar.boundingBox();
+  const detailsBox = await details.boundingBox();
+  if (!barBox || !detailsBox) throw new Error("The bar isn't drawn.");
+  expect(detailsBox.x + detailsBox.width).toBeLessThanOrEqual(barBox.x + barBox.width);
+  await shot(window, "meeting-details-narrow-en");
+
+  // In Chinese, the same details in Chinese words.
+  await window.evaluate(async () =>
+    (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+      user: { language: "zh-CN" },
+    }),
+  );
+  await expect(details).toContainText("已改用云端转写：这台电脑跟不上");
+  await expect(details).toContainText(/在这台电脑上转写，速度是实时的 0\.\d 倍，跟不上实时转写/);
+  await expect(unsaved).toHaveText(/^有 \d+ 秒的音频无法保存，转写稿中缺少这部分。$/);
+  await expect(toggle).toHaveAttribute("aria-label", "隐藏录制详情");
+  await shot(window, "meeting-details-narrow-zh");
+  await toggle.click();
+  await expect(unsaved).toHaveText(/ · 详情$/);
+  await shot(window, "meeting-line-unsaved-narrow-zh");
+  await setWindowSize(app, window, 1440, 900);
+  await shot(window, "meeting-line-unsaved-wide-zh");
+  await unsaved.getByTestId("meeting-line-details").click();
+  await shot(window, "meeting-details-wide-zh");
+
+  // Stopped, the details open from the line under the meeting, and ⌘K reaches them too.
+  await window.evaluate(async () =>
+    (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+      user: { language: "en" },
+    }),
+  );
+  await bar.getByTestId("meeting-stop").click();
+  await expect(bar).toBeHidden();
+  const after = window.getByTestId("meeting-details-toggle");
+  await expect(after).toHaveText("Recording details");
+  await expect(after).toHaveAttribute("aria-expanded", "true");
+  await expect(window.getByTestId("meeting-details")).toContainText(
+    "Switched to cloud transcription: this computer fell behind",
+  );
+  await shot(window, "meeting-details-stopped-en");
+  await after.click();
+  await expect(window.getByTestId("meeting-details")).toHaveCount(0);
+  await expect(window.getByTestId("meeting-line-unsaved")).toBeVisible();
+  await shot(window, "meeting-line-unsaved-stopped-en");
+});
+
+test("asking during the call: the assistant listens to the live transcript, its Answer cites a time that opens the transcript there, quick asks start a conversation, and after Stop it is in the meeting's Folder", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await setWindowSize(app, window, 1440, 900);
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await useOutputLocation(window, sources);
+  await turnOnMeetings(window);
+  const bar = await startRecording(window, await recordMeeting(window), { notice: true });
+  const [meeting] = await bridge(window);
+  if (!meeting) throw new Error("No Meeting.");
+  // The meeting's Mind is in a Folder, where its conversations go.
+  const folderId = await window.evaluate(async (mindId) => {
+    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    const folder = await core.createLibraryGroup({ name: "Launch", description: "" });
+    await core.moveToFolder({ mindIds: [mindId], folderId: folder.id });
+    return folder.id;
+  }, meeting.mindId);
+  await expect(bar.getByTestId("meeting-transcript-toggle")).toBeEnabled({ timeout: 20_000 });
+  await window.getByTestId("mind-editor").click();
+
+  // A new conversation says it listens, and offers the quick asks.
+  const reads = window.getByTestId("assistant-reads");
+  await expect(reads).toHaveText(/^Reads “Meeting, .+” · listening to the live transcript$/);
+  const starters = window.getByTestId("meeting-starter");
+  await expect(starters).toHaveText([
+    "Catch me up",
+    "Recap the last 5 minutes",
+    "What should I ask next?",
+    "Check what was just said",
+  ]);
+  await motionSettled(window);
+  await shot(window, "meeting-ask-starters-en");
+
+  // A Question about the call: its Answer cites a time in the transcript, the note untouched.
+  const answer = await askInAssistant(window, "When does the launch move to?");
+  await expect(answer.getByTestId("answer-steps")).toContainText("Listened to the live transcript");
+  const chip = answer.getByTestId("citation-chip").first();
+  await expect(chip).toHaveAttribute(
+    "aria-label",
+    /^Citation 1: Transcript · Meeting, .+, \d+:\d{2}/,
+  );
+  await expect(window.getByTestId("mind-editor")).toHaveText("");
+  await motionSettled(window);
+  await shot(window, "meeting-ask-answer-en");
+
+  // The Citation opens the transcript, hidden till now, at that line, beside the meeting's Mind.
+  await expect(window.getByTestId("viewer-transcript")).toHaveCount(0);
+  await pointAndClick(window, chip);
+  const card = window.getByTestId("citation-card");
+  if (await card.isVisible()) await card.getByTestId("citation-open").click();
+  const transcript = window.getByTestId("viewer-transcript");
+  await expect(transcript).toBeVisible();
+  await expect(transcript.locator("[data-quote-highlight]").first()).toBeInViewport();
+  await expect(window.getByTestId("mind-pane")).toBeVisible();
+  await shot(window, "meeting-ask-citation-en");
+
+  // A quick ask, in a new conversation, in Chinese.
+  await window.evaluate(async () =>
+    (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+      user: { language: "zh-CN" },
+    }),
+  );
+  await window.getByTestId("assistant-new-chat").click();
+  await window.getByTestId("mind-editor").click();
+  await expect(reads).toHaveText(/^正在读“.+” · 正在听：实时转写$/);
+  await expect(starters).toHaveText([
+    "赶上进度",
+    "回顾最近 5 分钟",
+    "接下来该问什么？",
+    "核对刚才说的话",
+  ]);
+  await shot(window, "meeting-ask-starters-zh");
+  await pointAndClick(window, starters.first());
+  const asked = window.getByTestId("assistant").getByTestId("assistant-question").last();
+  await expect(asked).toContainText("赶上进度");
+  await expect(
+    window.getByTestId("assistant").getByTestId("assistant-answer").last(),
+  ).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+
+  // After Stop, both conversations are the meeting's Folder's.
+  await bar.getByTestId("meeting-stop").click();
+  await expect(bar).toBeHidden();
+  const titles = await window.evaluate(async (folder) => {
+    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    return (await core.listConversations({ folderId: folder })).map((each) => each.title);
+  }, folderId);
+  expect(titles).toHaveLength(2);
+  await app.close();
 });

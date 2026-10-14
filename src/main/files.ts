@@ -2,13 +2,15 @@
  * The main process's half of the renderer's file helpers (`FilesBridge`):
  * choosing the Output location and showing a file saved there, showing the data and logs
  * folders, choosing a Skill folder or zip to import, choosing a folder to
- * link, opening a Document's file in another app or showing it (or a Linked
- * folder) in the file manager, and logging the window's uncaught errors. The core saves
+ * link or where a Linked folder is now, opening a Document's file in another
+ * app or showing it (or a Linked folder) in the file manager, and logging the
+ * window's uncaught errors. The core saves
  * files, reads the Skill, and checks a Document is live and its
  * file there before it hands the file's path to the shell adapter; only
  * this side touches dialogs.
  */
 import { mkdir } from "node:fs/promises";
+import { basename } from "node:path";
 import {
   app,
   BrowserWindow,
@@ -21,10 +23,11 @@ import {
 } from "electron";
 import type { Core } from "../core";
 import { FILES_CHANNELS } from "../shared/bridge";
-import { translate } from "../shared/i18n";
+import { type MessageKey, translate } from "../shared/i18n";
+import { handle } from "./ipc";
 import { type FileLogger, logsFolder, logWindowError } from "./log";
 import { isEditMenuState, setEditMenu, setMenuSidebarHidden } from "./menu";
-import { rememberPick, startFolder } from "./pickerFolders";
+import { rememberPick, startFolder, startNear } from "./pickerFolders";
 
 /** What "Add Documents" offers; the core decides what it takes (and says what it skipped). */
 const DOCUMENT_EXTENSIONS = ["pdf", "docx", "pptx", "xlsx", "csv", "txt", "md", "markdown"];
@@ -56,12 +59,17 @@ export function serveFileActions(
   };
 
   // The core checks it saved the file, then shows it through the shell adapter.
-  ipcMain.handle(FILES_CHANNELS.showSavedFile, async (event, path: unknown) => {
+  handle(FILES_CHANNELS.showSavedFile, async (event, path: unknown) => {
     refuseUnknown(event);
     await core.showSavedFile(path as string);
   });
 
-  ipcMain.handle(FILES_CHANNELS.pickOutputLocation, async (event): Promise<string | null> => {
+  handle(FILES_CHANNELS.openSavedFile, async (event, path: unknown) => {
+    refuseUnknown(event);
+    await core.openSavedFile(path as string);
+  });
+
+  handle(FILES_CHANNELS.pickOutputLocation, async (event): Promise<string | null> => {
     refuseUnknown(event);
     const [{ language }, { location }] = await Promise.all([
       core.getSettings(),
@@ -80,19 +88,19 @@ export function serveFileActions(
     return canceled ? null : (filePaths[0] ?? null);
   });
 
-  ipcMain.handle(FILES_CHANNELS.openDataFolder, async (event) => {
+  handle(FILES_CHANNELS.openDataFolder, async (event) => {
     refuseUnknown(event);
     await openPath(dataDir);
   });
 
-  ipcMain.handle(FILES_CHANNELS.openLogsFolder, async (event) => {
+  handle(FILES_CHANNELS.openLogsFolder, async (event) => {
     refuseUnknown(event);
     const folder = logsFolder(dataDir);
     await mkdir(folder, { recursive: true });
     await openPath(folder);
   });
 
-  ipcMain.handle(FILES_CHANNELS.pickSkill, async (event, kind: unknown): Promise<string | null> => {
+  handle(FILES_CHANNELS.pickSkill, async (event, kind: unknown): Promise<string | null> => {
     refuseUnknown(event);
     const { language } = await core.getSettings();
     const openOptions: OpenDialogOptions =
@@ -113,37 +121,55 @@ export function serveFileActions(
   });
 
   // The core checks the Document is live and its file there, then opens it through the shell adapter.
-  ipcMain.handle(FILES_CHANNELS.openDocumentExternally, async (event, documentId: unknown) => {
+  handle(FILES_CHANNELS.openDocumentExternally, async (event, documentId: unknown) => {
     refuseUnknown(event);
     await core.openDocumentInApp(documentId as string);
   });
 
-  ipcMain.handle(FILES_CHANNELS.showDocumentInFolder, async (event, documentId: unknown) => {
+  handle(FILES_CHANNELS.showDocumentInFolder, async (event, documentId: unknown) => {
     refuseUnknown(event);
     await core.showDocumentInFolder(documentId as string);
   });
 
-  ipcMain.handle(FILES_CHANNELS.pickLinkedFolder, async (event): Promise<string | null> => {
-    refuseUnknown(event);
-    const { language } = await core.getSettings();
-    const openOptions: OpenDialogOptions = {
-      title: translate(language, "linkedFolders.pick.title"),
-      buttonLabel: translate(language, "linkedFolders.pick.button"),
-      properties: ["openDirectory"],
-      defaultPath: startFolder(dataDir, "folders", app.getPath("home")),
-    };
-    const window = BrowserWindow.fromWebContents(event.sender);
-    const { canceled, filePaths } = window
-      ? await dialog.showOpenDialog(window, openOptions)
-      : await dialog.showOpenDialog(openOptions);
-    const picked = canceled ? null : (filePaths[0] ?? null);
-    if (picked) rememberPick(dataDir, "folders", picked);
-    return picked;
-  });
+  handle(
+    FILES_CHANNELS.pickLinkedFolder,
+    async (event, locating: unknown): Promise<string | null> => {
+      refuseUnknown(event);
+      const { language } = await core.getSettings();
+      const moved =
+        typeof locating === "string"
+          ? (await core.listLinkedFolders()).find((each) => each.id === locating)
+          : undefined;
+      const start = startFolder(dataDir, "folders", app.getPath("home"));
+      const openOptions: OpenDialogOptions = moved
+        ? {
+            title: translate(language, "linkedFolders.locate.pickTitle", {
+              name: basename(moved.path) || moved.path,
+            }),
+            buttonLabel: translate(language, "linkedFolders.locate.pickButton"),
+            properties: ["openDirectory"],
+            // A folder that moved is most likely near where it was.
+            defaultPath: startNear(moved.path, start),
+          }
+        : {
+            title: translate(language, "linkedFolders.pick.title"),
+            buttonLabel: translate(language, "linkedFolders.pick.button"),
+            properties: ["openDirectory"],
+            defaultPath: start,
+          };
+      const window = BrowserWindow.fromWebContents(event.sender);
+      const { canceled, filePaths } = window
+        ? await dialog.showOpenDialog(window, openOptions)
+        : await dialog.showOpenDialog(openOptions);
+      const picked = canceled ? null : (filePaths[0] ?? null);
+      if (picked) rememberPick(dataDir, "folders", picked);
+      return picked;
+    },
+  );
 
   // A sheet on the window that starts in a folder on this computer (see pickerFolders.ts),
   // instead of the web file input, which starts wherever macOS last was, often iCloud.
-  ipcMain.handle(FILES_CHANNELS.pickDocuments, async (event): Promise<string[]> => {
+  handle(FILES_CHANNELS.pickDocuments, async (event): Promise<string[]> => {
     refuseUnknown(event);
     const { language } = await core.getSettings();
     const openOptions: OpenDialogOptions = {
@@ -164,7 +190,7 @@ export function serveFileActions(
   });
 
   // The core reads the file and sends nothing; this is only the User choosing it (#287).
-  ipcMain.handle(FILES_CHANNELS.pickReferenceFile, async (event): Promise<string | null> => {
+  handle(FILES_CHANNELS.pickReferenceFile, async (event): Promise<string | null> => {
     refuseUnknown(event);
     const { language } = await core.getSettings();
     const openOptions: OpenDialogOptions = {
@@ -188,8 +214,41 @@ export function serveFileActions(
     return picked;
   });
 
+  /** One file of a kind, for the core to read: only the User choosing it. */
+  const pickOneFile = async (
+    event: IpcMainInvokeEvent,
+    title: MessageKey,
+    filter: MessageKey,
+    extension: string,
+  ): Promise<string | null> => {
+    refuseUnknown(event);
+    const { language } = await core.getSettings();
+    const openOptions: OpenDialogOptions = {
+      title: translate(language, title),
+      properties: ["openFile"],
+      filters: [{ name: translate(language, filter), extensions: [extension] }],
+      defaultPath: startFolder(dataDir, "documents", app.getPath("downloads")),
+    };
+    const window = BrowserWindow.fromWebContents(event.sender);
+    const { canceled, filePaths } = window
+      ? await dialog.showOpenDialog(window, openOptions)
+      : await dialog.showOpenDialog(openOptions);
+    const picked = canceled ? null : (filePaths[0] ?? null);
+    if (picked) rememberPick(dataDir, "documents", picked);
+    return picked;
+  };
+
+  // The core reads the file and keeps a copy for the Mind (#104).
+  handle(FILES_CHANNELS.pickWordFile, (event) =>
+    pickOneFile(event, "wordImport.pick.title", "wordImport.pick.filter", "docx"),
+  );
+  // The core adds it to the Library and makes a Mind of its text (#97).
+  handle(FILES_CHANNELS.pickPdfFile, (event) =>
+    pickOneFile(event, "verify.pick.title", "verify.pick.filter", "pdf"),
+  );
+
   // Only a folder the User linked: its path comes from the core's list, never from the page.
-  ipcMain.handle(FILES_CHANNELS.showLinkedFolder, async (event, linkedFolderId: unknown) => {
+  handle(FILES_CHANNELS.showLinkedFolder, async (event, linkedFolderId: unknown) => {
     refuseUnknown(event);
     const linked = (await core.listLinkedFolders()).find((each) => each.id === linkedFolderId);
     if (!linked) throw new Error("There is no such Linked folder.");

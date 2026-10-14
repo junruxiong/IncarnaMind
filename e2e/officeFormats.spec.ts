@@ -15,6 +15,8 @@ import type { TestHooks } from "../src/shared/testHooks";
 import { footnotesOf, part, unzip } from "../tests/helpers/docx";
 import {
   addDocuments,
+  addToNote,
+  askInAssistant,
   createDataFolder,
   dismissChatSetup,
   documentIdOf,
@@ -86,18 +88,17 @@ async function expectMarkBeside(mark: Locator, highlight: Locator) {
   expect(Math.abs(markBox.y + markBox.height / 2 - line.middle)).toBeLessThanOrEqual(1.5);
 }
 
-/** Asks a Question in a new Mind and waits for its Answer to finish. */
+/**
+ * Asks a Question beside a new Mind, waits for its Answer to finish in the
+ * assistant, and adds it to the Mind, whose note then holds its Citations.
+ */
 async function ask(window: Page, text: string) {
   await newMind(window);
   await window.getByTestId("mind-title").fill("Formats");
   const editor = window.getByTestId("mind-editor");
   await editor.click();
-  await window.keyboard.press("ControlOrMeta+j");
-  await window.keyboard.type(text);
-  await window.keyboard.press("Enter");
-  const answer = editor.getByTestId("answer");
-  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 20_000 });
-  return answer;
+  await addToNote(window, await askInAssistant(window, text));
+  return editor;
 }
 
 test("Word, PowerPoint, Excel and CSV files in a linked folder are cited by section, slide and rows, opened at each Citation, and exported with their Locations", async () => {
@@ -118,11 +119,11 @@ test("Word, PowerPoint, Excel and CSV files in a linked folder are cited by sect
     await expect(items.nth(index)).toHaveAttribute("data-status", "ready", { timeout: 30_000 });
   }
 
-  const answer = await ask(
+  const mind = await ask(
     window,
     "Compare each: the western fastest growth, the barrier crest halves damage, and West totals in rows.",
   );
-  const chips = answer.getByTestId("citation-chip");
+  const chips = mind.getByTestId("citation-chip");
   await expect(chips).toHaveCount(4);
   const labels = await chips.evaluateAll((elements) =>
     elements.map((element) => element.getAttribute("aria-label") ?? ""),
@@ -257,12 +258,10 @@ test("Word, PowerPoint, Excel and CSV files in a linked folder are cited by sect
   await useOutputLocation(window, sources);
   await window.keyboard.press("Escape");
   await window.getByTestId("export-mind").click();
-  const dialog = window.getByTestId("export-dialog");
-  await expect(dialog.getByTestId("export-citations")).toHaveAttribute("data-unverified", "0");
-  await dialog.getByTestId("export-save").click();
-  await expect(dialog.getByTestId("export-done")).toBeVisible();
-  await dialog.getByTestId("export-close").click();
-  await expect(dialog).toBeHidden();
+  const result = window.getByTestId("export-result");
+  await expect(result.getByTestId("export-done")).toHaveText("Saved Formats.docx");
+  // Every quote was found: no line about one that wasn't.
+  await expect(result.getByTestId("export-unverified")).toHaveCount(0);
   const footnotes = Object.values(
     footnotesOf(part(unzip(await readFile(target)), "word/footnotes.xml")),
   ).sort();
@@ -408,11 +407,11 @@ test("a Question about a Word comment cites the comment by its author, found, an
   await addDocuments(window, [report]);
 
   // Only the comment says this: the scripted model searches, and quotes the line that answers.
-  const answer = await ask(
+  const mind = await ask(
     window,
     "What should be confirmed with the hydrology team before release?",
   );
-  const chip = answer.getByTestId("citation-chip");
+  const chip = mind.getByTestId("citation-chip");
   await expect(chip).toHaveCount(1);
   await expect(chip).toHaveAttribute(
     "aria-label",
@@ -666,7 +665,10 @@ test("a Word file over 500 MB fails as too large to open, in English and Chinese
     await expect(review).toHaveAttribute("data-status", "ready", { timeout: 30_000 });
     // "Failed" at the row's end; the reason for screen readers, and the limit in its tooltip.
     const status = refused.getByTestId("document-status");
-    await expect(status.locator("[aria-hidden]")).toHaveText("Failed");
+    await expect(status.locator("[aria-hidden]").filter({ hasText: "Failed" })).toHaveText(
+      "Failed",
+    );
+    await expect(status.locator(".bg-attention")).toBeVisible();
     await expect(status.locator(".sr-only")).toHaveText("Failed: the file is too large to open");
     await expect(status).toHaveAttribute(
       "title",

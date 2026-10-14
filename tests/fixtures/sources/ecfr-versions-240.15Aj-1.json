@@ -1,0 +1,50 @@
+{
+  "content_versions": [
+    {
+      "date": "2016-12-31",
+      "amendment_date": "2016-12-31",
+      "issue_date": "2016-12-31",
+      "identifier": "240.15Aj-1",
+      "name": "§ 240.15Aj-1   Amendments and supplements to registration statements of securities associations.",
+      "part": "240",
+      "substantive": true,
+      "removed": false,
+      "subpart": "A",
+      "title": "17",
+      "type": "section"
+    },
+    {
+      "date": "2025-01-21",
+      "amendment_date": "2025-01-21",
+      "issue_date": "2025-01-21",
+      "identifier": "240.15Aj-1",
+      "name": "§ 240.15Aj-1   Amendments and supplements to registration statements of securities associations.",
+      "part": "240",
+      "substantive": true,
+      "removed": false,
+      "subpart": "A",
+      "title": "17",
+      "type": "section"
+    },
+    {
+      "date": "2025-03-24",
+      "amendment_date": "2025-03-24",
+      "issue_date": "2025-03-24",
+      "identifier": "240.15Aj-1",
+      "name": "§ 240.15Aj-1   Amendments and supplements to registration statements of securities associations.",
+      "part": "240",
+      "substantive": true,
+      "removed": true,
+      "subpart": "A",
+      "title": "17",
+      "type": "section"
+    }
+  ],
+  "meta": {
+    "title": "17",
+    "section": "240.15Aj-1",
+    "result_count": "3",
+    "latest_amendment_date": "2025-03-24",
+    "latest_issue_date": "2025-03-24"
+  }
+}

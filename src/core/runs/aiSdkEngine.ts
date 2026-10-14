@@ -26,7 +26,12 @@ import {
   tool,
 } from "ai";
 import Ajv, { type ValidateFunction } from "ajv";
-import { cacheProviderOptions, tokenUsageOf } from "../providers/promptCache";
+import {
+  cacheProviderOptions,
+  stablePrefixOf,
+  stablePrefixOptions,
+  tokenUsageOf,
+} from "../providers/promptCache";
 import {
   classifyProviderError,
   contextOverflow,
@@ -176,7 +181,11 @@ function toModelMessages(messages: readonly RunMessage[]): ModelMessage[] {
   const out: ModelMessage[] = [];
   for (const message of messages) {
     if (message.role === "user") {
-      out.push({ role: "user", content: message.text });
+      out.push({
+        role: "user",
+        content: message.text,
+        ...(message.stablePrefix && { providerOptions: stablePrefixOptions(message.stablePrefix) }),
+      });
     } else if (message.role === "assistant") {
       out.push(
         message.toolCalls.length === 0
@@ -227,7 +236,12 @@ function fromModelMessages(messages: readonly ModelMessage[]): RunMessage[] {
       : content.map((part) => (part.type === "text" ? part.text : "")).join("");
   for (const message of messages) {
     if (message.role === "user") {
-      out.push({ role: "user", text: textOf(message.content) });
+      const stablePrefix = stablePrefixOf(message.providerOptions);
+      out.push({
+        role: "user",
+        text: textOf(message.content),
+        ...(stablePrefix && { stablePrefix }),
+      });
     } else if (message.role === "assistant") {
       const parts = typeof message.content === "string" ? [] : message.content;
       out.push({
@@ -276,6 +290,29 @@ function splice(
     if (message) out.push(message);
   }
   return out;
+}
+
+/**
+ * The AI SDK's reasoning parts as "reasoning" events: a block starts with an
+ * empty one, and a block after another starts a new paragraph. Null for a
+ * part with no text.
+ */
+export function reasoningReader() {
+  let reasoned = false;
+  let newParagraph = false;
+  return (
+    part: { type: "reasoning-start" } | { type: "reasoning-delta"; text: string },
+  ): Extract<RunEvent, { type: "reasoning" }> | null => {
+    if (part.type === "reasoning-start") {
+      newParagraph = reasoned;
+      return { type: "reasoning", text: "" };
+    }
+    if (!part.text) return null;
+    const text = newParagraph ? `\n\n${part.text}` : part.text;
+    newParagraph = false;
+    reasoned = true;
+    return { type: "reasoning", text };
+  };
 }
 
 /** A failed model call as an event: a refusal before any output (see `RunEvent`), or a failure. */
@@ -358,6 +395,7 @@ async function* run(request: RunRequest): AsyncGenerator<RunEvent> {
   });
 
   let produced = false;
+  const reasoning = reasoningReader();
   try {
     for await (const part of result.fullStream) {
       if (signal.aborted || part.type === "abort") return;
@@ -367,6 +405,14 @@ async function* run(request: RunRequest): AsyncGenerator<RunEvent> {
           produced = true;
           yield { type: "text-delta", text: part.text };
           break;
+        case "reasoning-start":
+        case "reasoning-delta": {
+          const event = reasoning(part);
+          if (!event) break;
+          if (event.text) produced = true;
+          yield event;
+          break;
+        }
         case "tool-call":
           produced = true;
           yield {

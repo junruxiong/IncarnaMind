@@ -239,11 +239,11 @@ test("sidebar rows share one text edge, in the Folders view and on disk, a folde
   // Papers, Reports and Other Documents one step in; the Document in 2026 two.
   expect(edges.map((edge) => edge.depth).sort()).toEqual([0, 0, 0, 1, 1, 1, 1, 2]);
 
-  // "All Documents", Settings and Not in a Folder's label share the columns.
+  // "Library", Settings and Not in a Folder's label share the columns.
   const sidebarLeft = (await boxOf(sidebar)).x;
   const allDocuments = window.getByTestId("open-library");
   expect((await boxOf(allDocuments.locator("svg"))).x - sidebarLeft).toBeCloseTo(16, 0);
-  expect((await textLeft(allDocuments.locator("span"))) - sidebarLeft).toBeCloseTo(40, 0);
+  expect((await textLeft(allDocuments.locator("span").first())) - sidebarLeft).toBeCloseTo(40, 0);
   const settings = window.getByTestId("sidebar-footer").getByRole("button", { name: "Settings" });
   expect((await boxOf(settings.locator("svg"))).x - sidebarLeft).toBeCloseTo(16, 0);
   expect((await textLeft(settings.locator("span"))) - sidebarLeft).toBeCloseTo(40, 0);
@@ -447,7 +447,7 @@ test("the status footer doesn't move the tree when tagging starts or stops", asy
   await app.close();
 });
 
-test("a Mind whose Answer waits for the User's approval shows an amber dot in the sidebar", async () => {
+test("an Answer that waits for the User's approval shows an amber dot on the assistant, folded too, and none on the Mind", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
@@ -467,48 +467,44 @@ test("a Mind whose Answer waits for the User's approval shows an amber dot in th
 
   await newMind(window);
   await window.getByTestId("mind-title").fill("Trip");
-  await newMind(window);
-  await window.getByTestId("mind-title").fill("Other notes");
-  const trip = window.getByTestId("mind-list-item").filter({ hasText: "Trip" });
-  await trip.click();
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type("Please book_boat from Dover");
   await window.keyboard.press("Enter");
 
-  const card = editor.getByTestId("approval-card");
+  // The Answer is in the assistant, and so is its dot, by the conversation's title.
+  const assistant = window.getByTestId("assistant");
+  const card = assistant.getByTestId("approval-card");
   await expect(card).toBeVisible({ timeout: 15_000 });
-  const dot = trip.getByRole("img", { name: "Waiting for your approval" });
+  const dot = assistant.getByRole("img", { name: "Waiting for your approval" });
   await expect(dot).toBeVisible();
-  await expect(
-    window
-      .getByTestId("mind-list-item")
-      .filter({ hasText: "Other notes" })
-      .getByTestId("mind-approval"),
-  ).toHaveCount(0);
-  // It sits at the row's end, inside the row.
-  const row = await boxOf(trip);
+  expect((await boxOf(dot)).width).toBe(6);
+  const header = await boxOf(assistant.getByTestId("assistant-header"));
   const dotBox = await boxOf(dot);
-  expect(dotBox.width).toBe(6);
-  expect(dotBox.x + dotBox.width).toBeLessThanOrEqual(row.x + row.width - 8);
-  // Its tab shows the same amber dot, in place of the Mind icon; the other tab doesn't.
-  const tripId = await trip.getAttribute("data-mind-id");
-  const tabs = window.getByTestId("mind-tab");
-  const tripTab = tabs.and(window.locator(`[data-mind-id="${tripId}"]`));
-  const tabDot = tripTab.getByRole("img", { name: "Waiting for your approval" });
-  await expect(tabDot).toHaveAttribute("data-status", "waiting-for-approval");
-  await expect(tabs.filter({ hasText: "Other notes" }).getByTestId("mind-tab-status")).toHaveCount(
-    0,
-  );
-  expect((await boxOf(tabDot)).width).toBe(6);
-  await screenshot(window, "sidebar-approval", window.getByTestId("sidebar"));
-  await screenshot(window, "tabs-approval", window.getByTestId("tab-strip"));
+  expect(dotBox.y).toBeGreaterThanOrEqual(header.y);
+  expect(dotBox.y + dotBox.height).toBeLessThanOrEqual(header.y + header.height);
+  // The Mind it was asked beside has none, in the sidebar or on its tab: the Answer isn't in it.
+  await expect(window.getByTestId("mind-approval")).toHaveCount(0);
+  await expect(window.getByTestId("mind-tab-status")).toHaveCount(0);
+  await screenshot(window, "assistant-approval", assistant);
+
+  // Folded, the card is out of sight; the dot stays on what unfolds it.
+  const fold = assistant.getByTestId("assistant-fold");
+  await fold.click();
+  await expect(card).toBeHidden();
+  await expect(dot).toBeVisible();
+  await screenshot(window, "assistant-approval-folded", assistant);
+  await fold.click();
 
   await card.getByTestId("approval-deny").click();
   await expect(dot).toHaveCount(0);
-  // The Answer goes on (its tab shows it writing) and then ends, as slowly as the machine is.
-  await expect(tripTab.getByTestId("mind-tab-status")).toHaveCount(0, { timeout: 15_000 });
+  // The Answer goes on and then ends, as slowly as the machine is.
+  await expect(assistant.getByTestId("assistant-answer").last()).toHaveAttribute(
+    "data-status",
+    "done",
+    { timeout: 15_000 },
+  );
   await app.close();
 });
 

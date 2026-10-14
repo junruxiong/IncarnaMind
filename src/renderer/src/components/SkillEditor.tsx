@@ -11,6 +11,7 @@ import { errorMessage } from "../errors";
 import { useT } from "../i18n";
 import { formatSize } from "../skills";
 import { ProblemLine } from "./ProblemLine";
+import { TypingTextarea } from "./TypingTextarea";
 import { fieldLabelClass, ghostButtonClass, hintClass, inputClass, primaryButtonClass } from "./ui";
 
 /** Which field says what is wrong with a draft. */
@@ -83,7 +84,7 @@ export function SkillEditor({
       setProblem(result.problem);
       (FIELD_OF[result.problem] === "steps" ? steps : name).current?.focus();
     } catch (error) {
-      setFailure(errorMessage(error));
+      setFailure(errorMessage(error, t));
     } finally {
       setSaving(false);
     }
@@ -148,7 +149,7 @@ export function SkillEditor({
         <label htmlFor={`${testId}-when`} className={fieldLabelClass}>
           {t("skills.edit.when")}
         </label>
-        <textarea
+        <TypingTextarea
           id={`${testId}-when`}
           data-testid={`${testId}-when`}
           value={draft.description}
@@ -165,7 +166,7 @@ export function SkillEditor({
         <label htmlFor={`${testId}-steps`} className={fieldLabelClass}>
           {t("skills.edit.steps")}
         </label>
-        <textarea
+        <TypingTextarea
           ref={steps}
           id={`${testId}-steps`}
           data-testid={`${testId}-steps`}

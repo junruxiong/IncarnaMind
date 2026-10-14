@@ -19,9 +19,11 @@
  * work holds back (`onCapturingChange`): live capture comes first.
  *
  * Where this copy can transcribe, the audio also goes to the Meeting's
- * Transcript as it comes (./transcript, #136).
+ * Transcript as it comes (./transcript, #136). What goes wrong with the
+ * capture is kept in its health record (./health, #161).
  */
 import { randomUUID } from "node:crypto";
+import { formatDay } from "../../shared/dates";
 import { translate } from "../../shared/i18n";
 import {
   type AudioCapture,
@@ -31,6 +33,7 @@ import {
   MEETING_SAMPLE_RATE,
 } from "../adapters";
 import {
+  type AudioLossCause,
   type AudioSource,
   MEETING_AUDIO_KEPT_MS,
   type Meeting,
@@ -50,6 +53,7 @@ import {
   removeUnfinished,
   writePart,
 } from "./audioFiles";
+import type { CaptureHealthRecords } from "./health";
 import type { Transcripts } from "./transcript";
 
 /** Samples arriving this much later than the ones before them could have: a new run starts where they belong. */
@@ -132,13 +136,21 @@ export interface MeetingsOptions {
   onCapturingChange(capturing: boolean): void;
   /** Transcribes Meetings (#136); absent where this copy can't. */
   transcripts?: Transcripts;
+  health: CaptureHealthRecords;
   log: Logger;
 }
 
 export type Meetings = ReturnType<typeof createMeetings>;
 
+/** Why a part couldn't be saved, from the error's code. */
+function lossCauseOf(code: string): AudioLossCause {
+  if (code === "ENOSPC" || code === "EDQUOT") return "full";
+  if (code === "EACCES" || code === "EPERM" || code === "EROFS") return "denied";
+  return "error";
+}
+
 export function createMeetings(options: MeetingsOptions) {
-  const { db, now, capture, transcripts, log } = options;
+  const { db, now, capture, transcripts, health, log } = options;
   const clock = () => Date.parse(now());
   const folderOf = (meetingId: string) => meetingFolder(options.dataDir, meetingId);
   let live: Live | null = null;
@@ -153,7 +165,7 @@ export function createMeetings(options: MeetingsOptions) {
       `SELECT ${COLUMNS} FROM meetings WHERE id = ? AND deleted_at IS NULL`,
       [meetingId],
     );
-    if (!row) throw new NotFoundError("That Meeting doesn't exist or has been discarded.");
+    if (!row) throw new NotFoundError({ key: "error.meeting.notFound" });
     return row;
   };
 
@@ -206,6 +218,7 @@ export function createMeetings(options: MeetingsOptions) {
       },
       saveError: current?.saveError ?? null,
       transcript: transcripts && row.status !== "ready" ? transcripts.of(row.id) : null,
+      health: health.of(row.id),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -270,6 +283,13 @@ export function createMeetings(options: MeetingsOptions) {
       // The part is lost; the Meeting says so until a part is saved again.
       const code = (error as NodeJS.ErrnoException).code ?? "unknown";
       log.error("meeting.saveFailed", { meetingId: current.meetingId, source, code });
+      health.add(current.meetingId, {
+        kind: "audioLost",
+        source,
+        cause: lossCauseOf(code),
+        atMs: offsetMs,
+        durationMs: msOf(samples.length),
+      });
       if (current.saveError === null) {
         current.saveError = error instanceof Error ? error.message : String(error);
         changed();
@@ -295,9 +315,11 @@ export function createMeetings(options: MeetingsOptions) {
     if (live !== current || samples.length === 0) return;
     const at = meetingTime(current);
     let run = current.runs.get(source);
+    let stalledFrom: number | null = null;
     // Samples that come much later than the run could have produced them (a device changed,
     // the capture stalled) start a new run where they belong, so the parts keep the right times.
     if (run && at - (run.startMs + msOf(run.samples + samples.length)) > DISCONTINUITY_MS) {
+      stalledFrom = run.startMs + msOf(run.samples);
       endRun(current, source);
       run = undefined;
     }
@@ -311,6 +333,15 @@ export function createMeetings(options: MeetingsOptions) {
         waitingSamples: 0,
       };
       current.runs.set(source, run);
+      if (stalledFrom !== null && run.startMs > stalledFrom) {
+        health.add(current.meetingId, {
+          kind: "audioLost",
+          source,
+          cause: "stalled",
+          atMs: stalledFrom,
+          durationMs: run.startMs - stalledFrom,
+        });
+      }
     }
     transcripts?.hear(current.meetingId, samples, run.startMs + msOf(run.samples));
     run.waiting.push(samples);
@@ -400,6 +431,7 @@ export function createMeetings(options: MeetingsOptions) {
       audioEnd - current.period.offsetMs,
     );
     transcripts?.end(current.meetingId, current.period.offsetMs + length);
+    health.ended(current.meetingId);
     return length;
   }
 
@@ -429,7 +461,7 @@ export function createMeetings(options: MeetingsOptions) {
 
   function assertNoneCapturing(meetingId: string): void {
     if (live && live.meetingId !== meetingId) {
-      throw new InvalidInputError("Another Meeting is being recorded. Stop it first.");
+      throw new InvalidInputError({ key: "error.meeting.otherRecording" });
     }
   }
 
@@ -488,6 +520,24 @@ export function createMeetings(options: MeetingsOptions) {
       if (last) {
         last.endedBy = "interrupted";
         transcripts?.recovered(row.id, last.offsetMs + (last.durationMs ?? 0));
+        const saved = parts.filter((part) => part.offsetMs >= last.offsetMs).length;
+        if (saved > 0) {
+          health.add(row.id, {
+            kind: "audioRecovered",
+            parts: saved,
+            atMs: last.offsetMs + (last.durationMs ?? 0),
+            durationMs: last.durationMs ?? 0,
+          });
+        }
+      }
+      for (const part of unfinished) {
+        health.add(row.id, {
+          kind: "audioLost",
+          source: part.source,
+          cause: "closed",
+          atMs: part.offsetMs,
+          durationMs: part.durationMs,
+        });
       }
       save(row.id, {
         status: "paused",
@@ -495,7 +545,11 @@ export function createMeetings(options: MeetingsOptions) {
         periods: JSON.stringify(periods),
         audio_expires_at: expiryOf(row.id, periods),
       });
-      log.warn("meeting.recovered", { meetingId: row.id, parts: parts.length, unfinished });
+      log.warn("meeting.recovered", {
+        meetingId: row.id,
+        parts: parts.length,
+        unfinished: unfinished.length,
+      });
     }
   }
 
@@ -520,11 +574,7 @@ export function createMeetings(options: MeetingsOptions) {
 
   const meetingTitle = () => {
     const language = options.language();
-    const date = new Intl.DateTimeFormat(language === "zh-CN" ? "zh-CN" : "en-GB", {
-      day: "numeric",
-      month: "long",
-    }).format(new Date(clock()));
-    return translate(language, "meetings.mindTitle", { date });
+    return translate(language, "meetings.mindTitle", { date: formatDay(clock(), language) });
   };
 
   const parseInput = (input: unknown): Record<string, unknown> => {
@@ -537,11 +587,11 @@ export function createMeetings(options: MeetingsOptions) {
     list,
 
     create(input: unknown): Meeting {
-      if (!options.enabled()) throw new InvalidInputError("Meetings are turned off in Settings.");
+      if (!options.enabled()) throw new InvalidInputError({ key: "error.meeting.off" });
       if (!capture) throw new InvalidInputError("This copy of IncarnaMind can't record audio.");
       const { mindId } = parseInput(input);
       if (mindId !== undefined && (typeof mindId !== "string" || !options.mindExists(mindId))) {
-        throw new NotFoundError("That Mind doesn't exist or has been deleted.");
+        throw new NotFoundError({ key: "error.mind.notFound" });
       }
       if (
         typeof mindId === "string" &&
@@ -566,7 +616,7 @@ export function createMeetings(options: MeetingsOptions) {
     discard(meetingId: unknown): void {
       const row = rowOf(meetingId);
       if (row.status !== "ready") {
-        throw new InvalidInputError("Only a Meeting that hasn't started can be discarded.");
+        throw new InvalidInputError({ key: "error.meeting.cantDiscard" });
       }
       const at = now();
       db.run("UPDATE meetings SET deleted_at = ?, updated_at = ? WHERE id = ?", [at, at, row.id]);
@@ -576,14 +626,15 @@ export function createMeetings(options: MeetingsOptions) {
     start(input: unknown): Meeting {
       const { meetingId, systemAudio } = parseInput(input);
       const row = rowOf(meetingId);
-      if (row.status !== "ready") throw new InvalidInputError("That Meeting has started already.");
+      if (row.status !== "ready")
+        throw new InvalidInputError({ key: "error.meeting.alreadyStarted" });
       if (systemAudio !== undefined && typeof systemAudio !== "boolean") {
         throw new InvalidInputError("systemAudio must be true or false.");
       }
-      if (!options.enabled()) throw new InvalidInputError("Meetings are turned off in Settings.");
+      if (!options.enabled()) throw new InvalidInputError({ key: "error.meeting.off" });
       if (!capture) throw new InvalidInputError("This copy of IncarnaMind can't record audio.");
       if (!options.noticeAccepted()) {
-        throw new InvalidInputError("Read the recording notice before recording a Meeting.");
+        throw new InvalidInputError({ key: "error.meeting.noticeUnread" });
       }
       assertNoneCapturing(row.id);
       const at = now();
@@ -603,7 +654,8 @@ export function createMeetings(options: MeetingsOptions) {
 
     pause(meetingId: unknown): Meeting {
       const row = rowOf(meetingId);
-      if (row.status !== "recording") throw new InvalidInputError("That Meeting isn't recording.");
+      if (row.status !== "recording")
+        throw new InvalidInputError({ key: "error.meeting.notRecording" });
       const periods = closePeriod(row, "pause");
       save(row.id, {
         status: "paused",
@@ -618,7 +670,7 @@ export function createMeetings(options: MeetingsOptions) {
 
     resume(meetingId: unknown): Meeting {
       const row = rowOf(meetingId);
-      if (row.status !== "paused") throw new InvalidInputError("That Meeting isn't paused.");
+      if (row.status !== "paused") throw new InvalidInputError({ key: "error.meeting.notPaused" });
       assertNoneCapturing(row.id);
       const periods = periodsOf(row);
       const period: Period = {
@@ -642,7 +694,7 @@ export function createMeetings(options: MeetingsOptions) {
     stop(meetingId: unknown): Meeting {
       const row = rowOf(meetingId);
       if (row.status !== "recording" && row.status !== "paused") {
-        throw new InvalidInputError("That Meeting isn't being recorded.");
+        throw new InvalidInputError({ key: "error.meeting.notBeingRecorded" });
       }
       const periods = closePeriod(row, "stop");
       save(row.id, {
@@ -692,6 +744,7 @@ export function createMeetings(options: MeetingsOptions) {
       for (const row of rows) {
         if (live?.meetingId === row.id) end(live);
         transcripts?.forget(row.id);
+        health.forget(row.id);
         deleteAudio(row.id, "discarded");
         db.run("UPDATE meetings SET deleted_at = ?, updated_at = ? WHERE id = ?", [at, at, row.id]);
       }

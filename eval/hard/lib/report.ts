@@ -19,7 +19,9 @@ import {
   rerankedSearchOf,
   TOP_K,
 } from "../../lib/retrieval";
-import type { HardCitations } from "./citations";
+import { summariseTiming } from "../../lib/timing";
+import { timingLine, timingSection } from "../../lib/timingReport";
+import type { AnswerRuleResult, HardCitations } from "./citations";
 import type { FetchStatus } from "./fetch";
 import type { KeywordTiming, QueryTiming } from "./keywordTiming";
 import {
@@ -127,6 +129,8 @@ export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
   unanswerable: "Unanswerable",
   "cross-lingual": "Cross-lingual (with a translated second query)",
   "near-duplicate": "Near-duplicate",
+  "false-premise": "False premise",
+  disagreeing: "Disagreeing, newer and older",
 };
 
 const labelOf = (report: HardReport, mode: RetrievalMode) =>
@@ -355,7 +359,22 @@ function citationsSection(report: HardReport): string[] {
     row("**Declines, with or without Citations**", (d) =>
       d === "unanswerable" ? ofAnswers(of(d)?.declines ?? 0, d) : "–",
     ),
+    row("**Premise flagged first**", (d) =>
+      d === "false-premise" ? ofAnswers(of(d)?.premiseFlagged ?? 0, d) : "–",
+    ),
+    row("**Newer source leads**", (d) =>
+      d === "disagreeing" ? ofAnswers(of(d)?.newerLeads ?? 0, d) : "–",
+    ),
+    row("Names the older one too", (d) =>
+      d === "disagreeing" ? ofAnswers(of(d)?.namesOlder ?? 0, d) : "–",
+    ),
     "",
+    ...citedAfterCheckingSection(citations),
+    ...answerRulesSection(citations),
+    ...timingSection(
+      columns.map((difficulty) => ({ label: difficulty, ...of(difficulty) })),
+      "###",
+    ),
     ...(unanswerable
       ? [
           "Unanswerable Questions whose Answer declines, by the rule:",
@@ -371,6 +390,63 @@ function citationsSection(report: HardReport): string[] {
           "",
         ]
       : []),
+  ];
+}
+
+/** What #760's check of sentences written without markers did, over the finished Answers. */
+export function citedAfterCheckingCounts(citations: HardCitations) {
+  const finished = (citations.run.answers ?? []).filter((answer) => answer.status === "done");
+  const added = (answer: (typeof finished)[number]) => answer.citedAfterChecking?.count ?? 0;
+  const noneOwn = finished.filter((answer) => answer.citations.length - added(answer) === 0);
+  return {
+    answers: finished.length,
+    /** No Citation of the model's own: what the Answer was before #760. */
+    noneOwn: noneOwn.length,
+    /** Of those, Answers quoting text in quotation marks. */
+    noneOwnQuoting: noneOwn.filter((answer) => /["“「『][^"”」』\n]{8,}["”」』]/u.test(answer.text))
+      .length,
+    /** No Citation even after the check. */
+    stillNone: finished.filter((answer) => answer.citations.length === 0).length,
+    added: finished.reduce((sum, answer) => sum + added(answer), 0),
+    asked: finished.filter((answer) => answer.citedAfterChecking?.asked).length,
+  };
+}
+
+function citedAfterCheckingSection(citations: HardCitations): string[] {
+  const counts = citedAfterCheckingCounts(citations);
+  if (counts.answers === 0) return [];
+  return [
+    "Sentences written without markers (#760): finished Answers with no Citation of the model's own (of them, quoting in quotation marks), with none even after the check matched their sentences to the Passages read, the Citations it added, and the Answers that asked the model once more.",
+    "",
+    "| Answers | No Citation of its own (quoting) | None after the check | Citations added | Asked once more |",
+    "|---|---|---|---|---|",
+    `| ${counts.answers} | ${counts.noneOwn} (${counts.noneOwnQuoting}) | ${counts.stillNone} | ${counts.added} | ${counts.asked} |`,
+    "",
+  ];
+}
+
+/**
+ * Each false-premise and disagreeing Answer, with what the Answer rules found
+ * and how it opens, for a reviewer to check the rules against (#548).
+ */
+function answerRulesSection(citations: HardCitations): string[] {
+  if (citations.rules.length === 0) return [];
+  const found = (rule: AnswerRuleResult) =>
+    rule.difficulty === "false-premise"
+      ? rule.followed
+        ? "flagged"
+        : "not flagged"
+      : `${rule.followed ? "newer leads" : "newer doesn't lead"}${rule.namesOlder ? ", names the older" : ""}`;
+  return [
+    "The Answer rules (#548), Answer by Answer: a premise the Documents don't support is said so in the Answer's first paragraph (a phrase rule in English and Chinese); when two Documents disagree, what the newer one says comes first, and the Answer cites it. Each Answer's text is in `answers.md`.",
+    "",
+    "| Question | The rule found | How the Answer opens |",
+    "|---|---|---|",
+    ...citations.rules.map(
+      (rule) =>
+        `| ${rule.questionId} | ${found(rule)} | ${rule.opening.replace(/\s+/g, " ").replace(/\|/g, "\\|").slice(0, 200)} |`,
+    ),
+    "",
   ];
 }
 
@@ -477,6 +553,10 @@ export function hardSummary(report: HardReport, reportDir: string, root: string)
   const { citations } = report;
   if (!("skipped" in citations)) {
     const unanswerable = citations.byDifficulty.unanswerable;
+    const premise = citations.byDifficulty["false-premise"];
+    const disagreeing = citations.byDifficulty.disagreeing;
+    const timing = timingLine(summariseTiming(citations.run.answers));
+    if (timing) lines.push(`  Time (${citations.run.model}): ${timing}`);
     lines.push(
       `  Citations (${citations.run.model}): ${DIFFICULTIES.filter((d) => citations.byDifficulty[d])
         .map((d) => `${d} found ${percent(citations.byDifficulty[d]?.foundShare ?? null)}`)
@@ -484,6 +564,21 @@ export function hardSummary(report: HardReport, reportDir: string, root: string)
           ", ",
         )}${unanswerable ? `; unanswerable: ${unanswerable.declines}/${unanswerable.answers} decline, ${unanswerable.withoutCitation}/${unanswerable.answers} answered without a Citation` : ""}`,
     );
+    const checked = citedAfterCheckingCounts(citations);
+    lines.push(
+      `  Without markers (${citations.run.model}): ${checked.noneOwn}/${checked.answers} Answers had no Citation of their own (${checked.noneOwnQuoting} quoting), ${checked.stillNone} after the check; ${checked.added} Citations added, ${checked.asked} asked once more`,
+    );
+    if (premise || disagreeing) {
+      lines.push(
+        `  Answer rules (${citations.run.model}): ${[
+          premise && `premise flagged first ${premise.premiseFlagged}/${premise.answers}`,
+          disagreeing &&
+            `newer source leads ${disagreeing.newerLeads}/${disagreeing.answers} (names the older ${disagreeing.namesOlder})`,
+        ]
+          .filter(Boolean)
+          .join("; ")}`,
+      );
+    }
   }
   lines.push(`Reports: ${relative(root, reportDir)}/`, "");
   return lines.join("\n");

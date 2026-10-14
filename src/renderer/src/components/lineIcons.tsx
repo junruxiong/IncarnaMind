@@ -32,6 +32,16 @@ export function PlusLineIcon(props: IconProps) {
   );
 }
 
+/** Search: a magnifier. */
+export function SearchLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="m20 20-4.35-4.35" />
+    </LineIcon>
+  );
+}
+
 /** A Mind: a notebook. */
 export function MindLineIcon(props: IconProps) {
   return (
@@ -199,6 +209,15 @@ export function MoreLineIcon(props: IconProps) {
   );
 }
 
+/** Dropping files in: an arrow down onto a line. */
+export function DropLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />
+    </LineIcon>
+  );
+}
+
 export function TrashLineIcon(props: IconProps) {
   return (
     <LineIcon {...props}>
@@ -246,10 +265,41 @@ export function SparkLineIcon(props: IconProps) {
   );
 }
 
+export function CalculatorLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <rect x="5" y="3" width="14" height="18" rx="2" />
+      <path d="M8.5 7h7M8.5 11h.01M12 11h.01M15.5 11h.01M8.5 14.5h.01M12 14.5h.01M15.5 14.5h.01M8.5 18h3.5M15.5 18h.01" />
+    </LineIcon>
+  );
+}
+
+/** Mark as mine: a person, ticked. */
+export function MineLineIcon(props: IconProps) {
+  return (
+    <LineIcon strokeWidth={2} {...props}>
+      <circle cx="9" cy="8" r="3.5" />
+      <path d="M2.5 20a6.5 6.5 0 0 1 13 0" />
+      <path d="m15.5 11.5 2.5 2.5 4.5-5" />
+    </LineIcon>
+  );
+}
+
 export function CheckLineIcon(props: IconProps) {
   return (
     <LineIcon strokeWidth={2.25} {...props}>
       <path d="m5 12.5 4.5 4.5L19 7.5" />
+    </LineIcon>
+  );
+}
+
+/** A page with a tick: verifying a document (#97; the board Final-35-Verify-Start). */
+export function VerifyLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+      <path d="M14 3v5h5" />
+      <path d="m9 15 2 2 4-4" />
     </LineIcon>
   );
 }
@@ -277,12 +327,31 @@ export function SidebarLineIcon(props: IconProps) {
   );
 }
 
+/** This computer, for what stays on it: a laptop. */
+export function ComputerLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <rect x="4.5" y="5" width="15" height="10.5" rx="1.75" />
+      <path d="M2.75 19h18.5" />
+    </LineIcon>
+  );
+}
+
 /** Recording a meeting, as an action ("Record a meeting", "Start recording"): a ring and a dot. */
 export function RecordingLineIcon(props: IconProps) {
   return (
     <LineIcon {...props}>
       <circle cx="12" cy="12" r="8.25" />
       <circle cx="12" cy="12" r="3.75" fill="currentColor" stroke="none" />
+    </LineIcon>
+  );
+}
+
+/** How a recording went, its recording details: a pulse, as a call's health is in Teams. */
+export function PulseLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M3 12h4l2.5-6 5 12 2.5-6h4" />
     </LineIcon>
   );
 }
@@ -317,6 +386,15 @@ export function StopLineIcon(props: IconProps) {
   return (
     <LineIcon {...props}>
       <rect x="6.5" y="6.5" width="11" height="11" rx="1.5" fill="currentColor" />
+    </LineIcon>
+  );
+}
+
+/** A Mark in a meeting: a bookmark. */
+export function BookmarkLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M7.5 4.5h9v15l-4.5-3.5-4.5 3.5z" />
     </LineIcon>
   );
 }
@@ -356,6 +434,16 @@ export function ChatLineIcon(props: IconProps) {
   );
 }
 
+/** Copy: two sheets, one over the other. */
+export function CopyLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <rect x="8.5" y="8.5" width="11.5" height="11.5" rx="2" />
+      <path d="M15.5 8.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5" />
+    </LineIcon>
+  );
+}
+
 /** History: a clock with its hand turning back, as in Cursor and Claude. */
 export function HistoryLineIcon(props: IconProps) {
   return (
@@ -363,6 +451,16 @@ export function HistoryLineIcon(props: IconProps) {
       <path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3" />
       <path d="M4.5 4.5V9H9" />
       <path d="M12 8.5V12l2.5 1.5" />
+    </LineIcon>
+  );
+}
+
+/** Restore: an arrow coming round to where it started. */
+export function RestoreLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M4 12a8 8 0 1 0 2.3-5.6" />
+      <path d="M4 4v4h4" />
     </LineIcon>
   );
 }

@@ -181,12 +181,16 @@ describe("Re-processing", { timeout: 30_000 }, () => {
     first.close();
 
     const second = startCore(dataDir);
-    const statuses: Document["status"][] = [];
-    second.on("document.status", (document) => statuses.push(document.status));
+    const changed: string[] = [];
+    second.on("document.status", (document) => changed.push(document.id));
 
     expect((await second.listDocuments())[0]?.status).toBe("ready");
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    expect(statuses).toEqual([]);
+    // The processor takes Documents in the order queued: once one added now is ready, any the
+    // start would have queued has been processed.
+    const [control] = await addAndProcess(second, [
+      await writeSourceFile(await createSourceFolder(), "Control.md", "Nothing to do with it."),
+    ]);
+    expect(changed.filter((id) => id !== control?.id)).toEqual([]);
     expect(await second.searchPassages("Transformer", { mode: "keyword" })).toEqual(passages);
   });
 
@@ -263,8 +267,10 @@ describe("Re-processing", { timeout: 30_000 }, () => {
     expect((await third.listDocuments()).map((document) => document.status)).toEqual(
       Array(3).fill("ready"),
     );
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    expect(later).toEqual([]);
+    const [control] = await addAndProcess(third, [
+      await writeSourceFile(sources, "Control.md", "Nothing to do with them."),
+    ]);
+    expect(later.filter((id) => id !== control?.id)).toEqual([]);
     third.close();
   });
 

@@ -5,6 +5,7 @@ import { isShown } from "../layoutSlice";
 import { documentsByTag, NEEDS_REVIEW } from "../libraryFilters";
 import type { ObjectRef } from "../objects";
 import { useAppStore } from "../store";
+import { editTag } from "../tagChanges";
 import { BrowseGroup } from "./BrowseGroup";
 import { ReviewRing, TagDot } from "./TagColour";
 
@@ -45,6 +46,7 @@ export function SidebarTags({
     mark: ReactNode,
     title?: string,
     objectOf?: ObjectRef,
+    rename?: { label: string; commit(name: string): void | Promise<void> },
   ) => (
     <BrowseGroup
       key={value}
@@ -56,7 +58,6 @@ export function SidebarTags({
       object={objectOf}
       documents={byTag.get(value) ?? NONE}
       selected={tagFilter.includes(value)}
-      selectedAs="pressed"
       expanded={expanded.has(value)}
       onOpen={() => {
         const store = useAppStore.getState();
@@ -74,16 +75,17 @@ export function SidebarTags({
           return next;
         })
       }
+      rename={rename}
       renderDocument={renderDocument}
     />
   );
 
   return (
-    <nav aria-label={t("tags.title")} data-testid="sidebar-tags">
+    <div data-testid="sidebar-tags">
       {tags.length === 0 ? (
         <p className="px-2 py-1 text-[13px] leading-5 text-ink-meta">{t("tags.menu.none")}</p>
       ) : (
-        <ul>
+        <ul role="none">
           {(byTag.has(NEEDS_REVIEW) || tagFilter.includes(NEEDS_REVIEW)) &&
             group(NEEDS_REVIEW, t("tags.filter.review"), <ReviewRing />)}
           {tags.map((tag) =>
@@ -93,10 +95,14 @@ export function SidebarTags({
               <TagDot colour={tag.colour} size="md" />,
               tag.description || tag.name,
               { kind: "tag", id: tag.id },
+              {
+                label: t("tag.renameLabel", { name: tag.name }),
+                commit: (next) => editTag(tag.id, { name: next }),
+              },
             ),
           )}
         </ul>
       )}
-    </nav>
+    </div>
   );
 }

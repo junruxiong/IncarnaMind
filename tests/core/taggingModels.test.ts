@@ -27,7 +27,7 @@ const OPENROUTER = "https://openrouter.ai";
 interface SmallCall {
   kind: string;
   modelId: string;
-  thinking: "off" | undefined;
+  thinking: "off" | "summary" | undefined;
   /** What it was for, from its instructions. */
   purpose: "rewrite" | "translate" | "tags" | "organize" | "other";
 }
@@ -313,13 +313,13 @@ describe("Which model each quick call uses", () => {
     ]);
     expect(answers).toEqual(["cohere/command-r7b-12-2024"]);
     expect(specs.find((spec) => spec.modelId === "cohere/command-r7b-12-2024")?.thinking).toBe(
-      undefined,
+      "summary",
     );
     // Counted as the Answer's, as its own call is: 5 input tokens each.
     expect(ended.payload.usage.inputTokens).toBe(15);
   });
 
-  test("Tag suggestions, and Organize once there are Folders, go to the provider's tagging model", async () => {
+  test("Tag suggestions go to the provider's tagging model, and Organize too once the User lets it", async () => {
     const { core, calls } = await start();
     await core.saveChatProvider({ kind: "openai", apiKey: "sk-test", modelId: "gpt-6.1-sol" });
     await core.allowDataFlow("tagging", OPENAI);
@@ -332,11 +332,16 @@ describe("Which model each quick call uses", () => {
 
     await core.createLibraryGroup({ name: "Reports", description: "Reports and reviews" });
     const second = await addText(core, "Review.md", "Annual review.");
-    await vi.waitFor(async () =>
-      expect(
-        (await core.getLibrary()).assignments.find((each) => each.documentId === second.id)?.status,
-      ).toBe("classified"),
-    );
+    const status = async () =>
+      (await core.getLibrary()).assignments.find((each) => each.documentId === second.id)?.status;
+    // Automatic covers tagging only: Organize waits for the User's "Use {company}".
+    await vi.waitFor(async () => expect(await status()).toBe("waiting"));
+    expect(calls.filter((each) => each.purpose === "organize")).toEqual([]);
+    const { automatic } = await core.getTaggingModels();
+    if (!automatic) throw new Error("Automatic picked nothing.");
+    const { settings } = await core.getLibrary();
+    await core.saveLibrarySettings({ ...settings, organizeWith: automatic.classifier });
+    await vi.waitFor(async () => expect(await status()).toBe("classified"));
     expect(calls.filter((each) => each.purpose === "organize")).toEqual([
       { kind: "openai", modelId: "gpt-6-luna", thinking: "off", purpose: "organize" },
     ]);
@@ -497,6 +502,12 @@ describe("The image model reads scans the model that tags can't", () => {
       },
     });
     await core.allowDataFlow("classification", ANTHROPIC);
+    // Organize uses the local model, as "Use Ollama" in the Library sets it.
+    await core.saveLibrarySettings({
+      classifier: { kind: "automatic" },
+      automatic: true,
+      organizeWith: { kind: "chat", choice: { providerId: ollama.id, modelId: "local-model" } },
+    });
     await core.createLibraryGroup({ name: "Scans", description: "Scanned papers" });
     const [scan] = await addAndProcess(core, [
       await writeSourceFile(await createTempDataFolder(), "scan.pdf", SCAN),
@@ -546,7 +557,7 @@ describe("Moving to one Tagging setting", () => {
     await before.saveLibrarySettings(kept);
     before.close();
     const after = startCore(dataDir);
-    expect((await after.getLibrary()).settings).toEqual(kept);
+    expect((await after.getLibrary()).settings).toEqual({ ...kept, organizeWith: null });
     after.close();
 
     // As the version before stored "Organize manually".
@@ -559,6 +570,7 @@ describe("Moving to one Tagging setting", () => {
     expect((await upgraded.getLibrary()).settings).toEqual({
       classifier: { kind: "automatic" },
       automatic: true,
+      organizeWith: null,
     });
   });
 
@@ -568,6 +580,7 @@ describe("Moving to one Tagging setting", () => {
     expect((await core.getLibrary()).settings).toEqual({
       classifier: { kind: "automatic" },
       automatic: false,
+      organizeWith: null,
     });
   });
 });

@@ -8,7 +8,6 @@ import {
   formatDuration,
   indexingShare,
   linkedFolderRowState,
-  revealLabelKey,
   rowStateLabel,
 } from "../../src/renderer/src/linkedFolders";
 import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
@@ -100,14 +99,14 @@ describe("a Linked folder's row state", () => {
 describe("what a Linked folder's row says", () => {
   test("indexing counts with digit grouping, and has a shorter form for a narrow sidebar", () => {
     expect(rowStateLabel({ kind: "indexing", indexed: 120, files: 3214 }, en, "en")).toEqual({
-      short: "Indexing 120 of 3,214",
+      short: "Reading 120 of 3,214",
       compact: "120 of 3,214",
-      full: "Indexing 120 of 3,214 files, newest first",
+      full: "Reading 120 of 3,214 files, newest first",
     });
     expect(rowStateLabel({ kind: "indexing", indexed: 120, files: 3214 }, zh, "zh-CN")).toEqual({
-      short: "正在索引 120 / 3,214",
+      short: "正在读取 120 / 3,214",
       compact: "120 / 3,214",
-      full: "正在为 3,214 个文件建立索引，已完成 120 个，最新的优先",
+      full: "正在读取 3,214 个文件，已完成 120 个，最新的优先",
     });
   });
 
@@ -126,16 +125,16 @@ describe("what a Linked folder's row says", () => {
 
   test("the full words say how far a paused folder got, and count one online-only file as one", () => {
     expect(rowStateLabel({ kind: "paused", indexed: 2, files: 10 }, en, "en")?.full).toBe(
-      "Indexing is paused: 2 of 10 files indexed",
+      "Reading is paused: 2 of 10 files read",
     );
     expect(rowStateLabel({ kind: "paused", indexed: 10, files: 10 }, en, "en")?.full).toBe(
-      "Indexing is paused",
+      "Reading is paused",
     );
     expect(rowStateLabel({ kind: "online-only", files: 1 }, en, "en")?.full).toBe(
-      "1 online-only file isn't downloaded, so it isn't indexed",
+      "1 online-only file isn't downloaded, so it isn't read",
     );
     expect(rowStateLabel({ kind: "online-only", files: 1200 }, en, "en")?.full).toBe(
-      "1,200 online-only files aren't downloaded, so they aren't indexed",
+      "1,200 online-only files aren't downloaded, so they aren't read",
     );
   });
 });
@@ -173,12 +172,6 @@ describe("names and labels", () => {
     expect(folderName("/Users/ada/Papers")).toBe("Papers");
     expect(folderName("/Users/ada/Papers/")).toBe("Papers");
     expect(folderName("C:\\Users\\ada\\Zotero\\storage")).toBe("storage");
-  });
-
-  test("the file manager is named for the system", () => {
-    expect(en(revealLabelKey("MacIntel"))).toBe("Show in Finder");
-    expect(en(revealLabelKey("Win32"))).toBe("Show in Explorer");
-    expect(en(revealLabelKey("Linux x86_64"))).toBe("Show in file manager");
   });
 
   test("a Document's file status: words for missing and unavailable, nothing when it's there", () => {

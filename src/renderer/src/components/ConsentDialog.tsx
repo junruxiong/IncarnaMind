@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import type { ConsentRequest } from "../../../core/api";
 import { CHATGPT_SERVICE } from "../../../core/providers/chatgpt/service";
 import { core } from "../core";
-import { errorMessage } from "../errors";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import {
@@ -56,7 +55,7 @@ export function ConsentDialog() {
     try {
       await core.respondToConsent(request.requestId, accept);
     } catch (failure) {
-      useAppStore.setState({ actionError: errorMessage(failure) });
+      useAppStore.getState().reportError(failure);
     }
   };
 

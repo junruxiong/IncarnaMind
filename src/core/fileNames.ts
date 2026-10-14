@@ -1,5 +1,7 @@
-import { open, rm } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { open, rename, rm, writeFile } from "node:fs/promises";
 import { extname, join } from "node:path";
+import { cutAtWord } from "../shared/naming";
 
 /** Longest a file name made from a title gets, before its extension. */
 const MAX_NAME_LENGTH = 120;
@@ -16,14 +18,15 @@ const MAX_TRIES = 1000;
  * `fallback` if nothing is left.
  */
 export function safeFileName(title: string, fallback: string): string {
-  const name = title
-    // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters can't be in file names.
-    .replace(/[\\/:*?"<>|\u0000-\u001f\u007f]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/^\.+/, "")
-    .slice(0, MAX_NAME_LENGTH)
-    .replace(/[\s.]+$/, "");
+  const name = cutAtWord(
+    title
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters can't be in file names.
+      .replace(/[\\/:*?"<>|\u0000-\u001f\u007f]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/^\.+/, ""),
+    MAX_NAME_LENGTH,
+  ).replace(/[\s.]+$/, "");
   if (!name) return fallback;
   return WINDOWS_DEVICE.test(name) ? `${name}_` : name;
 }
@@ -32,8 +35,9 @@ export function safeFileName(title: string, fallback: string): string {
  * Writes a new file in `folder` under `name` ("Tides.docx"), or under the
  * next free name, as Finder does ("Tides 2.docx", "Tides 3.docx"), and
  * returns the name used. Each name is created exclusively, so nothing already
- * there, a file or a link, is ever replaced or followed. A file left half
- * written is removed.
+ * there, a file or a link, is ever replaced or followed. The bytes go to a
+ * temporary file beside it first, which then takes the name at once, so the
+ * file is never seen half written; if writing fails, neither is left.
  */
 export async function writeNewFile(
   folder: string,
@@ -45,18 +49,18 @@ export async function writeNewFile(
   for (let n = 1; n <= MAX_TRIES; n++) {
     const candidate = n === 1 ? name : `${stem} ${n}${extension}`;
     const path = join(folder, candidate);
-    let file: Awaited<ReturnType<typeof open>>;
     try {
-      file = await open(path, "wx");
+      await (await open(path, "wx")).close();
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "EEXIST") continue;
       throw error;
     }
+    const temporary = join(folder, `.${candidate}.${randomUUID()}.partial`);
     try {
-      await file.writeFile(data);
-      await file.close();
+      await writeFile(temporary, data, { flag: "wx" });
+      await rename(temporary, path);
     } catch (error) {
-      await file.close().catch(() => undefined);
+      await rm(temporary, { force: true });
       await rm(path, { force: true });
       throw error;
     }

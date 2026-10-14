@@ -132,7 +132,12 @@ export interface RunStep {
  * model as an error: the call failed.
  */
 export type RunMessage =
-  | { role: "user"; text: string }
+  | {
+      role: "user";
+      text: string;
+      /** The length of the start of `text` the next Run repeats as it is, for the prompt cache (see ../providers/promptCache). */
+      stablePrefix?: number;
+    }
   | { role: "assistant"; text: string; toolCalls: readonly RunToolCall[] }
   | { role: "tool"; id: string; tool: string; result: string; ok: boolean };
 
@@ -143,6 +148,12 @@ export type RunMessage =
  */
 export type RunEvent =
   | { type: "text-delta"; text: string }
+  /**
+   * The model's reasoning as its provider streams it, a summary or raw chain
+   * of thought: the caller decides whether to keep it. An empty `text` starts
+   * a block of reasoning. It is never in `messages`.
+   */
+  | { type: "reasoning"; text: string }
   /**
    * The model asked for a Tool. Its `gate`, then its call, run alongside the
    * stream, so they may begin before this event is read.

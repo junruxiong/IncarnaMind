@@ -6,6 +6,8 @@ import { paragraphsOf, part, unzip } from "../tests/helpers/docx";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
+  addToNote,
+  askInAssistant,
   createDataFolder,
   dismissChatSetup,
   documentIdOf,
@@ -67,18 +69,22 @@ test.afterEach(async () => {
   await removeDataFolder(sources);
 });
 
-/** Asks a Question in a new Mind and waits for its Answer to finish. */
+/**
+ * Asks a Question from a new Mind, in the assistant (#201), and adds its
+ * Answer to the Mind, as a person keeps one; resolves with the Mind's text,
+ * where its Citations now are.
+ */
 async function ask(window: Page, text: string): Promise<Locator> {
   await newMind(window);
   const editor = window.getByTestId("mind-editor");
   await pointAndClick(window, editor);
-  await window.keyboard.press("ControlOrMeta+j");
-  await window.keyboard.type(text);
-  await window.keyboard.press("Enter");
-  const answer = editor.getByTestId("answer");
-  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-  return answer;
+  await addToNote(window, await askInAssistant(window, text));
+  await expect(editor.getByTestId("citation").first()).toBeVisible();
+  return editor;
 }
+
+/** The checks in the Mind's margin, not the assistant's. */
+const mindChecks = (window: Page) => window.getByTestId("card").getByTestId("margin-check");
 
 /** Chooses a style in the open picker, typing to find it and pressing Enter, as a person would. */
 async function chooseStyle(window: Page, search: string, label: string): Promise<void> {
@@ -122,7 +128,7 @@ test("a Mind citing a paper offers a citation style; chosen, its Citations and R
   );
   // The second Citation is drawn by the first, but keeps its own check in the margin.
   await expect(answer.locator('[data-testid="citation"][data-styled="joined"]')).toHaveCount(1);
-  await expect(window.getByTestId("margin-check")).toHaveCount(2);
+  await expect(mindChecks(window)).toHaveCount(2);
 
   // Over a work's words, the pointer shows that Citation's card.
   const chip = styled.getByTestId("citation-chip");
@@ -143,7 +149,7 @@ test("a Mind citing a paper offers a citation style; chosen, its Citations and R
     "Bowler, D. E., & Buyung-Ali, L. (2010). Tides and the Moon. Ocean Review, 12, 1–20.",
   );
   await expect(entries.nth(1)).toHaveAttribute("data-needs-details", "true");
-  await expect(entries.nth(1)).toContainText("Lease agreement");
+  await expect(entries.nth(1)).toContainText(/Lease agreement\. Plain text, added \d+ \w+ \d{4}\./);
   await screenshot(window, "references-apa-en");
 
   // "Needs details" opens the Document's "Cite as" right there, at its first gap, its title.
@@ -201,15 +207,18 @@ test("a Mind citing a paper offers a citation style; chosen, its Citations and R
   await expect(dialog.getByTestId("export-citation-style")).toHaveText(
     "Chicago (notes and bibliography)",
   );
-  // The dialog's own style button switches it back to APA 7 for this export, and for the Mind.
+  // The options sheet's own style button switches it back to APA 7, for the Mind and so its
+  // exports; Save options keeps Word, and Export makes the file.
   await pointAndClick(window, dialog.getByTestId("export-citation-style"));
   await chooseStyle(window, "apa", "APA 7");
   await expect(dialog.getByTestId("export-citation-style")).toHaveText("APA 7");
   await screenshot(window, "export-dialog-style-en");
   await pointAndClick(window, dialog.getByTestId("export-save"));
-  await expect(dialog.getByTestId("export-done")).toBeVisible();
-  const saved = (await dialog.getByTestId("export-done").getAttribute("title")) ?? target;
-  await pointAndClick(window, dialog.getByTestId("export-close"));
+  await expect(dialog).toBeHidden();
+  await pointAndClick(window, window.getByTestId("export-mind"));
+  const done = window.getByTestId("export-result").getByTestId("export-done");
+  await expect(done).toHaveText(/^Saved .+\.docx$/);
+  const saved = (await done.getAttribute("title")) ?? target;
   const text = paragraphsOf(part(unzip(await readFile(saved)), "word/document.xml")).map(
     (each) => each.text,
   );
@@ -278,6 +287,7 @@ test("in Chinese: the offer puts GB/T 7714 first; chosen, raised numbers and 参
 
   // At the narrowest window the header wraps by word and nothing spills out of the column.
   await setWindowSize(app, window, 900, 660);
+  await expect(window.getByTestId("assistant")).toHaveAttribute("data-dock", "bottom");
   const column = await window.getByTestId("mind-pane").boundingBox();
   const head = await references.locator(".references-head").boundingBox();
   if (!column || !head) throw new Error("The References or the Mind aren't on screen.");
@@ -297,7 +307,7 @@ test("a Mind citing files with no details isn't offered a style until one is a p
   const answer = await ask(window, "When is spring rent due?");
   await expect(answer.getByTestId("citation-chip")).toHaveText(["1"]);
   const prompt = window.getByTestId("citation-style-prompt");
-  await expect(window.getByTestId("margin-check")).toHaveCount(1);
+  await expect(mindChecks(window)).toHaveCount(1);
   await expect(prompt).toHaveCount(0);
   await expect(window.getByTestId("references")).toHaveCount(0);
 

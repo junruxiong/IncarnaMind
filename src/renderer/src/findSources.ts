@@ -1,12 +1,14 @@
 import { create } from "zustand";
-import type {
-  AddFoundSourceResult,
-  FindSourcesResult,
-  FoundSource,
-  SourceProviderInfo,
+import {
+  type AddFoundSourceResult,
+  type FindSourcesResult,
+  type FoundSource,
+  SOURCE_KIND_PROVIDERS,
+  type SourceProviderInfo,
 } from "../../core/api";
 import { core } from "./core";
 import { errorMessage } from "./errors";
+import { translateNow } from "./i18n";
 import { useAppStore } from "./store";
 
 /** A work being added, or how adding it went, with the Folder it went to (null: Not in a Folder). */
@@ -41,6 +43,9 @@ interface FindSourcesState extends SourceSearch {
   error: string | null;
   /** Each work added this time, by key. */
   adds: Record<string, AddState>;
+  /** The provider whose key field is open, by id. */
+  keyOpen: string | null;
+  openKey(providerId: string | null): void;
   /**
    * Opens Find sources in the Library, adding to the Folder shown there; with
    * a search (an Answer's), fills it in and runs it.
@@ -57,6 +62,41 @@ interface FindSourcesState extends SourceSearch {
 
 /** Counts searches, so only the latest one's answer is shown. */
 let searchTicket = 0;
+
+/** The providers the last search couldn't ask for want of the User's key, or whose key they refused. */
+function keyProblems(result: FindSourcesResult | null): string[] {
+  if (result?.outcome !== "found") return [];
+  return result.providers
+    .filter(
+      (each) => each.failure?.reason === "needs-key" || each.failure?.reason === "key-rejected",
+    )
+    .map((each) => each.id);
+}
+
+/**
+ * The providers whose key line shows under the search: one that searches and
+ * is chosen; one that only looks citations up (GovInfo) when a provider of its
+ * kind is chosen (the eCFR), when the last search asked for its key, or while
+ * its field is open.
+ */
+export function keyLines(
+  providers: readonly SourceProviderInfo[],
+  off: readonly string[],
+  keyOpen: string | null,
+  result: FindSourcesResult | null,
+): SourceProviderInfo[] {
+  const wanted = keyProblems(result);
+  const chosen = (id: string) =>
+    !off.includes(id) && providers.some((each) => each.id === id && each.searches);
+  return providers.filter((each) => {
+    if (each.key === "none") return false;
+    if (each.searches) return !off.includes(each.id);
+    const peers = Object.values(SOURCE_KIND_PROVIDERS)
+      .filter((ids) => ids.includes(each.id))
+      .flat();
+    return keyOpen === each.id || wanted.includes(each.id) || peers.some(chosen);
+  });
+}
 
 /** The Folder the Library shows, if it shows one: where Find sources adds by default. */
 function shownFolder(): string | null {
@@ -78,6 +118,11 @@ export const useFindSources = create<FindSourcesState>()((set, get) => ({
   result: null,
   error: null,
   adds: {},
+  keyOpen: null,
+
+  openKey(providerId) {
+    set({ keyOpen: providerId });
+  },
 
   show(search) {
     const app = useAppStore.getState();
@@ -86,7 +131,7 @@ export const useFindSources = create<FindSourcesState>()((set, get) => ({
     const focus = used ?? null;
     set({ open: true, folderId, focus, ...fields });
     // The Library, as a tab, as it was: the User's Mind stays where it is.
-    app.openLibrary(app.libraryFilter === "new" ? "all" : app.libraryFilter);
+    app.openLibrary(app.libraryFilter);
     // Drug labels and trials start off: they are asked only when chosen, never with a search for papers.
     const startOff = (providers: SourceProviderInfo[]) =>
       providers
@@ -137,7 +182,8 @@ export const useFindSources = create<FindSourcesState>()((set, get) => ({
       if (ticket === searchTicket) set({ result, adds: {} });
     } catch (error) {
       // The last search's results aren't this one's: they go with it.
-      if (ticket === searchTicket) set({ error: errorMessage(error), result: null, adds: {} });
+      if (ticket === searchTicket)
+        set({ error: errorMessage(error, translateNow), result: null, adds: {} });
     } finally {
       if (ticket === searchTicket) set({ searching: false });
       // A consent decision may have changed what each provider shows.
@@ -151,10 +197,12 @@ export const useFindSources = create<FindSourcesState>()((set, get) => ({
   async setKey(providerId, key) {
     try {
       await core.setSourceProviderKey(providerId, key);
-      set({ providers: await core.listSourceProviders() });
+      set({ providers: await core.listSourceProviders(), keyOpen: null });
+      // A search that wanted this key is asked again with it.
+      if (key !== null && keyProblems(get().result).includes(providerId)) void get().search();
       return null;
     } catch (error) {
-      return errorMessage(error);
+      return errorMessage(error, translateNow);
     }
   },
 
@@ -166,7 +214,7 @@ export const useFindSources = create<FindSourcesState>()((set, get) => ({
       const result = await core.addFoundSource({ key: work.key, folderId });
       next = { status: "done", result, folderId };
     } catch (error) {
-      next = { status: "failed", message: errorMessage(error) };
+      next = { status: "failed", message: errorMessage(error, translateNow) };
     }
     set((state) => ({ adds: { ...state.adds, [work.key]: next } }));
   },

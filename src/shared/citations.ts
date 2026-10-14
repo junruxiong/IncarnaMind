@@ -12,7 +12,10 @@ import type {
   CitationCheckReason,
   Document,
   KeptCitationText,
+  QuotedPiece,
+  QuotedWords,
 } from "../core/api";
+import { displayName } from "./documentNames";
 import type { MessageKey } from "./i18n";
 import {
   citationLocation,
@@ -69,7 +72,9 @@ export function citedTextKept(
   });
 }
 
-type LiveDocument = Pick<Document, "id" | "contentHash">;
+/** What a Citation needs of a live Document: whether it is there, and the name to show for it. */
+export type LiveDocument = Pick<Document, "id" | "contentHash"> &
+  Partial<Pick<Document, "name" | "title">>;
 
 /** A list of Documents by ID and by content: the first in the list with each. */
 interface DocumentIndex {
@@ -101,6 +106,47 @@ function indexOf(documents: readonly LiveDocument[]): DocumentIndex {
   return index;
 }
 
+/** The live Document a Citation opens: its own, or one with the same content added again after it was deleted. */
+function liveDocumentOf(
+  attributes: Partial<Pick<CitationAttributes, "documentId" | "contentHash">>,
+  documents: readonly LiveDocument[],
+): LiveDocument | undefined {
+  const { byId, byContent } = indexOf(documents);
+  const own = attributes.documentId ?? null;
+  return (
+    (own === null ? undefined : byId.get(own)) ??
+    (attributes.contentHash ? byContent.get(attributes.contentHash) : undefined)
+  );
+}
+
+type Named = Partial<Pick<CitationAttributes, "documentId" | "contentHash" | "documentName">>;
+
+/**
+ * The name a Citation shows for its Document: the Document's own name while it is here, so a
+ * rename shows in every Citation of it, and the name stored when it was cited only when the
+ * Document can't be found. The stored name is never rewritten.
+ */
+export function shownDocumentName(
+  attributes: Named,
+  documents: readonly LiveDocument[] | null,
+): string | null {
+  const live = documents ? liveDocumentOf(attributes, documents) : undefined;
+  return live?.name === undefined
+    ? (attributes.documentName ?? null)
+    : displayName({ name: live.name, title: live.title });
+}
+
+/** The attributes with `shownDocumentName` for the name: the same object when it is the stored one. */
+export function withShownName<T extends Named>(
+  attributes: T,
+  documents: readonly LiveDocument[] | null,
+): T {
+  const name = shownDocumentName(attributes, documents);
+  return name === (attributes.documentName ?? null)
+    ? attributes
+    : { ...attributes, documentName: name };
+}
+
 /**
  * The badge state of a Citation, given the User's live Documents (null while
  * they are loading) and the text kept of Documents unlinked with their Linked
@@ -118,10 +164,7 @@ export function citationState(
   const reason = attributes.checkReason ?? null;
   const own = attributes.documentId ?? null;
   if (documents === null) return { check, reason, documentId: own, changedAfterCited: false };
-  const { byId, byContent } = indexOf(documents);
-  const live =
-    (own === null ? undefined : byId.get(own)) ??
-    (attributes.contentHash ? byContent.get(attributes.contentHash) : undefined);
+  const live = liveDocumentOf(attributes, documents);
   const changedAfterCited =
     live !== undefined &&
     typeof attributes.contentHash === "string" &&
@@ -152,6 +195,28 @@ export function citedLocation(
   return location ? formatLocation(location, t) : null;
 }
 
+/**
+ * Where a Citation points, as "Document, Location". A sheet that shares its
+ * Document's name is left out of the Location, so the name isn't said twice.
+ */
+export function citationSource(
+  attributes: Partial<CitationAttributes>,
+  t: Translate,
+): { name: string; where: string | null; text: string } {
+  const name = attributes.documentName ?? "";
+  const location = citationLocation(attributes);
+  if (!location) return { name, where: null, text: name };
+  const sameName = (sheet: string) =>
+    sheet.toLowerCase() === name.toLowerCase().replace(/\.[^.]+$/, "") ||
+    sheet.toLowerCase() === name.toLowerCase();
+  const shown =
+    location.kind === "rows" && location.sheet !== null && sameName(location.sheet)
+      ? { ...location, sheet: null }
+      : location;
+  const where = formatLocation(shown, t);
+  return { name, where, text: t("citation.where", { document: name, location: where }) };
+}
+
 /** A Citation as plain text, e.g. "[Attention Is All You Need, p. 3]", for copying as text. */
 export function citationReference(attributes: Partial<CitationAttributes>): string {
   const name = attributes.documentName;
@@ -160,26 +225,28 @@ export function citationReference(attributes: Partial<CitationAttributes>): stri
   return location ? `[${name}, ${englishLocation(location)}]` : `[${name}]`;
 }
 
+/** How a Citation's place reads in a sentence, and the parameters its message takes. */
+function placeOf(
+  attributes: Partial<CitationAttributes>,
+  t: Translate,
+): { where: "document" | "transcript" | "in" | "on"; params: Record<string, string> } {
+  const location = citationLocation(attributes);
+  if (location === null) {
+    return { where: "document", params: { document: attributes.documentName ?? "" } };
+  }
+  const params = { location: formatLocation(location, t) };
+  // A Transcript's is labelled so, so its check isn't taken for a page's.
+  if (isTranscriptLocation(location)) return { where: "transcript", params };
+  return { where: readsIn(location) ? "in" : "on", params };
+}
+
 /** The message key and parameters of a Citation's badge, its Location worded with `t`. */
 export function badgeMessage(
   state: CitationState,
   attributes: Partial<CitationAttributes>,
   t: Translate,
 ): { key: MessageKey; params?: Record<string, string> } {
-  const location = citationLocation(attributes);
-  const document = attributes.documentName ?? "";
-  const params: Record<string, string> = location
-    ? { location: formatLocation(location, t) }
-    : { document };
-  // A Transcript's is labelled so, so its check isn't taken for a page's.
-  const where =
-    location === null
-      ? "document"
-      : isTranscriptLocation(location)
-        ? "transcript"
-        : readsIn(location)
-          ? "in"
-          : "on";
+  const { where, params } = placeOf(attributes, t);
   switch (state.check) {
     case "checking":
       return { key: "citation.badge.checking" };
@@ -194,4 +261,38 @@ export function badgeMessage(
     case "contradicted":
       return { key: "citation.badge.contradicted" };
   }
+}
+
+/** The label over the Document's words nearest the words an Answer put in quotation marks (#483). */
+export function closestWordsMessage(
+  attributes: Partial<CitationAttributes>,
+  t: Translate,
+): { key: MessageKey; params: Record<string, string> } {
+  const { where, params } = placeOf(attributes, t);
+  return { key: `citation.closest.${where}`, params };
+}
+
+const isPieces = (value: unknown): value is QuotedPiece[] =>
+  Array.isArray(value) &&
+  value.every(
+    (piece) =>
+      typeof piece === "object" &&
+      piece !== null &&
+      typeof (piece as QuotedPiece).text === "string" &&
+      typeof (piece as QuotedPiece).found === "boolean",
+  );
+
+/** The quoted words a Citation stores (#483), checked; null if it has none. */
+export function parseQuotedWords(value: unknown): QuotedWords | null {
+  if (typeof value === "string") {
+    try {
+      return parseQuotedWords(JSON.parse(value));
+    } catch {
+      return null;
+    }
+  }
+  if (typeof value !== "object" || value === null) return null;
+  const { answer, closest } = value as Record<string, unknown>;
+  if (!isPieces(answer) || answer.length === 0) return null;
+  return { answer, closest: isPieces(closest) && closest.length > 0 ? closest : null };
 }

@@ -88,13 +88,19 @@ test("Minds open as tabs; the sidebar shows an open one, opens another in a new 
   await expect(titlesOf(window)).toHaveText(["Beta", "Gamma"]);
   await expect(activeTab(window)).toContainText("Gamma");
 
-  // ⌘-click (Ctrl-click), or a middle click, opens it in the group to the right.
-  await sidebarMind(window, "Alpha").click({ modifiers: ["ControlOrMeta"] });
+  // ⌘-click (Ctrl-click) selects it and opens nothing; the menu's "Open to the side" opens it in the group to the right.
   const groups = window.getByTestId("tab-group");
+  await sidebarMind(window, "Alpha").click({ modifiers: ["ControlOrMeta"] });
+  await expect(groups).toHaveCount(1);
+  // The open Mind and Alpha are selected, so their menu has only what applies to both; Esc clears.
+  await window.keyboard.press("Escape");
+  await sidebarMind(window, "Alpha").click({ button: "right" });
+  await window.getByTestId("mind.openSide").click();
   await expect(groups).toHaveCount(2);
   await expect(groups.nth(1).getByTestId("tab-title")).toHaveText(["Alpha"]);
   await groups.nth(1).getByTestId("tab-close").click();
   await expect(groups).toHaveCount(1);
+  // A middle click opens it to the right as well.
   await sidebarMind(window, "Alpha").click({ button: "middle" });
   await expect(groups).toHaveCount(2);
   await expect(groups.nth(1).getByTestId("tab-title")).toHaveText(["Alpha"]);
@@ -163,7 +169,6 @@ test("tabs close, reopen, move and switch by mouse and keyboard; a deleted Mind'
   await gammaRow.hover();
   await gammaRow.getByTestId("mind-menu").click();
   await gammaRow.getByTestId("mind.delete").click();
-  await window.getByTestId("confirm-delete-mind").click();
   await expect(titlesOf(window)).toHaveText(["Alpha"]);
   await expect(activeTab(window)).toContainText("Alpha");
 
@@ -200,6 +205,31 @@ test("a Mind's tab is renamed in place: a double-click or F2, Enter saves, Esc a
   await field.fill("   ");
   await field.press("Enter");
   await expect(titlesOf(window)).toHaveText(["Alpha, revised"]);
+  await app.close();
+});
+
+test("F2 on a tab right after a rename ended keeps its field when the frame the tab's focus waits for is late", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await newMind(window, "Alpha notes");
+  const tab = tabsOf(window).first();
+  await tab.getByTestId("tab-title").dblclick();
+  const field = tab.getByTestId("tab-rename");
+  await expect(field).toBeFocused();
+  // As on a busy runner, whatever the app asks of the next frame comes a moment after it.
+  await window.evaluate(() => {
+    const frame = globalThis.requestAnimationFrame.bind(globalThis);
+    globalThis.requestAnimationFrame = (callback) =>
+      frame(() => void setTimeout(() => callback(performance.now()), 300));
+  });
+  await field.press("Escape");
+  await expect(field).toHaveCount(0);
+  await tab.focus();
+  await window.keyboard.press("F2");
+  await expect(field).toBeFocused();
+  // Asked after the app's own, so it comes after it: the field still has the focus.
+  await window.evaluate(() => new Promise((late) => requestAnimationFrame(() => late(null))));
+  await expect(field).toBeFocused();
   await app.close();
 });
 
@@ -446,14 +476,12 @@ test("a Mind is renamed in place from its sidebar row, and Not in a Folder folds
   await field.press("Escape");
   await expect(rows.filter({ hasText: "Beta research" })).toHaveCount(1);
 
-  // By keyboard: Enter on the open Mind's row (selected) types its title in place, as F2 does.
+  // By keyboard: Enter on the open Mind's row only opens it; F2 types its title in place.
   const betaRow = rows.filter({ hasText: "Beta research" });
   await betaRow.click();
   await betaRow.focus();
   await window.keyboard.press("Enter");
-  await expect(field).toBeFocused();
-  await window.keyboard.press("Escape");
-  await expect(betaRow).toBeFocused();
+  await expect(field).toHaveCount(0);
   await window.keyboard.press("F2");
   await expect(field).toBeFocused();
   await window.keyboard.press("Escape");

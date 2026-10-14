@@ -1,0 +1,291 @@
+/**
+ * `npm run eval:word` (eval/word/README.md): for each file of the Word corpus, its checks, each a
+ * step in `STEPS`: the package, the import as a Mind (#104), opening in LibreOffice, the
+ * round-trip back into the file (#105), the export for review (#107), and someone's changes
+ * accepted and rejected (#108), each export opened in LibreOffice too. Last, a file exported for review has every change accepted in LibreOffice,
+ * which must show the text accepting every change in IncarnaMind does.
+ *
+ * INCARNAMIND_WORD_SET picks the files: "core" (the committed files, the default), "extended"
+ * (the cache that `npm run eval:word:fetch` fills) or "all".
+ * INCARNAMIND_WORD_REQUIRE_LIBREOFFICE=1 (CI sets it) fails the run when LibreOffice is missing,
+ * instead of skipping that step.
+ */
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, join } from "node:path";
+import { describe, expect, it } from "vitest";
+import { paragraph, run, table, wordFile } from "../../tests/helpers/word";
+import {
+  type CorpusEntry,
+  extendedCache,
+  inspectPackage,
+  readExtended,
+  readManifest,
+  WORD_DIR,
+} from "./corpus";
+import { checkExport, checkReview, checkTheirChanges } from "./exports";
+import { type Features, featureKinds } from "./features";
+import { checkImport } from "./imports";
+import { acceptAllChanges, convertToPdf, findLibreOffice } from "./libreoffice";
+
+interface Outcome {
+  ok: boolean;
+  detail: string;
+}
+
+/** A file to check, wherever it lives. */
+interface Subject {
+  name: string;
+  path: string;
+  features: Features;
+  known?: string;
+}
+
+interface Step {
+  name: string;
+  /** Its detail is printed when it passes too: the counts a step reports. */
+  reports?: true;
+  run(subject: Subject, bytes: Uint8Array): Promise<Outcome>;
+}
+
+const soffice = findLibreOffice();
+/** Where to keep a PDF of each edited export, for a person to look at (CI uploads them). */
+const keepPdfs = process.env.INCARNAMIND_WORD_PDFS;
+const required = process.env.INCARNAMIND_WORD_REQUIRE_LIBREOFFICE === "1";
+const wanted = process.env.INCARNAMIND_WORD_SET ?? "core";
+
+/** Each file's export with the scripted edit, for review, and with someone's changes resolved, for LibreOffice to open. */
+const exported = new Map<string, Uint8Array>();
+const reviewed = new Map<string, Uint8Array>();
+const resolved = new Map<string, Uint8Array>();
+
+/** Opens an export in LibreOffice, keeping its PDF as `suffix` says for a person to look at. */
+async function openExport(subject: Subject, data: Uint8Array | undefined, suffix: string) {
+  if (!soffice) return { ok: true, detail: "skipped: LibreOffice not found" };
+  if (!data) return { ok: true, detail: "nothing exported" };
+  const folder = mkdtempSync(join(tmpdir(), "incarnamind-word-export-"));
+  try {
+    const path = join(folder, basename(subject.path));
+    writeFileSync(path, data);
+    const keep = keepPdfs
+      ? join(keepPdfs, subject.name.replace(/\.docx$/i, `${suffix}.pdf`))
+      : undefined;
+    const result = await convertToPdf(soffice, path, keep);
+    return result.opened
+      ? { ok: true, detail: `${result.pdfBytes} bytes of PDF` }
+      : { ok: false, detail: result.problem ?? "did not open" };
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
+}
+
+const STEPS: Step[] = [
+  {
+    name: "package",
+    async run(subject, bytes) {
+      const { features, problems } = await inspectPackage(bytes);
+      if (problems.length > 0) return { ok: false, detail: problems.slice(0, 3).join("; ") };
+      const drift = driftIn(subject.features, features);
+      return drift
+        ? { ok: false, detail: `its listed features are out of date: ${drift}` }
+        : { ok: true, detail: "" };
+    },
+  },
+  {
+    name: "imports as a Mind",
+    reports: true,
+    run: async (_subject, bytes) => checkImport(bytes),
+  },
+  {
+    name: "opens in LibreOffice",
+    async run(subject) {
+      if (!soffice) return { ok: true, detail: "skipped: LibreOffice not found" };
+      const result = await convertToPdf(soffice, subject.path);
+      return result.opened
+        ? { ok: true, detail: `${result.pdfBytes} bytes of PDF` }
+        : { ok: false, detail: result.problem ?? "did not open" };
+    },
+  },
+  {
+    name: "exports back",
+    reports: true,
+    async run(subject, bytes) {
+      const outcome = await checkExport(bytes);
+      if (outcome.exported) exported.set(subject.name, outcome.exported);
+      return outcome;
+    },
+  },
+  {
+    name: "export opens in LibreOffice",
+    async run(subject) {
+      const outcome = await openExport(subject, exported.get(subject.name), "");
+      exported.delete(subject.name);
+      return outcome;
+    },
+  },
+  {
+    name: "exports for review",
+    reports: true,
+    async run(subject, bytes) {
+      const outcome = await checkReview(bytes);
+      if (outcome.exported) reviewed.set(subject.name, outcome.exported);
+      return outcome;
+    },
+  },
+  {
+    name: "review export opens in LibreOffice",
+    async run(subject) {
+      const outcome = await openExport(subject, reviewed.get(subject.name), "-review");
+      reviewed.delete(subject.name);
+      return outcome;
+    },
+  },
+  {
+    name: "resolves someone's changes",
+    reports: true,
+    async run(subject, bytes) {
+      const outcome = await checkTheirChanges(bytes);
+      if (outcome.exported) resolved.set(subject.name, outcome.exported);
+      return outcome;
+    },
+  },
+  {
+    name: "that export opens in LibreOffice",
+    async run(subject) {
+      const outcome = await openExport(subject, resolved.get(subject.name), "-resolved");
+      resolved.delete(subject.name);
+      return outcome;
+    },
+  },
+];
+
+/** A line's words, for comparing text LibreOffice saved with the Mind's: no numbers, marks or bullets. */
+const wordsOf = (lines: readonly string[]) =>
+  lines
+    .map((line) =>
+      line
+        .replace(/\[\*\]/g, "")
+        .replace(/[^\p{L}\s]/gu, "")
+        .replace(/\s+/g, " ")
+        .trim(),
+    )
+    .filter((line) => line !== "");
+
+/** The file LibreOffice accepts every change in: headings, paragraphs and a table, edited every way. */
+const ACCEPT_FIXTURE = wordFile({
+  body:
+    paragraph("Lease terms", { style: "Heading1" }) +
+    paragraph("The tenant pays rent every month, in advance.") +
+    paragraph("The landlord repairs the roof and the walls.") +
+    paragraph(run("Either party may end the lease with notice.", { font: "Georgia" })) +
+    table([
+      ["Item", "Amount"],
+      ["Rent", "Monthly"],
+    ]) +
+    paragraph("Signed by both parties."),
+});
+
+function driftIn(listed: Features, found: Features): string | undefined {
+  const keys = Object.keys(found) as (keyof Features)[];
+  const wrong = keys.filter((key) => JSON.stringify(listed[key]) !== JSON.stringify(found[key]));
+  return wrong.length > 0 ? wrong.join(", ") : undefined;
+}
+
+function subjects(): Subject[] {
+  const found: Subject[] = [];
+  if (wanted === "core" || wanted === "all") {
+    for (const entry of readManifest()) {
+      found.push({
+        name: entry.file,
+        path: join(WORD_DIR, entry.file),
+        features: entry.features,
+        known: entry.known,
+      });
+    }
+  }
+  if (wanted === "extended" || wanted === "all") {
+    const cache = extendedCache();
+    for (const entry of readExtended()) {
+      found.push({
+        name: `extended/${entry.name}`,
+        path: join(cache, entry.name),
+        features: entry.features,
+        known: entry.known,
+      });
+    }
+  }
+  return found;
+}
+
+describe("the Word corpus", () => {
+  const manifest = readManifest();
+
+  it("lists 32 documents, 20 files with tracked changes and at most 6 saved by hand, each once", () => {
+    expect(manifest.filter((entry) => entry.set === "documents")).toHaveLength(32);
+    expect(manifest.filter((entry) => entry.set === "tracked-changes")).toHaveLength(20);
+    expect(manifest.filter((entry) => entry.set === "saved").length).toBeLessThanOrEqual(6);
+    expect(new Set(manifest.map((entry) => entry.file)).size).toBe(manifest.length);
+  });
+
+  it("keeps the committed files small", () => {
+    const bytes = manifest.reduce(
+      (sum, entry: CorpusEntry) => sum + readFileSync(join(WORD_DIR, entry.file)).byteLength,
+      0,
+    );
+    expect(bytes).toBeLessThan(25_000_000);
+  });
+
+  it.skipIf(!required)("has LibreOffice when CI asks for it", () => {
+    expect(soffice).toBeDefined();
+  });
+
+  it.skipIf(!soffice)(
+    "accepting every change in LibreOffice gives the text accepting every change in IncarnaMind does",
+    async () => {
+      const outcome = await checkReview(ACCEPT_FIXTURE);
+      expect(outcome.ok, outcome.detail).toBe(true);
+      const folder = mkdtempSync(join(tmpdir(), "incarnamind-word-fixture-"));
+      try {
+        const path = join(folder, "lease.docx");
+        writeFileSync(path, outcome.exported ?? new Uint8Array());
+        const accepted = await acceptAllChanges(soffice as string, path);
+        if ("problem" in accepted) throw new Error(`LibreOffice: ${accepted.problem}`);
+        expect(wordsOf(accepted.text.split("\n"))).toEqual(wordsOf(outcome.accepted ?? []));
+      } finally {
+        rmSync(folder, { recursive: true, force: true });
+      }
+    },
+    5 * 60_000,
+  );
+
+  it(`opens every file of the "${wanted}" set, and reports each step`, async () => {
+    const all = subjects();
+    const missing = all.filter((subject) => !existsSync(subject.path));
+    expect(
+      missing.map((subject) => subject.name),
+      "fetch the extended set first: npm run eval:word:fetch",
+    ).toEqual([]);
+
+    const failures: string[] = [];
+    const lines: string[] = [];
+    for (const subject of all) {
+      const bytes = readFileSync(subject.path);
+      const cells: string[] = [];
+      for (const step of STEPS) {
+        const outcome = await step.run(subject, bytes);
+        const reported = outcome.ok && step.reports && outcome.detail ? ` (${outcome.detail})` : "";
+        cells.push(`${outcome.ok ? "ok" : "FAIL"} ${step.name}${reported}`);
+        if (!outcome.ok) {
+          const line = `${subject.name}: ${step.name}: ${outcome.detail}`;
+          if (subject.known) lines.push(`  (known: ${subject.known}) ${line}`);
+          else failures.push(line);
+        }
+      }
+      lines.push(`${subject.name}  ${featureKinds(subject.features)} kinds  ${cells.join(", ")}`);
+    }
+    console.log(
+      `${lines.join("\n")}\n${all.length} files; ${failures.length} failed${soffice ? "" : "; LibreOffice not found, so no file was opened in it"}`,
+    );
+    expect(failures).toEqual([]);
+  });
+});

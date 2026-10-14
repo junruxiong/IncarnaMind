@@ -4,9 +4,16 @@ import { describe, expect, onTestFinished, test, vi } from "vitest";
 import type * as Y from "yjs";
 import type { Core, CoreEvents } from "../../src/core";
 import { ANSWER_TEMPERATURE, answerTemperature } from "../../src/core/answers/engine";
+import { asGenerated } from "../../src/shared/aiText";
 import { pendingProposals, proposalRequestOf } from "../../src/shared/proposals";
 import { askAndFinish, setUpWithDocuments } from "../helpers/citations";
-import { createTempDataFolder, nextEvent, startCore } from "../helpers/core";
+import {
+  createTempDataFolder,
+  nextEvent,
+  nextTurn,
+  saveProviderUnasked,
+  startCore,
+} from "../helpers/core";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
 import {
   answerIn,
@@ -38,8 +45,12 @@ const NO_CITATIONS = {
   droppedRecords: 0,
   rejectedRecords: [],
   placedMarkers: 0,
+  citedAfterChecking: { count: 0, asked: false },
   citationSupport: null,
   quoteRetry: null,
+  figures: [],
+  uncalculated: 0,
+  figureRetry: null,
   usage: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, cacheWriteTokens: 0 },
 };
 
@@ -339,100 +350,103 @@ describe("Streaming Answers into the Mind", () => {
     const answerId = await ask(core, mind.id, asked.attrs.id);
     await answerEnded(core, answerId);
 
-    expect(answerIn(reader, answerId).toJSON().content).toEqual([
-      {
-        type: "heading",
-        attrs: { id: expect.any(String), level: 2, includeInContext: null, proposal: null },
-        content: [{ type: "text", text: "Tidal forces" }],
-      },
-      {
-        type: "paragraph",
-        attrs: { id: expect.any(String), includeInContext: null, proposal: null },
-        content: [
-          { type: "text", text: "The " },
-          { type: "text", text: "Moon", marks: [{ type: "bold" }] },
-          { type: "text", text: " pulls hardest on the near side, where " },
-          { type: "inlineMath", attrs: { latex: "F = G\\frac{m_1 m_2}{r^2}", proposal: null } },
-          { type: "text", text: " is largest." },
-        ],
-      },
-      {
-        type: "bulletList",
-        attrs: { id: expect.any(String), includeInContext: null, proposal: null },
-        content: [
-          {
-            type: "listItem",
-            attrs: { proposal: null },
-            content: [
-              {
-                type: "paragraph",
-                attrs: { id: expect.any(String), includeInContext: null, proposal: null },
-                content: [{ type: "text", text: "High tide faces the Moon" }],
-              },
-            ],
-          },
-          {
-            type: "listItem",
-            attrs: { proposal: null },
-            content: [
-              {
-                type: "paragraph",
-                attrs: { id: expect.any(String), includeInContext: null, proposal: null },
-                content: [
-                  { type: "text", text: "Another", marks: [{ type: "italic" }] },
-                  { type: "text", text: " one is opposite" },
-                ],
-              },
-            ],
-          },
-        ],
-      },
-      {
-        type: "codeBlock",
-        attrs: {
-          id: expect.any(String),
-          language: "python",
-          includeInContext: null,
-          proposal: null,
+    // Every word of it is AI text.
+    expect(answerIn(reader, answerId).toJSON().content).toEqual(
+      asGenerated([
+        {
+          type: "heading",
+          attrs: { id: expect.any(String), level: 2, includeInContext: null, proposal: null },
+          content: [{ type: "text", text: "Tidal forces" }],
         },
-        content: [{ type: "text", text: "print('tide')" }],
-      },
-      {
-        type: "blockMath",
-        attrs: {
-          id: expect.any(String),
-          latex: "h(t) = A \\cos(\\omega t)",
-          includeInContext: null,
-          proposal: null,
+        {
+          type: "paragraph",
+          attrs: { id: expect.any(String), includeInContext: null, proposal: null },
+          content: [
+            { type: "text", text: "The " },
+            { type: "text", text: "Moon", marks: [{ type: "bold" }] },
+            { type: "text", text: " pulls hardest on the near side, where " },
+            { type: "inlineMath", attrs: { latex: "F = G\\frac{m_1 m_2}{r^2}", proposal: null } },
+            { type: "text", text: " is largest." },
+          ],
         },
-      },
-      {
-        type: "paragraph",
-        attrs: { id: expect.any(String), includeInContext: null, proposal: null },
-        content: [
-          { type: "text", text: "See " },
-          {
-            type: "text",
-            text: "NOAA",
-            marks: [
-              {
-                type: "link",
-                attrs: {
-                  href: "https://oceanservice.noaa.gov",
-                  target: "_blank",
-                  rel: "noopener noreferrer nofollow",
-                  class: null,
-                  title: null,
+        {
+          type: "bulletList",
+          attrs: { id: expect.any(String), includeInContext: null, proposal: null },
+          content: [
+            {
+              type: "listItem",
+              attrs: { proposal: null },
+              content: [
+                {
+                  type: "paragraph",
+                  attrs: { id: expect.any(String), includeInContext: null, proposal: null },
+                  content: [{ type: "text", text: "High tide faces the Moon" }],
                 },
-              },
-            ],
+              ],
+            },
+            {
+              type: "listItem",
+              attrs: { proposal: null },
+              content: [
+                {
+                  type: "paragraph",
+                  attrs: { id: expect.any(String), includeInContext: null, proposal: null },
+                  content: [
+                    { type: "text", text: "Another", marks: [{ type: "italic" }] },
+                    { type: "text", text: " one is opposite" },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          type: "codeBlock",
+          attrs: {
+            id: expect.any(String),
+            language: "python",
+            includeInContext: null,
+            proposal: null,
           },
-          { type: "text", text: " and " },
-          { type: "text", text: "tide tables", marks: [{ type: "code" }] },
-          { type: "text", text: "." },
-        ],
-      },
-    ]);
+          content: [{ type: "text", text: "print('tide')" }],
+        },
+        {
+          type: "blockMath",
+          attrs: {
+            id: expect.any(String),
+            latex: "h(t) = A \\cos(\\omega t)",
+            includeInContext: null,
+            proposal: null,
+          },
+        },
+        {
+          type: "paragraph",
+          attrs: { id: expect.any(String), includeInContext: null, proposal: null },
+          content: [
+            { type: "text", text: "See " },
+            {
+              type: "text",
+              text: "NOAA",
+              marks: [
+                {
+                  type: "link",
+                  attrs: {
+                    href: "https://oceanservice.noaa.gov",
+                    target: "_blank",
+                    rel: "noopener noreferrer nofollow",
+                    class: null,
+                    title: null,
+                  },
+                },
+              ],
+            },
+            { type: "text", text: " and " },
+            { type: "text", text: "tide tables", marks: [{ type: "code" }] },
+            { type: "text", text: "." },
+          ],
+        },
+      ]),
+    );
 
     // While streaming, no Markdown syntax ever showed, and Blocks only grew at the end.
     const final = seen.at(-1)?.types ?? [];
@@ -467,15 +481,18 @@ describe("Streaming Answers into the Mind", () => {
       "codeBlock",
       "paragraph",
     ]);
-    expect(answer.child(5).toJSON().content).toEqual([
-      { type: "text", text: "Line " },
-      { type: "text", text: "one", marks: [{ type: "italic" }] },
-      { type: "hardBreak", attrs: { proposal: null } },
-      { type: "text", text: "Line " },
-      { type: "text", text: "two", marks: [{ type: "strike" }] },
-      { type: "text", text: " " },
-      { type: "text", text: "code", marks: [{ type: "code" }] },
-    ]);
+    expect(answer.attrs.generatedMarks).toBe(true);
+    expect(answer.child(5).toJSON().content).toEqual(
+      asGenerated([
+        { type: "text", text: "Line " },
+        { type: "text", text: "one", marks: [{ type: "italic" }] },
+        { type: "hardBreak", attrs: { proposal: null } },
+        { type: "text", text: "Line " },
+        { type: "text", text: "two", marks: [{ type: "strike" }] },
+        { type: "text", text: " " },
+        { type: "text", text: "code", marks: [{ type: "code" }] },
+      ]),
+    );
 
     // Tiptap's Yjs binding would write the Mind exactly as the core did: nothing changes.
     let rewritten = false;
@@ -700,7 +717,7 @@ describe("When Questions can't be answered", () => {
     const core = startCore(await createTempDataFolder(), {
       createChatModel: models.createChatModel,
     });
-    await core.saveChatProvider({ kind: "openai", apiKey: "sk-test", modelId: "gpt-test" });
+    await saveProviderUnasked(core, { kind: "openai", apiKey: "sk-test", modelId: "gpt-test" });
     const requested = nextEvent(core, "consent.requested");
     const mind = await core.createMind();
     const writer = await connectToMind(core, mind.id);
@@ -714,8 +731,8 @@ describe("When Questions can't be answered", () => {
     expect(answerIn(writer, answerId).attrs.status).toBe("stopped");
 
     await core.respondToConsent(request.requestId, true);
-    await vi.waitFor(() => expect(models.specs).toHaveLength(1));
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await vi.waitFor(() => expect(models.specs).toHaveLength(1), { timeout: 10_000 });
+    await nextTurn();
     expect(model.doStreamCalls).toEqual([]);
     expect(answerIn(writer, answerId).attrs.status).toBe("stopped");
   });
@@ -726,7 +743,7 @@ describe("When Questions can't be answered", () => {
     const core = startCore(await createTempDataFolder(), {
       createChatModel: models.createChatModel,
     });
-    await core.saveChatProvider({ kind: "openai", apiKey: "sk-test", modelId: "gpt-test" });
+    await saveProviderUnasked(core, { kind: "openai", apiKey: "sk-test", modelId: "gpt-test" });
     core.on("consent.requested", (request) => void core.respondToConsent(request.requestId, false));
     const mind = await core.createMind();
     const writer = await connectToMind(core, mind.id);
@@ -786,6 +803,7 @@ describe("Choosing the model", () => {
         baseUrl: "http://127.0.0.1:1234/v1",
         apiKey: null,
         modelId: "picked-model",
+        thinking: "summary",
       },
     ]);
     expect(answerIn(reader, answerId).attrs).toMatchObject({
@@ -822,12 +840,18 @@ describe("Choosing the model", () => {
       {
         provider: local,
         models: ["llama3.2:latest", "qwen3:4b"],
+        names: {},
+        other: [],
+        added: [],
         unknown: ["qwen3:4b"],
         cloud: [],
       },
       {
         provider: compatible,
         models: ["deepseek-chat", "deepseek-reasoner"],
+        names: {},
+        other: [],
+        added: [],
         unknown: ["deepseek-chat", "deepseek-reasoner"],
         cloud: [],
       },
@@ -837,7 +861,7 @@ describe("Choosing the model", () => {
 
   test("a cloud provider isn't asked for its models before the User allows the chat flow to it", async () => {
     const core = startCore(await createTempDataFolder());
-    const provider = await core.saveChatProvider({
+    const provider = await saveProviderUnasked(core, {
       kind: "openai",
       apiKey: "sk-test",
       modelId: "gpt-test",
@@ -846,7 +870,15 @@ describe("Choosing the model", () => {
     onTestFinished(() => fetch.mockRestore());
 
     expect(await core.listChatModels()).toEqual([
-      { provider, models: ["gpt-test"], unknown: ["gpt-test"], cloud: [] },
+      {
+        provider,
+        models: ["gpt-test"],
+        names: {},
+        other: [],
+        added: [],
+        unknown: ["gpt-test"],
+        cloud: [],
+      },
     ]);
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -860,7 +892,15 @@ describe("Choosing the model", () => {
     });
 
     expect(await core.listChatModels()).toEqual([
-      { provider, models: ["qwen3:4b"], unknown: ["qwen3:4b"], cloud: [] },
+      {
+        provider,
+        models: ["qwen3:4b"],
+        names: {},
+        other: [],
+        added: [],
+        unknown: ["qwen3:4b"],
+        cloud: [],
+      },
     ]);
   });
 });
@@ -920,7 +960,10 @@ describe("Temperature", () => {
     expect(model.doStreamCalls[0]?.temperature).toBe(ANSWER_TEMPERATURE);
   });
 
-  test("a model the catalog says takes no temperature is sent none; one it says takes one, or doesn't know, gets the Answer's", async () => {
+  // Six Answers, each from a core of its own: over 5 seconds on a slow runner.
+  test("a model the catalog says takes no temperature is sent none; one it says takes one, or doesn't know, gets the Answer's", {
+    timeout: 30_000,
+  }, async () => {
     const temperatureFor = async (provider: CloudProvider) => {
       const model = streamingModel("Twice a day.");
       const { core, mind, writer, reader } = await setUpCloud(model, provider);

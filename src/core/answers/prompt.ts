@@ -1,5 +1,5 @@
 /** The instructions every Answer is written with. Kept short: every word is sent with every Question. */
-import type { CitationSupport, SkillFile } from "../api";
+import type { CitationSupport, SkillFile, UnreadFile, UnreadReason } from "../api";
 import type { LoadedSkill, SkillSummary } from "../skills";
 
 /** A language a Question is clearly written in, judged by its script alone. */
@@ -14,7 +14,8 @@ function scriptLanguage(question: string): string | null {
 export function answerInstructions(): string {
   return [
     "You answer Questions in IncarnaMind, a notebook where the User writes Notes and asks Questions in place.",
-    "The messages are the part of the User's notebook above the Question: the User's Notes and earlier Questions as user messages, your earlier Answers as assistant messages. The last user message ends with the Question to answer now; use the rest as context.",
+    "The messages are the User's Notes and Questions as user messages, your Answers as assistant messages. The last user message ends with the Question to answer now; use the rest as context.",
+    "The first user message may start with the notebook page the User asks beside, in <mind> (earlier Q&A in <question> and <answer>; […] marks cuts), the last with what they selected in it, in <selection>: the Question is about that first, the rest is background.",
     "",
     "- Answer in the language the Question is written in, even when the Notes or Documents are in another language.",
     "- If you don't know the answer, or it isn't in what you were given and you aren't sure of it, say so plainly instead of guessing.",
@@ -66,6 +67,49 @@ export function sourcesInstructions(offered: boolean): string {
 }
 
 /**
+ * Web search's Tools, when offered (#128): read each page used, cite only what
+ * reading gave, and say which pages couldn't be saved.
+ */
+export function webInstructions(offered: boolean): string {
+  if (!offered) return "";
+  return [
+    "You can also search the web with search_web when the Question asks for the web, and read the pages it finds with read_web_page, which saves each page as one of the User's Documents and gives its Passages.",
+    "- Use only what read_web_page gives you from the web, and cite it with cite as any Passage. Never state or cite anything from search_web's list itself, or from a page you didn't read.",
+    "- Read the few pages most likely to answer, one call each. When a page couldn't be saved, say so in one short line that names it, and use the others.",
+  ].join("\n");
+}
+
+/**
+ * The Minds' Tools, when offered (#202): the User's words decide whether the
+ * Answer answers, changes a Mind or makes one, and once it has changed one,
+ * the reply says what it did, never the new text.
+ */
+export function mindInstructions(offered: boolean): string {
+  if (!offered) return "";
+  return [
+    "You can also change the User's Minds (their notes) and make new ones, with read_mind, edit_mind, add_to_mind and create_mind. What you write into a Mind arrives there as changes the User accepts or rejects.",
+    '- The User\'s words decide. A Question (what, why, how, compare, find, explain…) is answered in your reply and changes no Mind. A request to write or change something in a Mind ("shorten the summary", "add a risks section", "fix the typos", "把这段改短") changes that Mind. A request for a new note ("make notes on these papers", "summarise this into a new Mind", "新建一篇笔记") makes one.',
+    "- The Mind is the one in <mind>, unless the User names another. If they ask to change a Mind but none is in <mind> and they name none, change nothing: say so, and that they can open one or ask for a new Mind.",
+    "- Never write a Mind's new text in your reply. Once the Tools are done, reply in one or two sentences, with no Citation markers (the Mind holds them): which Mind you changed or made, what changed and why, and plainly anything you couldn't do, e.g. \"Shortened the summary in “Q3 review” from 320 to 150 words: dropped the repeated background and the third example; every Citation kept.\"",
+  ].join("\n");
+}
+
+/**
+ * A Question asked while the meeting the User is in records (#144): the live transcript goes
+ * with it (see ./liveTranscript), and is what Questions about the call are answered from.
+ */
+export function meetingInstructions(listening: boolean): string {
+  if (!listening) return "";
+  return [
+    "The User is in a meeting that is being recorded, and asks this during the call.",
+    "Before their Question, <live-transcript> holds what has been said so far, newest last: Passages of the meeting's Transcript, each at its time in the call.",
+    "- Answer what they ask about the call from it, and cite its lines as you cite any Passage, by its id.",
+    '- "Just now", "the last few minutes" and "what was just said" mean its newest Passages.',
+    "- Search the User's Documents too when the Question needs them, for instance to check what was said against them.",
+  ].join("\n");
+}
+
+/**
  * Connectors that are on but can't be used until the User signs in to them
  * again: their Tools aren't offered, and the Answer says so if it needed them.
  */
@@ -76,15 +120,80 @@ export function signInNeededInstructions(connectorNames: readonly string[]): str
   return `The User's ${plural ? "Connectors" : "Connector"} ${names} ${plural ? "need" : "needs"} the User to sign in again (in Settings → Connectors), so ${plural ? "their" : "its"} Tools can't be used for this Answer. If the Question needs ${plural ? "them" : "it"}, say so in one short sentence, then answer as well as you can without ${plural ? "them" : "it"}.`;
 }
 
-const NOT_COVERED =
-  "If the Documents don't cover the Question, say so plainly, then answer from your own knowledge if you can, without markers.";
+/**
+ * What the Documents don't answer is said, and left there (#548): in an app
+ * where claims carry Citations, a figure from the model's own knowledge reads
+ * as one from the User's Documents. General knowledge only for a general
+ * Question, labelled, and without figures. `cite`: the Answer cites with markers.
+ */
+function notCovered(cite: boolean): string {
+  return `If the Documents don't cover the Question, say so plainly. You may add what the Passages do say that comes closest${cite ? ", cited" : ""}, then stop: never fill the gap from your own knowledge, so no figure, date or name that isn't in a Passage. Only a general Question that isn't about the User's Documents (a concept or a method) may be answered from your own knowledge, in a paragraph that starts "Not from your Documents:" ("以下内容不是来自你的文档："), with no figures${cite ? " and no markers" : ""}.`;
+}
+
+/**
+ * A premise the Passages don't support, and Passages that disagree (#548):
+ * what a careful reader catches. The examples are in English and Chinese, so
+ * an Answer in either has its model. `cite`: the Answer cites with markers.
+ */
+function readingRules(cite: boolean): string {
+  const marker = (n: number) => (cite ? `[^${n}]` : "");
+  return [
+    `- If the Question takes for granted what the Passages don't say (an approval, a date, a figure, a cause), say so first, in one plain sentence, then answer from what they say: "The Documents don't record a Board approval; the 14 May memo asks for one." / "文档中没有董事会批准的记录；5 月 14 日的备忘录是在申请批准。"`,
+    `- If Passages from different Documents disagree, or give different figures for the same thing (one updates the other), lead with the newer Document by its date (a Passage's date is its Document's: the date it states, else when its file last changed)${cite ? " and cite it" : ""}. Then write one sentence naming the older Document, its date and its figure${cite ? ", with a Citation" : ""}; never leave it out: "Report outages over 4 hours (memo, May 2025)${marker(1)}. The older handbook (January 2024) says 6 hours${marker(2)}." / "2025 年 5 月的备忘录要求报告超过 4 小时的停电${marker(1)}。较早的手册（2024 年 1 月）写的是 6 小时${marker(2)}。" Say "probably" (可能) only when neither is dated or newer.`,
+  ].join("\n");
+}
+
+/** A Passage's Document and its date, as `formatPassages` (./citations) writes them. */
+const DATED_PASSAGE = /<passage id="[^"]*" document="([^"]*)" date="([^"]+)"/g;
+
+/**
+ * A reminder after Passages that come from Documents of different dates
+ * (#660): GPT-6 Luna, told the rule in its instructions, still gave only the
+ * newer Document's figure when a search handed it both. It names each dated
+ * Document with its date, newest first; empty when fewer than two dates differ.
+ * Without its line on passing mentions, Luna took "the other five Functions"
+ * in NIST CSF 2.0 for the Core's count.
+ */
+export function datedDocumentsNote(passages: string): string {
+  const dates = new Map<string, string>();
+  for (const [, document, date] of passages.matchAll(DATED_PASSAGE)) {
+    if (document !== undefined && date !== undefined && !dates.has(document)) {
+      dates.set(document, date);
+    }
+  }
+  if (new Set(dates.values()).size < 2) return "";
+  const listed = [...dates]
+    .sort(([, a], [, b]) => b.localeCompare(a))
+    .map(([document, date]) => `"${document}" (${date})`)
+    .join(", ");
+  return `These Passages come from Documents of different dates: ${listed}. Take each Document's figure only from a sentence that states it for that Document, never from a passing mention. Where they give different figures for the same thing, lead with the newer Document, then write one sentence naming the older one, its date and its figure, with a Citation.`;
+}
 
 const RECORD =
   'the Passage\'s id, where the quote is, and a short quote copied exactly from the Passage, without its marks. Where: the page, slide, section, or rows or lines the quote is in, or two in a row, written as the Passage names them (its pages or location, and marks where each new one starts, like [p. 4], [slide 4], [§ 2.1 Sensitivity], [Revenue, rows 2–41] or [lines 51–100]; name rows or lines more narrowly when you can, e.g. "Revenue, rows 12–14")';
 
+/**
+ * Calculated figures (ADR-0021): a model's own arithmetic looks exactly like a
+ * right answer when it is wrong, so it is steered to `calculate` for every
+ * number it works out, simple ones included.
+ */
+const CALCULATE = [
+  'Never work out a number yourself, not even a simple one: for any number the Answer gives that isn\'t written in a Passage (a difference, sum, average, ratio, share, growth rate, CAGR, change in percentage points, conversion between 万 and 亿 or millions and billions, or which of two is larger), call calculate and write its marker in the number\'s place, with no number or unit beside it: "grew [=1] in 2025", not "grew 20.4% [=1]".',
+  '- Name each input\'s number as it is written in its quote, labelled with what it is and its period; give a table heading\'s unit line ("单位：万元", "in millions") as unitQuote. Inputs come in base units with that scale applied: give scale ("亿", "billion") to show another, never convert in the formula.',
+  "- A number copied as it is from a Passage is cited with [^n]; calculate is only for numbers you work out.",
+].join("\n");
+
+/** Structured output's `calculations`, for a model offered them: what `CALCULATE` is to the Tool loop. */
+const CALCULATIONS =
+  '- calculations: one for each number the Answer works out from numbers in Passages (a difference, sum, average, ratio, share, growth rate, a change in percentage points, a conversion between 万 and 亿 or millions and billions), with [=1] in the answer where the number goes, never the number itself: its marker; its inputs, each a name for the formula, a label with its year or period, the marker of the Citation whose quote holds the number, and the number as it is written there; and a formula over the names in Excel\'s syntax, such as (b - a) / a, with "as": "percent" for a growth rate or share. When a number\'s unit or scale is only in a table\'s heading ("单位：万元"), give that line as unitQuote. Inputs are read in base units with that scale applied: give "scale" ("亿", "billion") for the scale a figure is shown in, never a division by 10000 or 1000.';
+
 /** The Citation check finds a quote with an ellipsis only part by part (see ../../shared/quoteMatch): best avoided. */
 const UNBROKEN_QUOTE =
   "- Copy each quote as one unbroken stretch of the Passage: don't leave words out with an ellipsis (... or …); quote less instead.";
+
+/** The Citation check also looks for the words an Answer puts in quotation marks (#483): a reader takes them for the Document's own. */
+const QUOTATION_MARKS =
+  "- Use quotation marks only around a Document's exact words, the same as the record's quote.";
 
 /** The most Document names the instructions list: the most recently added. */
 export const LISTED_DOCUMENTS = 50;
@@ -104,6 +213,41 @@ export interface ListedDocuments {
 function listedName(name: string): string {
   const line = name.replace(/\s+/g, " ").trim();
   return line.length > MAX_NAME_LENGTH ? `${line.slice(0, MAX_NAME_LENGTH - 1)}…` : line;
+}
+
+/** How many Documents `unreadDocumentsNote` names before "and N more". */
+const NAMED_UNREAD = 5;
+
+/** Why a Document couldn't be read, as the note tells the model. */
+const UNREAD_WORDS: Record<UnreadReason, (pages: readonly number[]) => string> = {
+  scan: () => "a scan with no text",
+  pages: (pages) => {
+    if (pages.length === 0) return "its scanned pages weren't read";
+    const shown = pages.slice(0, 10).join(", ") + (pages.length > 10 ? ", …" : "");
+    return pages.length === 1
+      ? `scanned page ${shown} wasn't read`
+      : `scanned pages ${shown} weren't read`;
+  },
+  password: () => "password-protected",
+  damaged: () => "damaged or couldn't be opened",
+  "too-large": () => "too large to open",
+  format: () => "a format IncarnaMind doesn't read",
+};
+
+/**
+ * A reminder after a search's Passages when Documents in the Search scope
+ * have no text to search, or pages with none (#485): no search finds
+ * anything in them, so a model that finds nothing says the answer may be
+ * there instead of taking another Document's figure for it. Names each, with
+ * why; empty when there are none.
+ */
+export function unreadDocumentsNote(unread: readonly UnreadFile[]): string {
+  if (unread.length === 0) return "";
+  const named = unread
+    .slice(0, NAMED_UNREAD)
+    .map((file) => `"${listedName(file.name)}" (${UNREAD_WORDS[file.reason](file.pages)})`);
+  const more = unread.length - named.length;
+  return `IncarnaMind couldn't read the text of some Documents in the search, so no Passage comes from that text: ${named.join(", ")}${more > 0 ? `, and ${more} more` : ""}. If the Passages don't clearly answer the Question and it may be about one of them, say in one sentence that it couldn't be read, so the answer may be there, rather than taking another Document's figure for it.`;
 }
 
 /**
@@ -129,15 +273,19 @@ function documentNames({ total, names }: ListedDocuments): string {
  * What to do with the User's Documents, for a way of citing. `passages`: what
  * the one search found, for a model that can't call Tools. `scoped`: the User
  * limited the Question to some of their Documents (its Search scope), and
- * `listed` covers only those.
+ * `listed` covers only those. `calculate`: the model is offered the
+ * `calculate` Tool (or `calculations` in its JSON), and steered to it.
  */
 export function documentInstructions(
   mode: CitationSupport | "no-documents",
   listed: ListedDocuments,
   passages = "",
   scoped = false,
+  calculate = false,
 ): string {
   const documents = `${listed.total} Document${listed.total === 1 ? "" : "s"}`;
+  const note = datedDocumentsNote(passages);
+  const dated = note ? [note] : [];
   const added = `${scoped ? `The User limited this Question to ${documents} of theirs` : `The User has added ${documents}`} (PDF, Word, PowerPoint, Excel, CSV, text and Markdown files).`;
   switch (mode) {
     case "no-documents":
@@ -150,9 +298,12 @@ export function documentInstructions(
         "Cite every claim you draw from a Passage:",
         `- Before writing the Answer, call cite once with a record for each quote you will use: a marker number (1, 2, …), ${RECORD}.`,
         UNBROKEN_QUOTE,
+        QUOTATION_MARKS,
         "- In the Answer, put the marker as [^1] right after each claim it supports, in a table's cell too. Use only markers you recorded, and add no list of sources.",
         "- Write nothing before your Tool calls: only the Answer, after them.",
-        NOT_COVERED,
+        notCovered(true),
+        readingRules(true),
+        ...(calculate ? ["", CALCULATE] : []),
       ].join("\n");
     case "structured-output":
       return [
@@ -161,13 +312,19 @@ export function documentInstructions(
         "",
         "Passages found in the User's Documents for this Question:",
         passages,
+        ...dated,
         "",
         // The example's location is a placeholder: a small model copied a real-looking one ("p. 3") as its own (#67).
-        'Reply with one JSON object: {"answer": "…", "citations": [{"marker": 1, "passage": "P1", "location": "…", "quote": "…"}]}.',
+        calculate
+          ? 'Reply with one JSON object: {"answer": "…", "citations": [{"marker": 1, "passage": "P1", "location": "…", "quote": "…"}], "calculations": [{"marker": 1, "label": "…", "inputs": [{"name": "a", "label": "…", "citation": 1, "number": "…"}], "formula": "…"}]}.'
+          : 'Reply with one JSON object: {"answer": "…", "citations": [{"marker": 1, "passage": "P1", "location": "…", "quote": "…"}]}.',
         "- answer: the Answer, in Markdown. Cite every claim you draw from a Passage by putting a marker such as [^1] right after it, in a table's cell too. Add no list of sources.",
         `- citations: one record for each marker: ${RECORD}.`,
         UNBROKEN_QUOTE,
-        NOT_COVERED,
+        QUOTATION_MARKS,
+        ...(calculate ? [CALCULATIONS] : []),
+        notCovered(true),
+        readingRules(true),
       ].join("\n");
     case "none":
       return [
@@ -176,9 +333,11 @@ export function documentInstructions(
         "",
         "Passages found in the User's Documents for this Question:",
         passages,
+        ...dated,
         "",
         "Use them where they help. Don't write citation markers or a list of sources.",
-        "If the Passages don't cover the Question, say so plainly, then answer from your own knowledge if you can.",
+        notCovered(false),
+        readingRules(false),
       ].join("\n");
   }
 }
@@ -224,6 +383,43 @@ export const QUOTE_RETRY_INSTRUCTIONS = [
   'Reply with one JSON object: {"quotes": [{"marker": 1, "quote": "…"}]}, with an item for each marker.',
 ].join("\n");
 
+/**
+ * For a local model that answered with structured output, once its Answer is
+ * written: the one request to fix the figures that couldn't be worked out
+ * (see ./figureRetry).
+ */
+export const FIGURE_RETRY_INSTRUCTIONS = [
+  "You fix the calculated figures of an Answer. A program reads each input's number from its quote and does the arithmetic, and couldn't for these figures, for the reason given with each.",
+  "- Give each figure again, with its marker, label, inputs and formula, fixed: copy each quote and number character for character from its Passage's text, and give unitQuote or reading where the reason asks for one.",
+  "- If a Passage's text has nothing to work a figure out from, leave that figure out.",
+  'Reply with one JSON object: {"calculations": [{"marker": 1, "label": "…", "inputs": [{"name": "a", "label": "…", "passage": "P1", "quote": "…", "number": "…"}], "formula": "…"}]}.',
+].join("\n");
+
+/** A figure that couldn't be worked out, as the request to fix it shows it. */
+export interface FigureToRetry {
+  marker: number;
+  /** The figure as the model gave it, as JSON. */
+  given: string;
+  problems: readonly string[];
+  /** The Passages its inputs name, each with its text or the part of it nearest the figure. */
+  passages: readonly { id: string; text: string }[];
+}
+
+/** The request to fix figures: each one as given, why it couldn't be worked out, and its Passages. */
+export function figureRetryPrompt(figures: readonly FigureToRetry[]): string {
+  return figures
+    .map((figure) =>
+      [
+        `[=${figure.marker}] as you gave it: ${figure.given}`,
+        `Why it couldn't be worked out: ${figure.problems.join(" ")}`,
+        ...figure.passages.map(
+          (passage) => `<passage id="${attribute(passage.id)}">\n${passage.text}\n</passage>`,
+        ),
+      ].join("\n"),
+    )
+    .join("\n\n");
+}
+
 /** A record whose quote wasn't found, as the request for exact quotes shows it. */
 export interface QuoteToRetry {
   marker: number;
@@ -250,6 +446,34 @@ export function quoteRetryPrompt(records: readonly QuoteToRetry[]): string {
       ].join("\n"),
     )
     .join("\n\n");
+}
+
+/**
+ * Once an Answer is written with no Citation though it read Passages, and no
+ * sentence of it matches one: the one request for its Citations (see
+ * ./unmarkedQuotes).
+ */
+export const CITE_RETRY_INSTRUCTIONS = [
+  "You add the Citations an Answer left out. The Answer was written from the Passages below, but none of its sentences says which Passage it comes from.",
+  "- For each sentence of the Answer that a Passage supports, give the sentence as the Answer has it, the Passage's id, and a quote from the Passage that supports it: one unbroken stretch, copied character for character, no longer than a sentence. Don't reword, translate, join sentences, change characters or leave words out.",
+  "- Leave out sentences that no Passage supports. Don't change the Answer.",
+  'Reply with one JSON object: {"citations": [{"sentence": "…", "passage": "P1", "quote": "…"}]}, or {"citations": []} if no Passage supports any sentence.',
+].join("\n");
+
+/** The one request for an Answer's Citations: the Answer, then the Passages it read. */
+export function citeRetryPrompt(
+  answer: string,
+  passages: readonly { id: string; text: string }[],
+): string {
+  return [
+    "<answer>",
+    answer,
+    "</answer>",
+    "",
+    ...passages.map((passage) =>
+      [`<passage id="${attribute(passage.id)}">`, passage.text, "</passage>"].join("\n"),
+    ),
+  ].join("\n");
 }
 
 /** The request to rewrite `question` into a search query, with the notebook text above it. */

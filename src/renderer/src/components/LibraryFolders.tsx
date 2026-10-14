@@ -1,32 +1,28 @@
-import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef } from "react";
 import { create } from "zustand";
 import type { Document, LibraryGroup, Mind } from "../../../core/api";
 import { useFolderDrop } from "../folderDrag";
-import { useT } from "../i18n";
+import { useLanguage, useT } from "../i18n";
 import { currentMindIdOf, currentTabOf } from "../layoutSlice";
+import { useRequests } from "../requests";
+import { sorted } from "../sort";
+import { type SortScope, sortOf, useSort } from "../sortChoices";
+import { documentFields, folderFields, mindFields } from "../sortFields";
 import { useAppStore } from "../store";
-import { TREE_ROW } from "../treeKeys";
+import { foldKeys, TreeLevelOffset, useTreeItem } from "../treeKeys";
+import { useRename } from "../useRename";
+import { InlineName } from "./InlineName";
 import { ChevronDownLineIcon, ChevronRightLineIcon, FolderLineIcon } from "./lineIcons";
 import { MindRow } from "./MindRow";
 import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
 import {
+  clearsActions,
   rowActionsClass,
   rowButtonClass,
   rowClass,
   rowIconClass,
-  rowInputClass,
   rowPadding,
 } from "./sidebarRows";
-import {
-  buttonClass,
-  dangerButtonClass,
-  dialogActionsClass,
-  dialogBodyClass,
-  dialogClass,
-  dialogTextClass,
-  dialogTitleClass,
-} from "./ui";
-import { useModal } from "./useModal";
 
 /** How many Documents a Folder lists at first; "Show N more Documents" lists more, in place. */
 export const FIRST_DOCUMENTS = 5;
@@ -119,8 +115,8 @@ const useFolds = create<Folds>()((set, get) => {
  * says. Minds drag onto a Folder, or onto Not in a Folder to leave theirs,
  * and the target lights up; a Folder renames in place (double-click, Enter
  * or F2, as in Finder) and has its menu (⋯ or a right-click): Open in the
- * Library, New Mind here, Rename, Delete…. → and ← open and close a Folder
- * (↑ and ↓ move through the rows, see `moveThroughRows`).
+ * Library, New Mind here, Rename, Delete…. The keys that walk the tree, → and
+ * ← among them, are `useTreeKeyboard`'s.
  */
 export function LibraryFolders({
   documents,
@@ -130,7 +126,6 @@ export function LibraryFolders({
   documents: readonly Document[];
   renderDocument(document: Document, depth: number): ReactNode;
 }) {
-  const t = useT();
   const groups = useAppStore((state) => state.library?.groups) ?? [];
   const assignments = useAppStore((state) => state.library?.assignments);
   const minds = useAppStore((state) => state.minds);
@@ -171,16 +166,23 @@ export function LibraryFolders({
     return grouped;
   }, [minds, groups]);
 
+  const language = useLanguage();
+  const sidebarSort = useSort(sortOf("sidebar"));
+  const orderedGroups = useMemo(
+    () => sorted(groups, sidebarSort, folderFields, language),
+    [groups, sidebarSort, language],
+  );
+
   const looseMinds = mindsByFolder.get(null) ?? NO_MINDS;
   const looseDocuments = documentsByFolder.get(null) ?? NO_DOCUMENTS;
   // Shown once there is a Folder to be out of, or something in it.
   const showLoose = groups.length > 0 || looseMinds.length > 0 || looseDocuments.length > 0;
 
   return (
-    <nav aria-label={t("sidebar.tree")} data-testid="library-folders">
+    <div data-testid="library-folders">
       {groups.length > 0 && (
-        <ul>
-          {groups.map((folder) => (
+        <ul role="none">
+          {orderedGroups.map((folder) => (
             <FolderGroup
               key={folder.id}
               folder={folder}
@@ -198,40 +200,65 @@ export function LibraryFolders({
           renderDocument={renderDocument}
         />
       )}
-    </nav>
+    </div>
   );
 }
 
 /** A Folder's or Not in a Folder's contents: its Minds, then its first Documents and "Show N more". */
 function Contents({
   listKey,
+  scope,
   depth,
   minds,
   documents,
   renderDocument,
 }: {
   listKey: string;
+  /** Whose sort it follows: its Folder's, or the sidebar's for Not in a Folder. */
+  scope: SortScope;
   depth: number;
   minds: readonly Mind[];
   documents: readonly Document[];
   renderDocument(document: Document, depth: number): ReactNode;
 }) {
   const t = useT();
+  const language = useLanguage();
+  const sort = useSort(sortOf(scope));
   const extra = useFolds((state) => state.shown[listKey] ?? 0);
   const listed = FIRST_DOCUMENTS + extra;
-  const more = Math.min(MORE_DOCUMENTS, documents.length - listed);
+  const { rows, shownDocuments } = useMemo(() => {
+    const ordered = sorted<Mind | Document>(
+      sort?.foldersFirst === false ? [...minds, ...documents] : [],
+      sort,
+      (item) => ("autoTitle" in item ? mindFields(item) : documentFields(t)(item)),
+      language,
+    );
+    // Folders first, or no choice: the Minds, then the Documents, each in its order.
+    const rows =
+      sort?.foldersFirst === false
+        ? ordered
+        : [
+            ...sorted(minds, sort, mindFields, language),
+            ...sorted(documents, sort, documentFields(t), language),
+          ];
+    return { rows, shownDocuments: documents.length };
+  }, [minds, documents, sort, language, t]);
+  const more = Math.min(MORE_DOCUMENTS, shownDocuments - listed);
+  const showMoreItem = useTreeItem({ depth });
   if (minds.length === 0 && documents.length === 0) return null;
+  let documentsListed = 0;
   return (
-    <ul>
-      {minds.map((mind) => (
-        <MindRow key={mind.id} mind={mind} depth={depth} />
-      ))}
-      {documents.slice(0, listed).map((doc) => renderDocument(doc, depth))}
+    <ul role="none">
+      {rows.map((each) => {
+        if ("autoTitle" in each) return <MindRow key={each.id} mind={each} depth={depth} />;
+        documentsListed += 1;
+        return documentsListed <= listed ? renderDocument(each, depth) : null;
+      })}
       {more > 0 && (
-        <li className="flex h-7 items-center">
+        <li role="none" className="flex h-7 items-center">
           <button
             type="button"
-            {...TREE_ROW}
+            {...showMoreItem}
             data-testid="show-more-documents"
             onClick={() => useFolds.getState().showMore(listKey, MORE_DOCUMENTS)}
             // Its text on the rows' text edge at this depth.
@@ -270,29 +297,37 @@ function FolderGroup({
       currentTabOf(state.layout)?.item.kind === "library" && state.libraryFilter === folder.id,
   );
   const drop = useFolderDrop(folder.id);
-  const [renaming, setRenaming] = useState(false);
-  const button = useRef<HTMLButtonElement>(null);
+  // The first click of a double-click folds or unfolds it: back as it was before renaming.
+  const rename = useRename<HTMLButtonElement>(`folder:${folder.id}`, () =>
+    useFolds.getState().toggle(folder.id),
+  );
+  // A Folder just made opens its name field here, once; that first name is part of making it.
+  const asked = useRequests((state) => state.nameFolder === folder.id);
+  const firstName = useRef(false);
+  const startRename = rename.start;
+  useEffect(() => {
+    if (!asked) return;
+    firstName.current = true;
+    useFolds.getState().reveal(folder.id);
+    startRename();
+    useRequests.getState().clear("nameFolder");
+  }, [asked, folder.id, startRename]);
+  const field = rename.field((name) => {
+    const first = firstName.current;
+    firstName.current = false;
+    const { nameNewFolder, renameFolder } = useAppStore.getState();
+    return first ? nameNewFolder(folder.id, name) : renameFolder(folder.id, name);
+  });
   const count = documents.length;
   const t = useT();
   const objectMenu = useObjectMenu({ kind: "folder", id: folder.id });
-
-  const onKeyDown = (event: KeyboardEvent) => {
-    // Enter or F2 renames, as in Finder; a click, Space or the arrows open and close it.
-    if ((event.key === "Enter" && !event.nativeEvent.isComposing) || event.key === "F2") {
-      event.preventDefault();
-      setRenaming(true);
-    } else if (event.key === "ArrowRight" && !expanded) {
-      event.preventDefault();
-      useFolds.getState().toggle(folder.id);
-    } else if (event.key === "ArrowLeft" && expanded) {
-      event.preventDefault();
-      useFolds.getState().toggle(folder.id);
-    }
-  };
+  const treeItem = useTreeItem({ depth: 0, expanded, selected });
+  const fold = foldKeys(expanded, () => useFolds.getState().toggle(folder.id));
 
   return (
     // The whole Folder takes a drop: its row, or anything listed in it.
     <li
+      role="none"
       data-testid="library-folder"
       data-folder-id={folder.id}
       data-count={count}
@@ -302,39 +337,38 @@ function FolderGroup({
       data-drop-target={drop.active ? "true" : undefined}
       className={`rounded-md ${drop.active ? dropLit : ""}`}
     >
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: a right-click shortcut to the row's menu, whose ⋯ button is the way in by keyboard. */}
-      <div {...(renaming ? {} : objectMenu.rowProps)} className={rowClass(selected)}>
-        {renaming ? (
+      <div {...(rename.renaming ? {} : objectMenu.rowProps)} className={rowClass(selected)}>
+        {rename.renaming ? (
           <span className="flex h-full w-full min-w-0 items-center gap-2 pr-1 pl-2">
             <FolderLineIcon className={rowIconClass(selected)} />
-            <RenameFolder
-              folder={folder}
-              onDone={() => {
-                setRenaming(false);
-                requestAnimationFrame(() => button.current?.focus());
+            <InlineName
+              value={folder.name}
+              label={t("folder.renameLabel", { name: folder.name })}
+              testId="folder-rename-field"
+              {...field}
+              onCancel={() => {
+                firstName.current = false;
+                field.onCancel();
               }}
             />
           </span>
         ) : (
           <button
-            ref={button}
+            {...rename.nameProps}
             type="button"
-            {...TREE_ROW}
+            {...treeItem}
             data-testid="folder-row"
-            aria-expanded={expanded}
             aria-current={selected ? "page" : undefined}
             title={folder.description ? `${folder.name}\n${folder.description}` : folder.name}
             onClick={(event) => {
               // The second click of a double-click renames instead.
               if (event.detail <= 1) useFolds.getState().toggle(folder.id);
             }}
-            onDoubleClick={() => {
-              // Back as it was before the first click opened or closed it.
-              useFolds.getState().toggle(folder.id);
-              setRenaming(true);
+            onKeyDown={(event) => {
+              rename.nameProps.onKeyDown(event);
+              fold(event);
             }}
-            onKeyDown={onKeyDown}
-            className={rowButtonClass}
+            className={`${rowButtonClass} ${clearsActions.menu}`}
           >
             <FolderLineIcon className={rowIconClass(selected)} />
             <span data-testid="row-text" className="min-w-0 flex-1 truncate">
@@ -345,12 +379,13 @@ function FolderGroup({
             </span>
           </button>
         )}
-        {!renaming && (
+        {!rename.renaming && (
           <div className={rowActionsClass}>
             <ObjectMenu
               target={{ kind: "folder", id: folder.id }}
               label={t("folder.more", { name: folder.name })}
-              here={{ "folder.rename": () => setRenaming(true) }}
+              tabIndex={-1}
+              here={{ "folder.rename": rename.start }}
             />
           </div>
         )}
@@ -358,6 +393,7 @@ function FolderGroup({
       {expanded && (
         <Contents
           listKey={folder.id}
+          scope={`folder:${folder.id}`}
           depth={1}
           minds={minds}
           documents={documents}
@@ -386,9 +422,10 @@ function NotInAFolder({
   const folded = useFolds((state) => state.looseFolded);
   const drop = useFolderDrop(null);
   const Chevron = folded ? ChevronRightLineIcon : ChevronDownLineIcon;
+  const treeItem = useTreeItem({ depth: 0, expanded: !folded });
+  const fold = foldKeys(!folded, () => useFolds.getState().toggle(NOT_IN_A_FOLDER));
   return (
-    <section
-      aria-labelledby="not-in-a-folder-heading"
+    <div
       data-testid="not-in-a-folder"
       data-count={documents.length}
       data-minds={minds.length}
@@ -397,19 +434,19 @@ function NotInAFolder({
       className={`mt-3 rounded-md ${drop.active ? dropLit : ""}`}
     >
       <div className="flex h-7 items-end gap-2 pr-2 pb-1 pl-2 text-label">
-        <h2 id="not-in-a-folder-heading" className="min-w-0 font-semibold text-ink-meta">
+        <div className="min-w-0 font-semibold text-ink-meta">
           <button
             type="button"
-            {...TREE_ROW}
+            {...treeItem}
             data-testid="not-in-a-folder-toggle"
-            aria-expanded={!folded}
             onClick={() => useFolds.getState().toggle(NOT_IN_A_FOLDER)}
+            onKeyDown={fold}
             className="flex max-w-full items-center gap-1 rounded-sm hover:text-ink-secondary"
           >
             <span className="truncate">{t("library.unsorted")}</span>
             <Chevron className="size-3 shrink-0" />
           </button>
-        </h2>
+        </div>
         <span
           data-testid="not-in-a-folder-hint"
           title={t("sidebar.notInFolder.title")}
@@ -419,101 +456,17 @@ function NotInAFolder({
         </span>
       </div>
       {!folded && (
-        <Contents
-          listKey={NOT_IN_A_FOLDER}
-          depth={0}
-          minds={minds}
-          documents={documents}
-          renderDocument={renderDocument}
-        />
+        <TreeLevelOffset value={1}>
+          <Contents
+            listKey={NOT_IN_A_FOLDER}
+            scope="sidebar"
+            depth={0}
+            minds={minds}
+            documents={documents}
+            renderDocument={renderDocument}
+          />
+        </TreeLevelOffset>
       )}
-    </section>
-  );
-}
-
-/** A Folder's name typed in its row: Enter or leaving the field saves, Esc cancels. */
-function RenameFolder({ folder, onDone }: { folder: LibraryGroup; onDone(): void }) {
-  const t = useT();
-  const [value, setValue] = useState(folder.name);
-  const field = useRef<HTMLInputElement>(null);
-  const finished = useRef(false);
-
-  useEffect(() => {
-    field.current?.focus();
-    field.current?.select();
-  }, []);
-
-  const finish = (save: boolean) => {
-    if (finished.current) return;
-    finished.current = true;
-    if (save) void useAppStore.getState().renameFolder(folder.id, value);
-    onDone();
-  };
-
-  return (
-    <input
-      ref={field}
-      value={value}
-      data-testid="folder-rename-field"
-      aria-label={t("folder.renameLabel", { name: folder.name })}
-      onChange={(event) => setValue(event.target.value)}
-      onKeyDown={(event) => {
-        if (event.nativeEvent.isComposing) return;
-        if (event.key === "Enter" || event.key === "Escape") {
-          event.preventDefault();
-          event.stopPropagation();
-          finish(event.key === "Enter");
-        }
-      }}
-      onBlur={() => finish(true)}
-      className={rowInputClass}
-    />
-  );
-}
-
-/**
- * Asks before deleting a Folder, which can't be undone yet: says where its
- * Documents and Minds go. Open while `folder` is set.
- */
-export function DeleteFolderDialog({
-  folder,
-  onClose,
-}: {
-  folder: LibraryGroup | null;
-  onClose(): void;
-}) {
-  const t = useT();
-  const dialog = useModal(folder !== null);
-  return (
-    <dialog
-      ref={dialog}
-      onClose={onClose}
-      data-testid="delete-folder-dialog"
-      aria-labelledby="delete-folder-title"
-      className={`${dialogClass} w-[26rem]`}
-    >
-      <div className={dialogBodyClass}>
-        <h2 id="delete-folder-title" className={dialogTitleClass}>
-          {t("folder.delete.title", { name: folder?.name ?? "" })}
-        </h2>
-        <p className={dialogTextClass}>{t("folder.delete.body")}</p>
-        <div className={dialogActionsClass}>
-          <button type="button" onClick={onClose} className={buttonClass}>
-            {t("folder.delete.cancel")}
-          </button>
-          <button
-            type="button"
-            data-testid="confirm-delete-folder"
-            onClick={() => {
-              if (folder) void useAppStore.getState().deleteFolder(folder.id);
-              onClose();
-            }}
-            className={dangerButtonClass}
-          >
-            {t("folder.delete.confirm")}
-          </button>
-        </div>
-      </div>
-    </dialog>
+    </div>
   );
 }

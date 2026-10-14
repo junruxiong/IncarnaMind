@@ -1,3 +1,4 @@
+import { DataFromNewerVersionError } from "../errors";
 import type { Database } from "./database";
 
 /**
@@ -1269,6 +1270,393 @@ export const migrations: readonly Migration[] = [
         WHERE status = 'reserved' AND deleted_at IS NULL;
     `,
   },
+  {
+    version: 58,
+    description:
+      "Documents known by where they belong, not by their path on one computer (ADR-0020)",
+    sql: `
+      -- Where a Document's file belongs, the same on every computer. source_kind:
+      -- 'linked-folder' (relative_path is inside its Linked folder), 'data-folder' (a file
+      -- IncarnaMind keeps, such as a web page's snapshot: relative_path is inside the data
+      -- folder) or 'file' (added on its own: nothing but its id; relative_path is NULL),
+      -- checked in code, so a kind a newer version adds is left alone. relative_path has "/"
+      -- between names on every system. path, file_mtime_ms and file_status, and a Linked
+      -- folder's path, are this computer's: derived from these, or seen here, never synced.
+      -- The core marks the files in the data folder at its next start: only it knows where
+      -- that is. Files aren't read: each is found where it was.
+      ALTER TABLE documents ADD COLUMN source_kind TEXT NOT NULL DEFAULT 'file';
+      ALTER TABLE documents ADD COLUMN relative_path TEXT;
+      -- A Linked folder's path has "/" first on macOS and Linux, and "\\" between names on
+      -- Windows, which become "/". A path not inside its Linked folder gets none.
+      UPDATE documents SET source_kind = 'linked-folder', relative_path = (
+        SELECT CASE
+          WHEN substr(l.path, 1, 1) = '/' THEN CASE
+            WHEN substr(documents.path, 1, length(rtrim(l.path, '/')) + 1) = rtrim(l.path, '/') || '/'
+            THEN substr(documents.path, length(rtrim(l.path, '/')) + 2) END
+          ELSE CASE
+            WHEN substr(documents.path, 1, length(rtrim(l.path, '\\')) + 1) = rtrim(l.path, '\\') || '\\'
+            THEN replace(substr(documents.path, length(rtrim(l.path, '\\')) + 2), '\\', '/') END
+        END
+        FROM linked_folders l WHERE l.id = documents.linked_folder_id
+      ) WHERE linked_folder_id IS NOT NULL;
+      CREATE UNIQUE INDEX documents_by_place ON documents (linked_folder_id, relative_path)
+        WHERE deleted_at IS NULL AND linked_folder_id IS NOT NULL;
+
+      -- The workspace: everything this data folder holds. One live row, made by the core at
+      -- its first start; computers that sync a User's Minds will share it. No account.
+      CREATE TABLE workspace (
+        id TEXT PRIMARY KEY NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+    `,
+  },
+  {
+    version: 59,
+    description:
+      "Outside agents remember the settings files and folders IncarnaMind created (#495)",
+    sql: `
+      -- The settings files, and the folders for them, that setting an agent up created because
+      -- they did not exist (a JSON list of absolute paths, shallowest first), so Disconnect can
+      -- take back what IncarnaMind made and nothing the User had. On this device only.
+      ALTER TABLE agent_pairings ADD COLUMN created_paths TEXT NOT NULL DEFAULT '[]';
+    `,
+  },
+  {
+    version: 62,
+    description: "Answers in conversations keep how they were reached: their steps (#391)",
+    sql: `
+      -- An Answer's steps (src/core/answers, AnswerSteps), as JSON: when its Question went to the
+      -- model and when it ended, its phases and when each began (ISO 8601, UTC), and its model's
+      -- reasoning summary and how long it thought, from a provider that summarizes reasoning
+      -- (raw chain of thought is never stored). NULL: an Answer written before, and Questions.
+      ALTER TABLE conversation_messages ADD COLUMN steps TEXT;
+    `,
+  },
+  {
+    version: 67,
+    description: "Answers in conversations keep their calculated figures (#438)",
+    sql: `
+      -- An Answer's calculated figures (src/core/answers/calculations.ts, ADR-0021), as a JSON
+      -- list: each figure's marker ("[=1]" in the text), label, formula, inputs (each with the
+      -- Citation it reads its number from, the number as written and where, and the cell or the
+      -- unit line it came with), result, shown text, and the evaluator version it was worked out
+      -- by. '[]' for a Question, and for an Answer with none.
+      ALTER TABLE conversation_messages ADD COLUMN figures TEXT NOT NULL DEFAULT '[]';
+    `,
+  },
+  {
+    version: 68,
+    description:
+      "A Document's file is known on this computer's disk, so moved and edited it stays the same Document (#389)",
+    sql: `
+      -- Which file a Document's is on this computer's disks, from stat: its device, file number
+      -- and creation time in nanoseconds, as decimal text (src/core/documents/files.ts). A file
+      -- moved and edited on the same disk while IncarnaMind didn't see it keeps all three. Like
+      -- path, file_mtime_ms and file_status, they are this computer's (ADR-0020): seen here,
+      -- different on another computer, and never synced. NULL until the file is next seen;
+      -- file_number and file_created_ns stay NULL where the file system gives none.
+      ALTER TABLE documents ADD COLUMN file_device TEXT;
+      ALTER TABLE documents ADD COLUMN file_number TEXT;
+      ALTER TABLE documents ADD COLUMN file_created_ns TEXT;
+      CREATE INDEX documents_by_file_number ON documents (file_number)
+        WHERE deleted_at IS NULL AND file_number IS NOT NULL;
+    `,
+  },
+  {
+    // 69 to 71 are reserved by work in progress.
+    version: 72,
+    description: "A Question in the assistant reads the Mind it was asked from (#544)",
+    sql: `
+      -- A Question keeps where the User was in the Mind it was asked from, as JSON
+      -- { selection, blockIds }: the text they selected ('' for none) and the ids of the
+      -- top-level Blocks it is in, or the one the cursor is in. NULL: none.
+      ALTER TABLE conversation_messages ADD COLUMN focus TEXT;
+      -- An Answer keeps the Mind it read (NULL: none), its version as read (a fingerprint of
+      -- its text), and 1 if only part of it fitted the model's window.
+      ALTER TABLE conversation_messages ADD COLUMN read_mind_id TEXT;
+      ALTER TABLE conversation_messages ADD COLUMN read_mind_version TEXT;
+      ALTER TABLE conversation_messages ADD COLUMN read_partial INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
+  {
+    version: 73,
+    description: "The cited page, saved when a Citation is made (#133)",
+    sql: `
+      -- How one Location of one version of a Document looked (src/core/citedPages.ts): a
+      -- picture in the data folder's "Cited pages", <id>.png or <id>.jpg, never in the
+      -- database, and never searched. One row per Location and version: page_from and
+      -- page_to are its Units, area what of them is drawn (JSON: a sheet's cited rows, or
+      -- the kind of Location for all of them). image_type is NULL while it waits to be drawn;
+      -- then the picture's type, its size in pixels, and the text drawn on it (JSON: each
+      -- run's text and box, for a quote to be found on it). A row goes (deleted_at) when it
+      -- can't be drawn, or at a start once no Citation or Checkpoint points at it; gone rows
+      -- are forgotten 30 days later. The pictures are this computer's.
+      CREATE TABLE cited_pages (
+        id TEXT PRIMARY KEY NOT NULL,
+        document_id TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        page_from INTEGER NOT NULL,
+        page_to INTEGER NOT NULL,
+        area TEXT NOT NULL,
+        image_type TEXT,
+        width INTEGER,
+        height INTEGER,
+        text TEXT,
+        saved_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX cited_pages_by_place
+        ON cited_pages (document_id, content_hash, page_from, page_to, area)
+        WHERE deleted_at IS NULL;
+      CREATE INDEX cited_pages_waiting ON cited_pages (created_at)
+        WHERE deleted_at IS NULL AND image_type IS NULL;
+      CREATE INDEX cited_pages_gone ON cited_pages (deleted_at) WHERE deleted_at IS NOT NULL;
+    `,
+  },
+  {
+    version: 75,
+    description: "Word files imported as Minds keep their original package (#104)",
+    sql: `
+      -- The .docx a Mind was imported from, kept in the data folder as "Word imports/<sha256>.docx"
+      -- so export can write back into it (#105) after the User's file has moved or gone. Two Minds
+      -- imported from the same file share it. completed_at: when every Block was written; NULL
+      -- while the import runs, so one a quit cut short goes on at the next start. deleted_at: the
+      -- Mind was deleted permanently, and the package goes once no Mind keeps it.
+      CREATE TABLE word_packages (
+        id TEXT PRIMARY KEY NOT NULL,
+        mind_id TEXT NOT NULL REFERENCES minds (id),
+        sha256 TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        size INTEGER NOT NULL,
+        completed_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX word_packages_by_mind ON word_packages (mind_id) WHERE deleted_at IS NULL;
+      CREATE INDEX word_packages_by_sha256 ON word_packages (sha256) WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    // 76 to 79 are reserved by work in progress.
+    version: 80,
+    description: "Models the User added to a provider's model menu (#513)",
+    sql: `
+      -- A model id the catalog does not offer in the menu by default (an unknown, deprecated or
+      -- other-API id), that the User put there from Settings → Models → Other models.
+      CREATE TABLE chat_menu_models (
+        id TEXT PRIMARY KEY NOT NULL,
+        provider_id TEXT NOT NULL,
+        model_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX chat_menu_models_by_model ON chat_menu_models (provider_id, model_id)
+        WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    version: 81,
+    description: "Tasks keep a journal that survives a force-quit, and schedules (#126)",
+    sql: `
+      -- One row per Task: a Run that goes on in the background (src/core/runs/tasks.ts). kind
+      -- names what runs it ('comparison'…), checked in code, so a kind a newer version adds is
+      -- left alone; input is what it runs, its kind's JSON. status: 'running' | 'paused' |
+      -- 'done' | 'stopped' | 'failed'. paused_reason: 'user' | 'closed' | 'cost-cap' |
+      -- 'plan-limit' | 'not-ready'; resets_at: when a plan's limit resets. ask: what it waits
+      -- for the User to answer (JSON), NULL for nothing; asks: how many times it has asked.
+      -- progress: its items settled and in all (JSON). problem: why it failed.
+      -- A Task left 'running' by a quit or a crash is settled at the next start.
+      CREATE TABLE runs (
+        id TEXT PRIMARY KEY NOT NULL,
+        kind TEXT NOT NULL,
+        mind_id TEXT,
+        input TEXT NOT NULL DEFAULT '{}',
+        status TEXT NOT NULL,
+        paused_reason TEXT,
+        resets_at TEXT,
+        ask TEXT,
+        asks INTEGER NOT NULL DEFAULT 0,
+        progress TEXT,
+        problem TEXT,
+        schedule_id TEXT,
+        started_at TEXT NOT NULL,
+        finished_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX runs_unfinished ON runs (status)
+        WHERE deleted_at IS NULL AND finished_at IS NULL;
+      CREATE INDEX runs_by_finished_at ON runs (finished_at)
+        WHERE deleted_at IS NULL AND finished_at IS NOT NULL;
+
+      -- The journal: one row per step of a Task, written as started before the step runs and as
+      -- completed after, each with the database synced to disk (synchronous=FULL). key names the
+      -- step within its Task, the same on every attempt. effect: what the step changes outside
+      -- this database (a file it writes, a Connector's Tool it calls), as JSON, so that after a
+      -- crash its outcome is checked before anything is done again; NULL for none. status:
+      -- 'started' | 'completed' | 'failed' | 'skipped'; result: its kind's JSON. No foreign
+      -- keys: a later sync may bring a step before its Task.
+      CREATE TABLE run_steps (
+        id TEXT PRIMARY KEY NOT NULL,
+        run_id TEXT NOT NULL,
+        key TEXT NOT NULL,
+        effect TEXT,
+        status TEXT NOT NULL,
+        result TEXT,
+        attempts INTEGER NOT NULL DEFAULT 1,
+        started_at TEXT NOT NULL,
+        completed_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX run_steps_by_key ON run_steps (run_id, key) WHERE deleted_at IS NULL;
+
+      -- Tasks that start by themselves (#147): what to run (template: a kind and its input, as
+      -- JSON), when (trigger, JSON), the Mind it writes into, what it has seen so far (cursor),
+      -- and when it runs next. Nothing writes one yet.
+      CREATE TABLE schedules (
+        id TEXT PRIMARY KEY NOT NULL,
+        kind TEXT NOT NULL,
+        template TEXT NOT NULL DEFAULT '{}',
+        trigger TEXT NOT NULL DEFAULT '{}',
+        mind_id TEXT,
+        cursor TEXT,
+        paused_at TEXT,
+        next_run_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+
+      -- The Task a model request was made for, so a Task's cost can be told; NULL for the rest.
+      ALTER TABLE model_requests ADD COLUMN run_id TEXT;
+      CREATE INDEX model_requests_by_run ON model_requests (run_id)
+        WHERE run_id IS NOT NULL AND deleted_at IS NULL;
+    `,
+  },
+  {
+    // 82 is reserved by work in progress.
+    version: 83,
+    description: "The words inside Minds, Block by Block, for ⌘K (#116)",
+    sql: `
+      -- Each top-level Block of each Mind as plain text (src/core/mindIndex.ts): its id, its node
+      -- type ('paragraph', 'heading', 'answer'…), its place among the Mind's Blocks from 0, and
+      -- its text, each paragraph, list item or cell on a line. The core derives the rows from the
+      -- Mind's content as it changes, so a computer that syncs a Mind derives its own. A Block
+      -- taken out of its Mind is marked deleted, its text dropped; the same row comes back with
+      -- the Block. No foreign key: a later sync may bring a Mind's content before its row.
+      CREATE TABLE mind_blocks (
+        seq INTEGER PRIMARY KEY, -- local key for the keyword index only
+        id TEXT NOT NULL UNIQUE,
+        mind_id TEXT NOT NULL,
+        block_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        text TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX mind_blocks_by_block ON mind_blocks (mind_id, block_id);
+
+      -- Keyword index, as for Passages (migration 10): each Block's words, segmented by the
+      -- core; rowid is the row's seq. Only the index is stored.
+      CREATE VIRTUAL TABLE mind_blocks_fts USING fts5 (
+        text,
+        content = '',
+        contentless_delete = 1,
+        tokenize = 'unicode61 remove_diacritics 2'
+      );
+      CREATE TRIGGER mind_blocks_fts_soft_delete AFTER UPDATE OF deleted_at ON mind_blocks
+      WHEN old.deleted_at IS NULL AND new.deleted_at IS NOT NULL BEGIN
+        DELETE FROM mind_blocks_fts WHERE rowid = old.seq;
+      END;
+      CREATE TRIGGER mind_blocks_fts_delete AFTER DELETE ON mind_blocks
+      WHEN old.deleted_at IS NULL BEGIN
+        DELETE FROM mind_blocks_fts WHERE rowid = old.seq;
+      END;
+
+      -- When the core last read each Mind's Blocks into mind_blocks (updated_at). A Mind whose
+      -- content was stored after that, as when the app quit before reading it, or that was never
+      -- read, such as every Mind written before this migration, is read at the next start.
+      CREATE TABLE mind_block_reads (
+        id TEXT PRIMARY KEY NOT NULL,
+        mind_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX mind_block_reads_by_mind ON mind_block_reads (mind_id)
+        WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    version: 84,
+    description: "Checkpoints: a Mind as it was before an AI change, or after a pause (#113)",
+    sql: `
+      -- One row per Checkpoint (src/core/checkpoints): the Mind's whole Yjs document as one
+      -- update (v1), and its Yjs snapshot, so a state already saved isn't saved again (a
+      -- snapshot holds what was deleted, which a state vector doesn't). reason is 'accept',
+      -- 'regenerate', 'enhance', 'compare', 'others', 'restore' or 'idle', checked in code. Only
+      -- idle ones are thinned as they age: a thinned row is marked deleted with its data
+      -- emptied, and forgotten 30 days later. The Document versions a Checkpoint's Citations
+      -- quote are retained in retained_versions (kind 'checkpoint'). No foreign key: a later
+      -- sync may deliver a row before its Mind.
+      CREATE TABLE mind_checkpoints (
+        id TEXT PRIMARY KEY NOT NULL,
+        mind_id TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        data BLOB NOT NULL,
+        snapshot BLOB NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX mind_checkpoints_by_mind ON mind_checkpoints (mind_id, created_at)
+        WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    // 85 is reserved by work in progress.
+    version: 86,
+    description: "A Word file imported as a Mind is also a Document (#720)",
+    sql: `
+      -- The Document the original file was also added as, so the Mind can say where it came
+      -- from and leave it out of its own checks, and the Document can open its Mind. NULL: the
+      -- User left it out of the Library, or the import was made before. No foreign key: a
+      -- later sync may deliver a row before its Document.
+      ALTER TABLE word_packages ADD COLUMN document_id TEXT;
+      CREATE INDEX word_packages_by_document ON word_packages (document_id)
+        WHERE document_id IS NOT NULL AND deleted_at IS NULL;
+    `,
+  },
+  {
+    version: 87,
+    description: "A data flow allowed when the User chose its service says so (ADR-0022, #718)",
+    sql: `
+      -- 1: the flow was allowed when the User chose the service, where a line said what goes
+      -- (first-run setup, Settings, a plan sign-in); 0: allowed in a dialog or in Settings ›
+      -- Privacy, as every decision made before this. A declined flow is always 0.
+      ALTER TABLE data_flow_consents ADD COLUMN chosen INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
+  {
+    version: 88,
+    description: "Organize: a waiting or failed Document's problem as a wording (#654)",
+    sql: `
+      -- The problem in error_message as a key of the dictionary and its values (JSON), so the
+      -- window says it in the interface language; NULL when the core gave only its sentence.
+      ALTER TABLE document_groups ADD COLUMN error_wording TEXT;
+    `,
+  },
 ];
 
 /**
@@ -1291,9 +1679,7 @@ export function migrate(db: Database, list: readonly Migration[] = migrations): 
   const known = new Set(list.map((migration) => migration.version));
   const unknown = [...applied].filter((version) => !known.has(version));
   if (unknown.length > 0) {
-    throw new Error(
-      `The database was written by a newer version of IncarnaMind (it has schema migration ${Math.max(...unknown)}, which this version doesn't know).`,
-    );
+    throw new DataFromNewerVersionError(Math.max(...unknown));
   }
 
   for (const migration of list) {

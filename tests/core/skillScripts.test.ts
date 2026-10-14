@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { readdir, readFile, realpath } from "node:fs/promises";
+import { readdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, onTestFinished, test, vi } from "vitest";
@@ -257,14 +257,14 @@ describe("Running a Skill's scripts", { timeout: 30_000 }, () => {
         },
       ]),
     );
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    expect(existsSync(log)).toBe(false);
     expect(answerIn(client, answerId).attrs.status).toBe("streaming");
 
+    // The script appends to its log: what it wrote is below what was there when the User decided.
+    await writeFile(log, "decided\n");
     const ended = answerEnded(core, answerId);
     await core.respondToApproval(request.requestId, "allow-once");
     expect((await ended).payload).toMatchObject({ status: "done" });
-    expect(await readFile(log, "utf8")).toBe("ran\n");
+    expect(await readFile(log, "utf8")).toBe("decided\nran\n");
   });
 
   test("Allow once: it runs with its arguments in a new temporary folder, removed afterwards; the model and the card get the exit code and output; the next run asks again", async () => {
@@ -359,11 +359,11 @@ describe("Running a Skill's scripts", { timeout: 30_000 }, () => {
 
     // Without the warning confirmed, "always run" is refused, and the run still waits.
     await expect(core.respondToApproval(request.requestId, "always-allow")).rejects.toThrow(
-      /riskAccepted/,
+      /Confirm the risk warning/,
     );
     await expect(
       core.respondToApproval(request.requestId, "always-allow", { riskAccepted: false }),
-    ).rejects.toThrow(/riskAccepted/);
+    ).rejects.toThrow(/Confirm the risk warning/);
     expect(await core.listApprovalRequests()).toEqual([request]);
     expect(await core.listApprovalPolicies()).toEqual([]);
     expect(existsSync(log)).toBe(false);
@@ -706,11 +706,8 @@ describe("The chat flow with Skill scripts", { timeout: 30_000 }, () => {
       createChatModel: scriptedModels(scriptedModel(() => ({ text: "OK" }))).createChatModel,
       processes: scriptProcesses(),
     });
+    // Choosing the provider allows the chat flow as it was: without Tool results.
     await core.saveChatProvider({ kind: "openai", apiKey: "sk-test", modelId: "gpt-5.4-mini" });
-    const first = nextEvent(core, "consent.requested");
-    const tested = core.testChatConnection({ kind: "openai", modelId: "gpt-5.4-mini" });
-    await core.respondToConsent((await first).requestId, true);
-    await tested;
     expect(await core.getChatReadiness()).toMatchObject({ consent: "accepted" });
     const sends = async () =>
       (await core.listDataFlows()).find((status) => status.flow.id === "chat")?.flow.sends;

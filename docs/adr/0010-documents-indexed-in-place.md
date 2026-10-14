@@ -9,7 +9,7 @@ What the index keeps is enough for Citations without the file:
 - Each version of a file is identified by the SHA-256 of its content.
 - When a file changes, the new version is indexed and becomes what search and new Answers use. The old version's pages are kept for as long as a Citation points at them, so the Citation is still checked against the text it quoted, and it says the Document changed after it was cited.
 - A new version that can't be read (a sync client wrote it half-way, or it is corrupt) replaces nothing: the last good version stays indexed and searched, and the Document shows the failure and offers Retry until a retry or a later change is read.
-- A file that moves or is renamed is found again by its content fingerprint, so its Citations and Search scopes follow it.
+- A file that moves or is renamed is found again by its content fingerprint, so its Citations and Search scopes follow it. One also edited where IncarnaMind didn't see it is found by its identity on its disk, or as the one clear candidate (ADR-0020's amendment, #389).
 - A file that disappears leaves a missing Document whose text and Citations remain. Only the rendered page, which needs the file, is lost.
 - Unlinking a Linked folder removes its Documents from the index but keeps the Units (ADR-0011) its Citations point to, so they are still checked; like an old version's pages, that text goes once no Citation quotes it (settled with the User on 2026-10-07).
 
@@ -65,3 +65,15 @@ An old version's text was kept only while a Citation quoted it. Check results (t
 - The start-up clean-up keeps a version that a Citation quotes or something retains. It reads every retained version with one query, beside its walk over Minds, which isn't extended.
 - Unlinking a Linked folder keeps the Units retained, as it keeps those Citations point to.
 - Once its last owner releases a version, and no Citation quotes it, its text goes at the next start. A release stays as a deleted row for 30 days, for a later sync to pass on, and is then forgotten.
+
+## Amendment: a Document is known by where it belongs, not by its path (2026-10-11, #171)
+
+"A Document is a file at a path" becomes "a file at a place": its Linked folder and its path inside it, the data folder, or a file of its own (ADR-0020). Its absolute path is where that place is on this computer, and differs on another. A Linked folder that moved, or that is somewhere else on another computer, is pointed at where it is now with Locate folder… in its menu: its Documents keep their ids, versions, Tags and Citations, and a file whose content didn't change isn't processed again (migration 58). The same content in two places is still two Documents, and a file that moves within what IncarnaMind watches is still found by its content.
+
+## Amendment: the cited page is saved when a Citation is made (2026-10-12, #133)
+
+A file that disappears no longer takes the cited page with it:
+
+- **What is saved.** When a Citation is made (in an Answer, or with a suggestion the User accepts), how its Location looked in the version it quotes becomes a picture in the data folder's "Cited pages": a PDF's pages, drawn by the page-image worker; a slide, the rows a sheet's Citation covers, a section or lines of text, drawn by their viewer off screen. The text drawn on it, each run with its box, is kept beside it (migration 73), so a quote can be found and highlighted on it. One picture per Location and version.
+- **When.** In the background queue, never while an Answer is being written. A picture a quit cut short is drawn at the next start, if the file still has that version; none is drawn of a version the file no longer has.
+- **How long.** While a Citation or a Checkpoint points at it, and it retains its version meanwhile (as a saved page, above). At the first start after the last one goes, it goes. The pictures are never searched, and are this computer's.

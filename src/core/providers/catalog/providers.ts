@@ -32,8 +32,8 @@ const PROVIDERS = [
         zh: "点“获取密钥”，登录 Anthropic Console。",
       },
       {
-        en: "Add credit under Billing. A Claude Max or Team plan includes monthly API credits: link the plan to this Console organization in claude.ai's Billing first. Pro doesn't include any.",
-        zh: "在 Billing 中充值。Claude Max 或 Team 订阅每月附带 API 额度：先在 claude.ai 的账单设置里把订阅关联到这个 Console 组织。Pro 订阅不含 API 额度。",
+        en: "Add credit under Billing, or link your Claude Max or Team plan there (see below).",
+        zh: "在 Billing 中充值，或在那里关联你的 Claude Max 或 Team 订阅（见下方说明）。",
       },
       {
         en: "Create a key, copy it (it's shown once) and paste it here.",
@@ -41,11 +41,24 @@ const PROVIDERS = [
       },
     ],
     docsUrl: "https://docs.anthropic.com/en/docs/about-claude/models",
-    // Claude 5.5 thinks by default (adaptively): a small call with a short reply runs out of room
-    // before it writes anything (#282).
-    request: { thinkingOff: { options: { anthropic: { thinking: { type: "disabled" } } } } },
+    request: {
+      // Claude 5.5 thinks by default (adaptively): a small call with a short reply runs out of room
+      // before it writes anything (#282).
+      thinkingOff: { options: { anthropic: { thinking: { type: "disabled" } } } },
+      // Claude 5 models think by default, and return only an empty block unless asked for the summary.
+      reasoningSummary: {
+        options: { anthropic: { thinking: { type: "adaptive", display: "summarized" } } },
+        only: [
+          "claude-fable-5",
+          "claude-mythos-5",
+          "claude-opus-5",
+          "claude-sonnet-5",
+          "claude-haiku-5",
+        ],
+      },
+    },
     roles: {
-      answers: "claude-sonnet-5-5",
+      answers: "claude-haiku-5-5",
       strongest: "claude-fable-5-1",
       quickTasks: "claude-haiku-5-5",
       images: "claude-sonnet-5-5",
@@ -65,8 +78,8 @@ const PROVIDERS = [
       },
     ],
     planCredits: {
-      en: "Claude Max and Team plans include monthly API credits, for keys in the Console organization you link to the plan. Free, Pro and Enterprise plans don't.",
-      zh: "Claude Max 和 Team 订阅每月附带 API 额度，可用于你关联到订阅的 Console 组织中的密钥。Free、Pro 和 Enterprise 订阅不含。",
+      en: "Claude Max and Team plans include monthly API credits, for keys in the Console organization you link to the plan in claude.ai's Billing. Free, Pro and Enterprise plans don't.",
+      zh: "Claude Max 和 Team 订阅每月附带 API 额度，可用于你在 claude.ai 账单设置中关联到订阅的 Console 组织里的密钥。Free、Pro 和 Enterprise 订阅不含。",
       url: "https://support.claude.com/en/articles/17154008",
     },
     checked: "2026-10-11",
@@ -86,8 +99,8 @@ const PROVIDERS = [
         zh: "点“获取密钥”，登录 OpenAI 平台。",
       },
       {
-        en: "Add credit under Billing. A ChatGPT plan doesn't include API use; with Plus or Pro, Continue with ChatGPT needs no key.",
-        zh: "在 Billing 中充值。ChatGPT 订阅不含 API 用量；有 Plus 或 Pro 的话，可改用“使用 ChatGPT 继续”，无需密钥。",
+        en: "Add credit under Billing.",
+        zh: "在 Billing 中充值。",
       },
       {
         en: "Create a key, copy it (it's shown once) and paste it here.",
@@ -124,9 +137,10 @@ const PROVIDERS = [
           "o4-mini",
         ],
       },
+      reasoningSummary: { options: { openai: { reasoningSummary: "auto" } } },
     },
     roles: {
-      answers: "gpt-6.1-sol",
+      answers: "gpt-6-luna",
       strongest: "gpt-6-astra",
       quickTasks: "gpt-6-luna",
       images: "gpt-6.1-sol",

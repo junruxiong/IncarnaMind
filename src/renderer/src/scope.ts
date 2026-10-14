@@ -1,13 +1,22 @@
 import type {
   Document,
+  DocumentGroupAssignment,
   DocumentKind,
   Folder,
   LibraryGroup,
   SearchScope,
   Tag,
 } from "../../core/api";
+import type { MessageKey } from "../../shared/i18n";
 import { SCOPE_KINDS, type ScopeKind, scopeIds } from "../../shared/searchScope";
 import { buildFolderTree, flattenFolderTree } from "./folders";
+
+/** What a scope item gone without its name is called: "Deleted Folder". */
+export const DELETED_NAMES: Record<ScopeKind, MessageKey> = {
+  folder: "scope.chip.deleted.folder",
+  tag: "scope.chip.deleted.tag",
+  document: "scope.chip.deleted.document",
+};
 
 /** The Folders, Tags and Documents a Search scope can name, as the app store holds them. */
 export interface ScopeLibrary {
@@ -17,10 +26,17 @@ export interface ScopeLibrary {
   deletedGroups?: readonly LibraryGroup[];
   tags: readonly Tag[];
   documents: readonly Document[];
+  /** Which in-app Folder each Document is filed in; the counts of those Folders read it. */
+  assignments?: readonly DocumentGroupAssignment[];
 }
 
 /** A Folder, Tag or Document the "@" picker offers for a Question's Search scope. */
 export interface ScopeChoice {
+  /**
+   * For a Folder or Tag: how many Documents it holds that can be searched (0: it is empty, and a
+   * search limited to it finds nothing). Undefined for a Document.
+   */
+  count?: number;
   kind: ScopeKind;
   id: string;
   name: string;
@@ -33,6 +49,8 @@ export interface ScopeChoice {
 
 /** A Search scope item as a chip on its Question. */
 export interface ScopeChip {
+  /** The same count as its choice's; undefined for a Document, or once it is deleted. */
+  count?: number;
   kind: ScopeKind;
   id: string;
   /**
@@ -48,8 +66,57 @@ export interface ScopeChip {
 /** The most choices of one kind the picker lists at once; typing narrows them. */
 const MAX_CHOICES_PER_KIND = 50;
 
+/** Whether a search can use the Document now. */
+const searchable = (document: Document) =>
+  document.fileStatus !== "missing" &&
+  document.status !== "failed" &&
+  document.status !== "no-text";
+
+/**
+ * How many Documents each Folder and Tag holds that can be searched (#764): an in-app
+ * Folder's filed Documents (suggested ones too, as a search counts them), a
+ * Linked folder's Documents with those in its sub-Folders, and a Tag's.
+ */
+export function scopeCounts(library: ScopeLibrary): Map<string, number> {
+  const counts = new Map<string, number>();
+  const live = library.documents.filter(searchable);
+  const liveIds = new Set(live.map((document) => document.id));
+  for (const group of library.groups ?? []) {
+    const filed = (library.assignments ?? []).filter(
+      (each) => each.groupId === group.id && liveIds.has(each.documentId),
+    );
+    counts.set(group.id, filed.length);
+  }
+  const children = new Map<string, string[]>();
+  for (const folder of library.folders) {
+    if (folder.parentId)
+      children.set(folder.parentId, [...(children.get(folder.parentId) ?? []), folder.id]);
+  }
+  const direct = new Map<string, number>();
+  for (const document of live) {
+    if (document.folderId) direct.set(document.folderId, (direct.get(document.folderId) ?? 0) + 1);
+  }
+  const within = (id: string, seen = new Set<string>()): number => {
+    if (seen.has(id)) return 0;
+    seen.add(id);
+    return (
+      (direct.get(id) ?? 0) +
+      (children.get(id) ?? []).reduce((sum, child) => sum + within(child, seen), 0)
+    );
+  };
+  for (const folder of library.folders) counts.set(folder.id, within(folder.id));
+  for (const tag of library.tags) {
+    counts.set(
+      tag.id,
+      live.filter((document) => document.tags.some((each) => each.tagId === tag.id)).length,
+    );
+  }
+  return counts;
+}
+
 /** Every Folder, Tag and Document, in the sidebar's order: Folders as a tree, depth first. */
 function everything(library: ScopeLibrary): ScopeChoice[] {
+  const counts = scopeCounts(library);
   const names = new Map(library.folders.map((folder) => [folder.id, folder.name]));
   const parents = new Map(library.folders.map((folder) => [folder.id, folder.parentId]));
   const pathOf = (folder: Folder) => {
@@ -71,6 +138,7 @@ function everything(library: ScopeLibrary): ScopeChoice[] {
         name: group.name,
         path: [],
         documentKind: null,
+        count: counts.get(group.id) ?? 0,
       }),
     ),
     ...flattenFolderTree(buildFolderTree(library.folders)).map(
@@ -81,6 +149,7 @@ function everything(library: ScopeLibrary): ScopeChoice[] {
         path: pathOf(folder),
         sourceLocation: (library.groups?.length ?? 0) > 0,
         documentKind: null,
+        count: counts.get(folder.id) ?? 0,
       }),
     ),
     ...library.tags.map(
@@ -90,6 +159,7 @@ function everything(library: ScopeLibrary): ScopeChoice[] {
         name: tag.name,
         path: [],
         documentKind: null,
+        count: counts.get(tag.id) ?? 0,
       }),
     ),
     ...library.documents.map(
@@ -136,6 +206,7 @@ export function scopeChoices(
 
 /** A Question's Search scope as chips, Folders first, then Tags, then Documents, each in the order chosen. */
 export function scopeChips(library: ScopeLibrary, scope: SearchScope): ScopeChip[] {
+  const counts = scopeCounts(library);
   const folders = new Map(
     [...library.folders, ...(library.groups ?? [])].map((folder) => [folder.id, folder]),
   );
@@ -151,11 +222,19 @@ export function scopeChips(library: ScopeLibrary, scope: SearchScope): ScopeChip
         name: live?.name ?? deletedFolders.get(id)?.name ?? null,
         deleted: !live,
         documentKind: null,
+        ...(live && { count: counts.get(id) ?? 0 }),
       };
     }),
     ...scope.tagIds.map((id): ScopeChip => {
       const tag = tags.get(id);
-      return { kind: "tag", id, name: tag?.name ?? null, deleted: !tag, documentKind: null };
+      return {
+        kind: "tag",
+        id,
+        name: tag?.name ?? null,
+        deleted: !tag,
+        documentKind: null,
+        ...(tag && { count: counts.get(id) ?? 0 }),
+      };
     }),
     ...scope.documentIds.map((id): ScopeChip => {
       const document = documents.get(id);
