@@ -7,7 +7,6 @@ import {
   CHART_NODE,
   CONTENT_SCHEMA_VERSION,
   CONTENT_SCHEMA_VERSION_KEY,
-  type Core,
   MIND_CONTENT_FIELD,
   MIND_SETTINGS_FIELD,
   type Pictures,
@@ -19,6 +18,7 @@ import {
   answerEnded,
   askAndFinish,
   citingModel,
+  contextOfNextQuestion,
   type ShownPassage,
   setUpWithDocuments,
 } from "../helpers/citations";
@@ -101,25 +101,6 @@ function chartsIn(client: MindClient): ChartAttributes[] {
   return charts;
 }
 
-/** Asks a Question at the end of the Mind and gives back what the model was given. */
-async function contextOfNextQuestion(
-  core: Core,
-  client: MindClient,
-  mindId: string,
-  model: ReturnType<typeof figuresModel>,
-): Promise<string> {
-  const calls = model.doStreamCalls.length;
-  const asked = question("Which quarter grew most?");
-  editMind(client, (blocks) => [...blocks, asked]);
-  await client.settled();
-  const result = await core.askQuestion({ mindId, questionId: asked.attrs.id });
-  if (!result.asked) throw new Error("The Question wasn't asked.");
-  await answerEnded(core, result.answerId);
-  return promptOf(model, calls)
-    .map((message) => message.text)
-    .join("\n\n");
-}
-
 /** A 1 × 1 PNG, as a fake host draws every picture. */
 const PNG = Uint8Array.from(
   Buffer.from(
@@ -198,6 +179,24 @@ describe("a chart from a cited table", { timeout: 30_000 }, () => {
     );
     // The value with no Citation reads as written, with no source.
     expect(context).toContain("| Q4 | 330.6 [Acme, p. 1] | 401.2 |");
+  });
+
+  test("Question context names its values' Document as it is named now", async () => {
+    const model = figuresModel();
+    const { core, client, mind, documents } = await setUpWithDocuments(model, [
+      { name: "Acme.pdf", contents: REPORT },
+    ]);
+    await askAndFinish(core, client, mind.id, "Revenue by quarter? Answer as a table.");
+    editMind(client, (blocks) => [...blocks, chartBlock(chartOfFirstTable(client))]);
+    await client.settled();
+
+    await core.renameDocument(documents[0]?.id ?? "", "Acme annual report");
+    const context = await contextOfNextQuestion(core, client, mind.id, model);
+
+    expect(context).toContain(
+      "| Q1 | 289.4 [Acme annual report, p. 1] | 341.5 [Acme annual report, p. 2] |",
+    );
+    expect(context).not.toContain("[Acme, p.");
   });
 
   test("Markdown writes its caption, its values as a table, and its sources as footnotes", async () => {

@@ -46,6 +46,7 @@ import {
   type EmbeddingModelStatus,
   type EmbeddingSettings,
   type ExportMindOptions,
+  type ExternalService,
   type Meeting,
   type Mind,
   type MindCitationStyle,
@@ -980,6 +981,7 @@ export function createCore(adapters: CoreAdapters): Core {
     prepareModel: (choice) => chat.prepareModel(choice),
     documents: {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
+      names: () => documents.names(),
       searchableNames: (documentIds, limit) =>
         documents.searchableNames(documentIds ?? undefined, limit),
       searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
@@ -990,7 +992,19 @@ export function createCore(adapters: CoreAdapters): Core {
       documentDate: (documentId) => documents.documentDate(documentId),
     },
     toolProviders: [
-      { kind: "connector", tools: (signal) => connectors.tools(signal) },
+      {
+        kind: "connector",
+        tools: async (signal) =>
+          (await connectors.tools(signal)).filter(
+            (tool) =>
+              tool.provider.kind !== "connector" ||
+              !approvals.turnedOff({
+                kind: "tool",
+                connectorId: tool.provider.id,
+                tool: tool.providerTool,
+              }),
+          ),
+      },
       { kind: "sources", tools: async () => sources.tools() },
     ],
     connectorsNeedingSignIn: () => connectors.needingSignIn(),
@@ -1291,6 +1305,7 @@ export function createCore(adapters: CoreAdapters): Core {
     evidence,
     documents: {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
+      names: () => documents.names(),
       searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
       citationSource: (passageId) => documents.citationSource(passageId),
       pageTexts: (documentId, contentHash, from, to) =>
@@ -1419,6 +1434,7 @@ export function createCore(adapters: CoreAdapters): Core {
   consent.registry.register({
     id: "tagging",
     sends: TAGGING_FLOW_SENDS,
+    background: true,
     async services() {
       const service = jev.enabled() ? jev.service() : chat.defaultService();
       return service ? [service] : [];
@@ -1454,8 +1470,11 @@ export function createCore(adapters: CoreAdapters): Core {
     now,
     tags,
     enabled: () => !organizationConfigured(),
-    canRun: async () =>
-      jev.enabled() ? jev.canRun() : (await chat.readiness(undefined, "tagging")).ready,
+    canRun: async () => {
+      if (jev.enabled()) return jev.canRun();
+      const readiness = await chat.readiness(undefined, "tagging");
+      return readiness.ready && readiness.consent !== "needed";
+    },
     mightBeReady: () => (jev.enabled() ? jev.mightBeReady() : chat.mightBeReady("tagging")),
     prepare: async () => {
       if (jev.enabled()) return jev.prepare();
@@ -1533,21 +1552,24 @@ export function createCore(adapters: CoreAdapters): Core {
       };
     },
   });
+  /** The service the model organizing Documents sends to, if it isn't on this computer. */
+  const classificationServices = async (): Promise<ExternalService[]> => {
+    const selected = library.settings().classifier;
+    if (selected?.kind === "jev") {
+      const service = jev.service();
+      return service ? [service] : [];
+    }
+    if (selected?.kind === "chat") {
+      const provider = (await chat.list()).find((item) => item.id === selected.choice.providerId);
+      return provider?.service ? [provider.service] : [];
+    }
+    return [];
+  };
   consent.registry.register({
     id: "classification",
     sends: CLASSIFICATION_FLOW_SENDS,
-    async services() {
-      const selected = library.settings().classifier;
-      if (selected?.kind === "jev") {
-        const service = jev.service();
-        return service ? [service] : [];
-      }
-      if (selected?.kind === "chat") {
-        const provider = (await chat.list()).find((item) => item.id === selected.choice.providerId);
-        return provider?.service ? [provider.service] : [];
-      }
-      return [];
-    },
+    background: true,
+    services: classificationServices,
   });
   libraryDocumentChanged = (id) => library.documentChanged(id);
   library.start();
@@ -1975,6 +1997,7 @@ export function createCore(adapters: CoreAdapters): Core {
       citing,
       recheck: (input) => recheckCitation(documents, input),
       minds: () => minds.list().filter((mind) => isKnownKind(mind.kind)),
+      liveDocuments: () => documents.names(),
       mindMarkdown: (mindId, footnote) => {
         const mind = minds.get(mindId);
         const { language } = settings.get();
@@ -2351,7 +2374,7 @@ export function createCore(adapters: CoreAdapters): Core {
     saveChatProvider: async (input) => {
       const provider = await chat.save(input);
       settingsChanged();
-      await readinessChanged();
+      await dataFlowsChanged();
       return provider;
     },
     deleteChatProvider: async (id) => {
@@ -2498,7 +2521,19 @@ export function createCore(adapters: CoreAdapters): Core {
       return deletion;
     },
     addLibraryStarterGroups: async (keys) => library.addStarters(keys),
-    saveLibrarySettings: async (input) => library.saveSettings(input),
+    saveLibrarySettings: async (input) => {
+      const before = JSON.stringify(library.settings().classifier);
+      const saved = library.saveSettings(input);
+      // Choosing the model that organizes Documents, where Settings says what goes, allows it
+      // (ADR-0022). Saving the same one again, for another setting, isn't a new choice.
+      if (JSON.stringify(library.settings().classifier) !== before) {
+        for (const service of await classificationServices()) {
+          consent.choose(["classification"], service);
+        }
+        await dataFlowsChanged();
+      }
+      return saved;
+    },
     classifyDocuments: async (ids) => {
       library.classify(ids);
       const classifier = library.settings().classifier;
@@ -2607,6 +2642,7 @@ export function createCore(adapters: CoreAdapters): Core {
     getJevSettings: () => jev.status(),
     saveJevSettings: async (input) => {
       await jev.save(input);
+      await dataFlowsChanged();
       return jevChanged();
     },
     removeJevSettings: async () => {
@@ -2616,7 +2652,11 @@ export function createCore(adapters: CoreAdapters): Core {
     testJevConnection: (input) => loggingTest("jev")(jev.test(input)),
 
     listConnectors: async () => connectors.list(),
-    addConnector: (input) => connectors.add(input),
+    addConnector: async (input) => {
+      const connector = await connectors.add(input);
+      await dataFlowsChanged();
+      return connector;
+    },
     editConnector: (connectorId, input) => connectors.edit(connectorId, input),
     setConnectorEnabled: async (connectorId, enabled) =>
       connectors.setEnabled(connectorId, enabled),
@@ -2634,11 +2674,17 @@ export function createCore(adapters: CoreAdapters): Core {
     addConnectorFromDirectory: async (entryId, client) => {
       const entry = directory.find((each) => each.id === entryId);
       if (!entry) throw new NotFoundError({ key: "error.connector.notInDirectory" });
-      return connectors.addFromDirectory(entry, client);
+      const connector = await connectors.addFromDirectory(entry, client);
+      await dataFlowsChanged();
+      return connector;
     },
     searchConnectorRegistry: (query) => registry.search(query),
     previewConnectorImport: async (json) => connectors.previewImport(json),
-    importConnectors: (json) => connectors.import(json),
+    importConnectors: async (json) => {
+      const imported = await connectors.import(json);
+      await dataFlowsChanged();
+      return imported;
+    },
 
     listApprovalPolicies: async () => approvals.list(),
     setApprovalPolicy: async (input) => approvals.set(input),
