@@ -2,11 +2,11 @@
  * Resolves formatting in Word's order. Runs: document defaults, table style,
  * paragraph style chain, character style chain, direct formatting.
  * Paragraphs: defaults, table style, style chain, list level, direct.
- *
- * Keys are given in the order styles are first met, so reading the same
- * package again gives the same keys: an interrupted import and the backfill
- * of earlier imports rely on it.
  */
+
+import { targetHash } from "../../../shared/proposals";
+import { sorted } from "../../../shared/wordFiles";
+import { defined } from "../../../shared/wordLook";
 import type {
   WordBorder,
   WordBorders,
@@ -18,17 +18,15 @@ import type {
   WordTabStop,
   WordWidth,
 } from "../../api";
-import { child, elements, parseXml, type XmlElement } from "./xml";
+import { child, descendants, elements, local, onOff, parseXml, type XmlElement } from "./xml";
 
-/** Raise it when reading the look changes, so Minds imported before get it again. */
+/**
+ * How the look was read. A later version that reads it differently and gives
+ * it again must first clear the look's attributes and marks.
+ */
 export const WORD_LOOK_VERSION = 1;
 
 const MAX_STYLE_DEPTH = 20;
-
-const isOn = (element: XmlElement | undefined): boolean | undefined =>
-  element === undefined
-    ? undefined
-    : !["false", "0", "off"].includes(element.attrs["w:val"] ?? "true");
 
 /** Twips (or 1/`per` points) to points, to a hundredth. */
 function points(value: string | undefined, per = 20): number | undefined {
@@ -40,11 +38,6 @@ function points(value: string | undefined, per = 20): number | undefined {
 function hex(value: string | undefined): string | undefined {
   if (!value || value === "auto" || !/^[0-9a-fA-F]{6}$/.test(value)) return undefined;
   return value.toUpperCase();
-}
-
-/** Drops unset keys, so equal looks serialise equal and share a key. */
-function defined<T extends object>(value: T): T {
-  return Object.fromEntries(Object.entries(value).filter(([, each]) => each !== undefined)) as T;
 }
 
 interface FontRef {
@@ -67,8 +60,8 @@ interface RunProps {
   caps?: boolean;
   smallCaps?: boolean;
   vertical?: string;
-  spacing?: number;
-  scale?: number;
+  letterSpacing?: number;
+  widthPercent?: number;
   hidden?: boolean;
 }
 
@@ -129,6 +122,7 @@ interface CellProps {
 interface StyleDefinition {
   type: string;
   basedOn: string | null;
+  next: string | null;
   pPr?: XmlElement;
   rPr?: XmlElement;
   tblPr?: XmlElement;
@@ -160,14 +154,16 @@ const TAB_ALIGN: Record<string, WordTabStop["align"]> = {
   num: "left",
 };
 
-const LEADERS: ReadonlySet<string> = new Set([
+const LEADERS: readonly WordTabStop["leader"][] = [
   "none",
   "dot",
   "hyphen",
   "underscore",
   "heavy",
   "middleDot",
-]);
+];
+const isLeader = (value: string): value is WordTabStop["leader"] =>
+  LEADERS.some((leader) => leader === value);
 
 /** Null for "none", which takes away a side a style gave. */
 function readBorder(side: XmlElement): WordBorder | null {
@@ -188,7 +184,7 @@ function readBorders(
   if (!element) return undefined;
   const sides: Record<string, WordBorder | null> = {};
   for (const side of elements(element)) {
-    const name = side.name.slice(side.name.indexOf(":") + 1);
+    const name = local(side.name);
     const key = name === "start" ? "left" : name === "end" ? "right" : name;
     sides[key] = readBorder(side);
   }
@@ -221,7 +217,7 @@ function readMargins(element: XmlElement | undefined): Record<string, number> | 
   if (!element) return undefined;
   const margins: Record<string, number> = {};
   for (const side of elements(element)) {
-    const name = side.name.slice(side.name.indexOf(":") + 1);
+    const name = local(side.name);
     const key = name === "start" ? "left" : name === "end" ? "right" : name;
     const value =
       side.attrs["w:type"] === "dxa" || !side.attrs["w:type"]
@@ -267,38 +263,38 @@ function readRun(rPr: XmlElement | undefined): RunProps {
         props.shade = readShade(element);
         break;
       case "w:b":
-        props.bold = isOn(element);
+        props.bold = onOff(element);
         break;
       case "w:i":
-        props.italic = isOn(element);
+        props.italic = onOff(element);
         break;
       case "w:u":
         props.underline = value ?? "single";
         break;
       case "w:strike":
-        props.strike = isOn(element);
+        props.strike = onOff(element);
         break;
       case "w:dstrike":
-        props.doubleStrike = isOn(element);
+        props.doubleStrike = onOff(element);
         break;
       case "w:caps":
-        props.caps = isOn(element);
+        props.caps = onOff(element);
         break;
       case "w:smallCaps":
-        props.smallCaps = isOn(element);
+        props.smallCaps = onOff(element);
         break;
       case "w:vanish":
-        props.hidden = isOn(element);
+        props.hidden = onOff(element);
         break;
       case "w:vertAlign":
         if (value) props.vertical = value;
         break;
       case "w:spacing":
-        props.spacing = points(value);
+        props.letterSpacing = points(value);
         break;
       case "w:w": {
-        const scale = Number(value);
-        if (Number.isFinite(scale)) props.scale = scale;
+        const percent = Number(value);
+        if (Number.isFinite(percent)) props.widthPercent = percent;
         break;
       }
     }
@@ -334,7 +330,7 @@ function readParagraph(pPr: XmlElement | undefined): ParagraphProps {
         });
         break;
       case "w:contextualSpacing":
-        props.contextual = isOn(element);
+        props.contextual = onOff(element);
         break;
       case "w:tabs":
         props.tabs = elements(element).flatMap((tab) => {
@@ -352,16 +348,16 @@ function readParagraph(pPr: XmlElement | undefined): ParagraphProps {
         props.borders = readBorders(element);
         break;
       case "w:keepNext":
-        props.keepNext = isOn(element);
+        props.keepNext = onOff(element);
         break;
       case "w:keepLines":
-        props.keepLines = isOn(element);
+        props.keepLines = onOff(element);
         break;
       case "w:pageBreakBefore":
-        props.pageBreakBefore = isOn(element);
+        props.pageBreakBefore = onOff(element);
         break;
       case "w:widowControl":
-        props.widowControl = isOn(element);
+        props.widowControl = onOff(element);
         break;
       case "w:numPr": {
         const numId = child(element, "w:numId")?.attrs["w:val"];
@@ -429,7 +425,7 @@ function readCell(tcPr: XmlElement | undefined): CellProps {
         props.margins = readMargins(element);
         break;
       case "w:noWrap":
-        props.noWrap = isOn(element);
+        props.noWrap = onOff(element);
         break;
     }
   }
@@ -438,6 +434,32 @@ function readCell(tcPr: XmlElement | undefined): CellProps {
 
 function mergeRun(base: RunProps, over: RunProps): RunProps {
   return { ...base, ...over };
+}
+
+const TOGGLES = [
+  "bold",
+  "italic",
+  "caps",
+  "smallCaps",
+  "strike",
+  "doubleStrike",
+  "hidden",
+] as const satisfies readonly (keyof RunProps)[];
+
+/**
+ * Toggle properties set in a style switch the value the levels before gave,
+ * so bold in a bold heading's character style is not bold (ECMA-376
+ * §17.7.3); direct formatting sets them outright.
+ */
+function resolveRun(defaults: RunProps, styles: readonly RunProps[], direct: RunProps): RunProps {
+  const resolved = [...styles, direct].reduce(mergeRun, defaults);
+  for (const name of TOGGLES) {
+    if (direct[name] !== undefined) continue;
+    let on = defaults[name] === true;
+    for (const level of styles) if (level[name] === true) on = !on;
+    resolved[name] = on;
+  }
+  return resolved;
 }
 
 function mergeParagraph(base: ParagraphProps, over: ParagraphProps): ParagraphProps {
@@ -495,33 +517,42 @@ interface ThemeFonts {
   minor: { latin?: string; eastAsia?: string };
 }
 
-function readTheme(xml: string | undefined): ThemeFonts {
+const EAST_ASIAN_SCRIPTS = ["Hans", "Hant", "Jpan", "Hang"];
+
+/** The theme's script for the file's East Asian language (`w:themeFontLang`). */
+function scriptOf(language: string | undefined): string | undefined {
+  const code = language?.toLowerCase() ?? "";
+  if (code.startsWith("zh")) return /-(tw|hk|mo|hant)/.test(code) ? "Hant" : "Hans";
+  if (code.startsWith("ja")) return "Jpan";
+  if (code.startsWith("ko")) return "Hang";
+  return undefined;
+}
+
+function readTheme(xml: string | undefined, language: string | undefined): ThemeFonts {
   const fonts: ThemeFonts = { major: {}, minor: {} };
   if (!xml) return fonts;
+  const wanted = scriptOf(language);
+  const scripts = wanted
+    ? [wanted, ...EAST_ASIAN_SCRIPTS.filter((each) => each !== wanted)]
+    : EAST_ASIAN_SCRIPTS;
   const root = parseXml(xml);
-  const scheme = [...walkByName(root, "a:fontScheme")][0];
+  const scheme = descendants(root, "a:fontScheme")[0];
   if (!scheme) return fonts;
   for (const kind of ["major", "minor"] as const) {
     const set = child(scheme, `a:${kind}Font`);
     if (!set) continue;
     const latin = child(set, "a:latin")?.attrs.typeface;
     const ea = child(set, "a:ea")?.attrs.typeface;
-    // A theme with no East Asian face names the one per script; Simplified Chinese's first.
-    const script = elements(set).find(
-      (font) =>
-        font.name === "a:font" && ["Hans", "Hant", "Jpan"].includes(font.attrs.script ?? ""),
-    )?.attrs.typeface;
+    // Office's themes leave a:ea empty and list a face per script, Japanese first.
+    const byScript = new Map(
+      elements(set)
+        .filter((font) => font.name === "a:font")
+        .map((font) => [font.attrs.script ?? "", font.attrs.typeface]),
+    );
+    const script = scripts.map((each) => byScript.get(each)).find(Boolean);
     fonts[kind] = defined({ latin: latin || undefined, eastAsia: ea || script || undefined });
   }
   return fonts;
-}
-
-function* walkByName(root: XmlElement, name: string): Generator<XmlElement> {
-  const stack = [root];
-  for (let element = stack.pop(); element; element = stack.pop()) {
-    if (element.name === name) yield element;
-    stack.push(...elements(element));
-  }
 }
 
 function themeFont(theme: ThemeFonts, ref: FontRef | undefined): string | undefined {
@@ -536,12 +567,14 @@ export interface LookParts {
   styles?: string;
   theme?: string;
   numbering?: string;
+  settings?: string;
   document: XmlElement;
 }
 
 export interface ParagraphLookContext {
   look: WordParagraphLook;
-  runs: RunProps;
+  /** The table style's run formatting, then the paragraph style's. */
+  runs: RunProps[];
 }
 
 export interface TableLookContext {
@@ -550,14 +583,14 @@ export interface TableLookContext {
   cellBase: CellProps;
 }
 
+/** Each look under a key made from the look itself, so a key names the same look in every Mind. */
 class KeyedStyles<T> {
-  private readonly byJson = new Map<string, string>();
   readonly entries: Record<string, T> = {};
 
   constructor(private readonly prefix: string) {}
 
   key(look: T): string | null {
-    const json = JSON.stringify(sortedKeys(look));
+    const json = JSON.stringify(sorted(look));
     return json === "{}" ? null : this.keyOf(json, look);
   }
 
@@ -566,24 +599,10 @@ class KeyedStyles<T> {
   }
 
   private keyOf(json: string, look: T): string {
-    let key = this.byJson.get(json);
-    if (!key) {
-      key = `${this.prefix}${this.byJson.size + 1}`;
-      this.byJson.set(json, key);
-      this.entries[key] = look;
-    }
+    const key = `${this.prefix}${targetHash(json)}`;
+    this.entries[key] ??= look;
     return key;
   }
-}
-
-function sortedKeys(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sortedKeys);
-  if (value === null || typeof value !== "object") return value;
-  return Object.fromEntries(
-    Object.keys(value)
-      .sort()
-      .map((key) => [key, sortedKeys((value as Record<string, unknown>)[key])]),
-  );
 }
 
 export class LookReader {
@@ -602,7 +621,9 @@ export class LookReader {
   private readonly width: number | null;
 
   constructor(parts: LookParts) {
-    this.theme = readTheme(parts.theme);
+    const settings = parts.settings ? parseXml(parts.settings) : undefined;
+    const language = settings && child(settings, "w:themeFontLang")?.attrs["w:eastAsia"];
+    this.theme = readTheme(parts.theme, language);
     const root = parts.styles ? parseXml(parts.styles) : undefined;
     const defaults = root && child(root, "w:docDefaults");
     this.runDefaults = readRun(child(child(defaults ?? EMPTY, "w:rPrDefault") ?? EMPTY, "w:rPr"));
@@ -620,6 +641,7 @@ export class LookReader {
       this.styles.set(`${type}:${id}`, {
         type,
         basedOn: child(style, "w:basedOn")?.attrs["w:val"] ?? null,
+        next: child(style, "w:next")?.attrs["w:val"] ?? null,
         pPr: child(style, "w:pPr"),
         rPr: child(style, "w:rPr"),
         tblPr: child(style, "w:tblPr"),
@@ -736,14 +758,15 @@ export class LookReader {
     const styleId = (pPr && child(pPr, "w:pStyle")?.attrs["w:val"]) ?? this.defaultParagraph;
     const style = this.chain("paragraph", styleId);
     let props = this.paragraphDefaults;
-    let runs = this.runDefaults;
+    let tableRuns: RunProps = {};
+    let paragraphRuns: RunProps = {};
     for (const level of table?.style ?? []) {
       props = mergeParagraph(props, readParagraph(level.pPr));
-      runs = mergeRun(runs, readRun(level.rPr));
+      tableRuns = mergeRun(tableRuns, readRun(level.rPr));
     }
     for (const level of style) {
       props = mergeParagraph(props, readParagraph(level.pPr));
-      runs = mergeRun(runs, readRun(level.rPr));
+      paragraphRuns = mergeRun(paragraphRuns, readRun(level.rPr));
     }
     const own = readParagraph(pPr);
     // Word applies the list level between the style and direct formatting.
@@ -753,7 +776,40 @@ export class LookReader {
       numId !== undefined && numId !== "0" ? this.levels.get(numId)?.get(ilvl) : undefined;
     if (level) props = mergeParagraph(props, readParagraph(level.pPr));
     props = mergeParagraph(props, own);
-    return { look: paragraphLook(props), runs };
+    const next = style.at(-1)?.next;
+    const look = paragraphLook(props);
+    if (next && styleId && next !== styleId) {
+      const nextKey = this.nextLook(next, table);
+      if (nextKey) look.next = nextKey;
+    }
+    return { look, runs: [tableRuns, paragraphRuns] };
+  }
+
+  private readonly nextLooks = new Map<string, string | null>();
+
+  /** The look Enter gives the paragraph after one whose style names `styleId` as its next. */
+  private nextLook(styleId: string, table: TableLookContext | null): string | null {
+    const id = `${table?.key ?? ""}|${styleId}`;
+    const known = this.nextLooks.get(id);
+    if (known !== undefined) return known;
+    // Two styles can name each other as next.
+    this.nextLooks.set(id, null);
+    const paragraph: XmlElement = {
+      name: "w:p",
+      attrs: {},
+      children: [
+        {
+          name: "w:pPr",
+          attrs: {},
+          children: [{ name: "w:pStyle", attrs: { "w:val": styleId }, children: [] }],
+        },
+      ],
+    };
+    const context = this.paragraph(paragraph, table);
+    const run = this.run(undefined, context, 0);
+    const key = this.paragraphKey(context, run && this.canBeParagraphRun(run) ? run : null);
+    this.nextLooks.set(id, key);
+    return key;
   }
 
   paragraphKey(paragraph: ParagraphLookContext, run: string | null): string | null {
@@ -784,12 +840,12 @@ export class LookReader {
     paragraph: ParagraphLookContext,
     characters: number,
   ): string | null {
-    let props = paragraph.runs;
     const styleId = rPr && child(rPr, "w:rStyle")?.attrs["w:val"];
+    let characterRuns: RunProps = {};
     for (const level of this.chain("character", styleId ?? null)) {
-      props = mergeRun(props, readRun(level.rPr));
+      characterRuns = mergeRun(characterRuns, readRun(level.rPr));
     }
-    props = mergeRun(props, readRun(rPr));
+    const props = resolveRun(this.runDefaults, [...paragraph.runs, characterRuns], readRun(rPr));
     if (props.size !== undefined && characters > 0) {
       this.charactersBySize.set(
         props.size,
@@ -818,8 +874,11 @@ export class LookReader {
         props.vertical === "superscript" || props.vertical === "subscript"
           ? props.vertical
           : undefined,
-      spacing: props.spacing || undefined,
-      scale: props.scale !== undefined && props.scale !== 100 ? props.scale : undefined,
+      letterSpacing: props.letterSpacing || undefined,
+      widthPercent:
+        props.widthPercent !== undefined && props.widthPercent !== 100
+          ? props.widthPercent
+          : undefined,
       hidden: props.hidden ? (true as const) : undefined,
     });
   }
@@ -871,7 +930,7 @@ function paragraphLook(props: ParagraphProps): WordParagraphLook {
       {
         at: Math.round((tab.pos / 20) * 100) / 100,
         align,
-        leader: LEADERS.has(tab.leader) ? (tab.leader as WordTabStop["leader"]) : "none",
+        leader: isLeader(tab.leader) ? tab.leader : "none",
       },
     ];
   });

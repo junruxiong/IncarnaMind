@@ -26,6 +26,7 @@
  */
 import type { MarkJSON, NodeJSON } from "../../../shared/blockJson";
 import { NODE_CHARACTER, targetHash } from "../../../shared/proposals";
+import { runLookOf } from "../../../shared/wordLook";
 import {
   BLOCK_ID_ATTRIBUTE,
   IMAGE_NODE,
@@ -60,7 +61,7 @@ import {
   type WordReview,
 } from "./docxPackage";
 import { dataUrlOf, imageTypeOf } from "./images";
-import { child, descendants, elements, parseXml, walk, type XmlElement } from "./xml";
+import { child, descendants, elements, onOff, parseXml, walk, type XmlElement } from "./xml";
 
 /** The largest picture made editable; a larger one is kept as is. */
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -364,14 +365,7 @@ function fieldType(instruction: string): string {
   return first === "ADDIN" && words[1] ? `ADDIN ${words[1].toUpperCase()}` : first;
 }
 
-/** Whether a toggle in run properties (`w:b`, `w:i`…) is on. */
-const isOn = (element: XmlElement | undefined) =>
-  element !== undefined && !["false", "0", "off"].includes(element.attrs["w:val"] ?? "true");
-
-function runLookOf(node: NodeJSON): string | null {
-  const key = node.marks?.find((mark) => mark.type === WORD_RUN_MARK)?.attrs?.k;
-  return typeof key === "string" ? key : null;
-}
+const isOn = (element: XmlElement | undefined) => onOff(element) === true;
 
 /** The editor's marks for a run's own formatting. */
 export function runMarks(rPr: XmlElement | undefined): MarkJSON[] {
@@ -602,7 +596,7 @@ class Reader {
   private readonly absorbed = new Set<XmlElement>();
   /** Someone's changes kept as is, by kind. */
   private readonly kept: Partial<Record<KeptChangeKind, number>> = {};
-  private paragraphLook: ParagraphLookContext = { look: {}, runs: {} };
+  private paragraphLook: ParagraphLookContext = { look: {}, runs: [] };
   private tableLook: TableLookContext | null = null;
 
   private constructor(
@@ -656,10 +650,13 @@ class Reader {
     const numberingXml = await read("/numbering");
     const styles = readStyles(stylesXml);
     const numbering = readNumbering(numberingXml, styles);
+    const themeXml = await read("/theme");
+    const settingsXml = await read("/settings");
     const look = new LookReader({
       ...(stylesXml !== undefined && { styles: stylesXml }),
       ...(numberingXml !== undefined && { numbering: numberingXml }),
-      ...(await read("/theme").then((theme) => (theme === undefined ? {} : { theme }))),
+      ...(themeXml !== undefined && { theme: themeXml }),
+      ...(settingsXml !== undefined && { settings: settingsXml }),
       document,
     });
     const comments = new Map<string, Comment>();
@@ -1147,7 +1144,9 @@ class Reader {
         }),
       );
     }
-    const look = this.paragraphLookKey(node.content, pPr);
+    const main = this.mainRunLook(node.content, pPr);
+    if (main !== null) this.markOnlyOtherRuns(node.content, main);
+    const look = this.look.paragraphKey(this.paragraphLook, main);
     if (look) node.attrs[WORD_LOOK_ATTRIBUTE] = look;
     this.noteWhole(node, pPr, inCell);
     const sectPr = pPr && child(pPr, "w:sectPr");
@@ -1439,42 +1438,45 @@ class Reader {
     });
   }
 
-  /** Also removes the run mark from the text that has the paragraph's main run look. */
-  private paragraphLookKey(content: NodeJSON[], pPr: XmlElement | undefined): string | null {
+  /** The run look most of the paragraph's text has, of those a paragraph can draw; its mark's when empty. */
+  private mainRunLook(content: NodeJSON[], pPr: XmlElement | undefined): string | null {
     const characters = new Map<string | null, number>();
     for (const node of content) {
       if (node.type !== "text" || !node.text) continue;
       const key = runLookOf(node);
       characters.set(key, (characters.get(key) ?? 0) + node.text.length);
     }
-    let run: string | null = null;
     if (characters.size === 0) {
-      run = this.look.run(pPr && child(pPr, "w:rPr"), this.paragraphLook, 0);
-      if (run !== null && !this.look.canBeParagraphRun(run)) run = null;
-    } else {
-      let most = 0;
-      for (const [key, count] of characters) {
-        if (key !== null && !this.look.canBeParagraphRun(key)) continue;
-        if (count > most) {
-          most = count;
-          run = key;
-        }
+      const run = this.look.run(pPr && child(pPr, "w:rPr"), this.paragraphLook, 0);
+      return run !== null && this.look.canBeParagraphRun(run) ? run : null;
+    }
+    let main: string | null = null;
+    let most = 0;
+    for (const [key, count] of characters) {
+      if (key !== null && !this.look.canBeParagraphRun(key)) continue;
+      if (count > most) {
+        most = count;
+        main = key;
       }
     }
-    if (run !== null && characters.size > 0) {
-      const plain = characters.has(null) ? this.look.plainRun() : null;
-      for (const node of content) {
-        if (node.type !== "text") continue;
-        const key = runLookOf(node);
-        if (key === run) {
-          node.marks = node.marks?.filter((mark) => mark.type !== WORD_RUN_MARK);
-          if (node.marks?.length === 0) delete node.marks;
-        } else if (key === null && plain) {
-          node.marks = [...(node.marks ?? []), { type: WORD_RUN_MARK, attrs: { k: plain } }];
-        }
+    return main;
+  }
+
+  /** Text with the paragraph's main run look loses its mark; text with no look gets one. */
+  private markOnlyOtherRuns(content: NodeJSON[], main: string): void {
+    const plain = content.some((node) => node.type === "text" && runLookOf(node) === null)
+      ? this.look.plainRun()
+      : null;
+    for (const node of content) {
+      if (node.type !== "text") continue;
+      const key = runLookOf(node);
+      if (key === main) {
+        node.marks = node.marks?.filter((mark) => mark.type !== WORD_RUN_MARK);
+        if (node.marks?.length === 0) delete node.marks;
+      } else if (key === null && plain) {
+        node.marks = [...(node.marks ?? []), { type: WORD_RUN_MARK, attrs: { k: plain } }];
       }
     }
-    return this.look.paragraphKey(this.paragraphLook, run);
   }
 
   private marksOfRun(run: XmlElement): MarkJSON[] {

@@ -1193,10 +1193,8 @@ export interface WordRunLook {
   caps?: true;
   smallCaps?: true;
   vertical?: "superscript" | "subscript";
-  /** Extra space between characters. */
-  spacing?: number;
-  /** Character width, in percent. */
-  scale?: number;
+  letterSpacing?: number;
+  widthPercent?: number;
   hidden?: true;
 }
 
@@ -1217,6 +1215,8 @@ export interface WordParagraphLook {
    * paragraph, those would cover text that doesn't have them.
    */
   run?: string;
+  /** The paragraph look Enter gives the paragraph after, when the style names another (`w:next`). */
+  next?: string;
   align?: "left" | "center" | "right" | "justify" | "distribute";
   left?: number;
   right?: number;

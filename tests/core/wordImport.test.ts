@@ -100,7 +100,6 @@ function blocksOf(client: MindClient): JSONContent[] {
   return (readMind(client).toJSON().content ?? []).map(strip);
 }
 
-/** Rejoins text that only a left-out run mark split. */
 function joinTexts(content: JSONContent[]): JSONContent[] {
   const joined: JSONContent[] = [];
   for (const node of content) {

@@ -1,4 +1,5 @@
-import { rm, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import * as Y from "yjs";
@@ -6,6 +7,7 @@ import {
   CONTENT_SCHEMA_VERSION,
   CONTENT_SCHEMA_VERSION_KEY,
   type CoreAdapters,
+  MIND_CONTENT_FIELD,
   MIND_SETTINGS_FIELD,
   MIND_WORD_LOOK_FIELD,
   WORD_LOOK_ATTRIBUTE,
@@ -14,7 +16,13 @@ import {
   type WordParagraphLook,
 } from "../../src/core";
 import { WORD_PACKAGES_FOLDER } from "../../src/core/wordImports";
-import { wordFileOf, wordImportProgressOf } from "../../src/shared/wordFiles";
+import { WORD_LOOK_TYPES } from "../../src/renderer/src/editor/wordSchema";
+import {
+  wordFileOf,
+  wordFingerprint,
+  wordImportProgressOf,
+  wordSourceOf,
+} from "../../src/shared/wordFiles";
 import { wordLookOf } from "../../src/shared/wordLook";
 import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core";
 import { unzip } from "../helpers/docx";
@@ -30,7 +38,7 @@ import { importWordBytes } from "../helpers/wordMinds";
 function styled(client: MindClient, look: WordLook) {
   const found: { type: string; text: string; look: unknown; runs: unknown[] }[] = [];
   readMind(client).descendants((node) => {
-    if (!["paragraph", "heading", "table", "tableCell", "tableHeader"].includes(node.type.name)) {
+    if (!WORD_LOOK_TYPES.includes(node.type.name)) {
       return true;
     }
     const key = node.attrs[WORD_LOOK_ATTRIBUTE] as string | null;
@@ -40,7 +48,11 @@ function styled(client: MindClient, look: WordLook) {
         : node.type.name.startsWith("table")
           ? look.cells
           : look.paragraphs;
-    const { run: paragraphRun, ...own } = (key ? styles[key] : {}) as WordParagraphLook;
+    const {
+      run: paragraphRun,
+      next: _next,
+      ...own
+    } = (key ? styles[key] : {}) as WordParagraphLook;
     const runs: unknown[] = [];
     node.forEach((child) => {
       const run =
@@ -81,7 +93,7 @@ describe("a Mind imported from Word keeps its look", () => {
       eastAsia: "华文中宋",
       size: 22,
       color: "1F3864",
-      spacing: 2,
+      letterSpacing: 2,
     });
     const section = nodes.find((node) => node.text === "教育背景");
     expect(section?.look).toEqual({
@@ -144,7 +156,7 @@ describe("a Mind imported from Word keeps its look", () => {
       size: 16,
       bold: true,
       smallCaps: true,
-      spacing: 2,
+      letterSpacing: 2,
     });
     expect(nodes.find((node) => node.text.startsWith("Dated"))?.look).toMatchObject({
       align: "right",
@@ -244,6 +256,63 @@ describe("a Mind imported from Word keeps its look", () => {
     expect(paragraphRun(1)).toBeUndefined();
   });
 
+  test("the theme's East Asian face is the one for the file's language, Simplified Chinese's when it says none", async () => {
+    const eastAsiaOf = async (bytes: Buffer) => {
+      const { client, look } = await imported(bytes);
+      return styled(client, look).find((node) => node.text === "Supply agreement")?.runs[0];
+    };
+    expect(await eastAsiaOf(contractFile())).toMatchObject({ eastAsia: "宋体" });
+    expect(await eastAsiaOf(contractFile({ eastAsia: "ja-JP" }))).toMatchObject({
+      eastAsia: "游明朝",
+    });
+    expect(await eastAsiaOf(contractFile({ eastAsia: "zh-TW" }))).toMatchObject({
+      eastAsia: "新細明體",
+    });
+  });
+
+  test("bold in a character style switches a bold heading's bold off; bold on the run itself stays", async () => {
+    const styles =
+      '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>' +
+      '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:pPr><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/><w:i/></w:rPr></w:style>' +
+      '<w:style w:type="character" w:styleId="Strong"><w:name w:val="Strong"/><w:rPr><w:b/></w:rPr></w:style>';
+    const strong = (text: string) =>
+      `<w:r><w:rPr><w:rStyle w:val="Strong"/></w:rPr><w:t xml:space="preserve">${text}</w:t></w:r>`;
+    const { client, look } = await imported(
+      wordFile({
+        styles,
+        body: [
+          paragraph(run("A heading with ") + strong("a strong part"), { style: "Heading1" }),
+          paragraph(strong("Strong ") + run("and bold", { b: true }), { style: "Heading1" }),
+          paragraph(strong("Strong in body text")),
+        ].join(""),
+      }),
+    );
+    const [first, second, body] = styled(client, look);
+    expect(first?.runs).toEqual([{ bold: true, italic: true }, { italic: true }]);
+    expect(second?.runs).toEqual([{ italic: true }, { bold: true, italic: true }]);
+    expect(body?.runs).toEqual([{ bold: true }]);
+  });
+
+  test("a heading names the look Enter gives the paragraph after it, as its style's next says", async () => {
+    const { client, look } = await imported(contractFile());
+    const heading = readMind(client).content.content.find(
+      (node) => node.textContent === "2.\tPrices",
+    )?.attrs[WORD_LOOK_ATTRIBUTE];
+    const next = look.paragraphs[String(heading)]?.next;
+    expect(next).toBeDefined();
+    expect(look.paragraphs[String(next)]).toMatchObject({
+      after: 8,
+      line: { rule: "auto", value: 1.079 },
+    });
+    expect(look.paragraphs[String(next)]).not.toHaveProperty("keepNext");
+  });
+
+  test("an empty Word file imports with nothing to draw", async () => {
+    const { client, look } = await imported(wordFile({ body: "" }));
+    expect(look.body).toBeNull();
+    expect(lookShown(client)).toEqual({ blocks: 0, runs: 0 });
+  });
+
   test("the styles kept grow with the styles the file uses, never with its Blocks", async () => {
     const short = await imported(longContract(8));
     const long = await imported(longContract());
@@ -314,6 +383,39 @@ describe("a Mind imported from Word keeps its look", () => {
     }
   });
 });
+
+const BEFORE = join(__dirname, "../fixtures/word-look");
+
+/**
+ * Imports look-before.docx, then stores its Mind as the version before the
+ * look wrote it: look-before.yjs is that version's Mind of the same file.
+ */
+async function importedBefore(change?: (doc: Y.Doc) => void) {
+  const bytes = await readFile(join(BEFORE, "look-before.docx"));
+  const { dataDir, core, mindId } = await imported(bytes);
+  core.close();
+  const before = new Y.Doc();
+  Y.applyUpdate(before, await readFile(join(BEFORE, "look-before.yjs")));
+  change?.(before);
+  const at = new Date().toISOString();
+  queryDatabase(dataDir, "DELETE FROM mind_updates WHERE mind_id = ?", [mindId]);
+  queryDatabase(
+    dataDir,
+    "INSERT INTO mind_updates (id, mind_id, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+    [randomUUID(), mindId, Y.encodeStateAsUpdate(before), at, at],
+  );
+  queryDatabase(dataDir, "UPDATE word_packages SET look_version = NULL WHERE mind_id = ?", [
+    mindId,
+  ]);
+  return { dataDir, mindId, before, bytes };
+}
+
+function findText(blocks: Y.XmlFragment, text: string): Y.XmlText {
+  for (const element of blocks.createTreeWalker(() => true)) {
+    if (element instanceof Y.XmlText && element.toString().includes(text)) return element;
+  }
+  throw new Error(`No "${text}".`);
+}
 
 /** Makes the Mind look like an import from before the look was kept. */
 function withoutLook(client: MindClient, dataDir: string, mindId: string): void {
@@ -386,7 +488,7 @@ describe("a Mind imported before gets its look once", () => {
     expect(entries).toContainEqual(
       expect.objectContaining({
         event: "word.look.added",
-        fields: expect.objectContaining({ mindId, skipped: 1 }),
+        fields: expect.objectContaining({ mindId, editedSinceImport: 1 }),
       }),
     );
     expect(
@@ -395,10 +497,81 @@ describe("a Mind imported before gets its look once", () => {
     const state = Y.encodeStateVector(after.doc);
     restarted.close();
 
-    const again = startCore(dataDir);
+    const { log: thirdLog, entries: thirdEntries } = recordingLog();
+    const again = startCore(dataDir, { log: thirdLog });
     const third = await connectToMind(again, mindId);
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await vi.waitFor(() =>
+      expect(thirdEntries).toContainEqual(
+        expect.objectContaining({ event: "word.look.done", fields: { minds: 0 } }),
+      ),
+    );
     expect(Buffer.from(Y.encodeStateVector(third.doc))).toEqual(Buffer.from(state));
+  });
+
+  test("a Mind as the version before the look wrote it gets the look on every Block, and export still writes the file's own bytes", async () => {
+    const { dataDir, mindId, before, bytes } = await importedBefore();
+    // The version before recorded fingerprints of text it hadn't rejoined.
+    const bold = before
+      .getXmlFragment(MIND_CONTENT_FIELD)
+      .toArray()
+      .find(
+        (child): child is Y.XmlElement =>
+          child instanceof Y.XmlElement && child.toString().includes("Bold one"),
+      );
+    const id = bold?.getAttribute("id");
+    if (!bold || typeof id !== "string") throw new Error("No bold paragraph.");
+    expect(wordFingerprint(bold)).not.toBe(wordSourceOf(before, id)?.f);
+
+    const { log, entries } = recordingLog();
+    const restarted = startCore(dataDir, { log });
+    const after = await connectToMind(restarted, mindId);
+    await vi.waitFor(() =>
+      expect(entries).toContainEqual(expect.objectContaining({ event: "word.look.done" })),
+    );
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        event: "word.look.added",
+        fields: { mindId, given: 4, editedSinceImport: 0 },
+      }),
+    );
+    const look = wordLookOf(after.doc) as WordLook;
+    const nodes = styled(after, look);
+    expect(nodes.find((node) => node.text === "Bold one. Bold two.")?.runs).toEqual([
+      { font: "Calibri", size: 11, bold: true },
+    ]);
+    expect(nodes.find((node) => node.text === "2.\tPrices")?.runs[0]).toMatchObject({
+      bold: true,
+      size: 14,
+    });
+    const result = await restarted.exportMind(mindId, { format: "docx" });
+    const original = unzip(bytes);
+    const exported = unzip(result.data);
+    expect(
+      [...original.keys()].filter(
+        (name) => !original.get(name)?.equals(exported.get(name) ?? Buffer.alloc(0)),
+      ),
+    ).toEqual([]);
+  });
+
+  test("a table edited before the look keeps the plain look; its paragraphs the User didn't change get theirs", async () => {
+    const { dataDir, mindId } = await importedBefore((doc) => {
+      const cell = findText(doc.getXmlFragment(MIND_CONTENT_FIELD), "Flour and fats");
+      cell.insert(cell.length, ", edited");
+    });
+
+    const { log, entries } = recordingLog();
+    const restarted = startCore(dataDir, { log });
+    const after = await connectToMind(restarted, mindId);
+    await vi.waitFor(() =>
+      expect(entries).toContainEqual(expect.objectContaining({ event: "word.look.done" })),
+    );
+    const look = wordLookOf(after.doc) as WordLook;
+    const nodes = styled(after, look);
+    expect(nodes.find((node) => node.type === "table")?.look).toBeNull();
+    expect(nodes.find((node) => node.text === "Flour and fats, edited")?.look).toBeNull();
+    expect(
+      nodes.find((node) => node.type === "paragraph" && node.text === "Products")?.runs,
+    ).toEqual([{ font: "Calibri", size: 11 }]);
   });
 
   test("a Mind whose package is gone, or can't be read, is left as it was and the failure logged", async () => {

@@ -1,7 +1,4 @@
 /**
- * Measured, not asserted: CI runners are too starved for wall-clock limits,
- * so each part of #746 puts these numbers in its pull request.
- *
  *   npx electron-vite build --mode test
  *   AUDIT_OUT=/tmp/word-look npx playwright test -c e2e/audit/playwright.audit.config.ts wordLook.audit.ts
  */
@@ -31,8 +28,7 @@ async function importWord(window: Page, path: string): Promise<string> {
   }, path);
 }
 
-/** Milliseconds until `count` elements match `done`. */
-async function openTimed(window: Page, mindId: string, done: string, count: number) {
+async function msToOpen(window: Page, mindId: string, done: string, count: number) {
   return window.evaluate(
     async ({ id, selector, wanted }) => {
       const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
@@ -88,12 +84,12 @@ test("typing in the 304-page contract, and opening it and the corpus's largest f
       });
     });
   const timedOpens = async (mindId: string, selector: string, count: () => Promise<number>) => {
-    await openTimed(window, mindId, selector, 1);
+    await msToOpen(window, mindId, selector, 1);
     const blocks = await count();
     const runs: number[] = [];
     for (let run = 0; run < 3; run++) {
       await elsewhere();
-      runs.push(await openTimed(window, mindId, selector, blocks));
+      runs.push(await msToOpen(window, mindId, selector, blocks));
     }
     return { blocks, runs, median: median(runs) };
   };
