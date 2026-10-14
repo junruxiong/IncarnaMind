@@ -11,6 +11,7 @@ import type { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test, vi } from "vitest";
 import * as Y from "yjs";
 import {
+  type ApprovalRequest,
   CITATION_NODE,
   type Core,
   DATABASE_FILE,
@@ -127,7 +128,10 @@ function researcher(seen: ModelCall[], hold?: { step: string; until: Promise<voi
   );
 }
 
-async function setUp(answering: MockLanguageModelV4) {
+async function setUp(
+  answering: MockLanguageModelV4,
+  { approve = "allow-once" }: { approve?: "allow-once" | "deny" } = {},
+) {
   const { model, searches } = webSearchingModel(answering, FOUND);
   const web = await startWeb({
     "/tea": () => ({ status: 200, body: fixture("article.html") }),
@@ -146,6 +150,11 @@ async function setUp(answering: MockLanguageModelV4) {
   core.on("consent.requested", (request) => {
     void core.respondToConsent(request.requestId, true);
   });
+  const asked: ApprovalRequest[] = [];
+  core.on("approval.requested", (request) => {
+    asked.push(request);
+    void core.respondToApproval(request.requestId, approve);
+  });
   await core.updateSettings({ user: { webSearch: true } });
   const folder = await core.createLibraryGroup({ name: "Grocers", description: "" });
   const sources = await createSourceFolder();
@@ -159,7 +168,7 @@ async function setUp(answering: MockLanguageModelV4) {
   if (!report) throw new Error("The report was added.");
   await core.moveToFolder({ documentIds: [report.id], folderId: folder.id });
   const mind = await core.createMind({ title: "Credit memo", folderId: folder.id });
-  return { core, dataDir, web, searches, provider, folder, mind, report, keychain };
+  return { core, dataDir, web, searches, provider, folder, mind, report, keychain, asked };
 }
 
 const startInput = (mindId: string, folderId: string, patch: Partial<StartResearchInput> = {}) => ({
@@ -290,7 +299,12 @@ describe("Research", { timeout: 30_000 }, () => {
     });
     const done = await waitForTask(core, task.id, (each) => each.finishedAt !== null);
 
-    expect(done).toMatchObject({ status: "done", progress: { done: 4, total: 4 } });
+    expect(done).toMatchObject({
+      status: "done",
+      progress: { done: 4, total: 4 },
+      summary: "1 source saved · 1 change proposed",
+      remaining: [],
+    });
     // The two pages are read at once: whichever ends first comes first.
     const reads = expect.arrayContaining([
       ["Read “Tea - The Open Encyclopedia”", "done"],
@@ -429,6 +443,95 @@ describe("Research", { timeout: 30_000 }, () => {
     const failed = await waitForTask(empty.core, nothing.id, (each) => each.finishedAt !== null);
     expect(failed).toMatchObject({ status: "failed", problem: "no-sources", review: null });
     expect((await changesIn(empty.core, empty.mind.id)).ids).toEqual([]);
+  });
+
+  test("having read web pages, it asks before filing them into the Library; denied, they stay where they were saved and the draft is still written", async () => {
+    const { core, folder, mind, asked } = await setUp(researcher([]), { approve: "deny" });
+    const task = await started(core, startInput(mind.id, folder.id));
+    const done = await waitForTask(core, task.id, (each) => each.finishedAt !== null);
+
+    expect(asked).toEqual([
+      expect.objectContaining({
+        taskId: task.id,
+        tool: "file_pages",
+        title: "Save 1 web page to a new Folder",
+        connector: { id: "library", name: "Library" },
+        effects: [{ action: "write", scope: { kind: "documents" } }],
+        thirdParty: [{ via: "read", source: "web-page" }],
+      }),
+    ]);
+    const steps = (await core.listTaskSteps(task.id)).map((step) => step.text);
+    expect(steps.slice(-2)).toEqual([
+      "The web pages stay where they were saved",
+      "Wrote a cited draft as 1 change in “Credit memo”",
+    ]);
+    expect(done).toMatchObject({ status: "done", summary: "1 change proposed" });
+    const { groups, assignments } = await core.getLibrary();
+    expect(groups.map((each) => each.name)).toEqual(["Grocers"]);
+    const page = (await core.listDocuments()).find((each) => each.kind === "web");
+    expect(assignments.find((each) => each.documentId === page?.id)?.groupId).toBe(folder.id);
+  });
+
+  test("Tell it…: a message waits until the next step starts, which reads it; one taken back is never read", async () => {
+    const seen: ModelCall[] = [];
+    let release = () => {};
+    const until = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { core, folder, mind } = await setUp(
+      researcher(seen, { step: "Find who first brought tea to Europe", until }),
+    );
+    const task = await started(core, startInput(mind.id, folder.id));
+    await waitFor(() =>
+      expect(seen.some((call) => call.results.some((result) => result.tool === "cite"))).toBe(true),
+    );
+
+    const told = await core.tellTask(task.id, "Leave out the discounters");
+    const kept = await core.tellTask(task.id, "Say nothing about coffee");
+    expect(kept.queued.map((each) => each.text)).toEqual([
+      "Leave out the discounters",
+      "Say nothing about coffee",
+    ]);
+    const message = told.queued[0];
+    if (!message) throw new Error("Nothing queued.");
+    const after = await core.untellTask(task.id, kept.queued[1]?.id ?? "");
+    expect(after.queued).toEqual([message]);
+    await expect(core.tellTask(task.id, "   ")).rejects.toThrow("1 to 2000 characters");
+    release();
+
+    const done = await waitForTask(core, task.id, (each) => each.finishedAt !== null);
+    expect(done.queued).toEqual([]);
+    const second = seen.find((call) => stepOf(call) === "Compare what the sources say");
+    expect(second && requestText(second)).toContain(
+      "While it worked, the User told it this; follow it in this step and those after:\n- Leave out the discounters",
+    );
+    expect(seen.every((call) => !requestText(call).includes("coffee"))).toBe(true);
+    // The steps it shows are its own: the messages are kept apart.
+    expect(
+      (await core.listTaskSteps(task.id)).some((step) => step.text.includes("discounters")),
+    ).toBe(false);
+    await expect(core.tellTask(task.id, "Too late")).rejects.toThrow("can't be told");
+  });
+
+  test("at the monthly cap it pauses and lists the steps it has still to do", async () => {
+    const { core, folder, mind } = await setUp(researcher([]));
+    await core.updateSettings({ user: { monthlyCap: { amount: 0.000_001, currency: "USD" } } });
+    const task = await started(core, startInput(mind.id, folder.id));
+    const paused = await waitForTask(core, task.id, (each) => each.status === "paused");
+
+    expect(paused).toMatchObject({ pausedReason: "cost-cap", summary: null });
+    expect(paused.remaining).toEqual([
+      "Find who first brought tea to Europe",
+      "Compare what the sources say",
+      "Save the sources in a new Folder",
+      "Write a cited draft",
+    ]);
+    expect((await core.getResearchPlan(task.id)).steps.map((step) => step.status)).toEqual([
+      "running",
+      "waiting",
+      "waiting",
+      "waiting",
+    ]);
   });
 
   test("with Web off it is offered no web Tool, and with the Library off no Document of the Library", async () => {

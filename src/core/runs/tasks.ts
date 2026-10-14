@@ -27,6 +27,7 @@
  *   notification when its Mind isn't on screen.
  */
 
+import { randomUUID } from "node:crypto";
 import type {
   Money,
   Task,
@@ -39,13 +40,14 @@ import type {
   TaskStep,
 } from "../api";
 import type { RetainVersion, VersionRetention } from "../documents/retention";
-import { InvalidInputError, NotFoundError } from "../errors";
+import { InvalidInputError, isRecord, NotFoundError } from "../errors";
 import type { Database } from "../storage";
 import { currentTask } from "./current";
 import { verifyEffect } from "./effects";
 import {
   createJournal,
   isStep,
+  RECORD_PREFIX,
   type StepRecord,
   type StoredAsk,
   type TaskApprovalCall,
@@ -106,6 +108,10 @@ export interface TaskRun {
   turn(local: boolean): Promise<TaskTurn>;
   /** The versions of Documents it reads (#79): kept until it finishes. */
   retain(versions: readonly RetainVersion[]): void;
+  /** What the User told it since it last looked (Tell it…), now read: at the start of a step. */
+  takeMessages(): string[];
+  /** Everything the User told it that it has read, oldest first. */
+  messages(): string[];
 }
 
 export interface TaskKind {
@@ -118,6 +124,10 @@ export interface TaskKind {
   questionOf?(input: unknown): string | null;
   /** Where Review opens, when its work went somewhere other than its own place. */
   reviewOf?(task: { id: string; mindId: string | null; input: unknown }): Task["review"];
+  /** Paused at a limit, the steps it has still to do, in its own words. */
+  remainingOf?(task: { id: string; mindId: string | null; input: unknown }): string[];
+  /** Done, what it did in a few words. */
+  summaryOf?(task: { id: string; mindId: string | null; input: unknown }): string | null;
   /** What the User can ask of it from its progress (D189). Absent: Pause and Stop. */
   readonly actions?: readonly TaskAction[];
   /** What its steps do, in its own words, by key; a step it can't name shows its key. */
@@ -129,6 +139,11 @@ export interface TaskKind {
 
 /** The steps a Task's progress shows at rest; the rest are a click away (`listTaskSteps`). */
 export const LATEST_STEPS = 4;
+
+/** A message the User told a Task, as its journal keeps it: a record, not a step. */
+const MESSAGE_PREFIX = `${RECORD_PREFIX}message:`;
+/** The longest message a Task takes, in characters. */
+export const MAX_MESSAGE = 2_000;
 
 const DEFAULT_ACTIONS: readonly TaskAction[] = ["pause", "stop"];
 
@@ -235,6 +250,32 @@ export function createTasks(options: TasksOptions) {
     }
   };
 
+  /** What a kind says of a Task, or its fallback when it says nothing or fails to. */
+  const kindSays = <T>(
+    record: TaskRecord,
+    say: ((task: { id: string; mindId: string | null; input: unknown }) => T) | undefined,
+    fallback: T,
+  ): T => {
+    if (!say) return fallback;
+    try {
+      return say({ id: record.id, mindId: record.mindId, input: record.input });
+    } catch (error) {
+      options.reportError(error);
+      return fallback;
+    }
+  };
+
+  /** The messages the User told a Task, as kept in its journal. */
+  const messagesOf = (taskId: string) =>
+    journal
+      .steps(taskId)
+      .filter((step) => step.key.startsWith(MESSAGE_PREFIX))
+      .map((step) => ({
+        id: step.key.slice(MESSAGE_PREFIX.length),
+        status: step.status,
+        text: isRecord(step.result) && typeof step.result.text === "string" ? step.result.text : "",
+      }));
+
   const view = (record: TaskRecord): Task => {
     const latest = journal.latestSteps(record.id, LATEST_STEPS);
     const ask: TaskAsk | null =
@@ -258,6 +299,16 @@ export function createTasks(options: TasksOptions) {
       actions: [...(kinds.get(record.kind)?.actions ?? DEFAULT_ACTIONS)],
       steps: stepsOf(record, latest.steps),
       stepCount: latest.count,
+      queued: messagesOf(record.id)
+        .filter((message) => message.status === "started")
+        .map(({ id, text }) => ({ id, text })),
+      remaining:
+        record.status === "paused" &&
+        (record.pausedReason === "cost-cap" || record.pausedReason === "plan-limit")
+          ? kindSays(record, kinds.get(record.kind)?.remainingOf, [])
+          : [],
+      summary:
+        record.status === "done" ? kindSays(record, kinds.get(record.kind)?.summaryOf, null) : null,
       startedAt: record.startedAt,
       finishedAt: record.finishedAt,
       updatedAt: record.updatedAt,
@@ -433,6 +484,18 @@ export function createTasks(options: TasksOptions) {
       },
       turn: (local) => takeTurn(local, signal),
       retain: (versions) => options.retention.retain("task", taskId, versions),
+      takeMessages() {
+        const fresh = messagesOf(taskId).filter((message) => message.status === "started");
+        for (const message of fresh) {
+          journal.settled(taskId, MESSAGE_PREFIX + message.id, "completed", { text: message.text });
+        }
+        if (fresh.length > 0) announce(journal.get(taskId));
+        return fresh.map((message) => message.text);
+      },
+      messages: () =>
+        messagesOf(taskId)
+          .filter((message) => message.status === "completed")
+          .map((message) => message.text),
     };
   }
 
@@ -588,6 +651,9 @@ export function createTasks(options: TasksOptions) {
       return view(record);
     },
 
+    /** A Task as its journal keeps it, finished or not; null for none. */
+    record: (taskId: string): TaskRecord | null => journal.get(taskId),
+
     /** Unfinished Tasks, oldest first, as records (for a kind to find its own). */
     unfinished: (): TaskRecord[] => journal.unfinished(),
 
@@ -618,6 +684,30 @@ export function createTasks(options: TasksOptions) {
         record,
         journal.steps(record.id).filter((step) => isStep(step.key)),
       );
+    },
+
+    /** Tell it…: a message for a running Task whose kind reads them, until its next step. */
+    tell(taskId: unknown, text: unknown): Task {
+      const record = requireTask(taskId);
+      if (!kinds.get(record.kind)?.actions?.includes("tell") || record.finishedAt !== null) {
+        throw new InvalidInputError({ key: "error.task.tell" });
+      }
+      const said = typeof text === "string" ? text.trim() : "";
+      if (said === "" || said.length > MAX_MESSAGE) {
+        throw new InvalidInputError({ key: "error.task.message", values: { max: MAX_MESSAGE } });
+      }
+      journal.keep(record.id, MESSAGE_PREFIX + randomUUID(), { text: said });
+      return current(record.id);
+    },
+
+    /** Takes back a message its Task hasn't read yet. */
+    untell(taskId: unknown, messageId: unknown): Task {
+      const record = requireTask(taskId);
+      const message = messagesOf(record.id).find((each) => each.id === messageId);
+      if (message?.status === "started") {
+        journal.settled(record.id, MESSAGE_PREFIX + message.id, "skipped", { text: message.text });
+      }
+      return current(record.id);
     },
 
     async pause(taskId: unknown): Promise<Task> {

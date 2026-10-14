@@ -1115,7 +1115,11 @@ export function createCore(adapters: CoreAdapters): Core {
       body = "";
     }
     notifications.show(
-      { title, body: body || translate(language, "task.notify.body") },
+      {
+        title,
+        body:
+          (what === "finished" && task.summary) || body || translate(language, "task.notify.body"),
+      },
       (windowIds) => mindShown(task.mindId, windowIds),
       () =>
         events.emit("task.shown", { taskId: task.id, mindId: task.mindId, blockId: task.blockId }),
@@ -1178,6 +1182,7 @@ export function createCore(adapters: CoreAdapters): Core {
     resolveScope,
     tasks: {
       start: (kind, mindId, input) => tasks.start(kind, mindId, input),
+      get: (taskId) => tasks.record(taskId),
       steps: (taskId) => tasks.steps(taskId),
     },
     say: (key, params) => translate(settings.get().language, key, params),
@@ -2422,6 +2427,9 @@ export function createCore(adapters: CoreAdapters): Core {
     stopTask: (taskId) => tasks.stop(taskId),
     answerTaskAsk: (taskId, answer) => tasks.answer(taskId, answer),
     listTaskSteps: async (taskId) => tasks.listSteps(taskId),
+    tellTask: async (taskId, text) => tasks.tell(taskId, text),
+    untellTask: async (taskId, messageId) => tasks.untell(taskId, messageId),
+    getResearchPlan: async (taskId) => research.planView(taskId),
     planResearch: (input) => research.plan(input),
     startResearch: (input) => research.start(input),
 

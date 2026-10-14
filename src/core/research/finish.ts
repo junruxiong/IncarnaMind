@@ -23,6 +23,11 @@ import { draftContext, readTags, TAG_INSTRUCTIONS, tagPrompt } from "./prompt";
 const TAG_TIMEOUT_MS = 60_000;
 
 export const SAVE_STEP = "save";
+/** Its ask before it files the pages, kept in its journal so the answer outlasts a quit. */
+const ASK_STEP = `${RECORD_PREFIX}approve:save`;
+/** What the approval card names: the Library, and filing pages into it. */
+const LIBRARY_TOOLS = "library";
+const FILE_TOOL = "file_pages";
 export const DRAFT_STEP = "draft";
 const FOLDER_RECORD = `${RECORD_PREFIX}folder`;
 const MIND_RECORD = `${RECORD_PREFIX}mind`;
@@ -65,12 +70,13 @@ export interface FinishOptions {
   reportError(error: unknown): void;
 }
 
-/** What a finished `save` step says: where the pages went, and how many. */
+/** What a finished `save` step says: where the pages went, and how many; or that the User said no. */
 export interface SavedSources {
   folderId: string;
   folder: string;
   documents: number;
   tags: string[];
+  declined?: boolean;
 }
 
 /** What a finished `draft` step says: where the changes are, and how many. */
@@ -89,6 +95,7 @@ export function savedOf(value: unknown): SavedSources | null {
     folder: value.folder,
     documents: value.documents,
     tags: Array.isArray(value.tags) ? value.tags.filter((tag) => typeof tag === "string") : [],
+    ...(value.declined === true && { declined: true }),
   };
 }
 
@@ -118,14 +125,10 @@ const idOf = (value: unknown, field: string): string | null =>
   isRecord(value) && typeof value[field] === "string" ? (value[field] as string) : null;
 
 /** The Folder an earlier try made, if it is still there; else a new one, named for the research. */
-function folderFor(options: FinishOptions, task: TaskRun, title: string, topic: string) {
+function folderFor(options: FinishOptions, task: TaskRun, chosen: string, topic: string) {
   const earlier = idOf(task.step(FOLDER_RECORD)?.result, "folderId");
   const name = idOf(task.step(FOLDER_RECORD)?.result, "name");
   if (earlier && name && options.library.folderExists(earlier)) return { id: earlier, name };
-  const chosen = freeName(
-    cutTitle(title) || options.say("research.folder.untitled"),
-    options.library.folderNames(),
-  );
   const id = options.library.createFolder(
     chosen,
     options.say("research.folder.description", { topic: cutTitle(topic) }),
@@ -204,7 +207,42 @@ export async function fileSources(
     task.settled(SAVE_STEP, "completed", none);
     return none;
   }
-  const folder = folderFor(options, task, input.plan.title, input.topic);
+  // It has read web pages: filing them into the Library asks first (#78), as the approval card says.
+  const name =
+    idOf(task.step(FOLDER_RECORD)?.result, "name") ??
+    freeName(
+      cutTitle(input.plan.title) || options.say("research.folder.untitled"),
+      options.library.folderNames(),
+    );
+  const allowed = await task.approve(ASK_STEP, {
+    mindId: task.mindId,
+    subject: { kind: "tool", connectorId: LIBRARY_TOOLS, tool: FILE_TOOL },
+    connector: { id: LIBRARY_TOOLS, name: options.say("research.ask.library") },
+    tool: FILE_TOOL,
+    title: options.say(pages.length === 1 ? "research.ask.title.one" : "research.ask.title.other", {
+      count: pages.length,
+    }),
+    input: {
+      [options.say("research.ask.folder")]: options.say("research.ask.folderNew", { name }),
+      [options.say("research.ask.pages")]: pages.map((page) => page.name).join("; "),
+    },
+    readOnly: false,
+    effects: [{ action: "write", scope: { kind: "documents" } }],
+    tainted: true,
+    thirdParty: [{ via: "read", source: "web-page" }],
+  });
+  if (!allowed) {
+    const declined: SavedSources = {
+      folderId: "",
+      folder: "",
+      documents: 0,
+      tags: [],
+      declined: true,
+    };
+    task.settled(SAVE_STEP, "completed", declined);
+    return declined;
+  }
+  const folder = folderFor(options, task, name, input.topic);
   options.library.file(
     pages.map((page) => page.id),
     folder.id,
@@ -270,7 +308,12 @@ export async function writeDraft(
   }
   const result = await answer((signal) =>
     answerCell({
-      context: draftContext({ topic: input.topic, plan: input.plan, notes: found.notes }),
+      context: draftContext({
+        topic: input.topic,
+        plan: input.plan,
+        notes: found.notes,
+        said: task.messages(),
+      }),
       documentIds,
       model,
       signal,
