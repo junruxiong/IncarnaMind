@@ -1,21 +1,11 @@
-/**
- * Two Word files whose look a Mind keeps (#746), as on the design boards:
- * a Chinese résumé (Word-Look-Resume-ZH: shaded section titles, tab-aligned
- * dates on the right, layout tables without lines, a bordered table with a
- * shaded column, 华文中宋 in several sizes) and an English supply agreement
- * (Word-Look-Contract: a theme's Book Antiqua, a small-caps title, justified
- * clauses with hanging numbers, a bordered table with a shaded heading row,
- * signature lines). Synthetic text, written for the tests.
- */
+/** The résumé and contract of the Word-Look-Resume-ZH and Word-Look-Contract boards, with synthetic text. */
 import { escapeXml, wordFile } from "./word";
 
 const REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 
-/** A run with the given rPr's inside. */
 const run = (text: string, rPr = "") =>
   `<w:r>${rPr ? `<w:rPr>${rPr}</w:rPr>` : ""}<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>`;
 
-/** Runs of text with a tab between each. */
 const tabbed = (parts: readonly string[], rPr = "") =>
   parts
     .map(
@@ -27,18 +17,16 @@ const tabbed = (parts: readonly string[], rPr = "") =>
 const p = (content: string, pPr = "") =>
   `<w:p>${pPr ? `<w:pPr>${pPr}</w:pPr>` : ""}${content}</w:p>`;
 
-/** A table cell: its tcPr's inside, and its paragraphs. */
 const cell = (paragraphs: string, tcPr = "") =>
   `<w:tc>${tcPr ? `<w:tcPr>${tcPr}</w:tcPr>` : ""}${paragraphs}</w:tc>`;
 
-/** The résumé's text width on A4 with 2 cm margins: 11906 − 2 × 1134 twips. */
+/** A4 with 2 cm margins: 11906 − 2 × 1134 twips. */
 export const RESUME_TEXT_WIDTH_TWIPS = 9638;
 
 const RESUME_STYLES = `<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:eastAsia="华文中宋"/><w:sz w:val="21"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="300" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style><w:style w:type="paragraph" w:styleId="SectionTitle"><w:name w:val="Section title"/><w:basedOn w:val="Normal"/><w:pPr><w:shd w:val="clear" w:color="auto" w:fill="D9E2F3"/><w:spacing w:before="240" w:after="120"/></w:pPr><w:rPr><w:color w:val="1F3864"/><w:sz w:val="28"/></w:rPr></w:style><w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:name w:val="Normal Table"/><w:tblPr><w:tblCellMar><w:left w:w="108" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style>`;
 
 const RESUME_NUMBERING = `<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="•"/><w:pPr><w:ind w:left="420" w:hanging="210"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>`;
 
-/** An entry: what and where on the left, the dates against the right edge. */
 const entry = (parts: readonly string[], dates: string) =>
   p(
     tabbed([...parts, dates]),
@@ -48,7 +36,6 @@ const entry = (parts: readonly string[], dates: string) =>
 const bullet = (text: string) =>
   p(run(text), '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>');
 
-/** A table that only places its text: no lines. */
 const layoutTable = (cells: readonly string[], widths: readonly number[]) =>
   `<w:tbl><w:tblPr><w:tblW w:w="${RESUME_TEXT_WIDTH_TWIPS}" w:type="dxa"/><w:tblBorders><w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="nil"/><w:right w:val="nil"/><w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tblBorders></w:tblPr><w:tblGrid>${widths.map((width) => `<w:gridCol w:w="${width}"/>`).join("")}</w:tblGrid><w:tr>${cells.map((text, index) => cell(p(run(text, '<w:sz w:val="21"/>'), index === cells.length - 1 ? '<w:jc w:val="right"/>' : ""), `<w:tcW w:w="${widths[index]}" w:type="dxa"/>`)).join("")}</w:tr></w:tbl>`;
 
@@ -63,7 +50,6 @@ const skills = `<w:tbl><w:tblPr><w:tblW w:w="${RESUME_TEXT_WIDTH_TWIPS}" w:type=
   )
   .join("")}</w:tbl>`;
 
-/** The résumé of the Word-Look-Resume-ZH board. */
 export function resumeFile(): Buffer {
   const title = (text: string) => p(run(text), '<w:pStyle w:val="SectionTitle"/>');
   return wordFile({
@@ -107,7 +93,6 @@ const CONTRACT_THEME = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><
 
 const CONTRACT_STYLES = `<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:hAnsiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia"/><w:sz w:val="24"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="160" w:line="259" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style><w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:pPr><w:jc w:val="center"/><w:spacing w:after="0"/></w:pPr><w:rPr><w:b/><w:smallCaps/><w:spacing w:val="40"/><w:sz w:val="32"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:before="240" w:after="120"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Clause"><w:name w:val="Clause"/><w:basedOn w:val="Normal"/><w:pPr><w:jc w:val="both"/><w:ind w:left="567" w:hanging="567"/></w:pPr></w:style><w:style w:type="character" w:styleId="Defined"><w:name w:val="Defined term"/><w:rPr><w:b/></w:rPr></w:style>`;
 
-/** The supply agreement of the Word-Look-Contract board. */
 export function contractFile(): Buffer {
   const clause = (number: string, text: string) =>
     p(tabbed([number, text]), '<w:pStyle w:val="Clause"/>');

@@ -86,7 +86,7 @@ export interface NoteSchemaOptions {
  * text. Charts, drawn from a table or from cited figures, each value with its
  * Citation (#436). Comparison tables, top-level only (#98). What a Word
  * import kept as it is, and its inline pictures (#104), and the file's look
- * on its Blocks and text (#746; see `wordSchema`).
+ * (see `wordSchema`).
  * Proposals the AI made, waiting for the User (see `proposalSchema`).
  * AI text, the words the AI wrote that the User hasn't made their own (see `aiText`).
  * The checks of the User's own sentences, on their text (see `claimChecks`).

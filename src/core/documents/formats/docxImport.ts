@@ -79,7 +79,6 @@ export interface WordStructure {
   report: WordImportReport;
   /** Someone's tracked changes read as Proposals (#108), by their request: who made each, and when. */
   changes: Map<string, WordChangeRequest>;
-  /** The file's look (#746): the styles its Blocks' `wordLook` attributes and its text's `wordRun` marks name. */
   look: WordLook;
 }
 
@@ -369,6 +368,11 @@ function fieldType(instruction: string): string {
 const isOn = (element: XmlElement | undefined) =>
   element !== undefined && !["false", "0", "off"].includes(element.attrs["w:val"] ?? "true");
 
+function runLookOf(node: NodeJSON): string | null {
+  const key = node.marks?.find((mark) => mark.type === WORD_RUN_MARK)?.attrs?.k;
+  return typeof key === "string" ? key : null;
+}
+
 /** The editor's marks for a run's own formatting. */
 export function runMarks(rPr: XmlElement | undefined): MarkJSON[] {
   if (!rPr) return [];
@@ -482,10 +486,13 @@ const nodeText = (node: NodeJSON): string =>
       ? NODE_CHARACTER
       : (node.content ?? []).map(nodeText).join("");
 
-const paragraphNode = (type: "paragraph" | "heading", attrs: Record<string, unknown>) => ({
+const paragraphNode = (
+  type: "paragraph" | "heading",
+  attrs: Record<string, unknown>,
+): { type: string; attrs: Record<string, unknown>; content: NodeJSON[] } => ({
   type,
   attrs: { [BLOCK_ID_ATTRIBUTE]: newId(), ...attrs },
-  content: [] as NodeJSON[],
+  content: [],
 });
 
 // ---------------------------------------------------------------------------
@@ -595,8 +602,7 @@ class Reader {
   private readonly absorbed = new Set<XmlElement>();
   /** Someone's changes kept as is, by kind. */
   private readonly kept: Partial<Record<KeptChangeKind, number>> = {};
-  /** The paragraph being read's look, which its runs start from; the table it is in. */
-  private paragraphLook: ParagraphLookContext = { key: null, runs: {} };
+  private paragraphLook: ParagraphLookContext = { look: {}, runs: {} };
   private tableLook: TableLookContext | null = null;
 
   private constructor(
@@ -1123,11 +1129,10 @@ class Reader {
     const level = this.headingLevel(styleId, pPr);
     const list = level === null ? this.listOf(styleId, pPr) : null;
     this.paragraphLook = this.look.paragraph(p, this.tableLook);
-    const looks = this.paragraphLook.key ? { [WORD_LOOK_ATTRIBUTE]: this.paragraphLook.key } : {};
     const node =
       level === null
-        ? paragraphNode("paragraph", looks)
-        : paragraphNode("heading", { level: Math.min(6, Math.max(1, level)), ...looks });
+        ? paragraphNode("paragraph", {})
+        : paragraphNode("heading", { level: Math.min(6, Math.max(1, level)) });
     node.content.push(...this.pending);
     this.pending = [];
     this.fieldDepth = 0;
@@ -1142,6 +1147,8 @@ class Reader {
         }),
       );
     }
+    const look = this.paragraphLookKey(node.content, pPr);
+    if (look) node.attrs[WORD_LOOK_ATTRIBUTE] = look;
     this.noteWhole(node, pPr, inCell);
     const sectPr = pPr && child(pPr, "w:sectPr");
     if (sectPr) {
@@ -1432,7 +1439,42 @@ class Reader {
     });
   }
 
-  /** A run's own marks: the editor's for its formatting, and its look's (#746). */
+  /** Also removes the run mark from the text that has the paragraph's main run look. */
+  private paragraphLookKey(content: NodeJSON[], pPr: XmlElement | undefined): string | null {
+    const characters = new Map<string | null, number>();
+    for (const node of content) {
+      if (node.type !== "text" || !node.text) continue;
+      const key = runLookOf(node);
+      characters.set(key, (characters.get(key) ?? 0) + node.text.length);
+    }
+    let run: string | null = null;
+    if (characters.size === 0) {
+      run = this.look.run(pPr && child(pPr, "w:rPr"), this.paragraphLook, 0);
+    } else {
+      let most = 0;
+      for (const [key, count] of characters) {
+        if (count > most) {
+          most = count;
+          run = key;
+        }
+      }
+    }
+    if (run !== null && characters.size > 0) {
+      const plain = characters.has(null) ? this.look.plainRun() : null;
+      for (const node of content) {
+        if (node.type !== "text") continue;
+        const key = runLookOf(node);
+        if (key === run) {
+          node.marks = node.marks?.filter((mark) => mark.type !== WORD_RUN_MARK);
+          if (node.marks?.length === 0) delete node.marks;
+        } else if (key === null && plain) {
+          node.marks = [...(node.marks ?? []), { type: WORD_RUN_MARK, attrs: { k: plain } }];
+        }
+      }
+    }
+    return this.look.paragraphKey(this.paragraphLook, run);
+  }
+
   private marksOfRun(run: XmlElement): MarkJSON[] {
     const rPr = child(run, "w:rPr");
     const key = this.look.run(rPr, this.paragraphLook, textIn(run).length);

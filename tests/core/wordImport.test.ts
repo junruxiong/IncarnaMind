@@ -79,10 +79,7 @@ function importDone(client: MindClient): Promise<void> {
   });
 }
 
-/**
- * The Mind's top-level Blocks as the editor reads them, each node's id left out, and the
- * file's look (#746), which tests/core/wordLook.test.ts reads.
- */
+/** The Mind's top-level Blocks as the editor reads them, ids and the Word look left out. */
 function blocksOf(client: MindClient): JSONContent[] {
   const strip = (node: JSONContent): JSONContent => {
     const attrs = Object.fromEntries(
@@ -103,7 +100,7 @@ function blocksOf(client: MindClient): JSONContent[] {
   return (readMind(client).toJSON().content ?? []).map(strip);
 }
 
-/** Text nodes side by side with the same marks as one, as they were before the look split them. */
+/** Rejoins text that only a left-out run mark split. */
 function joinTexts(content: JSONContent[]): JSONContent[] {
   const joined: JSONContent[] = [];
   for (const node of content) {

@@ -1,18 +1,11 @@
 /**
- * A Word document's look (#746): how its paragraphs, runs, tables and cells
- * are drawn, each resolved as Word resolves it, so the Mind it is imported as
- * can be drawn the same way without reading XML again. A run's formatting
- * comes from the document's defaults, then the table's style, the paragraph's
- * style and its chain, the run's character style and its chain, then the
- * run's own; a paragraph's from the defaults, the table's style, its style's
- * chain, its list level, then its own. A theme's fonts are read as the font
- * names they stand for. Each distinct style is kept once, under a short key
- * ("p3", "r12"), in the order first met, so reading the same package again
- * gives the same keys. Lengths are in points. Pure: given the parts' XML.
+ * Resolves formatting in Word's order. Runs: document defaults, table style,
+ * paragraph style chain, character style chain, direct formatting.
+ * Paragraphs: defaults, table style, style chain, list level, direct.
  *
- * Conditional table formatting (a first row's, a banded row's) and character
- * widths in characters (`leftChars`) aren't read yet: the table's whole style
- * and lengths in twips are.
+ * Keys are given in the order styles are first met, so reading the same
+ * package again gives the same keys: an interrupted import and the backfill
+ * of earlier imports rely on it.
  */
 import type {
   WordBorder,
@@ -27,10 +20,9 @@ import type {
 } from "../../api";
 import { child, elements, parseXml, type XmlElement } from "./xml";
 
-/** How the look is read: raise it when reading it changes, so a Mind's look is read again. */
+/** Raise it when reading the look changes, so Minds imported before get it again. */
 export const WORD_LOOK_VERSION = 1;
 
-/** How deep a style's `basedOn` chain is followed. */
 const MAX_STYLE_DEPTH = 20;
 
 const isOn = (element: XmlElement | undefined): boolean | undefined =>
@@ -38,28 +30,23 @@ const isOn = (element: XmlElement | undefined): boolean | undefined =>
     ? undefined
     : !["false", "0", "off"].includes(element.attrs["w:val"] ?? "true");
 
-/** A length in twips (or another unit, by `per`) as points, to a hundredth. */
+/** Twips (or 1/`per` points) to points, to a hundredth. */
 function points(value: string | undefined, per = 20): number | undefined {
   if (value === undefined) return undefined;
   const number = Number(value);
   return Number.isFinite(number) ? Math.round((number / per) * 100) / 100 : undefined;
 }
 
-/** A colour as hex, or undefined for automatic or none. */
 function hex(value: string | undefined): string | undefined {
   if (!value || value === "auto" || !/^[0-9a-fA-F]{6}$/.test(value)) return undefined;
   return value.toUpperCase();
 }
 
-/** Keeps only what is set, so equal styles compare equal and the stored look stays small. */
+/** Drops unset keys, so equal looks serialise equal and share a key. */
 function defined<T extends object>(value: T): T {
   return Object.fromEntries(Object.entries(value).filter(([, each]) => each !== undefined)) as T;
 }
 
-// ---------------------------------------------------------------------------
-// Properties as read, before they are resolved
-
-/** A font as a run names it: by name, or by the theme font it stands for. */
 interface FontRef {
   name?: string;
   theme?: string;
@@ -182,7 +169,7 @@ const LEADERS: ReadonlySet<string> = new Set([
   "middleDot",
 ]);
 
-/** A border side, or null for one that is set to none (it takes away an inherited one). */
+/** Null for "none", which takes away a side a style gave. */
 function readBorder(side: XmlElement): WordBorder | null {
   const style = side.attrs["w:val"] ?? "none";
   if (style === "none" || style === "nil") return null;
@@ -195,7 +182,6 @@ function readBorder(side: XmlElement): WordBorder | null {
   };
 }
 
-/** The sides of a border element, by name: "left" for "start", "right" for "end". */
 function readBorders(
   element: XmlElement | undefined,
 ): Record<string, WordBorder | null> | undefined {
@@ -209,7 +195,6 @@ function readBorders(
   return sides;
 }
 
-/** Shading's colour: its fill, or its colour when the pattern is solid. Null for none. */
 function readShade(shd: XmlElement | undefined): string | null | undefined {
   if (!shd) return undefined;
   const pattern = shd.attrs["w:val"] ?? "clear";
@@ -451,9 +436,6 @@ function readCell(tcPr: XmlElement | undefined): CellProps {
   return props;
 }
 
-// ---------------------------------------------------------------------------
-// Merging: what a later level sets replaces what an earlier one did
-
 function mergeRun(base: RunProps, over: RunProps): RunProps {
   return { ...base, ...over };
 }
@@ -470,7 +452,7 @@ function mergeParagraph(base: ParagraphProps, over: ParagraphProps): ParagraphPr
   if (base.spacing || over.spacing) merged.spacing = { ...base.spacing, ...over.spacing };
   if (base.borders || over.borders) merged.borders = { ...base.borders, ...over.borders };
   if (base.tabs || over.tabs) {
-    // A level's tabs add to those before it; a "clear" one takes away the stop at its place.
+    // Tabs add up across levels; a "clear" tab removes the stop at its position.
     const stops = new Map<number, RawTab>();
     for (const tab of [...(base.tabs ?? []), ...(over.tabs ?? [])]) {
       if (tab.val === "clear") stops.delete(tab.pos);
@@ -495,7 +477,6 @@ function mergeCell(base: CellProps, over: CellProps): CellProps {
   return merged;
 }
 
-/** Borders as kept: the sides that draw a line. */
 function keptBorders<Side extends string>(
   borders: Record<string, WordBorder | null> | undefined,
   sides: readonly Side[],
@@ -508,9 +489,6 @@ function keptBorders<Side extends string>(
   }
   return Object.keys(kept).length > 0 ? kept : undefined;
 }
-
-// ---------------------------------------------------------------------------
-// The theme's fonts
 
 interface ThemeFonts {
   major: { latin?: string; eastAsia?: string };
@@ -554,10 +532,6 @@ function themeFont(theme: ThemeFonts, ref: FontRef | undefined): string | undefi
   return name.endsWith("EastAsia") ? set.eastAsia : set.latin;
 }
 
-// ---------------------------------------------------------------------------
-// The reader
-
-/** The parts a look is read from: their XML, and the document's root. */
 export interface LookParts {
   styles?: string;
   theme?: string;
@@ -565,13 +539,11 @@ export interface LookParts {
   document: XmlElement;
 }
 
-/** What a paragraph's runs start from: its key, and the run formatting its levels give. */
 export interface ParagraphLookContext {
-  key: string | null;
+  look: WordParagraphLook;
   runs: RunProps;
 }
 
-/** What a table's paragraphs and cells start from: its key, and its style's formatting. */
 export interface TableLookContext {
   key: string | null;
   style: StyleDefinition[];
@@ -586,7 +558,14 @@ class KeyedStyles<T> {
 
   key(look: T): string | null {
     const json = JSON.stringify(sortedKeys(look));
-    if (json === "{}") return null;
+    return json === "{}" ? null : this.keyOf(json, look);
+  }
+
+  empty(look: T): string {
+    return this.keyOf("{}", look);
+  }
+
+  private keyOf(json: string, look: T): string {
     let key = this.byJson.get(json);
     if (!key) {
       key = `${this.prefix}${this.byJson.size + 1}`;
@@ -612,7 +591,6 @@ export class LookReader {
   private readonly runs = new KeyedStyles<WordRunLook>("r");
   private readonly tables = new KeyedStyles<WordTableLook>("t");
   private readonly cells = new KeyedStyles<WordCellLook>("c");
-  /** How many characters each run size has, for the body size. */
   private readonly charactersBySize = new Map<number, number>();
   private readonly styles = new Map<string, StyleDefinition>();
   private defaultParagraph: string | null = null;
@@ -620,7 +598,6 @@ export class LookReader {
   private readonly runDefaults: RunProps;
   private readonly paragraphDefaults: ParagraphProps;
   private readonly theme: ThemeFonts;
-  /** numId → its abstract numbering's levels' pPr and rPr, overrides applied. */
   private readonly levels = new Map<string, Map<number, { pPr?: XmlElement; rPr?: XmlElement }>>();
   private readonly width: number | null;
 
@@ -695,7 +672,6 @@ export class LookReader {
     }
   }
 
-  /** A style and those it is based on, the base first, as far as `MAX_STYLE_DEPTH`, never twice. */
   private chain(type: string, id: string | null): StyleDefinition[] {
     const chain: StyleDefinition[] = [];
     const seen = new Set<string>();
@@ -709,7 +685,6 @@ export class LookReader {
     return chain;
   }
 
-  /** A table's look, and what its paragraphs and cells start from. */
   table(tbl: XmlElement): TableLookContext {
     const tblPr = child(tbl, "w:tblPr");
     const styleId = (tblPr && child(tblPr, "w:tblStyle")?.attrs["w:val"]) ?? this.defaultTable;
@@ -743,7 +718,6 @@ export class LookReader {
     return { key: this.tables.key(look), style, cellBase };
   }
 
-  /** A cell's look. */
   cell(tc: XmlElement, table: TableLookContext): string | null {
     const props = mergeCell(table.cellBase, readCell(child(tc, "w:tcPr")));
     const look: WordCellLook = defined({
@@ -757,7 +731,6 @@ export class LookReader {
     return this.cells.key(look);
   }
 
-  /** A paragraph's look, and what its runs start from. `table`: the table it is in, if any. */
   paragraph(p: XmlElement, table: TableLookContext | null): ParagraphLookContext {
     const pPr = child(p, "w:pPr");
     const styleId = (pPr && child(pPr, "w:pStyle")?.attrs["w:val"]) ?? this.defaultParagraph;
@@ -773,17 +746,26 @@ export class LookReader {
       runs = mergeRun(runs, readRun(level.rPr));
     }
     const own = readParagraph(pPr);
-    // The list level's indents and tabs, between the style and the paragraph's own.
+    // Word applies the list level between the style and direct formatting.
     const numId = own.numId ?? props.numId;
     const ilvl = own.ilvl ?? props.ilvl ?? 0;
     const level =
       numId !== undefined && numId !== "0" ? this.levels.get(numId)?.get(ilvl) : undefined;
     if (level) props = mergeParagraph(props, readParagraph(level.pPr));
     props = mergeParagraph(props, own);
-    return { key: this.paragraphs.key(paragraphLook(props)), runs };
+    return { look: paragraphLook(props), runs };
   }
 
-  /** A run's look, in its paragraph; counts its characters, for the body size. */
+  paragraphKey(paragraph: ParagraphLookContext, run: string | null): string | null {
+    return this.paragraphs.key(run ? { ...paragraph.look, run } : paragraph.look);
+  }
+
+  /** For text with no look in a paragraph whose `run` has one. */
+  plainRun(): string {
+    return this.runs.empty({});
+  }
+
+  /** Also counts `characters` toward the body size. */
   run(
     rPr: XmlElement | undefined,
     paragraph: ParagraphLookContext,
@@ -829,7 +811,6 @@ export class LookReader {
     });
   }
 
-  /** The look read so far, every style under its key. */
   look(): WordLook {
     let body: number | null = null;
     let most = 0;
@@ -900,11 +881,10 @@ function paragraphLook(props: ParagraphProps): WordParagraphLook {
   });
 }
 
-/** How wide the text is on the first page: its section's page width less its margins and gutter. */
 function textWidth(document: XmlElement): number | null {
   const body = child(document, "w:body");
   if (!body) return null;
-  // The first section's properties: the first paragraph that ends a section, else the body's own.
+  // A section's properties sit in the pPr of its last paragraph; the last section's in the body.
   const ending = elements(body).find(
     (element) => element.name === "w:p" && child(child(element, "w:pPr") ?? EMPTY, "w:sectPr"),
   );

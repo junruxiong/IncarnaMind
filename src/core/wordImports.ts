@@ -516,11 +516,8 @@ export function createWordImports(options: WordImportsOptions) {
     },
 
     /**
-     * Gives the Word look (#746) to the Minds imported before Minds kept it,
-     * one at a time, in the background: each whose package is still kept,
-     * once, to the Blocks still as imported (./wordLookBackfill). Not an Undo
-     * step: the editor undoes only its own changes. A Mind that fails is
-     * logged and left as it was. Run once at start-up.
+     * Gives Minds imported before the look was kept their look, once, on the
+     * Blocks still as imported. A core change, so not an Undo step.
      */
     async addLooks(): Promise<void> {
       const imported = db.all<{ id: string; mind_id: string; sha256: string }>(
@@ -538,7 +535,7 @@ export function createWordImports(options: WordImportsOptions) {
         ]);
       for (const { id: rowId, mind_id: mindId, sha256 } of imported) {
         if (closed) return;
-        // Other work runs between Minds.
+        // Yields between Minds so start-up work isn't held up.
         await new Promise<void>((resolve) => setImmediate(resolve));
         try {
           let bytes: Uint8Array;
@@ -553,7 +550,7 @@ export function createWordImports(options: WordImportsOptions) {
           const pkg = await openWordPackage(bytes);
           const structure = await readWordStructure(pkg, await reviewOf(pkg));
           if (closed) return;
-          // Worked out before anything changes, in the change itself, so it is made on what it read.
+          // Planned inside the edit so it applies to the content it was planned on.
           const plan = content.edit(mindId, (blocks) => {
             if (!blocks.doc) return null;
             const look = wordLookOf(blocks.doc);

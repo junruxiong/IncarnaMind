@@ -1,11 +1,6 @@
 /**
- * The Word look's cost (#746), measured, not asserted: CI runners are too
- * starved for wall-clock limits, so each part of #746 runs this and puts the
- * numbers in its pull request. Typing in the 304-page contract
- * (tests/helpers/longContract.ts, 2,881 Blocks), on its first page and its
- * last, keydown to the next frame; and how long the contract and the Word
- * corpus's largest file take to open, from the tab opening to their last
- * Block drawn. Results go to AUDIT_OUT/results.json under "wordLook.*".
+ * Measured, not asserted: CI runners are too starved for wall-clock limits,
+ * so each part of #746 puts these numbers in its pull request.
  *
  *   npx electron-vite build --mode test
  *   AUDIT_OUT=/tmp/word-look npx playwright test -c e2e/audit/playwright.audit.config.ts wordLook.audit.ts
@@ -16,6 +11,7 @@ import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../../src/core/api";
 import { longContract } from "../../tests/helpers/longContract";
 import {
+  click,
   close,
   installKeyLatency,
   launch,
@@ -26,7 +22,6 @@ import {
   tempDir,
 } from "./harness";
 
-/** Imports the file and resolves with its Mind once every Block is in it. */
 async function importWord(window: Page, path: string): Promise<string> {
   return window.evaluate(async (file) => {
     const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
@@ -36,7 +31,7 @@ async function importWord(window: Page, path: string): Promise<string> {
   }, path);
 }
 
-/** Opens the Mind in place and resolves with the ms until `last` (a selector) is drawn. */
+/** Milliseconds until `count` elements match `done`. */
 async function openTimed(window: Page, mindId: string, done: string, count: number) {
   return window.evaluate(
     async ({ id, selector, wanted }) => {
@@ -58,7 +53,6 @@ async function openTimed(window: Page, mindId: string, done: string, count: numb
   );
 }
 
-/** The largest .docx in the Word corpus's committed set. */
 function largestCorpusFile(): string {
   const root = join(__dirname, "../../eval/word");
   let largest = { path: "", size: 0 };
@@ -80,8 +74,9 @@ test("typing in the 304-page contract, and opening it and the corpus's largest f
   const files = tempDir("files");
   const contract = join(files, "Framework Services Agreement.docx");
   writeFileSync(contract, longContract());
-  const launched = await launch(dataDir);
+  const launched = await launch(dataDir, { readyTestId: "chat-setup" });
   const { window } = launched;
+  await click(window, window.getByTestId("chat-setup-later"));
   const elsewhere = () =>
     window.evaluate(async () => {
       const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
@@ -92,7 +87,6 @@ test("typing in the 304-page contract, and opening it and the corpus's largest f
         where: { in: "place" },
       });
     });
-  /** Opens the Mind once until it is all there, then times three opens of it. */
   const timedOpens = async (mindId: string, selector: string, count: () => Promise<number>) => {
     await openTimed(window, mindId, selector, 1);
     const blocks = await count();
@@ -106,9 +100,8 @@ test("typing in the 304-page contract, and opening it and the corpus's largest f
   try {
     const contractId = await importWord(window, contract);
     const contractOpen = await timedOpens(contractId, ".ProseMirror h1", async () => {
-      // Every clause's heading in: the import has written every Block.
-      await expect(window.locator(".ProseMirror h1")).toHaveCount(240, { timeout: 120_000 });
-      return 240;
+      await expect(window.locator(".ProseMirror h1")).toHaveCount(241, { timeout: 120_000 });
+      return 241;
     });
 
     await installKeyLatency(window);
@@ -130,7 +123,7 @@ test("typing in the 304-page contract, and opening it and the corpus's largest f
     const corpus = largestCorpusFile();
     const corpusId = await importWord(window, corpus);
     const corpusOpen = await timedOpens(corpusId, ".ProseMirror > *", async () => {
-      // The import is done once its Blocks stop coming.
+      // No signal for the import's end that the page can see; wait until Blocks stop coming.
       let blocks = -1;
       for (;;) {
         await window.waitForTimeout(500);

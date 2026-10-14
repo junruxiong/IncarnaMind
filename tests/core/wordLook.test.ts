@@ -1,12 +1,3 @@
-/**
- * A Mind imported from Word keeps the file's look (#746), through the core's
- * public interface: each paragraph's, run's, table's and cell's style,
- * resolved from the defaults, the theme, the style chains, the list level and
- * direct formatting, kept once under a short key that the Blocks and the text
- * name; export writes the file's own bytes for what the User didn't change;
- * and a Mind imported before gets the look once, at a start, on the Blocks
- * still as imported.
- */
 import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
@@ -20,6 +11,7 @@ import {
   WORD_LOOK_ATTRIBUTE,
   WORD_RUN_MARK,
   type WordLook,
+  type WordParagraphLook,
 } from "../../src/core";
 import { WORD_PACKAGES_FOLDER } from "../../src/core/wordImports";
 import { wordFileOf, wordImportProgressOf } from "../../src/shared/wordFiles";
@@ -30,10 +22,11 @@ import { recordingLog } from "../helpers/log";
 import { longContract } from "../helpers/longContract";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
 import { readMind } from "../helpers/minds";
+import { paragraph, run, wordFile } from "../helpers/word";
 import { contractFile, RESUME_TEXT_WIDTH_TWIPS, resumeFile } from "../helpers/wordLookFiles";
 import { importWordBytes } from "../helpers/wordMinds";
 
-/** Each paragraph-like node's text, with its look and its runs' looks, in order. */
+/** A text with no run mark has its paragraph's `run` look. */
 function styled(client: MindClient, look: WordLook) {
   const found: { type: string; text: string; look: unknown; runs: unknown[] }[] = [];
   readMind(client).descendants((node) => {
@@ -47,15 +40,17 @@ function styled(client: MindClient, look: WordLook) {
         : node.type.name.startsWith("table")
           ? look.cells
           : look.paragraphs;
+    const { run: paragraphRun, ...own } = (key ? styles[key] : {}) as WordParagraphLook;
     const runs: unknown[] = [];
     node.forEach((child) => {
-      const run = child.marks.find((mark) => mark.type.name === WORD_RUN_MARK)?.attrs.k;
+      const run =
+        child.marks.find((mark) => mark.type.name === WORD_RUN_MARK)?.attrs.k ?? paragraphRun;
       runs.push(typeof run === "string" ? look.runs[run] : null);
     });
     found.push({
       type: node.type.name,
       text: node.textContent,
-      look: key ? styles[key] : null,
+      look: key ? own : null,
       runs,
     });
     return true;
@@ -107,7 +102,6 @@ describe("a Mind imported from Word keeps its look", () => {
     });
     const bullet = nodes.find((node) => node.text.startsWith("跟踪 12 家"));
     expect(bullet?.look).toMatchObject({ left: 21, firstLine: -10.5 });
-    // The layout tables draw no lines; the skills table does, and shades its first column.
     const tables = nodes.filter((node) => node.type === "table");
     expect(tables).toHaveLength(3);
     expect(tables[0]?.look).toMatchObject({
@@ -130,7 +124,6 @@ describe("a Mind imported from Word keeps its look", () => {
     expect(cells.find((node) => node.text === "2025.06 – 2025.09")?.look).toEqual({
       width: { value: 125, unit: "pt" },
     });
-    // Each style once, whatever the number of Blocks that use it.
     const keys = (styles: Record<string, unknown>) =>
       new Set(Object.values(styles).map((each) => JSON.stringify(each))).size;
     expect(keys(look.paragraphs)).toBe(Object.keys(look.paragraphs).length);
@@ -173,7 +166,6 @@ describe("a Mind imported from Word keeps its look", () => {
       (node) => node.type === "tableCell" && (node.text === "Term" || node.text === "Meaning"),
     );
     expect(heads.map((node) => node.look)).toEqual([{ shade: "F2F2F2" }, { shade: "F2F2F2" }]);
-    // A character style's bold, on a defined term.
     const term = nodes.find((node) => node.type === "paragraph" && node.text === "“Products”");
     expect(term?.runs[0]).toMatchObject({ bold: true });
     expect(
@@ -188,6 +180,39 @@ describe("a Mind imported from Word keeps its look", () => {
     ).toEqual({ borders: { bottom: { style: "single", width: 0.75, color: "000000", space: 0 } } });
   });
 
+  test("only text that looks unlike most of its paragraph carries a run mark; an empty paragraph takes its mark's look", async () => {
+    const { client, look } = await imported(
+      wordFile({
+        body: [
+          paragraph(run("Mostly bold, ", { b: true }) + run("then plain") + run(".", { b: true })),
+          paragraph(run("All of it plain")),
+          '<w:p><w:pPr><w:rPr><w:sz w:val="32"/></w:rPr></w:pPr></w:p>',
+        ].join(""),
+      }),
+    );
+    const blocks = readMind(client);
+    const marked = (index: number) => {
+      const marks: (string | null)[] = [];
+      blocks.child(index).forEach((text) => {
+        const mark = text.marks.find((each) => each.type.name === WORD_RUN_MARK);
+        marks.push(mark ? (mark.attrs.k as string) : null);
+      });
+      return marks;
+    };
+    const lookOf = (index: number) => {
+      const key = blocks.child(index).attrs[WORD_LOOK_ATTRIBUTE] as string | null;
+      return key ? look.paragraphs[key] : null;
+    };
+
+    const [bold, plain] = marked(0);
+    expect(bold).toBeNull();
+    expect(look.runs[lookOf(0)?.run ?? ""]).toEqual({ bold: true });
+    expect(look.runs[plain ?? ""]).toEqual({});
+    expect(marked(1)).toEqual([null]);
+    expect(lookOf(1)).toBeNull();
+    expect(look.runs[lookOf(2)?.run ?? ""]).toEqual({ size: 16 });
+  });
+
   test("the styles kept grow with the styles the file uses, never with its Blocks", async () => {
     const short = await imported(longContract(8));
     const long = await imported(longContract());
@@ -195,7 +220,6 @@ describe("a Mind imported from Word keeps its look", () => {
       [look.paragraphs, look.runs, look.tables, look.cells].map((each) => Object.keys(each).length);
     expect(sizes(long.look)).toEqual(sizes(short.look));
     const blocks = lookShown(long.client);
-    // Every paragraph and heading of the 304-page contract names its style, under a few keys.
     expect(blocks.blocks).toBeGreaterThan(2800);
     expect(Object.keys(long.look.paragraphs).length).toBeLessThan(8);
   });
@@ -227,13 +251,17 @@ describe("a Mind imported from Word keeps its look", () => {
     const used = new Set<string>();
     readMind(client).descendants((node) => {
       const key = node.attrs[WORD_LOOK_ATTRIBUTE];
-      if (typeof key === "string") used.add(key);
+      if (typeof key === "string") {
+        used.add(key);
+        const run = look.paragraphs[key]?.run;
+        if (run) used.add(run);
+      }
       for (const mark of node.marks) {
         if (mark.type.name === WORD_RUN_MARK) used.add(mark.attrs.k as string);
       }
       return true;
     });
-    expect(used.size).toBeGreaterThan(3);
+    expect(new Set([...used].map((key) => key[0]))).toEqual(new Set(["p", "r"]));
     expect([...used].filter((key) => !keys.has(key))).toEqual([]);
     expect(lookShown(client).blocks).toBeGreaterThan(2800);
   });
@@ -256,7 +284,7 @@ describe("a Mind imported from Word keeps its look", () => {
   });
 });
 
-/** Takes the look off a Mind, as a Mind imported before #746 has none, and forgets it was given. */
+/** Makes the Mind look like an import from before the look was kept. */
 function withoutLook(client: MindClient, dataDir: string, mindId: string): void {
   client.doc.transact(() => {
     const strip = (element: Y.XmlElement) => {
@@ -279,7 +307,6 @@ function withoutLook(client: MindClient, dataDir: string, mindId: string): void 
   ]);
 }
 
-/** Whether any node or text in the Mind has a look. */
 function lookShown(client: MindClient): { blocks: number; runs: number } {
   let blocks = 0;
   let runs = 0;
@@ -296,7 +323,6 @@ describe("a Mind imported before gets its look once", () => {
     const { dataDir, core, mindId, client } = await imported(contractFile());
     const full = lookShown(client);
     withoutLook(client, dataDir, mindId);
-    // The User changes the first clause.
     client.doc.transact(() => {
       const clause = client.blocks
         .toArray()
@@ -338,7 +364,6 @@ describe("a Mind imported before gets its look once", () => {
     const state = Y.encodeStateVector(after.doc);
     restarted.close();
 
-    // Once given, the next start leaves the Mind as it is.
     const again = startCore(dataDir);
     const third = await connectToMind(again, mindId);
     await new Promise((resolve) => setTimeout(resolve, 200));
