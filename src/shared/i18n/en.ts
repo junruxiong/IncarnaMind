@@ -81,7 +81,6 @@ export const en = {
     "{count} Documents need text, a model or permission. Open their details to check.",
   "library.count": "{count} Documents",
   "library.count.one": "1 Document",
-  "library.empty": "Add Documents from the sidebar to start organising them.",
   "library.manual": "Your choice",
   "library.saved": "Organized",
   "library.working": "Organizing…",
@@ -858,8 +857,8 @@ export const en = {
   "documents.add.webPage": "A web page…",
   "documents.add.connect": "Connect an app…",
   "documents.moveTo": "Move to…",
-  "documents.none":
-    "No Documents yet. Add files, or link a folder to keep in sync, with the + above.",
+  "documents.none": "No Documents yet",
+  "documents.none.addFiles": "Add files…",
   "documents.drop":
     "Drop PDF, Word, PowerPoint, Excel, CSV, TXT or Markdown files to add them, or a folder to link it",
   "documents.status.queued": "Queued",
@@ -1766,7 +1765,7 @@ export const en = {
   "consent.settings.status.declined": "Not allowed",
   "consent.settings.status.not-asked": "Not asked yet",
   "consent.settings.status.sendsMore": "Asks again: it sends more now",
-  "consent.settings.revoke": "Revoke",
+  "consent.settings.revoke": "Stop allowing",
   "consent.settings.askAgain": "Ask again",
 
   "privacy.tabs.general": "General",
@@ -2035,7 +2034,6 @@ export const en = {
   "comparison.addQuestion": "Question",
   "comparison.addQuestion.label": "Add a Question",
   "comparison.addQuestion.placeholder": "Question for each Document",
-  "comparison.notReady": "The table's model can't be used yet",
   "comparison.sheet.region": "Compare Documents",
   "comparison.sheet.documentsIn": "Documents in {folder}",
   "comparison.sheet.allDocuments": "All Documents",
@@ -2209,7 +2207,6 @@ export const en = {
   "skills.settings.title": "Skills",
   "skills.settings.body":
     "Steps the AI follows for a kind of task, in the standard SKILL.md format. It picks one when a Question calls for it; to choose one yourself, type / in the composer.",
-  "skills.settings.empty": "No Skills yet.",
   "skills.settings.enabled": "Use {name}",
   "skills.settings.remove": "Remove",
   "skills.settings.removeLabel": "Remove {name}",
@@ -2368,9 +2365,9 @@ export const en = {
   "scripts.card.deny": "Deny",
   "scripts.alwaysRun.title": "Always run the scripts of {skill}?",
   "scripts.alwaysRun.body":
-    "From now on, every script of {skill} runs whenever an Answer wants it, without asking you. Scripts aren't sandboxed: they can read, change or delete your files, install software and send your data over the internet. Only do this for a Skill you trust completely. You can revoke it in Settings, under Approvals.",
+    "From now on, every script of {skill} runs whenever an Answer wants it, without asking you. Scripts aren't sandboxed: they can read, change or delete your files, install software and send your data over the internet. Only do this for a Skill you trust completely. You can reset it in Settings, under Approvals.",
   "scripts.alwaysRun.bodySandboxed":
-    "From now on, every script of {skill} runs whenever an Answer wants it, without asking you. Scripts run in a sandbox: they can't open your home folder or IncarnaMind's data, can only write in their own working folder, and have no internet. They can still read files elsewhere on this computer, such as on an external drive. Only do this for a Skill you trust. You can revoke it in Settings, under Approvals.",
+    "From now on, every script of {skill} runs whenever an Answer wants it, without asking you. Scripts run in a sandbox: they can't open your home folder or IncarnaMind's data, can only write in their own working folder, and have no internet. They can still read files elsewhere on this computer, such as on an external drive. Only do this for a Skill you trust. You can reset it in Settings, under Approvals.",
   "scripts.alwaysRun.confirm": "Always run {skill}'s scripts",
   "scripts.alwaysRun.cancel": "Cancel",
   "scripts.call.waiting": "Waiting for your approval: {script} ({skill})",
@@ -2988,7 +2985,7 @@ export const en = {
   "approvals.card.allowOnce": "Allow once",
   "approvals.card.alwaysAllow": "Always allow",
   "approvals.card.alwaysAllowHint":
-    "Run {tool} from now on without asking. You can revoke this in Settings, under Approvals.",
+    "Run {tool} from now on without asking. You can reset it in Settings, under Approvals.",
   "approvals.card.deny": "Deny",
   "approvals.thirdParty.read.imported":
     "This Answer read a Mind with imported text, so it asks you first.",
@@ -3016,11 +3013,11 @@ export const en = {
   "approvals.tools.off": "Off",
   "approvals.settings.title": "Approvals",
   "approvals.settings.body":
-    "Tools that may change something, and Skill scripts, ask before each run. Here is every Tool you always allow, set to ask every time or turned off, and every Skill whose scripts always run. Revoke one to go back to the default.",
+    "Tools that may change something, and Skill scripts, ask before each run. Here is every Tool you always allow, set to ask every time or turned off, and every Skill whose scripts always run. Reset one to go back to its default.",
   "approvals.settings.empty":
     "No Tool is set to always allow, to ask every time or to stay off. No Skill's scripts always run.",
-  "approvals.settings.revoke": "Revoke",
-  "approvals.settings.revokeLabel": "Revoke the setting for {name}",
+  "approvals.settings.revoke": "Reset",
+  "approvals.settings.revokeLabel": "Reset {name} to its default",
   "approvals.settings.skillScripts": "Scripts of {skill}",
   "approvals.policy.always": "Always allow",
   "approvals.policy.ask": "Ask every time",
@@ -3421,7 +3418,7 @@ export const en = {
   "assistant.newChat.button": "New chat ({shortcut})",
   "assistant.titleButton": "{title} · History",
   "assistant.history": "History",
-  "assistant.history.empty": "No conversations yet.",
+  "assistant.history.empty": "No conversations yet. Ask a Question to start one.",
   "assistant.history.close": "Close History",
   "assistant.more": "More for the assistant",
   "assistant.fold": "Fold the assistant",
