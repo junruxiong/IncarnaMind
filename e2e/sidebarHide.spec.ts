@@ -66,20 +66,29 @@ interface Edges {
 interface Frame {
   sidebar: Edges;
   card: Edges;
+  /** The first tab group's band and its Split button, while the window shows them. */
+  band: Edges | null;
+  split: Edges | null;
 }
 
 /** The sidebar's and the card's edges as drawn now, in one frame, and whether anything moves. */
 function edges(window: Page): Promise<Frame & { moving: boolean }> {
   return window.evaluate(() => {
-    const edgesOf = (testId: string) => {
+    const maybeEdgesOf = (testId: string) => {
       const box = document.querySelector(`[data-testid="${testId}"]`)?.getBoundingClientRect();
-      if (!box) throw new Error(`No ${testId} on screen.`);
-      return { left: box.left, right: box.right };
+      return box && box.width > 0 ? { left: box.left, right: box.right } : null;
+    };
+    const edgesOf = (testId: string) => {
+      const edges = maybeEdgesOf(testId);
+      if (!edges) throw new Error(`No ${testId} on screen.`);
+      return edges;
     };
     const hooks = (globalThis as { incarnamindTestHooks?: TestHooks }).incarnamindTestHooks;
     return {
       sidebar: edgesOf("sidebar"),
       card: edgesOf("card"),
+      band: maybeEdgesOf("tab-strip"),
+      split: maybeEdgesOf("split-group"),
       moving: (hooks?.motionRunning() ?? 0) > 0,
     };
   });
@@ -108,13 +117,20 @@ function expectShownAtRest(settled: Frame): void {
 }
 
 /**
- * One motion: in every frame the card's edge keeps 8px from the sidebar, and
- * its right edge is where it settles, so nothing jumps at the end.
+ * One motion: in every frame the card's edge keeps 8px from the sidebar, its
+ * right edge is where it settles, so nothing jumps at the end, and the tab
+ * band reaches it, never falling short. What is in the band rides the card's
+ * left edge at its new place.
  */
 function expectTogether(frames: Frame[], settled: Frame): void {
   for (const frame of frames) {
     expect(Math.abs(frame.card.left - frame.sidebar.right - 8)).toBeLessThanOrEqual(1);
     expect(Math.abs(frame.card.right - settled.card.right)).toBeLessThanOrEqual(1);
+    if (frame.band) expect(Math.abs(frame.band.right - frame.card.right)).toBeLessThanOrEqual(1);
+    if (frame.split && settled.split) {
+      const offset = frame.split.left - frame.card.left;
+      expect(Math.abs(offset - (settled.split.left - settled.card.left))).toBeLessThanOrEqual(1);
+    }
   }
 }
 
@@ -336,7 +352,10 @@ const sidebarSeen = (window: Page) =>
 test("hiding and showing slide the sidebar and the card's edge together, 8px apart, at 1,440 and 1,100 px in English and Chinese", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
+  // Two tabs, so the band shows.
   await newMind(window);
+  await newMind(window);
+  await expect(window.getByTestId("tab-strip")).toBeVisible();
   const sizes = [
     { language: "en", width: 1440, hide: pressShortcut, show: pressButton },
     { language: "zh-CN", width: 1440, hide: pressButton, show: pressShortcut },

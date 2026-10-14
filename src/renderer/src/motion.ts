@@ -750,6 +750,14 @@ const differ = (a: Box, b: Box) =>
     Math.abs(a.height - b.height),
   ) >= 0.5;
 
+// A transform on an element with no box of its own (display: contents) does nothing: its children take it.
+function boxedChildren(parent: Element): HTMLElement[] {
+  return Array.from(parent.children).flatMap((child) => {
+    if (!(child instanceof HTMLElement)) return [];
+    return getComputedStyle(child).display === "contents" ? boxedChildren(child) : [child];
+  });
+}
+
 /**
  * Boxes moving on one spring, each from its old box to its new one; one that
  * changes size has its children counter-scaled. `velocity` is the first box's.
@@ -763,19 +771,33 @@ function moveFrames(
   const frames = moves.map(({ element, from, to }) => {
     const box = element.getBoundingClientRect();
     const resized = from.width !== to.width || from.height !== to.height;
-    const children = Array.from(resized ? element.children : [])
-      .filter((child): child is HTMLElement => child instanceof HTMLElement)
-      .map((child) => {
-        const rect = child.getBoundingClientRect();
-        return { child, x: rect.left - box.left, y: rect.top - box.top };
-      });
+    const children = (resized ? boxedChildren(element) : []).map((child) => {
+      const rect = child.getBoundingClientRect();
+      return { child, x: rect.left - box.left, y: rect.top - box.top };
+    });
     return { element, from, to, children };
   });
+  // A box inside another moving box is already carried by its translation (its
+  // children are counter-scaled), so it adds only the rest of its own move.
+  const carriers = new Map(
+    frames.map((inner) => {
+      let carrier: (typeof frames)[number] | undefined;
+      for (const outer of frames) {
+        if (outer === inner || !outer.element.contains(inner.element)) continue;
+        if (!carrier || carrier.element.contains(outer.element)) carrier = outer;
+      }
+      return [inner, carrier];
+    }),
+  );
   const apply = (progress: number) => {
-    for (const { element, from, to, children } of frames) {
-      const frame = frameAt(from, to, progress);
-      element.style.transform = `translate(${frame.x}px, ${frame.y}px) scale(${frame.scaleX}, ${frame.scaleY})`;
-      for (const { child, x, y } of children) {
+    const at = new Map(frames.map((moving) => [moving, frameAt(moving.from, moving.to, progress)]));
+    for (const [moving, frame] of at) {
+      const carrier = carriers.get(moving);
+      const carried = carrier ? at.get(carrier) : undefined;
+      const x = frame.x - (carried?.x ?? 0);
+      const y = frame.y - (carried?.y ?? 0);
+      moving.element.style.transform = `translate(${x}px, ${y}px) scale(${frame.scaleX}, ${frame.scaleY})`;
+      for (const { child, x, y } of moving.children) {
         child.style.transform = `translate(${x / frame.scaleX - x}px, ${y / frame.scaleY - y}px) scale(${1 / frame.scaleX}, ${1 / frame.scaleY})`;
       }
     }
@@ -816,17 +838,19 @@ function moveFrames(
 
 /**
  * The sidebar hides, shows or peeks (DESIGN.md, Motion), in two steps: call
- * this just before the change, with the boxes beside the sidebar that may
- * move with its edge and whether the sidebar shows after it, then call what
- * it returns once the change is laid out. On, they slide together from where
- * they are now, on the panel spring; Reduced, the sidebar fades and the rest
- * is placed at once; Off, nothing moves.
+ * this just before the change, with the boxes beside the sidebar that may move
+ * with its edge and whether the sidebar shows after it; then, once the change
+ * is laid out, call what it returns with any bands inside those boxes. On,
+ * they slide together from where they are now, on the panel spring, and a
+ * band laid out to its box's right edge stretches with it rather than riding
+ * along, so it never falls short of that edge; Reduced, the sidebar fades and
+ * the rest is placed at once; Off, nothing moves.
  */
 export function slideSidebar(
   sidebar: HTMLElement,
   beside: readonly HTMLElement[],
   shows: boolean,
-): () => void {
+): (bands: readonly HTMLElement[]) => void {
   if (mode === "off") return () => {};
   if (mode === "reduced") {
     const seen = () => sidebar.checkVisibility({ opacityProperty: true });
@@ -845,13 +869,25 @@ export function slideSidebar(
     element,
     from: boxOf(element.getBoundingClientRect()),
   }));
-  return () => {
-    for (const element of elements) haltUncounted(element);
+  return (bands) => {
+    for (const element of [...elements, ...bands]) haltUncounted(element);
     const moves = before
       .filter(({ element }) => element.isConnected)
       .map((move) => ({ ...move, to: boxOf(move.element.getBoundingClientRect()) }))
       .filter(({ from, to }) => to.width >= 1 && to.height >= 1 && differ(from, to));
-    if (moves.length > 0) moveFrames(moves, { spring: "smooth" });
+    const stretched = bands.flatMap((band) => {
+      const pane = moves.find(({ element }) => element.contains(band));
+      const to = boxOf(band.getBoundingClientRect());
+      if (!pane || Math.abs(to.left + to.width - (pane.to.left + pane.to.width)) >= 1) return [];
+      const from = {
+        left: pane.from.left + to.left - pane.to.left,
+        top: pane.from.top + to.top - pane.to.top,
+        width: to.width + pane.from.width - pane.to.width,
+        height: to.height,
+      };
+      return [{ element: band, from, to }];
+    });
+    if (moves.length > 0) moveFrames([...moves, ...stretched], { spring: "smooth" });
   };
 }
 
