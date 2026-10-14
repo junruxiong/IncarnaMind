@@ -80,6 +80,7 @@ import type {
   QuoteRetry,
   ReadThirdPartySource,
   ThirdPartyReason,
+  UnreadFile,
 } from "../api";
 import { ONE_SEARCH_PARAMETERS, type SearchToolParameters } from "../documents/searchTool";
 import { detectLanguage } from "../documents/textLanguage";
@@ -111,8 +112,10 @@ import {
   searchQueryPrompt,
   TRANSLATE_QUERY_INSTRUCTIONS,
   translateQueryPrompt,
+  unreadDocumentsNote,
 } from "./prompt";
 import { retryQuotes } from "./quoteRetry";
+import { citeUnmarked } from "./unmarkedQuotes";
 import { createWindowBudget, SEARCH_RESERVE_TOKENS, type WindowBudget } from "./window";
 
 /** One message of Question context. */
@@ -209,6 +212,8 @@ export interface AnswerTools {
    * Question is in another language. Empty or absent when they can't be told.
    */
   readonly documentLanguages?: readonly DocumentLanguage[];
+  /** The Documents in the Search scope whose text couldn't be read: the search Tool says so. Absent: none are known. */
+  unreadDocuments?(): readonly UnreadFile[];
   /** The document-search Tool. */
   searchDocuments(
     query: string,
@@ -219,6 +224,13 @@ export interface AnswerTools {
   cite(records: readonly CitationRecordInput[], options?: CiteOptions): string;
   /** Whether a valid record was taken for this marker: the engine places its marker if the model left it out. */
   hasRecord?(marker: number): boolean;
+  /** The Passages the model was given in this Answer, by the id it cites them by, as it read them. */
+  shownPassages?(): readonly { id: string; text: string }[];
+  /**
+   * Whether the Citation check would find `quote` in the Passage named `passage`
+   * ("P3"), read as structured output's records are (see `CiteOptions`).
+   */
+  quoteFound?(passage: string, quote: string): boolean;
   /**
    * The records taken whose quotes the check doesn't find on the pages they
    * cite, by marker: what structured output's one request for exact quotes
@@ -382,6 +394,11 @@ export type AnswerEngineEvent =
     }
   /** The engine put in `count` Citation markers the model left out of its text (see ./markerPlacement). */
   | { type: "markers-placed"; count: number }
+  /**
+   * Citations the engine added for sentences the Answer wrote without markers
+   * (see ./unmarkedQuotes), and whether the model was asked once more for them.
+   */
+  | { type: "cited-after-checking"; count: number; asked: boolean }
   /** The model's window holds only part of the Mind read with the Question: this share of it (0: none). */
   | { type: "mind-cut"; share: number }
   /** The model was asked once more for exact quotes (see ./quoteRetry), and what that gave. */
@@ -977,8 +994,12 @@ function createWritingEngine(options: AiSdkAnswerEngineOptions): AnswerEngine {
       // With no Documents there is nothing to search or cite: Skills and
       // Connector Tools alone, or a plain Answer. Web search saves what it reads as
       // Documents, which are cited, so with it the Documents' Tools are offered too.
+      // So are they where the only Documents in scope couldn't be read: the search says so (#485).
       const savesDocuments = request.tools.some((each) => each.provider.kind === "web");
-      if (request.documents.documentCount === 0 && !savesDocuments) {
+      const hasUnread =
+        (request.support ?? "tools") === "tools" &&
+        (request.documents.unreadDocuments?.().length ?? 0) > 0;
+      if (request.documents.documentCount === 0 && !savesDocuments && !hasUnread) {
         if (request.tools.length > 0 && (request.support ?? "tools") === "tools") {
           let unsupported = false;
           for await (const event of fitted(() =>
@@ -1198,9 +1219,12 @@ export function documentTools(
         for (const source of found.thirdParty ?? []) readThirdParty?.(source);
         const result = hooks.fit(found);
         hooks.searched(toolCallId, result.passageCount, found.passageIds);
-        // Named from the Passages that fit, so it never names a Document the model wasn't handed.
-        const note = datedDocumentsNote(result.text);
-        return note ? `${result.text}\n\n${note}` : result.text;
+        // The dates are named from the Passages that fit, so never a Document the model wasn't handed.
+        const notes = [
+          datedDocumentsNote(result.text),
+          unreadDocumentsNote(documents.unreadDocuments?.() ?? []),
+        ];
+        return [result.text, ...notes].filter((part) => part !== "").join("\n\n");
       },
     },
     cite: {
@@ -1557,7 +1581,10 @@ async function* toolLoop(
           keptText = unmarked;
           yield { type: "text-delta", text: unmarked };
         }
-        yield* missingMarkerEvents(keptText, cited, request.documents);
+        {
+          const placed = yield* missingMarkerEvents(keptText, cited, request.documents);
+          yield* citeUnmarked(request, placed, temperature, budget);
+        }
         yield { type: "finished" };
         return;
     }
@@ -1666,8 +1693,10 @@ async function* structured(
   yield* emit(answer);
   if (typeof answer === "string") {
     // A small model often gives the records but leaves their markers out.
-    const placed = yield* missingMarkerEvents(emitted, records, request.documents);
-    if (budget) yield* retryQuotes(request, placed, temperature, budget);
+    const marked = yield* missingMarkerEvents(emitted, records, request.documents);
+    if (budget) yield* retryQuotes(request, marked, temperature, budget);
+    if (signal.aborted) return;
+    const placed = yield* citeUnmarked(request, marked, temperature, budget);
     if (signal.aborted) return;
     // Worked out once the quotes are as good as they will be, since figures read their numbers there.
     const calculations = givenList((value as { calculations?: unknown } | undefined)?.calculations);

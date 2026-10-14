@@ -21,6 +21,7 @@
  * Nothing leaves the computer before the User allows the "checks" flow to
  * the model's service, and in local mode only a model on this computer is used.
  */
+
 import { randomUUID } from "node:crypto";
 import type * as Y from "yjs";
 import { type LiveDocument, withShownName } from "../../../shared/citations";
@@ -48,6 +49,7 @@ import { parseCheckedDocument } from "../../documents/evidence";
 import type { RetainVersion, VersionRetention } from "../../documents/retention";
 import { parseModel, parsePlace } from "../../edits";
 import { ChatNotReadyError, ConsentDeclinedError, InvalidInputError, isRecord } from "../../errors";
+import type { Language } from "../../language";
 import type { MindContent } from "../../mindContent";
 import { parseMindId } from "../../minds";
 import type { PreparedChatModel } from "../../providers/chat";
@@ -71,6 +73,8 @@ export interface ChecksOptions
     VerifyOptions,
     "requireFolder" | "addFile" | "document" | "onStatus" | "readText" | "createMind"
   > {
+  /** The interface language: what a check's sentence is written in. */
+  language(): Language;
   content: Pick<MindContent, "read" | "edit" | "readSettings">;
   /** Throws unless the Mind exists and this version may write to it. */
   requireMind(mindId: string): void;
@@ -134,7 +138,10 @@ function parseClaim(input: unknown) {
   const claim = typeof input.claim === "string" ? input.claim.trim() : "";
   if (claim === "") throw new InvalidInputError("A claim to check must be some text.");
   if (claim.length > MAX_CLAIM_CHARACTERS)
-    throw new InvalidInputError("The claim is too long to check.");
+    throw new InvalidInputError({
+      key: "error.check.claimTooLong",
+      values: { max: MAX_CLAIM_CHARACTERS },
+    });
   const cited: CitedQuote[] = Array.isArray(input.cited)
     ? input.cited.flatMap((each: unknown) =>
         isRecord(each) && typeof each.quote === "string"
@@ -420,11 +427,9 @@ export function createChecks(options: ChecksOptions) {
       if (!ready.ok) {
         const { result } = ready;
         if (result.kind === "not-ready") throw new ChatNotReadyError(result.readiness);
-        throw new InvalidInputError(
-          result.kind === "local-mode"
-            ? "Local mode is on, and the model isn't on this computer."
-            : "The User declined sending the claim to the model's service.",
-        );
+        throw new InvalidInputError({
+          key: result.kind === "local-mode" ? "error.check.localMode" : "error.check.declined",
+        });
       }
       const scope = options.evidence.scope(
         parsed.scope ? options.resolveScope(parsed.scope) : null,

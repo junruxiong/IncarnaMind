@@ -8,6 +8,7 @@ import {
   addDocuments,
   createDataFolder,
   dismissChatSetup,
+  focusRingShows,
   launchApp,
   removeDataFolder,
   setSidebarWidth,
@@ -69,24 +70,16 @@ async function slideAndClick(window: Page, target: Locator): Promise<void> {
   await window.mouse.up();
 }
 
-/** Whether the focused control shows DESIGN.md's ring: a solid 2px accent outline. */
-const focusRingShows = (window: Page) =>
-  window.evaluate(() => {
-    const element = document.activeElement as HTMLElement | null;
-    if (!element) return false;
-    const probe = document.createElement("span");
-    probe.style.color = "var(--color-accent)";
-    document.body.append(probe);
-    const accent = getComputedStyle(probe).color;
-    probe.remove();
-    const style = getComputedStyle(element);
-    return (
-      element.matches(":focus-visible") &&
-      style.outlineStyle === "solid" &&
-      Number.parseFloat(style.outlineWidth) >= 2 &&
-      style.outlineColor === accent
-    );
-  });
+/**
+ * Puts the focus on a row of the tree as the keyboard does: the tree is one Tab stop, the row
+ * last focused, so Tab from outside it comes back to `row`.
+ */
+async function tabIntoRow(window: Page, row: Locator): Promise<void> {
+  await row.focus();
+  await window.keyboard.press("Shift+Tab");
+  await window.keyboard.press("Tab");
+  await expect(row).toBeFocused();
+}
 
 /** Writes text files and adds them; waits until each is ready. */
 async function addTextDocuments(window: Page, files: Record<string, string>): Promise<void> {
@@ -334,37 +327,36 @@ test("the Tags tab lists every Tag with its colour and count, lists its Document
     await expect(library).toBeVisible();
     await expect(tagFilter).toHaveText("Tags: Paper");
     await expect(library.getByTestId("library-document")).toHaveCount(1);
-    await expect(openTag("Paper")).toHaveAttribute("aria-pressed", "true");
-    await expect(openTag("Report")).toHaveAttribute("aria-pressed", "false");
+    await expect(openTag("Paper")).toHaveAttribute("aria-selected", "true");
+    await expect(openTag("Report")).toHaveAttribute("aria-selected", "false");
     // The Tags view says the filter with its chosen Tag, so no "Tagged …" row pushes it down.
     await expect(window.getByTestId("tag-filter-active")).toHaveCount(0);
     expect(await tagList.boundingBox()).toEqual(listBefore);
     await screenshot(window, "tags-tab-en");
 
-    // By keyboard: Tab to Report, Enter shows it, Enter again stops filtering; its chevron
-    // folds and unfolds with Enter.
-    await tabTo(window, openTag("Report"));
+    // By keyboard: on Report's row, Enter shows it, Enter again stops filtering; ← and → fold
+    // and unfold its Documents, the chevron's job with the mouse.
+    await tabIntoRow(window, openTag("Report"));
     expect(await focusRingShows(window)).toBe(true);
     await window.keyboard.press("Enter");
     await expect(tagFilter).toHaveText("Tags: Report");
     await expect(library.getByTestId("library-document")).toHaveCount(2);
-    await expect(openTag("Report")).toHaveAttribute("aria-pressed", "true");
-    await expect(openTag("Paper")).toHaveAttribute("aria-pressed", "false");
+    await expect(openTag("Report")).toHaveAttribute("aria-selected", "true");
+    await expect(openTag("Paper")).toHaveAttribute("aria-selected", "false");
     await window.keyboard.press("Enter");
     await expect(tagFilter).toHaveCount(0);
     await expect(library.getByTestId("library-document")).toHaveCount(4);
-    await expect(openTag("Report")).toHaveAttribute("aria-pressed", "false");
+    await expect(openTag("Report")).toHaveAttribute("aria-selected", "false");
     await window.keyboard.press("Enter");
     await expect(tagFilter).toHaveText("Tags: Report");
-    await window.keyboard.press("Tab");
-    const collapse = tagList.getByRole("button", { name: "Collapse Report" });
-    await expect(collapse).toBeFocused();
-    expect(await focusRingShows(window)).toBe(true);
-    await window.keyboard.press("Enter");
+    await window.keyboard.press("ArrowLeft");
     await expect(reportDocuments).toHaveCount(0);
-    await expect(tagList.getByRole("button", { name: "Expand Report" })).toBeFocused();
-    await window.keyboard.press("Enter");
+    await expect(openTag("Report")).toHaveAttribute("aria-expanded", "false");
+    await expect(tagList.getByRole("button", { name: "Expand Report" })).toHaveCount(1);
+    await window.keyboard.press("ArrowRight");
     await expect(reportDocuments).toHaveCount(2);
+    await expect(openTag("Report")).toBeFocused();
+    expect(await focusRingShows(window)).toBe(true);
     // On up to the switcher, every stop with its ring.
     await tabTo(window, browse.getByRole("button", { name: "Tags", exact: true }));
     expect(await focusRingShows(window)).toBe(true);
@@ -429,7 +421,7 @@ test("the Tags tab lists every Tag with its colour and count, lists its Document
     await expect(tagList.getByRole("button", { name: "收起 Report" })).toBeVisible();
     await slideAndClick(window, openTag("Paper"));
     await expect(tagFilter).toHaveText("标签：Paper");
-    await expect(openTag("Paper")).toHaveAttribute("aria-pressed", "true");
+    await expect(openTag("Paper")).toHaveAttribute("aria-selected", "true");
     await window.mouse.move(700, 400, { steps: 6 });
     await screenshot(window, "tags-tab-zh");
     await openFilterMenu();
@@ -551,7 +543,7 @@ test("a Document row shows up to three Tag colours and +N after its name, names 
         name: "Source locations",
       }),
     );
-    await tabTo(window, attention);
+    await tabIntoRow(window, attention);
     expect(await focusRingShows(window)).toBe(true);
     await expect(tip).toBeVisible();
     await expect(tip.getByTestId("tag-names-tip-tag")).toHaveText([
@@ -586,7 +578,7 @@ test("a Document row shows up to three Tag colours and +N after its name, names 
     await expect(tip).toBeHidden();
     await expect(attention).toBeFocused();
     // A row without Tags has no tip.
-    await tabTo(window, row("Field notes").getByTestId("open-document"));
+    await tabIntoRow(window, row("Field notes").getByTestId("open-document"));
     await expect(tip).toBeHidden();
 
     // A narrow sidebar: still one 28px line each, the colours inside.
@@ -608,7 +600,7 @@ test("a Document row shows up to three Tag colours and +N after its name, names 
       "Attention\nAttention.txt\n标签：Book, Contract, Paper, Report",
     );
     await expect(attention).toHaveAccessibleDescription("标签：Book, Contract, Paper, Report");
-    await tabTo(window, attention);
+    await tabIntoRow(window, attention);
     await expect(tip).toBeVisible();
     await screenshot(window, "row-marks-zh");
   } finally {

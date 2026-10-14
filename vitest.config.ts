@@ -63,5 +63,9 @@ export default defineConfig({
   test: {
     include: ["tests/**/*.test.ts"],
     environment: "node",
+    // Tests wait for states, not times: a limit only catches a hang. Vitest's 5 s default failed
+    // tests that were merely slow on a loaded CI runner.
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
   },
 });

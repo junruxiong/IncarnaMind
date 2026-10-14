@@ -1,4 +1,4 @@
-import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef } from "react";
+import { type ReactNode, useEffect, useMemo, useRef } from "react";
 import { create } from "zustand";
 import type { Document, LibraryGroup, Mind } from "../../../core/api";
 import { useFolderDrop } from "../folderDrag";
@@ -9,7 +9,7 @@ import { sorted } from "../sort";
 import { type SortScope, sortOf, useSort } from "../sortChoices";
 import { documentFields, folderFields, mindFields } from "../sortFields";
 import { useAppStore } from "../store";
-import { TREE_ROW } from "../treeKeys";
+import { foldKeys, TreeLevelOffset, useTreeItem } from "../treeKeys";
 import { useRename } from "../useRename";
 import { InlineName } from "./InlineName";
 import { ChevronDownLineIcon, ChevronRightLineIcon, FolderLineIcon } from "./lineIcons";
@@ -115,8 +115,8 @@ const useFolds = create<Folds>()((set, get) => {
  * says. Minds drag onto a Folder, or onto Not in a Folder to leave theirs,
  * and the target lights up; a Folder renames in place (double-click, Enter
  * or F2, as in Finder) and has its menu (⋯ or a right-click): Open in the
- * Library, New Mind here, Rename, Delete…. → and ← open and close a Folder
- * (↑ and ↓ move through the rows, see `moveThroughRows`).
+ * Library, New Mind here, Rename, Delete…. The keys that walk the tree, → and
+ * ← among them, are `useTreeKeyboard`'s.
  */
 export function LibraryFolders({
   documents,
@@ -126,7 +126,6 @@ export function LibraryFolders({
   documents: readonly Document[];
   renderDocument(document: Document, depth: number): ReactNode;
 }) {
-  const t = useT();
   const groups = useAppStore((state) => state.library?.groups) ?? [];
   const assignments = useAppStore((state) => state.library?.assignments);
   const minds = useAppStore((state) => state.minds);
@@ -180,9 +179,9 @@ export function LibraryFolders({
   const showLoose = groups.length > 0 || looseMinds.length > 0 || looseDocuments.length > 0;
 
   return (
-    <nav aria-label={t("sidebar.tree")} data-testid="library-folders">
+    <div data-testid="library-folders">
       {groups.length > 0 && (
-        <ul>
+        <ul role="none">
           {orderedGroups.map((folder) => (
             <FolderGroup
               key={folder.id}
@@ -201,7 +200,7 @@ export function LibraryFolders({
           renderDocument={renderDocument}
         />
       )}
-    </nav>
+    </div>
   );
 }
 
@@ -245,20 +244,21 @@ function Contents({
     return { rows, shownDocuments: documents.length };
   }, [minds, documents, sort, language, t]);
   const more = Math.min(MORE_DOCUMENTS, shownDocuments - listed);
+  const showMoreItem = useTreeItem({ depth });
   if (minds.length === 0 && documents.length === 0) return null;
   let documentsListed = 0;
   return (
-    <ul>
+    <ul role="none">
       {rows.map((each) => {
         if ("autoTitle" in each) return <MindRow key={each.id} mind={each} depth={depth} />;
         documentsListed += 1;
         return documentsListed <= listed ? renderDocument(each, depth) : null;
       })}
       {more > 0 && (
-        <li className="flex h-7 items-center">
+        <li role="none" className="flex h-7 items-center">
           <button
             type="button"
-            {...TREE_ROW}
+            {...showMoreItem}
             data-testid="show-more-documents"
             onClick={() => useFolds.getState().showMore(listKey, MORE_DOCUMENTS)}
             // Its text on the rows' text edge at this depth.
@@ -321,21 +321,13 @@ function FolderGroup({
   const count = documents.length;
   const t = useT();
   const objectMenu = useObjectMenu({ kind: "folder", id: folder.id });
-
-  const onKeyDown = (event: KeyboardEvent) => {
-    // Enter, a click, Space or the arrows open and close it.
-    if (event.key === "ArrowRight" && !expanded) {
-      event.preventDefault();
-      useFolds.getState().toggle(folder.id);
-    } else if (event.key === "ArrowLeft" && expanded) {
-      event.preventDefault();
-      useFolds.getState().toggle(folder.id);
-    }
-  };
+  const treeItem = useTreeItem({ depth: 0, expanded, selected });
+  const fold = foldKeys(expanded, () => useFolds.getState().toggle(folder.id));
 
   return (
     // The whole Folder takes a drop: its row, or anything listed in it.
     <li
+      role="none"
       data-testid="library-folder"
       data-folder-id={folder.id}
       data-count={count}
@@ -345,7 +337,6 @@ function FolderGroup({
       data-drop-target={drop.active ? "true" : undefined}
       className={`rounded-md ${drop.active ? dropLit : ""}`}
     >
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: a right-click shortcut to the row's menu, whose ⋯ button is the way in by keyboard. */}
       <div {...(rename.renaming ? {} : objectMenu.rowProps)} className={rowClass(selected)}>
         {rename.renaming ? (
           <span className="flex h-full w-full min-w-0 items-center gap-2 pr-1 pl-2">
@@ -365,9 +356,8 @@ function FolderGroup({
           <button
             {...rename.nameProps}
             type="button"
-            {...TREE_ROW}
+            {...treeItem}
             data-testid="folder-row"
-            aria-expanded={expanded}
             aria-current={selected ? "page" : undefined}
             title={folder.description ? `${folder.name}\n${folder.description}` : folder.name}
             onClick={(event) => {
@@ -376,7 +366,7 @@ function FolderGroup({
             }}
             onKeyDown={(event) => {
               rename.nameProps.onKeyDown(event);
-              onKeyDown(event);
+              fold(event);
             }}
             className={`${rowButtonClass} ${clearsActions.menu}`}
           >
@@ -394,6 +384,7 @@ function FolderGroup({
             <ObjectMenu
               target={{ kind: "folder", id: folder.id }}
               label={t("folder.more", { name: folder.name })}
+              tabIndex={-1}
               here={{ "folder.rename": rename.start }}
             />
           </div>
@@ -431,9 +422,10 @@ function NotInAFolder({
   const folded = useFolds((state) => state.looseFolded);
   const drop = useFolderDrop(null);
   const Chevron = folded ? ChevronRightLineIcon : ChevronDownLineIcon;
+  const treeItem = useTreeItem({ depth: 0, expanded: !folded });
+  const fold = foldKeys(!folded, () => useFolds.getState().toggle(NOT_IN_A_FOLDER));
   return (
-    <section
-      aria-labelledby="not-in-a-folder-heading"
+    <div
       data-testid="not-in-a-folder"
       data-count={documents.length}
       data-minds={minds.length}
@@ -442,19 +434,19 @@ function NotInAFolder({
       className={`mt-3 rounded-md ${drop.active ? dropLit : ""}`}
     >
       <div className="flex h-7 items-end gap-2 pr-2 pb-1 pl-2 text-label">
-        <h2 id="not-in-a-folder-heading" className="min-w-0 font-semibold text-ink-meta">
+        <div className="min-w-0 font-semibold text-ink-meta">
           <button
             type="button"
-            {...TREE_ROW}
+            {...treeItem}
             data-testid="not-in-a-folder-toggle"
-            aria-expanded={!folded}
             onClick={() => useFolds.getState().toggle(NOT_IN_A_FOLDER)}
+            onKeyDown={fold}
             className="flex max-w-full items-center gap-1 rounded-sm hover:text-ink-secondary"
           >
             <span className="truncate">{t("library.unsorted")}</span>
             <Chevron className="size-3 shrink-0" />
           </button>
-        </h2>
+        </div>
         <span
           data-testid="not-in-a-folder-hint"
           title={t("sidebar.notInFolder.title")}
@@ -464,15 +456,17 @@ function NotInAFolder({
         </span>
       </div>
       {!folded && (
-        <Contents
-          listKey={NOT_IN_A_FOLDER}
-          scope="sidebar"
-          depth={0}
-          minds={minds}
-          documents={documents}
-          renderDocument={renderDocument}
-        />
+        <TreeLevelOffset value={1}>
+          <Contents
+            listKey={NOT_IN_A_FOLDER}
+            scope="sidebar"
+            depth={0}
+            minds={minds}
+            documents={documents}
+            renderDocument={renderDocument}
+          />
+        </TreeLevelOffset>
       )}
-    </section>
+    </div>
   );
 }

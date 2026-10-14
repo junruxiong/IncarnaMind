@@ -37,13 +37,13 @@ const PROCESSING: ReadonlySet<DocumentStatus> = new Set([
   "embedding",
 ]);
 
-/** In progress (a blue dot), waiting for the User (amber), failed (red), or for information (grey). */
+/** In progress (a blue dot), waiting for the User or failed (amber), or for information (grey). */
 type Tone = "progress" | "waiting" | "error" | "info";
 
 const dotTones: Record<Tone, string> = {
   progress: "bg-accent",
   waiting: "bg-attention",
-  error: "bg-danger",
+  error: "bg-attention",
   info: "bg-ink-placeholder",
 };
 
@@ -392,7 +392,7 @@ function useStatuses(): Status[] {
       short: t("status.taggingWaiting"),
       full: t("jev.waiting.notice"),
       action: {
-        label: t("status.setUp"),
+        label: t("status.choose"),
         testId: "tagging-waiting-setup",
         run: () => openSettings("models"),
       },

@@ -195,7 +195,7 @@ export function restoredSize(place: AssistantPlace, dock: AssistantDock): Partia
 
 /**
  * Whether the assistant's Fold is in its ⋯ menu rather than its header
- * (D189): on Windows, docked right, the header also holds the window's
+ * (#657): on Windows, docked right, the header also holds the window's
  * buttons, and its title needs the room.
  */
 export const foldsInMenu = (titleBar: TitleBar, dock: AssistantDock): boolean =>

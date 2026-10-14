@@ -111,7 +111,7 @@ export interface TaskKind {
   run(task: TaskRun): Promise<TaskEnd>;
   /** The Block in the Task's Mind it works on, from its input. */
   blockOf?(input: unknown): string | null;
-  /** What the User can ask of it from its progress (D189). Absent: Pause and Stop. */
+  /** What the User can ask of it from its progress (#657). Absent: Pause and Stop. */
   readonly actions?: readonly TaskAction[];
   /** What its steps do, in its own words, by key; a step it can't name shows its key. */
   describeSteps?(

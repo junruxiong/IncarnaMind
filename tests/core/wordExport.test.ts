@@ -10,7 +10,7 @@ import { readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { JSONContent } from "@tiptap/core";
 import { describe, expect, test } from "vitest";
-import { type Core, type Document, MIND_WORD_FIELD } from "../../src/core";
+import { type Core, type Document, MIND_WORD_FIELD, WORD_ATOM_NODE } from "../../src/core";
 import { recordProposalRequest } from "../../src/shared/proposals";
 import { wordFileOf, wordImportProgressOf } from "../../src/shared/wordFiles";
 import { createTempDataFolder, startCore } from "../helpers/core";
@@ -587,6 +587,28 @@ describe("Blocks added, deleted and moved", () => {
     await client.settled();
     const { document } = await exported(core, mindId);
     expect(document).toContain(`<w:body>${three}${one}<w:sectPr>`);
+  });
+
+  test("a deleted section break leaves its paragraph in the next section, with no properties of its own, and the rest as it was", async () => {
+    const one = paragraph("One.", {
+      paraId: "00000001",
+      sectPr: '<w:sectPr><w:pgSz w:orient="landscape"/></w:sectPr>',
+    });
+    const two = paragraph("Two.", { paraId: "00000002" });
+    const { core, mindId, client } = await setUp({ body: one + two });
+    editMind(client, ([first, ...rest]) => [
+      {
+        ...first,
+        content: (first?.content ?? []).filter((node) => node.type !== WORD_ATOM_NODE),
+      } as JSONContent,
+      ...rest,
+    ]);
+    await client.settled();
+    const { document } = await exported(core, mindId);
+    expect(document).not.toContain("landscape");
+    expect(document).toContain(
+      `<w:body>${paragraph("One.", { paraId: "00000001" })}${two}<w:sectPr>`,
+    );
   });
 
   test("a new item in a list goes on with the list's own numbering", async () => {

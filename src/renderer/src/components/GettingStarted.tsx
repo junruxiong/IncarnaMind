@@ -4,6 +4,7 @@ import { shortcutLabel } from "../commands/keymap";
 import { CheckMarkIcon } from "../editor/icons";
 import { useGap, useT } from "../i18n";
 import { useAppStore } from "../store";
+import { useAddYourDocuments } from "./AddYourDocuments";
 import { AskIcon, PlugIcon } from "./icons";
 import { ChevronRightLineIcon, CloseLineIcon } from "./lineIcons";
 import { SLOT, Slotted } from "./Slotted";
@@ -85,7 +86,8 @@ function StepMark({ number, done, next }: { number: number; done: boolean; next:
 /**
  * "Get started · N of 3", at the bottom of the sidebar: each step ticks
  * itself as the User does it, and the next one to do takes them there. It can
- * be hidden, and goes once all three are done.
+ * be hidden, and goes once all three are done. "Add your Documents" is a menu
+ * of the two ways, Add files… and Link a folder… (#766).
  */
 export function GetStartedCard() {
   const t = useT();
@@ -93,19 +95,16 @@ export function GetStartedCard() {
   const steps = useGettingStarted();
   const updateGettingStarted = useAppStore((state) => state.updateGettingStarted);
   const openExamples = useAppStore((state) => state.openExamples);
-  const createMind = useAppStore((state) => state.createMind);
   const startQuestion = useAppStore((state) => state.startQuestion);
+  const addMenu = useAddYourDocuments("get-started-add");
   if (!steps) return null;
 
   const done = steps.filter((step) => step.done).length;
   const next = steps.find((step) => !step.done)?.key;
-  const go: Record<StepKey, () => void> = {
+  const go: Record<Exclude<StepKey, "documents">, () => void> = {
     citation: () => void openExamples(),
-    // A Mind of their own, which shows the ways to add Documents or connect apps.
-    documents: () => void createMind(),
     question: startQuestion,
   };
-
   return (
     <section
       aria-labelledby="get-started-title"
@@ -150,8 +149,8 @@ export function GetStartedCard() {
                 </span>
               ) : step.key === next ? (
                 <button
+                  {...(step.key === "documents" ? addMenu.buttonProps : { onClick: go[step.key] })}
                   type="button"
-                  onClick={go[step.key]}
                   className={`${rowClass} font-semibold text-ink hover:bg-hover focus-visible:outline-offset-0`}
                 >
                   {mark}
@@ -171,6 +170,7 @@ export function GetStartedCard() {
           );
         })}
       </ol>
+      {addMenu.menu}
       <button
         type="button"
         data-testid="onboarding-groups"
@@ -184,13 +184,13 @@ export function GetStartedCard() {
 }
 
 /**
- * Above the example Mind's title: what a Mind is, and the ways on: a Mind of
- * one's own, to add Documents or apps to, or removing the examples.
+ * Above the example Mind's title: what a Mind is, and the ways on: adding
+ * one's own Documents, in place (#766), or removing the examples.
  */
 export function ExampleBanner() {
   const t = useT();
   const gap = useGap();
-  const createMind = useAppStore((state) => state.createMind);
+  const addMenu = useAddYourDocuments("example-add");
   const removeExamples = useAppStore((state) => state.removeExamples);
   return (
     <aside
@@ -221,13 +221,14 @@ export function ExampleBanner() {
         </p>
         <div className="flex flex-wrap gap-2">
           <button
+            {...addMenu.buttonProps}
             type="button"
             data-testid="example-add-own"
-            onClick={() => void createMind()}
             className={buttonStyle("primary", "sm")}
           >
             {t("examples.banner.addOwn")}
           </button>
+          {addMenu.menu}
           <button
             type="button"
             data-testid="example-remove"
