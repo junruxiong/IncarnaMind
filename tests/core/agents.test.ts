@@ -21,6 +21,8 @@ import { addAndProcess, createSourceFolder, writeSourceFile } from "../helpers/d
 import { connectToMind } from "../helpers/mindClient";
 import { writeMind } from "../helpers/minds";
 import { replyingModel } from "../helpers/models";
+import { paragraph, run, wordFile } from "../helpers/word";
+import { importWordBytes } from "../helpers/wordMinds";
 
 const TIDES = [
   "# Tides",
@@ -401,6 +403,29 @@ describe("outside agents", () => {
       arguments: { mindId: inFinance.id },
     });
     expect(refused.isError).toBe(true);
+  });
+
+  it("read someone's changes in a Mind imported from Word as changes, with who made each (#734)", async () => {
+    const { core, dataDir, launch, coast } = await pairedToCoast();
+    const priya = 'w:author="Priya Nair" w:date="2026-10-02T09:00:00Z"';
+    const { mindId } = await importWordBytes(
+      core,
+      dataDir,
+      wordFile({
+        body: paragraph(
+          `${run("Notice is ")}<w:del w:id="1" ${priya}><w:r><w:delText xml:space="preserve">one month</w:delText></w:r></w:del><w:ins w:id="2" ${priya}>${run("three months")}</w:ins>${run(".")}`,
+        ),
+      }),
+      { origin: "someone-else", folderId: coast.id },
+    );
+    const agent = await connectLegacyAgent(launch);
+
+    const read = structured<{ markdown: string }>(
+      await agent.callTool({ name: "read_mind", arguments: { mindId } }),
+    );
+    expect(read.markdown).toContain(
+      "Notice is {--one month--}{++three months++}{>>Replaced by Priya Nair, 2 Oct 2026<<}.",
+    );
   });
 
   it("name a renamed Document as it is now, in a Mind they read and in the Citations they check or show", async () => {

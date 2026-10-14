@@ -8,6 +8,7 @@ import {
   type Document,
   InvalidInputError,
   type MindExport,
+  messageReference,
   NotFoundError,
 } from "../../src/core";
 import { createTempDataFolder, manualClock, startCore } from "../helpers/core";
@@ -316,6 +317,7 @@ describe("exporting a Mind", () => {
       unverifiedCitations: 2,
       questions: 1,
       fromWord: false,
+      theirChanges: 0,
     });
   });
 
@@ -514,6 +516,68 @@ describe("exporting a Mind", () => {
       const long = await nameOf("", [note("tide ".repeat(40))], "markdown");
       expect(long.length).toBeLessThanOrEqual(64);
       expect(long.endsWith(" tide.md")).toBe(true);
+    });
+
+    test("a long first line ends at a clause, never on 'plus' or half a sentence (#769)", async () => {
+      expect(
+        await nameOf(
+          "",
+          [
+            note(
+              "The employee gets 27 days of paid holiday per year, plus bank holidays and the notice period after probation.",
+            ),
+          ],
+          "docx",
+        ),
+      ).toBe("The employee gets 27 days of paid holiday per year.docx");
+      expect(
+        await nameOf(
+          "",
+          [
+            note(
+              "员工每年享有二十七天带薪年假，另外还享有法定节假日，试用期结束后双方需要提前一个月书面通知对方，否则视为违约，需要承担相应的赔偿责任并支付违约金。",
+            ),
+          ],
+          "docx",
+        ),
+      ).toBe(
+        "员工每年享有二十七天带薪年假，另外还享有法定节假日，试用期结束后双方需要提前一个月书面通知对方，否则视为违约.docx",
+      );
+    });
+
+    test("a typed title too long for a file is cut at a word (#769)", async () => {
+      const title = "Holiday and notice rules for employees on probation ".repeat(4).trim();
+      const name = await nameOf(title, [note("Body")], "markdown");
+      expect(title.startsWith(`${name.slice(0, -".md".length)} `)).toBe(true);
+      expect(name.length).toBeLessThanOrEqual(123);
+    });
+
+    test("a Mind of Notes added from an Answer is named by the Question, not the Answer's first line (#769)", async () => {
+      const { core, mind } = await setUp("");
+      await core.addToNote({
+        mindId: mind.id,
+        blocks: [
+          {
+            type: "paragraph",
+            content: [
+              {
+                type: "text",
+                text: "The employee gets 27 days of paid holiday per year, plus bank holidays.",
+              },
+            ],
+          },
+        ],
+        origin: {
+          from: messageReference("conversation-1", "answer-1"),
+          question:
+            "How many days of holiday does the employee get, and how much notice after probation?",
+        },
+        model: null,
+      });
+
+      expect((await core.previewMindExport(mind.id, { format: "docx" })).fileName).toBe(
+        "How many days of holiday does the employee get.docx",
+      );
     });
   });
 

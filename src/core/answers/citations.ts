@@ -27,6 +27,7 @@
  * sections, the heading it sits under.
  */
 import { citationNode, type NodeJSON } from "../../shared/blockJson";
+import { parseQuotedWords } from "../../shared/citations";
 import {
   englishLocation,
   locationOf,
@@ -45,11 +46,13 @@ import {
   type CitationCheckReason,
   type CitationRecheck,
   MAX_CITED_PAGES,
+  type QuotedWords,
   type RejectedRecord,
 } from "../api";
 import type { CitationSource } from "../documents";
 import type { PageText } from "../documents/passages";
 import type { WindowedPassage } from "../documents/search";
+import { closestWords } from "./closestWords";
 import { withCueMarks } from "./cueMarks";
 import type {
   AnswerSearchOptions,
@@ -84,7 +87,7 @@ const NOTES_MARK = "[speaker notes]";
 const commentMark = (author: string | null) =>
   author ? `[comment by ${author.replace(/[\]\n]+/g, " ")}]` : "[comment]";
 
-const QUOTE_PAIRS: readonly (readonly [string, string])[] = [
+export const QUOTE_PAIRS: readonly (readonly [string, string])[] = [
   ['"', '"'],
   ["'", "'"],
   ["“", "”"],
@@ -114,6 +117,13 @@ export function cleanQuote(raw: string): string {
     if (quote === before) return quote;
   }
 }
+
+/** A name read for comparing: its letters and digits, in lower case ("Gradient Descent: The Ultimate Optimizer" is a file named without its colon). */
+const nameKey = (name: string) =>
+  name
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "");
 
 /** How a Document's text is matched: whether it lost its f-ligatures (see `lostLigatures`). */
 type Matching = Pick<MatchOptions, "lostLigatures">;
@@ -429,8 +439,17 @@ export function recheckKept(
   });
   if (now.check !== "found") return null;
   if (attributes.check === "found" && attributes.contentHash === now.contentHash) return null;
+  // The quote being found says nothing of the words the Answer put in quotation marks (#483).
+  const { quotedWords, ...kept } = attributes;
+  const asked = parseQuotedWords(quotedWords);
+  if (asked && now.contentHash !== null) {
+    const words = asked.answer.map((piece) => piece.text).join("");
+    const units = documents.pageTexts(documentId, now.contentHash, null, null);
+    const cited = documents.pageTexts(documentId, now.contentHash, now.pageFrom, now.pageTo);
+    if (!quoteInUnits(cited, words, matchingOf(units))) return null;
+  }
   return {
-    ...attributes,
+    ...kept,
     check: now.check,
     checkReason: now.checkReason,
     contentHash: now.contentHash,
@@ -561,6 +580,8 @@ interface Accepted {
   /** Where it points, for its label, worked out once when the record is taken. */
   location: Citation["location"];
   result: CheckResult | null;
+  /** The Answer's quoted words that its sentence's Citations don't have, when they made `result` not found (#483). */
+  quotedWords?: QuotedWords;
 }
 
 /** A record as `take` read it: accepted, with its Passage's Units; or why not. */
@@ -594,6 +615,7 @@ const toCitation = (record: Accepted, result: CheckResult | null): Citation => (
   quote: record.quote,
   check: result?.check ?? "checking",
   checkReason: result?.checkReason ?? null,
+  ...(record.quotedWords && { quotedWords: record.quotedWords }),
 });
 
 export interface CitationSessionEvents {
@@ -894,6 +916,20 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
     if (found.length === 0) {
       return { text: "No Passages in the User's Documents match this search.", passageCount: 0 };
     }
+    return {
+      text: show(found),
+      passageCount: found.length,
+      passageIds: found.map((passage) => passage.passageId),
+      ranks: found.map((passage, index) => passage.rank ?? index),
+      // Someone else wrote a saved web page: reading it makes the Run third-party (#78).
+      ...(found.some((passage) => passage.documentKind === "web") && {
+        thirdParty: ["web-page"] as const,
+      }),
+    };
+  }
+
+  /** The Passages as the model reads them, each under the id it cites it by. */
+  function show(found: readonly WindowedPassage[]): string {
     const dates = new Map<string, string | null>();
     const dateOf = (documentId: string) => {
       if (!dates.has(documentId)) dates.set(documentId, documents.documentDate(documentId));
@@ -927,16 +963,7 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
         text,
       };
     });
-    return {
-      text: formatPassages(formatted),
-      passageCount: found.length,
-      passageIds: found.map((passage) => passage.passageId),
-      ranks: found.map((passage, index) => passage.rank ?? index),
-      // Someone else wrote a saved web page: reading it makes the Run third-party (#78).
-      ...(found.some((passage) => passage.documentKind === "web") && {
-        thirdParty: ["web-page"] as const,
-      }),
-    };
+    return formatPassages(formatted);
   }
 
   const tools: AnswerTools = {
@@ -962,6 +989,17 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
     cite,
 
     hasRecord: (marker) => records.has(marker),
+
+    shownPassages: () =>
+      [...handleOf.values()].flatMap((id) => {
+        const text = shownTexts.get(id);
+        return text === undefined ? [] : [{ id, text }];
+      }),
+
+    quoteFound(passage: string, quote: string): boolean {
+      const taken = takeQuote({ passage, quote }, 0, { structured: true });
+      return taken.ok && !!taken.record.quote && check(taken.record).check === "found";
+    },
 
     unfoundQuotes(): UnfoundQuote[] {
       return [...records.values()]
@@ -1064,6 +1102,12 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
     searchDocument: (documentId: string, query: string, signal?: AbortSignal) =>
       search(query, signal, [documentId]),
 
+    /**
+     * Gives the model Passages without a search: a meeting's live transcript (#144). They can
+     * be cited as a search's are, and don't count as one of the Answer's searches.
+     */
+    show,
+
     quotes,
 
     /** The Passages the model was given, by the id it cites them by, as it read them. */
@@ -1083,6 +1127,42 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
     /** Checks every record, once, when the Answer finishes. */
     check(): void {
       for (const record of records.values()) record.result ??= check(record);
+    },
+
+    /**
+     * Checks the words an Answer put in quotation marks (#483), after `check`:
+     * each span (see ./quotedWords) is looked for with the Citation check's own
+     * matching in the Units cited in its sentence. One found changes nothing.
+     * One not found makes the Citation whose Units are nearest it "not found",
+     * with the Answer's words and the Document's nearest for its card. Where a
+     * Citation of the sentence couldn't be checked, no span of it is.
+     */
+    checkQuotedWords(quoted: readonly { words: string; markers: readonly number[] }[]): void {
+      // A Document's name in quotation marks, as an Answer gives a title, is a name, not a quote.
+      const names = new Set(
+        [...records.values()].map(({ source }) => nameKey(source.documentName)),
+      );
+      for (const { words, markers } of quoted) {
+        if (names.has(nameKey(words))) continue;
+        const cited = [...new Set(markers)].flatMap((marker) => {
+          const record = records.get(marker);
+          return record
+            ? [{ record, units: citedText(record), matching: matchingFor(record.source) }]
+            : [];
+        });
+        if (cited.some(({ record }) => record.result?.check === "cant-check")) continue;
+        if (cited.some(({ units, matching }) => quoteInUnits(units, words, matching))) continue;
+        let nearest: { record: Accepted; closest: ReturnType<typeof closestWords> } | undefined;
+        for (const { record, units, matching } of cited) {
+          const closest = closestWords(units, words, matching);
+          if (!nearest || closest.near > nearest.closest.near) nearest = { record, closest };
+        }
+        if (!nearest || nearest.record.quotedWords || nearest.record.result?.check !== "found") {
+          continue;
+        }
+        nearest.record.result = { check: "not-found", checkReason: "quoted-words-not-on-pages" };
+        nearest.record.quotedWords = nearest.closest.shown;
+      }
     },
 
     finalCitation,

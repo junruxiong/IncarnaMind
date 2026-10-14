@@ -3,10 +3,12 @@
  * a scripted model in place of a real one: claims extracted from a received
  * document, each claim and each Find support sentence searched for in the
  * Folder with `searchEvidence`, checked, and scored against labels. A model
- * failure leaves a sentence "not checked", never supported.
+ * failure leaves a sentence "not checked", never supported. The run checks
+ * with the app's claim check (`corePipeline`), which the baseline's tests
+ * stand beside.
  */
 import { describe, expect, test } from "vitest";
-import { baselinePipeline } from "../../eval/checks/lib/pipeline";
+import { baselinePipeline, corePipeline } from "../../eval/checks/lib/pipeline";
 import {
   type ExtractedClaim,
   type SentenceResult,
@@ -16,8 +18,10 @@ import {
 import type { CheckLabel, FindSupportItem, VerifyItem } from "../../eval/checks/lib/set";
 import type { Generate } from "../../eval/lib/rewrites";
 import type { PassageSearchResult } from "../../src/core";
+import { checkingModel } from "../helpers/checks";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import { addAndProcess, createSourceFolder, writeSourceFile } from "../helpers/documents";
+import { scriptedModels } from "../helpers/models";
 
 const TIDES =
   "# Tides\n\nSpring tides happen at new moon and at full moon.\n\n## Harbour\n\nThe harbour office opens on Mondays at 8am.\n";
@@ -244,5 +248,68 @@ describe("The checks pipeline", { timeout: 60_000 }, () => {
       evidence: null,
     });
     expect(pipeline.usage().calls).toBe(3);
+  });
+
+  test("the run's pipeline checks with the app's claim check: its verdict and the Citation that decides it, the received document never its evidence", async () => {
+    const plans = {
+      "Spring tides come at new moon.": {
+        verdict: "supported",
+        quote: "Spring tides happen at new moon and at full moon.",
+      },
+      "The harbour office opens on Tuesdays.": {
+        verdict: "contradicted",
+        quote: "The harbour office opens on Mondays at 8am.",
+      },
+      "The harbour has 40 moorings.": { reply: { text: "I'm sorry, I can't help with that." } },
+    } as const;
+    const core = startCore(await createTempDataFolder(), {
+      createChatModel: scriptedModels(checkingModel(plans)).createChatModel,
+    });
+    await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
+    const sources = await createSourceFolder();
+    const [tides, notice] = await addAndProcess(core, [
+      await writeSourceFile(sources, "Tides.md", TIDES),
+      await writeSourceFile(sources, "Harbour notice.md", NOTICE),
+    ]);
+    if (!tides || !notice) throw new Error("The Documents weren't added.");
+    const folder = await core.createLibraryGroup({ name: "Harbour", description: "Tides." });
+    await core.moveToFolder({ documentIds: [tides.id], folderId: folder.id });
+    const names = new Map([
+      [tides.id, "Tides.md"],
+      [notice.id, "Harbour notice.md"],
+    ]);
+    const pipeline = corePipeline({
+      core,
+      generate: scripted,
+      scope: { folderIds: [folder.id], tagIds: [], documentIds: [] },
+      nameOf: (passage) => names.get(passage.documentId) ?? passage.documentName,
+      citedName: (citation) => names.get(citation.documentId) ?? citation.documentName,
+    });
+
+    expect(await pipeline.check("Spring tides come at new moon.")).toMatchObject({
+      verdict: "supported",
+      evidence: {
+        document: "Tides.md",
+        quote: "Spring tides happen at new moon and at full moon.",
+      },
+    });
+    expect(
+      await pipeline.check("The harbour office opens on Tuesdays.", { documentIds: [notice.id] }),
+    ).toMatchObject({
+      verdict: "contradicted",
+      evidence: { document: "Tides.md", quote: "The harbour office opens on Mondays at 8am." },
+    });
+    expect(await pipeline.check("The harbour has 40 moorings.")).toEqual({
+      verdict: "not-checked",
+      reason: "refused",
+      evidence: null,
+    });
+    expect(await pipeline.check("Penguins nest on the harbour wall.")).toEqual({
+      verdict: "unsupported",
+      evidence: null,
+    });
+    // Extraction is still the baseline's one call.
+    expect((await pipeline.extractClaims(NOTICE)).claims).toHaveLength(3);
+    expect(pipeline.usage().calls).toBe(1);
   });
 });

@@ -19,6 +19,7 @@
  * Minds point to, and those retained, stay, the only text a deleted Document
  * keeps (`keptCitationTexts`), so those Citations can still be checked.
  */
+
 import { randomUUID } from "node:crypto";
 import { existsSync, renameSync } from "node:fs";
 import { rm, stat } from "node:fs/promises";
@@ -64,6 +65,7 @@ import { foundSourceOf } from "../sources/store";
 import type { Database, SqlValue } from "../storage";
 import { tagsOfDocument } from "../tags";
 import type { StoredTaggingState } from "../tags/tagger";
+import { isPlaceholderDate } from "./creationDate";
 import { createEmbeddingQueue } from "./embedding";
 import {
   DOCUMENT_EXTENSIONS,
@@ -75,12 +77,7 @@ import {
 } from "./files";
 import { isPackageKind, packageSizeError } from "./formats/zip";
 import { keywordText } from "./keywords";
-import {
-  createLibrary,
-  FORGET_FILE_IDENTITY,
-  type LibraryHooks,
-  type LibraryOptions,
-} from "./library";
+import { createLibrary, FORGET_FILE_IDENTITY, type LibraryHooks } from "./library";
 import type { PageText } from "./passages";
 import {
   CURRENT_SINCE,
@@ -417,8 +414,6 @@ export interface DocumentsOptions {
     retryMs: number;
     detectDataless: boolean;
   };
-  /** Says something to the User, in their language: why locating a Linked folder was refused. */
-  say: LibraryOptions["say"];
   reportError?: (error: unknown) => void;
 }
 
@@ -488,6 +483,15 @@ export function createDocuments(options: DocumentsOptions) {
     return row.status as DocumentStatus;
   };
 
+  /** The Mind a file was last imported as, still there (#720). */
+  const importedMindOf = (documentId: string): string | null =>
+    db.get<{ mind_id: string }>(
+      `SELECT p.mind_id FROM word_packages p JOIN minds m ON m.id = p.mind_id
+       WHERE p.document_id = ? AND p.deleted_at IS NULL AND m.deleted_at IS NULL
+       ORDER BY p.created_at DESC, p.rowid DESC LIMIT 1`,
+      [documentId],
+    )?.mind_id ?? null;
+
   const toDocument = (row: DocumentRow): Document => {
     const tagging = taggingOf(row.status, row.tagging_status);
     const status = statusOf(row);
@@ -522,13 +526,15 @@ export function createDocuments(options: DocumentsOptions) {
               message: row.tagging_error_message ?? "",
             }
           : null,
-      creationDate: row.creation_date,
+      creationDate:
+        row.creation_date && !isPlaceholderDate(row.creation_date) ? row.creation_date : null,
       modifiedAt: row.file_mtime_ms === null ? null : new Date(row.file_mtime_ms).toISOString(),
       title: row.title,
       web: row.kind === "web" ? webPageInfo(db, row.id) : null,
       reference: referenceOf(db, row.id),
       ownFile: ownFileOf(row),
       found: foundSourceOf(db, row.id),
+      importedAs: importedMindOf(row.id),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -1229,7 +1235,6 @@ export function createDocuments(options: DocumentsOptions) {
     db,
     now,
     dataDir,
-    say: options.say,
     folders: options.folders,
     watch: options.linkedFolders.watch,
     stat: options.linkedFolders.stat,
@@ -1853,10 +1858,13 @@ export function createDocuments(options: DocumentsOptions) {
       if (!row) return null;
       const issued = referenceOf(db, documentId)?.fields.issued;
       if (issued) return issued;
-      if (row.creation_date) return row.creation_date.slice(0, 10);
-      return row.file_mtime_ms === null
-        ? null
-        : new Date(row.file_mtime_ms).toISOString().slice(0, 10);
+      // A date stored before it was known to be a placeholder (2000-01-01) isn't shown either.
+      if (row.creation_date && !isPlaceholderDate(row.creation_date)) {
+        return row.creation_date.slice(0, 10);
+      }
+      if (row.file_mtime_ms === null) return null;
+      const modified = new Date(row.file_mtime_ms).toISOString().slice(0, 10);
+      return isPlaceholderDate(modified) ? null : modified;
     },
 
     /**
@@ -2010,6 +2018,9 @@ export function createDocuments(options: DocumentsOptions) {
       return { documents, skipped };
     },
 
+    /** See the library's `newVersionFrom`: a newer draft of a Word file imported before (#720). */
+    newVersionFrom: (documentId: string, path: string) => library.newVersionFrom(documentId, path),
+
     /**
      * Adds a file IncarnaMind saved in the data folder, a web page's snapshot
      * or a Meeting's Transcript while it records, as a new Document named
@@ -2079,6 +2090,19 @@ export function createDocuments(options: DocumentsOptions) {
     list,
     names,
     ids,
+
+    /** The live Documents (of these, or all of them) that failed or have no text: the few `findUnreadDocuments` looks at. */
+    unread(documentIds?: readonly string[]): Document[] {
+      const { where, params } = filterWhere(documentIds ? { ids: documentIds } : {});
+      return db
+        .all<DocumentRow>(
+          `SELECT ${COLUMNS} FROM documents
+           WHERE ${where} AND (status IN ('failed', 'no-text') OR failure_reason IS NOT NULL)
+           ORDER BY created_at DESC, rowid DESC`,
+          params,
+        )
+        .map(toDocument);
+    },
 
     /** A live Document. Throws NotFoundError for an unknown or deleted one. */
     get(idInput: unknown): Document {
@@ -2231,7 +2255,8 @@ export function createDocuments(options: DocumentsOptions) {
       const id = parseId(idInput);
       const row = find(id);
       if (!row) throw new NotFoundError({ key: "error.document.notFound" });
-      if (!failedNow(row)) {
+      // A scan with no text is read again too (#763): its text recognition may now be ready.
+      if (!failedNow(row) && row.status !== "no-text") {
         throw new InvalidInputError({ key: "error.document.notFailed" });
       }
       if (row.file_status !== "available") {

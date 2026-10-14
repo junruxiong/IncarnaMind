@@ -145,6 +145,8 @@ interface Place {
   show(window: Page): Promise<void>;
   row(window: Page, name: string): Locator;
   main(row: Locator): Locator;
+  /** What says the row is selected: its tree item in the sidebar, the row itself in the Library. */
+  selects(row: Locator): Locator;
   names(window: Page): Promise<string[]>;
 }
 
@@ -160,6 +162,7 @@ const sidebar: Place = {
       .getByTestId("document-list-item")
       .filter({ has: window.getByTestId("row-text").getByText(name, { exact: true }) }),
   main: (row) => row.getByTestId("open-document"),
+  selects: (row) => row.getByTestId("open-document"),
   names: (window) =>
     window
       .getByTestId("sidebar")
@@ -179,6 +182,7 @@ const library: Place = {
         has: window.getByTestId("library-document-name").getByText(name, { exact: true }),
       }),
   main: (row) => row.locator("[data-row-main]"),
+  selects: (row) => row,
   names: (window) => window.getByTestId("library-document-name").allTextContents(),
 };
 
@@ -277,8 +281,8 @@ for (const place of PLACES) {
       await window.keyboard.press("ArrowDown");
       await expect(peekName).toHaveText(names[1] as string);
       await expect(place.main(second)).toBeFocused();
-      await expect(second).toHaveAttribute("aria-selected", "true");
-      await expect(first).toHaveAttribute("aria-selected", "false");
+      await expect(place.selects(second)).toHaveAttribute("aria-selected", "true");
+      await expect(place.selects(first)).toHaveAttribute("aria-selected", "false");
       await window.keyboard.press("ArrowDown");
       await expect(peekName).toHaveText(names[2] as string);
       await window.keyboard.press("ArrowDown");

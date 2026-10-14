@@ -38,8 +38,7 @@ export function automaticGroupClassifier(
       signal.throwIfAborted();
       const status = await detectOllama(baseUrl);
       signal.throwIfAborted();
-      if (!status.running)
-        throw new TaggingNotReadyError("Start Ollama to use automatic local classification.");
+      if (!status.running) throw new TaggingNotReadyError({ key: "error.tagging.startOllama" });
       const models = status.models;
       const visual = excerpt.kind === "pdf" && images.length > 0;
       let model = visual ? VISION : fallback ? FAST : TEXT;
@@ -52,8 +51,8 @@ export function automaticGroupClassifier(
         if (!hasOllamaModel(models, id))
           throw new TaggingNotReadyError(
             id === VISION
-              ? "This PDF needs page images. Install clef-flash in Ollama, then classify it again, or assign a group manually."
-              : `Install ${id} in Ollama, then classify again, or select a model manually.`,
+              ? { key: "error.tagging.needsPageImages" }
+              : { key: "error.tagging.installModel", values: { model: id } },
           );
       };
       const loaded = await fetch(`${baseUrl}/api/ps`, {
@@ -128,9 +127,7 @@ export function automaticGroupClassifier(
           return run();
         }
         if (memoryFailure && visual)
-          throw new TaggingNotReadyError(
-            "Clef-Flash needs more available memory for this PDF. Close other models and retry, or assign a group manually.",
-          );
+          throw new TaggingNotReadyError({ key: "error.tagging.needsMemory" });
         throw error;
       }
     },

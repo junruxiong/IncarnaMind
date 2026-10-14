@@ -112,7 +112,7 @@ test("a Note switched out of Question context looks muted, and asking without a 
   await window.keyboard.press("Enter");
   const notReady = window.getByTestId("composer").getByTestId("composer-not-ready");
   await expect(notReady).toBeVisible();
-  await expect(notReady).toContainText("needs a chat model");
+  await expect(notReady).toContainText("needs an AI model");
   await expect(window.getByTestId("composer-input")).toHaveValue("Is anyone there?");
   await expect(window.getByTestId("assistant-question")).toHaveCount(0);
   await expect(window.getByTestId("assistant-empty")).toBeVisible();
