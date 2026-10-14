@@ -101,6 +101,14 @@ function parseBlockIds(value: unknown): string[] {
   return value;
 }
 
+/** A request's changes still waiting in a note: null when it hasn't proposed there. */
+function proposalsOf(note: Y.XmlFragment, request: string) {
+  const doc = note.doc;
+  if (!doc || proposalRequestOf(doc, request) === null) return null;
+  const mine = pendingProposals(note).filter((each) => each.request === request);
+  return { proposalId: mine[0]?.id ?? "", changes: mine.length };
+}
+
 export function createNoteAdding(options: NoteAddingOptions) {
   const { content } = options;
 
@@ -170,15 +178,17 @@ export function createNoteAdding(options: NoteAddingOptions) {
         await recheckCitations(citedTables(withoutIds(given)), options.recheck),
       );
       return content.edit(mindId, (note) => {
-        const doc = note.doc;
-        const already = doc !== null && proposalRequestOf(doc, request) !== null;
-        if (!already) {
-          insertBlocks(note, blocks, { request });
-          if (doc) recordProposalRequest(doc, request, made);
-        }
-        const mine = pendingProposals(note).filter((each) => each.request === request);
-        return { proposalId: mine[0]?.id ?? "", changes: mine.length };
+        const earlier = proposalsOf(note, request);
+        if (earlier) return earlier;
+        insertBlocks(note, blocks, { request });
+        if (note.doc) recordProposalRequest(note.doc, request, made);
+        return proposalsOf(note, request) ?? { proposalId: "", changes: 0 };
       });
+    },
+
+    /** A request's changes in a Mind, once it has proposed there; null before. */
+    proposed(mindId: string, request: string): { proposalId: string; changes: number } | null {
+      return content.read(mindId, (note) => proposalsOf(note, request));
     },
 
     undo(input: unknown): void {

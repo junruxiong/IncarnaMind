@@ -58,6 +58,7 @@ import {
   DRAFT_STEP,
   type FinishOptions,
   fileSources,
+  pausedBy,
   SAVE_STEP,
   savedOf,
   writeDraft,
@@ -377,15 +378,7 @@ export function createResearch(options: ResearchOptions) {
         },
         { signal: task.signal },
       );
-      if (stop) {
-        return {
-          end: {
-            status: "paused",
-            reason: stop.reason,
-            resetsAt: stop.reason === "plan-limit" ? stop.resetsAt : null,
-          },
-        };
-      }
+      if (stop) return { end: pausedBy(stop) };
       const outcome = outcomes[0];
       if (!outcome || outcome.status === "stopped" || outcome.status === "not-checked") {
         return { end: { status: "stopped" } };
@@ -495,7 +488,9 @@ export function createResearch(options: ResearchOptions) {
     if (task.signal.aborted) return { status: "stopped" };
     let saved = savedOf(task.step(SAVE_STEP)?.result);
     if (input.sources.web && !done(SAVE_STEP)) {
-      saved = await fileSources(options, task, input, documents, ready.prepared);
+      const filed = await fileSources(options, task, input, documents, ready.prepared);
+      if ("end" in filed) return filed.end;
+      saved = filed;
       report();
     }
     if (task.signal.aborted) return { status: "stopped" };
