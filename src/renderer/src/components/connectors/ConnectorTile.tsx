@@ -1,5 +1,5 @@
 /**
- * A Connector's tile: its name's first letter on a neutral square (D92), as
+ * A Connector's tile: its name's first letter on a neutral square (#148), as
  * Settings › Connectors shows each service, no brand logo. 32px in a list,
  * 44px at the head of its page.
  */
