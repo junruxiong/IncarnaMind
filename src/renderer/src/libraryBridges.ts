@@ -61,17 +61,17 @@ export function bridgeFrom(
 /**
  * The most recent Mind, which "Ask about this Folder" writes in: the one
  * shown before the Library covered it, or else the one edited last (`minds`
- * lists them so). Never the example Mind. Null with none: a new one is made.
+ * lists them so). Never an example Mind. Null with none: a new one is made.
  */
 export function mindToAskIn({
   minds,
   openMindId,
-  exampleMindId,
+  exampleMindIds,
 }: {
   minds: readonly Mind[];
   openMindId: string | null;
-  exampleMindId: string | null;
+  exampleMindIds: readonly string[];
 }): string | null {
-  const own = minds.filter((mind) => mind.id !== exampleMindId);
+  const own = minds.filter((mind) => !exampleMindIds.includes(mind.id));
   return (own.find((mind) => mind.id === openMindId) ?? own[0])?.id ?? null;
 }
