@@ -11,6 +11,7 @@ import {
   type ToolApprovalRequest,
 } from "../../../core/api";
 import { asksAfterThirdParty } from "../../../shared/approvalRules";
+import { toolCallsOf } from "../../../shared/toolCalls";
 import { AnswerWriting } from "../answerPhase";
 import { isCalculated, RUN_SCRIPT, SEARCH } from "../answerSteps";
 import { useAnswers } from "../answers";
@@ -39,22 +40,6 @@ const text = (value: unknown) => (typeof value === "string" ? value : null);
 
 const isErrorKind = (value: unknown): value is ProviderErrorKind =>
   typeof value === "string" && Object.hasOwn(ANSWER_PROBLEMS, value);
-
-/** The Tool calls the core stored on the Answer (a JSON array), or none if unreadable. */
-function toolCallsOf(value: unknown): AnswerToolCall[] {
-  if (typeof value !== "string") return [];
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return Array.isArray(parsed)
-      ? parsed.filter(
-          (call): call is AnswerToolCall =>
-            typeof call === "object" && call !== null && typeof call.id === "string",
-        )
-      : [];
-  } catch {
-    return [];
-  }
-}
 
 /** Items of the meta line, with a dot between each two. */
 function Dotted({ items }: { items: ReactNode[] }) {
