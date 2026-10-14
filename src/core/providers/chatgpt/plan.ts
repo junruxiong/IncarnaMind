@@ -1,6 +1,6 @@
 /**
  * The ChatGPT plan provider ("Continue with ChatGPT"): the sign-in, its
- * status, the account's models, and the clean-up of the experimental
+ * status, the account's models and their limits, and the clean-up of the experimental
  * provider it replaces. Chat providers (`../chat.ts`) use it for readiness,
  * the connection test and the model factory; the endpoint adapter does the
  * requests.
@@ -20,6 +20,7 @@ import type { Secrets } from "../../secrets";
 import type { SettingsStore } from "../../settings";
 import { ChatGptOtherAccountError, ChatGptPlanNotAllowedError } from "./errors";
 import { CHATGPT_PLAN_BASE_URL, KNOWN_PLAN_MODELS, listPlanModels } from "./planEndpoint";
+import { createPlanLimits } from "./planLimits";
 import {
   type ChatGptSignInEndpoints,
   createChatGptSignIn,
@@ -76,6 +77,8 @@ export function createChatGptPlan(options: {
   now: () => number;
   /** Its sign-in changed. */
   onChange: () => void;
+  /** What this session knows of its models' limits changed. */
+  onLimitsChange: () => void;
   fetch?: typeof globalThis.fetch;
 }) {
   const { endpoints, settings, onChange } = options;
@@ -104,6 +107,7 @@ export function createChatGptPlan(options: {
   });
 
   let listed: { at: number; models: ChatGptPlanModel[] } | null = null;
+  const limits = createPlanLimits({ now: options.now, onChange: options.onLimitsChange });
 
   /**
    * The account's models, read with its token and kept a few minutes; the
@@ -132,7 +136,12 @@ export function createChatGptPlan(options: {
   const status = async (): Promise<ChatGptPlanStatus> => {
     // Read before awaiting the keychain, so the status describes the moment it was asked for.
     const signingIn = signIn.signingIn();
-    return { account: await signIn.account(), signingIn, models: await models() };
+    return {
+      account: await signIn.account(),
+      signingIn,
+      models: await models(),
+      limits: limits.snapshot(),
+    };
   };
 
   return {
@@ -144,11 +153,13 @@ export function createChatGptPlan(options: {
     used: signIn.used,
     /** The account's models, for a Question's model picker. */
     models,
+    limits,
 
     async signIn(input: { anotherAccount?: boolean } = {}): Promise<ChatGptSignInResult> {
       try {
         const { firstTime } = await signIn.signIn(input);
         listed = null;
+        limits.clear();
         return { ok: true, firstTime, status: await status() };
       } catch (error) {
         return { ok: false, error: signInError(error) };
@@ -160,6 +171,7 @@ export function createChatGptPlan(options: {
     async signOut(): Promise<ChatGptSignOutResult> {
       const { revoked } = await signIn.signOut();
       listed = null;
+      limits.clear();
       return { revoked, status: await status() };
     },
 
