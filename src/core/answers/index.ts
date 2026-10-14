@@ -84,6 +84,7 @@ import {
   type ThirdPartyReason,
   type ThirdPartySource,
   type ToolCallApproval,
+  type UnreadFile,
   type WebPageCall,
 } from "../api";
 import type { CallToDecide, ToolCallToApprove } from "../approvals";
@@ -467,6 +468,8 @@ export interface DocumentsForAnswers
   searchableNames(documentIds: readonly string[] | null, limit: number): ListedDocuments;
   /** The languages the Documents to search are in, the most common first, with how many are in each. */
   searchableLanguages(documentIds: readonly string[] | null): DocumentLanguage[];
+  /** The Documents among these (null: every Document) whose text couldn't be read, or some of it. */
+  unread(documentIds: readonly string[] | null): UnreadFile[];
   search(
     query: string,
     documentIds: readonly string[] | null,
@@ -1322,6 +1325,7 @@ export function createAnswers(options: AnswersOptions) {
         },
         // So the model can search again in the Documents' language (see the search Tool).
         documentLanguages: options.documents.searchableLanguages(documentIds),
+        unreadDocuments: () => options.documents.unread(documentIds),
         searchDocuments: (query, signal, searchOptions) =>
           session.tools.searchDocuments(query, signal, searchOptions),
         cite: (records, citeOptions) => session.tools.cite(records, citeOptions),

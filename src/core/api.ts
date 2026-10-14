@@ -2780,6 +2780,8 @@ export interface UnreadFile {
   extension: string | null;
   /** The Document, or null for a file in a format not read. */
   documentId: string | null;
+  /** For "pages": the scanned pages that couldn't be read, from 1; empty when none could be, and for every other reason. */
+  pages: number[];
 }
 
 /**
