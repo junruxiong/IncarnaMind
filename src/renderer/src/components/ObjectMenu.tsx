@@ -215,9 +215,7 @@ export function ObjectMenu({
               aria-disabled={enabled === true ? undefined : true}
               title={reason}
               onClick={() => run(entry)}
-              className={`${menuItemClass} ${menuItemUnavailableClass} pl-2 ${
-                command.destructive ? "text-danger" : ""
-              }`}
+              className={`${menuItemClass} ${menuItemUnavailableClass} pl-2`}
             >
               <span className="flex-1">{menuLabelOf(command, ctx, t)}</span>
               {keys && <span className="pl-4 text-[13px] text-ink-meta">{keys}</span>}

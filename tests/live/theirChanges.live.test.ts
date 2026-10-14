@@ -19,7 +19,7 @@ import { createAiSdkChatModel } from "../../src/core/providers/models";
 import { createOllamaModels } from "../../src/core/providers/ollamaModels";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import { paragraph, run, wordFile } from "../helpers/word";
-import { importWord } from "../helpers/wordImports";
+import { importWordBytes } from "../helpers/wordMinds";
 
 const LIVE: { name: string; kind: ChatProviderKind; apiKey: string | undefined; model: string }[] =
   [
@@ -108,7 +108,10 @@ describe.each(LIVE)("Someone's tracked changes, read live: $name", (live) => {
         ...(live.apiKey && { apiKey: live.apiKey }),
         modelId: live.model,
       });
-      const { mindId } = await importWord(core, dataDir, CONTRACT, { name: "MSA redline.docx" });
+      const { mindId } = await importWordBytes(core, dataDir, CONTRACT, {
+        name: "MSA redline.docx",
+        origin: "someone-else",
+      });
 
       const report: string[] = [`## ${live.name} · ${live.model}`];
       onTestFinished(async () => {

@@ -178,6 +178,10 @@ Another person's tracked changes in an imported Word file, which #104 kept read-
 - **Content schema version 20:** a request of kind `word-change` in `proposalRequests`, with the author and the date the file gives. A version before 20 would take their changes for the AI's, and count what accepting one keeps as AI text.
 - **Checked on the Word corpus (#84):** `npm run eval:word` takes each file's changes in order, accepts every third, rejects the next and leaves the next, and exports with the User's edits tracked: no change is out of date as imported, the package passes the checks Word's repair prompt is about, nothing is reported lost, nothing is tracked as the User's or IncarnaMind's, the changes left import again with their kind, author, date and text, and accepting every change gives the text accepting every change in the Mind does. All 20 files of the tracked-changes set pass, and CI opens each export in LibreOffice headless.
 
+## Amendment: an imported Word file is also a Document (2026-10-13)
+
+Importing a .docx as a Mind also adds the original file to the Library as a Document, unless the User unticks it on the import screen. The Mind is the User's working copy and is never cited; the Document is the file as received and is cited like any other. Checks of the Mind's own sentences never use its original as evidence. A newer file of the same name, imported into the same Folder, can become a new version of the Document. Export writes into the kept package and never changes the Document; deleting either leaves the other.
+
 ## Amendment: someone else's changes, read and shown as changes (2026-10-13, #734)
 
 #108 read another person's changes still waiting as the AI's are, as not yet the Mind's text, so a model asked what the counterparty changed was shown the text before their changes, and a PDF showed it with nothing to say changes were waiting. They are now shown as changes, with who made each and when. The AI's own changes still waiting are read as before (ADR-0003).

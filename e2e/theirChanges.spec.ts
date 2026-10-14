@@ -6,6 +6,7 @@ import {
   askInAssistant,
   createDataFolder,
   dismissChatSetup,
+  expectReadyDocuments,
   importWordFromMenu,
   interceptOpenDialog,
   launchApp,
@@ -61,7 +62,7 @@ test.afterEach(async () => {
   await removeDataFolder(files);
 });
 
-test("the assistant reads someone's changes as changes, and a PDF shows them struck and underlined with who made each, or as if accepted", async () => {
+test("the assistant reads someone's changes as changes and cites the contract, and a PDF shows them struck and underlined with who made each, or as if accepted", async () => {
   const path = join(files, "MSA redline.docx");
   await writeFile(path, CONTRACT);
   const { app, window } = await launchApp(dataDir, { fakeChat: true, home });
@@ -73,16 +74,23 @@ test("the assistant reads someone's changes as changes, and a PDF shows them str
   await useOutputLocation(window, output);
   await interceptOpenDialog(app, path);
   const dialog = await importWordFromMenu(window);
+  // The original goes into the Library too (#720), so an Answer can cite the contract.
+  await expect(dialog.getByTestId("word-import-add-original")).toBeChecked();
   await dialog.getByTestId("word-import-confirm").click();
   await expect(dialog).toBeHidden();
   await expect(window.getByTestId("their-changes-count")).toHaveText("2 changes from Priya Nair");
+  await expectReadyDocuments(window, 1);
 
-  // Asked beside the Mind, the model reads the deleted clause as Priya's deletion.
-  const answer = await askInAssistant(window, "What did they change in clause 9?");
+  // Asked beside the Mind, the model reads the deleted clause as Priya's deletion, and cites the contract.
+  const answer = await askInAssistant(window, "What did they change in the termination clause?");
   await expect(answer).toContainText(
     "[deleted by Priya Nair, 2026-10-02: 9.2 The Customer may terminate for convenience.]",
   );
   await expect(answer).toContainText("[inserted by Priya Nair, 2026-10-02: 90]");
+  await expect(answer.getByTestId("citation-chip").first()).toHaveAttribute(
+    "aria-label",
+    /^Citation 1: MSA redline, .*Quote found/,
+  );
 
   // The export sheet offers how to show them, for a PDF: with changes shown, by default.
   await openOptions(window, "Export options");

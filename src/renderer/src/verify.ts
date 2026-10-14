@@ -102,8 +102,8 @@ export function stopVerify(mindId: string): void {
   if (running?.mindId === mindId) void core.cancelCheck(running.requestId);
 }
 
-/** Opens the document a Mind verifies beside it, at a page. */
-export function openVerified(documentId: string, page?: number): void {
+/** Opens a Document beside the Mind in front, at a page: the one it verifies, or its original (#720). */
+export function openDocumentBeside(documentId: string, page?: number): void {
   const { layout, openDocument } = useAppStore.getState();
   openDocument(
     { documentId, ...(page !== undefined && { pageFrom: page, pageTo: page }) },
@@ -134,7 +134,7 @@ export async function verifyDocument(): Promise<void> {
       return;
     }
     await showNewMind(made.mind);
-    openVerified(made.documentId);
+    openDocumentBeside(made.documentId);
     // A new Mind follows the default model.
     await findClaims(made.mind.id, null);
   } catch (error) {
