@@ -71,22 +71,24 @@ describe("the Mind a Question from the Library goes in", () => {
   const minds = [mind("edited"), mind("older"), mind("example")];
 
   test("the Mind last shown, which the Library covered", () => {
-    expect(mindToAskIn({ minds, openMindId: "older", exampleMindId: "example" })).toBe("older");
+    expect(mindToAskIn({ minds, openMindId: "older", exampleMindIds: ["example"] })).toBe("older");
   });
 
   test("with no Mind open, the one edited most recently", () => {
-    expect(mindToAskIn({ minds, openMindId: null, exampleMindId: "example" })).toBe("edited");
+    expect(mindToAskIn({ minds, openMindId: null, exampleMindIds: ["example"] })).toBe("edited");
   });
 
   test("never the example Mind, nor a Mind deleted meanwhile", () => {
-    expect(mindToAskIn({ minds, openMindId: "example", exampleMindId: "example" })).toBe("edited");
-    expect(mindToAskIn({ minds, openMindId: "gone", exampleMindId: null })).toBe("edited");
+    expect(mindToAskIn({ minds, openMindId: "example", exampleMindIds: ["example"] })).toBe(
+      "edited",
+    );
+    expect(mindToAskIn({ minds, openMindId: "gone", exampleMindIds: [] })).toBe("edited");
     expect(
-      mindToAskIn({ minds: [mind("example")], openMindId: "example", exampleMindId: "example" }),
+      mindToAskIn({ minds: [mind("example")], openMindId: "example", exampleMindIds: ["example"] }),
     ).toBeNull();
   });
 
   test("no Mind yet: none, so a new one is made", () => {
-    expect(mindToAskIn({ minds: [], openMindId: null, exampleMindId: null })).toBeNull();
+    expect(mindToAskIn({ minds: [], openMindId: null, exampleMindIds: [] })).toBeNull();
   });
 });
