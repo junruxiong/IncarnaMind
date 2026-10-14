@@ -2917,20 +2917,20 @@ export const en = {
   "gettingStarted.hide": "Hide Get started",
   "gettingStarted.done": "Done: ",
   "gettingStarted.step.citation": "Check a Citation in the example",
-  "gettingStarted.step.documents": "Index your Documents or connect apps",
+  "gettingStarted.step.documents": "Add your Documents",
   "gettingStarted.step.question": "Ask your own Question",
   "startGuide.title": "Start in three steps",
   "startGuide.documents.title": "Add your Documents, or connect your apps",
   "startGuide.documents.body":
     "PDF, Word, PowerPoint, Excel, Markdown or text. Your files stay where they are; IncarnaMind only reads them. A Google Drive or OneDrive folder synced to this computer works too.",
   "startGuide.documents.linkFolder": "Link a folder…",
-  "startGuide.documents.addFiles": "Add files",
+  "startGuide.documents.addFiles": "Add files…",
   "startGuide.documents.connectApp": "Connect an app…",
   "startGuide.documents.apps":
-    "Connect Notion, Google Drive or any app with an MCP server, and Answers can look things up there too. Only your Documents get checked Citations.",
+    "Connect Notion, Google Drive and other apps, and Answers can look things up there too. Only your Documents get checked Citations.",
   "startGuide.ask.title": "Ask a Question",
   "startGuide.ask.body":
-    "Press {shortcut} anywhere in a Mind and type. The Answer is written right below, from your Documents.",
+    "Press {shortcut} and ask. The Answer appears in the assistant; add it to your note with one click.",
   "startGuide.ask.example": "e.g. What do these reports say about Q3 revenue?",
   "startGuide.check.title": "Check where each claim comes from",
   "startGuide.check.body":
