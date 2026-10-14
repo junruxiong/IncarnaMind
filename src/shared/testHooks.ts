@@ -33,6 +33,8 @@ export interface TestHooks {
       string,
       { group: string; reversible: boolean; destructive: boolean; renames: boolean }
     >;
+    /** The kinds of object ⌘K finds by name. */
+    found: readonly string[];
   };
   /** How many animations are running, leaving copies of closed menus included: settled at 0. */
   motionRunning(): number;
