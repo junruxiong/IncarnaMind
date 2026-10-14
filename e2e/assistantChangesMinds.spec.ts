@@ -249,3 +249,30 @@ test("changes stay in their Mind when the User moves to another and back, and go
   await window.keyboard.type("l");
   await expect(window.getByTestId("change-out-of-date")).toHaveCount(1);
 });
+
+test("Reject all keeps a Mind the assistant made once something of it was accepted", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setLanguage(window, "en");
+  await setWindowSize(app, window, 1440, 900);
+  await writeMind(window, "Project plan", ["Hire a designer."]);
+  await writeMind(window, "Q3 review", ["The quarter was good."]);
+  const answer = await askInAssistant(
+    window,
+    "Add Ship the beta in May to Project plan and make a new note called Fieldwork plan",
+  );
+  const rows = answer.getByTestId("mind-changes-row");
+  await expect(rows.nth(1)).toContainText("Created: Fieldwork plan· 2 changes");
+
+  // Fieldwork plan is open beside, with the cursor in its first change: ⌘↵ accepts that one.
+  await pointAndClick(window, rows.nth(1).getByTestId("mind-changes-open"));
+  await expect(window.getByTestId("mind-title")).toHaveValue("Fieldwork plan");
+  await window.keyboard.press("ControlOrMeta+Enter");
+  await expect(rows.nth(1)).toContainText("· 1 change");
+
+  await pointAndClick(window, answer.getByTestId("mind-changes-reject-all"));
+  await expect(rows.nth(1)).toContainText("Created: Fieldwork plan");
+  await expect(window.getByTestId("mind-tab").filter({ hasText: "Fieldwork plan" })).toHaveCount(1);
+  await expect(rows.nth(0)).toContainText("· none waiting");
+});
