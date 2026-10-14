@@ -7,7 +7,13 @@ import { ANSWER_TEMPERATURE, answerTemperature } from "../../src/core/answers/en
 import { asGenerated } from "../../src/shared/aiText";
 import { pendingProposals, proposalRequestOf } from "../../src/shared/proposals";
 import { askAndFinish, setUpWithDocuments } from "../helpers/citations";
-import { createTempDataFolder, nextEvent, nextTurn, startCore } from "../helpers/core";
+import {
+  createTempDataFolder,
+  nextEvent,
+  nextTurn,
+  saveProviderUnasked,
+  startCore,
+} from "../helpers/core";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
 import {
   answerIn,
@@ -710,7 +716,7 @@ describe("When Questions can't be answered", () => {
     const core = startCore(await createTempDataFolder(), {
       createChatModel: models.createChatModel,
     });
-    await core.saveChatProvider({ kind: "openai", apiKey: "sk-test", modelId: "gpt-test" });
+    await saveProviderUnasked(core, { kind: "openai", apiKey: "sk-test", modelId: "gpt-test" });
     const requested = nextEvent(core, "consent.requested");
     const mind = await core.createMind();
     const writer = await connectToMind(core, mind.id);
@@ -736,7 +742,7 @@ describe("When Questions can't be answered", () => {
     const core = startCore(await createTempDataFolder(), {
       createChatModel: models.createChatModel,
     });
-    await core.saveChatProvider({ kind: "openai", apiKey: "sk-test", modelId: "gpt-test" });
+    await saveProviderUnasked(core, { kind: "openai", apiKey: "sk-test", modelId: "gpt-test" });
     core.on("consent.requested", (request) => void core.respondToConsent(request.requestId, false));
     const mind = await core.createMind();
     const writer = await connectToMind(core, mind.id);
@@ -854,7 +860,7 @@ describe("Choosing the model", () => {
 
   test("a cloud provider isn't asked for its models before the User allows the chat flow to it", async () => {
     const core = startCore(await createTempDataFolder());
-    const provider = await core.saveChatProvider({
+    const provider = await saveProviderUnasked(core, {
       kind: "openai",
       apiKey: "sk-test",
       modelId: "gpt-test",

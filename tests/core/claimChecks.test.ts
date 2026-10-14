@@ -5,7 +5,7 @@ import type { ClaimCheckAction, ClaimCheckAttributes, Core, Document } from "../
 import { claimSpans } from "../../src/renderer/src/editor/claimChecks";
 import { claimCheckShown } from "../../src/shared/claimChecks";
 import { checkingModel as checkingModelOf, type Plan, sentenceOf } from "../helpers/checks";
-import { setUpWithDocuments } from "../helpers/citations";
+import { type SourceFile, setUpWithDocuments } from "../helpers/citations";
 import { createTempDataFolder, manualClock, queryDatabase, startCore } from "../helpers/core";
 import { addAndProcess, sha256, waitForProcessing, writeSourceFile } from "../helpers/documents";
 import { connectToMind, type MindClient, typeInto } from "../helpers/mindClient";
@@ -26,6 +26,11 @@ const TIDES = {
     "",
     "Harbours publish the times of high water every year.",
   ].join("\n"),
+};
+
+const BREAD = {
+  name: "Bread.md",
+  contents: "# Bread\n\nSourdough bread needs a starter fed with flour and water every day.",
 };
 
 const SUPPORTED = "Spring tides come at new and full moon.";
@@ -99,9 +104,13 @@ async function shownChecks(core: Core, client: MindClient, folderId: string | nu
   }));
 }
 
-/** A Mind with one paragraph of these sentences and the Tides Document, checked by `model`. */
-async function mindWith(sentences: readonly string[], model = checkingModel()) {
-  const setup = await setUpWithDocuments(model, [TIDES]);
+/** A Mind with one paragraph of these sentences and the Tides Document (and `others`), checked by `model`. */
+async function mindWith(
+  sentences: readonly string[],
+  model = checkingModel(),
+  others: readonly SourceFile[] = [],
+) {
+  const setup = await setUpWithDocuments(model, [TIDES, ...others]);
   const body = sentences.join(" ");
   const block = paragraph(text(body));
   writeMind(setup.client, [block]);
@@ -270,6 +279,67 @@ describe("One claim check", () => {
     expect(
       await core.checkClaim({ claim: SUPPORTED, checked: { documentIds: [tides.id] } }),
     ).toMatchObject({ verdict: "unsupported", versions: [] });
+  });
+
+  test("the quotes a sentence cites name their Document as it is now, and as cited once it is gone", async () => {
+    const calls: ModelCall[] = [];
+    const { core, client, check, tides } = await mindWith(
+      [SUPPORTED],
+      checkingModel(PLANS, calls),
+      [BREAD],
+    );
+    const quote = "Spring tides happen at new moon and at full moon";
+    const cited = paragraph(
+      text(`${SUPPORTED.slice(0, -1)} `),
+      {
+        type: "citation",
+        attrs: {
+          documentId: tides.id,
+          documentName: "Tides",
+          contentHash: tides.contentHash,
+          quote,
+          check: "found",
+        },
+      },
+      text("."),
+    );
+    writeMind(client, [cited]);
+    await client.settled();
+    const citedToTheModel = async () => {
+      calls.length = 0;
+      await check("check-against-documents", whole(cited, SUPPORTED.length + 1));
+      const asked = calls[0]?.options.prompt.find((message) => message.role === "user")?.content;
+      return JSON.stringify(asked);
+    };
+    expect(await citedToTheModel()).toContain(`Tides: “${quote}”`);
+
+    await core.renameDocument(tides.id, "Tides of the coast");
+    expect(await citedToTheModel()).toContain(`Tides of the coast: “${quote}”`);
+
+    await core.deleteDocument(tides.id);
+    const gone = await citedToTheModel();
+    expect(gone).toContain(`Tides: “${quote}”`);
+    expect(gone).not.toContain("Tides of the coast");
+  });
+
+  test("checkClaim names the quotes it is given by their Document's name now", async () => {
+    const calls: ModelCall[] = [];
+    const { core, documents } = await setUpWithDocuments(checkingModel(PLANS, calls), [TIDES]);
+    const tides = documents[0] as Document;
+    await core.renameDocument(tides.id, "Tides of the coast");
+    const quote = "Spring tides happen at new moon and at full moon";
+
+    await core.checkClaim({
+      claim: SUPPORTED,
+      cited: [
+        { documentName: "Tides", documentId: tides.id, quote },
+        { documentName: "Notes from the harbour", quote: "High water is at six." },
+      ],
+    });
+
+    const asked = JSON.stringify(calls[0]?.options.prompt.find((each) => each.role === "user"));
+    expect(asked).toContain(`Tides of the coast: “${quote}”`);
+    expect(asked).toContain("Notes from the harbour: “High water is at six.”");
   });
 });
 
