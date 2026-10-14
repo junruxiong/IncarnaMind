@@ -1,7 +1,13 @@
 import { describe, expect, test } from "vitest";
 import { coverageOf, type ShownClaim } from "../../src/renderer/src/editor/claimChecks";
 
-const claim = (state: string, at: number, scope = { folderId: "f", widened: false }): ShownClaim =>
+type Scope = { folderId: string | null; widened: boolean };
+
+const claim = (
+  state: string,
+  at: number,
+  scope: Scope = { folderId: "f", widened: false },
+): ShownClaim =>
   ({
     from: at,
     to: at + 10,
