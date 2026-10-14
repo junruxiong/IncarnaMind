@@ -130,7 +130,6 @@ export function addFootnotes(
 const TABLE_NODE = "table";
 const TABLE_ROW_NODE = "tableRow";
 
-/** The ids of the tables in a fragment. */
 function tablesIn(fragment: Fragment): Set<unknown> {
   const ids = new Set<unknown>();
   fragment.descendants((node) => {
