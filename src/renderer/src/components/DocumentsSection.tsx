@@ -37,6 +37,7 @@ import { LibraryFolders } from "./LibraryFolders";
 import { LinkFolderDialog } from "./LinkFolderDialog";
 import { DocumentLineIcon, MoreLineIcon } from "./lineIcons";
 import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
+import { ProblemLine } from "./ProblemLine";
 import { SidebarSearch } from "./SidebarSearch";
 import { SidebarTags } from "./SidebarTags";
 import {
@@ -262,13 +263,23 @@ export function DocumentsSection() {
         (filtering ? (
           <p className="px-2 py-1 text-[13px] leading-5 text-ink-meta">{t("tags.filter.empty")}</p>
         ) : (
-          // Adding is the header's "+" menu's: this only says where.
-          <p
-            data-testid="documents-empty"
-            className="px-2 pt-2 pb-1 text-[13px] leading-5 text-ink-meta"
+          <ProblemLine
+            role="status"
+            testId="documents-empty"
+            className="px-2 pt-2 pb-1"
+            action={{
+              label: t("documents.none.addFiles"),
+              testId: "documents-empty-add-files",
+              onClick: () => void useAppStore.getState().pickDocuments(),
+            }}
+            also={{
+              label: t("sidebar.plus.linkFolder"),
+              testId: "documents-empty-link-folder",
+              onClick: () => void useAppStore.getState().addLinkedFolder(),
+            }}
           >
             {t("documents.none")}
-          </p>
+          </ProblemLine>
         ))}
       <LinkFolderDialog />
       <TagNamesTip />

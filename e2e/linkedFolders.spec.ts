@@ -24,6 +24,7 @@ import {
   pathsShown,
   previewLink,
   removeDataFolder,
+  setLanguage,
   showSourceLocations,
   useLocalChatModel,
 } from "./app";
@@ -593,15 +594,21 @@ test("an empty Linked folder says so; with nothing linked or added, the sidebar 
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
 
-  // Adding is the header's "+" menu's, the one place to add: the empty sidebar says so.
+  // The empty sidebar offers both ways in, as the "+" menu does.
   const start = window.getByTestId("documents-empty");
-  await expect(start).toHaveText(
-    "No Documents yet. Add files, or link a folder to keep in sync, with the + above.",
-  );
+  await expect(start).toHaveText("No Documents yet · Add files… · Link a folder…");
   await screenshot(window.getByTestId("sidebar"), "documents-empty");
+  await setLanguage(window, "zh-CN");
+  await expect(start).toHaveText("还没有文档 · 添加文件… · 添加同步文件夹…");
+  await setLanguage(window, "en");
 
   // Its "Link a folder…".
-  const dialog = await previewLink(app, window, empty);
+  const dialog = await previewLink(
+    app,
+    window,
+    empty,
+    start.getByTestId("documents-empty-link-folder"),
+  );
   await expect(dialog.getByTestId("link-folder-files")).toHaveText(
     "No supported files in it yet. Files added to it later are indexed then.",
   );
