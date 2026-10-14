@@ -9,6 +9,7 @@ import {
   type ChartData,
   type ChartKind,
   type ChartValue,
+  canSwitch,
   chartCells,
   chartPoints,
   chartSources,
@@ -39,7 +40,14 @@ import { ChartPlot, type PointEvents, type PointRef, samePoint } from "./ChartPl
 import { ChartPointCard } from "./ChartPointCard";
 import { ChartValues } from "./ChartValues";
 import { chartCardPlace } from "./chartCardPlace";
-import { changeChart, chartTable, tableUpdate, toggledSeries, withKind } from "./chartCommands";
+import {
+  changeChart,
+  chartTable,
+  switchedChartIn,
+  tableUpdate,
+  toggledSeries,
+  withKind,
+} from "./chartCommands";
 import { type ChartHandle, chartHandles } from "./chartHandles";
 import { Popover } from "./Popover";
 
@@ -197,7 +205,7 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
   );
 
   const change = (
-    attributes: Partial<Pick<ChartAttributes, "kind" | "title" | "drawn" | "data">>,
+    attributes: Partial<Pick<ChartAttributes, "kind" | "title" | "drawn" | "data" | "source">>,
   ) => {
     const pos = getPos();
     if (pos !== undefined) changeChart(editor, pos, attributes);
@@ -205,6 +213,12 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
   const setKind = (kind: ChartKind) => {
     dismiss();
     change(withKind(chart, kind));
+  };
+  const switchRowsAndColumns = () => {
+    const switched = switchedChartIn(editor.state.doc, node.attrs, language);
+    if (!switched) return;
+    dismiss();
+    change(switched);
   };
   const toggleTable = () => {
     dismiss();
@@ -217,8 +231,26 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
     change({ data: update, ...(same ? {} : { drawn: null }) });
   };
 
-  const latest = useRef({ chart, asTable, update, editable, setKind, toggleTable, applyUpdate });
-  latest.current = { chart, asTable, update, editable, setKind, toggleTable, applyUpdate };
+  const latest = useRef({
+    chart,
+    asTable,
+    update,
+    editable,
+    setKind,
+    switchRowsAndColumns,
+    toggleTable,
+    applyUpdate,
+  });
+  latest.current = {
+    chart,
+    asTable,
+    update,
+    editable,
+    setKind,
+    switchRowsAndColumns,
+    toggleTable,
+    applyUpdate,
+  };
   useEffect(() => {
     if (!blockId) return;
     const handle: ChartHandle = {
@@ -226,6 +258,10 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
       fits: (kind) => latest.current.editable && kindFits(kind, latest.current.chart.data),
       setKind: (kind) => {
         if (latest.current.editable) latest.current.setKind(kind);
+      },
+      canSwitch: () => latest.current.editable && canSwitch(latest.current.chart),
+      switchRowsAndColumns: () => {
+        if (latest.current.editable) latest.current.switchRowsAndColumns();
       },
       asTable: () => latest.current.asTable,
       toggleTable: () => latest.current.toggleTable(),
@@ -422,6 +458,7 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
             seriesName={seriesName}
             fits={(kind) => kindFits(kind, chart.data)}
             onKind={setKind}
+            onSwitch={canSwitch(chart) ? switchRowsAndColumns : null}
             onSeries={(series) => {
               dismiss();
               change({ drawn: toggledSeries(chart, series) });

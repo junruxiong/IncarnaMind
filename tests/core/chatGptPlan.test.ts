@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { generateText, jsonSchema, streamText, tool } from "ai";
-import { describe, expect, test } from "vitest";
+import { describe, expect, onTestFinished, test, vi } from "vitest";
 import {
   ChatNotReadyError,
   ConsentDeclinedError,
@@ -22,6 +22,7 @@ import {
   EMAIL,
   type FakeBrowser,
   type FakeOpenAI,
+  type FakeOpenAIServer,
   FULL_SCOPE,
   RESOURCE,
   startFakeOpenAI,
@@ -42,7 +43,7 @@ const MODEL = "gpt-6.1-sol";
 
 interface Setup {
   core: Core;
-  fake: FakeOpenAI;
+  fake: FakeOpenAIServer;
   browser: FakeBrowser;
   keychain: MemoryKeychain;
   clock: ReturnType<typeof manualClock>;
@@ -352,6 +353,167 @@ describe("Continue with ChatGPT", () => {
 
     expect(await abandoned).toMatchObject({ ok: false, error: { kind: "cancelled" } });
     expect(retried).toMatchObject({ ok: true, status: { account: { state: "signed-in" } } });
+  });
+});
+
+describe("Pasting the address the browser shows", () => {
+  /** A sign-in whose browser never comes back, and the address OpenAI's page sent it to. */
+  async function waitingSignIn({ core, browser, fake }: Setup) {
+    browser.behaviour = "ignore";
+    const opened = browser.opened.length;
+    const result = core.signInToChatGpt();
+    await expect.poll(() => browser.opened).toHaveLength(opened + 1);
+    const address = fake.redirectFor(browser.opened.at(-1) ?? "", { approve: {} }).href;
+    return { result, address };
+  }
+
+  const exchanges = (fake: FakeOpenAI) =>
+    fake.tokenRequests.filter((request) => request.grant_type === "authorization_code");
+
+  test("a pasted address finishes the sign-in, with spaces and quotes around it, and is never logged", async () => {
+    const setup = await setUp();
+    const logged = (["log", "info", "warn", "error", "debug"] as const).map((level) =>
+      vi.spyOn(console, level),
+    );
+    onTestFinished(() => {
+      for (const spy of logged) spy.mockRestore();
+    });
+    const { result, address } = await waitingSignIn(setup);
+
+    expect(await setup.core.pasteChatGptSignInAddress(`  "${address}"\n`)).toEqual({ ok: true });
+
+    expect(await result).toMatchObject({
+      ok: true,
+      firstTime: true,
+      status: { account: { state: "signed-in", email: EMAIL }, signingIn: false },
+    });
+    expect(exchanges(setup.fake)).toEqual([
+      expect.objectContaining({ client_id: "oaiapp_test_1", code: "code-1" }),
+    ]);
+    const callback = new URL(address);
+    callback.search = "";
+    await expect(fetch(callback)).rejects.toThrow();
+    const output = logged.flatMap((spy) => spy.mock.calls.flat().map(String)).join("\n");
+    expect(output).not.toContain("code-1");
+    expect(output).not.toContain(new URL(address).searchParams.get("state"));
+  });
+
+  test("an address with another state is refused and changes nothing; the right one still works", async () => {
+    const setup = await setUp();
+    const { result, address } = await waitingSignIn(setup);
+    const other = new URL(address);
+    other.searchParams.set("state", "from-another-sign-in");
+
+    expect(await setup.core.pasteChatGptSignInAddress(other.href)).toEqual({
+      ok: false,
+      problem: "other-sign-in",
+    });
+
+    expect(setup.fake.tokenRequests).toEqual([]);
+    expect((await setup.core.getChatGptPlan()).signingIn).toBe(true);
+    expect(await setup.core.pasteChatGptSignInAddress(address)).toEqual({ ok: true });
+    expect(await result).toMatchObject({ ok: true });
+  });
+
+  test("an earlier sign-in's address, its code already used, is refused", async () => {
+    const setup = await setUp();
+    const first = await waitingSignIn(setup);
+    await setup.core.pasteChatGptSignInAddress(first.address);
+    expect(await first.result).toMatchObject({ ok: true });
+    await setup.core.signOutOfChatGpt();
+    const second = await waitingSignIn(setup);
+
+    expect(await setup.core.pasteChatGptSignInAddress(first.address)).toEqual({
+      ok: false,
+      // The new sign-in listens on another free port, unless the system hands out the same one.
+      problem: expect.stringMatching(/^(not-sign-in-address|other-sign-in)$/),
+    });
+
+    expect(exchanges(setup.fake)).toHaveLength(1);
+    expect((await setup.core.getChatGptPlan()).account).toEqual({ state: "signed-out" });
+    await setup.core.cancelChatGptSignIn();
+    expect(await second.result).toMatchObject({ ok: false, error: { kind: "cancelled" } });
+  });
+
+  test("pasting twice, or the browser coming back after a paste, exchanges the code once", async () => {
+    const setup = await setUp();
+    const { result, address } = await waitingSignIn(setup);
+    let release = () => {};
+    setup.fake.holdCodeExchange = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    expect(await setup.core.pasteChatGptSignInAddress(address)).toEqual({ ok: true });
+    await expect.poll(() => exchanges(setup.fake)).toHaveLength(1);
+    expect(await setup.core.pasteChatGptSignInAddress(address)).toEqual({
+      ok: false,
+      problem: "finished",
+    });
+    const late = await fetch(address);
+    expect(late.status).toBe(409);
+    release();
+
+    expect(await result).toMatchObject({ ok: true });
+    expect(exchanges(setup.fake)).toHaveLength(1);
+  });
+
+  test("an address pasted after the browser came back is ignored", async () => {
+    const { core, browser, fake, keychain } = await setUp();
+    expect(await core.signInToChatGpt()).toMatchObject({ ok: true });
+    const before = { status: await core.getChatGptPlan(), stored: stored(keychain) };
+    const address = fake.redirectFor(browser.opened[0] ?? "", { approve: {} }).href;
+
+    expect(await core.pasteChatGptSignInAddress(address)).toEqual({
+      ok: false,
+      problem: "finished",
+    });
+
+    expect(exchanges(fake)).toHaveLength(1);
+    expect({ status: await core.getChatGptPlan(), stored: stored(keychain) }).toEqual(before);
+  });
+
+  test("an address of another host, port, scheme or path, or without a code or state, isn't the sign-in address", async () => {
+    const setup = await setUp();
+    const { result, address } = await waitingSignIn(setup);
+    const changed = (change: (url: URL) => void) => {
+      const url = new URL(address);
+      change(url);
+      return url.href;
+    };
+    const refused = [
+      changed((url) => {
+        url.hostname = "localhost";
+      }),
+      changed((url) => {
+        url.port = "1";
+      }),
+      changed((url) => {
+        url.protocol = "https:";
+      }),
+      changed((url) => {
+        url.pathname = "/auth/other";
+      }),
+      changed((url) => url.searchParams.delete("state")),
+      changed((url) => url.searchParams.delete("code")),
+      `${address} trailing`,
+      address.replace("/auth/", "/auth/\n"),
+      `"${address}`,
+      "",
+      "not an address",
+      setup.fake.endpoints.authorizeUrl,
+    ];
+
+    for (const text of refused) {
+      expect(await setup.core.pasteChatGptSignInAddress(text)).toEqual({
+        ok: false,
+        problem: "not-sign-in-address",
+      });
+    }
+
+    expect(setup.fake.tokenRequests).toEqual([]);
+    expect((await setup.core.getChatGptPlan()).signingIn).toBe(true);
+    await setup.core.cancelChatGptSignIn();
+    expect(await result).toMatchObject({ ok: false, error: { kind: "cancelled" } });
   });
 });
 

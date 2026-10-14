@@ -13,7 +13,7 @@ import type { ObjectRef } from "../objects";
 import { sorted } from "../sort";
 import { useSort } from "../sortChoices";
 import { documentFields, folderFields } from "../sortFields";
-import { selectTagFilterKey, useAppStore } from "../store";
+import { allExamples, selectTagFilterKey, useAppStore } from "../store";
 import { foldKeys, useTreeItem } from "../treeKeys";
 import { ExampleChip } from "./GettingStarted";
 import {
@@ -277,7 +277,9 @@ function LinkedFolderItem({
   const language = useLanguage();
   const state = linkedFolderRowState(linked, hasContents);
   const label = rowStateLabel(state, t, language);
-  const isExample = useAppStore((current) => current.examples?.linkedFolderId === linked.id);
+  const isExample = useAppStore((current) =>
+    allExamples(current).some((each) => each.linkedFolderId === linked.id),
+  );
   return (
     <GroupItem
       testId="folder-item"

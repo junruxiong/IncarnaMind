@@ -117,6 +117,7 @@ describe("the example Mind", { timeout: 30_000 }, () => {
       mindId: null,
       linkedFolderId: null,
       answerId: null,
+      more: expect.any(Array),
     });
     expect(await core.listMinds()).toEqual([]);
     expect(await core.listLinkedFolders()).toEqual([]);
@@ -137,6 +138,7 @@ describe("the example Mind", { timeout: 30_000 }, () => {
       mindId: null,
       linkedFolderId: made.linkedFolderId,
       answerId: null,
+      more: expect.any(Array),
     });
 
     const again = await core.createExamples();
@@ -163,6 +165,7 @@ describe("the example Mind", { timeout: 30_000 }, () => {
       mindId: null,
       linkedFolderId: null,
       answerId: null,
+      more: expect.any(Array),
     });
   });
 });

@@ -87,7 +87,7 @@ export interface Command {
 export const fromMenu = (id: MenuCommandId) => ({
   id,
   label: MENU_COMMANDS[id].label,
-  shortcut: { keys: MENU_COMMANDS[id].keys },
+  ...(MENU_COMMANDS[id].keys && { shortcut: { keys: MENU_COMMANDS[id].keys } }),
 });
 
 /** For a command that only the place showing the object can do: offered where it was given. */

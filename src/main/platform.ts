@@ -2,7 +2,7 @@
  * Electron implementations of the core's adapters. This is the only place that
  * turns Electron APIs into capabilities the core can use.
  */
-import { mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -14,10 +14,12 @@ import {
   BUILT_IN_SKILLS_SOURCE,
   type CoreAdapters,
   type CrashReporter,
+  createOllamaModels,
   type Executor,
   type FileShell,
   type Keychain,
   type Logger,
+  type OllamaApp,
   type UsageDataSender,
 } from "../core";
 import { createFakeCapture, type FakeCapture } from "../core/meetings/fakeCapture";
@@ -26,6 +28,7 @@ import { createCitedPageCapture } from "./citedPageCapture";
 import { createSentryCrashReporter } from "./crashReports";
 import { createUtilityProcessEmbedder } from "./embedder";
 import { createElectronAudioCapture } from "./meetings/capture";
+import { createFakeOllamaApp, createOllamaApp } from "./ollamaApp";
 import { createElectronPictures } from "./pictures";
 import { createElectronPrinter } from "./printPdf";
 import { createLoginShellProcesses } from "./processes";
@@ -97,6 +100,29 @@ const fileShell: FileShell = {
     shell.showItemInFolder(path);
   },
 };
+
+/**
+ * Test-only launch flag ("installed" or "missing"). Without it, the scripted chat model's
+ * Ollama always runs, so a test that saves an Ollama provider needs no server.
+ */
+const testOllamaApp =
+  import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_OLLAMA_APP : undefined;
+
+function ollamaApp(): OllamaApp {
+  if (import.meta.env.MODE === "test") {
+    return createFakeOllamaApp(testOllamaApp === "installed" ? "installed" : "missing");
+  }
+  return createOllamaApp({
+    platform: process.platform,
+    home: app.getPath("home"),
+    localAppData: process.env.LOCALAPPDATA,
+    exists: existsSync,
+    async openPath(path) {
+      const error = await shell.openPath(path);
+      if (error) throw new Error(error);
+    },
+  });
+}
 
 /**
  * Local Connectors and Skill scripts start with the User's login-shell
@@ -441,6 +467,12 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
   const chatGptPlan = chatGptStandIn();
   const web = webStandIn();
   const connectorDirectory = testConnectorDirectory();
+  const scriptedOllama =
+    import.meta.env.MODE === "test" &&
+    process.env.INCARNAMIND_FAKE_CHAT === "1" &&
+    testOllamaApp === undefined
+      ? { ...createOllamaModels(), running: async () => true }
+      : undefined;
   return {
     ...(connectorDirectory !== undefined && { connectorDirectory }),
     ...(connectorRegistryUrl && { connectorRegistryUrl }),
@@ -481,6 +513,8 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     keychain: createSafeStorageKeychain(dataDir),
     browser: systemBrowser,
     shell: fileShell,
+    ollamaApp: ollamaApp(),
+    ...(scriptedOllama && { ollamaModels: scriptedOllama }),
     printer: createElectronPrinter({ log, rendererUrl: process.env.ELECTRON_RENDERER_URL }),
     pictures: createElectronPictures(log),
     processes: loginShellProcesses,

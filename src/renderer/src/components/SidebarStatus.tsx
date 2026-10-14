@@ -8,7 +8,7 @@ import { useCapturing } from "../meetings";
 import { downloadProgress } from "../modelDownload";
 import { enterFrom, exitToward } from "../motion";
 import { rerankingModelStatus } from "../rerankStatus";
-import { isOwnDocument, useAppStore } from "../store";
+import { allExamples, isOwnDocument, useAppStore } from "../store";
 import { textRecognitionStatus, useTextRecognition } from "../textRecognition";
 import { canTryAgain, outsideDialog, reasonKey, useWebPages } from "../webPages";
 import { CloseLineIcon } from "./lineIcons";
@@ -227,7 +227,10 @@ function useStatuses(): Status[] {
           }
         } else if (item.status === "ready") {
           if (item.tagging === "pending" || item.tagging === "tagging") tagging++;
-          else if (item.tagging === "waiting-for-provider" && isOwnDocument(item, state.examples))
+          else if (
+            item.tagging === "waiting-for-provider" &&
+            isOwnDocument(item, allExamples(state))
+          )
             waitingForTagger++;
         }
       }

@@ -12,6 +12,7 @@ const KINDS: ProviderErrorKind[] = [
   "provider",
   "consent-declined",
   "local-mode",
+  "ollama-not-running",
   "not-signed-in",
   "plan-limit",
   "blocked",
@@ -26,13 +27,39 @@ describe("a failed Answer's problem line", () => {
     expect(Object.keys(ANSWER_PROBLEMS).sort()).toEqual([...KINDS].sort());
   });
 
-  test("offers at most one action: a page of Settings, trying again, a provider's page, signing in, or nothing", () => {
+  test("offers at most one action: a page of Settings, trying again, a provider's page, signing in, a model on this computer, Ollama, or nothing", () => {
     for (const kind of KINDS) {
       const { fix } = ANSWER_PROBLEMS[kind];
       if (fix.kind === "settings") expect(settingsPages).toContain(fix.page);
       if (fix.kind === "link") expect(fix.url).toMatch(/^https:\/\//);
-      expect(["settings", "retry", "link", "sign-in", "none"]).toContain(fix.kind);
+      expect(["settings", "retry", "link", "sign-in", "local-model", "ollama", "none"]).toContain(
+        fix.kind,
+      );
     }
+  });
+
+  test("local mode stopping an Answer offers a local model in place, and never a company's settings", () => {
+    expect(ANSWER_PROBLEMS["local-mode"].fix).toEqual({
+      kind: "local-model",
+      label: "answer.error.useLocal",
+    });
+  });
+
+  test("Ollama not running says so in both languages, and its fix is Ollama's own (open it or get it)", () => {
+    expect(ANSWER_PROBLEMS["ollama-not-running"]).toEqual({
+      line: "answer.error.ollama-not-running",
+      fix: { kind: "ollama", label: "localModel.open" },
+    });
+    expect(translate("en", "answer.error.ollama-not-running")).toBe(
+      "Ollama isn't running on this computer",
+    );
+    expect(translate("zh-CN", "answer.error.ollama-not-running")).toBe(
+      "Ollama 没有在这台电脑上运行",
+    );
+    expect(translate("en", "localModel.open")).toBe("Open Ollama");
+    expect(translate("en", "providers.ollama.get")).toBe("Get Ollama");
+    expect(translate("zh-CN", "localModel.open")).toBe("打开 Ollama");
+    expect(translate("zh-CN", "providers.ollama.get")).toBe("下载 Ollama");
   });
 
   test("an ended ChatGPT sign-in offers to sign in again, right from the Answer", () => {

@@ -22,6 +22,8 @@ export function billingOf(kind: ChatProviderKind, service: ExternalService | nul
 /** Where Ollama shows an account's usage and plan. */
 export const OLLAMA_USAGE_URL = "https://ollama.com/settings";
 
+export const OLLAMA_DOWNLOAD_URL = "https://ollama.com/download";
+
 /** Yuan to the dollar, for counting spending in one currency against a cap in the other. */
 export const CNY_PER_USD = 7.1;
 

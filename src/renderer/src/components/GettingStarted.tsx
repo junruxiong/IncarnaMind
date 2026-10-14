@@ -1,9 +1,9 @@
-import type { ReactNode } from "react";
-import type { GettingStarted } from "../../../core/api";
+import { Fragment, type ReactNode } from "react";
+import type { ExampleGroup, GettingStarted } from "../../../core/api";
 import { shortcutLabel } from "../commands/keymap";
 import { CheckMarkIcon } from "../editor/icons";
 import { useGap, useT } from "../i18n";
-import { useAppStore } from "../store";
+import { allExamples, useAppStore } from "../store";
 import { useAddYourDocuments } from "./AddYourDocuments";
 import { AskIcon, PlugIcon } from "./icons";
 import { ChevronRightLineIcon, CloseLineIcon } from "./lineIcons";
@@ -44,7 +44,9 @@ function stepsOf(progress: GettingStarted): Step[] | null {
 
 /** Whether a Mind is the example one. */
 export const useIsExample = (mindId: string | undefined) =>
-  useAppStore((state) => mindId !== undefined && state.examples?.mindId === mindId);
+  useAppStore(
+    (state) => mindId !== undefined && allExamples(state).some((each) => each.mindId === mindId),
+  );
 
 /** "Example", after the example Mind's name and its Linked folder's. */
 export function ExampleChip() {
@@ -187,11 +189,15 @@ export function GetStartedCard() {
  * Above the example Mind's title: what a Mind is, and the ways on: adding
  * one's own Documents, in place (#766), or removing the examples.
  */
-export function ExampleBanner() {
+export function ExampleBanner({ mindId }: { mindId: string }) {
   const t = useT();
   const gap = useGap();
   const addMenu = useAddYourDocuments("example-add");
   const removeExamples = useAppStore((state) => state.removeExamples);
+  const openExample = useAppStore((state) => state.openExample);
+  const more = useAppStore(
+    (state) => allExamples(state).find((each) => each.mindId === mindId)?.more,
+  );
   return (
     <aside
       aria-label={t("examples.banner.label")}
@@ -238,6 +244,26 @@ export function ExampleBanner() {
             {t("examples.banner.remove")}
           </button>
         </div>
+        {more && more.length > 0 && (
+          <p data-testid="example-more" className="pt-1.5 text-[13px] leading-5 text-ink-secondary">
+            {t("examples.banner.more")}
+            {gap(t("examples.banner.more"), t(`examples.group.${more[0] as ExampleGroup}`))}
+            {more.map((group, index) => (
+              <Fragment key={group}>
+                {index > 0 && " · "}
+                <button
+                  type="button"
+                  data-testid="example-more-link"
+                  data-group={group}
+                  onClick={() => void openExample(group)}
+                  className="rounded-sm text-accent-strong underline-offset-2 hover:underline focus-visible:outline-offset-0"
+                >
+                  {t(`examples.group.${group}`)}
+                </button>
+              </Fragment>
+            ))}
+          </p>
+        )}
       </div>
     </aside>
   );
@@ -398,5 +424,7 @@ export function StartGuide() {
 
 /** Whether an Answer is the example one, written in advance: its meta line says so. */
 export function useIsExampleAnswer(answerId: string | null) {
-  return useAppStore((state) => answerId !== null && state.examples?.answerId === answerId);
+  return useAppStore(
+    (state) => answerId !== null && allExamples(state).some((each) => each.answerId === answerId),
+  );
 }

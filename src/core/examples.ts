@@ -1,7 +1,7 @@
 /**
  * The example Minds (onboarding): "Where tea comes from", the first-run
- * default, and one per group of the first run's question (papers, reports,
- * contracts, meetings), each in English and in Chinese with Documents of its
+ * default, and one each for papers, reports, contracts and meetings, which
+ * the default's banner offers, each in English and in Chinese with Documents of its
  * own. Each is a Mind written in advance that works before any chat model is
  * set up. Its Documents ship with the app (`Paths.examples`), each with its
  * source, licence and attribution in LICENSE. Made, they are copied into the
@@ -49,6 +49,11 @@ import type { Language } from "./language";
 const EXAMPLES_VALUE = "examples";
 /** Set once the examples were offered on a first run, so they aren't made again unasked. */
 const OFFERED_VALUE = "examplesOffered";
+/** The order this install offers the other examples in, picked at random once. */
+const ORDER_VALUE = "examplesOrder";
+const DEFAULT_GROUP: ExampleGroup = "tea";
+/** The examples the banner offers besides the default. */
+const OFFERED_GROUPS: readonly ExampleGroup[] = ["papers", "contracts", "meetings"];
 
 const GROUPS = Object.keys(EXAMPLE_SETS) as ExampleGroup[];
 const valueKey = (group: ExampleGroup) =>
@@ -90,6 +95,8 @@ export interface ExamplesOptions {
   recheck(input: RecheckCitationInput): CitationRecheck;
   /** Pushes "examples.changed". */
   changed(examples: Examples): void;
+  /** A number from 0 up to, not including, 1; Math.random unless a test sets it. */
+  random?(): number;
 }
 
 /** A Document whose text is stored, so its Citations can be checked. */
@@ -112,6 +119,29 @@ export function createExamples(options: ExamplesOptions) {
       : null;
   };
 
+  /** A kept order: each offered example exactly once. */
+  const isOffered = (value: unknown): value is ExampleGroup[] =>
+    Array.isArray(value) &&
+    value.length === OFFERED_GROUPS.length &&
+    OFFERED_GROUPS.every((group) => value.includes(group));
+
+  /** The offered examples in this install's order: shuffled the first time, then kept. */
+  const order = (): ExampleGroup[] => {
+    const kept = options.readValue(ORDER_VALUE);
+    if (isOffered(kept)) return kept;
+    const random = options.random ?? Math.random;
+    const shuffled = [...OFFERED_GROUPS];
+    for (let index = shuffled.length - 1; index > 0; index--) {
+      const other = Math.floor(random() * (index + 1));
+      [shuffled[index], shuffled[other]] = [
+        shuffled[other] as ExampleGroup,
+        shuffled[index] as ExampleGroup,
+      ];
+    }
+    options.writeValue(ORDER_VALUE, shuffled);
+    return shuffled;
+  };
+
   /** Each part while it exists: the Mind can be deleted, or the folder unlinked, on its own. */
   const status = (group: ExampleGroup = "tea"): Examples => {
     const examples = stored(group);
@@ -124,6 +154,10 @@ export function createExamples(options: ExamplesOptions) {
       mindId: mind?.mindId ?? null,
       linkedFolderId: folder?.linkedFolderId ?? null,
       answerId: mind?.answerId ?? null,
+      more: [
+        ...(group === DEFAULT_GROUP ? [] : [DEFAULT_GROUP]),
+        ...order().filter((each) => each !== group),
+      ],
     };
   };
 

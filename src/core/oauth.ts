@@ -63,6 +63,11 @@ export interface LoopbackAuthorizationOptions extends LoopbackRedirectOptions {
   /** Extra form parameters for the code exchange. */
   tokenParams?: Readonly<Record<string, string>>;
   /**
+   * Called once the browser is open, with the redirect's `paste`, for a User
+   * whose browser can't come back to the loopback port.
+   */
+  onWaiting?(paste: LoopbackRedirect["paste"]): void;
+  /**
    * Checks what the browser brought back before anything in it is used (see
    * `LoopbackReceipt.verify`).
    */
@@ -292,10 +297,22 @@ export interface LoopbackReceipt<T> {
   exchange(code: string, params: URLSearchParams): Promise<T>;
 }
 
+/** What became of an address pasted from the browser (see `LoopbackRedirect.paste`). */
+export type PastedRedirect =
+  /** It is this sign-in's redirect: `receive` goes on with it. */
+  | "accepted"
+  /** It isn't a redirect to this loopback address with a code and a `state`. */
+  | "not-redirect"
+  /** It is a redirect, but for another sign-in. */
+  | "wrong-state"
+  /** A redirect already came back, or the sign-in ended. */
+  | "finished";
+
 /**
  * A loopback redirect waiting for the browser. It answers only a redirect to
  * its path that carries its `state`; anything else is refused, and it keeps
- * waiting. The first such redirect is held until `receive` deals with it.
+ * waiting. The first such redirect, from the browser or pasted, is held until
+ * `receive` deals with it.
  */
 export interface LoopbackRedirect {
   /** e.g. "http://127.0.0.1:53124/callback", for the authorization request. */
@@ -309,13 +326,43 @@ export interface LoopbackRedirect {
    * with whatever `verify` or `exchange` threw.
    */
   receive<T>(receipt: LoopbackReceipt<T>): Promise<T>;
+  /**
+   * The address the browser ended on, pasted by the User when it couldn't
+   * reach the loopback port: checked exactly as the browser's own request,
+   * and taken in its place. Only surrounding whitespace and one pair of
+   * quotes are ignored. A refused address changes nothing.
+   */
+  paste(text: string): PastedRedirect;
   /** Stops waiting and frees the port. Safe to call more than once. */
   close(): Promise<void>;
 }
 
 interface Arrival {
   params: URLSearchParams;
-  response: ServerResponse;
+  /** The browser's request, to answer with a page; none for a pasted address. */
+  response: ServerResponse | null;
+}
+
+const QUOTE_PAIRS = [
+  ['"', '"'],
+  ["'", "'"],
+  ["“", "”"],
+  ["‘", "’"],
+] as const;
+
+/** The URL parser alone would also drop tabs and line breaks inside the address. */
+function pastedUrl(text: string): URL | null {
+  let address = text.trim();
+  const quoted = QUOTE_PAIRS.some(
+    ([open, close]) => address.length > 1 && address.startsWith(open) && address.endsWith(close),
+  );
+  if (quoted) address = address.slice(1, -1);
+  if (address === "" || /\s/.test(address)) return null;
+  try {
+    return new URL(address);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -339,25 +386,37 @@ export async function openLoopbackRedirect(
   // A failure before anyone awaits (e.g. a timeout before `receive`) must not go unhandled.
   arrived.catch(() => undefined);
 
-  let claimed = false;
+  let waiting = true;
+  let redirect: URL | null = null;
   const failurePage = (detail: string) => renderPage(options.pages.failure, detail);
 
+  /** The one check for a redirect, from the browser or pasted: the first that passes is taken. */
+  const claim = (url: URL): PastedRedirect => {
+    if (!redirect || url.origin !== redirect.origin || url.pathname !== redirect.pathname) {
+      return "not-redirect";
+    }
+    // A redirect that didn't come from this sign-in: refuse it and keep waiting.
+    if (url.searchParams.get("state") !== state) return "wrong-state";
+    if (!waiting) return "finished";
+    waiting = false;
+    return "accepted";
+  };
+
   const handle = async (request: IncomingMessage, response: ServerResponse) => {
-    const url = new URL(request.url ?? "/", `http://${LOOPBACK_HOST}`);
-    if (request.method !== "GET" || url.pathname !== options.path) {
+    const url = new URL(request.url ?? "/", redirect ?? `http://${LOOPBACK_HOST}`);
+    const claimed = request.method === "GET" ? claim(url) : "not-redirect";
+    if (claimed === "not-redirect") {
       response.writeHead(404, { connection: "close" }).end();
       return;
     }
-    // A redirect that didn't come from this sign-in: refuse it and keep waiting.
-    if (url.searchParams.get("state") !== state) {
+    if (claimed === "wrong-state") {
       await sendPage(response, 400, failurePage("The sign-in state didn't match."));
       return;
     }
-    if (claimed) {
+    if (claimed === "finished") {
       await sendPage(response, 409, failurePage("This sign-in already finished."));
       return;
     }
-    claimed = true;
     // The tab waits for its page until `receive` has dealt with the redirect.
     arrive({ params: url.searchParams, response });
   };
@@ -386,12 +445,17 @@ export async function openLoopbackRedirect(
 
   const { port } = server.address() as AddressInfo;
   const redirectUri = `http://${LOOPBACK_HOST}:${port}${options.path}`;
+  redirect = new URL(redirectUri);
 
+  const end = (error: OAuthFlowError) => {
+    waiting = false;
+    fail(error);
+  };
   const timer = setTimeout(
-    () => fail(new OAuthFlowError("timed-out", "The sign-in didn't finish in time.")),
+    () => end(new OAuthFlowError("timed-out", "The sign-in didn't finish in time.")),
     options.timeoutMs ?? DEFAULT_SIGN_IN_TIMEOUT_MS,
   );
-  const onAbort = () => fail(new OAuthFlowError("cancelled", "The sign-in was cancelled."));
+  const onAbort = () => end(new OAuthFlowError("cancelled", "The sign-in was cancelled."));
   signal?.addEventListener("abort", onAbort, { once: true });
   // Cancelled while the server was starting: the listener above came too late to hear it.
   if (signal?.aborted) onAbort();
@@ -403,40 +467,51 @@ export async function openLoopbackRedirect(
 
     async receive<T>(receipt: LoopbackReceipt<T>): Promise<T> {
       const { params, response } = await arrived;
+      const answer = async (status: number, html: string) => {
+        if (response) await sendPage(response, status, html);
+      };
       try {
         receipt.verify?.(params);
       } catch (failure) {
         const reason = failure instanceof Error ? failure : new Error(String(failure));
-        await sendPage(response, 400, failurePage(reason.message));
+        await answer(400, failurePage(reason.message));
         throw reason;
       }
       const error = params.get("error");
       if (error) {
         const description = params.get("error_description") ?? error;
-        await sendPage(response, 400, failurePage(description));
+        await answer(400, failurePage(description));
         throw new OAuthFlowError("denied", `The sign-in was refused: ${description}`);
       }
       const code = params.get("code");
       if (!code) {
-        await sendPage(response, 400, failurePage("No authorization code came back."));
+        await answer(400, failurePage("No authorization code came back."));
         throw new OAuthFlowError("denied", "The sign-in returned no authorization code.");
       }
       try {
         const value = await receipt.exchange(code, params);
-        await sendPage(response, 200, renderPage(options.pages.success));
+        await answer(200, renderPage(options.pages.success));
         return value;
       } catch (failure) {
         const reason = failure instanceof Error ? failure : new Error(String(failure));
-        await sendPage(response, 502, failurePage(reason.message));
+        await answer(502, failurePage(reason.message));
         throw reason;
       }
+    },
+
+    paste(text) {
+      const url = pastedUrl(text);
+      if (!url?.searchParams.get("code") || !url.searchParams.get("state")) return "not-redirect";
+      const claimed = claim(url);
+      if (claimed === "accepted") arrive({ params: url.searchParams, response: null });
+      return claimed;
     },
 
     close() {
       closing ??= (async () => {
         clearTimeout(timer);
         signal?.removeEventListener("abort", onAbort);
-        fail(new OAuthFlowError("cancelled", "The sign-in was cancelled."));
+        end(new OAuthFlowError("cancelled", "The sign-in was cancelled."));
         // Pages are sent with "connection: close"; drop anything still open so the port is free now.
         await new Promise<void>((resolve) => {
           server.close(() => resolve());
@@ -476,6 +551,7 @@ export async function authorizeWithLoopback(
       };
       for (const [name, value] of Object.entries(params)) authorize.searchParams.set(name, value);
       await options.openBrowser(authorize.href);
+      options.onWaiting?.((text) => loopback.paste(text));
     }
     return await loopback.receive({
       ...(options.verify && { verify: options.verify }),

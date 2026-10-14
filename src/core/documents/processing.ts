@@ -242,7 +242,7 @@ export interface ReadingChannel {
  * (`request` pairs them with the asking), or why they couldn't be.
  */
 export type WorkerRequest =
-  | { id: number; job: WorkerJob }
+  | { id: number; job: WorkerJob; password?: string }
   | { id: number; stop: true }
   | {
       id: number;
@@ -264,11 +264,13 @@ export type WorkerResponse =
   | { id: number; request: number; page: number; picture: PagePicture };
 
 /** Runs a job of either kind. Never throws. */
+/** `password`: what opens the job's PDF when it is locked (#763), never kept with the job. */
 export function runJob(
   job: WorkerJob,
   channel: ReadingChannel | null = null,
+  password?: string,
 ): Promise<WorkerResult> {
-  return job.task === "process" ? processFile(job, channel) : readMetadata(job);
+  return job.task === "process" ? processFile(job, channel, password) : readMetadata(job, password);
 }
 
 /** Why the file couldn't be read: it is gone, or can't be read now. */
@@ -323,6 +325,7 @@ async function refuseTooLarge(file: string, kind: DocumentKind): Promise<Process
 export async function processFile(
   job: ProcessingJob,
   channel: ReadingChannel | null = null,
+  password?: string,
 ): Promise<ProcessingResult> {
   const refused = isPackageKind(job.kind) ? await refuseTooLarge(job.file, job.kind) : null;
   if (refused) return refused;
@@ -343,18 +346,18 @@ export async function processFile(
           ),
         }
       : null;
-  const { processed, firstPages } = await processBytes(job.kind, bytes, reading);
+  const { processed, firstPages } = await processBytes(job.kind, bytes, reading, password);
   if (reading?.signal.aborted) return { outcome: "stopped" };
   const firstUnit = processed.outcome === "ready" ? (processed.pages[0]?.text ?? null) : null;
   return {
     ...processed,
     ...version,
-    ...(await readMetadataOf(job.kind, bytes, firstUnit, firstPages)),
+    ...(await readMetadataOf(job.kind, bytes, firstUnit, firstPages, password)),
   };
 }
 
 /** A metadata job: the creation date of the version indexed, read from the file. Never throws. */
-export async function readMetadata(job: MetadataJob): Promise<MetadataResult> {
+export async function readMetadata(job: MetadataJob, password?: string): Promise<MetadataResult> {
   // Text, Markdown and CSV files have no metadata: only the stored first Unit is read.
   if (!hasMetadata(job.kind)) {
     const firstPages = job.firstUnit === null ? [] : [job.firstUnit];
@@ -371,7 +374,10 @@ export async function readMetadata(job: MetadataJob): Promise<MetadataResult> {
   // A PDF's first pages are read again as extracted: the stored first Unit has lost its running
   // headers and footers, where a DOI often is.
   const firstPages = job.kind === "pdf" ? null : job.firstUnit === null ? [] : [job.firstUnit];
-  return { outcome: "read", ...(await readMetadataOf(job.kind, bytes, job.firstUnit, firstPages)) };
+  return {
+    outcome: "read",
+    ...(await readMetadataOf(job.kind, bytes, job.firstUnit, firstPages, password)),
+  };
 }
 
 const hasMetadata = (kind: DocumentKind) =>
@@ -394,6 +400,7 @@ async function readMetadataOf(
   bytes: Uint8Array,
   firstUnit: string | null,
   firstPages: string[] | null,
+  password: string | undefined,
 ): Promise<VersionMetadata> {
   let fromMetadata: (string | null)[] = [];
   let property: string | null = null;
@@ -422,7 +429,7 @@ async function readMetadataOf(
       };
     }
     if (kind === "pdf") {
-      const pdf = await pdfMetadata(bytes, firstPages === null ? REFERENCE_PAGES : 0);
+      const pdf = await pdfMetadata(bytes, firstPages === null ? REFERENCE_PAGES : 0, password);
       fromMetadata = [
         pdf.info === null ? null : pdfDate(pdf.info),
         pdf.xmp === null ? null : w3cDate(pdf.xmp),
@@ -452,9 +459,10 @@ async function processBytes(
   kind: DocumentKind,
   bytes: Uint8Array,
   reading: PageReading | null,
+  password: string | undefined,
 ): Promise<{ processed: Processed; firstPages: string[] }> {
   try {
-    const extracted = await extractText(kind, bytes, reading);
+    const extracted = await extractText(kind, bytes, reading, password);
     const firstPages = extracted.units.slice(0, REFERENCE_PAGES).map((unit) => unit.text);
     const pages = kind === "pdf" ? stripBoilerplate(extracted.units) : extracted.units;
     const { pageCount, unread } = extracted;

@@ -498,6 +498,7 @@ export function evalOllamaModels(
       };
     },
     loaded: (baseUrl, model, numCtx) => models.loaded(baseUrl, model, numCtx),
+    running: (baseUrl) => models.running(baseUrl),
   };
 }
 

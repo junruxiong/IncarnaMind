@@ -22,8 +22,8 @@ Usage data is a small set of anonymous product events, such as "a Question was a
 ### When it's sent
 
 - **Only from a build made with an analytics project.** A build without one (from source, by default) sends nothing, asks nothing, and doesn't load the analytics code.
-- **A release asks once, on the first run.** Nothing is sent unless you agree; the default is no.
-- **A test build, for invited testers,** sends usage data until you turn it off, as testers agree to when they join. Its first run says so, with the switch to turn it off.
+- **A release asks once, after the first Answer to a Question of your own,** in a card at the bottom of the sidebar, not on the first run. Nothing is sent, or kept to send, unless you choose Send; the default is no.
+- **A test build, for invited testers,** sends usage data until you turn it off, as testers agree to when they join. Its first run says so, in a notice at the bottom of the sidebar with the switch to turn it off.
 - **Local mode** ("Keep everything on this computer", in Settings → Search) turns usage data off, and it stays off.
 - **You can change it any time** in Settings → Privacy, under "Usage data". Turning it off stops sending at once and drops anything still waiting to be sent.
 
@@ -46,7 +46,7 @@ Every field is a value from a closed list, a whole number, or true/false: there'
 | Event | Fields |
 | --- | --- |
 | `app_opened` | `language`: the interface language, `en` or `zh-CN` |
-| `onboarding_picked` | What the first run's "What will you use IncarnaMind for?" question was answered with, once that question exists: `papers_research`, `reports_analysis`, `contracts_legal`, `meetings_notes`, `everything`, `something_else`, `skipped`, each true or false |
+| `example_opened` | `group`: which example was opened from an example's banner: `tea`, `papers`, `reports`, `contracts` or `meetings`. Nothing else |
 | `mind_created` | No fields: you made a Mind |
 | `question_asked` | `provider`: the kind of provider of the model (`openai`, `anthropic`, `google`, `deepseek`, `qwen`, `kimi`, `glm`, `siliconflow`, `mistral`, `xai`, `openrouter`, `openai-compatible`, `ollama`, `chatgpt`); `local`: whether the model runs on your computer. Never the Question or the model's prompt |
 | `answer_finished` | `outcome`: `done` or `stopped`; `duration_ms`: how long it took; `citations`: how many Citations it has; `found`, `not_found`, `cant_check`: how many of them by check |

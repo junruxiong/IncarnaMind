@@ -42,13 +42,15 @@ interface PdfChecks {
 
 /**
  * Opens a PDF's file, if it is the version `contentHash` names, in a PDF.js
- * worker of its own, and hands it to `use`; `checkWorker` throws the worker's
- * error, if it had one. Everything is let go afterwards.
+ * worker of its own, with the password that opens it when it is locked
+ * (#763), and hands it to `use`; `checkWorker` throws the worker's error, if
+ * it had one. Everything is let go afterwards.
  */
 async function withPdf<T>(
   file: string,
   contentHash: string,
   checks: PdfChecks,
+  password: string | undefined,
   use: (document: PDFDocumentProxy, factory: CanvasFactory, checkWorker: () => void) => Promise<T>,
 ): Promise<T> {
   if ((await stat(file)).size > PDF_IMAGE_LIMITS.fileBytes) throw new Error(checks.tooLarge);
@@ -77,6 +79,7 @@ async function withPdf<T>(
     task = getDocument({
       worker,
       data: new Uint8Array(bytes),
+      ...(password !== undefined && { password }),
       cMapUrl: `${join(packageDir, "cmaps")}/`,
       cMapPacked: true,
       standardFontDataUrl: `${join(packageDir, "standard_fonts")}/`,
@@ -104,13 +107,14 @@ async function withPdf<T>(
 export async function renderPdfImages(
   file: string,
   contentHash: string,
+  password?: string,
 ): Promise<DocumentPageImage[]> {
   const checks = {
     tooLarge:
       "PDF page previews support files up to 100 MB. Turn off page images to classify its text.",
     changed: "The Document changed. Wait for it to finish processing, then classify it again.",
   };
-  return withPdf(file, contentHash, checks, async (document, factory, checkWorker) => {
+  return withPdf(file, contentHash, checks, password, async (document, factory, checkWorker) => {
     const { OPS } = await import("pdfjs-dist/legacy/build/pdf.mjs");
     // Always include the opening page; favour illustrations/charts in the next eleven.
     const candidates: { page: number; score: number }[] = [];
@@ -183,12 +187,13 @@ export async function drawPdfPages(
   file: string,
   contentHash: string,
   pages: readonly number[],
+  password?: string,
 ): Promise<DrawnPage> {
   const checks = {
     tooLarge: "Cited pages are saved for PDFs up to 100 MB.",
     changed: "The Document changed since it was cited.",
   };
-  return withPdf(file, contentHash, checks, async (document, factory, checkWorker) => {
+  return withPdf(file, contentHash, checks, password, async (document, factory, checkWorker) => {
     const { Util } = await import("pdfjs-dist/legacy/build/pdf.mjs");
     const drawn: { surface: Surface; top: number }[] = [];
     const text: PageText[] = [];

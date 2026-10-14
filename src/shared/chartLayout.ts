@@ -5,6 +5,7 @@
  * editor maps them to the theme's tokens, an export to the light theme's.
  */
 import {
+  CATEGORY_COUNT,
   type ChartAttributes,
   type ChartKind,
   type ChartValue,
@@ -22,8 +23,6 @@ export const CHART_FONT_SIZE = 12;
  * which mean found, contradicted and "you can act here".
  */
 export type ChartInk = "prior" | "now" | `category${number}`;
-
-export const CATEGORY_COUNT = 9;
 
 export type ChartMark =
   | { shape: "bar"; x: number; y: number; width: number; height: number }

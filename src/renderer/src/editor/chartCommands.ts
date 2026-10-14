@@ -15,6 +15,7 @@ import {
   type ChartAttributes,
   type ChartData,
   type ChartKind,
+  canSwitch,
   chartFromFigures,
   chartFromTable,
   drawnSeries,
@@ -22,6 +23,7 @@ import {
   type SourceGrid,
   type SourceLine,
   sameChartData,
+  switchedChart,
 } from "../../../shared/charts";
 import { readProposalAttribute } from "../../../shared/proposals";
 import { asOwnUndoStep } from "./selectionCommands";
@@ -176,7 +178,7 @@ export function insertChart(editor: Editor, chart: ChartAttributes): boolean {
 export function changeChart(
   editor: Editor,
   pos: number,
-  change: Partial<Pick<ChartAttributes, "kind" | "title" | "drawn" | "data">>,
+  change: Partial<Pick<ChartAttributes, "kind" | "title" | "drawn" | "data" | "source">>,
 ): boolean {
   const node = editor.state.doc.nodeAt(pos);
   if (!node || node.type.name !== CHART_NODE || !editor.isEditable) return false;
@@ -241,7 +243,35 @@ export function tableUpdate(
     blockId: chart.source.kind === "table" ? chart.source.blockId : null,
     title: chart.title,
     language,
+    switched: chart.source.kind === "table" && chart.source.switched === true,
   });
   if (!fresh) return null;
   return sameChartData(fresh.data, chart.data) ? null : fresh.data;
+}
+
+/**
+ * While the chart draws what its table holds, the table is read again the other way round: a
+ * row with no number, left out one way, comes back the other, and the table isn't taken to
+ * have changed.
+ */
+export function switchedChartIn(
+  doc: ProseMirrorNode,
+  attributes: Readonly<Record<string, unknown>>,
+  language: string,
+): ReturnType<typeof switchedChart> {
+  const chart = readChart(attributes);
+  const table =
+    canSwitch(chart) && tableUpdate(doc, attributes, language) === null
+      ? chartTable(doc, chart)
+      : null;
+  const fresh =
+    table &&
+    chart.source.kind === "table" &&
+    chartFromTable(tableGrid(table), {
+      blockId: chart.source.blockId,
+      title: chart.title,
+      language,
+      switched: chart.source.switched !== true,
+    });
+  return switchedChart(chart, fresh ? fresh.data : null);
 }

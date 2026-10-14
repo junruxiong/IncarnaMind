@@ -31,8 +31,9 @@ export const OLLAMA_REGISTRY: Readonly<ExternalService> = {
  * evaluation in #67.
  *
  * Changing it: change the catalog's role, give the model an entry in
- * ./catalog/local, and set the size in the "providers.ollama.use" and
- * "providers.ollama.pulling" strings (a test checks they agree).
+ * ./catalog/local, and set the size in the "providers.ollama.use",
+ * "providers.ollama.pulling" and "localModel.recommended" strings (a test
+ * checks they agree).
  */
 export const RECOMMENDED_OLLAMA_MODEL: string = catalogProvider("ollama")?.roles.answers ?? "";
 
@@ -44,12 +45,37 @@ export const RECOMMENDED_OLLAMA_DOWNLOAD_GB =
 
 const DETECT_TIMEOUT_MS = 2_000;
 
-export async function detectOllama(baseUrl: string): Promise<OllamaStatus> {
+/** How long Open Ollama waits for Ollama to answer: its app takes a few seconds to start. */
+export const OLLAMA_START_TIMEOUT_MS = 20_000;
+
+async function askOllama(baseUrl: string): Promise<Response | null> {
   try {
-    const response = await fetch(`${baseUrl}/api/tags`, {
-      signal: AbortSignal.timeout(DETECT_TIMEOUT_MS),
-    });
-    if (!response.ok) return { running: false, baseUrl };
+    return await fetch(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(DETECT_TIMEOUT_MS) });
+  } catch {
+    return null;
+  }
+}
+
+/** Whether anything answers at `baseUrl`, whatever the status: the request itself then says what is wrong. */
+export async function ollamaAnswers(baseUrl: string): Promise<boolean> {
+  const response = await askOllama(baseUrl);
+  await response?.body?.cancel().catch(() => undefined);
+  return response !== null;
+}
+
+export async function detectOllama(
+  baseUrl: string,
+  installed: () => Promise<boolean> = async () => false,
+): Promise<OllamaStatus> {
+  const notRunning = async (): Promise<OllamaStatus> => ({
+    running: false,
+    baseUrl,
+    installed: await installed().catch(() => false),
+    recommendedModel: RECOMMENDED_OLLAMA_MODEL,
+  });
+  const response = await askOllama(baseUrl);
+  if (!response?.ok) return notRunning();
+  try {
     const body: unknown = await response.json();
     const listed = isRecord(body) && Array.isArray(body.models) ? body.models : [];
     const models: string[] = [];
@@ -69,7 +95,21 @@ export async function detectOllama(baseUrl: string): Promise<OllamaStatus> {
       recommendedModel: RECOMMENDED_OLLAMA_MODEL,
     };
   } catch {
-    return { running: false, baseUrl };
+    return notRunning();
+  }
+}
+
+/** Resolves with the last status once `timeoutMs` has passed, rather than failing. */
+export async function waitForOllama(
+  baseUrl: string,
+  installed: () => Promise<boolean>,
+  { timeoutMs, everyMs = 500 }: { timeoutMs: number; everyMs?: number },
+): Promise<OllamaStatus> {
+  const until = Date.now() + timeoutMs;
+  for (;;) {
+    const status = await detectOllama(baseUrl, installed);
+    if (status.running || Date.now() >= until) return status;
+    await new Promise((resolve) => setTimeout(resolve, everyMs));
   }
 }
 

@@ -12,6 +12,7 @@ import type { PagePicture, RecognizedLine } from "../adapters";
 import type { DocumentKind } from "../api";
 import { isRecord } from "../errors";
 import { ExtractionError, extractUnits } from "./formats";
+import { passwordProblem } from "./pdfPasswords";
 import { scannedUnit } from "./scan/layout";
 import { type CanvasFactory, isScanned, pagePicture } from "./scan/pages";
 
@@ -44,12 +45,14 @@ export interface ExtractedText {
   unread: { pages: number[]; message: string } | null;
 }
 
+/** `password`: what opens a locked PDF, from ./pdfPasswords (#763). */
 export async function extractText(
   kind: DocumentKind,
   bytes: Uint8Array,
   reading: PageReading | null = null,
+  password?: string,
 ): Promise<ExtractedText> {
-  if (kind === "pdf") return extractPdf(bytes, reading);
+  if (kind === "pdf") return extractPdf(bytes, reading, password);
   return { pageCount: null, units: await extractUnits(kind, bytes), unread: null };
 }
 
@@ -119,11 +122,16 @@ export interface PdfMetadata {
  * its first pages too (#286: a DOI or an arXiv id is printed there).
  * Throws if the PDF can't be opened.
  */
-export async function pdfMetadata(bytes: Uint8Array, pages = 0): Promise<PdfMetadata> {
+export async function pdfMetadata(
+  bytes: Uint8Array,
+  pages = 0,
+  password?: string,
+): Promise<PdfMetadata> {
   const { getDocument } = await loadPdfJs();
   // pdf.js may take ownership of the buffer, so give it a copy.
   const task = getDocument({
     data: new Uint8Array(bytes),
+    ...(password !== undefined && { password }),
     ...(pages > 0 && { ...pdfjsDataUrls(), cMapPacked: true }),
     verbosity: 0,
   });
@@ -155,11 +163,43 @@ export async function pdfMetadata(bytes: Uint8Array, pages = 0): Promise<PdfMeta
   }
 }
 
-async function extractPdf(bytes: Uint8Array, reading: PageReading | null): Promise<ExtractedText> {
+/**
+ * Whether `password` opens a PDF (#763); without one, whether it opens as it
+ * is. False when it doesn't. Throws when the PDF can't be opened for another reason.
+ */
+export async function pdfOpensWith(bytes: Uint8Array, password?: string): Promise<boolean> {
+  const { getDocument } = await loadPdfJs();
+  // pdf.js may take ownership of the buffer, so give it a copy.
+  const task = getDocument({
+    data: new Uint8Array(bytes),
+    ...(password !== undefined && { password }),
+    verbosity: 0,
+  });
+  try {
+    await task.promise;
+    return true;
+  } catch (error) {
+    if (passwordProblem(error)) return false;
+    throw error;
+  } finally {
+    await task.destroy();
+  }
+}
+
+/** Whether a PDF needs a password to open (#763). */
+export const pdfIsLocked = async (bytes: Uint8Array): Promise<boolean> =>
+  !(await pdfOpensWith(bytes));
+
+async function extractPdf(
+  bytes: Uint8Array,
+  reading: PageReading | null,
+  password: string | undefined,
+): Promise<ExtractedText> {
   const { getDocument, OPS } = await loadPdfJs();
   const task = getDocument({
     // pdf.js may take ownership of the buffer, so give it a copy.
     data: new Uint8Array(bytes),
+    ...(password !== undefined && { password }),
     ...pdfjsDataUrls(),
     cMapPacked: true,
     disableFontFace: true,

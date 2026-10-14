@@ -25,7 +25,7 @@ import { translateNow } from "./i18n";
 /** Why a check gave no marks, for the line under the Mind's title. */
 export type CheckProblem =
   | Exclude<CheckSentencesResult, { kind: "checked" } | { kind: "cancelled" }>
-  | { kind: "failed"; message: string };
+  | { kind: "failed"; message: string; retry?: () => void };
 
 interface ChecksState {
   /** By Mind: the request checking its sentences now, and how many. */
@@ -86,7 +86,7 @@ export async function checkSentences(
   const requestId = crypto.randomUUID();
   setFor("problems", mindId, null);
   setFor("running", mindId, { requestId, action });
-  let result: CheckSentencesResult | { kind: "failed"; message: string };
+  let result: CheckProblem | CheckSentencesResult;
   try {
     result = await core.checkSentences({
       requestId,
@@ -98,7 +98,15 @@ export async function checkSentences(
       model: mindModelOf(doc),
     });
   } catch (error) {
-    result = { kind: "failed", message: errorMessage(error, translateNow) };
+    result = {
+      kind: "failed",
+      message: errorMessage(error, translateNow),
+      retry: () =>
+        void checkSentences(editor, mindId, doc, action, {
+          range: { from: selection.range.from, to: selection.range.to },
+          allDocuments,
+        }),
+    };
   } finally {
     setFor("running", mindId, null);
   }

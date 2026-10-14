@@ -104,7 +104,7 @@ test("the Privacy page lists the data flows and the update check, and offers no 
     },
   });
   await expect(privacy.locator('[data-traffic-id="usage-data"]')).toHaveCount(0);
-  await expect(window.getByTestId("usage-data-dialog")).toBeHidden();
+  await expect(window.getByTestId("usage-data-card")).toBeHidden();
 
   // In Chinese, what the chat flow sends.
   const language = (value: "en" | "zh-CN") =>

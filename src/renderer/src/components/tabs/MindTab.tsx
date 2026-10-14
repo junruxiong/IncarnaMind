@@ -45,7 +45,7 @@ export function MindTab({ mindId }: { mindId: string }) {
         {/* Every text in it starts at one edge (styles.css, `.mind-column`). */}
         <article data-testid="mind-pane" data-mind-id={mind.id} className="mind-column">
           <div className="mind-measure">
-            {isExample && <ExampleBanner />}
+            {isExample && <ExampleBanner mindId={mindId} />}
             <MindTitle mind={mind} />
             <div ref={setCountSlot} data-testid="mind-count-slot" />
             <MeetingInMind mindId={mind.id} />

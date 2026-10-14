@@ -8,7 +8,7 @@ import { Plugin } from "@tiptap/pm/state";
 import type { SourceContext } from "../../../shared/sources";
 import { languageNow } from "../i18n";
 import { useAppStore } from "../store";
-import { addFootnotes, citationsIn, textWithSources, wordFootnoteHtml } from "./copyNotes";
+import { addFootnotes, citationsIn, copiedText, wordFootnoteHtml } from "./copyNotes";
 
 function sourceContext(): SourceContext {
   return { language: languageNow(), documents: useAppStore.getState().documents };
@@ -51,7 +51,7 @@ export const CopyCitations = Extension.create({
             return serializer;
           })(),
           clipboardTextSerializer: (slice, view) =>
-            textWithSources(slice.content, view.state.schema, sourceContext()),
+            copiedText(slice.content, view.state.schema, sourceContext()),
         },
       }),
     ];

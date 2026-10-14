@@ -24,6 +24,7 @@ import { deletedCommands } from "./deleted";
 import { editCommands } from "./edit";
 import { evidenceCommands } from "./evidence";
 import { exportCommands } from "./exports";
+import { feedbackCommands } from "./feedback";
 import { fileCommands } from "./fileInfo";
 import { footnoteCommands } from "./footnotes";
 import { citationHandle, findHandle, readMindHandle, sidebarHandle } from "./handles";
@@ -132,6 +133,7 @@ const appCommands: readonly Command[] = [
   ...tabCommands,
   ...meetingCommands,
   ...webPageCommands,
+  ...feedbackCommands,
   ...sortCommands,
   ...fileCommands,
   ...evidenceCommands,

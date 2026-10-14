@@ -22,12 +22,14 @@ export function ChartKindMenu({
   seriesName,
   fits,
   onKind,
+  onSwitch,
   onSeries,
 }: {
   chart: ChartAttributes;
   seriesName(index: number): string;
   fits(kind: ChartKind): boolean;
   onKind(kind: ChartKind): void;
+  onSwitch: (() => void) | null;
   onSeries(series: number): void;
 }) {
   const t = useT();
@@ -92,7 +94,13 @@ export function ChartKindMenu({
             {chart.data.series.length > 1 && (
               <>
                 <div className={menuRuleClass} />
-                <p className={menuTitleClass}>{t("chart.columns")}</p>
+                <p className={menuTitleClass}>
+                  {t(
+                    chart.source.kind === "table" && chart.source.switched
+                      ? "chart.rows"
+                      : "chart.columns",
+                  )}
+                </p>
                 {chart.data.series.map((_, series) => {
                   const on =
                     chart.kind === "pie" ? drawn.includes(series) : chosen.includes(series);
@@ -124,6 +132,21 @@ export function ChartKindMenu({
                     </button>
                   );
                 })}
+              </>
+            )}
+            {onSwitch && (
+              <>
+                <div className={menuRuleClass} />
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-testid="chart-switch"
+                  onClick={() => choose(onSwitch)}
+                  className={`${menuItemClass} pl-2`}
+                >
+                  <CheckLineIcon className="invisible size-3.5 shrink-0" />
+                  <span className="flex-1">{t("chart.switch")}</span>
+                </button>
               </>
             )}
           </>

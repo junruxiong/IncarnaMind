@@ -10,6 +10,7 @@ import { CitationStylePickerHost } from "./components/CitationStylePicker";
 import { CommandPalette } from "./components/CommandPalette";
 import { ConsentDialog } from "./components/ConsentDialog";
 import { ErrorNotices } from "./components/ErrorNotices";
+import { FeedbackDialog } from "./components/FeedbackDialog";
 import { DropOverlay, useFileDrop } from "./components/FileDrop";
 import { FileWriteDialog } from "./components/FileWriteDialog";
 import { HistoryView } from "./components/history/HistoryView";
@@ -26,7 +27,6 @@ import { SidebarControlContext } from "./components/SidebarToggle";
 import { SortMenu } from "./components/SortMenu";
 import { TagsDialog } from "./components/TagsDialog";
 import { TabNoticeLine } from "./components/tabs/TabNoticeLine";
-import { UsageDataDialog } from "./components/UsageDataDialog";
 import { WordImportDialog } from "./components/WordImportDialog";
 import { files } from "./core";
 import { useEscapeToDismiss } from "./escapeDismiss";
@@ -272,9 +272,9 @@ function Workspace() {
         <InfoPanel />
         <Peek />
         <AddWebPageDialog />
+        <FeedbackDialog />
         <WordImportDialog />
         <ChatGptWelcomeDialog />
-        <UsageDataDialog />
         <CitationStylePickerHost />
         {/* Open after the dialog that triggered the request, so they show on top of it. */}
         <ConsentDialog />

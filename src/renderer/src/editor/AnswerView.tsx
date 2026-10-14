@@ -23,6 +23,10 @@ import { PlugIcon, ScriptIcon, SkillIcon, StopIcon } from "../components/icons";
 import { DocumentLineIcon, FindSourcesLineIcon } from "../components/lineIcons";
 import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
 import { ProblemLine, ProblemMark } from "../components/ProblemLine";
+import {
+  LocalModelRefusedLine,
+  OllamaNotRunningLine,
+} from "../components/providers/OllamaProblems";
 import { core } from "../core";
 import { formatResetTime } from "../cost";
 import { useFindSources } from "../findSources";
@@ -311,6 +315,15 @@ export function AnswerError({
         }
       : undefined;
   const { line, fix } = answerProblem(kind, provider);
+  if (fix.kind === "ollama") return <OllamaNotRunningLine details={details} onRetry={onRetry} />;
+  if (fix.kind === "local-model") {
+    return (
+      <LocalModelRefusedLine
+        model={modelId ? shownModel.name : t("answer.error.thisModel")}
+        details={details}
+      />
+    );
+  }
   const action = removeFromMenu
     ? { label: t("answer.error.removeFromMenu"), onClick: removeFromMenu }
     : kind === "auth" && keySaved && onRetry
