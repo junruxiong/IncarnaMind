@@ -22,11 +22,12 @@ import {
   type WordLook,
 } from "../../src/core";
 import { WORD_PACKAGES_FOLDER } from "../../src/core/wordImports";
-import { wordFileOf } from "../../src/shared/wordFiles";
+import { wordFileOf, wordImportProgressOf } from "../../src/shared/wordFiles";
 import { wordLookOf } from "../../src/shared/wordLook";
 import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core";
 import { unzip } from "../helpers/docx";
 import { recordingLog } from "../helpers/log";
+import { longContract } from "../helpers/longContract";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
 import { readMind } from "../helpers/minds";
 import { contractFile, RESUME_TEXT_WIDTH_TWIPS, resumeFile } from "../helpers/wordLookFiles";
@@ -185,6 +186,56 @@ describe("a Mind imported from Word keeps its look", () => {
         (node) => node.type === "tableCell" && node.text.startsWith("Signed for Northwind"),
       )?.look,
     ).toEqual({ borders: { bottom: { style: "single", width: 0.75, color: "000000", space: 0 } } });
+  });
+
+  test("the styles kept grow with the styles the file uses, never with its Blocks", async () => {
+    const short = await imported(longContract(8));
+    const long = await imported(longContract());
+    const sizes = (look: WordLook) =>
+      [look.paragraphs, look.runs, look.tables, look.cells].map((each) => Object.keys(each).length);
+    expect(sizes(long.look)).toEqual(sizes(short.look));
+    const blocks = lookShown(long.client);
+    // Every paragraph and heading of the 304-page contract names its style, under a few keys.
+    expect(blocks.blocks).toBeGreaterThan(2800);
+    expect(Object.keys(long.look.paragraphs).length).toBeLessThan(8);
+  });
+
+  test("an import a quit cut short names the same styles in the Blocks written after the restart", async () => {
+    const dataDir = await createTempDataFolder();
+    const first = startCore(dataDir);
+    const path = join(dataDir, "Contract.docx");
+    await writeFile(path, longContract());
+    const result = await first.importWordFile({ path, origin: "own" });
+    if (!result.ok) throw new Error(result.refusal);
+    first.close();
+
+    const second = startCore(dataDir);
+    const client = await connectToMind(second, result.mind.id);
+    await vi.waitFor(
+      () => {
+        if (wordImportProgressOf(client.doc) !== null) throw new Error("Not done.");
+      },
+      { timeout: 30_000 },
+    );
+    const look = wordLookOf(client.doc) as WordLook;
+    const keys = new Set([
+      ...Object.keys(look.paragraphs),
+      ...Object.keys(look.runs),
+      ...Object.keys(look.tables),
+      ...Object.keys(look.cells),
+    ]);
+    const used = new Set<string>();
+    readMind(client).descendants((node) => {
+      const key = node.attrs[WORD_LOOK_ATTRIBUTE];
+      if (typeof key === "string") used.add(key);
+      for (const mark of node.marks) {
+        if (mark.type.name === WORD_RUN_MARK) used.add(mark.attrs.k as string);
+      }
+      return true;
+    });
+    expect(used.size).toBeGreaterThan(3);
+    expect([...used].filter((key) => !keys.has(key))).toEqual([]);
+    expect(lookShown(client).blocks).toBeGreaterThan(2800);
   });
 
   test("the Mind records content schema 21, and export writes the file's own bytes for what wasn't changed", async () => {
