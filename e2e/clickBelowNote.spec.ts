@@ -174,3 +174,20 @@ test("a click under a table, inside the editor's own space, puts the cursor on a
   await expect.poll(lastIsTable).toBe(true);
   await app.close();
 });
+
+test("in an empty Mind a click under its line puts the cursor on it, and Chinese typed there lands in the note, not the title", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await setWindowSize(app, window, 1100, 660);
+  await newMind(window);
+  const editor = window.getByTestId("mind-editor");
+  await expect(editor).toBeVisible();
+
+  await clickBelowNote(window, editor, "editor");
+  await expect(editor).toBeFocused();
+  await window.keyboard.type("大潮在朔日和望日。");
+  await expect(blocks(editor)).toHaveCount(1);
+  await expect(blocks(editor).first()).toHaveText("大潮在朔日和望日。");
+  await expect(window.getByTestId("mind-title")).toHaveValue("");
+  await app.close();
+});
