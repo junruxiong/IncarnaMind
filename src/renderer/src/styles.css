@@ -3982,6 +3982,36 @@
     box-decoration-break: clone;
     -webkit-box-decoration-break: clone;
   }
+  /* The Answer's quoted words and the Document's nearest, when the quoted words weren't found (#483). */
+  .citation-card-words {
+    margin: 0;
+    padding-left: 22px;
+
+    blockquote {
+      margin: 0;
+      font-family: var(--font-serif);
+      font-size: 15px;
+      line-height: 24px;
+      color: var(--color-ink);
+      overflow-wrap: break-word;
+    }
+    .citation-card-wash {
+      color: var(--check-ink);
+    }
+  }
+  .citation-card-label {
+    font-size: var(--text-label);
+    line-height: var(--text-label--line-height);
+    font-weight: 600;
+    color: var(--color-ink-meta);
+  }
+  .citation-card-match {
+    padding: 1px 2px;
+    border-radius: 2px;
+    background: var(--color-success-wash);
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
   /* A word read from a scan that may be misread (#397): a spellchecker's wavy line, in amber. */
   .citation-card-unsure {
     text-decoration: underline wavy var(--color-attention);

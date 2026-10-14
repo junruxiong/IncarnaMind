@@ -11,7 +11,9 @@
  * with "misquote" in it gets a quote that isn't on the page; one with "no page"
  * names no page, as a small model often doesn't; one with "each"
  * cites the first Passage of each Document found, with a marker for each; one
- * with "rows" quotes two lines, so a sheet's Citation covers a range of rows; one that
+ * with "rows" quotes two lines, so a sheet's Citation covers a range of rows; one with
+ * "quotation marks" (引号) quotes the clause after a line's colon or comma, and writes
+ * it in quotation marks with the word before it, which the page doesn't have (#483); one that
  * asks for it "as a table" gets a Markdown table with its markers in a cell; one that
  * asks "by quarter" (按季度) gets a table of quarterly figures, its marker in each cell
  * but the last, to chart (#436); "分季度" gets the same in Chinese, in 万元, and
@@ -322,17 +324,25 @@ const UNIT_MARK = /^\[(p\. \d+|slides? [^\]]+|§[^\]]*|[^\]]*rows? [\d–-]+|lin
 /** Where a slide's speaker notes, or a Word comment, start in a Passage. */
 const NOTES_MARK = /^\[(?:speaker notes|comment(?: by [^\]]+)?)\] /;
 
+/** A Question that asks for its quote in quotation marks (#483). */
+const QUOTED_WORDS = /\bquotation marks\b|引号/i;
+/** A line's lead, up to its first colon or comma, and the clause after it, without its full stop. */
+const CLAUSE_AFTER_LEAD = /^(.+?)([,:，：])\s*(.+?)[.!?。！？]?$/u;
+
 /**
  * The record for a Passage: its line that shares the most words with the
  * Question, where that line is (the page, or the Unit a mark before it names,
  * or else the Passage's own location), and the line as the quote. A Question
  * that says "rows" quotes that line and the next, so it covers a range of rows.
+ * One that says "quotation marks" (引号) quotes the clause after the line's
+ * colon or comma, and `quoted` is that clause with the word before it joined
+ * on, as an Answer that puts it in quotation marks writes it.
  */
 function recordFor(
   passage: ShownPassage,
   question: string,
   marker: number,
-): { record: Record<string, unknown>; shared: number } | null {
+): { record: Record<string, unknown>; shared: number; quoted: string | null } | null {
   const words = question
     .toLowerCase()
     .split(/\W+/)
@@ -370,6 +380,16 @@ function recordFor(
     quote = `${quote}\n${next.line}`;
   }
   if (/misquote/i.test(question)) quote = `${quote.replace(/[.!?]$/, "")} and tomorrow.`;
+  // A model that quotes what comes after the line's colon or comma, and writes the word before it into its quotation marks.
+  let quoted: string | null = null;
+  const clause = QUOTED_WORDS.test(question) ? CLAUSE_AFTER_LEAD.exec(picked.line) : null;
+  if (clause) {
+    const [, lead = "", separator = "", rest = ""] = clause;
+    quote = rest;
+    quoted = /\p{Script=Han}$/u.test(lead)
+      ? `${lead.slice(-2)}${rest}`
+      : `${lead.split(/\s+/).at(-1)}${separator === "," || separator === ":" ? " " : ""}${rest}`;
+  }
   const record = {
     marker,
     passage: passage.id,
@@ -380,7 +400,7 @@ function recordFor(
         : {}),
     quote,
   };
-  return { record, shared: best };
+  return { record, shared: best, quoted };
 }
 
 /**
@@ -750,6 +770,15 @@ function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
         text: /增长/.test(question) ? "增长了[=1][^1]。" : "It grew [=1] [^1].\n\nThat is all.",
       };
     }
+  }
+  const firstPassage = passagesIn(searches.at(-1) ?? "")[0];
+  const quoted = firstPassage && recordFor(firstPassage, question, 1)?.quoted;
+  if (quoted) {
+    return {
+      text: /\p{Script=Han}/u.test(question)
+        ? `文档中写道“${quoted}”[^1]。`
+        : `Your Documents say “${quoted}” [^1].`,
+    };
   }
   // The markers the last cite call recorded: "Recorded [^1], [^2]." and then any problems.
   const recordedLine = /^Recorded ([^.]*)\./.exec(cites.at(-1) ?? "")?.[1] ?? "";

@@ -1178,6 +1178,8 @@ export type CitationCheck =
 export type CitationCheckReason =
   /** Not found: the quote isn't in the text of the cited Units (pages, slides…). */
   | "quote-not-on-pages"
+  /** Not found: the words the Answer put in quotation marks aren't in the text of the cited Units (#483). */
+  | "quoted-words-not-on-pages"
   /** Not found: the cited Units aren't all among the Units of the cited Passage. */
   | "pages-outside-passage"
   /** Not found: a Citation covers one Unit, or two consecutive ones of one sheet, at most. */
@@ -1265,6 +1267,24 @@ export type CitationLocation =
       paragraphs?: { from: number; to: number };
     };
 
+/** A stretch of words, and whether the Document has it where the Answer's quoted words were looked for. */
+export interface QuotedPiece {
+  text: string;
+  found: boolean;
+}
+
+/**
+ * Words an Answer put in quotation marks that aren't in the text its Citation
+ * points to (#483), for the card to set beside the Document's own: each in
+ * pieces, so the card washes what matches and what doesn't.
+ */
+export interface QuotedWords {
+  /** The Answer's words, whole; the pieces the Document doesn't have are `found: false`. */
+  answer: QuotedPiece[];
+  /** The Document's words nearest them, the matching stretch `found: true`; null when none is near. */
+  closest: QuotedPiece[] | null;
+}
+
 /**
  * A Citation's attributes, as stored on its node in the Mind's Yjs document.
  * Everything a footnote or a message needs is stored here, so it still reads
@@ -1301,6 +1321,8 @@ export interface CitationAttributes {
   checkReason: CitationCheckReason | null;
   /** One line on what the evidence says, when a claim check has one ("The agreement says 31 October 2026, p. 7"). */
   verdict?: string | null;
+  /** The Answer's quoted words the check didn't find, when that is why `check` is "not-found" (#483). */
+  quotedWords?: QuotedWords | null;
 }
 
 /** A Citation, as the Answer event stream reports it. */
@@ -1315,6 +1337,7 @@ export interface Citation {
   quote: string;
   check: CitationCheck;
   checkReason: CitationCheckReason | null;
+  quotedWords?: QuotedWords;
 }
 
 /**
