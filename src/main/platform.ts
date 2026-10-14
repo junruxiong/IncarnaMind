@@ -473,6 +473,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
       builtInSkills: builtInSkillsFolder(),
       examples: examplesFolder(),
       citationStyles: citationStylesFolder(),
+      home: app.getPath("home"),
       documents: documentsFolder(dataDir),
     },
     systemLanguages: () => app.getPreferredSystemLanguages(),
