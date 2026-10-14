@@ -12,8 +12,14 @@ import { createTempDataFolder, startCore } from "./core";
 import { addAndProcess, writeSourceFile } from "./documents";
 import { turnOnEmbeddings } from "./embedding";
 import { connectToMind, type MindClient } from "./mindClient";
-import { answerIn, question, writeMind } from "./minds";
-import { type ModelCall, type ScriptedReply, scriptedModel, scriptedModels } from "./models";
+import { answerIn, editMind, question, writeMind } from "./minds";
+import {
+  type ModelCall,
+  promptOf,
+  type ScriptedReply,
+  scriptedModel,
+  scriptedModels,
+} from "./models";
 
 /** A Passage as the search Tool showed it to the model. */
 export interface ShownPassage {
@@ -139,6 +145,26 @@ export async function setUpWithDocuments(
   const mind = await core.createMind({ title: "Tides" });
   const client = await connectToMind(core, mind.id);
   return { core, dataDir: folder, documents, mind, client, models };
+}
+
+/** Asks a Question at the end of the Mind and gives back what the model was sent for it. */
+export async function contextOfNextQuestion(
+  core: Core,
+  client: MindClient,
+  mindId: string,
+  model: MockLanguageModelV4,
+  text = "Which quarter grew most?",
+): Promise<string> {
+  const calls = model.doStreamCalls.length;
+  const asked = question(text);
+  editMind(client, (blocks) => [...blocks, asked]);
+  await client.settled();
+  const result = await core.askQuestion({ mindId, questionId: asked.attrs.id });
+  if (!result.asked) throw new Error("The Question wasn't asked.");
+  await answerEnded(core, result.answerId);
+  return promptOf(model, calls)
+    .map((message) => message.text)
+    .join("\n\n");
 }
 
 /** Resolves with the next "answer.finished" or "answer.failed" event for this Answer. */

@@ -8,6 +8,7 @@ import type {
 } from "../../core/api";
 import { conversationName } from "../../shared/naming";
 import { settleAsk, useAnswers } from "./answers";
+import { watchMindsMadeBy } from "./assistantMinds";
 import { composerKey } from "./composer";
 import { core } from "./core";
 import { translateNow } from "./i18n";
@@ -157,6 +158,7 @@ export async function askInAssistant(
     });
     settleAsk(key, result);
     if (!result.asked) return false;
+    watchMindsMadeBy(result.answerId);
     const id = result.conversation.id;
     if (useConversations.getState().stopWanted) {
       core.stopConversationAnswer({ conversationId: id, answerId: result.answerId }).catch(report);
@@ -182,6 +184,7 @@ export async function regenerateAnswer(answerId: string): Promise<void> {
   if (!conversationId) return;
   settleAsk(answerId, null);
   try {
+    watchMindsMadeBy(answerId);
     settleAsk(answerId, await core.regenerateConversationAnswer({ conversationId, answerId }));
   } catch (error) {
     settleAsk(answerId, null, error);
