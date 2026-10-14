@@ -19,6 +19,7 @@ import {
 import { DataFromNewerVersionError } from "../core/errors";
 import type { Language } from "../core/language";
 import { channelFor, EVENT_CHANNEL } from "../shared/bridge";
+import { showDevelopmentDockIcon, windowIcon } from "./appIcon";
 import { registerDocumentScheme, serveDocumentFiles } from "./documentProtocol";
 import { serveFileActions } from "./files";
 import { handle } from "./ipc";
@@ -137,6 +138,7 @@ function createWindow(): BrowserWindow {
     backgroundColor: "#F4F5F7",
     // No title row of the system's: its window buttons sit in the app's top band.
     ...titleBarOptions(process.platform),
+    ...windowIcon(),
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       contextIsolation: true,
@@ -216,6 +218,7 @@ async function showStartupError(error: unknown): Promise<void> {
 }
 
 app.whenReady().then(async () => {
+  showDevelopmentDockIcon();
   const createChatModel = await testChatModel();
   const taskKinds = await testTaskKinds();
   const executor = await scriptExecutor;
