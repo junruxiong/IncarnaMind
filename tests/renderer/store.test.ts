@@ -77,7 +77,7 @@ const snapshot = (assignments: DocumentGroupAssignment[]): LibrarySnapshot => ({
   ],
   deletedGroups: [],
   assignments,
-  settings: { classifier: { kind: "automatic" }, automatic: false },
+  settings: { classifier: { kind: "automatic" }, automatic: false, organizeWith: null },
 });
 
 let useAppStore: typeof import("../../src/renderer/src/store").useAppStore;
@@ -285,14 +285,26 @@ describe("changes the User can take back", () => {
     expect(method("renameMind")).toHaveBeenLastCalledWith("m", "Budget");
   });
 
-  test("a delete says so, is undone by restoring it and done again", async () => {
-    await useAppStore.getState().deleteDocument("a");
-    expect(top()?.message).toBe("Deleted “a v0”");
+  test("a delete asks nothing, says it went to Recently deleted, is undone by restoring it and done again", async () => {
+    await useAppStore.getState().deleteDocuments(["a"]);
+    expect(top()?.message).toBe("Moved “a v0” to Recently deleted");
     expect(useAppStore.getState().documents.map((each) => each.id)).toEqual(["b", "c"]);
     await useUndo.getState().undo();
     expect(method("restore")).toHaveBeenCalledWith([{ kind: "document", id: "a" }]);
     await useUndo.getState().redo();
     expect(method("deleteDocument")).toHaveBeenCalledTimes(2);
+  });
+
+  test("several Documents deleted together are one change, said by their count", async () => {
+    await useAppStore.getState().deleteDocuments(["a", "b"]);
+    expect(top()?.message).toBe("Moved 2 Documents to Recently deleted");
+    expect(top()?.name).toBe("Delete 2 Documents");
+    expect(useAppStore.getState().documents.map((each) => each.id)).toEqual(["c"]);
+    await useUndo.getState().undo();
+    expect(method("restore")).toHaveBeenCalledWith([
+      { kind: "document", id: "a" },
+      { kind: "document", id: "b" },
+    ]);
   });
 
   test("a Tag added is undone by putting each link back as it was, with who chose it", async () => {
@@ -363,8 +375,356 @@ describe("changes the User can take back", () => {
     expect(top()?.message).toBe("已将 2 个文档移动到“Research”");
     expect(top()?.name).toBe("移动 2 个文档");
     await useAppStore.getState().deleteMind("m");
-    expect(top()?.message).toBe("已删除“Plan”");
+    expect(top()?.message).toBe("已将“Plan”移到回收站");
     expect(top()?.name).toBe("删除“Plan”");
+  });
+});
+
+describe("making a Mind", () => {
+  const made = {
+    id: "n",
+    title: "",
+    autoTitle: "",
+    kind: "mind" as const,
+    folderId: null,
+    createdAt: "",
+    updatedAt: "",
+  };
+  let useUndo: typeof import("../../src/renderer/src/undo").useUndo;
+
+  beforeAll(async () => {
+    ({ useUndo } = await import("../../src/renderer/src/undo"));
+  });
+
+  beforeEach(() => {
+    useUndo.setState({ done: [], undone: [], line: null });
+    useAppStore.setState({ minds: [], settings: null });
+    method("createMind").mockResolvedValue(made);
+  });
+
+  const top = () => useUndo.getState().done.at(-1);
+
+  test("is one change, resolved to, which Undo sends to Recently deleted and Redo brings back", async () => {
+    const change = await useAppStore.getState().createMind();
+    expect(change).toBe(top());
+    expect(change?.message).toBe("Made a new Mind");
+    expect(change?.name).toBe("New Mind");
+    await useUndo.getState().undo();
+    expect(method("deleteMind")).toHaveBeenCalledWith("n");
+    await useUndo.getState().redo();
+    expect(method("restore")).toHaveBeenCalledWith([{ kind: "mind", id: "n" }]);
+    expect(useUndo.getState().done).toEqual([change]);
+  });
+
+  test("one started from Documents or a Folder is said by its name, in Chinese too", async () => {
+    method("createMind").mockResolvedValue({ ...made, title: "Tides" });
+    await useAppStore.getState().createMind({ title: "Tides", startQuestion: true });
+    expect(method("createMind")).toHaveBeenCalledWith({ title: "Tides" });
+    expect(top()?.message).toBe("Started “Tides”");
+    useAppStore.setState({ settings: { language: "zh-CN" } as never });
+    await useAppStore.getState().createMind({ title: "Tides", startQuestion: true });
+    expect(top()?.message).toBe("已新建“Tides”");
+    expect(top()?.name).toBe("新建 Mind");
+    method("createMind").mockResolvedValue(made);
+    await useAppStore.getState().createMind();
+    expect(top()?.message).toBe("已新建 Mind");
+  });
+
+  test("a Mind the core can't make is a problem, with no step to undo", async () => {
+    method("createMind").mockRejectedValue(new Error("The disk is full."));
+    expect(await useAppStore.getState().createMind()).toBeUndefined();
+    expect(useUndo.getState().done).toEqual([]);
+    const { useNotices } = await import("../../src/renderer/src/notices");
+    for (const notice of useNotices.getState().errors)
+      useNotices.getState().dismissError(notice.id);
+  });
+
+  test("asking about Documents makes a Mind only when there is none to ask in", async () => {
+    const scope = { folderIds: [], tagIds: [], documentIds: ["a"] };
+    const bridge = { kind: "documents" as const, title: "a", count: 1, scope };
+    const change = await useAppStore.getState().askAbout(bridge);
+    expect(change?.message).toBe("Made a new Mind");
+    useUndo.setState({ done: [], undone: [], line: null });
+    useAppStore.setState({ minds: [made] });
+    expect(await useAppStore.getState().askAbout(bridge)).toBeUndefined();
+    expect(useUndo.getState().done).toEqual([]);
+  });
+});
+
+describe("changing a Linked folder", () => {
+  const linked = {
+    id: "l",
+    path: "/Users/me/Papers",
+    folderId: "f",
+    status: "watching" as const,
+    layout: "tree" as const,
+    progress: { files: 0, indexed: 0 },
+    onlineOnly: { files: 0, bytes: 0, downloading: false },
+    unsupportedFiles: 0,
+    createdAt: "",
+    updatedAt: "",
+  };
+  let useUndo: typeof import("../../src/renderer/src/undo").useUndo;
+
+  beforeAll(async () => {
+    ({ useUndo } = await import("../../src/renderer/src/undo"));
+  });
+
+  beforeEach(() => {
+    useUndo.setState({ done: [], undone: [], line: null });
+    useAppStore.setState({ linkedFolders: [linked], settings: null });
+  });
+
+  const top = () => useUndo.getState().done.at(-1);
+
+  test("pausing is undone by resuming it and done again by pausing", async () => {
+    method("setLinkedFolderPaused").mockResolvedValue({ ...linked, status: "paused" });
+    const change = await useAppStore.getState().setLinkedFolderPaused("l", true);
+    expect(change).toBe(top());
+    expect(change?.message).toBe("Paused reading in “Papers”");
+    expect(change?.name).toBe("Pause reading");
+    expect(useAppStore.getState().linkedFolders[0]?.status).toBe("paused");
+    method("setLinkedFolderPaused").mockResolvedValue(linked);
+    await useUndo.getState().undo();
+    expect(method("setLinkedFolderPaused")).toHaveBeenLastCalledWith("l", false);
+    expect(useAppStore.getState().linkedFolders[0]?.status).toBe("watching");
+    method("setLinkedFolderPaused").mockResolvedValue({ ...linked, status: "paused" });
+    await useUndo.getState().redo();
+    expect(method("setLinkedFolderPaused")).toHaveBeenLastCalledWith("l", true);
+    expect(top()?.message).toBe("Paused reading in “Papers”");
+  });
+
+  test("resuming says so, and pausing what is paused already offers nothing to undo", async () => {
+    useAppStore.setState({ linkedFolders: [{ ...linked, status: "paused" }] });
+    method("setLinkedFolderPaused").mockResolvedValue({ ...linked, status: "paused" });
+    expect(await useAppStore.getState().setLinkedFolderPaused("l", true)).toBeUndefined();
+    method("setLinkedFolderPaused").mockResolvedValue({ ...linked, status: "scanning" });
+    const change = await useAppStore.getState().setLinkedFolderPaused("l", false);
+    expect(change?.message).toBe("Resumed reading in “Papers”");
+    expect(change?.name).toBe("Resume reading");
+  });
+
+  test("a layout is undone by the one it had and done again by the new one", async () => {
+    method("setLinkedFolderLayout").mockResolvedValue({ ...linked, layout: "flat" });
+    const change = await useAppStore.getState().setLinkedFolderLayout("l", "flat");
+    expect(change?.message).toBe("Showing “Papers” as a flat list");
+    expect(change?.name).toBe("Show as a flat list");
+    await useUndo.getState().undo();
+    expect(method("setLinkedFolderLayout")).toHaveBeenLastCalledWith("l", "tree");
+    await useUndo.getState().redo();
+    expect(method("setLinkedFolderLayout")).toHaveBeenLastCalledWith("l", "flat");
+    expect(await useAppStore.getState().setLinkedFolderLayout("l", "flat")).toBeUndefined();
+  });
+
+  test("the lines in Chinese", async () => {
+    useAppStore.setState({ settings: { language: "zh-CN" } as never });
+    method("setLinkedFolderPaused").mockResolvedValue({ ...linked, status: "paused" });
+    await useAppStore.getState().setLinkedFolderPaused("l", true);
+    expect(top()?.message).toBe("已暂停读取“Papers”");
+    expect(top()?.name).toBe("暂停读取");
+    method("setLinkedFolderLayout").mockResolvedValue({ ...linked, layout: "flat" });
+    await useAppStore.getState().setLinkedFolderLayout("l", "flat");
+    expect(top()?.message).toBe("已将“Papers”显示为平铺列表");
+    expect(top()?.name).toBe("显示为平铺列表");
+  });
+});
+
+describe("making a Folder", () => {
+  const made = {
+    id: "n",
+    name: "Untitled Folder",
+    description: "",
+    countsOwnFiles: false,
+    createdAt: "",
+    updatedAt: "",
+  };
+  let useUndo: typeof import("../../src/renderer/src/undo").useUndo;
+  let useRequests: typeof import("../../src/renderer/src/requests").useRequests;
+  let useNotices: typeof import("../../src/renderer/src/notices").useNotices;
+
+  beforeAll(async () => {
+    ({ useUndo } = await import("../../src/renderer/src/undo"));
+    ({ useRequests } = await import("../../src/renderer/src/requests"));
+    ({ useNotices } = await import("../../src/renderer/src/notices"));
+  });
+
+  /** The Library as the core has it once the new Folder is in it, named `name`. */
+  const withNewFolder = (name = made.name, assignments: DocumentGroupAssignment[] = []) => {
+    const library = snapshot(assignments);
+    method("getLibrary").mockResolvedValue({
+      ...library,
+      groups: [...library.groups, { ...made, name }],
+    });
+  };
+  const top = () => useUndo.getState().done.at(-1);
+
+  beforeEach(() => {
+    useUndo.setState({ done: [], undone: [], line: null });
+    useRequests.setState({ nameFolder: null });
+    useAppStore.setState({ settings: null, minds: [] });
+    method("createLibraryGroup").mockResolvedValue(made);
+    withNewFolder();
+  });
+
+  test("makes “Untitled Folder”, asks for its name in place, and one Undo removes it, one Redo brings it back", async () => {
+    expect(await useAppStore.getState().createFolder()).toBe("n");
+    expect(method("createLibraryGroup")).toHaveBeenCalledWith({
+      name: "Untitled Folder",
+      description: "",
+    });
+    expect(useRequests.getState().nameFolder).toBe("n");
+    expect(top()?.message).toBe("Made “Untitled Folder”");
+    expect(top()?.name).toBe("New Folder");
+    await useUndo.getState().undo();
+    expect(method("deleteLibraryGroup")).toHaveBeenCalledWith("n");
+    await useUndo.getState().redo();
+    expect(method("restore")).toHaveBeenCalledWith([{ kind: "folder", id: "n" }]);
+  });
+
+  test("a Folder the core can't make is a problem in place, with no step to undo", async () => {
+    method("createLibraryGroup").mockRejectedValue(
+      new Error("A folder with this name already exists."),
+    );
+    expect(await useAppStore.getState().createFolder()).toBeNull();
+    expect(useUndo.getState().done).toEqual([]);
+    const [notice] = useNotices.getState().errors;
+    expect(notice?.message).toContain("already exists");
+    if (notice) useNotices.getState().dismissError(notice.id);
+  });
+
+  test("a name the Folders already have is numbered, and Chinese names are made in Chinese", async () => {
+    useAppStore.setState({
+      library: {
+        ...snapshot([]),
+        groups: [{ ...made, id: "x", name: "untitled folder" }],
+      },
+    });
+    await useAppStore.getState().createFolder();
+    expect(method("createLibraryGroup")).toHaveBeenLastCalledWith({
+      name: "Untitled Folder 2",
+      description: "",
+    });
+    useAppStore.setState({ settings: { language: "zh-CN" } as never, library: snapshot([]) });
+    await useAppStore.getState().createFolder();
+    expect(method("createLibraryGroup")).toHaveBeenLastCalledWith({
+      name: "未命名文件夹",
+      description: "",
+    });
+    expect(top()?.message).toBe("已新建文件夹“未命名文件夹”");
+  });
+
+  test("its first name is part of making it: one step, named, which one Undo removes", async () => {
+    await useAppStore.getState().createFolder();
+    withNewFolder("Chapter 2");
+    method("updateLibraryGroup").mockResolvedValue({ ...made, name: "Chapter 2" });
+    await useAppStore.getState().nameNewFolder("n", "  Chapter 2 ");
+    expect(method("updateLibraryGroup")).toHaveBeenCalledWith("n", {
+      name: "Chapter 2",
+      description: "",
+    });
+    expect(useUndo.getState().done).toHaveLength(1);
+    expect(top()?.message).toBe("Made “Chapter 2”");
+    await useUndo.getState().undo();
+    expect(method("deleteLibraryGroup")).toHaveBeenCalledWith("n");
+    expect(method("updateLibraryGroup")).toHaveBeenCalledTimes(1);
+  });
+
+  test("a blank name, or one the Folder has, changes nothing; a later name is a step of its own", async () => {
+    await useAppStore.getState().createFolder();
+    await useAppStore.getState().nameNewFolder("n", "   ");
+    await useAppStore.getState().nameNewFolder("n", "Untitled Folder");
+    expect(method("updateLibraryGroup")).not.toHaveBeenCalled();
+    expect(top()?.message).toBe("Made “Untitled Folder”");
+    // Another change came after it, so the name no longer belongs to making it.
+    useUndo.getState().push({ message: "Something else", undo: async () => undefined });
+    method("updateLibraryGroup").mockResolvedValue({ ...made, name: "Later" });
+    await useAppStore.getState().nameNewFolder("n", "Later");
+    expect(useUndo.getState().done.map((each) => each.message)).toEqual([
+      "Made “Untitled Folder”",
+      "Something else",
+      "Renamed to “Later”",
+    ]);
+  });
+
+  test("with Documents and Minds: they move in at once, in one step, and Undo puts each back before the Folder goes", async () => {
+    const filed = assignment("a", "classified", "g");
+    useAppStore.setState({
+      documents: [doc("a"), doc("b"), doc("c")],
+      minds: [
+        {
+          id: "m",
+          title: "Plan",
+          autoTitle: "",
+          kind: "mind",
+          folderId: "g",
+          createdAt: "",
+          updatedAt: "",
+        },
+      ],
+      library: snapshot([filed]),
+    });
+    method("moveToFolder").mockResolvedValue({
+      folderId: "n",
+      minds: [{ id: "m", from: "g" }],
+      documents: [
+        { id: "a", from: "g", previous: filed },
+        { id: "b", from: null, previous: null },
+        { id: "c", from: null, previous: null },
+      ],
+      conversations: [],
+    });
+    withNewFolder("Untitled Folder", [filed]);
+
+    await useAppStore.getState().createFolder({ mindIds: ["m"], documentIds: ["a", "b", "c"] });
+    expect(method("moveToFolder")).toHaveBeenCalledWith({
+      mindIds: ["m"],
+      documentIds: ["a", "b", "c"],
+      conversationIds: [],
+      folderId: "n",
+    });
+    expect(top()?.message).toBe("Made “Untitled Folder” with 4 items");
+
+    await useUndo.getState().undo();
+    expect(method("moveToFolder")).toHaveBeenLastCalledWith({
+      mindIds: ["m"],
+      documentIds: [],
+      conversationIds: [],
+      folderId: "g",
+    });
+    expect(method("restoreAssignment")).toHaveBeenCalledWith("a", filed);
+    expect(method("restoreAssignment")).toHaveBeenCalledWith("b", null);
+    expect(method("restoreAssignment")).toHaveBeenCalledWith("c", null);
+    expect(method("deleteLibraryGroup").mock.invocationCallOrder[0]).toBeGreaterThan(
+      method("restoreAssignment").mock.invocationCallOrder[2] ?? 0,
+    );
+
+    await useUndo.getState().redo();
+    expect(method("restore")).toHaveBeenCalledWith([{ kind: "folder", id: "n" }]);
+    expect(method("moveToFolder")).toHaveBeenLastCalledWith({
+      mindIds: ["m"],
+      documentIds: ["a", "b", "c"],
+      conversationIds: [],
+      folderId: "n",
+    });
+  });
+
+  test("the line says how many went in, in English and in Chinese", async () => {
+    useAppStore.setState({ documents: [doc("a"), doc("b"), doc("c")] });
+    method("moveToFolder").mockResolvedValue({
+      folderId: "n",
+      minds: [],
+      documents: ["a", "b", "c"].map((id) => ({ id, from: null, previous: null })),
+      conversations: [],
+    });
+    await useAppStore.getState().createFolder({ documentIds: ["a", "b", "c"] });
+    expect(top()?.message).toBe("Made “Untitled Folder” with 3 Documents");
+    useUndo.setState({ done: [], undone: [], line: null });
+    useAppStore.setState({ settings: { language: "zh-CN" } as never, library: snapshot([]) });
+    await useAppStore.getState().createFolder({ documentIds: ["a"] });
+    expect(top()?.message).toBe("已新建文件夹“未命名文件夹”，放入“a v0”");
+    useAppStore.setState({ library: snapshot([]) });
+    await useAppStore.getState().createFolder({ documentIds: ["a", "b", "c"] });
+    expect(top()?.message).toBe("已新建文件夹“未命名文件夹”，放入 3 个文档");
   });
 });
 
@@ -407,5 +767,63 @@ describe("loading keeps a list the core pushed after reading it", () => {
     await loading;
 
     expect(folderIds()).toEqual(["mine", "examples"]);
+  });
+});
+
+describe("Organize says what it did (#763)", () => {
+  test("once it has gone through the Documents it says how many got a Suggested Folder, and Undo puts each back", async () => {
+    const { sayWhenOrganized } = await import("../../src/renderer/src/organizeRun");
+    const { useUndo } = await import("../../src/renderer/src/undo");
+    const before = new Map([
+      ["a", assignment("a", "classified")],
+      ["b", assignment("b", "classified")],
+    ]);
+    sayWhenOrganized(["a", "b"], before);
+
+    useAppStore.setState({
+      library: snapshot([assignment("a", "pending"), assignment("b", "classifying")]),
+    });
+    const earlier = useUndo.getState().line;
+    expect(useUndo.getState().line).toBe(earlier);
+    const suggested = (id: string) => ({
+      ...assignment(id, "classified", "g"),
+      suggested: true,
+    });
+    useAppStore.setState({ library: snapshot([suggested("a"), suggested("b")]) });
+
+    const change = useUndo.getState().line?.change;
+    expect(change?.message).toBe("Organize suggested a Folder for 2 Documents");
+    await useUndo.getState().undo();
+    const restored = method("restoreAssignment");
+    expect(restored).toHaveBeenCalledTimes(2);
+    expect(restored.mock.calls[0]?.[0]).toBe("a");
+    expect(restored.mock.calls[0]?.[1]).toMatchObject({ groupId: null, suggested: false });
+  });
+
+  test("Undo leaves a Document the User moved since", async () => {
+    const { sayWhenOrganized } = await import("../../src/renderer/src/organizeRun");
+    const { useUndo } = await import("../../src/renderer/src/undo");
+    method("restoreAssignment").mockClear();
+    const before = new Map([
+      ["a", assignment("a", "classified")],
+      ["b", assignment("b", "classified")],
+    ]);
+    useAppStore.setState({
+      library: snapshot([assignment("a", "pending"), assignment("b", "pending")]),
+    });
+    sayWhenOrganized(["a", "b"], before);
+    const suggested = (id: string) => ({ ...assignment(id, "classified", "g"), suggested: true });
+    useAppStore.setState({ library: snapshot([suggested("a"), suggested("b")]) });
+    // The User puts b somewhere else.
+    useAppStore.setState({
+      library: snapshot([
+        suggested("a"),
+        { ...assignment("b", "classified", null), source: "user" },
+      ]),
+    });
+    await useUndo.getState().undo();
+    const restored = method("restoreAssignment");
+    expect(restored).toHaveBeenCalledTimes(1);
+    expect(restored.mock.calls[0]?.[0]).toBe("a");
   });
 });

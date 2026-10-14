@@ -8,6 +8,8 @@ import type { Database, SqlValue } from "./database";
 export function openNodeSqlite(file: string): Database {
   const db = new DatabaseSync(file);
   db.exec("PRAGMA journal_mode = WAL");
+  // Each commit is on disk before it returns: a Task's journal must survive a force-quit (#126).
+  db.exec("PRAGMA synchronous = FULL");
   db.exec("PRAGMA foreign_keys = ON");
   db.exec("PRAGMA busy_timeout = 5000");
 

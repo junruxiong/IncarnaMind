@@ -25,7 +25,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Logger, SpeechSegment, Transcriber } from "../adapters";
+import type { EngineSwitch, Logger, SpeechSegment, Transcriber } from "../adapters";
 import type {
   Document,
   MeetingTranscript,
@@ -46,6 +46,7 @@ import { FileWriteCancelledError } from "../errors";
 import type { NewFile } from "../outputFiles";
 import type { TranscriptionModel } from "../transcription/model";
 import type { AudioPart } from "./audioFiles";
+import type { CaptureHealthRecords } from "./health";
 import { createMixer, type MixedAudio, type Mixer } from "./mixer";
 
 /** Live text this far behind the audio has fallen behind. */
@@ -84,6 +85,8 @@ interface Saved {
   /** Stretches to transcribe once the Meeting stops. */
   pending: Range[];
   savedPath: string | null;
+  /** Its save took the default Output location (`SavedFile.defaulted`). */
+  savedDefaulted?: boolean;
   /** Stopped with nothing transcribed. */
   empty?: boolean;
 }
@@ -154,6 +157,8 @@ export interface TranscriptsOptions {
   partsOf(meetingId: string): AudioPart[];
   /** Keeps how long decoding took for the audio it decoded, by model. */
   recordSpeed(modelId: string, ratio: number): void;
+  /** Each Meeting's capture health (#161): how fast live text came, restarts, falling behind, switches. */
+  health: CaptureHealthRecords;
   changed(): void;
   log: Logger;
 }
@@ -186,7 +191,7 @@ async function samplesOf(part: AudioPart): Promise<Int16Array> {
 }
 
 export function createTranscripts(options: TranscriptsOptions) {
-  const { transcriber, model, documents, log } = options;
+  const { transcriber, model, documents, health, log } = options;
   const folder = join(options.dataDir, "Transcripts");
   const states = new Map<string, State>();
   let streams = 0;
@@ -258,6 +263,7 @@ export function createTranscripts(options: TranscriptsOptions) {
       doneMs: state.doneMs,
       pending: state.pending,
       savedPath: state.savedPath,
+      ...(state.savedDefaulted && { savedDefaulted: true }),
       ...(state.state === "empty" && { empty: true }),
     };
     try {
@@ -363,7 +369,15 @@ export function createTranscripts(options: TranscriptsOptions) {
     if (live && state.partial?.id === segment.id) state.partial = null;
     if (segment.text)
       addCue(state, { startMs, endMs: baseMs + segment.endMs, text: segment.text, speaker: null });
-    if (live) probe(state, segment);
+    if (segment.failed) {
+      health.add(state.meetingId, {
+        kind: "notTranscribed",
+        atMs: startMs,
+        durationMs: segment.endMs - segment.startMs,
+      });
+    } else if (live) {
+      probe(state, segment);
+    }
     writeLines(state);
     options.changed();
   }
@@ -372,11 +386,13 @@ export function createTranscripts(options: TranscriptsOptions) {
   function probe(state: State, segment: SpeechSegment): void {
     state.probe.audioMs += segment.endMs - segment.startMs;
     state.probe.decodeMs += segment.decodeMs;
+    health.decoded(state.meetingId, segment.endMs - segment.startMs, segment.decodeMs);
     if (state.probe.recorded || state.probe.audioMs < PROBE_MS) return;
     state.probe.recorded = true;
     const ratio = state.probe.decodeMs / state.probe.audioMs;
     options.recordSpeed(model.definition.id, ratio);
     log.info("transcript.speed", {
+      meetingId: state.meetingId,
       model: model.definition.id,
       ratio: Math.round(ratio * 100) / 100,
     });
@@ -398,12 +414,10 @@ export function createTranscripts(options: TranscriptsOptions) {
     for (const state of states.values()) {
       const live = state.live;
       if (!live?.started) continue;
-      if (live.pendingFrom === null) {
-        const lost = { fromMs: live.doneMs, toMs: Math.max(live.doneMs, live.pushedMs) };
-        if (lost.toMs > lost.fromMs) {
-          state.gaps.push({ ...lost, reason: "restarted" });
-          state.pending = addRange(state.pending, lost);
-        }
+      const lost = { fromMs: live.doneMs, toMs: Math.max(live.doneMs, live.pushedMs) };
+      if (live.pendingFrom === null && lost.toMs > lost.fromMs) {
+        state.gaps.push({ ...lost, reason: "restarted" });
+        state.pending = addRange(state.pending, lost);
       }
       state.partial = null;
       const now = Date.now();
@@ -416,8 +430,14 @@ export function createTranscripts(options: TranscriptsOptions) {
         live.pendingFrom ??= live.pushedMs;
         state.state = "behind";
         state.problem = { kind: "engine", message: reason };
+        health.add(state.meetingId, { kind: "behind", atMs: lost.fromMs });
       } else {
         startEngine(state);
+        health.add(state.meetingId, {
+          kind: "restarted",
+          atMs: lost.fromMs,
+          gapMs: lost.toMs - lost.fromMs,
+        });
       }
       writeLines(state, { now: true });
       persist(state);
@@ -425,11 +445,27 @@ export function createTranscripts(options: TranscriptsOptions) {
     options.changed();
   }
 
+  /** The transcriber moved a stream to another engine (#141, #462): the Meeting's health says when, and why. */
+  function heardSwitch(change: EngineSwitch): void {
+    const found = owner(change.stream);
+    if (!found) return;
+    const { state } = found;
+    health.add(state.meetingId, {
+      kind: "switched",
+      atMs: state.live?.stream === change.stream ? state.live.pushedMs : found.baseMs,
+      from: change.from,
+      to: change.to,
+      reason: change.reason,
+    });
+  }
+
   transcriber.listen({
     segment: heardSegment,
     progress: heardProgress,
-    failed: (stream, message) => log.warn("transcript.decodeFailed", { stream, message }),
+    // Not the engine's message: one from a cloud service could quote what it was sent.
+    failed: (stream) => log.warn("transcript.decodeFailed", { stream }),
     stopped: engineStopped,
+    switched: heardSwitch,
   });
 
   // ---- Live ----
@@ -483,7 +519,7 @@ export function createTranscripts(options: TranscriptsOptions) {
     live.pendingFrom = live.doneMs;
     state.state = "behind";
     state.partial = null;
-    log.info("transcript.behind", { meetingId: state.meetingId });
+    health.add(state.meetingId, { kind: "behind", atMs: live.doneMs });
     persist(state);
     options.changed();
   }
@@ -630,6 +666,7 @@ export function createTranscripts(options: TranscriptsOptions) {
     if (document) await documents.moveFile(document.id, saved.path);
     rmSync(vttPath(state.meetingId), { force: true });
     state.savedPath = saved.path;
+    state.savedDefaulted = saved.defaulted;
     state.state = "saved";
     state.problem = null;
     log.info("transcript.saved", { meetingId: state.meetingId, lines: state.cues.length });
@@ -676,6 +713,20 @@ export function createTranscripts(options: TranscriptsOptions) {
   }
 
   return {
+    /**
+     * Indexes a recording Meeting's Transcript again now, for a Question asked during the call
+     * (#144): what was said up to now can be found and cited. Resolves once its file is checked
+     * (a changed one is then processed). Nothing for a Meeting with no lines or one saved.
+     */
+    async refresh(meetingId: string): Promise<void> {
+      const state = states.get(meetingId);
+      if (closed || !state?.documentId || state.savedPath || state.cues.length === 0) return;
+      if (state.indexTimer) clearTimeout(state.indexTimer);
+      state.indexTimer = null;
+      state.lastIndexed = Date.now();
+      await documents.check(vttPath(meetingId));
+    },
+
     /** The Meeting's Transcript, as the window shows it. */
     of(meetingId: string): MeetingTranscript {
       const state = load(meetingId);
@@ -695,6 +746,7 @@ export function createTranscripts(options: TranscriptsOptions) {
             ? status
             : null,
         savedPath: state.savedPath,
+        savedDefaulted: state.savedDefaulted === true,
         problem:
           state.problem ??
           (status.state === "failed" && (state.state === "preparing" || state.state === "finishing")

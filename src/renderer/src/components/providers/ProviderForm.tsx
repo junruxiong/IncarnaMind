@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useId, useState } from "react";
+import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import type {
   ChatProvider,
   ChatProviderKind,
@@ -13,9 +13,12 @@ import {
   keyProviderGroups,
 } from "../../../../core/providers/catalog/providers";
 import { core } from "../../core";
+import { dayOf } from "../../dates";
 import { errorMessage } from "../../errors";
-import { useLanguage, useT } from "../../i18n";
+import { useGap, useLanguage, useT } from "../../i18n";
+import type { KeyRefusal } from "../../keyRefusals";
 import { ChevronDownLineIcon } from "../lineIcons";
+import { ProblemMark } from "../ProblemLine";
 import {
   buttonClass,
   choiceListClass,
@@ -42,6 +45,15 @@ const suggestedModel = (kind: FormKind): string => catalogProviderOfKind(kind)?.
 const isSuggestion = (model: string) =>
   KEY_PROVIDER_KINDS.some((kind) => suggestedModel(kind) === model);
 
+/** An OpenAI-compatible server's address as the User typed it, by its host. */
+const hostOf = (url: string): string | null => {
+  try {
+    return new URL(url.trim()).host || null;
+  } catch {
+    return null;
+  }
+};
+
 const sameServer = (provider: ChatProvider, kind: FormKind, endpoint: string, baseUrl: string) =>
   provider.kind === kind &&
   (kind === "openai-compatible"
@@ -56,24 +68,28 @@ export function ProviderForm({
   providers,
   onSaved,
   withMoreProviders = false,
+  refused = null,
 }: {
   /** Saved providers, to tell the User when a key is already stored. */
   providers: readonly ChatProvider[];
   onSaved(provider: ChatProvider): void;
   /** Settings lists the best-effort providers too, under "More providers"; first run only the first-class ones. */
   withMoreProviders?: boolean;
+  /** A key its provider refused: the form opens on that provider, says so by the key, and focuses it. */
+  refused?: KeyRefusal | null;
 }) {
   const t = useT();
   const id = useId();
   const language = useLanguage();
-  const [kind, setKind] = useState<FormKind | null>(null);
+  const gap = useGap();
+  const [kind, setKind] = useState<FormKind | null>(refused?.kind ?? null);
   const [moreOpen, setMoreOpen] = useState(false);
   /** The region of a provider that has several; its first otherwise. */
-  const [endpointId, setEndpointId] = useState("");
+  const [endpointId, setEndpointId] = useState(refused?.endpoint ?? "");
   const key = useProviderKey();
   const { apiKey } = key;
   const [baseUrl, setBaseUrl] = useState("");
-  const [modelId, setModelId] = useState("");
+  const [modelId, setModelId] = useState(refused?.modelId ?? "");
   const [busy, setBusy] = useState<"testing" | "saving" | null>(null);
   const [test, setTest] = useState<ConnectionTestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -86,7 +102,21 @@ export function ProviderForm({
   const { main, more } = keyProviderGroups(
     withMoreProviders ? providers.map((each) => each.kind) : [],
   );
+  const refusedHere = refused !== null && refused.kind === kind;
+  const keyField = useRef<HTMLInputElement>(null);
+  // A refused key's field is where "Check the key" leads: in view, focused, and under "More
+  // providers" opened when its provider is listed there.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once, as the form opens on it.
+  useEffect(() => {
+    if (!refused) return;
+    if (more.includes(refused.kind)) setMoreOpen(true);
+    keyField.current?.scrollIntoView({ block: "center" });
+    keyField.current?.focus({ preventScroll: true });
+  }, []);
   const catalog = kind ? catalogProviderOfKind(kind) : undefined;
+  const words = language === "zh-CN" ? "zh" : "en";
+  const summary = catalog?.dataUse.summary[words] ?? "";
+  const planCredits = catalog?.planCredits?.[words] ?? "";
   const endpoint = catalog ? endpointOf(catalog, endpointId) : undefined;
   const saved = kind
     ? providers.find((each) => sameServer(each, kind, endpoint?.id ?? "", baseUrl))
@@ -153,7 +183,7 @@ export function ProviderForm({
         onSaved(provider);
       }
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     } finally {
       setBusy(null);
     }
@@ -168,7 +198,7 @@ export function ProviderForm({
     try {
       setSecretStorage(await core.acceptPlainTextSecretStorage());
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     }
   };
 
@@ -209,8 +239,9 @@ export function ProviderForm({
             <div className="flex flex-col gap-1" data-testid="provider-facts">
               {/* Where the data goes and what the provider does with it, before a key is pasted. */}
               <p className={hintClass}>
-                <span className="font-semibold text-ink">{t("providers.form.dataUse")}</span>{" "}
-                {catalog.dataUse.summary[language === "zh-CN" ? "zh" : "en"]}
+                <span className="font-semibold text-ink">{t("providers.form.dataUse")}</span>
+                {gap(t("providers.form.dataUse"), summary)}
+                {summary}
               </p>
             </div>
           )}
@@ -267,8 +298,11 @@ export function ProviderForm({
               onChange={(event) => key.type(event.target.value, baseUrl)}
               autoComplete="off"
               spellCheck={false}
+              ref={keyField}
+              aria-describedby={refusedHere ? `${id}-refused` : undefined}
               className={inputClass}
             />
+            {refusedHere && <KeyRefusedLine id={`${id}-refused`} refused={refused} />}
             {saved?.hasApiKey && (
               <span className={hintClass}>{t("providers.form.apiKeySaved")}</span>
             )}
@@ -301,7 +335,8 @@ export function ProviderForm({
           {catalog?.planCredits && (
             // Which of the provider's own plans pay for a key, in its words (#122).
             <p data-testid="provider-plan-credits" className={`-mt-2 ${hintClass}`}>
-              {catalog.planCredits[language === "zh-CN" ? "zh" : "en"]}{" "}
+              {planCredits}
+              {gap(planCredits, t("providers.form.planCredits"))}
               <a
                 href={catalog.planCredits.url}
                 target="_blank"
@@ -328,6 +363,13 @@ export function ProviderForm({
             />
           </label>
 
+          <ProviderSendsLine
+            provider={
+              kind === "openai-compatible"
+                ? (hostOf(baseUrl) ?? t("providers.kind.openai-compatible"))
+                : t(`providers.kind.${kind}`)
+            }
+          />
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="submit"
@@ -346,15 +388,44 @@ export function ProviderForm({
             </button>
           </div>
 
-          {test && <TestResult result={test} onRetry={() => void run("testing")} />}
+          {test && <TestResult result={test} />}
           {error && (
             <p role="alert" className={errorTextClass}>
+              <ProblemMark />
               {error}
             </p>
           )}
         </>
       )}
     </form>
+  );
+}
+
+/** Beside a refused key: who refused it, and when. */
+function KeyRefusedLine({ id, refused }: { id: string; refused: KeyRefusal }) {
+  const t = useT();
+  const language = useLanguage();
+  const provider = t(`providers.kind.${refused.kind}`);
+  const when = refused.at ? dayOf(new Date(refused.at), new Date(), language, t) : null;
+  return (
+    <span id={id} data-testid="provider-key-refused" role="status" className={hintClass}>
+      {when
+        ? t("providers.form.keyRefused", { provider, when })
+        : t("providers.form.keyRefusedNow", { provider })}
+    </span>
+  );
+}
+
+/**
+ * Above the button that chooses the chat model's provider: what goes to it.
+ * Choosing it is the consent for all of that (ADR-0022).
+ */
+export function ProviderSendsLine({ provider }: { provider: string }) {
+  const t = useT();
+  return (
+    <p data-testid="provider-sends" className={hintClass}>
+      {t("providers.sends", { provider })}
+    </p>
   );
 }
 
@@ -382,26 +453,8 @@ function readableMessage(message: string): string {
   }
 }
 
-/** Forgets the User's latest "Don't allow", so the next request asks again. */
-async function forgetLatestDecline(): Promise<void> {
-  const flows = await core.listDataFlows();
-  const latest = flows
-    .filter((each) => each.consent === "declined" && each.decidedAt !== null)
-    .sort((a, b) => (b.decidedAt ?? "").localeCompare(a.decidedAt ?? ""))[0];
-  if (latest) await core.revokeConsent(latest.flow.id, latest.flow.service.id);
-}
-
-/**
- * A connection test's outcome. After a "Don't allow", `onRetry` offers to ask
- * again: the decision is forgotten and the test runs again, asking first.
- */
-export function TestResult({
-  result,
-  onRetry,
-}: {
-  result: ConnectionTestResult;
-  onRetry?: () => void;
-}) {
+/** A connection test's outcome. A test sends nothing of the User's, so it asks nothing (ADR-0022). */
+export function TestResult({ result }: { result: ConnectionTestResult }) {
   const t = useT();
   if (result.ok) {
     return (
@@ -412,24 +465,15 @@ export function TestResult({
   }
   return (
     <div data-testid="connection-test" role="alert" className={errorTextClass}>
-      <p>{t(testErrorKey(result.error.kind))}</p>
-      {/* The provider's own words help with its errors; a declined consent needs none. */}
-      {result.error.message && result.error.kind !== "consent-declined" && (
+      <p>
+        <ProblemMark />
+        {t(testErrorKey(result.error.kind))}
+      </p>
+      {/* The provider's own words help with its errors. */}
+      {result.error.message && (
         <p className="mt-1 text-[12px] leading-[18px] break-words text-ink-meta">
           {readableMessage(result.error.message)}
         </p>
-      )}
-      {result.error.kind === "consent-declined" && onRetry && (
-        <button
-          type="button"
-          data-testid="connection-test-ask-again"
-          onClick={() => {
-            void forgetLatestDecline().then(onRetry, onRetry);
-          }}
-          className={`mt-2 ${buttonClass}`}
-        >
-          {t("consent.settings.askAgain")}
-        </button>
       )}
     </div>
   );

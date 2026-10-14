@@ -50,6 +50,11 @@ export interface EvalQuestion {
    */
   knownGap?: string;
   expected: ExpectedPassage;
+  /**
+   * Every Passage the answer needs, when it needs more than `expected` (the hard
+   * tier's); empty: it needs none, as an unanswerable Question. Left out: `expected`.
+   */
+  expectedAll?: readonly ExpectedPassage[];
 }
 
 /**

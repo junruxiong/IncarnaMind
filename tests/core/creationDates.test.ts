@@ -11,7 +11,13 @@ import { stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import { DATABASE_FILE, type Document, type DocumentKind } from "../../src/core";
-import { creationDate, pdfDate, w3cDate, yearWritten } from "../../src/core/documents/creationDate";
+import {
+  creationDate,
+  isPlaceholderDate,
+  pdfDate,
+  w3cDate,
+  yearWritten,
+} from "../../src/core/documents/creationDate";
 import { METADATA_VERSION, PROCESSING_VERSION } from "../../src/core/documents/processing";
 import { migrate, openDatabase } from "../../src/core/storage";
 import { migrations } from "../../src/core/storage/migrations";
@@ -498,11 +504,28 @@ describe("Existing Documents get their creation date once, in the background", {
     expect((await again.listDocuments()).map((document) => document.creationDate)).toEqual(
       documents.map((document) => document.creationDate),
     );
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    expect(later).toEqual([]);
-    expect(queryDatabase(dataDir, "SELECT id, updated_at FROM documents ORDER BY id")).toEqual(
-      written,
-    );
+    // The processor takes jobs in the order queued: once a Document added now is ready, any job
+    // the start would have queued has run.
+    const [control] = await addAndProcess(again, [
+      await writeSourceFile(await createSourceFolder(), "Control.md", "Nothing to do with them."),
+    ]);
+    expect(later.filter((id) => id !== control?.id)).toEqual([]);
+    expect(
+      queryDatabase<{ id: string }>(
+        dataDir,
+        "SELECT id, updated_at FROM documents ORDER BY id",
+      ).filter((row) => row.id !== control?.id),
+    ).toEqual(written);
     expect(embedder.texts).toEqual([]);
+  });
+});
+
+describe("A placeholder date is never a Document's date (#821)", () => {
+  test("midnight on 1 January 2000, like the other zero dates, isn't taken", () => {
+    expect(isPlaceholderDate("2000-01-01")).toBe(true);
+    expect(isPlaceholderDate("2000-01-01T00:00:00Z")).toBe(true);
+    expect(isPlaceholderDate("2000-01-02")).toBe(false);
+    expect(creationDate(["2000-01-01T00:00:00Z", "2019-03-04"], null, 2026)).toBe("2019-03-04");
+    expect(creationDate(["2000-01-01"], null, 2026)).toBeNull();
   });
 });

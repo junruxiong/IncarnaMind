@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { AnswerPlace } from "../../../core/api";
 import { core } from "../core";
 import { useT } from "../i18n";
 import { sentencesEnd, spokenText } from "./spokenText";
@@ -7,16 +8,25 @@ import { sentencesEnd, spokenText } from "./spokenText";
 const ANNOUNCE_EVERY_MS = 1_500;
 
 /**
- * Reads out the Answers being written in this Mind, in a polite live region
- * (it waits for a pause): that one is being written, then its sentences as
- * they arrive, a few at a time, then that it is done or stopped. A failed
- * Answer says so itself, as an alert under it.
+ * Reads out the Answers being written where `belongs` says (in a Mind, or in
+ * the conversation the assistant shows), in a polite live region (it waits
+ * for a pause): that one is being written, then its sentences as they
+ * arrive, a few at a time, then that it is done or stopped. A failed Answer
+ * says so itself, as an alert under it.
  */
-export function AnswerAnnouncer({ mindId }: { mindId: string }) {
+export function AnswerAnnouncer({
+  belongs,
+  testId = "composer-live",
+}: {
+  belongs(place: AnswerPlace): boolean;
+  testId?: string;
+}) {
   const t = useT();
   const words = useRef(t);
   words.current = t;
   const [said, setSaid] = useState("");
+  const isHere = useRef(belongs);
+  isHere.current = belongs;
 
   useEffect(() => {
     const t = (key: Parameters<typeof words.current>[0]) => words.current(key);
@@ -44,7 +54,7 @@ export function AnswerAnnouncer({ mindId }: { mindId: string }) {
     };
     const stops = [
       core.on("answer.started", (event) => {
-        if (event.mindId !== mindId) return;
+        if (!isHere.current(event)) return;
         answers.set(event.answerId, { text: "", told: 0 });
         setSaid(t("composer.live.writing"));
       }),
@@ -69,10 +79,10 @@ export function AnswerAnnouncer({ mindId }: { mindId: string }) {
       if (timer) clearTimeout(timer);
       for (const stop of stops) stop();
     };
-  }, [mindId]);
+  }, []);
 
   return (
-    <p role="status" aria-live="polite" data-testid="composer-live" className="sr-only">
+    <p role="status" aria-live="polite" data-testid={testId} className="sr-only">
       {said}
     </p>
   );

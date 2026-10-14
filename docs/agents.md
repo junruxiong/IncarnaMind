@@ -8,7 +8,7 @@ If you already use an AI agent, such as Claude, ChatGPT, Codex, Cursor or Antigr
 
 1. Open IncarnaMind, then **Settings → Agents**, and turn on **Connect AI agents**.
 2. Find your agent in the list (agents on this computer come first) and click **Connect**.
-3. Choose the folders it may read, then click **Allow and connect**. It can't read anything else.
+3. Choose the folders it may read, then click **Allow and connect**. It can't read anything else. **Not in a Folder** is a choice too: the Documents that are in no Folder when the agent asks, so a Document you later put in a Folder is no longer shared; your Minds are shared only with their Folder. With no Documents yet, the dialog offers **Add Documents…**.
 4. Follow the one step for your agent below.
 
 Keep IncarnaMind open while you use your agent: the agent talks to it.
@@ -64,7 +64,7 @@ Click **Connect**: IncarnaMind adds itself to WorkBuddy's MCP settings, `~/.work
 <a id="other"></a>
 ### Other agent
 
-Any other agent that can start a local MCP server works. Click **Connect**, and give it a name if you like: IncarnaMind copies its settings, in the `mcpServers` form most agents take (`{ "mcpServers": { "incarnamind": { "command", "args", "env" } } }`). Paste them where your agent adds an MCP server, then restart it. If your agent asks for the command, its arguments and its environment one by one, take them from the same settings: the **Details for technical users** of the connected agent show them again. IncarnaMind doesn't write into these agents' files.
+Any other agent that can start a local MCP server works. Click **Connect**, and give it a name if you like: IncarnaMind copies its settings, in the `mcpServers` form most agents take (`{ "mcpServers": { "incarnamind": { "command", "args", "env" } } }`). Paste them where your agent adds an MCP server, then restart it. If your agent asks for the command, its arguments and its environment one by one, the **Details for technical users** of the connected agent show each one, with its own **Copy** (the key is hidden on screen and included when you copy). IncarnaMind doesn't write into these agents' files.
 
 Chat apps that only work on the internet (ChatGPT and Claude on the web, Gemini, Le Chat, Grok, Microsoft 365 Copilot, 扣子, 元宝) can't reach IncarnaMind, which serves only this computer.
 

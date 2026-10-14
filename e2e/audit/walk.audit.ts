@@ -141,12 +141,12 @@ async function chooseFakeModel(window: Page) {
   });
 }
 
-/** Writes a Question in the composer (⌘J), asks it with Enter (it goes on the current line), and waits for the Answer. */
+/** Writes a Question in the composer (⌘J), asks it with Enter, and waits for its Answer in the assistant. */
 async function ask(window: Page, question: string, index: number) {
   await window.keyboard.press("ControlOrMeta+j");
   await typeLike(window, question, 45);
   await window.keyboard.press("Enter");
-  const answer = window.getByTestId("mind-editor").getByTestId("answer").nth(index);
+  const answer = window.getByTestId("assistant-answer").nth(index);
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 30_000 });
   return answer;
 }
@@ -205,18 +205,15 @@ test("A1 first run: the example Mind and its Citation card", async () => {
       const stops = await focusWalk(window, 45, "focus/A05");
       record("walk.focus.exampleMind", stops);
     });
-    await step(T, "add your own: a new Mind and the chat setup", async () => {
+    await step(T, "add your own: the ways to add Documents, in place", async () => {
       await window.keyboard.press("Escape");
       await click(window, window.getByTestId("example-add-own"));
       await window.waitForTimeout(800);
       await shot(window, "A06-after-add-your-own");
-      const setup = window.getByTestId("chat-setup");
-      if (await setup.isVisible()) {
-        await scan(window, "A06-chat-setup");
-        await window.keyboard.press("Escape");
-        await window.waitForTimeout(300);
-        record("walk.escape.chatSetup", { closes: !(await setup.isVisible()) });
-      }
+      const ways = window.getByTestId("example-add-items");
+      await window.keyboard.press("Escape");
+      await window.waitForTimeout(300);
+      record("walk.escape.addYourDocuments", { closes: !(await ways.isVisible()) });
     });
   } finally {
     if (app) await close(app);
@@ -382,7 +379,7 @@ test("A3 a working session: a Linked folder, Answers with Citations, the viewer,
       await window.keyboard.press("ControlOrMeta+j");
       await typeLike(window, "When do spring tides happen?", 50);
       await window.keyboard.press("Enter");
-      const first = window.getByTestId("mind-editor").getByTestId("answer").first();
+      const first = window.getByTestId("assistant-answer").first();
       await expect(first).toHaveAttribute("data-status", "streaming", { timeout: 15_000 });
       const stop = await startFrames(window);
       await window.waitForTimeout(500);
@@ -524,7 +521,9 @@ test("A3 a working session: a Linked folder, Answers with Citations, the viewer,
     });
 
     await step(T, "export dialog", async () => {
-      await click(window, window.getByTestId("export-mind"));
+      const tab = window.getByRole("tab", { selected: true }).first();
+      await tab.click({ button: "right" });
+      await click(window, tab.getByTestId("tab-actions").getByTestId("mind.exportOptions"));
       const dialog = window.getByTestId("export-dialog");
       await expect(dialog).toBeVisible();
       await window.waitForTimeout(500);
@@ -740,7 +739,7 @@ test("A4 approvals and consent", async () => {
       await window.waitForTimeout(400);
       await shot(window, "A60-approval-card");
       await scan(window, "A60-approval-card");
-      await shot(window.getByTestId("mind-tabs"), "A61-tab-waiting-dot");
+      await shot(window.getByTestId("assistant"), "A61-assistant-waiting-dot");
       await click(window, card.getByTestId("approval-allow-once"));
       const consent = window.getByTestId("consent-dialog");
       await expect(consent).toBeVisible({ timeout: 10_000 });

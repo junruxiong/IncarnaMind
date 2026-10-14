@@ -1,0 +1,32 @@
+{
+  "dateIssued": "2025-04-01",
+  "graphicsInPDF": "false",
+  "heading": "Section § 240.10b-5",
+  "packageId": "CFR-2025-title17-vol4",
+  "packageLink": "https://api.govinfo.gov/packages/CFR-2025-title17-vol4/summary",
+  "collectionCode": "CFR",
+  "detailsLink": "https://www.govinfo.gov/app/details/CFR-2025-title17-vol4/CFR-2025-title17-vol4-sec240-10b-5",
+  "title": "Employment of manipulative and deceptive devices.",
+  "leafRange": {
+    "from": "§ 240.10b-5",
+    "to": "§ 240.10b-5",
+    "type": "section"
+  },
+  "collectionName": "Code of Federal Regulations (annual edition)",
+  "granuleClass": "CONTENT",
+  "granuleId": "CFR-2025-title17-vol4-sec240-10b-5",
+  "download": {
+    "premisLink": "https://api.govinfo.gov/packages/CFR-2025-title17-vol4/premis",
+    "xmlLink": "https://api.govinfo.gov/packages/CFR-2025-title17-vol4/granules/CFR-2025-title17-vol4-sec240-10b-5/xml",
+    "zipLink": "https://api.govinfo.gov/packages/CFR-2025-title17-vol4/zip",
+    "modsLink": "https://api.govinfo.gov/packages/CFR-2025-title17-vol4/granules/CFR-2025-title17-vol4-sec240-10b-5/mods",
+    "pdfLink": "https://api.govinfo.gov/packages/CFR-2025-title17-vol4/granules/CFR-2025-title17-vol4-sec240-10b-5/pdf"
+  },
+  "relatedLink": "https://api.govinfo.gov/related/CFR-2025-title17-vol4-sec240-10b-5",
+  "authority": "(Sec. 10; 48 Stat. 891; 15 U.S.C. 78j)",
+  "docClass": "CFR",
+  "lastModified": "2025-08-26T14:30:54Z",
+  "category": "Regulatory Information",
+  "granuleNumber": "§ 240.10b-5",
+  "granulesLink": "https://api.govinfo.gov/packages/CFR-2025-title17-vol4/granules?offsetMark=*&pageSize=100"
+}

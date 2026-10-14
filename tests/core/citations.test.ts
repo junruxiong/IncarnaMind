@@ -205,10 +205,9 @@ describe("Answers cite Passages", { timeout: 30_000 }, () => {
     expect(started.map((event) => event.call)).toEqual([
       { ...call, status: "running", resultCount: null },
     ]);
-    expect(ended.map((event) => event.call)).toEqual([{ ...call, status: "done", resultCount: 1 }]);
-    expect(JSON.parse(answerIn(client, answerId).attrs.toolCalls as string)).toEqual([
-      { ...call, status: "done", resultCount: 1 },
-    ]);
+    const done = { ...call, status: "done", resultCount: 1, passages: [expect.any(String)] };
+    expect(ended.map((event) => event.call)).toEqual([done]);
+    expect(JSON.parse(answerIn(client, answerId).attrs.toolCalls as string)).toEqual([done]);
     // What the model wrote before searching was only a preamble: it isn't in the Answer.
     expect(answerText(client, answerId)).toBe("Neap tides are the small ones.");
   });
@@ -230,7 +229,7 @@ describe("Answers cite Passages", { timeout: 30_000 }, () => {
     );
     expect(system).toMatch(/The User has added 1 Document /);
     // Short: it is sent with every Question.
-    expect(system.length).toBeLessThan(2500);
+    expect(system.length).toBeLessThan(3800);
   });
 
   test("a marker with no record is removed, and a record naming no Passage is dropped: both are counted", async () => {

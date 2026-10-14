@@ -1,7 +1,7 @@
 import { type Editor, Extension } from "@tiptap/core";
 import { BLOCK_ID_ATTRIBUTE, QUESTION_BLOCK } from "../../../core/api";
 import { useAnswers } from "../answers";
-import { cursorBelowAnswer, whenAnswerShown } from "./composerAsk";
+import { cursorBelowAnswer, whenAnswerShown } from "./notePlace";
 
 export interface QuestionCommandsOptions {
   /** Called with a Question's Block ID when Enter is pressed in it. */

@@ -17,6 +17,8 @@ import {
   type StyledRun,
 } from "../../core/api";
 import type { CitationStyleId } from "../../shared/citationStyles";
+import { displayName } from "../../shared/documentNames";
+import { bibliographyShown } from "../../shared/mindBibliography";
 import {
   chosenCitationStyle,
   citationStyleIn,
@@ -25,6 +27,7 @@ import {
 import { core } from "./core";
 import { citationClusters, citedWorkOf } from "./editor/citationClusters";
 import { errorMessage } from "./errors";
+import { translateNow } from "./i18n";
 import { useAppStore } from "./store";
 
 /** A Mind's formatting, as last answered. */
@@ -67,9 +70,9 @@ export const useCitationFormatting = create<FormattingState>()((set) => ({
     }),
 }));
 
-/** The Mind's formatting, or undefined before the editor has asked. */
-export const useMindFormatting = (mindId: string) =>
-  useCitationFormatting((state) => state.minds[mindId]);
+/** The Mind's formatting, or undefined before the editor has asked, and in the assistant (no Mind). */
+export const useMindFormatting = (mindId: string | null) =>
+  useCitationFormatting((state) => (mindId === null ? undefined : state.minds[mindId]));
 
 /** What a Mind's document says of its citation style, following its changes. */
 export interface MindStyleChoice {
@@ -78,12 +81,15 @@ export interface MindStyleChoice {
   chosen: boolean;
   /** The User closed the prompt that offers a style, for this Mind. */
   promptDismissed: boolean;
+  /** The Mind shows its Bibliography without a style (#102); a styled Mind always does. */
+  bibliography: boolean;
 }
 
 const choiceIn = (settings: Y.Map<unknown>): MindStyleChoice => ({
   style: citationStyleIn(settings),
   chosen: chosenCitationStyle(settings) !== null,
   promptDismissed: citationStylePromptDismissed(settings),
+  bibliography: bibliographyShown(settings),
 });
 
 /** The Mind's style, whether it chose it, and whether it closed the offer of one. */
@@ -96,7 +102,8 @@ export function useMindStyleChoice(doc: Y.Doc): MindStyleChoice {
         const now = choiceIn(settings);
         return now.style === before.style &&
           now.chosen === before.chosen &&
-          now.promptDismissed === before.promptDismissed
+          now.promptDismissed === before.promptDismissed &&
+          now.bibliography === before.bibliography
           ? before
           : now;
       });
@@ -146,9 +153,12 @@ export function useCitationFormattingFor(
           works: cluster.members.map((member) => citedWorkOf(member.attributes)),
         })),
       };
-      // A record edited since is a new request, though the Citations are as they were.
+      // A record edited or a Document renamed since is a new request, though the Citations are as they were.
       const records = new Map(
-        documents.map((document) => [document.id, document.reference?.updatedAt ?? ""]),
+        documents.map((document) => [
+          document.id,
+          `${document.reference?.updatedAt ?? ""}\n${displayName(document)}`,
+        ]),
       );
       const cited = request.clusters.flatMap((cluster) =>
         cluster.works.map((work) => (work.documentId ? (records.get(work.documentId) ?? "-") : "")),
@@ -167,7 +177,7 @@ export function useCitationFormattingFor(
         (error: unknown) => {
           if (id !== progress.latest) return;
           progress.asked = "";
-          update(mindId, { style, pending: false, problem: errorMessage(error) });
+          update(mindId, { style, pending: false, problem: errorMessage(error, translateNow) });
         },
       );
     };

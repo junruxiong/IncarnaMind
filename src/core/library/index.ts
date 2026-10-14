@@ -1,13 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { type CitationStyleId, isCitationStyleId } from "../../shared/citationStyles";
+import { wordingOf } from "../../shared/errorWording";
 import { translate } from "../../shared/i18n";
-import { supportsLibraryImages } from "../../shared/libraryModels";
+import { organizeModelOf, supportsLibraryImages } from "../../shared/libraryModels";
 import { libraryPresetKeys } from "../../shared/libraryPresets";
 import type { DocumentKind, FolderDeletion, MovedDocument, ProviderError } from "../api";
 import type { BackgroundQueue } from "../backgroundQueue";
 import {
   ChatNotReadyError,
   ConsentDeclinedError,
+  ConsentNeededError,
   InvalidInputError,
   isRecord,
   NotFoundError,
@@ -55,6 +57,7 @@ interface AssignmentRow {
   request_id: string;
   error_kind: ProviderError["kind"] | null;
   error_message: string | null;
+  error_wording: string | null;
   classification_model: string | null;
 }
 interface DocumentRow {
@@ -76,6 +79,15 @@ const toGroup = ({ counts_own_files, ...row }: GroupRow): LibraryGroup => ({
   countsOwnFiles: counts_own_files === 1,
 });
 
+const errorOf = (row: AssignmentRow): ProviderError => {
+  const wording = row.error_wording === null ? null : wordingOf(row.error_wording);
+  return {
+    kind: row.error_kind ?? "unknown",
+    message: row.error_message ?? "",
+    ...(wording && { wording }),
+  };
+};
+
 /** A stored assignment as the API gives it. */
 const assignmentOf = (row: AssignmentRow): DocumentGroupAssignment => ({
   documentId: row.document_id,
@@ -83,7 +95,7 @@ const assignmentOf = (row: AssignmentRow): DocumentGroupAssignment => ({
   source: row.source,
   suggested: row.suggested === 1,
   status: row.status,
-  error: row.error_kind ? { kind: row.error_kind, message: row.error_message ?? "" } : null,
+  error: row.error_kind ? errorOf(row) : null,
   model: row.classification_model
     ? (JSON.parse(row.classification_model) as ClassificationModel)
     : null,
@@ -155,8 +167,6 @@ export function createLibrary(options: {
   tagged(ids: string[]): void;
   prepare(settings: LibrarySettings): Promise<GroupClassifier>;
   providerExists(id: string): boolean;
-  /** What the Tagging setting tags with, as last worked out (Automatic's pick), or null for none. */
-  tagsWith(): TaggingClassifier | null;
   /**
    * Whether a model that tags reads a PDF's pages, so it can organize one with
    * no text, a scan: itself, or through the image model (#180).
@@ -181,7 +191,43 @@ export function createLibrary(options: {
       isRecord(saved) && isRecord(saved.classifier) && typeof saved.classifier.kind === "string"
         ? (saved.classifier as LibraryClassifier)
         : AUTOMATIC;
-    return { classifier, automatic };
+    const organizeWith =
+      isRecord(saved) && isRecord(saved.organizeWith) && typeof saved.organizeWith.kind === "string"
+        ? (saved.organizeWith as TaggingClassifier)
+        : null;
+    return { classifier, automatic, organizeWith };
+  };
+  const checkClassifier = (selected: Record<string, unknown>) => {
+    if (selected.kind === "chat") {
+      if (
+        !isChatModelChoice(selected.choice) ||
+        !options.providerExists(selected.choice.providerId)
+      )
+        throw new InvalidInputError({ key: "error.library.classifierModel" });
+    } else if (selected.kind === "auto") {
+      if (typeof selected.baseUrl !== "string")
+        throw new InvalidInputError("Enter the local Ollama server.");
+      selected.baseUrl = normalizeBaseUrl(selected.baseUrl);
+      if (serviceForUrl(selected.baseUrl as string))
+        throw new InvalidInputError({ key: "error.library.autoNotLocal" });
+    } else if (selected.kind === "ollama") {
+      if (
+        typeof selected.baseUrl !== "string" ||
+        typeof selected.modelId !== "string" ||
+        !selected.modelId.trim() ||
+        selected.modelId.length > 200
+      )
+        throw new InvalidInputError({ key: "error.library.localModelMissing" });
+      if (selected.usePageImages !== undefined && typeof selected.usePageImages !== "boolean")
+        throw new InvalidInputError("Choose whether to include PDF page images.");
+      selected.modelId = selected.modelId.trim();
+      if (selected.usePageImages === true && !supportsLibraryImages(selected.modelId as string))
+        throw new InvalidInputError("PDF page images currently require local Clef-Flash.");
+      selected.baseUrl = normalizeBaseUrl(selected.baseUrl);
+      if (serviceForUrl(selected.baseUrl as string))
+        throw new InvalidInputError({ key: "error.library.ollamaNotLocal" });
+    } else if (selected.kind !== "jev")
+      throw new InvalidInputError("Choose a supported classifier.");
   };
   const groups = () =>
     db
@@ -192,7 +238,7 @@ export function createLibrary(options: {
   const group = (id: unknown) => {
     if (typeof id !== "string") throw new InvalidInputError("A group id must be text.");
     const value = groups().find((item) => item.id === id);
-    if (!value) throw new NotFoundError("That group no longer exists.");
+    if (!value) throw new NotFoundError({ key: "error.folder.notFound" });
     return value;
   };
   const document = (id: unknown) => {
@@ -201,7 +247,7 @@ export function createLibrary(options: {
       "SELECT id, name, kind, page_count, content_hash, status FROM documents WHERE id = ? AND deleted_at IS NULL",
       [id],
     );
-    if (!value) throw new NotFoundError("That Document no longer exists.");
+    if (!value) throw new NotFoundError({ key: "error.document.gone" });
     return value;
   };
   const assignment = (id: string) =>
@@ -232,7 +278,7 @@ export function createLibrary(options: {
     if (changed.length > 0) options.assigned(changed);
   };
   const hasContent = (doc: DocumentRow) => {
-    const classifier = doc.kind === "pdf" ? options.tagsWith() : null;
+    const classifier = doc.kind === "pdf" ? organizeModelOf(getSettings()) : null;
     const canReadPages = !!classifier && options.readsPages(classifier);
     return (
       (canReadPages && doc.status === "no-text") ||
@@ -279,8 +325,15 @@ export function createLibrary(options: {
   };
   const state = (id: string, status: ClassificationStatus, error?: ProviderError) => {
     db.run(
-      "UPDATE document_groups SET status = ?, error_kind = ?, error_message = ?, updated_at = ? WHERE document_id = ? AND deleted_at IS NULL",
-      [status, error?.kind ?? null, error?.message ?? null, now(), id],
+      "UPDATE document_groups SET status = ?, error_kind = ?, error_message = ?, error_wording = ?, updated_at = ? WHERE document_id = ? AND deleted_at IS NULL",
+      [
+        status,
+        error?.kind ?? null,
+        error?.message ?? null,
+        error?.wording ? JSON.stringify(error.wording) : null,
+        now(),
+        id,
+      ],
     );
     tagState(id, status, error);
     options.tagged([id]);
@@ -298,7 +351,7 @@ export function createLibrary(options: {
     const existing = assignment(doc.id);
     if (existing) {
       db.run(
-        "UPDATE document_groups SET group_id = ?, source = ?, suggested = ?, status = ?, content_hash = ?, request_id = ?, error_kind = NULL, error_message = NULL, updated_at = ?, classification_model = ? WHERE document_id = ? AND deleted_at IS NULL",
+        "UPDATE document_groups SET group_id = ?, source = ?, suggested = ?, status = ?, content_hash = ?, request_id = ?, error_kind = NULL, error_message = NULL, error_wording = NULL, updated_at = ?, classification_model = ? WHERE document_id = ? AND deleted_at IS NULL",
         [
           groupId,
           source,
@@ -442,6 +495,7 @@ export function createLibrary(options: {
             const waiting =
               error instanceof ChatNotReadyError ||
               error instanceof ConsentDeclinedError ||
+              error instanceof ConsentNeededError ||
               error instanceof TaggingNotReadyError ||
               isPlanLimit(error);
             state(id, waiting ? "waiting" : "failed", classifyProviderError(error));
@@ -466,7 +520,7 @@ export function createLibrary(options: {
     );
     // Existing batches run text first, then PDFs needing images, avoiding model churn.
     const ordered =
-      options.tagsWith()?.kind === "auto"
+      organizeModelOf(getSettings())?.kind === "auto"
         ? waiting
             .map((row) => ({ ...row, visual: needsPageImages(document(row.document_id)) }))
             .sort((a, b) => Number(a.visual) - Number(b.visual))
@@ -500,17 +554,15 @@ export function createLibrary(options: {
 
   function parseGroup(input: unknown, exceptId?: string) {
     if (!isRecord(input) || typeof input.name !== "string" || typeof input.description !== "string")
-      throw new InvalidInputError("Enter a folder name and description.");
+      throw new InvalidInputError({ key: "error.folder.nameAndDescription" });
     const name = input.name.trim();
     const description = input.description.trim();
     if (!name || name.length > 100 || description.length > 500)
-      throw new InvalidInputError(
-        "Use a name of 1–100 characters and a description of at most 500 characters.",
-      );
+      throw new InvalidInputError({ key: "error.folder.lengths" });
     if (groups().some((item) => item.id !== exceptId && sameName(item.name, name)))
-      throw new InvalidInputError("A folder with this name already exists.");
+      throw new InvalidInputError({ key: "error.folder.nameTaken" });
     if (!exceptId && groups().length >= 100)
-      throw new InvalidInputError("The Library supports up to 100 folders.");
+      throw new InvalidInputError({ key: "error.folder.limit" });
     const { countsOwnFiles } = input;
     if (countsOwnFiles !== undefined && typeof countsOwnFiles !== "boolean")
       throw new InvalidInputError("countsOwnFiles must be true or false.");
@@ -526,6 +578,20 @@ export function createLibrary(options: {
           [folderId],
         )
         .map((row) => row.document_id);
+    },
+    /**
+     * The live Documents in no live Folder now, the Library's "Not in a Folder": one with a
+     * suggested Folder waiting counts as in it, a Linked folder's Documents are in none
+     * until they are filed.
+     */
+    unfiledDocumentIds(): string[] {
+      return db
+        .all<{ id: string }>(
+          `SELECT d.id FROM documents d WHERE d.deleted_at IS NULL AND NOT EXISTS (
+             SELECT 1 FROM document_groups a JOIN library_groups g ON g.id = a.group_id
+             WHERE a.document_id = d.id AND a.deleted_at IS NULL AND g.deleted_at IS NULL)`,
+        )
+        .map((row) => row.id);
     },
     snapshot(): LibrarySnapshot {
       const assignments = db
@@ -658,14 +724,13 @@ export function createLibrary(options: {
      */
     restore(id: string): { minds: string[]; conversations: string[] } {
       const row = db.get<{ name: string }>("SELECT name FROM library_groups WHERE id = ?", [id]);
-      if (!row) throw new NotFoundError("That Folder doesn't exist.");
-      const language = settings.get().language;
+      if (!row) throw new NotFoundError({ key: "error.folder.notFound" });
       if (groups().some((item) => sameName(item.name, row.name)))
-        throw new InvalidInputError(
-          translate(language, "restore.error.folderNameTaken", { name: row.name }),
-        );
-      if (groups().length >= 100)
-        throw new InvalidInputError(translate(language, "restore.error.folderLimit"));
+        throw new InvalidInputError({
+          key: "error.restore.folderNameTaken",
+          values: { name: row.name },
+        });
+      if (groups().length >= 100) throw new InvalidInputError({ key: "error.restore.folderLimit" });
       const at = now();
       db.run("UPDATE library_groups SET deleted_at = NULL, updated_at = ? WHERE id = ?", [at, id]);
       db.run(
@@ -716,48 +781,29 @@ export function createLibrary(options: {
       if (!isRecord(input) || typeof input.automatic !== "boolean")
         throw new InvalidInputError("Choose classification settings.");
       // Null was "Organize manually" before there was Automatic: it is Automatic now.
-      const selected = input.classifier ?? AUTOMATIC;
-      if (!isRecord(selected)) throw new InvalidInputError("Choose a classifier.");
-      if (selected.kind === "automatic") {
-        if (Object.keys(selected).length !== 1)
-          throw new InvalidInputError("Automatic takes no settings.");
-      } else if (selected.kind === "chat") {
-        if (
-          !isChatModelChoice(selected.choice) ||
-          !options.providerExists(selected.choice.providerId)
-        )
-          throw new InvalidInputError("Choose a connected provider and a model.");
-      } else if (selected.kind === "auto") {
-        if (typeof selected.baseUrl !== "string")
-          throw new InvalidInputError("Enter the local Ollama server.");
-        selected.baseUrl = normalizeBaseUrl(selected.baseUrl);
-        if (serviceForUrl(selected.baseUrl as string))
-          throw new InvalidInputError("Automatic classification must run on this computer.");
-      } else if (selected.kind === "ollama") {
-        if (
-          typeof selected.baseUrl !== "string" ||
-          typeof selected.modelId !== "string" ||
-          !selected.modelId.trim() ||
-          selected.modelId.length > 200
-        )
-          throw new InvalidInputError("Enter the local server and decision model.");
-        if (selected.usePageImages !== undefined && typeof selected.usePageImages !== "boolean")
-          throw new InvalidInputError("Choose whether to include PDF page images.");
-        selected.modelId = selected.modelId.trim();
-        if (selected.usePageImages === true && !supportsLibraryImages(selected.modelId as string))
-          throw new InvalidInputError("PDF page images currently require local Clef-Flash.");
-        selected.baseUrl = normalizeBaseUrl(selected.baseUrl);
-        if (serviceForUrl(selected.baseUrl as string))
-          throw new InvalidInputError("The Ollama decision model must run on this computer.");
-      } else if (selected.kind !== "jev")
-        throw new InvalidInputError("Choose a supported classifier.");
-      settings.writeDeviceValue("library", { classifier: selected, automatic: input.automatic });
+      const chosen = input.classifier ?? AUTOMATIC;
+      const automaticChosen = isRecord(chosen) && chosen.kind === "automatic";
+      const organizeWith =
+        input.organizeWith === undefined ? getSettings().organizeWith : input.organizeWith;
+      const toCheck: unknown[] = automaticChosen ? [] : [chosen];
+      if (organizeWith !== null) toCheck.push(organizeWith);
+      for (const each of toCheck) {
+        if (!isRecord(each)) throw new InvalidInputError("Choose a classifier.");
+        checkClassifier(each);
+      }
+      settings.writeDeviceValue("library", {
+        classifier: automaticChosen ? AUTOMATIC : chosen,
+        automatic: input.automatic,
+        organizeWith,
+      });
       revision++;
       changed();
       resume();
     },
     classify(input: unknown) {
-      if (groups().length === 0) throw new InvalidInputError("Create or choose folders first.");
+      if (!organizeModelOf(getSettings()))
+        throw new InvalidInputError({ key: "error.library.noClassifier" });
+      if (groups().length === 0) throw new InvalidInputError({ key: "error.library.noFolders" });
       if (
         input !== undefined &&
         (!Array.isArray(input) || !input.every((id) => typeof id === "string" && id !== ""))
@@ -805,13 +851,12 @@ export function createLibrary(options: {
     /** See `CoreApi.restoreAssignment`. */
     restoreAssignment(id: unknown, input: unknown) {
       const previous = parsePreviousAssignment(input);
-      const language = settings.get().language;
       let doc: DocumentRow;
       try {
         doc = document(id);
       } catch (error) {
         if (!(error instanceof NotFoundError)) throw error;
-        throw new NotFoundError(translate(language, "restore.error.documentGone"));
+        throw new NotFoundError({ key: "error.restore.documentGone" });
       }
       if (previous?.groupId) {
         const name = db.get<{ name: string }>(
@@ -819,7 +864,7 @@ export function createLibrary(options: {
           [previous.groupId],
         )?.name;
         if (name !== undefined)
-          throw new NotFoundError(translate(language, "restore.error.folderGone", { name }));
+          throw new NotFoundError({ key: "error.restore.folderGone", values: { name } });
         group(previous.groupId);
       }
       if (!previous) {
@@ -838,8 +883,13 @@ export function createLibrary(options: {
         write(doc, previous.groupId, previous.source, status, previous.model, previous.suggested);
         if (previous.error)
           db.run(
-            "UPDATE document_groups SET error_kind = ?, error_message = ? WHERE document_id = ? AND deleted_at IS NULL",
-            [previous.error.kind, previous.error.message, doc.id],
+            "UPDATE document_groups SET error_kind = ?, error_message = ?, error_wording = ? WHERE document_id = ? AND deleted_at IS NULL",
+            [
+              previous.error.kind,
+              previous.error.message,
+              previous.error.wording ? JSON.stringify(previous.error.wording) : null,
+              doc.id,
+            ],
           );
         if (status === "pending" || status === "waiting") tagState(doc.id, status);
       });

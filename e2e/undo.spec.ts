@@ -4,11 +4,13 @@ import { type ElectronApplication, expect, type Page, test } from "@playwright/t
 import type { CoreBridge } from "../src/core/api";
 import {
   addDocuments,
+  clickEditItem,
   coreOf,
   createDataFolder,
   dismissChatSetup,
   documentIdOf,
   launchApp,
+  leaveText,
   newMind,
   openDocumentMenu,
   openDocumentTags,
@@ -58,15 +60,6 @@ const documentRow = async (window: Page, name: string) =>
   window.locator(
     `[data-testid="document-list-item"][data-document-id="${await documentIdOf(window, name)}"]`,
   );
-
-/** Clicks the empty foot of the sidebar's tree, where ⌘Z goes to the app's changes. */
-async function leaveText(window: Page): Promise<void> {
-  const box = await window.getByTestId("sidebar-tree").boundingBox();
-  if (!box) throw new Error("The sidebar isn't showing.");
-  await window.mouse.move(box.x + box.width / 2, box.y + box.height - 8, { steps: 8 });
-  await window.mouse.down();
-  await window.mouse.up();
-}
 
 const undo = (window: Page) => window.keyboard.press("ControlOrMeta+z");
 const redo = (window: Page) => window.keyboard.press("ControlOrMeta+Shift+z");
@@ -142,13 +135,14 @@ test("Minds and Folders: renamed, moved and deleted, each back with ⌘Z and aga
   await redo(window);
   await expect.poll(folderNames).toEqual(["Money"]);
 
-  // The Folder deleted (still asking first): restored with its Mind back in it.
+  // The Folder deleted (asking nothing): restored with its Mind back in it.
   const money = sidebarFolder(window, "Money");
   await money.getByTestId("folder-row").hover();
   await money.getByTestId("folder-menu").click();
   await money.getByTestId("folder.delete").click();
-  await window.getByTestId("confirm-delete-folder").click();
-  await expect(undoLine(window).getByTestId("undo-message")).toHaveText("Deleted “Money”");
+  await expect(undoLine(window).getByTestId("undo-message")).toHaveText(
+    "Moved “Money” to Recently deleted",
+  );
   await expect.poll(folderNames).toEqual([]);
   expect(await mindFolder(window, "Vendors")).toBeNull();
   await leaveText(window);
@@ -160,13 +154,14 @@ test("Minds and Folders: renamed, moved and deleted, each back with ⌘Z and aga
   await undo(window);
   await expect.poll(folderNames).toEqual(["Money"]);
 
-  // The Mind deleted (still asking first), then put back.
+  // The Mind deleted (asking nothing), then put back.
   const row = mindRow(window, "Vendors");
   await row.hover();
   await row.getByTestId("mind-menu").click();
   await row.getByTestId("mind-actions").getByTestId("mind.delete").click();
-  await window.getByTestId("confirm-delete-mind").click();
-  await expect(undoLine(window).getByTestId("undo-message")).toHaveText("Deleted “Vendors”");
+  await expect(undoLine(window).getByTestId("undo-message")).toHaveText(
+    "Moved “Vendors” to Recently deleted",
+  );
   await expect.poll(() => mindTitles(window)).toEqual([]);
   await leaveText(window);
   // The line's Undo does what ⌘Z does.
@@ -224,12 +219,28 @@ test("Documents: renamed, moved, tagged and deleted, each back with ⌘Z and aga
   await redo(window);
   await expect.poll(names).toEqual(["Ferries", "Tide tables"]);
 
-  // Moved into a Folder, from the Library.
+  // Moved into a Folder with Move to…, from its row's ⋯ in the Library.
   await pointAndClick(window, window.getByTestId("open-library"));
   const library = window.getByTestId("library");
-  await library
-    .getByRole("combobox", { name: "Folder for Tide tables", exact: true })
-    .selectOption({ label: "Finance" });
+  const tideRow = library
+    .getByTestId("library-document")
+    .filter({ has: window.getByRole("button", { name: "Tide tables", exact: true }) });
+  await tideRow.hover();
+  await pointAndClick(window, tideRow.getByTestId("document-file-menu"));
+  await pointAndClick(
+    window,
+    window
+      .getByTestId("document-file-actions")
+      .filter({ visible: true })
+      .getByTestId("document.moveTo"),
+  );
+  await pointAndClick(
+    window,
+    window
+      .getByTestId("move-to-picker")
+      .getByTestId("move-to-option")
+      .filter({ hasText: "Finance" }),
+  );
   await expect(undoLine(window).getByTestId("undo-message")).toHaveText(
     "Moved “Tide tables” to Finance",
   );
@@ -278,11 +289,12 @@ test("Documents: renamed, moved, tagged and deleted, each back with ⌘Z and aga
   await redo(window);
   await expect.poll(ferryTags).toEqual([]);
 
-  // Deleted (still asking first), then restored.
+  // Deleted (asking nothing), then restored.
   await openDocumentMenu(ferries);
   await ferries.getByTestId("document-file-actions").getByTestId("document.delete").click();
-  await window.getByTestId("confirm-delete-document").click();
-  await expect(undoLine(window).getByTestId("undo-message")).toHaveText("Deleted “Ferries”");
+  await expect(undoLine(window).getByTestId("undo-message")).toHaveText(
+    "Moved “Ferries” to Recently deleted",
+  );
   await expect.poll(names).toEqual(["Tide tables"]);
   expect(
     await read(window, async (core) => (await core.listDeleted()).map((each) => each.name)),
@@ -298,7 +310,7 @@ test("Documents: renamed, moved, tagged and deleted, each back with ⌘Z and aga
 test("Tags: renamed, recoloured, merged and deleted in Manage Tags, each back with ⌘Z and again with ⇧⌘Z", async () => {
   test.setTimeout(120_000);
   await writeFile(join(sources, "Lab notes.txt"), "Notes from the lab.\n");
-  const { window } = await launchApp(dataDir);
+  const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await addDocuments(window, [join(sources, "Lab notes.txt")]);
   const ids = await read(window, async (core) => {
@@ -317,12 +329,12 @@ test("Tags: renamed, recoloured, merged and deleted in Manage Tags, each back wi
     );
   const labTags = () =>
     read(window, async (core) => (await core.listDocuments())[0]?.tags.map((link) => link.tagId));
-  await pointAndClick(window, window.getByTestId("open-library"));
-  const library = window.getByTestId("library");
   const dialog = window.getByTestId("tags-dialog");
   const row = (id: string) => dialog.locator(`[data-testid="tag-row"][data-tag-id="${id}"]`);
+  // Manage Tags, from the sidebar's Tags menu.
   const manage = async () => {
-    await pointAndClick(window, library.getByRole("button", { name: "Manage tags" }));
+    await pointAndClick(window, window.getByTestId("tag-filter-menu"));
+    await pointAndClick(window, window.getByTestId("manage-tags"));
     await expect(dialog).toBeVisible();
   };
   const done = async () => {
@@ -335,7 +347,12 @@ test("Tags: renamed, recoloured, merged and deleted in Manage Tags, each back wi
   // Renamed and recoloured in one edit.
   await manage();
   await pointAndClick(window, row(ids.report).getByTestId("edit-tag"));
-  await row(ids.report).getByTestId("tag-name-input").fill("Reports");
+  const name = row(ids.report).getByTestId("tag-name-input");
+  await name.fill("Reports");
+  // The Edit menu's Undo in a dialog's field is the field's own.
+  await clickEditItem(app, "edit.undo");
+  await expect(name).toHaveValue("Report");
+  await name.fill("Reports");
   await pointAndClick(window, row(ids.report).locator('label:has([data-colour="teal"])'));
   await pointAndClick(window, row(ids.report).getByTestId("save-tag"));
   await expect(row(ids.report).getByTestId("tag-row-name")).toHaveText("Reports");
@@ -367,13 +384,14 @@ test("Tags: renamed, recoloured, merged and deleted in Manage Tags, each back wi
   await undo(window);
   await expect.poll(labTags).toEqual([ids.report]);
 
-  // Deleted (still asking first): back with its link.
+  // Deleted (asking nothing): back with its link.
   await manage();
   await pointAndClick(window, row(ids.report).getByTestId("delete-tag"));
-  await pointAndClick(window, row(ids.report).getByTestId("confirm-delete-tag"));
   await expect(row(ids.report)).toHaveCount(0);
   await done();
-  await expect(undoLine(window).getByTestId("undo-message")).toHaveText("Deleted “Reports”");
+  await expect(undoLine(window).getByTestId("undo-message")).toHaveText(
+    "Moved “Reports” to Recently deleted",
+  );
   await expect.poll(labTags).toEqual([]);
   await undo(window);
   await expect.poll(labTags).toEqual([ids.report]);
@@ -404,12 +422,6 @@ const editItem = (app: ElectronApplication, id: "edit.undo" | "edit.redo") =>
   app.evaluate(({ Menu }, itemId) => {
     const item = Menu.getApplicationMenu()?.getMenuItemById(itemId);
     return item ? { label: item.label, enabled: item.enabled } : null;
-  }, id);
-
-/** Chooses the Edit menu's Undo or Redo. */
-const clickEditItem = (app: ElectronApplication, id: "edit.undo" | "edit.redo") =>
-  app.evaluate(({ Menu }, itemId) => {
-    Menu.getApplicationMenu()?.getMenuItemById(itemId)?.click();
   }, id);
 
 test("⌘Z goes to the note's own undo in the note, to a field's in a field, and to the last change elsewhere; the Edit menu too, naming it", async () => {
@@ -462,9 +474,20 @@ test("⌘Z goes to the note's own undo in the note, to a field's in a field, and
   // And the Edit menu's, chosen there.
   await composer.fill("");
   await window.keyboard.type("Tides");
-  await expect.poll(() => editItem(app, "edit.undo")).toEqual({ label: "Undo", enabled: true });
+  await expect(composer).toHaveValue("Tides");
   await clickEditItem(app, "edit.undo");
   await expect(composer).not.toHaveValue("Tides");
+  expect(await mindFolder(window, "Shortlist")).toBe(finance);
+  // Even chosen right after clicking into the field from where the menu names the last change.
+  await composer.fill("");
+  await window.keyboard.type("Neap");
+  await leaveText(window);
+  await expect
+    .poll(() => editItem(app, "edit.undo"))
+    .toEqual({ label: "Undo Move “Shortlist”", enabled: true });
+  await pointAndClick(window, composer);
+  await clickEditItem(app, "edit.undo");
+  await expect(composer).not.toHaveValue("Neap");
   expect(await mindFolder(window, "Shortlist")).toBe(finance);
 
   // Anywhere else: the last change, and the Edit menu names it.
@@ -483,6 +506,34 @@ test("⌘Z goes to the note's own undo in the note, to a field's in a field, and
   await expect.poll(() => mindFolder(window, "Shortlist")).toBe(finance);
   await clickEditItem(app, "edit.undo");
   await expect.poll(() => mindFolder(window, "Shortlist")).toBeNull();
+});
+
+test("in a Mind's title and the composer, a run of typing is one step to undo and to redo, with ⌘Z and the Edit menu", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await newMind(window);
+  const title = window.getByTestId("mind-title");
+  await title.fill("Upgrade test");
+  const composer = window.getByTestId("composer-input");
+
+  for (const [field, before] of [
+    [title, "Upgrade test"],
+    [composer, ""],
+  ] as const) {
+    await pointAndClick(window, field);
+    await window.keyboard.press("End");
+    await window.keyboard.type(" abc");
+    await expect(field).toHaveValue(`${before} abc`);
+    await undo(window);
+    await expect(field).toHaveValue(before);
+    await redo(window);
+    await expect(field).toHaveValue(`${before} abc`);
+    await clickEditItem(app, "edit.undo");
+    await expect(field).toHaveValue(before);
+    await clickEditItem(app, "edit.redo");
+    await expect(field).toHaveValue(`${before} abc`);
+  }
+  await expect.poll(() => mindTitles(window)).toEqual(["Upgrade test abc"]);
 });
 
 test("an undo the core can't do shows one problem line where it happened, in Chinese too, and its action lets it happen", async () => {

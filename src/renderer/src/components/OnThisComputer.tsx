@@ -1,0 +1,24 @@
+import type { ReactNode } from "react";
+import { ComputerLineIcon } from "./lineIcons";
+
+/**
+ * What stays on this computer ("Stays on this computer"): its icon, then the
+ * words in `ink-secondary`. Never green: that colour is for Citation checks.
+ */
+export function OnThisComputer({
+  children,
+  className = "",
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <span
+      data-testid="on-this-computer"
+      className={`inline-flex items-center gap-1 text-ink-secondary ${className}`}
+    >
+      <ComputerLineIcon className="size-3.5 shrink-0" />
+      {children}
+    </span>
+  );
+}

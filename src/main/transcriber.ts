@@ -9,18 +9,20 @@
 import { utilityProcess } from "electron";
 import type { Transcriber } from "../core";
 import { createChannelTranscriber, type TranscriberResponse } from "../core/transcription/channel";
+import type { FakeTranscriberOptions } from "../core/transcription/fake";
 import transcriberProcessPath from "./transcriberProcess?modulePath";
 
 export interface UtilityProcessTranscriberOptions {
-  /** Runs the fake engine instead of the real one (smoke tests). */
-  fake?: boolean;
+  /** Runs the fake engine instead of the real one, as these options ask (smoke tests). */
+  fake?: FakeTranscriberOptions;
 }
 
 export function createUtilityProcessTranscriber(
   options: UtilityProcessTranscriberOptions = {},
 ): Transcriber {
+  const args = options.fake ? ["--fake", `--fake-options=${JSON.stringify(options.fake)}`] : [];
   return createChannelTranscriber(() => {
-    const child = utilityProcess.fork(transcriberProcessPath, options.fake ? ["--fake"] : [], {
+    const child = utilityProcess.fork(transcriberProcessPath, args, {
       serviceName: "IncarnaMind transcription",
       stdio: "inherit",
     });

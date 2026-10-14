@@ -4,7 +4,7 @@ import type { MessageKey } from "../../../shared/i18n";
 import type { ScopeKind } from "../../../shared/searchScope";
 import { DocumentLineIcon, FolderLineIcon, TagLineIcon } from "../components/lineIcons";
 import { useT } from "../i18n";
-import { type ScopeChip, scopeChips } from "../scope";
+import { DELETED_NAMES, type ScopeChip, scopeChips } from "../scope";
 import { useAppStore } from "../store";
 import { RemoveIcon } from "./icons";
 
@@ -12,12 +12,6 @@ const CHIP_TITLES: Record<ScopeKind, MessageKey> = {
   folder: "scope.chip.folder",
   tag: "scope.chip.tag",
   document: "scope.chip.document",
-};
-
-const DELETED_NAMES: Record<ScopeKind, MessageKey> = {
-  folder: "scope.chip.deleted.folder",
-  tag: "scope.chip.deleted.tag",
-  document: "scope.chip.deleted.document",
 };
 
 /** A chip's icon: the sidebar's line icon of its kind, in its muted ink. */
@@ -70,7 +64,8 @@ export function ScopeChips({
       ? 0
       : (state.library?.assignments.filter((each) => each.groupId === ownFolderId).length ?? 0),
   );
-  const chips = scopeChips({ folders, groups, deletedGroups, tags, documents }, scope);
+  const assignments = useAppStore((state) => state.library?.assignments);
+  const chips = scopeChips({ folders, groups, deletedGroups, tags, documents, assignments }, scope);
   const [expanded, setExpanded] = useState(false);
   const long = chips.length > most;
   const shown = long && !expanded ? chips.slice(0, most - 1) : chips;
@@ -100,6 +95,12 @@ export function ScopeChips({
         ) : (
           <span className="truncate">{name}</span>
         );
+        const emptyHint =
+          !deleted && chip.count === 0 ? (
+            <span data-testid="scope-chip-empty" className="scope-chip-empty">
+              {t("scope.chip.empty")}
+            </span>
+          ) : null;
         return (
           <li
             key={`${chip.kind}:${chip.id}`}
@@ -121,9 +122,13 @@ export function ScopeChips({
               >
                 <ChipIcon chip={chip} />
                 {label}
+                {emptyHint}
               </button>
             ) : (
-              label
+              <>
+                {label}
+                {emptyHint}
+              </>
             )}
             <button
               type="button"

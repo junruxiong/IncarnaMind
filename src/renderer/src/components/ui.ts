@@ -42,9 +42,12 @@ export const dangerButtonClass = buttonStyle("danger");
 export const iconButtonClass =
   "inline-flex size-7 shrink-0 items-center justify-center rounded-md text-ink-meta hover:bg-chip hover:text-ink focus-visible:outline-offset-0 disabled:opacity-50";
 
-/** A field's box: radius 4, a 1px edge, blue when focused. Sized by where it sits. */
+/**
+ * A field's box: radius 4, a 1px edge, blue when focused, `warning` while its
+ * value is wrong (`aria-invalid`, with its message under it). Sized by where it sits.
+ */
 export const fieldClass =
-  "rounded-sm border border-rule-strong bg-sheet px-2.5 py-1.5 text-ui text-ink placeholder:text-ink-placeholder focus:border-accent focus:outline-1 focus:outline-offset-0 focus:outline-accent disabled:opacity-60";
+  "rounded-sm border border-rule-strong bg-sheet px-2.5 py-1.5 text-ui text-ink placeholder:text-ink-placeholder aria-invalid:border-warning focus:border-accent focus:outline-1 focus:outline-offset-0 focus:outline-accent disabled:opacity-60";
 
 /** A text field, under its label, as wide as its column. */
 export const inputClass = `mt-1 block w-full ${fieldClass}`;
@@ -55,15 +58,23 @@ export const fieldLabelClass = "block text-[13px] leading-5 text-ink-secondary";
 /** The line of help under a field. */
 export const hintClass = "mt-1 block text-[12px] leading-[18px] text-ink-meta";
 
+/**
+ * A checkbox with its label, and the line of help under it: the box is 16px
+ * and the gap 8px, so the line's indent (24px) is where the label's text starts.
+ */
+export const checkRowClass = "flex items-center gap-2 text-ui text-ink";
+export const checkBoxClass = "m-0 size-4 shrink-0";
+export const checkHintClass = `${hintClass} mt-0 pl-6`;
+
 /** A note that needs reading, on the frame: no tinted boxes outside Citations. */
 export const noticeClass =
   "rounded-lg border border-rule bg-frame px-3 py-2 text-[13px] leading-5 text-ink-secondary";
 
-/** What went wrong, in words. */
-export const errorTextClass = "text-[13px] leading-5 break-words text-danger";
+/** What went wrong, in words, in ink after a `ProblemMark`. Red is only for what can't be undone. */
+export const errorTextClass = "text-[13px] leading-5 break-words text-ink";
 
-/** Something that worked, e.g. a connection test. */
-export const successTextClass = "text-[13px] leading-5 text-success";
+/** Something that worked, e.g. a connection test: in ink, as green is for Citation checks. */
+export const successTextClass = "text-[13px] leading-5 text-ink-secondary";
 
 // Dialogs ------------------------------------------------------------------
 
@@ -164,6 +175,17 @@ export const rowTextClass = "text-[13px] leading-5 text-ink-secondary";
 /** A row's status, on the right. */
 export const rowStatusClass = "text-[13px] leading-5 text-ink-meta";
 
+/**
+ * A few choices side by side, one chosen (radio buttons that look like a
+ * segmented control): `segmentedClass` on the group, `segmentClass` on each
+ * `<label>`, whose radio input is visually hidden (`sr-only`).
+ */
+export const segmentedClass =
+  "inline-flex shrink-0 overflow-hidden rounded-md shadow-[inset_0_0_0_1px_var(--color-rule-strong)]";
+
+export const segmentClass =
+  "h-[26px] cursor-default px-2 text-[12px] leading-[26px] whitespace-nowrap text-ink-secondary hover:text-ink has-[:checked]:bg-frame has-[:checked]:font-semibold has-[:checked]:text-ink has-[:focus-visible]:outline-2 has-[:focus-visible]:-outline-offset-2 has-[:focus-visible]:outline-accent";
+
 // Menus ----------------------------------------------------------------------
 
 /** A popover menu's element. */
@@ -175,7 +197,7 @@ export const menuTitleClass = "px-2 pt-1.5 pb-1 text-label font-semibold text-in
 
 /** A menu item: a 28px row, in the menu's ink unless it says otherwise. */
 export const menuItemClass =
-  "flex h-7 w-full items-center gap-2 rounded-md pr-2 text-left outline-none hover:bg-hover focus-visible:bg-hover disabled:text-ink-placeholder disabled:hover:bg-transparent";
+  "flex h-7 w-full items-center gap-2 rounded-md pr-2 text-left -outline-offset-2 hover:bg-hover focus-visible:bg-hover disabled:text-ink-placeholder disabled:hover:bg-transparent";
 
 /**
  * A menu item that can't be used right now (`aria-disabled`): it stays in

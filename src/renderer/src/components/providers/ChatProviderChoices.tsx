@@ -1,6 +1,10 @@
 import { type ReactNode, useId } from "react";
-import type { ChatProvider } from "../../../../core/api";
+import type { ChatProvider, ChatProviderKind } from "../../../../core/api";
+import { keyProviderGroups } from "../../../../core/providers/catalog/providers";
+import { CHATGPT_SERVICE } from "../../../../core/providers/chatgpt/service";
 import { useT } from "../../i18n";
+import type { KeyRefusal } from "../../keyRefusals";
+import { OnThisComputer } from "../OnThisComputer";
 import {
   buttonStyle,
   choiceListClass,
@@ -16,8 +20,16 @@ import {
   useChatGptStorage,
   useContinueWithChatGpt,
 } from "./ChatGptSignIn";
+import { KeepLocalChoice } from "./KeepLocalChoice";
 import { type Ollama, OllamaProgress, ollamaDescription } from "./OllamaCard";
-import { ProviderForm } from "./ProviderForm";
+import { ProviderForm, ProviderSendsLine } from "./ProviderForm";
+
+const SHORT_NAMES: Partial<
+  Record<ChatProviderKind, "providers.kind.short.qwen" | "providers.kind.short.deepseek">
+> = {
+  qwen: "providers.kind.short.qwen",
+  deepseek: "providers.kind.short.deepseek",
+};
 
 /** Where Answers come from: local models, an API key, or the User's ChatGPT plan. */
 export type ChatProviderChoice = "ollama" | "api-key" | "chatgpt";
@@ -37,6 +49,8 @@ interface ChatProviderChoicesProps {
   includeChatGpt?: boolean;
   /** Settings also lists the best-effort providers, under "More providers"; first run lists only first-class ones. */
   withMoreProviders?: boolean;
+  /** A key refused by its provider, whose field the API key's form opens on (#765). */
+  refused?: KeyRefusal | null;
 }
 
 /**
@@ -47,8 +61,15 @@ interface ChatProviderChoicesProps {
 export function ChatProviderChoices(props: ChatProviderChoicesProps) {
   const { choice, onChoose, ollama, providers, onSaved } = props;
   const { ollamaActionInRow = false, includeChatGpt = false, withMoreProviders = false } = props;
+  const { refused = null } = props;
   const t = useT();
   const name = useId();
+
+  const apiKeyBody = withMoreProviders
+    ? t("providers.choice.apiKey.body")
+    : t("providers.choice.apiKey.firstRun.body", {
+        providers: providerList(keyProviderGroups().main, t),
+      });
 
   const radio = (value: ChatProviderChoice) => (
     <input
@@ -74,10 +95,13 @@ export function ChatProviderChoices(props: ChatProviderChoicesProps) {
         inputId={`${name}-ollama`}
         chosen={choice === "ollama"}
         details={
-          (ollamaActionInRow || ollama.pulling || ollama.error) && (
+          (ollamaActionInRow || ollama.pulling || ollama.error || ollama.status?.running) && (
             <div className="flex flex-col items-start gap-3">
               <OllamaProgress ollama={ollama} />
               {ollamaActionInRow && <OllamaAction ollama={ollama} />}
+              {ollama.status?.running && (
+                <KeepLocalChoice keepLocal={ollama.keepLocal} disabled={ollama.pulling} />
+              )}
             </div>
           )
         }
@@ -86,9 +110,9 @@ export function ChatProviderChoices(props: ChatProviderChoicesProps) {
         <span className="flex min-w-0 flex-col gap-1">
           <span className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
             <span className={choiceTitleClass}>{t("providers.ollama.title")}</span>
-            <span className="text-label font-semibold text-success">
+            <OnThisComputer className="text-label font-semibold">
               {t("providers.choice.local")}
-            </span>
+            </OnThisComputer>
           </span>
           <span data-testid="ollama-status" className={choiceTextClass}>
             {ollamaDescription(ollama, t)}
@@ -104,13 +128,14 @@ export function ChatProviderChoices(props: ChatProviderChoicesProps) {
             providers={providers}
             onSaved={onSaved}
             withMoreProviders={withMoreProviders}
+            refused={refused}
           />
         }
       >
         {radio("api-key")}
         <span className="flex min-w-0 flex-col gap-1">
           <span className={choiceTitleClass}>{t("providers.choice.apiKey")}</span>
-          <span className={choiceTextClass}>{t("providers.choice.apiKey.body")}</span>
+          <span className={choiceTextClass}>{apiKeyBody}</span>
         </span>
       </Choice>
 
@@ -139,7 +164,10 @@ function ChatGptChoice({ onSaved }: { onSaved(provider: ChatProvider): void }) {
     <div className="flex flex-col items-start gap-2">
       <ChatGptStorageNotice storage={storage} />
       {!sign.waiting && (
-        <ContinueWithChatGptButton onClick={() => void sign.run()} disabled={!storage.canSave} />
+        <>
+          <ProviderSendsLine provider={CHATGPT_SERVICE.name} />
+          <ContinueWithChatGptButton onClick={() => void sign.run()} disabled={!storage.canSave} />
+        </>
       )}
       <ChatGptSignInState sign={sign} />
     </div>
@@ -169,7 +197,9 @@ function Choice({
   );
 }
 
-/** Ollama's button: use it (pulling the recommended model), or look for it again. */
+const OLLAMA_DOWNLOAD_URL = "https://ollama.com/download";
+
+/** Ollama's button: use it (pulling the recommended model), or get it and look for it again. */
 export function OllamaAction({ ollama, large = false }: { ollama: Ollama; large?: boolean }) {
   const t = useT();
   const { status, pulling } = ollama;
@@ -179,7 +209,7 @@ export function OllamaAction({ ollama, large = false }: { ollama: Ollama; large?
       <button
         type="button"
         data-testid="ollama-use"
-        disabled={pulling}
+        disabled={pulling || !ollama.keepLocal.asked}
         onClick={() => void ollama.use()}
         className={buttonStyle("primary", size)}
       >
@@ -188,13 +218,39 @@ export function OllamaAction({ ollama, large = false }: { ollama: Ollama; large?
     );
   }
   return (
-    <button
-      type="button"
-      disabled={status === null}
-      onClick={() => void ollama.detect()}
-      className={buttonStyle("secondary", size)}
-    >
-      {t("providers.ollama.checkAgain")}
-    </button>
+    <span className="flex flex-wrap items-center gap-2">
+      {status !== null && (
+        // The main process opens it in the User's browser.
+        <button
+          type="button"
+          data-testid="ollama-get"
+          onClick={() => window.open(OLLAMA_DOWNLOAD_URL, "_blank", "noreferrer")}
+          className={buttonStyle("primary", size)}
+        >
+          {t("providers.ollama.get")} ↗
+        </button>
+      )}
+      <button
+        type="button"
+        data-testid="ollama-check-again"
+        disabled={status === null}
+        onClick={() => void ollama.detect()}
+        className={buttonStyle("secondary", size)}
+      >
+        {t("providers.ollama.checkAgain")}
+      </button>
+    </span>
   );
+}
+
+/** The providers by their short names, in the language's list: "Anthropic, OpenAI or Google". */
+function providerList(kinds: readonly ChatProviderKind[], t: ReturnType<typeof useT>): string {
+  const names = kinds.map((kind) => {
+    const short = SHORT_NAMES[kind];
+    return t(short ?? `providers.kind.${kind}`);
+  });
+  const last = names.pop();
+  if (last === undefined) return "";
+  if (names.length === 0) return last;
+  return t("providers.list.last", { rest: names.join(t("providers.list.separator")), last });
 }

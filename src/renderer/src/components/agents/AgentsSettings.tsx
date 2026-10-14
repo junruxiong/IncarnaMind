@@ -71,7 +71,7 @@ export function AgentsSettings() {
       if (result.kind === "copy")
         await navigator.clipboard.writeText(result.text).catch(reportError);
     } catch (error) {
-      setProblem(errorMessage(error));
+      setProblem(errorMessage(error, t));
     } finally {
       setBusy(false);
     }
@@ -183,7 +183,6 @@ export function AgentsSettings() {
 
       <ConnectAgentDialog
         client={connecting}
-        folders={folders}
         busy={busy}
         problem={problem}
         onAllow={(folderIds, name) => connecting && void allow(connecting, folderIds, name)}

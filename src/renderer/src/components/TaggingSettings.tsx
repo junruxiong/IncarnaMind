@@ -10,12 +10,14 @@ import type {
   TaggingModels,
 } from "../../../core/api";
 import type { Language } from "../../../core/language";
+import { formatTime } from "../../../shared/dates";
 import type { MessageKey } from "../../../shared/i18n";
 import { supportsLibraryImages } from "../../../shared/libraryModels";
 import { core } from "../core";
 import { errorMessage } from "../errors";
-import { useLanguage, useT } from "../i18n";
+import { translateNow, useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
+import { ProblemMark } from "./ProblemLine";
 import { JevSettingsSection } from "./providers/JevSettings";
 import {
   buttonClass,
@@ -82,7 +84,7 @@ const nameOf = (
   t: (key: MessageKey, params?: Record<string, string | number>) => string,
 ) => (option.classifier.kind === "auto" ? t("tagging.decision.auto") : option.name);
 
-const providerOf = (option: TaggingModelOption, language: Language) =>
+export const providerOf = (option: TaggingModelOption, language: Language) =>
   option.provider ? (language === "zh-CN" ? option.provider.zh : option.provider.en) : null;
 
 /**
@@ -102,7 +104,9 @@ export function TaggingSettings() {
   const [otherOpen, setOtherOpen] = useState(false);
 
   const reload = useCallback(() => {
-    core.getTaggingModels().then(setModels, (failure: unknown) => setError(errorMessage(failure)));
+    core
+      .getTaggingModels()
+      .then(setModels, (failure: unknown) => setError(errorMessage(failure, translateNow)));
   }, []);
   useEffect(() => {
     reload();
@@ -124,7 +128,7 @@ export function TaggingSettings() {
       await core.saveLibrarySettings({ ...settings, ...next });
       await useAppStore.getState().refreshLibrary();
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     }
   };
 
@@ -146,6 +150,17 @@ export function TaggingSettings() {
     void save({ classifier });
   };
   const onPlan = inUse?.group === "plan";
+  const { organizeWith } = settings;
+  const organizesWith =
+    current.kind !== "automatic"
+      ? t("tagging.organize.same")
+      : organizeWith
+        ? t("tagging.organize.with", {
+            model:
+              models.options.find((option) => sameClassifier(option.classifier, organizeWith))
+                ?.name ?? customName(organizeWith, t),
+          })
+        : t("tagging.organize.ask");
   const localDecision = models.options.find((option) => option.decisionModel);
 
   return (
@@ -214,6 +229,7 @@ export function TaggingSettings() {
         </div>
       </div>
       <div className="mt-3 flex flex-col gap-1 text-[13px] leading-5 text-ink-secondary">
+        <p data-testid="tagging-organize">{organizesWith}</p>
         {models.localMode && <p data-testid="tagging-local-mode">{t("tagging.localMode")}</p>}
         {onPlan && <p data-testid="tagging-plan">{t("tagging.plan")}</p>}
         {onPlan && localDecision && (
@@ -231,12 +247,7 @@ export function TaggingSettings() {
         )}
         {models.planPausedUntil && (
           <p data-testid="tagging-plan-paused">
-            {t("tagging.plan.paused", {
-              time: new Date(models.planPausedUntil).toLocaleTimeString(language, {
-                hour: "2-digit",
-                minute: "2-digit",
-              }),
-            })}
+            {t("tagging.plan.paused", { time: formatTime(models.planPausedUntil, language) })}
           </p>
         )}
         {inUse && (
@@ -257,6 +268,7 @@ export function TaggingSettings() {
       </label>
       {error && (
         <p role="alert" className={`mt-2 ${errorTextClass}`}>
+          <ProblemMark />
           {error}
         </p>
       )}
@@ -358,7 +370,7 @@ function OtherModelForm({
         setProviders(list);
         setWhere((chosen) => chosen || list[0]?.id || "ollama");
       },
-      (failure: unknown) => setError(errorMessage(failure)),
+      (failure: unknown) => setError(errorMessage(failure, translateNow)),
     );
   }, []);
   return (
@@ -448,6 +460,7 @@ function OtherModelForm({
       </div>
       {error && (
         <p role="alert" className={errorTextClass}>
+          <ProblemMark />
           {error}
         </p>
       )}

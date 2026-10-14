@@ -1,6 +1,6 @@
 import type { Editor } from "@tiptap/core";
 import type * as Y from "yjs";
-import { useT } from "../i18n";
+import { useGap, useT } from "../i18n";
 import { useAppStore } from "../store";
 import { declineOffer, useSuggestionOffer } from "../suggestions";
 
@@ -25,6 +25,7 @@ export function SuggestionOffer({
   editor: Editor;
 }) {
   const t = useT();
+  const gap = useGap();
   const line = useSuggestionOffer((state) =>
     state.shown?.mindId === mindId ? state.shown.line : null,
   );
@@ -52,7 +53,8 @@ export function SuggestionOffer({
 
   return (
     <p role="status" data-testid="suggestion-offer" className={lineClass}>
-      <span>{t("suggestion.offer")}</span>{" "}
+      <span>{t("suggestion.offer")}</span>
+      {gap(t("suggestion.offer"), t("suggestion.offer.turnOn"))}
       <button
         type="button"
         data-testid="suggestion-offer-turn-on"

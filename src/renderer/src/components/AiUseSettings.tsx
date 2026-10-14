@@ -1,13 +1,11 @@
 import { useEffect, useState } from "react";
 import type { AiUseCleared } from "../../../core/api";
 import { core } from "../core";
-import { errorMessage } from "../errors";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { buttonStyle, rowStatusClass, rowTextClass, sectionTitleClass } from "./ui";
 
-const reportError = (failure: unknown) =>
-  useAppStore.setState({ actionError: errorMessage(failure) });
+const reportError = (failure: unknown) => useAppStore.getState().reportError(failure);
 
 /**
  * Settings → Privacy: the record of AI use stays on this computer (#292). One

@@ -300,10 +300,21 @@ export function proposalRequestOf(doc: Y.Doc, request: string): ProposalRequest 
   if (typeof value !== "object" || value === null) return null;
   const record = value as Record<string, unknown>;
   const { source, providerId, modelId, createdAt } = record;
+  if (source === "word-change") {
+    return {
+      source,
+      author: isText(record.author) ? record.author : null,
+      date: isText(record.date) ? record.date : null,
+    };
+  }
   if (!isText(providerId) || !isText(modelId) || !isText(createdAt)) return null;
   const made = { providerId, modelId, createdAt };
   if (source === "answer") {
     return isText(record.answerId) ? { ...made, source, answerId: record.answerId } : null;
+  }
+  if (source === "answer-added") return { ...made, source };
+  if (source === "comparison-table") {
+    return isText(record.tableId) ? { ...made, source, tableId: record.tableId } : null;
   }
   if (source !== "edit-with-ai") return null;
   const action = editActions.find((each) => each === record.action);
@@ -320,7 +331,10 @@ export function proposalRequestOf(doc: Y.Doc, request: string): ProposalRequest 
  * Proposal that added text which stays, with the model that wrote it and the
  * Blocks holding it. A Proposal that only removed words wrote nothing, and
  * one from an Answer's Regenerate stays in its Answer, which isn't recorded
- * (an Answer in a Mind is the AI's as it is).
+ * (an Answer in a Mind is the AI's as it is), nor does someone's change
+ * imported from a Word file (#108). An Answer from the assistant made into a
+ * new Mind (#201) is recorded as an Answer added, and a comparison table
+ * (#98) as one accepted.
  */
 export function aiUseOfAccepted(
   doc: Y.Doc,
@@ -332,11 +346,17 @@ export function aiUseOfAccepted(
     .filter((proposal) => proposal.characters > 0)
     .flatMap((proposal): RecordAiUseInput[] => {
       const made = proposalRequestOf(doc, proposal.request);
-      if (made?.source === "answer") return [];
+      // An Answer is recorded as it is; someone's change in a Word file isn't the AI's at all.
+      if (made?.source === "answer" || made?.source === "word-change") return [];
       return [
         {
           mindId,
-          kind: "edit-with-ai-accepted",
+          kind:
+            made?.source === "answer-added"
+              ? "answer-added"
+              : made?.source === "comparison-table"
+                ? "comparison-table-accepted"
+                : "edit-with-ai-accepted",
           providerId: made?.providerId ?? null,
           modelId: made?.modelId ?? null,
           characters: proposal.characters,

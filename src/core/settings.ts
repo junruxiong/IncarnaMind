@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import {
   type ChatModelChoice,
   type DeviceSettings,
+  EXPORT_FORMATS,
+  type ExportPreferences,
   type GettingStarted,
   MOTION_PREFERENCES,
   type MonthlyCap,
@@ -10,6 +12,7 @@ import {
   type Settings,
   SKILL_SCRIPT_LIMITS,
   type UserSettings,
+  type WordExportPreferences,
 } from "./api";
 import { InvalidInputError, isRecord } from "./errors";
 import { isLanguagePreference, resolveLanguage } from "./language";
@@ -44,6 +47,48 @@ export const isChatModelChoice = (value: unknown): value is ChatModelChoice =>
 const isModelSetting = (value: unknown): value is ChatModelChoice | null =>
   value === null || isChatModelChoice(value);
 
+const hasOnly = (value: unknown, keys: readonly string[]): value is Record<string, unknown> =>
+  isRecord(value) &&
+  Object.keys(value).length === keys.length &&
+  keys.every((key) => Object.hasOwn(value, key));
+
+const isQuestionsOption = (value: unknown) =>
+  hasOnly(value, ["includeQuestions"]) && isBoolean(value.includeQuestions);
+
+const WORD_CHOICES = ["trackChanges", "markAiText", "commentFailedChecks"] as const;
+
+/** Word's choices of #107 came later: choices saved before them have none, and read as the defaults. */
+const isWordOption = (value: unknown) =>
+  isQuestionsOption(value) ||
+  (hasOnly(value, ["includeQuestions", ...WORD_CHOICES]) &&
+    isBoolean(value.includeQuestions) &&
+    WORD_CHOICES.every((choice) => isBoolean(value[choice])));
+
+/**
+ * HTML came after the others, and how someone's changes are shown (#734) after HTML: choices
+ * saved before them have neither, and read as the defaults.
+ */
+const isExportPreferences = (value: unknown): value is ExportPreferences => {
+  if (!isRecord(value)) return false;
+  const later = ["html", "theirChanges"].filter((key) => Object.hasOwn(value, key));
+  return (
+    hasOnly(value, ["format", "docx", "pdf", ...later]) &&
+    EXPORT_FORMATS.some((format) => format === value.format) &&
+    isWordOption(value.docx) &&
+    isQuestionsOption(value.pdf) &&
+    (!Object.hasOwn(value, "html") || isQuestionsOption(value.html)) &&
+    (!Object.hasOwn(value, "theirChanges") ||
+      value.theirChanges === "shown" ||
+      value.theirChanges === "accepted")
+  );
+};
+
+/** The Word choices on by default (#107), so a file says what IncarnaMind changed and wrote. */
+const WORD_DEFAULTS: Omit<WordExportPreferences, "includeQuestions"> = {
+  trackChanges: true,
+  markAiText: true,
+  commentFailedChecks: true,
+};
 /** A cap of up to a million a month, in dollars or yuan. */
 const isMonthlyCap = (value: unknown): value is MonthlyCap =>
   isRecord(value) &&
@@ -64,7 +109,16 @@ const userScope: Scope<UserSettings> = {
     imageModel: null,
     suggestWhileWriting: false,
     leaveOutOwnFiles: true,
+    // Word is the deliverable most asked for; the deliverables leave the Questions out.
+    exportOptions: {
+      format: "docx",
+      docx: { includeQuestions: false, ...WORD_DEFAULTS },
+      pdf: { includeQuestions: false },
+      html: { includeQuestions: false },
+    },
+    authorName: null,
     monthlyCap: null,
+    webSearch: false,
   },
   validators: {
     language: isLanguagePreference,
@@ -73,7 +127,10 @@ const userScope: Scope<UserSettings> = {
     imageModel: isModelSetting,
     suggestWhileWriting: isBoolean,
     leaveOutOwnFiles: isBoolean,
+    exportOptions: isExportPreferences,
+    authorName: (value): value is string | null => value === null || isNonBlankText(value),
     monthlyCap: (value): value is MonthlyCap | null => value === null || isMonthlyCap(value),
+    webSearch: isBoolean,
   },
 };
 
@@ -204,12 +261,20 @@ export function createSettings(
   systemLanguages: () => readonly string[],
   scriptSandbox: SandboxLevel,
   meetingAudio: Settings["meetingAudio"] = "none",
+  systemUserName: () => string = () => "",
 ) {
   const get = (): Settings => {
     const user = read(db, userScope);
+    const stored: Partial<ExportPreferences> = user.exportOptions;
+    user.exportOptions = {
+      ...user.exportOptions,
+      docx: { ...WORD_DEFAULTS, ...user.exportOptions.docx },
+      html: stored.html ?? { includeQuestions: false },
+    };
     const device = read(db, deviceScope);
     const language = resolveLanguage(user.language, systemLanguages());
-    return { user, device, language, scriptSandbox, meetingAudio };
+    const author = user.authorName ?? systemUserName().trim();
+    return { user, device, language, scriptSandbox, meetingAudio, author };
   };
 
   return {

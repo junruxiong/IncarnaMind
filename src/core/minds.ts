@@ -84,7 +84,7 @@ export function createMinds(db: Database, now: () => string) {
       `SELECT ${COLUMNS} FROM minds WHERE id = ? AND deleted_at IS NULL`,
       [parseMindId(mindId)],
     );
-    if (!row) throw new NotFoundError("That Mind doesn't exist or has been deleted.");
+    if (!row) throw new NotFoundError({ key: "error.mind.notFound" });
     return toMind(row);
   };
 

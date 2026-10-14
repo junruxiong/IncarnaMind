@@ -14,6 +14,7 @@ import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
+import { ProblemMark } from "../ProblemLine";
 import {
   buttonClass,
   choiceListClass,
@@ -140,6 +141,7 @@ export function EmbeddingSettingsSection() {
             )}
             {error && (
               <p role="alert" className={`mt-1 ${errorTextClass}`} title={error.message}>
+                <ProblemMark />
                 {t("embeddingProviders.settings.error", { reason: t(testErrorKey(error.kind)) })}
               </p>
             )}
@@ -185,7 +187,7 @@ function LocalOnlySetting({ localOnly }: { localOnly: boolean }) {
     try {
       useAppStore.setState({ embedding: await core.setLocalOnly(enabled) });
     } catch (failure) {
-      useAppStore.setState({ actionError: errorMessage(failure) });
+      useAppStore.getState().reportError(failure);
     } finally {
       setBusy(false);
     }
@@ -296,7 +298,7 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
     try {
       setTest(await core.testEmbeddingConnection(input()));
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     } finally {
       setBusy(null);
     }
@@ -311,7 +313,7 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
       key.clear();
       onDone();
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     } finally {
       setBusy(null);
     }
@@ -326,7 +328,7 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
     try {
       setSecretStorage(await core.acceptPlainTextSecretStorage());
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     }
   };
 
@@ -467,10 +469,11 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
             {t("embeddingProviders.test.ok", { dimensions: test.dimensions })}
           </p>
         ) : (
-          <TestResult result={test} onRetry={() => void runTest()} />
+          <TestResult result={test} />
         ))}
       {error && (
         <p role="alert" className={errorTextClass}>
+          <ProblemMark />
           {error}
         </p>
       )}

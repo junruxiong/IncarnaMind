@@ -5,7 +5,8 @@
  * with the rows that go with it, all at the same moment: restoring one brings back the rows whose
  * `deleted_at` is its own. Deleting permanently, by the User or `RECENTLY_DELETED_DAYS` after
  * at start-up, drops that content and keeps the row as a tombstone (`purged_at`), which can't
- * be restored. Nothing here reads or writes the User's files.
+ * be restored. Nothing here reads or writes the User's files. A Document's text that a Citation
+ * still quotes stays (ADR-0010), as the text kept of an unlinked Document does.
  */
 import type { MessageKey, MessageParams } from "../shared/i18n";
 import {
@@ -22,6 +23,7 @@ import type { createDocuments } from "./documents";
 import { InvalidInputError, isRecord, NotFoundError } from "./errors";
 import type { createLibrary } from "./library";
 import type { createMindContent } from "./mindContent";
+import { forgetMindBlocks } from "./mindIndex";
 import type { createMinds } from "./minds";
 import type { Database } from "./storage";
 import { parseTagLinkStates, sameName, type TagsStore } from "./tags";
@@ -54,12 +56,43 @@ function parseRefs(input: unknown, what: string): RestoreRef[] {
   });
 }
 
+/** Drops the text of Documents deleted permanently, keeping the Units Citations point to (ADR-0010). */
+export type DocumentText = (documentIds: readonly string[]) => void;
+
 /** Drops deleted rows' content and marks them deleted permanently. Run in a transaction. */
-function purge(db: Database, kind: DeletedKind, ids: readonly string[], at: string): void {
+function purge(
+  db: Database,
+  kind: DeletedKind,
+  ids: readonly string[],
+  at: string,
+  documentText: DocumentText,
+): void {
   if (ids.length === 0) return;
   const list = JSON.stringify(ids);
   const IN = "IN (SELECT value FROM json_each(?))";
-  if (kind === "mind") db.run(`DELETE FROM mind_updates WHERE mind_id ${IN}`, [list]);
+  if (kind === "mind") {
+    db.run(`DELETE FROM mind_updates WHERE mind_id ${IN}`, [list]);
+    // Its Checkpoints hold its content too, and no longer keep the Document versions they quote.
+    db.run(
+      `UPDATE retained_versions SET deleted_at = ?, updated_at = ?
+       WHERE kind = 'checkpoint' AND deleted_at IS NULL
+         AND owner_id IN (SELECT id FROM mind_checkpoints WHERE mind_id ${IN})`,
+      [at, at, list],
+    );
+    db.run(`DELETE FROM mind_checkpoints WHERE mind_id ${IN}`, [list]);
+    // The Word package it was imported from goes once no other Mind keeps it (`sweepWordPackages`).
+    db.run(
+      `UPDATE word_packages SET deleted_at = ?, updated_at = ? WHERE mind_id ${IN} AND deleted_at IS NULL`,
+      [at, at, list],
+    );
+    forgetMindBlocks(db, ids, at);
+    // Its checks' evidence (#96), retained under the Mind (src/core/answers/checks).
+    db.run(
+      `UPDATE retained_versions SET deleted_at = ?, updated_at = ?
+       WHERE kind = 'check-result' AND owner_id ${IN} AND deleted_at IS NULL`,
+      [at, at, list],
+    );
+  }
   if (kind === "conversation") {
     // Its messages, their index and its titles: everything the User asked or was answered.
     const purged = `(SELECT id FROM conversations WHERE id ${IN} AND deleted_at IS NOT NULL)`;
@@ -82,8 +115,7 @@ function purge(db: Database, kind: DeletedKind, ids: readonly string[], at: stri
   }
   if (kind === "document") {
     db.run(`DELETE FROM passages WHERE document_id ${IN} AND deleted_at IS NOT NULL`, [list]);
-    // Live text of a deleted Document is what its Linked folder kept for Citations: it stays.
-    db.run(`DELETE FROM document_pages WHERE document_id ${IN} AND deleted_at IS NOT NULL`, [list]);
+    documentText(ids);
     db.run(`DELETE FROM document_tags WHERE document_id ${IN}`, [list]);
     db.run(`DELETE FROM web_pages WHERE document_id ${IN} AND deleted_at IS NOT NULL`, [list]);
   }
@@ -96,7 +128,7 @@ function purge(db: Database, kind: DeletedKind, ids: readonly string[], at: stri
   );
 }
 
-export function purgeExpired(db: Database, now: string): void {
+export function purgeExpired(db: Database, now: string, documentText: DocumentText): void {
   const before = earliestRestorable(now);
   db.transaction(() => {
     for (const kind of KINDS) {
@@ -109,6 +141,7 @@ export function purgeExpired(db: Database, now: string): void {
         kind,
         ids.map((row) => row.id),
         now,
+        documentText,
       );
     }
   });
@@ -123,6 +156,7 @@ interface DeletedRow {
 export function createRecentlyDeleted(options: {
   db: Database;
   now(): string;
+  documentText: DocumentText;
   /** A message in the interface language. */
   say(key: MessageKey, params?: MessageParams): string;
   minds: ReturnType<typeof createMinds>;
@@ -136,7 +170,8 @@ export function createRecentlyDeleted(options: {
   tagsChanged(): void;
   tagged(documentIds: string[]): void;
 }) {
-  const { db, now, say, minds, content, conversations, documents, tags, library } = options;
+  const { db, now, say, minds, content, conversations, documents, tags, library, documentText } =
+    options;
 
   const rowOf = (kind: DeletedKind, id: string) =>
     db.get<DeletedRow>(
@@ -167,18 +202,21 @@ export function createRecentlyDeleted(options: {
         row.linked_folder_id,
       ])
     )
-      throw new NotFoundError(say("restore.error.unlinked", { name }));
+      throw new NotFoundError({ key: "error.restore.unlinked", values: { name } });
     if (db.get("SELECT 1 FROM documents WHERE path = ? AND deleted_at IS NULL", [row.path]))
-      throw new InvalidInputError(say("restore.error.documentBack", { name }));
+      throw new InvalidInputError({ key: "error.restore.documentBack", values: { name } });
   }
 
   function checkLinks(links: readonly TagLinkState[]): void {
     for (const { documentId, tagId } of links) {
       if (!db.get("SELECT 1 FROM documents WHERE id = ? AND deleted_at IS NULL", [documentId]))
-        throw new NotFoundError(say("restore.error.documentGone"));
+        throw new NotFoundError({ key: "error.restore.documentGone" });
       const tag = rowOf("tag", tagId);
       if (!tag || tag.deleted_at !== null)
-        throw new NotFoundError(say("restore.error.tagGone", { name: tag?.name ?? "" }));
+        throw new NotFoundError({
+          key: "error.restore.tagGone",
+          values: { name: tag?.name ?? "" },
+        });
     }
   }
 
@@ -262,15 +300,19 @@ export function createRecentlyDeleted(options: {
         for (const ref of refs) {
           const { kind } = ref;
           const row = rowOf(kind, ref.id);
-          if (!row) throw new NotFoundError(say("restore.error.unknown"));
+          if (!row) throw new NotFoundError({ key: "error.restore.unknown" });
           const name = nameOf(kind, row);
           if (row.deleted_at !== null) {
             if (row.purged_at !== null)
-              throw new NotFoundError(say("restore.error.deletedPermanently", { name }));
+              throw new NotFoundError({
+                key: "error.restore.deletedPermanently",
+                values: { name },
+              });
             if (row.deleted_at < since)
-              throw new NotFoundError(
-                say("restore.error.expired", { name, days: RECENTLY_DELETED_DAYS }),
-              );
+              throw new NotFoundError({
+                key: "error.restore.expired",
+                values: { name, days: RECENTLY_DELETED_DAYS },
+              });
             if (kind === "mind") {
               minds.restore(ref.id);
               content.restore(ref.id, row.deleted_at);
@@ -291,7 +333,10 @@ export function createRecentlyDeleted(options: {
               restored.folders = true;
             } else {
               if (tags.list().some((tag) => sameName(tag.name, row.name)))
-                throw new InvalidInputError(say("restore.error.tagNameTaken", { name }));
+                throw new InvalidInputError({
+                  key: "error.restore.tagNameTaken",
+                  values: { name },
+                });
               for (const id of tags.restore(ref.id, row.deleted_at)) restored.tagged.add(id);
               restored.tags = true;
             }
@@ -314,6 +359,11 @@ export function createRecentlyDeleted(options: {
       if (done.tagged.size > 0) options.tagged([...done.tagged]);
     },
 
+    /** Deletes permanently what has waited `RECENTLY_DELETED_DAYS`; run once at start-up. */
+    expire(): void {
+      purgeExpired(db, now(), documentText);
+    },
+
     /** See `CoreApi.revertDocumentTags`. Returns the Documents whose Tags changed. */
     revertTags(input: unknown): string[] {
       const links = parseTagLinkStates(input);
@@ -330,12 +380,13 @@ export function createRecentlyDeleted(options: {
       db.transaction(() => {
         for (const { kind, id } of refs) {
           const row = rowOf(kind, id);
-          if (!row) throw new NotFoundError(say("restore.error.unknown"));
+          if (!row) throw new NotFoundError({ key: "error.restore.unknown" });
           if (row.deleted_at === null)
-            throw new InvalidInputError(
-              say("deletePermanently.error.notDeleted", { name: nameOf(kind, row) }),
-            );
-          purge(db, kind, [id], at);
+            throw new InvalidInputError({
+              key: "error.restore.notDeleted",
+              values: { name: nameOf(kind, row) },
+            });
+          purge(db, kind, [id], at, documentText);
         }
       });
     },

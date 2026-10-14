@@ -181,8 +181,8 @@ describe("Choosing how a local model cites, before the first request", () => {
     expect(ended.payload).toMatchObject({
       citations: [
         { pageFrom: 2, pageTo: 2, check: "found" },
-        // No page named: its Passage's two.
-        { pageFrom: 1, pageTo: 2, check: "found" },
+        // No page named: the page its quote is on.
+        { pageFrom: 2, pageTo: 2, check: "found" },
       ],
       droppedMarkers: 1,
       droppedRecords: 1,

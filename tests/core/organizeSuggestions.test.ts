@@ -459,7 +459,7 @@ describe("Organize suggests a Folder and waits for the User", () => {
     expect(await core.listLinkedFolders()).toEqual([]);
   });
 
-  test("automatic Organize is on with Automatic, and a User who turned it off keeps it off", async () => {
+  test("automatic Organize is on, waits until the User lets it use a model, and stays off once turned off", async () => {
     const fake = sorter();
     const dataDir = await createTempDataFolder();
     const sources = await createSourceFolder();
@@ -467,6 +467,7 @@ describe("Organize suggests a Folder and waits for the User", () => {
     expect((await core.getLibrary()).settings).toEqual({
       classifier: { kind: "automatic" },
       automatic: true,
+      organizeWith: null,
     });
     await core.createLibraryGroup({ name: "Thesis", description: "Research for my thesis" });
     const add = async (on: Core, name: string) => {
@@ -482,9 +483,18 @@ describe("Organize suggests a Folder and waits for the User", () => {
     await vi.waitFor(async () =>
       expect(await assignmentOf(core, early.id)).toMatchObject({ status: "waiting" }),
     );
-    // A chat model on this computer: Automatic organizes with it, the one waiting too.
+    // A chat model on this computer: Automatic tags with it, but Organize waits for "Use Ollama".
     const provider = await core.saveChatProvider({ kind: "ollama", modelId: "main-model" });
     const later = await add(core, "Chapter 2");
+    await vi.waitFor(async () =>
+      expect(await assignmentOf(core, later.id)).toMatchObject({ status: "waiting" }),
+    );
+    const { automatic: offered } = await core.getTaggingModels();
+    if (!offered) throw new Error("Automatic picked nothing.");
+    await core.saveLibrarySettings({
+      ...(await core.getLibrary()).settings,
+      organizeWith: offered.classifier,
+    });
     for (const document of [early, later]) {
       await vi.waitFor(async () =>
         expect(await assignmentOf(core, document.id)).toMatchObject({
@@ -506,7 +516,11 @@ describe("Organize suggests a Folder and waits for the User", () => {
       const { automatic } = (await reopened.getLibrary()).settings;
       await reopened.saveLibrarySettings({ classifier: next, automatic });
     }
-    expect((await reopened.getLibrary()).settings).toEqual({ classifier, automatic: false });
+    expect((await reopened.getLibrary()).settings).toEqual({
+      classifier,
+      automatic: false,
+      organizeWith: offered.classifier,
+    });
     const third = await add(reopened, "Chapter 3");
     expect(await assignmentOf(reopened, third.id)).toBeUndefined();
   });

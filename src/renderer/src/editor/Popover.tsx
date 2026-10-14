@@ -2,6 +2,7 @@ import {
   autoUpdate,
   computePosition,
   flip,
+  type Middleware,
   offset,
   type Placement,
   shift,
@@ -20,11 +21,13 @@ interface PopoverProps extends HTMLAttributes<HTMLDivElement> {
   /** What the popover sits next to. It follows it as the Mind scrolls. */
   anchor: Element | VirtualElement;
   placement?: Placement;
+  /** Where it goes, if not under (or over) `anchor`, called each time it is placed: a chart's value card (`chartCardPlace`). */
+  middleware?: () => Middleware[];
   /**
    * Called on Esc, wherever the focus is, or on a press outside both the
    * popover and `anchor`.
    */
-  onDismiss(): void;
+  onDismiss(how: "escape" | "outside"): void;
   /** What gets the focus once the popover shows, e.g. a menu's first item, or a text editor. */
   initialFocus?: RefObject<{ focus(): void } | null>;
   children: ReactNode;
@@ -42,6 +45,7 @@ const openPopovers: HTMLElement[] = [];
 export function Popover({
   anchor,
   placement = "bottom-start",
+  middleware,
   onDismiss,
   initialFocus,
   children,
@@ -55,6 +59,8 @@ export function Popover({
   dismiss.current = onDismiss;
   const focusFirst = useRef(initialFocus);
   focusFirst.current = initialFocus;
+  const placing = useRef(middleware);
+  placing.current = middleware;
 
   // First, so it is copied while it still shows: closed, it shrinks back toward its anchor.
   useExitToward(ref, () => (anchor instanceof Element ? anchor : anchor.getBoundingClientRect()));
@@ -68,7 +74,7 @@ export function Popover({
       void computePosition(anchor, element, {
         placement,
         strategy: "fixed",
-        middleware: [offset(4), flip(), shift({ padding: 8 })],
+        middleware: placing.current?.() ?? [offset(4), flip(), shift({ padding: 8 })],
       }).then(({ x, y }) => {
         Object.assign(element.style, { left: `${x}px`, top: `${y}px`, visibility: "visible" });
         if (!shown) {
@@ -98,7 +104,7 @@ export function Popover({
       const target = event.target;
       if (!(target instanceof Node) || element.contains(target) || inLater(target)) return;
       if (anchor instanceof Element && anchor.contains(target)) return;
-      dismiss.current();
+      dismiss.current("outside");
     };
     // Esc while the focus is elsewhere, e.g. still in the editor or on the
     // button that opened it. Captured, and marked handled, before the
@@ -107,7 +113,7 @@ export function Popover({
       if (event.key !== "Escape" || event.defaultPrevented || inLater(event.target)) return;
       if (event.target instanceof Node && element.contains(event.target)) return;
       event.preventDefault();
-      dismiss.current();
+      dismiss.current("escape");
     };
     document.addEventListener("pointerdown", dismissOnPressOutside, true);
     document.addEventListener("keydown", dismissOnEscape, true);
@@ -132,7 +138,7 @@ export function Popover({
         if (event.key === "Escape" && !event.defaultPrevented) {
           // Handled here, so Esc doesn't also close the Document viewer.
           event.preventDefault();
-          dismiss.current();
+          dismiss.current("escape");
         }
       }}
       className={`editor-popover ${className}`}

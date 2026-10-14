@@ -6,8 +6,11 @@ import type { CoreBridge } from "../src/core/api";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
+  addToNote,
+  askInAssistant,
   createDataFolder,
   dismissChatSetup,
+  focusEditor,
   launchApp,
   newMind,
   pointAndClick,
@@ -77,29 +80,24 @@ test("Shorten comes back as changes with their own bars: one accepted by mouse, 
   const editor = window.getByTestId("mind-editor");
   await editor.click();
 
-  // An Answer with a checked Citation, whose sentence is copied into a Note.
-  await window.keyboard.press("ControlOrMeta+j");
-  await window.keyboard.type("When do spring tides happen?");
+  // An Answer with a checked Citation, added to the note under a line of the User's.
+  await window.keyboard.type("Tides at the harbour.");
   await window.keyboard.press("Enter");
-  const answer = editor.getByTestId("answer");
-  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-  await editor.evaluate((dom) => {
-    const { view, commands } = (dom as unknown as { editor: Editor }).editor;
-    let at = -1;
-    view.state.doc.descendants((node, pos) => {
-      if (at < 0 && node.type.name === "citation") at = pos;
-    });
-    const sentence = view.state.doc.resolve(at);
-    commands.setTextSelection({ from: sentence.start(), to: sentence.end() });
-    const { dom: copied } = view.serializeForClipboard(view.state.selection.content());
-    commands.setTextSelection(view.state.doc.content.size - 1);
-    view.pasteHTML(copied.innerHTML);
-  });
-  const note = editor.locator(":scope > p").last();
+  const answer = await askInAssistant(window, "When do spring tides happen?");
+  await addToNote(window, answer);
+  const note = editor.locator(":scope > p").nth(1);
   await expect(note.getByTestId("citation")).toHaveAttribute("data-check", "found");
   await slideSelect(window, note, "Your Documents answer this");
   await window.keyboard.type("The tides here are very strong and really regular");
   await expect(note).toContainText("The tides here are very strong and really regular");
+
+  // The Answer's last line, under it, taken out as a person would: then nothing follows the line.
+  const last = editor.locator(":scope > p").last();
+  await expect(last).toHaveText("That is all.");
+  await slideSelect(window, last, "That is all.");
+  await window.keyboard.press("Backspace");
+  await window.keyboard.press("Backspace");
+  await expect(editor.locator(":scope > p")).toHaveCount(2);
 
   // Selected, the menu offers the AI's actions; Shorten comes back as two changes.
   // The words, then the space, the Citation and the full stop after them.
@@ -150,12 +148,131 @@ test("Shorten comes back as changes with their own bars: one accepted by mouse, 
   // Undo brings the rejected change back; Accept all takes it.
   await window.keyboard.press("ControlOrMeta+z");
   await expect(removed).toHaveText(["really "]);
+  await expect(bar.getByTestId("proposals-count")).toHaveText("1 change from the assistant");
+  await expect(changeBar).toContainText("Change 1 of 1");
   await pointAndClick(window, bar.getByTestId("proposals-accept-all"));
   await expect(bar).toHaveCount(0);
   await expect(note).toContainText("The tides here are strong and regular");
   // The Citation in the sentence is kept, and its quote still found.
   await expect(note.getByTestId("citation")).toHaveCount(1);
   await expect(note.getByTestId("citation")).toHaveAttribute("data-check", "found");
+});
+
+test("a whole Mind restructured with ⌘A and ⌘J keeps its headings, lists and Citation through Accept all, and Undo takes it back in one step (#703)", async () => {
+  await writeFile(join(sources, "Tides.pdf"), TIDES);
+  const { window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await addDocuments(window, [join(sources, "Tides.pdf")]);
+  const tides = await window.evaluate(async () => {
+    const documents = await (
+      globalThis as unknown as { incarnamind: CoreBridge }
+    ).incarnamind.listDocuments();
+    const found = documents.find((each) => each.name.startsWith("Tides"));
+    return found && { id: found.id, name: found.name, contentHash: found.contentHash };
+  });
+  if (!tides) throw new Error("Tides.pdf wasn't added.");
+  await newMind(window);
+  const editor = window.getByTestId("mind-editor");
+  await editor.click();
+
+  // Findings as bullets, one with a Citation; Decisions as numbered items; a closing line.
+  const paragraphOf = (...content: object[]) => ({ type: "paragraph", content });
+  const words = (text: string) => ({ type: "text", text });
+  const items = (...lines: object[][]) =>
+    lines.map((content) => ({ type: "listItem", content: [paragraphOf(...content)] }));
+  await editor.evaluate(
+    (dom, blocks) => {
+      const { editor: tiptap } = dom as unknown as { editor: Editor };
+      tiptap.commands.setContent(blocks);
+    },
+    [
+      { type: "heading", attrs: { level: 2 }, content: [words("Findings")] },
+      {
+        type: "bulletList",
+        content: items(
+          [
+            words("Spring tides happen at new moon. "),
+            {
+              type: "citation",
+              attrs: {
+                passageId: `passage-${tides.id}`,
+                documentId: tides.id,
+                documentName: tides.name,
+                contentHash: tides.contentHash,
+                pageFrom: 2,
+                pageTo: 2,
+                quote: "Spring tides happen at new moon and at full moon",
+                check: "found",
+              },
+            },
+          ],
+          [words("Neap tides are the weakest.")],
+        ),
+      },
+      { type: "heading", attrs: { level: 2 }, content: [words("Decisions")] },
+      {
+        type: "orderedList",
+        content: items(
+          [words("Publish the tide tables in March.")],
+          [words("Check the harbour gauges weekly.")],
+        ),
+      },
+      paragraphOf(words("Harbours publish the times of high water every year.")),
+    ],
+  );
+  const headings = editor.locator(":scope > h2");
+  const bullets = editor.locator(":scope > ul > li");
+  const numbered = editor.locator(":scope > ol > li");
+  await expect(headings).toHaveText(["Findings", "Decisions"]);
+
+  // The whole Mind, then what to change.
+  await editor.click();
+  await window.keyboard.press("ControlOrMeta+a");
+  await window.keyboard.press("ControlOrMeta+j");
+  await expect(window.getByTestId("composer-input")).toBeFocused();
+  await window.keyboard.type("Restructure so the decisions come first. Cut the last paragraph.");
+  await window.keyboard.press("Enter");
+  const bar = window.getByTestId("proposals-bar");
+  await expect(bar.getByTestId("proposals-count")).toContainText("changes from the assistant");
+  await screenshot(window, "edit-restructure-changes-en");
+
+  // Accept all: decisions first, each Block still the kind it was, the Citation still found.
+  await pointAndClick(window, bar.getByTestId("proposals-accept-all"));
+  await expect(bar).toHaveCount(0);
+  await expect(headings).toHaveText(["Decisions", "Findings"]);
+  await expect(numbered).toHaveText([
+    "Publish the tide tables in March.",
+    "Check the harbour gauges weekly.",
+  ]);
+  await expect(bullets).toHaveCount(2);
+  await expect(bullets.first()).toContainText("Spring tides happen at new moon.");
+  await expect(bullets.first().getByTestId("citation")).toHaveAttribute("data-check", "found");
+  await expect(bullets.last()).toHaveText("Neap tides are the weakest.");
+  await expect(editor.locator(":scope > p")).not.toContainText(["Harbours publish"]);
+  const order = await editor.evaluate((dom) =>
+    [...dom.children].map((child) => `${child.tagName}:${child.textContent?.slice(0, 12)}`),
+  );
+  // An empty paragraph the editor keeps at the end doesn't count.
+  expect(order.filter((each) => each !== "P:")).toEqual([
+    "H2:Decisions",
+    "OL:Publish the ",
+    "H2:Findings",
+    "UL:Spring tides",
+  ]);
+  await screenshot(window, "edit-restructure-accepted-en");
+
+  // One Undo brings every change back; Reject all leaves the Mind as it was.
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(bar.getByTestId("proposals-count")).toContainText("changes from the assistant");
+  await pointAndClick(window, bar.getByTestId("proposals-reject-all"));
+  await expect(bar).toHaveCount(0);
+  await expect(headings).toHaveText(["Findings", "Decisions"]);
+  await expect(bullets).toHaveCount(2);
+  await expect(bullets.first().getByTestId("citation")).toHaveAttribute("data-check", "found");
+  await expect(editor.locator(":scope > p").last()).toHaveText(
+    "Harbours publish the times of high water every year.",
+  );
 });
 
 test("⌘J with text selected says what to change in the composer, in Chinese; ⌘↵ accepts, Undo, and Reject all", async () => {
@@ -320,4 +437,61 @@ test("a double click accepts a change once; a change whose words the User edits 
   await pointAndClick(window, bar.getByTestId("proposals-accept-all"));
   await expect(bar).toHaveCount(0);
   await expect(note).toHaveText("The tides are very strong. They are high.");
+});
+
+test("copying a paragraph with changes waiting gives the text as it stands, in plain text and rich text; accepting them changes the copy", async () => {
+  const { window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await newMind(window);
+  const editor = window.getByTestId("mind-editor");
+  await editor.click();
+  const sentence = "The tides here are strong and really regular.";
+  await window.keyboard.type(sentence);
+  const note = editor.locator(":scope > p").first();
+
+  // What Copy would put on the clipboard for the whole paragraph, by type.
+  const copyParagraph = async () => {
+    await focusEditor(window, editor);
+    await window.keyboard.press("ControlOrMeta+a");
+    return editor.evaluate((dom) => {
+      const data = new DataTransfer();
+      dom.dispatchEvent(
+        new ClipboardEvent("copy", { clipboardData: data, bubbles: true, cancelable: true }),
+      );
+      return { plain: data.getData("text/plain"), html: data.getData("text/html") };
+    });
+  };
+
+  // A change that replaces "strong" with "powerful", waiting: the copy is the sentence as it was.
+  await selectWords(window, note, sentence);
+  await window.keyboard.press("ControlOrMeta+j");
+  await window.keyboard.type("replace strong with powerful");
+  await window.keyboard.press("Enter");
+  await expect(note.locator("ins.proposal-insert")).toHaveText("powerful");
+  const bar = window.getByTestId("proposals-bar");
+  const replacing = await copyParagraph();
+  expect(replacing.plain).toBe(sentence);
+  expect(replacing.html).toContain(sentence);
+  expect(replacing.html).not.toContain("powerful");
+
+  // Accepted, the copy has the new word.
+  await pointAndClick(window, bar.getByTestId("proposals-accept-all"));
+  await expect(bar).toHaveCount(0);
+  await expect(note).toHaveText("The tides here are powerful and really regular.");
+
+  // Shorten drops "really": waiting, the copy still has it; accepted, it doesn't.
+  await focusEditor(window, editor);
+  await window.keyboard.press("ArrowRight");
+  await selectWords(window, note, "The tides here are powerful and really regular.");
+  await pointAndClick(window, window.getByTestId("selection-action-shorten"));
+  await expect(note.locator("del.proposal-delete")).toHaveText("really ");
+  const shortening = await copyParagraph();
+  expect(shortening.plain).toBe("The tides here are powerful and really regular.");
+  expect(shortening.html).toContain("really");
+  await pointAndClick(window, bar.getByTestId("proposals-accept-all"));
+  await expect(bar).toHaveCount(0);
+  const shortened = await copyParagraph();
+  expect(shortened.plain).toBe("The tides here are powerful and regular.");
+  expect(shortened.html).not.toContain("really");
 });

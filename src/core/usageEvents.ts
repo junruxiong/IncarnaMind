@@ -80,7 +80,7 @@ const CITATION_CHECKS = [
   "unsupported",
   "contradicted",
 ] as const;
-const EXPORT_FORMATS = ["markdown", "docx"] as const;
+const EXPORT_FORMATS = ["markdown", "docx", "pdf", "source-pack", "html"] as const;
 
 /** The Settings pages (src/renderer/src/settingsPages.ts; a test keeps them the same). */
 export const SETTINGS_PAGES = [
@@ -119,6 +119,7 @@ const ANSWER_ERRORS = [
   "blocked",
   "too-long",
   "cost-cap",
+  "no-answer",
   "unknown",
 ] as const;
 const DOCUMENT_ERRORS = [
@@ -127,6 +128,7 @@ const DOCUMENT_ERRORS = [
   "too-large",
   "file-missing",
   "processing-error",
+  "pages-unread",
 ] as const;
 const CONNECTOR_ERRORS = [
   "missing-command",

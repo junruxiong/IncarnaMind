@@ -132,9 +132,13 @@ test("no title row of the system's: the traffic lights sit in the sidebar's head
   expect(frame.background.toUpperCase()).toBe("#F4F5F7");
   await expect(window.locator("html")).toHaveAttribute("data-title-bar", "inset");
 
-  // The lights: centred in the 44px band, the first on the sidebar's icon column, all
-  // inside the room the sidebar's header keeps for them, where the app's mark would be.
-  expect(frame.lights).toEqual({ x: 16, y: (44 - LIGHT.size) / 2 });
+  // The lights: on the line the headers' contents share (the sidebar's toggle is on it), the
+  // first on the sidebar's icon column, all inside the room the sidebar's header keeps for
+  // them, where the app's mark would be.
+  const toggle = await boxOf(window.getByTestId("sidebar-toggle"));
+  expect(frame.lights?.x).toBe(16);
+  const lightsCentre = (frame.lights?.y ?? 0) + LIGHT.size / 2;
+  expect(Math.abs(lightsCentre - (toggle.y + toggle.height / 2))).toBeLessThanOrEqual(1);
   expect(16 + 3 * LIGHT.size + 2 * LIGHT.gap).toBeLessThan(LIGHTS_ROOM);
   const header = window.getByTestId("sidebar-header");
   expect(await boxOf(header)).toMatchObject({ x: 0, y: 0, height: 44 });

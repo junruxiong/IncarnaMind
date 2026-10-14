@@ -44,7 +44,20 @@ const KIMI = { temperature: false, forcedToolChoice: false } as const;
 const GLM = { structuredOutput: "json_object", forcedToolChoice: false } as const;
 
 export const OVERRIDES: CatalogOverrides = {
+  cannotAnswer: {
+    openai: {
+      // Background research through the Responses API, not a chat: https://platform.openai.com/docs/guides/deep-research
+      "o3-deep-research": "deep-research",
+      "o4-mini-deep-research": "deep-research",
+      // Drives a computer through the Responses API's computer tool: https://platform.openai.com/docs/guides/tools-computer-use
+      "computer-use-preview": "computer-use",
+    },
+  },
   providers: {
+    // Measured using the calculate Tool well (#438: Claude Haiku 5.5, GPT-6 Luna); the ChatGPT plan
+    // serves OpenAI's models. Every other provider stays off until the evaluation (#441) says.
+    anthropic: { calculates: true },
+    openai: { calculates: true },
     // Google asks for its Gemini 3 models to run at their default temperature: lower makes
     // them loop or reason worse. The 2.5 models retire on 2026-10-20.
     google: { temperature: false },

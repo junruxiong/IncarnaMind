@@ -1,21 +1,17 @@
+import { randomUUID } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import {
   BUILT_IN_RERANKING_MODEL,
-  ConsentDeclinedError,
   type CoreAdapters,
   type CrossEncoder,
   DATABASE_FILE,
   InvalidInputError,
   type RerankSettings,
 } from "../../src/core";
-import {
-  askAndFinish,
-  citingModel,
-  type ShownPassage,
-  setUpWithDocuments,
-} from "../helpers/citations";
+import { openDatabase } from "../../src/core/storage";
+import { setUpWithDocuments, unaskedModel } from "../helpers/citations";
 import { createMemoryKeychain, createTempDataFolder, nextEvent, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
 import { startModelServer } from "../helpers/embedding";
@@ -24,6 +20,7 @@ import { mockRerankingModels } from "../helpers/embeddingProviders";
 const COHERE = { id: "https://api.cohere.com", name: "Cohere" };
 const VOYAGE = { id: "https://api.voyageai.com", name: "Voyage AI" };
 const COHERE_KEY = "cohere-test-key";
+const DECIDED_AT = "2026-09-01T09:00:00.000Z";
 
 /** A Markdown Document of `count` long sections, the word "lighthouse" only in `marked`. */
 function sections(count: number, marked: number, topic: string): string {
@@ -48,6 +45,7 @@ function weatherCrossEncoder() {
   const crossEncoder: CrossEncoder = {
     async load() {
       loaded = true;
+      return { device: "cpu" };
     },
     async score(query, texts) {
       if (!loaded) throw new Error("Not loaded.");
@@ -62,24 +60,15 @@ function weatherCrossEncoder() {
 }
 
 /**
- * Two Documents, a local chat model that searches for "lighthouse" and shows
- * what it was given, and mock reranking models. Embeddings are on, so vector
- * search hands the reranker the Weather Document, which has no "lighthouse".
+ * Two Documents and mock reranking models. Embeddings are on, so vector search
+ * hands the reranker the Weather Document, which has no "lighthouse". `ask`
+ * searches for "lighthouse" as a check does, and returns the Passages found.
  */
 async function setUp(overrides: Partial<CoreAdapters> = {}) {
-  let shown: ShownPassage[] = [];
   const rerankers = mockRerankingModels(prefersWeather);
   const keychain = createMemoryKeychain();
-  const model = citingModel({
-    query: "lighthouse",
-    records: (passages) => {
-      shown = passages;
-      return [];
-    },
-    answer: "There is a lighthouse.",
-  });
   const setup = await setUpWithDocuments(
-    model,
+    unaskedModel(),
     [
       { name: "Coast.md", contents: sections(24, 12, "red") },
       { name: "Weather.md", contents: sections(6, 0, "") },
@@ -87,9 +76,9 @@ async function setUp(overrides: Partial<CoreAdapters> = {}) {
     { createRerankingModel: rerankers.createRerankingModel, keychain, ...overrides },
     { embeddings: true },
   );
-  const ask = async (text = "Where is the lighthouse?") => {
-    await askAndFinish(setup.core, setup.client, setup.mind.id, text);
-    return shown;
+  const ask = async () => {
+    const found = await setup.core.searchEvidence("lighthouse");
+    return found.passages.map((passage) => ({ document: passage.documentName }));
   };
   return { ...setup, rerankers, keychain, ask };
 }
@@ -121,11 +110,13 @@ describe("Rerank", { timeout: 30_000 }, () => {
       service: null,
       paused: false,
       model: expect.objectContaining({ name: BUILT_IN_RERANKING_MODEL.name, state: "ready" }),
+      runsOn: null,
     });
     const shown = await ask();
 
     // The built-in model prefers Weather, so its Passages come first.
     expect(shown[0]?.document).toBe("Weather");
+    expect(await core.getRerankSettings()).toMatchObject({ runsOn: "cpu" });
     expect(weather.calls).toHaveLength(1);
     expect(requests).toEqual([]);
     expect(rerankers.calls).toEqual([]);
@@ -179,6 +170,7 @@ describe("Rerank", { timeout: 30_000 }, () => {
       service: COHERE,
       paused: false,
       model: expect.objectContaining({ name: BUILT_IN_RERANKING_MODEL.name }),
+      runsOn: null,
     };
     expect(saved).toEqual(expected);
     expect(await changed).toEqual(expected);
@@ -279,20 +271,50 @@ describe("Rerank", { timeout: 30_000 }, () => {
 });
 
 describe("Consent for rerank", { timeout: 30_000 }, () => {
-  test("nothing is sent before the User accepts; declining keeps the built-in model", async () => {
-    const { core, rerankers, keychain, ask } = await setUp();
-    const requested = nextEvent(core, "consent.requested");
+  test("choosing a service, where its form says what goes, allows it: nothing asks", async () => {
+    const { core } = await setUp();
+    const requests: string[] = [];
+    core.on("consent.requested", (request) => requests.push(request.flow.id));
 
-    const saving = core.saveRerankSettings({ kind: "cohere", apiKey: COHERE_KEY });
-    const request = await requested;
-    expect(request.flow).toEqual({ id: "rerank", service: COHERE, sends: ["queries", "passages"] });
-    await core.respondToConsent(request.requestId, false);
+    await core.saveRerankSettings({ kind: "cohere", apiKey: COHERE_KEY });
 
-    await expect(saving).rejects.toThrow(ConsentDeclinedError);
-    expect(await core.getRerankSettings()).toMatchObject({ kind: "built-in", byDefault: true });
-    expect(keychain.secrets.has("rerank:api-key")).toBe(false);
-    expect((await ask())[0]?.document).toBe("Coast");
-    expect(rerankers.calls).toEqual([]);
+    expect(requests).toEqual([]);
+    expect(await core.listDataFlows()).toContainEqual({
+      flow: { id: "rerank", service: COHERE, sends: ["queries", "passages"] },
+      consent: "accepted",
+      decidedAt: expect.any(String),
+      chosen: true,
+    });
+  });
+
+  test("choosing the service again is a new choice: it replaces a decline made before, and nothing asks", async () => {
+    const { core, rerankers, ask, dataDir } = await setUp();
+    const db = openDatabase(join(dataDir, DATABASE_FILE));
+    try {
+      db.run(
+        `INSERT INTO data_flow_consents
+           (id, flow, service_id, service_name, decision, data_kinds, created_at, updated_at)
+         VALUES (?, 'rerank', ?, ?, 'declined', '[]', ?, ?)`,
+        [randomUUID(), COHERE.id, COHERE.name, DECIDED_AT, DECIDED_AT],
+      );
+    } finally {
+      db.close();
+    }
+    const requests: string[] = [];
+    core.on("consent.requested", (request) => requests.push(request.flow.id));
+
+    await core.saveRerankSettings({ kind: "cohere", apiKey: COHERE_KEY });
+    await ask();
+
+    expect(requests).toEqual([]);
+    expect(rerankers.calls).toHaveLength(1);
+    expect(await core.listDataFlows()).toContainEqual(
+      expect.objectContaining({
+        flow: expect.objectContaining({ id: "rerank", service: COHERE }),
+        consent: "accepted",
+        chosen: true,
+      }),
+    );
   });
 
   test("revoked later, a search asks again; declining keeps search's order and sends nothing", async () => {
@@ -314,15 +336,15 @@ describe("Consent for rerank", { timeout: 30_000 }, () => {
 });
 
 describe("Testing the rerank connection", { timeout: 30_000 }, () => {
-  test("asks first, sends nothing of the User's, and saves nothing", async () => {
+  test("sends nothing of the User's, so it asks nothing, and saves nothing", async () => {
     const { core, rerankers } = await setUp();
-    const requested = nextEvent(core, "consent.requested");
-    const testing = core.testRerankConnection({ kind: "cohere", apiKey: COHERE_KEY });
-    const request = await requested;
-    expect(rerankers.calls).toEqual([]);
-    await core.respondToConsent(request.requestId, true);
+    const requests: string[] = [];
+    core.on("consent.requested", (request) => requests.push(request.flow.id));
 
-    expect(await testing).toEqual({ ok: true });
+    expect(await core.testRerankConnection({ kind: "cohere", apiKey: COHERE_KEY })).toEqual({
+      ok: true,
+    });
+    expect(requests).toEqual([]);
     expect(rerankers.calls).toHaveLength(1);
     expect(rerankers.calls[0]?.query).toContain("capital of France");
     expect(await core.getRerankSettings()).toMatchObject({ kind: "built-in", byDefault: true });
@@ -397,6 +419,7 @@ describe("The built-in reranking model", { timeout: 30_000 }, () => {
       service: null,
       paused: false,
       model: expect.objectContaining({ name: BUILT_IN_RERANKING_MODEL.name, state: "ready" }),
+      runsOn: null,
     });
     const shown = await ask();
 
@@ -526,7 +549,7 @@ describe("The built-in reranking model", { timeout: 30_000 }, () => {
 
   test("a model that fails as it reranks leaves search's order", async () => {
     const failing: CrossEncoder = {
-      load: async () => {},
+      load: async () => ({ device: "cpu" }),
       score: async () => {
         throw new Error("The reranking process stopped (exit code 1).");
       },

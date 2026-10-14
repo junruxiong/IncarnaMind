@@ -1,0 +1,193 @@
+[
+  {
+    "id": "box",
+    "name": "Box",
+    "publisher": "Box",
+    "group": "files",
+    "summary": {
+      "en": "Search and read the files in your Box",
+      "zh-CN": "搜索和读取 Box 里的文件"
+    },
+    "subscription": null,
+    "url": "https://mcp.box.com",
+    "signIn": "own-app"
+  },
+  {
+    "id": "dropbox",
+    "name": "Dropbox",
+    "publisher": "Dropbox",
+    "group": "files",
+    "summary": { "en": "Search and read your Dropbox files", "zh-CN": "搜索和读取 Dropbox 文件" },
+    "subscription": null,
+    "url": "https://mcp.dropbox.com/mcp",
+    "signIn": "own-app"
+  },
+  {
+    "id": "notion",
+    "name": "Notion",
+    "publisher": "Notion",
+    "group": "files",
+    "summary": { "en": "Find and read pages in Notion", "zh-CN": "查找和读取 Notion 页面" },
+    "subscription": null,
+    "url": "https://mcp.notion.com/mcp",
+    "signIn": "browser"
+  },
+  {
+    "id": "factset",
+    "name": "FactSet",
+    "publisher": "FactSet",
+    "group": "financial-data",
+    "summary": { "en": "Company data, estimates, filings", "zh-CN": "公司数据、一致预期、公告" },
+    "subscription": { "product": "FactSet" },
+    "url": "https://mcp.factset.com/mcp",
+    "signIn": "browser"
+  },
+  {
+    "id": "sp-global",
+    "name": "S&P Global Capital IQ",
+    "publisher": "S&P Global",
+    "group": "financial-data",
+    "summary": {
+      "en": "Capital IQ financials and transcripts",
+      "zh-CN": "Capital IQ 财务数据和电话会纪要"
+    },
+    "subscription": { "product": "S&P Capital IQ" },
+    "url": "https://kfinance.kensho.com/integrations/mcp",
+    "signIn": "browser"
+  },
+  {
+    "id": "lseg",
+    "name": "LSEG",
+    "publisher": "LSEG",
+    "group": "financial-data",
+    "summary": { "en": "Pricing, fundamentals, news", "zh-CN": "行情、基本面、新闻" },
+    "subscription": { "product": "LSEG" },
+    "url": "https://api.analytics.lseg.com/lfa/mcp",
+    "signIn": "browser"
+  },
+  {
+    "id": "moodys",
+    "name": "Moody’s",
+    "publisher": "Moody’s",
+    "group": "financial-data",
+    "summary": { "en": "Ratings and credit research", "zh-CN": "评级和信用研究" },
+    "subscription": { "product": "Moody’s" },
+    "url": "https://api.moodys.com/genai-ready-data/m1/mcp",
+    "signIn": "browser"
+  },
+  {
+    "id": "morningstar",
+    "name": "Morningstar",
+    "publisher": "Morningstar",
+    "group": "financial-data",
+    "summary": { "en": "Fund and equity research", "zh-CN": "基金和股票研究" },
+    "subscription": { "product": "Morningstar" },
+    "url": "https://mcp.morningstar.com/mcp",
+    "signIn": "browser"
+  },
+  {
+    "id": "pitchbook",
+    "name": "PitchBook",
+    "publisher": "PitchBook",
+    "group": "financial-data",
+    "summary": { "en": "Private companies and deals", "zh-CN": "非上市公司和交易" },
+    "subscription": { "product": "PitchBook" },
+    "url": "https://premium.mcp.pitchbook.com/mcp",
+    "signIn": "browser"
+  },
+  {
+    "id": "daloopa",
+    "name": "Daloopa",
+    "publisher": "Daloopa",
+    "group": "financial-data",
+    "summary": { "en": "Model-ready KPIs from filings", "zh-CN": "从公告里整理好的关键指标" },
+    "subscription": { "product": "Daloopa" },
+    "url": "https://mcp.daloopa.com/server/mcp",
+    "signIn": "browser"
+  },
+  {
+    "id": "cocounsel",
+    "name": "CoCounsel (Westlaw)",
+    "publisher": "Thomson Reuters",
+    "group": "legal-research",
+    "summary": {
+      "en": "Westlaw research through CoCounsel",
+      "zh-CN": "通过 CoCounsel 检索 Westlaw"
+    },
+    "subscription": { "product": "Westlaw" },
+    "url": "https://legal-mcp.thomsonreuters.com/mcp",
+    "signIn": "browser"
+  },
+  {
+    "id": "harvey",
+    "name": "Harvey",
+    "publisher": "Harvey",
+    "group": "legal-research",
+    "summary": { "en": "Ask Harvey from your matters", "zh-CN": "就你的案件向 Harvey 提问" },
+    "subscription": { "product": "Harvey" },
+    "url": "https://api.harvey.ai/hosted_mcp/mcp",
+    "signIn": "own-app"
+  },
+  {
+    "id": "pubmed",
+    "name": "PubMed",
+    "publisher": "Anthropic",
+    "group": "medicine-and-research",
+    "summary": {
+      "en": "Abstracts and full text from PubMed",
+      "zh-CN": "PubMed 摘要和全文"
+    },
+    "subscription": "free",
+    "url": "https://pubmed.mcp.claude.com/mcp",
+    "signIn": "none",
+    "tools": [
+      { "title": { "en": "Search articles", "zh-CN": "搜索文章" }, "changes": false },
+      { "title": { "en": "Get article metadata", "zh-CN": "获取文章元数据" }, "changes": false },
+      { "title": { "en": "Find related articles", "zh-CN": "查找相关文章" }, "changes": false },
+      {
+        "title": { "en": "Look up articles by citation", "zh-CN": "按引用信息查找文章" },
+        "changes": false
+      },
+      { "title": { "en": "Convert article IDs", "zh-CN": "转换文章 ID" }, "changes": false },
+      { "title": { "en": "Get full-text articles", "zh-CN": "获取全文" }, "changes": false },
+      { "title": { "en": "Get copyright status", "zh-CN": "获取版权状态" }, "changes": false }
+    ]
+  },
+  {
+    "id": "clinical-trials",
+    "name": "ClinicalTrials.gov",
+    "publisher": "Anthropic",
+    "group": "medicine-and-research",
+    "summary": { "en": "Trials and their results", "zh-CN": "临床试验及其结果" },
+    "subscription": "free",
+    "url": "https://hcls.mcp.claude.com/clinical_trials/mcp",
+    "signIn": "none",
+    "tools": [
+      { "title": { "en": "Search clinical trials", "zh-CN": "搜索临床试验" }, "changes": false },
+      { "title": { "en": "Get trial details", "zh-CN": "获取试验详情" }, "changes": false },
+      {
+        "title": { "en": "Search trials by sponsor", "zh-CN": "按申办方搜索试验" },
+        "changes": false
+      },
+      { "title": { "en": "Search investigators", "zh-CN": "搜索研究者" }, "changes": false },
+      { "title": { "en": "Analyze trial endpoints", "zh-CN": "分析试验终点" }, "changes": false },
+      {
+        "title": { "en": "Search by eligibility criteria", "zh-CN": "按入选标准搜索试验" },
+        "changes": false
+      }
+    ]
+  },
+  {
+    "id": "slack",
+    "name": "Slack",
+    "publisher": "Slack",
+    "group": "work",
+    "summary": {
+      "en": "Read channels; posts only when you approve",
+      "zh-CN": "读取频道；只有你批准后才发消息"
+    },
+    "subscription": null,
+    "url": "https://mcp.slack.com/mcp",
+    "signIn": "own-app"
+  }
+]

@@ -66,7 +66,7 @@ function runOf(text: string, format: RunFormat, textElement: "w:t" | "w:delText"
   if (!text) return "";
   // In the order the schema requires.
   const rPr = [
-    format.style ? `<w:rStyle w:val="${format.style}"/>` : "",
+    format.style ? `<w:rStyle w:val="${escapeXml(format.style)}"/>` : "",
     format.monospace ? '<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:cs="Consolas"/>' : "",
     format.bold ? "<w:b/>" : "",
     format.italic ? "<w:i/>" : "",
@@ -90,17 +90,28 @@ function runOf(text: string, format: RunFormat, textElement: "w:t" | "w:delText"
 // ---------------------------------------------------------------------------
 // Footnotes
 
-/** Where a footnote is referred to in the text: its number, in the FootnoteReference style. */
-export function footnoteReference(id: number): string {
-  return `<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteReference w:id="${id}"/></w:r>`;
+/**
+ * The ids of Word's footnote styles in a document: these, in a new one; an
+ * imported document may name them otherwise (in Chinese Word, "aff1"…).
+ */
+export interface FootnoteStyles {
+  text: string;
+  reference: string;
+}
+
+const FOOTNOTE_STYLES: FootnoteStyles = { text: "FootnoteText", reference: "FootnoteReference" };
+
+/** Where a footnote is referred to in the text: its number, in the footnote reference style. */
+export function footnoteReference(id: number, style = FOOTNOTE_STYLES.reference): string {
+  return `<w:r><w:rPr><w:rStyle w:val="${escapeXml(style)}"/></w:rPr><w:footnoteReference w:id="${id}"/></w:r>`;
 }
 
 /**
- * A footnote, for the footnotes part: one paragraph in the FootnoteText
+ * A footnote, for the footnotes part: one paragraph in the footnote text
  * style, its number, then `runs`.
  */
-export function footnote(id: number, runs: string): string {
-  return `<w:footnote w:id="${id}"><w:p><w:pPr><w:pStyle w:val="FootnoteText"/></w:pPr><w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteRef/></w:r>${runs}</w:p></w:footnote>`;
+export function footnote(id: number, runs: string, styles = FOOTNOTE_STYLES): string {
+  return `<w:footnote w:id="${id}"><w:p><w:pPr><w:pStyle w:val="${escapeXml(styles.text)}"/></w:pPr><w:r><w:rPr><w:rStyle w:val="${escapeXml(styles.reference)}"/></w:rPr><w:footnoteRef/></w:r>${runs}</w:p></w:footnote>`;
 }
 
 /**
@@ -124,7 +135,7 @@ export function footnotesPart(footnotes: readonly string[]): string {
 // Tracked changes
 
 /** A change's date, to the second, as Word writes it; nothing if it has none. */
-const dateAttribute = (date: string | null) =>
+export const dateAttribute = (date: string | null): string =>
   date ? ` w:date="${escapeXml(date.slice(0, 19))}Z"` : "";
 
 /**
@@ -153,24 +164,51 @@ export const COMMENTS_CONTENT_TYPE =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml";
 
 /**
+ * The ids of Word's comment styles in a document: these, in a new one; an
+ * imported document may name them otherwise.
+ */
+export interface CommentStyles {
+  text: string;
+  reference: string;
+}
+
+const COMMENT_STYLES: CommentStyles = { text: "CommentText", reference: "CommentReference" };
+
+/** Where the range the comment `id` covers starts. */
+export function commentStart(id: number): string {
+  return `<w:commentRangeStart w:id="${id}"/>`;
+}
+
+/** Where the range the comment `id` covers ends, and the comment's mark after it. */
+export function commentEnd(id: number, reference = COMMENT_STYLES.reference): string {
+  return `<w:commentRangeEnd w:id="${id}"/><w:r><w:rPr><w:rStyle w:val="${escapeXml(reference)}"/></w:rPr><w:commentReference w:id="${id}"/></w:r>`;
+}
+
+/**
  * Content with the comment `id` on it, in the text: the range it covers, and
  * the comment's mark after it, in the CommentReference style.
  */
-export function commented(id: number, content: string): string {
-  return `<w:commentRangeStart w:id="${id}"/>${content}<w:commentRangeEnd w:id="${id}"/><w:r><w:rPr><w:rStyle w:val="CommentReference"/></w:rPr><w:commentReference w:id="${id}"/></w:r>`;
+export function commented(id: number, content: string, reference?: string): string {
+  return `${commentStart(id)}${content}${commentEnd(id, reference)}`;
 }
 
 /**
  * A comment, for the comments part: by `author` at `date`, its text a
  * paragraph a line, in the CommentText style.
  */
-export function comment(id: number, author: string, date: string | null, text: string): string {
-  const mark = '<w:r><w:rPr><w:rStyle w:val="CommentReference"/></w:rPr><w:annotationRef/></w:r>';
+export function comment(
+  id: number,
+  author: string,
+  date: string | null,
+  text: string,
+  styles = COMMENT_STYLES,
+): string {
+  const mark = `<w:r><w:rPr><w:rStyle w:val="${escapeXml(styles.reference)}"/></w:rPr><w:annotationRef/></w:r>`;
   const paragraphs = text
     .split(/\r\n|\r|\n/)
     .map(
       (line, index) =>
-        `<w:p><w:pPr><w:pStyle w:val="CommentText"/></w:pPr>${index === 0 ? mark : ""}${run(line)}</w:p>`,
+        `<w:p><w:pPr><w:pStyle w:val="${escapeXml(styles.text)}"/></w:pPr>${index === 0 ? mark : ""}${run(line)}</w:p>`,
     );
   return `<w:comment w:id="${id}" w:author="${escapeXml(author)}"${dateAttribute(date)}>${paragraphs.join("")}</w:comment>`;
 }

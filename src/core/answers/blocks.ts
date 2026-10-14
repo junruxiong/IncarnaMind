@@ -16,24 +16,11 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import * as Y from "yjs";
+import type { MarkJSON, NodeJSON } from "../../shared/blockJson";
 import { BLOCK_ID_ATTRIBUTE, NOTE_BLOCK_TYPES } from "../api";
 import { contentMarkdownOf, elementMarkdown } from "./contextText";
 
-/** A node as ProseMirror (and Tiptap) write it in JSON. */
-export interface NodeJSON {
-  type: string;
-  attrs?: Record<string, unknown>;
-  content?: NodeJSON[];
-  /** Text nodes only. */
-  text?: string;
-  /** Text nodes only. */
-  marks?: MarkJSON[];
-}
-
-export interface MarkJSON {
-  type: string;
-  attrs?: Record<string, unknown>;
-}
+export type { MarkJSON, NodeJSON };
 
 type FormattingAttributes = Record<string, unknown>;
 
@@ -284,4 +271,10 @@ export const contentMarkdown = contentMarkdownOf;
 /** A fingerprint of an element's content, to tell whether it changed since. */
 export function contentHash(element: Y.XmlElement): string {
   return createHash("sha256").update(contentMarkdown(element)).digest("base64url").slice(0, 22);
+}
+
+/** The User has changed the Answer since it was written. */
+export function isEdited(answer: Y.XmlElement): boolean {
+  const hash = textAttribute(answer, "generatedHash");
+  return hash !== null && hash !== contentHash(answer);
 }

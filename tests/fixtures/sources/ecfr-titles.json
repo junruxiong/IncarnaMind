@@ -1,0 +1,24 @@
+{
+  "titles": [
+    {
+      "number": 17,
+      "name": "Commodity and Securities Exchanges",
+      "latest_amended_on": "2026-10-08",
+      "latest_issue_date": "2026-10-08",
+      "up_to_date_as_of": "2026-10-08",
+      "reserved": false
+    },
+    {
+      "number": 42,
+      "name": "Public Health",
+      "latest_amended_on": "2026-10-08",
+      "latest_issue_date": "2026-10-08",
+      "up_to_date_as_of": "2026-10-08",
+      "reserved": false
+    }
+  ],
+  "meta": {
+    "date": "2026-10-08",
+    "import_in_progress": false
+  }
+}

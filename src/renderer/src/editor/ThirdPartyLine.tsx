@@ -5,11 +5,12 @@ import { useT } from "../i18n";
 
 /** The line for text its Answer read itself. */
 const READ: Record<ReadThirdPartySource, MessageKey> = {
+  imported: "approvals.thirdParty.read.imported",
   "web-page": "approvals.thirdParty.read.webPage",
   "checked-document": "approvals.thirdParty.read.checkedDocument",
 };
 
-/** The line for text in its Question context: in a Mind. */
+/** The line for text in its Question context: in a Mind, or the Mind a Question in a conversation read. */
 const IN_MIND: Record<ThirdPartySource, MessageKey> = {
   imported: "approvals.thirdParty.mind.imported",
   "web-page": "approvals.thirdParty.mind.webPage",
@@ -36,7 +37,9 @@ export function ThirdPartyLine({ request }: { request: ApprovalRequest }) {
   const key =
     reason.via === "read"
       ? READ[reason.source]
-      : (request.mindId === null ? IN_CONVERSATION : IN_MIND)[reason.source];
+      : (reason.via === "context" && request.mindId === null ? IN_CONVERSATION : IN_MIND)[
+          reason.source
+        ];
   return (
     <p
       data-testid="approval-third-party"

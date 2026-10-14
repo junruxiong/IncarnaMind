@@ -11,21 +11,29 @@ import {
   type ToolApprovalRequest,
 } from "../../../core/api";
 import { asksAfterThirdParty } from "../../../shared/approvalRules";
+import { toolCallsOf } from "../../../shared/toolCalls";
 import { AnswerWriting } from "../answerPhase";
+import { isCalculated, RUN_SCRIPT, SEARCH } from "../answerSteps";
 import { useAnswers } from "../answers";
 import { useApprovals, waitingFor } from "../approvals";
 import { signInAgain } from "../chatGptSignIn";
+import { MindCall } from "../components/assistant/MindCall";
 import { useIsExampleAnswer } from "../components/GettingStarted";
 import { PlugIcon, ScriptIcon, SkillIcon, StopIcon } from "../components/icons";
-import { FindSourcesLineIcon } from "../components/lineIcons";
+import { DocumentLineIcon, FindSourcesLineIcon } from "../components/lineIcons";
 import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
-import { ProblemLine } from "../components/ProblemLine";
+import { ProblemLine, ProblemMark } from "../components/ProblemLine";
+import { core } from "../core";
 import { formatResetTime } from "../cost";
 import { useFindSources } from "../findSources";
 import { useLanguage, useT } from "../i18n";
+import { useKeyRefusals, useKeySavedSince } from "../keyRefusals";
+import { requestModelMenu } from "../modelMenu";
+import { useModelNames } from "../modelNames";
 import { ANSWER_PROBLEMS, answerProblem } from "../problems";
 import type { SettingsPage } from "../settingsPages";
 import { useAppStore } from "../store";
+import { reasonKey } from "../webPages";
 import { ChevronRightSmallIcon, RegenerateSmallIcon } from "./icons";
 import { useMindId } from "./mindContext";
 import { ThirdPartyLine } from "./ThirdPartyLine";
@@ -34,25 +42,6 @@ const text = (value: unknown) => (typeof value === "string" ? value : null);
 
 const isErrorKind = (value: unknown): value is ProviderErrorKind =>
   typeof value === "string" && Object.hasOwn(ANSWER_PROBLEMS, value);
-
-/** The Tool calls the core stored on the Answer (a JSON array), or none if unreadable. */
-function toolCallsOf(value: unknown): AnswerToolCall[] {
-  if (typeof value !== "string") return [];
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return Array.isArray(parsed)
-      ? parsed.filter(
-          (call): call is AnswerToolCall =>
-            typeof call === "object" && call !== null && typeof call.id === "string",
-        )
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-const RUN_SCRIPT = "run_skill_script";
-const SEARCH = "search_documents";
 
 /** Items of the meta line, with a dot between each two. */
 function Dotted({ items }: { items: ReactNode[] }) {
@@ -81,6 +70,7 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
   const answerId = text(node.attrs[BLOCK_ID_ATTRIBUTE]);
   const questionId = text(node.attrs.questionId);
   const modelId = text(node.attrs.modelId);
+  const shownModel = useModelNames()(modelId ?? "");
   const status = text(node.attrs.status) ?? "done";
   const writing = useAnswers((state) => (answerId ? state.writing.has(answerId) : false));
   // The event says so first; the status says so in windows that opened since.
@@ -124,8 +114,8 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
   }
   if (modelId) {
     meta.push(
-      <span data-testid="answer-model" className="answer-model">
-        {modelId}
+      <span data-testid="answer-model" className="answer-model" title={shownModel.id}>
+        {shownModel.name}
       </span>,
     );
   }
@@ -138,6 +128,7 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
       />,
     );
   }
+  const { calculated, uncalculated } = figuresOf(toolCalls);
 
   return (
     <NodeViewWrapper
@@ -153,16 +144,21 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
       <CallRows calls={toolCalls} approvals={approvals} />
 
       {text(node.attrs.citationSupport) === "none" && (
-        <p contentEditable={false} data-testid="answer-no-citations" className="answer-info">
-          {t("citation.unsupported")}
-        </p>
+        <div contentEditable={false}>
+          <NoCitationsLine modelId={modelId} providerId={text(node.attrs.providerId)} />
+        </div>
       )}
 
-      <NodeViewContent className="answer-content" />
+      <NodeViewContent
+        className="answer-content"
+        data-generated-marks={node.attrs.generatedMarks === true ? "" : undefined}
+      />
+
+      {!streaming && uncalculated > 0 && <UncalculatedLine count={uncalculated} />}
 
       {searchesOpen && (
         <div contentEditable={false} className="answer-searches-open">
-          <SearchList searches={searches} />
+          <SearchList searches={searches} calculated={calculated} />
         </div>
       )}
 
@@ -225,13 +221,50 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
   );
 }
 
+/** An Answer by a model that can't add Citations (#765): it says so, with the way to another model. */
+export function NoCitationsLine({
+  modelId,
+  providerId,
+}: {
+  modelId: string | null;
+  providerId: string | null;
+}) {
+  const t = useT();
+  const shownModel = useModelNames()(modelId ?? "", providerId);
+  return (
+    <ProblemLine
+      testId="answer-no-citations"
+      role="status"
+      action={{
+        label: t("citation.unsupported.choose"),
+        testId: "answer-choose-model",
+        onClick: requestModelMenu,
+      }}
+      className="answer-info"
+    >
+      {t("citation.unsupported", {
+        model: modelId ? shownModel.name : t("answer.error.thisModel"),
+      })}
+    </ProblemLine>
+  );
+}
+
+/** Failures that can come of a model that can't answer, rather than of the connection. */
+const WRONG_MODEL: ReadonlySet<ProviderErrorKind> = new Set([
+  "model",
+  "provider",
+  "no-answer",
+  "unknown",
+]);
+
 /** A failed Answer, under what was written of it: one line, and the one thing that can fix it. */
-function AnswerError({
+export function AnswerError({
   kind,
   modelId,
   providerId,
   resetsAt,
   details,
+  failedAt = null,
   onRetry,
   onOpenSettings,
 }: {
@@ -241,39 +274,72 @@ function AnswerError({
   /** When the plan's limit resets, when its provider said. */
   resetsAt: string | null;
   details: string | null;
+  /**
+   * When it failed, ISO 8601, said beside a refused key; an Answer in a Mind keeps no time, so
+   * its failure counts from when it was first shown. A key saved since lets it be asked again.
+   */
+  failedAt?: string | null;
   onRetry?: (() => void) | undefined;
   onOpenSettings(page: SettingsPage): void;
 }) {
   const t = useT();
   const language = useLanguage();
+  const shownModel = useModelNames()(modelId ?? "", providerId);
   const provider = useAnswers(
     (state) => state.models?.find((group) => group.provider.id === providerId)?.provider.kind,
   );
+  const [shownAt] = useState(() => new Date().toISOString());
+  const keySaved = useKeySavedSince(providerId, failedAt ?? shownAt);
   // Whose plan it was decides where its usage is managed.
   useEffect(() => {
-    if (kind === "plan-limit") useAnswers.getState().loadModels();
+    if (kind === "plan-limit" || WRONG_MODEL.has(kind)) useAnswers.getState().loadModels();
   }, [kind]);
+  // A model the User added to the menu that then failed: one click takes it back out.
+  const added = useAnswers((state) =>
+    state.models?.some(
+      (group) =>
+        group.provider.id === providerId && modelId !== null && group.added.includes(modelId),
+    ),
+  );
+  const removeFromMenu =
+    added && WRONG_MODEL.has(kind) && providerId && modelId
+      ? () => {
+          void core.setChatModelInMenu({ providerId, modelId, inMenu: false }).then(() => {
+            useAnswers.setState({ models: null });
+            useAnswers.getState().loadModels();
+          });
+        }
+      : undefined;
   const { line, fix } = answerProblem(kind, provider);
-  const action =
-    fix.kind === "settings"
-      ? { label: t(fix.label), onClick: () => onOpenSettings(fix.page) }
-      : fix.kind === "sign-in"
+  const action = removeFromMenu
+    ? { label: t("answer.error.removeFromMenu"), onClick: removeFromMenu }
+    : kind === "auth" && keySaved && onRetry
+      ? { label: t("answer.error.askAgain"), onClick: onRetry }
+      : kind === "auth"
         ? {
-            label: t(fix.label),
+            label: t("answer.error.checkKey"),
             onClick: () =>
-              void signInAgain(onOpenSettings).then((signedIn) => {
-                if (signedIn) onRetry?.();
-              }),
+              void useKeyRefusals.getState().check(providerId, modelId ?? "", failedAt),
           }
-        : fix.kind === "link"
-          ? // The main process opens it in the User's browser.
-            {
-              label: `${t(fix.label)} ↗`,
-              onClick: () => window.open(fix.url, "_blank", "noreferrer"),
-            }
-          : fix.kind === "retry" && onRetry
-            ? { label: t(fix.label), onClick: onRetry }
-            : undefined;
+        : fix.kind === "settings"
+          ? { label: t(fix.label), onClick: () => onOpenSettings(fix.page) }
+          : fix.kind === "sign-in"
+            ? {
+                label: t(fix.label),
+                onClick: () =>
+                  void signInAgain(onOpenSettings).then((signedIn) => {
+                    if (signedIn) onRetry?.();
+                  }),
+              }
+            : fix.kind === "link"
+              ? // The main process opens it in the User's browser.
+                {
+                  label: `${t(fix.label)} ↗`,
+                  onClick: () => window.open(fix.url, "_blank", "noreferrer"),
+                }
+              : fix.kind === "retry" && onRetry
+                ? { label: t(fix.label), onClick: onRetry }
+                : undefined;
   return (
     <div contentEditable={false} data-testid="answer-error" data-error-kind={kind}>
       <ProblemLine
@@ -282,7 +348,8 @@ function AnswerError({
         title={details ?? undefined}
         className="mt-1 select-none"
       >
-        {t(line, { model: modelId ?? t("answer.error.thisModel") })}
+        {t(line, { model: modelId ? shownModel.name : t("answer.error.thisModel") })}
+        {removeFromMenu && kind !== "model" && ` · ${shownModel.name}`}
         {kind === "plan-limit" && resetsAt && (
           <>
             <span aria-hidden="true"> · </span>
@@ -299,7 +366,13 @@ function AnswerError({
  * rows, Skills first. A call waiting for the User's approval has no row: its
  * approval card shows instead, after the Answer's text.
  */
-function CallRows({ calls, approvals }: { calls: AnswerToolCall[]; approvals: ApprovalRequest[] }) {
+export function CallRows({
+  calls,
+  approvals,
+}: {
+  calls: AnswerToolCall[];
+  approvals: ApprovalRequest[];
+}) {
   const waitingIds = new Set(approvals.map((request) => request.toolCallId));
   const rows = calls
     .filter(
@@ -307,17 +380,10 @@ function CallRows({ calls, approvals }: { calls: AnswerToolCall[]; approvals: Ap
         !waitingIds.has(call.id) &&
         (call.source === "connector" ||
           call.source === "sources" ||
+          call.source === "web" ||
           (call.source === "skill" && call.tool === RUN_SCRIPT)),
     )
-    .map((call) =>
-      call.source === "connector" ? (
-        <ConnectorCall key={call.id} call={call} />
-      ) : call.source === "sources" ? (
-        <SourcesCall key={call.id} call={call} />
-      ) : (
-        <ScriptCall key={call.id} call={call} />
-      ),
-    );
+    .map((call) => <CallRow key={call.id} call={call} />);
   const skills = skillRows(calls);
   if (skills.length === 0 && rows.length === 0) return null;
   return (
@@ -330,12 +396,32 @@ function CallRows({ calls, approvals }: { calls: AnswerToolCall[]; approvals: Ap
   );
 }
 
-/** The approval card for a request: a Connector's Tool, or a Skill script. */
-function ApprovalCard({ request }: { request: ApprovalRequest }) {
+/** The row of a call through a Connector, of Find sources, of web search, of a Minds' Tool, or of a Skill script. */
+export function CallRow({ call }: { call: AnswerToolCall }) {
+  if (call.source === "minds") return <MindCall call={call} />;
+  if (call.source === "connector") return <ConnectorCall call={call} />;
+  if (call.source === "sources") return <SourcesCall call={call} />;
+  if (call.source === "web") return <WebCall call={call} />;
+  return <ScriptCall call={call} />;
+}
+
+/**
+ * A button's tooltip and name with its shortcut: its label drops the hint when
+ * the assistant is narrow (#612), and the shortcut still works.
+ */
+export function withShortcut(label: string, keys: string | undefined) {
+  return keys ? { title: `${label} (${keys})`, "aria-label": `${label} (${keys})` } : {};
+}
+
+/**
+ * The approval card for a request: a Connector's Tool, or a Skill script.
+ * `keys`: the shortcut that allows it once, shown on its button (the Task tray's ⌘↵).
+ */
+export function ApprovalCard({ request, keys }: { request: ApprovalRequest; keys?: string }) {
   return request.subject.kind === "skill-script" ? (
-    <ScriptApprovalCard request={request as SkillScriptApprovalRequest} />
+    <ScriptApprovalCard request={request as SkillScriptApprovalRequest} keys={keys} />
   ) : (
-    <ToolApprovalCard request={request as ToolApprovalRequest} />
+    <ToolApprovalCard request={request as ToolApprovalRequest} keys={keys} />
   );
 }
 
@@ -362,7 +448,7 @@ function TitleWithCode({ title, code }: { title: string; code: string }) {
  * when its Answer had read third-party text: "Always allow" wouldn't cover
  * such a call, so it isn't offered. The Answer waits meanwhile.
  */
-function ToolApprovalCard({ request }: { request: ToolApprovalRequest }) {
+function ToolApprovalCard({ request, keys }: { request: ToolApprovalRequest; keys?: string }) {
   const t = useT();
   const respond = useApprovals((state) => state.respond);
   const titleId = useId();
@@ -404,8 +490,10 @@ function ToolApprovalCard({ request }: { request: ToolApprovalRequest }) {
           data-testid="approval-allow-once"
           onClick={() => decide("allow-once")}
           className="approval-button approval-button--primary"
+          {...withShortcut(t("approvals.card.allowOnce"), keys)}
         >
           {t("approvals.card.allowOnce")}
+          {keys && <span className="approval-keys">{keys}</span>}
         </button>
         {!thirdParty && (
           <button
@@ -440,7 +528,13 @@ function ToolApprovalCard({ request }: { request: ToolApprovalRequest }) {
  * third-party text. "Always run" first shows a warning in the last section,
  * which must be confirmed. The Answer waits meanwhile.
  */
-function ScriptApprovalCard({ request }: { request: SkillScriptApprovalRequest }) {
+function ScriptApprovalCard({
+  request,
+  keys,
+}: {
+  request: SkillScriptApprovalRequest;
+  keys?: string;
+}) {
   const t = useT();
   const respond = useApprovals((state) => state.respond);
   const sandboxed = useAppStore((state) => state.settings?.scriptSandbox === "os");
@@ -509,6 +603,7 @@ function ScriptApprovalCard({ request }: { request: SkillScriptApprovalRequest }
           className="approval-actions approval-warning"
         >
           <p id={warningId} className="approval-warning-title">
+            <ProblemMark />
             {t("scripts.alwaysRun.title", params)}
           </p>
           <p className="approval-warning-body">
@@ -519,7 +614,7 @@ function ScriptApprovalCard({ request }: { request: SkillScriptApprovalRequest }
               type="button"
               data-testid="always-run-confirm"
               onClick={() => respond(request.requestId, "always-allow", { riskAccepted: true })}
-              className="approval-button approval-button--danger"
+              className="approval-button"
             >
               {t("scripts.alwaysRun.confirm", params)}
             </button>
@@ -540,8 +635,10 @@ function ScriptApprovalCard({ request }: { request: SkillScriptApprovalRequest }
             data-testid="approval-allow-once"
             onClick={() => respond(request.requestId, "allow-once")}
             className="approval-button approval-button--primary"
+            {...withShortcut(t("scripts.card.allowOnce"), keys)}
           >
             {t("scripts.card.allowOnce")}
+            {keys && <span className="approval-keys">{keys}</span>}
           </button>
           {!asksAfterThirdParty(request) && (
             <button
@@ -654,6 +751,7 @@ function ScriptCall({ call }: { call: AnswerToolCall }) {
           </pre>
           {run?.error && (
             <p data-testid="answer-script-error" className="answer-call-error">
+              <ProblemMark />
               {run.error}
             </p>
           )}
@@ -798,6 +896,71 @@ function SourcesCall({ call }: { call: AnswerToolCall }) {
   );
 }
 
+/** What a call of web search said: running, what it searched for, or the page it saved or why not (#128). */
+function webCallText(t: ReturnType<typeof useT>, call: AnswerToolCall): string {
+  const running = call.status === "running";
+  if (call.tool === "search_web") {
+    const query = field(call, "query");
+    if (running) return t("web.call.searching", { query });
+    return t(call.status === "failed" ? "web.call.searchFailed" : "web.call.searched", { query });
+  }
+  const page = call.webPage;
+  const address = page?.address ?? field(call, "url");
+  if (page && "documentId" in page) return t("web.call.saved", { name: page.name });
+  if (running) return t("web.call.reading", { address });
+  return t("web.call.notSaved", {
+    address,
+    reason: t(reasonKey(page && "failure" in page ? page.failure : "unreachable")),
+  });
+}
+
+/**
+ * A call of web search: a search, with how many pages it found; or a page
+ * read, saved as a Document that opens from here, or why it couldn't be saved.
+ */
+function WebCall({ call }: { call: AnswerToolCall }) {
+  const t = useT();
+  const running = call.status === "running";
+  const page = call.webPage;
+  const saved = page && "documentId" in page ? page : null;
+  const count = call.tool === "search_web" && call.status === "done" ? call.resultCount : null;
+  const text = webCallText(t, call);
+  return (
+    <div
+      contentEditable={false}
+      data-testid="answer-web-call"
+      data-tool={call.tool}
+      data-status={call.status}
+      className="answer-call"
+    >
+      <span className="answer-call-summary answer-call-summary--static">
+        <DocumentLineIcon
+          kind="web"
+          className={`answer-call-icon ${running ? "animate-pulse" : ""}`}
+        />
+        <span className="answer-call-text" title={text}>
+          {text}
+        </span>
+        {count !== null && (
+          <span className="answer-call-note">
+            · {t(count === 1 ? "web.call.pages.one" : "web.call.pages", { count })}
+          </span>
+        )}
+        {saved && (
+          <button
+            type="button"
+            data-testid="answer-web-open"
+            onClick={() => useAppStore.getState().openDocument({ documentId: saved.documentId })}
+            className="answer-action"
+          >
+            {t("web.call.open")}
+          </button>
+        )}
+      </span>
+    </div>
+  );
+}
+
 /** A remote Connector the Answer couldn't use: it waits for the User to sign in again. */
 function SignInRequired({ connector }: { connector: string }) {
   const t = useT();
@@ -843,7 +1006,7 @@ function skillRows(calls: AnswerToolCall[]): SkillUse[] {
 }
 
 /** A Skill an Answer used, loaded by the model or chosen for the Question, with the files it read. */
-function SkillRow({ name, use, reads }: SkillUse) {
+export function SkillRow({ name, use, reads }: SkillUse) {
   const t = useT();
   const status = use?.status ?? "done";
   const summary =
@@ -861,7 +1024,15 @@ function SkillRow({ name, use, reads }: SkillUse) {
       className={`answer-call ${status === "failed" ? "answer-call--failed" : ""}`}
     >
       <p className="answer-call-summary answer-call-summary--static">
-        <SkillIcon className={`answer-call-icon ${status === "running" ? "animate-pulse" : ""}`} />
+        {status === "failed" ? (
+          <span className="answer-call-icon flex items-center justify-center">
+            <ProblemMark className="" />
+          </span>
+        ) : (
+          <SkillIcon
+            className={`answer-call-icon ${status === "running" ? "animate-pulse" : ""}`}
+          />
+        )}
         <span className="answer-call-text">{summary}</span>
         {use?.forced && <span className="answer-call-note"> · {t("skills.answer.forced")}</span>}
       </p>
@@ -877,6 +1048,27 @@ function SkillRow({ name, use, reads }: SkillUse) {
         </ul>
       )}
     </div>
+  );
+}
+
+/** How many calculated figures an Answer shows, and how many it couldn't, from its one `calculate` call. */
+export function figuresOf(calls: readonly AnswerToolCall[]): {
+  calculated: number;
+  uncalculated: number;
+} {
+  const call = calls.find(isCalculated);
+  return { calculated: call?.resultCount ?? 0, uncalculated: call?.uncalculated ?? 0 };
+}
+
+/** Under an Answer whose figures some couldn't be calculated: their numbers are missing from its text. */
+export function UncalculatedLine({ count }: { count: number }) {
+  const t = useT();
+  return (
+    <p contentEditable={false} data-testid="answer-uncalculated" className="answer-info">
+      {count === 1
+        ? t("answer.figures.uncalculated.one")
+        : t("answer.figures.uncalculated", { count })}
+    </p>
   );
 }
 
@@ -912,8 +1104,17 @@ function SearchesSummary({
   );
 }
 
-/** What each search was for, and what it found. */
-function SearchList({ searches }: { searches: AnswerToolCall[] }) {
+/**
+ * What each search was for and what it found, then how many figures the
+ * Answer calculated (ADR-0021), which have no Tool-call card.
+ */
+function SearchList({
+  searches,
+  calculated = 0,
+}: {
+  searches: AnswerToolCall[];
+  calculated?: number;
+}) {
   const t = useT();
   const results = (call: AnswerToolCall) =>
     call.status === "failed"
@@ -937,6 +1138,13 @@ function SearchList({ searches }: { searches: AnswerToolCall[] }) {
           </li>
         );
       })}
+      {calculated > 0 && (
+        <li data-testid="answer-figures">
+          {calculated === 1
+            ? t("answer.figures.calculated.one")
+            : t("answer.figures.calculated", { count: calculated })}
+        </li>
+      )}
     </ul>
   );
 }

@@ -9,7 +9,15 @@ import {
   type Page,
   test,
 } from "@playwright/test";
-import type { AssistantPlace, CoreBridge } from "../src/core/api";
+import type { Editor } from "@tiptap/core";
+import * as Y from "yjs";
+import {
+  type AssistantPlace,
+  CHOSEN_PROVIDER_FLOWS,
+  type CoreBridge,
+  type SaveChatProviderInput,
+} from "../src/core/api";
+import type { FakeTranscriberOptions } from "../src/core/transcription/fake";
 import type { DocumentLocation } from "../src/shared/documentViewer";
 import type { TestHooks } from "../src/shared/testHooks";
 
@@ -35,6 +43,10 @@ export interface LaunchOptions {
    */
   fakeChat?: boolean;
   /**
+   * Where Ollama is: a local server standing in for it (the app's `OLLAMA_HOST`).
+   */
+  ollama?: string;
+  /**
    * Where crash reports go: a test build offers them only with this, and
    * ignores the DSN a real build is made with. Point it at a local server.
    */
@@ -51,7 +63,10 @@ export interface LaunchOptions {
    * on the example Mind with "Get started". Without, a test build ships none.
    */
   examples?: boolean;
-  /** A home folder for the app instead of the User's, so nothing it writes there is theirs. */
+  /**
+   * The app's home folder, for a test that looks at what the app writes there. Without one,
+   * each launch gets its own temporary home, so nothing the app writes there is the User's.
+   */
   home?: string;
   /**
    * Where Look up asks Crossref and arXiv: a local server standing in for
@@ -63,6 +78,13 @@ export interface LaunchOptions {
    * all of them (tests/helpers/sourceServices.ts). A test build honours it.
    */
   sources?: string;
+  /**
+   * A JSON file of Connectors directory entries in place of the list that
+   * ships with the app, e.g. one served by a local stand-in. A test build honours it.
+   */
+  connectorDirectory?: string;
+  /** Where the Connectors search asks the MCP Registry: a local stand-in. A test build honours it. */
+  connectorRegistry?: string;
   /**
    * Where the ChatGPT plan signs in and asks: the origin of a local server
    * standing in for OpenAI (tests/helpers/fakeOpenAI.ts). A test build honours it.
@@ -79,6 +101,24 @@ export interface LaunchOptions {
    * always a fake that makes a tone: no test opens a device.
    */
   computerSound?: "allowed" | "denied" | "silent";
+  /** What a Meeting's fake speech-to-text engine does: slow, failing to read stretches, failing over. */
+  transcriber?: FakeTranscriberOptions;
+  /**
+   * The port of a local server standing in for the web (#128): web search's
+   * fetcher connects there for every host, its guard still deciding. A test
+   * build honours it.
+   */
+  web?: number;
+  /**
+   * What the fake text recognition model reads on each scanned page (#397):
+   * a JSON file of a `FakeScanScript`. Without, it reads nothing on them.
+   */
+  scans?: string;
+  /**
+   * The scripted Task that asks for approval and writes files (src/main/scriptedTask.ts),
+   * started with `startScriptedTask`. Needs a test build.
+   */
+  scriptedTasks?: boolean;
 }
 
 /**
@@ -97,6 +137,9 @@ export interface LaunchOptions {
  */
 export const WINDOW_SIZE = { width: 1600, height: 660 };
 
+/** The default Output location in Chinese, as the system names Documents: 文稿 on macOS, 文档 elsewhere. */
+export const DEFAULT_FOLDER_ZH = `${process.platform === "darwin" ? "文稿" : "文档"} › IncarnaMind`;
+
 /**
  * The key that, held with an arrow, moves the caret a word at a time, and with
  * Shift too selects by word: Option on macOS, Ctrl on Windows and Linux.
@@ -112,15 +155,22 @@ export async function launchApp(
   dataDir: string,
   {
     fakeChat = false,
+    ollama,
     sentryDsn,
     usageData,
     examples = false,
     home,
     referenceLookup,
     sources,
+    connectorDirectory,
+    connectorRegistry,
     chatGpt,
     keepWindow = false,
     computerSound = "allowed",
+    transcriber,
+    scans,
+    web,
+    scriptedTasks = false,
   }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
@@ -128,6 +178,8 @@ export async function launchApp(
     if (value !== undefined) env[name] = value;
   }
   delete env.ELECTRON_RUN_AS_NODE;
+  delete env.OLLAMA_HOST;
+  if (ollama) env.OLLAMA_HOST = ollama;
   delete env.INCARNAMIND_TEST_SENTRY_DSN;
   delete env.INCARNAMIND_TEST_EXAMPLES;
   delete env.INCARNAMIND_TEST_POSTHOG_KEY;
@@ -136,7 +188,13 @@ export async function launchApp(
   delete env.POSTHOG_CAPTURE_MODE;
   delete env.INCARNAMIND_TEST_REFERENCE_LOOKUP;
   delete env.INCARNAMIND_TEST_SOURCES;
+  delete env.INCARNAMIND_TEST_CONNECTOR_DIRECTORY;
+  delete env.INCARNAMIND_TEST_CONNECTOR_REGISTRY;
   delete env.INCARNAMIND_TEST_CHATGPT;
+  delete env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS;
+  delete env.INCARNAMIND_TEST_SCANS;
+  delete env.INCARNAMIND_TEST_WEB;
+  delete env.INCARNAMIND_TEST_TASKS;
   // A test never uses the ChatGPT sign-in an agent's shell may point at for checks by hand.
   delete env.INCARNAMIND_CHATGPT_PROFILE;
   env.INCARNAMIND_TEST_AUDIO = "fake";
@@ -148,19 +206,30 @@ export async function launchApp(
     env.INCARNAMIND_TEST_POSTHOG_HOST = usageData.host;
     if (usageData.testerBuild) env.INCARNAMIND_TEST_TESTER_BUILD = "1";
   }
-  if (home) env.HOME = home;
+  const appHome = home ?? (await mkdtemp(join(tmpdir(), "incarnamind-home-")));
+  env.HOME = appHome;
   if (referenceLookup) env.INCARNAMIND_TEST_REFERENCE_LOOKUP = referenceLookup;
   if (sources) env.INCARNAMIND_TEST_SOURCES = sources;
+  if (connectorDirectory) env.INCARNAMIND_TEST_CONNECTOR_DIRECTORY = connectorDirectory;
+  // Nowhere, unless a test serves one: a search in a test never reaches the real Registry.
+  env.INCARNAMIND_TEST_CONNECTOR_REGISTRY = connectorRegistry ?? "http://127.0.0.1:9";
   if (chatGpt) env.INCARNAMIND_TEST_CHATGPT = chatGpt;
+  if (scans) env.INCARNAMIND_TEST_SCANS = scans;
+  if (web) env.INCARNAMIND_TEST_WEB = String(web);
+  if (scriptedTasks) env.INCARNAMIND_TEST_TASKS = "1";
   env.INCARNAMIND_DATA_DIR = dataDir;
   env.INCARNAMIND_TEST_HOOKS = "1";
   if (fakeChat) env.INCARNAMIND_FAKE_CHAT = "1";
   env.INCARNAMIND_TEST_EMBEDDER = "fake";
   env.INCARNAMIND_TEST_TRANSCRIBER = "fake";
+  if (transcriber) env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS = JSON.stringify(transcriber);
 
   const app = await electron.launch({ args: [appDir], env });
   openApps.set(app, dataDir);
-  app.on("close", () => openApps.delete(app));
+  app.on("close", () => {
+    openApps.delete(app);
+    if (!home) void rm(appHome, { recursive: true, force: true, maxRetries: 3 });
+  });
   const window = await app.firstWindow();
   await window.getByTestId("plus-menu").waitFor();
   if (!keepWindow) {
@@ -171,6 +240,66 @@ export async function launchApp(
   }
   return { app, window };
 }
+
+/**
+ * Starts the scripted Task (`LaunchOptions.scriptedTasks`) in a Mind: for each
+ * file it asks for approval, then writes the file into `folder`. Returns its id.
+ */
+export const startScriptedTask = (
+  app: ElectronApplication,
+  mindId: string,
+  input: { folder: string; files: string[] },
+) =>
+  app.evaluate(
+    (_electron, [mind, given]) =>
+      (
+        globalThis as unknown as {
+          incarnamindScriptedTask: { start(mindId: string, input: unknown): string };
+        }
+      ).incarnamindScriptedTask.start(mind, given),
+    [mindId, input] as const,
+  );
+
+/**
+ * Returns once everything the app captured for usage data so far has reached
+ * the server `LaunchOptions.usageData` names, so a test can say nothing else
+ * did without waiting a while for it.
+ */
+export const flushUsageData = (app: ElectronApplication) =>
+  app.evaluate(async () => {
+    const hooks = (globalThis as { incarnamindUsageData?: { flush(): Promise<void> } })
+      .incarnamindUsageData;
+    if (!hooks)
+      throw new Error("Launch with `usageData`: only then has the app a usage data sender.");
+    await hooks.flush();
+  });
+
+/**
+ * Stands in for the system's notifications: each one shown is recorded
+ * instead (`notificationsShown`). Notifications made before this aren't.
+ */
+export const recordNotifications = (app: ElectronApplication) =>
+  app.evaluate(({ Notification }) => {
+    const shown: { title: string; body: string }[] = [];
+    (globalThis as { notificationsShown?: typeof shown }).notificationsShown = shown;
+    Notification.isSupported = () => true;
+    Notification.prototype.show = function show(this: Electron.Notification) {
+      shown.push({ title: this.title, body: this.body });
+    };
+  });
+
+export const notificationsShown = (app: ElectronApplication) =>
+  app.evaluate(
+    () =>
+      (globalThis as { notificationsShown?: { title: string; body: string }[] })
+        .notificationsShown ?? [],
+  );
+
+/** Chooses the Edit menu's Undo or Redo, as the application menu has it now. */
+export const clickEditItem = (app: ElectronApplication, id: "edit.undo" | "edit.redo") =>
+  app.evaluate(({ Menu }, itemId) => {
+    Menu.getApplicationMenu()?.getMenuItemById(itemId)?.click();
+  }, id);
 
 /**
  * "New Mind" from the sidebar header's "+" menu, the one place to add: a Mind
@@ -199,6 +328,20 @@ export async function openFolderInLibrary(window: Page, name: string): Promise<v
   await folder.getByTestId("folder-menu").click();
   await folder.getByTestId("folder.open").click();
   await expect(window.getByTestId("library")).toBeVisible();
+}
+
+/**
+ * Opens a Folder's form (its name, description and evidence choice) under its
+ * section in the Library, from its menu in the sidebar: "Edit Description…".
+ */
+export async function editFolderInLibrary(window: Page, name: string): Promise<Locator> {
+  const folder = sidebarFolder(window, name);
+  await folder.getByTestId("folder-row").hover();
+  await folder.getByTestId("folder-menu").click();
+  await folder.getByTestId("folder.editDescription").click();
+  const form = window.getByTestId("library").getByTestId("folder-form");
+  await expect(form).toBeVisible();
+  return form;
 }
 
 /**
@@ -351,6 +494,37 @@ export async function useOutputLocation(window: Page, folder: string): Promise<v
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     await bridge.setOutputLocation(path);
   }, folder);
+}
+
+/** The result line's saved file, once it says it saved one. */
+export async function savedPath(window: Page, name: string): Promise<string> {
+  const done = window.getByTestId("export-result").getByTestId("export-done");
+  await expect(done).toHaveText(`Saved ${name}`, { timeout: 30_000 });
+  return (await done.getAttribute("title")) ?? "";
+}
+
+/** The menu of the Mind's tab, opened by a right-click on the tab, as a person opens it. */
+export async function tabMenu(window: Page): Promise<Locator> {
+  const tab = window.getByRole("tab", { selected: true }).first();
+  await pointAndClick(window, tab, { button: "right" });
+  const menu = tab.getByTestId("tab-actions");
+  await expect(menu).toBeVisible();
+  return menu;
+}
+
+/** "Import a Word file…" from the "+" menu; the test answers the system's open dialog first. */
+export async function importWordFromMenu(window: Page): Promise<Locator> {
+  await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-import-word").click();
+  const dialog = window.getByTestId("word-import-dialog");
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+/** Export options…, from the tab's menu; resolves once the sheet shows `title`. */
+export async function openOptions(window: Page, title: string): Promise<void> {
+  await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.exportOptions"));
+  await expect(window.getByTestId("export-dialog").getByRole("heading")).toHaveText(title);
 }
 
 /**
@@ -580,11 +754,12 @@ export async function setWindowSize(
 }
 
 /**
- * Asks for the content size and waits until the page has it, asking again
- * while it hasn't. On Linux (Xvfb) a size asked for while the window is still
- * taking the one before it (a launch sets one, then a test its own) is
- * sometimes dropped, and the page stays as it was (#459), so one ask is not
- * enough. The launch also waits for the height; `setWindowSize` only the width.
+ * Asks for the content size once, waits until the page has it, then until the
+ * page has drawn a frame at it. Chromium sends a page its next size only after
+ * the page has drawn at the one before. On a runner's first launch the first
+ * frames can take seconds, so a size asked right after the launch's waited
+ * that long, while the page still reported the old one (#432). The launch also
+ * waits for the height; `setWindowSize` only the width.
  */
 async function resizeContent(
   app: ElectronApplication,
@@ -593,27 +768,60 @@ async function resizeContent(
   height: number,
   { message, waitForHeight = false }: { message?: string; waitForHeight?: boolean } = {},
 ): Promise<void> {
-  const ask = () =>
-    app.evaluate(
-      ({ BrowserWindow }, size) =>
-        BrowserWindow.getAllWindows()[0]?.setContentSize(size.width, size.height),
-      { width, height },
+  const browserWindow = await app.browserWindow(window);
+  await browserWindow.evaluate((win, asked) => win.setContentSize(asked.width, asked.height), {
+    width,
+    height,
+  });
+  const look = () =>
+    window.evaluate(() => ({ width: globalThis.innerWidth, height: globalThis.innerHeight }));
+  try {
+    await expect
+      .poll(
+        async () => {
+          const page = await look();
+          return [page.width, waitForHeight ? page.height : height];
+        },
+        { message },
+      )
+      .toEqual([width, height]);
+  } catch (error) {
+    const content = await browserWindow.evaluate((win) => win.getContentSize());
+    const page = await look();
+    throw new Error(
+      `${message ?? "The window did not reach its size"}: asked ${width} × ${height}; the window's content is ${content.join(" × ")}, the page ${page.width} × ${page.height}.`,
+      { cause: error },
     );
-  await ask();
-  await expect
-    .poll(
-      async () => {
-        const [innerWidth, innerHeight] = await window.evaluate(() => [
-          globalThis.innerWidth,
-          globalThis.innerHeight,
-        ]);
-        const arrived = innerWidth === width && (!waitForHeight || innerHeight === height);
-        if (!arrived) await ask();
-        return [innerWidth, waitForHeight ? innerHeight : height];
-      },
-      { message },
-    )
-    .toEqual([width, height]);
+  }
+  await window.evaluate(
+    () =>
+      new Promise((drawn) => requestAnimationFrame(() => requestAnimationFrame(() => drawn(null)))),
+  );
+}
+
+/** What the page copies goes to `copied` instead of the machine's clipboard. */
+export async function catchCopies(window: Page): Promise<void> {
+  await window.evaluate(() => {
+    const caught = globalThis as unknown as { copied?: string };
+    navigator.clipboard.writeText = async (text: string) => {
+      caught.copied = text;
+    };
+  });
+}
+
+/** What the page last copied since `catchCopies`. */
+export const copied = (window: Page) =>
+  window.evaluate(() => (globalThis as unknown as { copied?: string }).copied ?? "");
+
+/** Switches the interface's language, as Settings does. */
+export function setLanguage(window: Page, language: "en" | "zh-CN"): Promise<unknown> {
+  return window.evaluate(
+    (value) =>
+      (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+        user: { language: value },
+      }),
+    language,
+  );
 }
 
 /** How many animations are running (src/renderer/src/motion.ts), leaving copies included. */
@@ -787,7 +995,10 @@ export async function expectFirstTabAtCardStart(window: Page, firstTab: Locator)
 export async function pointAndClick(
   window: Page,
   target: Locator,
-  { button = "left" }: { button?: "left" | "right" } = {},
+  {
+    button = "left",
+    modifiers = [],
+  }: { button?: "left" | "right"; modifiers?: readonly ("ControlOrMeta" | "Shift")[] } = {},
 ): Promise<void> {
   await target.scrollIntoViewIfNeeded();
   const box = await target.boundingBox();
@@ -795,7 +1006,12 @@ export async function pointAndClick(
   const x = box.x + box.width / 2;
   const y = box.y + box.height / 2;
   await window.mouse.move(x, y, { steps: 8 });
-  await window.mouse.click(x, y, { button });
+  for (const key of modifiers) await window.keyboard.down(key);
+  try {
+    await window.mouse.click(x, y, { button });
+  } finally {
+    for (const key of modifiers.toReversed()) await window.keyboard.up(key);
+  }
 }
 
 /**
@@ -875,41 +1091,56 @@ export async function dragBlock(window: Page, block: Locator, target: Locator): 
 }
 
 /**
- * Puts the cursor on an empty line as a person does, clicking where its text
- * would start: further along, the hint over the line after an Answer has its
- * "press ⌘J…" link, which starts a Question once the cursor is on the line.
+ * Where `words` are drawn in a line of text: their left and right edges, and
+ * their middle line. They may run across marks (AI text and the User's, bold).
  */
-export async function clickEmptyLine(line: Locator): Promise<void> {
-  await line.click({ position: { x: 4, y: 14 } });
-  // What is typed next goes where the caret is: wait until it is on the line.
-  await expect
-    .poll(() =>
-      line.evaluate((element) => {
-        const caret = element.ownerDocument.getSelection()?.anchorNode;
-        const focused = element.ownerDocument.activeElement;
-        return !!caret && element.contains(caret) && !!focused && focused.contains(element);
-      }),
-    )
-    .toBe(true);
-}
-
-/** Where `words` are drawn in a line of text: their left and right edges, and their middle line. */
 async function wordsBox(line: Locator, words: string) {
   const box = await line.evaluate((element, wanted) => {
     const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      const at = node.textContent?.indexOf(wanted) ?? -1;
-      if (at < 0) continue;
-      const range = element.ownerDocument.createRange();
-      range.setStart(node, at);
-      range.setEnd(node, at + wanted.length);
-      const rect = range.getBoundingClientRect();
-      return { left: rect.left, right: rect.right, y: rect.top + rect.height / 2 };
-    }
-    return null;
+    const texts: Text[] = [];
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) texts.push(node as Text);
+    const at = texts
+      .map((text) => text.data)
+      .join("")
+      .indexOf(wanted);
+    if (at < 0) return null;
+    /** The text and offset `offset` characters in; an end falls at the end of a text, a start at the next. */
+    const place = (offset: number, end: boolean) => {
+      let start = 0;
+      for (const text of texts) {
+        if (offset < start + text.length || (end && offset === start + text.length)) {
+          return { text, offset: offset - start };
+        }
+        start += text.length;
+      }
+      return null;
+    };
+    const from = place(at, false);
+    const to = place(at + wanted.length, true);
+    if (!from || !to) return null;
+    const range = element.ownerDocument.createRange();
+    range.setStart(from.text, from.offset);
+    range.setEnd(to.text, to.offset);
+    const rect = range.getBoundingClientRect();
+    return { left: rect.left, right: rect.right, y: rect.top + rect.height / 2 };
   }, words);
   if (!box) throw new Error(`"${words}" isn't in the line.`);
   return box;
+}
+
+/**
+ * Returns once ProseMirror has settled its selection with the page after the editor got the
+ * focus. 20 ms after the focus it puts its own selection back into the page if the page's has
+ * moved since, which undoes a key pressed in those 20 ms (⌘A, End). Called after the focus, a
+ * 21 ms timer runs after the one ProseMirror set then.
+ */
+export const afterEditorFocus = (window: Page) =>
+  window.evaluate(() => new Promise((done) => setTimeout(done, 21)));
+
+/** Gives the editor the focus, and waits as `afterEditorFocus` says. */
+export async function focusEditor(window: Page, editor: Locator): Promise<void> {
+  await editor.focus();
+  await afterEditorFocus(window);
 }
 
 /**
@@ -930,6 +1161,9 @@ export async function slideSelect(
   await window.mouse.down();
   await window.mouse.move(end.right - 1, end.y, { steps: 12 });
   await window.mouse.up();
+  // After a drag, ProseMirror puts its selection back into the page in a task queued as the
+  // mouse comes up; a key pressed before that task runs is undone by it. This waits for it.
+  await window.evaluate(() => new Promise((resolve) => setTimeout(resolve)));
 }
 
 /**
@@ -942,8 +1176,310 @@ export async function enterContent(window: Page): Promise<void> {
   await expect(window.getByTestId("mind-editor")).toBeFocused();
 }
 
+/**
+ * Puts the cursor at the end of a line of text as a person does: slides to
+ * the right of its words and clicks there (Home and End don't move the
+ * cursor on macOS).
+ */
+export async function clickEndOf(window: Page, line: Locator): Promise<void> {
+  const box = await line.boundingBox();
+  if (!box) throw new Error("The line isn't visible.");
+  const x = box.x + box.width - 4;
+  const y = box.y + box.height - 10;
+  await window.mouse.move(x, y, { steps: 6 });
+  await window.mouse.click(x, y);
+  // A key pressed next acts where the editor's cursor is: wait until it is in the line.
+  await expect
+    .poll(() =>
+      line.evaluate((element) => {
+        const root = element.closest(".ProseMirror") as (Element & { editor?: Editor }) | null;
+        const view = root?.editor?.view;
+        if (!view) return false;
+        const { from, empty } = view.state.selection;
+        const at = view.domAtPos(from).node;
+        return empty && element.contains(at);
+      }),
+    )
+    .toBe(true);
+}
+
+/** Slides the mouse onto an element, in steps, as a person does, and leaves it there: returns where. */
+export async function pointAt(window: Page, target: Locator): Promise<{ x: number; y: number }> {
+  await target.scrollIntoViewIfNeeded();
+  const box = await target.boundingBox();
+  if (!box) throw new Error("The element isn't visible.");
+  const point = { x: box.x + Math.min(box.width / 2, 40), y: box.y + box.height / 2 };
+  await window.mouse.move(point.x, point.y, { steps: 8 });
+  return point;
+}
+
+/** Presses Tab, or Shift+Tab if `target` comes before the focus, until `target` has the focus. */
+export async function tabTo(window: Page, target: Locator, max = 40): Promise<void> {
+  const key = (await target.evaluate((element) => {
+    const focused = document.activeElement;
+    return (
+      focused !== null &&
+      focused !== document.body &&
+      (focused.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_PRECEDING) !== 0
+    );
+  }))
+    ? "Shift+Tab"
+    : "Tab";
+  for (let step = 0; step < max; step++) {
+    if (await target.evaluate((element) => element === document.activeElement)) return;
+    await window.keyboard.press(key);
+  }
+  await expect(target).toBeFocused();
+}
+
+/**
+ * Whether the focused control shows DESIGN.md's ring: a solid 2px accent outline, its own or,
+ * for the main button of a sidebar row, its row's.
+ */
+export const focusRingShows = (window: Page) =>
+  window.evaluate(() => {
+    const element = document.activeElement as HTMLElement | null;
+    if (!element) return false;
+    const probe = document.createElement("span");
+    probe.style.color = "var(--color-accent)";
+    document.body.append(probe);
+    const accent = getComputedStyle(probe).color;
+    probe.remove();
+    const rings = (holder: Element | null) => {
+      if (!holder) return false;
+      const style = getComputedStyle(holder);
+      return (
+        style.outlineStyle === "solid" &&
+        Number.parseFloat(style.outlineWidth) >= 2 &&
+        style.outlineColor === accent
+      );
+    };
+    return (
+      element.matches(":focus-visible") &&
+      (rings(element) || (element.matches(".row-main") && rings(element.closest(".group"))))
+    );
+  });
+
+/**
+ * Types a name through an input method: the composition is open, its Enter
+ * (the one that picks a candidate) changes nothing, and the next Enter saves.
+ */
+export async function typeWithInputMethod(
+  window: Page,
+  field: Locator,
+  name: string,
+): Promise<void> {
+  const session = await window.context().newCDPSession(window);
+  try {
+    await session.send("Input.imeSetComposition", {
+      text: "xinming",
+      selectionStart: 7,
+      selectionEnd: 7,
+    });
+    await field.dispatchEvent("keydown", { key: "Enter", isComposing: true, bubbles: true });
+    await expect(field).toBeVisible();
+    await session.send("Input.insertText", { text: name });
+    await expect(field).toHaveValue(name);
+  } finally {
+    await session.detach();
+  }
+  await window.keyboard.press("Enter");
+}
+
+/** Sets the sidebar's width, as dragging its edge does (165 is the narrowest), and waits for it. */
+export async function setSidebarWidth(window: Page, width: number): Promise<void> {
+  await window.evaluate(
+    (sidebarWidth) =>
+      (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+        device: { sidebarWidth },
+      }),
+    width,
+  );
+  await expect
+    .poll(async () => (await window.getByTestId("sidebar").boundingBox())?.width)
+    .toBeCloseTo(width, 0);
+}
+
+/** The assistant's Answers (#201), in the conversation it shows. */
+export const assistantAnswers = (window: Page) =>
+  window.getByTestId("assistant").getByTestId("assistant-answer");
+
+/**
+ * Asks a Question as a person does: ⌘J, the words, Enter. It is asked in the
+ * assistant's conversation (#201); resolves with its Answer there once it is
+ * written (the scripted model's, with `fakeChat`).
+ */
+export async function askInAssistant(window: Page, question: string): Promise<Locator> {
+  const answers = assistantAnswers(window);
+  const before = await answers.count();
+  await window.keyboard.press("ControlOrMeta+j");
+  await expect(window.getByTestId("composer-input")).toBeFocused();
+  await window.keyboard.type(question);
+  await window.keyboard.press("Enter");
+  const questions = window.getByTestId("assistant").getByTestId("assistant-question");
+  await expect(questions.last()).toContainText(question);
+  await expect(answers).toHaveCount(before + 1);
+  const answer = answers.last();
+  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  return answer;
+}
+
+/** The tiny MCP server the core tests use: `lookup_tide` is read-only, `book_boat` isn't. */
+const TIDE_SERVER = resolve(__dirname, "../tests/fixtures/mcp-server.mjs");
+
+/**
+ * Saves a chat provider through the core's bridge as it was left when
+ * choosing it wasn't yet the consent (ADR-0022): nothing allowed, so the
+ * first Question asks.
+ */
+export async function saveProviderUnasked(
+  window: Page,
+  input: SaveChatProviderInput,
+): Promise<void> {
+  await window.evaluate(
+    async ({ provider, flows }) => {
+      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      const saved = await bridge.saveChatProvider(provider);
+      const service = (await bridge.listChatProviders()).find(
+        (each) => each.id === saved.id,
+      )?.service;
+      if (service) for (const flow of flows) await bridge.revokeConsent(flow, service.id);
+    },
+    { provider: input, flows: CHOSEN_PROVIDER_FLOWS },
+  );
+}
+
+/** Adds the tiny server as a Connector through the core's bridge, waits until it's ready, and returns its id. */
+export async function addTideConnector(window: Page): Promise<string> {
+  return window.evaluate(
+    async ({ node, server }) => {
+      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      const connector = await bridge.addConnector({ name: "Tides", command: node, args: [server] });
+      for (let tries = 0; tries < 300; tries++) {
+        const found = (await bridge.listConnectors()).find((each) => each.id === connector.id);
+        if (found?.state === "ready") return connector.id;
+        await new Promise((done) => setTimeout(done, 100));
+      }
+      throw new Error("The Connector didn't get ready.");
+    },
+    { node: process.execPath, server: TIDE_SERVER },
+  );
+}
+
+/**
+ * Unfolds an Answer's steps in the assistant (#391) with the mouse, unless
+ * they are open, and returns their timeline: the reasoning, the searches,
+ * the Skills and Connector calls it made, and the check.
+ */
+export async function openSteps(window: Page, answer: Locator): Promise<Locator> {
+  const toggle = answer.getByTestId("answer-steps");
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") await pointAndClick(window, toggle);
+  const timeline = answer.getByTestId("answer-timeline");
+  await expect(timeline).toBeVisible();
+  return timeline;
+}
+
+/**
+ * Adds an Answer in the assistant to the Mind in focus, at its cursor (or
+ * end), with the mouse, as a person keeps one (#201), and waits until it is in.
+ */
+export async function addToNote(window: Page, answer: Locator): Promise<void> {
+  await pointAt(window, answer.getByTestId("assistant-answer-text"));
+  await pointAndClick(window, answer.getByTestId("answer-add"));
+  await expect(answer.getByTestId("answer-added")).toBeVisible();
+}
+
+/** A Block of a Mind as Minds held them before Questions went to the assistant (#201). */
+export type BlockFromBefore =
+  | { note: string }
+  | { heading: string }
+  | { question: string; answer: string };
+
+/**
+ * Makes a Mind as one written before Questions were asked in the assistant
+ * (#201) holds them: its Questions and Answers in the note, among its Notes.
+ * Made through the core's bridge, in the stored shape. Returns its id.
+ */
+export async function mindWrittenBefore(
+  window: Page,
+  title: string,
+  blocks: BlockFromBefore[],
+): Promise<string> {
+  const doc = new Y.Doc();
+  const fragment = doc.getXmlFragment("blocks");
+  const element = (
+    type: string,
+    text: string,
+    attributes: Record<string, number> = {},
+    id: string = crypto.randomUUID(),
+  ) => {
+    const node = new Y.XmlElement(type);
+    node.setAttribute("id", id);
+    // Stored as the editor stores them: a heading's level is a number.
+    for (const [key, value] of Object.entries(attributes)) {
+      node.setAttribute(key, value as unknown as string);
+    }
+    if (text) node.insert(0, [new Y.XmlText(text)]);
+    return node;
+  };
+  for (const block of blocks) {
+    if ("note" in block) fragment.push([element("paragraph", block.note)]);
+    else if ("heading" in block) fragment.push([element("heading", block.heading, { level: 2 })]);
+    else {
+      const questionId = crypto.randomUUID();
+      const question = element("question", block.question, {}, questionId);
+      const answer = new Y.XmlElement("answer");
+      answer.setAttribute("id", crypto.randomUUID());
+      answer.setAttribute("questionId", questionId);
+      answer.setAttribute("status", "done");
+      answer.insert(0, [element("paragraph", block.answer)]);
+      fragment.push([question, answer]);
+    }
+  }
+  const update = Array.from(Y.encodeStateAsUpdate(doc));
+  return window.evaluate(
+    async ([name, change]) => {
+      const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      const mind = await core.createMind({ title: name });
+      await core.applyMindUpdate(mind.id, new Uint8Array(change));
+      await core.closeMind(mind.id);
+      return mind.id;
+    },
+    [title, update] as const,
+  );
+}
+
+/**
+ * Stubs the window's clipboard, so a test can read what Copy wrote and the
+ * computer's own clipboard stays as it was. `copied()` gives it, by type.
+ */
+export async function stubClipboard(window: Page) {
+  await window.evaluate(() => {
+    const copied: Record<string, string> = {};
+    (globalThis as { copied?: unknown }).copied = copied;
+    navigator.clipboard.write = async (items: ClipboardItem[]) => {
+      for (const item of items) {
+        for (const type of item.types) copied[type] = await (await item.getType(type)).text();
+      }
+    };
+  });
+  return () =>
+    window.evaluate(() => (globalThis as { copied?: Record<string, string> }).copied ?? {});
+}
+
 /** A fresh, empty data folder. Remove it with `removeDataFolder`. */
 export const createDataFolder = () => mkdtemp(join(tmpdir(), "incarnamind-smoke-"));
+
+/** Closes an app, and kills it if it hasn't quit in 10 s, so one stuck app can't hold up the worker. */
+async function closeOrKill(app: ElectronApplication): Promise<void> {
+  const quit = app.close().catch(() => undefined);
+  let timer: NodeJS.Timeout | undefined;
+  const stuck = new Promise<"stuck">((resolve) => {
+    timer = setTimeout(() => resolve("stuck"), 10_000);
+  });
+  if ((await Promise.race([quit, stuck])) === "stuck") app.process().kill("SIGKILL");
+  clearTimeout(timer);
+}
 
 /**
  * Removes a data folder, after closing an app the test left open on it. If
@@ -962,7 +1498,7 @@ export async function removeDataFolder(dataDir: string): Promise<void> {
       const shot = await window.screenshot({ path }).catch(() => undefined);
       if (shot) await info.attach("app-window", { path, contentType: "image/png" });
     }
-    await app.close().catch(() => undefined);
+    await closeOrKill(app);
   }
   await rm(dataDir, { recursive: true, force: true, maxRetries: 3 });
 }
@@ -970,3 +1506,61 @@ export async function removeDataFolder(dataDir: string): Promise<void> {
 /** The core's bridge in the page, for a test to set things up or read them: `(await coreOf(window)).evaluate(...)`. */
 export const coreOf = (window: Page) =>
   window.evaluateHandle(() => (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind);
+
+/**
+ * What the core holds that a change to a Mind, Document, Folder, Tag, Linked folder or Recently
+ * deleted touches, as plain data: a test compares it before and after, through the bridge and not
+ * the screen. Dates are left out, as a change taken back is stamped again, and so is where a
+ * Document's automatic tagging is, which moves on by itself when a Document changes Folder.
+ */
+export async function coreState(window: Page): Promise<unknown> {
+  return (await coreOf(window)).evaluate(async (core) => {
+    const [minds, documents, library, tags, linkedFolders, deleted] = await Promise.all([
+      core.listMinds(),
+      core.listDocuments(),
+      core.getLibrary(),
+      core.listTags(),
+      core.listLinkedFolders(),
+      core.listDeleted(),
+    ]);
+    const state = {
+      minds,
+      documents,
+      folders: library.groups,
+      assignments: library.assignments,
+      tags,
+      linkedFolders,
+      deleted,
+    };
+    const progress = ["tagging", "taggingError"];
+    return JSON.parse(
+      JSON.stringify(state, (key, value) =>
+        key.endsWith("At") || progress.includes(key) ? undefined : value,
+      ),
+    );
+  });
+}
+
+/**
+ * The commands a menu holds, in order, with its rules as "—": the menu's items by their test ids,
+ * which are the commands' IDs.
+ */
+export async function menuCommands(menu: Locator): Promise<string[]> {
+  await expect(menu).toBeVisible();
+  // Its items draw a moment after the popover shows.
+  await expect(menu.getByRole("menuitem").first()).toBeVisible();
+  return menu.evaluate((element) =>
+    Array.from(element.children).map((child) =>
+      child.getAttribute("role") === "menuitem" ? (child.getAttribute("data-testid") ?? "") : "—",
+    ),
+  );
+}
+
+/** Clicks the empty foot of the sidebar's tree, so the focus isn't in text and ⌘Z goes to the app's changes. */
+export async function leaveText(window: Page): Promise<void> {
+  const box = await window.getByTestId("sidebar-tree").boundingBox();
+  if (!box) throw new Error("The sidebar isn't showing.");
+  await window.mouse.move(box.x + box.width / 2, box.y + box.height - 8, { steps: 8 });
+  await window.mouse.down();
+  await window.mouse.up();
+}

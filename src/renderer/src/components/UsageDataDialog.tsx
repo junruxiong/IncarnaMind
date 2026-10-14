@@ -1,8 +1,7 @@
 import { useId, useState } from "react";
 import type { MessageKey } from "../../../shared/i18n";
 import { core } from "../core";
-import { errorMessage } from "../errors";
-import { useT } from "../i18n";
+import { useGap, useT } from "../i18n";
 import { usageDataQuestionWaiting, useAppStore } from "../store";
 import {
   buttonClass,
@@ -21,7 +20,7 @@ import { useModal } from "./useModal";
 
 /** Every event and field usage data can hold, for people to read. */
 export const USAGE_DATA_DETAILS_URL =
-  "https://github.com/junruxiong/IncarnaMind/blob/main/docs/privacy.md#usage-data";
+  "https://github.com/IncarnaMind/IncarnaMind/blob/main/docs/privacy.md#usage-data";
 
 /** What usage data looks like, in words. */
 const EXAMPLES: readonly MessageKey[] = [
@@ -39,6 +38,7 @@ const EXAMPLES: readonly MessageKey[] = [
  */
 export function UsageDataDialog() {
   const t = useT();
+  const gap = useGap();
   const id = useId();
   const privacy = useAppStore((state) => state.privacy);
   const waiting = usageDataQuestionWaiting(privacy);
@@ -58,7 +58,7 @@ export function UsageDataDialog() {
     } catch (failure) {
       // Not answered after all: ask again.
       setAnswered(false);
-      useAppStore.setState({ actionError: errorMessage(failure) });
+      useAppStore.getState().reportError(failure);
     }
   };
 
@@ -116,7 +116,8 @@ export function UsageDataDialog() {
             </div>
           )}
           <p className={hintClass}>
-            {t("usageData.dialog.change")}{" "}
+            {t("usageData.dialog.change")}
+            {gap(t("usageData.dialog.change"), t("usageData.dialog.details"))}
             <a
               href={USAGE_DATA_DETAILS_URL}
               target="_blank"

@@ -6,14 +6,17 @@ import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import {
   addDocuments,
+  assistantAnswers,
   createDataFolder,
   dismissChatSetup,
   documentIdOf,
   interceptOpenDialog,
   interceptShowItemInFolder,
   launchApp,
+  motionSettled,
   newMind,
   openDocumentAt,
+  openSteps,
   pathsShown,
   removeDataFolder,
   useOutputLocation,
@@ -89,8 +92,8 @@ test("a failed Answer says so under itself with one action: the key's page in Se
     await window.keyboard.type("What is in my Documents?");
     await window.keyboard.press("Enter");
 
-    // The key was refused: the line names the model, in place under the Answer.
-    const answer = window.getByTestId("answer");
+    // The key was refused: the line names the model, in place under the Answer, in the assistant.
+    const answer = assistantAnswers(window).last();
     await expect(answer).toHaveAttribute("data-status", "failed", { timeout: 15_000 });
     const error = answer.getByTestId("answer-error");
     await expect(error).toContainText("The key for test-model was refused");
@@ -99,10 +102,12 @@ test("a failed Answer says so under itself with one action: the key's page in Se
     await expect(line).toHaveCSS("color", "rgb(101, 107, 116)");
     await expect(line.getByRole("button")).toHaveCount(1);
     await expect(line.getByRole("button")).toHaveText("Check the key");
-    // It sits under the Answer's text, in the Mind, with no dialog or toast about it.
+    // It sits under the Answer's text, in the assistant, with no dialog or toast about it.
     expect(
       await answer.evaluate((node) => {
-        const text = node.querySelector(".answer-content")?.getBoundingClientRect().bottom ?? 0;
+        const text =
+          node.querySelector('[data-testid="assistant-answer-text"]')?.getBoundingClientRect()
+            .bottom ?? 0;
         const line = node.querySelector('[data-testid="answer-error"]')?.getBoundingClientRect();
         return (line?.top ?? 0) >= text - 1;
       }),
@@ -117,8 +122,10 @@ test("a failed Answer says so under itself with one action: the key's page in Se
     await window.keyboard.press("Escape");
     await expect(window.getByTestId("settings")).toBeHidden();
 
-    // The provider has a problem now: Regenerate, and the line offers to try again, which asks again.
+    // The provider has a problem now: Regenerate, at the end of its steps, and the line offers to
+    // try again, which asks again.
     model.state.status = 500;
+    await openSteps(window, answer);
     await answer.getByTestId("answer-regenerate").click();
     await expect(error).toContainText("The provider ran into a problem", { timeout: 60_000 });
     await expect(error.getByTestId("answer-error-action")).toHaveText("Try again");
@@ -272,12 +279,12 @@ test("a Document that is gone says so in the viewer and in Chinese; one that can
   await expect(removed.getByTestId("viewer-problem")).toContainText("已从 IncarnaMind 中删除");
   await expect(removed.getByRole("button")).toHaveCount(0);
   await expect(removed).toContainText("Rent is due monthly.");
-  await window.waitForTimeout(600);
+  await motionSettled(window);
   await screenshot(window, "viewer-deleted-zh");
   await app.close();
 });
 
-test("an export that can't be saved says why under the format, and Change output location… saves it elsewhere; then Saved … shows it in the file manager", async () => {
+test("an export that can't be saved says why in the Mind, and Change output location… saves it elsewhere; then Saved … shows it in the file manager", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await newMind(window);
@@ -291,11 +298,10 @@ test("an export that can't be saved says why under the format, and Change output
   await useOutputLocation(window, readOnly);
   await interceptShowItemInFolder(app);
   await window.getByTestId("export-mind").click();
-  const dialog = window.getByTestId("export-dialog");
-  await dialog.getByTestId("export-save").click();
+  const result = window.getByTestId("export-result");
 
-  // The folder is read-only: the line says so, with its one action, and nothing pops up over the dialog.
-  const problem = dialog.getByTestId("export-problem");
+  // The folder is read-only: the line says so, in the Mind, with its one action, and nothing pops up.
+  const problem = result.getByTestId("export-problem");
   await expect(problem).toHaveText(
     "Couldn't save: the folder is read-only · Change output location…",
   );
@@ -303,35 +309,34 @@ test("an export that can't be saved says why under the format, and Change output
   await expect(problem.getByRole("button")).toHaveCount(1);
   await expect(problem).toHaveCSS("color", "rgb(101, 107, 116)");
   await expect(window.getByRole("alert")).toHaveCount(1);
-  await screenshot(dialog, "export-cant-save-en");
+  await screenshot(result, "export-cant-save-en");
 
   // Change output location…, by keyboard: the folder picker, then saved there.
   await interceptOpenDialog(app, sources);
-  await dialog.getByRole("button", { name: "Cancel" }).focus();
+  await result.getByTestId("export-dismiss").focus();
   await window.keyboard.press("Shift+Tab");
-  await expect(dialog.getByTestId("export-change-location")).toBeFocused();
-  await expect(dialog.getByTestId("export-change-location")).toHaveCSS("outline-style", "solid");
+  await expect(result.getByTestId("export-change-location")).toBeFocused();
+  await expect(result.getByTestId("export-change-location")).toHaveCSS("outline-style", "solid");
   await window.keyboard.press("Enter");
-  const done = dialog.getByTestId("export-done");
-  await expect(done).toHaveText(/^Saved Tides\.docx · Show in (Finder|folder)$/);
+  const done = result.getByTestId("export-done");
+  await expect(done).toHaveText("Saved Tides.docx");
   await expect(done).toHaveAttribute("role", "status");
+  await expect(result.getByTestId("export-show")).toHaveText(/^Show in (Finder|folder)$/);
   await expect(problem).toHaveCount(0);
-  await screenshot(dialog, "export-saved-en");
+  await screenshot(result, "export-saved-en");
 
-  // Show in Finder is the line's action.
-  await done.getByTestId("export-show").click();
-  await expect(dialog).toBeHidden();
-  expect(await pathsShown(app)).toEqual([join(await realpath(sources), "Tides.docx")]);
+  // Show in Finder is one of the line's actions.
+  await result.getByTestId("export-show").click();
+  await expect.poll(() => pathsShown(app)).toEqual([join(await realpath(sources), "Tides.docx")]);
 
   // The same two lines in Chinese; the file saved before stays, and this one takes the next name.
   await bridge(window).settings("zh-CN");
   await useOutputLocation(window, readOnly);
   await window.getByTestId("export-mind").click();
-  await dialog.getByTestId("export-save").click();
   await expect(problem).toHaveText("无法保存：这个文件夹是只读的 · 更改保存位置…");
-  await screenshot(dialog, "export-cant-save-zh");
-  await dialog.getByTestId("export-change-location").click();
-  await expect(dialog.getByTestId("export-done")).toContainText("已保存“Tides 2.docx”");
-  await screenshot(dialog, "export-saved-zh");
+  await screenshot(result, "export-cant-save-zh");
+  await result.getByTestId("export-change-location").click();
+  await expect(result.getByTestId("export-done")).toHaveText("已保存“Tides 2.docx”");
+  await screenshot(result, "export-saved-zh");
   await app.close();
 });

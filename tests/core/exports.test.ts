@@ -8,6 +8,7 @@ import {
   type Document,
   InvalidInputError,
   type MindExport,
+  messageReference,
   NotFoundError,
 } from "../../src/core";
 import { createTempDataFolder, manualClock, startCore } from "../helpers/core";
@@ -125,9 +126,9 @@ function writeSample(client: MindClient, tides: Document): void {
  * cell over two columns, and an image.
  */
 function writeEverythingElse(client: MindClient, tides: Document): void {
-  const at = (location: object, name: string): JSONContent => {
+  const at = (location: object): JSONContent => {
     const node = citation(tides, [1, 1], "found");
-    return { ...node, attrs: { ...node.attrs, documentName: name, location } };
+    return { ...node, attrs: { ...node.attrs, location } };
   };
   const linked = (value: string, href: string, ...marks: string[]): JSONContent => ({
     type: "text",
@@ -147,11 +148,11 @@ function writeEverythingElse(client: MindClient, tides: Document): void {
       text("new", "underline"),
       { type: "hardBreak" },
       text("Growth"),
-      at({ kind: "slide", from: 3, to: 3 }, "Deck"),
+      at({ kind: "slide", from: 3, to: 3 }),
       text(", revenue"),
-      at({ kind: "rows", sheet: "Revenue", from: 12, to: 14 }, "Model"),
+      at({ kind: "rows", sheet: "Revenue", from: 12, to: 14 }),
       text(", the crest"),
-      at({ kind: "section", heading: "2.1 Sensitivity" }, "Review"),
+      at({ kind: "section", heading: "2.1 Sensitivity" }),
       text("."),
     ),
     { type: "blockMath", attrs: { latex: "\\undefinedmacro{x}" } },
@@ -211,7 +212,7 @@ describe("exporting a Mind", () => {
     // The .docx's compressed bytes depend on zlib's build, so they are checked against this
     // Node's deflate, and the rest is pinned (see `zipFingerprint`).
     expect(zipFingerprint(await exported("docx"))).toBe(
-      "657f2cf0604e8470b9bcc513f41111ce89230884050fc75f4c900bb92ecb3b1b",
+      "9d3657aa6be50fa1e81d4b805ffab8d6976bf6648899b05d0307c44a194745be",
     );
   });
 
@@ -220,19 +221,19 @@ describe("exporting a Mind", () => {
       "the sample, with its Question",
       "sample",
       { includeQuestions: true },
-      "4d550b58862572e9cfacb754c17da2186f0962f2d4b26579c442e48e8dcbf0f5",
+      "90dedfa1ef94e2f23d93b35494788229aa348426f03557101123d83ba4bd98f5",
     ],
     [
       "the sample, in Chinese, on A4",
       "sample",
       { language: "zh-CN" },
-      "64ab43cb53ab415dfe722a7983f1416a75c7b2fc0a32e8886c2b10c648498624",
+      "7e0bbfccefa4e63d9be0ffb226798ad4cd766d60757725ff639d5d1b6fcbfc4f",
     ],
     [
       "quotes, rules, links, marks, breaks, tables, images and Locations",
       "rest",
       {},
-      "96c56a2c299134fa9209614c25a085974a7306317ebc41a09b5302bacef54ac8",
+      "407655edf9fc643d253e7ec404d663cec5aaf0867e57b45195d0eaf51cc939cb",
     ],
   ] as const)(
     "the bytes of a .docx export don't change either: %s",
@@ -315,6 +316,8 @@ describe("exporting a Mind", () => {
       citations: 3,
       unverifiedCitations: 2,
       questions: 1,
+      fromWord: false,
+      theirChanges: 0,
     });
   });
 
@@ -514,6 +517,68 @@ describe("exporting a Mind", () => {
       expect(long.length).toBeLessThanOrEqual(64);
       expect(long.endsWith(" tide.md")).toBe(true);
     });
+
+    test("a long first line ends at a clause, never on 'plus' or half a sentence (#769)", async () => {
+      expect(
+        await nameOf(
+          "",
+          [
+            note(
+              "The employee gets 27 days of paid holiday per year, plus bank holidays and the notice period after probation.",
+            ),
+          ],
+          "docx",
+        ),
+      ).toBe("The employee gets 27 days of paid holiday per year.docx");
+      expect(
+        await nameOf(
+          "",
+          [
+            note(
+              "员工每年享有二十七天带薪年假，另外还享有法定节假日，试用期结束后双方需要提前一个月书面通知对方，否则视为违约，需要承担相应的赔偿责任并支付违约金。",
+            ),
+          ],
+          "docx",
+        ),
+      ).toBe(
+        "员工每年享有二十七天带薪年假，另外还享有法定节假日，试用期结束后双方需要提前一个月书面通知对方，否则视为违约.docx",
+      );
+    });
+
+    test("a typed title too long for a file is cut at a word (#769)", async () => {
+      const title = "Holiday and notice rules for employees on probation ".repeat(4).trim();
+      const name = await nameOf(title, [note("Body")], "markdown");
+      expect(title.startsWith(`${name.slice(0, -".md".length)} `)).toBe(true);
+      expect(name.length).toBeLessThanOrEqual(123);
+    });
+
+    test("a Mind of Notes added from an Answer is named by the Question, not the Answer's first line (#769)", async () => {
+      const { core, mind } = await setUp("");
+      await core.addToNote({
+        mindId: mind.id,
+        blocks: [
+          {
+            type: "paragraph",
+            content: [
+              {
+                type: "text",
+                text: "The employee gets 27 days of paid holiday per year, plus bank holidays.",
+              },
+            ],
+          },
+        ],
+        origin: {
+          from: messageReference("conversation-1", "answer-1"),
+          question:
+            "How many days of holiday does the employee get, and how much notice after probation?",
+        },
+        model: null,
+      });
+
+      expect((await core.previewMindExport(mind.id, { format: "docx" })).fileName).toBe(
+        "How many days of holiday does the employee get.docx",
+      );
+    });
   });
 
   test("a Citation whose Document has been deleted is unverified, whatever its check said", async () => {
@@ -707,7 +772,7 @@ describe("exporting a Mind", () => {
       "2": "Tides, p. 2 [unverified]",
     });
     expect(zipFingerprint(exported.data)).toBe(
-      "e693192b33d772ddc9eadcea5a350af859450e560ec32592e487cdd7a652a880",
+      "9f853f696b6ffc80860f8e88f99d34cb8f7ed63efef368c53f7ff5efcc39c2e6",
     );
   });
 
@@ -740,20 +805,20 @@ describe("exporting a Mind", () => {
 
   test("a footnote names its Citation's Location: a slide, rows of a sheet, a section, lines", async () => {
     const { core, mind, client, tides } = await setUp();
-    const at = (location: object, name: string): JSONContent => {
+    const at = (location: object): JSONContent => {
       const node = citation(tides, [1, 1], "found");
-      return { ...node, attrs: { ...node.attrs, documentName: name, location } };
+      return { ...node, attrs: { ...node.attrs, location } };
     };
     writeMind(client, [
       paragraph(
         text("Growth"),
-        at({ kind: "slide", from: 3, to: 3 }, "Deck"),
+        at({ kind: "slide", from: 3, to: 3 }),
         text(", revenue"),
-        at({ kind: "rows", sheet: "Revenue", from: 12, to: 14 }, "Model"),
+        at({ kind: "rows", sheet: "Revenue", from: 12, to: 14 }),
         text(", the crest"),
-        at({ kind: "section", heading: "2.1 Sensitivity" }, "Review"),
+        at({ kind: "section", heading: "2.1 Sensitivity" }),
         text(", the log"),
-        at({ kind: "lines", from: 120, to: 134 }, "Log"),
+        at({ kind: "lines", from: 120, to: 134 }),
         text("."),
       ),
     ]);
@@ -761,26 +826,26 @@ describe("exporting a Mind", () => {
 
     expect(decode(await core.exportMind(mind.id, { format: "markdown" }))).toContain(
       [
-        "[^1]: Deck, slide 3",
-        "[^2]: Model, Revenue, rows 12–14",
-        "[^3]: Review, § 2.1 Sensitivity",
-        "[^4]: Log, lines 120–134",
+        "[^1]: Tides, slide 3",
+        "[^2]: Tides, Revenue, rows 12–14",
+        "[^3]: Tides, § 2.1 Sensitivity",
+        "[^4]: Tides, lines 120–134",
       ].join("\n"),
     );
     const docx = unzip((await core.exportMind(mind.id, { format: "docx" })).data);
     expect(footnotesOf(part(docx, "word/footnotes.xml"))).toEqual({
-      "1": "Deck, slide 3",
-      "2": "Model, Revenue, rows 12–14",
-      "3": "Review, § 2.1 Sensitivity",
-      "4": "Log, lines 120–134",
+      "1": "Tides, slide 3",
+      "2": "Tides, Revenue, rows 12–14",
+      "3": "Tides, § 2.1 Sensitivity",
+      "4": "Tides, lines 120–134",
     });
     await core.updateSettings({ user: { language: "zh-CN" } });
     expect(decode(await core.exportMind(mind.id, { format: "markdown" }))).toContain(
       [
-        "[^1]: Deck，第 3 张幻灯片",
-        "[^2]: Model，Revenue，第 12–14 行",
-        "[^3]: Review，§ 2.1 Sensitivity",
-        "[^4]: Log，第 120–134 行",
+        "[^1]: Tides，第 3 张幻灯片",
+        "[^2]: Tides，Revenue，第 12–14 行",
+        "[^3]: Tides，§ 2.1 Sensitivity",
+        "[^4]: Tides，第 120–134 行",
       ].join("\n"),
     );
   });
@@ -816,7 +881,7 @@ describe("exporting a Mind", () => {
   test("refuses unknown formats and Minds", async () => {
     const { core, mind } = await setUp();
     await expect(
-      core.exportMind(mind.id, { format: "pdf" } as unknown as { format: "docx" }),
+      core.exportMind(mind.id, { format: "odt" } as unknown as { format: "docx" }),
     ).rejects.toThrow(InvalidInputError);
     await expect(
       core.exportMind(mind.id, { format: "docx", includeQuestions: "yes" } as unknown as {

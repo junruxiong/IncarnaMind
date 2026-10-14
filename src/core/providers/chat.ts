@@ -5,16 +5,19 @@
  */
 import { randomUUID } from "node:crypto";
 import { generateText } from "ai";
-import type {
-  ChatModelChoice,
-  ChatModelGroup,
-  ChatProvider,
-  ChatProviderKind,
-  ChatReadiness,
-  CitationSupport,
-  ConnectionTestResult,
-  DataFlowId,
-  ExternalService,
+import {
+  CHOSEN_PROVIDER_FLOWS,
+  type ChatModelChoice,
+  type ChatModelGroup,
+  type ChatProvider,
+  type ChatProviderKind,
+  type ChatReadiness,
+  type CitationSupport,
+  type ConnectionTestResult,
+  type DataFlowId,
+  type ExternalService,
+  type OtherModel,
+  type SetChatModelInMenuInput,
 } from "../api";
 import type { Consent } from "../consent";
 import type { Meter, MeteredModel } from "../cost/meter";
@@ -31,6 +34,7 @@ import {
   startingSupport,
 } from "./capabilities";
 import {
+  cannotAnswerReason,
   catalogFacts,
   catalogModel,
   catalogProviderOfKind,
@@ -50,7 +54,13 @@ import {
   serviceFor,
 } from "./kinds";
 import { type ListedModel, listProviderModels } from "./modelLists";
-import type { ChatLanguageModel, ChatModelFactory, ChatModelSpec, ContextWindow } from "./models";
+import {
+  type ChatLanguageModel,
+  type ChatModelFactory,
+  type ChatModelSpec,
+  type ContextWindow,
+  summarizesReasoning,
+} from "./models";
 import { isCloudModelName, OLLAMA_CLOUD } from "./ollamaCloud";
 import {
   DEFAULT_OLLAMA_SETTINGS,
@@ -106,11 +116,15 @@ export interface PreparedChatModel {
   window?: ContextWindow;
   /** How the model gives Citations, known before the first request (see ./capabilities). */
   support?: CitationSupport;
+  /** Its reasoning comes back as its provider's summary, which an Answer may show (see ./models). */
+  summarizesReasoning: boolean;
   /**
    * A local model's quotes the Citation check doesn't find are asked for once
    * more (see ../answers/quoteRetry); never a cloud model's.
    */
   retryQuotes?: boolean;
+  /** How many parameters a model on this computer has, when its runtime says; never a cloud model's (#680). */
+  parameters?: number;
   /** Which build of the model this is (Ollama's digest), when known: what was learnt about it holds for this build. */
   revision?: string;
   /**
@@ -189,7 +203,7 @@ const ollamaFacts = (profile: OllamaModelProfile): ModelFactsLayer => ({
 
 function parseModelId(value: unknown): string {
   if (typeof value !== "string" || value.trim() === "" || value.length > 500) {
-    throw new InvalidInputError("Enter a model name.");
+    throw new InvalidInputError({ key: "error.provider.modelMissing" });
   }
   return value.trim();
 }
@@ -210,7 +224,7 @@ const displayName = (kind: ChatProviderKind, baseUrl: string | null) =>
 /** What chat providers need from the ChatGPT plan provider. */
 export type ChatGptPlanAccess = Pick<
   ChatGptPlan,
-  "hasSignIn" | "credentials" | "apiBaseUrl" | "modelIds"
+  "hasSignIn" | "credentials" | "apiBaseUrl" | "models"
 >;
 
 export function createChat(options: {
@@ -303,6 +317,16 @@ export function createChat(options: {
   const modelLists = new Map<string, { at: number; models: ListedModel[] }>();
   const listKey = (row: ProviderRow) => `${row.id}\n${row.base_url ?? ""}\n${row.endpoint ?? ""}`;
 
+  /** The ids the User added to a provider's menu, in the order added. */
+  const menuModelsOf = (providerId: string): string[] =>
+    db
+      .all<{ model_id: string }>(
+        `SELECT model_id FROM chat_menu_models
+          WHERE provider_id = ? AND deleted_at IS NULL ORDER BY created_at, id`,
+        [providerId],
+      )
+      .map((each) => each.model_id);
+
   const rowById = (id: string) =>
     db.get<ProviderRow>(
       `SELECT ${ROW_COLUMNS} FROM chat_providers WHERE id = ? AND deleted_at IS NULL`,
@@ -359,7 +383,7 @@ export function createChat(options: {
     apiKey: string | null,
     modelId: string,
     profile: OllamaModelProfile | null = null,
-    thinking?: "off",
+    thinking?: ChatModelSpec["thinking"],
   ): ChatModelSpec => {
     const { kind } = server;
     if (kind === "chatgpt") {
@@ -369,6 +393,7 @@ export function createChat(options: {
         apiKey: null,
         modelId,
         credentials: chatGpt.credentials,
+        ...(thinking && { thinking }),
       };
     }
     const baseUrl = endpointUrl(kind, server.endpoint) ?? server.baseUrl;
@@ -531,7 +556,12 @@ export function createChat(options: {
       return Promise.all(knownRows().map(withDefaultModel));
     },
 
-    /** Saves the provider and makes the model on it the default. The key is stored first: if the keychain refuses it, nothing changes. */
+    /**
+     * Saves the provider and makes the model on it the default: choosing a
+     * cloud provider allows the flows that send to it (`CHOSEN_PROVIDER_FLOWS`,
+     * ADR-0022).
+     * The key is stored first: if the keychain refuses it, nothing changes.
+     */
     async save(input: unknown): Promise<ChatProvider> {
       if (!isRecord(input)) throw new InvalidInputError("saveChatProvider expects an object.");
       const server = parseServer(input);
@@ -545,9 +575,10 @@ export function createChat(options: {
           ? existing !== undefined && (await secrets.tryGet(keyName(id))) !== null
           : apiKey !== null;
       if (requiresApiKey(server.kind) && !keyAfterSave) {
-        throw new InvalidInputError(
-          `Enter an API key for ${displayName(server.kind, server.baseUrl)}.`,
-        );
+        throw new InvalidInputError({
+          key: "error.provider.keyMissing",
+          values: { provider: displayName(server.kind, server.baseUrl) },
+        });
       }
 
       if (typeof apiKey === "string") await secrets.set(keyName(id), apiKey);
@@ -568,6 +599,11 @@ export function createChat(options: {
 
       const row = rowById(id);
       if (!row) throw new Error("The chat provider wasn't saved.");
+      // Ollama is chosen for models on this computer, where no line says what goes elsewhere:
+      // a cloud model in it asks once, at its first send. The line doesn't name what a
+      // Connector's Tools return either: with one on, the first Question asks for that.
+      const service = server.kind === "ollama" ? null : rowService(row);
+      if (service) consent.choose(CHOSEN_PROVIDER_FLOWS, service, ["tool-results"]);
       return toProvider(row);
     },
 
@@ -681,15 +717,18 @@ export function createChat(options: {
     /**
      * A quick check, with nothing to wait for: false when `model` (the
      * default chat model when left out) certainly can't be used on `flow`
-     * (there is none, or the User declined the flow to its service).
-     * `readiness` checks keys and sign-ins too.
+     * (there is none, or the User declined the flow to its service, or, for
+     * background work, which never asks, hasn't allowed it). `readiness`
+     * checks keys and sign-ins too.
      */
     mightBeReady(flow: DataFlowId, model?: ChatModelChoice): boolean {
       const row = model ? rowById(model.providerId) : defaultRow();
       if (!row) return false;
       const choice = model ?? settings.get().user.chatModel;
       const service = choice ? knownService(row, choice.modelId) : rowService(row);
-      return !service || consent.status(flow, service) !== "declined";
+      if (!service) return true;
+      const decision = consent.status(flow, service);
+      return consent.isBackground(flow) ? decision === "accepted" : decision !== "declined";
     },
 
     /**
@@ -702,7 +741,7 @@ export function createChat(options: {
       return Promise.all(
         knownRows().map(async (row) => {
           const provider = await toProvider(row);
-          // Like the connection test, a cloud service isn't contacted before the User allows the chat flow to it.
+          // A cloud service isn't asked for its list before the User allows the chat flow to it.
           const mayAsk =
             !provider.service || consent.status("chat", provider.service) === "accepted";
           const cacheKey = listKey(row);
@@ -711,7 +750,7 @@ export function createChat(options: {
           if (provider.kind === "chatgpt") {
             // The account's own list, read with its sign-in like the sign-in's own traffic, and
             // kept by the plan itself: it carries nothing of the User's.
-            listed = (await chatGpt.modelIds()).map((id) => ({ id }));
+            listed = (await chatGpt.models()).map(({ id, name }) => ({ id, name }));
           }
           if (!listed && !mayAsk) listed = [];
           if (!listed) {
@@ -725,7 +764,25 @@ export function createChat(options: {
             if (listed.length > 0) modelLists.set(cacheKey, { at: Date.now(), models: listed });
           }
           const defaultModel = chatModel?.providerId === row.id ? [chatModel.modelId] : [];
-          const models = [...new Set([...defaultModel, ...listed.map((each) => each.id)])];
+          const inMenu = listed.filter((each) => !each.other).map((each) => each.id);
+          const roles = catalogProviderOfKind(provider.kind)?.roles;
+          const roleModels = [roles?.answers, roles?.strongest, roles?.quickTasks];
+          const addedIds = menuModelsOf(row.id);
+          const other = listed.flatMap((each): OtherModel[] =>
+            each.other ? [{ id: each.id, ...each.other }] : [],
+          );
+          const added = addedIds.filter(
+            (id) =>
+              !inMenu.includes(id) && other.find((each) => each.id === id)?.why !== "cannot-answer",
+          );
+          const models = [
+            ...new Set([
+              ...defaultModel,
+              ...roleModels.filter((id): id is string => id !== undefined && inMenu.includes(id)),
+              ...inMenu,
+              ...added,
+            ]),
+          ];
           const unknown = models.filter((id) => !capabilitiesOf(row, id).known);
           // Ollama says which of its models run on ollama.com; the default one may not be in the list.
           const cloud = models.filter(
@@ -741,15 +798,52 @@ export function createChat(options: {
           ) {
             cloud.push(chosen);
           }
-          return { provider, models, unknown, cloud };
+          const names = Object.fromEntries(
+            listed.flatMap((each) => (each.name ? [[each.id, each.name]] : [])),
+          );
+          return { provider, models, names, other, added, unknown, cloud };
         }),
       );
+    },
+
+    setInMenu(input: unknown): void {
+      if (!isRecord(input)) throw new InvalidInputError("setChatModelInMenu expects an object.");
+      const { providerId, inMenu } = input as Partial<SetChatModelInMenuInput>;
+      const modelId = parseModelId(input.modelId);
+      const row = typeof providerId === "string" ? rowById(providerId) : undefined;
+      if (typeof providerId !== "string" || !row) {
+        throw new InvalidInputError("That chat provider isn't saved.");
+      }
+      if (
+        inMenu === true &&
+        cannotAnswerReason(
+          modelsProviderOfKind(row.kind as ChatProviderKind, row.endpoint),
+          modelId,
+        )
+      ) {
+        throw new InvalidInputError(`${modelId} can't answer Questions here.`);
+      }
+      if (typeof inMenu !== "boolean") throw new InvalidInputError("inMenu must be true or false.");
+      const at = now();
+      if (inMenu) {
+        db.run(
+          `INSERT OR IGNORE INTO chat_menu_models (id, provider_id, model_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?)`,
+          [randomUUID(), providerId, modelId, at, at],
+        );
+      } else {
+        db.run(
+          `UPDATE chat_menu_models SET deleted_at = ?, updated_at = ?
+            WHERE provider_id = ? AND model_id = ? AND deleted_at IS NULL`,
+          [at, at, providerId, modelId],
+        );
+      }
     },
 
     /**
      * Sends one tiny prompt with the given settings, which need not be saved.
      * Without a key in the input, the key stored for the same provider is used.
-     * A cloud provider's chat flow must be accepted first: nothing is sent before.
+     * It sends the key and a fixed prompt, nothing of the User's, so it needs no consent.
      */
     async test(input: unknown): Promise<ConnectionTestResult> {
       if (!isRecord(input)) throw new InvalidInputError("testChatConnection expects an object.");
@@ -761,9 +855,10 @@ export function createChat(options: {
         if (saved) apiKey = await secrets.tryGet(keyName(saved.id));
       }
       if (requiresApiKey(server.kind) && !apiKey) {
-        throw new InvalidInputError(
-          `Enter an API key for ${displayName(server.kind, server.baseUrl)}.`,
-        );
+        throw new InvalidInputError({
+          key: "error.provider.keyMissing",
+          values: { provider: displayName(server.kind, server.baseUrl) },
+        });
       }
       if (server.kind === "chatgpt" && !(await chatGpt.hasSignIn())) {
         return {
@@ -774,7 +869,6 @@ export function createChat(options: {
 
       try {
         const service = await remoteService(server, modelId);
-        if (service) await consent.ensure("chat", service);
         // A model in Ollama is tested with the settings Answers use, so it stays loaded for them.
         const profile = await profileFor(server.kind, server.baseUrl, modelId);
         checkCanChat(profile, modelId);
@@ -809,7 +903,8 @@ export function createChat(options: {
      * For Answers (#29): the default model, or `choice` from a Question's model
      * picker, after checking readiness and getting consent for its service on
      * `flow` (automatic tagging passes "tagging"). `thinking: "off"` skips
-     * thinking where the model can, for a short request on the chat flow.
+     * thinking where the model can, for a short request on the chat flow; the
+     * chat flow's other requests ask for a summary of the model's reasoning.
      * Throws `ChatNotReadyError` or `ConsentDeclinedError`; nothing is sent then.
      */
     async prepareModel(
@@ -832,7 +927,7 @@ export function createChat(options: {
           apiKey,
           modelId,
           profile,
-          thinking ?? (flow === "chat" ? undefined : "off"),
+          thinking ?? (flow === "chat" ? "summary" : "off"),
         ),
       );
       const row: ProviderRow = {
@@ -853,6 +948,7 @@ export function createChat(options: {
         provider,
         modelId,
         capabilities,
+        summarizesReasoning: summarizesReasoning(provider.kind),
         ...(support && { support }),
       };
       if (provider.kind !== "ollama") {
@@ -869,6 +965,9 @@ export function createChat(options: {
         ...prepared,
         window: { tokens: numCtx, outputTokens },
         retryQuotes: true,
+        ...(profile.parameters !== null &&
+          !profile.remote &&
+          !isCloudModelName(modelId) && { parameters: profile.parameters }),
         ...(profile.digest && { revision: profile.digest }),
         loaded: () => ollamaModels.loaded(baseUrl, modelId, numCtx),
       };

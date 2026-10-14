@@ -6,10 +6,10 @@
 import { create } from "zustand";
 import type { Document, WebPageFailureReason, WebPageResult } from "../../core/api";
 import type { Language } from "../../core/language";
+import { formatDate } from "../../shared/dates";
 import type { MessageKey } from "../../shared/i18n";
 import { pastedAddresses } from "../../shared/webAddresses";
 import { core } from "./core";
-import { errorMessage } from "./errors";
 import { useAppStore } from "./store";
 
 export interface WebPageProblem {
@@ -80,11 +80,7 @@ export function pageDate(value: string, language: Language): string {
   if (!/^\d{4}-\d{2}/.test(value)) return value;
   const time = Date.parse(value);
   if (Number.isNaN(time)) return value;
-  return new Intl.DateTimeFormat(language === "zh-CN" ? "zh-CN" : "en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  }).format(time);
+  return formatDate(time, language);
 }
 
 export const useWebPages = create<WebPagesState>()((set, get) => {
@@ -113,8 +109,7 @@ export const useWebPages = create<WebPagesState>()((set, get) => {
     folderId,
     document,
   });
-  const failedAction = (error: unknown) =>
-    useAppStore.setState({ actionError: errorMessage(error) });
+  const failedAction = (error: unknown) => useAppStore.getState().reportError(error);
 
   const save = async (address: string, folderId: string | null) => {
     if (get().fetching.includes(address)) return;

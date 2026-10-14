@@ -51,6 +51,7 @@ export const ANSWER_PROBLEMS: Record<ProviderErrorKind, AnswerProblem> = {
   provider: { line: "answer.error.provider", fix: retry },
   // A local model's context window: trying again can't help, shortening the Question does.
   "too-long": { line: "answer.error.too-long", fix: { kind: "none" } },
+  "no-answer": { line: "answer.error.no-answer", fix: retry },
   unknown: { line: "answer.error.unknown", fix: retry },
   // The ChatGPT plan provider.
   "not-signed-in": {

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { getSchema, type JSONContent } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { updateYFragment, yXmlFragmentToProseMirrorRootNode } from "@tiptap/y-tiptap";
-import { PROPOSAL_ATTRIBUTE, type SearchScope } from "../../src/core";
+import { GENERATED_MARK, PROPOSAL_ATTRIBUTE, type SearchScope } from "../../src/core";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
 import { pendingProposals, resolveProposals } from "../../src/shared/proposals";
 import { SCOPE_ATTRIBUTES } from "../../src/shared/searchScope";
@@ -128,6 +128,19 @@ export function shownWithChanges(client: MindClient): string[] {
     return false;
   });
   return lines.map((line) => line.replace(/-\]\[-|\+\}\{\+/g, ""));
+}
+
+/** A Block's text, its AI text (`GENERATED_MARK`) in «…», an inline node as U+FFFC. */
+export function shownWithAiText(block: ProseMirrorNode): string {
+  let shown = "";
+  block.descendants((node) => {
+    if (node.isText) {
+      const ai = node.marks.some((mark) => mark.type.name === GENERATED_MARK);
+      shown += ai ? `«${node.text}»` : (node.text ?? "");
+    } else if (node.isInline) shown += "\uFFFC";
+    return true;
+  });
+  return shown.replace(/»«/g, "");
 }
 
 /**

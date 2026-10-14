@@ -1,18 +1,35 @@
+import type { BlockOrigin } from "../../../core/api";
 import { signInAgain } from "../chatGptSignIn";
 import { useCitationStylePicker } from "../citationStylePicker";
 import { blockMenuOpeners } from "../editor/blockMenuOpeners";
-import { noteHolding } from "../editor/noteKeymap";
+import { originOf } from "../editor/blockOrigins";
+import { blockAt, noteHolding } from "../editor/noteKeymap";
+import { openOrigin } from "../editor/originActions";
 import { useFindSources } from "../findSources";
+import { useHistory } from "../history";
 import { currentTabOf } from "../layoutSlice";
 import { startSkillFromMind } from "../makeSkill";
+import { useMindTools } from "../mindTools";
 import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
+import { findTab } from "../tabs";
+import { verifyDocument } from "../verify";
+import { useWordImport } from "../wordImport";
 import { assistantCommands } from "./assistant";
+import { bibliographyCommands } from "./bibliography";
+import { chartCommands } from "./charts";
+import { checkCommands } from "./checks";
+import { comparisonCommands } from "./comparisons";
+import { deletedCommands } from "./deleted";
 import { editCommands } from "./edit";
 import { evidenceCommands } from "./evidence";
+import { exportCommands } from "./exports";
+import { fileCommands } from "./fileInfo";
 import { footnoteCommands } from "./footnotes";
-import { citationHandle, sidebarHandle } from "./handles";
+import { citationHandle, findHandle, readMindHandle, sidebarHandle } from "./handles";
+import { linkCommands } from "./links";
 import { meetingCommands } from "./meetings";
+import { newFolderCommands } from "./newFolder";
 import {
   answerCommands,
   citationCommands,
@@ -22,11 +39,18 @@ import {
   mindCommands,
   tagCommands,
 } from "./objects";
+import { paletteCommands } from "./palette";
+import { peekCommands } from "./peek";
 import { proposalCommands } from "./proposals";
+import { sortCommands } from "./sort";
 import "./objectMenus";
 import { type Command, type CommandContext, commands, fromMenu } from "./registry";
+import { selectionCommands } from "./selection";
+import { settingsPageCommands } from "./settings";
 import { tableCommands } from "./tables";
 import { tabCommands } from "./tabs";
+import { onlyOne } from "./targets";
+import { taskCommands } from "./tasks";
 import { webPageCommands } from "./webPages";
 
 /** What opens the menu of the Block with this ID, if its Mind is open. */
@@ -35,10 +59,33 @@ function blockMenuFor(blockId: string) {
   return (editor && blockMenuOpeners.get(editor)) ?? null;
 }
 
+/** Where the Block a menu names, or else the one the cursor is in, was added from; null if nowhere. */
+function originShown(ctx: CommandContext): BlockOrigin | null {
+  if (ctx.focus?.kind === "block") {
+    const editor = noteHolding(ctx.focus.id);
+    return editor && originOf(editor.state, ctx.focus.id);
+  }
+  const editor = readMindHandle.current?.editor;
+  if (!editor || editor.isDestroyed) return null;
+  const block = blockAt(editor.state.selection);
+  return block ? originOf(editor.state, block.id) : null;
+}
+
 /** The Mind in the tab the User is in, if that tab holds one. */
 function mindInFront(): string | null {
   const item = currentTabOf(useAppStore.getState().layout)?.item;
   return item?.kind === "mind" ? item.mindId : null;
+}
+
+/** The Mind a menu or the keyboard names: the Mind's row, the Mind a tab shows, else the one in front. */
+function mindShown(ctx: CommandContext): string | null {
+  const target = ctx.selection[0] ?? ctx.focus;
+  if (target?.kind === "mind") return target.id;
+  if (target?.kind === "tab") {
+    const item = findTab(useAppStore.getState().layout, target.id)?.item;
+    return item?.kind === "mind" ? item.mindId : null;
+  }
+  return mindInFront();
 }
 
 /** The Mind a command acts on: the one a menu names, else the one in front (⌘K, the assistant). */
@@ -54,24 +101,51 @@ const appCommands: readonly Command[] = [
     reversible: true,
     run: () => useAppStore.getState().createMind(),
   },
+  {
+    id: "word.import",
+    label: "wordImport.command",
+    group: "main",
+    reversible: true,
+    run: () => useWordImport.getState().pick(),
+  },
+  {
+    id: "verify.document",
+    label: "verify.command",
+    keywords: ["verify.command.keywords"],
+    group: "main",
+    // It adds the PDF and makes a Mind of it, each deleted as any other is.
+    reversible: true,
+    run: () => verifyDocument(),
+  },
   ...editCommands,
+  ...selectionCommands,
   ...mindCommands,
   ...documentCommands,
+  ...peekCommands,
   ...folderCommands,
+  ...newFolderCommands,
   ...tagCommands,
   ...linkedFolderCommands,
+  ...deletedCommands,
   ...answerCommands,
   ...citationCommands,
   ...tabCommands,
   ...meetingCommands,
   ...webPageCommands,
+  ...sortCommands,
+  ...fileCommands,
   ...evidenceCommands,
+  ...comparisonCommands,
+  ...exportCommands,
+  ...taskCommands,
   {
     ...fromMenu("settings.open"),
     group: "open",
     reversible: true,
     run: () => useAppStore.getState().openSettings(),
   },
+  ...settingsPageCommands,
+  ...paletteCommands,
   {
     id: "chatgpt.continue",
     label: "chatgpt.continue",
@@ -119,7 +193,8 @@ const appCommands: readonly Command[] = [
     // The picker's choice is taken back with Undo.
     reversible: true,
     // A Mind's row in the sidebar picks for that Mind.
-    when: (ctx) => ctx.here?.["mind.citationStyle"] !== undefined || mindInFront() !== null,
+    when: (ctx) =>
+      onlyOne(ctx) && (ctx.here?.["mind.citationStyle"] !== undefined || mindInFront() !== null),
     run: (ctx) => {
       if (ctx.here?.["mind.citationStyle"]) return ctx.here["mind.citationStyle"]();
       const mindId = mindInFront();
@@ -131,13 +206,27 @@ const appCommands: readonly Command[] = [
     },
   },
   {
+    id: "mind.history",
+    label: "history.command",
+    menuLabel: "history.menu",
+    keywords: ["history.keywords"],
+    group: "main",
+    // Opening it changes nothing; its Restore is taken back with Undo.
+    reversible: true,
+    when: (ctx) => onlyOne(ctx) && mindShown(ctx) !== null,
+    run: (ctx) => {
+      const mindId = mindShown(ctx);
+      if (mindId) useHistory.getState().open(mindId);
+    },
+  },
+  {
     // The AI drafts it in the Mind's card; nothing is saved until the User saves it.
     id: "skill.fromMind",
     label: "skills.make.command",
     keywords: ["skills.settings.title"],
     group: "main",
     reversible: true,
-    when: (ctx) => mindOf(ctx) !== null,
+    when: (ctx) => onlyOne(ctx) && mindOf(ctx) !== null,
     run: (ctx) => {
       const mindId = mindOf(ctx);
       if (mindId) return startSkillFromMind(mindId);
@@ -179,11 +268,11 @@ const appCommands: readonly Command[] = [
     shortcut: { keys: "CmdOrCtrl+Shift+Backspace" },
     group: "danger",
     destructive: true,
-    appliesTo: ["block", "answer"],
+    appliesTo: ["block", "answer", "chart"],
     // The note's own undo (⌘Z) brings it back.
     reversible: true,
     run(ctx) {
-      // An Answer's menu deletes that Answer, wherever the cursor is.
+      // An Answer's or a chart's menu deletes it, wherever the cursor is.
       if (ctx.here?.["block.delete"]) return ctx.here["block.delete"]();
       // The Blocks the note's selection touches, the focused one among them.
       if (ctx.focus) noteHolding(ctx.focus.id)?.commands.deleteBlock();
@@ -201,9 +290,72 @@ const appCommands: readonly Command[] = [
       if (ctx.focus?.kind === "block") blockMenuFor(ctx.focus.id)?.(ctx.focus.id);
     },
   },
+  {
+    id: "block.openSource",
+    label: "origin.open",
+    group: "open",
+    // Opening a conversation changes nothing.
+    reversible: true,
+    when: (ctx) => originShown(ctx) !== null,
+    run(ctx) {
+      const origin = originShown(ctx);
+      if (origin) void openOrigin(origin);
+    },
+  },
+  {
+    id: "mind.outline",
+    label: "editor.outline.title",
+    keywords: ["editor.slash.heading1"],
+    shortcut: { keys: "CmdOrCtrl+Alt+L" },
+    group: "main",
+    // Opening it changes nothing.
+    reversible: true,
+    when: (ctx) => onlyOne(ctx) && mindShown(ctx) !== null,
+    run: (ctx) => {
+      const mindId = mindShown(ctx);
+      if (!mindId) return;
+      // A Mind's row in the sidebar opens the Mind, which then shows its outline.
+      if (mindId !== mindInFront()) useAppStore.getState().openMind(mindId);
+      useMindTools.getState().showOutline(mindId);
+    },
+  },
+  {
+    id: "mind.find",
+    label: "editor.find.label",
+    shortcut: { keys: "CmdOrCtrl+F" },
+    group: "main",
+    reversible: true,
+    when: () => mindInFront() !== null,
+    run: () => {
+      const mindId = mindInFront();
+      if (mindId) useMindTools.getState().showFind(mindId);
+    },
+  },
+  {
+    id: "mind.findNext",
+    label: "command.mind.findNext",
+    shortcut: { keys: "CmdOrCtrl+G" },
+    group: "main",
+    reversible: true,
+    when: () => findHandle.current !== null,
+    run: () => findHandle.current?.next(),
+  },
+  {
+    id: "mind.findPrevious",
+    label: "command.mind.findPrevious",
+    shortcut: { keys: "CmdOrCtrl+Shift+G" },
+    group: "main",
+    reversible: true,
+    when: () => findHandle.current !== null,
+    run: () => findHandle.current?.previous(),
+  },
   ...footnoteCommands,
+  ...linkCommands,
+  ...bibliographyCommands,
   ...tableCommands,
+  ...chartCommands,
   ...proposalCommands,
+  ...checkCommands,
 ];
 
 for (const command of appCommands) commands.register(command);

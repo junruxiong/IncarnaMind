@@ -119,7 +119,7 @@ describe("Citation clusters", () => {
     expect(shown(state)).toEqual(["tides+moon"]);
   });
 
-  test("a Citation's cited work: its Document, and its Location from its pages", () => {
+  test("a Citation's cited work: its Document, its Location from its pages, and the version quoted", () => {
     const [cluster] = clusterCitations(stateWith([paragraph("a", citation("tides"))]).doc);
     const member = cluster?.members[0];
     if (!member) throw new Error("No Citation.");
@@ -127,6 +127,7 @@ describe("Citation clusters", () => {
       documentId: "tides",
       documentName: "tides",
       location: { kind: "page", from: 2, to: 3 },
+      contentHash: null,
     });
   });
 });

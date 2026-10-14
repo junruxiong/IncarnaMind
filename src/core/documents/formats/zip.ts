@@ -98,6 +98,9 @@ function startsWith(bytes: Uint8Array, prefix: readonly number[]): boolean {
   return prefix.every((byte, index) => bytes[index] === byte);
 }
 
+/** Whether the bytes are an OLE compound file: a legacy binary Office file, or an encrypted one. */
+export const isCompoundFile = (bytes: Uint8Array): boolean => startsWith(bytes, CFB_SIGNATURE);
+
 function contains(bytes: Uint8Array, needle: Uint8Array): boolean {
   const first = needle[0] as number;
   for (let at = bytes.indexOf(first); at >= 0 && at <= bytes.length - needle.length; ) {
@@ -261,8 +264,16 @@ export class ZipArchive {
   }
 }
 
+/**
+ * A part that inflates past what may be read of it. A Document with one fails
+ * as unreadable, as before; a Word import says it is too large (#104).
+ */
+export class PartTooLargeError extends ExtractionError {
+  override name = "PartTooLargeError";
+}
+
 const tooLarge = (name: string) =>
-  new ExtractionError("unreadable", `A part of the package is too large to read: ${name}`);
+  new PartTooLargeError("unreadable", `A part of the package is too large to read: ${name}`);
 
 async function* inflate(data: Uint8Array): AsyncGenerator<Uint8Array> {
   const stream = new Blob([data as BlobPart])

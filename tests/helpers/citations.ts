@@ -1,17 +1,32 @@
 import type { MockLanguageModelV4 } from "ai/test";
 import { expect } from "vitest";
-import type { CitationAttributes, Core, CoreAdapters, CoreEvents, Document } from "../../src/core";
+import type {
+  AnswerSearchTuning,
+  CitationAttributes,
+  Core,
+  CoreAdapters,
+  CoreEvents,
+  Document,
+} from "../../src/core";
 import { createTempDataFolder, startCore } from "./core";
 import { addAndProcess, writeSourceFile } from "./documents";
 import { turnOnEmbeddings } from "./embedding";
 import { connectToMind, type MindClient } from "./mindClient";
-import { answerIn, question, writeMind } from "./minds";
-import { type ModelCall, type ScriptedReply, scriptedModel, scriptedModels } from "./models";
+import { answerIn, editMind, question, writeMind } from "./minds";
+import {
+  type ModelCall,
+  promptOf,
+  type ScriptedReply,
+  scriptedModel,
+  scriptedModels,
+} from "./models";
 
 /** A Passage as the search Tool showed it to the model. */
 export interface ShownPassage {
   id: string;
   document: string;
+  /** Its Document's date, when known: "2025-05-14", "2024-03" or "2019". */
+  date: string | null;
   /** A PDF's: "3" or "3-4". Null for other kinds, which have a `location`. */
   pages: string | null;
   /** Every kind but PDF: where the Passage is, e.g. "slides 3–4" or "lines 1–12". */
@@ -19,18 +34,29 @@ export interface ShownPassage {
   text: string;
 }
 
+/** For `answerSearch`: each search an Answer makes, as the names of the Documents its Passages came from. */
+export function recordSearches() {
+  const searches: string[][] = [];
+  const answerSearch: AnswerSearchTuning = {
+    observe: ({ passages }) =>
+      searches.push([...new Set(passages.map((passage) => passage.documentName))].sort()),
+  };
+  return { searches, answerSearch };
+}
+
 /** The Passages in a search result (or in instructions), as the model reads them. */
 export function shownPassages(result: string): ShownPassage[] {
   const passages: ShownPassage[] = [];
   const pattern =
-    /<passage id="([^"]+)" document="([^"]*)"(?: pages="([^"]+)")?(?: location="([^"]+)")?>\n([\s\S]*?)\n<\/passage>/g;
+    /<passage id="([^"]+)" document="([^"]*)"(?: date="([^"]+)")?(?: pages="([^"]+)")?(?: location="([^"]+)")?>\n([\s\S]*?)\n<\/passage>/g;
   for (const match of result.matchAll(pattern)) {
     passages.push({
       id: match[1] as string,
       document: match[2] as string,
-      pages: match[3] ?? null,
-      location: match[4] ?? null,
-      text: match[5] as string,
+      date: match[3] ?? null,
+      pages: match[4] ?? null,
+      location: match[5] ?? null,
+      text: match[6] as string,
     });
   }
   return passages;
@@ -69,6 +95,9 @@ export function citingModel(plan: CitingPlan): MockLanguageModelV4 {
     return { text: plan.answer, pause: plan.pause };
   });
 }
+
+/** A model for a core under test that is never asked an Answer. */
+export const unaskedModel = () => scriptedModel(() => ({ text: "No Answer was asked." }));
 
 /** What the model was told about its records: the result of its last `cite` call. */
 export function citeFeedback(model: MockLanguageModelV4): string {
@@ -116,6 +145,26 @@ export async function setUpWithDocuments(
   const mind = await core.createMind({ title: "Tides" });
   const client = await connectToMind(core, mind.id);
   return { core, dataDir: folder, documents, mind, client, models };
+}
+
+/** Asks a Question at the end of the Mind and gives back what the model was sent for it. */
+export async function contextOfNextQuestion(
+  core: Core,
+  client: MindClient,
+  mindId: string,
+  model: MockLanguageModelV4,
+  text = "Which quarter grew most?",
+): Promise<string> {
+  const calls = model.doStreamCalls.length;
+  const asked = question(text);
+  editMind(client, (blocks) => [...blocks, asked]);
+  await client.settled();
+  const result = await core.askQuestion({ mindId, questionId: asked.attrs.id });
+  if (!result.asked) throw new Error("The Question wasn't asked.");
+  await answerEnded(core, result.answerId);
+  return promptOf(model, calls)
+    .map((message) => message.text)
+    .join("\n\n");
 }
 
 /** Resolves with the next "answer.finished" or "answer.failed" event for this Answer. */

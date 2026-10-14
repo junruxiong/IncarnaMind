@@ -13,6 +13,25 @@ export interface FetchLimits {
 
 export const FETCH_LIMITS: FetchLimits = { timeoutMs: 20_000, maxBytes: 10 * 1024 * 1024 };
 
+/** What `fetchPage` asks of a fetch: the global `fetch`, or web search's (../../tools/web/fetcher). */
+export interface PageRequest {
+  redirect: "follow";
+  credentials: "omit";
+  signal: AbortSignal;
+  headers: Record<string, string>;
+}
+
+/** What `fetchPage` reads of a response, whichever fetch gave it. */
+export interface PageResponse {
+  readonly url: string;
+  readonly status: number;
+  readonly ok: boolean;
+  readonly headers: { get(name: string): string | null };
+  readonly body: (AsyncIterable<Uint8Array> & { cancel(): Promise<void> }) | null;
+}
+
+export type PageFetch = (address: string, init: PageRequest) => Promise<PageResponse>;
+
 export interface FetchedPage {
   html: string;
   /** After any redirects. */
@@ -55,20 +74,17 @@ export function decodePage(bytes: Uint8Array, contentType: string | null): strin
   }
 }
 
-async function readBody(response: Response, maxBytes: number): Promise<Uint8Array> {
-  const reader = response.body?.getReader();
-  if (!reader) return new Uint8Array();
+async function readBody(response: PageResponse, maxBytes: number): Promise<Uint8Array> {
+  if (!response.body) return new Uint8Array();
   const chunks: Uint8Array[] = [];
   let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
+  // Leaving the loop early cancels the rest of the body.
+  for await (const chunk of response.body) {
+    size += chunk.byteLength;
     if (size > maxBytes) {
-      await reader.cancel().catch(() => undefined);
       throw new WebPageError("too-large", `The page is larger than ${maxBytes} bytes.`);
     }
-    chunks.push(value);
+    chunks.push(chunk);
   }
   const bytes = new Uint8Array(size);
   let at = 0;
@@ -82,7 +98,7 @@ async function readBody(response: Response, maxBytes: number): Promise<Uint8Arra
 /** Throws `WebPageError` when it can't, saying why. */
 export async function fetchPage(
   address: string,
-  options: { limits?: FetchLimits; fetch?: typeof fetch; languages?: readonly string[] } = {},
+  options: { limits?: FetchLimits; fetch?: PageFetch; languages?: readonly string[] } = {},
 ): Promise<FetchedPage> {
   const { timeoutMs, maxBytes } = options.limits ?? FETCH_LIMITS;
   if (!isWebAddress(address)) {
@@ -90,7 +106,7 @@ export async function fetchPage(
   }
   const signal = AbortSignal.timeout(timeoutMs);
   const languages = options.languages?.length ? options.languages.join(",") : "en";
-  let response: Response;
+  let response: PageResponse;
   try {
     response = await (options.fetch ?? fetch)(address, {
       redirect: "follow",
@@ -103,6 +119,7 @@ export async function fetchPage(
       },
     });
   } catch (error) {
+    if (error instanceof WebPageError) throw error;
     if (timedOut(error, signal)) {
       throw new WebPageError("timed-out", `No answer within ${timeoutMs} ms.`, { cause: error });
     }

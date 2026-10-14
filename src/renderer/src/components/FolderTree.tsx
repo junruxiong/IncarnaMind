@@ -1,4 +1,4 @@
-import { type ComponentType, type ReactNode, type SVGProps, useMemo } from "react";
+import { type ComponentType, type ReactNode, type SVGProps, useCallback, useMemo } from "react";
 import { create } from "zustand";
 import type { Document, LinkedFolder } from "../../../core/api";
 import { buildFolderTree, type FolderNode } from "../folders";
@@ -10,8 +10,11 @@ import {
   rowStateLabel,
 } from "../linkedFolders";
 import type { ObjectRef } from "../objects";
+import { sorted } from "../sort";
+import { useSort } from "../sortChoices";
+import { documentFields, folderFields } from "../sortFields";
 import { selectTagFilterKey, useAppStore } from "../store";
-import { TREE_ROW } from "../treeKeys";
+import { foldKeys, useTreeItem } from "../treeKeys";
 import { ExampleChip } from "./GettingStarted";
 import {
   ChevronDownLineIcon,
@@ -21,6 +24,7 @@ import {
 } from "./lineIcons";
 import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
 import {
+  clearsActions,
   INDENT_PX,
   rowActionsClass,
   rowButtonClass,
@@ -100,6 +104,13 @@ export function FolderTree({ documents, filtering, renderDocument }: FolderTreeP
   const collapsed = useFolderTree((state) => state.collapsed);
   const filteredFolds = useFolderTree((state) => state.filtered);
   const tree = useMemo(() => buildFolderTree(folders), [folders]);
+  const language = useLanguage();
+  const choices = useSort((state) => state.scopes);
+  const forAll = useSort((state) => state.all);
+  const sortOf = useCallback(
+    (key: string) => choices[`folder:${key}`] ?? forAll,
+    [choices, forAll],
+  );
 
   const linkedById = useMemo(
     () => new Map(linkedFolders.map((linked) => [linked.id, linked])),
@@ -134,12 +145,25 @@ export function FolderTree({ documents, filtering, renderDocument }: FolderTreeP
       list.push(item);
       grouped.set(key, list);
     }
+    // Each in its Folder's order (the Other Documents', under its own key).
+    for (const [key, list] of grouped) {
+      grouped.set(key, [
+        ...sorted(list, sortOf(key ?? OTHER_DOCUMENTS), documentFields(t), language),
+      ]);
+    }
     return grouped;
-  }, [documents, folders, flatRoots]);
+  }, [documents, folders, flatRoots, sortOf, language, t]);
 
   /** A Folder's sub-Folders, none in a Linked folder shown flat. */
   const subfoldersOf = (node: FolderNode) =>
-    flatRoots.has(node.folder.linkedFolderId) ? [] : node.children;
+    flatRoots.has(node.folder.linkedFolderId)
+      ? []
+      : sorted(
+          node.children,
+          sortOf(node.folder.id),
+          (child) => folderFields(child.folder),
+          language,
+        );
 
   /** While filtering: whether a Folder has a shown Document anywhere below it. */
   const hasDocuments = (node: FolderNode): boolean =>
@@ -200,12 +224,16 @@ export function FolderTree({ documents, filtering, renderDocument }: FolderTreeP
   // Without Linked folders there is nothing to set the Other Documents apart from.
   if (tree.length === 0) {
     return others.length === 0 ? null : (
-      <ul data-testid="document-tree">{others.map((item) => renderDocument(item, 0))}</ul>
+      <ul role="none" data-testid="document-tree">
+        {others.map((item) => renderDocument(item, 0))}
+      </ul>
     );
   }
   return (
-    <ul aria-label={t("folders.label")} data-testid="document-tree">
-      {renderLevel(tree)}
+    <ul role="none" data-testid="document-tree">
+      {renderLevel(
+        sorted(tree, choices.sidebar ?? forAll, (node) => folderFields(node.folder), language),
+      )}
       {others.length > 0 && (
         <GroupItem
           testId="other-documents"
@@ -270,6 +298,7 @@ function LinkedFolderItem({
         <ObjectMenu
           target={{ kind: "linkedFolder", id: linked.id }}
           label={t("linkedFolders.more", { name })}
+          tabIndex={-1}
         />
       }
       data={{
@@ -336,7 +365,9 @@ function GroupItem(props: GroupItemProps) {
   const tagFilter = useAppStore(selectTagFilterKey);
   const objectMenu = useObjectMenu(object ?? { kind: "folder", id: groupKey });
   const open = expandable && expanded;
+  const treeItem = useTreeItem({ depth, expanded: expandable ? open : undefined });
   const Chevron = open ? ChevronDownLineIcon : ChevronRightLineIcon;
+  const buttonClass = actions ? `${rowButtonClass} ${clearsActions.menu}` : rowButtonClass;
   const inner = (
     <>
       <Icon className={rowIconClass(false)} />
@@ -365,8 +396,7 @@ function GroupItem(props: GroupItemProps) {
   );
 
   return (
-    <li>
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: a right-click shortcut to the row's menu, whose ⋯ button is the way in by keyboard. */}
+    <li role="none">
       <div
         data-testid={testId}
         data-depth={depth}
@@ -377,18 +407,24 @@ function GroupItem(props: GroupItemProps) {
         {expandable ? (
           <button
             type="button"
-            {...TREE_ROW}
+            {...treeItem}
             data-testid="folder-toggle"
-            aria-expanded={open}
             title={title ?? name}
             onClick={() => toggle(groupKey, tagFilter)}
-            className={rowButtonClass}
+            onKeyDown={foldKeys(open, () => toggle(groupKey, tagFilter))}
+            className={buttonClass}
             style={rowPadding(depth)}
           >
             {inner}
           </button>
         ) : (
-          <div title={title ?? name} className={rowButtonClass} style={rowPadding(depth)}>
+          <div
+            {...treeItem}
+            tabIndex={-1}
+            title={title ?? name}
+            className={buttonClass}
+            style={rowPadding(depth)}
+          >
             {inner}
           </div>
         )}
@@ -410,7 +446,7 @@ function GroupItem(props: GroupItemProps) {
         )}
         {actions && <div className={rowActionsClass}>{actions}</div>}
       </div>
-      {open && <ul>{children}</ul>}
+      {open && <ul role="none">{children}</ul>}
     </li>
   );
 }

@@ -1,3 +1,5 @@
+import type { MessageKey } from "../../shared/i18n";
+
 /** The pages of the Settings dialog, in the order its list shows them. */
 export const settingsPages = [
   "general",
@@ -11,6 +13,18 @@ export const settingsPages = [
 ] as const;
 
 export type SettingsPage = (typeof settingsPages)[number];
+
+/** Each page's name: in the dialog's list, as its title, and in ⌘K. */
+export const settingsPageLabels: Record<SettingsPage, MessageKey> = {
+  general: "privacy.tabs.general",
+  models: "settings.pages.models",
+  search: "settings.pages.search",
+  meetings: "settings.pages.meetings",
+  connectors: "connectors.settings.title",
+  skills: "skills.settings.title",
+  agents: "settings.pages.agents",
+  privacy: "privacy.tabs.privacy",
+};
 
 /** Pages that were renamed or folded into another; a link to one opens where its settings went. */
 const movedPages: Record<string, SettingsPage> = { tools: "privacy", notifications: "general" };

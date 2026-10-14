@@ -2,23 +2,24 @@ import { type ReactNode, type ToggleEvent, useId, useRef, useState } from "react
 import { useShallow } from "zustand/react/shallow";
 import type { DocumentStatus, EmbeddingModelError } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
+import { core } from "../core";
 import { useT } from "../i18n";
 import { useCapturing } from "../meetings";
+import { downloadProgress } from "../modelDownload";
 import { enterFrom, exitToward } from "../motion";
 import { rerankingModelStatus } from "../rerankStatus";
 import { isOwnDocument, useAppStore } from "../store";
+import { textRecognitionStatus, useTextRecognition } from "../textRecognition";
 import { canTryAgain, outsideDialog, reasonKey, useWebPages } from "../webPages";
 import { CloseLineIcon } from "./lineIcons";
 import { embeddingProviderLabel } from "./providers/EmbeddingSettings";
 import { testErrorKey } from "./providers/shared";
 import { rowActionButtonClass } from "./sidebarRows";
+import { useTaggingPermission } from "./useTaggingPermission";
 
 /** The status row's button: a small ghost one, inside the 28px row. */
 const statusActionClass =
   "inline-flex h-6 shrink-0 items-center rounded-md px-2 text-[12px] font-semibold text-ink-secondary hover:bg-rule hover:text-ink focus-visible:outline-offset-0 aria-expanded:bg-rule aria-expanded:text-ink";
-
-/** Decimal megabytes, as the model's 135 MB is quoted elsewhere. */
-const MEGABYTE = 1_000_000;
 
 /** The gap between the "+N" button and the list of the other statuses above it. */
 const GAP_PX = 4;
@@ -36,21 +37,23 @@ const PROCESSING: ReadonlySet<DocumentStatus> = new Set([
   "embedding",
 ]);
 
-/** In progress (a blue dot), waiting for the User (amber), failed (red), or for information (grey). */
+/** In progress (a blue dot), waiting for the User or failed (amber), or for information (grey). */
 type Tone = "progress" | "waiting" | "error" | "info";
 
 const dotTones: Record<Tone, string> = {
   progress: "bg-accent",
   waiting: "bg-attention",
-  error: "bg-danger",
+  error: "bg-attention",
   info: "bg-ink-placeholder",
 };
 
 interface Status {
   testId: string;
   tone: Tone;
-  /** What the row shows: short enough for one line. */
+  /** What the row shows: short enough for one line. It gives way to `figure`. */
   short: string;
+  /** How far along it is ("3/22 MB"): shown after `short`, never cut. */
+  figure?: string;
   /** All of it: the tooltip, and what a screen reader reads. */
   full: string;
   action?: { label: string; testId?: string; run(): void };
@@ -82,7 +85,7 @@ export function SidebarStatus() {
 
 function StatusRow({ status, children }: { status: Status; children?: ReactNode }) {
   const t = useT();
-  const { tone, short, full, action, dismiss } = status;
+  const { tone, short, figure, full, action, dismiss } = status;
   return (
     <div
       role={tone === "error" ? "alert" : "status"}
@@ -97,8 +100,15 @@ function StatusRow({ status, children }: { status: Status; children?: ReactNode 
           }`}
         />
       </span>
-      <span aria-hidden="true" className="min-w-0 flex-1 truncate">
-        {short}
+      <span aria-hidden="true" className="flex min-w-0 flex-1 items-center gap-1">
+        <span data-testid="status-label" className="min-w-0 truncate">
+          {figure ? `${short} ·` : short}
+        </span>
+        {figure && (
+          <span data-testid="status-figure" className="shrink-0 tabular-nums">
+            {figure}
+          </span>
+        )}
       </span>
       <span className="sr-only">{full}</span>
       {children}
@@ -200,6 +210,8 @@ function useStatuses(): Status[] {
   const counts = useAppStore(
     useShallow((state) => {
       let processing = 0;
+      // Scanned pages still to read, of the Documents being read (#397).
+      let scannedPages = 0;
       let tagging = 0;
       // Only the User's own Documents: the examples need no model, so they alone don't ask for one.
       let waitingForTagger = 0;
@@ -211,7 +223,10 @@ function useStatuses(): Status[] {
       );
       for (const item of state.documents) {
         if (PROCESSING.has(item.status)) {
-          if (item.linkedFolderId === null || !paused.has(item.linkedFolderId)) processing++;
+          if (item.linkedFolderId === null || !paused.has(item.linkedFolderId)) {
+            processing++;
+            if (item.scan) scannedPages += item.scan.pages - item.scan.read;
+          }
         } else if (item.status === "ready") {
           if (item.tagging === "pending" || item.tagging === "tagging") tagging++;
           else if (item.tagging === "waiting-for-provider" && isOwnDocument(item, state.examples)) {
@@ -220,16 +235,23 @@ function useStatuses(): Status[] {
           }
         }
       }
-      return { processing, tagging, waitingForTagger, waitingForPlan };
+      return { processing, scannedPages, tagging, waitingForTagger, waitingForPlan };
     }),
   );
   const retryDownload = useAppStore((state) => state.downloadEmbeddingModel);
   const rerank = useAppStore((state) => state.rerank);
   const retryRerankingDownload = useAppStore((state) => state.downloadRerankingModel);
+  const textRecognition = textRecognitionStatus(
+    useTextRecognition((state) => state.status),
+    t,
+  );
+  const retryTextRecognition = useTextRecognition((state) => state.download);
   const retryEmbedding = useAppStore((state) => state.retryEmbedding);
   const dismissSkipped = useAppStore((state) => state.dismissSkippedFiles);
   const dismissAlreadyAdded = useAppStore((state) => state.dismissAlreadyAdded);
   const openSettings = useAppStore((state) => state.openSettings);
+  const taggingWaits = !organizing && counts.waitingForTagger > 0;
+  const taggingNeedsOk = useTaggingPermission(taggingWaits);
   // The dialog shows how the pages typed in it go; the rest are said here.
   const fetchingPages = useWebPages(
     (state) => state.fetching.filter((key) => outsideDialog(state, key)).length,
@@ -244,6 +266,7 @@ function useStatuses(): Status[] {
     testId: rerankingStatus.testId,
     tone: rerankingStatus.tone,
     short: rerankingStatus.short,
+    figure: rerankingStatus.figure,
     full: rerankingStatus.full,
     ...(rerankingStatus.retry && {
       action: {
@@ -274,6 +297,17 @@ function useStatuses(): Status[] {
   }
 
   if (reranking?.tone === "error") statuses.push(reranking);
+
+  if (textRecognition?.tone === "error") {
+    statuses.push({
+      ...textRecognition,
+      action: {
+        label: t("status.retry"),
+        testId: "text-recognition-retry",
+        run: () => void retryTextRecognition(),
+      },
+    });
+  }
 
   if (embedding?.error) {
     const provider = embeddingProviderLabel(embedding.provider, t);
@@ -347,14 +381,29 @@ function useStatuses(): Status[] {
       short: t("status.taggingPaused"),
       full: t("status.taggingPaused.full"),
     });
-  } else if (!organizing && counts.waitingForTagger > 0) {
+  } else if (taggingWaits && taggingNeedsOk) {
+    statuses.push({
+      testId: "tagging-waiting",
+      tone: "waiting",
+      short: t("status.taggingPermission"),
+      full: t("jev.waiting.permission", { service: taggingNeedsOk.name }),
+      action: {
+        label: t("privacy.flows.allow"),
+        testId: "tagging-waiting-allow",
+        run: () =>
+          void core
+            .allowDataFlow("tagging", taggingNeedsOk.id)
+            .catch((error: unknown) => useAppStore.getState().reportError(error)),
+      },
+    });
+  } else if (taggingWaits) {
     statuses.push({
       testId: "tagging-waiting",
       tone: "waiting",
       short: t("status.taggingWaiting"),
       full: t("jev.waiting.notice"),
       action: {
-        label: t("status.setUp"),
+        label: t("status.choose"),
         testId: "tagging-waiting-setup",
         run: () => openSettings("models"),
       },
@@ -362,17 +411,18 @@ function useStatuses(): Status[] {
   }
 
   if (model?.state === "downloading") {
-    const downloaded = Math.floor(model.downloadedBytes / MEGABYTE);
-    const total = Math.ceil(model.totalBytes / MEGABYTE);
+    const { downloaded, total, figure } = downloadProgress(model, t);
     statuses.push({
       testId: "embedding-model-download",
       tone: "progress",
-      short: t("status.downloading", { downloaded, total }),
+      short: t("status.downloading"),
+      figure,
       full: `${t("embedding.model.downloading", { downloaded, total })}\n${t("embedding.model.note")}`,
     });
   }
 
   if (reranking?.tone === "progress") statuses.push(reranking);
+  if (textRecognition?.tone === "progress") statuses.push(textRecognition);
 
   const rebuild = embedding?.rebuild;
   if (rebuild) {
@@ -385,7 +435,8 @@ function useStatuses(): Status[] {
     statuses.push({
       testId: "embedding-rebuild-notice",
       tone: "progress",
-      short: t("status.rebuilding", { done: rebuild.done, total: rebuild.total }),
+      short: t("status.rebuilding"),
+      figure: `${rebuild.done}/${rebuild.total}`,
       full: `${reason}${title}\n${t("embeddingProviders.rebuild.note")}`,
     });
   }
@@ -407,10 +458,15 @@ function useStatuses(): Status[] {
       full: t("status.readingPaused.full"),
     });
   } else if (counts.processing > 0) {
+    // While scanned pages are read, they are what takes the time: the row says so.
     const text =
-      counts.processing === 1
-        ? t("status.processing.one")
-        : t("status.processing.other", { count: counts.processing });
+      counts.scannedPages > 0
+        ? counts.scannedPages === 1
+          ? t("status.scanning.one")
+          : t("status.scanning.other", { count: counts.scannedPages })
+        : counts.processing === 1
+          ? t("status.processing.one")
+          : t("status.processing.other", { count: counts.processing });
     statuses.push({ testId: "processing-status", tone: "progress", short: text, full: text });
   }
 

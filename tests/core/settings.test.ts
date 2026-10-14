@@ -2,6 +2,32 @@ import { describe, expect, test } from "vitest";
 import { type Executor, InvalidInputError } from "../../src/core";
 import { createTempDataFolder, startCore } from "../helpers/core";
 
+/**
+ * Export uses Word until the User saves other options, and the deliverables leave Questions
+ * out. A Word file tracks the User's edits and marks AI text and failed checks (#107).
+ */
+const DEFAULT_WORD = {
+  includeQuestions: false,
+  trackChanges: true,
+  markAiText: true,
+  commentFailedChecks: true,
+} as const;
+
+const DEFAULT_EXPORT = {
+  format: "docx",
+  docx: DEFAULT_WORD,
+  pdf: { includeQuestions: false },
+  html: { includeQuestions: false },
+} as const;
+
+const PDF_EXPORT = {
+  format: "pdf",
+  docx: { ...DEFAULT_WORD, markAiText: false },
+  pdf: { includeQuestions: true },
+  html: { includeQuestions: false },
+  theirChanges: "accepted",
+} as const;
+
 describe("Settings", () => {
   test("a new data folder starts with the defaults", async () => {
     const core = startCore(await createTempDataFolder());
@@ -14,7 +40,10 @@ describe("Settings", () => {
         imageModel: null,
         suggestWhileWriting: false,
         leaveOutOwnFiles: true,
+        exportOptions: DEFAULT_EXPORT,
+        authorName: null,
         monthlyCap: null,
+        webSearch: false,
       },
       device: {
         sidebarWidth: 248,
@@ -39,6 +68,7 @@ describe("Settings", () => {
       scriptSandbox: "none",
       // No capture in these tests: Meetings can't record.
       meetingAudio: "none",
+      author: "Priya Raman",
     });
   });
 
@@ -106,7 +136,10 @@ describe("Settings", () => {
       imageModel: null,
       suggestWhileWriting: false,
       leaveOutOwnFiles: true,
+      exportOptions: DEFAULT_EXPORT,
+      authorName: null,
       monthlyCap: null,
+      webSearch: false,
     });
     expect(settings.device).toEqual({
       sidebarWidth: 320,
@@ -164,7 +197,10 @@ describe("Settings", () => {
         language: "zh-CN",
         suggestWhileWriting: true,
         leaveOutOwnFiles: false,
+        exportOptions: PDF_EXPORT,
+        authorName: "P. Raman",
         monthlyCap: { amount: 20, currency: "USD" },
+        webSearch: true,
       },
       device,
     });
@@ -180,12 +216,16 @@ describe("Settings", () => {
         imageModel: null,
         suggestWhileWriting: true,
         leaveOutOwnFiles: false,
+        exportOptions: PDF_EXPORT,
+        authorName: "P. Raman",
         monthlyCap: { amount: 20, currency: "USD" },
+        webSearch: true,
       },
       device,
       language: "zh-CN",
       scriptSandbox: "none",
       meetingAudio: "none",
+      author: "P. Raman",
     });
   });
 
@@ -215,6 +255,22 @@ describe("Settings", () => {
       patch: { device: { skillScriptTimeoutSeconds: 1.5 } },
     },
     { name: "an unknown motion choice", patch: { device: { motion: "slow" } } },
+    {
+      name: "an export format the app can't write",
+      patch: { user: { exportOptions: { ...DEFAULT_EXPORT, format: "odt" } } },
+    },
+    {
+      name: "export options with a format's options missing",
+      patch: { user: { exportOptions: { format: "pdf", docx: { includeQuestions: false } } } },
+    },
+    {
+      name: "export options whose Questions switch isn't true or false",
+      patch: { user: { exportOptions: { ...DEFAULT_EXPORT, pdf: { includeQuestions: "yes" } } } },
+    },
+    {
+      name: "a way to show someone's changes that isn't one",
+      patch: { user: { exportOptions: { ...DEFAULT_EXPORT, theirChanges: "hidden" } } },
+    },
     {
       name: "a default model without a model",
       patch: { user: { chatModel: { providerId: "x" } } },

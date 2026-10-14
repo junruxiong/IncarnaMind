@@ -1,8 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import {
-  ConsentDeclinedError,
   type Core,
   type CoreAdapters,
   DATABASE_FILE,
@@ -11,10 +11,10 @@ import {
   InvalidInputError,
   RECOMMENDED_OLLAMA_MODEL,
 } from "../../src/core";
+import { openDatabase } from "../../src/core/storage";
 import {
   createMemoryKeychain,
   createTempDataFolder,
-  nextEvent,
   queryDatabase,
   startCore,
 } from "../helpers/core";
@@ -34,6 +34,7 @@ Bond yields rose after the announcement.`;
 const BUILT_IN_ID = "multilingual-e5-small-int8";
 const OPENAI = { id: "https://api.openai.com", name: "OpenAI" };
 const OPENAI_KEY = "sk-test-embeddings-key";
+const DECIDED_AT = "2026-09-01T09:00:00.000Z";
 /** A server on this computer: nothing is sent elsewhere, so no consent is asked. */
 const LOCAL_SERVER = "http://127.0.0.1:9/v1";
 
@@ -352,38 +353,61 @@ describe("Switching the embedding provider", { timeout: 30_000 }, () => {
 });
 
 describe("Consent for cloud embeddings", { timeout: 30_000 }, () => {
-  test("nothing is sent before the User accepts; declining changes nothing", async () => {
-    const { core, embeddings, keychain, dataDir } = await setUp();
-    const requested = nextEvent(core, "consent.requested");
+  test("choosing a cloud provider, where the dialog says what goes, allows it: nothing asks", async () => {
+    const { core } = await setUp();
+    const asked = vi.fn();
+    core.on("consent.requested", asked);
+    const finished = rebuildFinished(core);
 
-    const saving = core.saveEmbeddingProvider({
+    await core.saveEmbeddingProvider({
       kind: "openai",
       apiKey: OPENAI_KEY,
       modelId: "text-embedding-3-small",
     });
-    const request = await requested;
-    expect(request.flow).toEqual({
-      id: "embeddings",
-      service: OPENAI,
-      sends: ["document-text", "queries"],
-    });
-    expect(embeddings.calls).toEqual([]);
+    await finished;
 
-    await core.respondToConsent(request.requestId, false);
-    await expect(saving).rejects.toThrow(ConsentDeclinedError);
-    expect((await core.getEmbeddingSettings()).provider.kind).toBe("built-in");
-    expect(keychain.secrets.size).toBe(0);
-    expect((await core.listDocuments()).map((each) => each.status)).toEqual(["ready", "ready"]);
-    expect(recordedModels(dataDir).map((row) => row.embedding_model)).toEqual([
-      BUILT_IN_ID,
-      BUILT_IN_ID,
-    ]);
-    expect(embeddings.calls).toEqual([]);
+    expect(asked).not.toHaveBeenCalled();
     expect(await core.listDataFlows()).toContainEqual({
       flow: { id: "embeddings", service: OPENAI, sends: ["document-text", "queries"] },
-      consent: "declined",
+      consent: "accepted",
       decidedAt: expect.any(String),
+      chosen: true,
     });
+  });
+
+  test("choosing the provider again is a new choice: it replaces a decline made before, and nothing asks", async () => {
+    const { core, embeddings, dataDir } = await setUp();
+    const db = openDatabase(join(dataDir, DATABASE_FILE));
+    try {
+      db.run(
+        `INSERT INTO data_flow_consents
+           (id, flow, service_id, service_name, decision, data_kinds, created_at, updated_at)
+         VALUES (?, 'embeddings', ?, ?, 'declined', '[]', ?, ?)`,
+        [randomUUID(), OPENAI.id, OPENAI.name, DECIDED_AT, DECIDED_AT],
+      );
+    } finally {
+      db.close();
+    }
+    const asked = vi.fn();
+    core.on("consent.requested", asked);
+    const finished = rebuildFinished(core);
+
+    await core.saveEmbeddingProvider({
+      kind: "openai",
+      apiKey: OPENAI_KEY,
+      modelId: "text-embedding-3-small",
+    });
+    await finished;
+
+    expect(asked).not.toHaveBeenCalled();
+    expect(embeddings.passages()).toHaveLength(2);
+    expect(await core.listDataFlows()).toContainEqual(
+      expect.objectContaining({
+        flow: expect.objectContaining({ id: "embeddings", service: OPENAI }),
+        consent: "accepted",
+        chosen: true,
+      }),
+    );
   });
 
   test("once accepted, every Document's text goes to the provider, and searches too", async () => {
@@ -418,19 +442,19 @@ describe("Consent for cloud embeddings", { timeout: 30_000 }, () => {
     expect(embeddings.queries()).toEqual(["bond yields"]);
   });
 
-  test("the connection test asks first too, sends nothing of the User's, and reports the size", async () => {
+  test("the connection test sends nothing of the User's, so it asks nothing, and reports the size", async () => {
     const { core, embeddings } = await setUp();
-    const requested = nextEvent(core, "consent.requested");
-    const testing = core.testEmbeddingConnection({
-      kind: "openai",
-      apiKey: OPENAI_KEY,
-      modelId: "text-embedding-3-small",
-    });
-    const request = await requested;
-    expect(embeddings.calls).toEqual([]);
-    await core.respondToConsent(request.requestId, true);
+    const asked = vi.fn();
+    core.on("consent.requested", asked);
 
-    expect(await testing).toEqual({ ok: true, dimensions: 64 });
+    expect(
+      await core.testEmbeddingConnection({
+        kind: "openai",
+        apiKey: OPENAI_KEY,
+        modelId: "text-embedding-3-small",
+      }),
+    ).toEqual({ ok: true, dimensions: 64 });
+    expect(asked).not.toHaveBeenCalled();
     expect(embeddings.calls).toHaveLength(1);
     expect(embeddings.calls[0]?.values[0]).toContain("checking");
     // Testing saves nothing.
@@ -706,7 +730,7 @@ describe("Local mode", { timeout: 30_000 }, () => {
     expect(off).toMatchObject({ localOnly: false, provider: { kind: "built-in" }, rebuild: null });
   });
 
-  test("choosing local models with one click turns it on, switching cloud embeddings back too", async () => {
+  test("choosing local models with the box ticked turns it on, switching cloud embeddings back too", async () => {
     const ollama = await startOllamaStub({ models: [RECOMMENDED_OLLAMA_MODEL] });
     const { core, dataDir } = await withOpenAi();
     const changed = new Promise<EmbeddingSettings>((resolve) => {
@@ -718,7 +742,7 @@ describe("Local mode", { timeout: 30_000 }, () => {
     });
     const finished = rebuildFinished(core);
 
-    await core.selectOllama({ baseUrl: ollama.baseUrl });
+    await core.selectOllama({ baseUrl: ollama.baseUrl, localOnly: true });
 
     expect(await changed).toMatchObject({ localOnly: true, provider: { kind: "built-in" } });
     await finished;
@@ -726,6 +750,24 @@ describe("Local mode", { timeout: 30_000 }, () => {
       BUILT_IN_ID,
       BUILT_IN_ID,
     ]);
+  });
+
+  test("choosing local models without the choice leaves Local mode and the cloud embeddings as they were", async () => {
+    const ollama = await startOllamaStub({ models: [RECOMMENDED_OLLAMA_MODEL] });
+    const { core } = await withOpenAi();
+
+    await core.selectOllama({ baseUrl: ollama.baseUrl });
+    expect(await core.getEmbeddingSettings()).toMatchObject({
+      localOnly: false,
+      provider: { kind: "openai" },
+    });
+
+    await core.setLocalOnly(true);
+    await core.selectOllama({ baseUrl: ollama.baseUrl });
+    expect((await core.getEmbeddingSettings()).localOnly).toBe(true);
+
+    await core.selectOllama({ baseUrl: ollama.baseUrl, localOnly: false });
+    expect((await core.getEmbeddingSettings()).localOnly).toBe(false);
   });
 
   test("an embedding provider on this computer, such as Ollama, is kept", async () => {

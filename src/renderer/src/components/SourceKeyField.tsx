@@ -6,32 +6,30 @@ import { ProblemLine } from "./ProblemLine";
 import { buttonStyle, inputClass } from "./ui";
 
 /**
- * A provider's optional key of the User's own (openFDA's): a line under the
- * search that opens to a field, kept in the keychain by the core and never
- * shown again. Saving an empty field removes it.
+ * A provider's key of the User's own: optional for openFDA, needed for
+ * GovInfo, with where to get one. A line under the search that opens to a
+ * field, kept in the keychain by the core and never shown again. Saving an
+ * empty field removes it.
  */
 export function SourceKeyField({ provider }: { provider: SourceProviderInfo }) {
   const t = useT();
   const hintId = useId();
-  const [open, setOpen] = useState(false);
+  const open = useFindSources((state) => state.keyOpen === provider.id);
   const [key, setKey] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
   const save = async (value: string | null) => {
     const failed = await useFindSources.getState().setKey(provider.id, value);
     setProblem(failed);
-    if (!failed) {
-      setKey("");
-      setOpen(false);
-    }
+    if (!failed) setKey("");
   };
   const name = { provider: provider.name };
   return (
-    <div className="mt-2 text-[13px] leading-5 text-ink-secondary">
+    <div data-provider={provider.id} className="mt-2 text-[13px] leading-5 text-ink-secondary">
       <button
         type="button"
         aria-expanded={open}
         data-testid="find-sources-key-open"
-        onClick={() => setOpen(!open)}
+        onClick={() => useFindSources.getState().openKey(open ? null : provider.id)}
         className="underline decoration-rule-strong underline-offset-2 hover:text-ink"
       >
         {t("sources.key.open", name)}
@@ -53,6 +51,8 @@ export function SourceKeyField({ provider }: { provider: SourceProviderInfo }) {
             type="password"
             autoComplete="off"
             spellCheck={false}
+            // biome-ignore lint/a11y/noAutofocus: it opens only when the User asks to add a key.
+            autoFocus
             data-testid="find-sources-key"
             aria-label={t("sources.key.title", name)}
             aria-describedby={hintId}
@@ -80,7 +80,21 @@ export function SourceKeyField({ provider }: { provider: SourceProviderInfo }) {
             </button>
           )}
           <p id={hintId} className="basis-full text-ink-meta">
-            {t("sources.key.hint", name)}
+            {t(provider.keyNeeded ? "sources.key.hint.needed" : "sources.key.hint", name)}
+            {provider.keySignUp && (
+              <>
+                {" "}
+                <a
+                  href={provider.keySignUp}
+                  target="_blank"
+                  rel="noreferrer"
+                  data-testid="find-sources-key-sign-up"
+                  className="underline decoration-rule-strong underline-offset-2 hover:text-ink"
+                >
+                  {t("sources.key.signUp")}
+                </a>
+              </>
+            )}
           </p>
         </form>
       )}

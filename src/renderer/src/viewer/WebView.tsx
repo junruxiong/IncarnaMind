@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Document } from "../../../core/api";
 import { readWebPage, type WebPage } from "../../../core/documents/formats/web";
 import type { XmlNode } from "../../../core/documents/formats/xml";
@@ -6,6 +6,7 @@ import type { MessageKey } from "../../../shared/i18n";
 import { useLanguage, useT } from "../i18n";
 import type { ViewerTarget } from "../store";
 import { pageDate } from "../webPages";
+import { useCitedArea } from "./citedArea";
 import { markQuote, textNodes, unmarkQuote } from "./domQuote";
 import { FileStates } from "./FileStates";
 import { CitationMark, marginRoom, markTopFor, quoteMarkOf, quoteTone } from "./quoteMark";
@@ -178,12 +179,10 @@ function WebPageContent({
     return () => body.replaceChildren();
   }, [page, blocks, t]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: each open request goes there again
-  useLayoutEffect(() => {
+  /** The cited sections' first block, and their range as drawn, to the last one's last block. */
+  const citedSections = useCallback((): { first: Element | null; range: Range | null } => {
     const body = host.current;
-    const container = scroller.current;
-    if (!body || !container) return;
-    unmarkQuote(body);
+    if (!body) return { first: null, range: null };
     const cited = page.units.filter(
       (unit) =>
         target.pageFrom !== undefined &&
@@ -192,12 +191,23 @@ function WebPageContent({
     );
     const first = cited[0] && body.querySelector(`[data-block="${cited[0].blocks.first}"]`);
     const last = cited.at(-1) && body.querySelector(`[data-block="${cited.at(-1)?.blocks.last}"]`);
-    let range: Range | undefined;
-    if (first && last) {
-      range = body.ownerDocument.createRange();
-      range.setStartBefore(first);
-      range.setEndAfter(last);
-    }
+    if (!first || !last) return { first: first ?? null, range: null };
+    const range = body.ownerDocument.createRange();
+    range.setStartBefore(first);
+    range.setEndAfter(last);
+    return { first, range };
+  }, [page, target.pageFrom, target.pageTo]);
+  // A cited page drawn to save it (#133): the cited sections.
+  const citedArea = useCallback(() => citedSections().range, [citedSections]);
+  useCitedArea(true, citedArea);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: each open request goes there again
+  useLayoutEffect(() => {
+    const body = host.current;
+    const container = scroller.current;
+    if (!body || !container) return;
+    unmarkQuote(body);
+    const { first, range } = citedSections();
     const quote = target.quote;
     const marks = quote
       ? ((range && markQuote(textNodes(body, range), quote)) ?? markQuote(textNodes(body), quote))

@@ -2,10 +2,12 @@ import type { ReactNode } from "react";
 import type { GettingStarted } from "../../../core/api";
 import { shortcutLabel } from "../commands/keymap";
 import { CheckMarkIcon } from "../editor/icons";
-import { useT } from "../i18n";
+import { useGap, useT } from "../i18n";
 import { useAppStore } from "../store";
+import { useAddYourDocuments } from "./AddYourDocuments";
 import { AskIcon, PlugIcon } from "./icons";
 import { ChevronRightLineIcon, CloseLineIcon } from "./lineIcons";
+import { SLOT, Slotted } from "./Slotted";
 import { buttonStyle } from "./ui";
 
 /**
@@ -19,21 +21,6 @@ type StepKey = "citation" | "documents" | "question";
 interface Step {
   key: StepKey;
   done: boolean;
-}
-
-/** Stands in for an element in a translated message, which is split around it. */
-const SLOT = "";
-
-/** A translated message with an element where its `{name}` placeholder was. */
-function Slotted({ message, slot }: { message: string; slot: ReactNode }) {
-  const [before, after] = message.split(SLOT);
-  return (
-    <>
-      {before}
-      {slot}
-      {after}
-    </>
-  );
 }
 
 /**
@@ -99,26 +86,25 @@ function StepMark({ number, done, next }: { number: number; done: boolean; next:
 /**
  * "Get started · N of 3", at the bottom of the sidebar: each step ticks
  * itself as the User does it, and the next one to do takes them there. It can
- * be hidden, and goes once all three are done.
+ * be hidden, and goes once all three are done. "Add your Documents" is a menu
+ * of the two ways, Add files… and Link a folder… (#766).
  */
 export function GetStartedCard() {
   const t = useT();
+  const gap = useGap();
   const steps = useGettingStarted();
   const updateGettingStarted = useAppStore((state) => state.updateGettingStarted);
   const openExamples = useAppStore((state) => state.openExamples);
-  const createMind = useAppStore((state) => state.createMind);
   const startQuestion = useAppStore((state) => state.startQuestion);
+  const addMenu = useAddYourDocuments("get-started-add");
   if (!steps) return null;
 
   const done = steps.filter((step) => step.done).length;
   const next = steps.find((step) => !step.done)?.key;
-  const go: Record<StepKey, () => void> = {
+  const go: Record<Exclude<StepKey, "documents">, () => void> = {
     citation: () => void openExamples(),
-    // A Mind of their own, which shows the ways to add Documents or connect apps.
-    documents: () => void createMind(),
     question: startQuestion,
   };
-
   return (
     <section
       aria-labelledby="get-started-title"
@@ -127,7 +113,8 @@ export function GetStartedCard() {
     >
       <div className="flex items-center justify-between pb-1 pl-2">
         <h2 id="get-started-title" className="text-[13px] leading-5 font-semibold text-ink">
-          {t("gettingStarted.title")}{" "}
+          {t("gettingStarted.title")}
+          {gap(t("gettingStarted.title"), t("gettingStarted.count", { done, total: steps.length }))}
           <span data-testid="get-started-count" className="font-normal text-ink-meta">
             {t("gettingStarted.count", { done, total: steps.length })}
           </span>
@@ -162,8 +149,8 @@ export function GetStartedCard() {
                 </span>
               ) : step.key === next ? (
                 <button
+                  {...(step.key === "documents" ? addMenu.buttonProps : { onClick: go[step.key] })}
                   type="button"
-                  onClick={go[step.key]}
                   className={`${rowClass} font-semibold text-ink hover:bg-hover focus-visible:outline-offset-0`}
                 >
                   {mark}
@@ -183,11 +170,12 @@ export function GetStartedCard() {
           );
         })}
       </ol>
+      {addMenu.menu}
       <button
         type="button"
         data-testid="onboarding-groups"
         className={`${buttonStyle("ghost", "sm")} mt-1 justify-start`}
-        onClick={() => useAppStore.getState().openLibrary()}
+        onClick={() => useAppStore.getState().openLibrary("starters")}
       >
         {t("library.chooseStarters")}
       </button>
@@ -196,12 +184,13 @@ export function GetStartedCard() {
 }
 
 /**
- * Above the example Mind's title: what a Mind is, and the ways on: a Mind of
- * one's own, to add Documents or apps to, or removing the examples.
+ * Above the example Mind's title: what a Mind is, and the ways on: adding
+ * one's own Documents, in place (#766), or removing the examples.
  */
 export function ExampleBanner() {
   const t = useT();
-  const createMind = useAppStore((state) => state.createMind);
+  const gap = useGap();
+  const addMenu = useAddYourDocuments("example-add");
   const removeExamples = useAppStore((state) => state.removeExamples);
   return (
     <aside
@@ -226,18 +215,20 @@ export function ExampleBanner() {
       </svg>
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <p>
-          <strong className="font-semibold text-ink">{t("examples.banner.title")}</strong>{" "}
+          <strong className="font-semibold text-ink">{t("examples.banner.title")}</strong>
+          {gap(t("examples.banner.title"), t("examples.banner.body"))}
           {t("examples.banner.body")}
         </p>
         <div className="flex flex-wrap gap-2">
           <button
+            {...addMenu.buttonProps}
             type="button"
             data-testid="example-add-own"
-            onClick={() => void createMind()}
             className={buttonStyle("primary", "sm")}
           >
             {t("examples.banner.addOwn")}
           </button>
+          {addMenu.menu}
           <button
             type="button"
             data-testid="example-remove"
@@ -293,6 +284,7 @@ function GuideStep({
  */
 export function StartGuide() {
   const t = useT();
+  const gap = useGap();
   const progress = useAppStore((state) => state.settings?.device.gettingStarted);
   const examplesAvailable = useAppStore((state) => state.examples?.available === true);
   const addLinkedFolder = useAppStore((state) => state.addLinkedFolder);
@@ -388,7 +380,8 @@ export function StartGuide() {
       </ol>
       {examplesAvailable && (
         <p className="mt-5 text-ui text-ink-meta">
-          {t("startGuide.example.lead")}{" "}
+          {t("startGuide.example.lead")}
+          {gap(t("startGuide.example.lead"), t("startGuide.example.open"))}
           <button
             type="button"
             data-testid="start-open-example"

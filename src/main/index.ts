@@ -5,7 +5,6 @@ import {
   dialog,
   type IpcMainEvent,
   type IpcMainInvokeEvent,
-  ipcMain,
   powerMonitor,
 } from "electron";
 import {
@@ -15,18 +14,22 @@ import {
   createCore,
   resolveLanguage,
   type Settings,
+  type TaskKind,
 } from "../core";
+import { DataFromNewerVersionError } from "../core/errors";
 import type { Language } from "../core/language";
 import { defaultOllamaUrl } from "../core/providers/kinds";
 import { installedOllamaModels } from "../core/providers/ollama";
 import { channelFor, EVENT_CHANNEL } from "../shared/bridge";
-import { translate } from "../shared/i18n";
 import { registerDocumentScheme, serveDocumentFiles } from "./documentProtocol";
 import { serveFileActions } from "./files";
+import { handle } from "./ipc";
 import { startLogging } from "./logging";
 import { isCaptureWindow } from "./meetings/capture";
 import { installAppMenu } from "./menu";
+import { createSystemNotifications } from "./notifications";
 import { chooseExecutor, createElectronAdapters, systemBrowser } from "./platform";
+import { DOWNLOAD_BUTTON, RELEASES_PAGE, startupDialog } from "./startupError";
 import { reportFullScreen, titleBarOptions } from "./titleBar";
 import { registerUpdateCheck, startAutoUpdates } from "./updater";
 import { keepWindowPlace, windowPlace } from "./windowState";
@@ -63,6 +66,19 @@ async function testChatModel(): Promise<ChatModelFactory | undefined> {
   return undefined;
 }
 
+/**
+ * The smoke tests' scripted Task, which asks for approval and writes files
+ * (see ./scriptedTask). Only a test build has it, as it has the scripted chat
+ * model; a test starts it through `globalThis.incarnamindScriptedTask`.
+ */
+async function testTaskKinds(): Promise<TaskKind[]> {
+  if (import.meta.env.MODE === "test" && process.env.INCARNAMIND_TEST_TASKS === "1") {
+    const { scriptedTask } = await import("./scriptedTask");
+    return [scriptedTask];
+  }
+  return [];
+}
+
 let core: Core | undefined;
 
 /** The app's windows: not the hidden one that records a Meeting's audio. */
@@ -79,7 +95,7 @@ function isFromOurRenderer(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
  */
 function exposeCore(core: Core): void {
   for (const method of coreApiMethods) {
-    ipcMain.handle(channelFor(method), (event, ...args: unknown[]) => {
+    handle(channelFor(method), (event, ...args) => {
       if (!isFromOurRenderer(event)) throw new Error("Refused a call from an unknown page.");
       return Reflect.apply(core[method], core, args) as Promise<unknown>;
     });
@@ -185,18 +201,25 @@ function installMenuInLanguage(core: Core): void {
   });
 }
 
-function showStartupError(error: unknown): void {
+async function showStartupError(error: unknown): Promise<void> {
   logger.exception("app.startFailed", error);
   const language = resolveLanguage("system", app.getPreferredSystemLanguages());
-  const message = error instanceof Error ? error.message : String(error);
-  dialog.showErrorBox(
-    translate(language, "error.startup.title"),
-    translate(language, "error.startup.body", { message }),
-  );
+  const options = startupDialog(error, language);
+  if (!(error instanceof DataFromNewerVersionError)) {
+    dialog.showErrorBox(options.title, options.detail);
+    return;
+  }
+  const { response } = await dialog.showMessageBox({ type: "error", ...options });
+  if (response === DOWNLOAD_BUTTON) {
+    await systemBrowser.open(RELEASES_PAGE).catch((openError: unknown) => {
+      logger.exception("app.startFailed", openError);
+    });
+  }
 }
 
 app.whenReady().then(async () => {
   const createChatModel = await testChatModel();
+  const taskKinds = await testTaskKinds();
   const executor = await scriptExecutor;
   // The window's page starts loading while the core starts. Its calls reach the core once
   // `exposeCore` has run, below: they wait until this synchronous run is done.
@@ -204,6 +227,7 @@ app.whenReady().then(async () => {
   try {
     core = createCore({
       ...createElectronAdapters(logger),
+      notifications: createSystemNotifications(appWindows),
       ...(executor && { executor }),
       ...(createChatModel && { createChatModel }),
       // A smoke test never reaches an Ollama that happens to run on the computer: only a
@@ -212,13 +236,20 @@ app.whenReady().then(async () => {
         localModels: (baseUrl: string) =>
           baseUrl === defaultOllamaUrl() ? Promise.resolve([]) : installedOllamaModels(baseUrl),
       }),
+      ...(taskKinds.length > 0 && { taskKinds }),
     });
   } catch (error) {
-    showStartupError(error);
+    await showStartupError(error);
     app.quit();
     return;
   }
   exposeCore(core);
+  if (taskKinds.length > 0) {
+    const started = core;
+    (globalThis as { incarnamindScriptedTask?: unknown }).incarnamindScriptedTask = {
+      start: (mindId: string, input: unknown) => started.startTask("scripted", mindId, input).id,
+    };
+  }
   registerUpdateCheck(core);
   serveFileActions(core, {
     dataDir: app.getPath("userData"),

@@ -10,7 +10,20 @@ const settings = (leaveOutOwnFiles: boolean): Pick<Settings, "user"> => ({
     imageModel: null,
     suggestWhileWriting: false,
     leaveOutOwnFiles,
+    exportOptions: {
+      format: "docx",
+      docx: {
+        includeQuestions: false,
+        trackChanges: true,
+        markAiText: true,
+        commentFailedChecks: true,
+      },
+      pdf: { includeQuestions: false },
+      html: { includeQuestions: false },
+    },
+    authorName: null,
     monthlyCap: null,
+    webSearch: false,
   },
 });
 

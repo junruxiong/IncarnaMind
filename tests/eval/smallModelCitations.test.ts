@@ -76,6 +76,7 @@ function sessionOver({ name, pages, passages }: Excerpt) {
       },
       pageTexts: (_documentId, _contentHash, from, to) =>
         from === null || to === null ? units : inRange(from, to),
+      documentDate: () => null,
     },
     { onRecord: () => undefined },
   );
@@ -237,7 +238,7 @@ describe("Why a small model's Citations of long PDFs aren't found", () => {
     expect(outcomes).toMatchObject([
       { check: "not-found", outcome: "wrong-page", pages: [7, 7], quoteOn: [8, 8] },
       { check: "found", pages: [8, 8] },
-      { check: "found", pages: [7, 8] },
+      { check: "found", pages: [8, 8] },
     ]);
     // In the Tool loop, `cite` tells the model, which may fix the record with another call.
     expect(feedback).toMatch(/\[\^1\]: the quote isn't word for word on p\. 7 in P1/);
@@ -251,7 +252,7 @@ describe("Why a small model's Citations of long PDFs aren't found", () => {
     ).toMatchObject([{ check: "found", pages: [8, 8] }]);
   });
 
-  test("the structured-output example names no page; its placeholder, copied, cites the Passage's own pages (en-02)", async () => {
+  test("the structured-output example names no page; its placeholder, copied, cites the page the quote is on (en-02)", async () => {
     const instructions = documentInstructions("structured-output", {
       total: 1,
       names: ["Attention Is All You Need"],
@@ -268,7 +269,7 @@ describe("Why a small model's Citations of long PDFs aren't found", () => {
     ]);
 
     expect(outcomes).toMatchObject([
-      { check: "found", pages: [7, 8] },
+      { check: "found", pages: [8, 8] },
       { check: "not-found", checkReason: "pages-outside-passage", outcome: "page-range" },
     ]);
     // In structured output, a page outside the Passage is placed inside it, where the quote is.

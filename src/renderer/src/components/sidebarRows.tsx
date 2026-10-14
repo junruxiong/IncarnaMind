@@ -24,23 +24,41 @@ const rowTones: Record<RowTone, string> = {
  * an inset rule and weight 600. Its actions (`rowActionsClass`) sit on its
  * right end and take its background. Names of Documents and Folders are a
  * shade darker than the app's own rows. A row's words can't be selected, so
- * a right-click never selects them. `--row-bg` follows
- * its background, for a mark that rings itself in it (a Document's Tag dots).
+ * a right-click never selects them. `--row-bg` is the sheet while selected,
+ * for a mark that rings itself in it (a Document's Tag dots, which step aside
+ * while the row is washed). The focus ring (DESIGN.md, Focus) is the row's, just
+ * inside its edge, while its main button (`rowButtonClass`) has the focus.
  */
 export const rowClass = (selected: boolean, tone: RowTone = "app") =>
-  `group relative flex h-7 shrink-0 items-center rounded-md text-ui select-none ${
+  `group relative flex h-7 shrink-0 items-center rounded-md text-ui select-none has-[.row-main:focus-visible]:outline-2 has-[.row-main:focus-visible]:-outline-offset-2 has-[.row-main:focus-visible]:outline-accent ${
     selected
       ? "bg-sheet font-semibold text-ink shadow-[inset_0_0_0_1px_var(--color-rule)] [--row-bg:var(--color-sheet)]"
-      : `${rowTones[tone]} hover:bg-hover has-[:focus-visible]:bg-hover hover:[--row-bg:var(--color-hover)] has-[:focus-visible]:[--row-bg:var(--color-hover)]`
+      : `${rowTones[tone]} hover:bg-hover has-[:focus-visible]:bg-hover`
   }`;
 
 /** A name being typed in a row. */
 export const rowInputClass =
   "h-6 w-full min-w-0 rounded-sm border border-accent bg-sheet px-1.5 text-ui text-ink outline-1 outline-offset-0 outline-accent select-text";
 
-/** The button that fills a row: icon, 8px gap, text, and anything at its end. */
+/**
+ * The button that fills a row: icon, 8px gap, text, and anything at its end.
+ * `row-main` is how the row finds it (`rowClass`), which draws its focus ring.
+ */
 export const rowButtonClass =
-  "flex h-full w-full min-w-0 items-center gap-2 rounded-md pr-2 pl-2 text-left focus-visible:-outline-offset-2";
+  "row-main flex h-full w-full min-w-0 items-center gap-2 rounded-md pr-2 pl-2 text-left focus-visible:outline-0";
+
+/**
+ * Added to a row's button, so that while the row's actions show its content
+ * ends before them: the name gives way with its "…" instead of running under
+ * them. The room is the actions' own (`rowActionsClass`): 24px a button, 1px
+ * between, 4px and 3px of padding, and the 2px they sit in from the edge.
+ */
+export const clearsActions = {
+  menu: "actions-shown:pr-[33px]",
+  tagsAndMenu: "actions-shown:pr-[58px]",
+  /** A Tag's row, whose menu sits 29px in from the edge, before its chevron. */
+  menuBeforeChevron: "actions-shown:pr-[36px]",
+} as const;
 
 /** A row's 16px icon: muted unless the row is selected. */
 export const rowIconClass = (selected: boolean) =>
@@ -49,12 +67,14 @@ export const rowIconClass = (selected: boolean) =>
 /**
  * A row's actions, over its right end: shown while it is pointed at, is
  * reached by keyboard, or has a menu open (a mouse click alone doesn't keep
- * them). They take the row's background, so its end (a status, a chevron)
- * doesn't show through, and sit 1px inside its edge, so a selected row's
- * outline runs unbroken behind them.
+ * them), which is what the `actions-shown:` variant (styles.css) says; the
+ * `row-actions` class is how the variant finds an open menu. They
+ * take the row's background and sit 2px inside its edge, clear of the focus
+ * ring (2px) and a selected row's outline (1px). The row's button keeps its
+ * content clear of them (`clearsActions`).
  */
 export const rowActionsClass =
-  "absolute inset-y-px right-px flex items-center gap-px rounded-r-[5px] bg-inherit pr-[3px] pl-1 opacity-0 group-hover:opacity-100 group-has-[:focus-visible]:opacity-100 has-[[aria-expanded=true]]:opacity-100";
+  "row-actions absolute inset-y-0.5 right-0.5 flex items-center gap-px rounded-r-[4px] bg-inherit pr-[3px] pl-1 opacity-0 actions-shown:opacity-100";
 
 /** A 24px icon button among a row's actions. */
 export const rowActionButtonClass =

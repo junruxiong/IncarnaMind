@@ -43,6 +43,8 @@
   --color-accent: #2a5bd7;
   --color-accent-strong: #1e46b0;
   --color-accent-wash: #e7edfb;
+  /* A selection in a field that has lost the focus, as macOS draws one in a window not in front. */
+  --color-selection-inactive: #dde1e7;
   /* Citation checks only (and the same green on a found quote in the viewer). */
   --color-success: #166534;
   --color-success-wash: #dcf3e4;
@@ -93,6 +95,12 @@
   --color-tag-gray-ink: #4a4f57;
   --color-tag-gray-dot: #9aa0a8;
   --color-tag-gray-edge: #818993;
+  /*
+   * Charts (DESIGN.md, Colors): an earlier series in this light grey, the later
+   * in `ink-secondary`, the value in focus in `accent`, a pie's slices (and
+   * three series or more) in the Tag hues teal, purple, orange and yellow.
+   */
+  --color-chart-prior: #b9bec6;
 
   /* The type scale (DESIGN.md, Typography). */
   --text-display: 34px;
@@ -144,6 +152,15 @@
  */
 @custom-variant motion-safe (&:where(:root[data-motion="on"] *));
 @custom-variant motion-reduce (&:where(:root:not([data-motion="on"]) *));
+
+/*
+ * While a sidebar row shows its actions: pointed at, reached by keyboard, or
+ * with a menu of theirs open (`rowActionsClass`). What makes room for them or
+ * steps aside says `actions-shown:`.
+ */
+@custom-variant actions-shown (
+  &:where(.group:is(:hover, :has(:focus-visible), :has(.row-actions [aria-expanded="true"])) *)
+);
 
 @utility hide-scrollbar {
   scrollbar-width: none;
@@ -652,9 +669,9 @@
     &[data-divider]::after {
       content: "";
       position: absolute;
-      top: 9px;
+      top: 8px;
       right: 0;
-      bottom: 9px;
+      bottom: 10px;
       width: 1px;
       background: var(--color-tab-divider);
     }
@@ -666,8 +683,10 @@
     }
   }
   /*
-   * The content of a tab: inset 4px at the sides and 3px from the bottom on
-   * the tabs not shown (a 28px shape with radius 8), the whole tab on the shown one.
+   * The content of a tab: inset 4px at the sides and from the bottom on the
+   * tabs not shown (a 28px shape with radius 8, 2px under the slot's top), the
+   * whole tab on the shown one, which keeps the same 4px under its content.
+   * Both centre on the band's line, y 26, as every header's contents do (#615).
    */
   .tab-inner {
     display: flex;
@@ -676,7 +695,7 @@
     gap: 8px;
     min-width: 0;
     height: 28px;
-    margin: 0 4px 3px;
+    margin: 2px 4px 4px;
     padding: 0 4px 0 8px;
     border-radius: 8px;
   }
@@ -684,7 +703,7 @@
     align-self: stretch;
     height: auto;
     margin: 0;
-    padding: 0 8px 0 12px;
+    padding: 0 8px 4px 12px;
     border-radius: 10px 10px 0 0;
   }
   /* The tab is the keyboard stop; its shape shows the focus. */
@@ -863,11 +882,38 @@
   /* 6px from the last tab: the list's 10px end padding (room for a foot) less 4px. */
   .tab-new {
     width: 28px;
-    margin: 0 0 3px -4px;
+    margin: 0 0 4px -4px;
     border-radius: 9999px;
   }
   .tab-strip-spacer {
     flex: 1 1 auto;
+  }
+  /* The Tasks chip (#126; DESIGN.md, Finding Tasks): a pill in the band while a Task runs or needs the User. */
+  .tasks-chip {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    margin: 0 4px 6px;
+    padding: 0 10px 0 8px;
+    border-radius: 9999px;
+    background: var(--color-sheet);
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--color-ink);
+    outline: none;
+
+    &:hover,
+    &[aria-expanded="true"] {
+      background: var(--color-frame);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 1px;
+    }
   }
   .tab-export {
     gap: 6px;
@@ -1071,15 +1117,170 @@
     }
   }
 
+  /* A Mind imported from a Word file: where it came from, or how far its import has got (#104). */
+  .mind-word {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    margin: -16px 0 6px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink-meta);
+
+    + .mind-count {
+      margin-top: 0;
+    }
+  }
+  .mind-word-problem {
+    margin: -2px 0 6px;
+
+    + .mind-count {
+      margin-top: 0;
+    }
+  }
+
+  /* A Mind made by "Verify a document…" (#97): where its text came from, then where its verify is. */
+  .mind-verify {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    min-width: 0;
+    margin: -16px 0 16px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink-meta);
+  }
+  .mind-word-original {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+  }
+  .mind-word-more {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 20px;
+    border-radius: 4px;
+    color: var(--color-ink-meta);
+
+    &:hover,
+    &[aria-expanded="true"] {
+      background: var(--color-hover);
+    }
+  }
+  .mind-verify-from,
+  .mind-word-from {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    max-width: 100%;
+    padding: 0 4px;
+    margin-left: -4px;
+    border-radius: 4px;
+    color: var(--color-ink-secondary);
+
+    &:hover {
+      background: var(--color-hover);
+    }
+  }
+  .mind-verify-done {
+    display: contents;
+    font-variant-numeric: tabular-nums;
+  }
+  .mind-verify-link {
+    border-radius: 4px;
+    font-weight: 600;
+    color: var(--color-accent);
+    text-underline-offset: 2px;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+  .mind-verify-problem {
+    margin: -8px 0 16px;
+  }
+
   /* The count under the title: quiet status text, pulled up into the title's margin. */
   .mind-count {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 8px;
     margin: -16px 0 16px;
     font-family: var(--font-sans);
     font-size: 12px;
     line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  /* The Mind's health under its title (#96), on the count's line: each part moves to its next sentence or Citation. */
+  .mind-health {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 4px;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+  .mind-health-dot {
+    color: var(--color-rule-strong);
+  }
+  .mind-health-part {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 3px;
+    border-radius: 4px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    outline: none;
+
+    &:hover,
+    &:focus-visible {
+      background: var(--color-hover);
+      color: var(--color-ink-secondary);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 1px;
+    }
+  }
+  .mind-health-icon {
+    box-sizing: border-box;
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    padding: 1px;
+    border-radius: 3px;
+  }
+  .mind-health-part[data-part="found"] .mind-health-icon {
+    padding: 0;
+    color: var(--color-success);
+  }
+  .mind-health-part:is([data-part="unsupported"], [data-part="notFound"]) .mind-health-icon {
+    background: var(--color-warning);
+    color: var(--color-sheet);
+  }
+  .mind-health-part[data-part="contradicted"] .mind-health-icon {
+    box-shadow: inset 0 0 0 1.25px var(--color-danger);
+    color: var(--color-danger);
+  }
+  .mind-health-line::before {
+    content: "·";
+    margin-right: 8px;
+    color: var(--color-rule-strong);
+  }
+  .mind-health-note {
+    margin: 0;
     color: var(--color-ink-meta);
   }
   .mind-count-button {
@@ -1136,12 +1337,12 @@
     background: var(--color-sheet);
     outline: none;
 
-    &:focus-visible {
-      border-color: var(--color-accent);
+    &[aria-invalid="true"] {
+      border-color: var(--color-warning);
     }
 
-    &[aria-invalid="true"] {
-      border-color: var(--color-danger);
+    &:focus-visible {
+      border-color: var(--color-accent);
     }
   }
   .count-target-set {
@@ -1160,7 +1361,7 @@
     grid-column: 1 / -1;
     font-size: 12px;
     line-height: 16px;
-    color: var(--color-danger);
+    color: var(--color-ink);
   }
 
   /* The editor and the margin column of checks beside it. */
@@ -1226,12 +1427,17 @@
     color: var(--color-ink);
     transition: border-color 80ms ease-out;
 
+    /* A Document dragged over it, to join the Search scope. */
+    &[data-dropping] {
+      border-color: var(--color-accent);
+      background: var(--color-hover);
+    }
     &:has(> .composer-row > .composer-input:focus) {
       border-color: var(--color-accent);
     }
   }
   .composer-problem {
-    padding: 8px 12px 0 16px;
+    padding: 8px 12px 0 11px;
     user-select: none;
   }
   .composer-row {
@@ -1240,7 +1446,8 @@
     align-items: flex-end;
     gap: 4px 8px;
     min-height: 44px;
-    padding: 8px 8px 8px 12px;
+    /* The text sits 12px inside the box: its 1px edge and 11px. */
+    padding: 8px 8px 8px 11px;
   }
   .composer-input {
     flex: 1 1 14rem;
@@ -1248,7 +1455,7 @@
     min-height: 28px;
     /* Eight lines, then it scrolls. */
     max-height: 168px;
-    padding: 4px 0 4px 4px;
+    padding: 4px 0;
     border: 0;
     outline: none;
     resize: none;
@@ -1421,7 +1628,6 @@
     overflow: auto;
     font: inherit;
     white-space: pre-wrap;
-    overflow-wrap: anywhere;
     color: var(--color-ink);
   }
   .composer-controls {
@@ -1477,6 +1683,45 @@
   .meeting-line {
     padding: 0 4px 2px;
   }
+  /* A Meeting's recording details (#161): meta lines, each after its time in the Meeting. */
+  .capture-details {
+    display: flex;
+    flex-direction: column;
+    margin: 2px 0;
+    padding-top: 6px;
+    border-top: 1px solid var(--color-rule);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    line-height: 20px;
+    color: var(--color-ink-meta);
+    overflow-wrap: break-word;
+
+    & li {
+      display: flex;
+      gap: 8px;
+    }
+  }
+  .meeting-bar .capture-details {
+    margin-inline: 4px;
+  }
+  .capture-details-time {
+    flex-shrink: 0;
+    min-width: 2.5rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .capture-details-line {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink-meta);
+
+    &:hover {
+      color: var(--color-ink);
+    }
+  }
   .meeting-controls {
     display: flex;
     flex-shrink: 0;
@@ -1517,6 +1762,10 @@
       background: var(--color-hover);
       color: var(--color-ink);
     }
+  }
+  .meeting-button:disabled {
+    color: var(--color-ink-placeholder);
+    background: none;
   }
   .meeting-button--icon {
     justify-content: center;
@@ -1635,6 +1884,20 @@
     line-height: 16px;
     color: var(--color-ink-meta);
   }
+  .model-menu-search {
+    width: calc(100% - 8px);
+    margin: 4px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: var(--color-hover);
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink);
+
+    &::placeholder {
+      color: var(--color-ink-meta);
+    }
+  }
   .model-menu-heading {
     padding: 8px 8px 2px;
     font-size: 12px;
@@ -1711,6 +1974,38 @@
       text-decoration: underline;
       text-underline-offset: 2px;
     }
+  }
+
+  /*
+   * A line written while a meeting records shows its time after its words when
+   * pointed at (#139); an empty one, a Mark, shows it before the cursor.
+   */
+  .mind-editor [data-meeting-time]::after {
+    content: attr(data-meeting-time);
+    margin-left: 12px;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-ink-meta);
+    opacity: 0;
+    user-select: none;
+    pointer-events: none;
+  }
+  .mind-editor [data-meeting-time]:hover::after {
+    opacity: 1;
+  }
+  .mind-editor [data-meeting-time]:has(> br:only-child)::after {
+    content: none;
+  }
+  .mind-editor [data-meeting-time]:has(> br:only-child)::before {
+    content: attr(data-meeting-time) " ·";
+    margin-right: 8px;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-ink-meta);
+    user-select: none;
+    pointer-events: none;
   }
 
   /* The Mind editor's content (Tiptap): your writing in Source Serif 4, 17/28. */
@@ -1813,6 +2108,35 @@
     }
     :where(li ul, li ol) {
       padding-left: 24px;
+    }
+
+    /* A checklist: the box hangs in the margin like a bullet; a done item is struck through. */
+    ul:has(> li[data-checked]) {
+      list-style: none;
+    }
+    li[data-checked] {
+      display: flex;
+      gap: 8px;
+      margin-left: -24px;
+    }
+    li[data-checked] > label {
+      flex: none;
+      width: 16px;
+      padding-top: 5px;
+      user-select: none;
+    }
+    li[data-checked] > label > input {
+      margin: 0;
+      accent-color: var(--color-accent);
+      cursor: pointer;
+    }
+    li[data-checked] > div {
+      flex: 1;
+      min-width: 0;
+    }
+    li[data-checked="true"] > div {
+      color: var(--color-ink-secondary);
+      text-decoration: line-through;
     }
 
     /* A quote: its rule hangs in the margin, so its text keeps the edge. */
@@ -2032,6 +2356,13 @@
   }
 
   /* Formulas (KaTeX). Clicking one opens its LaTeX. */
+  /* KaTeX draws at 1.21em; at 1.05em its x-height matches the words around it. Block maths keeps its size. */
+  .mind-editor .katex {
+    font-size: 1.05em;
+  }
+  .mind-editor .katex-display > .katex {
+    font-size: 1.21em;
+  }
   .tiptap-mathematics-render {
     display: inline-block;
     margin-inline: -2px;
@@ -2063,7 +2394,9 @@
   .block-math-error,
   .inline-math-error {
     font-family: var(--font-mono);
-    color: var(--color-danger);
+    color: var(--color-ink-meta);
+    text-decoration: underline dotted var(--color-warning);
+    text-underline-offset: 3px;
   }
   .tiptap-mathematics-render.ProseMirror-selectednode {
     background: var(--color-accent-wash);
@@ -2431,9 +2764,17 @@
   .answer-searches-found {
     color: var(--color-ink-placeholder);
   }
-  /* Its Blocks are inside the node view's content element, one level down. */
+  /*
+   * Its Blocks are inside the node view's content element, one level down. An
+   * Answer written before AI text was marked word by word is all in the
+   * Answer's ink; a newer one is in the User's, its AI text marked.
+   */
   .answer-content {
     color: var(--color-ink-answer);
+
+    &[data-generated-marks] {
+      color: var(--color-ink);
+    }
 
     :where([data-node-view-content-react] > * + *) {
       margin-top: 12px;
@@ -2473,7 +2814,7 @@
     border-top: 1px solid var(--color-rule);
   }
   .answer-call--failed {
-    color: var(--color-danger);
+    color: var(--color-ink);
   }
   .answer-call-summary {
     display: flex;
@@ -2530,7 +2871,6 @@
     line-height: 18px;
     color: var(--color-ink-secondary);
     white-space: pre-wrap;
-    overflow-wrap: anywhere;
     user-select: text;
   }
   .answer-call-detail-label {
@@ -2545,7 +2885,7 @@
   }
   .answer-call-error {
     font-family: var(--font-sans);
-    color: var(--color-danger);
+    color: var(--color-ink);
   }
   .answer-call-files {
     margin: 0 0 0 18px;
@@ -2604,7 +2944,6 @@
   }
   .approval-title-text {
     min-width: 0;
-    overflow-wrap: anywhere;
   }
   .approval-dot {
     width: 8px;
@@ -2652,7 +2991,6 @@
       margin: 0;
       color: var(--color-ink);
       white-space: pre-wrap;
-      overflow-wrap: anywhere;
     }
     pre {
       font-family: var(--font-mono);
@@ -2707,14 +3045,20 @@
       color: var(--color-ink);
     }
   }
-  .approval-button--danger {
-    border-color: transparent;
-    background: var(--color-danger);
-    color: #fff;
-
-    &:hover {
-      background: #912018;
-    }
+  /* In the assistant's narrower column the choices take less room, so Deny keeps its place at their row's end. */
+  .assistant-answer .approval-actions {
+    gap: 4px;
+    padding-right: 8px;
+  }
+  /* Deny has no frame: its padding is only its hit area, and the others need the room. */
+  .assistant-answer .approval-button--ghost {
+    padding-inline: 8px;
+  }
+  .assistant-answer .approval-button {
+    padding: 0 10px;
+  }
+  .assistant-answer .approval-button--primary {
+    padding: 0 12px;
   }
   /* "Always run": the risk, in the choices' section, before it can be confirmed. */
   .approval-warning {
@@ -2726,7 +3070,7 @@
     font-size: var(--text-ui);
     line-height: var(--text-ui--line-height);
     font-weight: 600;
-    color: var(--color-danger);
+    color: var(--color-ink);
   }
   .approval-warning-body {
     font-size: 13px;
@@ -2749,6 +3093,22 @@
     position: relative;
     display: inline;
   }
+  /* A word, its Citations and the punctuation after them, in one run (see `CitationGlue`). */
+  .citation-glue {
+    white-space: nowrap;
+  }
+  /*
+   * The node view's wrappers are `white-space: normal` and would allow a break
+   * between markers; its menu keeps normal text.
+   */
+  .node-citation,
+  .citation {
+    white-space: nowrap !important;
+
+    > [popover] {
+      white-space: normal;
+    }
+  }
   /* The Citation's ⋯, out of sight: its menu opens from the marker (see `ObjectMenu`). */
   .citation-menu-anchor {
     position: absolute;
@@ -2764,7 +3124,7 @@
     box-sizing: border-box;
     min-width: 18px;
     height: 18px;
-    margin: 0 1px 0 4px;
+    margin: 0 0 0 2px;
     padding: 0 4px;
     border: 0;
     border-radius: 4px;
@@ -2874,6 +3234,16 @@
     opacity: 0;
   }
   /*
+   * AI text (#95; DESIGN.md, Writing and text): the Answer's ink, a step
+   * softer than the User's writing. A quote keeps its own, softer still.
+   */
+  .mind-editor .generated-text {
+    color: var(--color-ink-answer);
+  }
+  .mind-editor blockquote .generated-text {
+    color: inherit;
+  }
+  /*
    * Proposals waiting for the User (#93; DESIGN.md, AI edits): removed words
    * struck in ink-meta, new words in the Answer's ink with a 1px accent
    * underline, whole new Blocks the same. Strike and underline say it, not
@@ -2892,6 +3262,11 @@
     color: var(--color-ink-meta);
     text-decoration: line-through 1px var(--color-ink-meta);
   }
+  /* Someone's words from a Word file (#108) aren't AI text: in the User's ink, underlined the same. */
+  .mind-editor ins.proposal-insert.proposal-theirs,
+  .mind-editor .proposal-node--insert.proposal-theirs:not(.citation-marker) {
+    color: var(--color-ink);
+  }
   /* A Citation a change adds or removes: its marker underlined, or struck and faded. */
   .mind-editor .proposal-node--insert .citation-marker,
   .mind-editor .citation-marker.proposal-node--insert {
@@ -2907,14 +3282,17 @@
     background: var(--color-accent-wash);
     border-radius: 2px;
   }
-  /* "3 changes from the assistant · Accept all · Reject all": at the top of the Mind, in view as it scrolls. */
+  /*
+   * "3 changes from the assistant · Accept all · Reject all": at the top of
+   * the Mind, in view as it scrolls, with a line of its own for someone's
+   * changes from a Word file (#108).
+   */
   .proposals-bar {
     position: sticky;
     top: 0;
     z-index: 5;
     display: flex;
-    align-items: center;
-    gap: 6px;
+    flex-direction: column;
     min-width: 0;
     margin: 0 0 12px;
     padding: 6px 0;
@@ -2924,6 +3302,12 @@
     font-size: 13px;
     line-height: 20px;
     color: var(--color-ink-secondary);
+  }
+  .proposals-bar-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
   }
   .proposals-bar-icon {
     width: 14px;
@@ -2997,6 +3381,12 @@
   .change-bar-drops {
     color: var(--color-warning);
   }
+  .change-bar-author {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--color-ink-secondary);
+  }
   /* What the AI is working on: the dot the Answer being written has. */
   .edit-pending-dot {
     display: inline-block;
@@ -3013,6 +3403,33 @@
     flex-shrink: 1;
     max-width: 16rem;
     margin-top: 4px;
+  }
+  /* A quote chip: “the words” · where they are from, a click shows the passage. */
+  .composer-quote--passage {
+    padding-left: 0;
+  }
+  .quote-chip-show {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 4px;
+    height: 100%;
+    padding: 0 0 0 6px;
+    border-radius: 4px 0 0 4px;
+    text-align: start;
+
+    &:hover {
+      color: var(--color-ink);
+    }
+  }
+  .quote-chip-words {
+    flex: 0 1 auto;
+    color: var(--color-ink);
+  }
+  .quote-chip-from {
+    flex: 0 100 auto;
+    min-width: 0;
+    color: var(--color-ink-meta);
   }
 
   /*
@@ -3034,7 +3451,7 @@
     box-sizing: border-box;
     min-width: 18px;
     height: 18px;
-    margin: 0 1px 0 4px;
+    margin: 0 0 0 2px;
     padding: 0 4px;
     border-radius: 4px;
     box-shadow: inset 0 0 0 1px var(--color-rule-strong);
@@ -3084,6 +3501,127 @@
     &[data-check="found"] {
       background: var(--color-success-wash);
       color: var(--color-success);
+    }
+  }
+
+  /*
+   * What a Word import kept as it is (#104; the board Final-30-Word-Import):
+   * quiet, on the frame, never edited inside. A chip in the text (a field, a
+   * control), a box on its own line (a text box, a shape, a chart) whose
+   * label shows on hover or when reached by keyboard, a raised footnote
+   * number, a comment's mark, someone else's change underlined or struck,
+   * and nothing at all for a bookmark, a range or a break.
+   */
+  .word-atom {
+    cursor: default;
+    user-select: none;
+
+    &.ProseMirror-selectednode {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 1px;
+      border-radius: 4px;
+    }
+  }
+  .word-atom-chip {
+    padding: 1px 4px;
+    border-radius: 4px;
+    background: var(--color-frame);
+    color: var(--color-ink-secondary);
+  }
+  .word-atom-note {
+    padding: 0 2px;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    line-height: 0;
+    font-weight: 600;
+    color: var(--color-ink-secondary);
+  }
+  .word-atom-comment {
+    display: inline-flex;
+    padding: 1px 2px;
+    vertical-align: -1px;
+    color: var(--color-ink-meta);
+  }
+  .word-atom-insertion {
+    color: var(--color-ink-secondary);
+    text-decoration: underline;
+    text-decoration-color: var(--color-ink-meta);
+    text-underline-offset: 3px;
+  }
+  .word-atom-deletion {
+    color: var(--color-ink-meta);
+    text-decoration: line-through;
+  }
+  .word-atom-box,
+  .word-block {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 12px 16px 14px;
+    border-radius: 8px;
+    background: var(--color-frame);
+    box-shadow: inset 0 0 0 1px var(--color-rule);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 22px;
+    color: var(--color-ink-secondary);
+    white-space: pre-wrap;
+    cursor: default;
+    user-select: none;
+
+    &:hover,
+    &.ProseMirror-selectednode {
+      box-shadow: inset 0 0 0 1px var(--color-rule-strong);
+    }
+    &.ProseMirror-selectednode {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 1px;
+    }
+    &:hover .word-atom-label,
+    &.ProseMirror-selectednode .word-atom-label {
+      opacity: 1;
+    }
+  }
+  /*
+   * In the line, not a block of its own: ProseMirror keeps an empty mark on
+   * each side of an uneditable node for the cursor, which beside a block would
+   * be a line's gap above and below the box.
+   */
+  .word-atom-box {
+    display: inline-flex;
+    width: 100%;
+    box-sizing: border-box;
+    vertical-align: top;
+  }
+  .word-atom-label {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 4px;
+    background: var(--color-sheet);
+    box-shadow: inset 0 0 0 1px var(--color-rule);
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+    white-space: nowrap;
+    opacity: 0;
+  }
+  /* A picture in the text, at the size Word drew it, never wider than the text. */
+  .mind-image {
+    display: inline;
+    max-width: 100%;
+    height: auto;
+    vertical-align: bottom;
+
+    &.ProseMirror-selectednode {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 2px;
     }
   }
 
@@ -3277,6 +3815,15 @@
   }
 
   /*
+   * Notes added from an Answer (#201): just added, washed for a moment
+   * (DESIGN.md: "a brief wash on text just added").
+   */
+  .mind-editor > .block-just-added {
+    border-radius: 2px;
+    animation: block-just-added 1600ms ease-in both;
+  }
+
+  /*
    * The margin column of checks (`MarginChecks`): for each Citation an 18px
    * mark with its state's icon and number, level with its marker's line.
    */
@@ -3343,6 +3890,10 @@
     --check-ink: var(--color-ink-secondary);
     --check-wash: var(--color-chip);
   }
+  .margin-check:is([data-check="not-checked"], [data-check="needs-recheck"]) {
+    --check-ink: var(--color-ink-meta);
+    --check-wash: none;
+  }
   .margin-check[data-check="checking"],
   .citation-card--checking {
     --check-ink: var(--color-ink-meta);
@@ -3360,6 +3911,11 @@
       .margin-check-icon {
         color: var(--color-success);
       }
+    }
+    /* A sentence found supported is as quiet as a Citation found: its "+" says the Passage can be cited. */
+    &[data-check="supported"] {
+      --check-wash: none;
+      color: var(--color-success);
     }
     /* Contradicted is outlined, so it reads without its colour. */
     &[data-check="contradicted"] {
@@ -3447,12 +4003,59 @@
     box-decoration-break: clone;
     -webkit-box-decoration-break: clone;
   }
+  /* The Answer's quoted words and the Document's nearest, when the quoted words weren't found (#483). */
+  .citation-card-words {
+    margin: 0;
+    padding-left: 22px;
+
+    blockquote {
+      margin: 0;
+      font-family: var(--font-serif);
+      font-size: 15px;
+      line-height: 24px;
+      color: var(--color-ink);
+      overflow-wrap: break-word;
+    }
+    .citation-card-wash {
+      color: var(--check-ink);
+    }
+  }
+  .citation-card-label {
+    font-size: var(--text-label);
+    line-height: var(--text-label--line-height);
+    font-weight: 600;
+    color: var(--color-ink-meta);
+  }
+  .citation-card-match {
+    padding: 1px 2px;
+    border-radius: 2px;
+    background: var(--color-success-wash);
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+  /* A word read from a scan that may be misread (#397): a spellchecker's wavy line, in amber. */
+  .citation-card-unsure {
+    text-decoration: underline wavy var(--color-attention);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+  }
   /* A Citation's verdict, the one line a claim check adds. */
   .citation-card-verdict {
     padding-left: 22px;
     font-size: var(--text-meta);
     line-height: 18px;
     color: var(--check-ink);
+  }
+  /* The wash behind a sentence its check found unsupported or contradicted (#96). */
+  .claim-wash--unsupported {
+    background: var(--color-warning-wash);
+  }
+  .claim-wash--contradicted {
+    background: var(--color-danger-wash);
+  }
+  .claim-card-says {
+    padding-left: 22px;
+    color: var(--color-ink-secondary);
   }
   .citation-card-note {
     padding-left: 22px;
@@ -3777,6 +4380,142 @@
     max-width: 90vw;
     padding: 8px;
   }
+  /* The find bar over the Mind's top right corner; its matches are marked in the text. */
+  .find-bar {
+    position: fixed;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    max-width: calc(100vw - 32px);
+    padding: 4px;
+    border-radius: 8px;
+    background: var(--color-sheet);
+    box-shadow: var(--shadow-popover);
+    font-family: var(--font-sans);
+    font-size: var(--text-ui);
+    line-height: var(--text-ui--line-height);
+    color: var(--color-ink);
+
+    input {
+      width: 160px;
+      min-width: 0;
+      flex: 1 1 auto;
+      height: 28px;
+      padding: 0 8px;
+      border-radius: 6px;
+      background: var(--color-chip);
+      outline: none;
+    }
+    .find-count {
+      flex: none;
+      min-width: 3.5em;
+      padding: 0 6px;
+      text-align: center;
+      font-size: var(--text-meta);
+      color: var(--color-ink-meta);
+      white-space: nowrap;
+    }
+    .find-count--none {
+      color: var(--color-ink);
+    }
+    button {
+      display: flex;
+      flex: none;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      color: var(--color-ink-secondary);
+      outline: none;
+
+      &:hover:not(:disabled),
+      &:focus-visible {
+        background: var(--color-hover);
+        color: var(--color-ink);
+      }
+      &:disabled {
+        opacity: 0.4;
+      }
+    }
+  }
+  /* A Document chip: a name in the text that opens the Document. */
+  .document-chip-wrap {
+    display: inline;
+  }
+  .document-chip {
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    gap: 4px;
+    padding: 0 6px;
+    border-radius: 6px;
+    background: var(--color-chip);
+    font-size: 0.9em;
+    line-height: 1.5;
+    color: var(--color-ink);
+    vertical-align: baseline;
+    cursor: pointer;
+
+    &:hover {
+      background: var(--color-hover);
+    }
+    .document-chip-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    &[data-missing="true"] {
+      color: var(--color-ink-meta);
+      cursor: default;
+      .document-chip-name {
+        text-decoration: line-through;
+      }
+    }
+  }
+  .ProseMirror-selectednode .document-chip {
+    outline: 2px solid var(--color-accent);
+  }
+  .held-selection {
+    background: var(--color-selection-inactive);
+  }
+  .ProseMirror:focus .held-selection {
+    background: transparent;
+  }
+  .find-match {
+    border-radius: 2px;
+    background: rgb(250 204 21 / 0.35);
+    color: inherit;
+  }
+  .find-match--current {
+    background: rgb(250 204 21 / 0.85);
+  }
+  .mind-outline {
+    width: min(320px, 92vw);
+    max-height: min(60vh, 420px);
+    overflow-y: auto;
+  }
+  /* Where a link goes, with Open, Edit and Remove: the address gives way to the buttons. */
+  .editor-menu.link-bubble {
+    flex-direction: row;
+    align-items: center;
+    gap: 2px;
+    max-width: min(460px, 92vw);
+    .link-bubble-address {
+      min-width: 0;
+      flex: 1 1 auto;
+      overflow: hidden;
+      padding: 0 8px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--color-ink-secondary);
+    }
+    .selection-format {
+      flex: none;
+      padding: 0 8px;
+    }
+  }
 
   /* The handle left of the Block under the mouse: drag it to move the Block, click it for its menu. */
   .block-handle > button {
@@ -3955,6 +4694,14 @@
     font-size: var(--text-meta);
     color: var(--color-ink-meta);
   }
+  /* An empty Folder or Tag stays pickable but reads as empty: its name greys, its hint says so. */
+  .scope-picker-item--empty .truncate {
+    color: var(--color-ink-meta);
+  }
+  .scope-chip-empty {
+    flex-shrink: 0;
+    color: var(--color-ink-meta);
+  }
   .scope-picker-empty {
     padding: 4px 8px;
     font-size: 13px;
@@ -4015,8 +4762,16 @@
     .mind-editor {
       --editor-gutter: 40px;
     }
+    /* A Citation's check shows in its marker; a sentence check's mark keeps to the 40px gutter. */
     .margin-checks {
+      width: 40px;
+    }
+    .margin-checks:not(:has(.claim-mark)),
+    .margin-check:not(.claim-mark) {
       display: none;
+    }
+    .claim-mark {
+      left: 8px;
     }
     /* No margin to hang the footnotes' numbers in. */
     .footnote-area-row {
@@ -4181,6 +4936,8 @@
     background: var(--color-sheet);
     container: assistant / inline-size;
     -webkit-app-region: no-drag;
+    /* The side inset of everything in it: the header's contents, the thread and the composer's box (#612). */
+    --edge: 16px;
 
     &::after {
       content: "";
@@ -4203,12 +4960,16 @@
     }
   }
   .assistant-header {
+    /* Where its first button's box starts: its icon, 6px in, sits on the edge. */
+    --header-start: calc(var(--edge) - 6px);
+
+    position: relative;
     display: flex;
     flex: none;
     align-items: center;
     gap: 2px;
     height: 36px;
-    padding: 0 4px 0 2px;
+    padding: 0 var(--header-start);
     border-bottom: 1px solid var(--color-rule);
     /* It looks movable: the move cursor, and a grip while pointed at. */
     cursor: move;
@@ -4218,9 +4979,15 @@
   .assistant[data-folded] .assistant-header {
     border-bottom: 0;
   }
+  /* Its rule takes the band's last pixel; this one keeps the contents on the band's line, y 26 (#615). */
+  .assistant:not([data-folded]) .assistant-header {
+    padding-top: 1px;
+  }
+  /* In the margin left of the first button, so it takes no room from the edge. */
   .assistant-grip {
-    flex: none;
-    width: 12px;
+    position: absolute;
+    left: calc(var(--header-start) - 10px);
+    width: 10px;
     height: 12px;
     color: var(--color-ink-placeholder);
     opacity: 0;
@@ -4279,14 +5046,14 @@
   }
   /* At the window's top-right corner, clear of Windows' buttons; at its top-left, of macOS's traffic lights. */
   .assistant[data-dock="right"] .assistant-header {
-    padding-right: max(4px, calc(var(--window-buttons-right) - 8px));
+    padding-right: max(var(--header-start), calc(var(--window-buttons-right) - 8px));
   }
   :root[data-title-bar="overlay"] .assistant[data-dock="right"] .assistant-rail {
     padding-top: 40px;
   }
   :root[data-title-bar="inset"]:not([data-full-screen]) .assistant[data-at-window-left] {
     .assistant-header {
-      padding-left: max(2px, calc(var(--window-buttons-left) - 8px));
+      padding-left: max(var(--header-start), calc(var(--window-buttons-left) + 6px));
     }
     .assistant-rail {
       padding-top: 40px;
@@ -4303,38 +5070,1031 @@
       display: none;
     }
   }
-  /* What it reads: one 12px line under the header. */
+  /* What the next Question reads and searches: one line, once, in an empty conversation (#391). */
   .assistant-reads {
-    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
     margin: 0;
-    padding: 4px 12px;
-    border-bottom: 1px solid var(--color-rule);
-    overflow: hidden;
-    font-size: 12px;
-    line-height: 16px;
+    font-size: var(--text-ui);
+    line-height: var(--text-ui--line-height);
     color: var(--color-ink-meta);
+  }
+  .assistant-reads-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+  }
+  .assistant-reads-text {
+    min-width: 0;
+    overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
   }
+  /*
+   * Its scrollbar is a fixed 8px that always has its room, so the 16px edge holds
+   * whatever the system's scrollbars are: the content ends where the composer's
+   * box does, and the scrollbar sits inside that edge (#612).
+   */
   .assistant-thread {
+    --scrollbar: 8px;
+
     flex: 1 1 auto;
     min-height: 0;
-    padding: 12px 14px;
+    padding: 12px calc(var(--edge) - var(--scrollbar)) 12px var(--edge);
     overflow-y: auto;
     overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+
+    &::-webkit-scrollbar {
+      width: var(--scrollbar);
+    }
+    &::-webkit-scrollbar-thumb {
+      border: 2px solid transparent;
+      border-radius: 4px;
+      background: var(--color-rule-strong) padding-box;
+    }
+
+    /* The last 12px above the composer fade to the sheet, so text never meets its edge. */
+    &::after {
+      content: "";
+      position: sticky;
+      bottom: 0;
+      display: block;
+      height: 12px;
+      margin-top: -12px;
+      background: linear-gradient(to bottom, transparent, var(--color-sheet));
+      pointer-events: none;
+    }
   }
   .assistant-empty {
     margin: 0;
-    font-size: 13px;
-    line-height: 20px;
+    font-size: var(--text-ui);
+    line-height: var(--text-ui--line-height);
     color: var(--color-ink-meta);
   }
-  /* The composer of the Mind it reads is drawn here, the panel's width. */
-  .assistant-composer {
-    flex: none;
-    padding: 0 10px 10px;
+  /* Quick asks about the call, in a new conversation while its meeting records (#144). */
+  .assistant-starters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .assistant-starter {
+    padding: 3px 10px;
+    border: 1px solid var(--color-rule);
+    border-radius: 999px;
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink-secondary);
+
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+  }
+
+  /*
+   * The conversation (#201; DESIGN.md, Answer): Questions as
+   * bubbles at the right, Answers with no box, in one reading size (#391):
+   * 14px, Answers 14/22, the actions 13/18, Citation markers 10px; 8–12px
+   * between turns, so the note beside it stays the largest text on screen.
+   * Each Answer's checks sit in a margin at its right, as in a Mind.
+   */
+  /* Short, it sits at the foot, by the composer, as in Claude and ChatGPT. */
+  .assistant-log {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 10px;
+    min-height: 100%;
+
+    &:has(> .assistant-empty) {
+      justify-content: flex-start;
+    }
+  }
+  .assistant-question {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 2px;
+  }
+  .assistant-question-bubble {
+    max-width: 88%;
+    margin: 0;
+    padding: 4px 10px;
+    border-radius: 10px;
+    background: var(--color-chip);
+    font-size: var(--text-ui);
+    line-height: var(--text-ui--line-height);
+    font-weight: 500;
+    color: var(--color-ink);
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+  }
+  /* What the Question was about, kept with it: above its words, a rule on its left. */
+  .assistant-question-quote {
+    display: -webkit-box;
+    margin-bottom: 4px;
+    padding-left: 8px;
+    border-left: 2px solid var(--color-rule-strong);
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    overflow: hidden;
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 400;
+    color: var(--color-ink-meta);
+  }
+  .assistant-question[data-pending] .assistant-question-bubble {
+    color: var(--color-ink-secondary);
+  }
+  .assistant-question-skill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-right: 6px;
+    font-weight: 600;
+    color: var(--color-ink-secondary);
+  }
+  .assistant-answer {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    border-radius: 6px;
+
+    .answer-info,
+    [data-testid="answer-error"],
+    [role="alert"],
+    [role="status"]:not(.assistant-answer-added) {
+      font-size: var(--text-ui);
+      line-height: var(--text-ui--line-height);
+    }
+  }
+  /* A link back from a Note led here: washed for a moment, as text just added is. */
+  .assistant-answer[data-sought] {
+    animation: block-just-added 1600ms ease-in both;
+  }
+  .assistant-answer-frame {
+    position: relative;
+    /* Room at the right for the Citations' checks. */
+    margin-right: 36px;
+
+    .margin-check {
+      left: 6px;
+      height: 16px;
+      font-size: 10px;
+      line-height: 16px;
+    }
+  }
+  .mind-editor.assistant-answer-text {
+    --editor-gutter: 0px;
+
+    min-height: 0;
+    margin-left: 0;
+    padding-left: 0;
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 22px;
+    color: var(--color-ink-answer);
+    cursor: text;
+
+    > * + * {
+      margin-top: 8px;
+    }
+    > * + :is(h1, h2, h3, h4, h5, h6) {
+      margin-top: 12px;
+    }
+    :is(h1, h2, h3, h4, h5, h6) {
+      font-size: 15px;
+      line-height: 22px;
+    }
+    /*
+     * Lists: the text starts 20px in, its bullet or number inside those 20px
+     * (a Mind's hang in its margin; an Answer has none); a nested list goes 20px
+     * further. Past nine items the numbers need a little more.
+     */
+    :where(ul, ol) {
+      padding-left: 20px;
+    }
+    :where(ol:has(> li:nth-child(10))) {
+      padding-left: 28px;
+    }
+    :where(li ul, li ol) {
+      padding-left: 20px;
+    }
+    /*
+     * A code block on its band, inside the Answer's column and as in a Mind in
+     * the compact sizes. It never wraps: a long line scrolls sideways in its band.
+     */
+    :is(pre, .code-block > pre) {
+      margin: 0;
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: var(--color-frame);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 18px;
+      color: var(--color-ink);
+      overflow-x: auto;
+    }
+    /* On the code, not the band: the editor's own style gives `pre` pre-wrap, outside our layers. */
+    :is(pre, .code-block > pre) > code {
+      white-space: pre;
+      overflow-wrap: normal;
+    }
+    /* A table wider than the Answer scrolls inside its frame; the cut edge fades. */
+    .tableWrapper[data-more-after] {
+      mask-image: linear-gradient(to left, transparent, #000 32px);
+    }
+    .tableWrapper[data-more-before] {
+      mask-image: linear-gradient(to right, transparent, #000 32px);
+    }
+    .tableWrapper[data-more-before][data-more-after] {
+      mask-image: linear-gradient(
+        to right,
+        transparent,
+        #000 32px,
+        #000 calc(100% - 32px),
+        transparent
+      );
+    }
+    .citation-marker {
+      min-width: 16px;
+      height: 16px;
+      font-size: 10px;
+      line-height: 16px;
+      vertical-align: 1px;
+    }
+  }
+  /*
+   * Under an Answer: Copy · Add to note ▾ (Stop while it is written); on
+   * hover or focus, and always on the newest, while it is written and once
+   * it is added. Hidden ones keep their room and their place in the Tab order.
+   */
+  .assistant-answer-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0 2px;
+    min-height: 24px;
+    margin-left: -6px;
+    font-size: 13px;
+    line-height: 18px;
+    white-space: nowrap;
+    color: var(--color-ink-meta);
+    user-select: none;
+    opacity: 0;
+    transition: opacity 80ms ease-out;
+  }
+  .assistant-answer:hover > .assistant-answer-actions,
+  .assistant-answer:focus-within > .assistant-answer-actions,
+  .assistant-answer[data-status="streaming"] > .assistant-answer-actions,
+  .assistant-answer:last-of-type > .assistant-answer-actions,
+  .assistant-answer-actions--added {
+    opacity: 1;
+  }
+  .assistant-answer .assistant-answer-action {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 5px;
+    height: 24px;
+    padding: 0 7px 0 6px;
+    border-radius: 6px;
+    font-weight: 400;
+    color: var(--color-ink-meta);
+
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+  }
+  .assistant-answer-add {
+    display: inline-flex;
+    flex-shrink: 0;
+  }
+  .assistant-answer .assistant-answer-add-main {
+    padding-right: 4px;
+    border-radius: 6px 0 0 6px;
+  }
+  .assistant-answer .assistant-answer-add-more {
+    justify-content: center;
+    width: 20px;
+    padding: 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .assistant-answer-add:hover > .assistant-answer-action {
+    background: var(--color-hover);
+  }
+  .assistant-answer-actions > .assistant-answer-status {
+    padding: 0 6px;
+    color: var(--color-ink-meta);
+  }
+
+  /*
+   * A Task's progress in the thread (#657; DESIGN.md, Task progress in the
+   * thread): its head (dot, name, how far), a 3px bar, its latest steps with
+   * their marks, then quiet text actions.
+   */
+  .task-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    margin: 4px 0 8px;
+    font-size: var(--text-ui);
+    line-height: var(--text-ui--line-height);
+    color: var(--color-ink);
+  }
+  .task-progress-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .task-progress-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-weight: 600;
+  }
+  .task-progress-meta {
+    flex-shrink: 0;
+    font-size: 12.5px;
+    line-height: 18px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    color: var(--color-ink-meta);
+  }
+  .task-progress-bar {
+    height: 3px;
+    overflow: hidden;
+    border-radius: 2px;
+    background: var(--color-rule);
+
+    > span {
+      display: block;
+      height: 100%;
+      border-radius: 2px;
+      background: var(--color-accent);
+    }
+  }
+  .task-progress-more {
+    align-self: flex-start;
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--color-ink-meta);
+
+    &:hover {
+      color: var(--color-ink);
+    }
+  }
+  .task-progress-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .task-progress-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+  .task-progress-mark,
+  .task-progress-check {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 20px;
+  }
+  .task-progress-check {
+    height: 14px;
+    margin-top: 3px;
+    color: var(--color-success);
+  }
+  .task-progress-mark--failed {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--color-warning);
+  }
+  .task-progress-details {
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  .task-progress-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 6px;
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink-secondary);
 
     &:empty {
+      display: none;
+    }
+  }
+  .task-progress-action {
+    border-radius: 4px;
+    color: var(--color-ink-secondary);
+
+    &:hover {
+      color: var(--color-ink);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 1px;
+    }
+  }
+  .task-progress-action--strong {
+    font-weight: 600;
+    color: var(--color-accent);
+
+    &:hover {
+      color: var(--color-accent-strong);
+    }
+  }
+  .task-progress-dot {
+    color: var(--color-ink-placeholder);
+  }
+
+  /*
+   * An Answer's steps (#391; DESIGN.md, Answer › In the assistant): one
+   * 14/20 line, folded; the live step with its dot while it is written; and,
+   * unfolded, a timeline whose 16px icons a 1px rule joins. Folding and the
+   * chevron turning are instant.
+   */
+  .answer-steps {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 0;
+  }
+  .answer-steps-line {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    max-width: calc(100% + 6px);
+    min-height: 26px;
+    margin: 0 0 0 -6px;
+    padding: 3px 6px;
+    border-radius: 6px;
+    font-size: var(--text-ui);
+    line-height: var(--text-ui--line-height);
+    text-align: left;
+    color: var(--color-ink-meta);
+    user-select: none;
+  }
+  .assistant-answer .answer-steps-toggle:hover {
+    background: var(--color-hover);
+  }
+  .assistant-answer .answer-steps-toggle[aria-expanded="true"] {
+    color: var(--color-ink-secondary);
+  }
+  .answer-steps-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+  }
+  /* A line that names the Mind: its words open and fold the steps, the name goes to the Mind. */
+  .assistant-answer .answer-steps-split {
+    gap: 0;
+
+    &:has(.answer-steps-part:hover) {
+      background: var(--color-hover);
+    }
+    &:has([aria-expanded="true"]) {
+      color: var(--color-ink-secondary);
+    }
+  }
+  .answer-steps-part {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 6px;
+    white-space: pre;
+  }
+  .answer-steps-part--end {
+    padding-left: 6px;
+  }
+  .answer-steps-mind {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .answer-steps-text {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .answer-steps-chevron {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+
+    [aria-expanded="true"] > & {
+      transform: rotate(90deg);
+    }
+  }
+  .answer-steps-dot {
+    width: 6px;
+    height: 6px;
+    margin: 0 4px;
+    flex-shrink: 0;
+    border-radius: 9999px;
+    background: var(--color-accent);
+    animation: mind-pulse 1.6s ease-in-out infinite;
+  }
+  .answer-steps-dot--waiting {
+    background: var(--color-attention);
+    animation: none;
+  }
+  .answer-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    margin: 6px 0 2px;
+    padding: 0;
+    list-style: none;
+    font-size: var(--text-ui);
+    line-height: var(--text-ui--line-height);
+    color: var(--color-ink-secondary);
+  }
+  .answer-step {
+    position: relative;
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr);
+    column-gap: 10px;
+
+    /* The rule from this step's icon to the next one's. */
+    &:not(:last-child)::before {
+      content: "";
+      position: absolute;
+      top: 22px;
+      bottom: -10px;
+      left: 7.5px;
+      width: 1px;
+      background: var(--color-rule);
+    }
+  }
+  .answer-step-icon {
+    display: flex;
+    width: 16px;
+    height: 20px;
+    align-items: center;
+    color: var(--color-ink-meta);
+
+    > svg {
+      width: 16px;
+      height: 16px;
+    }
+  }
+  .answer-step-body {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 0;
+  }
+  .answer-step-title {
+    margin: 0;
+    overflow-wrap: break-word;
+  }
+  .answer-step-link {
+    text-align: left;
+    border-radius: 4px;
+  }
+  .assistant-answer .answer-step-link:hover {
+    color: var(--color-ink);
+    text-decoration: underline;
+    text-decoration-color: var(--color-rule-strong);
+    text-underline-offset: 3px;
+  }
+  .answer-step-detail {
+    margin: 0;
+    color: var(--color-ink-meta);
+  }
+  .answer-step-reasoning {
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+
+    &:not([data-whole]) {
+      display: -webkit-box;
+      overflow: hidden;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 3;
+    }
+  }
+  .answer-step-more {
+    margin-top: 4px;
+    border-radius: 4px;
+    color: var(--color-ink-secondary);
+    text-decoration: underline;
+    text-decoration-color: var(--color-rule-strong);
+    text-underline-offset: 3px;
+  }
+  .assistant-answer .answer-step-more:hover {
+    color: var(--color-ink);
+  }
+  .answer-step-queries {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .answer-step-sources {
+    width: 100%;
+    margin: 4px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .answer-step-source {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    height: 28px;
+    margin-left: -6px;
+    padding: 0 6px;
+    border-radius: 6px;
+    text-align: left;
+    color: var(--color-ink-secondary);
+  }
+  .assistant-answer .answer-step-source:hover {
+    background: var(--color-hover);
+    color: var(--color-ink);
+  }
+  .answer-step-source-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    color: var(--color-ink-meta);
+  }
+  .answer-step-source-name {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .answer-step-source-where {
+    flex-shrink: 0;
+  }
+  .answer-step-check[data-check="found"] {
+    color: var(--color-success);
+  }
+  .answer-step-check[data-check="not-found"] {
+    color: var(--color-warning);
+  }
+  .assistant-answer .answer-step-problem {
+    font-size: var(--text-ui);
+    line-height: var(--text-ui--line-height);
+  }
+  /* A Connector's, a Skill's or a script's own row, its icon in the timeline's column. */
+  .answer-step--call {
+    > .answer-call {
+      grid-column: 1 / -1;
+      padding: 0;
+      border-top: 0;
+    }
+    .answer-call-summary {
+      gap: 10px;
+      margin-left: 0;
+      padding: 0;
+    }
+    .answer-call-icon {
+      width: 16px;
+      height: 16px;
+    }
+    .answer-call-details,
+    .answer-call-files {
+      margin-left: 26px;
+    }
+  }
+  .answer-steps-regenerate {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 24px;
+    margin: 4px 0 0 20px;
+    padding: 0 7px 0 6px;
+    border-radius: 6px;
+    font-size: 13px;
+    line-height: 18px;
+    font-weight: 600;
+    color: var(--color-ink-secondary);
+  }
+  .assistant-answer .answer-steps-regenerate:hover {
+    background: var(--color-hover);
+    color: var(--color-ink);
+  }
+  .assistant-answer-actions--added {
+    flex-wrap: nowrap;
+    gap: 4px;
+    margin-left: 0;
+  }
+  .assistant-answer-added {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 600;
+    color: var(--color-ink);
+  }
+
+  /* The ▾ beside Add to note, as Notion's "Add to page". */
+  .editor-popover.add-to-picker {
+    display: flex;
+    flex-direction: column;
+    width: 320px;
+    max-width: calc(100vw - 16px);
+    overflow: hidden;
+    border-radius: 10px;
+    background: var(--color-sheet);
+    box-shadow: var(--shadow-popover);
+    font-family: var(--font-sans);
+    text-align: left;
+    color: var(--color-ink);
+  }
+  .add-to-search {
+    padding: 8px 8px 4px;
+  }
+  .add-to-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 32px;
+    padding: 0 8px;
+    border-radius: 4px;
+    box-shadow: inset 0 0 0 1px var(--color-rule);
+    color: var(--color-ink-meta);
+
+    &:focus-within {
+      box-shadow: inset 0 0 0 1px var(--color-accent);
+    }
+    > input {
+      flex: 1 1 auto;
+      min-width: 0;
+      height: 28px;
+      border: 0;
+      outline: none;
+      background: transparent;
+      font: inherit;
+      font-size: 14px;
+      line-height: 20px;
+      color: var(--color-ink);
+
+      &::placeholder {
+        color: var(--color-ink-placeholder);
+      }
+    }
+  }
+  .add-to-list {
+    display: flex;
+    flex-direction: column;
+    max-height: 360px;
+    padding: 0 4px 4px;
+    overflow-y: auto;
+  }
+  .add-to-option {
+    display: grid;
+    /* Its icon, its name and where it goes, and on the chosen one the key that adds. */
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+    column-gap: 8px;
+    align-items: start;
+    padding: 5px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+
+    &[aria-selected="true"] {
+      background: var(--color-chip);
+    }
+  }
+  .add-to-option-icon {
+    padding-top: 2px;
+    color: var(--color-ink-meta);
+  }
+  .add-to-option-text {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+  }
+  .add-to-option-title,
+  .add-to-option-detail {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .add-to-option-title {
+    font-size: 14px;
+    line-height: 20px;
+  }
+  .add-to-option-detail {
+    font-size: var(--text-label);
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  .add-to-option-key {
+    align-self: center;
+    font-size: var(--text-label);
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  .add-to-heading {
+    margin: 0;
+    padding: 8px 8px 2px;
+    font-size: var(--text-label);
+    line-height: 16px;
+    font-weight: 600;
+    color: var(--color-ink-meta);
+  }
+  .add-to-separator {
+    flex-shrink: 0;
+    height: 1px;
+    margin: 4px;
+    background: var(--color-rule);
+  }
+  .add-to-empty {
+    margin: 0;
+    padding: 4px 8px;
+    font-size: 13px;
+    color: var(--color-ink-meta);
+  }
+  /* The composer is drawn here, the panel's width: the Mind's it reads, or the one with none in focus. */
+  .assistant-composer {
+    flex: none;
+    padding: 0 var(--edge) 10px;
+
+    &:empty {
+      display: none;
+    }
+  }
+  /*
+   * The Task tray (#126, narrowed by #657; DESIGN.md, Task tray): joined to
+   * the top of the composer, its width, sharing its edge: the plan card, the
+   * one ask, its buttons pinned at the bottom while the rest scrolls, and
+   * queued messages, each section ruled from the one above it.
+   */
+  .task-tray {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--color-rule);
+    border-bottom: 0;
+    border-radius: 10px 10px 0 0;
+    background: var(--color-sheet);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--color-ink);
+  }
+  .task-tray + .composer {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+  }
+  .task-dot {
+    width: 6px;
+    height: 6px;
+    flex-shrink: 0;
+    border-radius: 9999px;
+    background: var(--color-accent);
+    animation: mind-pulse 1.6s ease-in-out infinite;
+  }
+  .task-dot--attention {
+    background: var(--color-attention);
+    animation: none;
+  }
+  .task-dot--idle {
+    background: var(--color-ink-placeholder);
+    animation: none;
+  }
+  .tasks-popover {
+    width: 320px;
+    max-width: calc(100vw - 16px);
+
+    .model-menu-item {
+      align-items: start;
+    }
+    .task-dot {
+      margin: 7px 0 0 5px;
+    }
+  }
+  .tasks-popover-title,
+  .tasks-popover-line {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .tasks-popover-title {
+    font-size: 13px;
+    line-height: 18px;
+    font-weight: 600;
+  }
+  .tasks-popover-done {
+    width: 14px;
+    height: 14px;
+    margin-top: 2px;
+    color: var(--color-success);
+  }
+  /* The ask scrolls inside its card, so its buttons stay pinned at the card's foot. */
+  .task-ask {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    padding: 8px 8px 10px;
+
+    & + * {
+      border-top: 1px solid var(--color-rule);
+    }
+    .approval-card {
+      flex: 0 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+    /* What it asks stays in view above the scrolled details, as the buttons stay below (#678). */
+    .approval-head {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      padding: 10px;
+      background: var(--color-sheet);
+    }
+    .approval-title {
+      font-size: 14px;
+      line-height: 20px;
+    }
+    /* In the short tray of the bottom dock the head is the title's one line, and the details scroll between it and the buttons. */
+    .assistant[data-dock="bottom"] & {
+      padding-block: 4px 6px;
+
+      .approval-actions {
+        padding-block: 4px;
+      }
+      .approval-head {
+        padding-block: 8px 4px;
+      }
+      .approval-title {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .approval-explanation {
+        display: none;
+      }
+    }
+    .approval-details {
+      padding: 10px;
+    }
+    .approval-explanation {
+      margin-left: 0;
+    }
+    .approval-actions {
+      position: sticky;
+      bottom: 0;
+      gap: 4px;
+      padding: 8px 10px;
+      border-radius: 0 0 8px 8px;
+      background: var(--color-sheet);
+    }
+    .approval-button {
+      padding: 0 8px;
+    }
+    .approval-button--primary {
+      padding: 0 10px;
+    }
+  }
+  .task-ask-count {
+    flex: none;
+    margin-bottom: 6px;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  .approval-keys {
+    margin-left: 4px;
+    font-size: 11px;
+    font-weight: 400;
+    opacity: 0.75;
+  }
+  /* In a narrow assistant the buttons keep one row without the hint; the key stays in the button's tooltip and name. */
+  @container assistant (max-width: 360px) {
+    .approval-keys {
       display: none;
     }
   }
@@ -4344,7 +6104,7 @@
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
-    margin: 0 10px 10px;
+    margin: 0 var(--edge) 10px;
     padding: 10px 12px;
     border: 1px solid var(--color-rule);
     border-radius: 10px;
@@ -4352,25 +6112,9 @@
     line-height: 20px;
     color: var(--color-ink-meta);
   }
-  /* At the bottom, the conversation and the composer keep to the Mind's column, 832px. */
+  /* At the bottom, the conversation and the composer keep to the Mind's column, 832px, which gutters the text 40px: the edge is where it starts. */
   .assistant[data-dock="bottom"] {
-    .assistant-thread {
-      padding-inline: 40px;
-    }
-    .assistant-composer {
-      padding-inline: 40px;
-    }
-    .assistant-thread > *,
-    .assistant-composer > .composer {
-      width: auto;
-      max-width: 812px;
-      margin-inline: auto;
-    }
-    .assistant-no-mind {
-      width: auto;
-      max-width: 812px;
-      margin: 0 max(40px, calc((100% - 812px) / 2)) 10px;
-    }
+    --edge: max(40px, calc((100cqw - 812px) / 2));
   }
 
   /* A floating box's edges and corners resize it; its bottom-right corner also takes the keys. */
@@ -4494,6 +6238,1358 @@
     line-height: 20px;
     color: var(--color-ink-meta);
   }
+
+  /*
+   * History (#113, the canvas board Final-02-History): the whole window, the
+   * frame around one card of two columns with a rule between, the earlier
+   * version left and the later right. Its marks are grey, as nothing in it
+   * can be changed: removed words struck in ink-meta, added words on a
+   * tab-strip wash with an ink-placeholder underline. At 900px and under the
+   * columns stack: a row that changed shows both, one that didn't shows once.
+   */
+  .history {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    max-width: none;
+    height: 100vh;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    flex-direction: column;
+    background: var(--color-frame);
+    color: var(--color-ink);
+    container: history / inline-size;
+
+    &[open] {
+      display: flex;
+    }
+    &::backdrop {
+      background: transparent;
+    }
+  }
+  .history-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    color: var(--color-ink-meta);
+  }
+  .history-meta {
+    color: var(--color-ink-meta);
+  }
+  .history-bar {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    flex-shrink: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: center;
+    height: 44px;
+    padding: 0 max(8px, var(--window-buttons-right)) 0 8px;
+  }
+  .history-bar-half {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+    padding-left: max(8px, calc(var(--window-buttons-left) - 8px));
+
+    &[data-side="right"] {
+      padding-left: 56px;
+    }
+  }
+  .history-title {
+    display: flex;
+    flex: 0 1 auto;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+    margin: 0 4px 0 0;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 20px;
+    color: var(--color-ink-secondary);
+
+    > .history-icon {
+      width: 16px;
+      height: 16px;
+    }
+  }
+  .history-picker {
+    display: inline-flex;
+    flex: 0 1 auto;
+    min-width: 0;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 6px 0 8px;
+    border: 1px solid var(--color-rule-strong);
+    border-radius: 6px;
+    background: var(--color-sheet);
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink);
+    white-space: nowrap;
+
+    /* Only the left one waits for versions to choose from. */
+    &[data-side="left"]:enabled:hover {
+      background: var(--color-frame);
+    }
+    &[data-side="left"]:disabled {
+      opacity: 0.5;
+    }
+    /* The Mind now, or another version: quiet, a label until it is pointed at. */
+    &[data-side="right"] {
+      border-color: transparent;
+      background: transparent;
+      font-weight: 600;
+      color: var(--color-ink-secondary);
+    }
+    &[data-side="right"]:hover {
+      background: var(--color-chip);
+    }
+  }
+  .history-menu {
+    width: 300px;
+    max-width: calc(100vw - 16px);
+    font-size: 13px;
+    line-height: 20px;
+  }
+  .history-time {
+    font-variant-numeric: tabular-nums;
+  }
+  .history-option {
+    color: var(--color-ink-secondary);
+
+    &[aria-checked="true"] {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+    &[aria-checked="true"] > .history-time {
+      font-weight: 600;
+    }
+  }
+  .history-card {
+    position: relative;
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    margin: 0 8px 8px;
+    overflow: hidden;
+    border: 1px solid var(--color-rule);
+    border-radius: 10px;
+    background: var(--color-sheet);
+  }
+  .history-note {
+    margin: 16px 56px 0;
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink-meta);
+  }
+  .history-scroller {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    /* The rule between the columns, the scroller's whole height. */
+    background: linear-gradient(var(--color-rule), var(--color-rule)) no-repeat center / 1px 100%;
+    background-attachment: local;
+  }
+  .history-rows {
+    padding: 40px 0 48px;
+    font-family: var(--font-serif);
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+    color: var(--color-ink);
+    overflow-wrap: break-word;
+  }
+  .history-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .history-cell {
+    min-width: 0;
+    padding: 0 48px 16px 56px;
+  }
+  .history-block {
+    margin: 0;
+  }
+  .history-heading {
+    margin-top: 16px;
+    font-size: var(--text-heading);
+    font-weight: 600;
+    line-height: var(--text-heading--line-height);
+
+    &[data-level="2"] {
+      font-size: 19px;
+      line-height: 28px;
+    }
+    &:is([data-level="3"], [data-level="4"], [data-level="5"], [data-level="6"]) {
+      font-size: var(--text-body);
+      line-height: var(--text-body--line-height);
+    }
+  }
+  .history-question {
+    font-family: var(--font-sans);
+    font-size: var(--text-question);
+    font-weight: 500;
+    line-height: var(--text-question--line-height);
+    color: var(--color-ink-secondary);
+  }
+  /* A list item's bullet or number hangs in the 24px its indent keeps for it. */
+  .history-marker {
+    display: inline-block;
+    width: 24px;
+    margin-left: -24px;
+    font-variant-numeric: tabular-nums;
+  }
+  .history-quote {
+    padding-left: 16px;
+    border-left: 2px solid var(--color-rule-strong);
+    color: var(--color-ink-secondary);
+  }
+  .history-code {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 20px;
+    white-space: pre-wrap;
+  }
+  .history-lines {
+    font-family: var(--font-sans);
+    font-size: var(--text-ui);
+    line-height: 22px;
+    white-space: pre-line;
+  }
+  .history-label {
+    font-weight: 600;
+    color: var(--color-ink-meta);
+  }
+  .history-rule {
+    height: 0;
+    margin: 12px 0;
+    border: 0;
+    border-top: 1px solid var(--color-rule-strong);
+  }
+  .history-citation {
+    display: inline-flex;
+    min-width: 18px;
+    height: 18px;
+    align-items: center;
+    justify-content: center;
+    margin: 0 1px 0 4px;
+    padding: 0 4px;
+    border-radius: 4px;
+    background: var(--color-chip);
+    font-family: var(--font-sans);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 18px;
+    color: var(--color-ink-secondary);
+    vertical-align: 2px;
+  }
+  .history-rows del {
+    color: var(--color-ink-meta);
+    text-decoration: line-through 1px var(--color-ink-meta);
+  }
+  .history-rows ins {
+    padding: 2px 0;
+    border-radius: 2px;
+    background: var(--color-tab-strip);
+    color: var(--color-ink-answer);
+    text-decoration: underline 1px var(--color-ink-placeholder);
+    text-underline-offset: 4px;
+    box-decoration-break: clone;
+  }
+  @container history (width <= 900px) {
+    .history-bar {
+      grid-template-columns: minmax(0, 1fr);
+      row-gap: 8px;
+      height: auto;
+      padding-top: 8px;
+      padding-bottom: 8px;
+    }
+    .history-bar-half[data-side="right"] {
+      padding-left: 8px;
+    }
+    .history-scroller {
+      background: none;
+    }
+    .history-row {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .history-row:not([data-changed]) > [data-side="left"],
+    .history-cell:empty {
+      display: none;
+    }
+    .history-cell {
+      padding-right: 24px;
+      padding-left: 24px;
+    }
+    .history-note {
+      margin-right: 24px;
+      margin-left: 24px;
+    }
+  }
+
+  /* A chart (#436): its colours are tokens only, so it follows the theme. */
+  .chart-block {
+    position: relative;
+    margin: 4px 0 24px;
+    font-family: var(--font-sans);
+    font-size: var(--text-ui);
+    line-height: var(--text-ui--line-height);
+    color: var(--color-ink);
+    cursor: default;
+    user-select: none;
+  }
+  .chart-block.ProseMirror-selectednode .chart-body {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -1px;
+  }
+  .chart-head {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-height: 28px;
+    margin-bottom: 6px;
+  }
+  .chart-title {
+    min-width: 0;
+    overflow: hidden;
+    padding: 0;
+    text-align: start;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    line-height: 18px;
+    font-weight: 600;
+    color: var(--color-ink-meta);
+    cursor: default;
+  }
+  .chart-title-field {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 26px;
+    padding: 0 6px;
+    border: 1px solid var(--color-accent);
+    border-radius: 4px;
+    background: var(--color-sheet);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-ink);
+    outline: none;
+  }
+  .chart-head-space {
+    flex: 1 1 auto;
+  }
+  .chart-head-button {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 4px;
+    height: 26px;
+    padding: 0 6px;
+    border-radius: 6px;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-ink-secondary);
+
+    &:is(:hover, [aria-expanded="true"]) {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: -2px;
+    }
+  }
+  /* The right-click menu's ⋯ button: there for the menu to open from, never seen. */
+  .chart-menu-anchor {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .chart-body {
+    padding: 12px 12px 6px;
+    border: 1px solid var(--color-rule);
+    border-radius: 8px;
+    background: var(--color-sheet);
+  }
+  .chart-plot {
+    position: relative;
+    margin: 0;
+
+    svg {
+      display: block;
+      overflow: visible;
+    }
+  }
+  /* The values lie over the drawing; only they take the pointer. */
+  .chart-marks {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .chart-axis {
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    fill: var(--color-ink-meta);
+  }
+  .chart-label {
+    font-size: 12px;
+    fill: var(--color-ink-secondary);
+  }
+  .chart-grid {
+    stroke: var(--color-rule);
+    stroke-width: 1;
+  }
+  .chart-base {
+    stroke: var(--color-rule-strong);
+    stroke-width: 1;
+  }
+  .chart-line {
+    fill: none;
+    stroke-width: 2;
+    stroke-linejoin: round;
+  }
+  .chart-point {
+    outline: none;
+    cursor: pointer;
+    pointer-events: auto;
+
+    &:hover {
+      opacity: 0.85;
+    }
+  }
+  /* The value in focus, or with its card, in the accent; a pie's slice keeps its colour and is ringed. */
+  :is(rect, circle).chart-point:is([data-active], :focus-visible) {
+    opacity: 1;
+    fill: var(--color-accent);
+  }
+  path.chart-point {
+    stroke: var(--color-sheet);
+    stroke-width: 2;
+  }
+  .chart-ring {
+    fill: none;
+    stroke: var(--color-accent);
+    stroke-width: 3;
+    pointer-events: none;
+  }
+  .chart-fill-prior {
+    fill: var(--color-chart-prior);
+    background: var(--color-chart-prior);
+  }
+  .chart-fill-now {
+    fill: var(--color-ink-secondary);
+    background: var(--color-ink-secondary);
+  }
+  .chart-stroke-prior {
+    stroke: var(--color-chart-prior);
+  }
+  .chart-stroke-now {
+    stroke: var(--color-ink-secondary);
+  }
+  /* Categories in the Tag hues (never green, red or blue), then their darker inks, then grey. */
+  .chart-fill-category0 {
+    fill: var(--color-tag-teal-dot);
+    background: var(--color-tag-teal-dot);
+  }
+  .chart-stroke-category0 {
+    stroke: var(--color-tag-teal-dot);
+  }
+  .chart-fill-category1 {
+    fill: var(--color-tag-purple-dot);
+    background: var(--color-tag-purple-dot);
+  }
+  .chart-stroke-category1 {
+    stroke: var(--color-tag-purple-dot);
+  }
+  .chart-fill-category2 {
+    fill: var(--color-tag-orange-dot);
+    background: var(--color-tag-orange-dot);
+  }
+  .chart-stroke-category2 {
+    stroke: var(--color-tag-orange-dot);
+  }
+  .chart-fill-category3 {
+    fill: var(--color-tag-yellow-dot);
+    background: var(--color-tag-yellow-dot);
+  }
+  .chart-stroke-category3 {
+    stroke: var(--color-tag-yellow-dot);
+  }
+  .chart-fill-category4 {
+    fill: var(--color-tag-teal-ink);
+    background: var(--color-tag-teal-ink);
+  }
+  .chart-stroke-category4 {
+    stroke: var(--color-tag-teal-ink);
+  }
+  .chart-fill-category5 {
+    fill: var(--color-tag-purple-ink);
+    background: var(--color-tag-purple-ink);
+  }
+  .chart-stroke-category5 {
+    stroke: var(--color-tag-purple-ink);
+  }
+  .chart-fill-category6 {
+    fill: var(--color-tag-orange-ink);
+    background: var(--color-tag-orange-ink);
+  }
+  .chart-stroke-category6 {
+    stroke: var(--color-tag-orange-ink);
+  }
+  .chart-fill-category7 {
+    fill: var(--color-tag-yellow-ink);
+    background: var(--color-tag-yellow-ink);
+  }
+  .chart-stroke-category7 {
+    stroke: var(--color-tag-yellow-ink);
+  }
+  .chart-fill-category8 {
+    fill: var(--color-tag-gray-dot);
+    background: var(--color-tag-gray-dot);
+  }
+  .chart-stroke-category8 {
+    stroke: var(--color-tag-gray-dot);
+  }
+  .chart-empty {
+    margin: 0;
+    padding: 24px 0 30px;
+    text-align: center;
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--color-ink-meta);
+  }
+
+  .chart-values {
+    overflow-x: auto;
+
+    table {
+      width: 100%;
+      border: 0;
+      border-radius: 0;
+      border-collapse: collapse;
+      font-variant-numeric: tabular-nums;
+    }
+    :is(th, td) {
+      min-width: 0;
+      padding: 6px 10px;
+      border: 0;
+      border-bottom: 1px solid var(--color-rule);
+      border-radius: 0;
+      background: none;
+      text-align: end;
+      white-space: nowrap;
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 20px;
+      font-weight: 400;
+      color: var(--color-ink);
+    }
+    :is(th, td):first-child {
+      text-align: start;
+    }
+    thead th {
+      font-size: 12px;
+      line-height: 16px;
+      font-weight: 600;
+      color: var(--color-ink-meta);
+    }
+    tbody tr:last-child > * {
+      border-bottom: 0;
+    }
+  }
+  .chart-value-note {
+    font-size: 12px;
+    white-space: nowrap;
+    color: var(--color-ink-meta);
+  }
+  .chart-value {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 2px;
+    border-radius: 4px;
+    cursor: pointer;
+
+    &:is(:hover, [data-active]) {
+      background: var(--color-hover);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 1px;
+    }
+  }
+
+  .chart-check {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    background: var(--color-chip);
+    color: var(--color-ink-secondary);
+  }
+  .chart-check--md {
+    width: 14px;
+    height: 14px;
+  }
+  .chart-check-icon {
+    width: 10px;
+    height: 10px;
+  }
+  .chart-check--found {
+    background: var(--color-success);
+    color: var(--color-sheet);
+  }
+  :is(.chart-check--not-found, .chart-check--unsupported) {
+    background: var(--color-warning-wash);
+    color: var(--color-warning);
+  }
+  .chart-check--contradicted {
+    background: var(--color-sheet);
+    box-shadow: inset 0 0 0 1.5px var(--color-danger);
+    color: var(--color-danger);
+  }
+  .chart-check--checking {
+    color: var(--color-ink-meta);
+  }
+  .chart-check--none {
+    width: 10px;
+    height: 10px;
+    margin: 0 2px;
+    border-radius: 50%;
+    background: none;
+    box-shadow: inset 0 0 0 1.5px var(--color-ink-placeholder);
+  }
+  /* In a table cell, a found check is just its tick, as the margin's is. */
+  .chart-check--sm {
+    width: 12px;
+    height: 12px;
+
+    &.chart-check--found {
+      background: none;
+      color: var(--color-success);
+    }
+    &.chart-check--none {
+      width: 8px;
+      height: 8px;
+    }
+    .chart-check-icon {
+      width: 11px;
+      height: 11px;
+    }
+  }
+
+  .chart-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 14px;
+    margin-top: 8px;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  .chart-legend {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+  }
+  .chart-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .chart-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+  }
+  .chart-source {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  /* The foot's "1 with no Citation" (#503): a way to find them, so quiet, not the accent. */
+  .chart-find {
+    border-radius: 2px;
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: var(--color-rule-strong);
+    text-underline-offset: 3px;
+
+    &:hover {
+      color: var(--color-ink-secondary);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 1px;
+    }
+  }
+  .chart-link {
+    padding: 0 2px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-accent);
+
+    &:hover {
+      text-decoration: underline;
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+    }
+  }
+
+  .chart-card {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    box-sizing: border-box;
+    width: var(--chart-card-width, 300px);
+    max-width: calc(100vw - 16px);
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: var(--color-sheet);
+    box-shadow: var(--shadow-popover);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--color-ink);
+
+    p {
+      margin: 0;
+    }
+  }
+  .chart-card-title {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 600;
+    color: var(--color-ink-meta);
+  }
+  .chart-card-position {
+    flex: none;
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+  }
+  .chart-card-value {
+    font-size: 15px;
+    line-height: 22px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .chart-card-detail {
+    font-size: 12px;
+    line-height: 16px;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-ink-secondary);
+  }
+  .chart-card-source {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    margin-top: 6px;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  /* Two lines at most, for a card narrowed beside a pie (#578). */
+  .chart-card-where {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+  .chart-card-open {
+    flex: none;
+    padding: 0 2px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-accent);
+
+    &:hover {
+      text-decoration: underline;
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+    }
+  }
+  .chart-card-cut {
+    margin-top: 6px;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+
+  /*
+   * A comparison table (#98; DESIGN.md, Comparison table): the measure wide,
+   * ruled like a table, a row per Document and a column per Question. Its
+   * cells are a grid whose rows and cells' own boxes step aside (`display:
+   * contents`), so the Document column can stick as the table scrolls
+   * sideways. Expanded, it fills the Mind's card where it is.
+   */
+  .comparison-table {
+    position: relative;
+    margin: 4px 0 24px;
+    font-family: var(--font-sans);
+  }
+  .comparison-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 28px;
+    margin-bottom: 6px;
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--color-ink-meta);
+    user-select: none;
+  }
+  .comparison-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    strong {
+      font-weight: 600;
+      color: var(--color-ink);
+    }
+  }
+  .comparison-progress,
+  .comparison-proposal {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 6px;
+  }
+  .comparison-head-end {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+  }
+  .comparison-action,
+  .comparison-back,
+  .comparison-add-question {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 4px;
+    height: 26px;
+    padding: 0 6px;
+    border-radius: 6px;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-ink-secondary);
+
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+  }
+  .comparison-action--accept {
+    color: var(--color-accent);
+  }
+  .comparison-back kbd {
+    margin-left: 2px;
+    padding: 0 4px;
+    border: 1px solid var(--color-rule);
+    border-radius: 4px;
+    font-family: var(--font-sans);
+    font-size: 11px;
+    line-height: 16px;
+    font-weight: 500;
+    color: var(--color-ink-meta);
+  }
+  .comparison-expand {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    color: var(--color-ink-meta);
+
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+  }
+  .comparison-problem {
+    margin: -2px 0 6px;
+  }
+  .comparison-frame {
+    position: relative;
+  }
+  /*
+   * "+ Question" stands beside the heading row, outside the table, where the card leaves
+   * the margin room for it; otherwise, and expanded, in the title line.
+   */
+  .comparison-add-question--side {
+    position: absolute;
+    top: 6px;
+    left: calc(100% + 8px);
+    display: none;
+    color: var(--color-ink-meta);
+  }
+  @container mind (width >= 1240px) {
+    .comparison-table:not([data-expanded]) {
+      .comparison-add-question--side {
+        display: inline-flex;
+      }
+      .comparison-add-question--head {
+        display: none;
+      }
+    }
+  }
+  .comparison-scroll {
+    display: grid;
+    grid-template-columns: minmax(132px, 168px) repeat(
+        var(--comparison-columns),
+        minmax(156px, 1fr)
+      );
+    overflow-x: auto;
+    border: 1px solid var(--color-rule);
+    border-radius: 8px;
+    background: var(--color-sheet);
+  }
+  .comparison-head-row,
+  .comparison-rows,
+  .comparison-rows > [data-node-view-content-react],
+  .comparison-row,
+  .comparison-row-cells {
+    display: contents;
+  }
+  .comparison-corner,
+  .comparison-question,
+  .comparison-document,
+  .comparison-cell {
+    min-width: 0;
+    padding: 9px 12px;
+    border-right: 1px solid var(--color-rule);
+    border-bottom: 1px solid var(--color-rule);
+  }
+  .comparison-corner,
+  .comparison-question {
+    background: var(--color-frame);
+    font-size: 13px;
+    line-height: 18px;
+    font-weight: 600;
+    color: var(--color-ink-secondary);
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+  .comparison-question--new input {
+    width: 100%;
+    margin: -3px -6px;
+    padding: 2px 6px;
+    border: 1px solid var(--color-accent);
+    border-radius: 4px;
+    background: var(--color-sheet);
+    font: inherit;
+    color: var(--color-ink);
+    outline: none;
+  }
+  /* The Document column stays as the table scrolls sideways. */
+  .comparison-corner,
+  .comparison-document {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+  }
+  .comparison-document {
+    display: flex;
+    flex-direction: column;
+    background: var(--color-sheet);
+    font-size: 13px;
+    line-height: 20px;
+    font-weight: 600;
+    color: var(--color-ink);
+    user-select: none;
+  }
+  .comparison-document-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .comparison-document-removed {
+    font-weight: 400;
+    color: var(--color-warning);
+  }
+  .comparison-row[data-removed="true"] .comparison-document-name {
+    color: var(--color-ink-meta);
+  }
+  .comparison-question:last-child,
+  .comparison-cell:last-child {
+    border-right: 0;
+  }
+  .comparison-row:last-child > .comparison-document,
+  .comparison-row:last-child > .comparison-row-cells > .comparison-cell {
+    border-bottom: 0;
+  }
+  .comparison-cell {
+    position: relative;
+    font-family: var(--font-serif);
+    font-size: 15px;
+    line-height: 24px;
+    color: var(--color-ink);
+
+    > .comparison-cell-content > * + * {
+      margin-top: 6px;
+    }
+    > .comparison-cell-content p {
+      margin: 0;
+    }
+  }
+  /* Its text, or what it says in its place: never an empty cell. */
+  .comparison-cell-running,
+  .comparison-cell-stopped,
+  .comparison-cell-problem {
+    display: none;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 24px;
+    color: var(--color-ink-meta);
+  }
+  .comparison-cell:not([data-status="done"]) > .comparison-cell-content {
+    display: none;
+  }
+  .comparison-table:is([data-filling], [data-waiting])
+    .comparison-cell:is([data-status="waiting"], [data-status="writing"])
+    > .comparison-cell-running,
+  .comparison-table:not([data-filling], [data-waiting])
+    .comparison-cell:is([data-status="waiting"], [data-status="writing"])
+    > .comparison-cell-stopped,
+  .comparison-cell[data-status="failed"] > .comparison-cell-problem {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  /* On the reason's first line, however many it takes. */
+  .comparison-cell-mark {
+    flex: none;
+    margin-top: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    background: var(--color-warning-wash);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-warning);
+  }
+  /* In a cell, a Citation's check shows in its marker, as when the margin folds away. */
+  .comparison-cell
+    .citation-marker:is([data-check="not-found"], [data-check="unsupported"])
+    .citation-marker-icon {
+    display: block;
+  }
+  /*
+   * Waiting as a change, it is drawn as one Block added: an accent edge, not every word
+   * underlined. The change's class lands on the element around the table's own.
+   */
+  .mind-editor .proposal-node--insert:has(> [data-comparison-table]) {
+    text-decoration: none;
+    color: inherit;
+
+    .comparison-scroll {
+      border-color: var(--color-accent);
+      box-shadow: inset 3px 0 0 var(--color-accent);
+    }
+    .citation-marker {
+      box-shadow: none;
+    }
+  }
+  .comparison-table.ProseMirror-selectednode .comparison-scroll {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -1px;
+  }
+  /* Expanded: the card holds the table, its heading row and Document column held as it scrolls. */
+  /* Above the bar of changes, which sticks at the Mind's top. */
+  .comparison-table[data-expanded] {
+    position: relative;
+    z-index: 6;
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    background: var(--color-sheet);
+
+    .comparison-head {
+      gap: 8px;
+      min-height: 44px;
+      margin: 0;
+      padding: 0 12px 0 16px;
+      border-bottom: 1px solid var(--color-rule);
+    }
+    .comparison-frame {
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+    .comparison-scroll {
+      height: 100%;
+      overflow: auto;
+      align-content: start;
+      border: 0;
+      border-radius: 0;
+    }
+    .comparison-corner,
+    .comparison-question {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+    .comparison-corner {
+      z-index: 3;
+    }
+  }
+
+  /* The Compare Documents sheet, docked at the foot of the Mind in its column's measure. */
+  /* Its gutter as the note's, which keeps room for a scrollbar, so the two measures line up. */
+  .compare-sheet-dock {
+    container: mind / inline-size;
+    flex: none;
+    overflow: hidden;
+    scrollbar-gutter: stable;
+  }
+  .compare-sheet-dock:empty {
+    display: none;
+  }
+  .compare-sheet {
+    margin-bottom: 16px;
+    border: 1px solid var(--color-rule-strong);
+    border-radius: 12px;
+    background: var(--color-sheet);
+    font-family: var(--font-sans);
+    font-size: var(--text-ui);
+    line-height: var(--text-ui--line-height);
+    color: var(--color-ink);
+  }
+  .compare-sheet-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+    gap: 24px;
+    padding: 14px 16px 12px;
+    border-bottom: 1px solid var(--color-rule);
+  }
+  .compare-sheet-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 24px;
+    margin-bottom: 6px;
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 600;
+    color: var(--color-ink-secondary);
+  }
+  .compare-sheet-count {
+    flex: none;
+    font-weight: 400;
+    color: var(--color-ink-meta);
+  }
+  .compare-sheet-source {
+    display: inline-flex;
+    min-width: 0;
+    align-items: center;
+    gap: 4px;
+    margin-left: -4px;
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-weight: 600;
+
+    &:hover,
+    &[aria-expanded="true"] {
+      background: var(--color-hover);
+    }
+  }
+  .compare-sheet-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 16px;
+    max-height: 168px;
+    overflow-y: auto;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .compare-sheet-document {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+    height: 28px;
+    cursor: default;
+
+    input {
+      flex: none;
+      width: 15px;
+      height: 15px;
+      accent-color: var(--color-ink);
+    }
+  }
+  .compare-sheet-question-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .compare-sheet-question {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 28px;
+    border-bottom: 1px solid var(--color-rule);
+
+    input {
+      flex: 1 1 auto;
+      min-width: 0;
+      border: 0;
+      background: transparent;
+      font: inherit;
+      color: var(--color-ink);
+      outline: none;
+    }
+    input::placeholder {
+      color: var(--color-ink-placeholder);
+    }
+    &:focus-within {
+      border-bottom-color: var(--color-accent);
+    }
+  }
+  .compare-sheet-number {
+    flex: none;
+    width: 12px;
+    font-size: 12px;
+    color: var(--color-ink-meta);
+  }
+  .compare-sheet-remove {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    color: var(--color-ink-meta);
+    opacity: 0;
+
+    .compare-sheet-question:is(:hover, :focus-within) > & {
+      opacity: 1;
+    }
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+  }
+  .compare-sheet-add {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    margin-left: -4px;
+    padding: 0 4px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: var(--color-ink-secondary);
+
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+  }
+  .compare-sheet-instruction {
+    display: block;
+    width: 100%;
+    height: 40px;
+    padding: 0 16px;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    color: var(--color-ink);
+    outline: none;
+
+    &::placeholder {
+      color: var(--color-ink-placeholder);
+    }
+  }
+  .compare-sheet-problem {
+    padding: 0 16px 4px;
+  }
+  .compare-sheet-foot {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 8px 8px 12px;
+  }
+  .compare-sheet-chip {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 6px;
+    height: 26px;
+    padding: 0 4px 0 8px;
+    border: 1px solid var(--color-rule);
+    border-radius: 6px;
+    background: var(--color-frame);
+    font-size: 13px;
+    font-weight: 600;
+
+    button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      color: var(--color-ink-meta);
+    }
+    button:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+  }
+  .compare-sheet-note {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    color: var(--color-ink-meta);
+  }
+  @container mind (width < 760px) {
+    .compare-sheet-body {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 14px;
+    }
+    .compare-sheet-list {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
 }
 
 @keyframes mind-pulse {
@@ -4509,33 +7605,33 @@
   }
 }
 
+/* Text just added from an Answer, or the Answer a link back led to: washed, then not. */
+@keyframes block-just-added {
+  from,
+  60% {
+    background: var(--color-frame);
+    box-shadow: 0 0 0 6px var(--color-frame);
+  }
+  to {
+    background: transparent;
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+
 /* Reduced motion: checks appear at once, and nothing pulses. */
 :root:not([data-motion="on"]) :is(.margin-check-icon, .margin-check--reveal),
 :root:not([data-motion="on"]) :is(.citation-marker-icon, .edit-pending-dot),
-:root:not([data-motion="on"]) .answer-writing::before {
+:root:not([data-motion="on"]) .answer-writing::before,
+:root:not([data-motion="on"]) .answer-steps-dot,
+:root:not([data-motion="on"]) .task-dot {
   animation: none;
 }
-
-/* Folder contents stay readable beside an open document viewer. */
-.library-pane {
-  container-type: inline-size;
-}
-.library-columns {
-  display: grid;
-  grid-template-columns: minmax(160px, 1.7fr) minmax(130px, 1fr) minmax(120px, 1.2fr);
-  gap: 12px;
-  align-items: start;
-}
-@container (max-width: 540px) {
-  .library-columns {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
-  .library-document-name {
-    grid-column: 1 / -1;
-  }
-  .library-column-labels {
-    display: none;
-  }
+/* Washed while it lasts, with no fade. */
+:root:not([data-motion="on"]) .mind-editor > .block-just-added,
+:root:not([data-motion="on"]) .assistant-answer[data-sought] {
+  animation: none;
+  background: var(--color-frame);
+  box-shadow: 0 0 0 6px var(--color-frame);
 }
 
 /* macOS's traffic lights take the app mark's place in the sidebar's header (see "The title bar"). */

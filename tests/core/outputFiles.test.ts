@@ -1,5 +1,15 @@
 import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, realpath, rename, rm, symlink } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  readdir,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import { type Core, type FileWriteRequest, InvalidInputError, NotFoundError } from "../../src/core";
@@ -13,7 +23,7 @@ import { createSourceFolder, linkAndProcess, sha256, writeSourceFile } from "../
 import { connectToMind } from "../helpers/mindClient";
 import { note, writeMind } from "../helpers/minds";
 
-/** A core with a Mind titled "Tides" holding one Note, and the Documents folder its first save offers. */
+/** A core with a Mind titled "Tides" holding one Note, and the default its first save takes. */
 async function setUp(dataDir?: string) {
   const data = dataDir ?? (await createTempDataFolder());
   const core = startCore(data);
@@ -22,6 +32,30 @@ async function setUp(dataDir?: string) {
   writeMind(client, [note("Spring tides come twice a month.")]);
   const save = () => core.saveMindExport(mind.id, { format: "markdown" });
   return { core, data, mind, save, suggested: join(data, "Documents", "IncarnaMind") };
+}
+
+/** Files made under `under` are refused, as macOS refuses them in a Documents folder it hasn't allowed. */
+const refused = vi.hoisted(() => ({ under: null as string | null }));
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return {
+    ...actual,
+    open: (...args: Parameters<typeof actual.open>) => {
+      const [path] = args;
+      if (refused.under !== null && String(path).startsWith(refused.under)) {
+        return Promise.reject(
+          Object.assign(new Error("EPERM: operation not permitted, open"), { code: "EPERM" }),
+        );
+      }
+      return actual.open(...args);
+    },
+  };
+});
+
+/** Puts a file where the default Output location would be made, so it can't be. */
+async function blockDefault(suggested: string): Promise<void> {
+  await mkdir(dirname(suggested), { recursive: true });
+  await writeFile(suggested, "Not a folder.");
 }
 
 /** Every question the core raises from now on. */
@@ -67,76 +101,173 @@ async function hashes(root: string): Promise<Record<string, string>> {
 }
 
 describe("The Output location", () => {
-  test("the first save asks where new files go, offering IncarnaMind in Documents; Save here makes it, saves there, and is remembered", async () => {
+  test("the first save goes to IncarnaMind in Documents without asking, making it, says it took the default, and later saves go there too (D209)", async () => {
     const { core, save, suggested } = await setUp();
     expect(await core.getOutputSettings()).toEqual({
       location: null,
       suggested,
       linkedFolders: [],
     });
+    const asked = questionsAsked(core);
 
-    const saving = save();
-    const request = await answerNext(core, "output-location", true);
-    expect(request).toMatchObject({ suggested, fileName: "Tides.md" });
-    const result = await saving;
-
+    const result = await save();
     const location = await realpath(suggested);
     expect(result).toEqual({
       status: "saved",
-      file: { path: join(location, "Tides.md"), name: "Tides.md" },
+      file: { path: join(location, "Tides.md"), name: "Tides.md", defaulted: true },
+      citations: 0,
+      unverifiedCitations: 0,
+      questions: 0,
+      word: null,
     });
     expect(await readFile(join(location, "Tides.md"), "utf8")).toContain(
       "Spring tides come twice a month.",
     );
     expect((await core.getOutputSettings()).location).toBe(location);
-    expect(await core.listFileWriteRequests()).toEqual([]);
 
-    // The next save doesn't ask.
-    const asked = questionsAsked(core);
-    expect(await save()).toMatchObject({ status: "saved", file: { name: "Tides 2.md" } });
+    // The next save goes there too, and no longer says it took the default.
+    expect(await save()).toMatchObject({
+      status: "saved",
+      file: { name: "Tides 2.md", defaulted: false },
+    });
     expect(asked).toEqual([]);
   });
 
-  test("a folder the User picks answers the first save, and later saves go there too", async () => {
-    const { core, save } = await setUp();
+  test("two first saves at once both go to the default under their own names, without asking", async () => {
+    const { core, save, suggested } = await setUp();
+    const asked = questionsAsked(core);
+    const results = await Promise.all([save(), save()]);
+    const location = await realpath(suggested);
+    const files = results.map((each) => (each.status === "saved" ? each.file : null));
+    expect(files.map((file) => file?.name).sort()).toEqual(["Tides 2.md", "Tides.md"]);
+    for (const file of files) {
+      expect(file).toEqual({
+        path: join(location, file?.name ?? ""),
+        name: file?.name,
+        defaulted: true,
+      });
+    }
+    expect((await core.getOutputSettings()).location).toBe(location);
+    expect(asked).toEqual([]);
+  });
+
+  test("a folder picked in Settings before any save is where files go, and nothing is asked", async () => {
+    const { core, save, suggested } = await setUp();
     const picked = await createSourceFolder();
+    const settings = await core.setOutputLocation(picked);
+    expect(settings.location).toBe(picked);
+    const asked = questionsAsked(core);
+    expect(await save()).toMatchObject({
+      file: { path: join(picked, "Tides.md"), defaulted: false },
+    });
+    expect(asked).toEqual([]);
+    expect(existsSync(suggested)).toBe(false);
+  });
+
+  test("a default that can't be made asks where instead, saying why; the folder picked then takes the file", async () => {
+    const { core, save, suggested } = await setUp();
+    await blockDefault(suggested);
 
     const saving = save();
     const request = await waitingQuestion(core);
+    expect(request).toMatchObject({
+      kind: "output-location",
+      suggested,
+      fileName: "Tides.md",
+      problem: "missing",
+    });
+    const picked = await createSourceFolder();
     const resolved = nextEvent(core, "fileWrite.resolved");
-    const settings = await core.setOutputLocation(picked);
-    expect(settings.location).toBe(picked);
+    await core.setOutputLocation(picked);
     expect(await resolved).toEqual({ requestId: request.requestId });
-    expect(await saving).toMatchObject({ file: { path: join(picked, "Tides.md") } });
-
-    // Picked in Settings before any save: nothing is asked.
-    const other = await createSourceFolder();
-    await core.setOutputLocation(other);
-    const asked = questionsAsked(core);
-    expect(await save()).toMatchObject({ file: { path: join(other, "Tides.md") } });
-    expect(asked).toEqual([]);
+    expect(await saving).toMatchObject({
+      file: { path: join(picked, "Tides.md"), defaulted: false },
+    });
   });
 
-  test("cancelling the first question saves nothing, and the next save asks again", async () => {
+  test("cancelling that question saves nothing, and the next save asks again", async () => {
     const { core, save, suggested } = await setUp();
+    await blockDefault(suggested);
+
     const saving = save();
     await answerNext(core, "output-location", false);
     expect(await saving).toEqual({ status: "cancelled" });
-    expect(existsSync(suggested)).toBe(false);
     expect((await core.getOutputSettings()).location).toBeNull();
 
     const again = save();
-    await answerNext(core, "output-location", true);
-    expect(await again).toMatchObject({ status: "saved" });
+    const picked = await createSourceFolder();
+    await waitingQuestion(core);
+    await core.setOutputLocation(picked);
+    expect(await again).toMatchObject({ status: "saved", file: { name: "Tides.md" } });
+  });
+
+  test("a default that looked fine but refuses the file itself isn't kept: the save asks where instead, saying so", async () => {
+    const { core, save, data } = await setUp();
+    refused.under = join(await realpath(data), "Documents");
+    try {
+      const saving = save();
+      expect(await answerNext(core, "output-location", false)).toMatchObject({
+        fileName: "Tides.md",
+        problem: "not-writable",
+      });
+      expect(await saving).toEqual({ status: "cancelled" });
+      expect((await core.getOutputSettings()).location).toBeNull();
+
+      const again = save();
+      await waitingQuestion(core);
+      const picked = await createSourceFolder();
+      await core.setOutputLocation(picked);
+      expect(await again).toMatchObject({
+        file: { path: join(picked, "Tides.md"), defaulted: false },
+      });
+    } finally {
+      refused.under = null;
+    }
+  });
+
+  test.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+    "a default IncarnaMind may not write in asks for another folder, saying so",
+    async () => {
+      const { core, save, data } = await setUp();
+      const documents = join(data, "Documents");
+      await mkdir(documents, { recursive: true });
+      await chmod(documents, 0o500);
+      try {
+        const saving = save();
+        expect(await waitingQuestion(core)).toMatchObject({
+          kind: "output-location",
+          problem: "not-writable",
+        });
+        const picked = await createSourceFolder();
+        await core.setOutputLocation(picked);
+        expect(await saving).toMatchObject({ file: { path: join(picked, "Tides.md") } });
+      } finally {
+        await chmod(documents, 0o700);
+      }
+    },
+  );
+
+  test("a chosen Output location that is gone, with the folder it was in, isn't asked about or made again: the save fails", async () => {
+    const { core, save } = await setUp();
+    const parent = await createSourceFolder();
+    const gone = join(parent, "Exports");
+    await mkdir(gone);
+    await core.setOutputLocation(gone);
+    await rm(parent, { recursive: true });
+    const asked = questionsAsked(core);
+    await expect(save()).rejects.toMatchObject({ code: "ENOENT" });
+    expect(asked).toEqual([]);
+    expect(existsSync(parent)).toBe(false);
   });
 
   test("saves waiting at the same time share one question", async () => {
-    const { core, save } = await setUp();
+    const { core, save, suggested } = await setUp();
+    await blockDefault(suggested);
     const asked = questionsAsked(core);
     const first = save();
     const second = save();
     await expect.poll(() => asked.length).toBe(1);
-    await core.respondToFileWrite(asked[0]?.requestId ?? "", true);
+    await core.setOutputLocation(await createSourceFolder());
     const names = [await first, await second].map((each) =>
       each.status === "saved" ? each.file.name : each.status,
     );
@@ -380,6 +511,7 @@ describe("Saving next to an original (the call other features use)", () => {
     expect(await outputs.save({ name: "Lease.docx", data, folder, ownFile: "export" })).toEqual({
       path: join(folder, "Lease 2.docx"),
       name: "Lease 2.docx",
+      defaulted: false,
     });
     expect(sha256(await readFile(original))).toBe(before);
     // A name can't climb out of its folder.

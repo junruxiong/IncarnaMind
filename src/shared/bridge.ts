@@ -23,6 +23,8 @@ export interface FilesBridge {
   pathForFile(file: File): string;
   /** Shows a file IncarnaMind saved (`CoreApi.saveMindExport`), selected in the system's file manager. */
   showSavedFile(path: string): Promise<void>;
+  /** Opens a file IncarnaMind saved (`CoreApi.saveMindExport`) in the system's default app for it. */
+  openSavedFile(path: string): Promise<void>;
   /**
    * Shows the system's open dialog for the Output location (see
    * `CoreApi.setOutputLocation`), starting at the current one. Resolves with
@@ -51,10 +53,11 @@ export interface FilesBridge {
   showDocumentInFolder(documentId: string): Promise<void>;
   /**
    * Shows the system's open dialog for a folder to link (see
-   * `CoreApi.addLinkedFolder`). Resolves with its absolute path, or null if
-   * the User cancelled.
+   * `CoreApi.addLinkedFolder`), or, given a Linked folder's id, for where
+   * that folder is now (see `CoreApi.locateLinkedFolder`). Resolves with its
+   * absolute path, or null if the User cancelled.
    */
-  pickLinkedFolder(): Promise<string | null>;
+  pickLinkedFolder(locating?: string): Promise<string | null>;
   /**
    * Shows the system's open dialog for Documents to add, as a sheet on the
    * window, starting in the folder last picked from (else Downloads).
@@ -68,6 +71,15 @@ export interface FilesBridge {
    * its absolute path, or null if the User cancelled.
    */
   pickReferenceFile(): Promise<string | null>;
+  /**
+   * Shows the system's open dialog for a Word file to import as a Mind (see
+   * `CoreApi.importWordFile`), as a sheet on the window, starting in the folder
+   * last picked from (else Downloads). Resolves with its absolute path, or null
+   * if the User cancelled.
+   */
+  pickWordFile(): Promise<string | null>;
+  /** As `pickWordFile`, for a PDF to verify (see `CoreApi.verifyDocument`). */
+  pickPdfFile(): Promise<string | null>;
   /**
    * Shows a Linked folder selected in the system's file manager (Finder,
    * Explorer). Rejects for an unknown Linked folder, or one that can't be
@@ -95,11 +107,11 @@ export interface FilesBridge {
 export type MenuCommand = MenuCommandId;
 
 /**
- * Where the Edit menu's Undo and Redo go in the window in front: to the field
- * with the focus (the menu does a field's own undo itself), to the note's own
- * undo, or to the app's changes (`text` null). `undo` and `redo` name the change
+ * What the Edit menu's Undo and Redo show for the window in front: whether the
+ * focus is in a field or the note, whose own undo they reach, or neither (`text`
+ * null), where they reach the app's changes. `undo` and `redo` name the change
  * each would reach ("Move 3 Documents"; "" for one without a name), or are null
- * when there is none.
+ * when there is none. The window decides where they go when they are chosen.
  */
 export interface EditMenuState {
   text: "field" | "note" | null;
@@ -120,6 +132,7 @@ export interface RendererErrorReport {
 /** The main process's channels for the `FilesBridge` methods that need it. */
 export const FILES_CHANNELS = {
   showSavedFile: "files:showSavedFile",
+  openSavedFile: "files:openSavedFile",
   pickOutputLocation: "files:pickOutputLocation",
   openDataFolder: "files:openDataFolder",
   openLogsFolder: "files:openLogsFolder",
@@ -129,6 +142,8 @@ export const FILES_CHANNELS = {
   pickLinkedFolder: "files:pickLinkedFolder",
   pickDocuments: "files:pickDocuments",
   pickReferenceFile: "files:pickReferenceFile",
+  pickWordFile: "files:pickWordFile",
+  pickPdfFile: "files:pickPdfFile",
   showLinkedFolder: "files:showLinkedFolder",
   logError: "files:logError",
   /** From the page: the sidebar is hidden (true) or shown (false), for the View menu's label. */

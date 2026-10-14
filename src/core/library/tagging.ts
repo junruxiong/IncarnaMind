@@ -237,7 +237,10 @@ export function createTagging(options: TaggingOptions) {
   const providerName = (model: DescribedModel): { en: string; zh: string } => {
     if (model.kind === "chatgpt") return { en: "ChatGPT plan", zh: "ChatGPT 订阅" };
     const entry = catalogProvider(model.catalogId);
-    if (entry && !(model.kind === "ollama" && model.service !== null)) return entry.name;
+    // A server the User gave the address of is named by it, as the data goes there.
+    const atOwnAddress =
+      model.service !== null && (model.kind === "ollama" || entry?.serverUrl === "required");
+    if (entry && !atOwnAddress) return entry.name;
     const name = model.service?.name ?? model.kind;
     return { en: name, zh: name };
   };

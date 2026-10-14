@@ -1,5 +1,8 @@
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
+import { DataFromNewerVersionError } from "../../src/core/errors";
 import { migrate, openDatabase } from "../../src/core/storage";
 import { createTempDataFolder } from "../helpers/core";
 
@@ -53,8 +56,32 @@ describe("Migrations", () => {
 
     migrate(db, [one, two]);
 
-    expect(() => migrate(db, [one])).toThrow(/newer version/);
+    expect(() => migrate(db, [one])).toThrow(DataFromNewerVersionError);
     db.close();
+  });
+
+  test("a newer database names its newest migration and is left untouched", async () => {
+    const file = join(await createTempDataFolder(), "test.db");
+    const db = openDatabase(file);
+    const one = { version: 1, description: "one", sql: "CREATE TABLE one (id TEXT) STRICT;" };
+    const two = { version: 2, description: "two", sql: "CREATE TABLE two (id TEXT) STRICT;" };
+    const three = { version: 3, description: "three", sql: "CREATE TABLE three (id TEXT) STRICT;" };
+    migrate(db, [one, two, three]);
+    db.close();
+    const before = createHash("sha256").update(readFileSync(file)).digest("hex");
+
+    const reopened = openDatabase(file);
+    let caught: unknown;
+    try {
+      migrate(reopened, [one]);
+    } catch (error) {
+      caught = error;
+    }
+    reopened.close();
+
+    expect(caught).toBeInstanceOf(DataFromNewerVersionError);
+    expect((caught as DataFromNewerVersionError).newestVersion).toBe(3);
+    expect(createHash("sha256").update(readFileSync(file)).digest("hex")).toBe(before);
   });
 
   test("a database from before migrations were recorded keeps what it applied", async () => {

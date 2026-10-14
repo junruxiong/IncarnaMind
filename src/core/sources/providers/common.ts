@@ -72,6 +72,34 @@ export function compactDate(value: string): string | null {
 /** Runs of spaces and line breaks as single spaces. */
 export const tidy = (value: string): string => value.replace(/\s+/g, " ").trim();
 
+/** What a text says of itself (where it is from, which version), as its first section. */
+export const aboutText = (paragraphs: string[]): TextSection => ({
+  heading: "About this text",
+  level: 1,
+  paragraphs,
+});
+
+/**
+ * Keeps what the last few loads gave, by key, so the same text isn't fetched
+ * twice in a session; a load that fails is forgotten, so it is tried again.
+ */
+export function remembered<V>(max = 20): (key: string, load: () => Promise<V>) => Promise<V> {
+  const kept = new Map<string, Promise<V>>();
+  return (key, load) => {
+    const known = kept.get(key);
+    if (known) return known;
+    const loading = load();
+    kept.set(key, loading);
+    loading.catch(() => kept.delete(key));
+    while (kept.size > max) {
+      const oldest = kept.keys().next().value;
+      if (oldest === undefined) break;
+      kept.delete(oldest);
+    }
+    return loading;
+  };
+}
+
 /** What a label says of itself, as its first section, with the source's own notice when it has one. */
 export function aboutLabel(info: {
   source: string;

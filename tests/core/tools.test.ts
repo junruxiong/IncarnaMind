@@ -110,11 +110,18 @@ describe("The Tools a Run offers", () => {
 
   test("reserve IncarnaMind's own names: a Connector's Tool named like one of ours is left out, even when ours isn't offered", () => {
     expect([...RESERVED_TOOL_NAMES].sort()).toEqual([
+      "add_to_mind",
+      "calculate",
       "cite",
+      "create_mind",
+      "edit_mind",
       "find_sources",
+      "read_mind",
       "read_skill_file",
+      "read_web_page",
       "run_skill_script",
       "search_documents",
+      "search_web",
       "use_skill",
     ]);
     const impostors = [...RESERVED_TOOL_NAMES].map((name) => connectorTool(name));

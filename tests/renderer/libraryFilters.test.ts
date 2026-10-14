@@ -196,7 +196,7 @@ describe("the filters' words", () => {
     expect(yearFacet.label(NO_DATE, zh)).toBe("无日期");
     expect(formatFacet.label("docx", en)).toBe("Word");
     expect(formatFacet.label("text", zh)).toBe("纯文本");
-    expect(statusFacet.label("not-indexed", en)).toBe("Not indexed yet");
+    expect(statusFacet.label("not-indexed", en)).toBe("Not read yet");
     expect(statusFacet.label("unavailable", zh)).toBe("无法访问");
     expect(en(yearFacet.title)).toBe("Year");
     expect(zh(statusFacet.title)).toBe("状态");

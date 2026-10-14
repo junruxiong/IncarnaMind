@@ -1,5 +1,5 @@
 import type { Editor } from "@tiptap/core";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import type * as Y from "yjs";
 import type { MessageKey } from "../../../shared/i18n";
 import {
@@ -14,14 +14,13 @@ import {
   type CountBasis,
   countFor,
   mostlyCjk,
-  NO_COUNT,
   parseTarget,
-  type TextCount,
 } from "../../../shared/wordCount";
 import { CheckLineIcon } from "../components/lineIcons";
+import { ProblemMark } from "../components/ProblemLine";
 import { usePopoverMenu } from "../components/usePopoverMenu";
 import { useLanguage, useT } from "../i18n";
-import { countMind } from "./wordCountText";
+import { createMindCounter, type MindCount } from "./wordCountText";
 
 /**
  * How long the editor is left alone before the count is worked out. Counting
@@ -30,38 +29,62 @@ import { countMind } from "./wordCountText";
  */
 export const COUNT_IDLE_MS = 300;
 
+/**
+ * The most a count holds the main thread at once (#812). Only Blocks not
+ * counted yet take time, which after an edit is the Blocks it changed; a long
+ * Mind's first count goes on in idle time, a slice at a time.
+ */
+const COUNT_SLICE_MS = 8;
+
 const BASIS_NAMES: Record<CountBasis, MessageKey> = {
   words: "wordCount.basis.words",
   characters: "wordCount.basis.characters",
   charactersNoSpaces: "wordCount.basis.charactersNoSpaces",
 };
 
-interface Counts {
-  total: TextCount;
-  selection: TextCount | null;
-}
-
-/** The Mind's counts, worked out a moment after the text or the selection last changed. */
-function useCounts(editor: Editor): Counts {
-  const [counts, setCounts] = useState<Counts>({ total: NO_COUNT, selection: null });
+/**
+ * The Mind's counts, worked out a moment after the text or the selection last
+ * changed; null until the Mind's first count is done, so a long Mind never
+ * shows "0 words" while it is counted.
+ */
+function useCounts(editor: Editor): MindCount | null {
+  const [counts, setCounts] = useState<MindCount | null>(null);
 
   useEffect(() => {
+    setCounts(null);
+    const counter = createMindCounter();
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let idle: number | undefined;
     const count = () => {
       timer = undefined;
+      idle = undefined;
       if (editor.isDestroyed) return;
+      const until = performance.now() + COUNT_SLICE_MS;
       const { from, to } = editor.state.selection;
-      setCounts(countMind(editor.state.doc, { from, to }));
+      const counted = counter.count(
+        editor.state.doc,
+        { from, to },
+        () => performance.now() > until,
+      );
+      if (counted) setCounts(counted);
+      // Not starved while the renderer is busy for long, as when an Answer streams.
+      else idle = requestIdleCallback(count, { timeout: 1000 });
+    };
+    const stop = () => {
+      clearTimeout(timer);
+      if (idle !== undefined) cancelIdleCallback(idle);
+      timer = undefined;
+      idle = undefined;
     };
     const later = () => {
-      clearTimeout(timer);
+      stop();
       timer = setTimeout(count, COUNT_IDLE_MS);
     };
     count();
     editor.on("update", later);
     editor.on("selectionUpdate", later);
     return () => {
-      clearTimeout(timer);
+      stop();
       editor.off("update", later);
       editor.off("selectionUpdate", later);
     };
@@ -89,7 +112,16 @@ function useCountSettings(doc: Y.Doc) {
  * chooses what is counted (words, or characters with or without spaces) and
  * sets the target. Both are remembered for the Mind (`mindWordCount`).
  */
-export function WordCount({ editor, doc }: { editor: Editor; doc: Y.Doc }) {
+export function WordCount({
+  editor,
+  doc,
+  children,
+}: {
+  editor: Editor;
+  doc: Y.Doc;
+  /** What follows the count on its line: the Mind's health (#96). */
+  children?: ReactNode;
+}) {
   const t = useT();
   const language = useLanguage();
   const counts = useCounts(editor);
@@ -97,6 +129,14 @@ export function WordCount({ editor, doc }: { editor: Editor; doc: Y.Doc }) {
   const menu = usePopoverMenu();
   const [draft, setDraft] = useState("");
   const [invalid, setInvalid] = useState(false);
+
+  if (!counts) {
+    return (
+      <div className="mind-count" data-testid="mind-count">
+        {children}
+      </div>
+    );
+  }
 
   const format = (value: number) => new Intl.NumberFormat(language).format(value);
   // Words, unless the writing is Chinese or Japanese (or the User asked for characters).
@@ -228,6 +268,7 @@ export function WordCount({ editor, doc }: { editor: Editor; doc: Y.Doc }) {
               </button>
               {invalid && (
                 <p role="alert" className="count-target-problem">
+                  <ProblemMark />
                   {t("wordCount.target.invalid")}
                 </p>
               )}
@@ -251,6 +292,7 @@ export function WordCount({ editor, doc }: { editor: Editor; doc: Y.Doc }) {
           </>
         )}
       </div>
+      {children}
     </div>
   );
 }

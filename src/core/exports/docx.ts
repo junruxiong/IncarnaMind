@@ -24,12 +24,20 @@ import {
   type Image,
   type Inline,
   type Marks,
+  type Pendings,
   type TableCell,
   tableLayout,
 } from "../mindText";
+import { changeKey } from "./citations";
+import type { ExportLabels } from "./labels";
 import { latexToOmml, MATH_NAMESPACE } from "./math";
 import {
+  COMMENTS_CONTENT_TYPE,
+  COMMENTS_RELATIONSHIP,
+  type CommentStyles,
+  commentsPart,
   escapeXml,
+  type FootnoteStyles,
   footnote,
   footnoteReference,
   footnotesPart,
@@ -40,22 +48,37 @@ import {
   WordIds,
   XML_DECLARATION,
 } from "./wordml";
+import {
+  type Authorship,
+  passagesOf,
+  Review,
+  type ReviewChoices,
+  trackBlocks,
+  trackInline,
+} from "./wordReview";
 
 export interface DocxOptions {
   /** The Mind's title, as the document's title. Empty: none. */
   title: string;
-  labels: {
-    /** Marks a Question, e.g. "Question:". */
-    question: string;
-    /** Follows an unverified Citation's source in its footnote, e.g. "[unverified]". */
-    unverified: string;
-  };
+  labels: ExportLabels;
   /** The language Word checks the text in, e.g. "en-US". */
   language: string;
   paper: "letter" | "a4";
   /** When the document was made, ISO 8601. */
   created: string;
+  /** What the file says for review (#107); none: Blocks read for review are written as they read. */
+  review?: ReviewChoices;
 }
+
+/** The prefixes the writer writes, and their namespaces. */
+export const WRITER_NAMESPACES: ReadonlyMap<string, string> = new Map([
+  ["w", W_NAMESPACE],
+  ["r", R_NAMESPACE],
+  ["wp", "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"],
+  ["a", "http://schemas.openxmlformats.org/drawingml/2006/main"],
+  ["pic", "http://schemas.openxmlformats.org/drawingml/2006/picture"],
+  ["m", MATH_NAMESPACE],
+]);
 
 const NS = {
   w: W_NAMESPACE,
@@ -99,7 +122,12 @@ const EMU_PER_PIXEL = 9525;
 
 export function renderDocx(blocks: readonly Block[], options: DocxOptions): Uint8Array {
   const paper = PAPER[options.paper];
-  const writer = new DocxWriter(options, paper.width - 2 * MARGIN);
+  const target = new NewDocxTarget();
+  const review = options.review
+    ? new Review(options.review, target.ids, options.labels, () => NEW_DOCUMENT_STYLES.comment)
+    : null;
+  review?.mark(passagesOf(piecesOf(blocks)));
+  const writer = new DocxWriter(options.labels, paper.width - 2 * MARGIN, target, review);
   const title = options.title ? paragraph({ style: "Title" }, run(options.title)) : "";
   const body = writer.body(blocks);
 
@@ -109,17 +137,21 @@ export function renderDocx(blocks: readonly Block[], options: DocxOptions): Uint
     `<w:sectPr><w:pgSz w:w="${paper.width}" w:h="${paper.height}"/><w:pgMar w:top="${MARGIN}" w:right="${MARGIN}" w:bottom="${MARGIN}" w:left="${MARGIN}" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>` +
     "</w:body></w:document>";
 
+  const comments = review?.comments ?? [];
   const relationships = [
     { id: "rIdStyles", type: RELATIONSHIP.styles, target: "styles.xml" },
     { id: "rIdSettings", type: RELATIONSHIP.settings, target: "settings.xml" },
     { id: "rIdNumbering", type: RELATIONSHIP.numbering, target: "numbering.xml" },
     { id: "rIdFootnotes", type: RELATIONSHIP.footnotes, target: "footnotes.xml" },
-    ...writer.relationships,
+    ...(comments.length > 0
+      ? [{ id: "rIdComments", type: COMMENTS_RELATIONSHIP, target: "comments.xml" }]
+      : []),
+    ...target.relationships,
   ];
 
   return writeZip(
     [
-      { name: "[Content_Types].xml", data: contentTypes() },
+      { name: "[Content_Types].xml", data: contentTypes(comments.length > 0) },
       {
         name: "_rels/.rels",
         data: relationshipsXml([
@@ -130,20 +162,21 @@ export function renderDocx(blocks: readonly Block[], options: DocxOptions): Uint
       { name: "docProps/core.xml", data: coreProperties(options) },
       { name: "word/document.xml", data: document },
       { name: "word/_rels/document.xml.rels", data: relationshipsXml(relationships) },
-      { name: "word/styles.xml", data: styles(options.language) },
+      { name: "word/styles.xml", data: styles(options.language, comments.length > 0) },
       { name: "word/settings.xml", data: SETTINGS },
-      { name: "word/numbering.xml", data: numbering(writer.lists) },
+      { name: "word/numbering.xml", data: numbering(target.lists) },
       { name: "word/footnotes.xml", data: footnotesPart(writer.footnotes) },
+      ...(comments.length > 0 ? [{ name: "word/comments.xml", data: commentsPart(comments) }] : []),
       // Links in footnotes are the footnotes part's own relationships.
-      ...(writer.noteRelationships.length > 0
+      ...(target.noteRelationships.length > 0
         ? [
             {
               name: "word/_rels/footnotes.xml.rels",
-              data: relationshipsXml(writer.noteRelationships),
+              data: relationshipsXml(target.noteRelationships),
             },
           ]
         : []),
-      ...writer.media.map((file) => ({ name: `word/media/${file.name}`, data: file.data })),
+      ...target.media.map((file) => ({ name: `word/media/${file.name}`, data: file.data })),
     ],
     deflateRawSync,
   );
@@ -154,6 +187,108 @@ interface Relationship {
   type: string;
   target: string;
   external?: boolean;
+}
+
+/**
+ * The style ids Blocks are written in: a new document's own, or those an
+ * imported document has for the same styles, which Word may name otherwise
+ * (#105).
+ */
+export interface DocxStyles {
+  heading(level: number): string;
+  quote: string;
+  question: string;
+  listParagraph: string;
+  code: string;
+  codeChar: string;
+  math: string;
+  caption: string;
+  hyperlink: string;
+  tableGrid: string;
+  footnote: FootnoteStyles;
+  comment: CommentStyles;
+}
+
+export const NEW_DOCUMENT_STYLES: DocxStyles = {
+  heading: (level) => `Heading${level}`,
+  quote: "Quote",
+  question: "Question",
+  listParagraph: "ListParagraph",
+  code: "Code",
+  codeChar: "CodeChar",
+  math: "Math",
+  caption: "Caption",
+  hyperlink: "Hyperlink",
+  tableGrid: "TableGrid",
+  footnote: { text: "FootnoteText", reference: "FootnoteReference" },
+  comment: { text: "CommentText", reference: "CommentReference" },
+};
+
+/** A picture to add to the package. */
+export interface NewPicture {
+  data: Uint8Array;
+  extension: DecodedImage["extension"];
+}
+
+/**
+ * Where Blocks are written: a new document, or an imported one written back
+ * into (#105), whose ids, relationships, pictures and lists are already
+ * there and must not be handed out twice.
+ */
+export interface DocxTarget {
+  readonly styles: DocxStyles;
+  readonly ids: WordIds;
+  /** A web link's relationship, from the document part or, `inNote`, the footnotes part. */
+  link(href: string, inNote: boolean): string;
+  /** A new picture's relationship from the document part, and its part's file name. */
+  picture(picture: NewPicture): { id: string; name: string };
+  /** A numbering instance for a list at `level` that starts at `start`: its numId. */
+  list(ordered: boolean, level: number, start: number): number;
+}
+
+/** A new document: links, pictures and lists numbered from 1, in the order they are written. */
+class NewDocxTarget implements DocxTarget {
+  readonly styles = NEW_DOCUMENT_STYLES;
+  /** The footnotes' and drawings' ids, each from 1. */
+  readonly ids = new WordIds();
+  readonly relationships: Relationship[] = [];
+  /** The footnotes part's relationships: its links. */
+  readonly noteRelationships: Relationship[] = [];
+  readonly media: { name: string; data: Uint8Array }[] = [];
+  /** Each list written: a Word numbering instance, numbered from 1. */
+  readonly lists: List[] = [];
+  private readonly links = new Map<string, string>();
+  private readonly noteLinks = new Map<string, string>();
+
+  link(href: string, inNote: boolean): string {
+    const known = inNote ? this.noteLinks : this.links;
+    let id = known.get(href);
+    if (!id) {
+      id = `${inNote ? "rIdNoteLink" : "rIdLink"}${known.size + 1}`;
+      known.set(href, id);
+      (inNote ? this.noteRelationships : this.relationships).push({
+        id,
+        type: RELATIONSHIP.hyperlink,
+        target: href,
+        external: true,
+      });
+    }
+    return id;
+  }
+
+  picture(picture: NewPicture): { id: string; name: string } {
+    const number = this.media.length + 1;
+    const name = `image${number}.${picture.extension}`;
+    const id = `rIdImage${number}`;
+    this.media.push({ name, data: picture.data });
+    this.relationships.push({ id, type: RELATIONSHIP.image, target: `media/${name}` });
+    return { id, name };
+  }
+
+  list(ordered: boolean, level: number, start: number): number {
+    this.lists.push({ ordered, level, start });
+    return this.lists.length;
+  }
 }
 
 /** Where Blocks are being written. */
@@ -174,33 +309,52 @@ interface Context {
   note?: boolean;
 }
 
-interface List {
+export interface List {
   ordered: boolean;
   level: number;
   start: number;
 }
 
-class DocxWriter {
-  /** The `<w:footnote>` of each Citation and footnote, numbered from 1 in order. */
+/**
+ * Writes Blocks as WordprocessingML into a target: a new document's body, or
+ * Blocks added to an imported one (#105). The `<w:footnote>` of each Citation
+ * and footnote it writes is in `footnotes`, in order.
+ */
+export class DocxWriter {
   readonly footnotes: string[] = [];
-  readonly relationships: Relationship[] = [];
-  /** The footnotes part's relationships: its links. */
-  readonly noteRelationships: Relationship[] = [];
-  readonly media: { name: string; data: Uint8Array }[] = [];
-  /** Each list written: a Word numbering instance, numbered from 1. */
-  readonly lists: List[] = [];
-  private readonly links = new Map<string, string>();
-  private readonly noteLinks = new Map<string, string>();
-  /** The footnotes' and drawings' ids, each from 1. */
-  private readonly ids = new WordIds();
+  private readonly styles: DocxStyles;
 
   constructor(
-    private readonly options: DocxOptions,
+    private readonly labels: ExportLabels,
     private readonly textWidth: number,
-  ) {}
+    private readonly target: DocxTarget,
+    /** Changes still waiting, as tracked changes, and comments (#107); none: neither. */
+    private readonly review: Review | null = null,
+  ) {
+    this.styles = target.styles;
+  }
+
+  /** XML written for content that changes still waiting add or remove: their tracked changes. */
+  private tracked(xml: string, change: Pendings, blocks: boolean): string {
+    const { review } = this;
+    if (!review) return xml;
+    const track = blocks ? trackBlocks : trackInline;
+    let out = xml;
+    if (change.deleted) out = track(out, review.pending("delete", change.deleted), this.target.ids);
+    if (change.inserted)
+      out = track(out, review.pending("insert", change.inserted), this.target.ids);
+    return out;
+  }
 
   body(blocks: readonly Block[]): string {
-    const xml = this.blocks(blocks, {
+    const xml = this.render(blocks);
+    // The body's last element before its section properties must be a paragraph.
+    return xml.endsWith("</w:p>") ? xml : `${xml}<w:p/>`;
+  }
+
+  /** Blocks at the top of the text, at its full width. */
+  render(blocks: readonly Block[]): string {
+    return this.blocks(blocks, {
       indent: 0,
       style: null,
       listDepth: 0,
@@ -208,14 +362,24 @@ class DocxWriter {
       width: this.textWidth,
       align: null,
     });
-    // The body's last element before its section properties must be a paragraph.
-    return xml.endsWith("</w:p>") ? xml : `${xml}<w:p/>`;
+  }
+
+  /** Inline content in a paragraph of the text: runs, and a footnote's reference for each Citation. */
+  inlineXml(content: readonly Inline[]): string {
+    return this.inline(content, {
+      indent: 0,
+      style: null,
+      listDepth: 0,
+      bold: false,
+      width: this.textWidth,
+      align: null,
+    });
   }
 
   private blocks(blocks: readonly Block[], context: Context): string {
     let xml = "";
     for (const block of blocks) {
-      const next = this.block(block, context);
+      const next = this.tracked(this.block(block, context), block, true);
       // Two tables in a row would merge into one.
       if (xml.endsWith("</w:tbl>") && next.startsWith("<w:tbl>")) xml += "<w:p/>";
       xml += next;
@@ -233,21 +397,24 @@ class DocxWriter {
         );
       case "heading":
         return paragraph(
-          { style: `Heading${block.level}`, indent, align: context.align },
+          { style: this.styles.heading(block.level), indent, align: context.align },
           this.inline(block.content, context),
         );
       case "question":
         return paragraph(
-          { style: "Question", indent },
-          run(`${this.options.labels.question} `, { bold: true }) +
-            this.inline(block.content, context),
+          { style: this.styles.question, indent },
+          run(`${this.labels.question} `, { bold: true }) + this.inline(block.content, context),
         );
       case "code": {
         const lines = block.code.split(/\r\n|\r|\n/);
         return lines
           .map((line, index) =>
             paragraph(
-              { style: "Code", indent, spacingAfter: index === lines.length - 1 ? 160 : undefined },
+              {
+                style: this.styles.code,
+                indent,
+                spacingAfter: index === lines.length - 1 ? 160 : undefined,
+              },
               run(line),
             ),
           )
@@ -257,23 +424,55 @@ class DocxWriter {
         // A display equation, or its LaTeX if it can't be one.
         const equation = latexToOmml(block.latex, true);
         return paragraph(
-          { style: "Math", indent },
+          { style: this.styles.math, indent },
           equation ? `<m:oMathPara>${equation}</m:oMathPara>` : run(`$$${block.latex}$$`),
         );
       }
       case "list":
         return this.list(block, context);
       case "quote":
-        return this.blocks(block.content, { ...context, indent: indent + INDENT, style: "Quote" });
+        return this.blocks(block.content, {
+          ...context,
+          indent: indent + INDENT,
+          style: this.styles.quote,
+        });
       case "rule":
         return paragraph({ indent, bottomBorder: true }, "");
       case "table":
         return this.table(block.rows, context);
       case "image":
         return paragraph({ style: context.style, indent }, this.image(block.image, context));
+      case "chart":
+        return this.chart(block, context);
       case "bibliography":
         return this.bibliography(block);
     }
+  }
+
+  /** With no picture (a host that can't draw one), the table of its values instead. */
+  private chart(block: Extract<Block, { kind: "chart" }>, context: Context): string {
+    const { indent } = context;
+    const { labels } = this;
+    const shown = block.picture
+      ? paragraph({ indent, keepNext: true }, this.image(block.picture, context))
+      : this.table(block.table, context);
+    let sources = "";
+    const cited = this.inline(block.sources, context);
+    if (cited) sources += run(labels.chartSources) + cited;
+    if (block.uncited > 0) {
+      sources += run(`${sources ? " " : ""}${labels.chartUncited(block.uncited)}`);
+    }
+    const { rows, cutFrom } = block.chart.data;
+    if (cutFrom !== null)
+      sources += run(`${sources ? " " : ""}${labels.chartCut(rows.length, cutFrom)}`);
+    return (
+      shown +
+      paragraph(
+        { style: this.styles.caption, indent, keepNext: sources !== "" },
+        run(labels.chart(block.chart.title)),
+      ) +
+      (sources ? paragraph({ style: this.styles.caption, indent }, sources) : "")
+    );
   }
 
   /**
@@ -285,7 +484,7 @@ class DocxWriter {
     const labelled = block.items.some((item) => item.label !== null);
     const hang = labelled || block.hangingIndent ? INDENT : undefined;
     return (
-      paragraph({ style: "Heading1" }, run(block.heading)) +
+      paragraph({ style: this.styles.heading(1) }, run(block.heading)) +
       block.items
         .map((item) =>
           paragraph(
@@ -314,8 +513,8 @@ class DocxWriter {
             each.script === "sup" ? "superscript" : each.script === "sub" ? "subscript" : undefined,
         };
         if (each.link && isWebLink(each.link)) {
-          const id = inNote ? this.noteLink(each.link) : this.link(each.link);
-          return `<w:hyperlink r:id="${id}" w:history="1">${run(each.text, { ...format, style: "Hyperlink" })}</w:hyperlink>`;
+          const id = this.target.link(each.link, inNote);
+          return `<w:hyperlink r:id="${id}" w:history="1">${run(each.text, { ...format, style: this.styles.hyperlink })}</w:hyperlink>`;
         }
         return run(each.text, format);
       })
@@ -327,35 +526,44 @@ class DocxWriter {
    * Word numbers with the User's own. In a footnote's text, a note can only be its words.
    */
   private cite(item: Extract<Inline, { kind: "cite" }>, context: Context): string {
-    const marker = item.unverified ? run(` ${this.options.labels.unverified}`, { bold: true }) : "";
+    const marker = item.unverified ? run(` ${this.labels.unverified}`, { bold: true }) : "";
     if (!item.note || context.note) return this.styled(item.runs, context.note) + marker;
-    const id = this.ids.take("footnote");
-    this.footnotes.push(footnote(id, run(" ") + this.styled(item.runs, true) + marker));
-    return footnoteReference(id);
+    const id = this.target.ids.take("footnote");
+    this.footnotes.push(
+      footnote(id, run(" ") + this.styled(item.runs, true) + marker, this.styles.footnote),
+    );
+    return footnoteReference(id, this.styles.footnote.reference);
   }
 
   /** A Word list: the first paragraph of each item carries its number or bullet. */
   private list(block: Extract<Block, { kind: "list" }>, context: Context): string {
     const level = Math.min(context.listDepth, 8);
-    this.lists.push({ ordered: block.ordered, level, start: block.start });
-    const numbering = { id: this.lists.length, level };
+    const numbering = { id: this.target.list(block.ordered, level, block.start), level };
     const textIndent = context.indent + INDENT * (level + 1);
     const numbered = (content: string) =>
       paragraph(
-        { style: "ListParagraph", numbering, indent: textIndent, hanging: HANGING },
+        { style: this.styles.listParagraph, numbering, indent: textIndent, hanging: HANGING },
         content,
       );
 
     let xml = "";
     for (const item of block.items) {
       const [first, ...rest] = item;
-      if (first?.kind === "paragraph") xml += numbered(this.inline(first.content, context));
+      if (first?.kind === "paragraph")
+        xml += this.tracked(numbered(this.inline(first.content, context)), first, true);
       else xml += numbered("");
       for (const child of first?.kind === "paragraph" ? rest : item) {
-        xml +=
+        xml += this.tracked(
           child.kind === "list"
             ? this.list(child, { ...context, listDepth: context.listDepth + 1 })
-            : this.block(child, { ...context, indent: textIndent, style: "ListParagraph" });
+            : this.block(child, {
+                ...context,
+                indent: textIndent,
+                style: this.styles.listParagraph,
+              }),
+          child,
+          true,
+        );
       }
     }
     return xml;
@@ -374,7 +582,7 @@ class DocxWriter {
     const cell = (content: string, span: number, header: boolean, merge: string) =>
       `<w:tc><w:tcPr><w:tcW w:w="${column * span}" w:type="dxa"/>${span > 1 ? `<w:gridSpan w:val="${span}"/>` : ""}${merge}${header ? '<w:shd w:val="clear" w:color="auto" w:fill="F3F4F6"/>' : ""}</w:tcPr>${content}</w:tc>`;
 
-    let xml = `<w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="${column * columns}" w:type="dxa"/>${context.indent ? `<w:tblInd w:w="${context.indent}" w:type="dxa"/>` : ""}</w:tblPr>`;
+    let xml = `<w:tbl><w:tblPr><w:tblStyle w:val="${escapeXml(this.styles.tableGrid)}"/><w:tblW w:w="${column * columns}" w:type="dxa"/>${context.indent ? `<w:tblInd w:w="${context.indent}" w:type="dxa"/>` : ""}</w:tblPr>`;
     xml += `<w:tblGrid>${`<w:gridCol w:w="${column}"/>`.repeat(columns)}</w:tblGrid>`;
     layout.rows.forEach((slots, index) => {
       const header = (rows[index] as TableCell[]).every((each) => each.header);
@@ -413,27 +621,64 @@ class DocxWriter {
     return `${xml}</w:tbl>`;
   }
 
+  /** Inline content, each stretch that changes still waiting do the same to as its tracked change. */
   private inline(content: readonly Inline[], context: Context): string {
     let xml = "";
-    for (let index = 0; index < content.length; index++) {
+    for (let from = 0; from < content.length; ) {
+      const key = changeKey(content[from]);
+      let to = from + 1;
+      while (to < content.length && changeKey(content[to]) === key) to++;
+      xml += this.tracked(
+        this.inlineRange(content, from, to, context),
+        content[from] as Inline,
+        false,
+      );
+      from = to;
+    }
+    return xml;
+  }
+
+  /** A run of text, with IncarnaMind's comment on AI text starting before it or ending after it. */
+  private text(
+    item: Extract<Inline, { kind: "text" }>,
+    format: RunFormat,
+    context: Context,
+  ): string {
+    const xml = run(item.text, format);
+    if (!this.review || context.note) return xml;
+    return this.review.before(item) + xml + this.review.after(item);
+  }
+
+  private inlineRange(
+    content: readonly Inline[],
+    from: number,
+    to: number,
+    context: Context,
+  ): string {
+    let xml = "";
+    for (let index = from; index < to; index++) {
       const item = content[index] as Inline;
       if (item.kind === "text" && item.marks.link && isWebLink(item.marks.link)) {
         // Consecutive text with the same link is one hyperlink.
         const href = item.marks.link;
         let runs = "";
-        for (; index < content.length; index++) {
+        for (; index < to; index++) {
           const next = content[index] as Inline;
           if (next.kind !== "text" || next.marks.link !== href) break;
-          runs += run(next.text, formatOf(next.marks, context, "Hyperlink"));
+          runs += this.text(
+            next,
+            formatOf(next.marks, context, this.styles, this.styles.hyperlink),
+            context,
+          );
         }
         index--;
-        const id = context.note ? this.noteLink(href) : this.link(href);
+        const id = this.target.link(href, context.note === true);
         xml += `<w:hyperlink r:id="${id}" w:history="1">${runs}</w:hyperlink>`;
         continue;
       }
       switch (item.kind) {
         case "text":
-          xml += run(item.text, formatOf(item.marks, context));
+          xml += this.text(item, formatOf(item.marks, context, this.styles), context);
           break;
         case "math":
           xml += latexToOmml(item.latex, false) ?? run(`$${item.latex}$`, { bold: context.bold });
@@ -447,7 +692,10 @@ class DocxWriter {
             const before = content[index - 1];
             const apart = before?.kind === "text" && /\S$/.test(before.text);
             xml += this.source(item.footnote, apart ? " " : "");
-          } else xml += this.footnote(item.footnote);
+          } else {
+            const reference = this.footnote(item.footnote);
+            xml += this.review ? this.review.failed(reference, [item.footnote]) : reference;
+          }
           break;
         case "footnote":
           if (!context.note) xml += this.userFootnote(item.content);
@@ -456,9 +704,12 @@ class DocxWriter {
           // A picture's relationship belongs to the document part, not to a footnote.
           xml += context.note ? run(item.image.alt) : this.image(item.image, context);
           break;
-        case "cite":
-          xml += this.cite(item, context);
+        case "cite": {
+          const cited = this.cite(item, context);
+          xml +=
+            this.review && !context.note ? this.review.failed(cited, item.failed ?? []) : cited;
           break;
+        }
       }
     }
     return xml;
@@ -466,16 +717,14 @@ class DocxWriter {
 
   /** A Citation's footnote, and the reference to it in the text. */
   private footnote(citation: Footnote): string {
-    const id = this.ids.take("footnote");
-    this.footnotes.push(footnote(id, this.source(citation, " ")));
-    return footnoteReference(id);
+    const id = this.target.ids.take("footnote");
+    this.footnotes.push(footnote(id, this.source(citation, " "), this.styles.footnote));
+    return footnoteReference(id, this.styles.footnote.reference);
   }
 
   /** A Citation's source, after `before`, e.g. "Tides, p. 2", and "[unverified]" in bold. */
   private source(citation: Footnote, before: string): string {
-    const marker = citation.unverified
-      ? run(` ${this.options.labels.unverified}`, { bold: true })
-      : "";
+    const marker = citation.unverified ? run(` ${this.labels.unverified}`, { bold: true }) : "";
     return run(`${before}${citation.source}`) + marker;
   }
 
@@ -485,7 +734,7 @@ class DocxWriter {
    * its number from the same ids as Citations', so Word numbers them together.
    */
   private userFootnote(content: readonly Inline[]): string {
-    const id = this.ids.take("footnote");
+    const id = this.target.ids.take("footnote");
     const text = this.inline(content, {
       indent: 0,
       style: null,
@@ -495,43 +744,15 @@ class DocxWriter {
       align: null,
       note: true,
     });
-    this.footnotes.push(footnote(id, run(" ") + text));
-    return footnoteReference(id);
-  }
-
-  private link(href: string): string {
-    return this.relationshipOf(href, this.links, this.relationships, "rIdLink");
-  }
-
-  /** A link in a footnote: the footnotes part's own relationship. */
-  private noteLink(href: string): string {
-    return this.relationshipOf(href, this.noteLinks, this.noteRelationships, "rIdNoteLink");
-  }
-
-  private relationshipOf(
-    href: string,
-    known: Map<string, string>,
-    relationships: Relationship[],
-    prefix: string,
-  ): string {
-    let id = known.get(href);
-    if (!id) {
-      id = `${prefix}${known.size + 1}`;
-      known.set(href, id);
-      relationships.push({ id, type: RELATIONSHIP.hyperlink, target: href, external: true });
-    }
-    return id;
+    this.footnotes.push(footnote(id, run(" ") + text, this.styles.footnote));
+    return footnoteReference(id, this.styles.footnote.reference);
   }
 
   /** An image embedded in the document, or its description if it can't be. */
   private image(image: Image, context: Context): string {
     const decoded = decodeImage(image.src);
     if (!decoded) return run(image.alt || image.src);
-    const number = this.media.length + 1;
-    const name = `image${number}.${decoded.extension}`;
-    const id = `rIdImage${number}`;
-    this.media.push({ name, data: decoded.data });
-    this.relationships.push({ id, type: RELATIONSHIP.image, target: `media/${name}` });
+    const { id, name } = this.target.picture(decoded);
 
     // Its size in pixels, shrunk to fit the width available.
     const maxWidth = Math.max(context.width - context.indent, INDENT) * EMU_PER_TWIP;
@@ -541,7 +762,7 @@ class DocxWriter {
       cy = Math.round((cy * maxWidth) / cx);
       cx = maxWidth;
     }
-    const drawing = this.ids.take("drawing");
+    const drawing = this.target.ids.take("drawing");
     const description = escapeXml(image.alt);
     return (
       `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/>` +
@@ -555,11 +776,46 @@ class DocxWriter {
 
 const isWebLink = (href: string) => /^(https?:|mailto:)/i.test(href);
 
+/**
+ * The pieces of text in Blocks, in the order the writer writes them, for
+ * finding AI text's passages (`passagesOf`): text is the AI's or the User's;
+ * what a change still waiting adds, a Citation, a chart's values and the
+ * Bibliography are neither.
+ */
+export function* piecesOf(
+  blocks: readonly Block[],
+): Generator<{ key: object; authorship: Authorship }> {
+  for (const block of blocks) {
+    if (block.inserted) continue;
+    switch (block.kind) {
+      case "paragraph":
+      case "heading":
+      case "question":
+        for (const inline of block.content) {
+          if (inline.kind !== "text" || inline.inserted) continue;
+          const authorship = inline.ai ? "ai" : inline.text.trim() === "" ? "neither" : "own";
+          yield { key: inline, authorship };
+        }
+        break;
+      case "list":
+        for (const item of block.items) yield* piecesOf(item);
+        break;
+      case "quote":
+        yield* piecesOf(block.content);
+        break;
+      case "table":
+        for (const row of block.rows) for (const cell of row) yield* piecesOf(cell.content);
+        break;
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Paragraphs and runs
 
 interface ParagraphProperties {
   style?: string | null;
+  keepNext?: boolean;
   numbering?: { id: number; level: number };
   bottomBorder?: boolean;
   spacingAfter?: number;
@@ -571,10 +827,12 @@ interface ParagraphProperties {
 }
 
 function paragraph(properties: ParagraphProperties, content: string): string {
-  const { style, numbering, bottomBorder, spacingAfter, indent, hanging, align } = properties;
+  const { style, keepNext, numbering, bottomBorder, spacingAfter, indent, hanging, align } =
+    properties;
   // In the order the schema requires.
   const pPr = [
-    style ? `<w:pStyle w:val="${style}"/>` : "",
+    style ? `<w:pStyle w:val="${escapeXml(style)}"/>` : "",
+    keepNext ? "<w:keepNext/>" : "",
     numbering
       ? `<w:numPr><w:ilvl w:val="${numbering.level}"/><w:numId w:val="${numbering.id}"/></w:numPr>`
       : "",
@@ -588,9 +846,9 @@ function paragraph(properties: ParagraphProperties, content: string): string {
   return `<w:p>${pPr ? `<w:pPr>${pPr}</w:pPr>` : ""}${content}</w:p>`;
 }
 
-function formatOf(marks: Marks, context: Context, style?: string): RunFormat {
+function formatOf(marks: Marks, context: Context, styles: DocxStyles, style?: string): RunFormat {
   return {
-    style: style ?? (marks.code ? "CodeChar" : undefined),
+    style: style ?? (marks.code ? styles.codeChar : undefined),
     bold: marks.bold || context.bold,
     italic: marks.italic,
     strike: marks.strike,
@@ -603,7 +861,7 @@ function formatOf(marks: Marks, context: Context, style?: string): RunFormat {
 // ---------------------------------------------------------------------------
 // Images
 
-interface DecodedImage {
+export interface DecodedImage {
   data: Uint8Array;
   extension: "png" | "jpeg" | "gif";
   /** In pixels. */
@@ -615,7 +873,7 @@ interface DecodedImage {
  * A PNG, JPEG or GIF given as a data: URL, with its size. Images elsewhere
  * (on the web) aren't fetched: the export never goes online.
  */
-function decodeImage(src: string): DecodedImage | null {
+export function decodeImage(src: string): DecodedImage | null {
   const match = /^data:image\/[\w.+-]+;base64,([\s\S]*)$/i.exec(src);
   if (!match?.[1]) return null;
   const data = Buffer.from(match[1], "base64");
@@ -654,7 +912,7 @@ function imageSize(data: Buffer): Omit<DecodedImage, "data"> | null {
 // ---------------------------------------------------------------------------
 // The package's other parts
 
-function contentTypes(): string {
+function contentTypes(comments: boolean): string {
   const types = [
     `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>`,
     `<Default Extension="xml" ContentType="application/xml"/>`,
@@ -666,6 +924,9 @@ function contentTypes(): string {
     `<Override PartName="/word/settings.xml" ContentType="${MAIN_CONTENT_TYPE}.settings+xml"/>`,
     `<Override PartName="/word/numbering.xml" ContentType="${MAIN_CONTENT_TYPE}.numbering+xml"/>`,
     `<Override PartName="/word/footnotes.xml" ContentType="${MAIN_CONTENT_TYPE}.footnotes+xml"/>`,
+    ...(comments
+      ? [`<Override PartName="/word/comments.xml" ContentType="${COMMENTS_CONTENT_TYPE}"/>`]
+      : []),
     `<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>`,
   ];
   return `${XML_DECLARATION}<Types xmlns="${NS.contentTypes}">${types.join("")}</Types>`;
@@ -699,47 +960,205 @@ const SETTINGS =
 const BULLETS = ["•", "◦", "▪"];
 const NUMBER_FORMATS = ["decimal", "lowerLetter", "lowerRoman"];
 
+/** A list definition (`w:abstractNum`) of bullets, or of numbers. */
+export function listDefinition(id: number, ordered: boolean): string {
+  let levels = "";
+  for (let level = 0; level < 9; level++) {
+    const format = ordered ? NUMBER_FORMATS[level % 3] : "bullet";
+    const text = ordered ? `%${level + 1}.` : BULLETS[level % 3];
+    levels += `<w:lvl w:ilvl="${level}"><w:start w:val="1"/><w:numFmt w:val="${format}"/><w:lvlText w:val="${text}"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="${INDENT * (level + 1)}" w:hanging="${HANGING}"/></w:pPr></w:lvl>`;
+  }
+  return `<w:abstractNum w:abstractNumId="${id}"><w:multiLevelType w:val="hybridMultilevel"/>${levels}</w:abstractNum>`;
+}
+
+/**
+ * A list (`w:num`) of a definition: an ordered one starts at its own number,
+ * rather than going on from the last list of the same definition.
+ */
+export function listInstance(numId: number, definition: number, list: List): string {
+  return `<w:num w:numId="${numId}"><w:abstractNumId w:val="${definition}"/>${list.ordered ? `<w:lvlOverride w:ilvl="${list.level}"><w:startOverride w:val="${list.start}"/></w:lvlOverride>` : ""}</w:num>`;
+}
+
 /** Two list definitions, bullets (0) and numbers (1), and an instance of one for each list. */
 function numbering(lists: readonly List[]): string {
-  const definition = (id: number, ordered: boolean) => {
-    let levels = "";
-    for (let level = 0; level < 9; level++) {
-      const format = ordered ? NUMBER_FORMATS[level % 3] : "bullet";
-      const text = ordered ? `%${level + 1}.` : BULLETS[level % 3];
-      levels += `<w:lvl w:ilvl="${level}"><w:start w:val="1"/><w:numFmt w:val="${format}"/><w:lvlText w:val="${text}"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="${INDENT * (level + 1)}" w:hanging="${HANGING}"/></w:pPr></w:lvl>`;
-    }
-    return `<w:abstractNum w:abstractNumId="${id}"><w:multiLevelType w:val="hybridMultilevel"/>${levels}</w:abstractNum>`;
-  };
-  // Each ordered list starts at its own number, rather than going on from the last.
-  const instances = lists.map(
-    (list, index) =>
-      `<w:num w:numId="${index + 1}"><w:abstractNumId w:val="${list.ordered ? 1 : 0}"/>${list.ordered ? `<w:lvlOverride w:ilvl="${list.level}"><w:startOverride w:val="${list.start}"/></w:lvlOverride>` : ""}</w:num>`,
-  );
-  return `${XML_DECLARATION}<w:numbering xmlns:w="${NS.w}">${definition(0, false)}${definition(1, true)}${instances.join("")}</w:numbering>`;
+  const instances = lists.map((list, index) => listInstance(index + 1, list.ordered ? 1 : 0, list));
+  return `${XML_DECLARATION}<w:numbering xmlns:w="${NS.w}">${listDefinition(0, false)}${listDefinition(1, true)}${instances.join("")}</w:numbering>`;
 }
 
 const CODE_FONT = '<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:cs="Consolas"/>';
 
-function styles(language: string): string {
-  const paragraphStyle = (
-    id: string,
-    name: string,
-    { pPr = "", rPr = "", next = false }: { pPr?: string; rPr?: string; next?: boolean },
-  ) =>
-    `<w:style w:type="paragraph" w:styleId="${id}"><w:name w:val="${name}"/><w:basedOn w:val="Normal"/>${next ? '<w:next w:val="Normal"/>' : ""}<w:qFormat/>${pPr ? `<w:pPr>${pPr}</w:pPr>` : ""}${rPr ? `<w:rPr>${rPr}</w:rPr>` : ""}</w:style>`;
-  const headingSizes = [32, 28, 26, 24, 22, 22];
-  const headings = headingSizes
-    .map((size, index) =>
-      paragraphStyle(`Heading${index + 1}`, `heading ${index + 1}`, {
+/** A style the export writes in, by what it is for. */
+export type StyleRole =
+  | "title"
+  | `heading${1 | 2 | 3 | 4 | 5 | 6}`
+  | "quote"
+  | "question"
+  | "listParagraph"
+  | "code"
+  | "math"
+  | "caption"
+  | "footnoteText"
+  | "footnoteReference"
+  | "hyperlink"
+  | "codeChar"
+  | "tableGrid"
+  | "commentText"
+  | "commentReference";
+
+/** The ids of the styles a document's styles are based on, where it has them. */
+export interface StyleBases {
+  paragraph: string | null;
+  character: string | null;
+  table: string | null;
+}
+
+/** A style the export writes in: Word's name for it, its kind, and its definition under an id. */
+export interface StyleDefinition {
+  /** Word's own name for a built-in style ("heading 1", "footnote text"), or ours. */
+  name: string;
+  type: "paragraph" | "character" | "table";
+  xml(id: string, bases: StyleBases): string;
+}
+
+const basedOn = (id: string | null) => (id ? `<w:basedOn w:val="${escapeXml(id)}"/>` : "");
+
+function paragraphStyle(
+  name: string,
+  { pPr = "", rPr = "", next = false }: { pPr?: string; rPr?: string; next?: boolean },
+): StyleDefinition {
+  return {
+    name,
+    type: "paragraph",
+    xml: (id, bases) =>
+      `<w:style w:type="paragraph" w:styleId="${escapeXml(id)}"><w:name w:val="${name}"/>${basedOn(bases.paragraph)}${next && bases.paragraph ? `<w:next w:val="${escapeXml(bases.paragraph)}"/>` : ""}<w:qFormat/>${pPr ? `<w:pPr>${pPr}</w:pPr>` : ""}${rPr ? `<w:rPr>${rPr}</w:rPr>` : ""}</w:style>`,
+  };
+}
+
+const border = (color: string) =>
+  `<w:pBdr><w:left w:val="single" w:sz="12" w:space="8" w:color="${color}"/></w:pBdr>`;
+
+const HEADING_SIZES = [32, 28, 26, 24, 22, 22];
+
+/** The export's styles, in the order a new document defines them. */
+export const STYLE_DEFINITIONS: Readonly<Record<StyleRole, StyleDefinition>> = {
+  title: paragraphStyle("Title", {
+    next: true,
+    pPr: '<w:spacing w:after="240"/>',
+    rPr: '<w:sz w:val="48"/><w:szCs w:val="48"/>',
+  }),
+  ...(Object.fromEntries(
+    HEADING_SIZES.map((size, index) => [
+      `heading${index + 1}`,
+      paragraphStyle(`heading ${index + 1}`, {
         next: true,
         pPr: `<w:keepNext/><w:keepLines/><w:spacing w:before="${index === 0 ? 360 : 240}" w:after="80"/><w:outlineLvl w:val="${index}"/>`,
         rPr: `<w:b/>${index >= 3 ? "<w:i/>" : ""}<w:sz w:val="${size}"/><w:szCs w:val="${size}"/>`,
       }),
-    )
-    .join("");
-  const border = (color: string) =>
-    `<w:pBdr><w:left w:val="single" w:sz="12" w:space="8" w:color="${color}"/></w:pBdr>`;
+    ]),
+  ) as Record<`heading${1 | 2 | 3 | 4 | 5 | 6}`, StyleDefinition>),
+  quote: paragraphStyle("Quote", {
+    pPr: `${border("D1D5DB")}<w:ind w:left="${INDENT}"/>`,
+    rPr: '<w:i/><w:color w:val="4B5563"/>',
+  }),
+  question: paragraphStyle("Question", {
+    next: true,
+    pPr: border("0EA5E9"),
+    rPr: '<w:color w:val="374151"/>',
+  }),
+  listParagraph: paragraphStyle("List Paragraph", {
+    pPr: `<w:ind w:left="${INDENT}"/><w:contextualSpacing/>`,
+  }),
+  code: paragraphStyle("Code", {
+    pPr: '<w:shd w:val="clear" w:color="auto" w:fill="F3F4F6"/><w:spacing w:after="0" w:line="240" w:lineRule="auto"/>',
+    rPr: `${CODE_FONT}<w:sz w:val="20"/><w:szCs w:val="20"/>`,
+  }),
+  math: paragraphStyle("Math", { pPr: '<w:jc w:val="center"/>' }),
+  // Word's own "caption" style, so its captions list picks a chart's up.
+  caption: paragraphStyle("caption", {
+    pPr: '<w:spacing w:after="160"/>',
+    rPr: '<w:i/><w:color w:val="4A4F57"/><w:sz w:val="18"/><w:szCs w:val="18"/>',
+  }),
+  footnoteText: {
+    name: "footnote text",
+    type: "paragraph",
+    xml: (id, bases) =>
+      `<w:style w:type="paragraph" w:styleId="${escapeXml(id)}"><w:name w:val="footnote text"/>${basedOn(bases.paragraph)}<w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:rPr><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr></w:style>`,
+  },
+  footnoteReference: {
+    name: "footnote reference",
+    type: "character",
+    xml: (id, bases) =>
+      `<w:style w:type="character" w:styleId="${escapeXml(id)}"><w:name w:val="footnote reference"/>${basedOn(bases.character)}<w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:rPr><w:vertAlign w:val="superscript"/></w:rPr></w:style>`,
+  },
+  hyperlink: {
+    name: "Hyperlink",
+    type: "character",
+    xml: (id, bases) =>
+      `<w:style w:type="character" w:styleId="${escapeXml(id)}"><w:name w:val="Hyperlink"/>${basedOn(bases.character)}<w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:rPr><w:color w:val="0563C1"/><w:u w:val="single"/></w:rPr></w:style>`,
+  },
+  codeChar: {
+    name: "Inline Code",
+    type: "character",
+    xml: (id, bases) =>
+      `<w:style w:type="character" w:styleId="${escapeXml(id)}"><w:name w:val="Inline Code"/>${basedOn(bases.character)}<w:rPr>${CODE_FONT}<w:shd w:val="clear" w:color="auto" w:fill="F3F4F6"/></w:rPr></w:style>`,
+  },
+  commentText: {
+    name: "annotation text",
+    type: "paragraph",
+    xml: (id, bases) =>
+      `<w:style w:type="paragraph" w:styleId="${escapeXml(id)}"><w:name w:val="annotation text"/>${basedOn(bases.paragraph)}<w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:pPr><w:spacing w:line="240" w:lineRule="auto"/></w:pPr><w:rPr><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr></w:style>`,
+  },
+  commentReference: {
+    name: "annotation reference",
+    type: "character",
+    xml: (id, bases) =>
+      `<w:style w:type="character" w:styleId="${escapeXml(id)}"><w:name w:val="annotation reference"/>${basedOn(bases.character)}<w:uiPriority w:val="99"/><w:semiHidden/><w:unhideWhenUsed/><w:rPr><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr></w:style>`,
+  },
+  tableGrid: {
+    name: "Table Grid",
+    type: "table",
+    xml: (id, bases) =>
+      `<w:style w:type="table" w:styleId="${escapeXml(id)}"><w:name w:val="Table Grid"/>${basedOn(bases.table)}<w:uiPriority w:val="39"/><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:left w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:right w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="auto"/></w:tblBorders></w:tblPr></w:style>`,
+  },
+};
 
+/** A new document's ids for the styles, which `NEW_DOCUMENT_STYLES` writes in. */
+export const NEW_DOCUMENT_STYLE_IDS: Readonly<Record<StyleRole, string>> = {
+  title: "Title",
+  heading1: "Heading1",
+  heading2: "Heading2",
+  heading3: "Heading3",
+  heading4: "Heading4",
+  heading5: "Heading5",
+  heading6: "Heading6",
+  quote: "Quote",
+  question: "Question",
+  listParagraph: "ListParagraph",
+  code: "Code",
+  math: "Math",
+  caption: "Caption",
+  footnoteText: "FootnoteText",
+  footnoteReference: "FootnoteReference",
+  hyperlink: "Hyperlink",
+  codeChar: "CodeChar",
+  tableGrid: "TableGrid",
+  commentText: "CommentText",
+  commentReference: "CommentReference",
+};
+
+/** The styles only a document with comments needs. */
+const COMMENT_ROLES: ReadonlySet<StyleRole> = new Set(["commentText", "commentReference"]);
+
+function styles(language: string, comments: boolean): string {
+  const bases: StyleBases = {
+    paragraph: "Normal",
+    character: "DefaultParagraphFont",
+    table: "TableNormal",
+  };
+  const defined = (Object.keys(STYLE_DEFINITIONS) as StyleRole[])
+    .filter((role) => comments || !COMMENT_ROLES.has(role))
+    .map((role) => STYLE_DEFINITIONS[role].xml(NEW_DOCUMENT_STYLE_IDS[role], bases))
+    .join("");
   return (
     `${XML_DECLARATION}<w:styles xmlns:w="${NS.w}">` +
     `<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/><w:sz w:val="22"/><w:szCs w:val="22"/><w:lang w:val="${language}"/></w:rPr></w:rPrDefault>` +
@@ -748,34 +1167,7 @@ function styles(language: string): string {
     '<w:style w:type="character" w:default="1" w:styleId="DefaultParagraphFont"><w:name w:val="Default Paragraph Font"/><w:uiPriority w:val="1"/><w:semiHidden/><w:unhideWhenUsed/></w:style>' +
     '<w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:name w:val="Normal Table"/><w:uiPriority w:val="99"/><w:semiHidden/><w:unhideWhenUsed/><w:tblPr><w:tblInd w:w="0" w:type="dxa"/><w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="108" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style>' +
     '<w:style w:type="numbering" w:default="1" w:styleId="NoList"><w:name w:val="No List"/><w:uiPriority w:val="99"/><w:semiHidden/><w:unhideWhenUsed/></w:style>' +
-    paragraphStyle("Title", "Title", {
-      next: true,
-      pPr: '<w:spacing w:after="240"/>',
-      rPr: '<w:sz w:val="48"/><w:szCs w:val="48"/>',
-    }) +
-    headings +
-    paragraphStyle("Quote", "Quote", {
-      pPr: `${border("D1D5DB")}<w:ind w:left="${INDENT}"/>`,
-      rPr: '<w:i/><w:color w:val="4B5563"/>',
-    }) +
-    paragraphStyle("Question", "Question", {
-      next: true,
-      pPr: border("0EA5E9"),
-      rPr: '<w:color w:val="374151"/>',
-    }) +
-    paragraphStyle("ListParagraph", "List Paragraph", {
-      pPr: `<w:ind w:left="${INDENT}"/><w:contextualSpacing/>`,
-    }) +
-    paragraphStyle("Code", "Code", {
-      pPr: '<w:shd w:val="clear" w:color="auto" w:fill="F3F4F6"/><w:spacing w:after="0" w:line="240" w:lineRule="auto"/>',
-      rPr: `${CODE_FONT}<w:sz w:val="20"/><w:szCs w:val="20"/>`,
-    }) +
-    paragraphStyle("Math", "Math", { pPr: '<w:jc w:val="center"/>' }) +
-    '<w:style w:type="paragraph" w:styleId="FootnoteText"><w:name w:val="footnote text"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:rPr><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr></w:style>' +
-    '<w:style w:type="character" w:styleId="FootnoteReference"><w:name w:val="footnote reference"/><w:basedOn w:val="DefaultParagraphFont"/><w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:rPr><w:vertAlign w:val="superscript"/></w:rPr></w:style>' +
-    '<w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:basedOn w:val="DefaultParagraphFont"/><w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:rPr><w:color w:val="0563C1"/><w:u w:val="single"/></w:rPr></w:style>' +
-    `<w:style w:type="character" w:styleId="CodeChar"><w:name w:val="Inline Code"/><w:basedOn w:val="DefaultParagraphFont"/><w:rPr>${CODE_FONT}<w:shd w:val="clear" w:color="auto" w:fill="F3F4F6"/></w:rPr></w:style>` +
-    '<w:style w:type="table" w:styleId="TableGrid"><w:name w:val="Table Grid"/><w:basedOn w:val="TableNormal"/><w:uiPriority w:val="39"/><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:left w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:right w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="auto"/></w:tblBorders></w:tblPr></w:style>' +
+    defined +
     "</w:styles>"
   );
 }
