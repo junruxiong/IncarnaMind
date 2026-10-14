@@ -724,6 +724,7 @@ export const zhCN = {
   "proposal.theirs.rejectAll": "全部拒绝 {name} 的修订",
   "proposal.unknownAuthor": "未知作者",
   "proposal.madeBy": "{author}，{date}",
+  "proposal.why": "原因：{reason}",
   "proposal.outOfDate.why.theirs":
     "你后来改过这段文字，所以无法接受这处修订。可以拒绝，或自己改好。",
   "proposal.announce.theirs": "{author} 的修订：{what}。按 {accept} 接受，按 {reject} 拒绝。",
@@ -1471,6 +1472,7 @@ export const zhCN = {
   "providers.test.too-long": "这个模型的上下文窗口太小，连很短的请求都放不下。",
   "providers.test.cost-cap": "未发送任何内容：已达到本月花费上限。可在“设置 → 通用”中更改。",
   "providers.test.no-answer": "模型没有回复。",
+  "providers.test.ollama-not-running": "Ollama 没有在这台电脑上运行。请先打开它，再测试一次。",
   "providers.test.unknown": "测试未通过。",
 
   "providers.secrets.plainText.title": "没有正在运行的密钥环",
@@ -1510,6 +1512,12 @@ export const zhCN = {
   "localMode.keep.list.last": "{rest} 和 {last}",
   "localMode.keep.agents.one": "1 个已连接的智能体",
   "localMode.keep.agents": "{count} 个已连接的智能体",
+  "localModel.title": "使用本地模型",
+  "localModel.installed": "这台电脑上有 Ollama，但它没有运行。",
+  "localModel.recommended": "推荐使用 {model}（3.3 GB），只需下载一次。",
+  "localModel.open": "打开 Ollama",
+  "localModel.opening": "正在打开 Ollama…",
+  "localModel.cancel": "取消",
 
   "providers.settings.title": "对话模型",
   "providers.settings.none": "尚未设置对话模型。",
@@ -1566,6 +1574,13 @@ export const zhCN = {
   "chatgpt.welcome.ok": "知道了",
   "chatgpt.consent.note": "数据会以你的 ChatGPT 账号发送给 OpenAI，并计入订阅的用量。",
   "chatgpt.menu.hint": "使用 Plus 或 Pro 订阅",
+  "chatgpt.paste.question": "没有回到 IncarnaMind？",
+  "chatgpt.paste.open": "粘贴浏览器地址栏里的地址",
+  "chatgpt.paste.continue": "继续",
+  "chatgpt.paste.problem.not-sign-in-address": "这不是登录地址。",
+  "chatgpt.paste.problem.other-sign-in":
+    "这个地址来自之前的一次登录。在刚打开的页面上登录后，再粘贴地址栏里的地址。",
+  "chatgpt.paste.problem.finished": "这次登录已经结束。",
 
   "consent.dialog.title": "向 {service} 发送数据？",
   "consent.dialog.body": "为了{purpose}，IncarnaMind 会向 {service} 发送：",
@@ -1909,6 +1924,7 @@ export const zhCN = {
 
   "answer.label": "回答",
   "answer.status.streaming": "正在回答…",
+  "mind.writing": "正在修改…",
   "answer.phase.waiting-for-consent": "等待你允许发送",
   "answer.phase.loading": "正在加载模型…",
   "answer.phase.searching": "正在搜索你的文档…",
@@ -1933,6 +1949,7 @@ export const zhCN = {
   "answer.error.local-mode":
     "已停止：已开启“所有内容都留在这台电脑上”，而 {model} 不在这台电脑上运行",
   "answer.error.useLocal": "改用本地模型",
+  "answer.error.ollama-not-running": "Ollama 没有在这台电脑上运行",
   "answer.error.too-long":
     "这个问题太长，即使不带前面的内容，也超出了模型的上下文窗口。请缩短问题，或换一个模型",
   "answer.error.no-answer": "模型没有给出回答",
@@ -2580,6 +2597,8 @@ export const zhCN = {
   "error.provider.urlScheme": "API 地址必须以 http:// 或 https:// 开头。",
   "error.provider.urlExtras":
     "API 地址不能包含用户名、密码、查询参数或片段。API 密钥请填在密钥栏中。",
+  "error.provider.ollamaNotRunning": "Ollama 没有在这台电脑上运行。",
+  "error.provider.ollamaCantOpen": "无法从这里打开 Ollama。请到 ollama.com 下载。",
   "error.provider.ollamaCloud":
     "{model} 在 ollama.com 上运行，不在这台电脑上。选择一个本地模型，或到模型菜单中选择。",
   "error.provider.rerankLocalMode":
@@ -3472,11 +3491,30 @@ export const zhCN = {
   "answer.add": "添加到笔记",
   "answer.add.to": "添加到“{mind}”（{shortcut}）",
   "answer.add.choose": "选择要添加到的 Mind",
+  "mindChanges.minds": "已修改的 Mind（{count}）",
+  "mindChanges.one": "“{mind}”中有 {count} 处修订",
+  "mindChanges.one.one": "“{mind}”中有 1 处修订",
+  "mindChanges.one.none": "“{mind}”中没有待处理的修订",
+  "mindChanges.one.edited": "修改了“{mind}”",
+  "mindChanges.one.created": "新建了“{mind}” · {count} 处修订",
+  "mindChanges.one.created.one": "新建了“{mind}” · 1 处修订",
+  "mindChanges.one.created.none": "新建了“{mind}”",
+  "mindChanges.one.removed": "已移除“{mind}”",
+  "mindChanges.review": "审阅",
+  "mindChanges.row.created": "新建：{mind}",
+  "mindChanges.row.edited": "修改：{mind}",
+  "mindChanges.row.removed": "已移除：{mind}",
+  "mindChanges.row.count": "· {count} 处修订",
+  "mindChanges.row.one": "· 1 处修订",
+  "mindChanges.row.none": "· 没有待处理的修订",
+  "mindChanges.open": "打开",
+  "mindChanges.noMind": "没有打开的 Mind 可以修改。",
   "mindCall.thisMind": "这个 Mind",
   "mindCall.reading": "正在读“{mind}”…",
   "mindCall.editing": "正在修改“{mind}”…",
   "mindCall.adding": "正在添加到“{mind}”…",
   "mindCall.creating": "正在新建“{mind}”…",
+  "mindCall.creating.new": "正在新建 Mind…",
   "mindCall.read": "读了“{mind}”",
   "mindCall.edited": "修改了“{mind}” · {count} 处修订",
   "mindCall.edited.one": "修改了“{mind}” · 1 处修订",

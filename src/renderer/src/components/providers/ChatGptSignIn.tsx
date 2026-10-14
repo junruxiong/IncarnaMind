@@ -18,6 +18,7 @@ import {
 } from "../ui";
 import { useModal } from "../useModal";
 import { ChatGptMark } from "./ChatGptMark";
+import { PasteSignInAddress } from "./PasteSignInAddress";
 import { SecretStorageNotice } from "./ProviderForm";
 
 /** The ChatGPT plan provider's status, kept up to date with the core's event. */
@@ -160,17 +161,20 @@ export function ChatGptSignInState({
   const t = useT();
   if (sign.waiting) {
     return (
-      <p className="flex flex-wrap items-center gap-x-2 text-[13px] leading-5 text-ink-secondary">
-        <span>{t("chatgpt.signingIn")}</span>
-        <button
-          type="button"
-          data-testid="chatgpt-cancel"
-          onClick={sign.cancel}
-          className="font-semibold text-accent underline-offset-2 hover:underline"
-        >
-          {t("chatgpt.cancel")}
-        </button>
-      </p>
+      <div className="flex w-full flex-col gap-2">
+        <p className="flex flex-wrap items-center gap-x-2 text-[13px] leading-5 text-ink-secondary">
+          <span>{t("chatgpt.signingIn")}</span>
+          <button
+            type="button"
+            data-testid="chatgpt-cancel"
+            onClick={sign.cancel}
+            className="font-semibold text-accent underline-offset-2 hover:underline"
+          >
+            {t("chatgpt.cancel")}
+          </button>
+        </p>
+        <PasteSignInAddress />
+      </div>
     );
   }
   const { failure, failureText } = sign;

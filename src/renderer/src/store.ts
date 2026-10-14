@@ -120,6 +120,8 @@ export interface AppState extends LayoutSlice {
    * `MindTitle`), so typing names it instead of pressing the button again.
    */
   titleToFocus: string | null;
+  /** A Mind just created with its title given: its text takes the focus once it shows. */
+  bodyToFocus: string | null;
   /** Set once loaded. */
   settings: Settings | null;
   /** Whether Questions can be asked. Set once loaded, then follows the core's event. */
@@ -206,10 +208,14 @@ export interface AppState extends LayoutSlice {
    */
   createMind(options?: {
     startQuestion?: boolean;
+    /** Its text takes the focus, not its title: one asked for by name (#202). */
+    focusBody?: boolean;
     title?: string;
     scope?: SearchScope | null;
     folderId?: string | null;
     groupId?: string;
+    /** Runs once it is made and shown, with its id. */
+    made?(mindId: string): void;
   }): Promise<Undoable | undefined>;
   /**
    * Moves Minds and Documents into a Folder, or out of every Folder (null):
@@ -236,6 +242,8 @@ export interface AppState extends LayoutSlice {
   showNewMind(mind: Mind, groupId?: string): Promise<void>;
   /** Called once the new Mind's title has the focus. */
   titleFocused(): void;
+  /** Called once the new Mind's text has the focus. */
+  bodyFocused(): void;
   /** Starts a Question at the end of the open Mind, or of a new Mind if none is open. */
   startQuestion(): void;
   /** Called once the Question asked for is started. */
@@ -679,6 +687,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     status: { kind: "loading" },
     minds: [],
     titleToFocus: null,
+    bodyToFocus: null,
     pickingDocuments: false,
     settings: null,
     chatReadiness: null,
@@ -828,9 +837,12 @@ export const useAppStore = create<AppState>()((set, get) => {
         set(
           options?.startQuestion
             ? { questionToStart: { mindId: mind.id, scope: options.scope ?? null } }
-            : { titleToFocus: mind.id },
+            : options?.focusBody
+              ? { bodyToFocus: mind.id }
+              : { titleToFocus: mind.id },
         );
         await get().showNewMind(mind, options?.groupId);
+        options?.made?.(mind.id);
       });
       return made;
     },
@@ -846,6 +858,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     },
 
     titleFocused: () => set({ titleToFocus: null }),
+    bodyFocused: () => set({ bodyToFocus: null }),
 
     startQuestion() {
       const { layout, createMind } = get();
