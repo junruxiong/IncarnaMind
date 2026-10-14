@@ -60,6 +60,8 @@ export interface VersionRetention {
   release(kind: RetentionKind, ownerId: string): void;
   /** The versions one owner retains, in the order they were first retained. */
   retainedBy(kind: RetentionKind, ownerId: string): RetainedVersion[];
+  /** Whether any owner of this kind retains a version of one of these Documents. */
+  isRetained(kind: RetentionKind, documentIds: readonly string[]): boolean;
 }
 
 interface Row {
@@ -202,6 +204,19 @@ export function createVersionRetention(db: Database, now: () => string) {
 
     retainedBy(kindInput: unknown, ownerInput: unknown): RetainedVersion[] {
       return ownRows(parseKind(kindInput), parseOwner(ownerInput)).map(toVersion);
+    },
+
+    isRetained(kindInput: unknown, documentIds: readonly string[]): boolean {
+      const kind = parseKind(kindInput);
+      if (documentIds.length === 0) return false;
+      const marks = documentIds.map(() => "?").join(", ");
+      return (
+        db.get<{ found: number }>(
+          `SELECT 1 AS found FROM retained_versions
+           WHERE kind = ? AND document_id IN (${marks}) AND deleted_at IS NULL LIMIT 1`,
+          [kind, ...documentIds],
+        ) !== undefined
+      );
     },
 
     /**
