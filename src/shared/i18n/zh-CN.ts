@@ -1340,9 +1340,10 @@ export const zhCN = {
   "outputLocation.title": "保存位置",
   "outputLocation.body":
     "导出的文件和任务保存的文件都放在这里。未经你同意，IncarnaMind 不会写入其他位置。",
-  "outputLocation.notChosen": "尚未选择。第一次保存时会询问你。",
   "outputLocation.change": "更改…",
-  "outputLocation.choose": "选择…",
+  "outputLocation.defaultName": "文稿 › IncarnaMind",
+  "outputLocation.defaultName.other": "文档 › IncarnaMind",
+  "outputLocation.default": "默认位置：在你选择其他文件夹之前，新文件都保存在这里。",
   "outputLocation.failed": "无法更改：{reason}",
   "outputLocation.pick.title": "选择新文件的保存位置",
   "outputLocation.pick.button": "选择",
@@ -1351,9 +1352,9 @@ export const zhCN = {
     "IncarnaMind 只读取同步文件夹，除非你允许它在其中添加新文件。它不会修改或删除你的文件。",
   "outputLocation.linked.allow": "允许在“{name}”中添加新文件",
   "fileWrite.location.title": "新文件保存到哪里？",
-  "fileWrite.location.body":
-    "IncarnaMind 会把“{name}”以及以后生成的文件都保存在同一个文件夹里。你可以在设置 › 通用中更改。",
-  "fileWrite.location.save": "保存到这里",
+  "fileWrite.location.missing": "无法把“{name}”保存到“{folder}”：IncarnaMind 无法创建这个文件夹。",
+  "fileWrite.location.notWritable":
+    "无法把“{name}”保存到“{folder}”：IncarnaMind 没有在这里写入的权限。",
   "fileWrite.location.choose": "另选文件夹…",
   "fileWrite.location.cancel": "取消",
   "fileWrite.location.failed": "无法使用这个文件夹：{reason}",
@@ -2349,6 +2350,8 @@ export const zhCN = {
   "export.changeLocation": "更改保存位置…",
   "export.allow": "允许",
   "export.done": "已保存“{name}”",
+  "export.doneIn": "已保存“{name}”到“{folder}”",
+  "export.changeFolder": "更改文件夹…",
   "export.word.review.one": "Word 文件中有 1 处无法保留",
   "export.word.review.other": "Word 文件中有 {count} 处无法保留",
   "export.word.anyway": "仍然导出",
@@ -2978,6 +2981,7 @@ export const zhCN = {
   "meetings.transcript.finishingDownload":
     "正在完成转写稿：正在下载语音模型（{percent}%，共 {size}）…",
   "meetings.transcript.saved": "转写稿已保存",
+  "meetings.transcript.savedIn": "转写稿已保存到“{folder}”",
   "meetings.transcript.open": "打开转写稿",
   "meetings.transcript.empty": "没有识别到可转写的内容，因此未保存转写稿。",
   "meetings.transcript.downloadFailed": "无法下载语音模型：{message}",

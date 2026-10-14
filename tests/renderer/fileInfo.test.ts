@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   addedDate,
+  defaultFolderLabelKey,
   documentSummary,
   fileDate,
   infoLabelKey,
@@ -76,6 +77,18 @@ test("every action that shows a file says Finder on macOS and folder on Windows 
   for (const platform of ["Win32", "Linux x86_64"]) {
     expect(says(platform, "en")).toBe("Show in folder");
     expect(says(platform, "zh-CN")).toBe("在文件夹中显示");
+  }
+});
+
+test("the default Output location is in 文稿 on macOS and 文档 on Windows and Linux, in Chinese", () => {
+  const says = (platform: string, language: "en" | "zh-CN") =>
+    translate(language, defaultFolderLabelKey(platform));
+  expect(says("MacIntel", "zh-CN")).toBe("文稿 › IncarnaMind");
+  for (const platform of ["Win32", "Linux x86_64"]) {
+    expect(says(platform, "zh-CN")).toBe("文档 › IncarnaMind");
+  }
+  for (const platform of ["MacIntel", "Win32", "Linux x86_64"]) {
+    expect(says(platform, "en")).toBe("Documents › IncarnaMind");
   }
 });
 

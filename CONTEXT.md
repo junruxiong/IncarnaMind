@@ -304,7 +304,7 @@ A folder the User has allowed an Answer or a Task to read, once. It is not a Lin
 _Avoid_: shared folder, workspace, permission
 
 **Output location**:
-The folder the User picks for the files IncarnaMind creates, such as exports and Documents a Task saves. IncarnaMind writes nowhere else without asking.
+The folder the files IncarnaMind creates go in, such as exports, Transcripts and Documents a Task saves. Until the User picks one, it is IncarnaMind in their Documents folder (Documents › IncarnaMind; in Chinese, 文稿 › IncarnaMind on a Mac and 文档 › IncarnaMind on Windows and Linux): the first save goes there without asking and says where. IncarnaMind writes nowhere else without asking: a Linked folder asks first, and if the default can't be made or written to, the save asks where instead.
 _Avoid_: export folder, downloads, save path
 
 **Workspace**:
