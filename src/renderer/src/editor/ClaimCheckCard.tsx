@@ -3,6 +3,7 @@ import { type CSSProperties, useCallback, useEffect, useRef, useState } from "re
 import { createPortal } from "react-dom";
 import type * as Y from "yjs";
 import { CITATION_NODE, type CitationAttributes } from "../../../core/api";
+import { shownDocumentName } from "../../../shared/citations";
 import { citationLocation, formatLocation, openKind } from "../../../shared/locations";
 import { addAsCitation, checkAgain } from "../checks";
 import { CountItLine } from "../components/CountItLine";
@@ -219,8 +220,8 @@ function ClaimCard({
           </p>
         )}
         {evidence && (
-          <p className="citation-card-source">
-            {[evidence.documentName, where].filter(Boolean).join(" · ")}
+          <p data-testid="claim-source" className="citation-card-source">
+            {[shownDocumentName(evidence, documents), where].filter(Boolean).join(" · ")}
           </p>
         )}
       </div>
