@@ -2717,16 +2717,16 @@ export type LinkedFolderStatus = "scanning" | "watching" | "paused" | "unavailab
 
 /**
  * The groups that have an example Mind (onboarding, see src/core/examples.ts):
- * "tea" is the first-run default; the others are one per pick of the first
- * run's question (Papers and research, Reports and analysis, Contracts and
- * legal work, Meetings and team notes).
+ * "credit", a credit committee paper, is the first-run default (#802); the
+ * others are one per pick of the first run's question (Papers and research,
+ * Reports and analysis, Contracts and legal work, Meetings and team notes).
  */
-export type ExampleGroup = "tea" | "papers" | "reports" | "contracts" | "meetings";
+export type ExampleGroup = "credit" | "papers" | "reports" | "contracts" | "meetings";
 
 /**
- * An example Mind (onboarding, see src/core/examples.ts): "Where tea comes
- * from", or one of a group, with its example Documents in their own Linked
- * folder, written in advance so it works before any chat model is set up.
+ * An example Mind (onboarding, see src/core/examples.ts): "Draft: credit
+ * committee paper", or one of a group, with its example Documents in their own
+ * Linked folder, written in advance so it works before any chat model is set up.
  */
 export interface Examples {
   /** Which example this is. */
@@ -6908,7 +6908,7 @@ export interface CoreApi {
    */
   addFoundSource(input: AddFoundSourceInput): Promise<AddFoundSourceResult>;
 
-  /** An example Mind and its Documents, if made (see `Examples`); the tea example by default. */
+  /** An example Mind and its Documents, if made (see `Examples`); the credit paper by default. */
   getExamples(group?: ExampleGroup): Promise<Examples>;
   /**
    * On a first run (no Mind yet, examples never offered before), makes the
@@ -6918,8 +6918,8 @@ export interface CoreApi {
   /**
    * Makes the example Mind and its Documents (copies of the shipped files in
    * the data folder, linked), or returns them if they exist. Its Citations
-   * are checked once the Documents have been read. "examples.changed" follows.
-   * The tea example by default.
+   * are checked once the Documents have been read, and so are its draft's
+   * checks, already made. "examples.changed" follows. The credit paper by default.
    */
   createExamples(group?: ExampleGroup): Promise<Examples>;
   /** Deletes the example Mind, and unlinks the example Documents and deletes their copies. */

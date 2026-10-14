@@ -123,7 +123,11 @@ export function ClaimMark({
         onPointerLeave={() => hold("pointer", false)}
         onFocus={() => hold("focus", true)}
         onBlur={() => hold("focus", false)}
-        onClick={() => setPinned(true)}
+        onClick={() => {
+          setPinned(true);
+          // "Open a check in the example", in Get started.
+          useAppStore.getState().updateGettingStarted({ citationChecked: true });
+        }}
         onAnimationEnd={(event) => {
           if (event.target === event.currentTarget && reveal) onRevealed();
         }}

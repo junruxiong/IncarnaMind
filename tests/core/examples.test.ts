@@ -5,6 +5,7 @@ import { describe, expect, test, vi } from "vitest";
 import {
   ANSWER_BLOCK,
   CITATION_NODE,
+  CLAIM_CHECK_MARK,
   type Core,
   type ExampleGroup,
   QUESTION_BLOCK,
@@ -42,8 +43,22 @@ function citationsOf(doc: ProseMirrorNode): Record<string, unknown>[] {
   return found;
 }
 
+/** Each check's mark, once, with the text it marks. */
+function checksOf(doc: ProseMirrorNode): { text: string; check: Record<string, unknown> }[] {
+  const found = new Map<string, { text: string; check: Record<string, unknown> }>();
+  doc.descendants((node) => {
+    const mark = node.marks.find((each) => each.type.name === CLAIM_CHECK_MARK);
+    const check = mark?.attrs as Record<string, unknown> | undefined;
+    if (!node.isText || !check) return true;
+    const id = String(check.id);
+    found.set(id, { text: (found.get(id)?.text ?? "") + (node.text ?? ""), check });
+    return true;
+  });
+  return [...found.values()];
+}
+
 describe("the example Mind", { timeout: 30_000 }, () => {
-  test("is made on a first run, once, and its Citations quote its Documents and are found", async () => {
+  test("is made on a first run, once: its Citations quote its Documents and are found, and its draft's wrong figure is marked contradicted, quoting the results", async () => {
     const { core } = await startWithExamples();
 
     const made = await core.offerExamples();
@@ -57,29 +72,31 @@ describe("the example Mind", { timeout: 30_000 }, () => {
 
     const mindId = made?.mindId as string;
     const [mind] = await core.listMinds();
-    expect(mind).toMatchObject({ id: mindId, title: "Where tea comes from" });
+    expect(mind).toMatchObject({ id: mindId, title: "Draft: credit committee paper" });
     // Its Documents appear once the folder is scanned.
     await vi.waitFor(async () => {
       const documents = await core.listDocuments({ linkedFolderId: made?.linkedFolderId });
       expect(documents.map((each) => each.name).sort()).toEqual([
-        "Tea · Wikipedia",
-        "茶 · 维基百科",
+        "Northwind Retail · Q3 2026 results",
+        "Northwind Retail · Senior facilities agreement (excerpt)",
       ]);
     });
 
-    // Its blocks: a Note, the Question (scoped to the examples' folder), its Answer, an empty line.
+    // Its blocks: a Note, the draft, the Question (scoped to the examples' folder), its Answer, an empty line.
     const doc = await exampleMind(core, mindId);
     expect(doc.content.content.map((block) => block.type.name)).toEqual([
+      "paragraph",
+      "heading",
+      "paragraph",
+      "heading",
       "paragraph",
       QUESTION_BLOCK,
       ANSWER_BLOCK,
       "paragraph",
     ]);
-    expect(doc.child(1).textContent).toBe(
-      "Where does tea come from, and how did it spread around the world?",
-    );
+    expect(doc.child(5).textContent).toBe("Is Northwind inside its leverage covenant?");
 
-    // Once both Documents are read, both Citations are checked: found, in the right sections.
+    // Once both Documents are read, both Citations are checked: found, on the pages they quote.
     await vi.waitFor(
       async () => {
         const checks = citationsOf(await exampleMind(core, mindId)).map((each) => each.check);
@@ -87,17 +104,40 @@ describe("the example Mind", { timeout: 30_000 }, () => {
       },
       { timeout: 20_000, interval: 100 },
     );
-    const [english, chinese] = citationsOf(await exampleMind(core, mindId));
-    expect(english).toMatchObject({
-      documentName: "Tea · Wikipedia",
+    const read = await exampleMind(core, mindId);
+    const [results, agreement] = citationsOf(read);
+    expect(results).toMatchObject({
+      documentName: "Northwind Retail · Q3 2026 results",
       quote:
-        "Tea drinking may have begun in the region of Yunnan, where it was used for medicinal purposes.",
-      location: { kind: "section", heading: "Early tea drinking" },
+        "Net debt to EBITDA was 3.1 times at the end of the quarter, up from 2.7 times at the half year.",
+      pageFrom: 1,
     });
-    expect(chinese).toMatchObject({
-      documentName: "茶 · 维基百科",
-      location: { kind: "section", heading: "在世界各地的传播" },
+    expect(agreement).toMatchObject({
+      documentName: "Northwind Retail · Senior facilities agreement (excerpt)",
+      pageFrom: 1,
     });
+
+    // The draft's wrong figure is marked contradicted, quoting the results where the check found it.
+    expect(checksOf(read)).toEqual([
+      {
+        text: "Gross margin fell to 36.8% in Q3, mostly in online.",
+        check: expect.objectContaining({
+          state: "contradicted",
+          text: "Gross margin fell to 36.8% in Q3, mostly in online.",
+          says: "The Q3 results say gross margin was 38.6%, not 36.8%.",
+          evidence: expect.objectContaining({
+            documentName: "Northwind Retail · Q3 2026 results",
+            quote:
+              "Group gross margin was 38.6%, down from 40.3% a year earlier, with online the main drag.",
+            check: "found",
+            pageFrom: 1,
+          }),
+          versions: expect.arrayContaining([
+            expect.objectContaining({ documentId: results?.documentId }),
+          ]),
+        }),
+      },
+    ]);
   });
 
   test("are removed with their Documents and the copies of their files, and can be made again", async () => {
@@ -106,13 +146,13 @@ describe("the example Mind", { timeout: 30_000 }, () => {
     const folder = join(dataDir, "Examples");
     expect((await readdir(folder)).sort()).toEqual([
       "LICENSE",
-      "Tea · Wikipedia.md",
-      "茶 · 维基百科.md",
+      "Northwind Retail · Q3 2026 results.pdf",
+      "Northwind Retail · Senior facilities agreement (excerpt).pdf",
     ]);
 
     await core.removeExamples();
     expect(await core.getExamples()).toEqual({
-      group: "tea",
+      group: "credit",
       available: true,
       mindId: null,
       linkedFolderId: null,
@@ -132,7 +172,7 @@ describe("the example Mind", { timeout: 30_000 }, () => {
     const made = await core.createExamples();
     await core.deleteMind(made.mindId as string);
     expect(await core.getExamples()).toEqual({
-      group: "tea",
+      group: "credit",
       available: true,
       mindId: null,
       linkedFolderId: made.linkedFolderId,
@@ -158,7 +198,7 @@ describe("the example Mind", { timeout: 30_000 }, () => {
     const without = startCore(dataDir);
     expect(await without.offerExamples()).toBeNull();
     expect(await without.getExamples()).toEqual({
-      group: "tea",
+      group: "credit",
       available: false,
       mindId: null,
       linkedFolderId: null,
@@ -182,21 +222,36 @@ describe("the example Mind follows the interface language (#709)", { timeout: 60
   test("an untouched example becomes the other language's, in place, and back", async () => {
     const { core, dataDir } = await startWithExamples("en");
     const made = await core.createExamples();
-    await foundIn(core, made.mindId as string, "Tea drinking");
+    await foundIn(core, made.mindId as string, "Net debt to EBITDA");
+    // Its draft's check is there: the example is still as it was made, so it follows the language.
+    expect(checksOf(await exampleMind(core, made.mindId as string))).toHaveLength(1);
 
     await core.updateSettings({ user: { language: "zh-CN" } });
     await vi.waitFor(async () => {
       expect((await core.listMinds()).map((mind) => mind.title)).toEqual([
-        EXAMPLE_SETS.tea["zh-CN"].title,
+        EXAMPLE_SETS.credit["zh-CN"].title,
       ]);
     });
-    const doc = await exampleMind(core, made.mindId as string);
-    expect(doc.child(1).textContent).toBe(EXAMPLE_SETS.tea["zh-CN"].question);
     await foundIn(
       core,
       made.mindId as string,
-      EXAMPLE_SETS.tea["zh-CN"].quotes[0]?.quote.slice(0, 6) ?? "",
+      EXAMPLE_SETS.credit["zh-CN"].quotes[0]?.quote.slice(0, 6) ?? "",
     );
+    const doc = await exampleMind(core, made.mindId as string);
+    expect(doc.child(5).textContent).toBe(EXAMPLE_SETS.credit["zh-CN"].question);
+    expect(checksOf(doc)).toEqual([
+      {
+        text: "第三季度毛利率降至 36.8%，主要拖累来自线上业务。",
+        check: expect.objectContaining({
+          state: "contradicted",
+          says: "第三季度业绩写的是毛利率 38.6%，不是 36.8%。",
+          evidence: expect.objectContaining({
+            quote: "集团毛利率为 38.6%，上年同期为 40.3%，主要受线上业务拖累。",
+            check: "found",
+          }),
+        }),
+      },
+    ]);
     expect((await core.listMinds()).length).toBe(1);
     expect((await core.listLinkedFolders()).length).toBe(1);
     await expect(access(join(dataDir, "Examples"))).rejects.toThrow();
@@ -204,9 +259,11 @@ describe("the example Mind follows the interface language (#709)", { timeout: 60
 
     await core.updateSettings({ user: { language: "en" } });
     await vi.waitFor(async () => {
-      expect((await core.listMinds()).map((mind) => mind.title)).toEqual(["Where tea comes from"]);
+      expect((await core.listMinds()).map((mind) => mind.title)).toEqual([
+        "Draft: credit committee paper",
+      ]);
     });
-    await foundIn(core, made.mindId as string, "Tea drinking");
+    await foundIn(core, made.mindId as string, "Net debt to EBITDA");
     await expect(access(join(dataDir, "示例文档"))).rejects.toThrow();
   });
 
@@ -219,11 +276,19 @@ describe("the example Mind follows the interface language (#709)", { timeout: 60
     await client.settled();
     await core.updateSettings({ user: { language: "zh-CN" } });
     await new Promise((resolve) => setTimeout(resolve, 500));
-    expect((await core.listMinds()).map((mind) => mind.title)).toEqual(["Where tea comes from"]);
+    expect((await core.listMinds()).map((mind) => mind.title)).toEqual([
+      "Draft: credit committee paper",
+    ]);
   });
 });
 
-const GROUPS = ["papers", "reports", "contracts", "meetings"] as const satisfies ExampleGroup[];
+const GROUPS = [
+  "credit",
+  "papers",
+  "reports",
+  "contracts",
+  "meetings",
+] as const satisfies ExampleGroup[];
 const LANGUAGES = ["en", "zh-CN"] as const satisfies Language[];
 
 describe("the example Minds of each group", { timeout: 90_000 }, () => {
@@ -267,8 +332,8 @@ describe("the example Minds of each group", { timeout: 90_000 }, () => {
 
         // The first Question is there for the User to ask.
         const doc = await exampleMind(core, made.mindId as string);
-        expect(doc.child(1).type.name).toBe(QUESTION_BLOCK);
-        expect(doc.child(1).textContent).toBe(set.question);
+        const question = doc.content.content.find((block) => block.type.name === QUESTION_BLOCK);
+        expect(question?.textContent).toBe(set.question);
       });
     }
   }

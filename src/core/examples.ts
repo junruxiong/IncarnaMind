@@ -1,14 +1,19 @@
 /**
- * The example Minds (onboarding): "Where tea comes from", the first-run
- * default, and one per group of the first run's question (papers, reports,
- * contracts, meetings), each in English and in Chinese with Documents of its
- * own. Each is a Mind written in advance that works before any chat model is
- * set up. Its Documents ship with the app (`Paths.examples`), each with its
- * source, licence and attribution in LICENSE. Made, they are copied into the
- * data folder and linked as a Linked folder; the Mind holds a Question and an
- * Answer whose Citations quote real sentences of them (src/core/exampleSets.ts).
- * Its Citations are checked like any others, against the stored text, once all
- * its Documents have been read.
+ * The example Minds (onboarding): "Draft: credit committee paper", the
+ * first-run default (#802), and one per group of the first run's question
+ * (papers, reports, contracts, meetings), each in English and in Chinese with
+ * Documents of its own. Each is a Mind written in advance that works before
+ * any chat model is set up. Its Documents ship with the app (`Paths.examples`),
+ * each with its source, licence and attribution in LICENSE. Made, they are
+ * copied into the data folder and linked as a Linked folder; the Mind holds a
+ * Question and an Answer whose Citations quote real sentences of them
+ * (src/core/exampleSets.ts), and the credit paper a draft of the User's own,
+ * one of whose sentences a check already found contradicted. Its Citations are
+ * checked like any others, against the stored text, once all its Documents
+ * have been read, and its draft's checks are written then, with the Passages
+ * that decide them. They retain no Document version (#79): the example's
+ * Documents change only when it follows the interface language, which writes
+ * the Mind again.
  *
  * Which Mind and Linked folder are an example's is a device value, so no
  * table changes: the renderer marks them "Example", and `remove` deletes both.
@@ -16,8 +21,9 @@
 import { randomUUID } from "node:crypto";
 import { cp, mkdir, rm } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
-import type * as Y from "yjs";
+import * as Y from "yjs";
 import { withCitations } from "../shared/blockJson";
+import { sentenceSpans } from "../shared/sentences";
 import {
   contentHash,
   createElement,
@@ -27,6 +33,7 @@ import {
   toMarkdown,
   topLevelBlocks,
 } from "./answers/blocks";
+import { markSentence } from "./answers/checks/sentences";
 import { markdownToBlocks } from "./answers/markdown";
 import {
   ANSWER_BLOCK,
@@ -34,6 +41,7 @@ import {
   CITATION_NODE,
   type CitationAttributes,
   type CitationRecheck,
+  type ClaimCheckAttributes,
   type Document,
   type ExampleGroup,
   type Examples,
@@ -42,17 +50,16 @@ import {
   QUESTION_BLOCK,
   type RecheckCitationInput,
 } from "./api";
-import { EXAMPLE_SETS, type ExampleQuote, type ExampleSet } from "./exampleSets";
+import { EXAMPLE_SETS, type ExampleCheck, type ExampleQuote, type ExampleSet } from "./exampleSets";
 import type { Language } from "./language";
 
-/** The device value naming the tea example, once made; the groups' are `examples.<group>`. */
+/** The device values naming each example, once made, are `examples.<group>`. */
 const EXAMPLES_VALUE = "examples";
 /** Set once the examples were offered on a first run, so they aren't made again unasked. */
 const OFFERED_VALUE = "examplesOffered";
 
 const GROUPS = Object.keys(EXAMPLE_SETS) as ExampleGroup[];
-const valueKey = (group: ExampleGroup) =>
-  group === "tea" ? EXAMPLES_VALUE : `${EXAMPLES_VALUE}.${group}`;
+const valueKey = (group: ExampleGroup) => `${EXAMPLES_VALUE}.${group}`;
 
 interface StoredExamples {
   mindId: string;
@@ -85,9 +92,22 @@ export interface ExamplesOptions {
   unlinkFolder(linkedFolderId: string): void;
   linkedFolderExists(linkedFolderId: string): boolean;
   documentsIn(linkedFolderId: string): Document[];
+  /** The Folder a Mind is in; null for none: where its checks searched. */
+  mindFolder(mindId: string): string | null;
   recheck(input: RecheckCitationInput): CitationRecheck;
   /** Pushes "examples.changed". */
   changed(examples: Examples): void;
+}
+
+/** An example's draft, as the Blocks it is written into its Mind as. */
+const draftBlocks = (set: ExampleSet): NodeJSON[] => (set.draft ? markdownToBlocks(set.draft) : []);
+
+/** Each of the draft's Blocks as Markdown, as the Mind holds it: to tell whether the User changed it. */
+function draftMarkdown(set: ExampleSet): string[] {
+  const scratch = new Y.Doc();
+  const fragment = scratch.getXmlFragment("draft");
+  fragment.insert(0, draftBlocks(set).map(createElement));
+  return topLevelBlocks(fragment).map((block) => toMarkdown(block).trim());
 }
 
 /** A Document whose text is stored, so its Citations can be checked. */
@@ -111,7 +131,7 @@ export function createExamples(options: ExamplesOptions) {
   };
 
   /** Each part while it exists: the Mind can be deleted, or the folder unlinked, on its own. */
-  const status = (group: ExampleGroup = "tea"): Examples => {
+  const status = (group: ExampleGroup = "credit"): Examples => {
     const examples = stored(group);
     const mind = examples && options.mindExists(examples.mindId) ? examples : null;
     const folder =
@@ -126,27 +146,85 @@ export function createExamples(options: ExamplesOptions) {
   };
 
   /** A Citation's attributes: what is known before it is checked, then the check's result. */
+  const citationAttributes = (
+    quote: ExampleQuote,
+    document: Document | undefined,
+    result: CitationRecheck | null,
+  ): CitationAttributes => ({
+    passageId: result?.passageId ?? null,
+    documentId: document?.id ?? null,
+    documentName: document?.name ?? quote.document,
+    contentHash: result?.contentHash ?? null,
+    pageFrom: result?.pageFrom ?? null,
+    pageTo: result?.pageTo ?? null,
+    location: result?.location ?? null,
+    quote: quote.quote,
+    check: result?.check ?? "checking",
+    checkReason: result?.checkReason ?? null,
+  });
+
   const citation = (
     quote: ExampleQuote,
     document: Document | undefined,
     result: CitationRecheck | null,
-  ): NodeJSON => {
-    const attrs: CitationAttributes = {
-      passageId: result?.passageId ?? null,
-      documentId: document?.id ?? null,
-      documentName: document?.name ?? quote.document,
-      contentHash: result?.contentHash ?? null,
-      pageFrom: result?.pageFrom ?? null,
-      pageTo: result?.pageTo ?? null,
-      location: result?.location ?? null,
-      quote: quote.quote,
-      check: result?.check ?? "checking",
-      checkReason: result?.checkReason ?? null,
-    };
-    return {
-      type: CITATION_NODE,
-      attrs: Object.fromEntries(Object.entries(attrs).filter(([, value]) => value !== null)),
-    };
+  ): NodeJSON => ({
+    type: CITATION_NODE,
+    attrs: Object.fromEntries(
+      Object.entries(citationAttributes(quote, document, result)).filter(
+        ([, value]) => value !== null,
+      ),
+    ),
+  });
+
+  /**
+   * Marks a draft's sentence with its check, made in advance: the Passage
+   * that decides it, found in the Document as any check's is. Nothing when
+   * the sentence isn't in the Mind as the example wrote it.
+   */
+  const markCheck = (
+    blocks: Y.XmlFragment,
+    check: ExampleCheck,
+    evidence: CitationAttributes,
+    documents: readonly Document[],
+    folderId: string | null,
+  ): void => {
+    for (const block of topLevelBlocks(blocks)) {
+      if (block.nodeName !== "paragraph") continue;
+      // A paragraph of the draft is one text, written without inline nodes.
+      const text = block
+        .toArray()
+        .flatMap((child) =>
+          child instanceof Y.XmlText
+            ? (child.toDelta() as { insert: unknown }[]).map((run) =>
+                typeof run.insert === "string" ? run.insert : "",
+              )
+            : [],
+        )
+        .join("");
+      const span = sentenceSpans(text).find(
+        (each) => text.slice(each.from, each.to) === check.sentence,
+      );
+      if (!span) continue;
+      const attributes: ClaimCheckAttributes = {
+        id: randomUUID(),
+        request: randomUUID(),
+        action: "find-support",
+        state: check.verdict,
+        reason: null,
+        detail: null,
+        text: check.sentence,
+        evidence,
+        says: check.says,
+        scope: { folderId, widened: false },
+        versions: documents.flatMap((each) =>
+          each.contentHash ? [{ documentId: each.id, contentHash: each.contentHash }] : [],
+        ),
+        excluded: [],
+        checkedAt: new Date().toISOString(),
+      };
+      markSentence(block, span.from, span.to, attributes);
+      return;
+    }
   };
 
   const answerContent = (set: ExampleSet, citationFor: (index: number) => NodeJSON): NodeJSON[] =>
@@ -162,10 +240,12 @@ export function createExamples(options: ExamplesOptions) {
     if (!options.linkedFolderExists(examples.linkedFolderId)) return;
     const set = EXAMPLE_SETS[group][examples.language];
     const documents = options.documentsIn(examples.linkedFolderId);
-    const found = set.quotes.map((quote) => documents.find((each) => each.name === quote.document));
-    if (found.some((document) => !document || !hasText(document))) return;
-    const results = set.quotes.map((quote, index) => {
-      const document = found[index] as Document;
+    const checks = set.checks ?? [];
+    const named = (quote: ExampleQuote) => documents.find((each) => each.name === quote.document);
+    const needed = [...set.quotes, ...checks.map((check) => check.evidence)].map(named);
+    if (needed.some((document) => !document || !hasText(document))) return;
+    const checked = (quote: ExampleQuote) => {
+      const document = named(quote) as Document;
       return {
         document,
         result: options.recheck({
@@ -175,9 +255,19 @@ export function createExamples(options: ExamplesOptions) {
           quote: quote.quote,
         }),
       };
+    };
+    const results = set.quotes.map(checked);
+    const evidence = checks.map((check) => {
+      const { document, result } = checked(check.evidence);
+      return citationAttributes(check.evidence, document, result);
     });
     if (!options.mindExists(examples.mindId)) return;
+    const folderId = options.mindFolder(examples.mindId);
     options.editMind(examples.mindId, (blocks) => {
+      checks.forEach((check, index) => {
+        const found = evidence[index];
+        if (found) markCheck(blocks, check, found, documents, folderId);
+      });
       const answer = findBlock(blocks, ANSWER_BLOCK, examples.answerId);
       if (!answer) return;
       // The User changed it: theirs now, and left as it is.
@@ -210,7 +300,7 @@ export function createExamples(options: ExamplesOptions) {
   };
 
   /** Deletes an example Mind and unlinks its Documents, and the copies of their files. */
-  const remove = async (group: ExampleGroup = "tea"): Promise<void> => {
+  const remove = async (group: ExampleGroup = "credit"): Promise<void> => {
     const examples = stored(group);
     if (!examples) return;
     if (options.mindExists(examples.mindId)) options.deleteMind(examples.mindId);
@@ -237,7 +327,7 @@ export function createExamples(options: ExamplesOptions) {
     return { folder, linked: await options.linkFolder(folder) };
   };
 
-  /** Writes an example's Note, Question and Answer into its Mind, replacing what is there. */
+  /** Writes an example's Note, draft, Question and Answer into its Mind, replacing what is there. */
   const populate = (
     mindId: string,
     set: ExampleSet,
@@ -257,6 +347,7 @@ export function createExamples(options: ExamplesOptions) {
       });
       blocks.insert(0, [
         createElement({ type: "paragraph", content: [{ type: "text", text: set.intro }] }),
+        ...draftBlocks(set).map(createElement),
         createElement({
           type: QUESTION_BLOCK,
           attrs: { [BLOCK_ID_ATTRIBUTE]: questionId, scopeFolderIds: [folderId] },
@@ -269,7 +360,7 @@ export function createExamples(options: ExamplesOptions) {
       answer.setAttribute("generatedHash", contentHash(answer));
     });
 
-  const create = async (group: ExampleGroup = "tea"): Promise<Examples> => {
+  const create = async (group: ExampleGroup = "credit"): Promise<Examples> => {
     if (!GROUPS.includes(group)) throw new Error(`There is no example for "${group}".`);
     const current = status(group);
     if (current.mindId && current.linkedFolderId) return current;
@@ -302,15 +393,19 @@ export function createExamples(options: ExamplesOptions) {
 
   /**
    * Whether the Mind is still as the example made it (#709): its title, its
-   * Note, its Question and its Answer unchanged, and nothing written after them.
+   * Note, its draft, its Question and its Answer unchanged, and nothing
+   * written after them. Its draft's checks may be there or not.
    */
   const untouched = (examples: StoredExamples, set: ExampleSet): boolean => {
     if (options.mindTitle(examples.mindId) !== set.title) return false;
+    const draft = draftMarkdown(set);
     return options.editMind(examples.mindId, (blocks) => {
-      const top = topLevelBlocks(blocks);
-      const [note, question, answer, ...rest] = top;
+      const [note, ...afterNote] = topLevelBlocks(blocks);
+      const drafted = afterNote.slice(0, draft.length);
+      const [question, answer, ...rest] = afterNote.slice(draft.length);
       if (!note || !question || !answer) return false;
       if (note.nodeName !== "paragraph" || toMarkdown(note).trim() !== set.intro) return false;
+      if (drafted.some((block, index) => toMarkdown(block).trim() !== draft[index])) return false;
       if (question.nodeName !== QUESTION_BLOCK || toMarkdown(question).trim() !== set.question) {
         return false;
       }
@@ -383,7 +478,7 @@ export function createExamples(options: ExamplesOptions) {
       if (options.source === undefined || options.readValue(OFFERED_VALUE) === true) return null;
       options.writeValue(OFFERED_VALUE, true);
       if (hasMinds) return null;
-      return create("tea");
+      return create("credit");
     },
 
     remove,
