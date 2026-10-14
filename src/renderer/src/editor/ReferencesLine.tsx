@@ -4,7 +4,9 @@ import { TextSelection } from "@tiptap/pm/state";
 import { useEditorState } from "@tiptap/react";
 import { useState } from "react";
 import type { ReferenceCheck } from "../../../core/api";
-import { type ListBlock, referenceEntries } from "../../../shared/referenceList";
+import type { Language } from "../../../core/language";
+import { checkableReferences, type ListBlock } from "../../../shared/referenceList";
+import { formatNames } from "../../../shared/references";
 import { ProblemLine } from "../components/ProblemLine";
 import { buttonStyle } from "../components/ui";
 import { useLanguage, useT } from "../i18n";
@@ -32,6 +34,12 @@ const NEEDS_A_LOOK: ReadonlySet<ReferenceCheck["mark"]> = new Set([
   "not-checked",
 ]);
 
+/** How many of a found work's authors its record line names before "et al.". */
+const AUTHORS_SHOWN = 3;
+
+/** A part of the line with the dot before it, so a wrapped line never ends on a dot. */
+const AFTER_DOT = "inline-flex items-center gap-2";
+
 /** The dot each mark shows, in DESIGN.md's status colours. */
 const MARK_DOT: Record<ReferenceCheck["mark"], string> = {
   found: "bg-success",
@@ -41,22 +49,65 @@ const MARK_DOT: Record<ReferenceCheck["mark"], string> = {
 };
 
 /**
+ * The record a checked reference matched, under it: for one found, its
+ * title, authors and year; for any, its DOI, which opens the work.
+ */
+function RecordLine({
+  record,
+  found,
+  language,
+}: {
+  record: NonNullable<ReferenceCheck["record"]>;
+  found: boolean;
+  language: Language;
+}) {
+  const t = useT();
+  const names = formatNames(record.authors.slice(0, AUTHORS_SHOWN), language);
+  const parts = found
+    ? [
+        record.title,
+        record.authors.length > AUTHORS_SHOWN ? t("references.record.etAl", { names }) : names,
+        record.year === null ? "" : String(record.year),
+      ].filter(Boolean)
+    : [];
+  if (parts.length === 0 && !record.doi) return null;
+  return (
+    <p data-testid="reference-record" className="mind-reference-record">
+      {parts.join(" · ")}
+      {parts.length > 0 && record.doi && " · "}
+      {record.doi && (
+        <a
+          href={`https://doi.org/${record.doi}`}
+          target="_blank"
+          rel="noreferrer"
+          data-testid="reference-doi"
+          className="mind-reference-link"
+        >
+          {record.doi}
+        </a>
+      )}
+    </p>
+  );
+}
+
+/**
  * The line under a verified document's claims (#711) when its Mind has a
  * reference list: what looking its references up sends, by the button that
  * does it, so clicking it is the consent (ADR-0022); how far a check is,
- * with Stop; then what it found, each reference that needs a look listed
- * below with why. In local mode it says why it can't run, with the way out.
+ * with Stop; then what it found, each reference listed below with its mark,
+ * those that need a look first (open at once when there are any). In local
+ * mode it says why it can't run, with the way out.
  */
 export function ReferencesLine({ editor, mindId }: { editor: Editor; mindId: string }) {
   const t = useT();
   const language = useLanguage();
   const count = useEditorState({
     editor,
-    selector: ({ editor: current }) => referenceEntries(blocksOf(current.state.doc)).length,
+    selector: ({ editor: current }) => checkableReferences(blocksOf(current.state.doc)).length,
   });
   const state = useReferenceChecks((current) => current.byMind[mindId]);
   const localOnly = useAppStore((current) => current.embedding?.localOnly ?? false);
-  const [open, setOpen] = useState(true);
+  const [shown, setShown] = useState<boolean | null>(null);
   if (count === 0 && !state) return null;
   const format = (value: number) => new Intl.NumberFormat(language).format(value);
   const dot = (
@@ -113,6 +164,11 @@ export function ReferencesLine({ editor, mindId }: { editor: Editor; mindId: str
       return n === 0 ? [] : [t(n === 1 ? `${key}.one` : key, { count: format(n) })];
     });
     const needLook = state.references.filter((reference) => NEEDS_A_LOOK.has(reference.mark));
+    const listed = [
+      ...needLook,
+      ...state.references.filter((reference) => !NEEDS_A_LOOK.has(reference.mark)),
+    ];
+    const open = shown ?? needLook.length > 0;
     const total = state.references.length;
     return (
       <>
@@ -124,43 +180,45 @@ export function ReferencesLine({ editor, mindId }: { editor: Editor; mindId: str
               })}
             </span>
             {parts.map((part) => (
-              <span key={part} className="contents">
+              <span key={part} className={AFTER_DOT}>
                 {dot}
                 <span>{part}</span>
               </span>
             ))}
           </span>
-          {needLook.length > 0 && (
-            <>
+          {total > 0 && (
+            <span className={AFTER_DOT}>
               {dot}
               <button
                 type="button"
                 data-testid="references-toggle"
                 aria-expanded={open}
                 className="mind-verify-link"
-                onClick={() => setOpen(!open)}
+                onClick={() => setShown(!open)}
               >
                 {t(open ? "references.hide" : "references.show")}
               </button>
-            </>
+            </span>
           )}
-          {dot}
-          <button
-            type="button"
-            data-testid="references-again"
-            className="mind-verify-link"
-            onClick={() => void checkReferences(mindId, count)}
-          >
-            {t("claim.checkAgain")}
-          </button>
+          <span className={AFTER_DOT}>
+            {dot}
+            <button
+              type="button"
+              data-testid="references-again"
+              className="mind-verify-link"
+              onClick={() => void checkReferences(mindId, count)}
+            >
+              {t("claim.checkAgain")}
+            </button>
+          </span>
         </div>
-        {open && needLook.length > 0 && (
+        {open && total > 0 && (
           <ul
             data-testid="references-list"
             aria-label={t("references.listLabel")}
             className="mind-references"
           >
-            {needLook.map((reference) => (
+            {listed.map((reference) => (
               <li key={`${reference.blockId}\n${reference.reference}`}>
                 <button
                   type="button"
@@ -179,6 +237,11 @@ export function ReferencesLine({ editor, mindId }: { editor: Editor; mindId: str
                       : t(`references.mark.${reference.mark}`)}
                   </span>
                   <span className="mind-reference-text">{reference.reference}</span>
+                  {reference.mark === "not-found" && reference.by && (
+                    <span className="mind-reference-detail">
+                      {t(`references.notFound.${reference.by}`)}
+                    </span>
+                  )}
                   {reference.differences.map((difference) => (
                     <span key={difference.field} className="mind-reference-detail">
                       {difference.field === "year"
@@ -195,6 +258,13 @@ export function ReferencesLine({ editor, mindId }: { editor: Editor; mindId: str
                     </span>
                   ))}
                 </button>
+                {reference.record && (
+                  <RecordLine
+                    record={reference.record}
+                    found={reference.mark === "found"}
+                    language={language}
+                  />
+                )}
               </li>
             ))}
           </ul>

@@ -39,37 +39,52 @@ export function workRecord(item: unknown): WorkRecord | null {
   return { fields, years: [...new Set(years)] };
 }
 
-const parse = (body: string): unknown => {
+/** The "message" of a Crossref answer. */
+function messageOf(body: string): unknown {
+  let parsed: unknown;
   try {
-    return JSON.parse(body);
+    parsed = JSON.parse(body);
   } catch {
     throw new SourceError("service-error", "Crossref's answer can't be read.");
   }
-};
+  return isRecord(parsed) ? parsed.message : undefined;
+}
 
 export interface CrossrefClient {
   /** The work a DOI names; null when Crossref has none. */
   byDoi(doi: string, signal: AbortSignal): Promise<WorkRecord | null>;
+  /**
+   * The agency that registered a DOI ("crossref", "datacite", …); null when
+   * none did, so the DOI leads nowhere.
+   */
+  agency(doi: string, signal: AbortSignal): Promise<string | null>;
   /** The works whose records best match a reference as written, best first. */
   search(reference: string, signal: AbortSignal): Promise<WorkRecord[]>;
 }
 
 export function createCrossrefClient(http: SourceHttp, baseUrl = CROSSREF_URL): CrossrefClient {
+  const get = async (path: string, signal: AbortSignal) =>
+    messageOf(
+      await http.text(`${baseUrl}${path}`, { ...LANE, accept: "application/json", signal }),
+    );
+  /** The answer at a DOI's `path`; null when Crossref has nothing there. */
+  const ofDoi = async (path: string, signal: AbortSignal): Promise<unknown> => {
+    try {
+      return await get(path, signal);
+    } catch (error) {
+      if (error instanceof SourceError && error.reason === "not-found") return null;
+      throw error;
+    }
+  };
   return {
     async byDoi(doi, signal) {
-      let body: string;
-      try {
-        body = await http.text(`${baseUrl}/works/${encodeURIComponent(doi)}`, {
-          ...LANE,
-          accept: "application/json",
-          signal,
-        });
-      } catch (error) {
-        if (error instanceof SourceError && error.reason === "not-found") return null;
-        throw error;
-      }
-      const message = (parse(body) as { message?: unknown } | null)?.message;
-      return workRecord(message);
+      return workRecord(await ofDoi(`/works/${encodeURIComponent(doi)}`, signal));
+    },
+
+    async agency(doi, signal) {
+      const message = await ofDoi(`/works/${encodeURIComponent(doi)}/agency`, signal);
+      const agency = isRecord(message) && isRecord(message.agency) ? message.agency.id : null;
+      return typeof agency === "string" ? agency : null;
     },
 
     async search(reference, signal) {
@@ -78,12 +93,7 @@ export function createCrossrefClient(http: SourceHttp, baseUrl = CROSSREF_URL): 
         rows: String(ROWS),
         select: SELECT,
       });
-      const body = await http.text(`${baseUrl}/works?${query}`, {
-        ...LANE,
-        accept: "application/json",
-        signal,
-      });
-      const message = (parse(body) as { message?: unknown } | null)?.message;
+      const message = await get(`/works?${query}`, signal);
       const items = isRecord(message) && Array.isArray(message.items) ? message.items : [];
       return items.map(workRecord).filter((record): record is WorkRecord => record !== null);
     },

@@ -625,7 +625,7 @@ export const zhCN = {
   "references.notChecked.one": "1 条未核对",
   "references.show": "查看",
   "references.hide": "收起",
-  "references.listLabel": "需要查看的参考文献",
+  "references.listLabel": "已核对的参考文献",
   "references.mark.found": "已找到",
   "references.mark.not-found": "找不到这部作品",
   "references.mark.mismatch": "与作品的记录不一致",
@@ -635,6 +635,12 @@ export const zhCN = {
   "references.reason.unreachable": "未核对：无法连接 Crossref",
   "references.reason.rate-limited": "未核对：Crossref 要求放慢速度，请稍后再核对",
   "references.reason.service-error": "未核对：Crossref 出错",
+  "references.reason.registered-elsewhere":
+    "未核对：它的 DOI 或 arXiv 编号确实存在，但记录不在 Crossref 中",
+  "references.notFound.doi": "它给出的 DOI 或 arXiv 编号不对应任何作品。",
+  "references.notFound.search":
+    "Crossref 中没有相近的记录。会议论文、预印本和许多中文期刊未必收录在 Crossref 中。",
+  "references.record.etAl": "{names} 等",
   "references.difference.year.cited": "年份：这里是 {cited}，Crossref 记录为 {found}",
   "references.difference.title": "Crossref 记录的标题：{found}",
   "references.difference.authors": "Crossref 记录的作者：{found}",

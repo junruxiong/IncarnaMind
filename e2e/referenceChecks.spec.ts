@@ -126,11 +126,24 @@ test("a verified document's references are looked up, and the invented one is fl
   await pointAndClick(window, line.getByTestId("references-check"));
 
   await expect(line.getByTestId("references-done")).toHaveText("Checked 3 references·1 not found");
-  const flagged = window.getByTestId("reference-check");
-  await expect(flagged).toHaveCount(1);
+  // The one that needs a look comes first, saying how much its mark can say.
+  const listed = window.getByTestId("reference-check");
+  await expect(listed).toHaveCount(3);
+  const flagged = listed.first();
   await expect(flagged).toHaveAttribute("data-mark", "not-found");
   await expect(flagged).toContainText("We couldn't find this work");
   await expect(flagged).toContainText("Quantum gradient folding");
+  await expect(flagged).toContainText("Crossref has no record like it.");
+  // The found ones follow, each with the record it matched and its DOI, which opens the work.
+  await expect(listed.nth(1)).toHaveAttribute("data-mark", "found");
+  const record = window.getByTestId("reference-record").first();
+  await expect(record).toContainText(
+    "Long Short-Term Memory · Hochreiter, Sepp; Schmidhuber, Jürgen · 1997",
+  );
+  await expect(record.getByTestId("reference-doi")).toHaveAttribute(
+    "href",
+    "https://doi.org/10.1162/neco.1997.9.8.1735",
+  );
   await screenshot(window, "references-flagged-en");
   // Clicking it is the consent: nothing asked; only the references went, one a request.
   expect(await asked()).toEqual([]);
@@ -164,7 +177,7 @@ test("in Chinese and a narrow window, and in local mode, where it says why and o
   );
   await pointAndClick(window, line.getByTestId("references-check"));
   await expect(line.getByTestId("references-done")).toHaveText("已核对 3 条参考文献·1 条未找到");
-  await expect(window.getByTestId("reference-check")).toContainText("找不到这部作品");
+  await expect(window.getByTestId("reference-check").first()).toContainText("找不到这部作品");
   await screenshot(window, "references-flagged-zh");
   // Narrow, the line wraps rather than overflowing the Mind.
   const lineBox = await line.boundingBox();

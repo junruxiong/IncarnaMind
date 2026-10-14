@@ -3,7 +3,8 @@
  * `GET /works/{doi}` and arXiv's `GET /api/query?id_list=…`, answering from
  * recorded answers (tests/fixtures/references/), and, for checking reference
  * lists (#711), Crossref's `GET /works?query.bibliographic=…` over a few
- * works, best match first by the words they share. It records every request, so
+ * works, best match first by the words they share, and its
+ * `GET /works/{doi}/agency`. It records every request, so
  * a test can check that nothing was sent, or only the identifier. No test
  * reaches the real services. Free of the test runner, so the smoke tests use
  * it too.
@@ -67,13 +68,15 @@ function searched(works: readonly CrossrefWork[], query: string): string {
 /**
  * Starts the stand-in. `crossref` maps DOIs to recorded Crossref answers (as
  * JSON text); `arxiv` maps arXiv ids to recorded Atom feeds; `works` are
- * searched, and answer their DOIs too. Anything else is a 404, as the real
- * services answer an unknown DOI or id.
+ * searched, and answer their DOIs too; `registered` maps DOIs Crossref has no
+ * record of to the agency that registered them ("datacite"). Anything else is
+ * a 404, as the real services answer an unknown DOI or id.
  */
 export async function startReferenceServices(answers: {
   crossref?: Readonly<Record<string, string>>;
   arxiv?: Readonly<Record<string, string>>;
   works?: readonly CrossrefWork[];
+  registered?: Readonly<Record<string, string>>;
 }): Promise<ReferenceServices> {
   const requests: ServiceRequest[] = [];
   let failure: number | null = null;
@@ -90,6 +93,28 @@ export async function startReferenceServices(answers: {
         return;
       }
       const url = new URL(path, "http://localhost");
+      const agencyOf = /^\/works\/(.+)\/agency$/.exec(url.pathname)?.[1];
+      if (agencyOf !== undefined) {
+        const asked = decodeURIComponent(agencyOf).toLowerCase();
+        const agency =
+          answers.works?.some((work) => work.DOI.toLowerCase() === asked) ||
+          Object.keys(answers.crossref ?? {}).some((doi) => doi.toLowerCase() === asked)
+            ? "crossref"
+            : Object.entries(answers.registered ?? {}).find(
+                ([doi]) => doi.toLowerCase() === asked,
+              )?.[1];
+        if (agency) {
+          response.writeHead(200, { "content-type": "application/json" }).end(
+            JSON.stringify({
+              status: "ok",
+              message: { DOI: asked, agency: { id: agency, label: agency } },
+            }),
+          );
+        } else {
+          response.writeHead(404, { "content-type": "text/plain" }).end("Resource not found.");
+        }
+        return;
+      }
       const doi = url.pathname.startsWith("/works/")
         ? decodeURIComponent(url.pathname.slice("/works/".length))
         : null;

@@ -2257,13 +2257,18 @@ export type ReferenceLookupFailureReason =
  */
 export type ReferenceCheckMark = "found" | "mismatch" | "not-found" | "not-checked";
 
-/** Why a reference wasn't checked. */
+/**
+ * Why a reference wasn't checked; "registered-elsewhere": its DOI (or arXiv
+ * number) exists, but another agency than Crossref registered it, as DataCite
+ * does arXiv's, so its details couldn't be compared.
+ */
 export type ReferenceCheckReason =
   | "local-mode"
   | "declined"
   | "unreachable"
   | "rate-limited"
-  | "service-error";
+  | "service-error"
+  | "registered-elsewhere";
 
 /** How a reference differs from the record of the work it names. */
 export interface ReferenceDifference {
@@ -2279,8 +2284,19 @@ export interface ReferenceCheck {
   /** As written, its white space collapsed. */
   reference: string;
   mark: ReferenceCheckMark;
+  /**
+   * How it was looked up: by the DOI (or arXiv number) it gives, or by
+   * searching for it as written, which finds only what Crossref holds; null
+   * when it wasn't.
+   */
+  by: "doi" | "search" | null;
   /** The record of the work it names; null when none was found, or it wasn't checked. */
-  record: { title: string; authors: string[]; year: number | null; doi: string | null } | null;
+  record: {
+    title: string;
+    authors: ReferenceName[];
+    year: number | null;
+    doi: string | null;
+  } | null;
   /** For "mismatch": how it differs. */
   differences: ReferenceDifference[];
   /** For "not-checked": why. */
@@ -6846,10 +6862,11 @@ export interface CoreApi {
   lookUpReference(documentId: string): Promise<ReferenceLookupResult>;
   /**
    * Looks up each entry of a Mind's reference list in Crossref (#711): by its
-   * DOI, else by the reference as written. Only the reference is sent, after
-   * the User has allowed the "reference-check" flow (asked once, where the
-   * check starts); never in local mode, where every entry is "not-checked".
-   * One check of a Mind at a time; "referenceCheck.progress" says how far it is.
+   * DOI, else by the reference as written. Only the reference is sent. The
+   * User starts it where a line by its action says so, so calling it is the
+   * consent to the "reference-check" flow (ADR-0022); never in local mode,
+   * where every entry is "not-checked". One check of a Mind at a time;
+   * "referenceCheck.progress" says how far it is.
    */
   checkReferences(mindId: string): Promise<CheckReferencesResult>;
   /** Stops a Mind's `checkReferences`: it gives "cancelled". Stopping none does nothing. */
