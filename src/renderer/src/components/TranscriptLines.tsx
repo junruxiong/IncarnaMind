@@ -3,6 +3,7 @@ import type { MessageKey } from "../../../shared/i18n";
 import { useT } from "../i18n";
 import { formatBytes } from "../linkedFolders";
 import { useMeetings } from "../meetings";
+import { showOutputLocationSetting } from "../outputFiles";
 import { showTranscript } from "../transcripts";
 import { type ProblemAction, ProblemLine } from "./ProblemLine";
 import { useTabPlace } from "./tabs/tabItems";
@@ -37,7 +38,12 @@ export function TranscriptLines({
         }
       : null;
 
-  let line: { text: string; action?: ProblemAction; role: "alert" | "status" } | null = null;
+  let line: {
+    text: string;
+    action?: ProblemAction;
+    also?: ProblemAction;
+    role: "alert" | "status";
+  } | null = null;
   if (problem) {
     const message = problem.message;
     if (problem.kind === "download") {
@@ -89,12 +95,22 @@ export function TranscriptLines({
   } else if (state === "saved" && transcript.documentId) {
     const documentId = transcript.documentId;
     line = {
-      text: t("meetings.transcript.saved"),
+      // The first save says where it went (D209).
+      text: transcript.savedDefaulted
+        ? t("meetings.transcript.savedIn", { folder: t("outputLocation.defaultName") })
+        : t("meetings.transcript.saved"),
       action: {
         label: t("meetings.transcript.open"),
         testId: "meeting-transcript-open",
         onClick: () => showTranscript(documentId, place?.groupId),
       },
+      ...(transcript.savedDefaulted && {
+        also: {
+          label: t("export.changeFolder"),
+          testId: "meeting-transcript-change-folder",
+          onClick: showOutputLocationSetting,
+        },
+      }),
       role: "status",
     };
   } else if (state === "empty") {
@@ -107,6 +123,7 @@ export function TranscriptLines({
       role={line.role}
       className={className}
       action={line.action}
+      also={line.also}
     >
       {line.text}
     </ProblemLine>
