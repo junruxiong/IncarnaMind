@@ -121,10 +121,12 @@ const useFolds = create<Folds>()((set, get) => {
 export function LibraryFolders({
   documents,
   renderDocument,
+  quiet = false,
 }: {
   /** The Documents to show, already filtered by Tag. */
   documents: readonly Document[];
   renderDocument(document: Document, depth: number): ReactNode;
+  quiet?: boolean;
 }) {
   const groups = useAppStore((state) => state.library?.groups) ?? [];
   const assignments = useAppStore((state) => state.library?.assignments);
@@ -198,6 +200,7 @@ export function LibraryFolders({
           minds={looseMinds}
           documents={looseDocuments}
           renderDocument={renderDocument}
+          quiet={quiet}
         />
       )}
     </div>
@@ -413,10 +416,12 @@ function NotInAFolder({
   minds,
   documents,
   renderDocument,
+  quiet,
 }: {
   minds: readonly Mind[];
   documents: readonly Document[];
   renderDocument(document: Document, depth: number): ReactNode;
+  quiet: boolean;
 }) {
   const t = useT();
   const folded = useFolds((state) => state.looseFolded);
@@ -443,17 +448,19 @@ function NotInAFolder({
             onKeyDown={fold}
             className="flex max-w-full items-center gap-1 rounded-sm hover:text-ink-secondary"
           >
-            <span className="truncate">{t("library.unsorted")}</span>
+            <span className="truncate">{t(quiet ? "sidebar.examples" : "library.unsorted")}</span>
             <Chevron className="size-3 shrink-0" />
           </button>
         </div>
-        <span
-          data-testid="not-in-a-folder-hint"
-          title={t("sidebar.notInFolder.title")}
-          className="ml-auto min-w-0 truncate font-normal text-ink-meta"
-        >
-          {t("sidebar.notInFolder.hint")}
-        </span>
+        {!quiet && (
+          <span
+            data-testid="not-in-a-folder-hint"
+            title={t("sidebar.notInFolder.title")}
+            className="ml-auto min-w-0 truncate font-normal text-ink-meta"
+          >
+            {t("sidebar.notInFolder.hint")}
+          </span>
+        )}
       </div>
       {!folded && (
         <TreeLevelOffset value={1}>

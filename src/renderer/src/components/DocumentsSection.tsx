@@ -12,6 +12,7 @@ import { displayName, sourceOf } from "../../../shared/documentNames";
 import type { MessageKey } from "../../../shared/i18n";
 import { startDocumentDrag } from "../documentDrag";
 import { documentStatusText } from "../documentStatus";
+import { useFirstOpen } from "../firstOpen";
 import { useLanguage, useT } from "../i18n";
 import { currentTabOf } from "../layoutSlice";
 import { fileStatusLabel, formatCount } from "../linkedFolders";
@@ -20,7 +21,7 @@ import { useRequests } from "../requests";
 import { scanningStatus } from "../scanStatus";
 import { rowsIn, selectedOn, useSelectable, useSelectionOrder } from "../selection";
 import { useSortMenu } from "../sortMenu";
-import { selectVisibleDocuments, useAppStore } from "../store";
+import { isOwnDocument, selectVisibleDocuments, useAppStore } from "../store";
 import { chipsOf, tagIndex } from "../tagEditing";
 import { moveThroughRows, TREE_ROW, useTreeItem } from "../treeKeys";
 import { useRename } from "../useRename";
@@ -59,6 +60,8 @@ const shortStatusMessages: Record<DocumentStatus, MessageKey | null> = {
   failed: "documents.statusShort.failed",
   "no-text": "documents.statusShort.noText",
 };
+
+const NO_DOCUMENTS: readonly Document[] = [];
 
 /** The ways to browse the Documents, in the switcher's order. */
 type BrowseView = "folders" | "tags" | "sources";
@@ -99,6 +102,11 @@ export function DocumentsSection() {
   const hasTags = useAppStore((state) => state.tags.length > 0);
   const documentCount = useAppStore((state) => state.documents.length);
   const hasAnyDocuments = documentCount > 0;
+  const firstOpen = useFirstOpen();
+  const hasOwnDocuments = useAppStore((state) =>
+    state.documents.some((each) => isOwnDocument(each, state.examples)),
+  );
+  const quiet = firstOpen && !hasOwnDocuments;
   const [chosenView, setView] = useState<BrowseView>("folders");
   const libraryOpen = useAppStore((state) => currentTabOf(state.layout)?.item.kind === "library");
   // The same array until the Documents or the Tag filter change (see `selectVisibleDocuments`).
@@ -183,41 +191,48 @@ export function DocumentsSection() {
         onChange={addPicked}
       />
       <SidebarSearch />
-      <div className={rowClass(libraryOpen)}>
-        <button
-          type="button"
-          {...TREE_ROW}
-          data-testid="open-library"
-          // ⌘-click (Ctrl-click) opens it to the side, as a Mind's row does.
-          onClick={(event) =>
-            useAppStore.getState().openLibrary(undefined, { side: event.metaKey || event.ctrlKey })
-          }
-          className={`${rowButtonClass} ${clearsActions.menu}`}
-        >
-          <DocumentLineIcon kind="text" className="size-4 shrink-0" />
-          <span className="min-w-0 flex-1 truncate">{t("library.title")}</span>
-          <span data-testid="library-row-count" className="text-[12px] tabular-nums text-ink-meta">
-            {formatCount(documentCount, language)}
-          </span>
-        </button>
-        <div className={rowActionsClass}>
+      {!quiet && (
+        <div className={rowClass(libraryOpen)}>
           <button
             type="button"
-            data-testid="sidebar-sort"
-            aria-label={t("sort.sidebar")}
-            title={t("sort.sidebar")}
+            {...TREE_ROW}
+            data-testid="open-library"
+            // ⌘-click (Ctrl-click) opens it to the side, as a Mind's row does.
             onClick={(event) =>
-              useSortMenu
+              useAppStore
                 .getState()
-                .show({ scope: "sidebar", withFolders: true, anchor: event.currentTarget })
+                .openLibrary(undefined, { side: event.metaKey || event.ctrlKey })
             }
-            className={rowActionButtonClass}
+            className={`${rowButtonClass} ${clearsActions.menu}`}
           >
-            <MoreLineIcon className="size-4" />
+            <DocumentLineIcon kind="text" className="size-4 shrink-0" />
+            <span className="min-w-0 flex-1 truncate">{t("library.title")}</span>
+            <span
+              data-testid="library-row-count"
+              className="text-[12px] tabular-nums text-ink-meta"
+            >
+              {formatCount(documentCount, language)}
+            </span>
           </button>
+          <div className={rowActionsClass}>
+            <button
+              type="button"
+              data-testid="sidebar-sort"
+              aria-label={t("sort.sidebar")}
+              title={t("sort.sidebar")}
+              onClick={(event) =>
+                useSortMenu
+                  .getState()
+                  .show({ scope: "sidebar", withFolders: true, anchor: event.currentTarget })
+              }
+              className={rowActionButtonClass}
+            >
+              <MoreLineIcon className="size-4" />
+            </button>
+          </div>
         </div>
-      </div>
-      {views.length > 1 && (
+      )}
+      {!quiet && views.length > 1 && (
         <div className="mx-2 my-2 flex items-center gap-2 border-b border-rule pb-1">
           <fieldset
             className="flex min-w-0 items-center gap-3 text-[12px] text-ink-meta"
@@ -252,7 +267,11 @@ export function DocumentsSection() {
         {...treeKeys}
       >
         {view === "folders" ? (
-          <LibraryFolders documents={documents} renderDocument={renderDocument} />
+          <LibraryFolders
+            documents={quiet ? NO_DOCUMENTS : documents}
+            renderDocument={renderDocument}
+            quiet={quiet}
+          />
         ) : view === "tags" ? (
           <SidebarTags renderDocument={renderDocument} />
         ) : (

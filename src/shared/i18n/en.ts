@@ -3120,6 +3120,7 @@ export const en = {
   "editor.hint.example": "Try it: write a line here, or {ask}",
   "editor.hint.example.ask": "press {shortcut} to ask your own Question",
   "examples.chip": "Example",
+  "sidebar.examples": "Examples",
   "examples.banner.label": "About this example",
   "examples.banner.title": "This is an example Mind.",
   "examples.banner.body":

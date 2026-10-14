@@ -77,6 +77,7 @@ import { wordAtomView, wordBlockView } from "../editor/WordAtomView";
 import { WordCount } from "../editor/WordCount";
 import { OriginalNotAdded, useWordFile, WordOrigin } from "../editor/WordOrigin";
 import { requestEdit, startEditing, TRANSLATE_LANGUAGES } from "../editWithAi";
+import { useFirstOpen } from "../firstOpen";
 import { translateNow, useT } from "../i18n";
 import { markSelectionAsMine } from "../markAsMine";
 import { useMeetingOf, useMeetings } from "../meetings";
@@ -632,6 +633,7 @@ function MindEditorView({
   }, [empty, explained]);
   const findShown = useMindTools((state) => state.findMindId === mindId);
   const outlineShown = useMindTools((state) => state.outlineMindId === mindId);
+  const firstOpen = useFirstOpen();
   const guide = useGettingStarted() !== null && empty && !isExample && !readOnly;
   const verification = useVerification(doc);
   const frame = useRef<HTMLDivElement>(null);
@@ -647,7 +649,7 @@ function MindEditorView({
             {verification ? (
               <VerifyLine editor={editor} doc={doc} mindId={mindId} verification={verification} />
             ) : (
-              <WordCount editor={editor} doc={doc}>
+              <WordCount editor={editor} doc={doc} quiet={firstOpen && isExample}>
                 <NoteHealth editor={editor} mindId={mindId} doc={doc} />
               </WordCount>
             )}
