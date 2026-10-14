@@ -1400,9 +1400,10 @@ export const en = {
   "outputLocation.title": "Output location",
   "outputLocation.body":
     "Where exports and files that Tasks save go. IncarnaMind writes nowhere else without asking.",
-  "outputLocation.notChosen": "Not chosen yet. The first save asks.",
   "outputLocation.change": "Change…",
-  "outputLocation.choose": "Choose…",
+  "outputLocation.defaultName": "Documents › IncarnaMind",
+  "outputLocation.defaultName.other": "Documents › IncarnaMind",
+  "outputLocation.default": "The default: new files go here until you choose another folder.",
   "outputLocation.failed": "Couldn't change it: {reason}",
   "outputLocation.pick.title": "Choose where new files go",
   "outputLocation.pick.button": "Choose",
@@ -1411,9 +1412,10 @@ export const en = {
     "IncarnaMind only reads a Linked folder unless you allow it to add new files there. It never changes or deletes your files.",
   "outputLocation.linked.allow": "Allow new files in {name}",
   "fileWrite.location.title": "Where should new files go?",
-  "fileWrite.location.body":
-    "IncarnaMind saves “{name}”, and the files it makes from now on, in one folder. You can change it in Settings › General.",
-  "fileWrite.location.save": "Save here",
+  "fileWrite.location.missing":
+    "Couldn't save “{name}” in {folder}: IncarnaMind couldn't make that folder.",
+  "fileWrite.location.notWritable":
+    "Couldn't save “{name}” in {folder}: IncarnaMind isn't allowed to write there.",
   "fileWrite.location.choose": "Choose another folder…",
   "fileWrite.location.cancel": "Cancel",
   "fileWrite.location.failed": "Couldn't use that folder: {reason}",
@@ -2454,6 +2456,8 @@ export const en = {
   "export.changeLocation": "Change output location…",
   "export.allow": "Allow",
   "export.done": "Saved {name}",
+  "export.doneIn": "Saved “{name}” in {folder}",
+  "export.changeFolder": "Change folder…",
   "export.word.review.one": "1 thing in the Word file can't be kept",
   "export.word.review.other": "{count} things in the Word file can't be kept",
   "export.word.anyway": "Export anyway",
@@ -3134,6 +3138,7 @@ export const en = {
   "meetings.transcript.finishingDownload":
     "Finishing the transcript: downloading the speech model, {percent}% of {size}…",
   "meetings.transcript.saved": "Transcript saved",
+  "meetings.transcript.savedIn": "Transcript saved in {folder}",
   "meetings.transcript.open": "Open transcript",
   "meetings.transcript.empty":
     "Nothing was said that could be transcribed, so no transcript was saved.",

@@ -5995,9 +5995,12 @@ export interface SetMindCitationStyleOptions {
  * renames or deletes a file that is already there.
  */
 export interface OutputSettings {
-  /** The folder the User chose, absolute, symbolic links resolved; null until they choose (the first save asks). */
+  /**
+   * The folder new files go in, absolute, symbolic links resolved; null until
+   * the first save, which takes `suggested` without asking (D209).
+   */
   location: string | null;
-  /** The folder the first save offers: "IncarnaMind" in the User's Documents folder. */
+  /** The default: "IncarnaMind" in the User's Documents folder (文稿 on a Chinese Mac). */
   suggested: string;
   /** The Linked folders the User has answered about, oldest answer first. */
   linkedFolders: LinkedFolderWriting[];
@@ -6015,14 +6018,22 @@ export interface LinkedFolderWriting {
 
 /**
  * A save waiting for the User's answer (`respondToFileWrite`), asked once:
- * - "output-location": no Output location is chosen yet. Accepting saves in
- *   the suggested folder; `setOutputLocation` answers with another one.
+ * - "output-location": none is chosen and the default, `suggested`, can't
+ *   take new files (`problem`). `setOutputLocation` answers with another
+ *   folder; accepting makes the default the Output location all the same.
  * - "linked-folder": the file would go inside a Linked folder. Accepting lets
  *   IncarnaMind add files there from now on; declining stops it, until the
  *   User changes it in Settings (`setLinkedFolderWriting`).
  */
 export type FileWriteRequest =
-  | { requestId: string; kind: "output-location"; suggested: string; fileName: string }
+  | {
+      requestId: string;
+      kind: "output-location";
+      suggested: string;
+      fileName: string;
+      /** Why `suggested` can't take it. */
+      problem: OutputFolderProblem;
+    }
   | {
       requestId: string;
       kind: "linked-folder";
@@ -6031,12 +6042,20 @@ export type FileWriteRequest =
       fileName: string;
     };
 
+/** Why a folder can't take new files: it can't be made (a file is in the way), or IncarnaMind may not write in it. */
+export type OutputFolderProblem = "missing" | "not-writable";
+
 /** A new file IncarnaMind saved. */
 export interface SavedFile {
   /** Absolute. */
   path: string;
   /** Its name: the one asked for, or, when that was taken, the next free one ("Tides 2.docx"). */
   name: string;
+  /**
+   * This save took the default Output location, Documents › IncarnaMind,
+   * none being chosen yet (D209): what shows it says where, with a way to change it.
+   */
+  defaulted: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -6234,6 +6253,8 @@ export interface MeetingTranscript {
   model: TranscriptionModelStatus | null;
   /** The WebVTT file in the Output location, once saved. */
   savedPath: string | null;
+  /** Its save took the default Output location, none being chosen yet (`SavedFile.defaulted`). */
+  savedDefaulted: boolean;
   problem: TranscriptProblem | null;
 }
 

@@ -16,8 +16,7 @@ import { core } from "../core";
 import { errorMessage } from "../errors";
 import { exportPreferences, FORMAT_LABELS, hasQuestionsOption } from "../exports";
 import { useT } from "../i18n";
-import { folderName } from "../linkedFolders";
-import { chooseOutputLocation } from "../outputFiles";
+import { chooseOutputLocation, outputFolderLabel } from "../outputFiles";
 import { useAppStore } from "../store";
 import { ChevronDownLineIcon, CloseLineIcon } from "./lineIcons";
 import { ProblemLine } from "./ProblemLine";
@@ -224,7 +223,7 @@ function CitationStyleRow({ mindId }: { mindId: string }) {
   );
 }
 
-/** Where exports go: the Output location, which the first export asks for, and how to change it. */
+/** Where exports go: the Output location, Documents › IncarnaMind until the User picks another, and how to change it. */
 function SaveToRow() {
   const t = useT();
   const [output, setOutput] = useState<OutputSettings | null>(null);
@@ -250,7 +249,7 @@ function SaveToRow() {
       setProblem(errorMessage(failure, t));
     }
   };
-  const location = output?.location ?? null;
+  const location = output ? (output.location ?? output.suggested) : null;
   return (
     <div className="flex flex-col gap-1 py-2">
       <div className={rowClass}>
@@ -261,11 +260,9 @@ function SaveToRow() {
             title={location ?? undefined}
             className="truncate text-[13px] leading-5 text-ink-meta"
           >
-            {output === null
+            {output === null || location === null
               ? "…"
-              : location
-                ? folderName(location)
-                : t("outputLocation.notChosen")}
+              : outputFolderLabel(location, output.suggested, t)}
           </span>
         </div>
         <button
@@ -274,7 +271,7 @@ function SaveToRow() {
           onClick={() => void change()}
           className={buttonClass}
         >
-          {t(location ? "outputLocation.change" : "outputLocation.choose")}
+          {t("outputLocation.change")}
         </button>
       </div>
       {problem && (
