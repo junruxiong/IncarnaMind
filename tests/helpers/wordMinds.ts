@@ -1,3 +1,5 @@
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { Core, ImportWordFileInput } from "../../src/core";
 import { wordFileOf, wordImportProgressOf } from "../../src/shared/wordFiles";
 import { connectToMind, type MindClient } from "./mindClient";
@@ -21,4 +23,16 @@ export async function importWordMind(
     check();
   });
   return { mindId: result.mind.id, client };
+}
+
+/** Saves a Word file's bytes as `name` in `folder`, then imports it as `importWordMind` does. */
+export async function importWordBytes(
+  core: Core,
+  folder: string,
+  bytes: Buffer,
+  { name = "Lease.docx", ...input }: Omit<ImportWordFileInput, "path"> & { name?: string },
+): Promise<{ mindId: string; client: MindClient }> {
+  const path = join(folder, name);
+  await writeFile(path, bytes);
+  return importWordMind(core, { ...input, path });
 }

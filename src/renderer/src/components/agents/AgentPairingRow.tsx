@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import type {
-  AgentActivity,
-  AgentClientId,
-  AgentPairing,
-  AgentSetupResult,
-  LibraryGroup,
+import {
+  type AgentActivity,
+  type AgentClientId,
+  type AgentPairing,
+  type AgentSetupResult,
+  type LibraryGroup,
+  NOT_IN_A_FOLDER_ID,
 } from "../../../../core/api";
 import { core } from "../../core";
 import { useLanguage, useT } from "../../i18n";
@@ -19,6 +20,7 @@ import {
   rowTitleClass,
   ruledRowClass,
 } from "../ui";
+import { AgentFolderList, useAgentFolderRows } from "./AgentFolderList";
 import { activityWords, doneWords, helpUrl, pairingInSentence, timeWords } from "./agentWords";
 import { LaunchDetails } from "./LaunchDetails";
 
@@ -68,9 +70,11 @@ export function AgentPairingRow({
   // The Folders as the User just chose them, shown at once; the core's answer then replaces them.
   const [chosen, setChosen] = useState(pairing.folderIds);
   useEffect(() => setChosen(pairing.folderIds), [pairing.folderIds]);
-  const names = chosen
-    .map((id) => folders.find((folder) => folder.id === id)?.name)
-    .filter((name): name is string => name !== undefined);
+  const rows = useAgentFolderRows(open === "folders");
+  const names = [
+    ...folders.filter((folder) => chosen.includes(folder.id)).map((folder) => folder.name),
+    ...(chosen.includes(NOT_IN_A_FOLDER_ID) ? [t("library.unsorted")] : []),
+  ];
   const setFolder = (folderId: string, on: boolean) => {
     const next = on ? [...chosen, folderId] : chosen.filter((id) => id !== folderId);
     setChosen(next);
@@ -160,26 +164,16 @@ export function AgentPairingRow({
           </p>
         )}
         {open === "folders" && (
-          <fieldset data-testid="agent-pairing-folders" className="mt-2 flex flex-col">
+          <fieldset data-testid="agent-pairing-folders" className="mt-2 flex min-w-0 flex-col">
             <legend className="text-[13px] leading-5 font-semibold text-ink">
               {t("agents.pairing.foldersTitle", { agent: pairingInSentence(pairing, t) })}
             </legend>
-            {folders.map((folder) => (
-              <label
-                key={folder.id}
-                className="flex min-h-8 cursor-pointer items-center gap-2 text-ui text-ink"
-              >
-                <input
-                  type="checkbox"
-                  checked={chosen.includes(folder.id)}
-                  onChange={(event) => setFolder(folder.id, event.target.checked)}
-                  className="size-4 shrink-0 accent-ink"
-                />
-                <span className="min-w-0 truncate" title={folder.name}>
-                  {folder.name}
-                </span>
-              </label>
-            ))}
+            <AgentFolderList
+              rows={rows}
+              agent={pairingInSentence(pairing, t)}
+              chosen={new Set(chosen)}
+              onToggle={setFolder}
+            />
           </fieldset>
         )}
         {open === "activity" && (

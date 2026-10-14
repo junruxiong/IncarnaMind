@@ -24,6 +24,7 @@ import { ObjectMenu, useObjectMenu } from "../ObjectMenu";
 import { rowActionButtonClass } from "../sidebarRows";
 import { ReviewRing } from "../TagColour";
 import { useTabPlace } from "../tabs/tabItems";
+import { DocumentFix } from "./DocumentFix";
 import { documentsToMove, useDocumentMove } from "./DocumentMoveTo";
 import { RowTags } from "./RowTags";
 
@@ -35,7 +36,7 @@ export const COLUMN_CLASSES = {
   // Narrow, only the chips go: the "+" stays, so Tags… from the menu still has its place.
   tags: "w-[200px] shrink-0 @max-[512px]/page:w-auto @max-[512px]/page:[&_[data-testid^=tag-chip]]:hidden",
   format: "w-[76px] shrink-0 @max-[704px]/page:hidden",
-  added: "w-20 shrink-0 @max-[768px]/page:hidden",
+  added: "w-24 shrink-0 @max-[768px]/page:hidden",
   more: "flex w-7 shrink-0 justify-end",
 } as const;
 
@@ -269,6 +270,7 @@ export const LibraryRow = memo(function LibraryRow({
                 />
               )}
             </div>
+            <DocumentFix doc={doc} />
             {line && (
               <p
                 data-testid="library-found-text"

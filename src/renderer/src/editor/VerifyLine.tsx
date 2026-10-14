@@ -25,8 +25,10 @@ import {
   stopVerify,
   useVerify,
 } from "../verify";
-import { shownClaims } from "./claimChecks";
+import { AnswerError } from "./AnswerView";
+import { type Coverage, coverageOf, sameCoverage, shownClaims } from "./claimChecks";
 import { useMindModel } from "./ModelChip";
+import { UncoveredLine } from "./UncoveredLine";
 
 /** What a Mind made by "Verify a document…" verifies, as it changes. */
 export function useVerification(doc: Y.Doc): Verification | null {
@@ -51,7 +53,7 @@ function claimMarks(editor: Editor, pages: Verification["pages"]) {
     if (claim.shown.state === "checking") checking++;
     else if (claim.shown.state !== "supported") needLook.push(claim.from);
   }
-  return { marked, checking, needLook };
+  return { marked, checking, needLook, coverage: coverageOf(shownClaims(editor.state)) };
 }
 
 /**
@@ -82,6 +84,13 @@ export function VerifyLine({
   );
   const outcome = useVerify((state) => state.outcomes[mindId]);
   const openSettings = useAppStore((state) => state.openSettings);
+  // The model the run used: the Mind's own, else the default the composer shows.
+  const defaultProvider = useAppStore((state) =>
+    state.chatReadiness?.ready ? state.chatReadiness.provider.id : null,
+  );
+  const defaultModelId = useAppStore((state) =>
+    state.chatReadiness?.ready ? state.chatReadiness.modelId : null,
+  );
   const inFolder = useAppStore(
     (state) => (state.minds.find((each) => each.id === mindId)?.folderId ?? null) !== null,
   );
@@ -92,6 +101,7 @@ export function VerifyLine({
       b !== null &&
       a.marked === b.marked &&
       a.checking === b.checking &&
+      sameCoverage(a.coverage, b.coverage as Coverage | null) &&
       a.needLook.length === b.needLook.length &&
       a.needLook.every((at, index) => at === b.needLook[index]),
   });
@@ -185,9 +195,19 @@ export function VerifyLine({
     );
   } else if (outcome?.kind === "no-documents") {
     state = (
-      <span data-testid="verify-empty">
-        {t(inFolder ? "verify.noDocuments.folder" : "verify.noDocuments.all")}
-      </span>
+      <>
+        <span data-testid="verify-empty">
+          {t(inFolder ? "verify.noDocuments.folder" : "verify.noDocuments.all")}
+        </span>
+        <button
+          type="button"
+          data-testid="verify-add-files"
+          className={buttonStyle("secondary", "sm")}
+          onClick={() => void useAppStore.getState().pickDocuments()}
+        >
+          {t("checks.addFiles")}
+        </button>
+      </>
     );
   } else if (claims === null) {
     state = (
@@ -287,6 +307,14 @@ export function VerifyLine({
         {dot}
         {state}
       </div>
+      {running === null && marks.marked > 0 && marks.coverage.mostlyUncovered && (
+        <UncoveredLine
+          className="mind-verify-problem"
+          onCheckAll={
+            marks.coverage.canWiden ? () => void checkClaims(mindId, doc, true) : undefined
+          }
+        />
+      )}
       {running === null && outcome?.kind === "not-ready" && (
         <ProblemLine
           testId="verify-problem"
@@ -307,7 +335,21 @@ export function VerifyLine({
           {t("checks.problem.local-mode")}
         </ProblemLine>
       )}
-      {running === null && (outcome?.kind === "failed" || outcome?.kind === "error") && (
+      {running === null && outcome?.kind === "failed" && (
+        // The Answer errors' own wordings: the company or model named, and what to do next.
+        <AnswerError
+          kind={outcome.error.kind}
+          modelId={model?.modelId ?? defaultModelId}
+          providerId={model?.providerId ?? defaultProvider}
+          resetsAt={outcome.error.resetsAt ?? null}
+          details={outcome.error.message}
+          onRetry={() =>
+            void (claims === null ? findClaims(mindId, doc) : checkClaims(mindId, doc))
+          }
+          onOpenSettings={openSettings}
+        />
+      )}
+      {running === null && outcome?.kind === "error" && (
         <ProblemLine
           testId="verify-problem"
           className="mind-verify-problem"
@@ -318,9 +360,7 @@ export function VerifyLine({
               void (claims === null ? findClaims(mindId, doc) : checkClaims(mindId, doc)),
           }}
         >
-          {outcome.kind === "failed"
-            ? t("verify.problem.failed", { message: outcome.error.message })
-            : t("verify.problem.error", { message: outcome.message })}
+          {t("verify.problem.error", { message: outcome.message })}
         </ProblemLine>
       )}
     </>
