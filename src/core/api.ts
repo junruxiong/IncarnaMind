@@ -818,6 +818,15 @@ export interface AnswerToolCall {
   mindChange?: MindChange;
 }
 
+/** Where the assistant is writing a Mind's new Blocks as they come (#202). */
+export interface MindWriting {
+  mindId: string;
+  /** The top-level Block the next one goes after; null: the Mind's end. */
+  after: string | null;
+  /** False once it has stopped. */
+  writing: boolean;
+}
+
 /**
  * What a call of a Minds' Tool did (#202): the changes it proposed in one
  * Mind, which wait there for the User to accept or reject them.
@@ -7589,6 +7598,8 @@ export interface CoreEvents {
   "examples.changed": Examples;
   /** A Mind's content changed. Clients editing that Mind apply the update to their `Y.Doc`. */
   "mind.update": MindUpdate;
+  /** The assistant is writing new Blocks into a Mind as they come (#202), or has stopped. */
+  "mind.writing": MindWriting;
   /** A Mind's Checkpoints changed: one was saved, kept for good, or thinned out. Read `listCheckpoints` again. */
   "checkpoints.changed": { mindId: string };
   /**

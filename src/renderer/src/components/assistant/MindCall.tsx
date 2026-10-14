@@ -34,7 +34,9 @@ export function mindCallText(t: Translate, call: AnswerToolCall, mind: string): 
   const change = call.mindChange;
   if (call.status === "running") {
     if (call.tool === "read_mind") return t("mindCall.reading", { mind });
-    if (call.tool === "create_mind") return t("mindCall.creating", { mind });
+    if (call.tool === "create_mind") {
+      return mind ? t("mindCall.creating", { mind }) : t("mindCall.creating.new");
+    }
     return t(call.tool === "add_to_mind" ? "mindCall.adding" : "mindCall.editing", { mind });
   }
   if (call.status === "failed") {

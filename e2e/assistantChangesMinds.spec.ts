@@ -278,3 +278,33 @@ test("Reject all keeps a Mind the assistant made once something of it was accept
   await expect(window.getByTestId("mind-tab").filter({ hasText: "Fieldwork plan" })).toHaveCount(1);
   await expect(rows.nth(0)).toContainText("· none waiting");
 });
+
+test("a new Mind's text comes in Block by Block as the assistant writes it, with Writing… where the next goes", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setLanguage(window, "en");
+  await setWindowSize(app, window, 1440, 900);
+  await writeMind(window, "Q3 review", ["The quarter was good."]);
+
+  await window.keyboard.press("ControlOrMeta+j");
+  await expect(window.getByTestId("composer-input")).toBeFocused();
+  await window.keyboard.type("Make a new note called Field notes with a summary slowly");
+  await window.keyboard.press("Enter");
+
+  // Opened as soon as it is made: its heading is in while its paragraph is still being written.
+  await expect(window.getByTestId("mind-tab").filter({ hasText: "Field notes" })).toBeVisible();
+  const writing = window.getByTestId("mind-writing");
+  await expect(writing).toBeVisible();
+  await expect(writing).toHaveText("Writing…");
+  await expect(window.getByTestId("mind-editor").locator("h2")).toHaveText(["Summary"]);
+  await screenshot(window, "streaming-new-mind");
+
+  const answer = assistantAnswers(window).last();
+  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  await expect(writing).toHaveCount(0);
+  await expect(window.getByTestId("proposals-count")).toHaveText("2 changes from the assistant");
+  await expect(answer.getByTestId("mind-changes-title")).toHaveText(
+    "Created “Field notes with a summary” · 2 changes",
+  );
+});

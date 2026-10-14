@@ -3221,6 +3221,7 @@ export const zhCN = {
   "mindCall.editing": "正在修改“{mind}”…",
   "mindCall.adding": "正在添加到“{mind}”…",
   "mindCall.creating": "正在新建“{mind}”…",
+  "mindCall.creating.new": "正在新建 Mind…",
   "mindCall.read": "读了“{mind}”",
   "mindCall.edited": "修改了“{mind}” · {count} 处修订",
   "mindCall.edited.one": "修改了“{mind}” · 1 处修订",
