@@ -137,6 +137,9 @@ export interface LaunchOptions {
  */
 export const WINDOW_SIZE = { width: 1600, height: 660 };
 
+/** The default Output location in Chinese, as the system names Documents: 文稿 on macOS, 文档 elsewhere. */
+export const DEFAULT_FOLDER_ZH = `${process.platform === "darwin" ? "文稿" : "文档"} › IncarnaMind`;
+
 /**
  * The key that, held with an arrow, moves the caret a word at a time, and with
  * Shift too selects by word: Option on macOS, Ctrl on Windows and Linux.
@@ -507,6 +510,15 @@ export async function tabMenu(window: Page): Promise<Locator> {
   return menu;
 }
 
+/** "Import a Word file…" from the "+" menu; the test answers the system's open dialog first. */
+export async function importWordFromMenu(window: Page): Promise<Locator> {
+  await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-import-word").click();
+  const dialog = window.getByTestId("word-import-dialog");
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
 /** Export options…, from the tab's menu; resolves once the sheet shows `title`. */
 export async function openOptions(window: Page, title: string): Promise<void> {
   await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.exportOptions"));
@@ -784,6 +796,20 @@ async function resizeContent(
       new Promise((drawn) => requestAnimationFrame(() => requestAnimationFrame(() => drawn(null)))),
   );
 }
+
+/** What the page copies goes to `copied` instead of the machine's clipboard. */
+export async function catchCopies(window: Page): Promise<void> {
+  await window.evaluate(() => {
+    const caught = globalThis as unknown as { copied?: string };
+    navigator.clipboard.writeText = async (text: string) => {
+      caught.copied = text;
+    };
+  });
+}
+
+/** What the page last copied since `catchCopies`. */
+export const copied = (window: Page) =>
+  window.evaluate(() => (globalThis as unknown as { copied?: string }).copied ?? "");
 
 /** Switches the interface's language, as Settings does. */
 export function setLanguage(window: Page, language: "en" | "zh-CN"): Promise<unknown> {

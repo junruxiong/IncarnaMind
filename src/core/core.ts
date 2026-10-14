@@ -14,6 +14,7 @@ import {
 import { mindModelOf } from "../shared/mindModel";
 import { mindName } from "../shared/naming";
 import { paperFor } from "../shared/printDocument";
+import { wordFileOf } from "../shared/wordFiles";
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
 import { agentSocketPath, createAgents } from "./agents";
@@ -41,6 +42,7 @@ import {
   type CreateMindInput,
   DEFAULT_MIND_KIND,
   type Document,
+  type DocumentStatus,
   type EmbeddingModelStatus,
   type EmbeddingSettings,
   type ExportMindOptions,
@@ -48,6 +50,7 @@ import {
   type Meeting,
   type Mind,
   type MindCitationStyle,
+  NOT_IN_A_FOLDER_ID,
   type OwnFileKind,
   type ProviderError,
   type SavedExport,
@@ -79,6 +82,7 @@ import { statIdentity } from "./documents/files";
 import { createOwnFiles } from "./documents/ownFiles";
 import { createVersionRetention, type VersionRetention } from "./documents/retention";
 import { BUILT_IN_TEXT_RECOGNITION_MODEL, createTextRecognitionModel } from "./documents/scan";
+import type { WindowedPassage } from "./documents/search";
 import { tunedSearch } from "./documents/searchTuning";
 import { findUnreadDocuments } from "./documents/unread";
 import { fsWatchFolder } from "./documents/watcher";
@@ -125,7 +129,7 @@ import {
   parseIds,
   parseMindId,
 } from "./minds";
-import { firstLineOf, readBlocks } from "./mindText";
+import { firstLineOf, readBlocks, theirChangesReading } from "./mindText";
 import { createNoteAdding } from "./noteAdding";
 import { createOutputFiles } from "./outputFiles";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
@@ -282,6 +286,9 @@ export interface Core extends CoreApi, CoreEventSource {
   /** Closes the database and drops all listeners. The core can't be used afterwards. Safe to call twice. */
   close(): void;
 }
+
+/** How long a Question asked during a call waits for the live transcript's newest lines to be indexed (#144). */
+const LIVE_TRANSCRIPT_WAIT_MS = 3_000;
 
 /**
  * Opens (or creates) the data folder and its database, brings the schema up to
@@ -972,6 +979,7 @@ export function createCore(adapters: CoreAdapters): Core {
       if (!found || found.deletedAt !== null) return null;
       return isKnownKind(minds.get(mindId).kind) ? found.name : null;
     },
+    liveTranscript: (mindId) => liveTranscriptOf(mindId),
     providerExists: (providerId) => chat.exists(providerId),
     readiness: (choice) => chat.readiness(choice),
     prepareModel: (choice) => chat.prepareModel(choice),
@@ -981,6 +989,7 @@ export function createCore(adapters: CoreAdapters): Core {
       searchableNames: (documentIds, limit) =>
         documents.searchableNames(documentIds ?? undefined, limit),
       searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
+      unread: (documentIds) => findUnreadDocuments(documents.unread(documentIds ?? undefined)),
       search: searchDocuments,
       citationSource: (passageId) => documents.citationSource(passageId),
       pageTexts: (documentId, contentHash, from, to) =>
@@ -1834,6 +1843,7 @@ export function createCore(adapters: CoreAdapters): Core {
     linkedFolderExists: (linkedFolderId) =>
       documents.linkedFolders.list().some((folder) => folder.id === linkedFolderId),
     documentsIn: (linkedFolderId) => documents.list({ linkedFolderId }),
+    checksRelyOn: (documentIds) => retention.isRetained("check-result", documentIds),
     recheck: (input) => recheckCitation(documents, input),
     changed: (value) => events.emit("examples.changed", value),
   });
@@ -1848,6 +1858,8 @@ export function createCore(adapters: CoreAdapters): Core {
 
   // Transcripts (#136): a Meeting is transcribed on this computer as it records, where this copy can.
   let listMeetings: (() => Meeting[]) | undefined;
+  /** See `AnswersOptions.liveTranscript`; set once Meetings are. */
+  let liveTranscriptOf = async (_mindId: string): Promise<WindowedPassage[] | null> => null;
   const meetingsChanged = () => {
     if (listMeetings) events.emit("meetings.changed", listMeetings());
   };
@@ -1947,6 +1959,44 @@ export function createCore(adapters: CoreAdapters): Core {
     log: adapters.log ?? silentLogger,
   });
   listMeetings = () => meetings.list();
+  /** Resolves once a Document's newest version has its Passages, or after `ms` with the last version's. */
+  const extracted = (documentId: string, ms: number) =>
+    new Promise<void>((resolve) => {
+      const busy = (status: DocumentStatus | null) =>
+        status === "queued" || status === "extracting";
+      let status: DocumentStatus | null = null;
+      try {
+        status = documents.get(documentId).status;
+      } catch {
+        // Deleted meanwhile: there is nothing to wait for.
+      }
+      if (!busy(status)) {
+        resolve();
+        return;
+      }
+      const done = () => {
+        clearTimeout(timer);
+        stop();
+        resolve();
+      };
+      const timer = setTimeout(done, ms);
+      const stop = events.on("document.status", (document) => {
+        if (document.id === documentId && !busy(document.status)) done();
+      });
+    });
+  liveTranscriptOf = async (mindId) => {
+    const meeting = meetings
+      .list()
+      .find(
+        (each) =>
+          each.mindId === mindId && (each.status === "recording" || each.status === "paused"),
+      );
+    const documentId = meeting?.transcript?.documentId;
+    if (!meeting || !documentId || !transcripts) return null;
+    await transcripts.refresh(meeting.id);
+    await extracted(documentId, LIVE_TRANSCRIPT_WAIT_MS);
+    return documents.passagesBetween(documentId, 0, Number.MAX_SAFE_INTEGER);
+  };
 
   // Outside agents (#351): the User's own agent, paired in Settings, reads its Folders over the
   // socket and gets Citations IncarnaMind minted and checked. Off until the User turns it on.
@@ -1968,10 +2018,16 @@ export function createCore(adapters: CoreAdapters): Core {
     access: {
       say: (key, params) => translate(settings.get().language, key, params),
       folders: () => library.folders().map((folder) => ({ id: folder.id, name: folder.name })),
-      documentsIn: (folderIds) =>
-        folderIds.length === 0
-          ? []
-          : (resolveScope({ folderIds: [...folderIds], tagIds: [], documentIds: [] }) ?? []),
+      documentsIn: (folderIds) => {
+        const folders = folderIds.filter((id) => id !== NOT_IN_A_FOLDER_ID);
+        const filed =
+          folders.length === 0
+            ? []
+            : (resolveScope({ folderIds: folders, tagIds: [], documentIds: [] }) ?? []);
+        return folders.length === folderIds.length
+          ? filed
+          : [...new Set([...filed, ...library.unfiledDocumentIds()])];
+      },
       // Without the reranker: it costs about a second a search (ADR-0009), and an agent's
       // search must answer in well under 100 ms.
       search: (query, documentIds, parameters, signal) =>
@@ -1985,8 +2041,16 @@ export function createCore(adapters: CoreAdapters): Core {
       mindMarkdown: (mindId, footnote) => {
         const mind = minds.get(mindId);
         const { language } = settings.get();
+        // Someone's changes from a Word file read as changes, as the assistant reads them (#734).
         const blocks = content.peek(mind.id, (fragment) =>
-          readBlocks(fragment, { includeQuestions: true, footnote, trimBeforeCitation: true }),
+          readBlocks(fragment, {
+            includeQuestions: true,
+            footnote,
+            trimBeforeCitation: true,
+            ...(fragment.doc && wordFileOf(fragment.doc)
+              ? { review: theirChangesReading(fragment.doc) }
+              : {}),
+          }),
         );
         return renderMarkdown(mind.title || mind.autoTitle, blocks, exportLabels(language));
       },
@@ -2248,10 +2312,7 @@ export function createCore(adapters: CoreAdapters): Core {
     listUnreadFiles: async (scope) => {
       const wanted = parseSearchScope(scope);
       const inScope = wanted ? resolveScope(wanted) : null;
-      const kept = inScope === null ? null : new Set(inScope);
-      const unread = findUnreadDocuments(
-        documents.list().filter((each) => kept === null || kept.has(each.id)),
-      );
+      const unread = findUnreadDocuments(documents.unread(inScope ?? undefined));
       // Files in a format not read belong to Folders only: a Tag or a Document can't name them.
       // A Folder holds those in it and under it, even where no Document is.
       const named = wanted
@@ -2277,6 +2338,7 @@ export function createCore(adapters: CoreAdapters): Core {
             reason: "format",
             extension: file.extension,
             documentId: null,
+            pages: [],
           }),
         );
       return [...unread, ...files];
@@ -2751,6 +2813,7 @@ export function createCore(adapters: CoreAdapters): Core {
       const {
         fileName,
         fromWord: _,
+        theirChanges: _waiting,
         data,
         word,
         ...counts
