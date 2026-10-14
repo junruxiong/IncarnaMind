@@ -1206,6 +1206,51 @@ export async function tabTo(window: Page, target: Locator, max = 40): Promise<vo
   await expect(target).toBeFocused();
 }
 
+/** Whether the focused control shows DESIGN.md's ring: a solid 2px accent outline. */
+export const focusRingShows = (window: Page) =>
+  window.evaluate(() => {
+    const element = document.activeElement as HTMLElement | null;
+    if (!element) return false;
+    const probe = document.createElement("span");
+    probe.style.color = "var(--color-accent)";
+    document.body.append(probe);
+    const accent = getComputedStyle(probe).color;
+    probe.remove();
+    const style = getComputedStyle(element);
+    return (
+      element.matches(":focus-visible") &&
+      style.outlineStyle === "solid" &&
+      Number.parseFloat(style.outlineWidth) >= 2 &&
+      style.outlineColor === accent
+    );
+  });
+
+/**
+ * Types a name through an input method: the composition is open, its Enter
+ * (the one that picks a candidate) changes nothing, and the next Enter saves.
+ */
+export async function typeWithInputMethod(
+  window: Page,
+  field: Locator,
+  name: string,
+): Promise<void> {
+  const session = await window.context().newCDPSession(window);
+  try {
+    await session.send("Input.imeSetComposition", {
+      text: "xinming",
+      selectionStart: 7,
+      selectionEnd: 7,
+    });
+    await field.dispatchEvent("keydown", { key: "Enter", isComposing: true, bubbles: true });
+    await expect(field).toBeVisible();
+    await session.send("Input.insertText", { text: name });
+    await expect(field).toHaveValue(name);
+  } finally {
+    await session.detach();
+  }
+  await window.keyboard.press("Enter");
+}
+
 /** Sets the sidebar's width, as dragging its edge does (165 is the narrowest), and waits for it. */
 export async function setSidebarWidth(window: Page, width: number): Promise<void> {
   await window.evaluate(

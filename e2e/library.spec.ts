@@ -713,7 +713,7 @@ test("a bulk Organize leaves the Library's sections, filters and sidebar as the 
       await expect(tagRow(name).getByTestId("browse-count")).toHaveText(String(saved.byTag[name]));
     await tagRow("Invoice")
       .locator(":scope > div")
-      .getByRole("button", { name: /^Invoice/ })
+      .getByRole("treeitem", { name: /^Invoice/ })
       .click();
     await expect(library.getByTestId("library-heading")).toContainText("Library");
     await expect(library.locator('[data-testid="library-filter"][data-facet="tag"]')).toHaveText(
@@ -728,7 +728,7 @@ test("a bulk Organize leaves the Library's sections, filters and sidebar as the 
     // Elsewhere on the row than the first click, which a double-click would be.
     await tagRow("Invoice")
       .locator(":scope > div")
-      .getByRole("button", { name: /^Invoice/ })
+      .getByRole("treeitem", { name: /^Invoice/ })
       .click({ position: { x: 120, y: 12 } });
     await expect(library.getByTestId("library-filter")).toHaveCount(0);
 

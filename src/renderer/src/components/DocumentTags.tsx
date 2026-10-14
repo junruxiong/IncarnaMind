@@ -18,10 +18,12 @@ import { usePopoverMenu } from "./usePopoverMenu";
 export function DocumentTagMenu({
   item,
   buttonClassName,
+  tabIndex,
   children,
 }: {
   item: Document;
   buttonClassName: string;
+  tabIndex?: number;
   children?: ReactNode;
 }) {
   const t = useT();
@@ -35,6 +37,7 @@ export function DocumentTagMenu({
         data-testid="document-tags-menu"
         aria-label={label}
         title={label}
+        tabIndex={tabIndex}
         className={buttonClassName}
       >
         {children ?? <TagLineIcon className="size-[15px]" />}
