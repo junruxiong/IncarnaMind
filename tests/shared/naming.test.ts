@@ -60,15 +60,26 @@ describe("cutting a title", () => {
     }
   });
 
-  test("a long Chinese line is cut at a character, with none broken", () => {
+  test("a long Chinese line is cut at a word, with none broken", () => {
     const question =
       "在无风晴朗的夏季夜晚大型灌溉公园比周围建成区的街道最多能低多少摄氏度这个差距在白天是否更小".repeat(
         2,
       );
     const title = cutTitle(question);
     expect(Array.from(title).length).toBeLessThanOrEqual(NAME_LENGTH);
-    expect(Array.from(title).length).toBeGreaterThan(NAME_LENGTH - 3);
+    expect(Array.from(title).length).toBeGreaterThan(NAME_LENGTH - 6);
     expect(question.startsWith(title)).toBe(true);
+  });
+
+  test("a Chinese cut keeps every word whole, even one that ends in 的, 对, 同 or 成", () => {
+    expect(cutAtWord("两份合同对比结果", 6)).toBe("两份合同对比");
+    expect(cutAtWord("这项研究的目的是什么", 7)).toBe("这项研究的目的");
+    expect(cutAtWord("请总结员工参与情况", 6)).toBe("请总结员工");
+    expect(cutAtWord("如何与另一份合同对比", 8)).toBe("如何与另一份合同");
+    expect(fitName("飞往成都的航班价格", (text) => Array.from(text).length <= 5)).toBe("飞往成都…");
+    expect(fitName("存在行为首都成就人才", (text) => Array.from(text).length <= 5)).toBe(
+      "存在行为…",
+    );
   });
 
   test("a long Chinese line is cut at a clause mark, never in the middle of a clause", () => {
@@ -81,9 +92,26 @@ describe("cutting a title", () => {
     );
   });
 
-  test("a Chinese cut doesn't end on 以及 or 和", () => {
-    expect(cutTitle(`${"夜间降温".repeat(14)}公园以及湖泊`)).toBe(`${"夜间降温".repeat(14)}公园`);
-    expect(cutTitle(`${"夜间降温".repeat(14)}公园湖和泊`)).toBe(`${"夜间降温".repeat(14)}公园湖`);
+  test("a Chinese cut drops a whole 以及, 和 or 的 left at its end, and nothing else", () => {
+    const body = "夜间降温".repeat(14);
+    expect(cutTitle(`${body}公园以及湖泊`)).toBe(`${body}公园`);
+    expect(cutTitle(`${body}公园和湖泊`)).toBe(`${body}公园`);
+    expect(cutTitle(`${body}公园的湖泊`)).toBe(`${body}公园`);
+    expect(cutTitle(`${body}公园目的是什么`)).toBe(`${body}公园目的`);
+  });
+
+  test("a hyphenated word is kept whole or left out whole", () => {
+    expect(cutAtWord("Hire two full-time employees", 18)).toBe("Hire two full-time");
+    expect(cutAtWord("Hire two full-time employees", 14)).toBe("Hire two");
+  });
+
+  test("a cut doesn't strip back through words that often end a real phrase", () => {
+    expect(cutAtWord("Here is a list of the things you could be asked to do now", 53)).toBe(
+      "Here is a list of the things you could be asked to do",
+    );
+    expect(cutAtWord("Here is a list of the things you could be asked to do now", 52)).toBe(
+      "Here is a list of the things you could be asked",
+    );
   });
 
   test("a character outside the basic plane is never split", () => {
@@ -125,7 +153,7 @@ describe("fitting a name on one line", () => {
     expect(fitName(name, room(32))).toBe("The employee gets 27 days…");
   });
 
-  test("a Chinese name is cut at a character", () => {
+  test("a Chinese name is cut at a word", () => {
     const name = "员工每年享有多少天带薪年假，试用期结束后需要提前多久通知公司";
     expect(fitName(name, room(12))).toBe("员工每年享有多少天带薪…");
   });

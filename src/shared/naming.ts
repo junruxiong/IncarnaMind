@@ -8,87 +8,60 @@ export const NAME_LENGTH = 60;
 /** The fewest characters a cut at a clause mark keeps, so an opening like "Yes, but" isn't all that is left. */
 const MIN_CLAUSE = 16;
 
-const cjkLetter = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
 const trailingMarks = /[\s.,;:!?…。，；：！？、\-–—]+$/u;
 const quotes = /^["'“”‘’「」『』《》]+|["'“”‘’「」『』《》]+$/gu;
-const lastWord = /\s([\p{Script=Latin}'’]+)$/u;
 
-/** Words that start something a cut leaves unsaid; a name never ends on one. */
-const DANGLING_WORDS: ReadonlySet<string> = new Set(
-  (
-    "a an the of to in on at for from with without by as and or but nor plus than that which who whom whose " +
-    "if so per via into onto over under about between among after before during while when where what how why " +
-    "is are was were be been do does did has have had this these those its their our your can will would should could may might must"
+/** Where the text's words begin and end, in any language (Chinese and Japanese included). */
+const words = new Intl.Segmenter(undefined, { granularity: "word" });
+
+/** Words a name never ends on: each starts something a cut leaves unsaid, and is dropped whole. */
+const DANGLING_WORDS: ReadonlySet<string> = new Set([
+  ...(
+    "a an the of to in on at for from with without by as and or but nor plus than that which " +
+    "who whom whose if so per via into onto between among during while when where what how why " +
+    "its their our your"
   ).split(" "),
-);
-const DANGLING_CHARACTERS = "的和与及或并且在对把被为之而但若如则以从向比同跟给将也都还就又才却";
-const DANGLING_PAIRS = [
-  "以及",
-  "而且",
-  "并且",
-  "或者",
-  "因为",
-  "所以",
-  "如果",
-  "但是",
-  "然而",
-  "同时",
-  "其中",
-  "关于",
-  "对于",
-  "根据",
-  "按照",
-  "通过",
-  "为了",
-  "由于",
-  "还是",
-  "加上",
-  "另外",
-  "此外",
-];
+  ..."的 和 与 及 或 并 且 而 但 若 如 则 以 把 被 为 之 对 从 向 在 比".split(" "),
+  ...(
+    "以及 并且 而且 或者 因为 所以 如果 但是 然而 同时 其中 关于 对于 根据 按照 通过 为了 由于 " +
+    "还是 加上 另外 此外"
+  ).split(" "),
+]);
 
-/** Whether `characters` can be cut before the one at `end`: between words, or beside a Chinese or Japanese character. */
-function isBoundary(characters: readonly string[], end: number): boolean {
-  const before = characters[end - 1] ?? "";
-  const after = characters[end] ?? "";
-  return (
-    end >= characters.length ||
-    after === " " ||
-    before === " " ||
-    cjkLetter.test(before) ||
-    cjkLetter.test(after)
-  );
-}
-
-/** The last place at or before `limit` where the text can be cut; `limit` itself inside a word that is too long. */
-function boundaryAtOrBefore(characters: readonly string[], limit: number): number {
-  for (let end = Math.min(limit, characters.length); end > 0; end--) {
-    if (isBoundary(characters, end)) return end;
+/**
+ * How many characters of `text` end on a word, at most `limit`; `limit` itself
+ * when the first word is longer. It counts whole characters, so none is broken.
+ */
+function wordEnd(text: string, limit: number): number {
+  const parts = Array.from(words.segment(text));
+  const joined = (index: number) => {
+    const [before, part, after] = [parts[index - 1], parts[index], parts[index + 1]];
+    return part?.segment === "-" && before?.isWordLike && after?.isWordLike;
+  };
+  let characters = 0;
+  let end = 0;
+  for (const [index, { segment }] of parts.entries()) {
+    characters += Array.from(segment).length;
+    if (characters > limit) break;
+    // A hyphen joins the words around it ("full-time"), which a cut keeps whole.
+    if (!joined(index) && !joined(index + 1)) end = characters;
   }
-  return Math.min(limit, characters.length);
+  return end > 0 ? end : limit;
 }
 
-/** `text` without the words a cut leaves hanging at its end ("…per year, plus"), and without trailing marks. */
+/**
+ * `text` without the words a cut leaves hanging at its end ("…per year, plus"),
+ * and without trailing marks. Only a whole word of the list goes, never part of one.
+ */
 function withoutDanglingEnd(text: string): string {
   let kept = text.replace(trailingMarks, "");
   for (;;) {
-    const word = lastWord.exec(kept);
-    if (word?.[1] && DANGLING_WORDS.has(word[1].toLowerCase())) {
-      kept = kept.slice(0, word.index).replace(trailingMarks, "");
-      continue;
-    }
-    const characters = Array.from(kept);
-    const pair = DANGLING_PAIRS.find((each) => kept.endsWith(each));
-    if (pair && characters.length > pair.length) {
-      kept = characters.slice(0, -pair.length).join("").replace(trailingMarks, "");
-      continue;
-    }
-    const last = characters.at(-1) ?? "";
-    if (characters.length > 1 && DANGLING_CHARACTERS.includes(last)) {
-      kept = characters.slice(0, -1).join("").replace(trailingMarks, "");
-      continue;
-    }
-    return kept;
+    let last: { segment: string; index: number } | undefined;
+    for (const part of words.segment(kept)) if (part.isWordLike) last = part;
+    if (!last || !DANGLING_WORDS.has(last.segment.toLowerCase())) return kept;
+    const rest = kept.slice(0, last.index).replace(trailingMarks, "");
+    if (rest === "") return kept;
+    kept = rest;
   }
 }
 
@@ -101,18 +74,19 @@ function endsClause(characters: readonly string[], index: number): boolean {
 
 /**
  * The text's first line, cut to about `NAME_LENGTH` characters without trailing
- * punctuation: at a word boundary where words are separated by spaces, at a
- * character in Chinese or Japanese. It counts whole characters, so none is broken.
- * The cut never leaves a half sentence: it falls back to the last clause mark
- * when that keeps at least half of the cut ("…per year" rather than "…per year, plus"),
- * and drops a word such as "the" or "plus", or a Chinese 的 or 和, left at its end.
- * Empty when the text has no first line.
+ * punctuation, at a word (Chinese words too). The cut never leaves a half
+ * sentence: it falls back to the last clause mark when that keeps at least half
+ * of the cut ("…per year" rather than "…per year, plus"), and drops a word such as
+ * "the" or "plus", or a Chinese 的 or 和, left at its end. Empty when the text has
+ * no first line.
  */
 export function cutTitle(raw: string): string {
-  const first = raw.split(/\r?\n/).find((line) => line.trim() !== "") ?? "";
-  const characters = Array.from(first.replace(/\s+/g, " ").trim());
-  if (characters.length <= NAME_LENGTH) return characters.join("").replace(trailingMarks, "");
-  const end = boundaryAtOrBefore(characters, NAME_LENGTH);
+  const first = (raw.split(/\r?\n/).find((line) => line.trim() !== "") ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const characters = Array.from(first);
+  if (characters.length <= NAME_LENGTH) return first.replace(trailingMarks, "");
+  const end = wordEnd(first, NAME_LENGTH);
   for (let index = end - 1; index >= Math.max(MIN_CLAUSE, end / 2); index--) {
     if (endsClause(characters, index)) {
       return withoutDanglingEnd(characters.slice(0, index).join(""));
@@ -122,19 +96,18 @@ export function cutTitle(raw: string): string {
 }
 
 /**
- * `text` cut to at most `limit` characters at a word boundary, as `cutTitle` cuts,
+ * `text` cut to at most `limit` characters at a word, as `cutTitle` cuts,
  * for a name that has room for more than a title, such as a file's.
  */
 export function cutAtWord(text: string, limit: number): string {
   const characters = Array.from(text);
   if (characters.length <= limit) return text;
-  return withoutDanglingEnd(characters.slice(0, boundaryAtOrBefore(characters, limit)).join(""));
+  return withoutDanglingEnd(characters.slice(0, wordEnd(text, limit)).join(""));
 }
 
 /**
  * `name` shortened to one line: kept whole if `fits` says it fits, else cut at a
- * word boundary (a character in Chinese or Japanese) and ended with "…", so the
- * longest start that fits shows.
+ * word and ended with "…", so the longest start that fits shows.
  */
 export function fitName(name: string, fits: (text: string) => boolean): string {
   if (fits(name)) return name;
@@ -146,9 +119,9 @@ export function fitName(name: string, fits: (text: string) => boolean): string {
     if (fits(`${characters.slice(0, middle).join("")}…`)) low = middle;
     else high = middle - 1;
   }
-  const end = boundaryAtOrBefore(characters, Math.max(low, 1));
-  const kept = withoutDanglingEnd(characters.slice(0, end).join(""));
-  return `${kept || characters.slice(0, Math.max(low, 1)).join("")}…`;
+  const shown = Math.max(low, 1);
+  const kept = withoutDanglingEnd(characters.slice(0, wordEnd(name, shown)).join(""));
+  return `${kept || characters.slice(0, shown).join("")}…`;
 }
 
 /** What a Mind is called: the title the User typed, else its first line of text. Empty when it has neither. */
