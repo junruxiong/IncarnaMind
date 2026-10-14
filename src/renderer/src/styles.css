@@ -5427,7 +5427,7 @@
   }
 
   /*
-   * A Task's progress in the thread (D189; DESIGN.md, Task progress in the
+   * A Task's progress in the thread (#657; DESIGN.md, Task progress in the
    * thread): its head (dot, name, how far), a 3px bar, its latest steps with
    * their marks, then quiet text actions.
    */
@@ -5974,7 +5974,7 @@
     }
   }
   /*
-   * The Task tray (#126, narrowed by D189; DESIGN.md, Task tray): joined to
+   * The Task tray (#126, narrowed by #657; DESIGN.md, Task tray): joined to
    * the top of the composer, its width, sharing its edge: the plan card, the
    * one ask, its buttons pinned at the bottom while the rest scrolls, and
    * queued messages, each section ruled from the one above it.
