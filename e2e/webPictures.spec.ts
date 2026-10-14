@@ -138,8 +138,12 @@ test("a page with more pictures than a page keeps says while their text is read,
     "title",
     /^Reading the text in 60 pictures… \d+ read so far\.$/,
   );
+  if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, "pictures-reading-en.png") });
   await setLanguage(window, "zh-CN");
   await expect(status).toHaveAttribute("title", /^正在识别 60 张图片中的文字…已识别 \d+ 张。$/);
+  if (SCREENSHOTS) {
+    await window.screenshot({ path: join(SCREENSHOTS, "pictures-reading-zh-CN.png") });
+  }
   await expect(row).toHaveAttribute("data-status", "ready", { timeout: 60_000 });
   await row.getByTestId("open-document").click();
 
