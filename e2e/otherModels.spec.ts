@@ -70,7 +70,6 @@ test("Other models: grouped by why, ticked into the model menu, with a wrong tic
         modelId: "gpt-6.1-sol",
         apiKey: "key-not-real",
       });
-      if (provider.service) await bridge.allowDataFlow("chat", provider.service.id);
       await bridge.setChatModelInMenu({
         providerId: provider.id,
         modelId: "gpt-9-not-found",

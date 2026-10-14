@@ -13,6 +13,7 @@ import {
   openSteps,
   pointAndClick,
   removeDataFolder,
+  saveProviderUnasked,
   setWindowSize,
   slideSelect,
 } from "./app";
@@ -38,7 +39,10 @@ test.afterEach(async () => {
   await removeDataFolder(dataDir);
 });
 
-/** The app on an Anthropic key whose chat flow isn't allowed yet, in `language`. */
+/**
+ * The app on an Anthropic key whose chat flow isn't allowed yet, as a key
+ * chosen before choosing was the consent (ADR-0022) left it, in `language`.
+ */
 async function start(language: "en" | "zh-CN") {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await setWindowSize(app, window, 1440, 900);
@@ -47,12 +51,12 @@ async function start(language: "en" | "zh-CN") {
   await window.evaluate(async (chosen) => {
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     await bridge.updateSettings({ user: { language: chosen } });
-    await bridge.saveChatProvider({
-      kind: "anthropic",
-      apiKey: "sk-ant-test",
-      modelId: "claude-haiku-5-5",
-    });
   }, language);
+  await saveProviderUnasked(window, {
+    kind: "anthropic",
+    apiKey: "sk-ant-test",
+    modelId: "claude-haiku-5-5",
+  });
   return { app, window };
 }
 
