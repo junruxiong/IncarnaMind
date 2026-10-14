@@ -570,6 +570,8 @@ export const zhCN = {
   "claim.fixSentence": "修改这句话",
   "claim.findSources": "查找来源",
   "claim.searchWeb": "网页搜索",
+  "claim.webSearchOff": "开启网页搜索后才能查找。",
+  "claim.webSearchOff.action": "打开设置",
   "claim.removeMark": "移除标记",
   "claim.webQuestion": "在网页上搜索支持或反驳这句话的来源：“{sentence}”",
   "claim.searchAll": "搜索全部文档",
