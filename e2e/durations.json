@@ -39,6 +39,7 @@
   "enterOpens.spec.ts": 10,
   "export.spec.ts": 23,
   "exportPdf.spec.ts": 32,
+  "feedback.spec.ts": 4,
   "findSources.spec.ts": 23,
   "findSupport.spec.ts": 16,
   "focus.spec.ts": 3,
