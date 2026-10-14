@@ -2512,6 +2512,7 @@ export const en = {
   "error.folder.nameTaken": "A folder with this name already exists.",
   "error.folder.limit": "The Library supports up to 100 folders.",
   "error.mind.notFound": "That Mind doesn't exist or has been deleted.",
+  "error.layout.wordPlace": "That place in the Word file isn’t one IncarnaMind can open.",
   "error.mind.notFromWord":
     "This Mind wasn’t imported from a Word file, so it has no original to add.",
   "error.mind.newerVersion": "A newer version of IncarnaMind made this. Update to open it.",
@@ -3618,6 +3619,8 @@ export const en = {
   "wordImport.from": "From {name}",
   "wordImport.keepsStyles": "Export keeps its styles",
   "wordImport.from.open": "Open {name} beside it",
+  "wordImport.original.more": "More for {name}",
+  "wordImport.openOriginal": "Open the original",
   "wordImport.notAdded": "“{name}” couldn’t be added to the Library, so Answers can’t cite it.",
   "wordImport.addToLibrary": "Add to Library",
   "wordImport.from.tooltip":
