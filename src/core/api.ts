@@ -2740,11 +2740,11 @@ export type LinkedFolderStatus = "scanning" | "watching" | "paused" | "unavailab
 
 /**
  * The groups that have an example Mind (onboarding, see src/core/examples.ts):
- * "tea" is the first-run default; the others are one per pick of the first
- * run's question (Papers and research, Reports and analysis, Contracts and
- * legal work, Meetings and team notes).
+ * "tea" is the first-run default; the others are closer to a kind of work
+ * (papers, reports, contracts, meetings), and open from the default's banner.
  */
-export type ExampleGroup = "tea" | "papers" | "reports" | "contracts" | "meetings";
+export const EXAMPLE_GROUPS = ["tea", "papers", "reports", "contracts", "meetings"] as const;
+export type ExampleGroup = (typeof EXAMPLE_GROUPS)[number];
 
 /**
  * An example Mind (onboarding, see src/core/examples.ts): "Where tea comes
@@ -2762,6 +2762,8 @@ export interface Examples {
   linkedFolderId: string | null;
   /** The example Answer, written in advance, while the example Mind exists. */
   answerId: string | null;
+  /** The other examples this one's banner offers, in this install's order (random, then kept). */
+  more: ExampleGroup[];
 }
 
 /**
