@@ -2,8 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ConversationAnswer, ConversationQuestion } from "../../../../core/api";
 import { mindName } from "../../../../shared/naming";
 import { type AddTarget, addAnswer } from "../../addToNote";
-import { answerBlocks } from "../../answerBlocks";
-import { selectedNotes } from "../../answerEditors";
+import { notesToAdd } from "../../answerEditors";
 import { readsLine, stepsScope } from "../../assistantContext";
 import { readMindHandle } from "../../commands/handles";
 import { composerScope, NO_MIND, useComposer } from "../../composer";
@@ -31,10 +30,6 @@ import { TaskProgress } from "./TaskProgress";
 const SOUGHT_MS = 1600;
 /** How near the foot counts as being at it, so the thread keeps up with an Answer being written. */
 const AT_FOOT_PX = 24;
-
-/** What to add of an Answer: what is selected in it, or all of it as it ended. */
-const notesOf = (answer: ConversationAnswer) =>
-  selectedNotes(answer.id) ?? answerBlocks({ ...answer, status: "done" });
 
 /**
  * The conversation the assistant shows (#201): the Questions as bubbles at the
@@ -71,7 +66,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
   const [picking, setPicking] = useState<{
     answer: ConversationAnswer;
     anchor: HTMLElement;
-    blocks: ReturnType<typeof notesOf>;
+    blocks: ReturnType<typeof notesToAdd>;
   } | null>(null);
   const log = useRef<HTMLDivElement>(null);
   const atFoot = useRef(true);
@@ -113,7 +108,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
     }, SOUGHT_MS);
   }, [sought, messages]);
 
-  const add = (answer: ConversationAnswer, target: AddTarget, blocks = notesOf(answer)) =>
+  const add = (answer: ConversationAnswer, target: AddTarget, blocks = notesToAdd(answer)) =>
     void addAnswer({ answer, conversation, blocks }, target, focusedMindId === null);
   const keeping: AnswerKeeping = {
     focusedMindName,
@@ -121,7 +116,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
       if (focusedMindId) add(answer, { kind: "mind", mindId: focusedMindId });
     },
     pick(answer, anchor) {
-      setPicking({ answer, anchor, blocks: notesOf(answer) });
+      setPicking({ answer, anchor, blocks: notesToAdd(answer) });
     },
   };
 
