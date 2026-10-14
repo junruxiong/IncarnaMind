@@ -1687,6 +1687,20 @@ export const migrations: readonly Migration[] = [
       ALTER TABLE web_pages ADD COLUMN pictures_left_out INTEGER NOT NULL DEFAULT 0;
     `,
   },
+  {
+    version: 90,
+    description: "Web pages kept as they look: a PDF of each version, when the User asks (#756)",
+    // The PDF is a file named by its content, beside the snapshots (src/core/documents/web).
+    // A version asked for it is 'saving' until it is made, and made again at the next start
+    // if the app quit meanwhile; 'failed' says why in look_failure.
+    sql: `
+      ALTER TABLE web_pages ADD COLUMN look_status TEXT
+        CHECK (look_status IS NULL OR look_status IN ('saving', 'saved', 'failed'));
+      ALTER TABLE web_pages ADD COLUMN look_hash TEXT;
+      ALTER TABLE web_pages ADD COLUMN look_saved_at TEXT;
+      ALTER TABLE web_pages ADD COLUMN look_failure TEXT;
+    `,
+  },
 ];
 
 /**

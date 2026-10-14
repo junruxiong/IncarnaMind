@@ -42,6 +42,7 @@ describe("Settings", () => {
         authorName: null,
         monthlyCap: null,
         webSearch: false,
+        keepWebPageLook: false,
       },
       device: {
         sidebarWidth: 248,
@@ -136,6 +137,7 @@ describe("Settings", () => {
       authorName: null,
       monthlyCap: null,
       webSearch: false,
+      keepWebPageLook: false,
     });
     expect(settings.device).toEqual({
       sidebarWidth: 320,

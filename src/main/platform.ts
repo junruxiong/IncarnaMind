@@ -26,6 +26,7 @@ import { createCitedPageCapture } from "./citedPageCapture";
 import { createSentryCrashReporter } from "./crashReports";
 import { createUtilityProcessEmbedder } from "./embedder";
 import { createElectronAudioCapture } from "./meetings/capture";
+import { createPageLook } from "./pageLook";
 import { createElectronPictures } from "./pictures";
 import { createElectronPrinter } from "./printPdf";
 import { createLoginShellProcesses } from "./processes";
@@ -373,6 +374,17 @@ function webStandIn(): CoreAdapters["web"] {
 }
 
 /**
+ * Test-only launch flag: how long keeping a page as it looks may take, in
+ * milliseconds, so the smoke tests see a page that never loads closed within
+ * seconds. Only a test build honours it.
+ */
+function lookLimit(): { limitMs?: number } {
+  const limit =
+    import.meta.env.MODE === "test" ? Number(process.env.INCARNAMIND_TEST_LOOK_LIMIT) : Number.NaN;
+  return Number.isInteger(limit) && limit > 0 ? { limitMs: limit } : {};
+}
+
+/**
  * Test-only launch flag: a local server standing in for OpenAI (#122), at
  * this origin, where the ChatGPT plan signs in and asks, so the smoke tests
  * can sign in and reach neither OpenAI's sign-in nor its API. Only a test
@@ -482,6 +494,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     browser: systemBrowser,
     shell: fileShell,
     printer: createElectronPrinter({ log, rendererUrl: process.env.ELECTRON_RENDERER_URL }),
+    pageLook: createPageLook({ log, ...lookLimit() }),
     pictures: createElectronPictures(log),
     processes: loginShellProcesses,
     // JavaScript Skill scripts run on Electron's own Node, as plain Node: nothing to install.

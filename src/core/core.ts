@@ -610,7 +610,9 @@ export function createCore(adapters: CoreAdapters): Core {
     languages: () =>
       settings.get().language === "zh-CN" ? ["zh-CN", "zh;q=0.9", "en;q=0.8"] : ["en", "*;q=0.5"],
     pictureFetch: pictureFetcher.fetch,
-    reportError: (error) => console.error("A web page's picture couldn't be fetched:", error),
+    ...(adapters.pageLook ? { look: adapters.pageLook } : {}),
+    keepLookByDefault: () => settings.get().user.keepWebPageLook,
+    reportError: (error) => console.error("A web page's picture or look couldn't be kept:", error),
     ...adapters.webPages,
   });
   webPages.dropPurged().catch((error: unknown) => console.error(error));
@@ -2250,6 +2252,7 @@ export function createCore(adapters: CoreAdapters): Core {
         ? { ...result, document: documents.get(result.document.id) }
         : result;
     },
+    keepWebPageLook: async (documentId) => webPages.keepLook(documentId),
     fetchWebPageAgain: async (documentId) => webPages.fetchAgain(documentId),
     saveTextAsDocument: async (input) => {
       if (!isRecord(input) || typeof input.text !== "string" || input.text.trim() === "") {
