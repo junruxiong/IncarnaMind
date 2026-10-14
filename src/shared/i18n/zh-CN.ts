@@ -226,6 +226,7 @@ export const zhCN = {
   "mind.count": "Mind（{count}）",
   "mind.moveTo": "移动到…",
   "document.openTab": "在新标签页中打开",
+  "document.openMind": "打开对应的 Mind",
   "document.peek": "预览",
   "object.copy": "复制",
   "document.tags": "标签…",
@@ -910,6 +911,8 @@ export const zhCN = {
   "info.from.linked": "同步文件夹“{name}”",
   "info.from.own": "其他文档",
   "info.folder": "文件夹",
+  "info.mind": "Mind",
+  "info.importedAs": "已导入为 Mind",
   "info.tags": "标签",
   "info.created": "创建时间",
   "info.createdValue": "{date}（文件本身的日期）",
@@ -2414,6 +2417,7 @@ export const zhCN = {
   "error.folder.nameTaken": "已有同名的文件夹。",
   "error.folder.limit": "资料库最多可以有 100 个文件夹。",
   "error.mind.notFound": "这个 Mind 不存在或已删除。",
+  "error.mind.notFromWord": "这个 Mind 不是从 Word 文件导入的，没有可添加的原文件。",
   "error.mind.newerVersion": "这是较新版本的 IncarnaMind 创建的。更新后才能打开。",
   "error.mind.newerVersionEdit":
     "较新版本的 IncarnaMind 修改过这个 Mind。更新 IncarnaMind 后才能编辑。",
@@ -3503,6 +3507,8 @@ export const zhCN = {
   "wordImport.others": "其中有 {names} 的修订或批注。",
   "wordImport.othersMore": "另外 {count} 人",
   "wordImport.keeps": "IncarnaMind 会保留这个文件的副本，导出时把你的修改写回其中。",
+  "wordImport.addOriginal": "同时把原文件加入资料库，回答可以引用它",
+  "wordImport.newerDraft": "这是“{name}”的新稿吗？两稿都作为版本保留",
   "wordImport.layoutNotShown":
     "这份文件的版式（字体、颜色、底色和对齐）在 Mind 里不显示，会保留，导出 Word 时原样还原。",
   "wordImport.import": "导入",
@@ -3521,6 +3527,9 @@ export const zhCN = {
   "wordImport.refusal.unreadable": "无法读取“{name}”：它可能已移动，或 IncarnaMind 无权打开它。",
   "wordImport.from": "来自“{name}”",
   "wordImport.keepsStyles": "导出时保留原有格式",
+  "wordImport.from.open": "在旁边打开“{name}”",
+  "wordImport.notAdded": "未能把“{name}”加入资料库，回答无法引用它。",
+  "wordImport.addToLibrary": "加入资料库",
   "wordImport.from.tooltip":
     "从 Word 文件打开。导出时会把你的修改写回原文件，并保留其中的样式、编号、页眉和页脚。",
   "wordImport.progress": "正在导入“{name}” · {percent}%",
