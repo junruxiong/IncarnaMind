@@ -161,6 +161,10 @@ test("a click under a table, inside the editor's own space, puts the cursor on a
   await expect(blocks(editor).last()).toHaveText("");
   expect(await lastIsTable()).toBe(false);
   expect(await cursorInLastBlock(editor)).toBe(true);
+  // A second click at once, as in a double click, doesn't make a second paragraph.
+  const count = await blocks(editor).count();
+  await clickBelowNote(window, editor, "editor");
+  await expect(blocks(editor)).toHaveCount(count);
   await window.keyboard.type("Low water at six.");
   await expect(blocks(editor).last()).toHaveText("Low water at six.");
 
