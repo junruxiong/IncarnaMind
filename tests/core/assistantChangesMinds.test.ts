@@ -523,6 +523,45 @@ describe("New Blocks come in as the model writes them", { timeout: 30_000 }, () 
     });
   });
 
+  // protects=a model that writes its content before naming the Mind gets its Blocks taken back from the Mind in focus and written into the one it named, once each, with nothing left behind; fails_when=a streamed Block stays in the focused Mind, or one is written twice; no_claim=how long the take-back shows.
+  test("content written before the Mind is named is taken back from the Mind in focus and goes to the one named", async () => {
+    // Content first, then the Mind: against the schema's order, as a model may write it.
+    const input = { content: CONTENT, mind: "Project plan" };
+    const { core, mind, client } = await setUp(
+      scriptedModel(
+        ({ results }): ScriptedReply =>
+          results.length === 0
+            ? { calls: [{ tool: "add_to_mind", input, streamInput: true }] }
+            : { text: "Added." },
+        { chunkSize: 4 },
+      ),
+    );
+    const plan = await core.createMind({ title: "Project plan" });
+    const planClient = await connectToMind(core, plan.id);
+    let streamedHere = false;
+    client.blocks.observeDeep(() => {
+      if (pendingProposals(client.blocks).length > 0) streamedHere = true;
+    });
+
+    const asked = await core.askInConversation({ text: "Add risks", mindId: mind.id });
+    if (!asked.asked) throw new Error("Not asked.");
+    expect((await answerEnded(core, asked.answerId)).event).toBe("finished");
+    await client.settled();
+    await planClient.settled();
+
+    expect(streamedHere).toBe(true);
+    expect(shownWithChanges(client)).toEqual([
+      "Summary",
+      "The quarter was very good, and sales were really strong.",
+    ]);
+    expect(pendingProposals(client.blocks)).toEqual([]);
+    expect(shownWithChanges(planClient)).toEqual([
+      "+ Risks",
+      "+ The supplier is late.",
+      "+ The courier contract renews in February.",
+    ]);
+  });
+
   // protects=Stop while the model writes keeps the Blocks already written, as changes, on the Answer's card, and Writing… goes; fails_when=they vanish, or the card has no row for them; no_claim=none beyond protects.
   test("Stop keeps the Blocks already written, as changes on the card", async () => {
     const { core, mind, client } = await setUp(streamingAdd(new Promise(() => undefined)));
