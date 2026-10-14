@@ -16,7 +16,7 @@ export const EDIT_INSTRUCTIONS = [
   "The paragraphs it sits in are between <context> and </context>: they are there for meaning only.",
   "When the passage is part of a sentence, the words just before it are between <before> and </before>, and the words just after it between <after> and </after>. They stay as they are.",
   "",
-  "Reply with the new text of the passage. Then, on a last line of its own, say why you changed it, in a few words in the passage's language and with no markers, between <why> and </why>, such as <why>Shorter, with the same facts and sources.</why>",
+  "Reply with the new text of the passage. Then, on a last line of its own, say in a few words what is better now, for the reader, in the passage's language, between <why> and </why>, such as <why>Shorter, with the same facts and sources.</why> Don't mention markers there.",
   "Nothing else: no preamble, no other explanation, no quotation marks around the text, no code fence, no Markdown formatting but the paragraph marks below.",
   "- The new text must fit between the words before and after it. Never repeat those words in it.",
   "- Keep every Citation marker, such as [1], and every footnote marker, such as [^1], right after the words it belongs to. Never add a marker the passage doesn't have, and never change a marker's number. Leave a marker out only if the words it belongs to are gone.",
