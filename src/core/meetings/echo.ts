@@ -36,6 +36,15 @@ const TARGET = LEAD;
 const MOVE_AFTER = 40;
 /** Reference kept before the oldest block the filter reads, for moving its window. */
 const HISTORY = MAX_LEAD * ECHO_BLOCK + 16_000;
+/** How often, in blocks, the echo's position is compared with where it was, to measure drift. */
+const DRIFT_EVERY = 32;
+/** How much of the drift measured each time is corrected. */
+const DRIFT_GAIN = 0.3;
+/** The most drift corrected, as a share of a sample per sample: clocks a little apart differ by about 1e-4. */
+const MAX_DRIFT = 1e-3;
+/** The reference is read between its samples, once drift is corrected, through a windowed sinc. */
+const SINC_TAPS = 16;
+const SINC_PHASES = 256;
 
 const PREEMPHASIS = 0.9;
 const MIN_LEAK = 0.005;
@@ -49,6 +58,19 @@ const VAR2_UPDATE = 0.25;
 const VAR_BACKTRACK = 4;
 
 const spectra = (count: number) => Array.from({ length: count }, () => new Float64Array(BINS));
+
+/** For each fraction of a sample, the taps that read the reference that much later than a sample. */
+const SINC = Array.from({ length: SINC_PHASES }, (_, phase) => {
+  const fraction = phase / SINC_PHASES;
+  const half = SINC_TAPS / 2;
+  const taps = Float64Array.from({ length: SINC_TAPS }, (_, t) => {
+    const x = t - (half - 1) - fraction;
+    const sinc = x === 0 ? 1 : Math.sin(Math.PI * x) / (Math.PI * x);
+    return sinc * (0.5 + 0.5 * Math.cos((Math.PI * x) / (half + 0.5)));
+  });
+  const sum = taps.reduce((total, tap) => total + tap, 0);
+  return taps.map((tap) => tap / sum);
+});
 
 export function createEchoCanceller() {
   const fft = createRealFft(WINDOW);
@@ -106,8 +128,16 @@ export function createEchoCanceller() {
   let screwedUp = 0;
   let count = 0;
   let nearEnd = 0;
+  let strongest = 0;
   let lastMicrophone = 0;
   let lastEcho = 0;
+  /** How much later than its stamps the reference is read, in samples, to make up for drift. */
+  let tau = 0;
+  /** How much `tau` grows each sample. */
+  let drift = 0;
+  /** The echo's impulse response around its strongest partition when drift was last measured. */
+  let snapshot: { from: number; lead: number; taps: Float64Array } | null = null;
+  let farBlocks = 0;
 
   function initialProp(): void {
     const decay = Math.exp(-2.4 / PARTITIONS);
@@ -136,6 +166,7 @@ export function createEchoCanceller() {
     screwedUp = 0;
     canAdapt = false;
     nextAt = null;
+    snapshot = null;
     initialProp();
   }
 
@@ -146,11 +177,30 @@ export function createEchoCanceller() {
       : 0;
   };
 
-  /** The pre-emphasised reference from `start`, a window long, into `time`, then its spectrum into partition `slot`. */
+  /**
+   * The pre-emphasised reference from `start`, a window long and read `tau`
+   * samples late, into `time`, then its spectrum into partition `slot`.
+   */
   function referenceSpectrum(start: number, slot: number): void {
-    let previous = referenceAt(start - 1);
+    const late = start - tau;
+    let base = Math.floor(late);
+    let phase = Math.round((late - base) * SINC_PHASES);
+    if (phase === SINC_PHASES) {
+      base++;
+      phase = 0;
+    }
+    const taps = SINC[phase] as Float64Array;
+    const read = (sample: number) => {
+      if (phase === 0) return referenceAt(sample);
+      let value = 0;
+      for (let t = 0; t < SINC_TAPS; t++) {
+        value += (taps[t] as number) * referenceAt(sample + t - (SINC_TAPS / 2 - 1));
+      }
+      return value;
+    };
+    let previous = read(base - 1);
     for (let i = 0; i < WINDOW; i++) {
-      const value = referenceAt(start + i);
+      const value = read(base + i);
       time[i] = value - PREEMPHASIS * previous;
       previous = value;
     }
@@ -212,7 +262,7 @@ export function createEchoCanceller() {
    */
   function follow(at: number): void {
     if (!adapted) return;
-    let strongest = 0;
+    strongest = 0;
     let peak = 0;
     let total = 0;
     for (let j = 0; j < PARTITIONS; j++) {
@@ -247,6 +297,46 @@ export function createEchoCanceller() {
     davg1 = davg2 = dvar1 = dvar2 = 0;
   }
 
+  /**
+   * Compares the echo's impulse response around its strongest partition with
+   * where it was `DRIFT_EVERY` blocks ago. When the two clocks run a little
+   * apart, the echo slides along the filter faster than it can follow; the
+   * reference is then read later or earlier at the rate it slid.
+   */
+  function measureDrift(): void {
+    const from = Math.max(0, Math.min(PARTITIONS - 3, strongest - 1));
+    const taps = new Float64Array(3 * ECHO_BLOCK);
+    for (let j = 0; j < 3; j++) {
+      fft.inverse(fRe[from + j] as Float64Array, fIm[from + j] as Float64Array, time);
+      taps.set(time.subarray(0, ECHO_BLOCK), j * ECHO_BLOCK);
+    }
+    const before = snapshot;
+    snapshot = { from, lead, taps };
+    const active = farBlocks >= DRIFT_EVERY / 2;
+    farBlocks = 0;
+    if (!before || before.from !== from || before.lead !== lead || !active) return;
+    const correlation = (lag: number) => {
+      let sum = 0;
+      for (let t = Math.max(0, lag); t < taps.length + Math.min(0, lag); t++) {
+        sum += (taps[t] as number) * (before.taps[t - lag] as number);
+      }
+      return sum;
+    };
+    const lags = [-3, -2, -1, 0, 1, 2, 3].map(correlation);
+    let best = 3;
+    for (let i = 0; i < lags.length; i++)
+      if ((lags[i] as number) > (lags[best] as number)) best = i;
+    const energy = Math.sqrt(correlation(0) * before.taps.reduce((sum, tap) => sum + tap * tap, 0));
+    if (best === 0 || best === lags.length - 1 || (lags[best] as number) < 0.98 * energy) return;
+    const left = lags[best - 1] as number;
+    const middle = lags[best] as number;
+    const right = lags[best + 1] as number;
+    const curvature = left - 2 * middle + right;
+    const slid = best - 3 + (curvature < 0 ? (left - right) / (2 * curvature) : 0);
+    drift += (DRIFT_GAIN * slid) / (DRIFT_EVERY * ECHO_BLOCK);
+    drift = Math.max(-MAX_DRIFT, Math.min(MAX_DRIFT, drift));
+  }
+
   /** The reference's spectra as the block at `at` expects to find them, before it adds its own. */
   function reload(at: number): void {
     for (let j = 0; j < PARTITIONS; j++) referenceSpectrum(windowStart(at, j + 1), j);
@@ -262,6 +352,7 @@ export function createEchoCanceller() {
   }
 
   return {
+    debug: () => ({ drift, tau, lead, adapted, leak }),
     /** The computer's sound, its first sample at `at`, counted in samples of the Meeting's time. */
     reference(samples: Int16Array, at: number): void {
       if (at + samples.length <= referenceFrom) return;
@@ -296,6 +387,15 @@ export function createEchoCanceller() {
         lastMicrophone = input;
       }
 
+      tau += drift * ECHO_BLOCK;
+      // A whole block of drift is the same as reading from one block further along.
+      if (tau >= ECHO_BLOCK) {
+        tau -= ECHO_BLOCK;
+        lead--;
+      } else if (tau <= -ECHO_BLOCK && lead < MAX_LEAD) {
+        tau += ECHO_BLOCK;
+        lead++;
+      }
       for (let j = PARTITIONS; j > 0; j--) {
         (xRe[j] as Float64Array).set(xRe[j - 1] as Float64Array);
         (xIm[j] as Float64Array).set(xIm[j - 1] as Float64Array);
@@ -304,7 +404,8 @@ export function createEchoCanceller() {
       referenceSpectrum(start, 0);
       let sxx = 0;
       for (let i = ECHO_BLOCK; i < WINDOW; i++) sxx += (time[i] as number) ** 2;
-      const heard = referenceEnd >= start + WINDOW;
+      const heard = referenceEnd >= start + WINDOW - Math.min(0, Math.floor(tau)) + SINC_TAPS / 2;
+      if (sxx > (WINDOW * 1000) / 64) farBlocks++;
 
       filterOutput(fRe, fIm, foregroundEcho);
       let sff = 0;
@@ -469,6 +570,8 @@ export function createEchoCanceller() {
       canAdapt = heard;
 
       follow(at + ECHO_BLOCK);
+      if (!adapted) snapshot = null;
+      else if (count % DRIFT_EVERY === 0) measureDrift();
       forget(windowStart(at + ECHO_BLOCK, PARTITIONS) - HISTORY);
       return cleaned;
     },
