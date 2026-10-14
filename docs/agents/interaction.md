@@ -31,6 +31,7 @@ Each rule has a check a reviewer can apply. A UI change that breaks a rule says 
    - Check: the change lists each visible way to reach its action; a second visible way needs a reason.
 10. **Say it plainly.** Use the words in `CONTEXT.md`. Say what happened and what the User can do next. A problem stays where it happened, as one line with one action, until the User dismisses it or fixes the cause; it never closes itself, with an action or without one. Only a confirmation ("Copied", "Added to note") goes by itself, after a few seconds. Esc closes either, the newest first. No toast that goes away for an error.
     - A failure with no line of its own shows as a notice (`useNotices().showError`): the core's own sentence, or plain words in both languages when the sentence is the system's own code ("ENOSPC: no space left on device…"), never Electron's "Error invoking remote method…" or a stack, with the technical text, the system's included, under "Details". `describeError` in `src/renderer/src/errors.ts` is the one place that takes it apart; call `reportError`, don't format an error at the call site.
+    - A notice is drawn above whatever is open, Settings and every other modal dialog included, readable and dismissable: a native modal makes all else inert, so `ErrorNotices` draws inside the top one (`useTopModal`). A failure that belongs to a field or row in a dialog is a line there, not a notice.
     - Check: the copy reads well in English and Chinese, in `CONTEXT.md`'s words; no line shows an error's wrapping or a stack.
 11. **Hold the layout.** Every screen works at every window size the app supports, with and without the viewer open, in English and in Chinese. Text wraps by word, never by letter, and long names truncate with the full name in a tooltip.
     - Check: screenshots at a narrow and a wide window.
@@ -63,6 +64,7 @@ Each rule has a check a reviewer can apply. A UI change that breaks a rule says 
 | Delete | Moves to Recently deleted for 30 days, no question asked | Notion, Granola, Apple Notes, Finder, Feishu |
 | Undo | ⌘Z after any change, not only typing | Linear, Things |
 | Look inside a file | Space shows a quick preview beside the list; Enter opens it in the viewer | Finder's Quick Look |
+| Walk the sidebar | The tree is one Tab stop; ↑ ↓ Home End move, → opens a Folder or steps into it, ← closes it or steps out, typing a name's first letters jumps to it, ⌘⌫ (Delete on Windows and Linux) moves to Recently deleted | Finder's list view, Windows Explorer |
 | Files dropped on the composer | They become Documents and that Question's scope | Claude, ChatGPT |
 | Insert | "/" in the note, matching pinyin for Chinese | Notion, Feishu, Yuque |
 | Changes the AI proposes | Shown as changes in the note; one key accepts all, one rejects all | Cursor, Notion AI |

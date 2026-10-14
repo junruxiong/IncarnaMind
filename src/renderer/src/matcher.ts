@@ -191,6 +191,20 @@ export function joinRanges(ranges: TextRange[]): TextRange[] {
   return out;
 }
 
+/**
+ * Whether `name` starts with what was typed, as a list jumps to a name by its
+ * first letters: written as the name is (case, accents and traditional forms
+ * don't count), or, for a Chinese name, as its pinyin or the pinyin's initials.
+ */
+export function startsWith(typed: string, name: string): boolean {
+  const wanted = fold(typed).text;
+  if (wanted === "") return false;
+  const folded = fold(name);
+  return [folded, folded.pinyin, folded.initials].some((spelling) =>
+    spelling?.text.startsWith(wanted),
+  );
+}
+
 /** How `name` matches the words typed, or null when one of them isn't in it. */
 export function matchName(words: readonly string[], name: string): NameMatch | null {
   if (words.length === 0) return null;

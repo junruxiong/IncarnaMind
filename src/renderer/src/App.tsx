@@ -16,6 +16,7 @@ import { HistoryView } from "./components/history/HistoryView";
 import { InfoPanel } from "./components/InfoPanel";
 import { MeetingNoticeDialog } from "./components/MeetingNoticeDialog";
 import { Peek } from "./components/Peek";
+import { ProblemMark } from "./components/ProblemLine";
 import { ChatGptWelcomeDialog } from "./components/providers/ChatGptSignIn";
 import { RequestedDialogs } from "./components/RequestedDialogs";
 import { ResizeRod } from "./components/ResizeRod";
@@ -66,7 +67,8 @@ export function App() {
   if (status.kind === "loading") return <AppShell />;
   if (status.kind === "failed") {
     return (
-      <p role="alert" className="p-6 text-ui text-danger">
+      <p role="alert" className="p-6 text-ui text-ink">
+        <ProblemMark />
         {t("error.load", { message: status.message })}
       </p>
     );
