@@ -9,7 +9,7 @@ import { TagDot } from "./TagColour";
 const VISIBLE_MARKS = 3;
 const GAP_PX = 2;
 const EDGE_PX = 8;
-/** The tip's left padding: its first dot sits under the row's first. */
+/** The tip's left padding: its first dot sits under the name's start. */
 const PADDING_PX = 8;
 
 /**
@@ -18,13 +18,17 @@ const PADDING_PX = 8;
  * 4px and ringed in the row's background so the overlap reads, then "+N",
  * in the order its Library row shows its chips. Dots only: the names are in
  * the row's tooltip and description, and under the row while the keyboard is
- * on it (`TagNamesTip`).
+ * on it (`TagNamesTip`). While the row shows its actions they step aside.
  */
 export function TagMarks({ chips }: { chips: readonly { tag: Tag; link: DocumentTag }[] }) {
   if (chips.length === 0) return null;
   const more = chips.length - VISIBLE_MARKS;
   return (
-    <span data-testid="tag-marks" aria-hidden="true" className="flex shrink-0 items-center">
+    <span
+      data-testid="tag-marks"
+      aria-hidden="true"
+      className="flex shrink-0 items-center actions-shown:hidden"
+    >
       {chips.slice(0, VISIBLE_MARKS).map(({ tag }, index) => (
         <TagDot
           key={tag.id}
@@ -44,7 +48,7 @@ export function TagMarks({ chips }: { chips: readonly { tag: Tag; link: Document
   );
 }
 
-/** The Document the keyboard is on, if its row shows Tags, and those colours: the tip goes under them. */
+/** The Document the keyboard is on, if its row shows Tags, and its name: the tip goes under it. */
 const useFocusedRow = create<{ shown: { documentId: string; anchor: HTMLElement } | null }>(() => ({
   shown: null,
 }));
@@ -59,9 +63,11 @@ const hide = () => useFocusedRow.setState({ shown: null });
 export const tagNamesTipListProps = {
   onFocus(event: FocusEvent<HTMLElement>) {
     const target = event.target;
-    const anchor = target.matches('[data-testid="open-document"]:focus-visible')
-      ? target.querySelector<HTMLElement>('[data-testid="tag-marks"]')
-      : null;
+    const anchor =
+      target.matches('[data-testid="open-document"]:focus-visible') &&
+      target.querySelector('[data-testid="tag-marks"]')
+        ? target.querySelector<HTMLElement>('[data-testid="row-text"]')
+        : null;
     const documentId = target.closest<HTMLElement>("[data-document-id]")?.dataset.documentId;
     useFocusedRow.setState({ shown: anchor && documentId ? { documentId, anchor } : null });
   },
@@ -133,14 +139,14 @@ export function TagNamesTip() {
 }
 
 /**
- * Under the row, its first colour under the row's first, or above the row
+ * Under the row, its first colour under the name's start, or above the row
  * when the window has no room below; never past the window's edges.
  */
 function placeTip(element: HTMLElement, anchor: HTMLElement): void {
-  const marks = anchor.getBoundingClientRect();
+  const name = anchor.getBoundingClientRect();
   const row = (anchor.closest("li") ?? anchor).getBoundingClientRect();
   const { offsetWidth: width, offsetHeight: height } = element;
-  const left = Math.min(marks.left - PADDING_PX, window.innerWidth - width - EDGE_PX);
+  const left = Math.min(name.left - PADDING_PX, window.innerWidth - width - EDGE_PX);
   const below = row.bottom + GAP_PX;
   element.style.left = `${Math.max(EDGE_PX, left)}px`;
   element.style.top = `${

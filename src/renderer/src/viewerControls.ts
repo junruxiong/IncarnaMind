@@ -4,9 +4,12 @@
  * page URL): open a Document at a page range and quote, as a Citation does
  * from the group the User is in, and, not about the viewer, answer the Skill
  * picker without the system's dialog, add files and folders by path as a drop
- * would, or wait for, slow down and look at what moves.
+ * would, or wait for, slow down and look at what moves, or read the command
+ * registry as data.
  */
 import type { TestHooks } from "../../shared/testHooks";
+import { menuEntries, menuKinds } from "./commands/menus";
+import { COMMAND_GROUPS, commands } from "./commands/registry";
 import { currentTabOf } from "./layoutSlice";
 import { leavingCopies, motionRunning, setMotionSpeed } from "./motion";
 import { interceptSkillPicker } from "./skills";
@@ -30,6 +33,22 @@ export function installTestHooks(): void {
     },
     interceptSkillPicker,
     addPaths: (paths) => useAppStore.getState().addPaths(paths),
+    registry: () => ({
+      groups: COMMAND_GROUPS,
+      menus: Object.fromEntries(menuKinds().map((kind) => [kind, [...menuEntries(kind)]])),
+      commands: Object.fromEntries(
+        commands.all().map((command) => [
+          command.id,
+          {
+            group: command.group,
+            reversible: command.reversible === true,
+            destructive: command.destructive === true,
+            // F2 renames in any list, as the row or the tab list binds it.
+            renames: (command.rowKeys ?? command.shortcut?.keys) === "F2",
+          },
+        ]),
+      ),
+    }),
     motionRunning,
     setMotionSpeed,
     leavingCopies,

@@ -39,6 +39,7 @@ export function createFakeCrossEncoder(options: FakeCrossEncoderOptions = {}): C
   return {
     async load() {
       loaded = true;
+      return { device: "cpu" };
     },
     async score(query, texts) {
       if (!loaded) throw new Error("The fake reranking model isn't loaded.");

@@ -173,21 +173,25 @@ export function ChartPlot({
                 />
               )),
             )}
-            {layout.legendMarks.map((mark) => (
-              <g key={`key-${mark.x}-${mark.y}`}>
-                <rect
-                  className={`chart-fill-${mark.ink}`}
-                  x={mark.x}
-                  y={mark.y}
-                  width={12}
-                  height={12}
-                  rx={2}
-                />
-                <text className="chart-label" x={mark.text.x} y={mark.text.y}>
-                  {mark.text.text}
-                </text>
+            {layout.legendMarks.length > 0 && (
+              <g className="chart-key" data-testid="chart-key">
+                {layout.legendMarks.map((mark) => (
+                  <g key={`key-${mark.x}-${mark.y}`}>
+                    <rect
+                      className={`chart-fill-${mark.ink}`}
+                      x={mark.x}
+                      y={mark.y}
+                      width={12}
+                      height={12}
+                      rx={2}
+                    />
+                    <text className="chart-label" x={mark.text.x} y={mark.text.y}>
+                      {mark.text.text}
+                    </text>
+                  </g>
+                ))}
               </g>
-            ))}
+            )}
           </svg>
           {/* The values, over the drawing: each its own button with its name. */}
           <svg {...size} className="chart-marks" data-testid="chart-plot" data-kind={layout.kind}>

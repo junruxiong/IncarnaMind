@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import type { TabItem } from "../../../../core/api";
 import { shortcutLabel } from "../../commands/keymap";
+import { useDismissOnEscape } from "../../escapeDismiss";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
 import { CloseLineIcon } from "../lineIcons";
@@ -12,7 +13,7 @@ const SHOWN_FOR_MS = 8000;
 /**
  * One line about the tabs, above the sidebar's foot: a tab closed (with
  * Reopen, as ⇧⌘T does), or why a shortcut did nothing. It goes by itself
- * after a few seconds; nothing here is an error.
+ * after a few seconds, or with Esc; nothing here is an error.
  */
 export function TabNoticeLine() {
   const t = useT();
@@ -25,6 +26,7 @@ export function TabNoticeLine() {
     const timer = setTimeout(() => showTabNotice(null), SHOWN_FOR_MS);
     return () => clearTimeout(timer);
   }, [notice, showTabNotice]);
+  useDismissOnEscape(notice !== null, () => showTabNotice(null));
 
   if (!notice) return null;
   return (

@@ -10,6 +10,9 @@
  * out, a context window, and not something else by LiteLLM's mode) with
  * their facts, and lists the ids either source knows as something else
  * (embeddings, speech, images, video, realtime), which the app never offers.
+ * An id LiteLLM says answers by another API than chat (a completion model, or
+ * a chat model that answers in audio) is in neither list: the app doesn't
+ * know it as a chat model, so it waits under "Other models".
  * Where LiteLLM disagrees on Tools, images, JSON schema or limits, it prints
  * the difference and changes nothing: ./src/core/providers/catalog/overrides.ts
  * is where a person corrects a fact.
@@ -50,9 +53,13 @@ const LITELLM_URL =
  * catalog/index). `prices: false` leaves the source's prices out: models.dev gives every
  * price in US dollars, and a provider that bills in yuan has them in overrides.ts instead.
  */
-const SOURCES: Record<string, { modelsDev: string; litellm: string; prices?: false }> = {
+const SOURCES: Record<
+  string,
+  { modelsDev: string; litellm: string; litellmAlso?: string; prices?: false }
+> = {
   anthropic: { modelsDev: "anthropic", litellm: "anthropic" },
-  openai: { modelsDev: "openai", litellm: "openai" },
+  // LiteLLM files OpenAI's completion models under their own provider.
+  openai: { modelsDev: "openai", litellm: "openai", litellmAlso: "text-completion-openai" },
   google: { modelsDev: "google", litellm: "gemini" },
   openrouter: { modelsDev: "openrouter", litellm: "openrouter" },
   mistral: { modelsDev: "mistral", litellm: "mistral" },
@@ -112,6 +119,8 @@ interface ModelsDevModel {
 interface LiteLlmEntry {
   litellm_provider?: string;
   mode?: string;
+  supported_endpoints?: string[];
+  supported_output_modalities?: string[];
   max_input_tokens?: number;
   max_output_tokens?: number;
   supports_function_calling?: boolean;
@@ -133,6 +142,14 @@ function litellmEntries(all: Record<string, LiteLlmEntry>, provider: string) {
   }
   return entries;
 }
+
+/** Whether LiteLLM says the model answers by another API than chat: by completion, or in audio. */
+const answersElsewhere = (entry: LiteLlmEntry | undefined): boolean =>
+  entry?.mode === "completion" ||
+  (entry !== undefined &&
+    CHAT_MODES.has(entry.mode ?? "") &&
+    entry.supported_endpoints?.includes("/v1/chat/completions") === true &&
+    entry.supported_output_modalities?.includes("audio") === true);
 
 /** Whether models.dev's entry is a chat model: text in, text only out, a context window. */
 function readsAndWritesText(model: ModelsDevModel): boolean {
@@ -210,10 +227,17 @@ export function generateModels(
   const found: string[] = [];
   for (const [id, source] of Object.entries(SOURCES)) {
     const entries = litellmEntries(litellm, source.litellm);
+    if (source.litellmAlso) {
+      for (const [modelId, entry] of litellmEntries(litellm, source.litellmAlso)) {
+        if (!entries.has(modelId)) entries.set(modelId, entry);
+      }
+    }
     const models: CatalogModel[] = [];
     const nonChat = new Set<string>();
+    const cannotAnswer: GeneratedProviderModels["cannotAnswer"] = {};
     for (const [modelId, model] of Object.entries(modelsDev[source.modelsDev]?.models ?? {})) {
       const mode = entries.get(modelId)?.mode;
+      if (answersElsewhere(entries.get(modelId))) continue;
       if (!readsAndWritesText(model) || (mode !== undefined && !CHAT_MODES.has(mode))) {
         nonChat.add(modelId);
         continue;
@@ -225,10 +249,17 @@ export function generateModels(
     }
     const chat = new Set(models.map((model) => model.id));
     for (const [modelId, entry] of entries) {
-      if (entry.mode && !CHAT_MODES.has(entry.mode) && !chat.has(modelId)) nonChat.add(modelId);
+      const other = entry.mode && !CHAT_MODES.has(entry.mode) && !answersElsewhere(entry);
+      if (other && !chat.has(modelId)) nonChat.add(modelId);
+      if (answersElsewhere(entry) && !chat.has(modelId)) {
+        cannotAnswer[modelId] = entry.mode === "completion" ? "completion" : "audio";
+      }
     }
     providers[id] = {
       models: models.sort((a, b) => a.id.localeCompare(b.id)),
+      cannotAnswer: Object.fromEntries(
+        Object.entries(cannotAnswer).sort(([a], [b]) => a.localeCompare(b)),
+      ),
       nonChat: [...nonChat].sort((a, b) => a.localeCompare(b)),
     };
   }

@@ -76,6 +76,18 @@ export function whenAnswerShown(editor: Editor, answerId: string, timeoutMs = 3_
   });
 }
 
+/** Puts the cursor at the start of a Block's text, scrolled into view, with the focus in the note. */
+export function cursorAtBlock(editor: Editor, blockId: string): boolean {
+  const block = findBlock(editor.state.doc, blockId);
+  if (!block) return false;
+  const { state, view } = editor;
+  view.dispatch(
+    state.tr.setSelection(TextSelection.near(state.doc.resolve(block.pos + 1))).scrollIntoView(),
+  );
+  view.focus();
+  return true;
+}
+
 /**
  * Puts the Mind's cursor on an empty line right after an Answer, adding the
  * line unless one is there already, so what is typed next goes under it. The

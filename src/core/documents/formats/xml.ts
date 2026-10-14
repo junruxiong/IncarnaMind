@@ -15,6 +15,15 @@ export interface XmlElement {
   name: string;
   attrs: Record<string, string>;
   children: XmlNode[];
+  /**
+   * Where the element is in the text it was parsed from, in UTF-16 code
+   * units: its "<", the end of its start tag, and the end of its end tag (of
+   * its start tag, if it closes itself). Writing back into the text (#105)
+   * splices by them.
+   */
+  start?: number;
+  openEnd?: number;
+  end?: number;
 }
 
 export type XmlNode = XmlElement | string;
@@ -79,6 +88,7 @@ export function parseXml(xml: string): XmlElement {
       if (tag[0] === "/") {
         const name = tag.slice(1).trim();
         if (top().name !== name) throw broken(`a mismatched </${name}>.`);
+        top().end = at;
         stack.pop();
         continue;
       }
@@ -92,7 +102,7 @@ export function parseXml(xml: string): XmlElement {
           attrs[match[1] as string] = decodeEntities(match[2] ?? match[3] ?? "");
         }
       }
-      const element: XmlElement = { name, attrs, children: [] };
+      const element: XmlElement = { name, attrs, children: [], start: lt, openEnd: at, end: at };
       top().children.push(element);
       if (!selfClosing) stack.push(element);
     }
@@ -122,11 +132,31 @@ export const child = (node: XmlElement, name: string): XmlElement | undefined =>
 
 /** Every descendant element with this name, in document order. */
 export function descendants(node: XmlElement, name: string, into: XmlElement[] = []): XmlElement[] {
-  for (const element of elements(node)) {
-    if (is(element, name)) into.push(element);
-    descendants(element, name, into);
-  }
+  for (const element of walk(node)) if (is(element, name)) into.push(element);
   return into;
+}
+
+/**
+ * Every element under a node, in document order, not going inside those
+ * `inside` refuses. A stack, not recursion: a file can nest thousands deep (a
+ * table in a cell of a table…).
+ */
+export function* walk(
+  node: XmlElement,
+  inside: (element: XmlElement) => boolean = () => true,
+): Generator<XmlElement> {
+  const stack: XmlElement[] = [];
+  const enter = (parent: XmlElement) => {
+    const children = elements(parent);
+    for (let index = children.length - 1; index >= 0; index--) {
+      stack.push(children[index] as XmlElement);
+    }
+  };
+  enter(node);
+  for (let element = stack.pop(); element; element = stack.pop()) {
+    yield element;
+    if (inside(element)) enter(element);
+  }
 }
 
 /** All the text under a node, joined. */

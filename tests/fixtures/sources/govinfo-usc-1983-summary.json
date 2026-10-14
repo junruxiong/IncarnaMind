@@ -1,0 +1,31 @@
+{
+  "dateIssued": "2024-12-31",
+  "graphicsInPDF": "false",
+  "heading": "Sec. 1983",
+  "packageId": "USCODE-2024-title42",
+  "packageLink": "https://api.govinfo.gov/packages/USCODE-2024-title42/summary",
+  "collectionCode": "USCODE",
+  "detailsLink": "https://www.govinfo.gov/app/details/USCODE-2024-title42/USCODE-2024-title42-chap21-subchapI-sec1983",
+  "title": "Civil action for deprivation of rights",
+  "leafRange": {
+    "from": "1983",
+    "to": "1983",
+    "type": "section"
+  },
+  "collectionName": "United States Code",
+  "granuleClass": "LEAF",
+  "granuleId": "USCODE-2024-title42-chap21-subchapI-sec1983",
+  "download": {
+    "premisLink": "https://api.govinfo.gov/packages/USCODE-2024-title42/premis",
+    "txtLink": "https://api.govinfo.gov/packages/USCODE-2024-title42/granules/USCODE-2024-title42-chap21-subchapI-sec1983/htm",
+    "zipLink": "https://api.govinfo.gov/packages/USCODE-2024-title42/zip",
+    "modsLink": "https://api.govinfo.gov/packages/USCODE-2024-title42/granules/USCODE-2024-title42-chap21-subchapI-sec1983/mods",
+    "pdfLink": "https://api.govinfo.gov/packages/USCODE-2024-title42/granules/USCODE-2024-title42-chap21-subchapI-sec1983/pdf"
+  },
+  "relatedLink": "https://api.govinfo.gov/related/USCODE-2024-title42-chap21-subchapI-sec1983",
+  "docClass": "USCODE",
+  "lastModified": "2026-03-12T04:07:11Z",
+  "category": "Bills and Statutes",
+  "granuleNumber": " ",
+  "granulesLink": "https://api.govinfo.gov/packages/USCODE-2024-title42/granules?offsetMark=*&pageSize=100"
+}

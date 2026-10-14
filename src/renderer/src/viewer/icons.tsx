@@ -18,11 +18,11 @@ function Stroke({ strokeWidth = 1.75, ...props }: IconProps) {
   );
 }
 
-/** A box with a narrow column on its left: the outline panel. */
+/** A list, as the outline is a Document's headings; Show sidebar's is a window with a pane. */
 export const OutlineToggleIcon = (props: IconProps) => (
   <Stroke {...props}>
-    <rect x="3" y="4" width="18" height="16" rx="2" />
-    <path d="M9 4v16" />
+    <path d="M9.5 6.5h10.5M9.5 12h10.5M9.5 17.5h10.5" />
+    <path d="M4.5 6.5h.01M4.5 12h.01M4.5 17.5h.01" />
   </Stroke>
 );
 

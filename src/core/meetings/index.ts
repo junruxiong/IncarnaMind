@@ -594,7 +594,7 @@ export function createMeetings(options: MeetingsOptions) {
       if (!capture) throw new InvalidInputError("This copy of IncarnaMind can't record audio.");
       const { mindId } = parseInput(input);
       if (mindId !== undefined && (typeof mindId !== "string" || !options.mindExists(mindId))) {
-        throw new NotFoundError("That Mind doesn't exist or has been deleted.");
+        throw new NotFoundError({ key: "error.mind.notFound" });
       }
       if (
         typeof mindId === "string" &&

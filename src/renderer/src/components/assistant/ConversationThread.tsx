@@ -4,9 +4,9 @@ import { mindName } from "../../../../shared/naming";
 import { type AddTarget, addAnswer } from "../../addToNote";
 import { answerBlocks } from "../../answerBlocks";
 import { selectedNotes } from "../../answerEditors";
-import { askedFromLine, stepsScope } from "../../assistantContext";
+import { readsLine, stepsScope } from "../../assistantContext";
 import { readMindHandle } from "../../commands/handles";
-import { composerScope, useComposer } from "../../composer";
+import { composerScope, NO_MIND, useComposer } from "../../composer";
 import {
   conversationLabel,
   stopWriting,
@@ -17,12 +17,15 @@ import {
 import { useT } from "../../i18n";
 import { type ScopeChip, scopeChips } from "../../scope";
 import { useAppStore } from "../../store";
+import { interleave, type ThreadStart, threadTasks } from "../../taskGroups";
+import { loadTasks, useTasks } from "../../tasks";
 import { SearchIcon } from "../icons";
 import { SparkLineIcon } from "../lineIcons";
 import { AddToMindPicker } from "./AddToMindPicker";
 import { WritingLine } from "./AnswerActions";
 import { LiveLine } from "./AnswerSteps";
 import { type AnswerKeeping, AssistantAnswer } from "./AssistantAnswer";
+import { TaskProgress } from "./TaskProgress";
 
 /** How long an Answer a link back led to stays flashed. */
 const SOUGHT_MS = 1600;
@@ -36,27 +39,35 @@ const notesOf = (answer: ConversationAnswer) =>
 /**
  * The conversation the assistant shows (#201): the Questions as bubbles at the
  * right, as in Claude and ChatGPT, and the Answers with their steps,
- * Citations, checks and actions (`AssistantAnswer`); empty, where the next
- * Question is asked from and what it searches, and what asking here does. A Question shows
+ * Citations, checks and actions (`AssistantAnswer`); empty, what the next
+ * Question reads and searches, and what asking here does. A Question shows
  * the moment it is sent, with its Answer's first step and Stop under it
  * before the core has checked the model, so asking never looks like nothing
- * happened. It keeps up with an Answer being written while the User is at its
- * foot, and brings an Answer a link back led to into view, flashed.
+ * happened. The Tasks of the Mind it reads show their progress where each
+ * started, by time among the messages (D189). It keeps up with an Answer
+ * being written while the User is at its foot, and brings an Answer a link
+ * back led to into view, flashed.
  */
 export function ConversationThread({ focusedMindId }: { focusedMindId: string | null }) {
   const t = useT();
   const messages = useConversations((state) => state.messages);
   const asking = useConversations((state) => state.asking);
+  const askingQuote = useConversations((state) => state.askingQuote);
   const onItsWay = useAnswerOnItsWay();
   const stopWanted = useConversations((state) => state.stopWanted);
   const sought = useConversations((state) => state.sought);
   const conversation = useOpenConversation();
+  useEffect(loadTasks, []);
+  const allTasks = useTasks((state) => state.tasks);
+  const shownTask = useTasks((state) => state.shown);
+  const thread = useThreadStart(conversation ?? null);
+  const tasks = threadTasks(Object.values(allTasks), focusedMindId, thread, shownTask);
   const focusedMind = useAppStore((state) => state.minds.find((mind) => mind.id === focusedMindId));
   const focusedMindName = focusedMindId
     ? (focusedMind && mindName(focusedMind)) || t("mind.untitled")
     : null;
   const nextScope = useNextScope(focusedMindId);
-  const askedFrom = askedFromLine(t, focusedMind ? focusedMindName : null, nextScope);
+  const reads = readsLine(t, focusedMind ? focusedMindName : null, nextScope);
   const [picking, setPicking] = useState<{
     answer: ConversationAnswer;
     anchor: HTMLElement;
@@ -103,7 +114,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
   }, [sought, messages]);
 
   const add = (answer: ConversationAnswer, target: AddTarget, blocks = notesOf(answer)) =>
-    void addAnswer({ answer, conversation, blocks }, target);
+    void addAnswer({ answer, conversation, blocks }, target, focusedMindId === null);
   const keeping: AnswerKeeping = {
     focusedMindName,
     add(answer) {
@@ -129,17 +140,19 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
     >
       {messages.length === 0 && asking === null && (
         <>
-          <p data-testid="assistant-asked-from" title={askedFrom} className="assistant-asked-from">
-            <SearchIcon aria-hidden="true" className="assistant-asked-from-icon" />
-            <span className="assistant-asked-from-text">{askedFrom}</span>
+          <p data-testid="assistant-reads" title={reads} className="assistant-reads">
+            <SearchIcon aria-hidden="true" className="assistant-reads-icon" />
+            <span className="assistant-reads-text">{reads}</span>
           </p>
           <p data-testid="assistant-empty" className="assistant-empty">
             {t("assistant.empty")}
           </p>
         </>
       )}
-      {messages.map((message) =>
-        message.kind === "question" ? (
+      {interleave(messages, tasks).map((entry) => {
+        if (entry.kind === "task") return <TaskProgress key={entry.task.id} task={entry.task} />;
+        const message = entry.message;
+        return message.kind === "question" ? (
           <QuestionBubble key={message.id} question={message} />
         ) : (
           <AssistantAnswer
@@ -149,9 +162,9 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
             sought={message.id === sought}
             keeping={keeping}
           />
-        ),
-      )}
-      {asking !== null && <QuestionBubble text={asking} />}
+        );
+      })}
+      {asking !== null && <QuestionBubble text={asking} quote={askingQuote} />}
       {onItsWay && (
         // Its line shows at rest, as an Answer's being written does.
         <div
@@ -160,7 +173,14 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
           className="assistant-answer"
         >
           <LiveLine
-            step={{ kind: "searching" }}
+            step={
+              focusedMind
+                ? {
+                    kind: "reading",
+                    mind: { mindId: focusedMind.id, name: mindName(focusedMind), deleted: false },
+                  }
+                : { kind: "searching" }
+            }
             scope={stepsScope(
               t,
               nextScope.filter((chip) => !chip.deleted),
@@ -202,9 +222,18 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
 }
 
 /** A Question the User asked: their words in a bubble at the right, with the Skill forced on it. */
-function QuestionBubble({ question, text }: { question?: ConversationQuestion; text?: string }) {
+function QuestionBubble({
+  question,
+  text,
+  quote,
+}: {
+  question?: ConversationQuestion;
+  text?: string;
+  quote?: string;
+}) {
   const t = useT();
   const skill = question?.forcedSkill ?? null;
+  const about = (question ? question.focus?.selection : quote) ?? "";
   return (
     <div
       data-testid="assistant-question"
@@ -213,6 +242,15 @@ function QuestionBubble({ question, text }: { question?: ConversationQuestion; t
     >
       <p className="assistant-question-bubble">
         <span className="sr-only">{t("assistant.youAsked")}</span>
+        {about.trim() !== "" && (
+          <span
+            data-testid="assistant-question-quote"
+            title={about}
+            className="assistant-question-quote"
+          >
+            <span className="sr-only">{t("assistant.question.quote")}</span>“{about.trim()}”
+          </span>
+        )}
         {skill && (
           <span data-testid="assistant-question-skill" className="assistant-question-skill">
             <SparkLineIcon aria-hidden="true" className="size-3" />
@@ -225,19 +263,48 @@ function QuestionBubble({ question, text }: { question?: ConversationQuestion; t
   );
 }
 
-/** What the next Question searches: the Search scope of the composer of the Mind in focus; none with no Mind. */
+/** What the next Question searches: the Search scope of the composer of the Mind in focus, or of the composer with none. */
 function useNextScope(mindId: string | null): ScopeChip[] {
   const mind = useAppStore((state) => state.minds.find((each) => each.id === mindId));
-  const draft = useComposer((state) => (mindId ? state.drafts[mindId] : undefined));
+  const draft = useComposer((state) => state.drafts[mindId ?? NO_MIND]);
   const folders = useAppStore((state) => state.folders);
   const groups = useAppStore((state) => state.library?.groups);
   const deletedGroups = useAppStore((state) => state.library?.deletedGroups);
   const tags = useAppStore((state) => state.tags);
   const documents = useAppStore((state) => state.documents);
-  if (!mind) return [];
+  if (mindId !== null && !mind) return [];
   const scope = composerScope(
     draft ?? { text: "", scope: null, skill: null, pastes: [] },
-    mind.folderId,
+    mind?.folderId ?? null,
   );
   return scopeChips({ folders, groups, deletedGroups, tags, documents }, scope);
+}
+
+/**
+ * When the thread on screen began, and the Tasks it has shown running, for
+ * the Tasks it shows: its conversation's start, or, for a new chat, when it
+ * opened. A conversation that a new chat on screen became, with its first
+ * Question, keeps the new chat's start and Tasks, so a Task started before
+ * that Question stays where it was.
+ */
+function useThreadStart(conversation: { id: string; createdAt: string } | null): ThreadStart {
+  const id = conversation?.id ?? null;
+  const [thread, setThread] = useState(() => ({
+    id,
+    start: {
+      since: conversation?.createdAt ?? new Date().toISOString(),
+      seen: new Set<string>(),
+    },
+  }));
+  if (thread.id === id) return thread.start;
+  const born = conversation !== null && thread.id === null;
+  const start: ThreadStart = born
+    ? {
+        since:
+          thread.start.since < conversation.createdAt ? thread.start.since : conversation.createdAt,
+        seen: thread.start.seen,
+      }
+    : { since: conversation?.createdAt ?? new Date().toISOString(), seen: new Set() };
+  setThread({ id, start });
+  return start;
 }

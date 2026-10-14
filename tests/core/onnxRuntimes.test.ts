@@ -14,6 +14,10 @@ const MODEL = fileURLToPath(
 );
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
+// Both native runtimes have to load for real, in a child process: that is what the test is about,
+// so it can't be stubbed. It only stops a hang; a busy machine takes longer than vitest's 5 s (#583).
+const RUNNER_LIMIT = 120_000;
+
 /** Runs the model with onnxruntime-node on 512 samples of silence: its outputs' names. */
 const ORT_RUN = `
   const ort = await import("onnxruntime-node");
@@ -53,7 +57,9 @@ function inOneProcess(...steps: string[]): string[] {
   return JSON.parse(output.trim().split("\n").at(-1) ?? "[]") as string[];
 }
 
-test("onnxruntime-node and sherpa-onnx-node's ONNX Runtime work in one process, onnxruntime-node loaded first", () => {
+test("onnxruntime-node and sherpa-onnx-node's ONNX Runtime work in one process, onnxruntime-node loaded first", {
+  timeout: RUNNER_LIMIT,
+}, () => {
   expect(inOneProcess(ORT_RUN, SHERPA_RUN, ORT_RUN)).toEqual([
     "ort:new_c,new_h,prob",
     "sherpa:no speech",
@@ -61,7 +67,9 @@ test("onnxruntime-node and sherpa-onnx-node's ONNX Runtime work in one process, 
   ]);
 });
 
-test("onnxruntime-node and sherpa-onnx-node's ONNX Runtime work in one process, sherpa-onnx-node loaded first", () => {
+test("onnxruntime-node and sherpa-onnx-node's ONNX Runtime work in one process, sherpa-onnx-node loaded first", {
+  timeout: RUNNER_LIMIT,
+}, () => {
   expect(inOneProcess(SHERPA_RUN, ORT_RUN, SHERPA_RUN)).toEqual([
     "sherpa:no speech",
     "ort:new_c,new_h,prob",

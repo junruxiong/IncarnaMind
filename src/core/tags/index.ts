@@ -63,9 +63,9 @@ function parseTagId(id: unknown): string {
 function parseName(name: unknown): string {
   if (typeof name !== "string") throw new InvalidInputError("A Tag's name must be text.");
   const trimmed = name.trim();
-  if (!trimmed) throw new InvalidInputError("A Tag's name can't be empty.");
+  if (!trimmed) throw new InvalidInputError({ key: "error.tag.nameEmpty" });
   if (trimmed.length > MAX_NAME_LENGTH) {
-    throw new InvalidInputError(`A Tag's name can't be longer than ${MAX_NAME_LENGTH} characters.`);
+    throw new InvalidInputError({ key: "error.tag.nameTooLong", values: { max: MAX_NAME_LENGTH } });
   }
   return trimmed;
 }
@@ -81,9 +81,10 @@ function parseDescription(description: unknown): string {
   }
   const trimmed = description.trim();
   if (trimmed.length > MAX_DESCRIPTION_LENGTH) {
-    throw new InvalidInputError(
-      `A Tag's description can't be longer than ${MAX_DESCRIPTION_LENGTH} characters.`,
-    );
+    throw new InvalidInputError({
+      key: "error.tag.descriptionTooLong",
+      values: { max: MAX_DESCRIPTION_LENGTH },
+    });
   }
   return trimmed;
 }
@@ -140,7 +141,7 @@ export function createTags(db: Database, now: () => string) {
     const row = db.get<TagRow>(`SELECT ${COLUMNS} FROM tags WHERE id = ? AND deleted_at IS NULL`, [
       parseTagId(tagId),
     ]);
-    if (!row) throw new NotFoundError("That Tag doesn't exist or has been deleted.");
+    if (!row) throw new NotFoundError({ key: "error.tag.notFound" });
     return toTag(row);
   };
 
@@ -155,7 +156,8 @@ export function createTags(db: Database, now: () => string) {
   /** Refuses a name another live Tag has, ignoring case. */
   const checkUnique = (name: string, exceptId?: string) => {
     const taken = list().find((tag) => tag.id !== exceptId && sameName(tag.name, name));
-    if (taken) throw new InvalidInputError(`There is already a Tag named “${taken.name}”.`);
+    if (taken)
+      throw new InvalidInputError({ key: "error.tag.nameTaken", values: { name: taken.name } });
   };
 
   const liveLink = (documentId: string, tagId: string) =>
@@ -356,7 +358,7 @@ export function createTags(db: Database, now: () => string) {
       return db.transaction(() => {
         const from = get(fromInput);
         const into = get(intoInput);
-        if (from.id === into.id) throw new InvalidInputError("A Tag can't be merged into itself.");
+        if (from.id === into.id) throw new InvalidInputError({ key: "error.tag.mergeIntoItself" });
         // A deleted Document's links are left as they were, for restoring it.
         const rows = db.all<LinkRow & { document_id: string; deleted: number }>(
           `SELECT l.id, l.document_id, l.tag_id, l.source, l.confidence, l.needs_review,

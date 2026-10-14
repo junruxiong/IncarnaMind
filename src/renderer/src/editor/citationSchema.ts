@@ -79,7 +79,11 @@ export const Citation = Node.create<CitationOptions>({
   },
 
   parseHTML() {
-    return [{ tag: `span[data-type="${CITATION_NODE}"]` }];
+    // The footnote list a copy carries (see `addFootnotes`) isn't text to paste.
+    return [
+      { tag: `span[data-type="${CITATION_NODE}"]` },
+      { tag: "div[data-citation-notes]", ignore: true },
+    ];
   },
 
   renderHTML({ node, HTMLAttributes }) {

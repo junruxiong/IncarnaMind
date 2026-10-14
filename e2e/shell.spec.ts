@@ -239,11 +239,11 @@ test("sidebar rows share one text edge, in the Folders view and on disk, a folde
   // Papers, Reports and Other Documents one step in; the Document in 2026 two.
   expect(edges.map((edge) => edge.depth).sort()).toEqual([0, 0, 0, 1, 1, 1, 1, 2]);
 
-  // "All Documents", Settings and Not in a Folder's label share the columns.
+  // "Library", Settings and Not in a Folder's label share the columns.
   const sidebarLeft = (await boxOf(sidebar)).x;
   const allDocuments = window.getByTestId("open-library");
   expect((await boxOf(allDocuments.locator("svg"))).x - sidebarLeft).toBeCloseTo(16, 0);
-  expect((await textLeft(allDocuments.locator("span"))) - sidebarLeft).toBeCloseTo(40, 0);
+  expect((await textLeft(allDocuments.locator("span").first())) - sidebarLeft).toBeCloseTo(40, 0);
   const settings = window.getByTestId("sidebar-footer").getByRole("button", { name: "Settings" });
   expect((await boxOf(settings.locator("svg"))).x - sidebarLeft).toBeCloseTo(16, 0);
   expect((await textLeft(settings.locator("span"))) - sidebarLeft).toBeCloseTo(40, 0);

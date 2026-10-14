@@ -5,7 +5,12 @@ import { PluginKey } from "@tiptap/pm/state";
 import { ReactRenderer } from "@tiptap/react";
 import { Suggestion, type SuggestionProps } from "@tiptap/suggestion";
 import { type Ref, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { QUESTION_BLOCK, type SearchScope } from "../../../core/api";
+import {
+  ANSWER_BLOCK,
+  DOCUMENT_CHIP_NODE,
+  QUESTION_BLOCK,
+  type SearchScope,
+} from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
 import {
   SCOPE_ATTRIBUTES,
@@ -18,6 +23,8 @@ import { DocumentLineIcon, FolderLineIcon, TagLineIcon } from "../components/lin
 import { useT } from "../i18n";
 import { type ScopeChoice, scopeChoices } from "../scope";
 import { useAppStore } from "../store";
+
+const DOCUMENTS_ONLY: readonly ScopeKind[] = ["document"];
 
 /** Moves through a list of choices from the keyboard of the field it opened from. */
 export interface ChoiceListHandle {
@@ -35,17 +42,42 @@ const GROUP_LABELS: Record<ScopeKind, MessageKey> = {
   document: "scope.picker.documents",
 };
 
+const isQuestion = (state: EditorState, pos: number) =>
+  state.doc.resolve(Math.min(pos, state.doc.content.size)).parent.type.name === QUESTION_BLOCK;
+
 /** The Search scope of the Question that holds position `pos`, or none outside a Question. */
 function scopeAt(state: EditorState, pos: number): SearchScope {
   const { parent } = state.doc.resolve(Math.min(pos, state.doc.content.size));
   return searchScopeOf(parent.type.name === QUESTION_BLOCK ? parent.attrs : {});
 }
 
+/** Whether an "@" typed here can name a Document: in the text of a Note, not in code or an Answer. */
+function inNote(state: EditorState, pos: number): boolean {
+  const $pos = state.doc.resolve(pos);
+  if (!$pos.parent.inlineContent || $pos.parent.type.spec.code) return false;
+  for (let depth = $pos.depth; depth > 0; depth--) {
+    if ($pos.node(depth).type.name === ANSWER_BLOCK) return false;
+  }
+  return true;
+}
+
 /**
  * Adds a Folder, Tag or Document to the Search scope of the Question the "@"
- * was typed in, and removes the "@" and what was typed after it (`range`).
+ * was typed in, or in a Note puts a chip naming the Document where it was
+ * typed; and removes the "@" and what was typed after it (`range`).
  */
 function addToScope(editor: Editor, range: Range, choice: ScopeChoice): void {
+  if (!isQuestion(editor.state, range.from)) {
+    editor
+      .chain()
+      .focus()
+      .insertContentAt(range, [
+        { type: DOCUMENT_CHIP_NODE, attrs: { documentId: choice.id, name: choice.name } },
+        { type: "text", text: " " },
+      ])
+      .run();
+    return;
+  }
   editor
     .chain()
     .focus()
@@ -70,7 +102,8 @@ function addToScope(editor: Editor, range: Range, choice: ScopeChoice): void {
  * Typing `@` in a Question (at its start or after a space) opens a picker of
  * Folders, Tags and Documents, filtered by what is typed after it. Arrows
  * choose, Enter or Tab adds the choice to the Question's Search scope, where
- * it shows as a chip; Esc closes.
+ * it shows as a chip; Esc closes. In a Note it offers Documents only, and
+ * the choice becomes a chip in the text that opens the Document.
  */
 export const ScopePicker = Extension.create({
   name: "scopePicker",
@@ -83,9 +116,8 @@ export const ScopePicker = Extension.create({
         editor: this.editor,
         pluginKey: new PluginKey("scopePicker"),
         char: "@",
-        // Only in a Question: elsewhere an "@" is just an "@".
-        allow: ({ state, range }) =>
-          state.doc.resolve(range.from).parent.type.name === QUESTION_BLOCK,
+        // In a Question, or in the text of a Note: in code or an Answer an "@" is just an "@".
+        allow: ({ state, range }) => isQuestion(state, range.from) || inNote(state, range.from),
         // The list reads the Folders, Tags and Documents from the app store itself.
         items: () => [],
         command: ({ editor, range, props: choice }) => addToScope(editor, range, choice),
@@ -129,6 +161,7 @@ function ScopePickerList({ editor, range, query, command, ref }: ScopePickerList
   return (
     <ScopeChoiceList
       scope={scopeAt(editor.state, range.from)}
+      kinds={isQuestion(editor.state, range.from) ? undefined : DOCUMENTS_ONLY}
       query={query}
       onChoose={command}
       ref={ref}
@@ -148,9 +181,12 @@ export function ScopeChoiceList({
   onChoose,
   id,
   onSelect,
+  kinds,
   ref,
 }: {
   scope: SearchScope;
+  /** Only these kinds, e.g. Documents for a chip in a Note; all by default. */
+  kinds?: readonly ScopeKind[];
   query: string;
   onChoose(choice: ScopeChoice): void;
   /** The listbox's id, and its options' (`${id}-${index}`), for a field's `aria-activedescendant`. */
@@ -165,8 +201,12 @@ export function ScopeChoiceList({
   const tags = useAppStore((state) => state.tags);
   const documents = useAppStore((state) => state.documents);
   const library = { folders, groups, tags, documents };
-  const shown = scopeChoices(library, scope, query);
-  const nothing = folders.length + (groups?.length ?? 0) + tags.length + documents.length === 0;
+  const shown = scopeChoices(library, scope, query).filter(
+    (choice) => !kinds || kinds.includes(choice.kind),
+  );
+  const nothing = kinds
+    ? documents.length === 0
+    : folders.length + (groups?.length ?? 0) + tags.length + documents.length === 0;
   // The choice belongs to a query: typing more starts again from the top.
   const [choice, setChoice] = useState({ query, index: 0 });
   const selected = choice.query === query ? Math.min(choice.index, shown.length - 1) : 0;
@@ -203,12 +243,20 @@ export function ScopeChoiceList({
       id={id}
       role="listbox"
       data-testid="scope-picker"
-      aria-label={t("scope.picker.label")}
+      aria-label={t(kinds ? "scope.picker.documents" : "scope.picker.label")}
       className="editor-menu scope-picker"
     >
       {shown.length === 0 && (
         <p className="scope-picker-empty">
-          {t(nothing ? "scope.picker.none" : "scope.picker.empty")}
+          {t(
+            kinds
+              ? nothing
+                ? "editor.chip.picker.none"
+                : "editor.chip.picker.empty"
+              : nothing
+                ? "scope.picker.none"
+                : "scope.picker.empty",
+          )}
         </p>
       )}
       {SCOPE_KINDS.map((kind) => {

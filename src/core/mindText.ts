@@ -10,7 +10,10 @@
  * they appear.
  *
  * Node types are those the editor stores (Tiptap's names, see `noteSchema`),
- * plus Tiptap's tables and images, which are read when a Mind has them.
+ * plus Tiptap's tables and images, which are read when a Mind has them. What a
+ * Word import kept as it is reads as the text it holds or shows (a text box's,
+ * a field's result), a Word footnote as a footnote, and a deletion, a comment
+ * and the invisible marks as nothing (`wordAtomText`).
  *
  * What this version doesn't know:
  *
@@ -26,24 +29,42 @@
  *   a heading is level 1, a list starts at 1, a text attribute is "".
  *
  * Proposals still waiting (see `PROPOSAL_INSERT_MARK`) aren't the Mind's text
- * yet: what one adds is left out, and what one removes is read as it is.
+ * yet: what one adds is left out, and what one removes is read as it is. A
+ * Word export reads them too, for review (`ReadOptions.review`, #107).
  */
 import * as Y from "yjs";
 import { type ChartAttributes, chartSources, chosenSeries, readChart } from "../shared/charts";
+import { cellProblemMessage, comparisonCellOf, comparisonQuestionsOf } from "../shared/comparisons";
+import { type MessageKey, type MessageParams, translate } from "../shared/i18n";
 import { citationLocation } from "../shared/locations";
 import type { TableAlign } from "../shared/markdownTables";
 import { cutTitle } from "../shared/naming";
-import { readProposalAttribute } from "../shared/proposals";
+import {
+  outOfDateProposals,
+  proposalRequestOf,
+  readProposalAttribute,
+  readProposalRef,
+} from "../shared/proposals";
+import { readWordAtom, wordAtomText } from "../shared/wordFiles";
 import {
   ANSWER_BLOCK,
   CHART_NODE,
   CITATION_NODE,
   type CitedWork,
+  COMPARISON_ROW_NODE,
+  COMPARISON_TABLE_NODE,
+  DOCUMENT_CHIP_NODE,
   FOOTNOTE_NODE,
+  GENERATED_MARK,
   PROPOSAL_ATTRIBUTE,
+  PROPOSAL_DELETE_MARK,
   PROPOSAL_INSERT_MARK,
+  type ProposalRequest,
   QUESTION_BLOCK,
   type StyledRun,
+  WORD_ATOM_NODE,
+  WORD_BLOCK_NODE,
+  WORD_CHANGE_ID,
 } from "./api";
 
 export interface Marks {
@@ -63,6 +84,39 @@ export interface Footnote {
   source: string;
   /** The quote wasn't found, or can't be checked: the footnote gets the "[unverified]" marker. */
   unverified: boolean;
+  /** A web page's address, which `source` names: a format with links makes it one. */
+  link?: string;
+  /** Its check failed, which a Word file can say in a comment (#107). */
+  failed?: FailedCheck;
+}
+
+/** How a Citation's check failed (#107). */
+export interface FailedCheck {
+  check: "not-found" | "unsupported" | "contradicted";
+  /** The quote the check looked for. */
+  quote: string | null;
+  /** What the evidence says, when the check of the claim has a line on it. */
+  verdict: string | null;
+}
+
+/** Part of a change still waiting to be accepted (a Proposal), read for review (#107). */
+export interface Pending {
+  /** The Proposal it is part of. */
+  id: string;
+  /** When it was asked for, or made, ISO 8601; null when the Mind doesn't say. */
+  at: string | null;
+  /** Who made it, for someone's change in a Word file (#108); otherwise IncarnaMind's. */
+  by?: string;
+}
+
+/**
+ * What changes still waiting do to some content, read for review
+ * (`ReadOptions.review`): it is what one adds, or what one removes, or both
+ * (words one adds that another removes).
+ */
+export interface Pendings {
+  inserted?: Pending;
+  deleted?: Pending;
 }
 
 export interface Image {
@@ -70,8 +124,14 @@ export interface Image {
   alt: string;
 }
 
-export type Inline =
-  | { kind: "text"; text: string; marks: Marks }
+export type Inline = (
+  | {
+      kind: "text";
+      text: string;
+      marks: Marks;
+      /** AI text (`GENERATED_MARK`), when read for review. */
+      ai?: true;
+    }
   | { kind: "math"; latex: string }
   | { kind: "break" }
   | { kind: "citation"; footnote: Footnote; work: CitedWork }
@@ -85,7 +145,16 @@ export type Inline =
    * Citations written in a citation style (#289) by the exports (./exports/citations), never
    * read from a Mind: one Citation, or several side by side, in the text, or as a note.
    */
-  | { kind: "cite"; runs: StyledRun[]; note: boolean; unverified: boolean };
+  | {
+      kind: "cite";
+      runs: StyledRun[];
+      note: boolean;
+      unverified: boolean;
+      /** The footnotes of its Citations whose check failed. */
+      failed?: Footnote[];
+    }
+) &
+  Pendings;
 
 /** A Bibliography entry, as a citation style writes it: its number set apart, if any, then its text. */
 export interface BibliographyItem {
@@ -115,7 +184,7 @@ export interface TableSlot {
   continued: boolean;
 }
 
-export type Block =
+export type Block = (
   | { kind: "paragraph"; content: Inline[] }
   | { kind: "heading"; level: number; content: Inline[] }
   | { kind: "code"; language: string; code: string }
@@ -141,7 +210,9 @@ export type Block =
     }
   | { kind: "question"; content: Inline[] }
   /** The Bibliography a citation style adds at the end of an export (./exports/citations). */
-  | { kind: "bibliography"; heading: string; items: BibliographyItem[]; hangingIndent: boolean };
+  | { kind: "bibliography"; heading: string; items: BibliographyItem[]; hangingIndent: boolean }
+) &
+  Pendings;
 
 export interface ReadOptions {
   includeQuestions: boolean;
@@ -159,7 +230,80 @@ export interface ReadOptions {
    * decides (./exports/citations).
    */
   trimBeforeFootnote?: boolean;
+  /**
+   * A comparison table's own words (#98): its first column's heading, and what a cell
+   * without an Answer says. Absent: in English.
+   */
+  comparisonText?(key: MessageKey, params?: MessageParams): string;
+  /** Whether a Document was deleted: its comparison table row says its source was removed. */
+  documentRemoved?(documentId: string): boolean;
+  /**
+   * Read for a Word file's review (#107, see `reviewReading`): what changes still
+   * waiting add is read too, and each part of one is marked (`Pendings`), and
+   * AI text is marked `ai`. One of the AI's out of date is read as if it
+   * weren't there, as accepting every change leaves it; someone's change from
+   * the Word file stays theirs to resolve (#108). Absent everywhere else: a
+   * change's words aren't the Mind's until it is accepted.
+   */
+  review?: ReviewReading;
+  /** Set by the reader in an Answer from before AI text was marked, which is the AI's as a whole. */
+  wholeAnswerAi?: boolean;
 }
+
+/** What reading for review needs to know of a Mind's changes (`reviewReading`). */
+export interface ReviewReading {
+  /** The changes out of date that are read as if they weren't there, by id. */
+  stale: ReadonlySet<string>;
+  /** When a request's changes were made, and by whom if not by IncarnaMind. */
+  made(request: string): Omit<Pending, "id">;
+}
+
+/** What a Mind's Blocks need for reading them for review (`ReadOptions.review`). */
+export function reviewReading(blocks: Y.XmlFragment): ReviewReading {
+  const { doc } = blocks;
+  return {
+    stale: new Set([...outOfDateProposals(blocks)].filter((id) => !id.startsWith(WORD_CHANGE_ID))),
+    made: (request) => madeBy(doc ? proposalRequestOf(doc, request) : null),
+  };
+}
+
+/** When a request's changes were made, and by whom if not by IncarnaMind: someone's from a Word file. */
+export function madeBy(made: ProposalRequest | null): Omit<Pending, "id"> {
+  if (made?.source === "word-change") return { at: made.date, by: made.author ?? "" };
+  return { at: made?.createdAt ?? null };
+}
+
+/** The change a mark's or an attribute's value is part of, read for review; none if it is out of date. */
+export function pendingOf(value: unknown, review: ReviewReading | undefined): Pending | undefined {
+  const ref = review ? readProposalRef(value) : null;
+  if (!review || !ref || review.stale.has(ref.id)) return undefined;
+  return { id: ref.id, ...review.made(ref.request) };
+}
+
+/** Whether two things have the same changes still waiting. */
+export const samePendings = (a: Pendings, b: Pendings): boolean =>
+  a.inserted?.id === b.inserted?.id && a.deleted?.id === b.deleted?.id;
+
+/** Whether a change is someone's, from the Word file the Mind was imported from (#108). */
+export const isWordChange = (pending: Pending | undefined): pending is Pending =>
+  pending?.id.startsWith(WORD_CHANGE_ID) === true;
+
+const pendingIn = (value: unknown, options: ReadOptions) => pendingOf(value, options.review);
+
+/**
+ * What a change does to an element: null for one it adds that isn't read
+ * (never, read for review, unless it is out of date).
+ */
+function changeOf(element: Y.XmlElement, options: ReadOptions): Pendings | null {
+  const attribute = readProposalAttribute(element.getAttribute(PROPOSAL_ATTRIBUTE));
+  if (!attribute) return {};
+  const pending = pendingIn(attribute, options);
+  if (attribute.kind === "insert") return pending ? { inserted: pending } : null;
+  return pending ? { deleted: pending } : {};
+}
+
+const withChange = <T extends object>(items: T[], change: Pendings): T[] =>
+  change.inserted || change.deleted ? items.map((item) => ({ ...item, ...change })) : items;
 
 /** A stretch of text with one set of marks, as `Y.XmlText.toDelta()` gives it. */
 interface Run {
@@ -180,7 +324,8 @@ export function readBlocks(parent: Y.XmlFragment | Y.XmlElement, options: ReadOp
  * Answer as its Blocks, and none for a Question that `includeQuestions` leaves out.
  */
 export function readBlock(element: Y.XmlElement, options: ReadOptions): Block[] {
-  return proposedOnly(element) ? [] : readBlockElement(element, options);
+  const change = changeOf(element, options);
+  return change ? withChange(readBlockElement(element, options), change) : [];
 }
 
 /** The first stretch of text in an element: a list's first item, not all its items run together. */
@@ -197,11 +342,17 @@ function firstText(element: Y.XmlElement): string {
 
 /**
  * What a Mind without a title is called: its first line of text, cut as a title.
- * An Answer's text is not the User's, so it isn't read.
+ * An Answer's text, or a comparison table's, is not the User's, so it isn't read.
  */
 export function firstLineOf(blocks: Y.XmlFragment): string {
   for (const block of blocks.toArray()) {
-    if (!(block instanceof Y.XmlElement) || block.nodeName === ANSWER_BLOCK) continue;
+    if (
+      !(block instanceof Y.XmlElement) ||
+      block.nodeName === ANSWER_BLOCK ||
+      block.nodeName === COMPARISON_TABLE_NODE
+    ) {
+      continue;
+    }
     const title = cutTitle(firstText(block));
     if (title !== "") return title;
   }
@@ -256,7 +407,8 @@ function readChildren(
   const blocks: Block[] = [];
   for (const child of children) {
     if (child instanceof Y.XmlElement) {
-      if (!proposedOnly(child)) blocks.push(...readBlockElement(child, options));
+      const change = changeOf(child, options);
+      if (change) blocks.push(...withChange(readBlockElement(child, options), change));
     } else if (child instanceof Y.XmlText) {
       // Text straight in a Block container: keep it as a paragraph.
       const content = readInline([child], options);
@@ -276,6 +428,8 @@ const INLINE_TYPES: ReadonlySet<string> = new Set([
   "image",
   CITATION_NODE,
   FOOTNOTE_NODE,
+  WORD_ATOM_NODE,
+  DOCUMENT_CHIP_NODE,
 ]);
 
 const hasBlockChildren = (element: Y.XmlElement) =>
@@ -297,7 +451,9 @@ function readBlockElement(element: Y.XmlElement, options: ReadOptions): Block[] 
       ];
     case "blockMath":
       return [{ kind: "math", latex: stringAttribute(element, "latex") }];
+    // A checklist reads as a bulleted list: its ticks are for the User, not for what reads the text.
     case "bulletList":
+    case "taskList":
     case "orderedList": {
       const ordered = element.nodeName === "orderedList";
       const start = ordered
@@ -306,7 +462,11 @@ function readBlockElement(element: Y.XmlElement, options: ReadOptions): Block[] 
       const items = element
         .toArray()
         .filter((item): item is Y.XmlElement => item instanceof Y.XmlElement)
-        .map((item) => readChildren(item.toArray(), options));
+        .flatMap((item) => {
+          if (!options.review) return [readChildren(item.toArray(), options)];
+          const change = changeOf(item, options);
+          return change ? [withChange(readChildren(item.toArray(), options), change)] : [];
+        });
       return [{ kind: "list", ordered, start, items }];
     }
     case "blockquote":
@@ -315,16 +475,35 @@ function readBlockElement(element: Y.XmlElement, options: ReadOptions): Block[] 
       return [{ kind: "rule" }];
     case "table":
       return [{ kind: "table", rows: readTable(element, options) }];
+    case COMPARISON_TABLE_NODE:
+      return [{ kind: "table", rows: readComparison(element, options) }];
     case "image":
       return [{ kind: "image", image: readImage(element) }];
     case CHART_NODE:
       return [readChartBlock(element, options)];
+    case WORD_BLOCK_NODE: {
+      // Kept as is from a Word file: its text, a paragraph a line.
+      const text = wordAtomText(readWordAtom(element.getAttributes() as Record<string, unknown>));
+      return text
+        .split("\n")
+        .filter((line) => line.trim() !== "")
+        .map((line) => ({
+          kind: "paragraph",
+          content: [{ kind: "text", text: line, marks: NO_MARKS }],
+        }));
+    }
     case QUESTION_BLOCK:
       return options.includeQuestions
         ? [{ kind: "question", content: readInline(element.toArray(), options) }]
         : [];
     case ANSWER_BLOCK:
-      return readChildren(element.toArray(), options);
+      return readChildren(
+        element.toArray(),
+        options.review &&
+          (element.getAttributes() as Record<string, unknown>).generatedMarks !== true
+          ? { ...options, wholeAnswerAi: true }
+          : options,
+      );
     default:
       // A node type this version doesn't know: its Blocks, or its text.
       if (hasBlockChildren(element)) return readChildren(element.toArray(), options);
@@ -351,6 +530,54 @@ function readTable(table: Y.XmlElement, options: ReadOptions): TableCell[][] {
       });
     }
     if (cells.length > 0) rows.push(cells);
+  }
+  return rows;
+}
+
+/**
+ * A comparison table as a table: a heading row ("Document", then its
+ * Questions), then a row per Document, its name first, each cell its Answer,
+ * or what it says in the Answer's place.
+ */
+function readComparison(table: Y.XmlElement, options: ReadOptions): TableCell[][] {
+  const say = options.comparisonText ?? ((key, params) => translate("en", key, params));
+  const cell = (content: Block[], header = false): TableCell => ({
+    header,
+    colspan: 1,
+    rowspan: 1,
+    align: null,
+    content,
+  });
+  const words = (text: string): Block[] => [
+    { kind: "paragraph", content: [{ kind: "text", text, marks: NO_MARKS }] },
+  ];
+  const questions = comparisonQuestionsOf(table.getAttributes());
+  const rows: TableCell[][] = [
+    [
+      cell(words(say("comparison.document")), true),
+      ...questions.map((question) => cell(words(question.text), true)),
+    ],
+  ];
+  for (const row of table.toArray()) {
+    if (!(row instanceof Y.XmlElement) || row.nodeName !== COMPARISON_ROW_NODE) continue;
+    const name = stringAttribute(row, "documentName");
+    const removed = options.documentRemoved?.(stringAttribute(row, "documentId")) ?? false;
+    const cells = new Map<string, Y.XmlElement>();
+    for (const each of row.toArray()) {
+      if (each instanceof Y.XmlElement) cells.set(stringAttribute(each, "questionId"), each);
+    }
+    rows.push([
+      cell(words(removed ? say("comparison.row.removed", { name }) : name)),
+      ...questions.map((question) => {
+        const element = cells.get(question.id);
+        if (!element) return cell([]);
+        const state = comparisonCellOf(element.getAttributes());
+        if (state.status === "done") return cell(readChildren(element.toArray(), options));
+        if (!state.problem) return cell(words("…"));
+        const { key, params } = cellProblemMessage(state.problem);
+        return cell(words(say(key, params)));
+      }),
+    ]);
   }
   return rows;
 }
@@ -465,6 +692,12 @@ function marksOf(attributes: Record<string, unknown> = {}): Marks {
   };
 }
 
+/** Inline nodes as a paragraph's content reads: what a Word export writes new into an imported paragraph (#105). */
+export const readInlineNodes = (
+  children: readonly (Y.XmlElement | Y.XmlText)[],
+  options: ReadOptions,
+): Inline[] => readInline(children, options);
+
 function readInline(
   children: readonly (Y.XmlElement | Y.XmlText | Y.XmlHook)[],
   options: ReadOptions,
@@ -474,62 +707,106 @@ function readInline(
   for (const child of children) {
     if (child instanceof Y.XmlText) {
       for (const run of child.toDelta() as Run[]) {
-        if (run.attributes && PROPOSAL_INSERT_MARK in run.attributes) continue;
+        const attributes = run.attributes ?? {};
+        const inserted = pendingIn(attributes[PROPOSAL_INSERT_MARK], options);
+        if (PROPOSAL_INSERT_MARK in attributes && !inserted) continue;
         if (typeof run.insert === "string" && run.insert !== "") {
-          content.push({ kind: "text", text: run.insert, marks: marksOf(run.attributes) });
+          const deleted = pendingIn(attributes[PROPOSAL_DELETE_MARK], options);
+          const ai =
+            options.review !== undefined &&
+            (options.wholeAnswerAi === true || GENERATED_MARK in attributes);
+          content.push({
+            kind: "text",
+            text: run.insert,
+            marks: marksOf(run.attributes),
+            ...(ai && { ai: true }),
+            ...(inserted && { inserted }),
+            ...(deleted && { deleted }),
+          });
         }
       }
     } else if (child instanceof Y.XmlElement) {
-      if (proposedOnly(child)) continue;
-      switch (child.nodeName) {
-        case "inlineMath":
-          content.push({ kind: "math", latex: stringAttribute(child, "latex") });
-          break;
-        case "hardBreak":
-          content.push({ kind: "break" });
-          break;
-        case "image":
-          content.push({ kind: "image", image: readImage(child) });
-          break;
-        case CITATION_NODE: {
-          if (options.trimBeforeCitation && !inFootnote) trimTrailingSpace(content);
-          const attributes = child.getAttributes() as Record<string, unknown>;
-          content.push({
-            kind: "citation",
-            footnote: options.footnote(attributes),
-            work: citedWork(attributes),
-          });
-          break;
-        }
-        case FOOTNOTE_NODE: {
-          // A footnote in a footnote, which the editor never makes, is read as its text.
-          if (inFootnote) {
-            const text = plainText(child, true);
-            if (text) content.push({ kind: "text", text, marks: NO_MARKS });
-            break;
-          }
-          if (options.trimBeforeFootnote ?? options.trimBeforeCitation) trimTrailingSpace(content);
-          content.push({ kind: "footnote", content: readInline(child.toArray(), options, true) });
-          break;
-        }
-        default: {
-          // Inline content this version doesn't know: its text.
-          const text = plainText(child);
-          if (text) content.push({ kind: "text", text, marks: NO_MARKS });
-        }
-      }
+      const change = changeOf(child, options);
+      if (change) readInlineElement(child, options, inFootnote, content, change);
     }
   }
   return content;
 }
 
-/** What a citation style needs of a Citation: its Document and its Location. */
+/** An inline node, read into `content`, with what a change still waiting does to it. */
+function readInlineElement(
+  child: Y.XmlElement,
+  options: ReadOptions,
+  inFootnote: boolean,
+  content: Inline[],
+  change: Pendings,
+): void {
+  const add = (inline: Inline) => content.push({ ...inline, ...change });
+  switch (child.nodeName) {
+    case "inlineMath":
+      add({ kind: "math", latex: stringAttribute(child, "latex") });
+      break;
+    case "hardBreak":
+      add({ kind: "break" });
+      break;
+    case "image":
+      add({ kind: "image", image: readImage(child) });
+      break;
+    case WORD_ATOM_NODE: {
+      const atom = readWordAtom(child.getAttributes() as Record<string, unknown>);
+      // A Word file's footnote reads as a footnote, as one the User wrote does.
+      if ((atom.kind === "footnote" || atom.kind === "endnote") && !inFootnote && atom.text) {
+        if (options.trimBeforeFootnote ?? options.trimBeforeCitation) trimTrailingSpace(content);
+        add({ kind: "footnote", content: [{ kind: "text", text: atom.text, marks: NO_MARKS }] });
+        break;
+      }
+      const text = wordAtomText(atom);
+      if (text) add({ kind: "text", text, marks: NO_MARKS });
+      break;
+    }
+    case CITATION_NODE: {
+      if (options.trimBeforeCitation && !inFootnote) trimTrailingSpace(content);
+      const attributes = child.getAttributes() as Record<string, unknown>;
+      add({
+        kind: "citation",
+        footnote: options.footnote(attributes),
+        work: citedWork(attributes),
+      });
+      break;
+    }
+    case FOOTNOTE_NODE: {
+      // A footnote in a footnote, which the editor never makes, is read as its text.
+      if (inFootnote) {
+        const text = plainText(child, true);
+        if (text) add({ kind: "text", text, marks: NO_MARKS });
+        break;
+      }
+      if (options.trimBeforeFootnote ?? options.trimBeforeCitation) trimTrailingSpace(content);
+      add({ kind: "footnote", content: readInline(child.toArray(), options, true) });
+      break;
+    }
+    case DOCUMENT_CHIP_NODE: {
+      // A Document the User named: its name, as text.
+      const name = stringAttribute(child, "name");
+      if (name) add({ kind: "text", text: name, marks: NO_MARKS });
+      break;
+    }
+    default: {
+      // Inline content this version doesn't know: its text.
+      const text = plainText(child);
+      if (text) add({ kind: "text", text, marks: NO_MARKS });
+    }
+  }
+}
+
+/** What a citation style needs of a Citation: its Document, its Location and the version quoted. */
 function citedWork(attributes: Record<string, unknown>): CitedWork {
   const text = (value: unknown) => (typeof value === "string" && value !== "" ? value : null);
   return {
     documentId: text(attributes.documentId),
     documentName: text(attributes.documentName),
     location: citationLocation(attributes),
+    contentHash: text(attributes.contentHash),
   };
 }
 
@@ -548,6 +825,34 @@ function stringAttribute(element: Y.XmlElement, name: string): string {
 }
 
 /**
+ * A Block's words, as search reads them: each paragraph, heading, list item or
+ * cell on a line of its own, so words of two lines never run together, and a
+ * footnote's text on the line after the one its marker is in. What a Proposal
+ * adds is left out, as everywhere.
+ */
+export function blockText(element: Y.XmlElement): string {
+  const lines: string[] = [];
+  const visit = (node: Y.XmlElement) => {
+    if (proposedOnly(node)) return;
+    const children = node.toArray();
+    if (!children.some((child) => child instanceof Y.XmlText)) {
+      for (const child of children) if (child instanceof Y.XmlElement) visit(child);
+      return;
+    }
+    lines.push(plainText(node));
+    for (const child of children) {
+      if (child instanceof Y.XmlElement && child.nodeName === FOOTNOTE_NODE && !proposedOnly(child))
+        lines.push(plainText(child, true));
+    }
+  };
+  visit(element);
+  return lines
+    .map((line) => line.trim())
+    .filter((line) => line !== "")
+    .join("\n");
+}
+
+/**
  * All the text in an element, without marks or structure. A footnote's text
  * isn't part of the line its marker is in, so it is left out, unless `footnotes`.
  */
@@ -563,6 +868,11 @@ export function plainText(element: Y.XmlElement | Y.XmlText, footnotes = false):
       .join("");
   }
   if (!footnotes && element.nodeName === FOOTNOTE_NODE) return "";
+  if (element.nodeName === WORD_ATOM_NODE || element.nodeName === WORD_BLOCK_NODE) {
+    return wordAtomText(readWordAtom(element.getAttributes() as Record<string, unknown>));
+  }
+  // A Document chip is the User's words for a Document: its name is part of the line.
+  if (element.nodeName === DOCUMENT_CHIP_NODE) return stringAttribute(element, "name");
   return element
     .toArray()
     .map((child) =>

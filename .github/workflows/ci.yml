@@ -1,10 +1,12 @@
 name: CI
 
 on:
-  # Pull requests run once, through pull_request; a push runs CI only on main.
+  # Pull requests run once, through pull_request; a push runs CI only on main. The merge queue
+  # runs it again on each queued group, through merge_group, before anything reaches main.
   push:
     branches: [main]
   pull_request:
+  merge_group:
 
 permissions:
   contents: read
@@ -36,21 +38,55 @@ jobs:
       - run: npm run lint
       - run: npm test
 
+  # The Word corpus (eval/word/README.md): every file, its export back into itself after an
+  # edit, its export for review and its export with someone's changes resolved open in LibreOffice
+  # headless, and LibreOffice accepting every change in a fixture shows the Mind's text. Not a required check; it installs LibreOffice,
+  # which the other jobs don't need.
+  word-corpus:
+    name: Word corpus opens in LibreOffice
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      INCARNAMIND_WORD_REQUIRE_LIBREOFFICE: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Install LibreOffice Writer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libreoffice-writer
+      - run: npm run eval:word
+        env:
+          INCARNAMIND_WORD_PDFS: ${{ runner.temp }}/word-exports
+      # How LibreOffice draws each edited export, for a person to look at.
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: word-exports
+          path: ${{ runner.temp }}/word-exports
+          retention-days: 7
+          if-no-files-found: ignore
+
   # Every pull request runs the smoke test on Linux, where runners are plentiful; macOS runs
   # it every night (nightly.yml), for what only macOS has, such as the traffic lights.
   # The suite is split into shards that run at once: as one job it took about 20 minutes, and
   # pull requests merge one at a time, each up to date with main, so that time sets the pace.
   smoke-shard:
-    name: Smoke shard ${{ matrix.shard }}/4 (Linux)
+    name: Smoke shard ${{ matrix.shard }}/8 (Linux)
     # A pull request merges only when it is up to date with main and this passed, so the merge
     # commit's tree is the one already tested. Running it again on main tests nothing new.
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -67,9 +103,12 @@ jobs:
             sleep 20
           done
           exit 1
+      # Chinese faces, as a Linux system with Chinese has (DESIGN.md, Typography): the runner has
+      # none, so a printed PDF would hold no Chinese for the export specs to read back.
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends fonts-noto-cjk
       # The app needs a display: a virtual one, bigger than the window the specs set
       # (e2e/app.ts), at full colour depth. xvfb-run's own default is 640 × 480 at 8 bits.
-      - run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" npm run test:smoke -- --shard=${{ matrix.shard }}/4
+      - run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" npm run test:smoke -- --shard=${{ matrix.shard }}/8
       - name: Upload Playwright traces
         if: failure()
         uses: actions/upload-artifact@v7
@@ -81,7 +120,7 @@ jobs:
   # Branch protection requires this name, so the shards can change without touching it.
   smoke:
     name: Electron smoke test (Linux)
-    if: always() && github.event_name == 'pull_request'
+    if: always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
     needs: smoke-shard
     runs-on: ubuntu-latest
     steps:

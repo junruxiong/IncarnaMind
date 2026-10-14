@@ -9,8 +9,10 @@
  * Measured on an Apple M2 Max, one pair at a time, 20 Passages of about 500
  * tokens per query, in a Node process of its own: mmarco-mMiniLMv2-L12-H384
  * (Apache-2.0, 118M parameters) is 136 MB, about 0.5 s a query, 0.8 GB resident.
+ * Its fp16 file on the GPU reranks keyword search's top 60 about three times
+ * as fast as the int8 file on the CPU (#270).
  */
-import type { EmbeddingModelSource } from "../adapters";
+import type { EmbeddingModelSource, ModelFile, RerankingCheck } from "../adapters";
 
 export interface RerankingModelDefinition {
   /** A short id, e.g. for the evaluation's INCARNAMIND_EVAL_RERANK. */
@@ -26,6 +28,12 @@ export interface RerankingModelDefinition {
   /** The files the runner loads, relative to the model's folder. */
   files: { model: string; tokenizer: string; tokenizerConfig: string };
   source: EmbeddingModelSource;
+  /**
+   * The same model for the GPU (onnxruntime's WebGPU execution provider has no
+   * int8 kernels): its file, from the source's base URL into a folder of its
+   * own, downloaded only on a computer with a GPU adapter, and its check.
+   */
+  gpu?: { folder: string; file: ModelFile; check: RerankingCheck };
 }
 
 /** cross-encoder/mmarco-mMiniLMv2-L12-H384-v1, its sentence-transformers int8 ONNX export (the same file serves every CPU). */
@@ -60,6 +68,25 @@ const MMARCO_MINILM: RerankingModelDefinition = {
         sha256: "e7fbfbfa6347b4e414c1cee50d142e2c2f9a895dad68b068ae83a8b564c3837e",
       },
     ],
+  },
+  gpu: {
+    folder: "mmarco-mMiniLMv2-L12-H384-v1-fp16",
+    // Optimum's O4 export: fp16, with float32 logits.
+    file: {
+      path: "onnx/model_O4.onnx",
+      size: 235_460_006,
+      sha256: "613b96ad598e707de925349280296d3fe0f792a03bb17ff4661b11781380a0c3",
+    },
+    // Scored by onnx/model.onnx (fp32) on the CPU. Texts of different lengths, so the batch is padded.
+    check: {
+      query: "Which city is the capital of France?",
+      texts: [
+        "Cities\nParis is the capital and largest city of France, on the Seine.",
+        "城市\n巴黎是法国的首都和最大城市，位于塞纳河畔。",
+        "Weather\nHeavy rain is expected across the north.",
+      ],
+      scores: [6.4535, 6.3163, -5.7126],
+    },
   },
 };
 

@@ -218,12 +218,20 @@ export function createVersionRetention(db: Database, now: () => string) {
       }
     },
 
-    /** Adds the Units retained in these Documents to `cited`, for a Linked folder being unlinked. */
-    addRetainedUnits(documentIds: ReadonlySet<string>, cited: CitedUnits[]): void {
+    /**
+     * Adds the Units retained in these Documents to `cited`, for a Linked
+     * folder being unlinked; with `kinds`, only those owners of these kinds retain.
+     */
+    addRetainedUnits(
+      documentIds: ReadonlySet<string>,
+      cited: CitedUnits[],
+      kinds?: readonly RetentionKind[],
+    ): void {
       const rows = db.all<Omit<Row, "id" | "location">>(
         `SELECT document_id, content_hash, page_from, page_to FROM retained_versions
-         WHERE deleted_at IS NULL AND document_id IN (SELECT value FROM json_each(?))`,
-        [JSON.stringify([...documentIds])],
+         WHERE deleted_at IS NULL AND document_id IN (SELECT value FROM json_each(?1))
+           AND (?2 IS NULL OR kind IN (SELECT value FROM json_each(?2)))`,
+        [JSON.stringify([...documentIds]), kinds ? JSON.stringify(kinds) : null],
       );
       for (const row of rows) {
         const units = {

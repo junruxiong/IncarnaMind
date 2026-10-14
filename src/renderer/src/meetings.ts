@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { create } from "zustand";
 import type { AudioSource, Meeting, Settings } from "../../core/api";
+import { meetingTimeAt } from "../../shared/blockTimes";
 import { core } from "./core";
 import { errorMessage } from "./errors";
+import { translateNow } from "./i18n";
 import { useAppStore } from "./store";
 
 interface MeetingsState {
@@ -45,7 +47,9 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
     try {
       await action();
     } catch (error) {
-      set((state) => ({ problems: { ...state.problems, [meetingId]: errorMessage(error) } }));
+      set((state) => ({
+        problems: { ...state.problems, [meetingId]: errorMessage(error, translateNow) },
+      }));
     }
   };
 
@@ -154,5 +158,5 @@ export function useMeetingTime(meeting: Meeting): number {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [since]);
-  return meeting.recordedMs + (since === null ? 0 : Math.max(0, now - Date.parse(since)));
+  return meetingTimeAt(meeting, now);
 }

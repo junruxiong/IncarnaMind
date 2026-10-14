@@ -99,7 +99,7 @@ function DocumentGone({ quote, reason }: { quote?: string | undefined; reason: G
       const outcome = await locate(document.id);
       setLocated(outcome === "other" ? { kind: "other" } : null);
     } catch (failure) {
-      setLocated({ kind: "failed", reason: errorMessage(failure) });
+      setLocated({ kind: "failed", reason: errorMessage(failure, t) });
     } finally {
       setLocating(false);
     }

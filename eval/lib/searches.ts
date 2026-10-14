@@ -1,10 +1,10 @@
 /**
  * Other ways to find the Passages a reranker sees, with embeddings off:
- * reranked modes reported next to the gate, never gating, to see which
- * recovers the Passages keyword search ranks too low (see `RerankedSearch`
- * in ./retrieval). They were measured against keyword search's top 20, the
- * gate when they were built; keyword search's top 60, which recovered as
- * many as hybrid search, is the gate now (ADR-0009, 2026-10-10). Each builds
+ * reranked modes reported next to the search Tool's order, never gating, to
+ * see which recovers the Passages keyword search ranks too low (see
+ * `RerankedSearch` in ./retrieval). They were measured against keyword
+ * search's top 20; its top 60, which recovered as many as hybrid search, was
+ * the gate from 2026-10-10 to 2026-10-12 (ADR-0009). Each builds
  * at most 20 candidates, like keyword search's top 20, unless it is about
  * more candidates:
  *

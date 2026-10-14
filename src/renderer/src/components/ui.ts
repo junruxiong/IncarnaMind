@@ -62,8 +62,8 @@ export const noticeClass =
 /** What went wrong, in words. */
 export const errorTextClass = "text-[13px] leading-5 break-words text-danger";
 
-/** Something that worked, e.g. a connection test. */
-export const successTextClass = "text-[13px] leading-5 text-success";
+/** Something that worked, e.g. a connection test: in ink, as green is for Citation checks. */
+export const successTextClass = "text-[13px] leading-5 text-ink-secondary";
 
 // Dialogs ------------------------------------------------------------------
 
@@ -164,6 +164,17 @@ export const rowTextClass = "text-[13px] leading-5 text-ink-secondary";
 /** A row's status, on the right. */
 export const rowStatusClass = "text-[13px] leading-5 text-ink-meta";
 
+/**
+ * A few choices side by side, one chosen (radio buttons that look like a
+ * segmented control): `segmentedClass` on the group, `segmentClass` on each
+ * `<label>`, whose radio input is visually hidden (`sr-only`).
+ */
+export const segmentedClass =
+  "inline-flex shrink-0 overflow-hidden rounded-md shadow-[inset_0_0_0_1px_var(--color-rule-strong)]";
+
+export const segmentClass =
+  "h-[26px] cursor-default px-2 text-[12px] leading-[26px] whitespace-nowrap text-ink-secondary hover:text-ink has-[:checked]:bg-frame has-[:checked]:font-semibold has-[:checked]:text-ink has-[:focus-visible]:outline-2 has-[:focus-visible]:-outline-offset-2 has-[:focus-visible]:outline-accent";
+
 // Menus ----------------------------------------------------------------------
 
 /** A popover menu's element. */
@@ -175,7 +186,7 @@ export const menuTitleClass = "px-2 pt-1.5 pb-1 text-label font-semibold text-in
 
 /** A menu item: a 28px row, in the menu's ink unless it says otherwise. */
 export const menuItemClass =
-  "flex h-7 w-full items-center gap-2 rounded-md pr-2 text-left outline-none hover:bg-hover focus-visible:bg-hover disabled:text-ink-placeholder disabled:hover:bg-transparent";
+  "flex h-7 w-full items-center gap-2 rounded-md pr-2 text-left -outline-offset-2 hover:bg-hover focus-visible:bg-hover disabled:text-ink-placeholder disabled:hover:bg-transparent";
 
 /**
  * A menu item that can't be used right now (`aria-disabled`): it stays in

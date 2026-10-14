@@ -2,7 +2,8 @@
  * Electron implementations of the core's adapters. This is the only place that
  * turns Electron APIs into capabilities the core can use.
  */
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
+import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { app, safeStorage, shell } from "electron";
@@ -21,10 +22,12 @@ import {
 } from "../core";
 import { createFakeCapture, type FakeCapture } from "../core/meetings/fakeCapture";
 import type { FakeTranscriberOptions } from "../core/transcription/fake";
+import { createCitedPageCapture } from "./citedPageCapture";
 import { createSentryCrashReporter } from "./crashReports";
 import { createUtilityProcessEmbedder } from "./embedder";
 import { createElectronAudioCapture } from "./meetings/capture";
 import { createElectronPictures } from "./pictures";
+import { createElectronPrinter } from "./printPdf";
 import { createLoginShellProcesses } from "./processes";
 import { createUtilityProcessCrossEncoder } from "./reranker";
 import { loadOsSandbox } from "./sandbox";
@@ -32,6 +35,7 @@ import { createUtilityProcessTextRecognizer } from "./scanReader";
 import { createFileKeychain, SECRETS_FILE, type SecretCipher } from "./secretsFile";
 import { createUtilityProcessTranscriber } from "./transcriber";
 import { createPostHogSender } from "./usageData";
+import { systemUserName } from "./userName";
 
 /**
  * `safeStorage` encrypts with a key held by the OS secret store: the macOS
@@ -278,18 +282,32 @@ function usageDataProject(): { key: string; host: string; testerBuild: boolean }
   return { key, host, testerBuild: tester?.trim() === "1" };
 }
 
-/** Sends usage data, if this copy was built to. The core starts it only while the User agrees. */
+/**
+ * Sends usage data, if this copy was built to. The core starts it only while the User agrees.
+ * A test build lets a test wait for what was captured so far to reach the server
+ * (`globalThis.incarnamindUsageData.flush`), instead of waiting a while and hoping.
+ */
 function createUsageDataSender(): UsageDataSender | undefined {
   const project = usageDataProject();
   if (!project) return undefined;
-  return createPostHogSender({
+  const test = import.meta.env.MODE === "test";
+  const sender = createPostHogSender({
     projectKey: project.key,
     host: project.host,
     testerBuild: project.testerBuild,
     appVersion: app.getVersion(),
     // The smoke tests don't wait half a minute for events.
-    ...(import.meta.env.MODE === "test" && { flushIntervalMs: 500 }),
+    ...(test && { flushIntervalMs: 500 }),
   });
+  if (test) {
+    (globalThis as { incarnamindUsageData?: unknown }).incarnamindUsageData = {
+      flush: async () => {
+        await sender.settled();
+        await sender.flush();
+      },
+    };
+  }
+  return sender;
 }
 
 /**
@@ -302,12 +320,57 @@ const referenceLookupUrl =
 
 /**
  * Test-only launch flag: where Find sources asks its providers (#296), a
- * local server standing in for each provider (OpenAlex, arXiv, PubMed, Crossref, openFDA, DailyMed and ClinicalTrials.gov), each
+ * local server standing in for each provider (OpenAlex, arXiv, PubMed, Crossref, openFDA, DailyMed, ClinicalTrials.gov, the eCFR and GovInfo), each
  * under its own path, so the smoke tests reach none of them. Only a test
  * build honours it.
  */
 const sourceProvidersUrl =
   import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_SOURCES : undefined;
+
+/**
+ * Test-only launch flag: a JSON file of Connectors directory entries (#148)
+ * in place of the list that ships with the app, so the smoke tests connect
+ * an entry served by a local stand-in. Only a test build honours it.
+ */
+function testConnectorDirectory(): unknown {
+  const file =
+    import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_CONNECTOR_DIRECTORY : undefined;
+  return file ? JSON.parse(readFileSync(file, "utf8")) : undefined;
+}
+
+/**
+ * Test-only launch flag: where the Connectors search asks the MCP Registry
+ * (#148), a local stand-in, so the smoke tests reach no registry. Only a
+ * test build honours it.
+ */
+const connectorRegistryUrl =
+  import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_CONNECTOR_REGISTRY : undefined;
+
+/**
+ * Test-only launch flag: the port of a local server standing in for the web
+ * (#128). Web search's fetcher resolves every host to a public address and
+ * connects there, its guard still deciding which hosts it reaches, so the
+ * smoke tests reach no site. Only a test build honours it.
+ */
+function webStandIn(): CoreAdapters["web"] {
+  const port =
+    import.meta.env.MODE === "test" ? Number(process.env.INCARNAMIND_TEST_WEB) : Number.NaN;
+  if (!Number.isInteger(port) || port <= 0) return undefined;
+  return {
+    resolve: async () => [{ address: "93.184.215.14", family: 4 }],
+    connector: (lookup) => (options, callback) => {
+      lookup(options.hostname, {}, (error) => {
+        if (error) {
+          callback(error, null);
+          return;
+        }
+        const socket = connect(port, "127.0.0.1");
+        socket.once("connect", () => callback(null, socket));
+        socket.once("error", (failure) => callback(failure, null));
+      });
+    },
+  };
+}
 
 /**
  * Test-only launch flag: a local server standing in for OpenAI (#122), at
@@ -376,9 +439,14 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
   const usageData = createUsageDataSender();
   const chatGptStore = chatGptTestProfile(log);
   const chatGptPlan = chatGptStandIn();
+  const web = webStandIn();
+  const connectorDirectory = testConnectorDirectory();
   return {
+    ...(connectorDirectory !== undefined && { connectorDirectory }),
+    ...(connectorRegistryUrl && { connectorRegistryUrl }),
     ...(chatGptStore && { chatGptStore }),
     ...(chatGptPlan && { chatGptPlan }),
+    ...(web && { web }),
     ...(crashReporter && { crashReporter }),
     ...(usageData && { usageData }),
     ...(referenceLookupUrl && {
@@ -393,10 +461,13 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
         openfda: `${sourceProvidersUrl}/openfda`,
         dailymed: `${sourceProvidersUrl}/dailymed`,
         clinicaltrials: `${sourceProvidersUrl}/clinicaltrials`,
+        ecfr: `${sourceProvidersUrl}/ecfr`,
+        govinfo: `${sourceProvidersUrl}/govinfo`,
       },
     }),
     log,
     audioCapture: audioCapture(log),
+    capturePage: createCitedPageCapture({ rendererUrl: process.env.ELECTRON_RENDERER_URL }),
     paths: {
       dataDir,
       builtInSkills: builtInSkillsFolder(),
@@ -405,9 +476,12 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
       documents: documentsFolder(dataDir),
     },
     systemLanguages: () => app.getPreferredSystemLanguages(),
+    systemRegion: () => app.getLocaleCountryCode(),
+    systemUserName: () => systemUserName(log),
     keychain: createSafeStorageKeychain(dataDir),
     browser: systemBrowser,
     shell: fileShell,
+    printer: createElectronPrinter({ log, rendererUrl: process.env.ELECTRON_RENDERER_URL }),
     pictures: createElectronPictures(log),
     processes: loginShellProcesses,
     // JavaScript Skill scripts run on Electron's own Node, as plain Node: nothing to install.

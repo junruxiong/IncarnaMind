@@ -5,21 +5,13 @@
  * title for its placeholder, a shape's text and fill. Charts aren't drawn: a
  * chart shows a picture only when the file keeps one as its fallback. Pure.
  */
+import { dataUrlOf, imageTypeOf } from "./images";
 import type { SheetDrawing, SheetPoint } from "./sheetLayout";
 import { child, descendants, elements, is, local, parseXml, textOf, type XmlElement } from "./xml";
 import { resolvePart, type ZipArchive } from "./zip";
 
 /** EMUs (DrawingML's unit) in a CSS pixel. */
 const EMU_PER_PIXEL = 9525;
-
-const IMAGE_TYPES: Readonly<Record<string, string>> = {
-  png: "image/png",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  gif: "image/gif",
-  bmp: "image/bmp",
-  webp: "image/webp",
-};
 
 /** The largest picture shown, and the most picture bytes read from one workbook. */
 const MAX_IMAGE_BYTES = 16 * 1024 * 1024;
@@ -61,7 +53,7 @@ export async function relationshipsOf(
 
 /** A part of the package as a `data:` URL; null for formats a browser can't show, or too large. */
 async function dataUrl(zip: ZipArchive, part: string, budget: ImageBudget): Promise<string | null> {
-  const type = IMAGE_TYPES[part.split(".").pop()?.toLowerCase() ?? ""];
+  const type = imageTypeOf(part);
   if (!type || !zip.has(part)) return null;
   let data: Uint8Array | undefined;
   try {
@@ -71,11 +63,7 @@ async function dataUrl(zip: ZipArchive, part: string, budget: ImageBudget): Prom
   }
   if (!data) return null;
   budget.left -= data.length;
-  let binary = "";
-  for (let at = 0; at < data.length; at += 0x8000) {
-    binary += String.fromCharCode(...data.subarray(at, at + 0x8000));
-  }
-  return `data:${type};base64,${btoa(binary)}`;
+  return dataUrlOf(data, type);
 }
 
 const number = (element: XmlElement | undefined, name: string) =>

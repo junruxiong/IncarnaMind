@@ -1,5 +1,5 @@
 import type { Editor } from "@tiptap/core";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import type * as Y from "yjs";
 import type { MessageKey } from "../../../shared/i18n";
 import {
@@ -89,7 +89,16 @@ function useCountSettings(doc: Y.Doc) {
  * chooses what is counted (words, or characters with or without spaces) and
  * sets the target. Both are remembered for the Mind (`mindWordCount`).
  */
-export function WordCount({ editor, doc }: { editor: Editor; doc: Y.Doc }) {
+export function WordCount({
+  editor,
+  doc,
+  children,
+}: {
+  editor: Editor;
+  doc: Y.Doc;
+  /** What follows the count on its line: the Mind's health (#96). */
+  children?: ReactNode;
+}) {
   const t = useT();
   const language = useLanguage();
   const counts = useCounts(editor);
@@ -251,6 +260,7 @@ export function WordCount({ editor, doc }: { editor: Editor; doc: Y.Doc }) {
           </>
         )}
       </div>
+      {children}
     </div>
   );
 }

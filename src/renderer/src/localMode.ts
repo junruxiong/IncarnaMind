@@ -20,3 +20,21 @@ export async function turnOffLocalMode(): Promise<void> {
     redo: () => setLocalMode(false),
   });
 }
+
+/**
+ * Local mode was just turned on or off from choosing a local model: this
+ * window learns of it, and the change offers Undo, as turning it off does:
+ * at the sidebar's foot, or at `shownAt` where Settings holds the choice.
+ */
+export async function localModeChosen(wasOn: boolean, shownAt?: string): Promise<void> {
+  const embedding = await core.getEmbeddingSettings();
+  useAppStore.setState({ embedding });
+  if (embedding.localOnly === wasOn) return;
+  const now = embedding.localOnly;
+  useUndo.getState().push({
+    message: translateNow(now ? "localMode.turnedOn" : "localMode.turnedOff"),
+    undo: () => setLocalMode(wasOn),
+    redo: () => setLocalMode(now),
+    ...(shownAt && { shownAt }),
+  });
+}

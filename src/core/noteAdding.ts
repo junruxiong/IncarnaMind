@@ -4,12 +4,14 @@
  * in them checked again against its Document there, with a link back to the
  * Answer (`MIND_ORIGINS_FIELD`). What goes in at once is recorded as AI use
  * (#292); Blocks `proposed` (a new Mind made from an Answer) wait as changes
- * to accept or reject, each Block one, and are recorded once accepted. Undo
- * takes them out again. The Mind open in the editor adds at its cursor itself,
- * by the same rules (src/shared/noteBlocks.ts).
+ * to accept or reject, each Block one, and are recorded once accepted. Their
+ * words go in as AI text (`GENERATED_MARK`). Undo takes them out again. The
+ * Mind open in the editor adds at its cursor itself, by the same rules
+ * (src/shared/noteBlocks.ts).
  */
 import { randomUUID } from "node:crypto";
 import * as Y from "yjs";
+import { asGenerated } from "../shared/aiText";
 import { parseOrigin, removeOrigins, setOrigins } from "../shared/blockOrigins";
 import { parseNoteBlocks, recheckCitations, textLength, withoutIds } from "../shared/noteBlocks";
 import { proposalRequestOf, recordProposalRequest } from "../shared/proposals";
@@ -67,7 +69,7 @@ export function createNoteAdding(options: NoteAddingOptions) {
       if (input.origin && !origin) throw new InvalidInputError("That isn't a Block's origin.");
       const model: ChatModelChoice | null = isChatModelChoice(input.model) ? input.model : null;
       const proposed = input.proposed === true;
-      const blocks = await recheckCitations(withoutIds(parsed), options.recheck);
+      const blocks = asGenerated(await recheckCitations(withoutIds(parsed), options.recheck));
       const request = randomUUID();
 
       const blockIds = content.edit(mindId, (note) => {

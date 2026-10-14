@@ -34,6 +34,7 @@ import { fillReference, linkReference, writeUnlinkedReference } from "../referen
 import type { Secrets } from "../secrets";
 import type { Database } from "../storage";
 import type { Tool } from "../tools";
+import { cfrId, parseCfr, parseUsc, uscId } from "./citations";
 import { downloadOpenPdf, fileOf } from "./fullText";
 import { SourceError, type SourceHttp } from "./http";
 import { licenceOf } from "./licences";
@@ -165,8 +166,16 @@ export function parseFindInput(input: unknown): ParsedInput {
   };
 }
 
-/** A DOI, an arXiv ID, a PubMed ID, an NCT number or a label's set id the User typed, which is looked up rather than searched for. */
+/**
+ * A DOI, an arXiv ID, a PubMed ID, an NCT number, a label's set id or a US
+ * citation (a CFR section or part, a US Code section) the User typed, which
+ * is looked up rather than searched for.
+ */
 export function identifierOf(query: string): WorkIdentifier | null {
+  const cfr = parseCfr(query);
+  if (cfr) return { kind: "cfr", id: cfrId(cfr) };
+  const usc = parseUsc(query);
+  if (usc) return { kind: "usc", id: uscId(usc) };
   const doi = normalizeDoi(query);
   if (doi) return { kind: "doi", id: doi.toLowerCase() };
   const arxiv =
@@ -187,6 +196,17 @@ const FAILURES: Record<SourceError["reason"], SourceFailureReason> = {
   "service-error": "service-error",
   "not-found": "service-error",
   "not-open": "service-error",
+  "needs-key": "needs-key",
+  "key-rejected": "key-rejected",
+};
+
+/** Why adding failed, when a provider's answer, not the copy, is the reason: the next copy won't fare better. */
+const ADD_FAILURES: Partial<
+  Record<SourceError["reason"], "rate-limited" | "needs-key" | "key-rejected">
+> = {
+  "rate-limited": "rate-limited",
+  "needs-key": "needs-key",
+  "key-rejected": "key-rejected",
 };
 
 /** How a found work's full text can be had: as its first open copy, the one adding tries first. */
@@ -234,8 +254,14 @@ export function createSources(options: SourcesOptions) {
     access: accessOf(work),
     landingUrl: work.landingUrl,
     notice: work.notice,
+    unofficial: work.unofficial,
     inLibrary: inLibrary(db, work.ids),
   });
+
+  /** A provider that works only with the User's own key, which isn't set: it is off, and nothing is sent to it. */
+  const missingKey = async (provider: SourceProvider): Promise<boolean> =>
+    provider.needsKey !== undefined &&
+    (await options.secrets.tryGet(sourceKeySecret(provider.id))) === null;
 
   const context = (signal: AbortSignal) => ({
     http,
@@ -263,6 +289,13 @@ export function createSources(options: SourcesOptions) {
       count: number,
       failure: SourceProviderOutcome["failure"] = null,
     ): SourceProviderOutcome => ({ id: provider.id, name: provider.name, count, failure });
+    // Before consent: there is nothing to ask about until the User has a key.
+    if (await missingKey(provider)) {
+      return {
+        works: [],
+        outcome: outcome(0, { reason: "needs-key", message: `${provider.name} needs a key.` }),
+      };
+    }
     if (!(await allowed(provider.service))) {
       return {
         works: [],
@@ -421,6 +454,9 @@ export function createSources(options: SourcesOptions) {
         });
       };
     let declined: string | null = null;
+    /** What a provider answered that the User can act on (wait, add a key), when no copy could be had. */
+    let refused: { reason: "rate-limited" | "needs-key" | "key-rejected"; message: string } | null =
+      null;
     for (const copy of work.fullText) {
       if (copy.format === "html") {
         // Open as a web page at its publisher's: saved as Add a web page saves one.
@@ -432,6 +468,10 @@ export function createSources(options: SourcesOptions) {
       const provider = copy.provider === null ? null : byId.get(copy.provider);
       // A copy only its provider can fetch, from a provider not here (or one that fetches none).
       if (provider === undefined || (provider && !provider.fetchFullText)) continue;
+      if (provider && (await missingKey(provider))) {
+        refused = { reason: "needs-key", message: `${provider.name} needs a key.` };
+        continue;
+      }
       if (provider && !(await allowed(provider.service))) {
         declined = provider.name;
         continue;
@@ -446,6 +486,8 @@ export function createSources(options: SourcesOptions) {
         path = await keepCopy(text, work);
       } catch (error) {
         if (!(error instanceof SourceError)) throw error;
+        const reason = ADD_FAILURES[error.reason];
+        if (reason) refused = { reason, message: error.message };
         // That copy can't be had: the next one may be.
         continue;
       }
@@ -460,6 +502,8 @@ export function createSources(options: SourcesOptions) {
         message: `Downloading from ${declined} isn't allowed.`,
       };
     }
+    // Asked to wait, or for a key: nothing is kept, so trying again later adds the text.
+    if (refused && !existing) return { outcome: "failed", ...refused };
     const reason = work.fullText.length > 0 ? "download-failed" : "closed";
     // An open copy that couldn't be had here, the User's browser may: else its page at its publisher.
     const landingUrl =
@@ -497,6 +541,13 @@ export function createSources(options: SourcesOptions) {
   }
 
   return {
+    /** What the "find-sources" flow sends to one service besides: the User's key, to a provider that works only with it. */
+    sendsTo(serviceId: string): DataKind[] {
+      return providers.some((each) => each.needsKey && each.service.id === serviceId)
+        ? ["provider-key"]
+        : [];
+    },
+
     async list(): Promise<SourceProviderInfo[]> {
       return Promise.all(
         providers.map(async (provider) => ({
@@ -512,6 +563,8 @@ export function createSources(options: SourcesOptions) {
               ? ("unset" as const)
               : ("set" as const)
             : ("none" as const),
+          keyNeeded: provider.needsKey !== undefined,
+          keySignUp: provider.needsKey?.signUp ?? null,
         })),
       );
     },

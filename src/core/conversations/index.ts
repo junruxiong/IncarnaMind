@@ -3,12 +3,15 @@
  * SQLite beside the Minds, never as Minds. A conversation is made with its first
  * Question and belongs to the Folder of the Mind that Question was asked from;
  * its messages, Questions and Answers, are rows in order. An Answer is the
- * Markdown the model wrote, with a marker where each Citation goes, and its
- * Citations (with their markers), written as it streams by the Answer code
- * (../answers). Deleting marks the conversation deleted (ADR-0003); deleting it
- * permanently is Recently deleted's (../recentlyDeleted).
+ * Markdown the model wrote, with a marker where each Citation and each
+ * calculated figure goes, and its Citations and figures (with their markers),
+ * written as it streams by the Answer code (../answers). A Question keeps where
+ * the User was in the Mind it was asked from, and its Answer the Mind it read
+ * and its version (#544). Deleting marks the conversation deleted (ADR-0003);
+ * deleting it permanently is Recently deleted's (../recentlyDeleted).
  */
 import { randomUUID } from "node:crypto";
+import { withFigureText } from "../../shared/figureMarkers";
 import { conversationName, cutTitle } from "../../shared/naming";
 import { parseThirdPartySource } from "../../shared/textOrigins";
 import {
@@ -33,6 +36,9 @@ import type {
   ConversationMessage,
   ConversationQuestion,
   MarkedCitation,
+  MarkedFigure,
+  MindFocus,
+  MindRead,
   MovedItem,
   ProviderError,
   ProviderErrorKind,
@@ -43,7 +49,8 @@ import { InvalidInputError, isRecord, NotFoundError } from "../errors";
 import { parseSearchScope } from "../scope";
 import { isChatModelChoice } from "../settings";
 import type { Database, SqlValue } from "../storage";
-import { excerptOf, findTerms, indexText, plainText, searchTerms, termQuery } from "./search";
+import { excerptOf, findTerms, searchTerms, termQuery } from "../wordSearch";
+import { indexText, plainText } from "./search";
 
 /** A Question to add, read from `askInConversation`'s input (see `parseQuestion`). */
 export interface QuestionInput {
@@ -52,19 +59,26 @@ export interface QuestionInput {
   text: string;
   /** The Mind in focus, and its Folder: a new conversation's. Null: none. */
   mind: { id: string; folderId: string | null } | null;
+  /** Where the User was in that Mind; null with none. */
+  focus: MindFocus | null;
   scope: SearchScope | null;
   model: ChatModelChoice | null;
   forcedSkill: string | null;
 }
 
+/** What an Answer records of the Mind it read (#544): which, its version, and whether only part of it. */
+export type AnswerRead = Pick<MindRead, "mindId" | "version" | "partial">;
+
 /** An Answer as it stands, to write (see `writeAnswer`); `outcome` once it has ended. */
 export interface AnswerWrite {
   text: string;
   citations: MarkedCitation[];
+  figures: MarkedFigure[];
   toolCalls: AnswerToolCall[];
   support: CitationSupport | null;
   /** Where the third-party text its Run had read came from (#78); null: none. */
   textOrigin: ThirdPartySource | null;
+  read: AnswerRead | null;
   steps: AnswerSteps;
   outcome?: { status: Exclude<AnswerStatus, "streaming">; error: ProviderError | null };
 }
@@ -105,26 +119,39 @@ interface MessageRow {
   error_message: string | null;
   citation_support: string | null;
   citations: string;
+  figures: string;
   tool_calls: string;
   text_origin: string | null;
   steps: string | null;
+  focus: string | null;
+  read_mind_id: string | null;
+  read_mind_version: string | null;
+  read_partial: number;
   created_at: string;
   updated_at: string;
   /** Joined in: the asked-from Mind's name, and 1 if it is deleted or not on this computer. */
   mind_name: string | null;
   mind_gone: number | null;
+  /** Joined in: the same of the Mind an Answer read. */
+  read_mind_name: string | null;
+  read_mind_gone: number | null;
 }
 
 const CONVERSATION_COLUMNS = "seq, id, title, auto_title, folder_id, created_at, updated_at";
 
 /** A Mind's name as `mindName` gives it: its title, else its first line. */
-const MIND_NAME = "CASE WHEN mind.title <> '' THEN mind.title ELSE mind.auto_title END";
-const MIND_GONE = "mind.id IS NULL OR mind.deleted_at IS NOT NULL";
+const nameOfMind = (alias: string) =>
+  `CASE WHEN ${alias}.title <> '' THEN ${alias}.title ELSE ${alias}.auto_title END`;
+const goneMind = (alias: string) => `${alias}.id IS NULL OR ${alias}.deleted_at IS NOT NULL`;
+const MIND_NAME = nameOfMind("mind");
+const MIND_GONE = goneMind("mind");
 
 const MESSAGE_SELECT = `
-  SELECT msg.*, ${MIND_NAME} AS mind_name, ${MIND_GONE} AS mind_gone
+  SELECT msg.*, ${MIND_NAME} AS mind_name, ${MIND_GONE} AS mind_gone,
+    ${nameOfMind("read_mind")} AS read_mind_name, ${goneMind("read_mind")} AS read_mind_gone
   FROM conversation_messages msg
-  LEFT JOIN minds mind ON mind.id = msg.asked_from_mind_id`;
+  LEFT JOIN minds mind ON mind.id = msg.asked_from_mind_id
+  LEFT JOIN minds read_mind ON read_mind.id = msg.read_mind_id`;
 
 /** The order of a conversation's messages; a sync that brings two at one position orders them by time, then id. */
 const MESSAGE_ORDER = "msg.position, msg.created_at, msg.id";
@@ -158,6 +185,7 @@ const PHASES: Record<AnswerPhase, true> = {
   searching: true,
   writing: true,
   "checking-quotes": true,
+  "checking-figures": true,
 };
 
 const timeOrNull = (value: unknown): string | null =>
@@ -177,7 +205,7 @@ function storedSteps(value: string | null): AnswerSteps | null {
   }
   if (!isRecord(parsed)) return null;
   const phases = Array.isArray(parsed.phases) ? parsed.phases.filter(isRecord) : [];
-  const { reasoning } = parsed;
+  const { reasoning, readShare } = parsed;
   return {
     sentAt: timeOrNull(parsed.sentAt),
     finishedAt: timeOrNull(parsed.finishedAt),
@@ -194,6 +222,7 @@ function storedSteps(value: string | null): AnswerSteps | null {
       typeof reasoning.ms === "number"
         ? { summary: reasoning.summary, ms: reasoning.ms }
         : null,
+    ...(typeof readShare === "number" && readShare >= 0 && readShare <= 1 && { readShare }),
   };
 }
 
@@ -208,6 +237,13 @@ function storedList<T>(value: string): T[] {
   } catch {
     return [];
   }
+}
+
+/** An Answer's text as words are read from it: each figure marker its figure's shown text. */
+function shownText(text: string, figures: readonly MarkedFigure[]): string {
+  if (figures.length === 0) return withFigureText(text, () => null);
+  const byMarker = new Map(figures.map((figure) => [figure.marker, figure]));
+  return withFigureText(text, (marker) => byMarker.get(marker) ?? null);
 }
 
 function storedScope(value: string | null): SearchScope | null {
@@ -227,6 +263,36 @@ const askedFromOf = (row: MessageRow): AskedFrom | null =>
     ? null
     : { mindId: row.asked_from_mind_id, name: row.mind_name ?? "", deleted: row.mind_gone !== 0 };
 
+const readOf = (row: MessageRow): MindRead | null =>
+  row.read_mind_id === null
+    ? null
+    : {
+        mindId: row.read_mind_id,
+        name: row.read_mind_name ?? "",
+        deleted: row.read_mind_gone !== 0,
+        version: row.read_mind_version ?? "",
+        partial: row.read_partial === 1,
+      };
+
+/** Where the User was in a Mind, as stored (JSON); null when there is none or it can't be read. */
+function storedFocus(value: string | null): MindFocus | null {
+  if (value === null) return null;
+  try {
+    return parseFocus(JSON.parse(value));
+  } catch {
+    return null;
+  }
+}
+
+/** A `MindFocus`, or null for anything else. */
+function parseFocus(value: unknown): MindFocus | null {
+  if (!isRecord(value) || typeof value.selection !== "string" || !Array.isArray(value.blockIds)) {
+    return null;
+  }
+  const blockIds = value.blockIds.filter((id): id is string => typeof id === "string" && id !== "");
+  return { selection: value.selection, blockIds };
+}
+
 function toQuestion(row: MessageRow): ConversationQuestion {
   return {
     kind: "question",
@@ -234,6 +300,7 @@ function toQuestion(row: MessageRow): ConversationQuestion {
     conversationId: row.conversation_id,
     text: row.text,
     askedFrom: askedFromOf(row),
+    focus: storedFocus(row.focus),
     scope: storedScope(row.scope),
     model: modelOf(row),
     forcedSkill: row.forced_skill,
@@ -250,6 +317,7 @@ function toAnswer(row: MessageRow): ConversationAnswer {
     questionId: row.question_id ?? "",
     text: row.text,
     citations: storedList<MarkedCitation>(row.citations),
+    figures: storedList<MarkedFigure>(row.figures),
     model: modelOf(row),
     status,
     errorKind:
@@ -258,6 +326,7 @@ function toAnswer(row: MessageRow): ConversationAnswer {
     citationSupport: SUPPORTS.find((each) => each === row.citation_support) ?? null,
     toolCalls: storedList<AnswerToolCall>(row.tool_calls),
     textOrigin: parseThirdPartySource(row.text_origin),
+    read: readOf(row),
     steps: storedSteps(row.steps),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -270,6 +339,13 @@ const toMessage = (row: MessageRow): ConversationMessage | null =>
 
 const messagesOf = (rows: readonly MessageRow[]) =>
   rows.map(toMessage).filter((message): message is ConversationMessage => message !== null);
+
+/** An Answer's `read_mind_id`, `read_mind_version` and `read_partial`. */
+const readColumns = (read: AnswerRead | null): [string | null, string | null, number] => [
+  read?.mindId ?? null,
+  read?.version ?? null,
+  read?.partial ? 1 : 0,
+];
 
 export function createConversations(db: Database, now: () => string) {
   /** Each conversation's Minds asked from, each once, in the order first asked from. */
@@ -321,13 +397,13 @@ export function createConversations(db: Database, now: () => string) {
       `SELECT ${CONVERSATION_COLUMNS} FROM conversations WHERE id = ? AND deleted_at IS NULL`,
       [conversationId],
     );
-    if (!row) throw new NotFoundError("That conversation doesn't exist or has been deleted.");
+    if (!row) throw new NotFoundError({ key: "error.conversation.notFound" });
     return row;
   };
 
   const get = (conversationId: unknown): Conversation => {
     const [conversation] = toConversations([liveRow(conversationId)]);
-    if (!conversation) throw new NotFoundError("That conversation doesn't exist.");
+    if (!conversation) throw new NotFoundError({ key: "error.conversation.notFound" });
     return conversation;
   };
 
@@ -363,12 +439,12 @@ export function createConversations(db: Database, now: () => string) {
     ]);
   };
 
-  /** Indexes a message's text (again): its plain text's words. */
-  const indexMessage = (seq: number, text: string) => {
+  /** Indexes a message's text (again): its plain text's words, its figures as they are shown. */
+  const indexMessage = (seq: number, text: string, figures: readonly MarkedFigure[] = []) => {
     db.run("DELETE FROM conversation_messages_fts WHERE rowid = ?", [BigInt(seq)]);
     db.run("INSERT INTO conversation_messages_fts (rowid, text) VALUES (?, ?)", [
       BigInt(seq),
-      indexText(plainText(text)),
+      indexText(plainText(shownText(text, figures))),
     ]);
   };
 
@@ -380,19 +456,22 @@ export function createConversations(db: Database, now: () => string) {
       text: string;
       questionId?: string;
       askedFrom?: string | null;
+      focus?: MindFocus | null;
       scope?: SearchScope | null;
       model: ChatModelChoice | null;
       forcedSkill?: string | null;
       status?: AnswerStatus;
+      read?: AnswerRead | null;
     },
     at: string,
   ): MessageRow {
     const id = randomUUID();
     db.run(
       `INSERT INTO conversation_messages (id, conversation_id, position, kind, question_id, text,
-         asked_from_mind_id, scope, provider_id, model_id, forced_skill, status, created_at, updated_at)
+         asked_from_mind_id, focus, scope, provider_id, model_id, forced_skill, status,
+         read_mind_id, read_mind_version, read_partial, created_at, updated_at)
        VALUES (?, ?, (SELECT coalesce(max(position), 0) + 1 FROM conversation_messages
-                      WHERE conversation_id = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                      WHERE conversation_id = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         conversationId,
@@ -401,11 +480,13 @@ export function createConversations(db: Database, now: () => string) {
         fields.questionId ?? null,
         fields.text,
         fields.askedFrom ?? null,
+        fields.focus ? JSON.stringify(fields.focus) : null,
         fields.scope ? JSON.stringify(fields.scope) : null,
         fields.model?.providerId ?? null,
         fields.model?.modelId ?? null,
         fields.forcedSkill ?? null,
         fields.status ?? null,
+        ...readColumns(fields.read ?? null),
         at,
         at,
       ],
@@ -425,25 +506,36 @@ export function createConversations(db: Database, now: () => string) {
 
   /** Answers left being written by an earlier run of the app: nothing writes them any more. */
   db.transaction(() => {
-    for (const row of db.all<{ seq: number; text: string }>(
+    for (const row of db.all<{ seq: number; text: string; figures: string }>(
       `UPDATE conversation_messages SET status = 'stopped', updated_at = ?
-       WHERE kind = 'answer' AND status = 'streaming' RETURNING seq, text`,
+       WHERE kind = 'answer' AND status = 'streaming' RETURNING seq, text, figures`,
       [now()],
     )) {
-      indexMessage(row.seq, row.text);
+      indexMessage(row.seq, row.text, storedList<MarkedFigure>(row.figures));
     }
   });
 
-  /** Calls `add` with every Citation kept by an Answer of a conversation not deleted permanently. */
+  /**
+   * Calls `add` with every Citation kept by an Answer of a conversation not
+   * deleted permanently: its own, and those its calculated figures' inputs read.
+   */
   function eachCitation(add: (citation: CitationFields) => void): void {
-    const rows = db.all<{ citations: string }>(
-      `SELECT msg.citations FROM conversation_messages msg
+    const rows = db.all<{ citations: string; figures: string }>(
+      `SELECT msg.citations, msg.figures FROM conversation_messages msg
        JOIN conversations c ON c.id = msg.conversation_id
        WHERE msg.kind = 'answer' AND msg.deleted_at IS NULL AND c.purged_at IS NULL
-         AND msg.citations <> '[]'`,
+         AND (msg.citations <> '[]' OR msg.figures <> '[]')`,
     );
-    for (const row of rows)
+    for (const row of rows) {
       for (const citation of storedList<CitationFields>(row.citations)) add(citation);
+      for (const figure of storedList<MarkedFigure>(row.figures)) {
+        for (const input of Array.isArray(figure.inputs) ? figure.inputs : []) {
+          const unit = input.unitStatement?.citation;
+          if (isRecord(input.citation)) add(input.citation);
+          if (isRecord(unit)) add(unit);
+        }
+      }
+    }
   }
 
   return {
@@ -490,9 +582,9 @@ export function createConversations(db: Database, now: () => string) {
      */
     parseQuestion(input: unknown): QuestionInput {
       if (!isRecord(input)) throw new InvalidInputError("askInConversation expects an object.");
-      const { text, conversationId, mindId, model, forcedSkill } = input;
+      const { text, conversationId, mindId, model, forcedSkill, focus } = input;
       if (typeof text !== "string" || text.trim() === "") {
-        throw new InvalidInputError("Write the Question before asking it.");
+        throw new InvalidInputError({ key: "error.question.empty" });
       }
       let mind: QuestionInput["mind"] = null;
       if (mindId !== undefined && mindId !== null) {
@@ -503,11 +595,15 @@ export function createConversations(db: Database, now: () => string) {
           "SELECT folder_id FROM minds WHERE id = ? AND deleted_at IS NULL",
           [mindId],
         );
-        if (!row) throw new NotFoundError("That Mind doesn't exist or has been deleted.");
+        if (!row) throw new NotFoundError({ key: "error.mind.notFound" });
         mind = { id: mindId, folderId: row.folder_id };
       }
       if (model !== undefined && model !== null && !isChatModelChoice(model)) {
         throw new InvalidInputError("A model must be { providerId, modelId }.");
+      }
+      const where = focus === undefined || focus === null ? null : parseFocus(focus);
+      if (focus !== undefined && focus !== null && where === null) {
+        throw new InvalidInputError("A focus must be { selection, blockIds }.");
       }
       if (
         forcedSkill !== undefined &&
@@ -523,6 +619,7 @@ export function createConversations(db: Database, now: () => string) {
             : liveRow(conversationId).id,
         text: text.trim(),
         mind,
+        focus: mind ? where : null,
         scope: parseSearchScope(input.scope),
         model: model ?? null,
         forcedSkill: typeof forcedSkill === "string" ? forcedSkill : null,
@@ -531,10 +628,11 @@ export function createConversations(db: Database, now: () => string) {
 
     /**
      * Adds a Question, starting its conversation when it has none, and its Answer, being
-     * written with `answerModel`, all in one go. A new conversation is named by the
-     * Question and belongs to the Folder of the Mind in focus, or to none.
+     * written with `answerModel` from the Mind it reads (`read`), all in one go. A new
+     * conversation is named by the Question and belongs to the Folder of the Mind in
+     * focus, or to none.
      */
-    add(input: QuestionInput, answerModel: ChatModelChoice | null): Turn {
+    add(input: QuestionInput, answerModel: ChatModelChoice | null, read: AnswerRead | null): Turn {
       return db.transaction(() => {
         const at = now();
         let conversationId = input.conversationId;
@@ -560,6 +658,7 @@ export function createConversations(db: Database, now: () => string) {
             kind: "question",
             text: input.text,
             askedFrom: input.mind?.id ?? null,
+            focus: input.focus,
             scope: input.scope,
             model: input.model,
             forcedSkill: input.forcedSkill,
@@ -575,6 +674,7 @@ export function createConversations(db: Database, now: () => string) {
             questionId: question.id,
             model: answerModel,
             status: "streaming",
+            read,
           },
           at,
         );
@@ -609,29 +709,40 @@ export function createConversations(db: Database, now: () => string) {
       const conversation = liveRow(input.conversationId);
       const answer = liveMessage(input.answerId);
       if (answer?.kind !== "answer" || answer.conversation_id !== conversation.id) {
-        throw new NotFoundError("That Answer isn't in this conversation.");
+        throw new NotFoundError({ key: "error.answer.notInConversation" });
       }
       const question = liveMessage(answer.question_id);
       if (question?.kind !== "question") {
-        throw new NotFoundError("The Question of this Answer has been deleted.");
+        throw new NotFoundError({ key: "error.answer.questionGone" });
       }
       return { answerId: answer.id, question: toQuestion(question) };
     },
 
-    /** Empties an Answer, where it is, to write it again with `answerModel`. */
-    restartAnswer(answerId: string, answerModel: ChatModelChoice | null): Turn {
+    /** Empties an Answer, where it is, to write it again with `answerModel` from the Mind it reads. */
+    restartAnswer(
+      answerId: string,
+      answerModel: ChatModelChoice | null,
+      read: AnswerRead | null,
+    ): Turn {
       return db.transaction(() => {
         const answer = liveMessage(answerId);
         const question = liveMessage(answer?.question_id);
         if (!answer || !question)
-          throw new NotFoundError("That Answer isn't in this conversation.");
+          throw new NotFoundError({ key: "error.answer.notInConversation" });
         db.run(
-          `UPDATE conversation_messages SET text = '', citations = '[]', tool_calls = '[]',
+          `UPDATE conversation_messages SET text = '', citations = '[]', figures = '[]', tool_calls = '[]',
              status = 'streaming', error_kind = NULL, error_message = NULL,
              citation_support = NULL, text_origin = NULL, steps = NULL, provider_id = ?,
-             model_id = ?, updated_at = ?
+             model_id = ?, read_mind_id = ?, read_mind_version = ?, read_partial = ?,
+             updated_at = ?
            WHERE id = ?`,
-          [answerModel?.providerId ?? null, answerModel?.modelId ?? null, now(), answerId],
+          [
+            answerModel?.providerId ?? null,
+            answerModel?.modelId ?? null,
+            ...readColumns(read),
+            now(),
+            answerId,
+          ],
         );
         db.run("DELETE FROM conversation_messages_fts WHERE rowid = ?", [BigInt(answer.seq)]);
         return turnOf(question, answerId);
@@ -648,16 +759,19 @@ export function createConversations(db: Database, now: () => string) {
       const { outcome } = write;
       db.transaction(() => {
         db.run(
-          `UPDATE conversation_messages SET text = ?, citations = ?, tool_calls = ?,
-             citation_support = ?, text_origin = ?, steps = ?, status = ?, error_kind = ?,
-             error_message = ?, updated_at = ?
+          `UPDATE conversation_messages SET text = ?, citations = ?, figures = ?, tool_calls = ?,
+             citation_support = ?, text_origin = ?, read_mind_id = ?, read_mind_version = ?,
+             read_partial = ?, steps = ?, status = ?, error_kind = ?, error_message = ?,
+             updated_at = ?
            WHERE id = ?`,
           [
             write.text,
             JSON.stringify(write.citations),
+            JSON.stringify(write.figures),
             JSON.stringify(write.toolCalls),
             write.support,
             write.textOrigin,
+            ...readColumns(write.read),
             JSON.stringify(write.steps),
             outcome?.status ?? "streaming",
             outcome?.error?.kind ?? null,
@@ -666,7 +780,7 @@ export function createConversations(db: Database, now: () => string) {
             answerId,
           ],
         );
-        if (outcome) indexMessage(row.seq, write.text);
+        if (outcome) indexMessage(row.seq, write.text, write.figures);
       });
       return toAnswer(storedMessage(answerId));
     },
@@ -797,7 +911,10 @@ export function createConversations(db: Database, now: () => string) {
               {
                 messageId: message.id,
                 kind: message.kind,
-                ...excerptOf(plainText(row.text), terms),
+                ...excerptOf(
+                  plainText(shownText(row.text, storedList<MarkedFigure>(row.figures))),
+                  terms,
+                ),
               },
             ];
           }),
@@ -841,6 +958,9 @@ export function createConversations(db: Database, now: () => string) {
     addCitedUnits(documentIds: ReadonlySet<string>, cited: CitedUnits[]): void {
       eachCitation((citation) => addCitedUnit(citation, documentIds, cited));
     },
+
+    /** Calls `visit` with the attributes of each Citation in the Answers of conversations. */
+    eachCitation,
   };
 }
 

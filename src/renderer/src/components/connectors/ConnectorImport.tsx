@@ -4,11 +4,13 @@ import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { SecretStorageNotice } from "../providers/ProviderForm";
+import { TypingTextarea } from "../TypingTextarea";
 import {
   buttonClass,
   errorTextClass,
   fieldLabelClass,
   ghostButtonClass,
+  hintClass,
   inputClass,
   primaryButtonClass,
   rowTitleClass,
@@ -39,7 +41,7 @@ export function ConnectorImport({ onDone }: { onDone(): void }) {
     try {
       setPreview(await core.previewConnectorImport(text));
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     }
   };
 
@@ -63,7 +65,7 @@ export function ConnectorImport({ onDone }: { onDone(): void }) {
       await core.importConnectors(json);
       onDone();
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     } finally {
       setBusy(false);
     }
@@ -73,7 +75,7 @@ export function ConnectorImport({ onDone }: { onDone(): void }) {
     try {
       setSecretStorage(await core.acceptPlainTextSecretStorage());
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     }
   };
 
@@ -82,7 +84,7 @@ export function ConnectorImport({ onDone }: { onDone(): void }) {
       <p className="text-[13px] leading-5 text-ink-secondary">{t("connectors.import.body")}</p>
       <label className={fieldLabelClass}>
         {t("connectors.import.json")}
-        <textarea
+        <TypingTextarea
           value={json}
           onChange={(event) => {
             setJson(event.target.value);
@@ -133,7 +135,7 @@ export function ConnectorImport({ onDone }: { onDone(): void }) {
                   <span className={`min-w-0 flex-1 truncate ${rowTitleClass}`}>{entry.name}</span>
                   <span
                     className={`shrink-0 text-[13px] leading-5 ${
-                      entry.action === "add" ? "font-semibold text-success" : "text-ink-meta"
+                      entry.action === "add" ? "font-semibold text-ink" : "text-ink-meta"
                     }`}
                   >
                     {t(`connectors.import.action.${entry.action}`)}
@@ -165,7 +167,10 @@ export function ConnectorImport({ onDone }: { onDone(): void }) {
               {t("connectors.import.nothing")}
             </p>
           ) : (
-            <div>
+            <div className="flex flex-col items-start gap-2">
+              <p data-testid="connector-import-sends" className={hintClass}>
+                {t("connectors.import.sends")}
+              </p>
               <button
                 type="button"
                 data-testid="connector-import-confirm"

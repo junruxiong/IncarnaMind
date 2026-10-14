@@ -31,17 +31,23 @@ export interface ClusterPlace {
   signature: string;
 }
 
-/** What a style needs of a Citation: the Document it cites, and where. */
+/** What a style needs of a Citation: the Document it cites, where, and the version quoted. */
 export function citedWorkOf(attributes: CitationAttributes): CitedWork {
   return {
     documentId: attributes.documentId ?? null,
     documentName: attributes.documentName ?? null,
     location: citationLocation(attributes),
+    contentHash: attributes.contentHash ?? null,
   };
 }
 
 const workSignature = (attributes: CitationAttributes) =>
-  JSON.stringify([attributes.documentId, attributes.documentName, citationLocation(attributes)]);
+  JSON.stringify([
+    attributes.documentId,
+    attributes.documentName,
+    citationLocation(attributes),
+    attributes.contentHash,
+  ]);
 
 /** The Mind's clusters, top to bottom. A footnote between two Citations parts them. */
 export function clusterCitations(doc: ProseMirrorNode): CitationCluster[] {

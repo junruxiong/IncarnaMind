@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Document } from "../../../core/api";
 import {
   extractPptx,
@@ -16,6 +16,7 @@ import {
 import { findQuoteInPieces, type TextRange } from "../../../shared/quoteMatch";
 import { useT } from "../i18n";
 import type { ViewerTarget } from "../store";
+import { useCitedArea } from "./citedArea";
 import { FileStates } from "./FileStates";
 import { HighlightedText } from "./highlightedText";
 import {
@@ -215,6 +216,31 @@ function Slides({ loaded, target }: { loaded: Loaded; target: ViewerTarget }) {
       cancelled = true;
     };
   }, [loaded.bytes, drawing, slides, drawn, target.pageFrom]);
+
+  // A cited page drawn to save it (#133): the cited slides, once their pictures are in.
+  const citedFrom = target.pageFrom ?? 1;
+  const citedTo = target.pageTo ?? citedFrom;
+  const citedPictures = useMemo(
+    () =>
+      slides
+        .filter((slide) => slide.number >= citedFrom && slide.number <= citedTo)
+        .flatMap((slide) => {
+          const each = drawn.get(slide.number);
+          return each && !isFailed(each)
+            ? pictureParts(each)
+            : slide.images.map((image) => image.part);
+        }),
+    [slides, drawn, citedFrom, citedTo],
+  );
+  const citedArea = useCallback(() => {
+    const elements: HTMLElement[] = [];
+    for (let number = citedFrom; number <= citedTo; number++) {
+      const element = slideElements.current.get(number);
+      if (element) elements.push(element);
+    }
+    return elements.length > 0 ? elements : null;
+  }, [citedFrom, citedTo]);
+  useCitedArea(viewWidth > 0 && citedPictures.every((part) => images.has(part)), citedArea);
 
   // Each open request goes to its quote, else to its slide, else the top.
   useLayoutEffect(() => {

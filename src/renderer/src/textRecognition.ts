@@ -8,10 +8,8 @@ import { create } from "zustand";
 import type { EmbeddingModelError, EmbeddingModelStatus } from "../../core/api";
 import type { MessageKey, MessageParams } from "../../shared/i18n";
 import { core } from "./core";
+import { downloadProgress } from "./modelDownload";
 import { useAppStore } from "./store";
-
-/** Decimal megabytes, as the other models' downloads are shown. */
-const MEGABYTE = 1_000_000;
 
 const failures: Record<Exclude<EmbeddingModelError["kind"], "load">, MessageKey> = {
   network: "embedding.model.failure.network",
@@ -42,6 +40,8 @@ export interface TextRecognitionStatus {
   testId: "text-recognition-download" | "text-recognition-failed";
   tone: "progress" | "error";
   short: string;
+  /** How far the download has come, kept whole by the status row: "3/22 MB". */
+  figure?: string;
   full: string;
   retry: boolean;
 }
@@ -52,12 +52,12 @@ export function textRecognitionStatus(
   t: (key: MessageKey, params?: MessageParams) => string,
 ): TextRecognitionStatus | null {
   if (model?.state === "downloading") {
-    const downloaded = Math.floor(model.downloadedBytes / MEGABYTE);
-    const total = Math.ceil(model.totalBytes / MEGABYTE);
+    const { downloaded, total, figure } = downloadProgress(model, t);
     return {
       testId: "text-recognition-download",
       tone: "progress",
-      short: t("status.scanModelDownloading", { downloaded, total }),
+      short: t("status.scanModelDownloading"),
+      figure,
       full: t("scan.model.downloading", { downloaded, total }),
       retry: false,
     };

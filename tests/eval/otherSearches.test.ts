@@ -253,14 +253,14 @@ describe("The report of the other searches", () => {
       },
     ],
     summary: {
-      [GATING_MODE]: summary(16, 20, [6, 5]),
-      [rerankMode(model, "keyword")]: summary(15, 19, [6, 4]),
+      [GATING_MODE]: summary(15, 19, [6, 4]),
+      [rerankMode(model, "keyword-60")]: summary(16, 20, [6, 5]),
       [rerankMode(model, "sub-questions")]: summary(15, 19, [6, 4]),
     },
-    rerankers: [info("keyword-60", 3), info("keyword", 2), info("sub-questions", 5)],
+    rerankers: [info("keyword", 2), info("keyword-60", 3), info("sub-questions", 5)],
     candidates: [
-      counts("keyword-60", 58, 39, 13),
       counts("keyword", 19.5, 36, 10),
+      counts("keyword-60", 58, 39, 13),
       counts("sub-questions", 19.8, 36, 10),
     ],
     otherSearches: {
@@ -324,12 +324,12 @@ describe("The report of the other searches", () => {
       const name = model.name;
       expect(markdown).toContain("### Other ways to find the candidates (reported, not gating)");
       expect(markdown).toContain(
-        `| keyword top 60 + ${name} (gating) | 16/20 | 20/20 | 36/40 | 11/15 (6 + 5) | 39/40 | 13/15 | 58.0 | 3 ms | 700 ms | 703 ms |`,
+        `| keyword top 60 + ${name} | 16/20 | 20/20 | 36/40 | 11/15 (6 + 5) | 39/40 | 13/15 | 58.0 | 3 ms | 700 ms | 703 ms |`,
       );
       expect(markdown).toContain(
         `| keyword top 20 + ${name} | 15/20 | 19/20 | 34/40 | 10/15 (6 + 4) | 36/40 | 10/15 | 19.5 | 2 ms | 700 ms | 702 ms |`,
       );
-      // The gate's row first, then the other seven.
+      // The search Tool's reranked order first, then the other seven.
       const header = markdown.findIndex((line) =>
         line.startsWith("| Reranked mode | English | Chinese |"),
       );
@@ -337,10 +337,10 @@ describe("The report of the other searches", () => {
       expect(
         markdown.slice(header + 2, end).map((line) => line.split(" | ")[0]?.replace(/^\| /, "")),
       ).toEqual([
-        `keyword top 60 + ${name} (gating)`,
+        `keyword top 20 + ${name}`,
         ...[
-          "keyword top 20",
           "keyword top 40",
+          "keyword top 60",
           "keyword + feedback terms",
           "keyword + rewrites",
           "keyword + sub-questions",

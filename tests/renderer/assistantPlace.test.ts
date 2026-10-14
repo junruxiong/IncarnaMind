@@ -8,6 +8,7 @@ import {
   FLOAT_MIN,
   floatAt,
   floatRect,
+  foldsInMenu,
   GAP,
   groupsMergedAt,
   HEADER,
@@ -174,5 +175,17 @@ describe("the groups", () => {
     // Folded to the rail, or at the bottom, the room comes back.
     expect(groupsMergedAt(1280, 964)).toBe(false);
     expect(groupsMergedAt(1000, 736)).toBe(false);
+  });
+});
+
+describe("Fold", () => {
+  test("is in ⋯ only on Windows docked right, where the header holds the window's buttons (D189)", () => {
+    expect(foldsInMenu("overlay", "right")).toBe(true);
+    for (const dock of ["left", "bottom", "float"] as const) {
+      expect(foldsInMenu("overlay", dock)).toBe(false);
+    }
+    for (const titleBar of ["inset", "native"] as const) {
+      expect(foldsInMenu(titleBar, "right")).toBe(false);
+    }
   });
 });

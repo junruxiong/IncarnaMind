@@ -7,6 +7,7 @@ import type {
   EmbeddingSettings,
   Examples,
   Folder,
+  FolderMove,
   GettingStarted,
   KeptCitationText,
   LayoutChange,
@@ -32,8 +33,17 @@ import { displayName } from "../../shared/documentNames";
 import type { DocumentLocation } from "../../shared/documentViewer";
 import { type MessageKey, type MessageParams, translate } from "../../shared/i18n";
 import { mindName } from "../../shared/naming";
-import { deleted, renamed, retagged, tagLinks } from "./changes";
+import {
+  deleted,
+  linkedFolderPaused,
+  linkedFolderShown,
+  mindMade,
+  renamed,
+  retagged,
+  tagLinks,
+} from "./changes";
 import { core, files } from "./core";
+import { LIBRARY_DELETED } from "./deletedItems";
 import { applyAssignments, applyDocumentChanges, createDocumentUpdates } from "./documentUpdates";
 import { errorMessage } from "./errors";
 import {
@@ -46,15 +56,20 @@ import {
 } from "./layoutSlice";
 import { type LibraryBridge, mindToAskIn } from "./libraryBridges";
 import { matchesTags, NEEDS_REVIEW } from "./libraryFilters";
+import { folderName as linkedFolderName } from "./linkedFolders";
 import {
   foldersMovedFrom,
   itemsOf,
   type MoveItems,
+  madeMessage,
   movedLocally,
   moveMessage,
   moveName,
   undoMoves,
 } from "./moves";
+import { untitledFolderName } from "./newFolder";
+import { useNotices } from "./notices";
+import { useRequests } from "./requests";
 import { resolveSettingsPage, type SettingsPage } from "./settingsPages";
 import { type Undoable, UndoRefused, useUndo } from "./undo";
 
@@ -83,10 +98,16 @@ export interface ViewerTarget extends DocumentLocation {
  * - "list": from the sidebar, ⌘K or a test, as a preview beside the Mind;
  * - "library": from a Library row in group `from`, as a preview to its right;
  * - "here": a normal tab in group `from` (⌘-click in the Library).
+ *
+ * A Document already open goes to its tab, in any group. `keep`, for
+ * "citation": a preview there is kept (Open the page, in a Citation's card).
  */
 export interface OpenDocumentHow {
   as: "citation" | "list" | "library" | "here";
   from?: string;
+  keep?: boolean;
+  /** "citation": a tab of its own, not a preview the next Citation opened replaces; the focus stays. */
+  stay?: boolean;
 }
 
 interface AppState extends LayoutSlice {
@@ -101,8 +122,6 @@ interface AppState extends LayoutSlice {
   settings: Settings | null;
   /** Whether Questions can be asked. Set once loaded, then follows the core's event. */
   chatReadiness: ChatReadiness | null;
-  /** The last action that failed, shown until dismissed. */
-  actionError: string | null;
   /** Most recently added first. */
   documents: Document[];
   /**
@@ -141,15 +160,18 @@ interface AppState extends LayoutSlice {
    * of them (`NEEDS_REVIEW` stands for a Tag awaiting review). Empty: all.
    */
   tagFilter: readonly string[];
-  /** The Library's Documents the User selected, e.g. to tag them at once. */
-  selectedDocuments: ReadonlySet<string>;
   tagsDialogOpen: boolean;
   library: LibrarySnapshot | null;
+  /**
+   * What the Library was asked to show: "all"; a Folder's id, "unsorted" or
+   * `LIBRARY_DELETED`, whose section the page brings into view (then "all"
+   * again); or "starters", the starter Folders at its top.
+   */
   libraryFilter: string;
   refreshLibrary(): Promise<void>;
   /**
-   * Shows the Library (one tab per window) at a Folder: its tab where it is
-   * open, else a new tab in the focused group, or to the side.
+   * Shows the Library (one tab per window), at a Folder's section if given:
+   * its tab where it is open, else a new tab in the focused group, or to the side.
    */
   openLibrary(filter?: string, options?: { side?: boolean }): void;
   /** Every Skill, in name order, on or off. Set once loaded, then follows the core's event. */
@@ -171,7 +193,8 @@ interface AppState extends LayoutSlice {
   /**
    * Creates a Mind, in a Folder if given, and opens it in a new tab after the
    * shown one, in the focused group or `groupId`, with its title focused, or
-   * with a Question started in it (with a Search scope, if given).
+   * with a Question started in it (with a Search scope, if given). Undo sends it
+   * to Recently deleted; redo brings it back and shows it. Resolves to that change.
    */
   createMind(options?: {
     startQuestion?: boolean;
@@ -179,19 +202,30 @@ interface AppState extends LayoutSlice {
     scope?: SearchScope | null;
     folderId?: string | null;
     groupId?: string;
-  }): Promise<void>;
+  }): Promise<Undoable | undefined>;
   /**
    * Moves Minds and Documents into a Folder, or out of every Folder (null):
    * shown at once, then as the core has it, with "Moved … · Undo" (and ⌘Z).
    * The sidebar's drag and drop and "Move to…" share it.
    */
   moveToFolder(items: MoveItems, folderId: string | null): Promise<void>;
+  /**
+   * Makes "Untitled Folder" (numbered if that is taken) and asks the sidebar to
+   * open its name field. With `items`, the Minds and Documents go into it at
+   * once. One step to undo, with its first name (`nameNewFolder`). Resolves to
+   * the Folder's id, or null if it couldn't be made.
+   */
+  createFolder(items?: MoveItems): Promise<string | null>;
+  /** Names the Folder just made: part of making it, so one Undo takes both back. */
+  nameNewFolder(folderId: string, name: string): Promise<void>;
   /** Renames a Folder, keeping its description. */
   renameFolder(folderId: string, name: string): Promise<void>;
   /** Changes a Folder's name, description or evidence choice, with Undo. Throws what the core throws. */
   editFolder(folderId: string, input: LibraryGroupInput): Promise<void>;
   /** Deletes a Folder, with Undo: its Documents and Minds go to Not in a Folder. */
   deleteFolder(folderId: string): Promise<void>;
+  /** Lists a Mind just made and opens it in a new tab after the shown one, in the focused group or `groupId`. */
+  showNewMind(mind: Mind, groupId?: string): Promise<void>;
   /** Called once the new Mind's title has the focus. */
   titleFocused(): void;
   /** Starts a Question at the end of the open Mind, or of a new Mind if none is open. */
@@ -201,14 +235,16 @@ interface AppState extends LayoutSlice {
   /**
    * "Ask about this Folder" in the Library: a Question with the bridge's
    * Search scope at the end of the most recent Mind (see `mindToAskIn`), or
-   * of a new Mind if there is none, with the cursor in it.
+   * of a new Mind if there is none, with the cursor in it. Resolves to the
+   * change of that new Mind (see `createMind`); a Question in a Mind already
+   * there is the note's own to undo.
    */
-  askAbout(bridge: LibraryBridge): Promise<void>;
+  askAbout(bridge: LibraryBridge): Promise<Undoable | undefined>;
   /**
    * "Start a Mind from this Folder": a new Mind titled as the Library's
    * sheet, whose first Block is a Question with the bridge's Search scope.
    */
-  startMindFrom(bridge: LibraryBridge): Promise<void>;
+  startMindFrom(bridge: LibraryBridge): Promise<Undoable | undefined>;
   /** Opens the example Mind, making the examples again if they were removed. */
   openExamples(): Promise<void>;
   /** Deletes the example Mind and its Documents. */
@@ -249,7 +285,6 @@ interface AppState extends LayoutSlice {
   updateSettings(patch: SettingsPatch): Promise<void>;
   /** Changes pane widths on screen only, e.g. while dragging a divider. */
   previewLayout(layout: Partial<DeviceSettings>): void;
-  dismissActionError(): void;
   /**
    * Adds picked files as Documents. Files already in IncarnaMind, and those
    * it can't take, are named in the footer, once.
@@ -278,7 +313,8 @@ interface AppState extends LayoutSlice {
    */
   locateDocumentFile(id: string): Promise<"cancelled" | "located" | "other">;
   renameDocument(id: string, name: string): Promise<void>;
-  deleteDocument(id: string): Promise<void>;
+  /** To Recently deleted, at once, with one undo line for all of them. */
+  deleteDocuments(ids: readonly string[]): Promise<void>;
   /** Processes a Document that failed again, from its file. */
   retryDocument(id: string): Promise<void>;
   dismissSkippedFiles(): void;
@@ -298,10 +334,13 @@ interface AppState extends LayoutSlice {
   confirmLinkedFolder(layout: LinkedFolderLayout): Promise<void>;
   /** Closes the link dialog without linking. */
   cancelLinkedFolder(): void;
-  /** Pauses or resumes a Linked folder's indexing. */
-  setLinkedFolderPaused(linkedFolderId: string, paused: boolean): Promise<void>;
-  /** Shows a Linked folder as Folders or as a flat list. */
-  setLinkedFolderLayout(linkedFolderId: string, layout: LinkedFolderLayout): Promise<void>;
+  /** Pauses or resumes a Linked folder's indexing, with Undo. Resolves to that change, if it changed anything. */
+  setLinkedFolderPaused(linkedFolderId: string, paused: boolean): Promise<Undoable | undefined>;
+  /** Shows a Linked folder as Folders or as a flat list, with Undo. Resolves to that change, if it changed anything. */
+  setLinkedFolderLayout(
+    linkedFolderId: string,
+    layout: LinkedFolderLayout,
+  ): Promise<Undoable | undefined>;
   /** Downloads a Linked folder's online-only files and indexes them. */
   downloadOnlineOnlyFiles(linkedFolderId: string): Promise<void>;
   /** Shows a Linked folder in the system's file manager. */
@@ -325,9 +364,6 @@ interface AppState extends LayoutSlice {
   removeTagFromDocuments(documentIds: readonly string[], tagId: string): Promise<void>;
   /** Creates a Tag; the list follows the core's event. Throws what the core throws. */
   createTag(name: string, description?: string): Promise<Tag>;
-  /** Selects Documents in the Library, or deselects them. */
-  selectDocuments(documentIds: readonly string[], selected: boolean): void;
-  clearSelection(): void;
   /** Recomputes the automatic Tags of these Documents, or of all of them. */
   retagDocuments(documentIds?: string[]): Promise<void>;
   openTagsDialog(): void;
@@ -458,10 +494,12 @@ export const useAppStore = create<AppState>()((set, get) => {
     try {
       await action();
     } catch (error) {
-      set({ actionError: errorMessage(error) });
+      useNotices.getState().showError(error);
     }
   };
   const push = (change: Undoable) => useUndo.getState().push(change);
+  const showLinked = (linked: LinkedFolder) =>
+    set((state) => ({ linkedFolders: replaceLinked(state.linkedFolders, linked) }));
 
   /**
    * Refuses to put something back in a Folder deleted since, as the core would,
@@ -481,6 +519,20 @@ export const useAppStore = create<AppState>()((set, get) => {
       },
     });
   };
+
+  /** Takes a move back: each Mind and conversation to where it was, each Document's assignment as it was. */
+  const putBack = async (done: FolderMove, names: ReadonlyMap<string, string>) => {
+    refuseIfDeleted(foldersMovedFrom(done), names);
+    for (const back of undoMoves(done)) await move(back.items, back.folderId);
+    for (const document of done.documents)
+      await core.restoreAssignment(document.id, document.previous);
+  };
+
+  /**
+   * The Folder made last, until it is named: its first name is part of making
+   * it, so that replaces its step and one Undo takes both back.
+   */
+  let justMade: { id: string; step: Undoable; stepNamed(name: string): Undoable } | null = null;
 
   /** A Mind renamed from `before`, with Undo, if its title changed. */
   const offerRename = (mind: Mind, before: string) => {
@@ -535,7 +587,7 @@ export const useAppStore = create<AppState>()((set, get) => {
       if (get().linking?.path === path) set({ linking: { path, preview, error: null } });
     } catch (error) {
       if (get().linking?.path === path) {
-        set({ linking: { path, preview: null, error: errorMessage(error) } });
+        set({ linking: { path, preview: null, error: errorMessage(error, t) } });
       }
     }
   };
@@ -611,14 +663,13 @@ export const useAppStore = create<AppState>()((set, get) => {
   };
 
   return {
-    ...createLayoutSlice(set, get, (error) => set({ actionError: errorMessage(error) })),
+    ...createLayoutSlice(set, get, (error) => useNotices.getState().showError(error)),
     status: { kind: "loading" },
     minds: [],
     titleToFocus: null,
     pickingDocuments: false,
     settings: null,
     chatReadiness: null,
-    actionError: null,
     documents: [],
     keptCitationTexts: [],
     skippedFiles: [],
@@ -634,7 +685,6 @@ export const useAppStore = create<AppState>()((set, get) => {
     linkQueue: [],
     tags: [],
     tagFilter: [],
-    selectedDocuments: new Set(),
     tagsDialogOpen: false,
     library: null,
     libraryFilter: "all",
@@ -646,20 +696,14 @@ export const useAppStore = create<AppState>()((set, get) => {
       documentUpdates.flush();
       set({
         library,
-        ...(get().libraryFilter !== "all" &&
-        get().libraryFilter !== "unsorted" &&
-        get().libraryFilter !== "new" &&
+        ...(!["all", "unsorted", "starters", LIBRARY_DELETED].includes(get().libraryFilter) &&
         !library.groups.some((g) => g.id === get().libraryFilter)
           ? { libraryFilter: "all" }
           : {}),
       });
     },
     openLibrary: (filter = "all", options) => {
-      set((state) => ({
-        libraryFilter: filter,
-        // Another Folder: what was selected in this one isn't in view any more.
-        ...(filter !== state.libraryFilter && { selectedDocuments: new Set<string>() }),
-      }));
+      set({ libraryFilter: filter });
       void get().changeLayout({
         type: "open",
         item: { kind: "library" },
@@ -734,29 +778,46 @@ export const useAppStore = create<AppState>()((set, get) => {
         await get().refreshLibrary();
         tickIndexed(connectors.length);
       } catch (error) {
-        set({ status: { kind: "failed", message: errorMessage(error) } });
+        set({ status: { kind: "failed", message: errorMessage(error, t) } });
       }
     },
 
-    createMind: (options) =>
-      attempt(async () => {
+    createMind: async (options) => {
+      let made: Undoable | undefined;
+      await attempt(async () => {
         const mind = await core.createMind({
           ...(options?.title && { title: options.title }),
           ...(options?.folderId && { folderId: options.folderId }),
         });
-        // The "minds.changed" event may have listed it already.
-        set((state) => ({
-          minds: [mind, ...state.minds.filter((each) => each.id !== mind.id)],
-          ...(options?.startQuestion
+        made = mindMade(
+          t,
+          mindName(mind),
+          () => core.deleteMind(mind.id),
+          async () => {
+            await core.restore([{ kind: "mind", id: mind.id }]);
+            get().openMind(mind.id);
+          },
+        );
+        push(made);
+        set(
+          options?.startQuestion
             ? { questionToStart: { mindId: mind.id, scope: options.scope ?? null } }
-            : { titleToFocus: mind.id }),
-        }));
-        await get().changeLayout({
-          type: "open",
-          item: { kind: "mind", mindId: mind.id },
-          where: { in: "group", ...(options?.groupId && { groupId: options.groupId }) },
-        });
-      }),
+            : { titleToFocus: mind.id },
+        );
+        await get().showNewMind(mind, options?.groupId);
+      });
+      return made;
+    },
+
+    showNewMind: async (mind, groupId) => {
+      // The "minds.changed" event may have listed it already.
+      set((state) => ({ minds: [mind, ...state.minds.filter((each) => each.id !== mind.id)] }));
+      await get().changeLayout({
+        type: "open",
+        item: { kind: "mind", mindId: mind.id },
+        where: { in: "group", ...(groupId && { groupId }) },
+      });
+    },
 
     titleFocused: () => set({ titleToFocus: null }),
 
@@ -779,6 +840,7 @@ export const useAppStore = create<AppState>()((set, get) => {
       if (!mindId) return get().createMind({ startQuestion: true, scope });
       get().openMind(mindId);
       set({ questionToStart: { mindId, scope } });
+      return undefined;
     },
 
     // From a Folder as it is, the new Mind is the Folder's.
@@ -815,17 +877,67 @@ export const useAppStore = create<AppState>()((set, get) => {
         push({
           message,
           name: moveName(t, moving, { minds, documents }),
-          undo: async () => {
-            refuseIfDeleted(foldersMovedFrom(done), names);
-            for (const back of undoMoves(done)) await move(back.items, back.folderId);
-            for (const document of done.documents)
-              await core.restoreAssignment(document.id, document.previous);
-          },
+          undo: () => putBack(done, names),
           redo: async () => {
             if (folderId !== null) refuseIfDeleted([folderId], names);
             done = await move(moving, folderId);
           },
         });
+      }),
+
+    createFolder: async (items) => {
+      let madeId: string | null = null;
+      await attempt(async () => {
+        const { minds, documents, library } = get();
+        const name = untitledFolderName(
+          t,
+          (library?.groups ?? []).map((group) => group.name),
+        );
+        const folder = await core.createLibraryGroup({ name, description: "" });
+        await get().refreshLibrary();
+        const chosen = items ? itemsOf(items) : null;
+        const going =
+          chosen && chosen.mindIds.length + chosen.documentIds.length > 0 ? chosen : null;
+        let done = going ? await move(going, folder.id) : null;
+        const names = new Map(library?.groups.map((group) => [group.id, group.name]));
+        const stepNamed = (shown: string): Undoable => ({
+          message: madeMessage(t, shown, going, { minds, documents }),
+          name: t("undo.name.newFolder"),
+          undo: async () => {
+            if (done) await putBack(done, names);
+            await core.deleteLibraryGroup(folder.id);
+            await get().refreshLibrary();
+          },
+          redo: async () => {
+            await core.restore([{ kind: "folder", id: folder.id }]);
+            await get().refreshLibrary();
+            if (going) done = await move(going, folder.id);
+          },
+        });
+        const step = stepNamed(name);
+        justMade = { id: folder.id, step, stepNamed };
+        push(step);
+        useRequests.getState().ask({ nameFolder: folder.id });
+        madeId = folder.id;
+      });
+      return madeId;
+    },
+
+    nameNewFolder: (folderId, name) =>
+      attempt(async () => {
+        const folder = get().library?.groups.find((group) => group.id === folderId);
+        const trimmed = name.trim();
+        if (!folder || !trimmed || trimmed === folder.name) return;
+        const made = justMade;
+        if (made?.id !== folderId || useUndo.getState().done.at(-1) !== made.step) {
+          await get().editFolder(folderId, { name: trimmed, description: folder.description });
+          return;
+        }
+        await core.updateLibraryGroup(folderId, { name: trimmed, description: folder.description });
+        await get().refreshLibrary();
+        justMade = null;
+        useUndo.getState().withdraw(made.step);
+        push(made.stepNamed(trimmed));
       }),
 
     renameFolder: (folderId, name) =>
@@ -956,7 +1068,7 @@ export const useAppStore = create<AppState>()((set, get) => {
       }),
 
     reportError(error) {
-      set({ actionError: errorMessage(error) });
+      useNotices.getState().showError(error);
     },
 
     openDocument(location, how = { as: "list" }) {
@@ -965,6 +1077,7 @@ export const useAppStore = create<AppState>()((set, get) => {
       const at = Object.keys(place).length > 0 ? { place } : {};
       // A merged window shows one group: what opens to the side comes to the front.
       const merged = groupsMerged();
+      const keep = how.keep ? { keep: true } : {};
       const change: LayoutChange =
         how.as === "here"
           ? {
@@ -980,9 +1093,10 @@ export const useAppStore = create<AppState>()((set, get) => {
                 type: "open",
                 item,
                 ...at,
-                preview: true,
+                ...keep,
+                preview: !how.stay,
                 where: { in: "side", ...(how.from && { from: how.from }) },
-                focus: merged,
+                focus: merged && !how.stay,
               };
       void get().changeLayout(change);
     },
@@ -1008,10 +1122,6 @@ export const useAppStore = create<AppState>()((set, get) => {
     previewLayout(layout) {
       const { settings } = get();
       if (settings) set({ settings: { ...settings, device: { ...settings.device, ...layout } } });
-    },
-
-    dismissActionError() {
-      set({ actionError: null });
     },
 
     addDocuments: (picked) =>
@@ -1069,17 +1179,25 @@ export const useAppStore = create<AppState>()((set, get) => {
         push(renamed(t, displayName(document), rename, { before, after: document.name }));
       }),
 
-    deleteDocument: (id) =>
+    deleteDocuments: (ids) =>
       attempt(async () => {
-        const document = get().documents.find((each) => each.id === id);
+        const first = get().documents.find((each) => each.id === ids[0]);
         const remove = async () => {
-          await core.deleteDocument(id);
+          for (const id of ids) await core.deleteDocument(id);
           documentUpdates.flush();
-          set((state) => ({ documents: state.documents.filter((each) => each.id !== id) }));
+          set((state) => ({ documents: state.documents.filter((each) => !ids.includes(each.id)) }));
         };
         await remove();
-        const shown = document ? displayName(document) : "";
-        push(deleted(t, shown, [{ kind: "document", id }], remove));
+        if (ids.length === 0) return;
+        const shown = first ? displayName(first) : "";
+        push(
+          deleted(
+            t,
+            shown,
+            ids.map((id) => ({ kind: "document", id })),
+            remove,
+          ),
+        );
       }),
 
     // Its status follows the core's "document.status" event too.
@@ -1139,17 +1257,38 @@ export const useAppStore = create<AppState>()((set, get) => {
       if (get().linking) nextLink();
     },
 
-    setLinkedFolderPaused: (linkedFolderId, paused) =>
-      attempt(async () => {
-        const linked = await core.setLinkedFolderPaused(linkedFolderId, paused);
-        set((state) => ({ linkedFolders: replaceLinked(state.linkedFolders, linked) }));
-      }),
+    setLinkedFolderPaused: async (linkedFolderId, paused) => {
+      let change: Undoable | undefined;
+      await attempt(async () => {
+        const before = get().linkedFolders.find((each) => each.id === linkedFolderId);
+        const setPaused = async (to: boolean) => {
+          showLinked(await core.setLinkedFolderPaused(linkedFolderId, to));
+        };
+        await setPaused(paused);
+        if (before && (before.status === "paused") !== paused) {
+          change = linkedFolderPaused(t, linkedFolderName(before.path), paused, setPaused);
+          push(change);
+        }
+      });
+      return change;
+    },
 
-    setLinkedFolderLayout: (linkedFolderId, layout) =>
-      attempt(async () => {
-        const linked = await core.setLinkedFolderLayout(linkedFolderId, layout);
-        set((state) => ({ linkedFolders: replaceLinked(state.linkedFolders, linked) }));
-      }),
+    setLinkedFolderLayout: async (linkedFolderId, layout) => {
+      let change: Undoable | undefined;
+      await attempt(async () => {
+        const before = get().linkedFolders.find((each) => each.id === linkedFolderId);
+        const setLayout = async (to: LinkedFolderLayout) => {
+          showLinked(await core.setLinkedFolderLayout(linkedFolderId, to));
+        };
+        await setLayout(layout);
+        if (before && before.layout !== layout) {
+          const layouts = { before: before.layout, after: layout };
+          change = linkedFolderShown(t, linkedFolderName(before.path), layouts, setLayout);
+          push(change);
+        }
+      });
+      return change;
+    },
 
     downloadOnlineOnlyFiles: (linkedFolderId) =>
       attempt(async () => {
@@ -1210,19 +1349,6 @@ export const useAppStore = create<AppState>()((set, get) => {
             ),
       }));
       return tag;
-    },
-
-    selectDocuments(documentIds, selected) {
-      const next = new Set(get().selectedDocuments);
-      for (const id of documentIds) {
-        if (selected) next.add(id);
-        else next.delete(id);
-      }
-      set({ selectedDocuments: next });
-    },
-
-    clearSelection() {
-      if (get().selectedDocuments.size > 0) set({ selectedDocuments: new Set() });
     },
 
     retagDocuments: (documentIds) =>

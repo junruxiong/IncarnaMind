@@ -113,10 +113,17 @@ export const BlockOrigins = Extension.create<BlockOriginsOptions>({
         view: () => {
           const stop = doc
             ? observeOrigins(doc, () => {
-                if (editor.isDestroyed) return;
-                editor.view.dispatch(
-                  editor.state.tr.setMeta(originsKey, { origins: allOrigins(doc) } satisfies Meta),
-                );
+                // Not in the Yjs transaction: the map's observers run before the Blocks reach the
+                // editor, and a transaction dispatched now makes y-prosemirror write the editor's
+                // stale Blocks back, which brings back Blocks the core just removed.
+                queueMicrotask(() => {
+                  if (editor.isDestroyed) return;
+                  editor.view.dispatch(
+                    editor.state.tr.setMeta(originsKey, {
+                      origins: allOrigins(doc),
+                    } satisfies Meta),
+                  );
+                });
               })
             : () => undefined;
           return { destroy: stop };

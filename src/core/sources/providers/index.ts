@@ -8,6 +8,8 @@ import { ARXIV_URLS, createArxiv } from "./arxiv";
 import { createClinicalTrials } from "./clinicaltrials";
 import { createCrossref } from "./crossref";
 import { createDailymed } from "./dailymed";
+import { createEcfr } from "./ecfr";
+import { createGovinfo, GOVINFO_URLS } from "./govinfo";
 import { createOpenAlex } from "./openalex";
 import { createOpenfda } from "./openfda";
 import { createPubmed } from "./pubmed";
@@ -15,7 +17,15 @@ import { createPubmed } from "./pubmed";
 /** Where each provider is asked, by its id: the real services unless a test's stand-in is given. */
 export type SourceProviderUrls = Partial<
   Record<
-    "openalex" | "arxiv" | "pubmed" | "crossref" | "openfda" | "dailymed" | "clinicaltrials",
+    | "openalex"
+    | "arxiv"
+    | "pubmed"
+    | "crossref"
+    | "openfda"
+    | "dailymed"
+    | "clinicaltrials"
+    | "ecfr"
+    | "govinfo",
     string
   >
 >;
@@ -36,5 +46,10 @@ export function createSourceProviders(
     createOpenfda(urls.openfda, () => readKey("openfda")),
     createDailymed(urls.dailymed),
     createClinicalTrials(urls.clinicaltrials),
+    createEcfr(urls.ecfr),
+    // A stand-in serves GovInfo's API and its link service from one address.
+    createGovinfo(urls.govinfo ? { api: urls.govinfo, site: urls.govinfo } : GOVINFO_URLS, () =>
+      readKey("govinfo"),
+    ),
   ];
 }

@@ -23,6 +23,7 @@ import {
 import { useAppStore } from "../store";
 import { useUndo } from "../undo";
 import { type ProblemAction, ProblemLine } from "./ProblemLine";
+import { TypingTextarea } from "./TypingTextarea";
 import { buttonStyle } from "./ui";
 
 type TextField = Exclude<ReferenceField, "type">;
@@ -91,7 +92,7 @@ export function CiteAsPanel({
         },
       });
     } catch (failure) {
-      setProblem(errorMessage(failure));
+      setProblem(errorMessage(failure, t));
     }
   };
 
@@ -104,7 +105,7 @@ export function CiteAsPanel({
       result = await core.lookUpReference(document.id);
     } catch (failure) {
       setLookingUp(false);
-      setLookUpLine({ text: errorMessage(failure), role: "alert" });
+      setLookUpLine({ text: errorMessage(failure, t), role: "alert" });
       return;
     }
     setLookingUp(false);
@@ -380,7 +381,7 @@ function TextValue({
   if (editing) {
     return (
       <div className="py-0.5">
-        <textarea
+        <TypingTextarea
           ref={input}
           rows={1}
           value={draft}

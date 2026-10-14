@@ -558,6 +558,9 @@ describe("Usage data: what the core derives from its events", () => {
       placedMarkers: 0,
       citationSupport: null,
       quoteRetry: null,
+      figures: [],
+      uncalculated: 0,
+      figureRetry: null,
       usage: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, cacheWriteTokens: 0 },
     });
 

@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="cfr.xsl"?>
+<CFRGRANULE xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="CFRMergedXML.xsd">
+    <FDSYS>
+        <CFRTITLE>17</CFRTITLE>
+        <CFRTITLETEXT>Commodity and Securities Exchanges</CFRTITLETEXT>
+        <VOL>4</VOL>
+        <DATE>2025-04-01</DATE>
+        <COVERONLY>false</COVERONLY>
+        <ORIGINALDATE>2025-04-01</ORIGINALDATE>
+        <ANCESTORS>
+            <PARENT HEADING="Title 17" SEQ="4">Commodity and Securities Exchanges</PARENT>
+            <PARENT HEADING="CHAPTER II" SEQ="3">SECURITIES AND EXCHANGE COMMISSION (CONTINUED)</PARENT>
+            <PARENT HEADING="PART 240" SEQ="2">GENERAL RULES AND REGULATIONS, SECURITIES EXCHANGE ACT OF 1934</PARENT>
+            <PARENT HEADING="Subpart A" SEQ="1">Rules and Regulations Under the Securities Exchange Act of 1934</PARENT>
+            <PARENT HEADING="" SEQ="0">Manipulative and Deceptive Devices and Contrivances</PARENT>
+        </ANCESTORS>
+    </FDSYS>
+    <SECTION>
+        <SECTNO>§ 240.10b-5</SECTNO>
+        <SUBJECT>Employment of manipulative and deceptive devices.</SUBJECT>
+        <P>It shall be unlawful for any person, directly or indirectly, by the use of any means or instrumentality of interstate commerce, or of the mails or of any facility of any national securities exchange,</P>
+        <P>(a) To employ any device, scheme, or artifice to defraud,</P>
+        <P>(b) To make any untrue statement of a material fact or to omit to state a material fact necessary in order to make the statements made, in the light of the circumstances under which they were made, not misleading, or</P>
+        <P>(c) To engage in any act, practice, or course of business which operates or would operate as a fraud or deceit upon any person,</P>
+        <FP>in connection with the purchase or sale of any security.</FP>
+        <SECAUTH>(Sec. 10; 48 Stat. 891; 15 U.S.C. 78j)</SECAUTH>
+        <CITA>[13 FR 8183, Dec. 22, 1948, as amended at 16 FR 7928, Aug. 11, 1951]</CITA>
+    </SECTION>
+</CFRGRANULE>

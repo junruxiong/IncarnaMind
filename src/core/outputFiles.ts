@@ -38,9 +38,6 @@ import type { Database } from "./storage";
 /** The device value holding the Output location: paths belong to one computer (ADR-0003). */
 const OUTPUT_LOCATION = "outputLocation";
 
-const OUTSIDE =
-  "IncarnaMind saves new files only in the output location, or inside a Linked folder it may add files to.";
-
 /** A file to save (see `OutputFiles.save`). */
 export interface NewFile {
   /** The name it should have, e.g. "Tides.docx". Characters file systems refuse are replaced. */
@@ -106,7 +103,8 @@ function fileNameOf(input: unknown): string {
 /** A folder's real path, links followed; throws if it isn't a folder. */
 async function realFolder(path: string): Promise<string> {
   const real = await realpath(path);
-  if (!(await stat(real)).isDirectory()) throw new InvalidInputError("That path isn't a folder.");
+  if (!(await stat(real)).isDirectory())
+    throw new InvalidInputError({ key: "error.path.notFolder" });
   return real;
 }
 
@@ -214,7 +212,7 @@ export function createOutputFiles(options: OutputFilesOptions) {
       real = await realFolder(input);
     } catch (error) {
       if (!isGone(error)) throw error;
-      if (input !== suggested) throw new NotFoundError("There is no folder at that path.");
+      if (input !== suggested) throw new NotFoundError({ key: "error.path.noFolder" });
       await mkdir(input, { recursive: true });
       real = await realFolder(input);
     }
@@ -241,7 +239,7 @@ export function createOutputFiles(options: OutputFilesOptions) {
       real = await realFolder(chosen);
     }
     // A link put in its place, or above it, that leads elsewhere.
-    if (!isInside(chosen, real)) throw new InvalidInputError(OUTSIDE);
+    if (!isInside(chosen, real)) throw new InvalidInputError({ key: "error.files.outside" });
     return real;
   };
 
@@ -253,7 +251,7 @@ export function createOutputFiles(options: OutputFilesOptions) {
     const real = await realFolder(folder);
     const chosen = location();
     if ((chosen === null || !isInside(chosen, real)) && !ownerOf(real)) {
-      throw new InvalidInputError(OUTSIDE);
+      throw new InvalidInputError({ key: "error.files.outside" });
     }
     return real;
   };
@@ -281,7 +279,7 @@ export function createOutputFiles(options: OutputFilesOptions) {
   /** Allows or stops new files in a live Linked folder, from Settings or its question. */
   const setLinkedFolderWriting = (linkedFolderId: unknown, allowed: unknown): OutputSettings => {
     if (typeof linkedFolderId !== "string" || !liveFolder(linkedFolderId)) {
-      throw new NotFoundError("That Linked folder doesn't exist or has been removed.");
+      throw new NotFoundError({ key: "error.linkedFolder.notFound" });
     }
     if (typeof allowed !== "boolean") throw new InvalidInputError("allowed must be true or false.");
     record(linkedFolderId, allowed);

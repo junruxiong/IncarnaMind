@@ -65,7 +65,7 @@ export function RerankSettingsSection() {
     try {
       setRerank(await action());
     } catch (failure) {
-      useAppStore.setState({ actionError: errorMessage(failure) });
+      useAppStore.getState().reportError(failure);
     }
   };
 
@@ -91,6 +91,13 @@ export function RerankSettingsSection() {
                       { model: rerank.modelId ?? "" },
                     )}
                   </p>
+                  {rerank.runsOn && (
+                    <p data-testid="rerank-runs-on" className={rowTextClass}>
+                      {t("rerank.settings.runsOn", {
+                        device: rerank.runsOn === "gpu" ? "GPU" : "CPU",
+                      })}
+                    </p>
+                  )}
                   <p className={rowTextClass}>{t("rerank.settings.builtInNote")}</p>
                   <BuiltInModelState model={rerank.model} />
                 </>
@@ -283,7 +290,7 @@ function RerankForm({
         onSaved(saved);
       }
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     } finally {
       setBusy(null);
     }
@@ -298,7 +305,7 @@ function RerankForm({
     try {
       setSecretStorage(await core.acceptPlainTextSecretStorage());
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     }
   };
 
@@ -373,6 +380,11 @@ function RerankForm({
         </>
       )}
 
+      {!builtIn && (
+        <p data-testid="rerank-sends" className={hintClass}>
+          {t("rerank.settings.sends", { service: t(`rerank.kind.${kind}`) })}
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="submit"
@@ -396,7 +408,7 @@ function RerankForm({
         </button>
       </div>
 
-      {test && <TestResult result={test} onRetry={() => void run("testing")} />}
+      {test && <TestResult result={test} />}
       {error && (
         <p role="alert" className={errorTextClass}>
           {error}

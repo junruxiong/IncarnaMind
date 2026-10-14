@@ -6,6 +6,8 @@
  * imports Electron (ADR-0004, ADR-0006).
  */
 import type { ChildProcess } from "node:child_process";
+import type { DrawnPage, PageCaptureRequest } from "../shared/citedPage";
+import type { PrintDocument } from "../shared/printDocument";
 import type { AgentLauncher } from "./agents";
 import type { AnswerEngine } from "./answers/engine";
 import type {
@@ -16,18 +18,21 @@ import type {
   SecretProtection,
   TranscriptionEngine,
 } from "./api";
+import type { StatIdentity } from "./documents/files";
 import type { Reranker } from "./documents/searchTool";
 import type { AnswerSearchTuning } from "./documents/searchTuning";
 import type { WatchFolder } from "./documents/watcher";
-import type { FetchLimits } from "./documents/web/fetch";
+import type { FetchLimits, PageFetch } from "./documents/web/fetch";
 import type { ChatGptPlanEndpoints } from "./providers/chatgpt/plan";
 import type { EmbeddingModelFactory } from "./providers/embeddings";
 import type { ChatModelFactory } from "./providers/models";
 import type { OllamaModels } from "./providers/ollamaModels";
 import type { RerankingModelFactory } from "./providers/rerank";
 import type { RunEngine } from "./runs/engine";
+import type { TaskKind } from "./runs/tasks";
 import type { PaceTimers } from "./sources/pace";
 import type { SourceProviderUrls } from "./sources/providers";
+import type { PublicFetchOptions } from "./tools/web/fetcher";
 import type { UsageEventName, UsageValue } from "./usageEvents";
 
 export interface Paths {
@@ -113,6 +118,24 @@ export interface Keychain {
   delete(name: string): Promise<void>;
 }
 
+/**
+ * The system's notifications. The host knows which windows are in front;
+ * the core knows what each shows, so it decides, through `onScreen`, whether
+ * the User is already looking at what a notification is about.
+ */
+export interface SystemNotifications {
+  /**
+   * Shows `note`, unless `onScreen` says the windows in front (by their ids)
+   * show what it is about. A click brings a window to the front, then calls
+   * `onClick`.
+   */
+  show(
+    note: { title: string; body: string },
+    onScreen: (windowIds: readonly string[]) => boolean,
+    onClick: () => void,
+  ): void;
+}
+
 /** Opens a URL in the User's default browser, e.g. for a Connector's OAuth sign-in. */
 export interface Browser {
   open(url: string): Promise<void>;
@@ -128,6 +151,15 @@ export interface FileShell {
   openPath(path: string): Promise<void>;
   /** Shows a file selected in the system's file manager (Finder, Explorer). */
   showItemInFolder(path: string): void;
+}
+
+/**
+ * Prints a document as a PDF, laid out in pages with each footnote at the foot of the page its
+ * marker is on. The desktop app prints with Chromium in a hidden window that reaches nothing
+ * outside the app (src/main/printPdf.ts).
+ */
+export interface Printer {
+  print(document: PrintDocument): Promise<Uint8Array>;
 }
 
 /** How Linked folders are watched and checked (see ./documents/library). The defaults suit the app. */
@@ -147,6 +179,12 @@ export interface LinkedFolderOptions {
    * tests may pass a fake.
    */
   watch?: WatchFolder;
+  /**
+   * Reads a file's device, file number and creation time, which a file moved
+   * and edited while IncarnaMind didn't see it is recognised by. Defaults to
+   * Node's `stat`; tests may pass one that puts files on other disks.
+   */
+  stat?: StatIdentity;
 }
 
 export interface SpawnOptions {
@@ -313,8 +351,38 @@ export interface Embedder {
   close(): void;
 }
 
-/** The built-in reranking model's downloaded files: the same kinds as the embedding model's. */
-export type RerankingModelFiles = EmbeddingModelFiles;
+/**
+ * A query and texts with the scores the reranking model as trained (fp32, on
+ * the CPU) gives them, which its GPU file must match before it reranks.
+ */
+export interface RerankingCheck {
+  query: string;
+  texts: readonly string[];
+  /** Logits, one per text. */
+  scores: readonly number[];
+}
+
+/** The built-in reranking model's downloaded files: the embedding model's kinds, and its GPU file if it has one. */
+export interface RerankingModelFiles extends EmbeddingModelFiles {
+  /** The model's GPU file, null while it isn't downloaded, and the check it must pass. */
+  gpu?: { model: string | null; check: RerankingCheck };
+}
+
+/**
+ * Why a reranking model with a GPU file runs on the CPU:
+ * - "not-downloaded": a GPU adapter was found, but the GPU file isn't downloaded yet;
+ * - "no-adapter": no GPU adapter was found;
+ * - "session": the model failed on the GPU;
+ * - "check": the GPU's scores for the check were off by more than 0.1 logits.
+ */
+export type CpuFallbackReason = "not-downloaded" | "no-adapter" | "session" | "check";
+
+/** Where `CrossEncoder.load` runs the model. */
+export interface RerankingDevice {
+  device: "gpu" | "cpu";
+  /** Set when the model has a GPU file but runs on the CPU; `message` is technical detail in English, for the log. */
+  fallback?: { reason: CpuFallbackReason; message: string };
+}
 
 /**
  * Runs the built-in reranking model, a cross-encoder, off the core's thread:
@@ -322,8 +390,12 @@ export type RerankingModelFiles = EmbeddingModelFiles;
  * pass a deterministic fake. The core downloads and checks the files first.
  */
 export interface CrossEncoder {
-  /** Loads the model, if it isn't loaded already. Rejects if the model can't start. */
-  load(files: RerankingModelFiles): Promise<void>;
+  /**
+   * Loads the model, if it isn't loaded already, on the GPU when its GPU file
+   * is given and passes the check, otherwise on the CPU. Rejects if the model
+   * can't start.
+   */
+  load(files: RerankingModelFiles): Promise<RerankingDevice>;
   /**
    * How well each text answers the query, in the order given: the model's own
    * scores, higher is better. Rejects if the model isn't loaded or fails.
@@ -492,6 +564,13 @@ export interface AudioCapture {
 }
 
 /**
+ * Draws a cited page with the Document viewer's view for its kind, off
+ * screen, so it can be saved (#133): every kind but PDF, whose pages the core
+ * draws itself. Rejects when the page can't be drawn, and when `signal` aborts.
+ */
+export type CapturePage = (request: PageCaptureRequest, signal: AbortSignal) => Promise<DrawnPage>;
+
+/**
  * A speech-to-text engine's downloaded files, as the core hands them to a
  * `Transcriber` (#136). Engine-neutral: each engine names its own files.
  */
@@ -584,6 +663,18 @@ export interface CoreAdapters {
   paths: Paths;
   /** The OS's preferred languages, most preferred first, as BCP 47 tags such as "zh-Hans-CN". */
   systemLanguages(): readonly string[];
+  /**
+   * The OS's region, as an ISO 3166 country code such as "GB" ("" when it doesn't say), for what
+   * goes by country rather than by language, such as the paper a PDF is printed on. Absent, or
+   * "": the region of the most preferred system language.
+   */
+  systemRegion?(): string;
+  /**
+   * The name the computer knows the User by, which their edits go under as
+   * tracked changes in a Word file until they choose another (#107): their
+   * full name where the OS keeps one. Absent: the account's name.
+   */
+  systemUserName?(): string;
   keychain: Keychain;
   browser: Browser;
   /**
@@ -591,6 +682,8 @@ export interface CoreAdapters {
    * Absent (tests that don't need it): both are refused.
    */
   shell?: FileShell;
+  /** Prints PDF exports. Absent (tests that don't export PDFs): a PDF export is refused. */
+  printer?: Printer;
   /**
    * Draws a chart's picture for a Word export. Absent (tests that don't need
    * it): a chart goes into Word as the table of its values instead.
@@ -602,7 +695,13 @@ export interface CoreAdapters {
    * How web pages are fetched (#261). Defaults to Node's fetch, within 20
    * seconds and 10 MB; tests shorten the limits.
    */
-  webPages?: { fetch?: typeof fetch; limits?: FetchLimits };
+  webPages?: { fetch?: PageFetch; limits?: FetchLimits };
+  /**
+   * How web search's fetcher resolves host names and makes its connections
+   * (#128): the system's resolver and undici's by default. Tests stand a
+   * local server in for the web; the fetcher's guard still decides.
+   */
+  web?: PublicFetchOptions;
   processes: ProcessLauncher;
   /**
    * Runs the programs Tools start, such as Skill scripts (see `Executor`).
@@ -692,6 +791,16 @@ export interface CoreAdapters {
    */
   connectorSignInTimeoutMs?: number;
   /**
+   * The Connectors directory's entries, in its JSON form, in place of the
+   * list that ships with the app; tests point an entry at a local stand-in.
+   */
+  connectorDirectory?: unknown;
+  /**
+   * Where the Connectors search asks the MCP Registry. Defaults to the
+   * official one; tests point it at a local stand-in. Consent is still the Registry's.
+   */
+  connectorRegistryUrl?: string;
+  /**
    * Where requests to TypeSafe's hosted Jev go. Defaults to
    * https://api.typesafe.ai; tests point it at a local fake server. Consent
    * still treats them as going to TypeSafe.
@@ -705,7 +814,7 @@ export interface CoreAdapters {
   referenceLookup?: { crossref?: string; arxiv?: string };
   /**
    * Where Find sources (#296) asks each Source provider, by its id
-   * ("openalex", "arxiv", "pubmed", "crossref", "openfda", "dailymed", "clinicaltrials"). Defaults to the real
+   * ("openalex", "arxiv", "pubmed", "crossref", "openfda", "dailymed", "clinicaltrials", "ecfr", "govinfo"). Defaults to the real
    * services; tests point them at a local stand-in. Consent still treats the
    * requests as going to each provider.
    */
@@ -727,6 +836,13 @@ export interface CoreAdapters {
    * plugs in here, and must pass the same contract suite.
    */
   runEngine?: RunEngine;
+  /**
+   * Shows a Task's system notification (#126) when the User isn't looking
+   * at its Mind. Absent: Tasks notify nobody.
+   */
+  notifications?: SystemNotifications;
+  /** Kinds of Task the host adds to the core's own (`Core.startTask`): a test build's scripted one. */
+  taskKinds?: readonly TaskKind[];
   /**
    * Builds embedding models for the providers the User can choose instead of
    * the built-in model. Defaults to the AI SDK providers; tests pass AI SDK
@@ -766,6 +882,12 @@ export interface CoreAdapters {
    * Meetings): Meetings can't start.
    */
   audioCapture?: AudioCapture;
+  /**
+   * Draws cited pages other than PDFs' (see `CapturePage`). The desktop app
+   * draws them in a hidden window (src/main/citedPageCapture.ts). Absent
+   * (tests that aren't about them): only PDFs' cited pages are saved.
+   */
+  capturePage?: CapturePage;
   /**
    * Transcribes Meetings on this computer (see `Transcriber`). Absent (tests
    * that aren't about transcripts): Meetings record without a Transcript.

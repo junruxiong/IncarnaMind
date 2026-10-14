@@ -24,6 +24,12 @@ export const ComposerDockContext = createContext<HTMLElement | null>(null);
 export const CountSlotContext = createContext<HTMLElement | null>(null);
 
 /**
+ * Where a Mind's Compare Documents sheet is drawn: at the foot of its tab,
+ * below the note, which scrolls above it (see `MindTab`). Null until it is there.
+ */
+export const CompareSheetSlotContext = createContext<HTMLElement | null>(null);
+
+/**
  * Whether a node view is drawn in a footnote's text (`FootnoteText`), where a
  * Citation is part of the footnote and has no number of its own.
  */

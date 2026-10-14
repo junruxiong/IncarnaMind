@@ -102,6 +102,8 @@ async function renames(window: Page, find: (name: string) => Row, from: string, 
   await window.keyboard.press("Enter");
   const renamed = find(to);
   await expect(renamed.name).toHaveText(to);
+  // The row has the focus again, wherever the new name put it in the list.
+  await expect(renamed.main).toBeFocused();
   await expect(renamed.field).toHaveCount(0);
 
   await renamed.main.focus();
@@ -110,6 +112,7 @@ async function renames(window: Page, find: (name: string) => Row, from: string, 
   await typeWithInputMethod(window, renamed.field, "新名称");
   const final = find("新名称");
   await expect(final.name).toHaveText("新名称");
+  await expect(final.main).toBeFocused();
   await expect(final.field).toHaveCount(0);
 }
 

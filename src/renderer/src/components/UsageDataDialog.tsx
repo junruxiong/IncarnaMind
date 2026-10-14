@@ -1,7 +1,6 @@
 import { useId, useState } from "react";
 import type { MessageKey } from "../../../shared/i18n";
 import { core } from "../core";
-import { errorMessage } from "../errors";
 import { useGap, useT } from "../i18n";
 import { usageDataQuestionWaiting, useAppStore } from "../store";
 import {
@@ -21,7 +20,7 @@ import { useModal } from "./useModal";
 
 /** Every event and field usage data can hold, for people to read. */
 export const USAGE_DATA_DETAILS_URL =
-  "https://github.com/junruxiong/IncarnaMind/blob/main/docs/privacy.md#usage-data";
+  "https://github.com/IncarnaMind/IncarnaMind/blob/main/docs/privacy.md#usage-data";
 
 /** What usage data looks like, in words. */
 const EXAMPLES: readonly MessageKey[] = [
@@ -59,7 +58,7 @@ export function UsageDataDialog() {
     } catch (failure) {
       // Not answered after all: ask again.
       setAnswered(false);
-      useAppStore.setState({ actionError: errorMessage(failure) });
+      useAppStore.getState().reportError(failure);
     }
   };
 

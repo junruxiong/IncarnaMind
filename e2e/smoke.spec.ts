@@ -97,14 +97,13 @@ test("the sidebar lists the most recently edited Mind first, and a deleted Mind 
   await window.keyboard.type("An edit");
   await expect(items).toHaveText(["Older", "Newer"]);
 
-  // Deleting it asks first, then removes it from the sidebar and closes its tab: the
+  // Deleting it asks nothing and removes it from the sidebar and closes its tab: the
   // other open Mind shows instead.
   const olderId = await items.filter({ hasText: "Older" }).getAttribute("data-mind-id");
   const older = window.getByTestId("mind-row").filter({ hasText: "Older" });
   await older.hover();
   await older.getByTestId("mind-menu").click();
   await older.getByTestId("mind.delete").click();
-  await window.getByTestId("confirm-delete-mind").click();
   await expect(items).toHaveText(["Newer"]);
   await expect(window.getByTestId("mind-tab").getByTestId("tab-title")).toHaveText(["Newer"]);
   await expect(window.getByTestId("mind-pane")).not.toHaveAttribute("data-mind-id", `${olderId}`);
@@ -142,14 +141,13 @@ test("added files are processed, show as ready in the sidebar, and can be delete
     await expect(notesItem.getByTestId("document-status")).toHaveText("Ready");
     await first.app.close();
 
-    // After a restart both are still there. Deleting one (from its menu) asks first, then removes it.
+    // After a restart both are still there. Deleting one (from its menu) asks nothing and removes it.
     const second = await launchApp(dataDir);
     const restored = second.window.getByTestId("document-list-item");
     await expect(restored).toHaveCount(2);
     const doomed = restored.filter({ hasText: "Reading notes" });
     await openDocumentMenu(doomed);
     await doomed.getByTestId("document.delete").click();
-    await second.window.getByTestId("confirm-delete-document").click();
     await expect(restored).toHaveCount(1);
     await expect(restored).toHaveAttribute("data-status", "ready");
     await second.app.close();
@@ -313,27 +311,6 @@ test("in Chinese, the provider form has no space after full-width punctuation wh
   const credits = await form.getByTestId("provider-plan-credits").innerText();
   expect(credits).toMatch(/。了解更多/);
   expect(`${facts}${credits}`).not.toMatch(/[。：] /);
-  await app.close();
-});
-
-test('after "Don\'t allow", a connection test offers to ask again, and asks before sending anything', async () => {
-  const { app, window } = await launchApp(dataDir);
-  const form = window.getByTestId("chat-setup").getByTestId("provider-form");
-  await window.getByTestId("chat-choice-api-key").check();
-  await form.getByRole("radio", { name: "OpenAI", exact: true }).check();
-  await form.getByLabel(/^API key/).fill("sk-not-a-real-key");
-  const consent = window.getByTestId("consent-dialog");
-
-  await form.getByRole("button", { name: "Test connection" }).click();
-  await consent.getByTestId("consent-decline").click();
-  const result = form.getByTestId("connection-test");
-  await expect(result).toContainText("Nothing was sent");
-
-  // Asking again forgets the "Don't allow": the test asks first, again.
-  await result.getByTestId("connection-test-ask-again").click();
-  await expect(consent).toBeVisible();
-  await consent.getByTestId("consent-decline").click();
-  await expect(result).toContainText("Nothing was sent");
   await app.close();
 });
 

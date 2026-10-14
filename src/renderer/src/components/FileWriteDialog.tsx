@@ -63,7 +63,7 @@ export function FileWriteDialog() {
     try {
       await core.respondToFileWrite(request.requestId, accept);
     } catch (failure) {
-      useAppStore.setState({ actionError: errorMessage(failure) });
+      useAppStore.getState().reportError(failure);
     }
   };
 
@@ -75,7 +75,7 @@ export function FileWriteDialog() {
         setQueue((current) => current.filter((queued) => queued.requestId !== request.requestId));
       }
     } catch (failure) {
-      setProblem(errorMessage(failure));
+      setProblem(errorMessage(failure, t));
     }
   };
 

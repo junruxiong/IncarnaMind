@@ -14,12 +14,26 @@
  * with "rows" quotes two lines, so a sheet's Citation covers a range of rows; one that
  * asks for it "as a table" gets a Markdown table with its markers in a cell; one that
  * asks "by quarter" (按季度) gets a table of quarterly figures, its marker in each cell
- * but the last, to chart (#436); "分季度" gets the same in Chinese, in 万元.
+ * but the last, to chart (#436); "分季度" gets the same in Chinese, in 万元, and
+ * "in millions" each figure as "$289.4 million"; one that asks for "four columns" gets a
+ * table of four, wider than the assistant (#612).
+ * One that asks how much something grew (增长) has the growth from the first
+ * two numbers of its quote calculated, and writes it with its marker.
  * Before its search it reasons, a line that quotes the Question, as a model
  * that thinks does. A Question asked "slowly" waits a moment before each step
  * and writes its Answer word by word, so a test sees each step of the Answer.
  *
- * A Question with "blank reply" in it gets a reply with no text at all.
+ * A Question with "blank reply" in it gets a reply with no text at all. A model whose id ends
+ * "-not-found" fails as one its provider doesn't know.
+ *
+ * A comparison table's cell (#98) cites its Document's line that shares the
+ * most words with the Question and answers with its value ("Termination
+ * notice: 90 days." gives "90 days"), or NOT_FOUND when no line shares one;
+ * a cell whose Question says "busy" is refused with an HTTP 429 the first time.
+ *
+ * A Question about the User's notes or what they selected ("notes", "selected",
+ * 笔记, 选中), asked beside a Mind, gets an Answer that starts by saying what it
+ * read of the Mind: its name and first line, and the selected text.
  *
  * With Skills: a Question that names a listed Skill gets it loaded with
  * use_skill first. An Answer that follows a Skill (forced, or loaded) starts
@@ -40,6 +54,11 @@
  * once, for the words after "on" (and the year after "since"), then lists
  * the first three titles it found.
  *
+ * With web search (#128): it searches the web for the Question, reads each
+ * page found, one call each, then cites the first page it could read as it
+ * cites a search's Passages. Asked to search with its provider's own tool,
+ * it finds `FOUND_PAGES`, whatever the query.
+ *
  * For automatic tagging it tags a Document with every Tag whose name is a word in it.
  * As the User writes, it suggests a Passage's line that shares words with their paragraph.
  *
@@ -51,7 +70,15 @@
  *
  * Make this a Skill (`fakeSkillDraft`): a draft whose "when to use it" and first
  * step quote the Mind's last Question, so a test sees that the Mind was read.
+ *
+ * Find support and Check against Documents (`checkReply`): a sentence that shares
+ * three words with a Passage's line is supported, or contradicted when it has a
+ * number the line doesn't; otherwise unsupported.
+ *
+ * Verify (`fakeClaims`): every sentence of a document claims something, but a
+ * question or thanks. Its claims are checked as above.
  */
+import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import type { ChatModelFactory } from "../core";
 import { EXCERPT_END, EXCERPT_START } from "../core/tags/classify";
@@ -88,6 +115,15 @@ function fakeAnswer(question: string, skill: string | null = null): string {
   ].join("\n");
 }
 
+/**
+ * What the scripted provider's web search finds, whatever the query: pages the
+ * smoke tests' stand-in web serves (INCARNAMIND_TEST_WEB), as any host does there.
+ */
+const FOUND_PAGES = [
+  { url: "http://encyclopedia.test/tea", title: "Tea - The Open Encyclopedia" },
+  { url: "http://news.test/members", title: "Tea's history, for members" },
+];
+
 /** The scripted Answer when it cited something: one sentence with a marker. */
 const CITED_ANSWER = "Your Documents answer this [^1].\n\nThat is all.";
 
@@ -105,15 +141,30 @@ const tableAnswer = (markers: string) =>
 /** A Question that asks for its Answer as a table. */
 const AS_A_TABLE = /\bas a table\b/i;
 
+/** The scripted Answer to a Question that asks for "four columns": a table wider than the assistant. */
+const wideTableAnswer = (marker: string) =>
+  [
+    "| Quarter | Revenue 2024 | Revenue 2025 | Change |",
+    "|:--|--:|--:|--:|",
+    `| Q1 | 289.4 ${marker} | 341.5 | +18.0% |`,
+    "| Q2 | 301.2 | 362.0 | +20.2% |",
+    "| Q3 | 309.8 | 377.9 | +22.0% |",
+    "",
+    "That is all.",
+  ].join("\n");
+
+/** A Question that asks for four columns. */
+const FOUR_COLUMNS = /\bfour columns\b/i;
+
 /** The scripted Answer to a Question that asks for figures by quarter: a table of them, each cited but the last. */
-const figuresAnswer = (marker: string) =>
+const figuresAnswer = (marker: string, written = (figure: string) => figure) =>
   [
     "| Quarter | 2024 | 2025 |",
     "|:--|--:|--:|",
-    `| Q1 | 289.4 ${marker} | 341.5 ${marker} |`,
-    `| Q2 | 301.2 ${marker} | 362.0 ${marker} |`,
-    `| Q3 | 309.8 ${marker} | 377.9 ${marker} |`,
-    `| Q4 | 330.6 ${marker} | 401.2 |`,
+    `| Q1 | ${written("289.4")} ${marker} | ${written("341.5")} ${marker} |`,
+    `| Q2 | ${written("301.2")} ${marker} | ${written("362.0")} ${marker} |`,
+    `| Q3 | ${written("309.8")} ${marker} | ${written("377.9")} ${marker} |`,
+    `| Q4 | ${written("330.6")} ${marker} | ${written("401.2")} |`,
     "",
     "That is all.",
   ].join("\n");
@@ -134,13 +185,44 @@ const chineseFiguresAnswer = (marker: string) =>
 /** A Question that asks for figures by quarter. */
 const BY_QUARTER = /\bby quarter\b|按季度/i;
 const BY_QUARTER_CHINESE = /分季度/;
+const IN_MILLIONS = /\bin millions\b/i;
 
-/** The text of the last user message: the Question, at the end of its Question context. */
-function lastQuestion(prompt: Prompt): string {
-  const last = prompt.filter((message) => message.role === "user").at(-1);
-  if (!last || typeof last.content === "string") return "";
-  const text = last.content.map((part) => (part.type === "text" ? part.text : "")).join("");
-  return text.split("\n\n").at(-1) ?? "";
+/** The text of a user message. */
+const userText = (message: Prompt[number] | undefined): string =>
+  !message || typeof message.content === "string"
+    ? ""
+    : message.content.map((part) => (part.type === "text" ? part.text : "")).join("");
+
+/** The text of the last user message: the Question, after what it is asked beside. */
+const lastUserText = (prompt: Prompt): string =>
+  userText(prompt.filter((message) => message.role === "user").at(-1));
+
+/** The Question, at the end of its Question context. */
+const lastQuestion = (prompt: Prompt): string => lastUserText(prompt).split("\n\n").at(-1) ?? "";
+
+/** A Question about the User's notes or what they selected in them. */
+const ABOUT_THE_MIND = /\bnotes?\b|\bselect(?:ed|ion)\b|笔记|选中/i;
+
+/** What the Answer says it read of the Mind a Question about it was asked beside, if any. */
+function mindRead(prompt: Prompt): string | null {
+  if (!ABOUT_THE_MIND.test(lastQuestion(prompt))) return null;
+  // The Mind starts the first user message, and the selection the last (#564).
+  const text = lastUserText(prompt);
+  const mind = /<mind name="([^"]*)">\n([\s\S]*?)<\/mind>/.exec(
+    userText(prompt.find((message) => message.role === "user")),
+  );
+  if (!mind) return null;
+  const first = (mind[2] ?? "")
+    .split("\n")
+    .map((line) => line.replace(/^#+\s*/, "").trim())
+    .find((line) => line !== "" && line !== "[…]")
+    // A short Answer, however long the line.
+    ?.slice(0, 80);
+  const selection = /<selection>\n([\s\S]*?)\n<\/selection>/.exec(text)?.[1];
+  return [
+    first ? `Read “${mind[1]}”, which starts: ${first}` : `Read “${mind[1]}”, which is empty.`,
+    ...(selection ? [`About what you selected: ${selection}`] : []),
+  ].join("\n\n");
 }
 
 /** The text results of the Tool calls so far, by Tool name, oldest first. */
@@ -192,7 +274,7 @@ interface ShownPassage {
 
 function passagesIn(result: string): ShownPassage[] {
   const pattern =
-    /<passage id="([^"]+)" document="([^"]*)"(?: pages="(\d+)(?:-\d+)?")?(?: location="([^"]+)")?>\n([\s\S]*?)\n<\/passage>/g;
+    /<passage id="([^"]+)" document="([^"]*)"(?: date="[^"]*")?(?: pages="(\d+)(?:-\d+)?")?(?: location="([^"]+)")?>\n([\s\S]*?)\n<\/passage>/g;
   return [...result.matchAll(pattern)].map((match) => ({
     id: match[1] as string,
     document: match[2] as string,
@@ -367,6 +449,24 @@ function connectorToolNamed(
   return null;
 }
 
+/** Every result of a Tool's calls so far, as text, whether they worked or not, oldest first. */
+function allResults(prompt: Prompt, tool: string): string[] {
+  const found: string[] = [];
+  for (const message of prompt) {
+    if (message.role !== "tool") continue;
+    for (const part of message.content) {
+      if (part.type !== "tool-result" || part.toolName !== tool) continue;
+      const output = part.output;
+      found.push(
+        output.type === "text" || output.type === "error-text"
+          ? output.value
+          : JSON.stringify(output),
+      );
+    }
+  }
+  return found;
+}
+
 /** What a Tool call gave back, as text, whether it worked or not; undefined if it hasn't been called. */
 function lastResult(prompt: Prompt, tool: string): string | undefined {
   let found: string | undefined;
@@ -413,6 +513,7 @@ function scriptNamed(
  */
 function nextReply(prompt: Prompt, tools: readonly OfferedTool[]): Reply {
   const names = tools.map((tool) => tool.name);
+  if (CHECK_RUN.test(systemOf(prompt))) return checkReply(prompt);
   const question = lastQuestion(prompt);
   if (/blank reply/i.test(question)) return { text: "" };
   /** What the calls made first said, in order. */
@@ -443,13 +544,88 @@ function nextReply(prompt: Prompt, tools: readonly OfferedTool[]): Reply {
           : "I found no papers.",
     };
   }
+  const mindLine = mindRead(prompt);
+  if (mindLine) said.unshift(mindLine);
+  if (names.includes("search_web")) {
+    const searched = lastResult(prompt, "search_web");
+    if (searched === undefined) return { tool: "search_web", input: { query: question } };
+    const found = [...searched.matchAll(/^\d+\. .*?: (https?:\/\/\S+)/gm)].map((match) => match[1]);
+    const reads = allResults(prompt, "read_web_page");
+    const next = found[reads.length];
+    if (next) return { tool: "read_web_page", input: { url: next, query: question } };
+    const read = reads.find((each) => passagesIn(each).length > 0);
+    if (!read) return { text: "I couldn't save any of the pages I found." };
+    if (toolResults(prompt, "cite").length === 0) {
+      return { tool: "cite", input: { citations: recordsFor(read, question) } };
+    }
+    return { text: CITED_ANSWER };
+  }
   const reply = answerReply(prompt, names);
   return "text" in reply && said.length > 0 ? { text: [...said, reply.text].join("\n\n") } : reply;
+}
+
+/** A comparison table's cell (#98) says so before its Question. */
+const isCell = (prompt: Prompt) => lastUserText(prompt).includes("one cell of a comparison table");
+
+/**
+ * A cell: the line of its Document that shares the most words with the
+ * Question, cited, then its value ("Termination notice: 90 days." gives "90
+ * days"); NOT_FOUND when no line shares a word.
+ */
+function cellReply(prompt: Prompt, question: string): Reply {
+  const searches = toolResults(prompt, "search_documents");
+  if (searches.length === 0) return { tool: "search_documents", input: { query: question } };
+  let best: { record: Record<string, unknown>; shared: number } | null = null;
+  for (const passage of passagesIn(searches.at(-1) ?? "")) {
+    const found = recordFor(passage, question, 1);
+    if (found && (!best || found.shared > best.shared)) best = found;
+  }
+  if (!best || best.shared === 0) return { text: "NOT_FOUND" };
+  if (toolResults(prompt, "cite").length === 0) {
+    return { tool: "cite", input: { citations: [best.record] } };
+  }
+  const quote = String(best.record.quote);
+  const value = (quote.split(": ")[1] ?? quote).replace(/[.。]$/, "");
+  return { text: `${value} [^1]` };
+}
+
+/** The cells whose provider has refused them once already ("busy" in the Question). */
+const refusedOnce = new Set<string>();
+
+/** The scripted provider's web search: it searches once and finds `FOUND_PAGES`, as Anthropic reports them. */
+function searchParts(tool: string, query: string): StreamPart[] {
+  return [
+    { type: "stream-start", warnings: [] },
+    {
+      type: "tool-call",
+      toolCallId: "fake-web-search",
+      toolName: tool,
+      input: JSON.stringify({ query }),
+      providerExecuted: true,
+    },
+    {
+      type: "tool-result",
+      toolCallId: "fake-web-search",
+      toolName: tool,
+      result: FOUND_PAGES.map((page) => ({
+        type: "web_search_result",
+        url: page.url,
+        title: page.title,
+        pageAge: null,
+        encryptedContent: "",
+      })),
+    },
+    { type: "text-start", id: "answer" },
+    { type: "text-delta", id: "answer", delta: "done" },
+    { type: "text-end", id: "answer" },
+    { type: "finish", finishReason: { unified: "stop", raw: undefined }, usage: USAGE },
+  ];
 }
 
 /** What the model does next, apart from Connector Tools: call a Tool, or stream its Answer. */
 function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
   const question = lastQuestion(prompt);
+  if (tools.includes("search_documents") && isCell(prompt)) return cellReply(prompt, question);
   if (tools.includes("use_skill") && toolResults(prompt, "use_skill").length === 0) {
     const named = skillNamed(prompt, question);
     if (named) return { tool: "use_skill", input: { name: named } };
@@ -470,18 +646,45 @@ function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
     if (records.length > 0) return { tool: "cite", input: { citations: records } };
     return { text: fakeAnswer(question, skill) };
   }
+  if (tools.includes("calculate") && /\bgrow|增长/i.test(question)) {
+    const calculated = toolResults(prompt, "calculate");
+    if (calculated.length === 0) {
+      const inputs = [1, 2].map((position) => ({
+        name: `n${position}`,
+        label: position === 1 ? "Later" : "Earlier",
+        citation: 1,
+        position,
+      }));
+      return {
+        tool: "calculate",
+        input: {
+          figures: [{ marker: 1, label: "Growth", inputs, formula: "n1 / n2 - 1", as: "percent" }],
+        },
+      };
+    }
+    if (calculated.at(-1)?.startsWith("Recorded [=1]")) {
+      return {
+        text: /增长/.test(question) ? "增长了[=1][^1]。" : "It grew [=1] [^1].\n\nThat is all.",
+      };
+    }
+  }
   // The markers the last cite call recorded: "Recorded [^1], [^2]." and then any problems.
   const recordedLine = /^Recorded ([^.]*)\./.exec(cites.at(-1) ?? "")?.[1] ?? "";
   const recorded = [...new Set([...recordedLine.matchAll(/\[\^\d+\]/g)].map((match) => match[0]))];
   const answer = BY_QUARTER_CHINESE.test(question)
     ? chineseFiguresAnswer(recorded[0] ?? "")
     : BY_QUARTER.test(question)
-      ? figuresAnswer(recorded[0] ?? "")
-      : AS_A_TABLE.test(question)
-        ? tableAnswer(recorded.join(" "))
-        : recorded.length > 1
-          ? `Your Documents answer this ${recorded.join(" ")}.\n\nThat is all.`
-          : CITED_ANSWER;
+      ? figuresAnswer(
+          recorded[0] ?? "",
+          IN_MILLIONS.test(question) ? (figure) => `$${figure} million` : undefined,
+        )
+      : FOUR_COLUMNS.test(question)
+        ? wideTableAnswer(recorded[0] ?? "")
+        : AS_A_TABLE.test(question)
+          ? tableAnswer(recorded.join(" "))
+          : recorded.length > 1
+            ? `Your Documents answer this ${recorded.join(" ")}.\n\nThat is all.`
+            : CITED_ANSWER;
   return { text: skill ? `Following the Skill ${skill}.\n\n${answer}` : answer };
 }
 
@@ -639,6 +842,103 @@ function fakeStructuredOutput(options: GenerateOptions): string {
   return JSON.stringify({ tags: fakeTags(options.prompt, offeredTags(options)) });
 }
 
+/** Finding a verified document's claims (#97, src/core/answers/checks/claims.ts). */
+const FIND_CLAIMS = /^You sort the sentences of a document someone else wrote/m;
+
+/** The numbers of the listed sentences ("[3] …") that claim something: all but questions and thanks. */
+function fakeClaims(options: GenerateOptions): string | null {
+  if (!FIND_CLAIMS.test(systemOf(options.prompt))) return null;
+  const claims = lastUserText(options.prompt)
+    .split("\n")
+    .flatMap((line) => {
+      const listed = /^\[(\d+)\] (.*)$/.exec(line);
+      return listed?.[2] === undefined || /[?？]$|thank|谢/i.test(listed[2])
+        ? []
+        : [Number(listed[1])];
+    });
+  return JSON.stringify({ claims });
+}
+
+/** A check Run's instructions (#96, src/core/answers/checks/prompt.ts). */
+const CHECK_RUN = /^You check one sentence the User wrote against the User's Documents/m;
+
+/** Words that decide a check: those of four letters or more, and every number. */
+const checkWords = (text: string): string[] => [
+  ...(text.toLowerCase().match(/[a-z]{4,}|\d+(?:[.,]\d+)?/g) ?? []),
+];
+
+/**
+ * A check of one sentence (#96): it searches for the sentence, then takes the
+ * Passage line that shares the most words with it. Three shared words or more
+ * support it, unless the sentence has a number the line doesn't while the
+ * line has numbers: that contradicts it. Fewer leave it unsupported. A
+ * sentence with "blank reply" gets an empty reply, and one with "refuse" a refusal.
+ */
+function checkReply(prompt: Prompt): Reply {
+  const sentence = /<sentence>\n([\s\S]*?)\n<\/sentence>/.exec(lastUserText(prompt))?.[1] ?? "";
+  if (/blank reply/i.test(sentence)) return { text: "" };
+  if (/\brefuse\b/i.test(sentence)) return { text: "I'm sorry, I can't help with that." };
+  const searched = toolResults(prompt, "search_documents").at(-1);
+  if (searched === undefined) return { tool: "search_documents", input: { query: sentence } };
+  const words = checkWords(sentence);
+  let best: { record: Record<string, unknown>; line: string; shared: number } | null = null;
+  for (const passage of passagesIn(searched)) {
+    const found = recordFor(passage, sentence, 1);
+    const line = typeof found?.record.quote === "string" ? found.record.quote : "";
+    const shared = checkWords(line).filter((word) => words.includes(word)).length;
+    if (found && (!best || shared > best.shared)) best = { record: found.record, line, shared };
+  }
+  if (!best || best.shared < 3) return { text: "Verdict: unsupported" };
+  const lineNumbers = checkWords(best.line).filter((word) => /\d/.test(word));
+  const contradicted =
+    lineNumbers.length > 0 && words.some((word) => /\d/.test(word) && !lineNumbers.includes(word));
+  if (toolResults(prompt, "cite").length === 0) {
+    return { tool: "cite", input: { citations: [best.record] } };
+  }
+  return {
+    text: contradicted
+      ? `Verdict: contradicted\nThe Document says: ${best.line} [^1]`
+      : `Verdict: supported\nThe Document says so [^1].`,
+  };
+}
+
+/** The scripted reply to a request, as it streams: its reasoning, then a Tool call or its Answer. */
+function replyParts(prompt: Prompt, tools: readonly OfferedTool[]): StreamPart[] {
+  const reply = nextReply(prompt, tools);
+  const parts: StreamPart[] = [{ type: "stream-start", warnings: [] }];
+  if (reply.reasoning) {
+    parts.push(
+      { type: "reasoning-start", id: "thinking" },
+      ...reply.reasoning
+        .split(/(?<=\s)/)
+        .map((word): StreamPart => ({ type: "reasoning-delta", id: "thinking", delta: word })),
+      { type: "reasoning-end", id: "thinking" },
+    );
+  }
+  if ("tool" in reply) {
+    // Calls of one Tool after its first, such as a second page read, have ids of their own.
+    const earlier = allResults(prompt, reply.tool).length;
+    parts.push(
+      {
+        type: "tool-call",
+        toolCallId: earlier === 0 ? `fake-${reply.tool}` : `fake-${reply.tool}-${earlier + 1}`,
+        toolName: reply.tool,
+        input: JSON.stringify(reply.input),
+      },
+      { type: "finish", finishReason: { unified: "tool-calls", raw: undefined }, usage: USAGE },
+    );
+    return parts;
+  }
+  const words = reply.text.split(/(?<=\s)/);
+  parts.push(
+    { type: "text-start", id: "answer" },
+    ...words.map((word): StreamPart => ({ type: "text-delta", id: "answer", delta: word })),
+    { type: "text-end", id: "answer" },
+    { type: "finish", finishReason: { unified: "stop", raw: undefined }, usage: USAGE },
+  );
+  return parts;
+}
+
 export const createFakeChatModel: ChatModelFactory = (spec) =>
   new MockLanguageModelV4({
     provider: "incarnamind-fake",
@@ -652,7 +952,7 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
           text:
             options.responseFormat?.type === "json"
               ? fakeStructuredOutput(options)
-              : (fakeSkillDraft(options) ?? fakeEdit(options) ?? "OK"),
+              : (fakeClaims(options) ?? fakeSkillDraft(options) ?? fakeEdit(options) ?? "OK"),
         },
       ],
       finishReason: { unified: "stop", raw: undefined },
@@ -660,37 +960,33 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
       warnings: [],
     }),
     doStream: async ({ prompt, tools, abortSignal }) => {
-      const reply = nextReply(prompt, tools ?? []);
-      const slow = SLOWLY.test(lastQuestion(prompt));
-      const parts: StreamPart[] = [{ type: "stream-start", warnings: [] }];
-      if (reply.reasoning) {
-        parts.push(
-          { type: "reasoning-start", id: "thinking" },
-          ...reply.reasoning
-            .split(/(?<=\s)/)
-            .map((word): StreamPart => ({ type: "reasoning-delta", id: "thinking", delta: word })),
-          { type: "reasoning-end", id: "thinking" },
-        );
+      // A model id ending "-not-found" is one its provider doesn't know, for a test of that Problem.
+      if (spec.modelId.endsWith("-not-found")) {
+        throw new APICallError({
+          message: `The model ${spec.modelId} does not exist`,
+          url: "https://fake.invalid/chat",
+          requestBodyValues: {},
+          statusCode: 404,
+        });
       }
-      if ("tool" in reply) {
-        parts.push(
-          {
-            type: "tool-call",
-            toolCallId: `fake-${reply.tool}`,
-            toolName: reply.tool,
-            input: JSON.stringify(reply.input),
-          },
-          { type: "finish", finishReason: { unified: "tool-calls", raw: undefined }, usage: USAGE },
-        );
-      } else {
-        const words = reply.text.split(/(?<=\s)/);
-        parts.push(
-          { type: "text-start", id: "answer" },
-          ...words.map((word): StreamPart => ({ type: "text-delta", id: "answer", delta: word })),
-          { type: "text-end", id: "answer" },
-          { type: "finish", finishReason: { unified: "stop", raw: undefined }, usage: USAGE },
-        );
+      // A busy provider refuses each "busy" cell's first request once, as an HTTP 429.
+      const cell =
+        isCell(prompt) && /\bbusy\b/i.test(lastQuestion(prompt)) ? lastUserText(prompt) : null;
+      if (cell && !refusedOnce.has(cell)) {
+        refusedOnce.add(cell);
+        throw new APICallError({
+          message: "Too Many Requests",
+          url: "http://127.0.0.1/v1/chat/completions",
+          requestBodyValues: {},
+          statusCode: 429,
+          isRetryable: false,
+        });
       }
+      const search = tools?.find((each) => each.type === "provider");
+      const parts = search
+        ? searchParts(search.name, lastQuestion(prompt))
+        : replyParts(prompt, tools ?? []);
+      const slow = !search && SLOWLY.test(lastQuestion(prompt));
       const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
       const stream = new ReadableStream<StreamPart>({
         async pull(controller) {

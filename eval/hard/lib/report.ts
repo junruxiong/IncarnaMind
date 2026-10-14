@@ -21,7 +21,7 @@ import {
 } from "../../lib/retrieval";
 import { summariseTiming } from "../../lib/timing";
 import { timingLine, timingSection } from "../../lib/timingReport";
-import type { HardCitations } from "./citations";
+import type { AnswerRuleResult, HardCitations } from "./citations";
 import type { FetchStatus } from "./fetch";
 import type { KeywordTiming, QueryTiming } from "./keywordTiming";
 import {
@@ -129,6 +129,8 @@ export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
   unanswerable: "Unanswerable",
   "cross-lingual": "Cross-lingual (with a translated second query)",
   "near-duplicate": "Near-duplicate",
+  "false-premise": "False premise",
+  disagreeing: "Disagreeing, newer and older",
 };
 
 const labelOf = (report: HardReport, mode: RetrievalMode) =>
@@ -357,7 +359,17 @@ function citationsSection(report: HardReport): string[] {
     row("**Declines, with or without Citations**", (d) =>
       d === "unanswerable" ? ofAnswers(of(d)?.declines ?? 0, d) : "–",
     ),
+    row("**Premise flagged first**", (d) =>
+      d === "false-premise" ? ofAnswers(of(d)?.premiseFlagged ?? 0, d) : "–",
+    ),
+    row("**Newer source leads**", (d) =>
+      d === "disagreeing" ? ofAnswers(of(d)?.newerLeads ?? 0, d) : "–",
+    ),
+    row("Names the older one too", (d) =>
+      d === "disagreeing" ? ofAnswers(of(d)?.namesOlder ?? 0, d) : "–",
+    ),
     "",
+    ...answerRulesSection(citations),
     ...timingSection(
       columns.map((difficulty) => ({ label: difficulty, ...of(difficulty) })),
       "###",
@@ -377,6 +389,31 @@ function citationsSection(report: HardReport): string[] {
           "",
         ]
       : []),
+  ];
+}
+
+/**
+ * Each false-premise and disagreeing Answer, with what the Answer rules found
+ * and how it opens, for a reviewer to check the rules against (#548).
+ */
+function answerRulesSection(citations: HardCitations): string[] {
+  if (citations.rules.length === 0) return [];
+  const found = (rule: AnswerRuleResult) =>
+    rule.difficulty === "false-premise"
+      ? rule.followed
+        ? "flagged"
+        : "not flagged"
+      : `${rule.followed ? "newer leads" : "newer doesn't lead"}${rule.namesOlder ? ", names the older" : ""}`;
+  return [
+    "The Answer rules (#548), Answer by Answer: a premise the Documents don't support is said so in the Answer's first paragraph (a phrase rule in English and Chinese); when two Documents disagree, what the newer one says comes first, and the Answer cites it. Each Answer's text is in `answers.md`.",
+    "",
+    "| Question | The rule found | How the Answer opens |",
+    "|---|---|---|",
+    ...citations.rules.map(
+      (rule) =>
+        `| ${rule.questionId} | ${found(rule)} | ${rule.opening.replace(/\s+/g, " ").replace(/\|/g, "\\|").slice(0, 200)} |`,
+    ),
+    "",
   ];
 }
 
@@ -483,6 +520,8 @@ export function hardSummary(report: HardReport, reportDir: string, root: string)
   const { citations } = report;
   if (!("skipped" in citations)) {
     const unanswerable = citations.byDifficulty.unanswerable;
+    const premise = citations.byDifficulty["false-premise"];
+    const disagreeing = citations.byDifficulty.disagreeing;
     const timing = timingLine(summariseTiming(citations.run.answers));
     if (timing) lines.push(`  Time (${citations.run.model}): ${timing}`);
     lines.push(
@@ -492,6 +531,17 @@ export function hardSummary(report: HardReport, reportDir: string, root: string)
           ", ",
         )}${unanswerable ? `; unanswerable: ${unanswerable.declines}/${unanswerable.answers} decline, ${unanswerable.withoutCitation}/${unanswerable.answers} answered without a Citation` : ""}`,
     );
+    if (premise || disagreeing) {
+      lines.push(
+        `  Answer rules (${citations.run.model}): ${[
+          premise && `premise flagged first ${premise.premiseFlagged}/${premise.answers}`,
+          disagreeing &&
+            `newer source leads ${disagreeing.newerLeads}/${disagreeing.answers} (names the older ${disagreeing.namesOlder})`,
+        ]
+          .filter(Boolean)
+          .join("; ")}`,
+      );
+    }
   }
   lines.push(`Reports: ${relative(root, reportDir)}/`, "");
   return lines.join("\n");

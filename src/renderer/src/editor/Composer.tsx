@@ -3,10 +3,8 @@ import {
   type ChangeEvent,
   type ClipboardEvent,
   type KeyboardEvent,
-  type Ref,
   useEffect,
   useId,
-  useImperativeHandle,
   useLayoutEffect,
   useRef,
   useState,
@@ -14,6 +12,7 @@ import {
 import type * as Y from "yjs";
 import type { AnswerPlace, SearchScope } from "../../../core/api";
 import { mindModelOf } from "../../../shared/mindModel";
+import { mindName } from "../../../shared/naming";
 import { hasSearchScope, type ScopeKind, scopeIds } from "../../../shared/searchScope";
 import { useAnswers } from "../answers";
 import { shortcutLabel } from "../commands/keymap";
@@ -27,6 +26,7 @@ import {
   composerScope,
   type Draft,
   isLongPaste,
+  NO_MIND,
   type Paste,
   useComposer,
 } from "../composer";
@@ -38,6 +38,7 @@ import {
   useConversations,
 } from "../conversations";
 import { core } from "../core";
+import { carriesDocuments, droppedDocumentIds } from "../documentDrag";
 import { editFromComposer, stopEditing, useEdits } from "../editWithAi";
 import { useT } from "../i18n";
 import type { ScopeChoice } from "../scope";
@@ -48,8 +49,10 @@ import { AskProblem } from "./AskProblem";
 import { EditStatus } from "./EditStatus";
 import { AskArrowIcon, CollapseIcon, ExpandIcon, RemoveIcon } from "./icons";
 import { ModelChip } from "./ModelChip";
+import { useMindSelection } from "./mindSelection";
 import { PasteChip, usePasteLabel } from "./PasteChip";
 import { SkillChip } from "./QuestionView";
+import { QuoteChip } from "./QuoteChip";
 import { ScopeChips } from "./ScopeChips";
 import { type ChoiceListHandle, ScopeChoiceList } from "./ScopePicker";
 import { SkillChoiceList } from "./SkillChoiceList";
@@ -87,12 +90,6 @@ const TRIGGER = /(?:^|\s)([@/])([^\s@/]*)$/;
 const isCommand = (event: { metaKey: boolean; ctrlKey: boolean }) =>
   isMacOS() ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
 
-/** What the composer can be asked to do from outside: take the focus, with a Search scope. */
-export interface ComposerHandle {
-  /** Takes the focus; a `scope` (from the Library) becomes the Mind's Search scope. */
-  focus(scope?: SearchScope | null): void;
-}
-
 /**
  * The one input, at the foot of the assistant (DESIGN.md, Composer; #253),
  * for the Mind the assistant reads: "Ask, or say what to change…". ⌘J
@@ -113,23 +110,39 @@ export interface ComposerHandle {
  * User writes (`SuggestionOffer`).
  */
 export function Composer({
-  editor,
-  doc,
-  mindId,
-  ref,
+  mind,
 }: {
-  editor: Editor;
-  doc: Y.Doc;
-  mindId: string;
-  ref?: Ref<ComposerHandle>;
+  /** The Mind in focus; null in the Library, on Home or in a Document: every Document is searched. */
+  mind: { editor: Editor; doc: Y.Doc; mindId: string } | null;
 }) {
   const t = useT();
-  const draft = useComposer((state) => state.drafts[mindId]) ?? EMPTY;
+  const mindId = mind?.mindId ?? null;
+  const key = mindId ?? NO_MIND;
+  const draft = useComposer((state) => state.drafts[key]) ?? EMPTY;
   // The Mind's Folder, whose chip its Questions start with.
   const folderId = useAppStore(
-    (state) => state.minds.find((mind) => mind.id === mindId)?.folderId ?? null,
+    (state) => state.minds.find((each) => each.id === mindId)?.folderId ?? null,
   );
   const scope = composerScope(draft, folderId);
+  // The Mind in focus changes under the one composer: what was typed with no Mind goes with the
+  // User into the Mind that opens, whose draft is empty; the rest of its state starts over.
+  const was = useRef(key);
+  useEffect(() => {
+    const before = was.current;
+    was.current = key;
+    if (before === key) return;
+    setPicking(null);
+    setExpanded(false);
+    setViewing(null);
+    if (before !== NO_MIND) return;
+    const state = useComposer.getState();
+    const loose = state.draft(NO_MIND);
+    const own = state.draft(key);
+    if (loose.text === "" && loose.pastes.length === 0) return;
+    if (own.text !== "" || own.pastes.length > 0) return;
+    state.update(key, { text: loose.text, pastes: loose.pastes });
+    state.update(NO_MIND, { text: "", pastes: [] });
+  }, [key]);
   const problem = useAnswers((state) => state.blocked[composerKey(mindId)]);
   const skills = useAppStore((state) => state.skills);
   const field = useRef<HTMLTextAreaElement>(null);
@@ -156,10 +169,16 @@ export function Composer({
   const enabledSkills = skills.filter((skill) => skill.enabled);
   const skill = draft.skill ? skills.find((each) => each.name === draft.skill) : undefined;
   /** The selection the composer is saying what to change in (Edit with AI…, ⌘J with a selection). */
-  const editing = useEdits((state) => state.editing[mindId]);
+  const editing = useEdits((state) => state.editing[key]);
+  const selection = useMindSelection(mind, editing !== undefined);
+  const mindTitle = useAppStore((state) => {
+    const own = state.minds.find((each) => each.id === mindId);
+    return (own && mindName(own)) || t("mind.untitled");
+  });
 
-  const update = (change: Partial<Draft>) => useComposer.getState().update(mindId, change);
+  const update = (change: Partial<Draft>) => useComposer.getState().update(key, change);
   /** Keeps the scope the User chose; the Mind's own follows it to another Folder. */
+  const [dropping, setDropping] = useState(false);
   const updateScope = (next: SearchScope) => update({ scope: chosenScope(next, folderId) });
 
   // Single-line text sits beside the controls; once it would run past one line, it takes the
@@ -172,12 +191,15 @@ export function Composer({
     const style = getComputedStyle(rowElement);
     const fieldStyle = getComputedStyle(element);
     const gap = Number.parseFloat(style.columnGap) || 0;
-    const skillElement = rowElement.querySelector<HTMLElement>(".question-skill");
+    const chips = Array.from(rowElement.querySelectorAll<HTMLElement>(".question-skill")).reduce(
+      (width, chip) => width + chip.offsetWidth + gap,
+      0,
+    );
     const room =
       rowElement.clientWidth -
       Number.parseFloat(style.paddingLeft) -
       Number.parseFloat(style.paddingRight) -
-      (skillElement ? skillElement.offsetWidth + gap : 0) -
+      chips -
       (controls.current?.offsetWidth ?? 0) -
       gap -
       Number.parseFloat(fieldStyle.paddingLeft);
@@ -223,13 +245,6 @@ export function Composer({
     if (kind === "skill" && enabledSkills.length === 0) return null;
     return { kind, query, from, to: at };
   };
-
-  useImperativeHandle(ref, () => ({
-    focus(given) {
-      if (given) updateScope(given);
-      useComposer.getState().requestFocus();
-    },
-  }));
 
   // Asked for from elsewhere: ⌘J anywhere in the window but a dialog ("composer.focus"; with
   // text selected in the note, to say what to change in it), Edit with AI… and its siblings,
@@ -293,6 +308,15 @@ export function Composer({
     field.current?.focus();
   };
 
+  /** Documents dragged from the sidebar join the Search scope, as "@" would add them. */
+  const addDocuments = (ids: readonly string[]) => {
+    const have = scopeIds(scope, "document");
+    const fresh = ids.filter((id) => !have.includes(id));
+    if (fresh.length === 0) return;
+    updateScope({ ...scope, documentIds: [...have, ...fresh] });
+    field.current?.focus();
+  };
+
   const chooseSkill = (name: string) => {
     update({ skill: name, ...(picking && { text: withoutTyped(picking) }) });
     useAnswers.getState().dismiss(composerKey(mindId));
@@ -350,7 +374,7 @@ export function Composer({
         name: first.trim().slice(0, 60) || t("composer.paste.name"),
         text: paste.text,
       });
-      const now = useComposer.getState().draft(mindId);
+      const now = useComposer.getState().draft(key);
       const nowScope = composerScope(now, folderId);
       const ids = scopeIds(nowScope, "document");
       update({
@@ -367,10 +391,13 @@ export function Composer({
 
   const ask = async () => {
     // As it is now, not as it was drawn: "Ask without it" has just taken the Skill off.
-    const current = useComposer.getState().draft(mindId);
-    if (useEdits.getState().editing[mindId]) {
+    const current = useComposer.getState().draft(key);
+    if (mind && useEdits.getState().editing[mind.mindId]) {
       // What to change in the selected text: it comes back as changes in the note.
-      if (current.text.trim() !== "" && editFromComposer(editor, mindId, doc, current.text)) {
+      if (
+        current.text.trim() !== "" &&
+        editFromComposer(mind.editor, mind.mindId, mind.doc, current.text)
+      ) {
         update({ text: "" });
       }
       return;
@@ -389,17 +416,21 @@ export function Composer({
     setExpanded(false);
     setViewing(null);
     setPicking(null);
-    // In the assistant's conversation: the Mind is read, never written to.
+    // In the assistant's conversation: the Mind is read, what is selected in it first, never written to.
     const asked = await askInAssistant({
       mindId,
       text,
+      focus: selection.focus(),
       scope: composerScope(current, folderId),
-      model: mindModelOf(doc),
+      model: mind ? mindModelOf(mind.doc) : useComposer.getState().modelWithoutMind,
       forcedSkill: current.skill,
     });
-    if (asked) return;
+    if (asked) {
+      selection.asked();
+      return;
+    }
     // Not asked: its words come back here, unless the User has typed anew meanwhile.
-    const now = useComposer.getState().draft(mindId);
+    const now = useComposer.getState().draft(key);
     if (now.text === "" && now.pastes.length === 0) {
       update({ text: typed, pastes: current.pastes, skill: now.skill ?? current.skill });
     }
@@ -421,6 +452,18 @@ export function Composer({
         return;
       }
     }
+    if (
+      event.key === "Backspace" &&
+      selection.quote !== "" &&
+      draft.text === "" &&
+      event.currentTarget.selectionStart === 0 &&
+      event.currentTarget.selectionEnd === 0
+    ) {
+      // As in a recipient field, Backspace at the start takes the last chip away.
+      event.preventDefault();
+      selection.leaveOut();
+      return;
+    }
     if (event.key === "Enter" && !event.shiftKey && !event.altKey && !isCommand(event)) {
       event.preventDefault();
       void ask();
@@ -432,12 +475,12 @@ export function Composer({
       setExpanded(false);
       return;
     }
-    if (event.key === "Escape" && editing) {
+    if (event.key === "Escape" && editing && mind) {
       // Back to asking; the next Esc is the assistant's.
       event.preventDefault();
-      stopEditing(editor, mindId);
+      stopEditing(mind.editor, mind.mindId);
     }
-    // Any other Esc goes on to the assistant, which folds (`Assistant`).
+    // Any other Esc goes on to the assistant, which gives the focus back to the Mind (`Assistant`).
   };
 
   const canAsk = draft.text.trim() !== "" || draft.pastes.length > 0;
@@ -446,14 +489,35 @@ export function Composer({
   const activeOption = picking && option >= 0 ? `${listId}-${option}` : undefined;
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: a drop target; "@" adds a Document without dragging.
     <div
       ref={root}
       data-testid="composer"
       data-expanded={expanded || undefined}
+      data-dropping={dropping || undefined}
       className={expanded ? "composer composer--expanded" : "composer"}
+      onDragOver={(event) => {
+        if (!carriesDocuments(event)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "link";
+        setDropping(true);
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropping(false);
+      }}
+      onDrop={(event) => {
+        if (!carriesDocuments(event)) return;
+        event.preventDefault();
+        setDropping(false);
+        addDocuments(droppedDocumentIds(event));
+      }}
     >
-      <SuggestionOffer mindId={mindId} doc={doc} editor={editor} />
-      <EditStatus mindId={mindId} />
+      {mind && (
+        <>
+          <SuggestionOffer mindId={mind.mindId} doc={mind.doc} editor={mind.editor} />
+          <EditStatus mindId={mind.mindId} />
+        </>
+      )}
       {problem && (
         <AskProblem
           problem={problem}
@@ -528,6 +592,19 @@ export function Composer({
             ))}
           </div>
         )}
+        {selection.quote !== "" && (
+          <QuoteChip
+            testId="composer-selection"
+            quote={selection.quote}
+            from={mindTitle}
+            removeLabel={t("composer.selection.drop")}
+            onShow={selection.show}
+            onRemove={() => {
+              selection.leaveOut();
+              field.current?.focus();
+            }}
+          />
+        )}
         {editing && (
           <span
             data-testid="composer-edit-quote"
@@ -543,7 +620,7 @@ export function Composer({
               title={t("composer.edit.stop")}
               // The text keeps the focus.
               onMouseDown={(event) => event.preventDefault()}
-              onClick={() => stopEditing(editor, mindId)}
+              onClick={() => mind && stopEditing(mind.editor, mind.mindId)}
               className="scope-chip-remove"
             >
               <RemoveIcon className="size-2.5" />
@@ -585,7 +662,7 @@ export function Composer({
           className="composer-input"
         />
         <div ref={controls} className="composer-controls">
-          <ModelChip doc={doc} onChosen={() => field.current?.focus()} />
+          <ModelChip doc={mind?.doc ?? null} onChosen={() => field.current?.focus()} />
           {hasSearchScope(scope) ? (
             <ScopeChips
               scope={scope}
@@ -704,8 +781,8 @@ const SCOPE_LISTS: Record<ScopeKind, keyof SearchScope> = {
  * (for a new chat, the one its first Question makes), or, regenerated in the
  * note, in this Mind.
  */
-function answeredHere(mindId: string, place: AnswerPlace): boolean {
-  if (place.mindId === mindId) return true;
+function answeredHere(mindId: string | null, place: AnswerPlace): boolean {
+  if (mindId !== null && place.mindId === mindId) return true;
   const { openId } = useConversations.getState();
   return place.conversationId !== undefined && (openId === null || openId === place.conversationId);
 }
