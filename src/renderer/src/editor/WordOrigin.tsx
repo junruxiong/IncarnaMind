@@ -219,7 +219,7 @@ function OriginalLink({
               role="menuitem"
               data-testid="mind-word-open-original"
               onClick={() => choose(open)}
-              className={menuItemClass}
+              className={`${menuItemClass} pl-2`}
             >
               {t("wordImport.openOriginal")}
             </button>
@@ -237,7 +237,7 @@ function OriginalLink({
                     .catch((error) => useAppStore.getState().reportError(error));
                 });
               }}
-              className={`${menuItemClass} ${menuItemUnavailableClass}`}
+              className={`${menuItemClass} ${menuItemUnavailableClass} pl-2`}
             >
               {t(showFileLabelKey(navigator.platform))}
             </button>
