@@ -299,6 +299,45 @@ describe("One claim check", () => {
     });
   });
 
+  // protects=a sentence found unsupported keeps the nearest line the Run read when that line states another value for the same thing, and the verdict stays unsupported; fails_when=the line is lost, the verdict says contradicted, or an unrelated sentence gets a line; no_claim=how a real model words its judgement.
+  test("an unsupported sentence keeps the nearest line that says something different (#770)", async () => {
+    const different = { verdict: "unsupported" as const };
+    const { core, client, check } = await mindWith(
+      [CONTRADICTED, UNSUPPORTED],
+      checkingModel({ [CONTRADICTED]: different, [UNSUPPORTED]: different }),
+    );
+
+    await check();
+
+    const [near, unrelated] = await shownChecks(core, client);
+    expect(near).toMatchObject({
+      shown: { state: "unsupported" },
+      check: {
+        evidence: {
+          documentName: "Tides",
+          quote: "Harbours publish the times of high water every year.",
+          check: "found",
+        },
+      },
+    });
+    expect(unrelated).toMatchObject({ shown: { state: "unsupported" }, check: { evidence: null } });
+  });
+
+  test("the nearest line is shown only when, judged alone, it differs", async () => {
+    const same = { verdict: "unsupported" as const, judgement: "neither" as const };
+    const { core, client, check } = await mindWith(
+      [CONTRADICTED],
+      checkingModel({ [CONTRADICTED]: same }),
+    );
+
+    await check();
+
+    expect((await shownChecks(core, client))[0]).toMatchObject({
+      shown: { state: "unsupported" },
+      check: { evidence: null },
+    });
+  });
+
   test("checkClaim is the same check, for a claim outside a Mind", async () => {
     const { core, documents } = await setUpWithDocuments(checkingModel(), [TIDES]);
     const tides = documents[0] as Document;
