@@ -43,6 +43,7 @@ import {
   confirmPrompt,
   EVIDENCE_INSTRUCTIONS,
   evidencePrompt,
+  NEAREST_INSTRUCTIONS,
   type ReadVerdict,
   readEvidence,
   readJudgement,
@@ -258,13 +259,14 @@ async function confirmContradiction(
   evidence: Citation,
   session: ReturnType<typeof createCitationSession>,
   signal: AbortSignal,
+  instructions = CONFIRM_INSTRUCTIONS,
 ): Promise<"conflict" | "same" | "neither" | null> {
   const passage = session.shownPassages().find((each) => each.passageId === evidence.passageId);
   const { model } = request;
   try {
     const { text } = await generateText({
       model: model.model,
-      instructions: CONFIRM_INSTRUCTIONS,
+      instructions,
       prompt: confirmPrompt({
         claim: request.claim,
         quote: evidence.quote,
@@ -307,7 +309,13 @@ async function nearestDifferent(
   session.check();
   const citation = session.finalCitation(NEAREST_MARKER);
   if (citation?.check !== "found") return null;
-  const judged = await confirmContradiction(request, citation, session, signal);
+  const judged = await confirmContradiction(
+    request,
+    citation,
+    session,
+    signal,
+    NEAREST_INSTRUCTIONS,
+  );
   return judged === "conflict" ? citation : null;
 }
 
