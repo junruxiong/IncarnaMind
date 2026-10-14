@@ -3,7 +3,7 @@ import type { ChatProvider } from "../../../../core/api";
 import { core } from "../../core";
 import { useT } from "../../i18n";
 import { currentMindIdOf, currentTabOf } from "../../layoutSlice";
-import { usageDataQuestionWaiting, useAppStore } from "../../store";
+import { allExamples, useAppStore } from "../../store";
 import { buttonStyle, dialogClass } from "../ui";
 import { useModal } from "../useModal";
 import { type ChatProviderChoice, ChatProviderChoices, OllamaAction } from "./ChatProviderChoices";
@@ -23,17 +23,14 @@ export function ChatSetupDialog() {
   // The example Mind works without a model: setting one up is offered once the User moves on.
   const onExample = useAppStore((state) => {
     const mindId = currentMindIdOf(state.layout);
-    return mindId !== null && mindId === state.examples?.mindId;
+    return mindId !== null && allExamples(state).some((each) => each.mindId === mindId);
   });
-  // The first run's question about usage data comes first.
-  const usageQuestion = useAppStore((state) => usageDataQuestionWaiting(state.privacy));
   const open =
     readiness?.ready === false &&
     readiness.reason === "no-provider" &&
     dismissed === false &&
     !onExample &&
-    !libraryOpen &&
-    !usageQuestion;
+    !libraryOpen;
   // The dialog itself takes focus, so no choice looks picked: none is preselected.
   const dialog = useModal(open, { focusDialog: true });
 
