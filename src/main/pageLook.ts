@@ -7,6 +7,7 @@
  * loaded, or stopped waiting for it, the page is printed as the screen shows
  * it, and the window is destroyed: all of it within the time limit.
  */
+import { once } from "node:events";
 import { BrowserWindow, type Session, session } from "electron";
 import type { Logger, PageLook, WebPageLookFailure } from "../core";
 
@@ -39,6 +40,8 @@ function allowed(url: string, pageHost: string): boolean {
 }
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+const aborted = (error: Error) => "errno" in error && error.errno === -3;
 
 type Made = Awaited<ReturnType<PageLook["render"]>>;
 
@@ -106,7 +109,14 @@ export function createPageLook({
           (error: unknown) => (error instanceof Error ? error : new Error(String(error))),
         );
         const loaded = await Promise.race([loading, wait(LOAD_MS).then(() => null)]);
-        if (loaded) return failed("unreachable", loaded.message);
+        // A page whose script tried to go elsewhere while it loaded is still there: the load
+        // only reports the navigation refused (ERR_ABORTED).
+        if (loaded && !(aborted(loaded) && contents.getURL())) {
+          return failed("unreachable", loaded.message);
+        }
+        if (loaded && contents.isLoading()) {
+          await Promise.race([once(contents, "did-stop-loading"), wait(LOAD_MS)]);
+        }
         await wait(SETTLE_MS);
         try {
           contents.debugger.attach("1.3");

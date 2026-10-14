@@ -24,10 +24,17 @@ export function loadPdfJs(): Promise<PdfJs> {
 
 const dataUrl = (folder: string) => new URL(`pdfjs/${folder}/`, document.baseURI).href;
 
-/** Starts loading a Document's PDF, streamed from the main process (never over IPC). */
-export function openPdf(pdfjs: PdfJs, documentId: string): PDFDocumentLoadingTask {
+/**
+ * Starts loading a Document's PDF, streamed from the main process (never over
+ * IPC): its file, or another PDF it serves (`url`), as a web page's look.
+ */
+export function openPdf(
+  pdfjs: PdfJs,
+  documentId: string,
+  url = documentFileUrl(documentId),
+): PDFDocumentLoadingTask {
   return pdfjs.getDocument({
-    url: documentFileUrl(documentId),
+    url,
     cMapUrl: dataUrl("cmaps"),
     cMapPacked: true,
     standardFontDataUrl: dataUrl("standard_fonts"),
