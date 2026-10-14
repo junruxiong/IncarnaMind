@@ -15,6 +15,7 @@
  * Codes and tokens are never logged.
  */
 import type { Browser } from "./adapters";
+import type { PastedAddressProblem, PastedAddressResult } from "./api";
 import { SecretStorageError } from "./errors";
 import {
   authorizeInBrowser,
@@ -108,6 +109,16 @@ function refusal(error: unknown): RefreshRefusal | "passing" {
   const { status } = error;
   return status >= 400 && status < 500 && status !== 408 && status !== 429 ? "unusable" : "passing";
 }
+
+const PASTE_PROBLEMS: Record<Exclude<PastedRedirect, "accepted">, PastedAddressProblem> = {
+  "not-redirect": "not-sign-in-address",
+  "wrong-state": "other-sign-in",
+  finished: "finished",
+};
+
+/** What became of a pasted address, as the core's interface says it. */
+export const pastedAddressResult = (pasted: PastedRedirect): PastedAddressResult =>
+  pasted === "accepted" ? { ok: true } : { ok: false, problem: PASTE_PROBLEMS[pasted] };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 

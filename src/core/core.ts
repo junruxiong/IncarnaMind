@@ -142,6 +142,8 @@ import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
 import { readsImages } from "./providers/capabilities";
 import { CHAT_FLOW_SENDS, createChat, type PreparedChatModel } from "./providers/chat";
 import { CHATGPT_PLAN_ENDPOINTS, createChatGptPlan } from "./providers/chatgpt/plan";
+import { createClaudeAccount } from "./providers/claudeAccount/account";
+import { ANTHROPIC_OAUTH } from "./providers/claudeAccount/config";
 import { createAiSdkEmbeddingModel } from "./providers/embeddings";
 import { ollamaBaseUrl } from "./providers/kinds";
 import { createAiSdkChatModel } from "./providers/models";
@@ -797,6 +799,16 @@ export function createCore(adapters: CoreAdapters): Core {
   chatGpt.forgetCodexSignIn().catch((error: unknown) => {
     console.error("The experimental ChatGPT provider's sign-in couldn't be removed.", error);
   });
+  let claudeAccountChanged = () => {};
+  const claudeProfile = adapters.claudeAccount ?? ANTHROPIC_OAUTH;
+  const claudeAccount = createClaudeAccount({
+    config: claudeProfile,
+    secrets,
+    language: () => settings.get().language,
+    browser: adapters.browser,
+    now: () => (adapters.now?.() ?? new Date()).getTime(),
+    onChange: () => claudeAccountChanged(),
+  });
   const meter = createMeter({
     db,
     now: () => adapters.now?.() ?? new Date(),
@@ -812,6 +824,7 @@ export function createCore(adapters: CoreAdapters): Core {
     consent,
     createModel: adapters.createChatModel ?? createAiSdkChatModel,
     chatGpt,
+    claudeAccount,
     ollamaModels: adapters.ollamaModels ?? createOllamaModels(),
     localOnly: () => embedding.localOnly(),
     meter,
@@ -1750,6 +1763,17 @@ export function createCore(adapters: CoreAdapters): Core {
       if (!lifetime.signal.aborted) console.error(error);
     });
   };
+  claudeAccountChanged = () => {
+    const report = async () => {
+      const status = await claudeAccount.status();
+      if (lifetime.signal.aborted) return;
+      events.emit("claudeAccount.changed", status);
+      await readinessChanged();
+    };
+    report().catch((error: unknown) => {
+      if (!lifetime.signal.aborted) console.error(error);
+    });
+  };
 
   // Tagging a quit interrupted starts again; Documents waiting for a chat model are checked.
   tagger.start();
@@ -1813,6 +1837,13 @@ export function createCore(adapters: CoreAdapters): Core {
     service: { id: chatGptSignIn.origin, name: "OpenAI" },
     listed: () => chatGpt.used(),
   });
+  if (claudeProfile) {
+    privacy.traffic.register({
+      id: "claude-sign-in",
+      service: { id: new URL(claudeProfile.authorizeUrl).origin, name: "Anthropic" },
+      listed: () => claudeAccount.used(),
+    });
+  }
   privacy.traffic.register({
     id: "remote-connectors",
     services: () => connectors.remoteTraffic(),
@@ -2638,6 +2669,12 @@ export function createCore(adapters: CoreAdapters): Core {
     signOutOfChatGpt: () => chatGpt.signOut(),
     pasteChatGptSignInAddress: async (address) =>
       chatGpt.pasteSignInAddress(typeof address === "string" ? address : ""),
+    getClaudeAccount: () => claudeAccount.status(),
+    signInToClaude: () => claudeAccount.signIn(),
+    cancelClaudeSignIn: () => claudeAccount.cancelSignIn(),
+    signOutOfClaude: () => claudeAccount.signOut(),
+    pasteClaudeSignInAddress: async (address) =>
+      claudeAccount.pasteSignInAddress(typeof address === "string" ? address : ""),
 
     listDataFlows: () => consent.list(),
     listConsentRequests: async () => consent.requests(),
