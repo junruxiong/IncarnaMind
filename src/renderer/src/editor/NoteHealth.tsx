@@ -20,7 +20,7 @@ import {
   noteHealth,
 } from "./healthCounts";
 import { CheckMarkIcon, ClaimMarkIcon } from "./icons";
-import { CheckedWhen, MindCheckAction, MindCheckProgress } from "./MindCheckLine";
+import { CheckedWhen, MindCheckAction, MindCheckProgress, MindCheckWiden } from "./MindCheckLine";
 import { COUNT_IDLE_MS } from "./WordCount";
 
 const NONE: Health = {
@@ -200,6 +200,7 @@ export function NoteHealth({
               </Fragment>
             );
           })}
+          {checkedAll && !running && !asking && <MindCheckWiden editor={editor} mindId={mindId} />}
           {canCheck && (
             <>
               <span className="mind-health-dot" aria-hidden="true">

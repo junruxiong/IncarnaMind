@@ -7241,10 +7241,15 @@ export interface CoreApi {
    */
   checkContradictions(input: CheckContradictionsInput): Promise<CheckContradictionsResult>;
   /**
-   * What "Check this Mind" (#737) would send in `mode`, or why there is
-   * nothing to check. Sends nothing.
+   * What "Check this Mind" (#737) would send in `mode`, against the Mind's
+   * Folder or, with `allDocuments`, every Document; or why there is nothing
+   * to check. Sends nothing.
    */
-  planMindCheck(mindId: string, mode: CheckMindMode): Promise<MindCheckPlan>;
+  planMindCheck(
+    mindId: string,
+    mode: CheckMindMode,
+    allDocuments?: boolean,
+  ): Promise<MindCheckPlan>;
   /**
    * "Check this Mind" (#737): the model names the claims among the Mind's
    * sentences, leaving out headings, questions and the User's own opinions,

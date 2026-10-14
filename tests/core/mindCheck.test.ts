@@ -247,7 +247,7 @@ describe("Check this Mind", () => {
     expect(mindCheckOf(client.doc)?.stop).toEqual({ reason: "cost-cap" });
   });
 
-  test("says why there is nothing to check: no sentences, or no Documents to check against", async () => {
+  test("says why there is nothing to check: no sentences, or no Documents to check against, unless every Document is", async () => {
     const { core } = await setUp();
     const empty = await core.createMind({ title: "Empty", folderId: null });
     expect(await core.planMindCheck(empty.id, "all")).toEqual({ kind: "nothing" });
@@ -259,6 +259,11 @@ describe("Check this Mind", () => {
     expect(await core.planMindCheck(lonely.id, "all")).toEqual({
       kind: "no-documents",
       folderId: emptyFolder.id,
+    });
+    // Against every Document, the Folder's emptiness doesn't stop it.
+    expect(await core.planMindCheck(lonely.id, "all", true)).toMatchObject({
+      kind: "ready",
+      sentences: 1,
     });
   });
 });

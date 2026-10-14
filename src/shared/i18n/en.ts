@@ -630,6 +630,7 @@ export const en = {
     "Check this Mind’s {count} sentences against this Folder’s Documents? {estimate}",
   "mindCheck.ask.all.one": "Check this Mind’s sentence against your Documents? {estimate}",
   "mindCheck.ask.all": "Check this Mind’s {count} sentences against your Documents? {estimate}",
+  "mindCheck.widen": "Check against all Documents",
   "mindCheck.check": "Check",
   "mindCheck.cancel": "Not now",
   "verify.command": "Verify a document…",
