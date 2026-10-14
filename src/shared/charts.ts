@@ -20,7 +20,7 @@ export type ChartKind = (typeof CHART_KINDS)[number];
 /** At most this many values in a chart: a longer table is cut, and the chart says so. */
 export const MAX_CHART_VALUES = 500;
 
-/** How many series a chart's key tells apart by colour (`ChartInk`); past it, colours repeat. */
+/** Past this many series, a chart's colours repeat (`ChartInk`). */
 export const CATEGORY_COUNT = 9;
 
 export type ChartValueOrigin =
@@ -65,7 +65,7 @@ export interface ChartData {
 }
 
 export type ChartSource =
-  /** `switched`: the chart's rows are the table's columns, its periods across the first row (#704). */
+  /** `switched`: the chart's rows are its table's columns. */
   { kind: "table"; blockId: string | null; switched?: boolean } | { kind: "figures" };
 
 export interface ChartAttributes {
@@ -310,10 +310,7 @@ function unitKey(value: Measured): string {
   return unit.kind;
 }
 
-/**
- * How a run of numbers is measured: "none" when none says a unit; "one" when they all say the
- * same one, or at least half do and the bare others are left out (`unitlessRows`); else "mixed".
- */
+/** "one" also when only half of them say it: the bare others aren't drawn (`unitlessRows`). */
 function unitsOf(values: readonly Measured[]): "none" | "one" | "mixed" {
   const withUnit = values.filter(saysUnit);
   const units = new Set(withUnit.map(unitKey)).size;
@@ -420,7 +417,6 @@ export function chartSources(
 /** What a figure doesn't settle that changes its value: drawn, it would be a guess. */
 const UNSETTLED = new Set(["separator", "sign"]);
 
-/** The first of a text's figures, with the value to draw, or null when it can't be read one way. */
 function figureIn(figures: readonly Figure[]): { figure: Figure; value: number | null } | null {
   const [figure] = figures;
   if (!figure) return null;
@@ -446,21 +442,19 @@ export interface FromTableOptions {
   title: string;
   /** The Mind's language, a BCP 47 tag: how its numbers are written when its text doesn't say. */
   language: string;
-  /** Which way round: false, the first column is the labels; true, the first row. Undecided, the table's periods decide (`chartFromTable`). */
+  /** True: the first row is the labels. Left out, the table's periods decide (`chartFromTable`). */
   switched?: boolean;
 }
 
-/** A cell that stands for nothing: a dash or "n/a" counts neither for nor against a table being numbers. */
-const NOTHING = /^(?:[-–—−]+|n\/?a|n\.a\.|nm|无|暂无)$/i;
+const BLANK_MARK = /^(?:[-–—−]+|n\/?a|n\.a\.|nm|无|暂无)$/i;
 
 interface TableReading {
   first: readonly (SourceCell | null)[];
   headingRow: boolean;
-  /** The grid's index of the first row that holds values. */
-  firstRow: number;
+  firstDataRow: number;
   dataRows: SourceGrid;
   columns: number;
-  /** The figures in a cell's text, trimmed: each text read once, as a table is read twice. */
+  /** Each text is read once: `numericSeries` and the chart read the table twice. */
   figuresOf(text: string): readonly Figure[];
 }
 
@@ -487,23 +481,19 @@ function readTable(grid: SourceGrid, language: string): TableReading {
   return {
     first,
     headingRow,
-    firstRow: headingRow ? 1 : 0,
+    firstDataRow: headingRow ? 1 : 0,
     dataRows: headingRow ? grid.slice(1) : grid,
     columns: Math.max(0, ...grid.map((row) => row.length)),
     figuresOf,
   };
 }
 
-/** The longest word that makes a figure approximate, which isn't part of its span. */
+/** The word that makes a figure approximate ("约", "about") isn't part of its span. */
 const MAX_APPROXIMATE_WORD = "approximately".length;
 
 type CellKind = "number" | "calculation" | "words";
 
-/**
- * What a cell is: one figure and nothing else ("41.2%", "$1.2 million", "约1.5亿"), words with
- * no figure in them, or a calculation, a figure among other things: a formula
- * ("(377.9−330.6)/330.6"), several figures or units ("10 kg + 5 lb"), a sentence with a figure.
- */
+/** A figure among other things (a formula, several figures, a sentence) is a calculation. */
 function readCell(
   text: string,
   figures: readonly Figure[],
@@ -518,13 +508,11 @@ function readCell(
 }
 
 /**
- * Whether a table is a series of numbers worth a chart (#704). Its body (not its labels, the
- * first column and the heading row) holds numbers, one figure to a cell: at least as many as
- * the cells of words, and more than the calculations. And they measure one thing down each
- * column, or along each row when two columns or more hold them (`unitsOf`). So a
- * table with a column of notes beside its figures is a series, as is a table of years by
- * metrics in dollars and percent; a calculation's working table, with its formulas, its steps
- * in words or a column of dollars and percent, is not. Dashes and "n/a" count for nothing.
+ * In the table's body (not its first column or heading row; dashes and "n/a" left out), numbers
+ * (one figure alone in a cell) are at least as many as cells of words and more than
+ * calculations, and they share one unit down each column, or along each row when two columns
+ * or more hold them. A calculation's working table, with formulas, steps in words or a column
+ * of dollars and percent, is not a numeric series.
  */
 export const isNumericSeries = (grid: SourceGrid, language: string): boolean =>
   numericSeries(readTable(grid, language));
@@ -538,7 +526,7 @@ function numericSeries({ dataRows, columns, figuresOf }: TableReading): boolean 
     for (let column = 1; column < columns; column++) {
       const cell = row[column];
       const text = cell?.text.trim() ?? "";
-      if (!cell || cell.continued || text === "" || NOTHING.test(text)) continue;
+      if (!cell || cell.continued || text === "" || BLANK_MARK.test(text)) continue;
       const { kind, figure } = readCell(text, figuresOf(text));
       counts[kind]++;
       if (figure) {
@@ -558,10 +546,9 @@ function numericSeries({ dataRows, columns, figuresOf }: TableReading): boolean 
   );
 }
 
-/** A chart's data before it is cut to `MAX_CHART_VALUES`: all its rows. */
-type Matrix = Pick<ChartData, "labelHeading" | "series" | "rows">;
+type UncutData = Pick<ChartData, "labelHeading" | "series" | "rows">;
 
-function cut(matrix: Matrix): ChartData {
+function cut(matrix: UncutData): ChartData {
   const fit = Math.max(1, Math.floor(MAX_CHART_VALUES / Math.max(1, matrix.series.length)));
   return {
     labelHeading: matrix.labelHeading,
@@ -573,11 +560,10 @@ function cut(matrix: Matrix): ChartData {
 }
 
 /**
- * The rows as series and the series as rows. A row with no number isn't a
- * series, as a column with none isn't. The labels have no heading: the
- * table's corner cell names the labels that become the series.
+ * A row with no number isn't a series, as a column with none isn't. The labels lose their
+ * heading: the table's corner cell names the labels that become the series.
  */
-function transposed(matrix: Matrix): Matrix {
+function transposed(matrix: UncutData): UncutData {
   const kept = matrix.rows.filter((row) => row.values.some((value) => value?.value != null));
   return {
     labelHeading: "",
@@ -589,31 +575,21 @@ function transposed(matrix: Matrix): Matrix {
   };
 }
 
-/**
- * A chart's data with its rows and columns switched, or null when it can't be:
- * a chart cut at `MAX_CHART_VALUES` has rows it doesn't hold, and a switch of
- * those would be a different, longer chart.
- */
+/** Null for a chart cut at `MAX_CHART_VALUES`: it doesn't hold the rows a switch needs. */
 export function switchedData(data: ChartData): ChartData | null {
   if (data.cutFrom !== null) return null;
   const matrix = transposed(data);
   return matrix.series.length === 0 ? null : cut(matrix);
 }
 
-/**
- * Whether a chart can switch its rows and columns (`switchedData`) and has
- * something to switch: one made from a table, with more than one value.
- */
 export const canSwitch = (chart: Pick<ChartAttributes, "data" | "source">): boolean =>
   chart.source.kind === "table" &&
   chart.data.cutFrom === null &&
   chart.data.rows.length * chart.data.series.length > 1;
 
 /**
- * What a chart becomes with its rows and columns switched: its data switched,
- * or `fromTable`, its table read the other way round; all its series drawn
- * again; and a bar chart where its kind can't draw the new data (a scatter
- * chart needs two series). Null when it can't be (`canSwitch`).
+ * `fromTable`: the table read the other way round, used in place of the chart's own data.
+ * Every series is drawn again, and a kind that can't draw the new data becomes a bar chart.
  */
 export function switchedChart(
   chart: ChartAttributes,
@@ -638,7 +614,7 @@ export function switchedChart(
  * `MAX_CHART_VALUES` are drawn, and the chart says how many there were; the
  * rest are kept to list.
  *
- * Periods go on the x axis (#704): when the first row holds periods ("2023",
+ * Periods go on the x axis: when the first row holds periods ("2023",
  * "Q1 2025", "2024年") and the first column doesn't, the rows are the series
  * and the columns the labels, which is `source.switched`; unless the rows
  * are more series than the key tells apart (`CATEGORY_COUNT`). Null when
@@ -650,7 +626,7 @@ export function chartFromTable(
   options: FromTableOptions,
 ): ChartAttributes | null {
   const table = readTable(grid, options.language);
-  const { first, headingRow, firstRow, dataRows, columns, figuresOf } = table;
+  const { first, headingRow, firstDataRow, dataRows, columns, figuresOf } = table;
   if (!numericSeries(table)) return null;
 
   const valueAt = (cell: SourceCell | null, row: number, column: number): ChartValue | null => {
@@ -669,18 +645,20 @@ export function chartFromTable(
   const seriesColumns: number[] = [];
   for (let column = 1; column < columns; column++) {
     const holdsNumber = dataRows.some(
-      (row, index) => valueAt(row[column] ?? null, firstRow + index, column)?.value != null,
+      (row, index) => valueAt(row[column] ?? null, firstDataRow + index, column)?.value != null,
     );
     if (holdsNumber) seriesColumns.push(column);
   }
   if (seriesColumns.length === 0) return null;
 
-  const labelled: Matrix = {
+  const labelled: UncutData = {
     labelHeading: headingRow ? (first[0]?.text.trim() ?? "") : "",
     series: seriesColumns.map((column) => (headingRow ? (first[column]?.text.trim() ?? "") : "")),
     rows: dataRows.map((row, index) => ({
       label: row[0]?.text.trim() ?? "",
-      values: seriesColumns.map((column) => valueAt(row[column] ?? null, firstRow + index, column)),
+      values: seriesColumns.map((column) =>
+        valueAt(row[column] ?? null, firstDataRow + index, column),
+      ),
     })),
   };
   const periodsAcross = headingRow && holdsPeriods(first.slice(1).map((cell) => cell?.text ?? ""));

@@ -75,7 +75,6 @@ const QUARTERS: JSONContent = {
   ],
 };
 
-/** The words of a row of a table, headings first when `header`. */
 const wordsRow = (header: boolean, ...values: string[]): JSONContent => ({
   type: "tableRow",
   content: values.map((value) =>
@@ -83,7 +82,6 @@ const wordsRow = (header: boolean, ...values: string[]): JSONContent => ({
   ),
 });
 
-/** A statement of accounts: the years across the top, a metric on each row. */
 const YEARS_BY_METRICS: JSONContent = {
   type: "table",
   attrs: { id: "table-2" },
@@ -94,7 +92,6 @@ const YEARS_BY_METRICS: JSONContent = {
   ],
 };
 
-/** A calculation's working table: its steps, the formulas and the results. */
 const WORKING_TABLE: JSONContent = {
   type: "table",
   attrs: { id: "table-3" },
@@ -322,7 +319,6 @@ describe("changing a chart in place", () => {
     expect(after.data.rows.map((row) => row.label)).toEqual(["2024", "2025"]);
     expect(tableUpdate(editor.state.doc, node()?.attrs ?? {}, "en")).toBeNull();
 
-    // A figure is corrected: what the table would draw now is still switched.
     let at = -1;
     editor.state.doc.descendants((child, place) => {
       if (at < 0 && child.isText && child.text === "362.0") at = place;
@@ -333,7 +329,6 @@ describe("changing a chart in place", () => {
     expect(update?.rows.map((row) => row.label)).toEqual(["2024", "2025"]);
     expect(update?.rows[1]?.values[1]?.shown).toBe("365.0");
 
-    // And back again: the values it had, kept until Update.
     const back = switchedChartIn(editor.state.doc, node()?.attrs ?? {}, "en");
     changeChart(editor, chartAt(editor).pos, back ?? {});
     expect(chartAt(editor).chart.source).toEqual({ kind: "table", blockId: "table-1" });

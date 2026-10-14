@@ -11,15 +11,7 @@ import {
   setWindowSize,
 } from "./app";
 
-/*
- * A table in a Mind and its chart (#704): "Chart from table" puts the years of a table of years
- * by metrics on the x axis, with the metrics as its series; "Switch rows and columns" swaps them,
- * from the chart's kind menu, from ⌘K and from its right-click menu, twice, and ⌘Z puts them
- * back; a calculation's working table is offered no chart; and a plain-text copy of a Mind with
- * a table and its chart has the table once, tab-separated, while the HTML copy keeps both. In
- * English and Chinese, at a wide and a narrow window. Set INCARNAMIND_SCREENSHOTS to a folder to
- * also save screenshots.
- */
+// Set INCARNAMIND_SCREENSHOTS to a folder to also save screenshots.
 const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
 async function screenshot(window: Page, name: string): Promise<void> {
   if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
@@ -87,7 +79,6 @@ const tableHtml = (table: { head: readonly string[]; rows: readonly (readonly st
     .map((row) => `<tr>${row.map((each) => `<td>${each}</td>`).join("")}</tr>`)
     .join("")}</table>`;
 
-/** A new Mind with a line of text and this table pasted in, as from a spreadsheet. */
 async function mindWithTable(
   window: Page,
   lead: string,
@@ -111,14 +102,11 @@ async function mindWithTable(
   return { editor, grid };
 }
 
-/** The labels along the chart's x axis and up its y axis, as drawn. */
 const axisLabels = (chart: Locator) => chart.locator(".chart-axis").allTextContents();
 
-/** The value of the chart at this row and series of its data. */
 const point = (chart: Locator, row: number, series: number) =>
   chart.locator(`[data-testid="chart-point"][data-point="${row}:${series}"]`);
 
-/** What the editor's copy puts on the clipboard for the selection, read from its own event. */
 const copyPayload = (editor: Locator) =>
   editor.evaluate((dom) => {
     const data = new DataTransfer();
@@ -140,7 +128,6 @@ for (const [language, width] of [
     await setWindowSize(app, window, width, 660);
     const { editor, grid } = await mindWithTable(window, words.lead, words.years);
 
-    // The table's menu makes the chart, after the table.
     await pointAndClick(window, grid.locator("td").filter({ hasText: words.firstMetric }));
     await pointAndClick(window, window.getByTestId("table-menu"));
     const chartItem = window.getByTestId("table-chart");
@@ -151,7 +138,6 @@ for (const [language, width] of [
     await expect(chart).toHaveCount(1);
     await expect(chart.getByTestId("chart-point")).toHaveCount(6);
 
-    // The years are along the x axis and the metrics are the series, in the key.
     expect(await axisLabels(chart)).toEqual(expect.arrayContaining([...words.years2]));
     await expect(chart.getByTestId("chart-legend")).toContainText(words.metrics[0]);
     await expect(chart.getByTestId("chart-legend")).toContainText(words.metrics[1]);
@@ -161,7 +147,6 @@ for (const [language, width] of [
     );
     await screenshot(window, `table-chart-years-${language}-${width}`);
 
-    // Switch rows and columns, in the chart's menu: the metrics are along the axis, the years the series.
     await pointAndClick(window, chart.getByTestId("chart-kind"));
     const menu = window.getByTestId("chart-kind-menu");
     await expect(menu).toContainText(words.rows);
@@ -180,7 +165,6 @@ for (const [language, width] of [
     await expect(chart.getByTestId("chart-changed")).toHaveCount(0);
     await screenshot(window, `table-chart-switched-${language}-${width}`);
 
-    // ⌘Z puts the years back along the axis.
     await expect(chart.getByTestId("chart-kind")).toBeFocused();
     await window.keyboard.press("ControlOrMeta+z");
     await expect.poll(() => axisLabels(chart)).toEqual(expect.arrayContaining([...words.years2]));
@@ -189,7 +173,6 @@ for (const [language, width] of [
       new RegExp(`^${words.years2[0]} · ${words.metrics[0]}`),
     );
 
-    // From ⌘K, with the focus on the chart.
     await window.keyboard.press("ControlOrMeta+k");
     await expect(window.getByTestId("palette")).toBeVisible();
     await window.keyboard.type(words.switch);
@@ -201,8 +184,6 @@ for (const [language, width] of [
     await window.keyboard.press("ControlOrMeta+z");
     await expect.poll(() => axisLabels(chart)).toEqual(expect.arrayContaining([...words.years2]));
 
-    // From the right-click menu, among the chart's own actions, twice: back as it was, and each
-    // switch is a step of its own that ⌘Z takes back.
     const switchFromMenu = async () => {
       await chart.locator(".chart-head").click({ button: "right", position: { x: 4, y: 4 } });
       const actions = window.getByTestId("chart-actions");
@@ -223,7 +204,6 @@ for (const [language, width] of [
     await expect.poll(() => axisLabels(chart)).toEqual(expect.arrayContaining([...words.years2]));
     await expect(chart.getByTestId("chart-changed")).toHaveCount(0);
 
-    // Copied as text, the Mind has its table once, a row to a line with tabs; the HTML keeps both.
     await pointAndClick(window, grid.locator("td").filter({ hasText: words.firstMetric }));
     await window.keyboard.press("ControlOrMeta+a");
     const copied = await copyPayload(editor);

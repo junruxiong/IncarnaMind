@@ -3,8 +3,7 @@
  * each Citation as it was, so it pastes back into IncarnaMind as a Citation, and shows it as
  * Word writes a footnote: a numbered marker in the text and a footnote list after it. Word
  * pastes those as footnotes; where footnotes can't be pasted, they read as numbered markers with
- * a list of Sources. The plain text has the same markers and a Sources list, and a table as
- * tab-separated rows.
+ * a list of Sources. The plain text has the same markers and a Sources list.
  */
 import { getTextBetween, getTextSerializersFromSchema, type TextSerializer } from "@tiptap/core";
 import { Fragment, type Node as ProseMirrorNode, type Schema } from "@tiptap/pm/model";
@@ -139,10 +138,7 @@ function tablesIn(fragment: Fragment): Set<unknown> {
   return ids;
 }
 
-/**
- * A chart drawn from a table that is in the copy too says nothing the table doesn't: its
- * values, written again as text, would be the table twice (#704).
- */
+/** A chart of a table in the copy would write the table's values a second time. */
 function withoutChartsOf(fragment: Fragment, tables: Set<unknown>): Fragment {
   const kept: ProseMirrorNode[] = [];
   fragment.forEach((node) => {
@@ -152,7 +148,7 @@ function withoutChartsOf(fragment: Fragment, tables: Set<unknown>): Fragment {
   return Fragment.fromArray(kept);
 }
 
-/** Cells selected in a table are copied as its rows alone: they are a table too. */
+/** prosemirror-tables copies selected cells as their rows, without the table around them. */
 function withRowsAsTable(fragment: Fragment, schema: Schema): Fragment {
   const table = schema.nodes[TABLE_NODE];
   return table && fragment.firstChild?.type.name === TABLE_ROW_NODE
@@ -160,11 +156,7 @@ function withRowsAsTable(fragment: Fragment, schema: Schema): Fragment {
     : fragment;
 }
 
-/**
- * The text of a copied fragment: a table as rows of cells apart by tabs, and its Citations as
- * numbered markers, "[1]", with the list of Sources after it. "" when it holds no table and no
- * Citation, so the editor's own text stands.
- */
+/** "" when the copy holds no table and no Citation, so the editor's own text stands. */
 export function copiedText(copy: Fragment, schema: Schema, context: SourceContext): string {
   const fragment = withRowsAsTable(copy, schema);
   const citations = citationsIn(fragment);
