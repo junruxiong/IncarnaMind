@@ -83,7 +83,7 @@ A short span of a Document that can be retrieved and cited.
 _Avoid_: chunk, snippet
 
 **Citation**:
-A reference, anchored in the text of an Answer, to the Passage a claim was drawn from: the Location it cites, and a quote from the Passage that is checked against the text at that Location. Copied into a Note, it stays a Citation; Question context shows it as a plain reference to its Document. It names its Document as the Document is named now, so a rename shows in every Citation of it; the name it was made with is kept, never rewritten, and shown only when the Document can't be found.
+A reference, anchored in the text of an Answer, to the Passage a claim was drawn from: the Location it cites, and a quote from the Passage that is checked against the text at that Location. Copied into a Note, it stays a Citation; Question context shows it as a plain reference to its Document. It names its Document as the Document is named now, so a rename shows in every Citation of it, on screen, in exports and in what a model or an outside agent reads; the name it was made with is kept, never rewritten, and shown only when the Document can't be found. A History comparison keeps each Checkpoint's own names.
 _Avoid_: source, reference
 
 **Calculated figure**:
@@ -152,6 +152,10 @@ _Avoid_: cluster, category, collection, group
 **Library**:
 The view of all of a User's Documents, organised into Folders with visible Tags. Users can search names or Tags, manage Folders, and organise Documents automatically or correct them by hand; manual choices are kept.
 _Avoid_: archive, index, vault
+
+**Peek**:
+A quick preview of a Document beside the list, opened with Space on its row in the sidebar or the Library, without opening the viewer: its first page, slide or sheet drawn small, its facts, and its Tags and Folder, which can be changed there. ↑ and ↓ move it to the next or previous Document; Space or Esc closes it, and Enter opens the Document in the viewer. It floats over the window and never replaces the Mind.
+_Avoid_: Quick Look, preview (a preview Tab is another thing), hover card
 
 ### Tools
 

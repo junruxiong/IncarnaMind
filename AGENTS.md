@@ -39,8 +39,8 @@ Single-context: `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/
 8. **Add few dependencies.** A new one must be open source under a permissive licence, maintained and small, and the pull request says why it's needed. No LangChain (ADR-0005). The lockfile changes only through `npm install`.
 9. **Keep secrets and the User's data safe.**
    - No keys or tokens in code, logs, tests, issues or pull requests. Store secrets only through `src/core/secrets.ts`.
-   - Nothing leaves the computer without the User's consent (ADR-0014, `src/core/consent.ts`).
-10. **Every interface string comes in English and Simplified Chinese**, in `src/shared/i18n/`. Chinese strings follow [`docs/agents/zh-CN.md`](docs/agents/zh-CN.md).
+   - Nothing leaves the computer without the User's consent, which they give where they choose the service (ADR-0022, `src/core/consent.ts`); background work never asks. Usage data follows ADR-0014.
+10. **Every interface string comes in English and Simplified Chinese**, in `src/shared/i18n/`. Chinese strings follow [`docs/agents/zh-CN.md`](docs/agents/zh-CN.md). Every date and time the interface shows comes from `src/shared/dates.ts`.
 11. **Write as few comments as possible.** Add one only when the code can't say it itself: a reason that isn't obvious, such as a workaround, a platform quirk, a constraint from an ADR or an issue (link it), or a trap the next reader would fall into. Prefer clearer names and smaller functions to a comment.
     - Don't write comments that restate what the code does, narrate a change ("now uses…", "fixed…"), label sections or address the reviewer.
     - No commented-out code. No TODO without an issue number.
@@ -65,7 +65,7 @@ Read [`docs/agents/testing.md`](docs/agents/testing.md). Work is done when the p
   - wait for states rather than times;
   - keep wall-clock limits out of unit tests.
 - Test through the core's public interface, as the UI uses it, and assert what a User would see. Tests need no API keys and no network.
-- Automated tests use the scripted chat model. Before calling an AI feature done, use it by hand with real models from at least three providers, including Anthropic and OpenAI, plus an Ollama cloud model or a small local Ollama model (the local one whenever the feature runs in Local mode). The pull request says which models you used and where one did worse.
+- Automated tests use the scripted chat model. Before calling an AI feature done, use it by hand with a real model: Claude Haiku 5.5 on an Anthropic API key (Sonnet 5.5 for a hard feature), plus a small local Ollama model whenever the feature runs in Local mode. The pull request says which models you used. Every provider is tried before a release (`docs/agents/testing.md`).
 
 ## UI
 

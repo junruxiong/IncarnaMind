@@ -21,22 +21,61 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Whether the change needs the heavy jobs. A pull request that changes only the repository's
+  # own documents (the root's *.md files and docs/, except docs/privacy.md, which a unit test
+  # reads) skips them; the required checks still report, as passed. Any other file, a merge
+  # group and a push to main run everything. Not every *.md is a document: the built-in Skills
+  # and the example Documents are Markdown files the tests read.
+  changes:
+    name: Which checks to run
+    runs-on: ubuntu-latest
+    outputs:
+      heavy: ${{ steps.diff.outputs.heavy }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          heavy=true
+          if [ "$EVENT" = pull_request ]; then
+            files="$(git diff --name-only "$BASE...$HEAD")" || files=""
+            echo "$files"
+            # Nothing listed (the diff failed, or is empty) runs everything.
+            if [ -n "$files" ] && ! echo "$files" | grep -qvE '^([^/]+\.md|docs/(.+))$' \
+               && ! echo "$files" | grep -qx 'docs/privacy.md'; then
+              heavy=false
+            fi
+          fi
+          echo "heavy=$heavy" | tee -a "$GITHUB_OUTPUT"
+
   check:
     name: Typecheck, lint and unit tests
+    needs: changes
     runs-on: ubuntu-latest
     env:
       # The unit tests drive the core in plain Node; they don't need the Electron binary.
       ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - if: needs.changes.outputs.heavy == 'true'
+        uses: actions/checkout@v7
+      - if: needs.changes.outputs.heavy == 'true'
+        uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm run lint
-      - run: npm test
+      - if: needs.changes.outputs.heavy == 'true'
+        run: npm ci
+      - if: needs.changes.outputs.heavy == 'true'
+        run: npm run typecheck
+      - if: needs.changes.outputs.heavy == 'true'
+        run: npm run lint
+      - if: needs.changes.outputs.heavy == 'true'
+        run: npm test
 
   # The Word corpus (eval/word/README.md): every file, its export back into itself after an
   # edit, its export for review and its export with someone's changes resolved open in LibreOffice
@@ -44,6 +83,8 @@ jobs:
   # which the other jobs don't need.
   word-corpus:
     name: Word corpus opens in LibreOffice
+    needs: changes
+    if: needs.changes.outputs.heavy == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -80,7 +121,8 @@ jobs:
     name: Smoke shard ${{ matrix.shard }}/8 (Linux)
     # A pull request merges only when it is up to date with main and this passed, so the merge
     # commit's tree is the one already tested. Running it again on main tests nothing new.
-    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    needs: changes
+    if: needs.changes.outputs.heavy == 'true' && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -121,8 +163,15 @@ jobs:
   smoke:
     name: Electron smoke test (Linux)
     if: always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
-    needs: smoke-shard
+    needs: [changes, smoke-shard]
     runs-on: ubuntu-latest
     steps:
+      # Skipped shards (a change to documents only) count as passed; a failed or cancelled one never does.
       - name: Every shard passed
-        run: test "${{ needs.smoke-shard.result }}" = success
+        run: |
+          test "${{ needs.changes.result }}" = success
+          if [ "${{ needs.changes.outputs.heavy }}" = true ]; then
+            test "${{ needs.smoke-shard.result }}" = success
+          else
+            test "${{ needs.smoke-shard.result }}" = skipped
+          fi

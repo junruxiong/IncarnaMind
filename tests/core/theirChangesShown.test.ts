@@ -91,10 +91,10 @@ describe("someone else's changes, shown as changes", { timeout: 30_000 }, () => 
 
     const shown = await text(core, mindId);
     expect(shown).toContain(
-      "9.1 Either party may end this agreement on {--30--}{++90++}{>>Replaced by Priya Nair, 2026-10-02<<} days' notice.",
+      "9.1 Either party may end this agreement on {--30--}{++90++}{>>Replaced by Priya Nair, 2 Oct 2026<<} days' notice.",
     );
     expect(shown).toContain(
-      "{--9.2 The Customer may terminate for convenience.--}{>>Deleted by Priya Nair, 2026-10-02<<}",
+      "{--9.2 The Customer may terminate for convenience.--}{>>Deleted by Priya Nair, 2 Oct 2026<<}",
     );
 
     const accepted = await text(core, mindId, { theirChanges: "accepted" });
@@ -114,14 +114,14 @@ describe("someone else's changes, shown as changes", { timeout: 30_000 }, () => 
     );
     expect(body).toContain('<ins class="change"> under any circumstances</ins>');
     expect(printed[0]?.notes).toEqual([
-      "Replaced by Priya Nair, 2026-10-02",
-      "Deleted by Priya Nair, 2026-10-02",
-      "Inserted by Priya Nair, 2026-10-02",
+      "Replaced by Priya Nair, 2 Oct 2026",
+      "Deleted by Priya Nair, 2 Oct 2026",
+      "Inserted by Priya Nair, 2 Oct 2026",
     ]);
 
     const html = new TextDecoder().decode((await core.exportMind(mindId, { format: "html" })).data);
     expect(html).toContain('<del class="change">30</del><ins class="change">90</ins>');
-    expect(html).toContain("Deleted by Priya Nair, 2026-10-02");
+    expect(html).toContain("Deleted by Priya Nair, 2 Oct 2026");
 
     await core.exportMind(mindId, { format: "pdf", theirChanges: "accepted" });
     expect(printed[1]?.body).not.toContain('class="change"');
