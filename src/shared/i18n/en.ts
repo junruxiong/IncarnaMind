@@ -56,6 +56,7 @@ export const en = {
   "unread.reason.scan":
     "A scan with no text that could be recognized (handwriting or a picture, say).",
   "unread.reason.password": "Password-protected. Remove the password and add it again.",
+  "unread.reason.passwordPdf": "Locked with a password.",
   "unread.reason.damaged": "The file is damaged or couldn't be opened.",
   "unread.reason.too-large": "Too large to open.",
   "unread.reason.pages": "Some scanned pages haven't been read yet.",
@@ -504,6 +505,7 @@ export const en = {
   "chart.kindName.scatter": "Scatter chart",
   "chart.kindMenu": "Chart type",
   "chart.columns": "Columns",
+  "chart.rows": "Rows",
   "chart.scatter.across": "across",
   "chart.scatter.up": "up",
   "chart.scatter.needsTwo": "A scatter chart needs two columns of numbers",
@@ -518,14 +520,15 @@ export const en = {
   "chart.empty": "Nothing to draw. Choose a column of numbers in Chart type.",
   "chart.plot.label": "{kind}: {title}, {count} values. The arrow keys move between them.",
   "chart.fromTable": "Chart from table",
-  "chart.fromTable.none": "No column of this table holds numbers to chart",
   "chart.fromFigures": "Chart from selected figures",
   "chart.fromFigures.none": "Select lines with figures in them to chart them",
   "chart.command.bar": "Show as bar chart",
   "chart.command.line": "Show as line chart",
   "chart.command.pie": "Show as pie chart",
   "chart.command.scatter": "Show as scatter chart",
+  "chart.switch": "Switch rows and columns",
   "chart.series.unnamed": "Column {number}",
+  "chart.series.unnamedRow": "Row {number}",
   "chart.series.value": "Value",
   "chart.point": "{label}: {value} · {source}",
   "chart.point.title": "{row} · {series}",
@@ -644,6 +647,7 @@ export const en = {
   "checks.problem.local-mode":
     "Local mode is on, and the model isn't on this computer, so nothing was checked.",
   "checks.problem.chooseModel": "Choose a model",
+  "checks.tryAgain": "Try again",
   "checks.problem.failed": "Couldn't check: {message}",
   "verify.command": "Verify a document…",
   "verify.command.keywords": "verify check PDF claims fact-check received draft someone else",
@@ -652,6 +656,7 @@ export const en = {
   "verify.refused.unreadable": "Couldn't read that PDF.",
   "verify.refused.no-text":
     "That PDF has no text to check. If it's a scan, its pages couldn't be read.",
+  "verify.mindTitle": "Checking: {name}",
   "verify.from": "From {name}",
   "verify.from.title": "Someone else wrote this text. Open {name} beside it",
   "verify.finding": "Finding the claims to check…",
@@ -808,6 +813,12 @@ export const en = {
   "viewer.keepTip": "Keep this tab open (or double-click its tab)",
   "viewer.loading": "Opening the Document…",
   "viewer.failed": "This Document couldn't be shown: {message}",
+  "viewer.locked.title": "This PDF is locked",
+  "viewer.locked.body":
+    "Type its password to open it. It's kept on this computer, for this PDF only.",
+  "viewer.locked.password": "Password",
+  "viewer.locked.unlock": "Unlock",
+  "viewer.locked.wrong": "That password doesn't open it.",
   "viewer.notText": "This file doesn't hold readable text.",
   "viewer.removed.body": "This Document has been deleted from IncarnaMind, so it can't be shown.",
   "viewer.removed.unlinked":
@@ -931,6 +942,8 @@ export const en = {
   "documents.pick.title": "Add Documents",
   "documents.pick.filter": "Documents",
   "documents.retryAction": "Retry",
+  "documents.unlockAction": "Unlock…",
+  "documents.forgetPasswordAction": "Forget password",
   "documents.renameLabel": "New name for {name}",
   "documents.deleteAction.many": "Delete {count} Documents",
   "documents.deleteAction": "Delete",
@@ -1492,6 +1505,8 @@ export const en = {
   "providers.form.apiKey": "API key",
   "providers.form.apiKeyOptional": "API key (optional)",
   "providers.form.apiKeySaved": "A key is saved. Leave this empty to keep it.",
+  "providers.form.keyRefused": "{provider} refused this key ({when}).",
+  "providers.form.keyRefusedNow": "{provider} refused this key.",
   "providers.form.region": "Region",
   "providers.region.cn": "China",
   "providers.region.intl": "International",
@@ -1535,7 +1550,7 @@ export const en = {
   "providers.secrets.unavailable":
     "This system can't encrypt API keys, so they can't be saved. You can still use Ollama, or a server that needs no key.",
 
-  "providers.ollama.title": "Local models with Ollama",
+  "providers.ollama.title": "On this computer (free)",
   "providers.ollama.checking": "Looking for Ollama on this computer…",
   "providers.ollama.detected":
     "Ollama is running on this computer. With a local model, your Questions and Documents stay on it.",
@@ -1544,6 +1559,7 @@ export const en = {
   "providers.ollama.use": "Use local models ({model}, 3.3 GB)",
   "providers.ollama.pulling": "Downloading {model} (3.3 GB)… This can take a while.",
   "providers.ollama.checkAgain": "Check again",
+  "providers.ollama.get": "Get Ollama",
 
   "providers.readiness.no-provider":
     "Asking Questions needs a chat model. Notes and Documents work without one.",
@@ -2016,6 +2032,7 @@ export const en = {
   "answer.error.plan-limit": "Your ChatGPT plan's usage limit is reached",
   "answer.error.blocked": "OpenAI didn't let IncarnaMind use your ChatGPT plan",
   "answer.error.checkKey": "Check the key",
+  "answer.error.askAgain": "Ask again",
   "answer.error.removeFromMenu": "Remove from menu",
   "answer.error.chooseModel": "Choose another model",
   "answer.error.allow": "Allow it",
@@ -2220,8 +2237,8 @@ export const en = {
   "citation.regenerate": "Regenerate the Answer",
   "citation.changedAfterCited": "The Document changed after this was cited.",
   "citation.recheck": "Check against the current version",
-  "citation.unsupported":
-    "This model can't call tools or return structured output, so this Answer has no Citations. Pick another model on the Question to get Citations.",
+  "citation.unsupported": "{model} can’t add Citations, so nothing in this Answer is checked",
+  "citation.unsupported.choose": "Choose another model",
 
   "search.running": "Searching your Documents…",
   "search.done": "Searched your Documents",
@@ -2631,6 +2648,9 @@ export const en = {
   "error.document.fileGone": "The Document's file isn't there to read.",
   "error.document.fileCantOpen": "The Document's file can't be opened.",
   "error.document.notFailed": "Only a Document that failed to process can be retried.",
+  "error.document.notPdf": "Only a PDF is opened with a password.",
+  "error.document.passwordMissing": "Type the PDF's password to open it.",
+  "error.document.notLocked": "This PDF isn't locked: it opens without a password.",
   "error.search.limit": "The limit must be a whole number from 1 to {max}.",
   "error.search.options": "The search's options must be given as a list of settings.",
   "error.tag.notFound": "That Tag doesn't exist or has been deleted.",

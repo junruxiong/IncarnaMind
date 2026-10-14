@@ -95,7 +95,7 @@ test("Verify a PDF: its Mind opens beside it, its claims are checked, and the co
   await verifyFromPlusMenu(window, "Verify a document…");
 
   const line = window.getByTestId("verify-line");
-  await expect(window.getByTestId("mind-title")).toHaveValue("Harbour report");
+  await expect(window.getByTestId("mind-title")).toHaveValue("Checking: Harbour report");
   await expect(line.getByTestId("verify-from")).toHaveText("From Harbour report");
   // The PDF is open beside the Mind, on the right, as a tab of its own.
   const viewer = window.getByTestId("viewer");
@@ -196,7 +196,9 @@ test("Empty states: nothing to check against, then no claims found", async () =>
   await interceptOpenDialog(app, join(sources, "Thanks.pdf"));
   await verifyFromPlusMenu(window, "Verify a document…");
   // The first Mind's tab stays open behind it.
-  await expect(window.locator('[data-testid="mind-title"]:visible')).toHaveValue("Thanks");
+  await expect(window.locator('[data-testid="mind-title"]:visible')).toHaveValue(
+    "Checking: Thanks",
+  );
   await expect(
     window.locator('[data-testid="verify-line"]:visible').getByTestId("verify-empty"),
   ).toHaveText("No claims found");
