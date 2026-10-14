@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { open, rename, rm, writeFile } from "node:fs/promises";
 import { extname, join } from "node:path";
+import { cutAtWord } from "../shared/naming";
 
 /** Longest a file name made from a title gets, before its extension. */
 const MAX_NAME_LENGTH = 120;
@@ -17,14 +18,15 @@ const MAX_TRIES = 1000;
  * `fallback` if nothing is left.
  */
 export function safeFileName(title: string, fallback: string): string {
-  const name = title
-    // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters can't be in file names.
-    .replace(/[\\/:*?"<>|\u0000-\u001f\u007f]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/^\.+/, "")
-    .slice(0, MAX_NAME_LENGTH)
-    .replace(/[\s.]+$/, "");
+  const name = cutAtWord(
+    title
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters can't be in file names.
+      .replace(/[\\/:*?"<>|\u0000-\u001f\u007f]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/^\.+/, ""),
+    MAX_NAME_LENGTH,
+  ).replace(/[\s.]+$/, "");
   if (!name) return fallback;
   return WINDOWS_DEVICE.test(name) ? `${name}_` : name;
 }
