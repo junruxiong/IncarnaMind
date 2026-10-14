@@ -289,7 +289,10 @@ export function AnswerError({
   /** When the plan's limit resets, when its provider said. */
   resetsAt: string | null;
   details: string | null;
-  /** When it failed, ISO 8601: a key saved since lets a refused one be asked again. */
+  /**
+   * When it failed, ISO 8601, said beside a refused key; an Answer in a Mind keeps no time, so
+   * its failure counts from when it was first shown. A key saved since lets it be asked again.
+   */
   failedAt?: string | null;
   onRetry?: (() => void) | undefined;
   onOpenSettings(page: SettingsPage): void;
@@ -300,7 +303,8 @@ export function AnswerError({
   const provider = useAnswers(
     (state) => state.models?.find((group) => group.provider.id === providerId)?.provider.kind,
   );
-  const keySaved = useKeySavedSince(providerId, failedAt);
+  const [shownAt] = useState(() => new Date().toISOString());
+  const keySaved = useKeySavedSince(providerId, failedAt ?? shownAt);
   // Whose plan it was decides where its usage is managed.
   useEffect(() => {
     if (kind === "plan-limit" || WRONG_MODEL.has(kind)) useAnswers.getState().loadModels();

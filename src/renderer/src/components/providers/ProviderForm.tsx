@@ -13,6 +13,7 @@ import {
   keyProviderGroups,
 } from "../../../../core/providers/catalog/providers";
 import { core } from "../../core";
+import { dayOf } from "../../dates";
 import { errorMessage } from "../../errors";
 import { useGap, useLanguage, useT } from "../../i18n";
 import type { KeyRefusal } from "../../keyRefusals";
@@ -403,14 +404,7 @@ function KeyRefusedLine({ id, refused }: { id: string; refused: KeyRefusal }) {
   const t = useT();
   const language = useLanguage();
   const provider = t(`providers.kind.${refused.kind}`);
-  const when = refused.at
-    ? new Intl.DateTimeFormat(language, {
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      }).format(new Date(refused.at))
-    : null;
+  const when = refused.at ? dayOf(new Date(refused.at), new Date(), language, t) : null;
   return (
     <span id={id} data-testid="provider-key-refused" role="status" className={hintClass}>
       {when

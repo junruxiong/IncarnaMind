@@ -1393,7 +1393,7 @@ export const zhCN = {
   "providers.form.apiKey": "API 密钥",
   "providers.form.apiKeyOptional": "API 密钥（可选）",
   "providers.form.apiKeySaved": "已保存密钥。留空即保留原密钥。",
-  "providers.form.keyRefused": "{provider} 于 {when} 拒绝了这个密钥。",
+  "providers.form.keyRefused": "{provider} 拒绝了这个密钥（{when}）。",
   "providers.form.keyRefusedNow": "{provider} 拒绝了这个密钥。",
   "providers.form.region": "地域",
   "providers.region.cn": "中国",
