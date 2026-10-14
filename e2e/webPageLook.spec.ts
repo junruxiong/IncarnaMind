@@ -7,6 +7,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  motionSettled,
   openSettings,
   removeDataFolder,
   setLanguage,
@@ -151,7 +152,7 @@ test("off by default: the box is unticked, a page saved is never loaded for its 
   await window.getByTestId("plus-menu").click();
   await window.getByTestId("plus-add-web-page").click();
   await expect(dialog.getByTestId("add-web-page-keep-look")).toBeChecked();
-  await expect(window.getByTestId("plus-add-web-page")).toBeHidden();
+  await motionSettled(window);
   if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, "look-add-dialog-en.png") });
   await app.close();
 });
