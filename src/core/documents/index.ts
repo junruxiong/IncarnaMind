@@ -19,6 +19,7 @@
  * Minds point to, and those retained, stay, the only text a deleted Document
  * keeps (`keptCitationTexts`), so those Citations can still be checked.
  */
+
 import { randomUUID } from "node:crypto";
 import { existsSync, renameSync } from "node:fs";
 import { rm, stat } from "node:fs/promises";
@@ -64,6 +65,7 @@ import { foundSourceOf } from "../sources/store";
 import type { Database, SqlValue } from "../storage";
 import { tagsOfDocument } from "../tags";
 import type { StoredTaggingState } from "../tags/tagger";
+import { isPlaceholderDate } from "./creationDate";
 import { createEmbeddingQueue } from "./embedding";
 import {
   DOCUMENT_EXTENSIONS,
@@ -1855,7 +1857,10 @@ export function createDocuments(options: DocumentsOptions) {
       if (!row) return null;
       const issued = referenceOf(db, documentId)?.fields.issued;
       if (issued) return issued;
-      if (row.creation_date) return row.creation_date.slice(0, 10);
+      // A date stored before it was known to be a placeholder (2000-01-01) isn't shown either.
+      if (row.creation_date && !isPlaceholderDate(row.creation_date)) {
+        return row.creation_date.slice(0, 10);
+      }
       return row.file_mtime_ms === null
         ? null
         : new Date(row.file_mtime_ms).toISOString().slice(0, 10);
