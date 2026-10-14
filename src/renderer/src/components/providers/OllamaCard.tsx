@@ -63,7 +63,7 @@ export type Ollama = ReturnType<typeof useOllama>;
 /** What Ollama's choice says about this computer: looking, found, or not found. */
 export function ollamaDescription(ollama: Ollama, t: ReturnType<typeof useT>): string {
   if (ollama.status === null) return t("providers.ollama.checking");
-  return ollama.status.running ? t("providers.ollama.detected") : t("providers.ollama.notDetected");
+  return ollama.status.running ? t("providers.ollama.detected") : t("setup.way.local.notRunning");
 }
 
 /** The model being pulled, with its progress, and what went wrong. */
