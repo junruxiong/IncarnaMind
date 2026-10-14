@@ -1068,7 +1068,7 @@ export const en = {
   "status.scanning.other": "Reading {count} scanned pages…",
   "status.tagging.one": "Tagging 1 Document…",
   "status.tagging.other": "Tagging {count} Documents…",
-  "status.taggingWaiting": "Tags come once you choose an AI model",
+  "status.taggingWaiting": "No AI model for Tags",
   "status.taggingPermission": "Tags need your OK",
   "status.choose": "Choose…",
   "status.downloading": "Search model",
@@ -1338,7 +1338,7 @@ export const en = {
   "tags.dialog.retag.started": "Re-tagging has started.",
   "tags.dialog.done": "Done",
 
-  "jev.waiting.notice": "Tags wait until you choose a model.",
+  "jev.waiting.notice": "Tags come once you choose an AI model.",
   "jev.waiting.permission": "Tags wait until you allow Document text to go to {service}.",
   "jev.chip.needsReview": "needs review",
   "jev.chip.likely": "{tag}: added automatically, {percent}% likely",

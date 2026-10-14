@@ -144,13 +144,13 @@ test("before a model is chosen, a new Document's tagging waits with its line, an
   const item = window.getByTestId("document-list-item").filter({ hasText: "Invoice 43" });
   await expect(item).toHaveAttribute("data-tagging", "waiting-for-provider");
   const status = window.getByTestId("tagging-waiting");
-  await expect(status).toContainText("Tags come once you choose an AI model");
-  await expect(status).toHaveAttribute("title", "Tags wait until you choose a model.");
+  await expect(status).toContainText("No AI model for Tags");
+  await expect(status).toHaveAttribute("title", "Tags come once you choose an AI model.");
   await expect(window.getByTestId("consent-dialog")).toBeHidden();
   expect(await consentAsked()).toEqual([]);
 
   await setLanguage(window, "zh-CN");
-  await expect(status).toHaveAttribute("title", "选好模型后再打标签。");
+  await expect(status).toHaveAttribute("title", "选择 AI 模型后会自动打标签。");
   await app.close();
 });
 
