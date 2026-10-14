@@ -2555,14 +2555,15 @@ export function createCore(adapters: CoreAdapters): Core {
 
     getChatGptPlan: () => chatGpt.status(),
     answerWithPlanModel: async (input) => {
-      if (!isRecord(input) || typeof input.insteadOf !== "string") {
-        throw new InvalidInputError("answerWithPlanModel expects { insteadOf, modelId }.");
+      const models = await chatGpt.models();
+      if (
+        !isRecord(input) ||
+        typeof input.insteadOf !== "string" ||
+        !models.some((model) => model.id === input.modelId)
+      ) {
+        throw new InvalidInputError({ key: "error.chatgpt.notPlanModel" });
       }
-      const { insteadOf, modelId } = input;
-      if (!(await chatGpt.models()).some((model) => model.id === modelId)) {
-        throw new InvalidInputError(`"${modelId}" isn't a model of the ChatGPT plan.`);
-      }
-      chatGpt.limits.answerWith(insteadOf, modelId);
+      chatGpt.limits.answerWith(input.insteadOf, input.modelId);
       return chatGpt.status();
     },
     endPlanStandIn: async () => {

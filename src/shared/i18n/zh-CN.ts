@@ -2558,6 +2558,7 @@ export const zhCN = {
   "error.files.notSaved.show": "只能显示 IncarnaMind 保存的文件。",
   "error.files.notSaved.open": "只能打开 IncarnaMind 保存的文件。",
   "error.provider.modelMissing": "输入模型名称。",
+  "error.chatgpt.notPlanModel": "你的 ChatGPT 订阅里没有这个模型。",
   "error.provider.embeddingModelMissing": "输入嵌入模型名称。",
   "error.provider.rerankModelMissing": "输入重排序模型名称。",
   "error.provider.keyMissing": "输入 {provider} 的 API 密钥。",
