@@ -1,3 +1,4 @@
+import { writeSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
   app,
@@ -26,11 +27,22 @@ import { startLogging } from "./logging";
 import { isCaptureWindow } from "./meetings/capture";
 import { installAppMenu } from "./menu";
 import { createSystemNotifications } from "./notifications";
-import { chooseExecutor, createElectronAdapters, systemBrowser } from "./platform";
+import { chooseExecutor, createElectronAdapters, homeFolder, systemBrowser } from "./platform";
 import { DOWNLOAD_BUTTON, RELEASES_PAGE, startupDialog } from "./startupError";
+import { realHomeProblem } from "./testHome";
 import { reportFullScreen, titleBarOptions } from "./titleBar";
 import { registerUpdateCheck, startAutoUpdates } from "./updater";
 import { keepWindowPlace, windowPlace } from "./windowState";
+
+// A test build refuses the real home folder before anything is written. It says why on stderr and
+// exits: a dialog would leave the smoke test waiting.
+if (import.meta.env.MODE === "test") {
+  const problem = realHomeProblem(homeFolder());
+  if (problem) {
+    writeSync(2, `${problem}\n`);
+    process.exit(1);
+  }
+}
 
 // Points the app at another data folder: the smoke test uses a temporary one.
 // Set before anything reads `userData`, so Chromium's own data moves there too.
