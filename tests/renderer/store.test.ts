@@ -799,4 +799,31 @@ describe("Organize says what it did (#763)", () => {
     expect(restored.mock.calls[0]?.[0]).toBe("a");
     expect(restored.mock.calls[0]?.[1]).toMatchObject({ groupId: null, suggested: false });
   });
+
+  test("Undo leaves a Document the User moved since", async () => {
+    const { sayWhenOrganized } = await import("../../src/renderer/src/organizeRun");
+    const { useUndo } = await import("../../src/renderer/src/undo");
+    method("restoreAssignment").mockClear();
+    const before = new Map([
+      ["a", assignment("a", "classified")],
+      ["b", assignment("b", "classified")],
+    ]);
+    useAppStore.setState({
+      library: snapshot([assignment("a", "pending"), assignment("b", "pending")]),
+    });
+    sayWhenOrganized(["a", "b"], before);
+    const suggested = (id: string) => ({ ...assignment(id, "classified", "g"), suggested: true });
+    useAppStore.setState({ library: snapshot([suggested("a"), suggested("b")]) });
+    // The User puts b somewhere else.
+    useAppStore.setState({
+      library: snapshot([
+        suggested("a"),
+        { ...assignment("b", "classified", null), source: "user" },
+      ]),
+    });
+    await useUndo.getState().undo();
+    const restored = method("restoreAssignment");
+    expect(restored).toHaveBeenCalledTimes(1);
+    expect(restored.mock.calls[0]?.[0]).toBe("a");
+  });
 });

@@ -178,6 +178,25 @@ for (const language of ["en", "zh-CN"] as const) {
     await expect(needs.getByTestId("library-organize-use")).toHaveText(
       language === "en" ? "Use Ollama" : "使用 Ollama",
     );
+    // A local model sends nothing, so says nothing about sending.
+    await expect(needs.getByTestId("library-organize-sends")).toHaveCount(0);
+
+    // A model on another service: the line says what would be sent there.
+    await bridge(window, async (core) => {
+      await core.saveChatProvider({
+        kind: "openai-compatible",
+        baseUrl: "https://llm.example.com/v1",
+        modelId: "example-model",
+      });
+    });
+    await expect(needs.getByTestId("library-organize-use")).toHaveText(
+      language === "en" ? "Use llm.example.com" : "使用 llm.example.com",
+    );
+    await expect(needs.getByTestId("library-organize-sends")).toHaveText(
+      language === "en"
+        ? "Sends your Documents' text, Folder names and Tag definitions to llm.example.com"
+        : "会把文档文本、文件夹名称和标签说明发送给 llm.example.com",
+    );
     await app.close();
   });
 }
