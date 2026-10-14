@@ -146,7 +146,7 @@ test("Export saves a .docx in one click: the first goes to Documents › Incarna
   await app.close();
 });
 
-test("in Chinese the first export says it went to 文稿 › IncarnaMind; if that folder can't be made, the save asks where instead, in plain words, and Esc saves nothing", async () => {
+test("in Chinese, at the narrowest window, the first export says it went to 文稿 › IncarnaMind, its long name wrapped whole; if that folder can't be made, the save asks where instead, in plain words, and Esc saves nothing", async () => {
   // A file where the folder would be made.
   await mkdir(join(dataDir, "Documents"), { recursive: true });
   const blocked = join(dataDir, "Documents", "IncarnaMind");
@@ -154,7 +154,9 @@ test("in Chinese the first export says it went to 文稿 › IncarnaMind; if tha
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Tides");
+  const title =
+    "Contract review notes for the fourth-quarter credit committee 信贷委员会合同审阅笔记";
+  await window.getByTestId("mind-title").fill(title);
   await window.getByTestId("mind-editor").click();
   await window.keyboard.type("Spring tides come twice a month.");
 
@@ -165,7 +167,7 @@ test("in Chinese the first export says it went to 文稿 › IncarnaMind; if tha
   await expect(ask).toHaveAttribute("data-kind", "output-location");
   await expect(ask.getByRole("heading")).toHaveText("Where should new files go?");
   await expect(ask.getByTestId("file-write-unusable")).toHaveText(
-    "Couldn't save “Tides.docx” in Documents › IncarnaMind: IncarnaMind couldn't make that folder.",
+    `Couldn't save “${title}.docx” in Documents › IncarnaMind: IncarnaMind couldn't make that folder.`,
   );
   await expect(ask.getByRole("button")).toHaveText(["Cancel", "Choose another folder…"]);
   await screenshot(ask, "file-write-output-location-en");
@@ -174,26 +176,38 @@ test("in Chinese the first export says it went to 文稿 › IncarnaMind; if tha
   await expect(result).toHaveCount(0);
 
   await bridge(window).language("zh-CN");
+  await setWindowSize(app, window, 900, WINDOW_SIZE.height);
   await exportButton.click();
   await expect(ask.getByRole("heading")).toHaveText("新文件保存到哪里？");
   await expect(ask.getByTestId("file-write-unusable")).toHaveText(
-    "无法把“Tides.docx”保存到“文稿 › IncarnaMind”：IncarnaMind 无法创建这个文件夹。",
+    `无法把“${title}.docx”保存到“文稿 › IncarnaMind”：IncarnaMind 无法创建这个文件夹。`,
   );
   await screenshot(ask, "file-write-output-location-zh");
   await ask.getByRole("button", { name: "取消" }).click();
   await expect(ask).toBeHidden();
   await expect(result).toHaveCount(0);
 
-  // With the file out of the way, the save goes there, and says so in Chinese.
+  // With the file out of the way, the save goes there and says so, the whole name wrapped
+  // inside the line rather than cut short.
   await rm(blocked);
   await exportButton.click();
-  await expect(result.getByTestId("export-done")).toHaveText(
-    "已保存“Tides.docx”到“文稿 › IncarnaMind”",
-  );
+  const done = result.getByTestId("export-done");
+  await expect(done).toHaveText(`已保存“${title}.docx”到“文稿 › IncarnaMind”`);
   await expect(result.getByTestId("export-open")).toHaveText("打开");
   await expect(result.getByTestId("export-change-folder")).toHaveText("更改文件夹…");
   await expect(ask).toBeHidden();
+  const [line, saved, windowWidth] = await Promise.all([
+    result.boundingBox(),
+    done.boundingBox(),
+    window.evaluate(() => globalThis.innerWidth),
+  ]);
+  if (!line || !saved) throw new Error("The line isn't laid out.");
+  expect(saved.height).toBeGreaterThan(30);
+  expect(saved.x + saved.width).toBeLessThanOrEqual(line.x + line.width);
+  expect(line.x + line.width).toBeLessThanOrEqual(windowWidth);
+  expect(await done.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   await screenshot(result, "export-first-save-zh");
+  await screenshot(window, "export-first-save-window-zh-narrow");
   await result.getByTestId("export-change-folder").click();
   await expect(window.getByTestId("output-location-settings")).toBeInViewport();
   await app.close();
