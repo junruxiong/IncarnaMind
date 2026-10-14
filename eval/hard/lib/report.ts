@@ -395,7 +395,7 @@ function citationsSection(report: HardReport): string[] {
 
 /** What #760's check of sentences written without markers did, over the finished Answers. */
 export function citedAfterCheckingCounts(citations: HardCitations) {
-  const finished = citations.run.answers.filter((answer) => answer.status === "done");
+  const finished = (citations.run.answers ?? []).filter((answer) => answer.status === "done");
   const added = (answer: (typeof finished)[number]) => answer.citedAfterChecking?.count ?? 0;
   const noneOwn = finished.filter((answer) => answer.citations.length - added(answer) === 0);
   return {

@@ -30,7 +30,7 @@ import { createTempDataFolder, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
 import { askAndEnd, isAnswer, QWEN35, setUpLocalModel } from "../helpers/localModels";
 import { answerIn, question, writeMind } from "../helpers/minds";
-import { promptOf, scriptedModel, scriptedModels } from "../helpers/models";
+import { lastAnswerCall, promptOf, scriptedModel, scriptedModels } from "../helpers/models";
 import { xlsxPackage } from "../helpers/office";
 import { type OllamaChatReply, startOllamaServer } from "../helpers/ollama";
 import { buildPdf } from "../helpers/pdf";
@@ -1005,7 +1005,7 @@ describe("The calculate Tool", { timeout: 60_000 }, () => {
 
     await askAndRead(core, "Why?", conversationId);
 
-    const earlier = promptOf(model, model.doStreamCalls.length - 1).filter(
+    const earlier = promptOf(model, lastAnswerCall(model)).filter(
       (message) => message.role === "assistant" && message.text,
     );
     expect(earlier.map((message) => message.text)).toEqual([
