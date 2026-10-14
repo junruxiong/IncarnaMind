@@ -2248,6 +2248,57 @@ export type ReferenceLookupFailureReason =
   | "unreachable"
   | "service-error";
 
+/**
+ * How a reference in a Mind's reference list checks against Crossref (#711):
+ * - "found": the work exists, as written;
+ * - "mismatch": a record exists, but its title, year or first author differ;
+ * - "not-found": no record is this work, or its DOI leads nowhere;
+ * - "not-checked": it couldn't be asked about (`ReferenceCheck.reason`).
+ */
+export type ReferenceCheckMark = "found" | "mismatch" | "not-found" | "not-checked";
+
+/** Why a reference wasn't checked. */
+export type ReferenceCheckReason =
+  | "local-mode"
+  | "declined"
+  | "unreachable"
+  | "rate-limited"
+  | "service-error";
+
+/** How a reference differs from the record of the work it names. */
+export interface ReferenceDifference {
+  field: "title" | "authors" | "year";
+  /** As the record has it: the authors as "Hochreiter, Schmidhuber". */
+  found: string;
+  /** As the reference has it, when it can be read alone (its year). */
+  cited: string | null;
+}
+
+/** One reference of a reference list, checked. */
+export interface ReferenceCheck {
+  /** As written, its white space collapsed. */
+  reference: string;
+  mark: ReferenceCheckMark;
+  /** The record of the work it names; null when none was found, or it wasn't checked. */
+  record: { title: string; authors: string[]; year: number | null; doi: string | null } | null;
+  /** For "mismatch": how it differs. */
+  differences: ReferenceDifference[];
+  /** For "not-checked": why. */
+  reason: ReferenceCheckReason | null;
+}
+
+/** What `checkReferences` did. */
+export type CheckReferencesResult =
+  | {
+      kind: "checked";
+      /** Each entry of the reference list, in order, with the Block it is in. */
+      references: (ReferenceCheck & { blockId: string })[];
+    }
+  /** The Mind has no reference list: no heading such as "References" or "参考文献". */
+  | { kind: "no-references" }
+  /** Stopped by `stopReferenceCheck`, or the Mind went. */
+  | { kind: "cancelled" };
+
 /** What Look up came to. */
 export type ReferenceLookupResult =
   | {
@@ -4751,6 +4802,7 @@ export const dataKinds = [
   "answers",
   "web-searches",
   "verified-document",
+  "references",
   "connector-search",
 ] as const;
 
@@ -4776,6 +4828,9 @@ export type DataKind = (typeof dataKinds)[number];
  * - "reference-lookup": a Document's DOI to Crossref, or its arXiv id to
  *   arXiv, when the User asks Look up to fill its reference record (#286).
  *   Nothing else: no file, text or name. None in local mode.
+ * - "reference-check": each entry of a Mind's reference list, as written,
+ *   to Crossref, when the User checks the list's references (#711). Nothing
+ *   else of the Mind. None in local mode.
  * - "find-sources": what the User (or an Answer, for them) searches for, with
  *   its filters, to each Source provider searched, and the identifier of a
  *   work they add, to the provider that gives its full text or record (#296).
@@ -4809,6 +4864,7 @@ export const dataFlowIds = [
   "rerank",
   "suggestions",
   "reference-lookup",
+  "reference-check",
   "find-sources",
   "edits",
   "checks",
@@ -6789,6 +6845,16 @@ export interface CoreApi {
    */
   lookUpReference(documentId: string): Promise<ReferenceLookupResult>;
   /**
+   * Looks up each entry of a Mind's reference list in Crossref (#711): by its
+   * DOI, else by the reference as written. Only the reference is sent, after
+   * the User has allowed the "reference-check" flow (asked once, where the
+   * check starts); never in local mode, where every entry is "not-checked".
+   * One check of a Mind at a time; "referenceCheck.progress" says how far it is.
+   */
+  checkReferences(mindId: string): Promise<CheckReferencesResult>;
+  /** Stops a Mind's `checkReferences`: it gives "cancelled". Stopping none does nothing. */
+  stopReferenceCheck(mindId: string): Promise<void>;
+  /**
    * Imports the references in a CSL JSON, BibTeX or RIS file (#287), from
    * Zotero, EndNote, Mendeley and others. The format is read from what is in
    * the file. Each reference is matched to a Document by DOI, then arXiv id,
@@ -7741,6 +7807,8 @@ export interface CoreEvents {
    * "document.status". Carries each Document whole.
    */
   "references.changed": Document[];
+  /** How far a Mind's `checkReferences` is: `done` of `total` entries looked up. */
+  "referenceCheck.progress": { mindId: string; done: number; total: number };
   /** `importReferences` has matched `done` of `total` references. */
   "references.importProgress": { done: number; total: number };
   /** The ChatGPT sign-in changed: started, finished, signed out, or expired. */
@@ -7880,6 +7948,8 @@ const methods: Record<CoreApiMethod, true> = {
   updateReference: true,
   restoreReference: true,
   lookUpReference: true,
+  checkReferences: true,
+  stopReferenceCheck: true,
   listSourceProviders: true,
   setSourceProviderKey: true,
   findSources: true,

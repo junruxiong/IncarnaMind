@@ -27,6 +27,7 @@ import {
 } from "../verify";
 import { shownClaims } from "./claimChecks";
 import { useMindModel } from "./ModelChip";
+import { ReferencesLine } from "./ReferencesLine";
 
 /** What a Mind made by "Verify a document…" verifies, as it changes. */
 export function useVerification(doc: Y.Doc): Verification | null {
@@ -321,6 +322,7 @@ export function VerifyLine({
             : t("verify.problem.error", { message: outcome.message })}
         </ProblemLine>
       )}
+      {running === null && <ReferencesLine editor={editor} mindId={mindId} />}
     </>
   );
 }

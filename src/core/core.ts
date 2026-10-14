@@ -146,6 +146,7 @@ import { isCloudModelName } from "./providers/ollamaCloud";
 import { createOllamaModels } from "./providers/ollamaModels";
 import { createAiSdkRerankingModel, createRerank } from "./providers/rerank";
 import { createRecentlyDeleted } from "./recentlyDeleted";
+import { createReferenceChecks } from "./referenceChecks";
 import {
   createReferenceImport,
   createReferences,
@@ -1558,6 +1559,17 @@ export function createCore(adapters: CoreAdapters): Core {
     signal: lifetime.signal,
     pace,
   });
+  // Checking a Mind's reference list (#711) sends each reference only, to Crossref, once the
+  // User starts it where a line says so; never in local mode.
+  const referenceChecks = createReferenceChecks({
+    consent,
+    localOnly: () => embedding.localOnly(),
+    http: createSourceHttp(pace, paceTimers),
+    crossrefUrl: adapters.referenceLookup?.crossref,
+    content,
+    progress: (event) => events.emit("referenceCheck.progress", event),
+    signal: lifetime.signal,
+  });
   // Importing references (#287) reads a file the User chose and sends nothing.
   const referenceImport = createReferenceImport({
     db,
@@ -2268,6 +2280,8 @@ export function createCore(adapters: CoreAdapters): Core {
     restoreReference: async (documentId, before, fields) =>
       references.restore(documentId, before, fields),
     lookUpReference: (documentId) => references.lookUp(documentId),
+    checkReferences: (mindId) => referenceChecks.check(mindId),
+    stopReferenceCheck: async (mindId) => referenceChecks.stop(mindId),
     listSourceProviders: () => sources.list(),
     setSourceProviderKey: (providerId, key) => sources.setKey(providerId, key),
     findSources: (input) => sources.search(input),
