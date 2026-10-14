@@ -116,30 +116,15 @@ function headingAbove(doc: ProseMirrorNode, topLevel: number): string {
   return title;
 }
 
-/** Each table as it stands is read once: ⌘K asks whether to offer Chart from table as the User types. */
-const tableCharts = new WeakMap<ProseMirrorNode, Map<string, ChartAttributes | null>>();
-
-function chartOfTableNode(table: ProseMirrorNode, language: string): ChartAttributes | null {
-  const charts = tableCharts.get(table) ?? new Map<string, ChartAttributes | null>();
-  tableCharts.set(table, charts);
-  if (!charts.has(language)) {
-    const id = table.attrs[BLOCK_ID_ATTRIBUTE];
-    const chart = chartFromTable(tableGrid(table), {
-      blockId: typeof id === "string" ? id : null,
-      title: "",
-      language,
-    });
-    charts.set(language, chart);
-  }
-  return charts.get(language) ?? null;
-}
-
 export function chartOfTable(state: EditorState, language: string): ChartAttributes | null {
   const table = tableAround(state);
-  const chart = table && chartOfTableNode(table.node, language);
-  if (!table || !chart) return null;
-  const title = headingAbove(state.doc, state.doc.resolve(table.pos).index(0)).trim();
-  return { ...chart, title };
+  if (!table) return null;
+  const id = table.node.attrs[BLOCK_ID_ATTRIBUTE];
+  return chartFromTable(tableGrid(table.node), {
+    blockId: typeof id === "string" ? id : null,
+    title: headingAbove(state.doc, state.doc.resolve(table.pos).index(0)),
+    language,
+  });
 }
 
 function selectedLines(state: EditorState): SourceLine[] {
