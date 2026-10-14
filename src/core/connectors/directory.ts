@@ -36,6 +36,16 @@ function languagesOf(value: unknown, where: string): Language[] {
   return [...value];
 }
 
+function toolsOf(value: unknown, where: string): { title: LocalizedText; changes: boolean }[] {
+  if (!Array.isArray(value)) throw new Error(`${where} must list its Tools.`);
+  return value.map((tool, index) => {
+    if (!isRecord(tool) || typeof tool.changes !== "boolean") {
+      throw new Error(`${where} ${index} must say whether it changes things.`);
+    }
+    return { title: localized(tool.title, `${where} ${index}`), changes: tool.changes };
+  });
+}
+
 function entryOf(value: unknown, index: number): ConnectorDirectoryEntry {
   const where = `Connector directory entry ${index}`;
   if (!isRecord(value)) throw new Error(`${where} must be an object.`);
@@ -52,6 +62,7 @@ function entryOf(value: unknown, index: number): ConnectorDirectoryEntry {
     throw new Error(`${where} has an unknown subscription.`);
   }
   const languages = value.languages === undefined ? undefined : languagesOf(value.languages, where);
+  const tools = value.tools === undefined ? undefined : toolsOf(value.tools, `${where} Tool`);
   return {
     id: text(value.id, `${where}.id`),
     name: text(value.name, `${where}.name`),
@@ -63,6 +74,7 @@ function entryOf(value: unknown, index: number): ConnectorDirectoryEntry {
       : subscription,
     url: parseRemoteUrl(value.url),
     signIn,
+    ...(tools && { tools }),
     ...(languages && { languages }),
   };
 }

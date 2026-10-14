@@ -17,7 +17,7 @@ import { CheckLineIcon, ChevronLeftLineIcon, PencilLineIcon, TrashLineIcon } fro
 import { buttonStyle, errorTextClass, iconButtonClass, primaryButtonClass } from "../ui";
 import { ConnectorForm } from "./ConnectorForm";
 import { ConnectorTile } from "./ConnectorTile";
-import { ConnectorTools } from "./ConnectorTools";
+import { ConnectorTools, ReviewedTools } from "./ConnectorTools";
 import { commandLine } from "./commandLine";
 import { ClientForm, RemoteSignIn } from "./RemoteSignIn";
 
@@ -250,6 +250,8 @@ export function ConnectorDetail({
         <h5 className={sectionHeadClass}>{t("connectors.directory.what")}</h5>
         {connector?.state === "ready" && connector.tools ? (
           <ConnectorTools connectorId={connector.id} tools={connector.tools} policies={policies} />
+        ) : entry?.tools ? (
+          <ReviewedTools tools={entry.tools} />
         ) : (
           <p className={sectionTextClass}>{t("connectors.directory.what.before")}</p>
         )}
