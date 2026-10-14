@@ -27,6 +27,8 @@ export const en = {
     "Suggests a Folder and Tags for each Document here. You accept or change each one.",
   "library.organize.needsModel": "Organize needs an AI model",
   "library.organize.use": "Use {company}",
+  "library.organize.sends":
+    "Sends your Documents' text, Folder names and Tag definitions to {company}",
   "library.organize.setUp": "Set up a model on this computer",
   "library.organize.done.one": "Organize suggested a Folder for 1 Document",
   "library.organize.done": "Organize suggested a Folder for {count} Documents",

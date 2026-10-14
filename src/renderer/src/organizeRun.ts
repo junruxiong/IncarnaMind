@@ -22,15 +22,13 @@ export function sayWhenOrganized(
   before: ReadonlyMap<string, DocumentGroupAssignment>,
 ): void {
   const mine = new Set(ids);
-  let sawWorking = false;
-  let stop = () => {};
+  const itemsNow = () =>
+    (useAppStore.getState().library?.assignments ?? []).filter((item) => mine.has(item.documentId));
+  let unsubscribe = () => {};
   const finish = () => {
-    stop();
-    const changed = (useAppStore.getState().library?.assignments ?? []).filter(
-      (item) =>
-        mine.has(item.documentId) &&
-        item.suggested &&
-        placeOf(item) !== placeOf(before.get(item.documentId)),
+    unsubscribe();
+    const changed = itemsNow().filter(
+      (item) => item.suggested && placeOf(item) !== placeOf(before.get(item.documentId)),
     );
     if (changed.length === 0) return;
     const put = (item: DocumentGroupAssignment) => {
@@ -44,20 +42,25 @@ export function sayWhenOrganized(
         count: changed.length,
       }),
       undo: async () => {
-        await Promise.all(changed.map(put));
+        // A Document the User has moved since is theirs now: it stays where they put it.
+        const now = new Map(
+          (useAppStore.getState().library?.assignments ?? []).map((item) => [
+            item.documentId,
+            item,
+          ]),
+        );
+        await Promise.all(
+          changed.filter((item) => placeOf(now.get(item.documentId)) === placeOf(item)).map(put),
+        );
         await useAppStore.getState().refreshLibrary();
       },
     });
   };
-  const unsubscribe = useAppStore.subscribe((state) => {
-    const items = (state.library?.assignments ?? []).filter((item) => mine.has(item.documentId));
-    if (items.some(working)) sawWorking = true;
+  // Organize has queued its Documents by now: with nothing working, there is nothing to wait for.
+  let sawWorking = itemsNow().some(working);
+  if (!sawWorking) return;
+  unsubscribe = useAppStore.subscribe(() => {
+    if (itemsNow().some(working)) sawWorking = true;
     else if (sawWorking) finish();
   });
-  // A run that never shows work (nothing to organize) is let go after a while.
-  const giveUp = setTimeout(() => stop(), 30 * 60_000);
-  stop = () => {
-    clearTimeout(giveUp);
-    unsubscribe();
-  };
 }

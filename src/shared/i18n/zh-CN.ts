@@ -23,6 +23,7 @@ export const zhCN = {
   "library.organize.explain": "为这里的每个文档建议文件夹和标签，由你接受或更改。",
   "library.organize.needsModel": "“整理”需要 AI 模型",
   "library.organize.use": "使用 {company}",
+  "library.organize.sends": "会把文档文本、文件夹名称和标签说明发送给 {company}",
   "library.organize.setUp": "在这台电脑上设置模型",
   "library.organize.done.one": "已为 1 个文档建议文件夹",
   "library.organize.done": "已为 {count} 个文档建议文件夹",

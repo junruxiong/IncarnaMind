@@ -347,7 +347,7 @@ function OrganizeNeedsModel({
   onClose(): void;
 }) {
   const t = useT();
-  const [company, setCompany] = useState<string | null>(null);
+  const [company, setCompany] = useState<{ name: string; cloud: boolean } | null>(null);
   const chosen = useAppStore((state) => state.settings?.user.chatModel ?? null);
   useEffect(() => {
     if (!chosen) return;
@@ -356,10 +356,13 @@ function OrganizeNeedsModel({
       (providers) => {
         const provider = providers.find((each) => each.id === chosen.providerId);
         if (current && provider) {
-          setCompany(provider.service?.name ?? t(`providers.kind.${provider.kind}`));
+          setCompany({
+            name: provider.service?.name ?? t(`providers.kind.${provider.kind}`),
+            cloud: provider.service !== null,
+          });
         }
       },
-      () => undefined,
+      (error: unknown) => console.error("Organize couldn't list the AI model's services.", error),
     );
     return () => {
       current = false;
@@ -370,7 +373,7 @@ function OrganizeNeedsModel({
     core
       .saveLibrarySettings({
         classifier: { kind: "chat", choice: chosen },
-        automatic: false,
+        automatic: useAppStore.getState().library?.settings.automatic ?? false,
       })
       .then(() => useAppStore.getState().refreshLibrary())
       .then(() => {
@@ -395,9 +398,14 @@ function OrganizeNeedsModel({
             onClick={use}
             className={quietButtonClass}
           >
-            {t("library.organize.use", { company })}
+            {t("library.organize.use", { company: company.name })}
           </button>
         </>
+      )}
+      {company?.cloud && (
+        <span data-testid="library-organize-sends" className="basis-full">
+          {t("library.organize.sends", { company: company.name })}
+        </span>
       )}
       <span aria-hidden="true">·</span>
       <button
