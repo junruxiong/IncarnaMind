@@ -135,6 +135,14 @@ for (const { language, width, question, name } of FROM_QUESTION) {
     expect(answerText).not.toBe("");
 
     // The Mind's name is the Question's, cut cleanly: not the Answer's first line, and not typed.
+    const added = answer.getByTestId("answer-added");
+    await expect(added).toContainText(name);
+    // However long the name, the line keeps its words and its Undo on one row.
+    const [words, undo] = await Promise.all([
+      added.locator('[role="status"]').boundingBox(),
+      added.getByTestId("answer-added-undo").boundingBox(),
+    ]);
+    expect(Math.abs((undo?.y ?? 0) - (words?.y ?? 100))).toBeLessThan(8);
     const row = window.getByTestId("mind-list-item");
     await expect(row).toContainText(name);
     await expect(row).not.toContainText(answerText.slice(0, 20));
