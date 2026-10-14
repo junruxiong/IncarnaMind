@@ -80,6 +80,7 @@ function ollamaAsTheAppSees(): OllamaModels {
       return { ...profile, settings: { ...profile.settings, numCtx, outputTokens } };
     },
     loaded: (baseUrl, model, numCtx) => app.loaded(baseUrl, model, numCtx),
+    running: (baseUrl) => app.running(baseUrl),
   };
 }
 

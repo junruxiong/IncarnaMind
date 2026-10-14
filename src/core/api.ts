@@ -3254,6 +3254,8 @@ export type ProviderErrorKind =
   | "consent-declined"
   /** "Keep everything on this computer" is on and the model isn't on this computer: nothing was sent, or the Answer was stopped. */
   | "local-mode"
+  /** The model is in Ollama on this computer, and Ollama isn't running: found before anything was sent. */
+  | "ollama-not-running"
   /** ChatGPT plan: there is no sign-in on this device, or it expired: sign in again. */
   | "not-signed-in"
   /** ChatGPT plan: the plan's usage limit, or the one the User set for IncarnaMind, is reached. */
@@ -4783,7 +4785,13 @@ export interface SecretStorageStatus {
 // Ollama
 
 export type OllamaStatus =
-  | { running: false; baseUrl: string }
+  | {
+      running: false;
+      baseUrl: string;
+      /** Whether `openOllama` can open its app: false too where this computer can't tell. */
+      installed: boolean;
+      recommendedModel: string;
+    }
   | {
       running: true;
       baseUrl: string;
@@ -7337,6 +7345,11 @@ export interface CoreApi {
   /** Looks for Ollama, on its default local port unless another URL is given. */
   detectOllama(input?: { baseUrl?: string }): Promise<OllamaStatus>;
   /**
+   * Opens Ollama's app and waits, for up to twenty seconds, until Ollama answers; resolves with
+   * what `detectOllama` then finds. Rejects when the app can't be opened from here.
+   */
+  openOllama(input?: { baseUrl?: string }): Promise<OllamaStatus>;
+  /**
    * One click "use local models": pulls the model if needed (progress arrives as
    * "ollama.pullProgress" events), saves Ollama as a provider and makes the model the default.
    */
@@ -8135,6 +8148,7 @@ const methods: Record<CoreApiMethod, true> = {
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,
   detectOllama: true,
+  openOllama: true,
   selectOllama: true,
   getChatGptPlan: true,
   signInToChatGpt: true,

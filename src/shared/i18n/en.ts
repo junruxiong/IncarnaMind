@@ -1535,6 +1535,8 @@ export const en = {
   "providers.test.cost-cap":
     "Nothing was sent: this month's spending cap is reached. Change it in Settings → General.",
   "providers.test.no-answer": "The model sent no reply.",
+  "providers.test.ollama-not-running":
+    "Ollama isn't running on this computer. Open it, then test again.",
   "providers.test.unknown": "The test didn't work.",
 
   "providers.secrets.plainText.title": "No keyring is running",
@@ -1577,6 +1579,12 @@ export const en = {
   "localMode.keep.list.last": "{rest} and {last}",
   "localMode.keep.agents.one": "1 connected agent",
   "localMode.keep.agents": "{count} connected agents",
+  "localModel.title": "Use a local model",
+  "localModel.installed": "Ollama is on this computer, but it isn't running.",
+  "localModel.recommended": "Recommended: {model}, 3.3 GB. It is downloaded once.",
+  "localModel.open": "Open Ollama",
+  "localModel.opening": "Opening Ollama…",
+  "localModel.cancel": "Cancel",
 
   "providers.settings.title": "Chat model",
   "providers.settings.none": "No chat model is set up yet.",
@@ -2019,6 +2027,7 @@ export const en = {
   "answer.error.local-mode":
     "Stopped: “Keep everything on this computer” was turned on, and {model} isn't on this computer",
   "answer.error.useLocal": "Use a local model",
+  "answer.error.ollama-not-running": "Ollama isn't running on this computer",
   "answer.error.too-long":
     "This Question is too long for the model’s context window, even with nothing before it. Shorten it, or choose another model",
   "answer.error.no-answer": "The model sent no Answer",
@@ -2691,6 +2700,9 @@ export const en = {
   "error.provider.urlScheme": "The server URL must start with http:// or https://.",
   "error.provider.urlExtras":
     "The server URL can't contain a user name, password, query or fragment. Put an API key in the key field.",
+  "error.provider.ollamaNotRunning": "Ollama isn't running on this computer.",
+  "error.provider.ollamaCantOpen":
+    "This computer can't open Ollama from here. Get it from ollama.com.",
   "error.provider.ollamaCloud":
     "{model} runs on ollama.com, not on this computer. Choose a local model, or pick it in the model menu.",
   "error.provider.rerankLocalMode":
