@@ -45,16 +45,20 @@ describe("the sidebar's one nudge (#123)", () => {
     expect(chooseNudge(state({ progress: { hidden: true }, notice: "answered" }))).toBeNull();
   });
 
-  test("a test build's notice shows from the first run and stays once its switch is used", () => {
+  test("a test build says so first, from the first run, before Get started, and keeps it once the switch is used", () => {
     const tester = { testerBuild: true };
-    const first = { ...state({ progress: { hidden: true, askedOwn: false }, usage: tester }) };
+    const first = state({ progress: { askedOwn: false }, usage: tester });
     expect(chooseNudge({ ...first, ownAnswerArrived: false } as never)).toBe("usage-data");
-    const used = state({
-      progress: { hidden: true },
-      usage: { ...tester, asked: true },
-      notice: "kept",
-    });
+    const used = state({ usage: { ...tester, asked: true }, notice: "kept" });
     expect(chooseNudge(used)).toBe("usage-data");
+    // Hidden, it gives the place to Get started.
+    const hidden = state({ usage: { ...tester, asked: true }, notice: "answered" });
+    expect(chooseNudge(hidden)).toBe("get-started");
+  });
+
+  test("a release shows Get started first, whatever the usage data card waits on", () => {
+    expect(chooseNudge(state({ progress: { askedOwn: false } }))).toBe("get-started");
+    expect(chooseNudge(state())).toBe("get-started");
   });
 
   test("nothing shows without a sender, or in local mode", () => {
