@@ -2664,6 +2664,15 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  /* Where the assistant's next Block goes while it writes them into the Mind (#202). */
+  .mind-writing {
+    margin-block: 4px;
+    font-family: var(--font-sans);
+    font-size: var(--text-meta);
+    line-height: var(--text-meta--line-height);
+    color: var(--color-ink-meta);
+    user-select: none;
+  }
   /* Being written: a pulsing accent dot. Waiting for approval: an attention dot. */
   .answer-writing {
     display: inline-flex;

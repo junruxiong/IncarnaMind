@@ -77,6 +77,7 @@ import { useVerification, VerifyLine } from "../editor/VerifyLine";
 import { wordAtomView, wordBlockView } from "../editor/WordAtomView";
 import { WordCount } from "../editor/WordCount";
 import { useWordFile, WordOrigin } from "../editor/WordOrigin";
+import { setWritingPlace, WritingPlace } from "../editor/writingPlace";
 import { requestEdit, startEditing, TRANSLATE_LANGUAGES } from "../editWithAi";
 import { translateNow, useT } from "../i18n";
 import { markSelectionAsMine } from "../markAsMine";
@@ -84,6 +85,7 @@ import { useMeetingOf, useMeetings } from "../meetings";
 import { type OpenedCopy, openMindCopy } from "../mindCopies";
 import { isWritingIn } from "../mindStatus";
 import { useMindTools } from "../mindTools";
+import { onMindWriting, writingPlaceOf } from "../mindWriting";
 import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
 import { askForSuggestion, describeSuggestion } from "../suggestions";
@@ -370,6 +372,7 @@ function MindEditorView({
         }),
         QuestionFold.configure({ mindId }),
         ProposalReview.configure({ translate: translateNow }),
+        WritingPlace.configure({ label: () => translateNow("answer.status.streaming") }),
         Suggestions.configure({
           request: (request) => askForSuggestion(mindId, doc, request),
           cancel: (requestId) =>
@@ -549,6 +552,14 @@ function MindEditorView({
       if (useComposer.getState().seat?.mindId === mindId) useComposer.setState({ seat: null });
     };
   }, [asksHere, editor, doc, mindId]);
+
+  // The assistant writing new Blocks into this Mind as they come (#202): "Writing…" where the next goes.
+  useEffect(() => {
+    setWritingPlace(editor, writingPlaceOf(mindId));
+    return onMindWriting(({ mindId: changed, after, writing }) => {
+      if (changed === mindId) setWritingPlace(editor, writing ? { after } : null);
+    });
+  }, [editor, mindId]);
 
   // A Mind just made with its title given ("Create a new note called …", #202): its text has the cursor.
   const bodyHere = useAppStore((state) => state.bodyToFocus === mindId);

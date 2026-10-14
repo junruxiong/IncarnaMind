@@ -232,8 +232,12 @@ export type ScriptedReply =
       /** What the model reasons before it replies, as its provider streams it. */
       reasoning?: string;
       text?: string;
-      calls?: { tool: string; input: unknown }[];
-      /** Stops streaming once `after` characters of the text are out, until `until` resolves. */
+      /** With `streamInput`, the call's input streams in chunks first, as a provider that streams Tool inputs sends it. */
+      calls?: { tool: string; input: unknown; streamInput?: boolean }[];
+      /**
+       * Stops streaming once `after` characters of the text, or of a streamed
+       * input, are out, until `until` resolves.
+       */
       pause?: { after: number; until: Promise<void> };
     }
   /** The provider refuses the request with an HTTP error. */
@@ -353,12 +357,20 @@ export function scriptedModel(
         parts.push({ type: "text-end", id: "answer" });
       }
       (reply.calls ?? []).forEach((each, number) => {
-        parts.push({
-          type: "tool-call",
-          toolCallId: `call-${call.index}-${number}`,
-          toolName: each.tool,
-          input: JSON.stringify(each.input),
-        });
+        const toolCallId = `call-${call.index}-${number}`;
+        const input = JSON.stringify(each.input);
+        if (each.streamInput) {
+          parts.push({ type: "tool-input-start", id: toolCallId, toolName: each.tool });
+          for (let at = 0; at < input.length; at += chunkSize) {
+            parts.push({
+              type: "tool-input-delta",
+              id: toolCallId,
+              delta: input.slice(at, at + chunkSize),
+            });
+          }
+          parts.push({ type: "tool-input-end", id: toolCallId });
+        }
+        parts.push({ type: "tool-call", toolCallId, toolName: each.tool, input });
       });
       parts.push({
         type: "finish",
@@ -380,7 +392,9 @@ export function scriptedModel(
           if (pause && streamed >= pause.after && part.type !== "stream-start") {
             await pause.until;
           }
-          if (part.type === "text-delta") streamed += part.delta.length;
+          if (part.type === "text-delta" || part.type === "tool-input-delta") {
+            streamed += part.delta.length;
+          }
           if (options.abortSignal?.aborted) {
             controller.error(new DOMException("The request was aborted.", "AbortError"));
             return;

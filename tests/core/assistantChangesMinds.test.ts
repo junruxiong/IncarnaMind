@@ -416,3 +416,95 @@ const blockIdAt = (client: MindClient, index: number): string => {
   if (typeof id !== "string") throw new Error("That Block has no id.");
   return id;
 };
+
+describe("New Blocks come in as the model writes them", { timeout: 30_000 }, () => {
+  const CONTENT = "## Risks\n\nThe supplier is late.\n\nThe courier contract renews in February.";
+
+  /** A model that adds CONTENT, its input streamed, held back from "courier" on until `until`. */
+  function streamingAdd(until: Promise<void>) {
+    const after = JSON.stringify({ content: CONTENT }).indexOf("courier");
+    return scriptedModel(
+      ({ results }): ScriptedReply =>
+        results.length === 0
+          ? {
+              calls: [{ tool: "add_to_mind", input: { content: CONTENT }, streamInput: true }],
+              pause: { after, until },
+            }
+          : { text: "Added a risks section." },
+    );
+  }
+
+  /** Resolves with each "mind.writing" event, in order, as they come. */
+  const writingEvents = (core: Core) => {
+    const seen: { after: string | null; writing: boolean }[] = [];
+    core.on("mind.writing", ({ after, writing }) => seen.push({ after, writing }));
+    return seen;
+  };
+
+  // protects=each Block the model finishes goes into the Mind as a change while the rest is still being written, with "Writing…" where the next goes, and all of them once it ends, none twice; fails_when=nothing shows until the call ends, a Block is written twice, or Writing… stays; no_claim=how a real provider chunks its input.
+  test("finished Blocks are in the Mind while the rest is written, then all of them, once each", async () => {
+    let release: () => void = () => undefined;
+    const until = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { core, mind, client } = await setUp(streamingAdd(until));
+    const seen = writingEvents(core);
+    const asked = await core.askInConversation({ text: "Add a risks section", mindId: mind.id });
+    if (!asked.asked) throw new Error("Not asked.");
+
+    await expect
+      .poll(() => shownWithChanges(client), { timeout: 10_000 })
+      .toEqual([
+        "Summary",
+        "The quarter was very good, and sales were really strong.",
+        "+ Risks",
+        "+ The supplier is late.",
+      ]);
+    expect(seen.at(-1)?.writing).toBe(true);
+    // The card says so while the call is still being written.
+    const stored = async () => {
+      const { messages } = await core.getConversation(asked.conversation.id);
+      const answer = messages.find((message) => message.id === asked.answerId);
+      return answer?.kind === "answer" ? changesIn(answer) : [];
+    };
+    await expect
+      .poll(stored)
+      .toEqual([{ mindId: mind.id, created: false, request: expect.any(String), proposals: 2 }]);
+
+    release();
+    expect((await answerEnded(core, asked.answerId)).event).toBe("finished");
+    await client.settled();
+    expect(shownWithChanges(client)).toEqual([
+      "Summary",
+      "The quarter was very good, and sales were really strong.",
+      "+ Risks",
+      "+ The supplier is late.",
+      "+ The courier contract renews in February.",
+    ]);
+    expect(seen.at(-1)?.writing).toBe(false);
+    expect(await checkpointsOf(core, mind.id)).toHaveLength(1);
+  });
+
+  // protects=Stop while the model writes keeps the Blocks already written, as changes, on the Answer's card, and Writing… goes; fails_when=they vanish, or the card has no row for them; no_claim=none beyond protects.
+  test("Stop keeps the Blocks already written, as changes on the card", async () => {
+    const { core, mind, client } = await setUp(streamingAdd(new Promise(() => undefined)));
+    const seen = writingEvents(core);
+    const asked = await core.askInConversation({ text: "Add a risks section", mindId: mind.id });
+    if (!asked.asked) throw new Error("Not asked.");
+    await expect.poll(() => pendingProposals(client.blocks).length, { timeout: 10_000 }).toBe(2);
+
+    await core.stopConversationAnswer({
+      conversationId: asked.conversation.id,
+      answerId: asked.answerId,
+    });
+    await client.settled();
+    expect(pendingProposals(client.blocks)).toHaveLength(2);
+    expect(seen.at(-1)?.writing).toBe(false);
+    const { messages } = await core.getConversation(asked.conversation.id);
+    const stopped = messages.find((message) => message.id === asked.answerId);
+    if (stopped?.kind !== "answer") throw new Error("No Answer.");
+    expect(changesIn(stopped)).toEqual([
+      { mindId: mind.id, created: false, request: expect.any(String), proposals: 2 },
+    ]);
+  });
+});

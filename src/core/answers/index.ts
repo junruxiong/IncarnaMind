@@ -1333,7 +1333,16 @@ export function createAnswers(options: AnswersOptions) {
                 );
                 return { blocks, notFound, unrecorded };
               },
-              changed: (toolCallId, change) => mindChanges.set(toolCallId, change),
+              changed: (toolCallId, change) => {
+                mindChanges.set(toolCallId, change);
+                // On its card at once: a Mind changes while the call is still being written.
+                const call = toolCalls.find((each) => each.id === toolCallId);
+                if (call && !finished) {
+                  call.mindChange = change;
+                  writeSoon();
+                }
+              },
+              signal: controller.signal,
               now: () => new Date(),
             })
           : [];

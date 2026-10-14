@@ -85,8 +85,10 @@
  * (叫), its content citing the Documents when there are any; and "add X to
  * <Mind>" (把 X 添加到 <Mind>) calls add_to_mind with X; "add X to <Mind> and
  * make a new note called Y" calls both. Each then replies with the first
- * sentence of what its calls came to. Anything else, asked in a Search scope
- * with no Documents, gets the sentence the instructions give for that.
+ * sentence of what its calls came to; add_to_mind's and create_mind's input
+ * streams in word by word, slowly for a Question asked "slowly". Anything
+ * else, asked in a Search scope with no Documents, gets the sentence the
+ * instructions give for that.
  */
 import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
@@ -582,6 +584,9 @@ function nextReply(prompt: Prompt, tools: readonly OfferedTool[]): Reply {
 const EMPTY_SCOPE =
   /nothing to search or cite\. If the User asks about their Documents, reply with just this: "([^"]+)"/;
 
+/** The Minds' Tools whose input the scripted provider streams. */
+const STREAMED_INPUT: ReadonlySet<string> = new Set(["add_to_mind", "create_mind"]);
+
 /** A request to shorten a Mind's text. */
 const SHORTEN = /\bshort(?:en|er)\b|缩短|改短/i;
 /** A request for a new note, and its title after "called" (叫). */
@@ -601,8 +606,10 @@ const firstSentence = (result: string) => /^[^.。]*[.。]?/u.exec(result)?.[0] 
  * The scripted assistant's choice with the Minds' Tools (see the top of this
  * file): a Tool call, the reply once it has returned, or null to answer.
  */
-function mindsReply(prompt: Prompt, question: string, names: readonly string[]): Reply | null {
+function mindsReply(prompt: Prompt, asked: string, names: readonly string[]): Reply | null {
   if (!names.includes("edit_mind")) return null;
+  // Asked "slowly", only its pace changes.
+  const question = asked.replace(/\s+slowly$/i, "");
   const both = ADD_AND_NEW.exec(question);
   if (both) {
     if (lastResult(prompt, "add_to_mind") === undefined) {
@@ -1002,13 +1009,20 @@ function replyParts(prompt: Prompt, tools: readonly OfferedTool[]): StreamPart[]
   if ("tool" in reply) {
     // Calls of one Tool after its first, such as a second page read, have ids of their own.
     const earlier = allResults(prompt, reply.tool).length;
+    const toolCallId = earlier === 0 ? `fake-${reply.tool}` : `fake-${reply.tool}-${earlier + 1}`;
+    const input = JSON.stringify(reply.input);
+    // A Minds' Tool that writes new text gets its input word by word, as a provider streams it.
+    if (STREAMED_INPUT.has(reply.tool)) {
+      parts.push(
+        { type: "tool-input-start", id: toolCallId, toolName: reply.tool },
+        ...input
+          .split(/(?<=\s)/)
+          .map((delta): StreamPart => ({ type: "tool-input-delta", id: toolCallId, delta })),
+        { type: "tool-input-end", id: toolCallId },
+      );
+    }
     parts.push(
-      {
-        type: "tool-call",
-        toolCallId: earlier === 0 ? `fake-${reply.tool}` : `fake-${reply.tool}-${earlier + 1}`,
-        toolName: reply.tool,
-        input: JSON.stringify(reply.input),
-      },
+      { type: "tool-call", toolCallId, toolName: reply.tool, input },
       { type: "finish", finishReason: { unified: "tool-calls", raw: undefined }, usage: USAGE },
     );
     return parts;
@@ -1080,7 +1094,9 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
             return;
           }
           if (slow && part.type === "stream-start") await wait(SLOW_STEP_MS);
-          if (part.type === "text-delta") await wait(slow ? SLOW_WORD_MS : WORD_DELAY_MS);
+          if (part.type === "text-delta" || part.type === "tool-input-delta") {
+            await wait(slow ? SLOW_WORD_MS : WORD_DELAY_MS);
+          }
           if (slow && part.type === "reasoning-delta") await wait(WORD_DELAY_MS);
           if (abortSignal?.aborted) {
             controller.error(new DOMException("The request was aborted.", "AbortError"));

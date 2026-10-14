@@ -3382,6 +3382,7 @@ export const en = {
   "mindCall.editing": "Changing “{mind}”…",
   "mindCall.adding": "Adding to “{mind}”…",
   "mindCall.creating": "Making “{mind}”…",
+  "mindCall.creating.new": "Making a new Mind…",
   "mindCall.read": "Read “{mind}”",
   "mindCall.edited": "Edited “{mind}” · {count} changes",
   "mindCall.edited.one": "Edited “{mind}” · 1 change",
