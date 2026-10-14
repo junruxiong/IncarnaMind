@@ -182,7 +182,6 @@ function providerModel(spec: ChatModelSpec): ChatLanguageModel {
       })(spec.modelId);
     case "siliconflow":
     case "openai-compatible": {
-      // SiliconFlow, a preset or a server the User gives: one adapter, with the row's quirks.
       const provider = catalogProviderOf(spec.kind, spec.catalogId);
       const quirks = provider?.request?.openAiCompatible;
       return createOpenAICompatible({
