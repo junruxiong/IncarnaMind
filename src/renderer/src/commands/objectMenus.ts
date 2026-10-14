@@ -32,6 +32,7 @@ registerMenu("mind", [
 registerMenu("document", [
   "document.open",
   "document.openTab",
+  "document.peek",
   "document.ask",
   "document.startMind",
   "document.moveTo",

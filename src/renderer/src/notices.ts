@@ -28,6 +28,13 @@ export interface ErrorNotice {
   reason: MessageKey | null;
   /** The technical text, for the Details. */
   detail: string;
+  /** The one thing that puts it right, as a button beside Dismiss. */
+  action: NoticeAction | null;
+}
+
+export interface NoticeAction {
+  label: string;
+  run(): Promise<void> | void;
 }
 
 /** Something that worked, said once. */
@@ -41,7 +48,7 @@ interface NoticesState {
   errors: readonly ErrorNotice[];
   confirmation: Confirmation | null;
   /** Shows a failure where the action that failed has nowhere of its own to say it. */
-  showError(error: unknown): void;
+  showError(error: unknown, action?: NoticeAction): void;
   dismissError(id: number): void;
   /** Shows what worked for a few seconds; the next one takes its place. */
   confirm(message: MessageKey): void;
@@ -55,7 +62,7 @@ export function createNotices(clock: Clock = systemClock) {
   return create<NoticesState>()((set, get) => ({
     errors: [],
     confirmation: null,
-    showError(error) {
+    showError(error, action) {
       const { message, wording, reason, detail } = describeError(error);
       // The same failure twice is one notice: it says it once.
       if (
@@ -66,7 +73,10 @@ export function createNotices(clock: Clock = systemClock) {
         return;
       }
       set((state) => ({
-        errors: [...state.errors, { id: ++ids, message, wording, reason, detail }],
+        errors: [
+          ...state.errors,
+          { id: ++ids, message, wording, reason, detail, action: action ?? null },
+        ],
       }));
     },
     dismissError(id) {

@@ -337,6 +337,14 @@
     "source": ""
   },
   {
+    "file": "documents/synthetic/en-resume-layout.docx",
+    "origin": "synthetic",
+    "language": "en",
+    "domain": "hr",
+    "licence": "Apache-2.0",
+    "source": ""
+  },
+  {
     "file": "documents/synthetic/zh-bilingual-contract.docx",
     "origin": "synthetic",
     "language": "zh",
@@ -397,6 +405,14 @@
     "origin": "synthetic",
     "language": "zh",
     "domain": "finance",
+    "licence": "Apache-2.0",
+    "source": ""
+  },
+  {
+    "file": "documents/synthetic/zh-resume-layout.docx",
+    "origin": "synthetic",
+    "language": "zh",
+    "domain": "hr",
     "licence": "Apache-2.0",
     "source": ""
   },
