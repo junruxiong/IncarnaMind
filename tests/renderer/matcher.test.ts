@@ -38,3 +38,33 @@ describe("matching names", () => {
     expect(marked("cafe", "Café notes")).toEqual(["Café"]);
   });
 });
+
+describe("Chinese names by pinyin, and typos", () => {
+  test("full pinyin and its initials find a Chinese name, marking the characters they spell", () => {
+    expect(marked("caiwu", "财务")).toEqual(["财务"]);
+    expect(marked("cw", "财务")).toEqual(["财务"]);
+    expect(marked("hetong", "供应商合同")).toEqual(["合同"]);
+    expect(marked("caiw", "2026 财务报表")).toEqual(["财务"]);
+    expect(marked("2026 cwbb", "2026 财务报表")).toEqual(["2026", "财务报表"]);
+    expect(marked("hetong", "合同 (traditional 合約)")).toEqual(["合同"]);
+  });
+
+  test("pinyin counts only from a syllable's start, and Latin names aren't read as pinyin", () => {
+    expect(matchName(queryWords("aiwu"), "财务")).toBeNull();
+    expect(matchName(queryWords("cw"), "Crown works")).toBeNull();
+  });
+
+  test("a word of four letters or more may have one typo, and ranks below every exact match", () => {
+    expect(marked("contarct", "Contracts register 2026")).toEqual(["Contract"]);
+    expect(marked("contrat", "Master contract")).toEqual(["contract"]);
+    expect(marked("recieve", "Received payments")).toEqual(["Receive"]);
+    expect(marked("cnotract", "Contract")).toEqual(["Contract"]);
+    expect(matchName(queryWords("cnotarct"), "Contract")).toBeNull();
+    expect(matchName(queryWords("xontract"), "Contract")).toBeNull();
+    expect(matchName(queryWords("tdi"), "Tide tables")).toBeNull();
+    expect(ranked("contarct", ["Contract typo test", "Contarct notes"])).toEqual([
+      "Contarct notes",
+      "Contract typo test",
+    ]);
+  });
+});
