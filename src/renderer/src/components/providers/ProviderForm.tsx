@@ -42,6 +42,15 @@ const suggestedModel = (kind: FormKind): string => catalogProviderOfKind(kind)?.
 const isSuggestion = (model: string) =>
   KEY_PROVIDER_KINDS.some((kind) => suggestedModel(kind) === model);
 
+/** An OpenAI-compatible server's address as the User typed it, by its host. */
+const hostOf = (url: string): string | null => {
+  try {
+    return new URL(url.trim()).host || null;
+  } catch {
+    return null;
+  }
+};
+
 const sameServer = (provider: ChatProvider, kind: FormKind, endpoint: string, baseUrl: string) =>
   provider.kind === kind &&
   (kind === "openai-compatible"
@@ -334,6 +343,13 @@ export function ProviderForm({
             />
           </label>
 
+          <ProviderSendsLine
+            provider={
+              kind === "openai-compatible"
+                ? (hostOf(baseUrl) ?? t("providers.kind.openai-compatible"))
+                : t(`providers.kind.${kind}`)
+            }
+          />
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="submit"
@@ -352,7 +368,7 @@ export function ProviderForm({
             </button>
           </div>
 
-          {test && <TestResult result={test} onRetry={() => void run("testing")} />}
+          {test && <TestResult result={test} />}
           {error && (
             <p role="alert" className={errorTextClass}>
               {error}
@@ -361,6 +377,19 @@ export function ProviderForm({
         </>
       )}
     </form>
+  );
+}
+
+/**
+ * Above the button that chooses the chat model's provider: what goes to it.
+ * Choosing it is the consent for all of that (ADR-0022).
+ */
+export function ProviderSendsLine({ provider }: { provider: string }) {
+  const t = useT();
+  return (
+    <p data-testid="provider-sends" className={hintClass}>
+      {t("providers.sends", { provider })}
+    </p>
   );
 }
 
@@ -388,26 +417,8 @@ function readableMessage(message: string): string {
   }
 }
 
-/** Forgets the User's latest "Don't allow", so the next request asks again. */
-async function forgetLatestDecline(): Promise<void> {
-  const flows = await core.listDataFlows();
-  const latest = flows
-    .filter((each) => each.consent === "declined" && each.decidedAt !== null)
-    .sort((a, b) => (b.decidedAt ?? "").localeCompare(a.decidedAt ?? ""))[0];
-  if (latest) await core.revokeConsent(latest.flow.id, latest.flow.service.id);
-}
-
-/**
- * A connection test's outcome. After a "Don't allow", `onRetry` offers to ask
- * again: the decision is forgotten and the test runs again, asking first.
- */
-export function TestResult({
-  result,
-  onRetry,
-}: {
-  result: ConnectionTestResult;
-  onRetry?: () => void;
-}) {
+/** A connection test's outcome. A test sends nothing of the User's, so it asks nothing (ADR-0022). */
+export function TestResult({ result }: { result: ConnectionTestResult }) {
   const t = useT();
   if (result.ok) {
     return (
@@ -419,23 +430,11 @@ export function TestResult({
   return (
     <div data-testid="connection-test" role="alert" className={errorTextClass}>
       <p>{t(testErrorKey(result.error.kind))}</p>
-      {/* The provider's own words help with its errors; a declined consent needs none. */}
-      {result.error.message && result.error.kind !== "consent-declined" && (
+      {/* The provider's own words help with its errors. */}
+      {result.error.message && (
         <p className="mt-1 text-[12px] leading-[18px] break-words text-ink-meta">
           {readableMessage(result.error.message)}
         </p>
-      )}
-      {result.error.kind === "consent-declined" && onRetry && (
-        <button
-          type="button"
-          data-testid="connection-test-ask-again"
-          onClick={() => {
-            void forgetLatestDecline().then(onRetry, onRetry);
-          }}
-          className={`mt-2 ${buttonClass}`}
-        >
-          {t("consent.settings.askAgain")}
-        </button>
       )}
     </div>
   );
