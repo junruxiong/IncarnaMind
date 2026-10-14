@@ -94,7 +94,13 @@ export function ChartKindMenu({
             {chart.data.series.length > 1 && (
               <>
                 <div className={menuRuleClass} />
-                <p className={menuTitleClass}>{t("chart.columns")}</p>
+                <p className={menuTitleClass}>
+                  {t(
+                    chart.source.kind === "table" && chart.source.switched
+                      ? "chart.rows"
+                      : "chart.columns",
+                  )}
+                </p>
                 {chart.data.series.map((_, series) => {
                   const on =
                     chart.kind === "pie" ? drawn.includes(series) : chosen.includes(series);

@@ -19,7 +19,6 @@ import {
   MAX_CHART_VALUES,
   seriesName as nameOfSeries,
   readChart,
-  switchedChart,
   unitlessRows,
 } from "../../../shared/charts";
 import {
@@ -41,7 +40,14 @@ import { ChartPlot, type PointEvents, type PointRef, samePoint } from "./ChartPl
 import { ChartPointCard } from "./ChartPointCard";
 import { ChartValues } from "./ChartValues";
 import { chartCardPlace } from "./chartCardPlace";
-import { changeChart, chartTable, tableUpdate, toggledSeries, withKind } from "./chartCommands";
+import {
+  changeChart,
+  chartTable,
+  switchedChartIn,
+  tableUpdate,
+  toggledSeries,
+  withKind,
+} from "./chartCommands";
 import { type ChartHandle, chartHandles } from "./chartHandles";
 import { Popover } from "./Popover";
 
@@ -209,7 +215,7 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
     change(withKind(chart, kind));
   };
   const switchRowsAndColumns = () => {
-    const switched = switchedChart(chart);
+    const switched = switchedChartIn(editor.state.doc, node.attrs, language);
     if (!switched) return;
     dismiss();
     change(switched);

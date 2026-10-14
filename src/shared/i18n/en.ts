@@ -499,6 +499,7 @@ export const en = {
   "chart.kindName.scatter": "Scatter chart",
   "chart.kindMenu": "Chart type",
   "chart.columns": "Columns",
+  "chart.rows": "Rows",
   "chart.scatter.across": "across",
   "chart.scatter.up": "up",
   "chart.scatter.needsTwo": "A scatter chart needs two columns of numbers",

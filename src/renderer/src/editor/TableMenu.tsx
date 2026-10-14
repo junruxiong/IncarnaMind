@@ -73,7 +73,6 @@ export function TableMenu({ editor }: { editor: Editor }) {
   const [asked, setAsked] = useState<{ buttons: number } | null>(null);
   const shown = spot !== null && (focused || menu.open || asked !== null);
   const button = menu.buttonProps.ref;
-  /** Chart from table is offered only for a table that is a series of numbers. */
   const chart = menu.open && spot ? chartOfTable(editor.state, languageNow()) : null;
   const groups = GROUPS.filter((group) => group[0] !== "chart" || chart !== null);
 

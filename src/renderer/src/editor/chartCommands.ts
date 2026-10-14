@@ -15,6 +15,7 @@ import {
   type ChartAttributes,
   type ChartData,
   type ChartKind,
+  canSwitch,
   chartFromFigures,
   chartFromTable,
   drawnSeries,
@@ -22,6 +23,7 @@ import {
   type SourceGrid,
   type SourceLine,
   sameChartData,
+  switchedChart,
 } from "../../../shared/charts";
 import { readProposalAttribute } from "../../../shared/proposals";
 import { asOwnUndoStep } from "./selectionCommands";
@@ -114,15 +116,30 @@ function headingAbove(doc: ProseMirrorNode, topLevel: number): string {
   return title;
 }
 
+/** Each table as it stands is read once: ⌘K asks whether to offer Chart from table as the User types. */
+const tableCharts = new WeakMap<ProseMirrorNode, Map<string, ChartAttributes | null>>();
+
+function chartOfTableNode(table: ProseMirrorNode, language: string): ChartAttributes | null {
+  const charts = tableCharts.get(table) ?? new Map<string, ChartAttributes | null>();
+  tableCharts.set(table, charts);
+  if (!charts.has(language)) {
+    const id = table.attrs[BLOCK_ID_ATTRIBUTE];
+    const chart = chartFromTable(tableGrid(table), {
+      blockId: typeof id === "string" ? id : null,
+      title: "",
+      language,
+    });
+    charts.set(language, chart);
+  }
+  return charts.get(language) ?? null;
+}
+
 export function chartOfTable(state: EditorState, language: string): ChartAttributes | null {
   const table = tableAround(state);
-  if (!table) return null;
-  const id = table.node.attrs[BLOCK_ID_ATTRIBUTE];
-  return chartFromTable(tableGrid(table.node), {
-    blockId: typeof id === "string" ? id : null,
-    title: headingAbove(state.doc, state.doc.resolve(table.pos).index(0)),
-    language,
-  });
+  const chart = table && chartOfTableNode(table.node, language);
+  if (!table || !chart) return null;
+  const title = headingAbove(state.doc, state.doc.resolve(table.pos).index(0)).trim();
+  return { ...chart, title };
 }
 
 function selectedLines(state: EditorState): SourceLine[] {
@@ -245,4 +262,31 @@ export function tableUpdate(
   });
   if (!fresh) return null;
   return sameChartData(fresh.data, chart.data) ? null : fresh.data;
+}
+
+/**
+ * A chart with its rows and columns switched (`switchedChart`). While it draws what its table
+ * holds, the table is read again the other way round, so a row with no number that one way
+ * leaves out comes back the other way, and the table isn't taken to have changed.
+ */
+export function switchedChartIn(
+  doc: ProseMirrorNode,
+  attributes: Readonly<Record<string, unknown>>,
+  language: string,
+): ReturnType<typeof switchedChart> {
+  const chart = readChart(attributes);
+  const table =
+    canSwitch(chart) && tableUpdate(doc, attributes, language) === null
+      ? chartTable(doc, chart)
+      : null;
+  const fresh =
+    table &&
+    chart.source.kind === "table" &&
+    chartFromTable(tableGrid(table), {
+      blockId: chart.source.blockId,
+      title: chart.title,
+      language,
+      switched: chart.source.switched !== true,
+    });
+  return switchedChart(chart, fresh ? fresh.data : null);
 }

@@ -479,6 +479,7 @@ export const zhCN = {
   "chart.kindName.scatter": "散点图",
   "chart.kindMenu": "图表类型",
   "chart.columns": "数据列",
+  "chart.rows": "数据行",
   "chart.scatter.across": "横轴",
   "chart.scatter.up": "纵轴",
   "chart.scatter.needsTwo": "散点图需要两列数字",
