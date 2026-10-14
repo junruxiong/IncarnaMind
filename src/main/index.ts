@@ -6,7 +6,6 @@ import {
   type IpcMainEvent,
   type IpcMainInvokeEvent,
   powerMonitor,
-  shell,
 } from "electron";
 import {
   type ChatModelFactory,
@@ -159,9 +158,7 @@ function createWindow(): BrowserWindow {
 
   // Links open in the User's browser, never inside the app.
   window.webContents.setWindowOpenHandler(({ url }) => {
-    // A feedback draft opens in the User's mail app.
-    const open = url.startsWith("mailto:") ? shell.openExternal(url) : systemBrowser.open(url);
-    open.catch(() => undefined);
+    systemBrowser.open(url).catch(() => undefined);
     return { action: "deny" };
   });
   window.webContents.on("will-navigate", (event) => {
