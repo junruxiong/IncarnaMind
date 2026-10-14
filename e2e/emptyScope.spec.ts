@@ -63,19 +63,18 @@ for (const language of ["en", "zh-CN"] as const) {
     await window.keyboard.press("Enter");
     await expect(window.getByTestId("composer").getByTestId("scope-chip")).toBeVisible();
 
-    for (const question of [
-      "Make the summary section shorter",
-      "What does this Mind say about it?",
-    ]) {
+    // An edit request edits the Mind (it needs no Documents); a Question about the Mind is answered
+    // from it. Neither is refused for the empty scope.
+    for (const [question, answered] of [
+      ["Make the summary section shorter", /Deal memo/],
+      ["What does this Mind say about it?", /Answer to: What does this Mind say about it\?/],
+    ] as const) {
       await window.keyboard.press("ControlOrMeta+j");
       await window.keyboard.type(question);
       await window.keyboard.press("Enter");
       const answer = assistantAnswers(window).last();
       await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-      // Answered by the model, not refused: the scripted model's Answer, which says what it was asked.
-      await expect(answer.getByTestId("assistant-answer-text")).toContainText(
-        `Answer to: ${question}`,
-      );
+      await expect(answer.getByTestId("assistant-answer-text")).toHaveText(answered);
       await expect(answer.getByTestId("answer-empty-scope")).toContainText(words.line);
     }
 
