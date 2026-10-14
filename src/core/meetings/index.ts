@@ -371,9 +371,8 @@ export function createMeetings(options: MeetingsOptions) {
 
   function heardState(current: Live, source: AudioSource, state: CaptureState): void {
     if (live !== current) return;
-    // "Recording" again is a new track (the default microphone changed): its samples start a new
-    // run where they arrive, however short the gap, so they stay in step with the computer's sound
-    // for the echo canceller (#846).
+    // "Recording" again is a new track (the default microphone changed): its samples start a run
+    // where they arrive, however short the gap, to stay in step with the computer's sound (#846).
     endRun(current, source);
     if (state === "recording" && current.sources[source] === "silent") return;
     setSource(current, source, state);
