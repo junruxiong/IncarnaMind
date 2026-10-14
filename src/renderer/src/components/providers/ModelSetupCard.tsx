@@ -6,6 +6,7 @@ import { useLanguage, useT } from "../../i18n";
 import { giveUpWaiting, useModelSetup } from "../../modelSetup";
 import { useAppStore } from "../../store";
 import { ChevronRightLineIcon } from "../lineIcons";
+import { ProblemLine } from "../ProblemLine";
 import { buttonStyle, hintClass } from "../ui";
 import { ChatGptMark } from "./ChatGptMark";
 import {
@@ -337,11 +338,7 @@ function ClaudeWay() {
           </button>
         </>
       )}
-      {problem && (
-        <p role="alert" className="text-[13px] leading-5 text-danger">
-          {problem}
-        </p>
-      )}
+      {problem && <ProblemLine testId="setup-claude-problem">{problem}</ProblemLine>}
     </div>
   );
 }

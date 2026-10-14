@@ -11,6 +11,7 @@ import {
   newMind,
   removeDataFolder,
   setGroupBeside,
+  setLanguage,
   setWindowSize,
   useLocalChatModel,
   widthOf,
@@ -412,7 +413,14 @@ test("its ⋯ menu and the keyboard dock, float and fold it; ⌘J unfolds it int
   await window.getByTestId("assistant-history").click();
   const history = window.getByTestId("assistant-history-popover");
   await expect(history).toBeVisible();
-  await expect(history.getByTestId("assistant-history-empty")).toHaveText("No conversations yet.");
+  await expect(history.getByTestId("assistant-history-empty")).toHaveText(
+    "No conversations yet. Ask a Question to start one.",
+  );
+  await setLanguage(window, "zh-CN");
+  await expect(history.getByTestId("assistant-history-empty")).toHaveText(
+    "还没有对话。提一个问题即可开始。",
+  );
+  await setLanguage(window, "en");
   await window.keyboard.press("Escape");
   await expect(history).toBeHidden();
   await window.getByTestId("assistant-title").click();

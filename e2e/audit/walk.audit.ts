@@ -205,11 +205,15 @@ test("A1 first run: the example Mind and its Citation card", async () => {
       const stops = await focusWalk(window, 45, "focus/A05");
       record("walk.focus.exampleMind", stops);
     });
-    await step(T, "add your own: a new Mind and the chat setup", async () => {
+    await step(T, "add your own: the ways to add Documents, in place", async () => {
       await window.keyboard.press("Escape");
       await click(window, window.getByTestId("example-add-own"));
       await window.waitForTimeout(800);
       await shot(window, "A06-after-add-your-own");
+      const ways = window.getByTestId("example-add-items");
+      await window.keyboard.press("Escape");
+      await window.waitForTimeout(300);
+      record("walk.escape.addYourDocuments", { closes: !(await ways.isVisible()) });
     });
   } finally {
     if (app) await close(app);

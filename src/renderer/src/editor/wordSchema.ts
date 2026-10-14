@@ -1,7 +1,4 @@
 import { mergeAttributes, Node, type NodeViewRenderer } from "@tiptap/core";
-import { isChangeOrigin } from "@tiptap/extension-collaboration";
-import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { Plugin, PluginKey, type Transaction } from "@tiptap/pm/state";
 import { IMAGE_NODE, WORD_ATOM_NODE, WORD_BLOCK_NODE } from "../../../core/api";
 import { readWordAtom, wordAtomText } from "../../../shared/wordFiles";
 
@@ -44,54 +41,13 @@ const atomAttributes = () => ({
 export interface WordAtomOptions {
   /** Draws the atom: its chip, mark or box, and what it says on hover. */
   view: NodeViewRenderer | null;
-  /**
-   * Called instead of a change that would delete a section break: `retry`
-   * makes the change after all. Without it, such a change goes through.
-   */
-  onSectionBreakDelete: ((retry: () => void) => void) | null;
-}
-
-/** Set on a transaction to let it delete section breaks: the User was asked. */
-const SECTION_BREAKS_ASKED = "wordSectionBreaksAsked";
-
-const isSectionBreak = (node: ProseMirrorNode) =>
-  node.type.name === WORD_ATOM_NODE && node.attrs.kind === "sectionBreak";
-
-const sectionBreaksIn = (doc: ProseMirrorNode) => {
-  let total = 0;
-  doc.descendants((node) => {
-    if (isSectionBreak(node)) total++;
-  });
-  return total;
-};
-
-/**
- * Whether a transaction removes a section break: only where it changes the
- * document is looked at, and only then is the whole counted, so typing stays fast.
- */
-function deletesSectionBreak(tr: Transaction): boolean {
-  let touched = false;
-  tr.steps.forEach((step, index) => {
-    const before = tr.docs[index];
-    if (!before || touched) return;
-    step.getMap().forEach((from, to) => {
-      if (touched || to <= from) return;
-      before.nodesBetween(from, to, (node) => {
-        if (isSectionBreak(node)) touched = true;
-        return !touched;
-      });
-    });
-  });
-  // One moved, not removed (a paragraph dragged elsewhere), keeps the count.
-  return touched && sectionBreaksIn(tr.doc) < sectionBreaksIn(tr.before);
 }
 
 /**
  * What a Word import kept as it is, inside a paragraph's text (#104): a
  * field, a content control, a text box, a footnote's mark, another person's
  * tracked change… (see `WordAtomAttributes`). It can't be edited inside; it
- * moves with the text and goes when that text is deleted, except a section
- * break, whose deletion asks first (`onSectionBreakDelete`).
+ * moves with the text and goes when that text is deleted.
  */
 export const WordAtom = Node.create<WordAtomOptions>({
   name: WORD_ATOM_NODE,
@@ -102,7 +58,7 @@ export const WordAtom = Node.create<WordAtomOptions>({
   draggable: false,
 
   addOptions() {
-    return { view: null, onSectionBreakDelete: null };
+    return { view: null };
   },
 
   addAttributes() {
@@ -127,28 +83,6 @@ export const WordAtom = Node.create<WordAtomOptions>({
 
   addNodeView() {
     return this.options.view;
-  },
-
-  addProseMirrorPlugins() {
-    const ask = this.options.onSectionBreakDelete;
-    if (!ask) return [];
-    return [
-      new Plugin({
-        key: new PluginKey("wordSectionBreaks"),
-        filterTransaction: (tr) => {
-          // Changes from Yjs (another device, or undo) are never held back.
-          if (!tr.docChanged || tr.getMeta(SECTION_BREAKS_ASKED) || isChangeOrigin(tr)) return true;
-          if (!deletesSectionBreak(tr)) return true;
-          ask(() => {
-            const view = this.editor.view;
-            const retry = view.state.tr;
-            for (const step of tr.steps) retry.maybeStep(step);
-            view.dispatch(retry.setMeta(SECTION_BREAKS_ASKED, true));
-          });
-          return false;
-        },
-      }),
-    ];
   },
 });
 
