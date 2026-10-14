@@ -1422,6 +1422,8 @@ export const zhCN = {
   "providers.form.apiKey": "API 密钥",
   "providers.form.apiKeyOptional": "API 密钥（可选）",
   "providers.form.apiKeySaved": "已保存密钥。留空即保留原密钥。",
+  "providers.form.keyRefused": "{provider} 拒绝了这个密钥（{when}）。",
+  "providers.form.keyRefusedNow": "{provider} 拒绝了这个密钥。",
   "providers.form.region": "地域",
   "providers.region.cn": "中国",
   "providers.region.intl": "国际",
@@ -1462,7 +1464,7 @@ export const zhCN = {
   "providers.secrets.unavailable":
     "此系统无法加密 API 密钥，因此无法保存密钥。你仍然可以使用 Ollama，或不需要密钥的服务器。",
 
-  "providers.ollama.title": "使用 Ollama 运行本地模型",
+  "providers.ollama.title": "在本机运行（免费）",
   "providers.ollama.checking": "正在查找本机的 Ollama…",
   "providers.ollama.detected":
     "Ollama 正在本机运行。使用本地模型时，你的问题和文档都不会离开这台电脑。",
@@ -1470,6 +1472,7 @@ export const zhCN = {
   "providers.ollama.use": "使用本地模型（{model}，3.3 GB）",
   "providers.ollama.pulling": "正在下载 {model}（3.3 GB）…可能需要一些时间。",
   "providers.ollama.checkAgain": "重新检查",
+  "providers.ollama.get": "下载 Ollama",
 
   "providers.readiness.no-provider": "提问需要先设置对话模型。笔记和文档不需要模型也能使用。",
   "providers.readiness.missing-api-key":
@@ -1922,6 +1925,7 @@ export const zhCN = {
   "answer.error.plan-limit": "ChatGPT 订阅的用量已达上限",
   "answer.error.blocked": "OpenAI 不允许 IncarnaMind 使用你的 ChatGPT 订阅",
   "answer.error.checkKey": "检查密钥",
+  "answer.error.askAgain": "重新提问",
   "answer.error.removeFromMenu": "从菜单中移除",
   "answer.error.chooseModel": "换一个模型",
   "answer.error.allow": "允许发送",
@@ -2121,8 +2125,8 @@ export const zhCN = {
   "citation.regenerate": "重新生成回答",
   "citation.changedAfterCited": "此文档在被引用后有改动。",
   "citation.recheck": "按当前版本重新核对",
-  "citation.unsupported":
-    "这个模型不能调用工具，也不能返回结构化输出，所以这个回答没有引用。为这个问题换一个模型即可获得引用。",
+  "citation.unsupported": "{model} 无法添加引用，这个回答里的内容都没有核对",
+  "citation.unsupported.choose": "换一个模型",
 
   "search.running": "正在搜索你的文档…",
   "search.done": "已搜索你的文档",
