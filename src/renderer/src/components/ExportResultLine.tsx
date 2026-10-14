@@ -161,7 +161,7 @@ function ResultBody({
                 role="status"
                 data-testid="export-done"
                 title={result.path}
-                className="flex min-w-0 items-center gap-2 text-[14px] leading-5 text-ink-secondary"
+                className="flex min-w-0 items-start gap-2 text-[14px] leading-5 text-ink-secondary"
               >
                 <CheckIcon />
                 <SavedName
@@ -267,7 +267,10 @@ function ResultBody({
   );
 }
 
-/** "Saved Tides.pdf", or "Saved “Tides.pdf” in Documents › IncarnaMind", the file's name in the ink. */
+/**
+ * "Saved Tides.pdf", or "Saved “Tides.pdf” in Documents › IncarnaMind", the
+ * file's name in the ink, wrapped rather than cut short so all of it shows.
+ */
 function SavedName({ name, folder }: { name: string; folder: string | null }) {
   const t = useT();
   const said =
@@ -276,7 +279,7 @@ function SavedName({ name, folder }: { name: string; folder: string | null }) {
       : t("export.doneIn", { name: "\u0000", folder });
   const [before = "", after = ""] = said.split("\u0000");
   return (
-    <span className="min-w-0 truncate">
+    <span className="min-w-0 break-words">
       {before}
       <span className="font-semibold text-ink">{name}</span>
       {after}
@@ -294,7 +297,7 @@ function CheckIcon() {
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
-      className="size-4 shrink-0 text-ink"
+      className="mt-0.5 size-4 shrink-0 text-ink"
     >
       <path d="m5 12.5 4.5 4.5L19 7.5" />
     </svg>

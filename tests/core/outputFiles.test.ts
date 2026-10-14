@@ -115,6 +115,24 @@ describe("The Output location", () => {
     expect(asked).toEqual([]);
   });
 
+  test("two first saves at once both go to the default under their own names, without asking", async () => {
+    const { core, save, suggested } = await setUp();
+    const asked = questionsAsked(core);
+    const results = await Promise.all([save(), save()]);
+    const location = await realpath(suggested);
+    const files = results.map((each) => (each.status === "saved" ? each.file : null));
+    expect(files.map((file) => file?.name).sort()).toEqual(["Tides 2.md", "Tides.md"]);
+    for (const file of files) {
+      expect(file).toEqual({
+        path: join(location, file?.name ?? ""),
+        name: file?.name,
+        defaulted: true,
+      });
+    }
+    expect((await core.getOutputSettings()).location).toBe(location);
+    expect(asked).toEqual([]);
+  });
+
   test("a folder picked in Settings before any save is where files go, and nothing is asked", async () => {
     const { core, save, suggested } = await setUp();
     const picked = await createSourceFolder();
