@@ -262,7 +262,6 @@ export function createWebPages(options: WebPagesOptions) {
 
   let looks: Promise<void> = Promise.resolve();
 
-  /** Makes a version's look after those asked for before it, and records how it went. */
   const queueLook = (documentId: string, contentHash: string, address: string) => {
     const look = options.look;
     if (!look) return;
@@ -283,7 +282,7 @@ export function createWebPages(options: WebPagesOptions) {
             hold([lookHash], -1);
           }
         } else {
-          options.reportError?.(new Error(`${address}: ${made.message}`));
+          options.reportError?.(`${address}: ${made.failure}, ${made.message}`);
           recordLook(
             db,
             documentId,
@@ -438,7 +437,7 @@ export function createWebPages(options: WebPagesOptions) {
     /** See `CoreApi.keepWebPageLook`. */
     keepLook(documentId: unknown): Document {
       if (typeof documentId !== "string" || documentId === "") {
-        throw new InvalidInputError("A Document id is required.");
+        throw new InvalidInputError({ key: "error.document.idRequired" });
       }
       const document = documents.get(documentId);
       const info = webPageInfo(db, document.id);

@@ -1,6 +1,6 @@
 /**
  * One `web_pages` row per version of a web page (migration 47), with its
- * look when it was asked for (migration 90), and one `web_page_pictures` row
+ * look when it was asked for (migration 91), and one `web_page_pictures` row
  * per picture each version shows (migration 89).
  */
 import { randomUUID } from "node:crypto";

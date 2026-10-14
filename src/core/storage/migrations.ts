@@ -1688,7 +1688,7 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
-    version: 90,
+    version: 91,
     description: "Web pages kept as they look: a PDF of each version, when the User asks (#756)",
     // The PDF is a file named by its content, beside the snapshots (src/core/documents/web).
     // A version asked for it is 'saving' until it is made, and made again at the next start
