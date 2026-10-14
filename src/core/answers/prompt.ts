@@ -1,5 +1,5 @@
 /** The instructions every Answer is written with. Kept short: every word is sent with every Question. */
-import type { CitationSupport, SkillFile } from "../api";
+import type { CitationSupport, SkillFile, UnreadFile, UnreadReason } from "../api";
 import type { LoadedSkill, SkillSummary } from "../skills";
 
 /** A language a Question is clearly written in, judged by its script alone. */
@@ -176,6 +176,10 @@ const CALCULATIONS =
 const UNBROKEN_QUOTE =
   "- Copy each quote as one unbroken stretch of the Passage: don't leave words out with an ellipsis (... or …); quote less instead.";
 
+/** The Citation check also looks for the words an Answer puts in quotation marks (#483): a reader takes them for the Document's own. */
+const QUOTATION_MARKS =
+  "- Use quotation marks only around a Document's exact words, the same as the record's quote.";
+
 /** The most Document names the instructions list: the most recently added. */
 export const LISTED_DOCUMENTS = 50;
 
@@ -194,6 +198,41 @@ export interface ListedDocuments {
 function listedName(name: string): string {
   const line = name.replace(/\s+/g, " ").trim();
   return line.length > MAX_NAME_LENGTH ? `${line.slice(0, MAX_NAME_LENGTH - 1)}…` : line;
+}
+
+/** How many Documents `unreadDocumentsNote` names before "and N more". */
+const NAMED_UNREAD = 5;
+
+/** Why a Document couldn't be read, as the note tells the model. */
+const UNREAD_WORDS: Record<UnreadReason, (pages: readonly number[]) => string> = {
+  scan: () => "a scan with no text",
+  pages: (pages) => {
+    if (pages.length === 0) return "its scanned pages weren't read";
+    const shown = pages.slice(0, 10).join(", ") + (pages.length > 10 ? ", …" : "");
+    return pages.length === 1
+      ? `scanned page ${shown} wasn't read`
+      : `scanned pages ${shown} weren't read`;
+  },
+  password: () => "password-protected",
+  damaged: () => "damaged or couldn't be opened",
+  "too-large": () => "too large to open",
+  format: () => "a format IncarnaMind doesn't read",
+};
+
+/**
+ * A reminder after a search's Passages when Documents in the Search scope
+ * have no text to search, or pages with none (#485): no search finds
+ * anything in them, so a model that finds nothing says the answer may be
+ * there instead of taking another Document's figure for it. Names each, with
+ * why; empty when there are none.
+ */
+export function unreadDocumentsNote(unread: readonly UnreadFile[]): string {
+  if (unread.length === 0) return "";
+  const named = unread
+    .slice(0, NAMED_UNREAD)
+    .map((file) => `"${listedName(file.name)}" (${UNREAD_WORDS[file.reason](file.pages)})`);
+  const more = unread.length - named.length;
+  return `IncarnaMind couldn't read the text of some Documents in the search, so no Passage comes from that text: ${named.join(", ")}${more > 0 ? `, and ${more} more` : ""}. If the Passages don't clearly answer the Question and it may be about one of them, say in one sentence that it couldn't be read, so the answer may be there, rather than taking another Document's figure for it.`;
 }
 
 /**
@@ -244,6 +283,7 @@ export function documentInstructions(
         "Cite every claim you draw from a Passage:",
         `- Before writing the Answer, call cite once with a record for each quote you will use: a marker number (1, 2, …), ${RECORD}.`,
         UNBROKEN_QUOTE,
+        QUOTATION_MARKS,
         "- In the Answer, put the marker as [^1] right after each claim it supports, in a table's cell too. Use only markers you recorded, and add no list of sources.",
         "- Write nothing before your Tool calls: only the Answer, after them.",
         notCovered(true),
@@ -266,6 +306,7 @@ export function documentInstructions(
         "- answer: the Answer, in Markdown. Cite every claim you draw from a Passage by putting a marker such as [^1] right after it, in a table's cell too. Add no list of sources.",
         `- citations: one record for each marker: ${RECORD}.`,
         UNBROKEN_QUOTE,
+        QUOTATION_MARKS,
         ...(calculate ? [CALCULATIONS] : []),
         notCovered(true),
         readingRules(true),
@@ -390,6 +431,34 @@ export function quoteRetryPrompt(records: readonly QuoteToRetry[]): string {
       ].join("\n"),
     )
     .join("\n\n");
+}
+
+/**
+ * Once an Answer is written with no Citation though it read Passages, and no
+ * sentence of it matches one: the one request for its Citations (see
+ * ./unmarkedQuotes).
+ */
+export const CITE_RETRY_INSTRUCTIONS = [
+  "You add the Citations an Answer left out. The Answer was written from the Passages below, but none of its sentences says which Passage it comes from.",
+  "- For each sentence of the Answer that a Passage supports, give the sentence as the Answer has it, the Passage's id, and a quote from the Passage that supports it: one unbroken stretch, copied character for character, no longer than a sentence. Don't reword, translate, join sentences, change characters or leave words out.",
+  "- Leave out sentences that no Passage supports. Don't change the Answer.",
+  'Reply with one JSON object: {"citations": [{"sentence": "…", "passage": "P1", "quote": "…"}]}, or {"citations": []} if no Passage supports any sentence.',
+].join("\n");
+
+/** The one request for an Answer's Citations: the Answer, then the Passages it read. */
+export function citeRetryPrompt(
+  answer: string,
+  passages: readonly { id: string; text: string }[],
+): string {
+  return [
+    "<answer>",
+    answer,
+    "</answer>",
+    "",
+    ...passages.map((passage) =>
+      [`<passage id="${attribute(passage.id)}">`, passage.text, "</passage>"].join("\n"),
+    ),
+  ].join("\n");
 }
 
 /** The request to rewrite `question` into a search query, with the notebook text above it. */

@@ -18,6 +18,7 @@ import { errorMessage } from "../../errors";
 import { useGap, useLanguage, useT } from "../../i18n";
 import type { KeyRefusal } from "../../keyRefusals";
 import { ChevronDownLineIcon } from "../lineIcons";
+import { ProblemMark } from "../ProblemLine";
 import {
   buttonClass,
   choiceListClass,
@@ -390,6 +391,7 @@ export function ProviderForm({
           {test && <TestResult result={test} />}
           {error && (
             <p role="alert" className={errorTextClass}>
+              <ProblemMark />
               {error}
             </p>
           )}
@@ -463,7 +465,10 @@ export function TestResult({ result }: { result: ConnectionTestResult }) {
   }
   return (
     <div data-testid="connection-test" role="alert" className={errorTextClass}>
-      <p>{t(testErrorKey(result.error.kind))}</p>
+      <p>
+        <ProblemMark />
+        {t(testErrorKey(result.error.kind))}
+      </p>
       {/* The provider's own words help with its errors. */}
       {result.error.message && (
         <p className="mt-1 text-[12px] leading-[18px] break-words text-ink-meta">
