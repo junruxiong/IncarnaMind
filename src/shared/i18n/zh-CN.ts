@@ -1332,6 +1332,7 @@ export const zhCN = {
     "导出的文件和任务保存的文件都放在这里。未经你同意，IncarnaMind 不会写入其他位置。",
   "outputLocation.change": "更改…",
   "outputLocation.defaultName": "文稿 › IncarnaMind",
+  "outputLocation.defaultName.other": "文档 › IncarnaMind",
   "outputLocation.default": "默认位置：在你选择其他文件夹之前，新文件都保存在这里。",
   "outputLocation.failed": "无法更改：{reason}",
   "outputLocation.pick.title": "选择新文件的保存位置",

@@ -4,7 +4,7 @@ import { core } from "../core";
 import { errorMessage } from "../errors";
 import { useT } from "../i18n";
 import { folderName } from "../linkedFolders";
-import { chooseOutputLocation } from "../outputFiles";
+import { chooseOutputLocation, defaultFolderLabel } from "../outputFiles";
 import { useAppStore } from "../store";
 import { PathText } from "./PathText";
 import { ProblemLine } from "./ProblemLine";
@@ -102,7 +102,7 @@ export function FileWriteDialog() {
               request.problem === "missing"
                 ? "fileWrite.location.missing"
                 : "fileWrite.location.notWritable",
-              { name: request.fileName, folder: t("outputLocation.defaultName") },
+              { name: request.fileName, folder: defaultFolderLabel(t) },
             )}
           </p>
           {problem && (

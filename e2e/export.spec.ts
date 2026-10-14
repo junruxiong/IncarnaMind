@@ -11,6 +11,7 @@ import {
   closeSettings,
   coreOf,
   createDataFolder,
+  DEFAULT_FOLDER_ZH,
   dismissChatSetup,
   editFolderInLibrary,
   interceptOpenDialog,
@@ -146,7 +147,7 @@ test("Export saves a .docx in one click: the first goes to Documents › Incarna
   await app.close();
 });
 
-test("in Chinese, at the narrowest window, the first export says it went to 文稿 › IncarnaMind, its long name wrapped whole; if that folder can't be made, the save asks where instead, in plain words, and Esc saves nothing", async () => {
+test("in Chinese, at the narrowest window, the first export says it went to 文稿 (文档 off macOS) › IncarnaMind, its long name wrapped whole; if that folder can't be made, the save asks where instead, in plain words, and Esc saves nothing", async () => {
   // A file where the folder would be made.
   await mkdir(join(dataDir, "Documents"), { recursive: true });
   const blocked = join(dataDir, "Documents", "IncarnaMind");
@@ -180,7 +181,7 @@ test("in Chinese, at the narrowest window, the first export says it went to 文�
   await exportButton.click();
   await expect(ask.getByRole("heading")).toHaveText("新文件保存到哪里？");
   await expect(ask.getByTestId("file-write-unusable")).toHaveText(
-    `无法把“${title}.docx”保存到“文稿 › IncarnaMind”：IncarnaMind 无法创建这个文件夹。`,
+    `无法把“${title}.docx”保存到“${DEFAULT_FOLDER_ZH}”：IncarnaMind 无法创建这个文件夹。`,
   );
   await screenshot(ask, "file-write-output-location-zh");
   await ask.getByRole("button", { name: "取消" }).click();
@@ -192,7 +193,7 @@ test("in Chinese, at the narrowest window, the first export says it went to 文�
   await rm(blocked);
   await exportButton.click();
   const done = result.getByTestId("export-done");
-  await expect(done).toHaveText(`已保存“${title}.docx”到“文稿 › IncarnaMind”`);
+  await expect(done).toHaveText(`已保存“${title}.docx”到“${DEFAULT_FOLDER_ZH}”`);
   await expect(result.getByTestId("export-open")).toHaveText("打开");
   await expect(result.getByTestId("export-change-folder")).toHaveText("更改文件夹…");
   await expect(ask).toBeHidden();

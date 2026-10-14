@@ -34,6 +34,24 @@ async function setUp(dataDir?: string) {
   return { core, data, mind, save, suggested: join(data, "Documents", "IncarnaMind") };
 }
 
+/** Files made under `under` are refused, as macOS refuses them in a Documents folder it hasn't allowed. */
+const refused = vi.hoisted(() => ({ under: null as string | null }));
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return {
+    ...actual,
+    open: (...args: Parameters<typeof actual.open>) => {
+      const [path] = args;
+      if (refused.under !== null && String(path).startsWith(refused.under)) {
+        return Promise.reject(
+          Object.assign(new Error("EPERM: operation not permitted, open"), { code: "EPERM" }),
+        );
+      }
+      return actual.open(...args);
+    },
+  };
+});
+
 /** Puts a file where the default Output location would be made, so it can't be. */
 async function blockDefault(suggested: string): Promise<void> {
   await mkdir(dirname(suggested), { recursive: true });
@@ -181,6 +199,30 @@ describe("The Output location", () => {
     await waitingQuestion(core);
     await core.setOutputLocation(picked);
     expect(await again).toMatchObject({ status: "saved", file: { name: "Tides.md" } });
+  });
+
+  test("a default that looked fine but refuses the file itself isn't kept: the save asks where instead, saying so", async () => {
+    const { core, save, data } = await setUp();
+    refused.under = join(await realpath(data), "Documents");
+    try {
+      const saving = save();
+      expect(await answerNext(core, "output-location", false)).toMatchObject({
+        fileName: "Tides.md",
+        problem: "not-writable",
+      });
+      expect(await saving).toEqual({ status: "cancelled" });
+      expect((await core.getOutputSettings()).location).toBeNull();
+
+      const again = save();
+      await waitingQuestion(core);
+      const picked = await createSourceFolder();
+      await core.setOutputLocation(picked);
+      expect(await again).toMatchObject({
+        file: { path: join(picked, "Tides.md"), defaulted: false },
+      });
+    } finally {
+      refused.under = null;
+    }
   });
 
   test.skipIf(process.platform === "win32" || process.getuid?.() === 0)(

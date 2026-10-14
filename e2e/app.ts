@@ -137,6 +137,9 @@ export interface LaunchOptions {
  */
 export const WINDOW_SIZE = { width: 1600, height: 660 };
 
+/** The default Output location in Chinese, as the system names Documents: 文稿 on macOS, 文档 elsewhere. */
+export const DEFAULT_FOLDER_ZH = `${process.platform === "darwin" ? "文稿" : "文档"} › IncarnaMind`;
+
 /**
  * The key that, held with an arrow, moves the caret a word at a time, and with
  * Shift too selects by word: Option on macOS, Ctrl on Windows and Linux.
