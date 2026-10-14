@@ -127,7 +127,7 @@ test("a failed Answer says so under itself with one action: the key's page in Se
     model.state.status = 500;
     await openSteps(window, answer);
     await answer.getByTestId("answer-regenerate").click();
-    await expect(error).toContainText("The provider ran into a problem", { timeout: 60_000 });
+    await expect(error).toContainText("Ollama ran into a problem", { timeout: 60_000 });
     await expect(error.getByTestId("answer-error-action")).toHaveText("Try again");
     const asked = model.state.requests;
     // By keyboard: the focus ring shows on the action, and Enter asks again.
@@ -138,13 +138,22 @@ test("a failed Answer says so under itself with one action: the key's page in Se
     await expect(error.getByTestId("answer-error-action")).toHaveCSS("outline-style", "solid");
     await window.keyboard.press("Enter");
     await expect.poll(() => model.state.requests).toBeGreaterThan(asked);
-    await expect(error).toContainText("The provider ran into a problem", { timeout: 60_000 });
+    await expect(error).toContainText("Ollama ran into a problem", { timeout: 60_000 });
 
     // The same line in Chinese.
     await bridge(window).settings("zh-CN");
-    await expect(error).toContainText("提供商出错");
+    await expect(error).toContainText("Ollama 出错了");
     await expect(error.getByTestId("answer-error-action")).toHaveText("重试");
     await screenshot(window, "answer-provider-problem-zh");
+
+    // Offline: the line names the company and says what to check, in both languages.
+    await new Promise<void>((resolve) => model.server.close(() => resolve()));
+    await error.getByTestId("answer-error-action").click();
+    await expect(error).toContainText("无法连接 Ollama，请检查网络连接", { timeout: 60_000 });
+    await expect(error.getByTestId("answer-error-action")).toHaveText("重试");
+    await bridge(window).settings("en");
+    await expect(error).toContainText("Couldn't reach Ollama. Check your internet connection");
+    await expect(error.getByTestId("answer-error-action")).toHaveText("Try again");
     await app.close();
   } finally {
     model.server.close();
@@ -158,7 +167,7 @@ test("asking without a chat model says what to set up, in the composer's row and
 
   // At the top of the Mind: one line and one action, read as a status.
   const top = window.getByTestId("chat-readiness");
-  await expect(top).toContainText("Asking Questions needs a chat model");
+  await expect(top).toContainText("Asking Questions needs an AI model");
   await expect(top.getByRole("button")).toHaveText("Set up");
   await expect(window.getByRole("status").filter({ has: top })).toHaveCount(0);
   await screenshot(window, "needs-chat-model-en");
@@ -170,7 +179,7 @@ test("asking without a chat model says what to set up, in the composer's row and
   await window.keyboard.press("Enter");
   const composer = window.getByTestId("composer");
   const notReady = composer.getByTestId("composer-not-ready");
-  await expect(notReady).toContainText("Asking Questions needs a chat model");
+  await expect(notReady).toContainText("Asking Questions needs an AI model");
   await expect(notReady.getByRole("button")).toHaveCount(1);
   await expect(notReady).toHaveCSS("color", "rgb(101, 107, 116)");
   await expect(composer.getByTestId("composer-input")).toHaveValue("Is anyone there?");
@@ -187,9 +196,9 @@ test("asking without a chat model says what to set up, in the composer's row and
 
   // In Chinese.
   await bridge(window).settings("zh-CN");
-  await expect(top).toContainText("提问需要先设置对话模型");
+  await expect(top).toContainText("提问需要先设置 AI 模型");
   await expect(top.getByRole("button")).toHaveText("去设置");
-  await expect(notReady).toContainText("提问需要先设置对话模型");
+  await expect(notReady).toContainText("提问需要先设置 AI 模型");
   await screenshot(window, "needs-chat-model-zh");
   await app.close();
 });

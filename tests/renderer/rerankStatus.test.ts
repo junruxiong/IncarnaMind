@@ -40,7 +40,7 @@ describe("The reranking model's download in the sidebar's status row", () => {
       tone: "progress",
       short: "Reranking",
       figure: "45/136 MB",
-      full: "Downloading the reranking model: 45 of 136 MB. Until it's ready, search keeps its own order.",
+      full: "Downloading the model that orders search results: 45 of 136 MB. Until it's ready, search keeps its own order.",
       retry: false,
     });
     const started = rerankingModelStatus(
@@ -67,7 +67,7 @@ describe("The reranking model's download in the sidebar's status row", () => {
       testId: "reranking-model-failed",
       tone: "error",
       short: "Reranking model download failed",
-      full: "The reranking model couldn't be downloaded: check your internet connection.\nfetch failed",
+      full: "The model that orders search results couldn't be downloaded: check your internet connection.\nfetch failed",
       retry: true,
     });
     expect(

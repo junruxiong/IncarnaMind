@@ -26,7 +26,7 @@ test.afterEach(async () => {
 const LANGUAGES = [
   {
     language: "en",
-    more: "More providers",
+    more: "More services",
     first: ["Anthropic", "OpenAI", "Google", "OpenRouter", "DeepSeek", "Qwen", "SiliconFlow"],
     setUp: "Mistral",
     rest: ["xAI", "Kimi", "GLM", "OpenAI-compatible server"],
@@ -34,7 +34,7 @@ const LANGUAGES = [
   },
   {
     language: "zh-CN",
-    more: "更多提供商",
+    more: "更多服务",
     first: ["Anthropic", "OpenAI", "Google", "OpenRouter", "DeepSeek", "通义千问", "硅基流动"],
     setUp: "Mistral",
     rest: ["xAI", "Kimi", "智谱 GLM", "OpenAI 兼容服务器"],

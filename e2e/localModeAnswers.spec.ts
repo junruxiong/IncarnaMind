@@ -75,12 +75,9 @@ test("in local mode a Question to a cloud model isn't sent: one line says so wit
   await window.keyboard.press("Enter");
   const refusal = window.getByTestId("composer").getByTestId("composer-not-ready");
   await expect(refusal).toHaveText(
-    "“Keep everything on this computer” is on, so this Question wasn't sent to llm.example.com · Use a local model · Turn off local mode",
+    "“Keep everything on this computer” is on, so this Question wasn't sent to llm.example.com · Use a local model · Allow cloud models",
   );
-  await expect(refusal.getByRole("button")).toHaveText([
-    "Use a local model",
-    "Turn off local mode",
-  ]);
+  await expect(refusal.getByRole("button")).toHaveText(["Use a local model", "Allow cloud models"]);
   await expect(window.getByTestId("composer-input")).toHaveValue("What is IncarnaMind?");
   await expect(editor.getByTestId("question")).toHaveCount(0);
   await expect(editor.getByTestId("answer")).toHaveCount(0);
@@ -95,7 +92,7 @@ test("in local mode a Question to a cloud model isn't sent: one line says so wit
   // In Chinese.
   await bridge(window).language("zh-CN");
   await expect(refusal).toHaveText(
-    "已开启“所有内容都留在这台电脑上”，这个问题没有发送给 llm.example.com · 改用本地模型 · 关闭本地模式",
+    "已开启“所有内容都留在这台电脑上”，这个问题没有发送给 llm.example.com · 改用本地模型 · 允许使用云端模型",
   );
   await expect(top).toContainText("因此不会向 llm.example.com 发送问题");
   await window.getByTestId("composer-model").click();
@@ -109,7 +106,7 @@ test("in local mode a Question to a cloud model isn't sent: one line says so wit
   await window.keyboard.press("Escape");
   await expect(window.getByTestId("settings")).toBeHidden();
 
-  // Turn off local mode: the line goes, and Undo turns it on again.
+  // Allow cloud models: the line goes, and Undo turns it on again.
   await refusal.getByTestId("local-mode-turn-off").click();
   await expect(refusal).toBeHidden();
   await expect(top).toBeHidden();
