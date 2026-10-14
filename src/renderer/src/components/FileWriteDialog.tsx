@@ -22,10 +22,11 @@ import { useModal } from "./useModal";
 
 /**
  * Asks once before a save that needs the User's answer (the core raises the
- * question and waits): where new files go, the first time IncarnaMind saves
- * one; or whether it may add files to a Linked folder, the first time a file
- * would go inside one. Esc cancels the first, which saves nothing; the second
- * is remembered, so it must be answered.
+ * question and waits): where new files go, when none is chosen and the
+ * default, Documents › IncarnaMind (D209), can't take them, saying why; or
+ * whether it may add files to a Linked folder, the first time a file would go
+ * inside one. Esc cancels the first, which saves nothing; the second is
+ * remembered, so it must be answered.
  */
 export function FileWriteDialog() {
   const t = useT();
@@ -96,10 +97,14 @@ export function FileWriteDialog() {
           <h2 id="file-write-title" className={dialogTitleClass}>
             {t("fileWrite.location.title")}
           </h2>
-          <p className={dialogTextClass}>
-            {t("fileWrite.location.body", { name: request.fileName })}
+          <p data-testid="file-write-unusable" className={dialogTextClass}>
+            {t(
+              request.problem === "missing"
+                ? "fileWrite.location.missing"
+                : "fileWrite.location.notWritable",
+              { name: request.fileName, folder: t("outputLocation.defaultName") },
+            )}
           </p>
-          <FolderPath path={request.suggested} testId="file-write-suggested" />
           {problem && (
             <ProblemLine testId="file-write-problem">
               {t("fileWrite.location.failed", { reason: problem })}
@@ -118,17 +123,9 @@ export function FileWriteDialog() {
               type="button"
               data-testid="file-write-choose"
               onClick={() => void chooseAnother()}
-              className={buttonClass}
-            >
-              {t("fileWrite.location.choose")}
-            </button>
-            <button
-              type="button"
-              data-testid="file-write-save-here"
-              onClick={() => void respond(true)}
               className={primaryButtonClass}
             >
-              {t("fileWrite.location.save")}
+              {t("fileWrite.location.choose")}
             </button>
           </div>
         </div>
