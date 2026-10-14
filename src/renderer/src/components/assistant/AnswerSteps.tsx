@@ -174,6 +174,8 @@ function liveText(t: Translate, step: LiveStep, scope: string): string {
       return t("approvals.answer.waiting");
     case "consent":
       return t("answer.phase.waiting-for-consent");
+    case "listening":
+      return t("answer.phase.listening");
     case "loading":
       return t("answer.phase.loading");
     case "reading":
@@ -271,7 +273,9 @@ function foldedText(
     case "searched-web":
       return t("steps.searchedWeb", { sources: sourcesText(t, line.sources) });
     case "listened":
-      return t("steps.listened", { sources: sourcesText(t, line.sources) });
+      return t(line.screen ? "steps.listened.screen" : "steps.listened", {
+        sources: sourcesText(t, line.sources),
+      });
     case "read":
     case "asked":
       return mindStepText(t, line);

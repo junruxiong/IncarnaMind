@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { create } from "zustand";
-import type { AudioSource, Meeting, Settings } from "../../core/api";
+import { useShallow } from "zustand/react/shallow";
+import type { AudioSource, Meeting, Settings, ShareableWindow } from "../../core/api";
 import { meetingTimeAt } from "../../shared/blockTimes";
 import { core } from "./core";
 import { errorMessage } from "./errors";
@@ -17,6 +18,16 @@ interface MeetingsState {
   gapsSeen: Readonly<Record<string, number>>;
   /** The Meetings whose recording details are shown (#161). */
   detailsShown: Readonly<Record<string, boolean>>;
+  /**
+   * IncarnaMind's window picker for a Meeting's shared screen (ADR-0024),
+   * while open: the windows to choose from, null while they are found.
+   */
+  screenPicker: { meetingId: string; windows: ShareableWindow[] | null } | null;
+  /**
+   * The Meetings whose bar has said why macOS will ask for Screen Recording:
+   * Choose window… then asks for it.
+   */
+  screenExplained: Readonly<Record<string, boolean>>;
   /** Lists the Meetings, at startup; the core's events keep the list after that. */
   load(): Promise<void>;
   /** "Record a meeting": a new Mind, in a tab of its own, with the start block. */
@@ -37,6 +48,17 @@ interface MeetingsState {
   dismissGaps(meetingId: string): void;
   /** Shows or hides a Meeting's recording details; with no `shown`, the other way from now. */
   showDetails(meetingId: string, shown?: boolean): void;
+  /**
+   * Choose window…: IncarnaMind's picker with the windows it can read; on
+   * macOS, the first time, the bar first says why macOS will ask.
+   */
+  chooseScreen(meetingId: string): Promise<void>;
+  /** Reads the window chosen in IncarnaMind's picker, which closes. */
+  readScreen(meetingId: string, windowId: string): Promise<void>;
+  closeScreenPicker(): void;
+  /** Not this time: the meeting bar stops asking. */
+  declineScreen(meetingId: string): Promise<void>;
+  stopScreen(meetingId: string): Promise<void>;
 }
 
 /** Meetings (#135), as the core lists them, and what the UI does with them. */
@@ -59,6 +81,8 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
     noticeFor: null,
     gapsSeen: {},
     detailsShown: {},
+    screenPicker: null,
+    screenExplained: {},
 
     async load() {
       try {
@@ -114,6 +138,35 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
         gapsSeen: { ...state.gapsSeen, [meetingId]: meeting?.gaps.length ?? 0 },
       }));
     },
+    async chooseScreen(meetingId) {
+      const meeting = get().meetings.find((each) => each.id === meetingId);
+      // macOS asks for Screen Recording the first time: the bar says why before it does.
+      if (meeting?.screen?.permission === "not-asked" && !get().screenExplained[meetingId]) {
+        set((state) => ({ screenExplained: { ...state.screenExplained, [meetingId]: true } }));
+        return;
+      }
+      set({ screenPicker: { meetingId, windows: null } });
+      await attempt(meetingId, async () => {
+        try {
+          const windows = await core.listShareableWindows(meetingId);
+          set((state) =>
+            state.screenPicker?.meetingId !== meetingId
+              ? {}
+              : { screenPicker: windows ? { meetingId, windows } : null },
+          );
+        } catch (error) {
+          set({ screenPicker: null });
+          throw error;
+        }
+      });
+    },
+    async readScreen(meetingId, windowId) {
+      set({ screenPicker: null });
+      await attempt(meetingId, () => core.readSharedScreen({ meetingId, windowId }));
+    },
+    closeScreenPicker: () => set({ screenPicker: null }),
+    declineScreen: (meetingId) => attempt(meetingId, () => core.declineSharedScreen(meetingId)),
+    stopScreen: (meetingId) => attempt(meetingId, () => core.stopSharedScreen(meetingId)),
     showDetails(meetingId, shown) {
       set((state) => ({
         detailsShown: {
@@ -143,6 +196,15 @@ export const useMeetingOf = (mindId: string): Meeting | undefined =>
 /** A Meeting is recording or paused: its Mind shows the meeting bar. */
 export const isLive = (meeting: Meeting | undefined): meeting is Meeting =>
   meeting?.status === "recording" || meeting?.status === "paused";
+
+/**
+ * The shared screens still kept (ADR-0024): each recording Meeting's memory,
+ * which starts its screens' ids. A screen Citation whose screen isn't kept was deleted.
+ */
+export const useKeptScreens = (): string[] =>
+  useMeetings(
+    useShallow((state) => state.meetings.flatMap((meeting) => meeting.screen?.memory ?? [])),
+  );
 
 /** Whether some Meeting's audio is being captured now: background work waits meanwhile. */
 export const useCapturing = (): boolean =>

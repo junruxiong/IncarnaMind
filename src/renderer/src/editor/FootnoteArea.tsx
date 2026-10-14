@@ -5,7 +5,8 @@ import { useRef } from "react";
 import type { CitationAttributes } from "../../../core/api";
 import { citationSource, citationState, withShownName } from "../../../shared/citations";
 import { noteOfCitation, useMindFormatting } from "../citationFormatting";
-import { useT } from "../i18n";
+import { useLanguage, useT } from "../i18n";
+import { useKeptScreens } from "../meetings";
 import { useAppStore } from "../store";
 import { numberedCitations, numberedFootnotes } from "./citationNumbers";
 import { FootnoteText } from "./FootnoteText";
@@ -125,9 +126,11 @@ function CitationRow({ editor, row }: { editor: Editor; row: Extract<Row, { kind
     state.status.kind === "ready" ? state.documents : null,
   );
   const kept = useAppStore((state) => state.keptCitationTexts);
+  const screens = useKeptScreens();
+  const language = useLanguage();
   const { attributes } = row;
-  const state = citationState(attributes, documents, kept);
-  const source = citationSource(withShownName(attributes, documents), t).text;
+  const state = citationState(attributes, documents, kept, screens);
+  const source = citationSource(withShownName(attributes, documents), t, language).text;
   // In a note style, the note as the style writes it (#289), once it is formatted.
   const formatting = useMindFormatting(useMindId());
   const note = noteOfCitation(editor.state, formatting, row.key);

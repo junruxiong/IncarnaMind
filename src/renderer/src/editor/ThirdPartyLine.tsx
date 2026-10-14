@@ -8,6 +8,8 @@ const READ: Record<ReadThirdPartySource, MessageKey> = {
   imported: "approvals.thirdParty.read.imported",
   "web-page": "approvals.thirdParty.read.webPage",
   "checked-document": "approvals.thirdParty.read.checkedDocument",
+  transcript: "approvals.thirdParty.read.transcript",
+  "shared-screen": "approvals.thirdParty.read.sharedScreen",
 };
 
 /** The line for text in its Question context: in a Mind, or the Mind a Question in a conversation read. */
@@ -15,6 +17,8 @@ const IN_MIND: Record<ThirdPartySource, MessageKey> = {
   imported: "approvals.thirdParty.mind.imported",
   "web-page": "approvals.thirdParty.mind.webPage",
   "checked-document": "approvals.thirdParty.mind.checkedDocument",
+  transcript: "approvals.thirdParty.mind.transcript",
+  "shared-screen": "approvals.thirdParty.mind.sharedScreen",
 };
 
 /** The line for text in its Question context: in a conversation. */
@@ -22,6 +26,8 @@ const IN_CONVERSATION: Record<ThirdPartySource, MessageKey> = {
   imported: "approvals.thirdParty.conversation.imported",
   "web-page": "approvals.thirdParty.conversation.webPage",
   "checked-document": "approvals.thirdParty.conversation.checkedDocument",
+  transcript: "approvals.thirdParty.conversation.transcript",
+  "shared-screen": "approvals.thirdParty.conversation.sharedScreen",
 };
 
 /**

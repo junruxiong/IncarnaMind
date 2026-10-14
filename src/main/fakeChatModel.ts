@@ -34,6 +34,10 @@
  * notice: 90 days." gives "90 days"), or NOT_FOUND when no line shares one;
  * a cell whose Question says "busy" is refused with an HTTP 429 the first time.
  *
+ * A Question about a meeting's shared screen ("screen", "slide", 屏幕), asked
+ * during the call with one read, cites the newest screen's line that shares
+ * the most with it, without searching, and says the screen shows it.
+ *
  * A Question about the User's notes or what they selected ("notes", "selected",
  * 笔记, 选中), asked beside a Mind, gets an Answer that starts by saying what it
  * read of the Mind: its name and first line, and the selected text.
@@ -236,6 +240,44 @@ const lastQuestion = (prompt: Prompt): string => lastUserText(prompt).split("\n\
 
 /** A Question about the User's notes or what they selected in them. */
 const ABOUT_THE_MIND = /\bnotes?\b|\bselect(?:ed|ion)\b|笔记|选中/i;
+
+/** A Question about what is on a meeting's shared screen (ADR-0024). */
+const ABOUT_THE_SCREEN = /\b(?:screen|slide)\b|屏幕|幻灯片/i;
+
+/**
+ * The scripted Answer to a Question about the shared screen, given one: it
+ * cites the newest screen's line that shares the most with the Question, then
+ * says the screen shows it, in the Question's language.
+ */
+function screenReply(prompt: Prompt, question: string, tools: readonly string[]): Reply | null {
+  if (!ABOUT_THE_SCREEN.test(question) || !tools.includes("cite")) return null;
+  const screens = [
+    ...lastUserText(prompt).matchAll(
+      /<shared-screen id="(S\d+)"[^>]*>\n([\s\S]*?)\n<\/shared-screen>/g,
+    ),
+  ];
+  const screen = screens.at(-1);
+  if (!screen) return null;
+  if (toolResults(prompt, "cite").length > 0) {
+    return {
+      text: /\p{Script=Han}/u.test(question)
+        ? "屏幕上写着这个 [^1]。"
+        : "The shared screen shows it [^1].",
+    };
+  }
+  const asked = new Set(wordsAndPairs(question));
+  const lines = (screen[2] ?? "").split("\n").filter((line) => line.trim() !== "");
+  let quote = lines[0] ?? "";
+  let best = 0;
+  for (const line of lines) {
+    const shared = wordsAndPairs(line).filter((word) => asked.has(word)).length;
+    if (shared > best) {
+      best = shared;
+      quote = line;
+    }
+  }
+  return { tool: "cite", input: { citations: [{ marker: 1, passage: screen[1], quote }] } };
+}
 
 /** What the Answer says it read of the Mind a Question about it was asked beside, if any. */
 function mindRead(prompt: Prompt): string | null {
@@ -715,6 +757,8 @@ function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
     if (named) return { tool: "use_skill", input: { name: named } };
   }
   const skill = skillFollowed(prompt);
+  const screen = screenReply(prompt, question, tools);
+  if (screen) return screen;
   if (!tools.includes("search_documents")) return { text: fakeAnswer(question, skill) };
   const searches = toolResults(prompt, "search_documents");
   if (searches.length === 0) {

@@ -23,7 +23,7 @@ import { registerDocumentScheme, serveDocumentFiles } from "./documentProtocol";
 import { serveFileActions } from "./files";
 import { handle } from "./ipc";
 import { startLogging } from "./logging";
-import { isCaptureWindow } from "./meetings/capture";
+import { isCaptureWindow } from "./meetings/captureWindow";
 import { installAppMenu } from "./menu";
 import { createSystemNotifications } from "./notifications";
 import { chooseExecutor, createElectronAdapters, systemBrowser } from "./platform";

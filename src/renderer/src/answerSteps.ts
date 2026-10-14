@@ -77,7 +77,8 @@ export type FoldedLine =
    */
   | { kind: "read-passages"; passages: number; citedAfterChecking: number }
   | { kind: "searched-web"; sources: number }
-  | { kind: "listened"; sources: number }
+  /** Asked during a call: what was said, and what was read from the shared screen when an Answer cites it. */
+  | { kind: "listened"; sources: number; screen: boolean }
   | { kind: "read"; mind: MindRead; share: number | null; selection?: true }
   | { kind: "asked"; mind: AskedFrom }
   | { kind: "answered"; model: string };
@@ -85,6 +86,8 @@ export type FoldedLine =
 export type LiveStep =
   | { kind: "waiting" }
   | { kind: "consent" }
+  /** Asked during a call: the live transcript is brought up to now (#144). */
+  | { kind: "listening" }
   | { kind: "loading" }
   | { kind: "reading"; mind: AskedFrom }
   | { kind: "searching" }
@@ -282,7 +285,10 @@ function extraScopes(calls: readonly AnswerToolCall[]): number {
 export function foldedLine(input: StepsInput): FoldedLine | null {
   const { answer, meeting } = input;
   const sources = sourceCount(answer.citations);
-  if (meeting) return { kind: "listened", sources };
+  if (meeting) {
+    const screen = answer.citations.some((citation) => citation.location?.kind === "screen");
+    return { kind: "listened", sources, screen };
+  }
   if (answer.toolCalls.some((call) => isSearch(call) && call.status === "done")) {
     // Never "no sources" once Passages were read: when the model cited nothing itself, what
     // was read, and what came of checking the Answer against it.
@@ -318,6 +324,7 @@ export function liveStep({
 }): LiveStep {
   if (waitingForApproval) return { kind: "waiting" };
   if (phase === "waiting-for-consent") return { kind: "consent" };
+  if (phase === "listening") return { kind: "listening" };
   if (phase === "loading") return { kind: "loading" };
   if (phase === "checking-quotes") {
     return { kind: "checking", count: shownCitations(answer).length };

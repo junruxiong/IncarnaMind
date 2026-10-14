@@ -69,12 +69,12 @@ async function turnOnMeetings(window: Page, name?: string): Promise<void> {
   await closeSettings(window);
 }
 
-/** The + menu's "Record a meeting": a new Mind with the start block. */
-async function recordMeeting(window: Page): Promise<Locator> {
+/** The + menu's "Record a meeting" (录制会议 in Chinese): a new Mind with the start block. */
+async function recordMeeting(window: Page, item = "Record a meeting"): Promise<Locator> {
   const plus = window.getByTestId("plus-menu");
   await plus.hover();
   await plus.click();
-  await window.getByRole("menuitem", { name: "Record a meeting" }).click();
+  await window.getByRole("menuitem", { name: item }).click();
   const start = window.getByTestId("meeting-start");
   await expect(start).toBeVisible();
   return start;
@@ -897,5 +897,117 @@ test("asking during the call: the assistant listens to the live transcript, its 
     return (await core.listConversations({ folderId: folder })).map((each) => each.title);
   }, folderId);
   expect(titles).toHaveLength(2);
+  await app.close();
+});
+
+/** A slide, as the window someone shares in a call shows it (ADR-0024): its lines, a table's cells apart. */
+const SLIDE = `<!doctype html><html><head><meta charset="utf-8"><title>Q3 review · slides</title>
+<style>body{margin:0;background:#1f2430;color:#fff;font:28px sans-serif}main{padding:48px}td{padding:6px 24px}</style>
+</head><body><main><h1>Launch budget</h1><table>
+<tr><td>Budget</td><td>£1.2m</td></tr><tr><td>Spent to date</td><td>£640k</td></tr>
+<tr><td>Contingency left</td><td>£90k</td></tr></table></main></body></html>`;
+
+/** What the fake text recognition reads on the first screen read: the slide's lines. */
+const SLIDE_READ = {
+  pages: {
+    "1": {
+      lines: ["Launch budget", "Budget £1.2m", "Spent to date £640k", "Contingency left £90k"],
+    },
+  },
+};
+
+const screenOf = async (window: Page) => (await bridge(window))[0]?.screen ?? null;
+
+test("the shared screen: the bar asks at the start, one chosen window is read, an Answer cites it, and after Stop the Citation says it was deleted; Not this time reads nothing", async () => {
+  const slide = join(sources, "slide.html");
+  await writeFile(slide, SLIDE);
+  const scans = join(sources, "slide-read.json");
+  await writeFile(scans, JSON.stringify(SLIDE_READ));
+  const { app, window } = await launchApp(dataDir, { fakeChat: true, sharedWindow: slide, scans });
+  await setWindowSize(app, window, 1440, 900);
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await useOutputLocation(window, sources);
+  await turnOnMeetings(window);
+  const bar = await startRecording(window, await recordMeeting(window), { notice: true });
+
+  // Asked in the bar as recording starts: a line, not a dialog.
+  const line = bar.getByTestId("meeting-screen-line");
+  await expect(line).toHaveAttribute("data-state", "ask");
+  await expect(line).toHaveText(
+    "Will someone share their screen? Read it to answer your questions · Choose window… · Not this time",
+  );
+  await motionSettled(window);
+  await shot(window, "screen-ask-en");
+
+  // Choose window…: IncarnaMind's picker lists the one window there is to read.
+  await pointAndClick(window, line.getByTestId("meeting-screen-choose"));
+  const picker = window.getByTestId("screen-picker");
+  await expect(picker).toBeVisible();
+  await expect(picker.getByTestId("screen-picker-window")).toHaveText(["Q3 review · slides"]);
+  await shot(window, "screen-picker-en");
+  await pointAndClick(window, picker.getByTestId("screen-picker-read"));
+  await expect(picker).toBeHidden();
+  await expect(line).toHaveText("Reading the “Q3 review · slides” window · Stop");
+  // Read once it has settled, on this computer.
+  await expect.poll(async () => (await screenOf(window))?.screens, { timeout: 20_000 }).toBe(1);
+
+  // A Question about the slide: its Answer cites the shared screen, the card shows the screen.
+  await window.getByTestId("mind-editor").click();
+  const answer = await askInAssistant(window, "How much has been spent, as the slide shows?");
+  await expect(answer.getByTestId("answer-steps")).toContainText("Read the shared screen");
+  const chip = answer.getByTestId("citation-chip").first();
+  await expect(chip).toHaveAttribute(
+    "aria-label",
+    /^Citation 1: Shared screen \d{1,2}:\d{2}.*\. Read from the shared screen$/,
+  );
+  await pointAndClick(window, chip);
+  const card = window.getByTestId("screen-citation-card");
+  await expect(card).toBeVisible();
+  await expect(card.getByTestId("screen-citation-where")).toContainText(
+    "Q3 review · slides window",
+  );
+  await expect(card.getByTestId("screen-citation-quote")).toHaveText("Spent to date £640k");
+  await expect(card.getByTestId("screen-citation-picture")).toBeVisible();
+  await motionSettled(window);
+  await shot(window, "screen-reading-en");
+
+  // After Stop nothing of the screen is kept: the Citation says it was deleted, with nothing to open.
+  await window.keyboard.press("Escape");
+  await expect(card).toBeHidden();
+  await bar.getByTestId("meeting-stop").click();
+  await expect(window.getByTestId("meeting-bar")).toBeHidden();
+  await expect(chip).toHaveAttribute("data-check", "cant-check");
+  await pointAndClick(window, chip);
+  await expect(card).toHaveAttribute("data-gone", "true");
+  await expect(card.getByTestId("citation-badge")).toHaveText("Deleted after the meeting");
+  await expect(card.getByTestId("screen-citation-picture")).toHaveCount(0);
+  await expect(card.getByTestId("screen-citation-quote")).toHaveCount(0);
+  await motionSettled(window);
+  await shot(window, "screen-after-en");
+  await window.keyboard.press("Escape");
+  await expect(card).toBeHidden();
+
+  // In Chinese, Not this time: nothing is read, and the line offers it for later in the call.
+  await window.evaluate(async () =>
+    (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+      user: { language: "zh-CN" },
+    }),
+  );
+  const next = await startRecording(window, await recordMeeting(window, "录制会议"));
+  const asked = next.getByTestId("meeting-screen-line");
+  await expect(asked).toHaveText(
+    "会上有人共享屏幕吗？读取屏幕来回答你的问题 · 选择窗口… · 这次不用",
+  );
+  await motionSettled(window);
+  await shot(window, "screen-ask-zh");
+  await pointAndClick(window, asked.getByTestId("meeting-screen-decline"));
+  await expect(asked.getByTestId("meeting-screen-offer")).toHaveText("读取共享屏幕…");
+  await window.getByTestId("assistant-new-chat").click();
+  await window.getByTestId("mind-editor").click();
+  const plain = await askInAssistant(window, "屏幕上的预算花了多少？");
+  await expect(plain.getByTestId("answer-steps")).not.toContainText("共享屏幕");
+  const meetings = await bridge(window);
+  expect(meetings[0]?.screen).toMatchObject({ state: "off", screens: 0 });
   await app.close();
 });

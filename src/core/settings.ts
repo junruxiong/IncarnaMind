@@ -153,6 +153,7 @@ const deviceScope: Scope<DeviceSettings> = {
     meetingsEnabled: false,
     meetingSystemAudio: true,
     meetingNoticeAccepted: false,
+    meetingScreenAsk: true,
     motion: "system",
   },
   validators: {
@@ -167,6 +168,7 @@ const deviceScope: Scope<DeviceSettings> = {
     meetingsEnabled: isBoolean,
     meetingSystemAudio: isBoolean,
     meetingNoticeAccepted: isBoolean,
+    meetingScreenAsk: isBoolean,
     motion: (value): value is MotionPreference =>
       MOTION_PREFERENCES.some((preference) => preference === value),
   },

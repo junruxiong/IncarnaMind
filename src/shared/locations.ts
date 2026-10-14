@@ -13,7 +13,9 @@
  * by Reviewer", #76).
  */
 import type { CitationAttributes, CitationLocation } from "../core/api";
+import type { Language } from "../core/language";
 import { clockTime, parseClockTime } from "./clock";
+import { formatTime } from "./dates";
 import { type MessageKey, type MessageParams, translate } from "./i18n";
 import { findQuote, type MatchOptions, type TextRange } from "./quoteMatch";
 import { anchorsOf, lineAt, parseCellRef, parseCueTarget, type UnitText } from "./units";
@@ -47,6 +49,16 @@ export function parseLocation(value: unknown): CitationLocation | null {
       return isCount(from) && isCount(to) && to >= from ? { kind, from, to } : null;
     case "time":
       return isTime(from) && isTime(to) && to >= from ? { kind, from, to } : null;
+    case "screen": {
+      const { at, screen } = location;
+      return typeof at === "string" &&
+        typeof screen === "string" &&
+        isTime(from) &&
+        isTime(to) &&
+        to >= from
+        ? { kind, at, screen, from, to }
+        : null;
+    }
     case "rows":
       if (!isCount(from) || !isCount(to) || to < from) return null;
       return {
@@ -106,8 +118,15 @@ export function citationLocation(
 /** Words a Location in a language: `t` is the renderer's `t` or the core's `translate`. */
 export type Translate = (key: MessageKey, params?: MessageParams) => string;
 
-/** A Location's short label, e.g. "slide 4" or "Revenue, rows 12–14". */
-export function formatLocation(location: CitationLocation, t: Translate): string {
+/**
+ * A Location's short label, e.g. "slide 4" or "Revenue, rows 12–14"; a shared
+ * screen's time of day is written as `language` writes it.
+ */
+export function formatLocation(
+  location: CitationLocation,
+  t: Translate,
+  language: Language = "en",
+): string {
   switch (location.kind) {
     case "page":
       return t("location.page", { range: span(location.from, location.to) });
@@ -131,6 +150,8 @@ export function formatLocation(location: CitationLocation, t: Translate): string
       });
     case "time":
       return clockTime(location.from);
+    case "screen":
+      return t("location.screen", { time: formatTime(location.at, language) });
     case "section": {
       const section = location.notes
         ? t("location.section.notes")
@@ -160,7 +181,7 @@ export const englishLocation = (location: CitationLocation): string =>
 
 /** The kinds of Location the card's "Open …" button names: the page, the slide, the section… */
 export const openKind = (location: CitationLocation | null) =>
-  location === null ? "document" : location.kind;
+  location === null || location.kind === "screen" ? "document" : location.kind;
 
 /** A Citation of a Transcript, whose Location is a time: checked against the Transcript's text, not a page. */
 export const isTranscriptLocation = (location: CitationLocation | null) =>

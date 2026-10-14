@@ -5,12 +5,13 @@ import type * as Y from "yjs";
 import type { CitationAttributes, CitationCheck } from "../../../core/api";
 import { badgeMessage, citationState, withShownName } from "../../../shared/citations";
 import { useT } from "../i18n";
+import { useKeptScreens } from "../meetings";
 import { motionMode, subscribeMotion } from "../motion";
 import { useAppStore } from "../store";
 import { ClaimMark } from "./ClaimCheckCard";
 import { type NumberedCitation, numberedCitations, textBlockEdited } from "./citationNumbers";
 import { type ShownClaim, shownClaims } from "./claimChecks";
-import { CheckMarkIcon, type ClaimMarkState } from "./icons";
+import { CitationMarkIcon, type ClaimMarkState } from "./icons";
 import { peekCitation } from "./peek";
 
 const MARK_HEIGHT = 18;
@@ -37,6 +38,8 @@ type Mark =
   | (Placed & {
       kind: "citation";
       check: CitationCheck;
+      /** A shared screen's, deleted with its Meeting: a ring. */
+      gone: boolean;
       /** The marker in the text: the mark is aligned to it, and clicking the mark clicks it. */
       marker: HTMLElement;
     })
@@ -54,6 +57,8 @@ const subjectOf = (mark: Mark) => (mark.kind === "citation" ? mark.marker : mark
 interface Description {
   number: number;
   check: CitationCheck;
+  /** A shared screen's, deleted with its Meeting (ADR-0024). */
+  gone: boolean;
   label: string;
 }
 
@@ -122,7 +127,8 @@ export function MarginChecks({
   const kept = useAppStore((state) => state.keptCitationTexts);
   const layer = useRef<HTMLDivElement>(null);
   const [marks, setMarks] = useState<readonly Mark[]>([]);
-  const inputs = useRef({ t, documents, kept });
+  const screens = useKeptScreens();
+  const inputs = useRef({ t, documents, kept, screens });
   /**
    * Each Citation's check and label, by its attributes (an edit elsewhere keeps
    * them), until the words, the Documents or the kept text change: worked out
@@ -149,12 +155,13 @@ export function MarginChecks({
     const describe = ({ attributes, number }: NumberedCitation): Description => {
       const known = described.current.get(attributes);
       if (known?.number === number) return known;
-      const { t: translate, documents: live, kept: keptTexts } = inputs.current;
-      const state = citationState(attributes, live, keptTexts);
+      const { t: translate, documents: live, kept: keptTexts, screens } = inputs.current;
+      const state = citationState(attributes, live, keptTexts, screens);
       const badge = badgeMessage(state, withShownName(attributes, live), translate);
       const description = {
         number,
         check: state.check,
+        gone: state.reason === "screen-deleted",
         label: translate("citation.mark.label", {
           number,
           badge: translate(badge.key, badge.params),
@@ -198,12 +205,13 @@ export function MarginChecks({
           };
         }
         placed.set(citation.key, place);
-        const { check, label } = describe(citation);
+        const { check, gone, label } = describe(citation);
         const mark: Mark = {
           kind: "citation",
           key: citation.key,
           number: citation.number,
           check,
+          gone,
           label,
           ...place,
           top: 0,
@@ -309,10 +317,10 @@ export function MarginChecks({
   // The interface language, the Documents (one deleted can't be checked) and the text kept of
   // unlinked ones change marks too.
   useEffect(() => {
-    inputs.current = { t, documents, kept };
+    inputs.current = { t, documents, kept, screens };
     described.current = new WeakMap();
     remeasure.current();
-  }, [t, documents, kept]);
+  }, [t, documents, kept, screens]);
 
   // Motion turned to Reduced or Off stops the cascade (styles.css), so it never ends on its own:
   // its marks are simply there, and can't play it later if motion comes back on.
@@ -384,7 +392,7 @@ export function MarginChecks({
               );
             }}
           >
-            <CheckMarkIcon check={mark.check} className="margin-check-icon" />
+            <CitationMarkIcon check={mark.check} gone={mark.gone} className="margin-check-icon" />
             {mark.number}
           </button>
         ),

@@ -14,7 +14,8 @@ import {
 
 /**
  * Settings → Meetings → Recording: the switch that turns recording on (it is
- * new, and off until transcripts and speakers come), and what is recorded.
+ * new, and off until transcripts and speakers come), what is recorded, and
+ * whether a recording asks to read the shared screen (ADR-0024).
  */
 export function MeetingsSettings() {
   const t = useT();
@@ -23,6 +24,7 @@ export function MeetingsSettings() {
   const updateSettings = useAppStore((state) => state.updateSettings);
   const enabledId = useId();
   const whatId = useId();
+  const screenId = useId();
   if (!device || !canRecord) return null;
   const microphoneOnly = canRecord !== "both";
   const both = device.meetingSystemAudio && !microphoneOnly;
@@ -87,6 +89,30 @@ export function MeetingsSettings() {
             <option value="both">{t("meetings.audio.both")}</option>
             <option value="me">{t("meetings.audio.me")}</option>
           </select>
+        </div>
+        <div className={ruledRowClass}>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <label htmlFor={screenId} className={rowTitleClass}>
+              {t("meetings.settings.screen")}
+            </label>
+            <p id={`${screenId}-description`} className={rowTextClass}>
+              {t("meetings.settings.screenBody")}
+            </p>
+          </div>
+          <input
+            id={screenId}
+            type="checkbox"
+            role="switch"
+            aria-checked={device.meetingScreenAsk}
+            aria-describedby={`${screenId}-description`}
+            data-testid="meetings-screen-ask"
+            checked={device.meetingScreenAsk}
+            disabled={canRecord === "none"}
+            onChange={(event) =>
+              void updateSettings({ device: { meetingScreenAsk: event.target.checked } })
+            }
+            className="switch"
+          />
         </div>
       </div>
       <p className={hintClass}>

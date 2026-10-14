@@ -33,6 +33,7 @@ import {
 import { createCiting } from "./answers/citing";
 import { readMind } from "./answers/context";
 import type { AnswerSearchOptions } from "./answers/engine";
+import type { Listened } from "./answers/liveTranscript";
 import {
   type AddDocumentsResult,
   type ChatModelChoice,
@@ -80,7 +81,6 @@ import { statIdentity } from "./documents/files";
 import { createOwnFiles } from "./documents/ownFiles";
 import { createVersionRetention, type VersionRetention } from "./documents/retention";
 import { BUILT_IN_TEXT_RECOGNITION_MODEL, createTextRecognitionModel } from "./documents/scan";
-import type { WindowedPassage } from "./documents/search";
 import { tunedSearch } from "./documents/searchTuning";
 import { findUnreadDocuments } from "./documents/unread";
 import { fsWatchFolder } from "./documents/watcher";
@@ -116,6 +116,7 @@ import { documentCitedPages, documentPageImages } from "./library/pageImages";
 import { createMeetings } from "./meetings";
 import { listParts, meetingFolder } from "./meetings/audioFiles";
 import { createCaptureHealth } from "./meetings/health";
+import { createSharedScreens } from "./meetings/screens";
 import { createTranscripts } from "./meetings/transcript";
 import { accessFor, isKnownKind } from "./mindAccess";
 import { createMindContent } from "./mindContent";
@@ -977,7 +978,7 @@ export function createCore(adapters: CoreAdapters): Core {
       if (!found || found.deletedAt !== null) return null;
       return isKnownKind(minds.get(mindId).kind) ? found.name : null;
     },
-    liveTranscript: (mindId) => liveTranscriptOf(mindId),
+    listening: (mindId, question) => listeningTo(mindId, question),
     providerExists: (providerId) => chat.exists(providerId),
     readiness: (choice) => chat.readiness(choice),
     prepareModel: (choice) => chat.prepareModel(choice),
@@ -1854,8 +1855,8 @@ export function createCore(adapters: CoreAdapters): Core {
 
   // Transcripts (#136): a Meeting is transcribed on this computer as it records, where this copy can.
   let listMeetings: (() => Meeting[]) | undefined;
-  /** See `AnswersOptions.liveTranscript`; set once Meetings are. */
-  let liveTranscriptOf = async (_mindId: string): Promise<WindowedPassage[] | null> => null;
+  /** See `AnswersOptions.listening`; set once Meetings are. */
+  let listeningTo = async (_mindId: string, _question: string): Promise<Listened | null> => null;
   const meetingsChanged = () => {
     if (listMeetings) events.emit("meetings.changed", listMeetings());
   };
@@ -1921,6 +1922,28 @@ export function createCore(adapters: CoreAdapters): Core {
       log: adapters.log ?? silentLogger,
     });
 
+  // The shared screen (ADR-0024): one window a recording Meeting reads, in memory only.
+  const screenCapture = adapters.screenCapture;
+  const screens =
+    screenCapture && textRecognitionModel
+      ? createSharedScreens({
+          capture: screenCapture,
+          reader: textRecognitionModel,
+          now,
+          asks: () => settings.get().device.meetingScreenAsk,
+          searchLibrary: async (text) => {
+            const found = await documents.search(text, { mode: "keyword", limit: 5 });
+            return found.flatMap((passage) => documents.passage(passage.passageId) ?? []);
+          },
+          passage: (passageId) => documents.passage(passageId),
+          changed: meetingsChanged,
+          log: adapters.log ?? silentLogger,
+        })
+      : undefined;
+  events.on("textRecognitionModel.status", () => {
+    if (screens?.waitingForModel()) meetingsChanged();
+  });
+
   // Meetings (#135): while audio is being captured, background model work holds back.
   const meetings = createMeetings({
     db,
@@ -1951,10 +1974,16 @@ export function createCore(adapters: CoreAdapters): Core {
       documents.hold(capturing);
     },
     ...(transcripts && { transcripts }),
+    ...(screens && { screens }),
     health: captureHealth,
     log: adapters.log ?? silentLogger,
   });
   listMeetings = () => meetings.list();
+  const meetingOf = (meetingId: string): Meeting => {
+    const meeting = meetings.list().find((each) => each.id === meetingId);
+    if (!meeting) throw new NotFoundError({ key: "error.meeting.notFound" });
+    return meeting;
+  };
   /** Resolves once a Document's newest version has its Passages, or after `ms` with the last version's. */
   const extracted = (documentId: string, ms: number) =>
     new Promise<void>((resolve) => {
@@ -1980,18 +2009,23 @@ export function createCore(adapters: CoreAdapters): Core {
         if (document.id === documentId && !busy(document.status)) done();
       });
     });
-  liveTranscriptOf = async (mindId) => {
+  listeningTo = async (mindId, question) => {
     const meeting = meetings
       .list()
       .find(
         (each) =>
           each.mindId === mindId && (each.status === "recording" || each.status === "paused"),
       );
-    const documentId = meeting?.transcript?.documentId;
-    if (!meeting || !documentId || !transcripts) return null;
+    if (!meeting) return null;
+    const seen = screens?.forQuestion(meeting.id, question) ?? [];
+    const documentId = meeting.transcript?.documentId;
+    if (!documentId || !transcripts) return { transcript: [], screens: seen };
     await transcripts.refresh(meeting.id);
     await extracted(documentId, LIVE_TRANSCRIPT_WAIT_MS);
-    return documents.passagesBetween(documentId, 0, Number.MAX_SAFE_INTEGER);
+    return {
+      transcript: documents.passagesBetween(documentId, 0, Number.MAX_SAFE_INTEGER),
+      screens: seen,
+    };
   };
 
   // Outside agents (#351): the User's own agent, paired in Settings, reads its Folders over the
@@ -2854,6 +2888,38 @@ export function createCore(adapters: CoreAdapters): Core {
     stopMeeting: async (meetingId) => meetings.stop(meetingId),
     deleteMeetingAudio: async (meetingId) => meetings.deleteAudio(meetingId),
     retryTranscript: async (meetingId) => meetings.retryTranscript(meetingId),
+    listShareableWindows: async (meetingId) => {
+      if (!screens) throw new InvalidInputError({ key: "error.meeting.noSharedScreen" });
+      if (typeof meetingId !== "string") throw new NotFoundError({ key: "error.meeting.notFound" });
+      return screens.windows(meetingId);
+    },
+    readSharedScreen: async (input) => {
+      if (!screens) throw new InvalidInputError({ key: "error.meeting.noSharedScreen" });
+      if (!isRecord(input) || typeof input.meetingId !== "string") {
+        throw new InvalidInputError({ key: "error.meeting.noWindow" });
+      }
+      if (meetingOf(input.meetingId).status !== "recording") {
+        throw new InvalidInputError({ key: "error.meeting.notRecording" });
+      }
+      await screens.read(input.meetingId, input.windowId);
+      return meetingOf(input.meetingId);
+    },
+    declineSharedScreen: async (meetingId) => {
+      screens?.decline(meetingId);
+      return meetingOf(meetingId);
+    },
+    stopSharedScreen: async (meetingId) => {
+      screens?.stop(meetingId);
+      return meetingOf(meetingId);
+    },
+    getSharedScreen: async (input) => {
+      if (!isRecord(input) || typeof input.screen !== "string") {
+        throw new InvalidInputError({ key: "error.meeting.screenNotKept" });
+      }
+      const from = typeof input.from === "number" ? input.from : 0;
+      const to = typeof input.to === "number" ? input.to : 0;
+      return screens?.frame(input.screen, from, to) ?? null;
+    },
     openAudioSettings: (source) => meetings.openSettings(source),
 
     openDocumentFile: (documentId) => documents.openFile(documentId),
