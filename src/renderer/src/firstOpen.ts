@@ -2,8 +2,7 @@ import type { GettingStarted } from "../../core/api";
 import { useAppStore } from "./store";
 
 export const firstOpenOf = (progress: GettingStarted | undefined): boolean =>
-  progress !== undefined &&
-  progress.started &&
+  progress?.started === true &&
   !progress.hidden &&
   !(progress.citationChecked && progress.indexed && progress.askedOwn);
 
