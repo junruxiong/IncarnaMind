@@ -1,8 +1,9 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useId, useState } from "react";
 import type { Connector, LocalConnector, SecretStorageStatus } from "../../../../core/api";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
+import { ProblemMark } from "../ProblemLine";
 import { SecretStorageNotice } from "../providers/ProviderForm";
 import { TypingTextarea } from "../TypingTextarea";
 import {
@@ -221,6 +222,11 @@ export function ConnectorForm({
         <SecretStorageNotice status={secretStorage} onAccept={() => void acceptPlainText()} />
       )}
 
+      {!editing && (
+        <p data-testid="connector-sends" className={hintClass}>
+          {t("connectors.form.sends")}
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <button type="submit" disabled={busy || invalid || blocked} className={primaryButtonClass}>
           {editing
@@ -237,6 +243,7 @@ export function ConnectorForm({
       </div>
       {error && (
         <p role="alert" className={errorTextClass}>
+          <ProblemMark />
           {error}
         </p>
       )}
@@ -257,6 +264,7 @@ function LocalFields(props: {
   savedEnv: readonly string[];
 }) {
   const t = useT();
+  const invalidId = useId();
   const { command, setCommand, args, setArgs, env, setEnv } = props;
   const [argsMoved, setArgsMoved] = useState(false);
   // A whole command line pasted as the command: the program stays, its
@@ -308,6 +316,8 @@ function LocalFields(props: {
           placeholder="GITHUB_PERSONAL_ACCESS_TOKEN=…"
           spellCheck={false}
           autoComplete="off"
+          aria-invalid={props.envInvalid || undefined}
+          aria-describedby={props.envInvalid ? invalidId : undefined}
           className={`${inputClass} font-mono`}
         />
         <span className={hintClass}>
@@ -316,7 +326,12 @@ function LocalFields(props: {
             : t("connectors.form.envHint")}
         </span>
         {props.envInvalid && (
-          <span role="alert" className="mt-1 block text-[12px] leading-[18px] text-danger">
+          <span
+            id={invalidId}
+            role="alert"
+            className="mt-1 block text-[12px] leading-[18px] text-ink"
+          >
+            <ProblemMark />
             {t("connectors.form.envInvalid")}
           </span>
         )}

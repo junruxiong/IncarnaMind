@@ -21,8 +21,10 @@
  * Nothing leaves the computer before the User allows the "checks" flow to
  * the model's service, and in local mode only a model on this computer is used.
  */
+
 import { randomUUID } from "node:crypto";
 import type * as Y from "yjs";
+import { type LiveDocument, withShownName } from "../../../shared/citations";
 import { judgesUnreliably } from "../../../shared/smallModel";
 import {
   type ChatModelChoice,
@@ -31,6 +33,7 @@ import {
   type CheckSentencesResult,
   type Citation,
   type CitationAttributes,
+  type CitedQuote,
   type ClaimCheckAction,
   type ClaimCheckAttributes,
   type ClaimCheckResult,
@@ -46,6 +49,7 @@ import { parseCheckedDocument } from "../../documents/evidence";
 import type { RetainVersion, VersionRetention } from "../../documents/retention";
 import { parseModel, parsePlace } from "../../edits";
 import { ChatNotReadyError, ConsentDeclinedError, InvalidInputError, isRecord } from "../../errors";
+import type { Language } from "../../language";
 import type { MindContent } from "../../mindContent";
 import { parseMindId } from "../../minds";
 import type { PreparedChatModel } from "../../providers/chat";
@@ -69,11 +73,15 @@ export interface ChecksOptions
     VerifyOptions,
     "requireFolder" | "addFile" | "document" | "onStatus" | "readText" | "createMind"
   > {
+  /** The interface language: what a check's sentence is written in. */
+  language(): Language;
   content: Pick<MindContent, "read" | "edit" | "readSettings">;
   /** Throws unless the Mind exists and this version may write to it. */
   requireMind(mindId: string): void;
   /** The Folder the Mind is in; null for none. */
   mindFolder(mindId: string): string | null;
+  /** The file a Mind was imported from (#720), which its own checks never use as evidence. */
+  originalOf(mindId: string): CheckedDocument | null;
   /** The default chat model, used when the Mind has none of its own. */
   defaultModel(): ChatModelChoice | null;
   chat: {
@@ -87,7 +95,10 @@ export interface ChecksOptions
   localOnly(): boolean;
   resolveScope(scope: SearchScope): string[] | null;
   evidence: Pick<Evidence, "scope" | "search">;
-  documents: ClaimCheckDependencies["documents"];
+  documents: ClaimCheckDependencies["documents"] & {
+    /** Every live Document's names: what the Citations a sentence already has are named by. */
+    names(): readonly LiveDocument[];
+  };
   engine: AnswerEngine;
   retention: Pick<VersionRetention, "retain">;
   now(): Date;
@@ -127,11 +138,21 @@ function parseClaim(input: unknown) {
   const claim = typeof input.claim === "string" ? input.claim.trim() : "";
   if (claim === "") throw new InvalidInputError("A claim to check must be some text.");
   if (claim.length > MAX_CLAIM_CHARACTERS)
-    throw new InvalidInputError("The claim is too long to check.");
-  const cited = Array.isArray(input.cited)
+    throw new InvalidInputError({
+      key: "error.check.claimTooLong",
+      values: { max: MAX_CLAIM_CHARACTERS },
+    });
+  const cited: CitedQuote[] = Array.isArray(input.cited)
     ? input.cited.flatMap((each: unknown) =>
         isRecord(each) && typeof each.quote === "string"
-          ? [{ documentName: String(each.documentName ?? ""), quote: each.quote }]
+          ? [
+              {
+                documentName: String(each.documentName ?? ""),
+                quote: each.quote,
+                ...(typeof each.documentId === "string" && { documentId: each.documentId }),
+                ...(typeof each.contentHash === "string" && { contentHash: each.contentHash }),
+              },
+            ]
           : [],
       )
     : [];
@@ -248,6 +269,15 @@ export function createChecks(options: ChecksOptions) {
     options.retention.retain("check-result", mindId, versions);
   }
 
+  /** What a sentence cites, each Document named as it is now. */
+  function citedNow(cited: readonly CitedQuote[]): { documentName: string; quote: string }[] {
+    const live = options.documents.names();
+    return cited.map((each) => ({
+      documentName: withShownName(each, live).documentName,
+      quote: each.quote,
+    }));
+  }
+
   /** Marks a request's sentences not checked yet "stopped". */
   function settleStopped(mindId: string, request: string): void {
     const ids = content.read(mindId, (blocks) =>
@@ -285,7 +315,8 @@ export function createChecks(options: ChecksOptions) {
     const read = content.read(mindId, (blocks) => selectedSentences(blocks, input.from, input.to));
     if (!read.ok) return { kind: read.reason };
 
-    const { searchable, folderId, check } = scopeOf(mindId, input.allDocuments);
+    const original = options.originalOf(mindId) ?? undefined;
+    const { searchable, folderId, check } = scopeOf(mindId, input.allDocuments, original);
     if (searchable === 0) return { kind: "no-documents", folderId };
     const { scope: evidenceScope, marked: scope } = check;
 
@@ -330,7 +361,7 @@ export function createChecks(options: ChecksOptions) {
       const result = await claimCheck({
         claim: sentence.claim,
         context: sentence.context,
-        cited: input.action === "check-against-documents" ? sentence.cited : [],
+        cited: input.action === "check-against-documents" ? citedNow(sentence.cited) : [],
         scope: evidenceScope,
         model: ready.prepared,
         cacheKey: mindId,
@@ -396,11 +427,9 @@ export function createChecks(options: ChecksOptions) {
       if (!ready.ok) {
         const { result } = ready;
         if (result.kind === "not-ready") throw new ChatNotReadyError(result.readiness);
-        throw new InvalidInputError(
-          result.kind === "local-mode"
-            ? "Local mode is on, and the model isn't on this computer."
-            : "The User declined sending the claim to the model's service.",
-        );
+        throw new InvalidInputError({
+          key: result.kind === "local-mode" ? "error.check.localMode" : "error.check.declined",
+        });
       }
       const scope = options.evidence.scope(
         parsed.scope ? options.resolveScope(parsed.scope) : null,
@@ -415,7 +444,7 @@ export function createChecks(options: ChecksOptions) {
       return claimCheck({
         claim: parsed.claim,
         context: parsed.context,
-        cited: parsed.cited,
+        cited: citedNow(parsed.cited),
         scope,
         model: ready.prepared,
         // Reading the document being checked makes the Run third-party (#78).

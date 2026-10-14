@@ -15,6 +15,7 @@ import { documentStatusText } from "../documentStatus";
 import { useLanguage, useT } from "../i18n";
 import { currentTabOf } from "../layoutSlice";
 import { fileStatusLabel, formatCount } from "../linkedFolders";
+import { usePeekKey } from "../peek";
 import { useRequests } from "../requests";
 import { scanningStatus } from "../scanStatus";
 import {
@@ -321,6 +322,7 @@ const DocumentRow = memo(function DocumentRow({
   const select = useSelectable({ kind: "document", id: item.id }, "sidebar", () =>
     openDocument({ documentId: item.id }),
   );
+  const peek = usePeekKey(item.id, "sidebar");
   const lit = isOpen || select.selected;
   const muted = !lit && (isProcessing(item.status) || item.fileStatus !== "available");
 
@@ -336,6 +338,7 @@ const DocumentRow = memo(function DocumentRow({
       data-tagging={item.tagging}
       role="treeitem"
       {...select.rowProps}
+      {...peek.rowProps}
       {...(rename.renaming ? {} : objectMenu.rowProps)}
       className={rowClass(lit, muted ? "muted" : "item")}
     >
@@ -439,10 +442,11 @@ export function DocumentStatusLabel({ item }: { item: Document }) {
     <span
       data-testid="document-status"
       title={title}
-      className={`shrink-0 text-label font-semibold ${
-        item.status === "failed" && !unread ? "text-danger" : "text-ink-meta"
-      }`}
+      className="flex shrink-0 items-center gap-1.5 text-label font-semibold text-ink-meta"
     >
+      {item.status === "failed" && !unread && (
+        <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-attention" />
+      )}
       <span aria-hidden="true">{short}</span>
       <span className="sr-only">{full}</span>
     </span>

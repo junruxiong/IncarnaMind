@@ -16,11 +16,12 @@ import { isCalculated, RUN_SCRIPT, SEARCH } from "../answerSteps";
 import { useAnswers } from "../answers";
 import { useApprovals, waitingFor } from "../approvals";
 import { signInAgain } from "../chatGptSignIn";
+import { MindCall } from "../components/assistant/MindCall";
 import { useIsExampleAnswer } from "../components/GettingStarted";
 import { PlugIcon, ScriptIcon, SkillIcon, StopIcon } from "../components/icons";
 import { DocumentLineIcon, FindSourcesLineIcon } from "../components/lineIcons";
 import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
-import { ProblemLine } from "../components/ProblemLine";
+import { ProblemLine, ProblemMark } from "../components/ProblemLine";
 import { core } from "../core";
 import { formatResetTime } from "../cost";
 import { useFindSources } from "../findSources";
@@ -364,8 +365,9 @@ export function CallRows({
   );
 }
 
-/** The row of a call through a Connector, of Find sources, of web search, or of a Skill script. */
+/** The row of a call through a Connector, of Find sources, of web search, of a Minds' Tool, or of a Skill script. */
 export function CallRow({ call }: { call: AnswerToolCall }) {
+  if (call.source === "minds") return <MindCall call={call} />;
   if (call.source === "connector") return <ConnectorCall call={call} />;
   if (call.source === "sources") return <SourcesCall call={call} />;
   if (call.source === "web") return <WebCall call={call} />;
@@ -570,6 +572,7 @@ function ScriptApprovalCard({
           className="approval-actions approval-warning"
         >
           <p id={warningId} className="approval-warning-title">
+            <ProblemMark />
             {t("scripts.alwaysRun.title", params)}
           </p>
           <p className="approval-warning-body">
@@ -580,7 +583,7 @@ function ScriptApprovalCard({
               type="button"
               data-testid="always-run-confirm"
               onClick={() => respond(request.requestId, "always-allow", { riskAccepted: true })}
-              className="approval-button approval-button--danger"
+              className="approval-button"
             >
               {t("scripts.alwaysRun.confirm", params)}
             </button>
@@ -717,6 +720,7 @@ function ScriptCall({ call }: { call: AnswerToolCall }) {
           </pre>
           {run?.error && (
             <p data-testid="answer-script-error" className="answer-call-error">
+              <ProblemMark />
               {run.error}
             </p>
           )}
@@ -989,7 +993,15 @@ export function SkillRow({ name, use, reads }: SkillUse) {
       className={`answer-call ${status === "failed" ? "answer-call--failed" : ""}`}
     >
       <p className="answer-call-summary answer-call-summary--static">
-        <SkillIcon className={`answer-call-icon ${status === "running" ? "animate-pulse" : ""}`} />
+        {status === "failed" ? (
+          <span className="answer-call-icon flex items-center justify-center">
+            <ProblemMark className="" />
+          </span>
+        ) : (
+          <SkillIcon
+            className={`answer-call-icon ${status === "running" ? "animate-pulse" : ""}`}
+          />
+        )}
         <span className="answer-call-text">{summary}</span>
         {use?.forced && <span className="answer-call-note"> · {t("skills.answer.forced")}</span>}
       </p>

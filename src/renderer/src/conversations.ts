@@ -8,6 +8,7 @@ import type {
 } from "../../core/api";
 import { conversationName } from "../../shared/naming";
 import { settleAsk, useAnswers } from "./answers";
+import { watchMindsMadeBy } from "./assistantMinds";
 import { composerKey } from "./composer";
 import { core } from "./core";
 import { translateNow } from "./i18n";
@@ -157,6 +158,7 @@ export async function askInAssistant(
     });
     settleAsk(key, result);
     if (!result.asked) return false;
+    watchMindsMadeBy(result.answerId);
     const id = result.conversation.id;
     if (useConversations.getState().stopWanted) {
       core.stopConversationAnswer({ conversationId: id, answerId: result.answerId }).catch(report);
@@ -176,13 +178,27 @@ export async function askInAssistant(
   }
 }
 
-/** Writes an Answer of the open conversation again; why it couldn't be is kept under its id. */
-export async function regenerateAnswer(answerId: string): Promise<void> {
+/**
+ * Writes an Answer of the open conversation again; why it couldn't be is kept under its id.
+ * `clearScope`: from every Document, its Question's Search scope taken off (#748).
+ */
+export async function regenerateAnswer(
+  answerId: string,
+  { clearScope = false }: { clearScope?: boolean } = {},
+): Promise<void> {
   const conversationId = useConversations.getState().openId;
   if (!conversationId) return;
   settleAsk(answerId, null);
   try {
-    settleAsk(answerId, await core.regenerateConversationAnswer({ conversationId, answerId }));
+    watchMindsMadeBy(answerId);
+    settleAsk(
+      answerId,
+      await core.regenerateConversationAnswer({
+        conversationId,
+        answerId,
+        ...(clearScope && { clearScope }),
+      }),
+    );
   } catch (error) {
     settleAsk(answerId, null, error);
   }

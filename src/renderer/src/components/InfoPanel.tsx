@@ -1,10 +1,13 @@
-import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { Document, LinkedFolder } from "../../../core/api";
 import { displayName } from "../../../shared/documentNames";
+import { mindName } from "../../../shared/naming";
 import { copyText } from "../copied";
-import { core, files } from "../core";
+import { files } from "../core";
+import { useDocumentFolder, useUnitCount } from "../documentFacts";
 import { documentStatusText } from "../documentStatus";
-import { addedDate, fileDate, KIND_LABELS, showFileLabelKey } from "../fileInfo";
+import { providerErrorText } from "../errors";
+import { addedDate, documentSummary, fileDate, showFileLabelKey } from "../fileInfo";
 import { useLanguage, useT } from "../i18n";
 import { useInfo } from "../info";
 import { organizeModel, organizeState } from "../libraryPage";
@@ -204,35 +207,6 @@ function Actions({
   );
 }
 
-/** Its slides or sheets, counted from the text the core kept: the Document itself holds only a PDF's pages. */
-function useUnitCount(
-  document: Document,
-): { key: "info.slides" | "info.sheets"; count: number } | null {
-  const [count, setCount] = useState<number | null>(null);
-  const { id, kind, contentHash } = document;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: counted again when the file's version changes.
-  useEffect(() => {
-    if (kind !== "pptx" && kind !== "xlsx") return;
-    let current = true;
-    core
-      .readDocumentText(id)
-      .then(({ pages }) => {
-        if (!current) return;
-        setCount(
-          kind === "pptx"
-            ? pages.length
-            : new Set(pages.map((page) => page.label?.sheet ?? "")).size,
-        );
-      })
-      .catch(() => undefined);
-    return () => {
-      current = false;
-    };
-  }, [id, kind, contentHash]);
-  if (count === null || count === 0) return null;
-  return { key: kind === "pptx" ? "info.slides" : "info.sheets", count };
-}
-
 function DocumentInfo({ document }: { document: Document }) {
   const t = useT();
   const language = useLanguage();
@@ -240,14 +214,14 @@ function DocumentInfo({ document }: { document: Document }) {
   const assignment = useAppStore((state) =>
     state.library?.assignments.find((each) => each.documentId === document.id),
   );
-  const folder = useAppStore((state) => {
-    const groupId = assignment?.groupId;
-    return groupId ? state.library?.groups.find((each) => each.id === groupId)?.name : undefined;
-  });
+  const folder = useDocumentFolder(document.id);
   const linkedName = useAppStore((state) => {
     const linked = state.linkedFolders.find((each) => each.id === document.linkedFolderId);
     return linked && folderName(linked.path);
   });
+  const importedAs = useAppStore((state) =>
+    document.importedAs ? state.minds.find((each) => each.id === document.importedAs) : undefined,
+  );
   const units = useUnitCount(document);
   const chips = chipsOf(document.tags, tags);
   const file = !document.web;
@@ -258,17 +232,7 @@ function DocumentInfo({ document }: { document: Document }) {
       : null;
   const status = documentStatusText(document, t, language, scanning);
 
-  const counted = (key: "info.pages" | "info.slides" | "info.sheets", count: number) =>
-    t(`${key}.${count === 1 ? "one" : "other"}`, { count: formatCount(count, language) });
-  const summary = [
-    t(KIND_LABELS[document.kind]),
-    document.pageCount !== null
-      ? counted("info.pages", document.pageCount)
-      : units && counted(units.key, units.count),
-    formatBytes(document.size, t),
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const summary = documentSummary(document, units, t, language);
 
   return (
     <>
@@ -293,8 +257,22 @@ function DocumentInfo({ document }: { document: Document }) {
           </Row>
         )}
         <Row label={t("info.folder")} testId="info-folder">
-          {folder ?? t("library.unsorted")}
+          {folder?.name ?? t("library.unsorted")}
         </Row>
+        {importedAs && (
+          <Row label={t("info.mind")} testId="info-imported-as">
+            <span className="block">{t("info.importedAs")}</span>
+            <button
+              type="button"
+              data-testid="info-open-mind"
+              title={t("document.openMind")}
+              onClick={() => useAppStore.getState().openMind(importedAs.id)}
+              className="rounded-sm text-left text-accent underline-offset-2 hover:underline"
+            >
+              {mindName(importedAs) || t("mind.untitled")}
+            </button>
+          </Row>
+        )}
         {chips.length > 0 && (
           <Row label={t("info.tags")} testId="info-tags">
             <span className="flex flex-wrap gap-x-3 gap-y-0.5">
@@ -328,7 +306,7 @@ function DocumentInfo({ document }: { document: Document }) {
             <span className="block text-ink-meta">{organizeModel(assignment.model, t)}</span>
           )}
           {assignment?.error && (
-            <span className="block text-ink-meta">{assignment.error.message}</span>
+            <span className="block text-ink-meta">{providerErrorText(assignment.error, t)}</span>
           )}
         </Row>
       </Rows>

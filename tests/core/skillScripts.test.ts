@@ -359,11 +359,11 @@ describe("Running a Skill's scripts", { timeout: 30_000 }, () => {
 
     // Without the warning confirmed, "always run" is refused, and the run still waits.
     await expect(core.respondToApproval(request.requestId, "always-allow")).rejects.toThrow(
-      /riskAccepted/,
+      /Confirm the risk warning/,
     );
     await expect(
       core.respondToApproval(request.requestId, "always-allow", { riskAccepted: false }),
-    ).rejects.toThrow(/riskAccepted/);
+    ).rejects.toThrow(/Confirm the risk warning/);
     expect(await core.listApprovalRequests()).toEqual([request]);
     expect(await core.listApprovalPolicies()).toEqual([]);
     expect(existsSync(log)).toBe(false);
@@ -706,11 +706,8 @@ describe("The chat flow with Skill scripts", { timeout: 30_000 }, () => {
       createChatModel: scriptedModels(scriptedModel(() => ({ text: "OK" }))).createChatModel,
       processes: scriptProcesses(),
     });
+    // Choosing the provider allows the chat flow as it was: without Tool results.
     await core.saveChatProvider({ kind: "openai", apiKey: "sk-test", modelId: "gpt-5.4-mini" });
-    const first = nextEvent(core, "consent.requested");
-    const tested = core.testChatConnection({ kind: "openai", modelId: "gpt-5.4-mini" });
-    await core.respondToConsent((await first).requestId, true);
-    await tested;
     expect(await core.getChatReadiness()).toMatchObject({ consent: "accepted" });
     const sends = async () =>
       (await core.listDataFlows()).find((status) => status.flow.id === "chat")?.flow.sends;

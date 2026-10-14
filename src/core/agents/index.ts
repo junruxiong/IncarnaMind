@@ -79,7 +79,7 @@ export interface AgentsOptions {
   now(): string;
   clock(): number;
   secrets: Pick<Secrets, "set" | "tryGet" | "delete">;
-  consent: Pick<Consent, "status" | "allow" | "revoke" | "registry">;
+  consent: Pick<Consent, "status" | "choose" | "revoke" | "registry">;
   readValue(key: string): unknown;
   writeValue(key: string, value: unknown): void;
   /** Local mode is on: every pairing is paused. */
@@ -206,7 +206,7 @@ export function createAgents(options: AgentsOptions) {
       throw new InvalidInputError("A pairing id must be text.");
     }
     const pairing = findPairing(pairingId);
-    if (!pairing) throw new NotFoundError("That agent isn't connected.");
+    if (!pairing) throw new NotFoundError({ key: "error.agent.notConnected" });
     return pairing;
   };
 
@@ -230,17 +230,20 @@ export function createAgents(options: AgentsOptions) {
 
   const parseName = (value: unknown, exceptId: string | null): string => {
     if (typeof value !== "string" || value.trim() === "") {
-      throw new InvalidInputError("Give the agent a name.");
+      throw new InvalidInputError({ key: "error.agent.nameEmpty" });
     }
     const name = value.trim();
     if (name.length > MAX_NAME_CHARS) {
-      throw new InvalidInputError(`An agent's name can be at most ${MAX_NAME_CHARS} characters.`);
+      throw new InvalidInputError({
+        key: "error.agent.nameTooLong",
+        values: { max: MAX_NAME_CHARS },
+      });
     }
     const taken = livePairings().some(
       (pairing) =>
         pairing.id !== exceptId && pairing.name.toLocaleLowerCase() === name.toLocaleLowerCase(),
     );
-    if (taken) throw new InvalidInputError(`An agent named "${name}" is already connected.`);
+    if (taken) throw new InvalidInputError({ key: "error.agent.nameTaken", values: { name } });
     return name;
   };
 
@@ -259,7 +262,7 @@ export function createAgents(options: AgentsOptions) {
     }
     const live = new Set(options.access.folders().map((folder) => folder.id));
     const unknown = value.find((id) => !live.has(id));
-    if (unknown !== undefined) throw new NotFoundError("That Folder no longer exists.");
+    if (unknown !== undefined) throw new NotFoundError({ key: "error.folder.notFound" });
     return [...new Set(value as string[])];
   };
 
@@ -471,7 +474,7 @@ export function createAgents(options: AgentsOptions) {
       );
       tokens.set(id, token);
       // The User confirmed what it may read and where that goes before this was called.
-      await options.consent.allow("agents", serviceOf({ id, name }).id);
+      options.consent.choose(["agents"], serviceOf({ id, name }));
       changed();
       return { pairing: requirePairing(id), launch: launchFor(token) } satisfies ConnectedAgent;
     },
@@ -529,9 +532,7 @@ export function createAgents(options: AgentsOptions) {
       const pairing = requirePairing(pairingIdInput);
       const token = await tokenOf(pairing.id);
       if (!token) {
-        throw new NotFoundError(
-          "This agent's key can't be read on this computer. Disconnect it and connect it again.",
-        );
+        throw new NotFoundError({ key: "error.agent.keyUnreadable" });
       }
       return launchFor(token);
     },

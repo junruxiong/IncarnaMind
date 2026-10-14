@@ -2,6 +2,7 @@ import { autoUpdate, computePosition, flip, offset, shift } from "@floating-ui/d
 import { type Editor, isMacOS, posToDOMRect } from "@tiptap/core";
 import { useEditorState } from "@tiptap/react";
 import { type MouseEvent as ReactMouseEvent, useEffect, useLayoutEffect, useRef } from "react";
+import { formatDate } from "../../../shared/dates";
 import { PencilLineIcon, SparkLineIcon } from "../components/lineIcons";
 import { regenerateChange, resolveProposalsIn, speak, useEdits } from "../editWithAi";
 import { useLanguage, useT } from "../i18n";
@@ -224,7 +225,7 @@ function GroupLine({
   );
 }
 
-/** Who made someone's change and when, as the file says: "Dana Kim, 2 October 2026". */
+/** Who made someone's change and when, as the file says: "Dana Kim, 2 Oct 2026". */
 function useMadeBy(made: { author: string | null; date: string | null } | null): string | null {
   const t = useT();
   const language = useLanguage();
@@ -235,7 +236,7 @@ function useMadeBy(made: { author: string | null; date: string | null } | null):
   // The day the file names, not the day it falls on here: Word writes its own clock's time.
   return t("proposal.madeBy", {
     author,
-    date: new Intl.DateTimeFormat(language, { dateStyle: "long", timeZone: "UTC" }).format(date),
+    date: formatDate(date, language, { timeZone: "UTC" }),
   });
 }
 

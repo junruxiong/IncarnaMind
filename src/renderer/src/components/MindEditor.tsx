@@ -27,10 +27,10 @@ import { CitationStylePrompt } from "../editor/CitationStylePrompt";
 import { CitationView } from "../editor/CitationView";
 import { CodeBlockView } from "../editor/CodeBlockView";
 import { ComparisonTableView } from "../editor/ComparisonTableView";
-import { ConversationLinks } from "../editor/ConversationLinks";
 import { CitationClusters } from "../editor/citationClusters";
 import { CitationNumbers, redrawFootnotes, setCitationForm } from "../editor/citationNumbers";
 import { ClaimChecks, setClaimContext } from "../editor/claimChecks";
+import { useClickBelowNote } from "../editor/clickBelowNote";
 import { comparisonCellView, comparisonRowView } from "../editor/comparisonViews";
 import { CopyCitations } from "../editor/copyCitations";
 import { DocumentChipView } from "../editor/DocumentChipView";
@@ -76,7 +76,7 @@ import { SmartTypography } from "../editor/typography";
 import { useVerification, VerifyLine } from "../editor/VerifyLine";
 import { wordAtomView, wordBlockView } from "../editor/WordAtomView";
 import { WordCount } from "../editor/WordCount";
-import { useWordFile, WordOrigin } from "../editor/WordOrigin";
+import { OriginalNotAdded, useWordFile, WordOrigin } from "../editor/WordOrigin";
 import { requestEdit, startEditing, TRANSLATE_LANGUAGES } from "../editWithAi";
 import { translateNow, useT } from "../i18n";
 import { markSelectionAsMine } from "../markAsMine";
@@ -631,6 +631,8 @@ function MindEditorView({
   const outlineShown = useMindTools((state) => state.outlineMindId === mindId);
   const guide = useGettingStarted() !== null && empty && !isExample && !readOnly;
   const verification = useVerification(doc);
+  const frame = useRef<HTMLDivElement>(null);
+  useClickBelowNote(editor, frame);
 
   return (
     <MindIdContext.Provider value={mindId}>
@@ -638,6 +640,7 @@ function MindEditorView({
         createPortal(
           <>
             <WordOrigin doc={doc} />
+            <OriginalNotAdded mindId={mindId} />
             {verification ? (
               <VerifyLine editor={editor} doc={doc} mindId={mindId} verification={verification} />
             ) : (
@@ -650,12 +653,11 @@ function MindEditorView({
         )}
       <SectionBreakDialog retry={sectionBreakRetry} onClose={() => setSectionBreakRetry(null)} />
       {readOnly && <MindNotice kind="read-only" />}
-      <div className={`mind-editor-frame ${guide ? "mind-editor-frame--guide" : ""}`}>
+      <div ref={frame} className={`mind-editor-frame ${guide ? "mind-editor-frame--guide" : ""}`}>
         {!readOnly && <ProposalBars editor={editor} mindId={mindId} />}
         <EditorContent editor={editor} />
         {!readOnly && <EndHint editor={editor} text={hintText} onAsk={askOnLine} />}
         <MarginChecks editor={editor} mind={{ id: mindId, doc }} />
-        <ConversationLinks editor={editor} />
         {!readOnly && <TableMenu editor={editor} />}
         <FootnoteArea editor={editor} citationView={citationView} />
         {(style !== "numbered" || styleChoice.bibliography) && (

@@ -19,6 +19,7 @@
  */
 import type { Editor } from "@tiptap/core";
 import { Fragment, type Node as ProseMirrorNode } from "@tiptap/pm/model";
+import { Selection } from "@tiptap/pm/state";
 import {
   BLOCK_ID_ATTRIBUTE,
   type BlockOrigin,
@@ -29,8 +30,8 @@ import { messageReference } from "../../core/references";
 import { asGenerated } from "../../shared/aiText";
 import type { NodeJSON } from "../../shared/blockJson";
 import { setOrigins } from "../../shared/blockOrigins";
-import { mindName } from "../../shared/naming";
-import { recheckCitations, textLength, withoutIds } from "../../shared/noteBlocks";
+import { cutTitle, mindName } from "../../shared/naming";
+import { citedTables, recheckCitations, textLength, withoutIds } from "../../shared/noteBlocks";
 import { readMindHandle } from "./commands/handles";
 import { conversationLabel, questionOf } from "./conversations";
 import { core } from "./core";
@@ -52,9 +53,10 @@ export interface AddedAnswer {
   blocks: NodeJSON[];
 }
 
-const nameOfMind = (mindId: string) => {
+/** The Mind's name, which an unnamed Mind is about to take from the Question (the core names it a moment after the Note is in). */
+const nameOfMind = (mindId: string, question: string) => {
   const mind = useAppStore.getState().minds.find((each) => each.id === mindId);
-  return (mind && mindName(mind)) || t("mind.untitled");
+  return (mind && mindName(mind)) || cutTitle(question) || t("mind.untitled");
 };
 
 const originOf = ({ answer }: AddedAnswer): BlockOrigin => ({
@@ -85,7 +87,11 @@ function addInEditor(editor: Editor, blocks: readonly NodeJSON[], atCursor: bool
   }
   const done = asOneStep(editor, () =>
     editor.commands.command(({ tr }) => {
-      tr.replaceWith(place.from, place.to, Fragment.from(nodes));
+      const fragment = Fragment.from(nodes);
+      tr.replaceWith(place.from, place.to, fragment);
+      // The cursor goes after what came in, so the next Answer added goes after it, in order.
+      const end = Math.min(place.from + fragment.size, tr.doc.content.size);
+      tr.setSelection(Selection.near(tr.doc.resolve(end), -1));
       return true;
     }),
   );
@@ -100,7 +106,9 @@ async function addToReadMind(added: AddedAnswer, mindId: string): Promise<boolea
   const read = readMindHandle.current;
   if (!read || read.mindId !== mindId || read.editor.isDestroyed) return false;
   const checked = asGenerated(
-    await recheckCitations(withoutIds(added.blocks), (input) => core.recheckCitation(input)),
+    await recheckCitations(citedTables(withoutIds(added.blocks)), (input) =>
+      core.recheckCitation(input),
+    ),
   );
   const { editor, doc } = read;
   if (editor.isDestroyed) return false;
@@ -124,7 +132,7 @@ async function addToReadMind(added: AddedAnswer, mindId: string): Promise<boolea
     .catch(useAppStore.getState().reportError);
   offerEditorUndo(
     editor,
-    t("answer.added", { mind: nameOfMind(mindId) }),
+    t("answer.added", { mind: nameOfMind(mindId, originOf(added).question) }),
     answerUndoPlace(added.answer.id),
   );
   return true;
@@ -139,7 +147,7 @@ async function addToOtherMind(added: AddedAnswer, mindId: string, openIt: boolea
     model: added.answer.model,
   });
   useUndo.getState().push({
-    message: t("answer.added", { mind: nameOfMind(mindId) }),
+    message: t("answer.added", { mind: nameOfMind(mindId, originOf(added).question) }),
     undo: () => core.undoAddToNote({ mindId, blockIds }),
     shownAt: answerUndoPlace(added.answer.id),
   });

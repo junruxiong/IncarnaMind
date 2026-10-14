@@ -16,6 +16,7 @@ import {
   type WordFileInfo,
   type WordImportProgress,
   type WordImportReport,
+  type WordLayout,
   type WordOrigin,
   type WordSource,
 } from "../core/api";
@@ -87,6 +88,25 @@ export function wordAtomText(atom: Pick<WordAtomAttributes, "kind" | "label" | "
   return atom.text || atom.label;
 }
 
+/**
+ * Whether a Word file's look is mostly what a Mind doesn't draw (#735), so the
+ * import screen says it is kept: two kinds of it at least, one of them placing
+ * the text (shading, rules, tab stops, tables with no borders) rather than only
+ * colouring or sizing it. Each bar sits above what the Word corpus's memos,
+ * contracts and reports reach; its résumés and forms pass them.
+ */
+export function layoutNotShown(layout: WordLayout | undefined): boolean {
+  if (!layout) return false;
+  const placing = [
+    layout.shading >= 10,
+    layout.borders >= 2,
+    layout.tabStops >= 4,
+    layout.layoutTables >= 1,
+  ].filter(Boolean).length;
+  const type = [layout.colours >= 2, layout.sizes >= 4].filter(Boolean).length;
+  return placing >= 1 && placing + type >= 2;
+}
+
 const wordMap = (doc: Y.Doc) => doc.getMap<unknown>(MIND_WORD_FIELD);
 const sourcesMap = (doc: Y.Doc) => doc.getMap<unknown>(MIND_WORD_SOURCES_FIELD);
 
@@ -94,11 +114,17 @@ const sourcesMap = (doc: Y.Doc) => doc.getMap<unknown>(MIND_WORD_SOURCES_FIELD);
 export function wordFileOf(doc: Y.Doc): WordFileInfo | null {
   const file = wordMap(doc).get("file");
   if (!isRecord(file)) return null;
-  const { name, sha256, size, part } = file;
+  const { name, sha256, size, part, documentId } = file;
   if (typeof name !== "string" || typeof sha256 !== "string" || typeof part !== "string") {
     return null;
   }
-  return { name, sha256, size: typeof size === "number" ? size : 0, part };
+  return {
+    name,
+    sha256,
+    size: typeof size === "number" ? size : 0,
+    part,
+    documentId: typeof documentId === "string" && documentId !== "" ? documentId : null,
+  };
 }
 
 /** How far the import has got; null once it is done, or for a Mind that wasn't imported. */
@@ -133,6 +159,13 @@ export function startWordImport(
   map.set("origin", origin);
   map.set("report", report);
   map.set("import", { done: 0, total } satisfies WordImportProgress);
+}
+
+/** Names the Document the original became after the import, when adding it then failed (#720). */
+export function linkWordFileDocument(doc: Y.Doc, documentId: string): void {
+  const map = wordMap(doc);
+  const file = map.get("file");
+  if (isRecord(file)) map.set("file", { ...file, documentId });
 }
 
 /** Records how many top-level Blocks have been written. Inside the transaction that wrote them. */
