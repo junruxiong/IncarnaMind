@@ -119,16 +119,16 @@ export function createExamples(options: ExamplesOptions) {
       : null;
   };
 
+  /** A kept order: each offered example exactly once. */
+  const isOffered = (value: unknown): value is ExampleGroup[] =>
+    Array.isArray(value) &&
+    value.length === OFFERED_GROUPS.length &&
+    OFFERED_GROUPS.every((group) => value.includes(group));
+
   /** The offered examples in this install's order: shuffled the first time, then kept. */
   const order = (): ExampleGroup[] => {
     const kept = options.readValue(ORDER_VALUE);
-    if (
-      Array.isArray(kept) &&
-      kept.length === OFFERED_GROUPS.length &&
-      OFFERED_GROUPS.every((group) => kept.includes(group))
-    ) {
-      return kept as ExampleGroup[];
-    }
+    if (isOffered(kept)) return kept;
     const random = options.random ?? Math.random;
     const shuffled = [...OFFERED_GROUPS];
     for (let index = shuffled.length - 1; index > 0; index--) {
